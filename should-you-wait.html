@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Should You Wait? — Mortgage Cost Reality Check</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8f5ef;
+    --card: #ffffff;
+    --ink: #18160f;
+    --ink2: #4a4535;
+    --muted: #9a9080;
+    --border: #ddd8cc;
+    --green-bg: #f0f7f2;
+    --green: #1d6840;
+    --red-bg: #fdf2f0;
+    --red: #b53a1e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+  .page { max-width: 980px; margin: 0 auto; padding: 28px 16px 60px; }
+  @media(min-width:600px) { .page { padding: 44px 24px 72px; } }
+
+  header { margin-bottom: 28px; }
+  @media(min-width:600px) { header { margin-bottom: 36px; } }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(22px, 6vw, 44px);
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .tagline {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--ink2);
+    line-height: 1.6;
+    border-left: 3px solid var(--border);
+    padding-left: 12px;
+  }
+
+  /* ── Inputs ── */
+  .inputs-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  @media(min-width:600px) { .inputs-wrap { padding: 24px; margin-bottom: 20px; } }
+
+  .inputs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media(min-width:480px) {
+    .inputs-grid { grid-template-columns: 1fr 1fr 1fr; }
+  }
+  @media(min-width:700px) {
+    .inputs-grid { grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  }
+
+  .field label {
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .input-wrap { display: flex; align-items: stretch; }
+
+  .affix {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .affix-pre { border-right: none; border-radius: 3px 0 0 3px; }
+  .affix-suf { border-left: none; border-radius: 0 3px 3px 0; }
+
+  input[type="number"] {
+    width: 100%;
+    height: 44px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 15px;
+    padding: 0 10px;
+    outline: none;
+    transition: border-color 0.18s;
+    -webkit-appearance: none;
+  }
+  input[type="number"]:focus { border-color: var(--ink); }
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+  input[type=number] { -moz-appearance: textfield; }
+
+  /* ── Break-even answer ── */
+  .breakeven-band {
+    background: #fffdf5;
+    border: 1px solid #d4b84a;
+    border-left: 4px solid #b87c20;
+    border-radius: 4px;
+    padding: 18px 16px;
+    margin-bottom: 16px;
+  }
+  @media(min-width:600px) { .breakeven-band { padding: 22px 24px; margin-bottom: 20px; } }
+
+  .be-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #b87c20;
+    margin-bottom: 6px;
+  }
+  .be-desc {
+    font-size: 13px;
+    color: var(--ink2);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+  .be-big {
+    font-family: 'DM Mono', monospace;
+    font-size: 38px;
+    font-weight: 500;
+    color: #b87c20;
+    display: block;
+    line-height: 1;
+  }
+  @media(min-width:600px) { .be-big { font-size: 44px; } }
+  .be-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+    display: block;
+  }
+
+  /* ── Scenario Cards ── */
+  .scenarios {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  @media(min-width:600px) { .scenarios { grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; } }
+
+  .s-card {
+    border-radius: 4px;
+    padding: 18px 16px;
+    border: 1px solid var(--border);
+  }
+  @media(min-width:600px) { .s-card { padding: 24px; } }
+
+  .s-card.accept { background: var(--green-bg); border-top: 3px solid var(--green); }
+  .s-card.wait   { background: var(--red-bg);   border-top: 3px solid var(--red); }
+
+  .s-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    display: inline-block;
+    margin-bottom: 8px;
+  }
+
+  .accept .s-badge { background: rgba(29,104,64,0.12); color: var(--green); }
+  .wait   .s-badge { background: rgba(181,58,30,0.10); color: var(--red); }
+
+  .s-title {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    line-height: 1.2;
+  }
+  .accept .s-title { color: var(--green); }
+  .wait   .s-title { color: var(--red); }
+
+  .s-desc { font-size: 12px; color: var(--ink2); margin-bottom: 16px; line-height: 1.5; }
+
+  .s-stats { display: flex; flex-direction: column; gap: 8px; }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    gap: 8px;
+  }
+  .stat-row:last-child { border-bottom: none; }
+
+  .stat-name { font-size: 12px; color: var(--ink2); flex: 1; }
+
+  .stat-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  .accept .stat-val { color: var(--green); }
+  .wait   .stat-val { color: var(--red); }
+
+  /* ── Verdict ── */
+  .verdict-band {
+    background: var(--ink);
+    color: white;
+    border-radius: 4px;
+    padding: 20px 16px;
+    margin-bottom: 16px;
+  }
+  @media(min-width:600px) { .verdict-band { padding: 28px 32px; margin-bottom: 20px; } }
+
+  .verdict-text {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 15px;
+    line-height: 1.65;
+    font-style: italic;
+    margin-bottom: 16px;
+  }
+  @media(min-width:600px) { .verdict-text { font-size: 17px; margin-bottom: 0; } }
+  .verdict-text strong { font-style: normal; color: #a8e8c0; }
+  .verdict-text .bad   { font-style: normal; color: #f0a090; }
+
+  .verdict-kpi { }
+
+  .verdict-kpi .big {
+    font-family: 'DM Mono', monospace;
+    font-size: 32px;
+    font-weight: 500;
+    display: block;
+    line-height: 1;
+  }
+  @media(min-width:600px) { .verdict-kpi .big { font-size: 36px; } }
+  .big.positive { color: #a8e8c0; }
+  .big.negative { color: #f0a090; }
+
+  .verdict-kpi .sub {
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.08em;
+    margin-top: 4px;
+    display: block;
+  }
+
+  /* ── Chart ── */
+  .chart-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 18px 12px;
+  }
+  @media(min-width:600px) { .chart-section { padding: 24px; } }
+
+  .chart-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .chart-title {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 14px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+
+  .leg-dot {
+    display: inline-block;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  canvas { width: 100% !important; }
+
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="kicker">Offer Analysis — Seller's Perspective</div>
+    <h1>Accept Now, or Wait?</h1>
+    <p class="tagline">
+      The current offer is on the table today at the current mortgage rate.
+      If you wait for a higher offer, rates are likely to rise — and this is what that means
+      for the total amount your buyer actually pays.
+    </p>
+  </header>
+
+  <div class="inputs-wrap">
+    <div class="inputs-grid">
+      <div class="field">
+        <label>Mortgage Size</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">£</span>
+          <input type="number" id="loanNow" value="400000" step="5000">
+        </div>
+      </div>
+      <div class="field">
+        <label>Current Rate</label>
+        <div class="input-wrap">
+          <input type="number" id="rateNow" value="4.50" step="0.05">
+          <span class="affix affix-suf">%</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Rate Change (if wait)</label>
+        <div class="input-wrap">
+          <input type="number" id="rateChange" value="0.25" step="0.05">
+          <span class="affix affix-suf">%</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Mortgage Term</label>
+        <div class="input-wrap">
+          <input type="number" id="termYears" value="30" step="1" min="5" max="40">
+          <span class="affix affix-suf">yrs</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Near-Term Window</label>
+        <div class="input-wrap">
+          <input type="number" id="windowYears" value="5" step="1" min="1" max="30">
+          <span class="affix affix-suf">yrs</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario cards -->
+  <div class="scenarios">
+
+    <div class="s-card accept">
+      <span class="s-badge">Accept now</span>
+      <div class="s-title" id="a_title">—</div>
+      <p class="s-desc" id="a_desc">—</p>
+      <div class="s-stats">
+        <div class="stat-row">
+          <span class="stat-name">Monthly payment</span>
+          <span class="stat-val" id="a_monthly">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name" id="a_win_lbl">Cost over 5 years</span>
+          <span class="stat-val" id="a_window">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name" id="a_term_lbl">Total cost over 30 yrs</span>
+          <span class="stat-val" id="a_term">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name">Total interest (full term)</span>
+          <span class="stat-val" id="a_interest">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="s-card wait">
+      <span class="s-badge">If you wait…</span>
+      <div class="s-title" id="b_title">—</div>
+      <p class="s-desc" id="b_desc">—</p>
+      <div class="s-stats">
+        <div class="stat-row">
+          <span class="stat-name">Monthly payment</span>
+          <span class="stat-val" id="b_monthly">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name" id="b_win_lbl">Cost over 5 years</span>
+          <span class="stat-val" id="b_window">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name" id="b_term_lbl">Total cost over 30 yrs</span>
+          <span class="stat-val" id="b_term">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name">Total interest (full term)</span>
+          <span class="stat-val" id="b_interest">—</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Verdict -->
+  <div class="verdict-band">
+    <div class="verdict-text" id="verdict_text">—</div>
+    <div class="verdict-kpi" style="margin-top:0">
+      <span class="big" id="verdict_big">—</span>
+      <span class="sub" id="verdict_sub">—</span>
+    </div>
+  </div>
+
+  <!-- Break-even -->
+  <div class="breakeven-band">
+    <div class="be-label">Break-even mortgage at <span id="be_rate">4.75%</span></div>
+    <div class="be-desc">If rates rise by <strong id="be_change_display"></strong>, this is the largest mortgage the buyer can take and still pay no more than today's deal — over the full term.</div>
+    <span class="be-big" id="be_amount">—</span>
+    <span class="be-sub" id="be_diff">—</span>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-section">
+    <div class="chart-head">
+      <div class="chart-title">Cumulative Mortgage Payments Over Time</div>
+      <div class="legend">
+        <span><span class="leg-dot" style="background:var(--green)"></span>Accept now</span>
+        <span><span class="leg-dot" style="background:var(--red)"></span>If you wait</span>
+      </div>
+    </div>
+    <canvas id="chart" height="300"></canvas>
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function monthlyPayment(principal, annualRatePct, years) {
+  if (annualRatePct === 0) return principal / (years * 12);
+  const r = annualRatePct / 100 / 12;
+  const n = years * 12;
+  return principal * r * Math.pow(1+r,n) / (Math.pow(1+r,n)-1);
+}
+
+function fmt(n, dec=0) {
+  return '£' + Math.abs(n).toLocaleString('en-GB', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+}
+function fmtK(n) {
+  if (Math.abs(n) >= 1000) return '£' + (n/1000).toLocaleString('en-GB',{minimumFractionDigits:1,maximumFractionDigits:1})+'k';
+  return fmt(n);
+}
+
+let ctx = $('chart').getContext('2d');
+
+function drawChart(mA, mB, termYrs, winYrs) {
+  const canvas = $('chart');
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth;
+  const H = 300;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0,0,W,H);
+
+  const PAD = {top:18, right:24, bottom:46, left:82};
+  const pw = W - PAD.left - PAD.right;
+  const ph = H - PAD.top - PAD.bottom;
+  const maxM = termYrs * 12;
+  const winM  = Math.min(winYrs * 12, maxM);
+
+  const maxVal = Math.max(mA, mB) * maxM;
+  const sx = m => PAD.left + (m / maxM) * pw;
+  const sy = v => PAD.top + ph - (v / maxVal) * ph;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(26,22,15,0.06)';
+  ctx.lineWidth = 1;
+  for (let i=0;i<=4;i++) {
+    const y = PAD.top + (i/4)*ph;
+    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+pw,y); ctx.stroke();
+  }
+  for (let i=0;i<=5;i++) {
+    const x = PAD.left + (i/5)*pw;
+    ctx.beginPath(); ctx.moveTo(x,PAD.top); ctx.lineTo(x,PAD.top+ph); ctx.stroke();
+  }
+
+  // Window shading
+  ctx.fillStyle = 'rgba(29,104,64,0.05)';
+  ctx.fillRect(PAD.left, PAD.top, sx(winM)-PAD.left, ph);
+  ctx.strokeStyle = 'rgba(29,104,64,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(sx(winM), PAD.top); ctx.lineTo(sx(winM), PAD.top+ph); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(29,104,64,0.65)';
+  ctx.font = "500 10px 'DM Mono',monospace";
+  ctx.textAlign = 'left';
+  ctx.fillText(`${winYrs}yr window`, sx(winM)+5, PAD.top+13);
+
+  // Fill between
+  ctx.beginPath();
+  ctx.moveTo(sx(0), sy(0));
+  for (let m=1; m<=maxM; m++) ctx.lineTo(sx(m), sy(mA*m));
+  for (let m=maxM; m>=0; m--) ctx.lineTo(sx(m), sy(mB*m));
+  ctx.closePath();
+  ctx.fillStyle = mB > mA ? 'rgba(181,58,30,0.07)' : 'rgba(29,104,64,0.07)';
+  ctx.fill();
+
+  // Line B (wait — red)
+  ctx.beginPath();
+  ctx.moveTo(sx(0), sy(0));
+  for (let m=1; m<=maxM; m++) ctx.lineTo(sx(m), sy(mB*m));
+  ctx.strokeStyle = '#c94c35';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Line A (accept — green)
+  ctx.beginPath();
+  ctx.moveTo(sx(0), sy(0));
+  for (let m=1; m<=maxM; m++) ctx.lineTo(sx(m), sy(mA*m));
+  ctx.strokeStyle = '#1d6840';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Dots at window and term
+  function dot(m, v, col) {
+    ctx.beginPath();
+    ctx.arc(sx(m), sy(v), 5, 0, Math.PI*2);
+    ctx.fillStyle = col;
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  dot(winM,  mA*winM,  '#1d6840');
+  dot(winM,  mB*winM,  '#c94c35');
+  dot(maxM,  mA*maxM,  '#1d6840');
+  dot(maxM,  mB*maxM,  '#c94c35');
+
+  // Y labels
+  ctx.fillStyle = '#9a9080';
+  ctx.font = "10px 'DM Mono',monospace";
+  ctx.textAlign = 'right';
+  for (let i=0;i<=4;i++) {
+    const v = (maxVal/4)*(4-i);
+    ctx.fillText(fmtK(v), PAD.left-6, PAD.top+(i/4)*ph+4);
+  }
+
+  // X labels
+  ctx.textAlign = 'center';
+  for (let i=0;i<=5;i++) {
+    const m = Math.round((i/5)*maxM);
+    ctx.fillText(`yr ${(m/12)|0}`, sx(m), H-PAD.bottom+16);
+  }
+
+  // Axes
+  ctx.strokeStyle = 'rgba(26,22,15,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD.left,PAD.top); ctx.lineTo(PAD.left,PAD.top+ph); ctx.lineTo(PAD.left+pw,PAD.top+ph);
+  ctx.stroke();
+}
+
+function update() {
+  const loanNow    = parseFloat($('loanNow').value)    || 0;
+  const rateNow    = parseFloat($('rateNow').value)    || 0;
+  const rateChange = parseFloat($('rateChange').value) || 0;
+  const rateWait   = rateNow + rateChange;
+  const term       = parseInt($('termYears').value)    || 30;
+  const win        = Math.min(parseInt($('windowYears').value) || 5, term);
+
+  // Monthly payment at current rate
+  const mA = monthlyPayment(loanNow, rateNow, term);
+
+  // Break-even: largest loan at rateWait that gives same monthly payment
+  let beAmount = 0;
+  if (rateWait > 0) {
+    const rB = rateWait / 100 / 12;
+    const n  = term * 12;
+    const factorB = rB * Math.pow(1+rB,n) / (Math.pow(1+rB,n)-1);
+    beAmount = mA / factorB;
+  } else {
+    beAmount = mA * term * 12;
+  }
+  const mB = monthlyPayment(beAmount, rateWait, term); // should equal mA
+
+  const loanDiff = beAmount - loanNow;
+  const winA  = mA * win * 12;
+  const winB  = mB * win * 12;
+  const termA = mA * term * 12;
+  const termB = mB * term * 12;
+  const intA  = termA - loanNow;
+  const intB  = termB - beAmount;
+
+  // Card A
+  $('a_title').textContent = `${fmt(loanNow)} @ ${rateNow.toFixed(2)}%`;
+  $('a_desc').textContent  = `${term}-year mortgage · accept now`;
+  $('a_monthly').textContent = fmt(mA, 2);
+  $('a_win_lbl').textContent = `Cost over ${win} yr${win!==1?'s':''}`;
+  $('a_window').textContent  = fmt(winA);
+  $('a_term_lbl').textContent = `Total cost over ${term} yrs`;
+  $('a_term').textContent    = fmt(termA);
+  $('a_interest').textContent = fmt(intA);
+
+  // Card B — break-even scenario
+  $('b_title').textContent  = `${fmt(beAmount)} @ ${rateWait.toFixed(2)}%`;
+  $('b_desc').textContent   = `Break-even mortgage if rate rises ${rateChange.toFixed(2)}%`;
+  $('b_monthly').textContent = fmt(mB, 2);
+  $('b_win_lbl').textContent = `Cost over ${win} yr${win!==1?'s':''}`;
+  $('b_window').textContent  = fmt(winB);
+  $('b_term_lbl').textContent = `Total cost over ${term} yrs`;
+  $('b_term').textContent    = fmt(termB);
+  $('b_interest').textContent = fmt(intB);
+
+  // Verdict
+  const vBig  = $('verdict_big');
+  const vSub  = $('verdict_sub');
+  const vText = $('verdict_text');
+
+  const rateDir = rateChange >= 0
+    ? `rises by ${rateChange.toFixed(2)}%`
+    : `falls by ${Math.abs(rateChange).toFixed(2)}%`;
+
+  if (loanDiff >= 0) {
+    vBig.textContent = fmt(loanDiff);
+    vBig.className = 'big positive';
+    vSub.textContent = 'maximum extra offer headroom';
+    vText.innerHTML = `If rates ${rateDir}, a buyer taking a <strong>${fmt(beAmount)} mortgage</strong>
+      pays exactly the same <strong>${fmt(mA,2)}/month</strong> as today's deal.
+      That's <strong>${fmt(loanDiff)} more</strong> than the current ${fmt(loanNow)} mortgage —
+      so any higher offer up to this amount costs the buyer <em>no more per month</em> than accepting now.
+      Over ${win} years and the full ${term}-year term, the total paid is identical.`;
+  } else {
+    vBig.textContent = fmt(-loanDiff);
+    vBig.className = 'big negative';
+    vSub.textContent = 'mortgage shrinks at this rate';
+    vText.innerHTML = `If rates ${rateDir}, the equivalent mortgage actually <em>falls</em> to
+      <strong>${fmt(beAmount)}</strong> — <strong>${fmt(-loanDiff)} less</strong> than today.
+      A falling rate environment means the buyer can afford a smaller loan for the same monthly cost.`;
+  }
+
+  // Break-even callout
+  $('be_rate').textContent = rateWait.toFixed(2) + '%';
+  $('be_amount').textContent = fmt(beAmount);
+  $('be_diff').textContent = (loanDiff >= 0 ? '+' : '') + fmt(loanDiff, 0) + ' vs current mortgage';
+  const beCD = document.getElementById('be_change_display');
+  if (beCD) beCD.textContent = rateChange.toFixed(2) + '%';
+
+  requestAnimationFrame(() => drawChart(mA, mB, term, win));
+}
+
+['loanNow','rateNow','rateChange','termYears','windowYears']
+  .forEach(id => $(id).addEventListener('input', update));
+
+window.addEventListener('resize', update);
+update();
+</script>
+</body>
+</html>
