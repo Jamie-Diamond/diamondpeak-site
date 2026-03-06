@@ -465,6 +465,55 @@
   }
   .btn-reset:hover { background: var(--red-bg); }
 
+  .btn-end-study {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: 2px solid var(--blue);
+    border-radius: 6px;
+    background: white;
+    color: var(--blue);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    margin-top: 12px;
+    transition: all 0.15s;
+  }
+  .btn-end-study:hover { background: #e8f0f6; }
+  .btn-end-study:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .status-ended {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    background: #e8f0f6;
+    color: var(--blue);
+    letter-spacing: 0.05em;
+  }
+
+  .ended-banner {
+    text-align: center;
+    padding: 16px;
+    background: #e8f0f6;
+    border: 1px solid #b8d4e8;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--blue);
+    font-weight: 500;
+  }
+  .ended-banner .ended-time {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
   textarea#sessionNotes {
     width: 100%;
     padding: 12px;
@@ -659,9 +708,14 @@
 
   <!-- Timer -->
   <div class="card">
+    <div id="endedBanner" class="ended-banner" style="display:none;">
+      Study Complete
+      <div class="ended-time" id="endedTime"></div>
+    </div>
     <div class="status-badge"><span id="statusBadge" class="status-idle">Ready</span></div>
     <div class="timer-display" id="timerDisplay">00:00:00</div>
     <button class="btn-main btn-start" id="mainBtn" onclick="toggleTimer()">Start Line</button>
+    <button class="btn-end-study" id="endStudyBtn" onclick="endStudy()" style="display:none;">End Study</button>
   </div>
 
   <!-- Live Visualisation -->
@@ -773,6 +827,7 @@ let assets = [...DEFAULT_ASSETS];
 let state = {
   status: 'idle',
   sessionStart: null,
+  sessionEnd: null,
   currentRunStart: null,
   currentStopStart: null,
   totalRunMs: 0,
@@ -801,6 +856,7 @@ try {
   if (saved && saved.stops) {
     state = { ...state, ...saved };
     if (state.sessionStart) state.sessionStart = new Date(state.sessionStart);
+    if (state.sessionEnd) state.sessionEnd = new Date(state.sessionEnd);
     if (state.currentRunStart) state.currentRunStart = new Date(state.currentRunStart);
     if (state.currentStopStart) state.currentStopStart = new Date(state.currentStopStart);
     state.stops = state.stops.map(s => ({
@@ -867,6 +923,7 @@ renderAssetTags();
 
 // -- Timer --
 function toggleTimer() {
+  if (state.status === 'ended') return;
   if (state.status === 'idle' || state.status === 'stopped') startLine();
   else if (state.status === 'running') stopLine();
 }
@@ -956,20 +1013,45 @@ function updateUI() {
   const btn = document.getElementById('mainBtn');
   const timer = document.getElementById('timerDisplay');
 
+  const endBtn = document.getElementById('endStudyBtn');
+  const endedBanner = document.getElementById('endedBanner');
+
   if (state.status === 'running') {
     badge.className = 'status-running'; badge.textContent = 'Running';
     btn.className = 'btn-main btn-stop'; btn.textContent = 'Stop Line';
+    btn.disabled = false;
     timer.className = 'timer-display running';
+    endBtn.style.display = 'block';
+    endedBanner.style.display = 'none';
     startTimerInterval();
   } else if (state.status === 'stopped') {
     badge.className = 'status-stopped'; badge.textContent = 'Stopped';
     btn.className = 'btn-main btn-start'; btn.textContent = 'Start Line';
+    btn.disabled = false;
     timer.className = 'timer-display stopped';
+    endBtn.style.display = 'block';
+    endedBanner.style.display = 'none';
     startTimerInterval();
+  } else if (state.status === 'ended') {
+    badge.className = 'status-ended'; badge.textContent = 'Ended';
+    btn.className = 'btn-main btn-start'; btn.textContent = 'Study Ended';
+    btn.disabled = true;
+    timer.className = 'timer-display';
+    timer.textContent = formatMs(state.totalRunMs);
+    endBtn.style.display = 'none';
+    endedBanner.style.display = 'block';
+    if (state.sessionEnd) {
+      document.getElementById('endedTime').textContent =
+        'Ended at ' + state.sessionEnd.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    clearInterval(state.timerInterval);
   } else {
     badge.className = 'status-idle'; badge.textContent = 'Ready';
     btn.className = 'btn-main btn-start'; btn.textContent = 'Start Line';
+    btn.disabled = false;
     timer.className = 'timer-display';
+    endBtn.style.display = 'none';
+    endedBanner.style.display = 'none';
     clearInterval(state.timerInterval);
   }
   renderStops();
@@ -1125,6 +1207,7 @@ function exportCSV() {
   rows.push(['Shift', `"${state.shift||''}"`]);
   rows.push(['SKU', `"${state.sku||''}"`]);
   rows.push(['Study Date', state.sessionStart ? state.sessionStart.toLocaleDateString('en-GB') : '']);
+  rows.push(['Study End', state.sessionEnd ? state.sessionEnd.toLocaleTimeString('en-GB') : '(ongoing)']);
   rows.push(['Total Run Time (s)', Math.round(state.totalRunMs/1000)]);
   rows.push(['Total Stop Time (s)', Math.round(state.totalStopMs/1000)]);
   rows.push(['Total Stops', state.stops.length]);
@@ -1164,7 +1247,7 @@ function resetStudy() {
   if (!confirm('Reset the entire study? All stop data will be lost.')) return;
   clearInterval(state.timerInterval);
   state = {
-    status:'idle', sessionStart:null, currentRunStart:null, currentStopStart:null,
+    status:'idle', sessionStart:null, sessionEnd:null, currentRunStart:null, currentStopStart:null,
     totalRunMs:0, totalStopMs:0, stops:[], timerInterval:null, editingStopIndex:null,
     crew: parseInt(document.getElementById('crewInput').value)||4,
     rpm: parseFloat(document.getElementById('rpmInput').value)||0,
@@ -1179,6 +1262,39 @@ function resetStudy() {
   localStorage.removeItem('dp_rag_study');
   document.getElementById('timerDisplay').textContent = '00:00:00';
   updateUI();
+}
+
+function endStudy() {
+  if (state.status === 'ended' || state.status === 'idle') return;
+  if (!confirm('End this study? The timer will stop and no more stops can be logged. Data will be preserved for export.')) return;
+
+  const now = new Date();
+
+  // If running, finalize current run time
+  if (state.status === 'running' && state.currentRunStart) {
+    state.totalRunMs += (now - state.currentRunStart);
+    state.currentRunStart = null;
+  }
+
+  // If stopped, finalize current stop time and close the open stop
+  if (state.status === 'stopped' && state.currentStopStart) {
+    const stopMs = now - state.currentStopStart;
+    state.totalStopMs += stopMs;
+    if (state.stops.length > 0) {
+      const lastStop = state.stops[state.stops.length - 1];
+      if (!lastStop.endTime) {
+        lastStop.endTime = now;
+        lastStop.durationMs = stopMs;
+      }
+    }
+    state.currentStopStart = null;
+  }
+
+  state.sessionEnd = now;
+  state.status = 'ended';
+  clearInterval(state.timerInterval);
+  updateUI();
+  saveState();
 }
 
 // -- Input listeners --
@@ -1253,9 +1369,32 @@ function updateViz() {
 
 setInterval(() => { if (state.status !== 'idle') { updateSummary(); updateViz(); } }, 1000);
 
+// -- Auto-save every 15 minutes --
+setInterval(() => {
+  if (state.status !== 'idle') {
+    saveState();
+    showAutoSaveIndicator();
+  }
+}, 15 * 60 * 1000);
+
+function showAutoSaveIndicator() {
+  let indicator = document.getElementById('autoSaveIndicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = 'autoSaveIndicator';
+    indicator.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 16px;border-radius:20px;font-family:"DM Mono",monospace;font-size:11px;opacity:0;transition:opacity 0.3s;z-index:100;pointer-events:none;';
+    document.body.appendChild(indicator);
+  }
+  const time = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  indicator.textContent = 'Auto-saved at ' + time;
+  indicator.style.opacity = '1';
+  setTimeout(() => { indicator.style.opacity = '0'; }, 2500);
+}
+
 // -- Init --
 updateUI();
-if (state.status !== 'idle') { updateTimerDisplay(); updateViz(); }
+if (state.status !== 'idle' && state.status !== 'ended') { updateTimerDisplay(); updateViz(); }
+if (state.status === 'ended') { updateViz(); }
 </script>
 </body>
 </html>
