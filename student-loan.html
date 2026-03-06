@@ -727,9 +727,9 @@ function simulate() {
   const advantage = netKeep - netPayoff;
 
   // Year-by-year net wealth arrays for chart
-  // Final year reflects write-off (loan balance zeroed)
+  // Show true net (ISA minus loan) at every point — write-off shown separately
   const netPayoffArr = payoffISA.map(v => v);
-  const netKeepArr   = keepISA.map((v, i) => v - (i < years ? keepLoan[i] : 0));
+  const netKeepArr   = keepISA.map((v, i) => v - keepLoan[i]);
 
   return {
     years, balance, loanRate, isaRate, writeoff,
@@ -762,7 +762,9 @@ function drawChart(data) {
   ctx.clearRect(0, 0, W, H);
 
   const n = data.years;
+  const writeoffVal = data.loanWrittenOff > 0 ? data.netKeep : null;
   const allVals = [...data.netPayoffArr, ...data.netKeepArr];
+  if (writeoffVal !== null) allVals.push(writeoffVal);
   let maxVal = Math.max(...allVals);
   let minVal = Math.min(...allVals, 0);
   const range = maxVal - minVal || 1;
@@ -875,6 +877,37 @@ function drawChart(data) {
   drawDot(xScale(n), yScale(data.netPayoffArr[n]), '#1d6840');
   drawDot(xScale(n), yScale(data.netKeepArr[n]), '#1a5276');
 
+  // Write-off indicator: dashed line from keep-loan net to post-write-off value
+  if (writeoffVal !== null) {
+    const x = xScale(n);
+    const yFrom = yScale(data.netKeepArr[n]);
+    const yTo = yScale(writeoffVal);
+    ctx.strokeStyle = '#1a5276';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, yFrom);
+    ctx.lineTo(x, yTo);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Write-off dot (open circle)
+    ctx.strokeStyle = '#1a5276';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(x, yTo, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = '#1a5276';
+    ctx.font = '9px "DM Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('write-off', x - 10, yTo);
+  }
+
   // Store for hover
   chartData = { data, xScale, yScale, n, pad, W, H, plotW, plotH };
 }
@@ -897,13 +930,19 @@ function handleHover(e) {
   const tip = $('tooltip');
   const payVal = data.netPayoffArr[year];
   const keepVal = data.netKeepArr[year];
-  const diff = keepVal - payVal;
+  const isWriteoffYear = year === n && data.loanWrittenOff > 0;
+  const keepFinal = isWriteoffYear ? data.netKeep : keepVal;
+  const diff = keepFinal - payVal;
   const winner = diff > 0 ? 'Keep loan' : 'Pay off';
 
-  tip.innerHTML = `<div style="margin-bottom:4px;color:rgba(255,255,255,0.5);">Year ${year}</div>` +
+  let tipHtml = `<div style="margin-bottom:4px;color:rgba(255,255,255,0.5);">Year ${year}${isWriteoffYear ? ' (write-off)' : ''}</div>` +
     `<div style="color:#a8e8c0;">Pay off: ${fmt(payVal)}</div>` +
-    `<div style="color:#7db8d4;">Keep loan: ${fmt(keepVal)}</div>` +
-    `<div style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.15);padding-top:4px;">${winner} wins by ${fmt(Math.abs(diff))}</div>`;
+    `<div style="color:#7db8d4;">Keep loan: ${fmt(keepVal)}</div>`;
+  if (isWriteoffYear) {
+    tipHtml += `<div style="color:#7db8d4;">After write-off: ${fmt(data.netKeep)}</div>`;
+  }
+  tipHtml += `<div style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.15);padding-top:4px;">${winner} wins by ${fmt(Math.abs(diff))}</div>`;
+  tip.innerHTML = tipHtml;
 
   const tipX = xScale(year);
   const tipY = Math.min(yScale(payVal), yScale(keepVal)) - 10;
