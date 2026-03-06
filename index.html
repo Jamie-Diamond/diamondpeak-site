@@ -143,47 +143,54 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Divider */
-        .divider {
+        /* Sections */
+        .section {
             position: relative;
             z-index: 1;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
             max-width: 860px;
+            width: 100%;
             margin: 0 auto;
-            padding: 0 2rem 2rem;
+            padding: 0 2rem 3.5rem;
             opacity: 0;
             animation: fadeUp 0.6s 0.65s forwards;
         }
 
-        .divider-line {
-            flex: 1;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, #1e293b, transparent);
+        .section:last-of-type { padding-bottom: 6rem; }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
         }
 
-        .divider-label {
+        .section-label {
             font-size: 0.7rem;
             font-weight: 600;
             letter-spacing: 0.15em;
             text-transform: uppercase;
             color: #334155;
+            white-space: nowrap;
+        }
+
+        .section-line {
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, #1e293b, transparent);
         }
 
         /* Tool cards */
         .tools {
-            position: relative;
-            z-index: 1;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
             gap: 1.25rem;
-            max-width: 860px;
-            width: 100%;
-            padding: 0 2rem 6rem;
-            margin: 0 auto;
-            opacity: 0;
-            animation: fadeUp 0.6s 0.75s forwards;
+        }
+
+        .empty-state {
+            color: #1e293b;
+            font-size: 0.875rem;
+            font-style: italic;
+            padding: 1.5rem 0;
         }
 
         .tool-card {
@@ -281,32 +288,41 @@
         <p class="subtitle">Useful tools for property and finance decisions</p>
     </div>
 
-    <div class="divider">
-        <div class="divider-line"></div>
-        <span class="divider-label">Available now</span>
-        <div class="divider-line"></div>
+    <div class="section">
+        <div class="section-header">
+            <span class="section-label">Consulting</span>
+            <div class="section-line"></div>
+        </div>
+        <div class="tools">
+            <p class="empty-state">Coming soon</p>
+        </div>
     </div>
 
-    <div class="tools">
-        <a href="stamp-duty.html" class="tool-card">
-            <div class="card-icon">&#127968;</div>
-            <h3>Stamp Duty Calculator</h3>
-            <p>Calculate UK stamp duty land tax for property purchases.</p>
-            <span class="card-arrow">&#8599;</span>
-        </a>
-        <a href="random-number.html" class="tool-card">
-            <div class="card-icon">&#127922;</div>
-            <h3>Random Number Generator</h3>
-            <p>Generate random numbers within any range, with options for unique values and sorting.</p>
-            <span class="card-arrow">&#8599;</span>
-        </a>
-        <a href="should-you-wait.html" class="tool-card">
-            <div class="card-icon">&#127968;</div>
-            <h3>Accept Now, or Wait?</h3>
-            <p>Mortgage cost reality check for sellers — see how rate changes affect buyer affordability.</p>
-            <span class="card-arrow">&#8599;</span>
-        </a>
-        <!-- More tools will appear here as we build them -->
+    <div class="section">
+        <div class="section-header">
+            <span class="section-label">Misc</span>
+            <div class="section-line"></div>
+        </div>
+        <div class="tools">
+            <a href="stamp-duty.html" class="tool-card">
+                <div class="card-icon">&#127968;</div>
+                <h3>Stamp Duty Calculator</h3>
+                <p>Calculate UK stamp duty land tax for property purchases.</p>
+                <span class="card-arrow">&#8599;</span>
+            </a>
+            <a href="random-number.html" class="tool-card">
+                <div class="card-icon">&#127922;</div>
+                <h3>Random Number Generator</h3>
+                <p>Generate random numbers within any range, with options for unique values and sorting.</p>
+                <span class="card-arrow">&#8599;</span>
+            </a>
+            <a href="should-you-wait.html" class="tool-card">
+                <div class="card-icon">&#127968;</div>
+                <h3>Accept Now, or Wait?</h3>
+                <p>Mortgage cost reality check for sellers — see how rate changes affect buyer affordability.</p>
+                <span class="card-arrow">&#8599;</span>
+            </a>
+        </div>
     </div>
 
     <div class="footer">&copy; 2026 Diamond Peak</div>
