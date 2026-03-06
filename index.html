@@ -4,320 +4,112 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Diamond Peak</title>
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        :root {
+            --bg: #f8f5ef;
+            --card: #fff;
+            --ink: #18160f;
+            --ink2: #4a4535;
+            --muted: #9a9080;
+            --border: #ddd8cc;
+            --green: #1d6840;
+            --blue: #1a5276;
+        }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
 
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #060b18;
-            color: #e2e8f0;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        /* Animated background */
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background:
-                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(56, 189, 248, 0.12) 0%, transparent 60%),
-                radial-gradient(ellipse 60% 40% at 80% 80%, rgba(129, 140, 248, 0.08) 0%, transparent 50%);
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        /* Grid overlay */
-        body::after {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image:
-                linear-gradient(rgba(56, 189, 248, 0.04) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(56, 189, 248, 0.04) 1px, transparent 1px);
-            background-size: 60px 60px;
-            pointer-events: none;
-            z-index: 0;
-        }
-
+        /* Hero */
         .hero {
-            position: relative;
-            z-index: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 65vh;
             text-align: center;
-            padding: 4rem 2rem 2rem;
+            padding: 56px 24px 40px;
+            max-width: 720px;
+            margin: 0 auto;
         }
 
-        /* Diamond logo */
-        .logo-wrap {
-            position: relative;
-            margin-bottom: 2.5rem;
-        }
-
-        .logo-wrap::before {
-            content: '';
-            position: absolute;
-            inset: -20px;
-            background: radial-gradient(circle, rgba(56, 189, 248, 0.2) 0%, transparent 70%);
-            border-radius: 50%;
-            animation: pulse 3s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 0.6; }
-            50% { transform: scale(1.2); opacity: 1; }
-        }
-
-        .diamond {
-            position: relative;
-            width: 80px;
-            height: 96px;
-            filter: drop-shadow(0 0 20px rgba(56, 189, 248, 0.4)) drop-shadow(0 0 50px rgba(129, 140, 248, 0.2));
-            animation: shimmer 4s ease-in-out infinite;
-        }
-
-        .diamond svg {
-            width: 100%;
-            height: 100%;
-        }
-
-        @keyframes shimmer {
-            0%, 100% { filter: drop-shadow(0 0 20px rgba(56,189,248,0.4)) drop-shadow(0 0 50px rgba(129,140,248,0.2)); }
-            50% { filter: drop-shadow(0 0 35px rgba(56,189,248,0.6)) drop-shadow(0 0 70px rgba(129,140,248,0.35)); }
+        .diamond-logo {
+            width: 56px;
+            height: 67px;
+            margin: 0 auto 24px;
+            opacity: 0.85;
         }
 
         .eyebrow {
-            font-size: 0.75rem;
-            font-weight: 600;
-            letter-spacing: 0.2em;
+            font-family: 'DM Mono', monospace;
+            font-size: 10px;
+            letter-spacing: 0.25em;
             text-transform: uppercase;
-            color: #38bdf8;
-            margin-bottom: 1rem;
-            opacity: 0;
-            animation: fadeUp 0.6s 0.2s forwards;
+            color: var(--muted);
+            margin-bottom: 12px;
         }
 
         h1 {
-            font-size: clamp(2.8rem, 6vw, 4.5rem);
-            font-weight: 800;
-            line-height: 1.05;
-            letter-spacing: -0.03em;
-            margin-bottom: 1rem;
-            background: linear-gradient(135deg, #f0f9ff 0%, #bae6fd 40%, #818cf8 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            opacity: 0;
-            animation: fadeUp 0.6s 0.35s forwards;
+            font-family: 'Libre Baskerville', serif;
+            font-size: clamp(28px, 5vw, 42px);
+            font-weight: 700;
+            line-height: 1.15;
+            margin-bottom: 10px;
         }
 
         .subtitle {
-            color: #64748b;
-            font-size: 1.1rem;
-            font-weight: 500;
-            margin-bottom: 0;
-            opacity: 0;
-            animation: fadeUp 0.6s 0.5s forwards;
-        }
-
-        @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(16px); }
-            to { opacity: 1; transform: translateY(0); }
+            font-size: 15px;
+            color: var(--ink2);
+            line-height: 1.6;
         }
 
         /* Sections */
-        .section {
-            position: relative;
-            z-index: 1;
-            max-width: 860px;
-            width: 100%;
+        .page {
+            max-width: 720px;
             margin: 0 auto;
-            padding: 0 2rem 3.5rem;
-            opacity: 0;
-            animation: fadeUp 0.6s 0.65s forwards;
+            padding: 0 16px 72px;
         }
+        @media(min-width:600px) { .page { padding: 0 24px 80px; } }
 
-        .section:last-of-type { padding-bottom: 6rem; }
+        .section {
+            margin-bottom: 40px;
+        }
 
         .section-header {
             display: flex;
             align-items: center;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
+            gap: 12px;
+            margin-bottom: 20px;
         }
 
         .section-label {
-            font-size: 0.7rem;
-            font-weight: 600;
+            font-family: 'DM Mono', monospace;
+            font-size: 9px;
+            font-weight: 500;
             letter-spacing: 0.15em;
             text-transform: uppercase;
-            color: #334155;
+            color: var(--muted);
             white-space: nowrap;
         }
 
         .section-line {
             flex: 1;
             height: 1px;
-            background: linear-gradient(90deg, #1e293b, transparent);
+            background: var(--border);
         }
 
-        /* Tool cards */
-        .tools {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 1.25rem;
-        }
-
-        .empty-state {
-            color: #1e293b;
-            font-size: 0.875rem;
-            font-style: italic;
-            padding: 1.5rem 0;
-        }
-
-        .tool-card {
-            position: relative;
-            background: rgba(15, 23, 42, 0.7);
-            border: 1px solid rgba(51, 65, 85, 0.8);
-            border-radius: 16px;
-            padding: 1.75rem;
-            text-decoration: none;
-            color: #e2e8f0;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-            backdrop-filter: blur(8px);
-            overflow: hidden;
-        }
-
-        .tool-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: 16px;
-            background: linear-gradient(135deg, rgba(56,189,248,0.06), rgba(129,140,248,0.06));
-            opacity: 0;
-            transition: opacity 0.25s;
-        }
-
-        .tool-card:hover {
-            border-color: rgba(129, 140, 248, 0.5);
-            transform: translateY(-4px);
-            box-shadow:
-                0 20px 40px rgba(0,0,0,0.4),
-                0 0 0 1px rgba(129,140,248,0.1),
-                0 0 40px rgba(129,140,248,0.08);
-        }
-
-        .tool-card:hover::before { opacity: 1; }
-
-        .card-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, rgba(56,189,248,0.15), rgba(129,140,248,0.15));
-            border: 1px solid rgba(56,189,248,0.2);
-            border-radius: 10px;
-            margin-bottom: 1.25rem;
-            font-size: 1.1rem;
-        }
-
-        .tool-card h3 {
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            color: #f1f5f9;
-        }
-
-        .tool-card p {
-            color: #64748b;
-            font-size: 0.875rem;
-            line-height: 1.6;
-        }
-
-        .card-arrow {
-            position: absolute;
-            bottom: 1.75rem;
-            right: 1.75rem;
-            color: #334155;
-            font-size: 1rem;
-            transition: all 0.25s;
-        }
-
-        .tool-card:hover .card-arrow {
-            color: #818cf8;
-            transform: translate(2px, -2px);
-        }
-
-        .card-icon--logo {
-            background: rgba(15, 23, 42, 0.6);
-            border-color: rgba(51, 65, 85, 0.5);
-        }
-
-        .card-icon--logo img {
-            width: 28px;
-            height: 28px;
-            object-fit: contain;
-        }
-
-        .card-tag {
-            display: inline-block;
-            font-size: 0.65rem;
-            font-weight: 600;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: #38bdf8;
-            background: rgba(56, 189, 248, 0.1);
-            border: 1px solid rgba(56, 189, 248, 0.2);
-            border-radius: 6px;
-            padding: 0.2rem 0.6rem;
-            margin-top: 0.75rem;
-        }
-
-        .footer {
-            position: relative;
-            z-index: 1;
-            text-align: center;
-            padding: 2rem;
-            color: #1e293b;
-            font-size: 0.8rem;
-            letter-spacing: 0.05em;
-        }
-
-        /* Subsection indent */
+        /* Subsections */
         .subsection {
-            margin-left: 1.5rem;
-            margin-bottom: 2rem;
+            margin-left: 20px;
+            margin-bottom: 28px;
         }
 
-        .subsection .section-header {
-            margin-bottom: 1rem;
-        }
+        .subsection .section-header { margin-bottom: 14px; }
 
-        .subsection .section-label {
-            color: #475569;
-            font-size: 0.65rem;
-        }
-
-        .subsection .section-line {
-            background: linear-gradient(90deg, #1e293b 0%, transparent 80%);
-        }
-
-        /* FMCG Animation */
+        /* FMCG conveyor */
         .fmcg-animation {
             position: relative;
             overflow: hidden;
-            height: 60px;
-            margin-bottom: 1.5rem;
-            border-radius: 12px;
-            background: rgba(15, 23, 42, 0.5);
-            border: 1px solid rgba(51, 65, 85, 0.4);
+            height: 48px;
+            margin-bottom: 16px;
+            border-radius: 6px;
+            background: var(--card);
+            border: 1px solid var(--border);
         }
 
         .fmcg-track {
@@ -331,31 +123,25 @@
         .fmcg-item {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            padding: 0 1.5rem;
+            gap: 5px;
+            padding: 0 18px;
             white-space: nowrap;
-            font-size: 0.8rem;
-            color: #64748b;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--muted);
         }
 
-        .fmcg-item span {
-            font-size: 1.4rem;
-        }
+        .fmcg-item span { font-size: 16px; }
 
         .fmcg-belt {
             position: absolute;
             bottom: 0;
             left: 0;
             right: 0;
-            height: 4px;
-            background: repeating-linear-gradient(
-                90deg,
-                #334155 0px,
-                #334155 12px,
-                #1e293b 12px,
-                #1e293b 24px
-            );
-            background-size: 24px 4px;
+            height: 3px;
+            background: repeating-linear-gradient(90deg, var(--border) 0px, var(--border) 10px, var(--bg) 10px, var(--bg) 20px);
+            background-size: 20px 3px;
             animation: beltMove 0.8s linear infinite;
         }
 
@@ -366,7 +152,7 @@
 
         @keyframes beltMove {
             0% { background-position: 0 0; }
-            100% { background-position: 24px 0; }
+            100% { background-position: 20px 0; }
         }
 
         .fmcg-animation::before,
@@ -375,174 +161,243 @@
             position: absolute;
             top: 0;
             bottom: 0;
-            width: 40px;
+            width: 30px;
             z-index: 2;
             pointer-events: none;
         }
 
         .fmcg-animation::before {
             left: 0;
-            background: linear-gradient(90deg, rgba(6,11,24,1), transparent);
+            background: linear-gradient(90deg, var(--bg), transparent);
         }
 
         .fmcg-animation::after {
             right: 0;
-            background: linear-gradient(-90deg, rgba(6,11,24,1), transparent);
+            background: linear-gradient(-90deg, var(--bg), transparent);
+        }
+
+        /* Tool cards */
+        .tools {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 12px;
+        }
+
+        .tool-card {
+            position: relative;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            text-decoration: none;
+            color: var(--ink);
+            transition: all 0.2s;
+        }
+
+        .tool-card:hover {
+            border-color: var(--ink2);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            transform: translateY(-2px);
+        }
+
+        .card-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            background: #faf8f4;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+
+        .card-icon--logo {
+            background: var(--card);
+        }
+
+        .card-icon--logo img {
+            width: 24px;
+            height: 24px;
+            object-fit: contain;
+        }
+
+        .tool-card h3 {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--ink);
+        }
+
+        .tool-card p {
+            font-size: 12px;
+            color: var(--ink2);
+            line-height: 1.6;
+        }
+
+        .card-arrow {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: var(--border);
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .tool-card:hover .card-arrow { color: var(--ink2); }
+
+        .card-tag {
+            display: inline-block;
+            font-family: 'DM Mono', monospace;
+            font-size: 9px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--green);
+            background: #e6f4ec;
+            border: 1px solid #c4ddd0;
+            border-radius: 4px;
+            padding: 2px 8px;
+            margin-top: 8px;
+        }
+
+        .empty-state {
+            color: var(--muted);
+            font-size: 12px;
+            font-style: italic;
+            padding: 12px 0;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 24px;
+            font-family: 'DM Mono', monospace;
+            font-size: 10px;
+            color: var(--muted);
+            letter-spacing: 0.05em;
         }
     </style>
 </head>
 <body>
     <div class="hero">
-        <div class="logo-wrap">
-            <div class="diamond">
-                <svg viewBox="0 0 80 96" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <!-- Crown (top facets) -->
-                    <polygon points="40,0 10,28 70,28" fill="url(#facet1)"/>
-                    <polygon points="10,28 0,36 40,28" fill="url(#facet2)"/>
-                    <polygon points="70,28 80,36 40,28" fill="url(#facet3)"/>
-                    <!-- Girdle -->
-                    <polygon points="0,36 40,28 80,36" fill="url(#facet4)" opacity="0.9"/>
-                    <!-- Pavilion (bottom facets) -->
-                    <polygon points="0,36 40,96 40,36" fill="url(#facet5)"/>
-                    <polygon points="80,36 40,96 40,36" fill="url(#facet6)"/>
-                    <!-- Highlight -->
-                    <polygon points="40,0 25,28 40,28" fill="rgba(255,255,255,0.18)"/>
-                    <polygon points="40,28 55,28 80,36 40,36" fill="rgba(255,255,255,0.08)"/>
-                    <defs>
-                        <linearGradient id="facet1" x1="40" y1="0" x2="40" y2="28" gradientUnits="userSpaceOnUse">
-                            <stop offset="0%" stop-color="#a5f3fc"/>
-                            <stop offset="100%" stop-color="#38bdf8"/>
-                        </linearGradient>
-                        <linearGradient id="facet2" x1="0" y1="28" x2="40" y2="28" gradientUnits="userSpaceOnUse">
-                            <stop offset="0%" stop-color="#818cf8"/>
-                            <stop offset="100%" stop-color="#38bdf8"/>
-                        </linearGradient>
-                        <linearGradient id="facet3" x1="80" y1="28" x2="40" y2="28" gradientUnits="userSpaceOnUse">
-                            <stop offset="0%" stop-color="#c084fc"/>
-                            <stop offset="100%" stop-color="#38bdf8"/>
-                        </linearGradient>
-                        <linearGradient id="facet4" x1="0" y1="36" x2="80" y2="36" gradientUnits="userSpaceOnUse">
-                            <stop offset="0%" stop-color="#818cf8"/>
-                            <stop offset="50%" stop-color="#67e8f9"/>
-                            <stop offset="100%" stop-color="#c084fc"/>
-                        </linearGradient>
-                        <linearGradient id="facet5" x1="0" y1="36" x2="40" y2="96" gradientUnits="userSpaceOnUse">
-                            <stop offset="0%" stop-color="#818cf8"/>
-                            <stop offset="100%" stop-color="#1e3a5f"/>
-                        </linearGradient>
-                        <linearGradient id="facet6" x1="80" y1="36" x2="40" y2="96" gradientUnits="userSpaceOnUse">
-                            <stop offset="0%" stop-color="#7dd3fc"/>
-                            <stop offset="100%" stop-color="#1e3a5f"/>
-                        </linearGradient>
-                    </defs>
-                </svg>
-            </div>
-        </div>
+        <svg class="diamond-logo" viewBox="0 0 80 96" fill="none">
+            <polygon points="40,0 10,28 70,28" fill="#c8c2b4"/>
+            <polygon points="10,28 0,36 40,28" fill="#a89e8e"/>
+            <polygon points="70,28 80,36 40,28" fill="#b8ae9e"/>
+            <polygon points="0,36 40,28 80,36" fill="#d4cfc4" opacity="0.9"/>
+            <polygon points="0,36 40,96 40,36" fill="#9a9080"/>
+            <polygon points="80,36 40,96 40,36" fill="#b8ae9e"/>
+            <polygon points="40,0 25,28 40,28" fill="rgba(255,255,255,0.25)"/>
+            <polygon points="40,28 55,28 80,36 40,36" fill="rgba(255,255,255,0.1)"/>
+        </svg>
         <div class="eyebrow">Diamond Peak</div>
         <h1>Professional Services</h1>
         <p class="subtitle">FMCG consulting and AI-driven solutions</p>
     </div>
 
-    <div class="section">
-        <div class="section-header">
-            <span class="section-label">Consulting</span>
-            <div class="section-line"></div>
-        </div>
-
-        <div class="subsection">
+    <div class="page">
+        <div class="section">
             <div class="section-header">
-                <span class="section-label">FMCG</span>
+                <span class="section-label">Consulting</span>
                 <div class="section-line"></div>
             </div>
-            <div class="fmcg-animation">
-                <div class="fmcg-track">
-                    <div class="fmcg-item"><span>&#x1F36B;</span> Chocolate</div>
-                    <div class="fmcg-item"><span>&#x1F37A;</span> Beverages</div>
-                    <div class="fmcg-item"><span>&#x1F9C1;</span> Snacks</div>
-                    <div class="fmcg-item"><span>&#x1F9F4;</span> Personal Care</div>
-                    <div class="fmcg-item"><span>&#x1F9FC;</span> Cleaning</div>
-                    <div class="fmcg-item"><span>&#x1F35E;</span> Bakery</div>
-                    <div class="fmcg-item"><span>&#x1F9C0;</span> Dairy</div>
-                    <div class="fmcg-item"><span>&#x1F96B;</span> Canned Goods</div>
-                    <div class="fmcg-item"><span>&#x1F4E6;</span> Packaging</div>
-                    <div class="fmcg-item"><span>&#x1F50D;</span> Quality</div>
-                    <div class="fmcg-item"><span>&#x2699;&#xFE0F;</span> OEE</div>
-                    <div class="fmcg-item"><span>&#x1F4CA;</span> Efficiency</div>
-                    <!-- Duplicate for seamless loop -->
-                    <div class="fmcg-item"><span>&#x1F36B;</span> Chocolate</div>
-                    <div class="fmcg-item"><span>&#x1F37A;</span> Beverages</div>
-                    <div class="fmcg-item"><span>&#x1F9C1;</span> Snacks</div>
-                    <div class="fmcg-item"><span>&#x1F9F4;</span> Personal Care</div>
-                    <div class="fmcg-item"><span>&#x1F9FC;</span> Cleaning</div>
-                    <div class="fmcg-item"><span>&#x1F35E;</span> Bakery</div>
-                    <div class="fmcg-item"><span>&#x1F9C0;</span> Dairy</div>
-                    <div class="fmcg-item"><span>&#x1F96B;</span> Canned Goods</div>
-                    <div class="fmcg-item"><span>&#x1F4E6;</span> Packaging</div>
-                    <div class="fmcg-item"><span>&#x1F50D;</span> Quality</div>
-                    <div class="fmcg-item"><span>&#x2699;&#xFE0F;</span> OEE</div>
-                    <div class="fmcg-item"><span>&#x1F4CA;</span> Efficiency</div>
+
+            <div class="subsection">
+                <div class="section-header">
+                    <span class="section-label">FMCG</span>
+                    <div class="section-line"></div>
                 </div>
-                <div class="fmcg-belt"></div>
+                <div class="fmcg-animation">
+                    <div class="fmcg-track">
+                        <div class="fmcg-item"><span>&#x1F36B;</span> Chocolate</div>
+                        <div class="fmcg-item"><span>&#x1F37A;</span> Beverages</div>
+                        <div class="fmcg-item"><span>&#x1F9C1;</span> Snacks</div>
+                        <div class="fmcg-item"><span>&#x1F9F4;</span> Personal Care</div>
+                        <div class="fmcg-item"><span>&#x1F9FC;</span> Cleaning</div>
+                        <div class="fmcg-item"><span>&#x1F35E;</span> Bakery</div>
+                        <div class="fmcg-item"><span>&#x1F9C0;</span> Dairy</div>
+                        <div class="fmcg-item"><span>&#x1F96B;</span> Canned Goods</div>
+                        <div class="fmcg-item"><span>&#x1F4E6;</span> Packaging</div>
+                        <div class="fmcg-item"><span>&#x1F50D;</span> Quality</div>
+                        <div class="fmcg-item"><span>&#x2699;&#xFE0F;</span> OEE</div>
+                        <div class="fmcg-item"><span>&#x1F4CA;</span> Efficiency</div>
+                        <div class="fmcg-item"><span>&#x1F36B;</span> Chocolate</div>
+                        <div class="fmcg-item"><span>&#x1F37A;</span> Beverages</div>
+                        <div class="fmcg-item"><span>&#x1F9C1;</span> Snacks</div>
+                        <div class="fmcg-item"><span>&#x1F9F4;</span> Personal Care</div>
+                        <div class="fmcg-item"><span>&#x1F9FC;</span> Cleaning</div>
+                        <div class="fmcg-item"><span>&#x1F35E;</span> Bakery</div>
+                        <div class="fmcg-item"><span>&#x1F9C0;</span> Dairy</div>
+                        <div class="fmcg-item"><span>&#x1F96B;</span> Canned Goods</div>
+                        <div class="fmcg-item"><span>&#x1F4E6;</span> Packaging</div>
+                        <div class="fmcg-item"><span>&#x1F50D;</span> Quality</div>
+                        <div class="fmcg-item"><span>&#x2699;&#xFE0F;</span> OEE</div>
+                        <div class="fmcg-item"><span>&#x1F4CA;</span> Efficiency</div>
+                    </div>
+                    <div class="fmcg-belt"></div>
+                </div>
+                <div class="tools">
+                    <a href="rag-study.html" class="tool-card">
+                        <div class="card-icon">&#x1F6A6;</div>
+                        <h3>RAG Study Tool</h3>
+                        <p>Red Amber Green production line study — track uptime, log stops by type and asset, and export data.</p>
+                        <span class="card-arrow">&#8599;</span>
+                    </a>
+                </div>
             </div>
-            <div class="tools">
-                <a href="rag-study.html" class="tool-card">
-                    <div class="card-icon">&#x1F6A6;</div>
-                    <h3>RAG Study Tool</h3>
-                    <p>Red Amber Green production line study — track uptime, log stops by type and asset, and export data.</p>
-                    <span class="card-arrow">&#8599;</span>
-                </a>
+
+            <div class="subsection">
+                <div class="section-header">
+                    <span class="section-label">AI</span>
+                    <div class="section-line"></div>
+                </div>
+                <div class="tools">
+                    <a href="https://www.majiai.co" target="_blank" rel="noopener" class="tool-card">
+                        <div class="card-icon card-icon--logo">
+                            <img src="https://cdn.prod.website-files.com/6917572096f0764001bd6b87/6917572096f0764001bd6c40_RGB%20Logo%20Mark%20Full%20Colour.svg" alt="Maji AI" width="24" height="24">
+                        </div>
+                        <h3>Maji AI</h3>
+                        <p>Operational Excellence, On Demand — AI-powered consulting for manufacturing and operations.</p>
+                        <span class="card-tag">Case Study</span>
+                        <span class="card-arrow">&#8599;</span>
+                    </a>
+                </div>
             </div>
         </div>
 
-        <div class="subsection">
+        <div class="section">
             <div class="section-header">
-                <span class="section-label">AI</span>
+                <span class="section-label">Resources</span>
                 <div class="section-line"></div>
             </div>
             <div class="tools">
-                <a href="https://www.majiai.co" target="_blank" rel="noopener" class="tool-card">
-                    <div class="card-icon card-icon--logo">
-                        <img src="https://cdn.prod.website-files.com/6917572096f0764001bd6b87/6917572096f0764001bd6c40_RGB%20Logo%20Mark%20Full%20Colour.svg" alt="Maji AI" width="28" height="28">
-                    </div>
-                    <h3>Maji AI</h3>
-                    <p>Operational Excellence, On Demand — AI-powered consulting for manufacturing and operations.</p>
-                    <span class="card-tag">Case Study</span>
+                <a href="stamp-duty.html" class="tool-card">
+                    <div class="card-icon">&#127968;</div>
+                    <h3>Stamp Duty Calculator</h3>
+                    <p>Calculate UK stamp duty land tax for property purchases.</p>
+                    <span class="card-arrow">&#8599;</span>
+                </a>
+                <a href="student-loan.html" class="tool-card">
+                    <div class="card-icon">&#127891;</div>
+                    <h3>Student Loan: Pay Off or Invest?</h3>
+                    <p>Should you clear your student loan or invest in an ISA? See the maths with interactive charts.</p>
+                    <span class="card-arrow">&#8599;</span>
+                </a>
+                <a href="should-you-wait.html" class="tool-card">
+                    <div class="card-icon">&#127968;</div>
+                    <h3>Accept Now, or Wait?</h3>
+                    <p>Mortgage cost reality check for sellers — see how rate changes affect buyer affordability.</p>
+                    <span class="card-arrow">&#8599;</span>
+                </a>
+                <a href="random-number.html" class="tool-card">
+                    <div class="card-icon">&#127922;</div>
+                    <h3>Random Number Generator</h3>
+                    <p>Generate random numbers within any range, with options for unique values and sorting.</p>
                     <span class="card-arrow">&#8599;</span>
                 </a>
             </div>
-        </div>
-    </div>
-
-    <div class="section">
-        <div class="section-header">
-            <span class="section-label">Resources</span>
-            <div class="section-line"></div>
-        </div>
-        <div class="tools">
-            <a href="stamp-duty.html" class="tool-card">
-                <div class="card-icon">&#127968;</div>
-                <h3>Stamp Duty Calculator</h3>
-                <p>Calculate UK stamp duty land tax for property purchases.</p>
-                <span class="card-arrow">&#8599;</span>
-            </a>
-            <a href="random-number.html" class="tool-card">
-                <div class="card-icon">&#127922;</div>
-                <h3>Random Number Generator</h3>
-                <p>Generate random numbers within any range, with options for unique values and sorting.</p>
-                <span class="card-arrow">&#8599;</span>
-            </a>
-            <a href="should-you-wait.html" class="tool-card">
-                <div class="card-icon">&#127968;</div>
-                <h3>Accept Now, or Wait?</h3>
-                <p>Mortgage cost reality check for sellers — see how rate changes affect buyer affordability.</p>
-                <span class="card-arrow">&#8599;</span>
-            </a>
-            <a href="student-loan.html" class="tool-card">
-                <div class="card-icon">&#127891;</div>
-                <h3>Student Loan: Pay Off or Invest?</h3>
-                <p>Should you clear your student loan or invest in an ISA? See the maths with interactive charts.</p>
-                <span class="card-arrow">&#8599;</span>
-            </a>
         </div>
     </div>
 
