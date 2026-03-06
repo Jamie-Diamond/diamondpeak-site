@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diamond Peak</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            text-align: center;
+            padding: 2rem;
+        }
+        .diamond {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            transform: rotate(45deg);
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #94a3b8; font-size: 1.1rem; margin-bottom: 3rem; }
+        .tools {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            max-width: 800px;
+            width: 100%;
+            padding: 0 2rem 4rem;
+            margin: 0 auto;
+        }
+        .tool-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-decoration: none;
+            color: #e2e8f0;
+            transition: all 0.2s;
+        }
+        .tool-card:hover {
+            border-color: #818cf8;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(129, 140, 248, 0.15);
+        }
+        .tool-card h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .tool-card p { color: #94a3b8; font-size: 0.9rem; line-height: 1.5; }
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: #475569;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <div class="diamond"></div>
+        <h1>Diamond Peak</h1>
+        <p class="subtitle">Tools &amp; Calculators</p>
+    </div>
+    <div class="tools">
+        <a href="stamp-duty.html" class="tool-card">
+            <h3>Stamp Duty Calculator</h3>
+            <p>Calculate UK stamp duty land tax for property purchases.</p>
+        </a>
+        <!-- More tools will appear here as we build them -->
+    </div>
+    <div class="footer">&copy; 2026 Diamond Peak</div>
+</body>
+</html>

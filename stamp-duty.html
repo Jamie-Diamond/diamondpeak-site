@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stamp Duty Calculator - Diamond Peak</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container { max-width: 600px; margin: 0 auto; }
+        .back { color: #818cf8; text-decoration: none; font-size: 0.9rem; }
+        .back:hover { text-decoration: underline; }
+        h1 {
+            font-size: 1.8rem;
+            margin: 1.5rem 0 0.5rem;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .desc { color: #94a3b8; margin-bottom: 2rem; }
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 2rem;
+        }
+        label { display: block; font-size: 0.9rem; color: #94a3b8; margin-bottom: 0.5rem; }
+        input, select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+        input:focus, select:focus { outline: none; border-color: #818cf8; }
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .checkbox-row input { width: auto; margin: 0; }
+        .checkbox-row label { margin: 0; color: #e2e8f0; }
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 0.5rem;
+        }
+        button:hover { opacity: 0.9; }
+        .result {
+            margin-top: 1.5rem;
+            padding: 1.5rem;
+            background: #0f172a;
+            border-radius: 8px;
+            display: none;
+        }
+        .result.show { display: block; }
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #1e293b;
+        }
+        .result-row:last-child { border: none; }
+        .result-row .label { color: #94a3b8; }
+        .result-row .value { font-weight: 600; }
+        .total { font-size: 1.2rem; color: #38bdf8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="back">&larr; Back to tools</a>
+        <h1>Stamp Duty Calculator</h1>
+        <p class="desc">Calculate UK Stamp Duty Land Tax (SDLT) for England &amp; Northern Ireland.</p>
+
+        <div class="card">
+            <label for="price">Property Price (&pound;)</label>
+            <input type="number" id="price" placeholder="e.g. 350000" min="0">
+
+            <label for="buyer-type">Buyer Type</label>
+            <select id="buyer-type">
+                <option value="standard">Standard (next home or moving)</option>
+                <option value="first-time">First-time buyer</option>
+                <option value="additional">Additional property / buy-to-let</option>
+            </select>
+
+            <button onclick="calculate()">Calculate Stamp Duty</button>
+
+            <div class="result" id="result"></div>
+        </div>
+    </div>
+
+    <script>
+        function calculate() {
+            const price = parseFloat(document.getElementById('price').value);
+            const type = document.getElementById('buyer-type').value;
+            const resultDiv = document.getElementById('result');
+
+            if (!price || price < 0) {
+                resultDiv.innerHTML = '<p style="color:#f87171">Please enter a valid property price.</p>';
+                resultDiv.classList.add('show');
+                return;
+            }
+
+            let bands, surcharge = 0;
+
+            if (type === 'first-time' && price <= 625000) {
+                // First-time buyer rates (from April 2025)
+                bands = [
+                    { limit: 300000, rate: 0 },
+                    { limit: 625000, rate: 0.05 },
+                ];
+            } else if (type === 'additional') {
+                // Standard bands + 5% surcharge on additional properties
+                bands = [
+                    { limit: 125000, rate: 0 },
+                    { limit: 250000, rate: 0.02 },
+                    { limit: 925000, rate: 0.05 },
+                    { limit: 1500000, rate: 0.10 },
+                    { limit: Infinity, rate: 0.12 },
+                ];
+                surcharge = 0.05;
+            } else {
+                // Standard rates
+                bands = [
+                    { limit: 125000, rate: 0 },
+                    { limit: 250000, rate: 0.02 },
+                    { limit: 925000, rate: 0.05 },
+                    { limit: 1500000, rate: 0.10 },
+                    { limit: Infinity, rate: 0.12 },
+                ];
+            }
+
+            let tax = 0;
+            let prev = 0;
+            let breakdown = [];
+
+            for (const band of bands) {
+                if (price <= prev) break;
+                const taxable = Math.min(price, band.limit) - prev;
+                const effectiveRate = band.rate + surcharge;
+                const bandTax = taxable * effectiveRate;
+                if (taxable > 0) {
+                    breakdown.push({
+                        from: prev,
+                        to: Math.min(price, band.limit),
+                        rate: effectiveRate,
+                        tax: bandTax
+                    });
+                }
+                tax += bandTax;
+                prev = band.limit;
+            }
+
+            // Handle first-time buyer over threshold
+            if (type === 'first-time' && price > 625000) {
+                // Falls back to standard rates
+                tax = 0;
+                breakdown = [];
+                prev = 0;
+                const stdBands = [
+                    { limit: 125000, rate: 0 },
+                    { limit: 250000, rate: 0.02 },
+                    { limit: 925000, rate: 0.05 },
+                    { limit: 1500000, rate: 0.10 },
+                    { limit: Infinity, rate: 0.12 },
+                ];
+                for (const band of stdBands) {
+                    if (price <= prev) break;
+                    const taxable = Math.min(price, band.limit) - prev;
+                    const bandTax = taxable * band.rate;
+                    if (taxable > 0) {
+                        breakdown.push({ from: prev, to: Math.min(price, band.limit), rate: band.rate, tax: bandTax });
+                    }
+                    tax += bandTax;
+                    prev = band.limit;
+                }
+            }
+
+            const effectiveRate = ((tax / price) * 100).toFixed(2);
+            const fmt = n => '£' + n.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+            let html = '';
+            for (const b of breakdown) {
+                html += `<div class="result-row">
+                    <span class="label">${fmt(b.from)} – ${fmt(b.to)} @ ${(b.rate * 100).toFixed(0)}%</span>
+                    <span class="value">${fmt(b.tax)}</span>
+                </div>`;
+            }
+            html += `<div class="result-row total">
+                <span class="label">Total Stamp Duty</span>
+                <span class="value">${fmt(tax)}</span>
+            </div>`;
+            html += `<div class="result-row">
+                <span class="label">Effective rate</span>
+                <span class="value">${effectiveRate}%</span>
+            </div>`;
+
+            resultDiv.innerHTML = html;
+            resultDiv.classList.add('show');
+        }
+    </script>
+</body>
+</html>
