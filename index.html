@@ -255,6 +255,31 @@
             transform: translate(2px, -2px);
         }
 
+        .card-icon--logo {
+            background: rgba(15, 23, 42, 0.6);
+            border-color: rgba(51, 65, 85, 0.5);
+        }
+
+        .card-icon--logo img {
+            width: 28px;
+            height: 28px;
+            object-fit: contain;
+        }
+
+        .card-tag {
+            display: inline-block;
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 6px;
+            padding: 0.2rem 0.6rem;
+            margin-top: 0.75rem;
+        }
+
         .footer {
             position: relative;
             z-index: 1;
@@ -470,7 +495,15 @@
                 <div class="section-line"></div>
             </div>
             <div class="tools">
-                <p class="empty-state">Coming soon</p>
+                <a href="https://www.majiai.co" target="_blank" rel="noopener" class="tool-card">
+                    <div class="card-icon card-icon--logo">
+                        <img src="https://cdn.prod.website-files.com/6917572096f0764001bd6b87/6917572096f0764001bd6c40_RGB%20Logo%20Mark%20Full%20Colour.svg" alt="Maji AI" width="28" height="28">
+                    </div>
+                    <h3>Maji AI</h3>
+                    <p>Operational Excellence, On Demand — AI-powered consulting for manufacturing and operations.</p>
+                    <span class="card-tag">Case Study</span>
+                    <span class="card-arrow">&#8599;</span>
+                </a>
             </div>
         </div>
     </div>
