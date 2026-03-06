@@ -766,10 +766,9 @@ function drawChart(data) {
   const allVals = [...data.netPayoffArr, ...data.netKeepArr];
   if (writeoffVal !== null) allVals.push(writeoffVal);
   let maxVal = Math.max(...allVals);
-  let minVal = Math.min(...allVals, 0);
+  let minVal = 0;
   const range = maxVal - minVal || 1;
   maxVal += range * 0.08;
-  minVal -= range * 0.05;
 
   const xScale = i => pad.left + (i / n) * plotW;
   const yScale = v => pad.top + plotH - ((v - minVal) / (maxVal - minVal)) * plotH;
@@ -814,17 +813,14 @@ function drawChart(data) {
     ctx.stroke();
   }
 
-  // Zero line
-  if (minVal < 0 && maxVal > 0) {
-    const zeroY = yScale(0);
-    ctx.strokeStyle = '#c8c2b4';
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(pad.left, zeroY);
-    ctx.lineTo(W - pad.right, zeroY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
+  // Zero line (bottom of chart)
+  ctx.strokeStyle = '#c8c2b4';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(pad.left, yScale(0));
+  ctx.lineTo(W - pad.right, yScale(0));
+  ctx.stroke();
 
   // Difference fill
   ctx.beginPath();
