@@ -5,85 +5,298 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Diamond Peak</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #0f172a;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #060b18;
             color: #e2e8f0;
             min-height: 100vh;
+            overflow-x: hidden;
         }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(56, 189, 248, 0.12) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 80%, rgba(129, 140, 248, 0.08) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Grid overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(56, 189, 248, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.04) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
         .hero {
+            position: relative;
+            z-index: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 60vh;
+            min-height: 65vh;
             text-align: center;
-            padding: 2rem;
+            padding: 4rem 2rem 2rem;
         }
+
+        /* Diamond logo */
+        .logo-wrap {
+            position: relative;
+            margin-bottom: 2.5rem;
+        }
+
+        .logo-wrap::before {
+            content: '';
+            position: absolute;
+            inset: -20px;
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.2) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: pulse 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.6; }
+            50% { transform: scale(1.2); opacity: 1; }
+        }
+
         .diamond {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            position: relative;
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
             transform: rotate(45deg);
-            border-radius: 8px;
-            margin-bottom: 2rem;
+            border-radius: 10px;
+            box-shadow:
+                0 0 30px rgba(56, 189, 248, 0.4),
+                0 0 60px rgba(129, 140, 248, 0.2),
+                inset 0 1px 0 rgba(255,255,255,0.3);
+            animation: shimmer 4s ease-in-out infinite;
         }
+
+        @keyframes shimmer {
+            0%, 100% { box-shadow: 0 0 30px rgba(56,189,248,0.4), 0 0 60px rgba(129,140,248,0.2), inset 0 1px 0 rgba(255,255,255,0.3); }
+            50% { box-shadow: 0 0 50px rgba(56,189,248,0.6), 0 0 90px rgba(129,140,248,0.35), inset 0 1px 0 rgba(255,255,255,0.4); }
+        }
+
+        .diamond::after {
+            content: '';
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            width: 16px;
+            height: 16px;
+            background: rgba(255,255,255,0.35);
+            border-radius: 3px;
+        }
+
+        .eyebrow {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: #38bdf8;
+            margin-bottom: 1rem;
+            opacity: 0;
+            animation: fadeUp 0.6s 0.2s forwards;
+        }
+
         h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            font-size: clamp(2.8rem, 6vw, 4.5rem);
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #f0f9ff 0%, #bae6fd 40%, #818cf8 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            background-clip: text;
+            opacity: 0;
+            animation: fadeUp 0.6s 0.35s forwards;
         }
-        .subtitle { color: #94a3b8; font-size: 1.1rem; margin-bottom: 3rem; }
-        .tools {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            max-width: 800px;
-            width: 100%;
-            padding: 0 2rem 4rem;
+
+        .subtitle {
+            color: #64748b;
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-bottom: 0;
+            opacity: 0;
+            animation: fadeUp 0.6s 0.5s forwards;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Divider */
+        .divider {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            max-width: 860px;
             margin: 0 auto;
+            padding: 0 2rem 2rem;
+            opacity: 0;
+            animation: fadeUp 0.6s 0.65s forwards;
         }
+
+        .divider-line {
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #1e293b, transparent);
+        }
+
+        .divider-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #334155;
+        }
+
+        /* Tool cards */
+        .tools {
+            position: relative;
+            z-index: 1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.25rem;
+            max-width: 860px;
+            width: 100%;
+            padding: 0 2rem 6rem;
+            margin: 0 auto;
+            opacity: 0;
+            animation: fadeUp 0.6s 0.75s forwards;
+        }
+
         .tool-card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 1.5rem;
+            position: relative;
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(51, 65, 85, 0.8);
+            border-radius: 16px;
+            padding: 1.75rem;
             text-decoration: none;
             color: #e2e8f0;
-            transition: all 0.2s;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(8px);
+            overflow: hidden;
         }
+
+        .tool-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(56,189,248,0.06), rgba(129,140,248,0.06));
+            opacity: 0;
+            transition: opacity 0.25s;
+        }
+
         .tool-card:hover {
-            border-color: #818cf8;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(129, 140, 248, 0.15);
+            border-color: rgba(129, 140, 248, 0.5);
+            transform: translateY(-4px);
+            box-shadow:
+                0 20px 40px rgba(0,0,0,0.4),
+                0 0 0 1px rgba(129,140,248,0.1),
+                0 0 40px rgba(129,140,248,0.08);
         }
-        .tool-card h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
-        .tool-card p { color: #94a3b8; font-size: 0.9rem; line-height: 1.5; }
+
+        .tool-card:hover::before { opacity: 1; }
+
+        .card-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, rgba(56,189,248,0.15), rgba(129,140,248,0.15));
+            border: 1px solid rgba(56,189,248,0.2);
+            border-radius: 10px;
+            margin-bottom: 1.25rem;
+            font-size: 1.1rem;
+        }
+
+        .tool-card h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #f1f5f9;
+        }
+
+        .tool-card p {
+            color: #64748b;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+
+        .card-arrow {
+            position: absolute;
+            bottom: 1.75rem;
+            right: 1.75rem;
+            color: #334155;
+            font-size: 1rem;
+            transition: all 0.25s;
+        }
+
+        .tool-card:hover .card-arrow {
+            color: #818cf8;
+            transform: translate(2px, -2px);
+        }
+
         .footer {
+            position: relative;
+            z-index: 1;
             text-align: center;
             padding: 2rem;
-            color: #475569;
-            font-size: 0.85rem;
+            color: #1e293b;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
         }
     </style>
 </head>
 <body>
     <div class="hero">
-        <div class="diamond"></div>
-        <h1>Diamond Peak</h1>
-        <p class="subtitle">Tools &amp; Calculators</p>
+        <div class="logo-wrap">
+            <div class="diamond"></div>
+        </div>
+        <div class="eyebrow">Diamond Peak</div>
+        <h1>Tools &amp; Calculators</h1>
+        <p class="subtitle">Useful tools for property and finance decisions</p>
     </div>
+
+    <div class="divider">
+        <div class="divider-line"></div>
+        <span class="divider-label">Available now</span>
+        <div class="divider-line"></div>
+    </div>
+
     <div class="tools">
         <a href="stamp-duty.html" class="tool-card">
+            <div class="card-icon">&#127968;</div>
             <h3>Stamp Duty Calculator</h3>
             <p>Calculate UK stamp duty land tax for property purchases.</p>
+            <span class="card-arrow">&#8599;</span>
         </a>
         <!-- More tools will appear here as we build them -->
     </div>
+
     <div class="footer">&copy; 2026 Diamond Peak</div>
 </body>
 </html>
