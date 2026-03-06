@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>RAG Study — Production Line</title>
+<style>
+  :root {
+    --pine: #006458;
+    --pine-dark: #004d43;
+    --lime: #DAF11B;
+    --dark: #001412;
+    --red: #d32f2f;
+    --red-dark: #b71c1c;
+    --amber: #f59e0b;
+    --grey-bg: #f3f4f6;
+    --grey-border: #d1d5db;
+    --white: #ffffff;
+    --text: #1f2937;
+    --text-light: #6b7280;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--grey-bg);
+    color: var(--text);
+    min-height: 100dvh;
+    padding-bottom: 100px;
+  }
+  header {
+    background: var(--pine);
+    color: var(--white);
+    padding: 16px 20px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  header h1 { font-size: 18px; font-weight: 700; }
+  header .sub { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+
+  .card {
+    background: var(--white);
+    border-radius: var(--radius);
+    margin: 12px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-light);
+    margin-bottom: 12px;
+  }
+
+  .timer-display {
+    font-size: 48px;
+    font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+    padding: 8px 0;
+  }
+  .timer-display.running { color: var(--pine); }
+  .timer-display.stopped { color: var(--red); }
+
+  .status-badge {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .status-badge span {
+    display: inline-block;
+    padding: 4px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .status-running { background: #dcfce7; color: #166534; }
+  .status-stopped { background: #fee2e2; color: #991b1b; }
+  .status-idle { background: #e5e7eb; color: #4b5563; }
+
+  .btn-main {
+    display: block;
+    width: 100%;
+    padding: 18px;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 18px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.1s;
+    margin-top: 12px;
+  }
+  .btn-main:active { transform: scale(0.97); opacity: 0.9; }
+  .btn-start { background: var(--pine); color: var(--white); }
+  .btn-stop { background: var(--red); color: var(--white); }
+
+  .stop-type-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .stop-type-btn {
+    flex: 1;
+    padding: 14px 8px;
+    border: 2px solid var(--grey-border);
+    border-radius: 8px;
+    background: var(--white);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .stop-type-btn:active { transform: scale(0.97); }
+  .stop-type-btn.selected-red {
+    border-color: var(--red);
+    background: #fee2e2;
+    color: var(--red-dark);
+  }
+  .stop-type-btn.selected-amber {
+    border-color: var(--amber);
+    background: #fef3c7;
+    color: #92400e;
+  }
+  .stop-type-hint {
+    font-size: 11px;
+    color: var(--text-light);
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  .speed-change-section {
+    border-top: 1px solid var(--grey-border);
+    padding-top: 12px;
+    margin-top: 4px;
+  }
+  .speed-change-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .speed-change-row input {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid var(--grey-border);
+    border-radius: 8px;
+    font-size: 16px;
+    -webkit-appearance: none;
+  }
+  .speed-change-row input:focus { outline: none; border-color: var(--pine); }
+  .speed-change-row .unit { font-size: 12px; color: var(--text-light); min-width: 45px; }
+
+  .input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .input-row:last-child { margin-bottom: 0; }
+  .input-row label {
+    font-size: 14px;
+    font-weight: 500;
+    min-width: 80px;
+  }
+  .input-row input, .input-row select {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid var(--grey-border);
+    border-radius: 8px;
+    font-size: 16px;
+    background: var(--white);
+    -webkit-appearance: none;
+  }
+  .input-row input:focus, .input-row select:focus {
+    outline: none;
+    border-color: var(--pine);
+  }
+  .input-row .unit {
+    font-size: 14px;
+    color: var(--text-light);
+    min-width: 50px;
+  }
+
+  .stop-list { list-style: none; }
+  .stop-item {
+    border: 1px solid var(--grey-border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .stop-item:active { background: #f9fafb; }
+  .stop-item .stop-num {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--white);
+    background: var(--pine);
+    border-radius: 4px;
+    padding: 2px 6px;
+    display: inline-block;
+    margin-bottom: 6px;
+  }
+  .stop-item .stop-num.needs-edit {
+    background: var(--amber);
+    color: var(--dark);
+  }
+  .stop-item .stop-duration {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--red);
+  }
+  .stop-item .stop-meta {
+    font-size: 13px;
+    color: var(--text-light);
+    margin-top: 4px;
+  }
+  .stop-item .stop-detail {
+    font-size: 14px;
+    margin-top: 6px;
+  }
+  .stop-item .stop-detail strong { color: var(--pine-dark); }
+  .stop-item .edit-hint {
+    font-size: 11px;
+    color: var(--amber);
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 24px;
+    color: var(--text-light);
+    font-size: 14px;
+  }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--white);
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    max-width: 500px;
+    max-height: 85dvh;
+    overflow-y: auto;
+    padding: 24px 20px 40px;
+    animation: slideUp 0.25s ease-out;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  .modal h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .modal .form-group {
+    margin-bottom: 16px;
+  }
+  .modal .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-light);
+    margin-bottom: 8px;
+  }
+  .modal .asset-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .asset-btn {
+    padding: 14px 8px;
+    border: 2px solid var(--grey-border);
+    border-radius: 8px;
+    background: var(--white);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .asset-btn.selected {
+    border-color: var(--pine);
+    background: #ecfdf5;
+    color: var(--pine-dark);
+    font-weight: 700;
+  }
+  .asset-btn:active { transform: scale(0.97); }
+
+  .modal input[type="text"], .modal textarea {
+    width: 100%;
+    padding: 14px;
+    border: 2px solid var(--grey-border);
+    border-radius: 8px;
+    font-size: 16px;
+    font-family: inherit;
+    -webkit-appearance: none;
+  }
+  .modal input[type="text"]:focus, .modal textarea:focus {
+    outline: none;
+    border-color: var(--pine);
+  }
+  .modal textarea { resize: vertical; min-height: 80px; }
+
+  .modal .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .modal .btn-row button {
+    flex: 1;
+    padding: 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-cancel { background: var(--grey-bg); color: var(--text); }
+  .btn-save { background: var(--pine); color: var(--white); }
+  .btn-skip { background: var(--amber); color: var(--dark); }
+
+  .summary-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    text-align: center;
+  }
+  .summary-item .val {
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .summary-item .lbl {
+    font-size: 11px;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .val-green { color: var(--pine); }
+  .val-red { color: var(--red); }
+  .val-amber { color: var(--amber); }
+
+  .timeline-bar {
+    display: flex;
+    height: 28px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--grey-border);
+    margin-bottom: 12px;
+  }
+  .timeline-bar .seg {
+    min-width: 1px;
+    transition: flex-grow 0.3s;
+  }
+  .seg-green { background: var(--pine); }
+  .seg-red { background: var(--red); }
+  .seg-amber { background: var(--amber); }
+  .seg-grey { background: #9ca3af; }
+  .seg-live-green { background: var(--pine); animation: pulse-green 1.5s infinite; }
+  .seg-live-red { background: var(--red); animation: pulse-red 1.5s infinite; }
+  @keyframes pulse-green { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+  @keyframes pulse-red { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+  .uptime-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .uptime-pct {
+    font-size: 32px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    min-width: 90px;
+  }
+  .uptime-track {
+    flex: 1;
+    height: 10px;
+    background: var(--red);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .uptime-fill {
+    height: 100%;
+    background: var(--pine);
+    border-radius: 5px;
+    transition: width 0.5s;
+  }
+  .uptime-label {
+    font-size: 11px;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-export {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: 2px solid var(--pine);
+    border-radius: var(--radius);
+    background: var(--white);
+    color: var(--pine);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    margin-top: 8px;
+  }
+  .btn-export:active { background: #ecfdf5; }
+
+  .btn-reset {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: 2px solid var(--red);
+    border-radius: var(--radius);
+    background: var(--white);
+    color: var(--red);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    margin-top: 8px;
+  }
+
+  @supports (-webkit-touch-callout: none) {
+    input, select, textarea { font-size: 16px !important; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>RAG Study Tool</h1>
+  <div class="sub">Production Line &bull; <span id="studyDate"></span></div>
+</header>
+
+<!-- Setup -->
+<div class="card" id="setupCard">
+  <div class="card-title">Line Setup</div>
+  <div class="input-row">
+    <label>Line</label>
+    <input type="text" id="lineInput" placeholder="e.g. Line 1" style="flex:1;">
+  </div>
+  <div class="input-row">
+    <label>Shift</label>
+    <input type="text" id="shiftInput" placeholder="e.g. Day, Night, Lates" style="flex:1;">
+  </div>
+  <div class="input-row">
+    <label>SKU</label>
+    <input type="text" id="skuInput" placeholder="e.g. SKU-001" style="flex:1;">
+  </div>
+  <div class="input-row">
+    <label>Crew</label>
+    <input type="number" id="crewInput" min="1" max="50" value="4" inputmode="numeric">
+    <span class="unit">people</span>
+  </div>
+  <div class="input-row">
+    <label>RPM</label>
+    <input type="number" id="rpmInput" min="0" step="1" placeholder="0" inputmode="decimal">
+    <span class="unit">rpm</span>
+  </div>
+  <div class="input-row">
+    <label>Packs/min</label>
+    <input type="number" id="packsMinInput" min="0" step="0.1" placeholder="0" inputmode="decimal">
+    <span class="unit">packs/min</span>
+  </div>
+</div>
+
+<!-- Timer -->
+<div class="card">
+  <div class="status-badge"><span id="statusBadge" class="status-idle">Ready</span></div>
+  <div class="timer-display" id="timerDisplay">00:00:00</div>
+  <button class="btn-main btn-start" id="mainBtn" onclick="toggleTimer()">Start Line</button>
+</div>
+
+<!-- Live Visualisation -->
+<div class="card" id="vizCard" style="display:none;">
+  <div class="uptime-row">
+    <div>
+      <div class="uptime-pct" id="uptimePct" style="color:var(--pine);">—</div>
+      <div class="uptime-label">Uptime</div>
+    </div>
+    <div style="flex:1;">
+      <div class="uptime-track">
+        <div class="uptime-fill" id="uptimeFill" style="width:0%;"></div>
+      </div>
+    </div>
+  </div>
+  <div class="timeline-bar" id="timelineBar"></div>
+</div>
+
+<!-- Summary -->
+<div class="card" id="summaryCard" style="display:none;">
+  <div class="card-title">Session Summary</div>
+  <div class="summary-bar">
+    <div class="summary-item">
+      <div class="val val-green" id="sumRuntime">0:00</div>
+      <div class="lbl">Run Time</div>
+    </div>
+    <div class="summary-item">
+      <div class="val val-red" id="sumStoptime">0:00</div>
+      <div class="lbl">Stop Time</div>
+    </div>
+    <div class="summary-item">
+      <div class="val val-amber" id="sumStops">0</div>
+      <div class="lbl">Stops</div>
+    </div>
+  </div>
+</div>
+
+<!-- Stop Log -->
+<div class="card">
+  <div class="card-title">Stop Log <span id="needsEditCount"></span></div>
+  <ul class="stop-list" id="stopList">
+    <li class="empty-state">No stops recorded yet. Tap an asset or stop the line to log.</li>
+  </ul>
+</div>
+
+<!-- Notes -->
+<div class="card">
+  <div class="card-title">Session Notes</div>
+  <textarea id="sessionNotes" placeholder="General observations, shift notes, product info..." style="width:100%; padding:12px; border:2px solid var(--grey-border); border-radius:8px; font-size:16px; font-family:inherit; min-height:80px; resize:vertical; -webkit-appearance:none;"></textarea>
+</div>
+
+<!-- Export -->
+<div class="card">
+  <div class="card-title">Data</div>
+  <button class="btn-export" onclick="exportCSV()">Export CSV</button>
+  <button class="btn-export" onclick="copyToClipboard()">Copy to Clipboard</button>
+  <button class="btn-reset" onclick="resetStudy()">Reset Study</button>
+</div>
+
+<!-- Stop Reason Modal -->
+<div class="modal-overlay" id="stopModal">
+  <div class="modal">
+    <h2 id="modalTitle">Log Stop Reason</h2>
+    <div class="form-group">
+      <label>Stop Type</label>
+      <div class="stop-type-row">
+        <button class="stop-type-btn" data-type="red" onclick="selectStopType(this)">Red</button>
+        <button class="stop-type-btn" data-type="amber" onclick="selectStopType(this)">Amber</button>
+      </div>
+      <div class="stop-type-hint">Red = non-productive (breakdown, wait) &bull; Amber = essential non-productive (changeover, clean)</div>
+    </div>
+    <div class="form-group">
+      <label>Asset / Station</label>
+      <div class="asset-grid" id="assetGrid">
+        <button class="asset-btn" data-asset="Infeed" onclick="selectAsset(this)">Infeed</button>
+        <button class="asset-btn" data-asset="Processing" onclick="selectAsset(this)">Processing</button>
+        <button class="asset-btn" data-asset="Filling" onclick="selectAsset(this)">Filling</button>
+        <button class="asset-btn" data-asset="Sealing" onclick="selectAsset(this)">Sealing</button>
+        <button class="asset-btn" data-asset="Labelling" onclick="selectAsset(this)">Labelling</button>
+        <button class="asset-btn" data-asset="Checkweigher" onclick="selectAsset(this)">Checkweigher</button>
+        <button class="asset-btn" data-asset="Packing" onclick="selectAsset(this)">Packing</button>
+        <button class="asset-btn" data-asset="Palletising" onclick="selectAsset(this)">Palletising</button>
+        <button class="asset-btn" data-asset="" onclick="selectAsset(this)">Other...</button>
+      </div>
+    </div>
+    <div class="form-group" id="otherAssetGroup" style="display:none;">
+      <label>Other Asset</label>
+      <input type="text" id="otherAssetInput" placeholder="Type asset name...">
+    </div>
+    <div class="form-group">
+      <label>Stop Reason</label>
+      <textarea id="reasonInput" placeholder="What caused the stop?"></textarea>
+    </div>
+    <div class="form-group speed-change-section">
+      <label>Speed Change (leave blank if unchanged)</label>
+      <div class="speed-change-row">
+        <input type="number" id="modalRpmInput" min="0" step="1" placeholder="RPM" inputmode="decimal">
+        <span class="unit">rpm</span>
+        <input type="number" id="modalPacksMinInput" min="0" step="0.1" placeholder="Pk/min" inputmode="decimal">
+        <span class="unit">pk/min</span>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="skipStopReason()">Skip (edit later)</button>
+      <button class="btn-save" onclick="saveStopReason()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// -- State --
+let state = {
+  status: 'idle',
+  sessionStart: null,
+  currentRunStart: null,
+  currentStopStart: null,
+  totalRunMs: 0,
+  totalStopMs: 0,
+  stops: [],
+  timerInterval: null,
+  editingStopIndex: null,
+  crew: 4,
+  rpm: 0,
+  packsMin: 0,
+  sku: '',
+  line: '',
+  shift: '',
+  sessionNotes: ''
+};
+
+// Try restore from localStorage
+try {
+  const saved = JSON.parse(localStorage.getItem('dp_rag_study'));
+  if (saved && saved.stops) {
+    state = { ...state, ...saved };
+    if (state.sessionStart) state.sessionStart = new Date(state.sessionStart);
+    if (state.currentRunStart) state.currentRunStart = new Date(state.currentRunStart);
+    if (state.currentStopStart) state.currentStopStart = new Date(state.currentStopStart);
+    state.stops = state.stops.map(s => ({
+      ...s,
+      startTime: new Date(s.startTime),
+      endTime: s.endTime ? new Date(s.endTime) : null
+    }));
+    document.getElementById('crewInput').value = state.crew;
+    document.getElementById('rpmInput').value = state.rpm || '';
+    document.getElementById('packsMinInput').value = state.packsMin || '';
+    document.getElementById('skuInput').value = state.sku || '';
+    document.getElementById('lineInput').value = state.line || '';
+    document.getElementById('shiftInput').value = state.shift || '';
+    document.getElementById('sessionNotes').value = state.sessionNotes || '';
+  }
+} catch(e) {}
+
+const ASSETS = ['Infeed','Processing','Filling','Sealing','Labelling','Checkweigher','Packing','Palletising'];
+
+// -- Date display --
+document.getElementById('studyDate').textContent = new Date().toLocaleDateString('en-GB', {
+  weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+});
+
+// -- Timer --
+function toggleTimer() {
+  if (state.status === 'idle' || state.status === 'stopped') {
+    startLine();
+  } else if (state.status === 'running') {
+    stopLine();
+  }
+}
+
+function startLine() {
+  const now = new Date();
+  state.crew = parseInt(document.getElementById('crewInput').value) || 1;
+  state.rpm = parseFloat(document.getElementById('rpmInput').value) || 0;
+  state.packsMin = parseFloat(document.getElementById('packsMinInput').value) || 0;
+  state.sku = document.getElementById('skuInput').value.trim();
+  state.line = document.getElementById('lineInput').value.trim();
+  state.shift = document.getElementById('shiftInput').value.trim();
+
+  if (state.status === 'stopped' && state.currentStopStart) {
+    const stopMs = now - state.currentStopStart;
+    state.totalStopMs += stopMs;
+    if (state.stops.length > 0) {
+      const lastStop = state.stops[state.stops.length - 1];
+      if (!lastStop.endTime) {
+        lastStop.endTime = now;
+        lastStop.durationMs = stopMs;
+      }
+    }
+    state.currentStopStart = null;
+  }
+
+  if (!state.sessionStart) state.sessionStart = now;
+  state.currentRunStart = now;
+  state.status = 'running';
+
+  updateUI();
+  startTimerInterval();
+  saveState();
+}
+
+function stopLine() {
+  const now = new Date();
+  if (state.currentRunStart) {
+    state.totalRunMs += (now - state.currentRunStart);
+    state.currentRunStart = null;
+  }
+  state.currentStopStart = now;
+  state.status = 'stopped';
+
+  state.stops.push({
+    id: Date.now(),
+    startTime: now,
+    endTime: null,
+    durationMs: 0,
+    asset: '',
+    reason: '',
+    stopType: '',
+    rpm: state.rpm,
+    packsMin: state.packsMin,
+    newRpm: null,
+    newPacksMin: null,
+    crew: state.crew,
+    sku: state.sku,
+    needsEdit: true
+  });
+
+  updateUI();
+  saveState();
+
+  state.editingStopIndex = state.stops.length - 1;
+  openModal();
+}
+
+function startTimerInterval() {
+  clearInterval(state.timerInterval);
+  state.timerInterval = setInterval(() => {
+    updateTimerDisplay();
+  }, 200);
+}
+
+function updateTimerDisplay() {
+  let totalMs = 0;
+  if (state.status === 'running' && state.currentRunStart) {
+    totalMs = state.totalRunMs + (new Date() - state.currentRunStart);
+  } else if (state.status === 'stopped' && state.currentStopStart) {
+    totalMs = new Date() - state.currentStopStart;
+  } else {
+    totalMs = state.totalRunMs;
+  }
+  document.getElementById('timerDisplay').textContent = formatMs(totalMs);
+}
+
+function formatMs(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function formatMsShort(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  if (m < 60) return `${m}m ${s}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+// -- UI Update --
+function updateUI() {
+  const badge = document.getElementById('statusBadge');
+  const btn = document.getElementById('mainBtn');
+  const timer = document.getElementById('timerDisplay');
+
+  if (state.status === 'running') {
+    badge.className = 'status-running';
+    badge.textContent = 'Running';
+    btn.className = 'btn-main btn-stop';
+    btn.textContent = 'Stop Line';
+    timer.className = 'timer-display running';
+    startTimerInterval();
+  } else if (state.status === 'stopped') {
+    badge.className = 'status-stopped';
+    badge.textContent = 'Stopped';
+    btn.className = 'btn-main btn-start';
+    btn.textContent = 'Start Line';
+    timer.className = 'timer-display stopped';
+    startTimerInterval();
+  } else {
+    badge.className = 'status-idle';
+    badge.textContent = 'Ready';
+    btn.className = 'btn-main btn-start';
+    btn.textContent = 'Start Line';
+    timer.className = 'timer-display';
+    clearInterval(state.timerInterval);
+  }
+
+  renderStops();
+  updateSummary();
+  updateViz();
+}
+
+function updateSummary() {
+  const card = document.getElementById('summaryCard');
+  if (state.stops.length === 0 && state.totalRunMs === 0) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+
+  let runMs = state.totalRunMs;
+  if (state.status === 'running' && state.currentRunStart) {
+    runMs += (new Date() - state.currentRunStart);
+  }
+  let stopMs = state.totalStopMs;
+  if (state.status === 'stopped' && state.currentStopStart) {
+    stopMs += (new Date() - state.currentStopStart);
+  }
+
+  document.getElementById('sumRuntime').textContent = formatMsShort(runMs);
+  document.getElementById('sumStoptime').textContent = formatMsShort(stopMs);
+  document.getElementById('sumStops').textContent = state.stops.length;
+}
+
+function renderStops() {
+  const list = document.getElementById('stopList');
+  const needsEdit = state.stops.filter(s => s.needsEdit).length;
+  document.getElementById('needsEditCount').textContent = needsEdit > 0 ? `(${needsEdit} need editing)` : '';
+
+  if (state.stops.length === 0) {
+    list.innerHTML = '<li class="empty-state">No stops recorded yet.</li>';
+    return;
+  }
+
+  list.innerHTML = state.stops.map((stop, i) => {
+    const dur = stop.endTime ? stop.durationMs : (state.status === 'stopped' && i === state.stops.length - 1 ? new Date() - stop.startTime : stop.durationMs);
+    const time = stop.startTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const assetDisplay = stop.asset || '—';
+    const reasonDisplay = stop.reason || '—';
+
+    const typeLabel = stop.stopType === 'red' ? '<span style="color:var(--red);font-weight:700;">RED</span>' : stop.stopType === 'amber' ? '<span style="color:var(--amber);font-weight:700;">AMBER</span>' : '<span style="color:var(--text-light);">—</span>';
+    const speedChange = (stop.newRpm !== null || stop.newPacksMin !== null) ? ` &rarr; ${stop.newRpm ?? stop.rpm}rpm / ${stop.newPacksMin ?? stop.packsMin}pk/min` : '';
+
+    return `<li class="stop-item" onclick="editStop(${i})">
+      <span class="stop-num ${stop.needsEdit ? 'needs-edit' : ''}">Stop ${i + 1}</span> ${typeLabel}
+      <div class="stop-duration">${formatMsShort(dur)}</div>
+      <div class="stop-meta">${time} &bull; Crew: ${stop.crew} &bull; ${stop.rpm}rpm &bull; ${stop.packsMin}pk/min${speedChange}</div>
+      <div class="stop-detail"><strong>${assetDisplay}</strong> — ${reasonDisplay}</div>
+      ${stop.needsEdit ? '<div class="edit-hint">Tap to add details</div>' : ''}
+    </li>`;
+  }).reverse().join('');
+}
+
+// -- Modal --
+let selectedAsset = '';
+let selectedStopType = '';
+
+function openModal() {
+  const modal = document.getElementById('stopModal');
+  const idx = state.editingStopIndex;
+  const stop = state.stops[idx];
+
+  document.getElementById('modalTitle').textContent = idx === state.stops.length - 1 && stop.needsEdit ? 'Log Stop Reason' : `Edit Stop ${idx + 1}`;
+
+  document.querySelectorAll('.asset-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('.stop-type-btn').forEach(b => { b.classList.remove('selected-red', 'selected-amber'); });
+  selectedAsset = '';
+  selectedStopType = '';
+  document.getElementById('otherAssetGroup').style.display = 'none';
+  document.getElementById('otherAssetInput').value = '';
+  document.getElementById('reasonInput').value = '';
+  document.getElementById('modalRpmInput').value = '';
+  document.getElementById('modalPacksMinInput').value = '';
+
+  if (stop.stopType) {
+    selectedStopType = stop.stopType;
+    const typeBtn = document.querySelector(`.stop-type-btn[data-type="${stop.stopType}"]`);
+    if (typeBtn) typeBtn.classList.add(stop.stopType === 'red' ? 'selected-red' : 'selected-amber');
+  }
+
+  if (stop.asset) {
+    selectedAsset = stop.asset;
+    const matchBtn = document.querySelector(`.asset-btn[data-asset="${stop.asset}"]`);
+    if (matchBtn) {
+      matchBtn.classList.add('selected');
+    } else {
+      const otherBtn = document.querySelector('.asset-btn[data-asset=""]');
+      otherBtn.classList.add('selected');
+      document.getElementById('otherAssetGroup').style.display = 'block';
+      document.getElementById('otherAssetInput').value = stop.asset;
+      selectedAsset = '';
+    }
+  }
+  if (stop.reason) {
+    document.getElementById('reasonInput').value = stop.reason;
+  }
+
+  if (stop.newRpm !== null) document.getElementById('modalRpmInput').value = stop.newRpm;
+  if (stop.newPacksMin !== null) document.getElementById('modalPacksMinInput').value = stop.newPacksMin;
+
+  modal.classList.add('active');
+}
+
+function selectStopType(btn) {
+  document.querySelectorAll('.stop-type-btn').forEach(b => { b.classList.remove('selected-red', 'selected-amber'); });
+  selectedStopType = btn.dataset.type;
+  btn.classList.add(selectedStopType === 'red' ? 'selected-red' : 'selected-amber');
+}
+
+function closeModal() {
+  document.getElementById('stopModal').classList.remove('active');
+  state.editingStopIndex = null;
+}
+
+function selectAsset(btn) {
+  document.querySelectorAll('.asset-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedAsset = btn.dataset.asset;
+
+  if (selectedAsset === '') {
+    document.getElementById('otherAssetGroup').style.display = 'block';
+    document.getElementById('otherAssetInput').focus();
+  } else {
+    document.getElementById('otherAssetGroup').style.display = 'none';
+    document.getElementById('otherAssetInput').value = '';
+  }
+}
+
+function saveStopReason() {
+  const idx = state.editingStopIndex;
+  if (idx === null) return;
+
+  let asset = selectedAsset;
+  if (asset === '') {
+    asset = document.getElementById('otherAssetInput').value.trim();
+  }
+  const reason = document.getElementById('reasonInput').value.trim();
+
+  state.stops[idx].asset = asset;
+  state.stops[idx].reason = reason;
+  state.stops[idx].stopType = selectedStopType;
+
+  const newRpmVal = document.getElementById('modalRpmInput').value.trim();
+  const newPacksVal = document.getElementById('modalPacksMinInput').value.trim();
+  state.stops[idx].newRpm = newRpmVal !== '' ? parseFloat(newRpmVal) : null;
+  state.stops[idx].newPacksMin = newPacksVal !== '' ? parseFloat(newPacksVal) : null;
+
+  if (state.stops[idx].newRpm !== null) {
+    state.rpm = state.stops[idx].newRpm;
+    document.getElementById('rpmInput').value = state.rpm;
+  }
+  if (state.stops[idx].newPacksMin !== null) {
+    state.packsMin = state.stops[idx].newPacksMin;
+    document.getElementById('packsMinInput').value = state.packsMin;
+  }
+
+  if (asset || reason || selectedStopType) state.stops[idx].needsEdit = false;
+
+  closeModal();
+  renderStops();
+  saveState();
+}
+
+function skipStopReason() {
+  closeModal();
+  renderStops();
+  saveState();
+}
+
+function editStop(index) {
+  state.editingStopIndex = index;
+  openModal();
+}
+
+// -- Persistence --
+function saveState() {
+  try {
+    localStorage.setItem('dp_rag_study', JSON.stringify(state));
+  } catch(e) {}
+}
+
+// -- Export --
+function exportCSV() {
+  if (state.stops.length === 0) { alert('No stops to export.'); return; }
+
+  const rows = [['Stop #','Time','Duration (s)','Type','Asset','Reason','RPM','Packs/min','New RPM','New Packs/min','Crew','SKU']];
+  state.stops.forEach((s, i) => {
+    const dur = s.endTime ? Math.round(s.durationMs / 1000) : '(ongoing)';
+    const time = s.startTime.toLocaleTimeString('en-GB');
+    rows.push([i+1, time, dur, s.stopType || '', `"${s.asset}"`, `"${s.reason}"`, s.rpm || 0, s.packsMin || 0, s.newRpm !== null ? s.newRpm : '', s.newPacksMin !== null ? s.newPacksMin : '', s.crew, `"${s.sku || ''}"`]);
+  });
+
+  rows.push([]);
+  rows.push(['Line', `"${state.line || ''}"`]);
+  rows.push(['Shift', `"${state.shift || ''}"`]);
+  rows.push(['SKU', `"${state.sku || ''}"`]);
+  rows.push(['Study Date', state.sessionStart ? state.sessionStart.toLocaleDateString('en-GB') : '']);
+  rows.push(['Total Run Time (s)', Math.round(state.totalRunMs / 1000)]);
+  rows.push(['Total Stop Time (s)', Math.round(state.totalStopMs / 1000)]);
+  rows.push(['Total Stops', state.stops.length]);
+  rows.push(['Red Stops', state.stops.filter(s => s.stopType === 'red').length]);
+  rows.push(['Amber Stops', state.stops.filter(s => s.stopType === 'amber').length]);
+  rows.push(['Session Notes', `"${(state.sessionNotes || '').replace(/"/g,'""')}"`]);
+
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const linePart = (state.line || 'line').replace(/[^a-zA-Z0-9]/g, '_');
+  const shiftPart = (state.shift || 'shift').replace(/[^a-zA-Z0-9]/g, '_');
+  a.download = `rag_study_${linePart}_${shiftPart}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function copyToClipboard() {
+  if (state.stops.length === 0) { alert('No stops to copy.'); return; }
+
+  let text = `Production Line RAG Study\n`;
+  text += `Date: ${state.sessionStart ? state.sessionStart.toLocaleDateString('en-GB') : 'N/A'}\n`;
+  text += `Line: ${state.line || 'N/A'} | Shift: ${state.shift || 'N/A'} | SKU: ${state.sku || 'N/A'}\n`;
+  text += `Run Time: ${formatMsShort(state.totalRunMs)} | Stop Time: ${formatMsShort(state.totalStopMs)} | Stops: ${state.stops.length} (Red: ${state.stops.filter(s=>s.stopType==='red').length}, Amber: ${state.stops.filter(s=>s.stopType==='amber').length})\n\n`;
+
+  state.stops.forEach((s, i) => {
+    const dur = s.endTime ? formatMsShort(s.durationMs) : '(ongoing)';
+    const time = s.startTime.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+    const type = s.stopType ? s.stopType.toUpperCase() : '?';
+    const speedNote = (s.newRpm !== null || s.newPacksMin !== null) ? ` -> ${s.newRpm ?? s.rpm}rpm/${s.newPacksMin ?? s.packsMin}pk/min` : '';
+    text += `${i+1}. [${type}] ${time} -- ${dur} -- ${s.asset || '?'} -- ${s.reason || '?'} -- ${s.rpm}rpm/${s.packsMin}pk/min${speedNote}\n`;
+  });
+
+  if (state.sessionNotes) {
+    text += `\nNotes:\n${state.sessionNotes}\n`;
+  }
+
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Copied to clipboard.');
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert('Copied to clipboard.');
+  });
+}
+
+function resetStudy() {
+  if (!confirm('Reset the entire study? All stop data will be lost.')) return;
+  clearInterval(state.timerInterval);
+  state = {
+    status: 'idle',
+    sessionStart: null,
+    currentRunStart: null,
+    currentStopStart: null,
+    totalRunMs: 0,
+    totalStopMs: 0,
+    stops: [],
+    timerInterval: null,
+    editingStopIndex: null,
+    crew: parseInt(document.getElementById('crewInput').value) || 4,
+    rpm: parseFloat(document.getElementById('rpmInput').value) || 0,
+    packsMin: parseFloat(document.getElementById('packsMinInput').value) || 0,
+    sku: document.getElementById('skuInput').value.trim(),
+    line: document.getElementById('lineInput').value.trim(),
+    shift: document.getElementById('shiftInput').value.trim(),
+    sessionNotes: ''
+  };
+  document.getElementById('sessionNotes').value = '';
+  document.getElementById('shiftInput').value = '';
+  localStorage.removeItem('dp_rag_study');
+  document.getElementById('timerDisplay').textContent = '00:00:00';
+  updateUI();
+}
+
+// -- Input change listeners --
+document.getElementById('rpmInput').addEventListener('change', function() {
+  state.rpm = parseFloat(this.value) || 0;
+  saveState();
+});
+document.getElementById('packsMinInput').addEventListener('change', function() {
+  state.packsMin = parseFloat(this.value) || 0;
+  saveState();
+});
+document.getElementById('crewInput').addEventListener('change', function() {
+  state.crew = parseInt(this.value) || 1;
+  saveState();
+});
+document.getElementById('skuInput').addEventListener('change', function() {
+  state.sku = this.value.trim();
+  saveState();
+});
+document.getElementById('lineInput').addEventListener('change', function() {
+  state.line = this.value.trim();
+  saveState();
+});
+document.getElementById('shiftInput').addEventListener('change', function() {
+  state.shift = this.value.trim();
+  saveState();
+});
+document.getElementById('sessionNotes').addEventListener('input', function() {
+  state.sessionNotes = this.value;
+  saveState();
+});
+
+// -- Live Visualisation --
+function buildTimeline() {
+  if (!state.sessionStart) return [];
+  const segments = [];
+  let cursor = state.sessionStart.getTime();
+  const now = Date.now();
+
+  const sortedStops = [...state.stops].sort((a, b) => a.startTime - b.startTime);
+
+  sortedStops.forEach(stop => {
+    const stopStart = stop.startTime.getTime();
+    if (stopStart > cursor) {
+      segments.push({ type: 'run', ms: stopStart - cursor });
+    }
+    const stopEnd = stop.endTime ? stop.endTime.getTime() : (state.status === 'stopped' && stop === sortedStops[sortedStops.length - 1] ? now : stopStart);
+    const stopMs = stopEnd - stopStart;
+    if (stopMs > 0) {
+      segments.push({ type: stop.stopType || 'stop', ms: stopMs, live: !stop.endTime });
+    }
+    cursor = stopEnd;
+  });
+
+  if (state.status === 'running' && cursor < now) {
+    segments.push({ type: 'run', ms: now - cursor, live: true });
+  }
+
+  return segments;
+}
+
+function renderTimeline() {
+  const bar = document.getElementById('timelineBar');
+  if (!bar) return;
+  const segments = buildTimeline();
+  if (segments.length === 0) { bar.innerHTML = ''; return; }
+
+  const totalMs = segments.reduce((sum, s) => sum + s.ms, 0);
+  if (totalMs === 0) { bar.innerHTML = ''; return; }
+
+  bar.innerHTML = segments.map(seg => {
+    const pct = (seg.ms / totalMs) * 100;
+    let cls = 'seg ';
+    if (seg.type === 'run') cls += seg.live ? 'seg-live-green' : 'seg-green';
+    else if (seg.type === 'red') cls += seg.live ? 'seg-live-red' : 'seg-red';
+    else if (seg.type === 'amber') cls += 'seg-amber';
+    else cls += seg.live ? 'seg-live-red' : 'seg-grey';
+    return `<div class="${cls}" style="flex-grow:${pct.toFixed(2)};"></div>`;
+  }).join('');
+}
+
+function updateUptime() {
+  const pctEl = document.getElementById('uptimePct');
+  const fillEl = document.getElementById('uptimeFill');
+  if (!pctEl || !fillEl) return;
+
+  let runMs = state.totalRunMs;
+  if (state.status === 'running' && state.currentRunStart) {
+    runMs += (Date.now() - state.currentRunStart.getTime());
+  }
+  let stopMs = state.totalStopMs;
+  if (state.status === 'stopped' && state.currentStopStart) {
+    stopMs += (Date.now() - state.currentStopStart.getTime());
+  }
+
+  const total = runMs + stopMs;
+  if (total === 0) { pctEl.textContent = '—'; fillEl.style.width = '0%'; return; }
+
+  const pct = (runMs / total) * 100;
+  pctEl.textContent = pct.toFixed(1) + '%';
+  fillEl.style.width = pct.toFixed(1) + '%';
+
+  if (pct >= 85) pctEl.style.color = 'var(--pine)';
+  else if (pct >= 70) pctEl.style.color = 'var(--amber)';
+  else pctEl.style.color = 'var(--red)';
+}
+
+function updateViz() {
+  const vizCard = document.getElementById('vizCard');
+  if (state.status === 'idle' && state.stops.length === 0 && state.totalRunMs === 0) {
+    vizCard.style.display = 'none';
+    return;
+  }
+  vizCard.style.display = 'block';
+  renderTimeline();
+  updateUptime();
+}
+
+// -- Periodic summary update --
+setInterval(() => {
+  if (state.status !== 'idle') {
+    updateSummary();
+    updateViz();
+  }
+}, 1000);
+
+// -- Init UI --
+updateUI();
+if (state.status !== 'idle') {
+  updateTimerDisplay();
+  updateViz();
+}
+</script>
+</body>
+</html>
