@@ -8,20 +8,19 @@
 <style>
   :root {
     --bg: #f8f5ef;
-    --card: #ffffff;
+    --card: #fff;
     --ink: #18160f;
     --ink2: #4a4535;
     --muted: #9a9080;
     --border: #ddd8cc;
     --green: #1d6840;
     --red: #b53a1e;
-    --gold: #b87c20;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; min-height: 100vh; }
-  .page { max-width: 680px; margin: 0 auto; padding: 32px 16px 72px; }
-  @media(min-width:600px) { .page { padding: 52px 24px 80px; } }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+  .page { max-width: 640px; margin: 0 auto; padding: 36px 16px 72px; }
+  @media(min-width:600px) { .page { padding: 56px 24px 80px; } }
 
   .kicker {
     font-family: 'DM Mono', monospace;
@@ -31,45 +30,39 @@
     color: var(--muted);
     margin-bottom: 10px;
   }
-
   h1 {
     font-family: 'Libre Baskerville', serif;
-    font-size: clamp(26px, 5vw, 42px);
+    font-size: clamp(26px, 5vw, 40px);
     font-weight: 700;
-    line-height: 1.1;
-    margin-bottom: 12px;
+    line-height: 1.15;
+    margin-bottom: 10px;
   }
-
   .intro {
     font-size: 14px;
     color: var(--ink2);
     line-height: 1.7;
-    margin-bottom: 36px;
-    max-width: 520px;
+    margin-bottom: 40px;
   }
 
   /* Inputs */
   .inputs {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 28px;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
-    margin-bottom: 32px;
   }
-  @media(min-width:500px) { .inputs { grid-template-columns: 1fr 1fr 1fr; } }
+  @media(min-width:480px) { .inputs { grid-template-columns: 1fr 1fr 1fr; padding: 24px; } }
 
   .field label {
     display: block;
     font-size: 12px;
     font-weight: 500;
-    color: var(--ink);
-    margin-bottom: 3px;
-  }
-  .field .hint {
-    font-size: 11px;
-    color: var(--muted);
-    margin-bottom: 7px;
-    display: block;
-    line-height: 1.4;
+    color: var(--ink2);
+    margin-bottom: 6px;
   }
   .input-wrap { display: flex; }
   .affix {
@@ -88,7 +81,7 @@
   .affix-suf { border-left: none; border-radius: 0 4px 4px 0; }
   input[type="number"] {
     width: 100%;
-    height: 44px;
+    height: 42px;
     border: 1px solid var(--border);
     background: white;
     color: var(--ink);
@@ -103,189 +96,176 @@
   input[type="number"]:focus { border-color: var(--ink); }
   input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
 
-  /* Main verdict */
-  .verdict {
-    border-radius: 6px;
-    padding: 28px 24px;
-    margin-bottom: 20px;
+  /* The headline stat */
+  .headline {
     background: var(--ink);
     color: white;
+    border-radius: 6px;
+    padding: 28px 24px 24px;
+    margin-bottom: 16px;
+    text-align: center;
   }
-  .verdict-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.35);
+
+  .hl-context {
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
     margin-bottom: 8px;
   }
-  .verdict-sentence {
-    font-family: 'Libre Baskerville', serif;
-    font-size: clamp(15px, 2.5vw, 19px);
-    line-height: 1.6;
-    font-style: italic;
-    margin-bottom: 24px;
-    color: rgba(255,255,255,0.88);
-  }
-  .verdict-sentence strong { font-style: normal; color: #a8e8c0; }
-  .verdict-sentence .bad { font-style: normal; color: #f0a090; }
 
-  .verdict-number {
+  .hl-number {
     font-family: 'DM Mono', monospace;
-    font-size: clamp(36px, 7vw, 56px);
+    font-size: clamp(44px, 10vw, 72px);
     font-weight: 500;
     line-height: 1;
     display: block;
     margin-bottom: 6px;
   }
-  .verdict-number.worse { color: #f0a090; }
-  .verdict-number.better { color: #a8e8c0; }
+  .hl-number.bad  { color: #f0a090; }
+  .hl-number.good { color: #a8e8c0; }
 
-  .verdict-caption {
-    font-size: 12px;
-    color: rgba(255,255,255,0.4);
-    font-family: 'DM Mono', monospace;
-    letter-spacing: 0.06em;
-  }
-
-  /* Breakdown */
-  .breakdown {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
+  .hl-label {
+    font-size: 14px;
+    color: rgba(255,255,255,0.55);
     margin-bottom: 20px;
   }
 
-  .breakdown-title {
-    padding: 14px 20px;
-    font-family: 'DM Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    background: #faf8f4;
-  }
-
-  .breakdown-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    gap: 16px;
-  }
-  .breakdown-row:last-child { border-bottom: none; }
-  .breakdown-row.total {
-    background: #faf8f4;
-    padding: 16px 20px;
-  }
-
-  .br-label { font-size: 13px; color: var(--ink2); line-height: 1.4; }
-  .br-label small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
-
-  .br-val {
-    font-family: 'DM Mono', monospace;
+  .hl-sentence {
+    font-family: 'Libre Baskerville', serif;
     font-size: 15px;
-    font-weight: 500;
-    flex-shrink: 0;
-    white-space: nowrap;
+    font-style: italic;
+    line-height: 1.6;
+    color: rgba(255,255,255,0.75);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 18px;
   }
-  .br-val.green { color: var(--green); }
-  .br-val.red   { color: var(--red); }
-  .br-val.bold  { font-size: 17px; }
+  .hl-sentence strong { font-style: normal; color: #a8e8c0; }
+  .hl-sentence .bad { font-style: normal; color: #f0a090; }
 
-  /* Visual bar */
-  .bar-section {
+  /* Year tabs */
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    background: var(--card);
+    color: var(--muted);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .tab.active {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: white;
+  }
+
+  /* Comparison rows */
+  .comparison {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 20px;
-  }
-  .bar-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--muted);
+    overflow: hidden;
     margin-bottom: 16px;
   }
-  .bar-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 10px;
+
+  .comp-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border-bottom: 1px solid var(--border);
   }
-  .bar-row:last-child { margin-bottom: 0; }
-  .bar-name { font-size: 12px; color: var(--ink2); width: 140px; flex-shrink: 0; }
-  .bar-track { flex: 1; height: 28px; background: #f0ece4; border-radius: 3px; overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 3px; display: flex; align-items: center; padding-left: 10px; transition: width 0.4s ease; min-width: 2px; }
-  .bar-fill.green { background: var(--green); }
-  .bar-fill.red   { background: var(--red); }
-  .bar-amount {
+  .comp-row:last-child { border-bottom: none; }
+  .comp-row.header { background: #faf8f4; }
+
+  .comp-cell {
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--ink2);
+    border-right: 1px solid var(--border);
+  }
+  .comp-cell:last-child { border-right: none; }
+  .comp-row.header .comp-cell {
     font-family: 'DM Mono', monospace;
-    font-size: 11px;
-    color: white;
-    white-space: nowrap;
-    overflow: hidden;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 14px;
   }
+  .comp-cell .val {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    display: block;
+    margin-top: 2px;
+  }
+  .comp-cell .val.green { color: var(--green); }
+  .comp-cell .val.red   { color: var(--red); }
+  .comp-cell .val.bold  { font-size: 16px; }
+
+  /* Crossover note */
+  .crossover {
+    background: #fffdf5;
+    border: 1px solid #d4b84a;
+    border-left: 4px solid #b87c20;
+    border-radius: 4px;
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--ink2);
+    line-height: 1.6;
+  }
+  .crossover strong { color: #b87c20; }
 </style>
 </head>
 <body>
 <div class="page">
 
-  <div class="kicker">For sellers considering waiting</div>
-  <h1>Is that extra offer<br>worth waiting for?</h1>
+  <div class="kicker">For sellers</div>
+  <h1>Is waiting for a<br>higher offer worth it?</h1>
   <p class="intro">
-    Waiting for a higher offer means your buyer needs a bigger mortgage at a worse rate.
-    Enter the numbers to see whether the extra money you gain actually outweighs what it costs you in interest.
+    A higher offer means a smaller mortgage on your next home —
+    but if rates rise while you wait, that smaller mortgage can still cost you more every month.
+    Enter your numbers to see whether holding out actually puts you ahead.
   </p>
 
   <div class="inputs">
     <div class="field">
-      <label>Offer on the table</label>
-      <span class="hint">What the buyer is offering now</span>
+      <label>Mortgage if you accept now</label>
       <div class="input-wrap">
         <span class="affix affix-pre">£</span>
-        <input type="number" id="offerNow" value="480000" step="5000">
-      </div>
-    </div>
-    <div class="field">
-      <label>Offer you want</label>
-      <span class="hint">What you're holding out for</span>
-      <div class="input-wrap">
-        <span class="affix affix-pre">£</span>
-        <input type="number" id="offerWant" value="490000" step="5000">
-      </div>
-    </div>
-    <div class="field">
-      <label>Your next home</label>
-      <span class="hint">What you plan to buy next</span>
-      <div class="input-wrap">
-        <span class="affix affix-pre">£</span>
-        <input type="number" id="nextHome" value="600000" step="5000">
+        <input type="number" id="mortgageNow" value="800000" step="5000">
       </div>
     </div>
     <div class="field">
       <label>Rate today</label>
-      <span class="hint">Current mortgage rate</span>
       <div class="input-wrap">
-        <input type="number" id="rateNow" value="4.50" step="0.05">
+        <input type="number" id="rateNow" value="3.50" step="0.05">
         <span class="affix affix-suf">%</span>
       </div>
     </div>
     <div class="field">
-      <label>Rate if you wait</label>
-      <span class="hint">Expected rate by then</span>
+      <label>Mortgage if you wait</label>
       <div class="input-wrap">
-        <input type="number" id="rateThen" value="5.00" step="0.05">
+        <span class="affix affix-pre">£</span>
+        <input type="number" id="mortgageWait" value="790000" step="5000">
+      </div>
+    </div>
+    <div class="field">
+      <label>Rate if you wait</label>
+      <div class="input-wrap">
+        <input type="number" id="rateWait" value="3.75" step="0.05">
         <span class="affix affix-suf">%</span>
       </div>
     </div>
     <div class="field">
       <label>Mortgage term</label>
-      <span class="hint">&nbsp;</span>
       <div class="input-wrap">
         <input type="number" id="term" value="25" step="1" min="5" max="40">
         <span class="affix affix-suf">yrs</span>
@@ -293,85 +273,88 @@
     </div>
   </div>
 
-  <!-- Verdict -->
-  <div class="verdict">
-    <div class="verdict-label">The verdict</div>
-    <div class="verdict-sentence" id="verdict_sentence">—</div>
-    <span class="verdict-number" id="verdict_number">—</span>
-    <span class="verdict-caption" id="verdict_caption">—</span>
+  <!-- Year selector -->
+  <div class="tabs">
+    <div class="tab active" data-years="5">Over 5 years</div>
+    <div class="tab" data-years="10">Over 10 years</div>
+    <div class="tab" data-years="15">Over 15 years</div>
   </div>
 
-  <!-- Breakdown -->
-  <div class="breakdown">
-    <div class="breakdown-title">How we got there</div>
-    <div class="breakdown-row">
-      <div class="br-label">
-        Extra from the sale
-        <small>The higher offer minus the current offer</small>
-      </div>
-      <span class="br-val green" id="b_extra_sale">—</span>
+  <!-- Headline -->
+  <div class="headline">
+    <div class="hl-context" id="hl_context">—</div>
+    <span class="hl-number" id="hl_number">—</span>
+    <div class="hl-label" id="hl_label">—</div>
+    <div class="hl-sentence" id="hl_sentence">—</div>
+  </div>
+
+  <!-- Comparison table -->
+  <div class="comparison">
+    <div class="comp-row header">
+      <div class="comp-cell"></div>
+      <div class="comp-cell">Accept now</div>
+      <div class="comp-cell">Wait</div>
     </div>
-    <div class="breakdown-row">
-      <div class="br-label">
-        Extra interest on your next mortgage
-        <small>Same home, smaller mortgage — but at a higher rate</small>
-      </div>
-      <span class="br-val red" id="b_extra_interest">—</span>
+    <div class="comp-row">
+      <div class="comp-cell">Mortgage</div>
+      <div class="comp-cell"><span class="val green" id="c_loan_now">—</span></div>
+      <div class="comp-cell"><span class="val red" id="c_loan_wait">—</span></div>
     </div>
-    <div class="breakdown-row">
-      <div class="br-label">
-        Monthly payment — accept now
-        <small id="b_now_detail">—</small>
-      </div>
-      <span class="br-val green" id="b_monthly_now">—</span>
+    <div class="comp-row">
+      <div class="comp-cell">Rate</div>
+      <div class="comp-cell"><span class="val green" id="c_rate_now">—</span></div>
+      <div class="comp-cell"><span class="val red" id="c_rate_wait">—</span></div>
     </div>
-    <div class="breakdown-row">
-      <div class="br-label">
-        Monthly payment — if you wait
-        <small id="b_wait_detail">—</small>
-      </div>
-      <span class="br-val red" id="b_monthly_wait">—</span>
+    <div class="comp-row">
+      <div class="comp-cell">Monthly payment</div>
+      <div class="comp-cell"><span class="val green bold" id="c_monthly_now">—</span></div>
+      <div class="comp-cell"><span class="val red bold" id="c_monthly_wait">—</span></div>
     </div>
-    <div class="breakdown-row total">
-      <div class="br-label"><strong>Net difference to you</strong></div>
-      <span class="br-val bold" id="b_net">—</span>
+    <div class="comp-row">
+      <div class="comp-cell" id="c_interest_lbl">Interest over 5 yrs</div>
+      <div class="comp-cell"><span class="val green" id="c_interest_now">—</span></div>
+      <div class="comp-cell"><span class="val red" id="c_interest_wait">—</span></div>
     </div>
   </div>
 
-  <!-- Visual bar comparison -->
-  <div class="bar-section">
-    <div class="bar-label">What you gain vs what it costs you</div>
-    <div class="bar-row">
-      <div class="bar-name">Extra from sale</div>
-      <div class="bar-track">
-        <div class="bar-fill green" id="bar_gain">
-          <span class="bar-amount" id="bar_gain_lbl">—</span>
-        </div>
-      </div>
-    </div>
-    <div class="bar-row">
-      <div class="bar-name">Extra interest paid</div>
-      <div class="bar-track">
-        <div class="bar-fill red" id="bar_cost">
-          <span class="bar-amount" id="bar_cost_lbl">—</span>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Crossover note -->
+  <div class="crossover" id="crossover_note">—</div>
 
 </div>
 <script>
 const $ = id => document.getElementById(id);
+let activeYears = 5;
 
-function monthly(loan, ratePct, years) {
+function monthly(loan, ratePct, termYrs) {
   if (loan <= 0) return 0;
-  if (ratePct === 0) return loan / (years * 12);
-  const r = ratePct / 100 / 12, n = years * 12;
+  if (ratePct === 0) return loan / (termYrs * 12);
+  const r = ratePct / 100 / 12, n = termYrs * 12;
   return loan * r * Math.pow(1+r,n) / (Math.pow(1+r,n)-1);
 }
 
-function totalInterest(loan, ratePct, years) {
-  return monthly(loan, ratePct, years) * years * 12 - loan;
+function remainingBalance(loan, ratePct, termYrs, months) {
+  if (loan <= 0) return 0;
+  if (ratePct === 0) return Math.max(0, loan - (loan / (termYrs*12)) * months);
+  const r = ratePct / 100 / 12, n = termYrs * 12;
+  return loan * (Math.pow(1+r,n) - Math.pow(1+r,months)) / (Math.pow(1+r,n) - 1);
+}
+
+function interestPaid(loan, ratePct, termYrs, years) {
+  const months = Math.min(years * 12, termYrs * 12);
+  const m = monthly(loan, ratePct, termYrs);
+  const paid = m * months;
+  const repaid = loan - remainingBalance(loan, ratePct, termYrs, months);
+  return paid - repaid;
+}
+
+// Find crossover year (when cumulative extra cost of waiting overtakes the extra sale proceeds)
+function crossoverYear(loanNow, rateNow, loanWait, rateWait, term, extraSale) {
+  for (let y = 1; y <= term; y++) {
+    const intNow  = interestPaid(loanNow, rateNow, term, y);
+    const intWait = interestPaid(loanWait, rateWait, term, y);
+    if (intWait - intNow > extraSale) return y;
+  }
+  return null;
 }
 
 function fmt(n, dec=0) {
@@ -379,82 +362,98 @@ function fmt(n, dec=0) {
 }
 
 function update() {
-  const offerNow  = parseFloat($('offerNow').value)  || 0;
-  const offerWant = parseFloat($('offerWant').value) || 0;
-  const nextHome  = parseFloat($('nextHome').value)  || 0;
-  const rateNow   = parseFloat($('rateNow').value)   || 0;
-  const rateThen  = parseFloat($('rateThen').value)  || 0;
-  const term      = parseInt($('term').value)        || 25;
+  const loanNow  = parseFloat($('mortgageNow').value)  || 0;
+  const rateNow  = parseFloat($('rateNow').value)      || 0;
+  const loanWait = parseFloat($('mortgageWait').value) || 0;
+  const rateWait = parseFloat($('rateWait').value)     || 0;
+  const term     = parseInt($('term').value)           || 25;
+  const years    = activeYears;
 
-  // Mortgages needed in each scenario
-  const loanNow  = Math.max(0, nextHome - offerNow);
-  const loanWait = Math.max(0, nextHome - offerWant);
+  const extraSale = loanNow - loanWait; // higher sale = smaller mortgage = positive
+  const mNow  = monthly(loanNow,  rateNow,  term);
+  const mWait = monthly(loanWait, rateWait, term);
+  const monthlyDiff = mWait - mNow; // positive = waiting costs more per month
 
-  const extraSale     = offerWant - offerNow;
-  const intNow        = totalInterest(loanNow, rateNow, term);
-  const intWait       = totalInterest(loanWait, rateThen, term);
-  const extraInterest = intWait - intNow;   // positive = costs more if wait
-  const net           = extraSale - extraInterest; // positive = waiting is worth it
+  const intNow  = interestPaid(loanNow,  rateNow,  term, years);
+  const intWait = interestPaid(loanWait, rateWait, term, years);
+  const extraInterest = intWait - intNow; // positive = more interest if wait
 
-  const mNow  = monthly(loanNow, rateNow, term);
-  const mWait = monthly(loanWait, rateThen, term);
+  // Net position: extra from sale minus extra interest cost
+  const net = extraSale - extraInterest;
 
-  // Verdict
-  const numEl = $('verdict_number');
-  const senEl = $('verdict_sentence');
-  const capEl = $('verdict_caption');
+  // Comparison table
+  $('c_loan_now').textContent   = fmt(loanNow);
+  $('c_loan_wait').textContent  = fmt(loanWait);
+  $('c_rate_now').textContent   = rateNow.toFixed(2) + '%';
+  $('c_rate_wait').textContent  = rateWait.toFixed(2) + '%';
+  $('c_monthly_now').textContent  = fmt(mNow, 2);
+  $('c_monthly_wait').textContent = fmt(mWait, 2);
+  $('c_interest_lbl').textContent = `Interest over ${years} yr${years!==1?'s':''}`;
+  $('c_interest_now').textContent  = fmt(intNow);
+  $('c_interest_wait').textContent = fmt(intWait);
+
+  // Headline
+  const hlNum = $('hl_number');
+  const hlLbl = $('hl_label');
+  const hlCtx = $('hl_context');
+  const hlSen = $('hl_sentence');
+
+  hlCtx.textContent = `Over ${years} years`;
 
   if (net < 0) {
-    numEl.textContent = fmt(Math.abs(net));
-    numEl.className = 'verdict-number worse';
-    capEl.textContent = 'worse off by waiting';
-    senEl.innerHTML = `Waiting for <strong>${fmt(extraSale)} more</strong> sounds good —
-      but your next mortgage at ${rateThen.toFixed(2)}% will cost you
-      <span class="bad">${fmt(extraInterest)} more in interest</span> over ${term} years.
-      You'd be better off accepting today's offer.`;
+    hlNum.textContent = fmt(Math.abs(net));
+    hlNum.className = 'hl-number bad';
+    hlLbl.textContent = `worse off by waiting`;
+    hlSen.innerHTML = `Yes, you'd get <strong>${fmt(extraSale)} more</strong> from the sale —
+      but at ${rateWait.toFixed(2)}%, your next mortgage costs
+      <span class="bad">${fmt(Math.abs(monthlyDiff), 2)} more every month</span>
+      despite being smaller. Over ${years} years that extra interest
+      <span class="bad">wipes out the higher sale price</span> and then some.`;
   } else if (net > 0) {
-    numEl.textContent = fmt(net);
-    numEl.className = 'verdict-number better';
-    capEl.textContent = 'better off by waiting';
-    senEl.innerHTML = `The <strong>${fmt(extraSale)} extra</strong> from waiting
-      more than covers the higher interest cost of <strong>${fmt(extraInterest)}</strong>.
-      In this case, waiting does pay off.`;
+    hlNum.textContent = fmt(net);
+    hlNum.className = 'hl-number good';
+    hlLbl.textContent = `better off by waiting`;
+    if (monthlyDiff > 0) {
+      hlSen.innerHTML = `You'd get <strong>${fmt(extraSale)} more</strong> from the sale,
+        and even though waiting costs <span class="bad">${fmt(Math.abs(monthlyDiff),2)}/month more</span>,
+        over ${years} years the higher sale price still wins — just.`;
+    } else {
+      hlSen.innerHTML = `You'd get <strong>${fmt(extraSale)} more</strong> from the sale
+        and actually pay <strong>${fmt(Math.abs(monthlyDiff),2)}/month less</strong> too.
+        Waiting pays off here.`;
+    }
   } else {
-    numEl.textContent = 'Break even';
-    numEl.className = 'verdict-number';
-    capEl.textContent = 'the extra sale price exactly covers the extra interest';
-    senEl.innerHTML = `The extra <strong>${fmt(extraSale)}</strong> from waiting exactly cancels out
-      the higher mortgage interest. Neither option is better.`;
+    hlNum.textContent = 'Break even';
+    hlNum.className = 'hl-number';
+    hlLbl.textContent = 'over ' + years + ' years';
+    hlSen.innerHTML = `The extra from the sale exactly cancels out the higher interest cost.`;
   }
 
-  // Breakdown rows
-  $('b_extra_sale').textContent     = '+' + fmt(extraSale);
-  $('b_extra_interest').textContent = '−' + fmt(Math.abs(extraInterest));
-  $('b_monthly_now').textContent    = fmt(mNow, 2);
-  $('b_monthly_wait').textContent   = fmt(mWait, 2);
-  $('b_now_detail').textContent     = `${fmt(loanNow)} mortgage @ ${rateNow.toFixed(2)}%`;
-  $('b_wait_detail').textContent    = `${fmt(loanWait)} mortgage @ ${rateThen.toFixed(2)}%`;
-  const netEl = $('b_net');
-  if (net < 0) {
-    netEl.textContent = '−' + fmt(Math.abs(net));
-    netEl.style.color = 'var(--red)';
-  } else {
-    netEl.textContent = '+' + fmt(net);
-    netEl.style.color = 'var(--green)';
+  // Crossover note
+  const cx = crossoverYear(loanNow, rateNow, loanWait, rateWait, term, extraSale);
+  const crossEl = $('crossover_note');
+  if (cx && monthlyDiff > 0) {
+    crossEl.innerHTML = `<strong>The tipping point:</strong> in year ${cx}, the extra interest from waiting overtakes the ${fmt(extraSale)} higher sale price. The longer you stay in the next home, the worse waiting looks.`;
+  } else if (!cx && monthlyDiff > 0) {
+    crossEl.innerHTML = `<strong>Worth noting:</strong> waiting costs <strong>${fmt(Math.abs(monthlyDiff),2)}/month more</strong> throughout the whole mortgage — even with the smaller loan.`;
+  } else if (monthlyDiff <= 0) {
+    crossEl.innerHTML = `<strong>Worth noting:</strong> in this scenario the rate rise is small enough that waiting reduces your monthly payment too. The numbers favour waiting.`;
   }
-
-  // Bars
-  const maxVal = Math.max(extraSale, Math.abs(extraInterest), 1);
-  const gainPct = (extraSale / maxVal) * 100;
-  const costPct = (Math.abs(extraInterest) / maxVal) * 100;
-  $('bar_gain').style.width = gainPct + '%';
-  $('bar_cost').style.width = costPct + '%';
-  $('bar_gain_lbl').textContent = fmt(extraSale);
-  $('bar_cost_lbl').textContent = fmt(Math.abs(extraInterest));
 }
 
-['offerNow','offerWant','nextHome','rateNow','rateThen','term']
+// Tabs
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    activeYears = parseInt(tab.dataset.years);
+    update();
+  });
+});
+
+['mortgageNow','rateNow','mortgageWait','rateWait','term']
   .forEach(id => $(id).addEventListener('input', update));
+
 update();
 </script>
 </body>
