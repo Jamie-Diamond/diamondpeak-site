@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Number Generator - Diamond Peak</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #060b18;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(56, 189, 248, 0.1) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 80%, rgba(129, 140, 248, 0.07) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .back {
+            color: #818cf8;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: color 0.2s;
+        }
+        .back:hover { color: #38bdf8; }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            margin: 1.5rem 0 0.5rem;
+            background: linear-gradient(135deg, #f0f9ff 0%, #bae6fd 40%, #818cf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .desc { color: #64748b; margin-bottom: 2rem; font-size: 0.95rem; line-height: 1.6; }
+
+        .card {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(51, 65, 85, 0.8);
+            border-radius: 16px;
+            padding: 2rem;
+            backdrop-filter: blur(8px);
+        }
+
+        .field { margin-bottom: 1.25rem; }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+        }
+
+        .range-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: #060b18;
+            border: 1px solid #1e293b;
+            border-radius: 10px;
+            color: #e2e8f0;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        input[type="number"]:focus { outline: none; border-color: #818cf8; }
+
+        .options-row {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            color: #94a3b8;
+            user-select: none;
+        }
+
+        .toggle-label input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #818cf8;
+            cursor: pointer;
+        }
+
+        button {
+            width: 100%;
+            padding: 0.85rem;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        button:hover { opacity: 0.9; }
+        button:active { transform: scale(0.99); }
+
+        /* Result display */
+        .result-box {
+            margin-top: 1.75rem;
+            border-top: 1px solid #1e293b;
+            padding-top: 1.75rem;
+            display: none;
+        }
+        .result-box.show { display: block; }
+
+        .result-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #334155;
+            margin-bottom: 0.75rem;
+        }
+
+        .result-number {
+            font-size: 4rem;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+            margin-bottom: 1rem;
+            animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        /* Multiple results */
+        .multi-results {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .num-chip {
+            padding: 0.4rem 0.9rem;
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #7dd3fc;
+            animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .error { color: #f87171; font-size: 0.875rem; margin-top: 1rem; }
+
+        .history {
+            margin-top: 1.75rem;
+            border-top: 1px solid #1e293b;
+            padding-top: 1.25rem;
+            display: none;
+        }
+        .history.show { display: block; }
+        .history-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #334155;
+            margin-bottom: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .clear-btn {
+            background: none;
+            border: none;
+            color: #475569;
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 0;
+            font-family: inherit;
+            width: auto;
+            transition: color 0.2s;
+        }
+        .clear-btn:hover { color: #f87171; opacity: 1; }
+        .history-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+        .history-chip {
+            padding: 0.25rem 0.65rem;
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="back">&larr; Back to tools</a>
+        <h1>Random Number Generator</h1>
+        <p class="desc">Generate random numbers within any range. Supports multiple results and unique values.</p>
+
+        <div class="card">
+            <div class="range-row">
+                <div class="field">
+                    <label for="min">Min</label>
+                    <input type="number" id="min" value="1">
+                </div>
+                <div class="field">
+                    <label for="max">Max</label>
+                    <input type="number" id="max" value="100">
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="count">How many numbers?</label>
+                <input type="number" id="count" value="1" min="1" max="100">
+            </div>
+
+            <div class="options-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="unique"> No duplicates
+                </label>
+                <label class="toggle-label">
+                    <input type="checkbox" id="sorted"> Sort results
+                </label>
+            </div>
+
+            <button onclick="generate()">Generate</button>
+
+            <div class="result-box" id="result-box">
+                <div class="result-label">Result</div>
+                <div id="result-display"></div>
+            </div>
+
+            <div class="history" id="history-section">
+                <div class="history-label">
+                    <span>History</span>
+                    <button class="clear-btn" onclick="clearHistory()">Clear</button>
+                </div>
+                <div class="history-list" id="history-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const history = [];
+
+        function generate() {
+            const min = parseInt(document.getElementById('min').value);
+            const max = parseInt(document.getElementById('max').value);
+            const count = parseInt(document.getElementById('count').value);
+            const unique = document.getElementById('unique').checked;
+            const sorted = document.getElementById('sorted').checked;
+            const resultBox = document.getElementById('result-box');
+            const display = document.getElementById('result-display');
+
+            if (isNaN(min) || isNaN(max) || isNaN(count)) {
+                display.innerHTML = '<p class="error">Please fill in all fields.</p>';
+                resultBox.classList.add('show');
+                return;
+            }
+            if (min >= max) {
+                display.innerHTML = '<p class="error">Min must be less than Max.</p>';
+                resultBox.classList.add('show');
+                return;
+            }
+            if (count < 1 || count > 100) {
+                display.innerHTML = '<p class="error">Count must be between 1 and 100.</p>';
+                resultBox.classList.add('show');
+                return;
+            }
+            if (unique && count > (max - min + 1)) {
+                display.innerHTML = '<p class="error">Not enough unique numbers in that range.</p>';
+                resultBox.classList.add('show');
+                return;
+            }
+
+            let numbers = [];
+            if (unique) {
+                const pool = Array.from({ length: max - min + 1 }, (_, i) => i + min);
+                for (let i = pool.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [pool[i], pool[j]] = [pool[j], pool[i]];
+                }
+                numbers = pool.slice(0, count);
+            } else {
+                for (let i = 0; i < count; i++) {
+                    numbers.push(Math.floor(Math.random() * (max - min + 1)) + min);
+                }
+            }
+
+            if (sorted) numbers.sort((a, b) => a - b);
+
+            // Add to history
+            const label = count === 1 ? `${numbers[0]}` : `[${numbers.join(', ')}]`;
+            history.unshift(label);
+            if (history.length > 20) history.pop();
+            renderHistory();
+
+            // Render result - force animation replay
+            if (count === 1) {
+                display.innerHTML = '';
+                setTimeout(() => {
+                    display.innerHTML = `<div class="result-number">${numbers[0]}</div>`;
+                }, 10);
+            } else {
+                display.innerHTML = '';
+                setTimeout(() => {
+                    display.innerHTML = '<div class="multi-results">' +
+                        numbers.map(n => `<span class="num-chip">${n}</span>`).join('') +
+                        '</div>';
+                }, 10);
+            }
+
+            resultBox.classList.add('show');
+        }
+
+        function renderHistory() {
+            const section = document.getElementById('history-section');
+            const list = document.getElementById('history-list');
+            if (history.length === 0) {
+                section.classList.remove('show');
+                return;
+            }
+            section.classList.add('show');
+            list.innerHTML = history.map(h => `<span class="history-chip">${h}</span>`).join('');
+        }
+
+        function clearHistory() {
+            history.length = 0;
+            renderHistory();
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Enter') generate();
+        });
+    </script>
+</body>
+</html>
