@@ -1369,6 +1369,28 @@ function updateViz() {
 
 setInterval(() => { if (state.status !== 'idle') { updateSummary(); updateViz(); } }, 1000);
 
+// -- Auto-save every 15 minutes --
+setInterval(() => {
+  if (state.status !== 'idle') {
+    saveState();
+    showAutoSaveIndicator();
+  }
+}, 15 * 60 * 1000);
+
+function showAutoSaveIndicator() {
+  let indicator = document.getElementById('autoSaveIndicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = 'autoSaveIndicator';
+    indicator.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 16px;border-radius:20px;font-family:"DM Mono",monospace;font-size:11px;opacity:0;transition:opacity 0.3s;z-index:100;pointer-events:none;';
+    document.body.appendChild(indicator);
+  }
+  const time = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  indicator.textContent = 'Auto-saved at ' + time;
+  indicator.style.opacity = '1';
+  setTimeout(() => { indicator.style.opacity = '0'; }, 2500);
+}
+
 // -- Init --
 updateUI();
 if (state.status !== 'idle' && state.status !== 'ended') { updateTimerDisplay(); updateViz(); }
