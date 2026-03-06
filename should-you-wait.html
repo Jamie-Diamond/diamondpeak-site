@@ -13,104 +13,82 @@
     --ink2: #4a4535;
     --muted: #9a9080;
     --border: #ddd8cc;
-    --green-bg: #f0f7f2;
     --green: #1d6840;
-    --red-bg: #fdf2f0;
     --red: #b53a1e;
     --gold: #b87c20;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
-  .page { max-width: 860px; margin: 0 auto; padding: 28px 16px 60px; }
-  @media(min-width:600px) { .page { padding: 44px 24px 72px; } }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; min-height: 100vh; }
+  .page { max-width: 680px; margin: 0 auto; padding: 32px 16px 72px; }
+  @media(min-width:600px) { .page { padding: 52px 24px 80px; } }
 
-  /* Header */
-  header { margin-bottom: 32px; }
   .kicker {
     font-family: 'DM Mono', monospace;
     font-size: 10px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
+
   h1 {
     font-family: 'Libre Baskerville', serif;
-    font-size: clamp(24px, 5vw, 40px);
+    font-size: clamp(26px, 5vw, 42px);
     font-weight: 700;
-    line-height: 1.15;
+    line-height: 1.1;
     margin-bottom: 12px;
   }
-  .tagline {
+
+  .intro {
     font-size: 14px;
     color: var(--ink2);
     line-height: 1.7;
-    max-width: 580px;
+    margin-bottom: 36px;
+    max-width: 520px;
   }
 
   /* Inputs */
-  .inputs-wrap {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 20px 16px;
-    margin-bottom: 20px;
-  }
-  @media(min-width:600px) { .inputs-wrap { padding: 24px 28px; } }
-
-  .inputs-title {
-    font-family: 'DM Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 16px;
-  }
-
-  .inputs-grid {
+  .inputs {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 14px;
+    gap: 16px;
+    margin-bottom: 32px;
   }
-  @media(min-width:560px) { .inputs-grid { grid-template-columns: repeat(3, 1fr); } }
-  @media(min-width:740px) { .inputs-grid { grid-template-columns: repeat(5, 1fr); } }
+  @media(min-width:500px) { .inputs { grid-template-columns: 1fr 1fr 1fr; } }
 
   .field label {
     display: block;
     font-size: 12px;
     font-weight: 500;
-    color: var(--ink2);
-    margin-bottom: 6px;
-    line-height: 1.3;
+    color: var(--ink);
+    margin-bottom: 3px;
   }
   .field .hint {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--muted);
-    margin-bottom: 6px;
+    margin-bottom: 7px;
     display: block;
-    margin-top: -3px;
+    line-height: 1.4;
   }
-
-  .input-wrap { display: flex; align-items: stretch; }
+  .input-wrap { display: flex; }
   .affix {
-    background: var(--bg);
+    background: #ede9e1;
     border: 1px solid var(--border);
     font-family: 'DM Mono', monospace;
     font-size: 12px;
     color: var(--muted);
-    padding: 0 8px;
+    padding: 0 9px;
     display: flex;
     align-items: center;
     flex-shrink: 0;
     user-select: none;
   }
-  .affix-pre { border-right: none; border-radius: 3px 0 0 3px; }
-  .affix-suf { border-left: none; border-radius: 0 3px 3px 0; }
-
+  .affix-pre { border-right: none; border-radius: 4px 0 0 4px; }
+  .affix-suf { border-left: none; border-radius: 0 4px 4px 0; }
   input[type="number"] {
     width: 100%;
-    height: 42px;
+    height: 44px;
     border: 1px solid var(--border);
     background: white;
     color: var(--ink);
@@ -125,512 +103,358 @@
   input[type="number"]:focus { border-color: var(--ink); }
   input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
 
-  /* Answer band */
-  .answer-band {
+  /* Main verdict */
+  .verdict {
+    border-radius: 6px;
+    padding: 28px 24px;
+    margin-bottom: 20px;
     background: var(--ink);
     color: white;
-    border-radius: 6px;
-    padding: 20px 20px;
-    margin-bottom: 20px;
   }
-  @media(min-width:600px) { .answer-band { padding: 28px 32px; } }
-
-  .answer-label {
+  .verdict-label {
     font-family: 'DM Mono', monospace;
     font-size: 9px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: rgba(255,255,255,0.4);
-    margin-bottom: 10px;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 8px;
   }
-
-  .answer-headline {
+  .verdict-sentence {
     font-family: 'Libre Baskerville', serif;
-    font-size: clamp(16px, 3vw, 22px);
+    font-size: clamp(15px, 2.5vw, 19px);
+    line-height: 1.6;
     font-style: italic;
-    line-height: 1.55;
-    margin-bottom: 20px;
-    color: rgba(255,255,255,0.9);
+    margin-bottom: 24px;
+    color: rgba(255,255,255,0.88);
   }
-  .answer-headline strong { font-style: normal; color: #a8e8c0; }
-  .answer-headline .bad   { font-style: normal; color: #f0a090; }
+  .verdict-sentence strong { font-style: normal; color: #a8e8c0; }
+  .verdict-sentence .bad { font-style: normal; color: #f0a090; }
 
-  .answer-stats {
-    display: flex;
-    gap: 24px;
-    flex-wrap: wrap;
-  }
-
-  .astat {}
-  .astat .num {
+  .verdict-number {
     font-family: 'DM Mono', monospace;
-    font-size: 28px;
+    font-size: clamp(36px, 7vw, 56px);
     font-weight: 500;
     line-height: 1;
     display: block;
+    margin-bottom: 6px;
   }
-  @media(min-width:600px) { .astat .num { font-size: 34px; } }
-  .astat .num.bad  { color: #f0a090; }
-  .astat .num.good { color: #a8e8c0; }
-  .astat .lbl {
-    font-size: 11px;
+  .verdict-number.worse { color: #f0a090; }
+  .verdict-number.better { color: #a8e8c0; }
+
+  .verdict-caption {
+    font-size: 12px;
     color: rgba(255,255,255,0.4);
     font-family: 'DM Mono', monospace;
-    margin-top: 4px;
-    display: block;
+    letter-spacing: 0.06em;
   }
 
-  /* Scenario cards */
-  .scenarios {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 14px;
-    margin-bottom: 20px;
-  }
-  @media(min-width:560px) { .scenarios { grid-template-columns: 1fr 1fr; } }
-
-  .s-card {
+  /* Breakdown */
+  .breakdown {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 20px;
-    border-top-width: 3px;
+    overflow: hidden;
+    margin-bottom: 20px;
   }
-  .s-card.accept { border-top-color: var(--green); background: var(--green-bg); }
-  .s-card.wait   { border-top-color: var(--red);   background: var(--red-bg); }
 
-  .s-badge {
+  .breakdown-title {
+    padding: 14px 20px;
     font-family: 'DM Mono', monospace;
     font-size: 9px;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 3px;
-    margin-bottom: 10px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    background: #faf8f4;
   }
-  .accept .s-badge { background: rgba(29,104,64,0.12); color: var(--green); }
-  .wait   .s-badge { background: rgba(181,58,30,0.1);  color: var(--red); }
 
-  .s-title {
-    font-family: 'Libre Baskerville', serif;
-    font-size: 16px;
-    font-weight: 700;
-    line-height: 1.3;
-    margin-bottom: 16px;
-  }
-  .accept .s-title { color: var(--green); }
-  .wait   .s-title { color: var(--red); }
-
-  .row {
+  .breakdown-row {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
-    padding: 9px 0;
-    border-bottom: 1px solid rgba(0,0,0,0.06);
-    gap: 12px;
+    align-items: center;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
   }
-  .row:last-child { border-bottom: none; padding-bottom: 0; }
+  .breakdown-row:last-child { border-bottom: none; }
+  .breakdown-row.total {
+    background: #faf8f4;
+    padding: 16px 20px;
+  }
 
-  .row-label { font-size: 13px; color: var(--ink2); }
-  .row-label small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .br-label { font-size: 13px; color: var(--ink2); line-height: 1.4; }
+  .br-label small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
 
-  .row-val {
+  .br-val {
     font-family: 'DM Mono', monospace;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
     flex-shrink: 0;
+    white-space: nowrap;
   }
-  .accept .row-val { color: var(--green); }
-  .wait   .row-val { color: var(--red); }
-  .row-val.neutral { color: var(--ink2); }
-  .row-val.same    { color: var(--muted); }
+  .br-val.green { color: var(--green); }
+  .br-val.red   { color: var(--red); }
+  .br-val.bold  { font-size: 17px; }
 
-  /* Chart */
-  .chart-wrap {
+  /* Visual bar */
+  .bar-section {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 20px 14px;
+    padding: 20px;
   }
-  @media(min-width:600px) { .chart-wrap { padding: 24px; } }
-
-  .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 4px;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .chart-title {
-    font-family: 'Libre Baskerville', serif;
-    font-size: 14px;
-    font-weight: 700;
-  }
-  .chart-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
-
-  .legend {
-    display: flex;
-    gap: 14px;
+  .bar-label {
     font-family: 'DM Mono', monospace;
-    font-size: 10px;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
     color: var(--muted);
     margin-bottom: 16px;
-    flex-wrap: wrap;
   }
-  .leg-dot {
-    display: inline-block;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    margin-right: 5px;
-    vertical-align: middle;
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
   }
-
-  canvas { width: 100% !important; }
+  .bar-row:last-child { margin-bottom: 0; }
+  .bar-name { font-size: 12px; color: var(--ink2); width: 140px; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 28px; background: #f0ece4; border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; display: flex; align-items: center; padding-left: 10px; transition: width 0.4s ease; min-width: 2px; }
+  .bar-fill.green { background: var(--green); }
+  .bar-fill.red   { background: var(--red); }
+  .bar-amount {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+  }
 </style>
 </head>
 <body>
 <div class="page">
 
-  <header>
-    <div class="kicker">Seller's calculator</div>
-    <h1>Should you wait for a higher offer?</h1>
-    <p class="tagline">
-      A bigger sale price means a smaller mortgage on your next home — but if rates rise while you wait,
-      that smaller mortgage could actually <em>cost you more</em> than a bigger mortgage at today's lower rate.
-    </p>
-  </header>
+  <div class="kicker">For sellers considering waiting</div>
+  <h1>Is that extra offer<br>worth waiting for?</h1>
+  <p class="intro">
+    Waiting for a higher offer means your buyer needs a bigger mortgage at a worse rate.
+    Enter the numbers to see whether the extra money you gain actually outweighs what it costs you in interest.
+  </p>
 
-  <div class="inputs-wrap">
-    <div class="inputs-title">Your situation</div>
-    <div class="inputs-grid">
-      <div class="field">
-        <label>Offer you have now</label>
-        <span class="hint">What you'd sell for today</span>
-        <div class="input-wrap">
-          <span class="affix affix-pre">£</span>
-          <input type="number" id="saleNow" value="480000" step="5000">
-        </div>
-      </div>
-      <div class="field">
-        <label>Offer you're waiting for</label>
-        <span class="hint">What you're hoping to get</span>
-        <div class="input-wrap">
-          <span class="affix affix-pre">£</span>
-          <input type="number" id="saleWait" value="500000" step="5000">
-        </div>
-      </div>
-      <div class="field">
-        <label>Next home you want</label>
-        <span class="hint">Purchase price</span>
-        <div class="input-wrap">
-          <span class="affix affix-pre">£</span>
-          <input type="number" id="nextHome" value="650000" step="5000">
-        </div>
-      </div>
-      <div class="field">
-        <label>Current mortgage rate</label>
-        <span class="hint">Available today</span>
-        <div class="input-wrap">
-          <input type="number" id="rateNow" value="4.50" step="0.05">
-          <span class="affix affix-suf">%</span>
-        </div>
-      </div>
-      <div class="field">
-        <label>Rate if you wait</label>
-        <span class="hint">Expected rise</span>
-        <div class="input-wrap">
-          <input type="number" id="rateWait" value="5.00" step="0.05">
-          <span class="affix affix-suf">%</span>
-        </div>
+  <div class="inputs">
+    <div class="field">
+      <label>Offer on the table</label>
+      <span class="hint">What the buyer is offering now</span>
+      <div class="input-wrap">
+        <span class="affix affix-pre">£</span>
+        <input type="number" id="offerNow" value="480000" step="5000">
       </div>
     </div>
-    <div style="margin-top:14px; display:flex; gap:14px; flex-wrap:wrap;">
-      <div class="field" style="flex:1; min-width:120px; max-width:180px;">
-        <label>Mortgage term</label>
-        <div class="input-wrap">
-          <input type="number" id="term" value="25" step="1" min="5" max="40">
-          <span class="affix affix-suf">yrs</span>
-        </div>
+    <div class="field">
+      <label>Offer you want</label>
+      <span class="hint">What you're holding out for</span>
+      <div class="input-wrap">
+        <span class="affix affix-pre">£</span>
+        <input type="number" id="offerWant" value="490000" step="5000">
+      </div>
+    </div>
+    <div class="field">
+      <label>Your next home</label>
+      <span class="hint">What you plan to buy next</span>
+      <div class="input-wrap">
+        <span class="affix affix-pre">£</span>
+        <input type="number" id="nextHome" value="600000" step="5000">
+      </div>
+    </div>
+    <div class="field">
+      <label>Rate today</label>
+      <span class="hint">Current mortgage rate</span>
+      <div class="input-wrap">
+        <input type="number" id="rateNow" value="4.50" step="0.05">
+        <span class="affix affix-suf">%</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Rate if you wait</label>
+      <span class="hint">Expected rate by then</span>
+      <div class="input-wrap">
+        <input type="number" id="rateThen" value="5.00" step="0.05">
+        <span class="affix affix-suf">%</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Mortgage term</label>
+      <span class="hint">&nbsp;</span>
+      <div class="input-wrap">
+        <input type="number" id="term" value="25" step="1" min="5" max="40">
+        <span class="affix affix-suf">yrs</span>
       </div>
     </div>
   </div>
 
-  <!-- The answer -->
-  <div class="answer-band">
-    <div class="answer-label">Bottom line</div>
-    <div class="answer-headline" id="answer_text">—</div>
-    <div class="answer-stats">
-      <div class="astat">
-        <span class="num" id="v_monthly_diff">—</span>
-        <span class="lbl" id="v_monthly_lbl">difference per month</span>
+  <!-- Verdict -->
+  <div class="verdict">
+    <div class="verdict-label">The verdict</div>
+    <div class="verdict-sentence" id="verdict_sentence">—</div>
+    <span class="verdict-number" id="verdict_number">—</span>
+    <span class="verdict-caption" id="verdict_caption">—</span>
+  </div>
+
+  <!-- Breakdown -->
+  <div class="breakdown">
+    <div class="breakdown-title">How we got there</div>
+    <div class="breakdown-row">
+      <div class="br-label">
+        Extra from the sale
+        <small>The higher offer minus the current offer</small>
       </div>
-      <div class="astat">
-        <span class="num" id="v_total_diff">—</span>
-        <span class="lbl" id="v_total_lbl">difference over full term</span>
+      <span class="br-val green" id="b_extra_sale">—</span>
+    </div>
+    <div class="breakdown-row">
+      <div class="br-label">
+        Extra interest on your next mortgage
+        <small>Same home, smaller mortgage — but at a higher rate</small>
       </div>
+      <span class="br-val red" id="b_extra_interest">—</span>
+    </div>
+    <div class="breakdown-row">
+      <div class="br-label">
+        Monthly payment — accept now
+        <small id="b_now_detail">—</small>
+      </div>
+      <span class="br-val green" id="b_monthly_now">—</span>
+    </div>
+    <div class="breakdown-row">
+      <div class="br-label">
+        Monthly payment — if you wait
+        <small id="b_wait_detail">—</small>
+      </div>
+      <span class="br-val red" id="b_monthly_wait">—</span>
+    </div>
+    <div class="breakdown-row total">
+      <div class="br-label"><strong>Net difference to you</strong></div>
+      <span class="br-val bold" id="b_net">—</span>
     </div>
   </div>
 
-  <!-- Side by side -->
-  <div class="scenarios">
-
-    <div class="s-card accept">
-      <span class="s-badge">Accept now</span>
-      <div class="s-title" id="a_title">—</div>
-      <div class="row">
-        <span class="row-label">You sell for</span>
-        <span class="row-val" id="a_sale">—</span>
-      </div>
-      <div class="row">
-        <span class="row-label">Mortgage needed<small>Next home minus sale price</small></span>
-        <span class="row-val" id="a_mortgage">—</span>
-      </div>
-      <div class="row">
-        <span class="row-label">Interest rate</span>
-        <span class="row-val" id="a_rate">—</span>
-      </div>
-      <div class="row">
-        <span class="row-label">Monthly payment</span>
-        <span class="row-val" id="a_monthly">—</span>
-      </div>
-      <div class="row">
-        <span class="row-label">Total interest paid</span>
-        <span class="row-val" id="a_interest">—</span>
+  <!-- Visual bar comparison -->
+  <div class="bar-section">
+    <div class="bar-label">What you gain vs what it costs you</div>
+    <div class="bar-row">
+      <div class="bar-name">Extra from sale</div>
+      <div class="bar-track">
+        <div class="bar-fill green" id="bar_gain">
+          <span class="bar-amount" id="bar_gain_lbl">—</span>
+        </div>
       </div>
     </div>
-
-    <div class="s-card wait">
-      <span class="s-badge">Wait for more</span>
-      <div class="s-title" id="b_title">—</div>
-      <div class="row">
-        <span class="row-label">You sell for</span>
-        <span class="row-val" id="b_sale">—</span>
-      </div>
-      <div class="row">
-        <span class="row-label">Mortgage needed<small>Next home minus sale price</small></span>
-        <span class="row-val" id="b_mortgage">—</span>
-      </div>
-      <div class="row">
-        <span class="row-label">Interest rate</span>
-        <span class="row-val" id="b_rate">—</span>
-      </div>
-      <div class="row">
-        <span class="row-label">Monthly payment</span>
-        <span class="row-val" id="b_monthly">—</span>
-      </div>
-      <div class="row">
-        <span class="row-label">Total interest paid</span>
-        <span class="row-val" id="b_interest">—</span>
+    <div class="bar-row">
+      <div class="bar-name">Extra interest paid</div>
+      <div class="bar-track">
+        <div class="bar-fill red" id="bar_cost">
+          <span class="bar-amount" id="bar_cost_lbl">—</span>
+        </div>
       </div>
     </div>
-
-  </div>
-
-  <!-- Chart -->
-  <div class="chart-wrap">
-    <div class="chart-header">
-      <div>
-        <div class="chart-title">Cumulative interest paid over time</div>
-        <div class="chart-sub">The lower the line, the less you pay</div>
-      </div>
-    </div>
-    <div class="legend">
-      <span><span class="leg-dot" style="background:var(--green)"></span>Accept now</span>
-      <span><span class="leg-dot" style="background:var(--red)"></span>Wait for more</span>
-    </div>
-    <canvas id="chart" height="280"></canvas>
   </div>
 
 </div>
 <script>
 const $ = id => document.getElementById(id);
 
-function monthly(principal, ratePct, years) {
-  if (ratePct === 0) return principal / (years * 12);
+function monthly(loan, ratePct, years) {
+  if (loan <= 0) return 0;
+  if (ratePct === 0) return loan / (years * 12);
   const r = ratePct / 100 / 12, n = years * 12;
-  return principal * r * Math.pow(1+r,n) / (Math.pow(1+r,n)-1);
+  return loan * r * Math.pow(1+r,n) / (Math.pow(1+r,n)-1);
+}
+
+function totalInterest(loan, ratePct, years) {
+  return monthly(loan, ratePct, years) * years * 12 - loan;
 }
 
 function fmt(n, dec=0) {
   return '£' + Math.abs(n).toLocaleString('en-GB', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
-function fmtSign(n, dec=0) {
-  return (n >= 0 ? '+' : '−') + fmt(n, dec);
-}
-function fmtK(n) {
-  return Math.abs(n) >= 1000
-    ? '£' + (n/1000).toLocaleString('en-GB',{minimumFractionDigits:1,maximumFractionDigits:1})+'k'
-    : fmt(n);
-}
-
-let ctx = $('chart').getContext('2d');
-
-function drawChart(mA, mB, loanA, loanB, termYrs) {
-  const canvas = $('chart');
-  const dpr = window.devicePixelRatio || 1;
-  const W = canvas.offsetWidth, H = 280;
-  canvas.width = W * dpr; canvas.height = H * dpr;
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0,0,W,H);
-
-  const PAD = {top:16, right:24, bottom:42, left:80};
-  const pw = W - PAD.left - PAD.right;
-  const ph = H - PAD.top - PAD.bottom;
-  const n = termYrs * 12;
-
-  // Cumulative interest paid after m months
-  const intA = m => mA * m - (loanA - (loanA * (Math.pow(1+0,0))));
-  // More accurate: cumulative interest = total paid - principal repaid
-  // principal repaid after m months = loanA - remainingBalance
-  function remainBal(loan, ratePct, years, months) {
-    if (ratePct === 0) return loan - (loan/(years*12))*months;
-    const r = ratePct/100/12, nt = years*12;
-    return loan * (Math.pow(1+r,nt) - Math.pow(1+r,months)) / (Math.pow(1+r,nt)-1);
-  }
-  function cumInt(loan, ratePct, years, months) {
-    const paid = monthly(loan, ratePct, years) * months;
-    const repaid = loan - remainBal(loan, ratePct, years, months);
-    return paid - repaid;
-  }
-
-  const step = 3;
-  const pts = Math.floor(n / step) + 1;
-  const maxVal = Math.max(cumInt(loanA, 0, termYrs, n), cumInt(loanB, 0, termYrs, n),
-    // use actual rates
-    (() => { let max = 0; for(let m=0;m<=n;m+=step) { max = Math.max(max, cumInt(loanA, parseFloat($('rateNow').value)||0, termYrs, m), cumInt(loanB, parseFloat($('rateWait').value)||0, termYrs, m)); } return max; })()
-  );
-
-  // Recompute properly
-  const rA = parseFloat($('rateNow').value) || 0;
-  const rB = parseFloat($('rateWait').value) || 0;
-
-  const sx = i => PAD.left + (i / (pts-1)) * pw;
-  const sy = v => PAD.top + ph - (v / (maxVal || 1)) * ph;
-
-  // Grid
-  ctx.strokeStyle = 'rgba(26,22,15,0.06)'; ctx.lineWidth = 1;
-  for (let i=0;i<=4;i++) {
-    const y = PAD.top + (i/4)*ph;
-    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+pw,y); ctx.stroke();
-  }
-
-  // Fill
-  ctx.beginPath();
-  ctx.moveTo(sx(0), sy(0));
-  for (let i=1;i<pts;i++) ctx.lineTo(sx(i), sy(cumInt(loanA, rA, termYrs, i*step)));
-  for (let i=pts-1;i>=0;i--) ctx.lineTo(sx(i), sy(cumInt(loanB, rB, termYrs, i*step)));
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(29,104,64,0.07)'; ctx.fill();
-
-  // Line B
-  ctx.beginPath(); ctx.moveTo(sx(0), sy(0));
-  for (let i=1;i<pts;i++) ctx.lineTo(sx(i), sy(cumInt(loanB, rB, termYrs, i*step)));
-  ctx.strokeStyle = '#c94c35'; ctx.lineWidth = 2.5; ctx.stroke();
-
-  // Line A
-  ctx.beginPath(); ctx.moveTo(sx(0), sy(0));
-  for (let i=1;i<pts;i++) ctx.lineTo(sx(i), sy(cumInt(loanA, rA, termYrs, i*step)));
-  ctx.strokeStyle = '#1d6840'; ctx.lineWidth = 2.5; ctx.stroke();
-
-  // Y labels
-  ctx.fillStyle = '#9a9080'; ctx.font = "10px 'DM Mono',monospace"; ctx.textAlign = 'right';
-  for (let i=0;i<=4;i++) {
-    const v = (maxVal/4)*(4-i);
-    ctx.fillText(fmtK(v), PAD.left-6, PAD.top+(i/4)*ph+4);
-  }
-  // X labels
-  ctx.textAlign = 'center';
-  for (let i=0;i<=5;i++) {
-    const idx = Math.round((i/5)*(pts-1));
-    ctx.fillText(`yr ${Math.round(idx*step/12)}`, sx(idx), H-PAD.bottom+14);
-  }
-  // Axes
-  ctx.strokeStyle = 'rgba(26,22,15,0.15)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(PAD.left,PAD.top); ctx.lineTo(PAD.left,PAD.top+ph); ctx.lineTo(PAD.left+pw,PAD.top+ph); ctx.stroke();
-}
 
 function update() {
-  const saleNow  = parseFloat($('saleNow').value)  || 0;
-  const saleWait = parseFloat($('saleWait').value) || 0;
-  const nextHome = parseFloat($('nextHome').value) || 0;
-  const rA       = parseFloat($('rateNow').value)  || 0;
-  const rB       = parseFloat($('rateWait').value) || 0;
-  const term     = parseInt($('term').value)       || 25;
+  const offerNow  = parseFloat($('offerNow').value)  || 0;
+  const offerWant = parseFloat($('offerWant').value) || 0;
+  const nextHome  = parseFloat($('nextHome').value)  || 0;
+  const rateNow   = parseFloat($('rateNow').value)   || 0;
+  const rateThen  = parseFloat($('rateThen').value)  || 0;
+  const term      = parseInt($('term').value)        || 25;
 
-  const loanA = Math.max(0, nextHome - saleNow);
-  const loanB = Math.max(0, nextHome - saleWait);
-  const saleDiff = saleWait - saleNow;
+  // Mortgages needed in each scenario
+  const loanNow  = Math.max(0, nextHome - offerNow);
+  const loanWait = Math.max(0, nextHome - offerWant);
 
-  const mA = monthly(loanA, rA, term);
-  const mB = monthly(loanB, rB, term);
-  const totalA = mA * term * 12;
-  const totalB = mB * term * 12;
-  const intA = totalA - loanA;
-  const intB = totalB - loanB;
-  const monthlyDiff = mB - mA;
-  const totalDiff = totalB - totalA;
+  const extraSale     = offerWant - offerNow;
+  const intNow        = totalInterest(loanNow, rateNow, term);
+  const intWait       = totalInterest(loanWait, rateThen, term);
+  const extraInterest = intWait - intNow;   // positive = costs more if wait
+  const net           = extraSale - extraInterest; // positive = waiting is worth it
 
-  // Cards
-  $('a_title').textContent  = `Accept ${fmt(saleNow)} now`;
-  $('a_sale').textContent   = fmt(saleNow);
-  $('a_mortgage').textContent = fmt(loanA);
-  $('a_rate').textContent   = rA.toFixed(2) + '%';
-  $('a_monthly').textContent  = fmt(mA, 2);
-  $('a_interest').textContent = fmt(intA);
+  const mNow  = monthly(loanNow, rateNow, term);
+  const mWait = monthly(loanWait, rateThen, term);
 
-  $('b_title').textContent  = `Wait for ${fmt(saleWait)}`;
-  $('b_sale').textContent   = fmt(saleWait);
-  $('b_mortgage').textContent = fmt(loanB);
-  $('b_rate').textContent   = rB.toFixed(2) + '%';
-  $('b_monthly').textContent  = fmt(mB, 2);
-  $('b_interest').textContent = fmt(intB);
+  // Verdict
+  const numEl = $('verdict_number');
+  const senEl = $('verdict_sentence');
+  const capEl = $('verdict_caption');
 
-  // Answer band
-  const vMonthly = $('v_monthly_diff');
-  const vTotal   = $('v_total_diff');
-  const ansText  = $('answer_text');
-
-  if (monthlyDiff > 0) {
-    // Waiting is worse
-    vMonthly.textContent = fmt(Math.abs(monthlyDiff), 2) + ' more';
-    vMonthly.className = 'num bad';
-    vTotal.textContent = fmt(Math.abs(totalDiff)) + ' more';
-    vTotal.className = 'num bad';
-    $('v_monthly_lbl').textContent = 'per month if you wait';
-    $('v_total_lbl').textContent = 'in total payments if you wait';
-    ansText.innerHTML = `Waiting gets you <strong>${fmt(saleDiff)} more</strong> from the sale —
-      but your smaller mortgage at a higher rate means you pay
-      <span class="bad">${fmt(Math.abs(monthlyDiff),2)} more every month</span>
-      and <span class="bad">${fmt(Math.abs(totalDiff))} more in total</span>.
-      You'd be better off accepting now.`;
-  } else if (monthlyDiff < 0) {
-    // Waiting is better
-    vMonthly.textContent = fmt(Math.abs(monthlyDiff), 2) + ' less';
-    vMonthly.className = 'num good';
-    vTotal.textContent = fmt(Math.abs(totalDiff)) + ' less';
-    vTotal.className = 'num good';
-    $('v_monthly_lbl').textContent = 'per month if you wait';
-    $('v_total_lbl').textContent = 'in total payments if you wait';
-    ansText.innerHTML = `Even with the rate rise, waiting for <strong>${fmt(saleDiff)} more</strong>
-      reduces your mortgage enough to save you
-      <strong>${fmt(Math.abs(monthlyDiff),2)}/month</strong>
-      and <strong>${fmt(Math.abs(totalDiff))} in total</strong>. Waiting pays off here.`;
+  if (net < 0) {
+    numEl.textContent = fmt(Math.abs(net));
+    numEl.className = 'verdict-number worse';
+    capEl.textContent = 'worse off by waiting';
+    senEl.innerHTML = `Waiting for <strong>${fmt(extraSale)} more</strong> sounds good —
+      but your next mortgage at ${rateThen.toFixed(2)}% will cost you
+      <span class="bad">${fmt(extraInterest)} more in interest</span> over ${term} years.
+      You'd be better off accepting today's offer.`;
+  } else if (net > 0) {
+    numEl.textContent = fmt(net);
+    numEl.className = 'verdict-number better';
+    capEl.textContent = 'better off by waiting';
+    senEl.innerHTML = `The <strong>${fmt(extraSale)} extra</strong> from waiting
+      more than covers the higher interest cost of <strong>${fmt(extraInterest)}</strong>.
+      In this case, waiting does pay off.`;
   } else {
-    vMonthly.textContent = 'No difference';
-    vMonthly.className = 'num';
-    vTotal.textContent = 'No difference';
-    vTotal.className = 'num';
-    ansText.innerHTML = `Both scenarios cost exactly the same. The rate rise perfectly offsets the higher sale price.`;
+    numEl.textContent = 'Break even';
+    numEl.className = 'verdict-number';
+    capEl.textContent = 'the extra sale price exactly covers the extra interest';
+    senEl.innerHTML = `The extra <strong>${fmt(extraSale)}</strong> from waiting exactly cancels out
+      the higher mortgage interest. Neither option is better.`;
   }
 
-  requestAnimationFrame(() => drawChart(mA, mB, loanA, loanB, term));
+  // Breakdown rows
+  $('b_extra_sale').textContent     = '+' + fmt(extraSale);
+  $('b_extra_interest').textContent = '−' + fmt(Math.abs(extraInterest));
+  $('b_monthly_now').textContent    = fmt(mNow, 2);
+  $('b_monthly_wait').textContent   = fmt(mWait, 2);
+  $('b_now_detail').textContent     = `${fmt(loanNow)} mortgage @ ${rateNow.toFixed(2)}%`;
+  $('b_wait_detail').textContent    = `${fmt(loanWait)} mortgage @ ${rateThen.toFixed(2)}%`;
+  const netEl = $('b_net');
+  if (net < 0) {
+    netEl.textContent = '−' + fmt(Math.abs(net));
+    netEl.style.color = 'var(--red)';
+  } else {
+    netEl.textContent = '+' + fmt(net);
+    netEl.style.color = 'var(--green)';
+  }
+
+  // Bars
+  const maxVal = Math.max(extraSale, Math.abs(extraInterest), 1);
+  const gainPct = (extraSale / maxVal) * 100;
+  const costPct = (Math.abs(extraInterest) / maxVal) * 100;
+  $('bar_gain').style.width = gainPct + '%';
+  $('bar_cost').style.width = costPct + '%';
+  $('bar_gain_lbl').textContent = fmt(extraSale);
+  $('bar_cost_lbl').textContent = fmt(Math.abs(extraInterest));
 }
 
-['saleNow','saleWait','nextHome','rateNow','rateWait','term']
+['offerNow','offerWant','nextHome','rateNow','rateThen','term']
   .forEach(id => $(id).addEventListener('input', update));
-window.addEventListener('resize', update);
 update();
 </script>
 </body>
