@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Buy Now or Wait? — Mortgage Affordability Reality Check</title>
+<title>Should You Wait for a Higher Offer? — Diamond Peak</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -17,16 +17,16 @@
     --green: #1d6840;
     --red-bg: #fdf2f0;
     --red: #b53a1e;
+    --gold: #b87c20;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
-  .page { max-width: 980px; margin: 0 auto; padding: 28px 16px 60px; }
+  .page { max-width: 860px; margin: 0 auto; padding: 28px 16px 60px; }
   @media(min-width:600px) { .page { padding: 44px 24px 72px; } }
 
-  header { margin-bottom: 28px; }
-  @media(min-width:600px) { header { margin-bottom: 36px; } }
-
+  /* Header */
+  header { margin-bottom: 32px; }
   .kicker {
     font-family: 'DM Mono', monospace;
     font-size: 10px;
@@ -35,53 +35,64 @@
     color: var(--muted);
     margin-bottom: 8px;
   }
-
   h1 {
     font-family: 'Libre Baskerville', serif;
-    font-size: clamp(22px, 6vw, 44px);
+    font-size: clamp(24px, 5vw, 40px);
     font-weight: 700;
-    line-height: 1.1;
+    line-height: 1.15;
+    margin-bottom: 12px;
   }
-
   .tagline {
-    margin-top: 10px;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--ink2);
-    line-height: 1.6;
-    border-left: 3px solid var(--border);
-    padding-left: 12px;
+    line-height: 1.7;
+    max-width: 580px;
   }
 
-  /* ── Inputs ── */
+  /* Inputs */
   .inputs-wrap {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 16px;
+    border-radius: 6px;
+    padding: 20px 16px;
+    margin-bottom: 20px;
+  }
+  @media(min-width:600px) { .inputs-wrap { padding: 24px 28px; } }
+
+  .inputs-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
     margin-bottom: 16px;
   }
-  @media(min-width:600px) { .inputs-wrap { padding: 24px; margin-bottom: 20px; } }
 
   .inputs-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 14px;
   }
-  @media(min-width:480px) { .inputs-grid { grid-template-columns: 1fr 1fr 1fr; } }
-  @media(min-width:700px) { .inputs-grid { grid-template-columns: repeat(6, 1fr); gap: 14px; } }
+  @media(min-width:560px) { .inputs-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media(min-width:740px) { .inputs-grid { grid-template-columns: repeat(5, 1fr); } }
 
   .field label {
     display: block;
-    font-family: 'DM Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink2);
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+  .field .hint {
+    font-size: 10px;
     color: var(--muted);
     margin-bottom: 6px;
+    display: block;
+    margin-top: -3px;
   }
 
   .input-wrap { display: flex; align-items: stretch; }
-
   .affix {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -92,237 +103,187 @@
     display: flex;
     align-items: center;
     flex-shrink: 0;
+    user-select: none;
   }
   .affix-pre { border-right: none; border-radius: 3px 0 0 3px; }
   .affix-suf { border-left: none; border-radius: 0 3px 3px 0; }
 
   input[type="number"] {
     width: 100%;
-    height: 44px;
+    height: 42px;
     border: 1px solid var(--border);
     background: white;
     color: var(--ink);
     font-family: 'DM Mono', monospace;
-    font-size: 15px;
+    font-size: 14px;
     padding: 0 10px;
     outline: none;
-    transition: border-color 0.18s;
+    transition: border-color 0.15s;
     -webkit-appearance: none;
+    -moz-appearance: textfield;
   }
   input[type="number"]:focus { border-color: var(--ink); }
   input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
-  input[type=number] { -moz-appearance: textfield; }
 
-  /* ── Same payment callout ── */
-  .same-payment-band {
-    background: #fffdf5;
-    border: 1px solid #d4b84a;
-    border-left: 4px solid #b87c20;
-    border-radius: 4px;
-    padding: 18px 16px;
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
+  /* Answer band */
+  .answer-band {
+    background: var(--ink);
+    color: white;
+    border-radius: 6px;
+    padding: 20px 20px;
+    margin-bottom: 20px;
   }
-  @media(min-width:600px) { .same-payment-band { padding: 20px 24px; margin-bottom: 20px; } }
+  @media(min-width:600px) { .answer-band { padding: 28px 32px; } }
 
-  .sp-left { flex: 1; min-width: 200px; }
-  .sp-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: #b87c20;
-    margin-bottom: 4px;
-  }
-  .sp-desc { font-size: 13px; color: var(--ink2); line-height: 1.5; }
-
-  .sp-right { text-align: right; }
-  .sp-big {
-    font-family: 'DM Mono', monospace;
-    font-size: 32px;
-    font-weight: 500;
-    color: #b87c20;
-    line-height: 1;
-    display: block;
-  }
-  @media(min-width:600px) { .sp-big { font-size: 38px; } }
-  .sp-sub {
-    font-family: 'DM Mono', monospace;
-    font-size: 11px;
-    color: var(--muted);
-    margin-top: 3px;
-    display: block;
-  }
-
-  /* ── Scenario Cards ── */
-  .scenarios {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-  @media(min-width:600px) { .scenarios { grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; } }
-
-  .s-card {
-    border-radius: 4px;
-    padding: 18px 16px;
-    border: 1px solid var(--border);
-  }
-  @media(min-width:600px) { .s-card { padding: 24px; } }
-
-  .s-card.now  { background: var(--green-bg); border-top: 3px solid var(--green); }
-  .s-card.wait { background: var(--red-bg);   border-top: 3px solid var(--red); }
-
-  .s-badge {
+  .answer-label {
     font-family: 'DM Mono', monospace;
     font-size: 9px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    padding: 3px 8px;
-    border-radius: 2px;
-    display: inline-block;
-    margin-bottom: 8px;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 10px;
   }
-  .now  .s-badge { background: rgba(29,104,64,0.12); color: var(--green); }
-  .wait .s-badge { background: rgba(181,58,30,0.10); color: var(--red); }
+
+  .answer-headline {
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(16px, 3vw, 22px);
+    font-style: italic;
+    line-height: 1.55;
+    margin-bottom: 20px;
+    color: rgba(255,255,255,0.9);
+  }
+  .answer-headline strong { font-style: normal; color: #a8e8c0; }
+  .answer-headline .bad   { font-style: normal; color: #f0a090; }
+
+  .answer-stats {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .astat {}
+  .astat .num {
+    font-family: 'DM Mono', monospace;
+    font-size: 28px;
+    font-weight: 500;
+    line-height: 1;
+    display: block;
+  }
+  @media(min-width:600px) { .astat .num { font-size: 34px; } }
+  .astat .num.bad  { color: #f0a090; }
+  .astat .num.good { color: #a8e8c0; }
+  .astat .lbl {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    font-family: 'DM Mono', monospace;
+    margin-top: 4px;
+    display: block;
+  }
+
+  /* Scenario cards */
+  .scenarios {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  @media(min-width:560px) { .scenarios { grid-template-columns: 1fr 1fr; } }
+
+  .s-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    border-top-width: 3px;
+  }
+  .s-card.accept { border-top-color: var(--green); background: var(--green-bg); }
+  .s-card.wait   { border-top-color: var(--red);   background: var(--red-bg); }
+
+  .s-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-bottom: 10px;
+  }
+  .accept .s-badge { background: rgba(29,104,64,0.12); color: var(--green); }
+  .wait   .s-badge { background: rgba(181,58,30,0.1);  color: var(--red); }
 
   .s-title {
     font-family: 'Libre Baskerville', serif;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
-    margin-bottom: 4px;
-    line-height: 1.2;
+    line-height: 1.3;
+    margin-bottom: 16px;
   }
-  .now  .s-title { color: var(--green); }
-  .wait .s-title { color: var(--red); }
+  .accept .s-title { color: var(--green); }
+  .wait   .s-title { color: var(--red); }
 
-  .s-desc { font-size: 12px; color: var(--ink2); margin-bottom: 16px; line-height: 1.5; }
-
-  .s-stats { display: flex; flex-direction: column; gap: 0; }
-
-  .stat-row {
+  .row {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    padding: 8px 0;
+    padding: 9px 0;
     border-bottom: 1px solid rgba(0,0,0,0.06);
-    gap: 8px;
+    gap: 12px;
   }
-  .stat-row:last-child { border-bottom: none; }
+  .row:last-child { border-bottom: none; padding-bottom: 0; }
 
-  .stat-name { font-size: 12px; color: var(--ink2); flex: 1; }
+  .row-label { font-size: 13px; color: var(--ink2); }
+  .row-label small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
 
-  .stat-val {
+  .row-val {
     font-family: 'DM Mono', monospace;
     font-size: 14px;
     font-weight: 500;
     flex-shrink: 0;
   }
-  .now  .stat-val { color: var(--green); }
-  .wait .stat-val { color: var(--red); }
+  .accept .row-val { color: var(--green); }
+  .wait   .row-val { color: var(--red); }
+  .row-val.neutral { color: var(--ink2); }
+  .row-val.same    { color: var(--muted); }
 
-  .stat-val.neutral { color: var(--ink2); }
-  .stat-val.highlight { font-size: 16px; }
-
-  /* ── Verdict ── */
-  .verdict-band {
-    background: var(--ink);
-    color: white;
-    border-radius: 4px;
-    padding: 20px 16px;
-    margin-bottom: 16px;
-  }
-  @media(min-width:600px) { .verdict-band { padding: 28px 32px; margin-bottom: 20px; } }
-
-  .verdict-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-  @media(min-width:600px) { .verdict-grid { grid-template-columns: 1fr auto; align-items: center; gap: 32px; } }
-
-  .verdict-text {
-    font-family: 'Libre Baskerville', serif;
-    font-size: 15px;
-    line-height: 1.65;
-    font-style: italic;
-  }
-  @media(min-width:600px) { .verdict-text { font-size: 17px; } }
-  .verdict-text strong { font-style: normal; color: #a8e8c0; }
-  .verdict-text .bad   { font-style: normal; color: #f0a090; }
-
-  .verdict-stats {
-    display: flex;
-    gap: 24px;
-    flex-shrink: 0;
-  }
-
-  .vstat { text-align: center; }
-  .vstat .num {
-    font-family: 'DM Mono', monospace;
-    font-size: 26px;
-    font-weight: 500;
-    display: block;
-    line-height: 1;
-  }
-  @media(min-width:600px) { .vstat .num { font-size: 30px; } }
-  .vstat .num.bad { color: #f0a090; }
-  .vstat .num.good { color: #a8e8c0; }
-  .vstat .lbl {
-    font-size: 10px;
-    color: rgba(255,255,255,0.4);
-    font-family: 'DM Mono', monospace;
-    letter-spacing: 0.06em;
-    margin-top: 4px;
-    display: block;
-    white-space: nowrap;
-  }
-
-  /* ── Chart ── */
-  .chart-section {
+  /* Chart */
+  .chart-wrap {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 18px 12px;
+    border-radius: 6px;
+    padding: 20px 14px;
   }
-  @media(min-width:600px) { .chart-section { padding: 24px; } }
+  @media(min-width:600px) { .chart-wrap { padding: 24px; } }
 
-  .chart-head {
+  .chart-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
-    margin-bottom: 14px;
+    align-items: flex-start;
+    margin-bottom: 4px;
     flex-wrap: wrap;
     gap: 8px;
   }
-
   .chart-title {
     font-family: 'Libre Baskerville', serif;
     font-size: 14px;
+    font-weight: 700;
   }
-  .chart-sub {
-    font-size: 11px;
-    color: var(--muted);
-    margin-top: 2px;
-  }
+  .chart-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
   .legend {
     display: flex;
     gap: 14px;
     font-family: 'DM Mono', monospace;
     font-size: 10px;
-    letter-spacing: 0.08em;
     color: var(--muted);
+    margin-bottom: 16px;
+    flex-wrap: wrap;
   }
-
   .leg-dot {
     display: inline-block;
-    width: 9px; height: 9px;
+    width: 8px; height: 8px;
     border-radius: 50%;
-    margin-right: 4px;
+    margin-right: 5px;
     vertical-align: middle;
   }
 
@@ -333,422 +294,342 @@
 <div class="page">
 
   <header>
-    <div class="kicker">Buyer's Mortgage Calculator</div>
-    <h1>Buy Now, or Wait?</h1>
+    <div class="kicker">Seller's calculator</div>
+    <h1>Should you wait for a higher offer?</h1>
     <p class="tagline">
-      If rates rise while you wait, you'll qualify for a smaller mortgage — for the exact same monthly payment.
-      Same cost every month, but less house and less equity. Here's what that looks like in numbers.
+      A bigger sale price means a smaller mortgage on your next home — but if rates rise while you wait,
+      that smaller mortgage could actually <em>cost you more</em> than a bigger mortgage at today's lower rate.
     </p>
   </header>
 
   <div class="inputs-wrap">
+    <div class="inputs-title">Your situation</div>
     <div class="inputs-grid">
       <div class="field">
-        <label>Mortgage now</label>
+        <label>Offer you have now</label>
+        <span class="hint">What you'd sell for today</span>
         <div class="input-wrap">
           <span class="affix affix-pre">£</span>
-          <input type="number" id="loanNow" value="400000" step="5000">
+          <input type="number" id="saleNow" value="480000" step="5000">
         </div>
       </div>
       <div class="field">
-        <label>Your deposit</label>
+        <label>Offer you're waiting for</label>
+        <span class="hint">What you're hoping to get</span>
         <div class="input-wrap">
           <span class="affix affix-pre">£</span>
-          <input type="number" id="deposit" value="50000" step="5000">
+          <input type="number" id="saleWait" value="500000" step="5000">
         </div>
       </div>
       <div class="field">
-        <label>Current rate</label>
+        <label>Next home you want</label>
+        <span class="hint">Purchase price</span>
+        <div class="input-wrap">
+          <span class="affix affix-pre">£</span>
+          <input type="number" id="nextHome" value="650000" step="5000">
+        </div>
+      </div>
+      <div class="field">
+        <label>Current mortgage rate</label>
+        <span class="hint">Available today</span>
         <div class="input-wrap">
           <input type="number" id="rateNow" value="4.50" step="0.05">
           <span class="affix affix-suf">%</span>
         </div>
       </div>
       <div class="field">
-        <label>Rate rise if wait</label>
+        <label>Rate if you wait</label>
+        <span class="hint">Expected rise</span>
         <div class="input-wrap">
-          <input type="number" id="rateChange" value="0.50" step="0.05">
+          <input type="number" id="rateWait" value="5.00" step="0.05">
           <span class="affix affix-suf">%</span>
         </div>
       </div>
-      <div class="field">
-        <label>House price growth</label>
-        <div class="input-wrap">
-          <input type="number" id="growth" value="3.0" step="0.5">
-          <span class="affix affix-suf">%/yr</span>
-        </div>
-      </div>
-      <div class="field">
+    </div>
+    <div style="margin-top:14px; display:flex; gap:14px; flex-wrap:wrap;">
+      <div class="field" style="flex:1; min-width:120px; max-width:180px;">
         <label>Mortgage term</label>
         <div class="input-wrap">
-          <input type="number" id="termYears" value="25" step="1" min="5" max="40">
+          <input type="number" id="term" value="25" step="1" min="5" max="40">
           <span class="affix affix-suf">yrs</span>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Same monthly payment callout -->
-  <div class="same-payment-band">
-    <div class="sp-left">
-      <div class="sp-label">The rate trap</div>
-      <div class="sp-desc">
-        Both scenarios cost <strong id="sp_monthly">—</strong>/month.
-        But if rates rise by <strong id="sp_rise">—</strong>, you can only borrow <strong id="sp_less_loan">—</strong> for that same payment
-        — meaning <strong id="sp_less_house">—</strong> less house.
+  <!-- The answer -->
+  <div class="answer-band">
+    <div class="answer-label">Bottom line</div>
+    <div class="answer-headline" id="answer_text">—</div>
+    <div class="answer-stats">
+      <div class="astat">
+        <span class="num" id="v_monthly_diff">—</span>
+        <span class="lbl" id="v_monthly_lbl">difference per month</span>
       </div>
-    </div>
-    <div class="sp-right">
-      <span class="sp-big" id="sp_diff">—</span>
-      <span class="sp-sub">less house, same monthly cost</span>
+      <div class="astat">
+        <span class="num" id="v_total_diff">—</span>
+        <span class="lbl" id="v_total_lbl">difference over full term</span>
+      </div>
     </div>
   </div>
 
-  <!-- Scenario cards -->
+  <!-- Side by side -->
   <div class="scenarios">
 
-    <div class="s-card now">
-      <span class="s-badge">Buy now</span>
+    <div class="s-card accept">
+      <span class="s-badge">Accept now</span>
       <div class="s-title" id="a_title">—</div>
-      <p class="s-desc" id="a_desc">—</p>
-      <div class="s-stats">
-        <div class="stat-row">
-          <span class="stat-name">Monthly payment</span>
-          <span class="stat-val highlight" id="a_monthly">—</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">Property value</span>
-          <span class="stat-val" id="a_propval">—</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">Property value in 5 yrs</span>
-          <span class="stat-val" id="a_propval5">—</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">Your equity in 5 yrs</span>
-          <span class="stat-val" id="a_equity5">—</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">Your equity at end of term</span>
-          <span class="stat-val" id="a_equityT">—</span>
-        </div>
+      <div class="row">
+        <span class="row-label">You sell for</span>
+        <span class="row-val" id="a_sale">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">Mortgage needed<small>Next home minus sale price</small></span>
+        <span class="row-val" id="a_mortgage">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">Interest rate</span>
+        <span class="row-val" id="a_rate">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">Monthly payment</span>
+        <span class="row-val" id="a_monthly">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">Total interest paid</span>
+        <span class="row-val" id="a_interest">—</span>
       </div>
     </div>
 
     <div class="s-card wait">
-      <span class="s-badge">If you wait…</span>
+      <span class="s-badge">Wait for more</span>
       <div class="s-title" id="b_title">—</div>
-      <p class="s-desc" id="b_desc">—</p>
-      <div class="s-stats">
-        <div class="stat-row">
-          <span class="stat-name">Monthly payment</span>
-          <span class="stat-val highlight neutral" id="b_monthly">—</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">Property value</span>
-          <span class="stat-val" id="b_propval">—</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">Property value in 5 yrs</span>
-          <span class="stat-val" id="b_propval5">—</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">Your equity in 5 yrs</span>
-          <span class="stat-val" id="b_equity5">—</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">Your equity at end of term</span>
-          <span class="stat-val" id="b_equityT">—</span>
-        </div>
+      <div class="row">
+        <span class="row-label">You sell for</span>
+        <span class="row-val" id="b_sale">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">Mortgage needed<small>Next home minus sale price</small></span>
+        <span class="row-val" id="b_mortgage">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">Interest rate</span>
+        <span class="row-val" id="b_rate">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">Monthly payment</span>
+        <span class="row-val" id="b_monthly">—</span>
+      </div>
+      <div class="row">
+        <span class="row-label">Total interest paid</span>
+        <span class="row-val" id="b_interest">—</span>
       </div>
     </div>
 
-  </div>
-
-  <!-- Verdict -->
-  <div class="verdict-band">
-    <div class="verdict-grid">
-      <div class="verdict-text" id="verdict_text">—</div>
-      <div class="verdict-stats">
-        <div class="vstat">
-          <span class="num bad" id="v_equity_diff">—</span>
-          <span class="lbl">less equity in 5 yrs</span>
-        </div>
-        <div class="vstat">
-          <span class="num bad" id="v_house_diff">—</span>
-          <span class="lbl">less house value</span>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- Chart -->
-  <div class="chart-section">
-    <div class="chart-head">
+  <div class="chart-wrap">
+    <div class="chart-header">
       <div>
-        <div class="chart-title">Equity Over Time</div>
-        <div class="chart-sub">Deposit + mortgage paydown + house price growth</div>
-      </div>
-      <div class="legend">
-        <span><span class="leg-dot" style="background:var(--green)"></span>Buy now</span>
-        <span><span class="leg-dot" style="background:var(--red)"></span>If you wait</span>
+        <div class="chart-title">Cumulative interest paid over time</div>
+        <div class="chart-sub">The lower the line, the less you pay</div>
       </div>
     </div>
-    <canvas id="chart" height="300"></canvas>
+    <div class="legend">
+      <span><span class="leg-dot" style="background:var(--green)"></span>Accept now</span>
+      <span><span class="leg-dot" style="background:var(--red)"></span>Wait for more</span>
+    </div>
+    <canvas id="chart" height="280"></canvas>
   </div>
 
 </div>
-
 <script>
 const $ = id => document.getElementById(id);
 
-function monthlyPayment(principal, annualRatePct, years) {
-  if (annualRatePct === 0) return principal / (years * 12);
-  const r = annualRatePct / 100 / 12;
-  const n = years * 12;
+function monthly(principal, ratePct, years) {
+  if (ratePct === 0) return principal / (years * 12);
+  const r = ratePct / 100 / 12, n = years * 12;
   return principal * r * Math.pow(1+r,n) / (Math.pow(1+r,n)-1);
-}
-
-// Remaining mortgage balance after N months
-function remainingBalance(principal, annualRatePct, termYears, monthsElapsed) {
-  if (annualRatePct === 0) return principal - (principal / (termYears * 12)) * monthsElapsed;
-  const r = annualRatePct / 100 / 12;
-  const n = termYears * 12;
-  const N = Math.min(monthsElapsed, n);
-  return principal * (Math.pow(1+r,n) - Math.pow(1+r,N)) / (Math.pow(1+r,n) - 1);
-}
-
-function equity(principal, rate, termYears, deposit, growthPct, monthsElapsed) {
-  const propNow = principal + deposit;
-  const propThen = propNow * Math.pow(1 + growthPct/100/12, monthsElapsed);
-  const bal = remainingBalance(principal, rate, termYears, monthsElapsed);
-  return propThen - bal;
 }
 
 function fmt(n, dec=0) {
   return '£' + Math.abs(n).toLocaleString('en-GB', {minimumFractionDigits:dec, maximumFractionDigits:dec});
 }
+function fmtSign(n, dec=0) {
+  return (n >= 0 ? '+' : '−') + fmt(n, dec);
+}
 function fmtK(n) {
-  if (Math.abs(n) >= 1000) return '£' + (n/1000).toLocaleString('en-GB',{minimumFractionDigits:1,maximumFractionDigits:1})+'k';
-  return fmt(n);
+  return Math.abs(n) >= 1000
+    ? '£' + (n/1000).toLocaleString('en-GB',{minimumFractionDigits:1,maximumFractionDigits:1})+'k'
+    : fmt(n);
 }
 
-let chartCtx = $('chart').getContext('2d');
+let ctx = $('chart').getContext('2d');
 
-function drawChart(loanA, rateA, loanB, rateB, deposit, growth, term) {
+function drawChart(mA, mB, loanA, loanB, termYrs) {
   const canvas = $('chart');
   const dpr = window.devicePixelRatio || 1;
-  const W = canvas.offsetWidth;
-  const H = 300;
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  chartCtx.scale(dpr, dpr);
-  chartCtx.clearRect(0,0,W,H);
+  const W = canvas.offsetWidth, H = 280;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0,0,W,H);
 
-  const PAD = {top:18, right:24, bottom:46, left:82};
+  const PAD = {top:16, right:24, bottom:42, left:80};
   const pw = W - PAD.left - PAD.right;
   const ph = H - PAD.top - PAD.bottom;
-  const maxM = term * 12;
+  const n = termYrs * 12;
 
-  // Precompute equity series
-  const eqA = [], eqB = [];
-  for (let m = 0; m <= maxM; m += 3) {
-    eqA.push(equity(loanA, rateA, term, deposit, growth, m));
-    eqB.push(equity(loanB, rateB, term, deposit, growth, m));
+  // Cumulative interest paid after m months
+  const intA = m => mA * m - (loanA - (loanA * (Math.pow(1+0,0))));
+  // More accurate: cumulative interest = total paid - principal repaid
+  // principal repaid after m months = loanA - remainingBalance
+  function remainBal(loan, ratePct, years, months) {
+    if (ratePct === 0) return loan - (loan/(years*12))*months;
+    const r = ratePct/100/12, nt = years*12;
+    return loan * (Math.pow(1+r,nt) - Math.pow(1+r,months)) / (Math.pow(1+r,nt)-1);
   }
-  const points = eqA.length;
-  const maxVal = Math.max(...eqA, ...eqB);
-  const minVal = Math.min(0, ...eqA, ...eqB);
-  const range = maxVal - minVal || 1;
+  function cumInt(loan, ratePct, years, months) {
+    const paid = monthly(loan, ratePct, years) * months;
+    const repaid = loan - remainBal(loan, ratePct, years, months);
+    return paid - repaid;
+  }
 
-  const sx = i => PAD.left + (i / (points - 1)) * pw;
-  const sy = v => PAD.top + ph - ((v - minVal) / range) * ph;
+  const step = 3;
+  const pts = Math.floor(n / step) + 1;
+  const maxVal = Math.max(cumInt(loanA, 0, termYrs, n), cumInt(loanB, 0, termYrs, n),
+    // use actual rates
+    (() => { let max = 0; for(let m=0;m<=n;m+=step) { max = Math.max(max, cumInt(loanA, parseFloat($('rateNow').value)||0, termYrs, m), cumInt(loanB, parseFloat($('rateWait').value)||0, termYrs, m)); } return max; })()
+  );
+
+  // Recompute properly
+  const rA = parseFloat($('rateNow').value) || 0;
+  const rB = parseFloat($('rateWait').value) || 0;
+
+  const sx = i => PAD.left + (i / (pts-1)) * pw;
+  const sy = v => PAD.top + ph - (v / (maxVal || 1)) * ph;
 
   // Grid
-  chartCtx.strokeStyle = 'rgba(26,22,15,0.06)';
-  chartCtx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(26,22,15,0.06)'; ctx.lineWidth = 1;
   for (let i=0;i<=4;i++) {
     const y = PAD.top + (i/4)*ph;
-    chartCtx.beginPath(); chartCtx.moveTo(PAD.left,y); chartCtx.lineTo(PAD.left+pw,y); chartCtx.stroke();
-  }
-  for (let i=0;i<=5;i++) {
-    const x = PAD.left + (i/5)*pw;
-    chartCtx.beginPath(); chartCtx.moveTo(x,PAD.top); chartCtx.lineTo(x,PAD.top+ph); chartCtx.stroke();
+    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+pw,y); ctx.stroke();
   }
 
-  // Zero line
-  if (minVal < 0) {
-    chartCtx.strokeStyle = 'rgba(26,22,15,0.2)';
-    chartCtx.lineWidth = 1;
-    chartCtx.setLineDash([4,3]);
-    chartCtx.beginPath(); chartCtx.moveTo(PAD.left, sy(0)); chartCtx.lineTo(PAD.left+pw, sy(0)); chartCtx.stroke();
-    chartCtx.setLineDash([]);
-  }
+  // Fill
+  ctx.beginPath();
+  ctx.moveTo(sx(0), sy(0));
+  for (let i=1;i<pts;i++) ctx.lineTo(sx(i), sy(cumInt(loanA, rA, termYrs, i*step)));
+  for (let i=pts-1;i>=0;i--) ctx.lineTo(sx(i), sy(cumInt(loanB, rB, termYrs, i*step)));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(29,104,64,0.07)'; ctx.fill();
 
-  // 5yr marker
-  const fiveYrI = Math.round((5 * 12 / 3) / (maxM / 3) * (points - 1));
-  if (fiveYrI < points) {
-    chartCtx.strokeStyle = 'rgba(26,22,15,0.15)';
-    chartCtx.lineWidth = 1;
-    chartCtx.setLineDash([5,4]);
-    chartCtx.beginPath(); chartCtx.moveTo(sx(fiveYrI), PAD.top); chartCtx.lineTo(sx(fiveYrI), PAD.top+ph); chartCtx.stroke();
-    chartCtx.setLineDash([]);
-    chartCtx.fillStyle = 'rgba(26,22,15,0.4)';
-    chartCtx.font = "500 10px 'DM Mono',monospace";
-    chartCtx.textAlign = 'left';
-    chartCtx.fillText('5yr', sx(fiveYrI)+4, PAD.top+13);
-  }
+  // Line B
+  ctx.beginPath(); ctx.moveTo(sx(0), sy(0));
+  for (let i=1;i<pts;i++) ctx.lineTo(sx(i), sy(cumInt(loanB, rB, termYrs, i*step)));
+  ctx.strokeStyle = '#c94c35'; ctx.lineWidth = 2.5; ctx.stroke();
 
-  // Fill between
-  chartCtx.beginPath();
-  chartCtx.moveTo(sx(0), sy(eqA[0]));
-  for (let i=1;i<points;i++) chartCtx.lineTo(sx(i), sy(eqA[i]));
-  for (let i=points-1;i>=0;i--) chartCtx.lineTo(sx(i), sy(eqB[i]));
-  chartCtx.closePath();
-  chartCtx.fillStyle = 'rgba(29,104,64,0.07)';
-  chartCtx.fill();
-
-  // Line B (wait — red)
-  chartCtx.beginPath();
-  chartCtx.moveTo(sx(0), sy(eqB[0]));
-  for (let i=1;i<points;i++) chartCtx.lineTo(sx(i), sy(eqB[i]));
-  chartCtx.strokeStyle = '#c94c35';
-  chartCtx.lineWidth = 2.5;
-  chartCtx.stroke();
-
-  // Line A (buy now — green)
-  chartCtx.beginPath();
-  chartCtx.moveTo(sx(0), sy(eqA[0]));
-  for (let i=1;i<points;i++) chartCtx.lineTo(sx(i), sy(eqA[i]));
-  chartCtx.strokeStyle = '#1d6840';
-  chartCtx.lineWidth = 2.5;
-  chartCtx.stroke();
-
-  // Dots
-  function dot(i, v, col) {
-    chartCtx.beginPath();
-    chartCtx.arc(sx(i), sy(v), 5, 0, Math.PI*2);
-    chartCtx.fillStyle = col;
-    chartCtx.fill();
-    chartCtx.strokeStyle = 'white';
-    chartCtx.lineWidth = 1.5;
-    chartCtx.stroke();
-  }
-  dot(points-1, eqA[points-1], '#1d6840');
-  dot(points-1, eqB[points-1], '#c94c35');
-  if (fiveYrI < points) {
-    dot(fiveYrI, eqA[fiveYrI], '#1d6840');
-    dot(fiveYrI, eqB[fiveYrI], '#c94c35');
-  }
+  // Line A
+  ctx.beginPath(); ctx.moveTo(sx(0), sy(0));
+  for (let i=1;i<pts;i++) ctx.lineTo(sx(i), sy(cumInt(loanA, rA, termYrs, i*step)));
+  ctx.strokeStyle = '#1d6840'; ctx.lineWidth = 2.5; ctx.stroke();
 
   // Y labels
-  chartCtx.fillStyle = '#9a9080';
-  chartCtx.font = "10px 'DM Mono',monospace";
-  chartCtx.textAlign = 'right';
+  ctx.fillStyle = '#9a9080'; ctx.font = "10px 'DM Mono',monospace"; ctx.textAlign = 'right';
   for (let i=0;i<=4;i++) {
-    const v = minVal + (range/4)*(4-i);
-    chartCtx.fillText(fmtK(v), PAD.left-6, PAD.top+(i/4)*ph+4);
+    const v = (maxVal/4)*(4-i);
+    ctx.fillText(fmtK(v), PAD.left-6, PAD.top+(i/4)*ph+4);
   }
-
   // X labels
-  chartCtx.textAlign = 'center';
+  ctx.textAlign = 'center';
   for (let i=0;i<=5;i++) {
-    const idx = Math.round((i/5)*(points-1));
-    const yr = Math.round(idx * 3 / 12);
-    chartCtx.fillText(`yr ${yr}`, sx(idx), H-PAD.bottom+16);
+    const idx = Math.round((i/5)*(pts-1));
+    ctx.fillText(`yr ${Math.round(idx*step/12)}`, sx(idx), H-PAD.bottom+14);
   }
-
   // Axes
-  chartCtx.strokeStyle = 'rgba(26,22,15,0.18)';
-  chartCtx.lineWidth = 1;
-  chartCtx.beginPath();
-  chartCtx.moveTo(PAD.left,PAD.top); chartCtx.lineTo(PAD.left,PAD.top+ph); chartCtx.lineTo(PAD.left+pw,PAD.top+ph);
-  chartCtx.stroke();
+  ctx.strokeStyle = 'rgba(26,22,15,0.15)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD.left,PAD.top); ctx.lineTo(PAD.left,PAD.top+ph); ctx.lineTo(PAD.left+pw,PAD.top+ph); ctx.stroke();
 }
 
 function update() {
-  const loanNow    = parseFloat($('loanNow').value)   || 0;
-  const deposit    = parseFloat($('deposit').value)   || 0;
-  const rateNow    = parseFloat($('rateNow').value)   || 0;
-  const rateChange = parseFloat($('rateChange').value)|| 0;
-  const rateWait   = rateNow + rateChange;
-  const growth     = parseFloat($('growth').value)    || 0;
-  const term       = parseInt($('termYears').value)   || 25;
+  const saleNow  = parseFloat($('saleNow').value)  || 0;
+  const saleWait = parseFloat($('saleWait').value) || 0;
+  const nextHome = parseFloat($('nextHome').value) || 0;
+  const rA       = parseFloat($('rateNow').value)  || 0;
+  const rB       = parseFloat($('rateWait').value) || 0;
+  const term     = parseInt($('term').value)       || 25;
 
-  // Monthly payment on the current mortgage
-  const mA = monthlyPayment(loanNow, rateNow, term);
+  const loanA = Math.max(0, nextHome - saleNow);
+  const loanB = Math.max(0, nextHome - saleWait);
+  const saleDiff = saleWait - saleNow;
 
-  // If rates rise, what mortgage gives the same monthly payment?
-  let loanWait = 0;
-  if (rateWait > 0) {
-    const r = rateWait / 100 / 12;
-    const n = term * 12;
-    loanWait = mA / (r * Math.pow(1+r,n) / (Math.pow(1+r,n)-1));
-  } else {
-    loanWait = mA * term * 12;
-  }
-  const mB = monthlyPayment(loanWait, rateWait, term); // ≈ mA
+  const mA = monthly(loanA, rA, term);
+  const mB = monthly(loanB, rB, term);
+  const totalA = mA * term * 12;
+  const totalB = mB * term * 12;
+  const intA = totalA - loanA;
+  const intB = totalB - loanB;
+  const monthlyDiff = mB - mA;
+  const totalDiff = totalB - totalA;
 
-  const propA = loanNow  + deposit;
-  const propB = loanWait + deposit;
-  const propDiff = propA - propB;
-
-  const months5 = 5 * 12;
-  const monthsT = term * 12;
-
-  const propA5 = propA * Math.pow(1 + growth/100/12, months5);
-  const propB5 = propB * Math.pow(1 + growth/100/12, months5);
-
-  const eqA5 = equity(loanNow,  rateNow,  term, deposit, growth, months5);
-  const eqB5 = equity(loanWait, rateWait, term, deposit, growth, months5);
-  const eqAT = equity(loanNow,  rateNow,  term, deposit, growth, monthsT);
-  const eqBT = equity(loanWait, rateWait, term, deposit, growth, monthsT);
-
-  const equityDiff5 = eqA5 - eqB5;
-
-  // Same-payment callout
-  $('sp_monthly').textContent   = fmt(mA, 2);
-  $('sp_rise').textContent      = rateChange.toFixed(2) + '%';
-  $('sp_less_loan').textContent = fmt(loanWait);
-  $('sp_less_house').textContent = fmt(propDiff);
-  $('sp_diff').textContent      = fmt(propDiff);
-
-  // Card A
-  $('a_title').textContent    = `${fmt(loanNow)} @ ${rateNow.toFixed(2)}%`;
-  $('a_desc').textContent     = `Buy now · ${fmt(propA)} property · ${term}-year term`;
+  // Cards
+  $('a_title').textContent  = `Accept ${fmt(saleNow)} now`;
+  $('a_sale').textContent   = fmt(saleNow);
+  $('a_mortgage').textContent = fmt(loanA);
+  $('a_rate').textContent   = rA.toFixed(2) + '%';
   $('a_monthly').textContent  = fmt(mA, 2);
-  $('a_propval').textContent  = fmt(propA);
-  $('a_propval5').textContent = fmt(propA5);
-  $('a_equity5').textContent  = fmt(eqA5);
-  $('a_equityT').textContent  = fmt(eqAT);
+  $('a_interest').textContent = fmt(intA);
 
-  // Card B
-  $('b_title').textContent    = `${fmt(loanWait)} @ ${rateWait.toFixed(2)}%`;
-  $('b_desc').textContent     = `Same ${fmt(mA,2)}/month · but only ${fmt(propB)} property`;
+  $('b_title').textContent  = `Wait for ${fmt(saleWait)}`;
+  $('b_sale').textContent   = fmt(saleWait);
+  $('b_mortgage').textContent = fmt(loanB);
+  $('b_rate').textContent   = rB.toFixed(2) + '%';
   $('b_monthly').textContent  = fmt(mB, 2);
-  $('b_propval').textContent  = fmt(propB);
-  $('b_propval5').textContent = fmt(propB5);
-  $('b_equity5').textContent  = fmt(eqB5);
-  $('b_equityT').textContent  = fmt(eqBT);
+  $('b_interest').textContent = fmt(intB);
 
-  // Verdict
-  $('v_equity_diff').textContent = fmt(equityDiff5);
-  $('v_house_diff').textContent  = fmt(propDiff);
+  // Answer band
+  const vMonthly = $('v_monthly_diff');
+  const vTotal   = $('v_total_diff');
+  const ansText  = $('answer_text');
 
-  $('verdict_text').innerHTML = `Waiting costs you nothing per month —
-    both scenarios are <strong>${fmt(mA,2)}/month</strong>.
-    But if rates rise by <strong>${rateChange.toFixed(2)}%</strong>, you can only borrow
-    <strong>${fmt(loanWait)}</strong> instead of <strong>${fmt(loanNow)}</strong>.
-    That means a <span class="bad">${fmt(propDiff)} cheaper property</span>, and
-    <span class="bad">${fmt(equityDiff5)} less equity</span> after 5 years
-    — even with the same monthly outgoing.`;
+  if (monthlyDiff > 0) {
+    // Waiting is worse
+    vMonthly.textContent = fmt(Math.abs(monthlyDiff), 2) + ' more';
+    vMonthly.className = 'num bad';
+    vTotal.textContent = fmt(Math.abs(totalDiff)) + ' more';
+    vTotal.className = 'num bad';
+    $('v_monthly_lbl').textContent = 'per month if you wait';
+    $('v_total_lbl').textContent = 'in total payments if you wait';
+    ansText.innerHTML = `Waiting gets you <strong>${fmt(saleDiff)} more</strong> from the sale —
+      but your smaller mortgage at a higher rate means you pay
+      <span class="bad">${fmt(Math.abs(monthlyDiff),2)} more every month</span>
+      and <span class="bad">${fmt(Math.abs(totalDiff))} more in total</span>.
+      You'd be better off accepting now.`;
+  } else if (monthlyDiff < 0) {
+    // Waiting is better
+    vMonthly.textContent = fmt(Math.abs(monthlyDiff), 2) + ' less';
+    vMonthly.className = 'num good';
+    vTotal.textContent = fmt(Math.abs(totalDiff)) + ' less';
+    vTotal.className = 'num good';
+    $('v_monthly_lbl').textContent = 'per month if you wait';
+    $('v_total_lbl').textContent = 'in total payments if you wait';
+    ansText.innerHTML = `Even with the rate rise, waiting for <strong>${fmt(saleDiff)} more</strong>
+      reduces your mortgage enough to save you
+      <strong>${fmt(Math.abs(monthlyDiff),2)}/month</strong>
+      and <strong>${fmt(Math.abs(totalDiff))} in total</strong>. Waiting pays off here.`;
+  } else {
+    vMonthly.textContent = 'No difference';
+    vMonthly.className = 'num';
+    vTotal.textContent = 'No difference';
+    vTotal.className = 'num';
+    ansText.innerHTML = `Both scenarios cost exactly the same. The rate rise perfectly offsets the higher sale price.`;
+  }
 
-  requestAnimationFrame(() => drawChart(loanNow, rateNow, loanWait, rateWait, deposit, growth, term));
+  requestAnimationFrame(() => drawChart(mA, mB, loanA, loanB, term));
 }
 
-['loanNow','deposit','rateNow','rateChange','growth','termYears']
+['saleNow','saleWait','nextHome','rateNow','rateWait','term']
   .forEach(id => $(id).addEventListener('input', update));
-
 window.addEventListener('resize', update);
 update();
 </script>
