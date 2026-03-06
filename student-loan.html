@@ -685,7 +685,6 @@ function simulate() {
     // --- Scenario B: Keep loan ---
     // ISA grows
     keepISABal = keepISABal * (1 + isaRate);
-    keepISA.push(keepISABal);
 
     // Loan accrues interest, then repayment is applied
     const interest = keepLoanBal * loanRate;
@@ -694,6 +693,12 @@ function simulate() {
     const actualRepay = Math.min(annualRepay, keepLoanBal);
     keepLoanBal = Math.max(0, keepLoanBal - actualRepay);
     totalRepaid += actualRepay;
+
+    // Once loan is paid off, surplus repayments go into ISA
+    const surplus = annualRepay - actualRepay;
+    if (surplus > 0) keepISABal += surplus;
+
+    keepISA.push(keepISABal);
     keepLoan.push(keepLoanBal);
 
     salary = salary * (1 + salaryGr);
@@ -702,24 +707,16 @@ function simulate() {
   // At write-off, remaining loan disappears
   const loanWrittenOff = keepLoanBal;
 
-  // Net wealth at the end
-  const netPayoff = payoffISABal;                    // ISA from redirected repayments
-  const netKeep   = keepISABal - 0;                  // ISA minus loan (loan written off)
-  // But we also need to account for: if you keep the loan you still have the ISA,
-  // but you've been making repayments out of salary in both scenarios.
-  // In pay-off: you spent £balance upfront + repayments go to ISA
-  // In keep: you spent £balance on ISA + repayments go to loan
-
-  // True comparison: net wealth = assets
-  // Pay off: you have payoffISABal in ISA. You spent the lump sum clearing debt.
-  // Keep: you have keepISABal in ISA. Loan is written off (keepLoanBal gone).
-  //        But you've been paying repayments to loan, not ISA.
+  // Net wealth at the end (loan written off at final year)
+  const netPayoff = payoffISABal;
+  const netKeep   = keepISABal;  // loan written off = 0 liability
 
   const advantage = netKeep - netPayoff;
 
   // Year-by-year net wealth arrays for chart
+  // Final year reflects write-off (loan balance zeroed)
   const netPayoffArr = payoffISA.map(v => v);
-  const netKeepArr   = keepISA.map((v, i) => v - keepLoan[i]);
+  const netKeepArr   = keepISA.map((v, i) => v - (i < years ? keepLoan[i] : 0));
 
   return {
     years, balance, loanRate, isaRate, writeoff,
