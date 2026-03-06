@@ -373,6 +373,38 @@
     border-top: 1px solid var(--border);
   }
   .assumptions strong { color: var(--ink2); font-weight: 500; }
+
+  /* Write-off toggle */
+  .writeoff-toggle {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .wo-btn {
+    flex: 1;
+    padding: 5px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--card);
+    color: var(--muted);
+    transition: all 0.15s;
+  }
+  .wo-btn:hover { border-color: var(--ink2); color: var(--ink2); }
+  .wo-btn.active {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: white;
+  }
+  .wo-result {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--green);
+    margin-top: 6px;
+  }
 </style>
 </head>
 <body>
@@ -434,11 +466,19 @@
       </div>
     </div>
     <div class="field">
-      <label>Years until write-off</label>
-      <div class="input-wrap">
-        <input type="number" id="writeoff" value="30" step="1" min="1" max="40">
-        <span class="affix affix-suf">yrs</span>
+      <label>How to calculate write-off</label>
+      <div class="writeoff-toggle">
+        <button class="wo-btn active" data-wo="age">My age</button>
+        <button class="wo-btn" data-wo="grad">Graduation year</button>
       </div>
+      <div class="input-wrap" id="wo_age_wrap">
+        <input type="number" id="age" value="25" step="1" min="18" max="70">
+        <span class="affix affix-suf">yrs old</span>
+      </div>
+      <div class="input-wrap" id="wo_grad_wrap" style="display:none;">
+        <input type="number" id="gradYear" value="2023" step="1" min="1990" max="2030">
+      </div>
+      <div class="wo-result" id="wo_result">≈ 30 yrs to write-off</div>
     </div>
     <div class="field">
       <label>Expected ISA return</label>
@@ -513,15 +553,73 @@
 const $ = id => document.getElementById(id);
 const fmt = (n, dec = 0) => '£' + Math.abs(n).toLocaleString('en-GB', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
-// Plan presets: { threshold, rate, writeoff, repayRate }
+// Plan presets: { threshold, rate, writeoffYears, repayRate, typicalGradAge }
 const plans = {
-  '1':  { threshold: 24990, loanRate: 6.25, writeoff: 25, repayRate: 9 },
-  '2':  { threshold: 27295, loanRate: 7.3,  writeoff: 30, repayRate: 9 },
-  '5':  { threshold: 25000, loanRate: 7.3,  writeoff: 40, repayRate: 9 },
-  'pg': { threshold: 21000, loanRate: 7.3,  writeoff: 30, repayRate: 6 },
+  '1':  { threshold: 24990, loanRate: 6.25, writeoffYears: 25, repayRate: 9, ageLimit: 65 },
+  '2':  { threshold: 27295, loanRate: 7.3,  writeoffYears: 30, repayRate: 9 },
+  '5':  { threshold: 25000, loanRate: 7.3,  writeoffYears: 40, repayRate: 9 },
+  'pg': { threshold: 21000, loanRate: 7.3,  writeoffYears: 30, repayRate: 6 },
 };
 
 let activePlan = '2';
+let writeoffMode = 'age'; // 'age' or 'grad'
+
+// Write-off mode toggle
+document.querySelectorAll('.wo-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.wo-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    writeoffMode = btn.dataset.wo;
+    $('wo_age_wrap').style.display = writeoffMode === 'age' ? '' : 'none';
+    $('wo_grad_wrap').style.display = writeoffMode === 'grad' ? '' : 'none';
+    update();
+  });
+});
+
+function calcWriteoffYears() {
+  const plan = plans[activePlan];
+  const currentYear = new Date().getFullYear();
+
+  if (!plan) {
+    // Custom mode — estimate from age assuming graduated at 21
+    if (writeoffMode === 'age') {
+      const age = parseInt($('age').value) || 25;
+      return Math.max(1, 30 - (age - 22));
+    } else {
+      const gradYr = parseInt($('gradYear').value) || 2023;
+      const yearsSinceGrad = currentYear - (gradYr + 1);
+      return Math.max(1, 30 - yearsSinceGrad);
+    }
+  }
+
+  if (writeoffMode === 'age') {
+    const age = parseInt($('age').value) || 25;
+    // Plan 1 has a special rule: written off at age 65 or after 25 years
+    if (plan.ageLimit) {
+      return Math.max(1, Math.min(plan.writeoffYears, plan.ageLimit - age));
+    }
+    // For other plans, estimate: assume graduated at ~21, repayments started at ~22
+    const yearsOfRepayment = age - 22;
+    return Math.max(1, plan.writeoffYears - yearsOfRepayment);
+  } else {
+    const gradYr = parseInt($('gradYear').value) || 2023;
+    // Repayments start April after graduation
+    const repaymentStartYear = gradYr + 1;
+    const yearsSinceStart = currentYear - repaymentStartYear;
+    let remaining = plan.writeoffYears - yearsSinceStart;
+    // Plan 1: also check age 65 if we have age
+    if (plan.ageLimit) {
+      const age = parseInt($('age').value) || 25;
+      remaining = Math.min(remaining, plan.ageLimit - age);
+    }
+    return Math.max(1, remaining);
+  }
+}
+
+function updateWriteoffDisplay() {
+  const yrs = calcWriteoffYears();
+  $('wo_result').textContent = `≈ ${yrs} yr${yrs !== 1 ? 's' : ''} to write-off`;
+}
 
 // Plan selector
 document.querySelectorAll('.plan-btn').forEach(btn => {
@@ -533,7 +631,6 @@ document.querySelectorAll('.plan-btn').forEach(btn => {
       const p = plans[activePlan];
       $('threshold').value = p.threshold;
       $('loanRate').value = p.loanRate;
-      $('writeoff').value = p.writeoff;
       $('repayRate').value = p.repayRate;
     }
     update();
@@ -553,7 +650,7 @@ function simulate() {
   const salary0    = parseFloat($('salary').value) || 0;
   const threshold  = parseFloat($('threshold').value) || 0;
   const repayRate  = (parseFloat($('repayRate').value) || 0) / 100;
-  const writeoff   = parseInt($('writeoff').value) || 30;
+  const writeoff   = calcWriteoffYears();
   const isaRate    = (parseFloat($('isaRate').value) || 0) / 100;
   const salaryGr   = (parseFloat($('salaryGrowth').value) || 0) / 100;
 
@@ -813,6 +910,7 @@ function handleHover(e) {
 }
 
 function update() {
+  updateWriteoffDisplay();
   const data = simulate();
 
   // Headline
@@ -902,7 +1000,7 @@ function update() {
 }
 
 // Listen to all inputs
-['balance','loanRate','salary','threshold','repayRate','writeoff','isaRate','salaryGrowth']
+['balance','loanRate','salary','threshold','repayRate','age','gradYear','isaRate','salaryGrowth']
   .forEach(id => $(id).addEventListener('input', update));
 
 // Resize handler
