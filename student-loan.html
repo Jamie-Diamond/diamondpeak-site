@@ -541,7 +541,7 @@
   </table>
 
   <div class="assumptions">
-    <strong>Assumptions:</strong> ISA returns are compounded annually. Loan interest is compounded annually on the outstanding balance.
+    <strong>Assumptions:</strong> ISA returns and loan interest are compounded monthly. Repayments are applied monthly (1/12 of annual amount).
     Salary-linked repayments are recalculated each year with salary growth. The loan is written off after the specified term —
     any remaining balance at that point disappears. This is a simplified model; actual student loan interest may vary
     (e.g. RPI-linked). ISA returns are not guaranteed. This is not financial advice.
@@ -672,32 +672,45 @@ function simulate() {
   const annualRepayments = [];
   let salary = salary0;
 
+  const monthlyIsaRate = Math.pow(1 + isaRate, 1/12) - 1;
+  const monthlyLoanRate = Math.pow(1 + loanRate, 1/12) - 1;
+
   for (let y = 1; y <= years; y++) {
-    // Annual repayment from salary
+    // Annual repayment from salary, split into monthly
     const annualRepay = Math.max(0, (salary - threshold) * repayRate);
+    const monthlyRepay = annualRepay / 12;
     annualRepayments.push(annualRepay);
 
-    // --- Scenario A: Pay off ---
-    // The money you would have repaid now goes into the ISA
-    payoffISABal = payoffISABal * (1 + isaRate) + annualRepay;
+    let yearInterest = 0;
+    let yearRepaid = 0;
+    let yearSurplus = 0;
+
+    for (let m = 0; m < 12; m++) {
+      // --- Scenario A: Pay off ---
+      // ISA grows monthly, repayment contributed monthly
+      payoffISABal = payoffISABal * (1 + monthlyIsaRate) + monthlyRepay;
+
+      // --- Scenario B: Keep loan ---
+      // ISA grows monthly
+      keepISABal = keepISABal * (1 + monthlyIsaRate);
+
+      // Loan accrues interest monthly, then monthly repayment applied
+      const interest = keepLoanBal * monthlyLoanRate;
+      yearInterest += interest;
+      keepLoanBal = keepLoanBal + interest;
+      const actualRepay = Math.min(monthlyRepay, keepLoanBal);
+      keepLoanBal = Math.max(0, keepLoanBal - actualRepay);
+      yearRepaid += actualRepay;
+
+      // Once loan is paid off, surplus repayments go into ISA
+      const surplus = monthlyRepay - actualRepay;
+      if (surplus > 0) { keepISABal += surplus; yearSurplus += surplus; }
+    }
+
+    totalInterest += yearInterest;
+    totalRepaid += yearRepaid;
+
     payoffISA.push(payoffISABal);
-
-    // --- Scenario B: Keep loan ---
-    // ISA grows
-    keepISABal = keepISABal * (1 + isaRate);
-
-    // Loan accrues interest, then repayment is applied
-    const interest = keepLoanBal * loanRate;
-    totalInterest += interest;
-    keepLoanBal = keepLoanBal + interest;
-    const actualRepay = Math.min(annualRepay, keepLoanBal);
-    keepLoanBal = Math.max(0, keepLoanBal - actualRepay);
-    totalRepaid += actualRepay;
-
-    // Once loan is paid off, surplus repayments go into ISA
-    const surplus = annualRepay - actualRepay;
-    if (surplus > 0) keepISABal += surplus;
-
     keepISA.push(keepISABal);
     keepLoan.push(keepLoanBal);
 
