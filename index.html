@@ -101,287 +101,19 @@
 
         .subsection .section-header { margin-bottom: 14px; }
 
-        /* FMCG factory conveyor */
-        .fmcg-animation {
+        /* TOC line animation */
+        .toc-line {
             position: relative;
-            overflow: hidden;
-            height: 88px;
-            margin-bottom: 16px;
-            border-radius: 8px;
-            background: linear-gradient(180deg, #eae6dc 0%, #e2ded4 60%, #d6d1c5 100%);
+            background: var(--card);
             border: 1px solid var(--border);
-        }
-
-        /* top guide rail */
-        .fmcg-rail {
-            position: absolute;
-            left: 0; right: 0;
-            height: 3px;
-            background: linear-gradient(180deg, #b0a998, #c4bdb0);
-            z-index: 3;
-        }
-        .fmcg-rail--top { top: 0; }
-        .fmcg-rail--mid {
-            top: 54px;
-            height: 2px;
-            background: #c4bdb0;
-            opacity: 0.6;
-        }
-
-        .fmcg-track {
-            display: flex;
-            align-items: flex-end;
-            height: 54px;
-            padding-bottom: 6px;
-            animation: conveyorScroll 22s linear infinite;
-            width: max-content;
-        }
-
-        .fmcg-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2px;
-            padding: 0 20px;
-            white-space: nowrap;
-            font-family: 'DM Mono', monospace;
-            font-size: 9px;
-            font-weight: 400;
-            color: var(--ink2);
-            letter-spacing: 0.03em;
-        }
-
-        .fmcg-item span {
-            font-size: 22px;
-            filter: drop-shadow(0 1px 1px rgba(0,0,0,0.08));
-            animation: itemBob 2.4s ease-in-out infinite;
-        }
-
-        .fmcg-item:nth-child(2n) span { animation-delay: -0.6s; }
-        .fmcg-item:nth-child(3n) span { animation-delay: -1.2s; }
-        .fmcg-item:nth-child(5n) span { animation-delay: -1.8s; }
-
-        @keyframes itemBob {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-1.5px); }
-        }
-
-        /* belt surface with rollers */
-        .fmcg-belt {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 34px;
-            background: linear-gradient(180deg, #c4bdb0 0%, #b8b0a2 4px, #ada598 4px, #a89e90 100%);
-        }
-
-        .fmcg-belt-surface {
-            position: absolute;
-            bottom: 10px;
-            left: 0;
-            right: 0;
-            height: 24px;
-            background: repeating-linear-gradient(
-                90deg,
-                rgba(0,0,0,0.04) 0px,
-                rgba(0,0,0,0.04) 2px,
-                transparent 2px,
-                transparent 14px
-            );
-            animation: beltMove 0.5s linear infinite;
-        }
-
-        /* roller circles */
-        .fmcg-rollers {
-            position: absolute;
-            bottom: 2px;
-            left: 0;
-            right: 0;
-            height: 8px;
-            display: flex;
-            justify-content: space-between;
-            padding: 0 10px;
-            z-index: 2;
-        }
-
-        .fmcg-roller {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 35% 35%, #c4bdb0, #8a8274);
-            border: 1px solid #7a7468;
-            animation: rollerSpin 1s linear infinite;
-            flex-shrink: 0;
-        }
-
-        @keyframes rollerSpin {
-            0% { box-shadow: inset 2px 0 0 rgba(255,255,255,0.3); }
-            25% { box-shadow: inset 0 2px 0 rgba(255,255,255,0.3); }
-            50% { box-shadow: inset -2px 0 0 rgba(255,255,255,0.3); }
-            75% { box-shadow: inset 0 -2px 0 rgba(255,255,255,0.3); }
-            100% { box-shadow: inset 2px 0 0 rgba(255,255,255,0.3); }
-        }
-
-        /* status light */
-        .fmcg-status {
-            position: absolute;
-            top: 8px;
-            right: 12px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            z-index: 4;
-        }
-
-        .fmcg-status-light {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--green);
-            box-shadow: 0 0 4px rgba(29,104,64,0.5);
-            animation: statusPulse 2s ease-in-out infinite;
-        }
-
-        .fmcg-status-text {
-            font-family: 'DM Mono', monospace;
-            font-size: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: var(--green);
-        }
-
-        @keyframes statusPulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        @keyframes conveyorScroll {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-        }
-
-        @keyframes beltMove {
-            0% { background-position: 0 0; }
-            100% { background-position: 14px 0; }
-        }
-
-        .fmcg-animation::before,
-        .fmcg-animation::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 40px;
-            z-index: 5;
-            pointer-events: none;
-        }
-
-        .fmcg-animation::before {
-            left: 0;
-            background: linear-gradient(90deg, #eae6dc, transparent);
-        }
-
-        .fmcg-animation::after {
-            right: 0;
-            background: linear-gradient(-90deg, #eae6dc, transparent);
-        }
-
-        /* Factory machinery row */
-        .factory-machinery {
-            display: flex;
-            align-items: center;
-            gap: 0;
+            border-radius: 8px;
             margin-bottom: 16px;
-            height: 32px;
             overflow: hidden;
         }
-
-        .machinery-pipe {
-            flex: 1;
-            height: 6px;
-            background: linear-gradient(180deg, #c4bdb0, #a89e90, #c4bdb0);
-            border-radius: 3px;
-            position: relative;
-        }
-
-        .machinery-pipe::after {
-            content: '';
-            position: absolute;
-            top: 1px; left: 0; right: 0;
-            height: 2px;
-            background: rgba(255,255,255,0.3);
-            border-radius: 2px;
-        }
-
-        .machinery-gear {
-            width: 28px;
-            height: 28px;
-            flex-shrink: 0;
-        }
-
-        .machinery-gear svg {
+        .toc-line canvas {
+            display: block;
             width: 100%;
-            height: 100%;
-            animation: gearSpin 4s linear infinite;
-        }
-
-        .machinery-gear:nth-child(even) svg {
-            animation-direction: reverse;
-            animation-duration: 3s;
-        }
-
-        @keyframes gearSpin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .machinery-gauge {
-            width: 28px;
-            height: 28px;
-            flex-shrink: 0;
-            position: relative;
-        }
-
-        .machinery-gauge svg {
-            width: 100%;
-            height: 100%;
-        }
-
-        .gauge-needle {
-            transform-origin: 14px 14px;
-            animation: gaugeSwing 3s ease-in-out infinite;
-        }
-
-        @keyframes gaugeSwing {
-            0%, 100% { transform: rotate(-20deg); }
-            50% { transform: rotate(25deg); }
-        }
-
-        .machinery-piston {
-            width: 14px;
-            height: 24px;
-            flex-shrink: 0;
-            position: relative;
-            background: linear-gradient(90deg, #a89e90, #b8b0a2, #a89e90);
-            border-radius: 2px;
-        }
-
-        .machinery-piston::after {
-            content: '';
-            position: absolute;
-            top: 2px;
-            left: 3px;
-            width: 8px;
-            height: 8px;
-            background: linear-gradient(180deg, #c4bdb0, #9a9080);
-            border-radius: 2px;
-            animation: pistonPump 1.2s ease-in-out infinite;
-        }
-
-        @keyframes pistonPump {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(10px); }
+            height: 100px;
         }
 
         /* Tool cards */
@@ -517,75 +249,156 @@
                     <span class="section-label">FMCG</span>
                     <div class="section-line"></div>
                 </div>
-                <div class="factory-machinery">
-                    <div class="machinery-gear">
-                        <svg viewBox="0 0 28 28"><path d="M14 6a8 8 0 100 16 8 8 0 000-16zm0 12a4 4 0 110-8 4 4 0 010 8z" fill="#a89e90"/><path d="M13 1h2v4h-2zM13 23h2v4h-2zM1 13h4v2H1zM23 13h4v2h-4zM4.2 4.2l1.4 1.4-1.4 1.4-1.4-1.4zM22.4 22.4l1.4 1.4-1.4 1.4-1.4-1.4zM4.2 23.8l1.4-1.4 1.4 1.4-1.4 1.4zM22.4 5.6l1.4-1.4 1.4 1.4-1.4 1.4z" fill="#a89e90"/></svg>
-                    </div>
-                    <div class="machinery-pipe"></div>
-                    <div class="machinery-piston"></div>
-                    <div class="machinery-pipe"></div>
-                    <div class="machinery-gauge">
-                        <svg viewBox="0 0 28 28">
-                            <circle cx="14" cy="14" r="12" fill="none" stroke="#a89e90" stroke-width="2"/>
-                            <circle cx="14" cy="14" r="10" fill="#eae6dc"/>
-                            <path d="M8 20 A8 8 0 0 1 6 14" stroke="#c4bdb0" stroke-width="1" fill="none"/>
-                            <path d="M20 20 A8 8 0 0 0 22 14" stroke="#c4bdb0" stroke-width="1" fill="none"/>
-                            <line class="gauge-needle" x1="14" y1="14" x2="14" y2="6" stroke="#9a9080" stroke-width="1.5" stroke-linecap="round"/>
-                            <circle cx="14" cy="14" r="2" fill="#9a9080"/>
-                        </svg>
-                    </div>
-                    <div class="machinery-pipe"></div>
-                    <div class="machinery-piston"></div>
-                    <div class="machinery-pipe"></div>
-                    <div class="machinery-gear">
-                        <svg viewBox="0 0 28 28"><path d="M14 6a8 8 0 100 16 8 8 0 000-16zm0 12a4 4 0 110-8 4 4 0 010 8z" fill="#a89e90"/><path d="M13 1h2v4h-2zM13 23h2v4h-2zM1 13h4v2H1zM23 13h4v2h-4zM4.2 4.2l1.4 1.4-1.4 1.4-1.4-1.4zM22.4 22.4l1.4 1.4-1.4 1.4-1.4-1.4zM4.2 23.8l1.4-1.4 1.4 1.4-1.4 1.4zM22.4 5.6l1.4-1.4 1.4 1.4-1.4 1.4z" fill="#a89e90"/></svg>
-                    </div>
+                <div class="toc-line">
+                    <canvas id="tocCanvas" height="100"></canvas>
                 </div>
-                <div class="fmcg-animation">
-                    <div class="fmcg-rail fmcg-rail--top"></div>
-                    <div class="fmcg-rail fmcg-rail--mid"></div>
-                    <div class="fmcg-status">
-                        <div class="fmcg-status-light"></div>
-                        <span class="fmcg-status-text">Running</span>
-                    </div>
-                    <div class="fmcg-track">
-                        <div class="fmcg-item"><span>&#x1F36B;</span>Chocolate</div>
-                        <div class="fmcg-item"><span>&#x1F37A;</span>Beverages</div>
-                        <div class="fmcg-item"><span>&#x1F9C1;</span>Snacks</div>
-                        <div class="fmcg-item"><span>&#x1F9F4;</span>Personal Care</div>
-                        <div class="fmcg-item"><span>&#x1F9FC;</span>Cleaning</div>
-                        <div class="fmcg-item"><span>&#x1F35E;</span>Bakery</div>
-                        <div class="fmcg-item"><span>&#x1F9C0;</span>Dairy</div>
-                        <div class="fmcg-item"><span>&#x1F96B;</span>Canned Goods</div>
-                        <div class="fmcg-item"><span>&#x1F4E6;</span>Packaging</div>
-                        <div class="fmcg-item"><span>&#x1F50D;</span>Quality</div>
-                        <div class="fmcg-item"><span>&#x2699;&#xFE0F;</span>OEE</div>
-                        <div class="fmcg-item"><span>&#x1F4CA;</span>Efficiency</div>
-                        <div class="fmcg-item"><span>&#x1F36B;</span>Chocolate</div>
-                        <div class="fmcg-item"><span>&#x1F37A;</span>Beverages</div>
-                        <div class="fmcg-item"><span>&#x1F9C1;</span>Snacks</div>
-                        <div class="fmcg-item"><span>&#x1F9F4;</span>Personal Care</div>
-                        <div class="fmcg-item"><span>&#x1F9FC;</span>Cleaning</div>
-                        <div class="fmcg-item"><span>&#x1F35E;</span>Bakery</div>
-                        <div class="fmcg-item"><span>&#x1F9C0;</span>Dairy</div>
-                        <div class="fmcg-item"><span>&#x1F96B;</span>Canned Goods</div>
-                        <div class="fmcg-item"><span>&#x1F4E6;</span>Packaging</div>
-                        <div class="fmcg-item"><span>&#x1F50D;</span>Quality</div>
-                        <div class="fmcg-item"><span>&#x2699;&#xFE0F;</span>OEE</div>
-                        <div class="fmcg-item"><span>&#x1F4CA;</span>Efficiency</div>
-                    </div>
-                    <div class="fmcg-belt">
-                        <div class="fmcg-belt-surface"></div>
-                    </div>
-                    <div class="fmcg-rollers">
-                        <div class="fmcg-roller"></div><div class="fmcg-roller"></div><div class="fmcg-roller"></div>
-                        <div class="fmcg-roller"></div><div class="fmcg-roller"></div><div class="fmcg-roller"></div>
-                        <div class="fmcg-roller"></div><div class="fmcg-roller"></div><div class="fmcg-roller"></div>
-                        <div class="fmcg-roller"></div><div class="fmcg-roller"></div><div class="fmcg-roller"></div>
-                        <div class="fmcg-roller"></div><div class="fmcg-roller"></div><div class="fmcg-roller"></div>
-                        <div class="fmcg-roller"></div><div class="fmcg-roller"></div><div class="fmcg-roller"></div>
-                    </div>
-                </div>
+                <script>
+                (function() {
+                  var canvas = document.getElementById('tocCanvas');
+                  var ctx = canvas.getContext('2d');
+                  var dpr = window.devicePixelRatio || 1;
+
+                  var stations = [
+                    { name: 'Infeed',  rate: 1.0 },
+                    { name: 'Process', rate: 1.0 },
+                    { name: 'Fill',    rate: 0.42 },
+                    { name: 'Seal',    rate: 1.0 },
+                    { name: 'Label',   rate: 1.0 },
+                    { name: 'Pack',    rate: 1.0 }
+                  ];
+
+                  var particles = [];
+                  var baseSpeed = 1.8;
+                  var spawnInterval = 38;
+                  var frame = 0;
+                  var W, H, stationW, laneY, stationY;
+
+                  function resize() {
+                    var rect = canvas.getBoundingClientRect();
+                    W = rect.width * dpr;
+                    H = 100 * dpr;
+                    canvas.width = W;
+                    canvas.height = H;
+                    stationW = W / stations.length;
+                    laneY = H * 0.38;
+                    stationY = H * 0.72;
+                  }
+
+                  function spawnParticle() {
+                    particles.push({ x: -8, processed: Array(stations.length).fill(false), waiting: false });
+                  }
+
+                  function tick() {
+                    for (var i = particles.length - 1; i >= 0; i--) {
+                      var p = particles[i];
+                      p.waiting = false;
+                      var nextStation = -1;
+                      for (var s = 0; s < stations.length; s++) {
+                        if (!p.processed[s]) { nextStation = s; break; }
+                      }
+                      if (nextStation === -1) {
+                        p.x += baseSpeed;
+                        if (p.x > W + 10) { particles.splice(i, 1); }
+                        continue;
+                      }
+                      var stationCenterX = stationW * nextStation + stationW * 0.5;
+                      var approachX = stationCenterX - stationW * 0.15;
+                      if (p.x < approachX) {
+                        p.x += baseSpeed;
+                        if (p.x > approachX) p.x = approachX;
+                      } else {
+                        if (Math.random() < stations[nextStation].rate) {
+                          p.processed[nextStation] = true;
+                          p.x = stationCenterX + stationW * 0.15;
+                        } else {
+                          p.waiting = true;
+                        }
+                      }
+                    }
+                  }
+
+                  function bufferCount(stationIdx) {
+                    var count = 0;
+                    var approachX = stationW * stationIdx + stationW * 0.35;
+                    for (var i = 0; i < particles.length; i++) {
+                      if (particles[i].waiting && Math.abs(particles[i].x - approachX) < stationW * 0.3) count++;
+                    }
+                    return count;
+                  }
+
+                  function draw() {
+                    ctx.clearRect(0, 0, W, H);
+                    // Track line
+                    ctx.strokeStyle = '#ddd8cc';
+                    ctx.lineWidth = 1 * dpr;
+                    ctx.beginPath();
+                    ctx.moveTo(0, laneY);
+                    ctx.lineTo(W, laneY);
+                    ctx.stroke();
+
+                    for (var s = 0; s < stations.length; s++) {
+                      var cx = stationW * s + stationW * 0.5;
+                      var bCount = bufferCount(s);
+                      // Buffer zone
+                      if (bCount > 0) {
+                        var bufAlpha = Math.min(bCount / 5, 1) * 0.15;
+                        ctx.fillStyle = 'rgba(210,160,60,' + bufAlpha + ')';
+                        ctx.fillRect(stationW * s, laneY - 14 * dpr, stationW * 0.35, 28 * dpr);
+                      }
+                      // Station box
+                      var isConstraint = stations[s].rate < 1;
+                      var boxW = stationW * 0.5;
+                      var boxH = 18 * dpr;
+                      ctx.fillStyle = isConstraint ? '#e8d4d0' : '#e6f4ec';
+                      ctx.strokeStyle = isConstraint ? '#c0756a' : '#a0ccb0';
+                      ctx.lineWidth = 1 * dpr;
+                      ctx.beginPath();
+                      ctx.roundRect(cx - boxW / 2, stationY - boxH / 2, boxW, boxH, 3 * dpr);
+                      ctx.fill();
+                      ctx.stroke();
+                      // Station label
+                      ctx.fillStyle = isConstraint ? '#8b3a2f' : '#1d6840';
+                      ctx.font = (8 * dpr) + 'px DM Mono, monospace';
+                      ctx.textAlign = 'center';
+                      ctx.textBaseline = 'middle';
+                      ctx.fillText(stations[s].name.toUpperCase(), cx, stationY);
+                      // Constraint marker
+                      if (isConstraint) {
+                        ctx.fillStyle = '#c0756a';
+                        ctx.font = 'bold ' + (7 * dpr) + 'px DM Mono, monospace';
+                        ctx.fillText('CONSTRAINT', cx, stationY + boxH / 2 + 8 * dpr);
+                      }
+                    }
+
+                    // Particles
+                    for (var i = 0; i < particles.length; i++) {
+                      var p = particles[i];
+                      ctx.beginPath();
+                      ctx.arc(p.x, laneY, 4 * dpr, 0, Math.PI * 2);
+                      ctx.fillStyle = p.waiting ? '#d4a03c' : '#1d6840';
+                      ctx.fill();
+                    }
+                  }
+
+                  function loop() {
+                    frame++;
+                    if (frame % spawnInterval === 0) spawnParticle();
+                    tick();
+                    draw();
+                    requestAnimationFrame(loop);
+                  }
+
+                  resize();
+                  window.addEventListener('resize', resize);
+                  // Pre-warm
+                  for (var i = 0; i < 120; i++) {
+                    frame++;
+                    if (frame % spawnInterval === 0) spawnParticle();
+                    tick();
+                  }
+                  loop();
+                })();
+                </script>
                 <div class="tools">
                     <a href="rag-study.html" class="tool-card">
                         <div class="card-icon">&#x1F6A6;</div>
