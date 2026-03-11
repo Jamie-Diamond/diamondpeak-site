@@ -673,6 +673,56 @@
     color: var(--muted);
     margin-bottom: 12px;
   }
+  .increment-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .increment-row label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink2);
+    white-space: nowrap;
+  }
+  .increment-presets {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .increment-preset {
+    padding: 8px 14px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    color: var(--ink2);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .increment-preset:active { transform: scale(0.97); }
+  .increment-preset.selected {
+    border-color: var(--green);
+    background: var(--green-bg);
+    color: var(--green);
+    font-weight: 700;
+  }
+  .increment-custom {
+    width: 60px;
+    padding: 8px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    text-align: center;
+    background: white;
+    color: var(--ink);
+    -webkit-appearance: none;
+  }
+  .increment-custom:focus { outline: none; border-color: var(--green); }
+
   .btn-count {
     display: block;
     width: 100%;
@@ -826,7 +876,18 @@
     <div class="card-title">Output Counter</div>
     <div class="output-count-display" id="outputCount">0</div>
     <div class="output-count-label">units counted</div>
-    <button class="btn-count" id="countBtn" onclick="incrementOutput()">+ Count Output</button>
+    <div class="increment-row">
+      <label>Per press:</label>
+      <div class="increment-presets" id="incrementPresets">
+        <button class="increment-preset selected" data-val="1" onclick="selectIncrement(this)">1</button>
+        <button class="increment-preset" data-val="2" onclick="selectIncrement(this)">2</button>
+        <button class="increment-preset" data-val="4" onclick="selectIncrement(this)">4</button>
+        <button class="increment-preset" data-val="6" onclick="selectIncrement(this)">6</button>
+        <button class="increment-preset" data-val="12" onclick="selectIncrement(this)">12</button>
+        <input type="number" class="increment-custom" id="incrementCustom" min="1" placeholder="..." inputmode="numeric" onchange="setCustomIncrement(this)">
+      </div>
+    </div>
+    <button class="btn-count" id="countBtn" onclick="incrementOutput()">+ Count 1 Unit</button>
     <div class="output-rate" id="outputRate"></div>
     <div class="output-actions">
       <button onclick="undoLastCount()">Undo Last</button>
@@ -1521,11 +1582,35 @@ function showAutoSaveIndicator() {
 }
 
 // -- Output Counter --
+let incrementBy = 1;
+
+function selectIncrement(btn) {
+  document.querySelectorAll('.increment-preset').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  incrementBy = parseInt(btn.dataset.val);
+  document.getElementById('incrementCustom').value = '';
+  updateCountBtnLabel();
+}
+
+function setCustomIncrement(input) {
+  const val = parseInt(input.value);
+  if (!val || val < 1) { input.value = ''; return; }
+  document.querySelectorAll('.increment-preset').forEach(b => b.classList.remove('selected'));
+  incrementBy = val;
+  updateCountBtnLabel();
+}
+
+function updateCountBtnLabel() {
+  const btn = document.getElementById('countBtn');
+  btn.textContent = incrementBy === 1 ? '+ Count 1 Unit' : `+ Count ${incrementBy} Units`;
+}
+
 function incrementOutput() {
   const now = new Date();
-  state.outputCount++;
+  state.outputCount += incrementBy;
   state.outputLog.push({
     qty: state.outputCount,
+    added: incrementBy,
     time: now.toISOString(),
     timeDisplay: now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     elapsed: state.sessionStart ? formatMsShort(now - state.sessionStart) : '--'
@@ -1537,8 +1622,9 @@ function incrementOutput() {
 
 function undoLastCount() {
   if (state.outputLog.length === 0) return;
-  state.outputLog.pop();
-  state.outputCount = state.outputLog.length > 0 ? state.outputLog[state.outputLog.length - 1].qty : 0;
+  const removed = state.outputLog.pop();
+  state.outputCount -= (removed.added || 1);
+  if (state.outputCount < 0) state.outputCount = 0;
   document.getElementById('outputCount').textContent = state.outputCount;
   renderOutputLog();
   saveState();
@@ -1568,17 +1654,17 @@ function renderOutputLog() {
   // Show last 50 entries, newest first
   const entries = state.outputLog.slice(-50).reverse();
   list.innerHTML = entries.map(e =>
-    `<li><span class="ol-qty">#${e.qty}</span><span class="ol-time">${e.timeDisplay}</span><span class="ol-elapsed">${e.elapsed}</span></li>`
+    `<li><span class="ol-qty">+${e.added || 1} (${e.qty})</span><span class="ol-time">${e.timeDisplay}</span><span class="ol-elapsed">${e.elapsed}</span></li>`
   ).join('');
 
-  // Calculate rate if we have 2+ entries
+  // Calculate rate based on total units
   if (state.outputLog.length >= 2) {
     const first = new Date(state.outputLog[0].time);
     const last = new Date(state.outputLog[state.outputLog.length - 1].time);
     const mins = (last - first) / 60000;
     if (mins > 0) {
-      const rate = (state.outputLog.length / mins).toFixed(1);
-      rateEl.innerHTML = `Rate: <span class="rate-val">${rate}</span> counts/min`;
+      const rate = (state.outputCount / mins).toFixed(1);
+      rateEl.innerHTML = `Rate: <span class="rate-val">${rate}</span> units/min`;
     } else {
       rateEl.textContent = '';
     }
@@ -1589,20 +1675,30 @@ function renderOutputLog() {
 
 function exportOutputLog() {
   if (state.outputLog.length === 0) { alert('No output counts to export.'); return; }
-  const rows = [['Count #', 'Time', 'Elapsed']];
-  state.outputLog.forEach(e => {
-    rows.push([e.qty, e.timeDisplay, e.elapsed]);
+  const rows = [['Count #','Time','Units Added','Running Total','Elapsed','Line','Shift','SKU','Crew']];
+  state.outputLog.forEach((e, i) => {
+    rows.push([i+1, e.timeDisplay, e.added || 1, e.qty, e.elapsed, `"${state.line||''}"`, `"${state.shift||''}"`, `"${state.sku||''}"`, state.crew]);
   });
   rows.push([]);
-  rows.push(['Total Count', state.outputCount]);
-  rows.push(['Line', `"${state.line || ''}"`]);
-  rows.push(['Shift', `"${state.shift || ''}"`]);
-  rows.push(['SKU', `"${state.sku || ''}"`]);
+  rows.push(['Line', `"${state.line||''}"`]);
+  rows.push(['Shift', `"${state.shift||''}"`]);
+  rows.push(['SKU', `"${state.sku||''}"`]);
+  rows.push(['Study Date', state.sessionStart ? state.sessionStart.toLocaleDateString('en-GB') : '']);
+  rows.push(['Study End', state.sessionEnd ? state.sessionEnd.toLocaleTimeString('en-GB') : '(ongoing)']);
+  rows.push(['Total Output', state.outputCount]);
+  rows.push(['Total Presses', state.outputLog.length]);
+  rows.push(['Total Run Time (s)', Math.round(state.totalRunMs/1000)]);
+  rows.push(['Total Stop Time (s)', Math.round(state.totalStopMs/1000)]);
+  rows.push(['Total Stops', state.stops.length]);
+  rows.push(['Red Stops', state.stops.filter(s => s.stopType==='red').length]);
+  rows.push(['Amber Stops', state.stops.filter(s => s.stopType==='amber').length]);
+  rows.push(['Session Notes', `"${(state.sessionNotes||'').replace(/"/g,'""')}"`]);
+
   const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `output_count_${(state.line || 'line').replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `output_count_${(state.line || 'line').replace(/[^a-zA-Z0-9]/g, '_')}_${(state.shift||'shift').replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
