@@ -481,6 +481,24 @@
     margin-top: 12px;
     transition: all 0.15s;
   }
+  .btn-speed-change {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--amber);
+    border-radius: 6px;
+    background: white;
+    color: var(--amber);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    margin-top: 8px;
+    transition: all 0.15s;
+  }
+  .btn-speed-change:hover { background: var(--amber-bg); }
+
   .btn-end-study:hover { background: #e8f0f6; }
   .btn-end-study:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -651,6 +669,206 @@
   @supports (-webkit-touch-callout: none) {
     input, select, textarea { font-size: 16px !important; }
   }
+
+  /* Output Counter */
+  .output-counter-card { position: relative; }
+  .output-count-display {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(48px, 12vw, 72px);
+    font-weight: 500;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: var(--green);
+    padding: 8px 0 4px;
+    line-height: 1;
+  }
+  .output-count-label {
+    text-align: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .increment-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .increment-row label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink2);
+    white-space: nowrap;
+  }
+  .increment-presets {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .increment-preset {
+    padding: 8px 14px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    color: var(--ink2);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .increment-preset:active { transform: scale(0.97); }
+  .increment-preset.selected {
+    border-color: var(--green);
+    background: var(--green-bg);
+    color: var(--green);
+    font-weight: 700;
+  }
+  .increment-custom {
+    width: 60px;
+    padding: 8px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    text-align: center;
+    background: white;
+    color: var(--ink);
+    -webkit-appearance: none;
+  }
+  .increment-custom:focus { outline: none; border-color: var(--green); }
+
+  .btn-count {
+    display: block;
+    width: 100%;
+    padding: 20px;
+    border: none;
+    border-radius: 6px;
+    background: var(--green);
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    letter-spacing: 0.02em;
+  }
+  .btn-count:hover { opacity: 0.9; }
+  .btn-count:active { transform: scale(0.97); }
+  .btn-count:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .output-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .output-actions button {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: white;
+    color: var(--ink2);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .output-actions button:hover { border-color: var(--ink2); }
+
+  .output-log {
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+  .output-log li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 12px;
+    color: var(--ink2);
+    border-bottom: 1px solid #f0ede6;
+  }
+  .output-log li .ol-qty {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    color: var(--ink);
+    min-width: 40px;
+  }
+  .output-log li .ol-time {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .output-log li .ol-elapsed {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 60px;
+    text-align: right;
+  }
+  .output-rate {
+    text-align: center;
+    margin-top: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--ink2);
+  }
+  .output-rate .rate-val { font-weight: 500; color: var(--green); }
+
+  /* Pareto */
+  .pareto-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .pareto-label { font-family:'DM Mono',monospace; font-size:11px; color:var(--ink2); min-width:90px; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pareto-bar-track { flex:1; height:20px; background:#f0ede6; border-radius:3px; overflow:hidden; position:relative; }
+  .pareto-bar-fill { height:100%; border-radius:3px; transition:width 0.4s; }
+  .pareto-bar-fill.bar-red { background:var(--red); }
+  .pareto-bar-fill.bar-amber { background:var(--amber); }
+  .pareto-bar-fill.bar-mixed { background:linear-gradient(90deg,var(--red) 50%,var(--amber) 50%); }
+  .pareto-value { font-family:'DM Mono',monospace; font-size:11px; color:var(--ink); min-width:48px; font-weight:500; }
+  .pareto-cumline { position:absolute; top:0; bottom:0; width:2px; background:var(--ink); opacity:0.3; }
+
+  /* Confirmation modal */
+  .confirm-overlay {
+    display:none; position:fixed; top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,0.35); z-index:300;
+    align-items:center; justify-content:center;
+  }
+  .confirm-overlay.active { display:flex; }
+  .confirm-box {
+    background:var(--card); border:1px solid var(--border); border-radius:12px;
+    padding:28px 24px; max-width:360px; width:90%; text-align:center;
+    animation:slideUp 0.2s ease-out;
+  }
+  .confirm-box h3 {
+    font-family:'Libre Baskerville',serif; font-size:16px; font-weight:700;
+    margin-bottom:8px; color:var(--ink);
+  }
+  .confirm-box p {
+    font-size:13px; color:var(--ink2); line-height:1.5; margin-bottom:20px;
+  }
+  .confirm-box .btn-row { display:flex; gap:8px; }
+  .confirm-box .btn-row button {
+    flex:1; padding:12px; border:none; border-radius:6px;
+    font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; cursor:pointer;
+  }
+  .confirm-box .btn-confirm-cancel { background:#ede9e1; color:var(--ink2); }
+  .confirm-box .btn-confirm-ok { background:var(--red); color:#fff; }
+
+  /* Speed change log items */
+  .speed-log-item {
+    border:1px solid var(--amber-border); border-radius:6px; padding:12px;
+    margin-bottom:6px; background:var(--amber-bg);
+  }
+  .speed-log-item .sl-time { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); }
+  .speed-log-item .sl-detail { font-size:13px; color:var(--ink2); margin-top:4px; }
+  .speed-log-item .sl-detail strong { color:var(--ink); }
 </style>
 </head>
 <body>
@@ -663,7 +881,7 @@
   <h1>RAG Study Tool</h1>
   <div class="study-date" id="studyDate"></div>
   <p class="intro">
-    Red Amber Green production line study &mdash; track uptime, log stops by type and asset, and export data.
+    Red Amber Green production line study &mdash; track uptime, log stops by type and asset, log speed changes, and export data.
   </p>
 
   <!-- Setup -->
@@ -696,6 +914,13 @@
       <input type="number" id="packsMinInput" min="0" step="0.1" placeholder="0" inputmode="decimal">
       <span class="unit">packs/min</span>
     </div>
+    <div class="input-row" style="margin-top:8px;">
+      <label>Counter</label>
+      <label style="min-width:auto;display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;">
+        <input type="checkbox" id="counterToggle" onchange="toggleCounter()" style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
+        Enable output counter for this study
+      </label>
+    </div>
     <div class="asset-config">
       <div class="asset-config-title">Assets / Stations</div>
       <div class="asset-tags" id="assetTags"></div>
@@ -715,7 +940,34 @@
     <div class="status-badge"><span id="statusBadge" class="status-idle">Ready</span></div>
     <div class="timer-display" id="timerDisplay">00:00:00</div>
     <button class="btn-main btn-start" id="mainBtn" onclick="toggleTimer()">Start Line</button>
+    <button class="btn-speed-change" id="speedChangeBtn" onclick="openSpeedChangeModal()" style="display:none;">Log Speed Change</button>
     <button class="btn-end-study" id="endStudyBtn" onclick="endStudy()" style="display:none;">End Study</button>
+  </div>
+
+  <!-- Output Counter -->
+  <div class="card output-counter-card" id="outputCard">
+    <div class="card-title">Output Counter</div>
+    <div class="output-count-display" id="outputCount">0</div>
+    <div class="output-count-label">units counted</div>
+    <div class="increment-row">
+      <label>Per press:</label>
+      <div class="increment-presets" id="incrementPresets">
+        <button class="increment-preset selected" data-val="1" onclick="selectIncrement(this)">1</button>
+        <button class="increment-preset" data-val="2" onclick="selectIncrement(this)">2</button>
+        <button class="increment-preset" data-val="4" onclick="selectIncrement(this)">4</button>
+        <button class="increment-preset" data-val="6" onclick="selectIncrement(this)">6</button>
+        <button class="increment-preset" data-val="12" onclick="selectIncrement(this)">12</button>
+        <input type="number" class="increment-custom" id="incrementCustom" min="1" placeholder="..." inputmode="numeric" onchange="setCustomIncrement(this)">
+      </div>
+    </div>
+    <button class="btn-count" id="countBtn" onclick="incrementOutput()">+ Count 1 Unit</button>
+    <div class="output-rate" id="outputRate"></div>
+    <div class="output-actions">
+      <button onclick="undoLastCount()">Undo Last</button>
+      <button onclick="resetOutputCounter()">Reset Counter</button>
+      <button onclick="exportOutputLog()">Export Log</button>
+    </div>
+    <ul class="output-log" id="outputLog"></ul>
   </div>
 
   <!-- Live Visualisation -->
@@ -732,6 +984,19 @@
       </div>
     </div>
     <div class="timeline-bar" id="timelineBar"></div>
+  </div>
+
+  <!-- Pareto Chart -->
+  <div class="card" id="paretoCard" style="display:none;">
+    <div class="card-title">Downtime Pareto</div>
+    <div id="paretoChart"></div>
+    <div id="paretoLegend" style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center;font-family:'DM Mono',monospace;"></div>
+  </div>
+
+  <!-- Speed Change Log -->
+  <div class="card" id="speedLogCard" style="display:none;">
+    <div class="card-title">Speed Change Log</div>
+    <ul class="stop-list" id="speedLogList"></ul>
   </div>
 
   <!-- Summary -->
@@ -819,6 +1084,38 @@
   </div>
 </div>
 
+<!-- Confirmation Modal -->
+<div class="confirm-overlay" id="confirmModal">
+  <div class="confirm-box">
+    <h3 id="confirmTitle">Are you sure?</h3>
+    <p id="confirmMsg"></p>
+    <div class="btn-row">
+      <button class="btn-confirm-cancel" onclick="confirmReject()">Cancel</button>
+      <button class="btn-confirm-ok" id="confirmOkBtn" onclick="confirmAccept()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Speed Change Modal (while running) -->
+<div class="modal-overlay" id="speedModal">
+  <div class="modal">
+    <h2>Log Speed Change</h2>
+    <p style="font-size:13px;color:var(--ink2);text-align:center;margin-bottom:16px;">Record a speed change without stopping the line.</p>
+    <div class="form-group">
+      <label>New RPM</label>
+      <input type="number" id="speedModalRpm" min="0" step="1" placeholder="RPM" inputmode="decimal" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:4px;font-size:14px;font-family:'DM Sans',sans-serif;background:white;color:var(--ink);">
+    </div>
+    <div class="form-group">
+      <label>New Packs/min</label>
+      <input type="number" id="speedModalPacks" min="0" step="0.1" placeholder="Packs/min" inputmode="decimal" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:4px;font-size:14px;font-family:'DM Sans',sans-serif;background:white;color:var(--ink);">
+    </div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeSpeedModal()">Cancel</button>
+      <button class="btn-save" onclick="saveSpeedChange()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const DEFAULT_ASSETS = ['Infeed','Processing','Filling','Sealing','Labelling','Checkweigher','Packing','Palletising'];
 
@@ -841,7 +1138,11 @@ let state = {
   sku: '',
   line: '',
   shift: '',
-  sessionNotes: ''
+  sessionNotes: '',
+  counterEnabled: false,
+  outputCount: 0,
+  outputLog: [],
+  speedChanges: []
 };
 
 // Restore assets
@@ -871,6 +1172,12 @@ try {
     document.getElementById('lineInput').value = state.line || '';
     document.getElementById('shiftInput').value = state.shift || '';
     document.getElementById('sessionNotes').value = state.sessionNotes || '';
+    if (!state.outputLog) state.outputLog = [];
+    if (!state.outputCount) state.outputCount = 0;
+    if (!state.speedChanges) state.speedChanges = [];
+    if (state.counterEnabled === undefined) state.counterEnabled = false;
+    document.getElementById('counterToggle').checked = state.counterEnabled;
+    renderOutputLog();
   }
 } catch(e) {}
 
@@ -920,6 +1227,119 @@ function renderAssetGrid() {
 }
 
 renderAssetTags();
+
+// -- Counter Toggle --
+function toggleCounter() {
+  state.counterEnabled = document.getElementById('counterToggle').checked;
+  document.getElementById('outputCard').style.display = state.counterEnabled ? 'block' : 'none';
+  saveState();
+}
+document.getElementById('outputCard').style.display = state.counterEnabled ? 'block' : 'none';
+
+// -- Confirmation Dialog --
+let confirmCallback = null;
+function showConfirm(title, msg, okLabel, cb) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMsg').textContent = msg;
+  document.getElementById('confirmOkBtn').textContent = okLabel || 'Confirm';
+  confirmCallback = cb;
+  document.getElementById('confirmModal').classList.add('active');
+}
+function confirmAccept() {
+  document.getElementById('confirmModal').classList.remove('active');
+  if (confirmCallback) confirmCallback();
+  confirmCallback = null;
+}
+function confirmReject() {
+  document.getElementById('confirmModal').classList.remove('active');
+  confirmCallback = null;
+}
+
+// -- Speed Change (while running) --
+function openSpeedChangeModal() {
+  if (state.status !== 'running' && state.status !== 'stopped') return;
+  document.getElementById('speedModalRpm').value = '';
+  document.getElementById('speedModalPacks').value = '';
+  document.getElementById('speedModal').classList.add('active');
+}
+function closeSpeedModal() {
+  document.getElementById('speedModal').classList.remove('active');
+}
+function saveSpeedChange() {
+  const newRpm = document.getElementById('speedModalRpm').value.trim();
+  const newPacks = document.getElementById('speedModalPacks').value.trim();
+  if (!newRpm && !newPacks) { closeSpeedModal(); return; }
+  const now = new Date();
+  const oldRpm = state.rpm, oldPacks = state.packsMin;
+  if (newRpm !== '') { state.rpm = parseFloat(newRpm); document.getElementById('rpmInput').value = state.rpm; }
+  if (newPacks !== '') { state.packsMin = parseFloat(newPacks); document.getElementById('packsMinInput').value = state.packsMin; }
+  state.speedChanges.push({
+    time: now.toISOString(),
+    timeDisplay: now.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' }),
+    oldRpm: oldRpm, oldPacks: oldPacks,
+    newRpm: state.rpm, newPacks: state.packsMin,
+    elapsed: state.sessionStart ? formatMsShort(now - state.sessionStart) : '--'
+  });
+  closeSpeedModal();
+  renderSpeedLog();
+  saveState();
+}
+function renderSpeedLog() {
+  const card = document.getElementById('speedLogCard');
+  const list = document.getElementById('speedLogList');
+  if (!state.speedChanges || state.speedChanges.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  list.innerHTML = state.speedChanges.map((sc, i) =>
+    `<li class="speed-log-item">
+      <span class="sl-time">${sc.timeDisplay} (${sc.elapsed})</span>
+      <div class="sl-detail"><strong>${sc.oldRpm}rpm / ${sc.oldPacks}pk/min</strong> &rarr; <strong>${sc.newRpm}rpm / ${sc.newPacks}pk/min</strong></div>
+    </li>`
+  ).reverse().join('');
+}
+
+// -- Pareto Chart --
+function renderPareto() {
+  const card = document.getElementById('paretoCard');
+  const chart = document.getElementById('paretoChart');
+  const legend = document.getElementById('paretoLegend');
+  const completedStops = state.stops.filter(s => s.asset && s.durationMs > 0);
+  if (completedStops.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  // Group by asset
+  const groups = {};
+  completedStops.forEach(s => {
+    const dur = s.endTime ? s.durationMs : (state.status === 'stopped' && s === state.stops[state.stops.length - 1] ? Date.now() - s.startTime.getTime() : s.durationMs);
+    if (!groups[s.asset]) groups[s.asset] = { total: 0, red: 0, amber: 0, count: 0 };
+    groups[s.asset].total += dur;
+    if (s.stopType === 'red') groups[s.asset].red += dur;
+    else if (s.stopType === 'amber') groups[s.asset].amber += dur;
+    groups[s.asset].count++;
+  });
+
+  // Sort descending
+  const sorted = Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
+  const maxMs = sorted[0][1].total;
+  const totalMs = sorted.reduce((sum, [, g]) => sum + g.total, 0);
+  let cumulative = 0;
+
+  chart.innerHTML = sorted.map(([asset, g]) => {
+    const pct = (g.total / maxMs) * 100;
+    cumulative += g.total;
+    const cumPct = (cumulative / totalMs) * 100;
+    const barClass = g.red > 0 && g.amber > 0 ? 'bar-mixed' : g.amber > 0 ? 'bar-amber' : 'bar-red';
+    return `<div class="pareto-row">
+      <div class="pareto-label" title="${asset}">${asset}</div>
+      <div class="pareto-bar-track">
+        <div class="pareto-bar-fill ${barClass}" style="width:${pct.toFixed(1)}%;"></div>
+        <div class="pareto-cumline" style="left:${cumPct.toFixed(1)}%;"></div>
+      </div>
+      <div class="pareto-value">${formatMsShort(g.total)} (${g.count})</div>
+    </div>`;
+  }).join('');
+
+  legend.textContent = `Total downtime: ${formatMsShort(totalMs)} across ${completedStops.length} stops`;
+}
 
 // -- Timer --
 function toggleTimer() {
@@ -1016,12 +1436,15 @@ function updateUI() {
   const endBtn = document.getElementById('endStudyBtn');
   const endedBanner = document.getElementById('endedBanner');
 
+  const speedBtn = document.getElementById('speedChangeBtn');
+
   if (state.status === 'running') {
     badge.className = 'status-running'; badge.textContent = 'Running';
     btn.className = 'btn-main btn-stop'; btn.textContent = 'Stop Line';
     btn.disabled = false;
     timer.className = 'timer-display running';
     endBtn.style.display = 'block';
+    speedBtn.style.display = 'block';
     endedBanner.style.display = 'none';
     startTimerInterval();
   } else if (state.status === 'stopped') {
@@ -1030,6 +1453,7 @@ function updateUI() {
     btn.disabled = false;
     timer.className = 'timer-display stopped';
     endBtn.style.display = 'block';
+    speedBtn.style.display = 'block';
     endedBanner.style.display = 'none';
     startTimerInterval();
   } else if (state.status === 'ended') {
@@ -1039,6 +1463,7 @@ function updateUI() {
     timer.className = 'timer-display';
     timer.textContent = formatMs(state.totalRunMs);
     endBtn.style.display = 'none';
+    speedBtn.style.display = 'none';
     endedBanner.style.display = 'block';
     if (state.sessionEnd) {
       document.getElementById('endedTime').textContent =
@@ -1051,12 +1476,15 @@ function updateUI() {
     btn.disabled = false;
     timer.className = 'timer-display';
     endBtn.style.display = 'none';
+    speedBtn.style.display = 'none';
     endedBanner.style.display = 'none';
     clearInterval(state.timerInterval);
   }
   renderStops();
   updateSummary();
   updateViz();
+  renderPareto();
+  renderSpeedLog();
 }
 
 function updateSummary() {
@@ -1213,7 +1641,16 @@ function exportCSV() {
   rows.push(['Total Stops', state.stops.length]);
   rows.push(['Red Stops', state.stops.filter(s => s.stopType==='red').length]);
   rows.push(['Amber Stops', state.stops.filter(s => s.stopType==='amber').length]);
+  rows.push(['Output Count', state.outputCount]);
+  rows.push(['Speed Changes', state.speedChanges ? state.speedChanges.length : 0]);
   rows.push(['Session Notes', `"${(state.sessionNotes||'').replace(/"/g,'""')}"`]);
+  if (state.speedChanges && state.speedChanges.length > 0) {
+    rows.push([]);
+    rows.push(['Speed Change #','Time','Old RPM','Old Packs/min','New RPM','New Packs/min','Elapsed']);
+    state.speedChanges.forEach((sc, i) => {
+      rows.push([i+1, sc.timeDisplay, sc.oldRpm, sc.oldPacks, sc.newRpm, sc.newPacks, sc.elapsed]);
+    });
+  }
 
   const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
@@ -1229,7 +1666,8 @@ function copyToClipboard() {
   let text = `Diamond Peak RAG Study\n`;
   text += `Date: ${state.sessionStart ? state.sessionStart.toLocaleDateString('en-GB') : 'N/A'}\n`;
   text += `Line: ${state.line||'N/A'} | Shift: ${state.shift||'N/A'} | SKU: ${state.sku||'N/A'}\n`;
-  text += `Run: ${formatMsShort(state.totalRunMs)} | Stop: ${formatMsShort(state.totalStopMs)} | Stops: ${state.stops.length} (R:${state.stops.filter(s=>s.stopType==='red').length} A:${state.stops.filter(s=>s.stopType==='amber').length})\n\n`;
+  text += `Run: ${formatMsShort(state.totalRunMs)} | Stop: ${formatMsShort(state.totalStopMs)} | Stops: ${state.stops.length} (R:${state.stops.filter(s=>s.stopType==='red').length} A:${state.stops.filter(s=>s.stopType==='amber').length})\n`;
+  text += `Output Count: ${state.outputCount}\n\n`;
   state.stops.forEach((s, i) => {
     const dur = s.endTime ? formatMsShort(s.durationMs) : '(ongoing)';
     const time = s.startTime.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
@@ -1237,6 +1675,12 @@ function copyToClipboard() {
     const sp = (s.newRpm!==null||s.newPacksMin!==null) ? ` -> ${s.newRpm??s.rpm}rpm/${s.newPacksMin??s.packsMin}pk/min` : '';
     text += `${i+1}. [${type}] ${time} - ${dur} - ${s.asset||'?'} - ${s.reason||'?'} - ${s.rpm}rpm/${s.packsMin}pk/min${sp}\n`;
   });
+  if (state.speedChanges && state.speedChanges.length > 0) {
+    text += `\nSpeed Changes:\n`;
+    state.speedChanges.forEach((sc, i) => {
+      text += `${i+1}. ${sc.timeDisplay} (${sc.elapsed}) - ${sc.oldRpm}rpm/${sc.oldPacks}pk/min -> ${sc.newRpm}rpm/${sc.newPacks}pk/min\n`;
+    });
+  }
   if (state.sessionNotes) text += `\nNotes:\n${state.sessionNotes}\n`;
   navigator.clipboard.writeText(text).then(() => alert('Copied.')).catch(() => {
     const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); alert('Copied.');
@@ -1244,30 +1688,42 @@ function copyToClipboard() {
 }
 
 function resetStudy() {
-  if (!confirm('Reset the entire study? All stop data will be lost.')) return;
-  clearInterval(state.timerInterval);
-  state = {
-    status:'idle', sessionStart:null, sessionEnd:null, currentRunStart:null, currentStopStart:null,
-    totalRunMs:0, totalStopMs:0, stops:[], timerInterval:null, editingStopIndex:null,
-    crew: parseInt(document.getElementById('crewInput').value)||4,
-    rpm: parseFloat(document.getElementById('rpmInput').value)||0,
-    packsMin: parseFloat(document.getElementById('packsMinInput').value)||0,
-    sku: document.getElementById('skuInput').value.trim(),
-    line: document.getElementById('lineInput').value.trim(),
-    shift: document.getElementById('shiftInput').value.trim(),
-    sessionNotes: ''
-  };
-  document.getElementById('sessionNotes').value = '';
-  document.getElementById('shiftInput').value = '';
-  localStorage.removeItem('dp_rag_study');
-  document.getElementById('timerDisplay').textContent = '00:00:00';
-  updateUI();
+  showConfirm('Reset Study', 'Reset the entire study? All stop data, speed changes, and counter data will be permanently lost.', 'Reset', function() {
+    clearInterval(state.timerInterval);
+    const keepCounter = state.counterEnabled;
+    state = {
+      status:'idle', sessionStart:null, sessionEnd:null, currentRunStart:null, currentStopStart:null,
+      totalRunMs:0, totalStopMs:0, stops:[], timerInterval:null, editingStopIndex:null,
+      crew: parseInt(document.getElementById('crewInput').value)||4,
+      rpm: parseFloat(document.getElementById('rpmInput').value)||0,
+      packsMin: parseFloat(document.getElementById('packsMinInput').value)||0,
+      sku: document.getElementById('skuInput').value.trim(),
+      line: document.getElementById('lineInput').value.trim(),
+      shift: document.getElementById('shiftInput').value.trim(),
+      sessionNotes: '',
+      counterEnabled: keepCounter,
+      outputCount: 0,
+      outputLog: [],
+      speedChanges: []
+    };
+    document.getElementById('sessionNotes').value = '';
+    document.getElementById('shiftInput').value = '';
+    localStorage.removeItem('dp_rag_study');
+    document.getElementById('timerDisplay').textContent = '00:00:00';
+    document.getElementById('outputCount').textContent = '0';
+    renderOutputLog();
+    updateUI();
+  });
 }
 
 function endStudy() {
   if (state.status === 'ended' || state.status === 'idle') return;
-  if (!confirm('End this study? The timer will stop and no more stops can be logged. Data will be preserved for export.')) return;
+  showConfirm('End Study', 'End this study? The timer will stop and no more stops can be logged. Data will be preserved for export.', 'End Study', function() {
+    doEndStudy();
+  });
+}
 
+function doEndStudy() {
   const now = new Date();
 
   // If running, finalize current run time
@@ -1367,7 +1823,7 @@ function updateViz() {
   updateUptime();
 }
 
-setInterval(() => { if (state.status !== 'idle') { updateSummary(); updateViz(); } }, 1000);
+setInterval(() => { if (state.status !== 'idle') { updateSummary(); updateViz(); renderPareto(); } }, 1000);
 
 // -- Auto-save every 15 minutes --
 setInterval(() => {
@@ -1391,8 +1847,134 @@ function showAutoSaveIndicator() {
   setTimeout(() => { indicator.style.opacity = '0'; }, 2500);
 }
 
+// -- Output Counter --
+let incrementBy = 1;
+
+function selectIncrement(btn) {
+  document.querySelectorAll('.increment-preset').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  incrementBy = parseInt(btn.dataset.val);
+  document.getElementById('incrementCustom').value = '';
+  updateCountBtnLabel();
+}
+
+function setCustomIncrement(input) {
+  const val = parseInt(input.value);
+  if (!val || val < 1) { input.value = ''; return; }
+  document.querySelectorAll('.increment-preset').forEach(b => b.classList.remove('selected'));
+  incrementBy = val;
+  updateCountBtnLabel();
+}
+
+function updateCountBtnLabel() {
+  const btn = document.getElementById('countBtn');
+  btn.textContent = incrementBy === 1 ? '+ Count 1 Unit' : `+ Count ${incrementBy} Units`;
+}
+
+function incrementOutput() {
+  const now = new Date();
+  state.outputCount += incrementBy;
+  state.outputLog.push({
+    qty: state.outputCount,
+    added: incrementBy,
+    time: now.toISOString(),
+    timeDisplay: now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    elapsed: state.sessionStart ? formatMsShort(now - state.sessionStart) : '--'
+  });
+  document.getElementById('outputCount').textContent = state.outputCount;
+  renderOutputLog();
+  saveState();
+}
+
+function undoLastCount() {
+  if (state.outputLog.length === 0) return;
+  const removed = state.outputLog.pop();
+  state.outputCount -= (removed.added || 1);
+  if (state.outputCount < 0) state.outputCount = 0;
+  document.getElementById('outputCount').textContent = state.outputCount;
+  renderOutputLog();
+  saveState();
+}
+
+function resetOutputCounter() {
+  if (state.outputCount === 0) return;
+  showConfirm('Reset Counter', 'Reset the output counter? All count data will be permanently lost.', 'Reset', function() {
+    state.outputCount = 0;
+    state.outputLog = [];
+    document.getElementById('outputCount').textContent = '0';
+    renderOutputLog();
+    saveState();
+  });
+}
+
+function renderOutputLog() {
+  const list = document.getElementById('outputLog');
+  const rateEl = document.getElementById('outputRate');
+  document.getElementById('outputCount').textContent = state.outputCount;
+
+  if (state.outputLog.length === 0) {
+    list.innerHTML = '';
+    rateEl.textContent = '';
+    return;
+  }
+
+  // Show last 50 entries, newest first
+  const entries = state.outputLog.slice(-50).reverse();
+  list.innerHTML = entries.map(e =>
+    `<li><span class="ol-qty">+${e.added || 1} (${e.qty})</span><span class="ol-time">${e.timeDisplay}</span><span class="ol-elapsed">${e.elapsed}</span></li>`
+  ).join('');
+
+  // Calculate rate based on total units
+  if (state.outputLog.length >= 2) {
+    const first = new Date(state.outputLog[0].time);
+    const last = new Date(state.outputLog[state.outputLog.length - 1].time);
+    const mins = (last - first) / 60000;
+    if (mins > 0) {
+      const rate = (state.outputCount / mins).toFixed(1);
+      rateEl.innerHTML = `Rate: <span class="rate-val">${rate}</span> units/min`;
+    } else {
+      rateEl.textContent = '';
+    }
+  } else {
+    rateEl.textContent = '';
+  }
+}
+
+function exportOutputLog() {
+  if (state.outputLog.length === 0) { alert('No output counts to export.'); return; }
+  const rows = [['Count #','Time','Units Added','Running Total','Elapsed','Line','Shift','SKU','Crew']];
+  state.outputLog.forEach((e, i) => {
+    rows.push([i+1, e.timeDisplay, e.added || 1, e.qty, e.elapsed, `"${state.line||''}"`, `"${state.shift||''}"`, `"${state.sku||''}"`, state.crew]);
+  });
+  rows.push([]);
+  rows.push(['Line', `"${state.line||''}"`]);
+  rows.push(['Shift', `"${state.shift||''}"`]);
+  rows.push(['SKU', `"${state.sku||''}"`]);
+  rows.push(['Study Date', state.sessionStart ? state.sessionStart.toLocaleDateString('en-GB') : '']);
+  rows.push(['Study End', state.sessionEnd ? state.sessionEnd.toLocaleTimeString('en-GB') : '(ongoing)']);
+  rows.push(['Total Output', state.outputCount]);
+  rows.push(['Total Presses', state.outputLog.length]);
+  rows.push(['Total Run Time (s)', Math.round(state.totalRunMs/1000)]);
+  rows.push(['Total Stop Time (s)', Math.round(state.totalStopMs/1000)]);
+  rows.push(['Total Stops', state.stops.length]);
+  rows.push(['Red Stops', state.stops.filter(s => s.stopType==='red').length]);
+  rows.push(['Amber Stops', state.stops.filter(s => s.stopType==='amber').length]);
+  rows.push(['Session Notes', `"${(state.sessionNotes||'').replace(/"/g,'""')}"`]);
+
+  const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `output_count_${(state.line || 'line').replace(/[^a-zA-Z0-9]/g, '_')}_${(state.shift||'shift').replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // -- Init --
 updateUI();
+renderOutputLog();
+renderSpeedLog();
+renderPareto();
 if (state.status !== 'idle' && state.status !== 'ended') { updateTimerDisplay(); updateViz(); }
 if (state.status === 'ended') { updateViz(); }
 </script>
