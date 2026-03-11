@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>RAG Study v2 — Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8f5ef;
+    --card: #fff;
+    --ink: #18160f;
+    --ink2: #4a4535;
+    --muted: #9a9080;
+    --border: #ddd8cc;
+    --green: #1d6840;
+    --green-bg: #e6f4ec;
+    --green-fill: #2e9e5e;
+    --red: #b53a1e;
+    --red-bg: #fdeee9;
+    --red-border: #e8c4ba;
+    --amber: #b87c20;
+    --amber-bg: #fdf4e3;
+    --amber-border: #e2d0a8;
+    --blue: #1a5276;
+    --radius: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100dvh;
+    padding-bottom: 60px;
+  }
+
+  .page { max-width: 720px; margin: 0 auto; padding: 36px 16px 72px; }
+  @media(min-width:600px) { .page { padding: 56px 24px 80px; } }
+
+  .back { color: var(--muted); text-decoration: none; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; }
+  .back:hover { color: var(--ink); }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    margin-top: 20px;
+  }
+  h1 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(26px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 6px;
+  }
+  .study-date {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .intro {
+    font-size: 14px;
+    color: var(--ink2);
+    line-height: 1.7;
+    margin-bottom: 36px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  @media(min-width:520px) { .card { padding: 24px; } }
+
+  .card-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  /* Timer */
+  .timer-display {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(40px, 10vw, 56px);
+    font-weight: 500;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+    padding: 8px 0;
+    color: var(--muted);
+  }
+  .timer-display.running { color: var(--green); }
+  .timer-display.stopped { color: var(--red); }
+
+  .status-badge { text-align: center; margin-bottom: 8px; }
+  .status-badge span {
+    display: inline-block;
+    padding: 4px 16px;
+    border-radius: 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .status-running { background: var(--green-bg); color: var(--green); border: 1px solid #c4ddd0; }
+  .status-stopped { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+  .status-idle { background: #f0ede6; color: var(--muted); border: 1px solid var(--border); }
+
+  .btn-main {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    margin-top: 12px;
+  }
+  .btn-main:hover { opacity: 0.85; }
+  .btn-main:active { transform: scale(0.99); }
+  .btn-start { background: var(--ink); color: #fff; }
+  .btn-stop { background: var(--red); color: #fff; }
+
+  /* Inputs */
+  .input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .input-row:last-child { margin-bottom: 0; }
+  .input-row label {
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 72px;
+    color: var(--ink2);
+  }
+  .input-row input, .input-row select {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    background: white;
+    color: var(--ink);
+    -webkit-appearance: none;
+  }
+  .input-row input:focus, .input-row select:focus {
+    outline: none;
+    border-color: var(--ink);
+  }
+  .input-row input::placeholder { color: var(--muted); }
+  .input-row .unit {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 50px;
+  }
+
+  /* Asset config */
+  .asset-config { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .asset-config-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .asset-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .asset-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    background: #f0ede6;
+    border: 1px solid var(--border);
+    color: var(--ink2);
+  }
+  .asset-tag .remove-asset {
+    cursor: pointer;
+    opacity: 0.5;
+    font-size: 14px;
+    line-height: 1;
+    margin-left: 2px;
+  }
+  .asset-tag .remove-asset:hover { opacity: 1; }
+  .add-asset-row {
+    display: flex;
+    gap: 6px;
+  }
+  .add-asset-row input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    background: white;
+    color: var(--ink);
+    -webkit-appearance: none;
+  }
+  .add-asset-row input:focus { outline: none; border-color: var(--ink); }
+  .add-asset-row input::placeholder { color: var(--muted); }
+  .add-asset-row button {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #f0ede6;
+    color: var(--ink2);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .add-asset-row button:hover { border-color: var(--ink2); }
+
+  /* Stop type buttons */
+  .stop-type-row { display: flex; gap: 8px; margin-bottom: 4px; }
+  .stop-type-btn {
+    flex: 1;
+    padding: 12px 8px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    color: var(--ink2);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .stop-type-btn:active { transform: scale(0.97); }
+  .stop-type-btn.selected-red {
+    border-color: var(--red);
+    background: var(--red-bg);
+    color: var(--red);
+  }
+  .stop-type-btn.selected-amber {
+    border-color: var(--amber);
+    background: var(--amber-bg);
+    color: var(--amber);
+  }
+  .stop-type-hint {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  .speed-change-section {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    margin-top: 4px;
+  }
+  .speed-change-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .speed-change-row input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    background: white;
+    color: var(--ink);
+    -webkit-appearance: none;
+  }
+  .speed-change-row input:focus { outline: none; border-color: var(--ink); }
+  .speed-change-row .unit { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); min-width: 45px; }
+
+  /* Stop log */
+  .stop-list { list-style: none; }
+  .stop-item {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    background: #faf8f4;
+    transition: border-color 0.15s;
+  }
+  .stop-item:hover { border-color: var(--ink2); }
+  .stop-item .stop-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    color: #fff;
+    background: var(--ink);
+    border-radius: 3px;
+    padding: 2px 7px;
+    display: inline-block;
+    margin-bottom: 6px;
+    letter-spacing: 0.05em;
+  }
+  .stop-item .stop-num.needs-edit {
+    background: var(--amber);
+  }
+  .stop-item .stop-duration {
+    font-family: 'DM Mono', monospace;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--red);
+  }
+  .stop-item .stop-meta {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .stop-item .stop-detail {
+    font-size: 13px;
+    margin-top: 6px;
+    color: var(--ink2);
+  }
+  .stop-item .stop-detail strong { color: var(--ink); }
+  .stop-item .edit-hint {
+    font-size: 11px;
+    color: var(--amber);
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 20px;
+    color: var(--muted);
+    font-size: 12px;
+    font-style: italic;
+  }
+
+  /* Visualisation */
+  .uptime-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .uptime-pct {
+    font-family: 'DM Mono', monospace;
+    font-size: 28px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    min-width: 80px;
+  }
+  .uptime-track {
+    flex: 1;
+    height: 8px;
+    background: #f0e0d6;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .uptime-fill {
+    height: 100%;
+    background: var(--green-fill);
+    border-radius: 4px;
+    transition: width 0.5s;
+  }
+  .uptime-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .timeline-bar {
+    display: flex;
+    height: 24px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #ede9e1;
+    margin-bottom: 8px;
+  }
+  .timeline-bar .seg { min-width: 1px; transition: flex-grow 0.3s; }
+  .seg-green { background: var(--green-fill); }
+  .seg-red { background: var(--red); }
+  .seg-amber { background: var(--amber); }
+  .seg-grey { background: var(--muted); }
+  .seg-live-green { background: var(--green-fill); animation: pulse-g 1.5s infinite; }
+  .seg-live-red { background: var(--red); animation: pulse-r 1.5s infinite; }
+  @keyframes pulse-g { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+  @keyframes pulse-r { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+  .summary-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    text-align: center;
+  }
+  .summary-item .val {
+    font-family: 'DM Mono', monospace;
+    font-size: 20px;
+    font-weight: 500;
+  }
+  .summary-item .lbl {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .val-green { color: var(--green); }
+  .val-red { color: var(--red); }
+  .val-amber { color: var(--amber); }
+
+  /* Export buttons */
+  .btn-export {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    margin-top: 8px;
+    transition: border-color 0.15s;
+  }
+  .btn-export:hover { border-color: var(--ink2); }
+
+  .btn-reset {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--red-border);
+    border-radius: 6px;
+    background: white;
+    color: var(--red);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    margin-top: 8px;
+  }
+  .btn-reset:hover { background: var(--red-bg); }
+
+  .btn-end-study {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: 2px solid var(--blue);
+    border-radius: 6px;
+    background: white;
+    color: var(--blue);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    margin-top: 12px;
+    transition: all 0.15s;
+  }
+  .btn-end-study:hover { background: #e8f0f6; }
+  .btn-end-study:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .status-ended {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    background: #e8f0f6;
+    color: var(--blue);
+    letter-spacing: 0.05em;
+  }
+
+  .ended-banner {
+    text-align: center;
+    padding: 16px;
+    background: #e8f0f6;
+    border: 1px solid #b8d4e8;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--blue);
+    font-weight: 500;
+  }
+  .ended-banner .ended-time {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  textarea#sessionNotes {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    min-height: 80px;
+    resize: vertical;
+    background: white;
+    color: var(--ink);
+    -webkit-appearance: none;
+  }
+  textarea#sessionNotes::placeholder { color: var(--muted); }
+  textarea#sessionNotes:focus { outline: none; border-color: var(--ink); }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 200;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    width: 100%;
+    max-width: 500px;
+    max-height: 85dvh;
+    overflow-y: auto;
+    padding: 24px 20px 40px;
+    animation: slideUp 0.25s ease-out;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  .modal h2 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    text-align: center;
+    color: var(--ink);
+  }
+  .modal .form-group { margin-bottom: 16px; }
+  .modal .form-group label {
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .modal .asset-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .asset-btn {
+    padding: 12px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    color: var(--ink2);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .asset-btn.selected {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: #fff;
+    font-weight: 600;
+  }
+  .asset-btn:active { transform: scale(0.97); }
+
+  .modal input[type="text"], .modal textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    background: white;
+    color: var(--ink);
+    -webkit-appearance: none;
+  }
+  .modal input[type="text"]::placeholder, .modal textarea::placeholder { color: var(--muted); }
+  .modal input[type="text"]:focus, .modal textarea:focus {
+    outline: none;
+    border-color: var(--ink);
+  }
+  .modal textarea { resize: vertical; min-height: 80px; }
+
+  .modal .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .modal .btn-row button {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 6px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-cancel { background: #ede9e1; color: var(--ink2); }
+  .btn-save { background: var(--ink); color: #fff; }
+
+  .footer {
+    text-align: center;
+    padding: 24px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  .footer a { color: var(--muted); text-decoration: none; }
+  .footer a:hover { color: var(--ink); }
+
+  @supports (-webkit-touch-callout: none) {
+    input, select, textarea { font-size: 16px !important; }
+  }
+
+  /* Output Counter */
+  .output-counter-card { position: relative; }
+  .output-count-display {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(48px, 12vw, 72px);
+    font-weight: 500;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: var(--green);
+    padding: 8px 0 4px;
+    line-height: 1;
+  }
+  .output-count-label {
+    text-align: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .btn-count {
+    display: block;
+    width: 100%;
+    padding: 20px;
+    border: none;
+    border-radius: 6px;
+    background: var(--green);
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    letter-spacing: 0.02em;
+  }
+  .btn-count:hover { opacity: 0.9; }
+  .btn-count:active { transform: scale(0.97); }
+  .btn-count:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .output-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .output-actions button {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: white;
+    color: var(--ink2);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .output-actions button:hover { border-color: var(--ink2); }
+
+  .output-log {
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+  .output-log li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 12px;
+    color: var(--ink2);
+    border-bottom: 1px solid #f0ede6;
+  }
+  .output-log li .ol-qty {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    color: var(--ink);
+    min-width: 40px;
+  }
+  .output-log li .ol-time {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .output-log li .ol-elapsed {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 60px;
+    text-align: right;
+  }
+  .output-rate {
+    text-align: center;
+    margin-top: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--ink2);
+  }
+  .output-rate .rate-val { font-weight: 500; color: var(--green); }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <a href="index.html" class="back">&larr; Back to tools</a>
+
+  <div class="kicker">FMCG Consulting</div>
+  <h1>RAG Study Tool v2</h1>
+  <div class="study-date" id="studyDate"></div>
+  <p class="intro">
+    Red Amber Green production line study &mdash; track uptime, log stops by type and asset, count output, and export data.
+  </p>
+
+  <!-- Setup -->
+  <div class="card" id="setupCard">
+    <div class="card-title">Line Setup</div>
+    <div class="input-row">
+      <label>Line</label>
+      <input type="text" id="lineInput" placeholder="e.g. Line 1" style="flex:1;">
+    </div>
+    <div class="input-row">
+      <label>Shift</label>
+      <input type="text" id="shiftInput" placeholder="e.g. Day, Night, Lates" style="flex:1;">
+    </div>
+    <div class="input-row">
+      <label>SKU</label>
+      <input type="text" id="skuInput" placeholder="e.g. SKU-001" style="flex:1;">
+    </div>
+    <div class="input-row">
+      <label>Crew</label>
+      <input type="number" id="crewInput" min="1" max="50" value="4" inputmode="numeric">
+      <span class="unit">people</span>
+    </div>
+    <div class="input-row">
+      <label>RPM</label>
+      <input type="number" id="rpmInput" min="0" step="1" placeholder="0" inputmode="decimal">
+      <span class="unit">rpm</span>
+    </div>
+    <div class="input-row">
+      <label>Packs/min</label>
+      <input type="number" id="packsMinInput" min="0" step="0.1" placeholder="0" inputmode="decimal">
+      <span class="unit">packs/min</span>
+    </div>
+    <div class="asset-config">
+      <div class="asset-config-title">Assets / Stations</div>
+      <div class="asset-tags" id="assetTags"></div>
+      <div class="add-asset-row">
+        <input type="text" id="addAssetInput" placeholder="Add custom asset...">
+        <button onclick="addCustomAsset()">+ Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timer -->
+  <div class="card">
+    <div id="endedBanner" class="ended-banner" style="display:none;">
+      Study Complete
+      <div class="ended-time" id="endedTime"></div>
+    </div>
+    <div class="status-badge"><span id="statusBadge" class="status-idle">Ready</span></div>
+    <div class="timer-display" id="timerDisplay">00:00:00</div>
+    <button class="btn-main btn-start" id="mainBtn" onclick="toggleTimer()">Start Line</button>
+    <button class="btn-end-study" id="endStudyBtn" onclick="endStudy()" style="display:none;">End Study</button>
+  </div>
+
+  <!-- Output Counter -->
+  <div class="card output-counter-card" id="outputCard">
+    <div class="card-title">Output Counter</div>
+    <div class="output-count-display" id="outputCount">0</div>
+    <div class="output-count-label">units counted</div>
+    <button class="btn-count" id="countBtn" onclick="incrementOutput()">+ Count Output</button>
+    <div class="output-rate" id="outputRate"></div>
+    <div class="output-actions">
+      <button onclick="undoLastCount()">Undo Last</button>
+      <button onclick="resetOutputCounter()">Reset Counter</button>
+      <button onclick="exportOutputLog()">Export Log</button>
+    </div>
+    <ul class="output-log" id="outputLog"></ul>
+  </div>
+
+  <!-- Live Visualisation -->
+  <div class="card" id="vizCard" style="display:none;">
+    <div class="uptime-row">
+      <div>
+        <div class="uptime-pct" id="uptimePct" style="color:var(--green);">--</div>
+        <div class="uptime-label">Uptime</div>
+      </div>
+      <div style="flex:1;">
+        <div class="uptime-track">
+          <div class="uptime-fill" id="uptimeFill" style="width:0%;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="timeline-bar" id="timelineBar"></div>
+  </div>
+
+  <!-- Summary -->
+  <div class="card" id="summaryCard" style="display:none;">
+    <div class="card-title">Session Summary</div>
+    <div class="summary-bar">
+      <div class="summary-item">
+        <div class="val val-green" id="sumRuntime">0:00</div>
+        <div class="lbl">Run Time</div>
+      </div>
+      <div class="summary-item">
+        <div class="val val-red" id="sumStoptime">0:00</div>
+        <div class="lbl">Stop Time</div>
+      </div>
+      <div class="summary-item">
+        <div class="val val-amber" id="sumStops">0</div>
+        <div class="lbl">Stops</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stop Log -->
+  <div class="card">
+    <div class="card-title">Stop Log <span id="needsEditCount"></span></div>
+    <ul class="stop-list" id="stopList">
+      <li class="empty-state">No stops recorded yet.</li>
+    </ul>
+  </div>
+
+  <!-- Notes -->
+  <div class="card">
+    <div class="card-title">Session Notes</div>
+    <textarea id="sessionNotes" placeholder="General observations, shift notes, product info..."></textarea>
+  </div>
+
+  <!-- Export -->
+  <div class="card">
+    <div class="card-title">Data</div>
+    <button class="btn-export" onclick="exportCSV()">Export CSV</button>
+    <button class="btn-export" onclick="copyToClipboard()">Copy to Clipboard</button>
+    <button class="btn-reset" onclick="resetStudy()">Reset Study</button>
+  </div>
+
+</div>
+
+<div class="footer"><a href="index.html">Diamond Peak</a> &bull; RAG Study Tool v2</div>
+
+<!-- Stop Reason Modal -->
+<div class="modal-overlay" id="stopModal">
+  <div class="modal">
+    <h2 id="modalTitle">Log Stop Reason</h2>
+    <div class="form-group">
+      <label>Stop Type</label>
+      <div class="stop-type-row">
+        <button class="stop-type-btn" data-type="red" onclick="selectStopType(this)">Red</button>
+        <button class="stop-type-btn" data-type="amber" onclick="selectStopType(this)">Amber</button>
+      </div>
+      <div class="stop-type-hint">Red = non-productive (breakdown, wait) &bull; Amber = essential non-productive (changeover, clean)</div>
+    </div>
+    <div class="form-group">
+      <label>Asset / Station</label>
+      <div class="asset-grid" id="assetGrid"></div>
+    </div>
+    <div class="form-group" id="otherAssetGroup" style="display:none;">
+      <label>Other Asset</label>
+      <input type="text" id="otherAssetInput" placeholder="Type asset name...">
+    </div>
+    <div class="form-group">
+      <label>Stop Reason</label>
+      <textarea id="reasonInput" placeholder="What caused the stop?"></textarea>
+    </div>
+    <div class="form-group speed-change-section">
+      <label>Speed Change (leave blank if unchanged)</label>
+      <div class="speed-change-row">
+        <input type="number" id="modalRpmInput" min="0" step="1" placeholder="RPM" inputmode="decimal">
+        <span class="unit">rpm</span>
+        <input type="number" id="modalPacksMinInput" min="0" step="0.1" placeholder="Pk/min" inputmode="decimal">
+        <span class="unit">pk/min</span>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="skipStopReason()">Skip</button>
+      <button class="btn-save" onclick="saveStopReason()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEFAULT_ASSETS = ['Infeed','Processing','Filling','Sealing','Labelling','Checkweigher','Packing','Palletising'];
+
+// -- State --
+let assets = [...DEFAULT_ASSETS];
+let state = {
+  status: 'idle',
+  sessionStart: null,
+  sessionEnd: null,
+  currentRunStart: null,
+  currentStopStart: null,
+  totalRunMs: 0,
+  totalStopMs: 0,
+  stops: [],
+  timerInterval: null,
+  editingStopIndex: null,
+  crew: 4,
+  rpm: 0,
+  packsMin: 0,
+  sku: '',
+  line: '',
+  shift: '',
+  sessionNotes: '',
+  outputCount: 0,
+  outputLog: []
+};
+
+// Restore assets
+try {
+  const savedAssets = JSON.parse(localStorage.getItem('dp_rag_assets'));
+  if (savedAssets && Array.isArray(savedAssets)) assets = savedAssets;
+} catch(e) {}
+
+// Restore state
+try {
+  const saved = JSON.parse(localStorage.getItem('dp_rag_study_v2'));
+  if (saved && saved.stops) {
+    state = { ...state, ...saved };
+    if (state.sessionStart) state.sessionStart = new Date(state.sessionStart);
+    if (state.sessionEnd) state.sessionEnd = new Date(state.sessionEnd);
+    if (state.currentRunStart) state.currentRunStart = new Date(state.currentRunStart);
+    if (state.currentStopStart) state.currentStopStart = new Date(state.currentStopStart);
+    state.stops = state.stops.map(s => ({
+      ...s,
+      startTime: new Date(s.startTime),
+      endTime: s.endTime ? new Date(s.endTime) : null
+    }));
+    document.getElementById('crewInput').value = state.crew;
+    document.getElementById('rpmInput').value = state.rpm || '';
+    document.getElementById('packsMinInput').value = state.packsMin || '';
+    document.getElementById('skuInput').value = state.sku || '';
+    document.getElementById('lineInput').value = state.line || '';
+    document.getElementById('shiftInput').value = state.shift || '';
+    document.getElementById('sessionNotes').value = state.sessionNotes || '';
+    if (!state.outputLog) state.outputLog = [];
+    if (!state.outputCount) state.outputCount = 0;
+    renderOutputLog();
+  }
+} catch(e) {}
+
+document.getElementById('studyDate').textContent = new Date().toLocaleDateString('en-GB', {
+  weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+});
+
+// -- Asset management --
+function renderAssetTags() {
+  const container = document.getElementById('assetTags');
+  container.innerHTML = assets.map((a, i) =>
+    `<span class="asset-tag">${a}<span class="remove-asset" onclick="removeAsset(${i})">&times;</span></span>`
+  ).join('');
+}
+
+function removeAsset(index) {
+  assets.splice(index, 1);
+  saveAssets();
+  renderAssetTags();
+}
+
+function addCustomAsset() {
+  const input = document.getElementById('addAssetInput');
+  const name = input.value.trim();
+  if (!name) return;
+  if (!assets.includes(name)) {
+    assets.push(name);
+    saveAssets();
+    renderAssetTags();
+  }
+  input.value = '';
+}
+
+document.getElementById('addAssetInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); addCustomAsset(); }
+});
+
+function saveAssets() {
+  localStorage.setItem('dp_rag_assets', JSON.stringify(assets));
+}
+
+function renderAssetGrid() {
+  const grid = document.getElementById('assetGrid');
+  grid.innerHTML = assets.map(a =>
+    `<button class="asset-btn" data-asset="${a}" onclick="selectAsset(this)">${a}</button>`
+  ).join('') + '<button class="asset-btn" data-asset="" onclick="selectAsset(this)">Other...</button>';
+}
+
+renderAssetTags();
+
+// -- Timer --
+function toggleTimer() {
+  if (state.status === 'ended') return;
+  if (state.status === 'idle' || state.status === 'stopped') startLine();
+  else if (state.status === 'running') stopLine();
+}
+
+function startLine() {
+  const now = new Date();
+  state.crew = parseInt(document.getElementById('crewInput').value) || 1;
+  state.rpm = parseFloat(document.getElementById('rpmInput').value) || 0;
+  state.packsMin = parseFloat(document.getElementById('packsMinInput').value) || 0;
+  state.sku = document.getElementById('skuInput').value.trim();
+  state.line = document.getElementById('lineInput').value.trim();
+  state.shift = document.getElementById('shiftInput').value.trim();
+
+  if (state.status === 'stopped' && state.currentStopStart) {
+    const stopMs = now - state.currentStopStart;
+    state.totalStopMs += stopMs;
+    if (state.stops.length > 0) {
+      const lastStop = state.stops[state.stops.length - 1];
+      if (!lastStop.endTime) {
+        lastStop.endTime = now;
+        lastStop.durationMs = stopMs;
+      }
+    }
+    state.currentStopStart = null;
+  }
+
+  if (!state.sessionStart) state.sessionStart = now;
+  state.currentRunStart = now;
+  state.status = 'running';
+  updateUI();
+  startTimerInterval();
+  saveState();
+}
+
+function stopLine() {
+  const now = new Date();
+  if (state.currentRunStart) {
+    state.totalRunMs += (now - state.currentRunStart);
+    state.currentRunStart = null;
+  }
+  state.currentStopStart = now;
+  state.status = 'stopped';
+
+  state.stops.push({
+    id: Date.now(), startTime: now, endTime: null, durationMs: 0,
+    asset: '', reason: '', stopType: '',
+    rpm: state.rpm, packsMin: state.packsMin,
+    newRpm: null, newPacksMin: null,
+    crew: state.crew, sku: state.sku, needsEdit: true
+  });
+
+  updateUI();
+  saveState();
+  state.editingStopIndex = state.stops.length - 1;
+  openModal();
+}
+
+function startTimerInterval() {
+  clearInterval(state.timerInterval);
+  state.timerInterval = setInterval(updateTimerDisplay, 200);
+}
+
+function updateTimerDisplay() {
+  let totalMs = 0;
+  if (state.status === 'running' && state.currentRunStart) totalMs = state.totalRunMs + (new Date() - state.currentRunStart);
+  else if (state.status === 'stopped' && state.currentStopStart) totalMs = new Date() - state.currentStopStart;
+  else totalMs = state.totalRunMs;
+  document.getElementById('timerDisplay').textContent = formatMs(totalMs);
+}
+
+function formatMs(ms) {
+  const t = Math.floor(ms / 1000);
+  return `${String(Math.floor(t/3600)).padStart(2,'0')}:${String(Math.floor((t%3600)/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+}
+
+function formatMsShort(ms) {
+  const t = Math.floor(ms / 1000);
+  if (t < 60) return `${t}s`;
+  const m = Math.floor(t / 60), s = t % 60;
+  if (m < 60) return `${m}m ${s}s`;
+  return `${Math.floor(m/60)}h ${m%60}m`;
+}
+
+// -- UI --
+function updateUI() {
+  const badge = document.getElementById('statusBadge');
+  const btn = document.getElementById('mainBtn');
+  const timer = document.getElementById('timerDisplay');
+
+  const endBtn = document.getElementById('endStudyBtn');
+  const endedBanner = document.getElementById('endedBanner');
+
+  if (state.status === 'running') {
+    badge.className = 'status-running'; badge.textContent = 'Running';
+    btn.className = 'btn-main btn-stop'; btn.textContent = 'Stop Line';
+    btn.disabled = false;
+    timer.className = 'timer-display running';
+    endBtn.style.display = 'block';
+    endedBanner.style.display = 'none';
+    startTimerInterval();
+  } else if (state.status === 'stopped') {
+    badge.className = 'status-stopped'; badge.textContent = 'Stopped';
+    btn.className = 'btn-main btn-start'; btn.textContent = 'Start Line';
+    btn.disabled = false;
+    timer.className = 'timer-display stopped';
+    endBtn.style.display = 'block';
+    endedBanner.style.display = 'none';
+    startTimerInterval();
+  } else if (state.status === 'ended') {
+    badge.className = 'status-ended'; badge.textContent = 'Ended';
+    btn.className = 'btn-main btn-start'; btn.textContent = 'Study Ended';
+    btn.disabled = true;
+    timer.className = 'timer-display';
+    timer.textContent = formatMs(state.totalRunMs);
+    endBtn.style.display = 'none';
+    endedBanner.style.display = 'block';
+    if (state.sessionEnd) {
+      document.getElementById('endedTime').textContent =
+        'Ended at ' + state.sessionEnd.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    clearInterval(state.timerInterval);
+  } else {
+    badge.className = 'status-idle'; badge.textContent = 'Ready';
+    btn.className = 'btn-main btn-start'; btn.textContent = 'Start Line';
+    btn.disabled = false;
+    timer.className = 'timer-display';
+    endBtn.style.display = 'none';
+    endedBanner.style.display = 'none';
+    clearInterval(state.timerInterval);
+  }
+  renderStops();
+  updateSummary();
+  updateViz();
+}
+
+function updateSummary() {
+  const card = document.getElementById('summaryCard');
+  if (state.stops.length === 0 && state.totalRunMs === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  let runMs = state.totalRunMs, stopMs = state.totalStopMs;
+  if (state.status === 'running' && state.currentRunStart) runMs += (new Date() - state.currentRunStart);
+  if (state.status === 'stopped' && state.currentStopStart) stopMs += (new Date() - state.currentStopStart);
+  document.getElementById('sumRuntime').textContent = formatMsShort(runMs);
+  document.getElementById('sumStoptime').textContent = formatMsShort(stopMs);
+  document.getElementById('sumStops').textContent = state.stops.length;
+}
+
+function renderStops() {
+  const list = document.getElementById('stopList');
+  const ne = state.stops.filter(s => s.needsEdit).length;
+  document.getElementById('needsEditCount').textContent = ne > 0 ? `(${ne} need editing)` : '';
+  if (state.stops.length === 0) { list.innerHTML = '<li class="empty-state">No stops recorded yet.</li>'; return; }
+
+  list.innerHTML = state.stops.map((stop, i) => {
+    const dur = stop.endTime ? stop.durationMs : (state.status === 'stopped' && i === state.stops.length - 1 ? new Date() - stop.startTime : stop.durationMs);
+    const time = stop.startTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const typeLabel = stop.stopType === 'red' ? '<span style="color:var(--red);font-weight:700;">RED</span>' : stop.stopType === 'amber' ? '<span style="color:var(--amber);font-weight:700;">AMBER</span>' : '<span style="color:var(--muted);">--</span>';
+    const speedChange = (stop.newRpm !== null || stop.newPacksMin !== null) ? ` &rarr; ${stop.newRpm ?? stop.rpm}rpm / ${stop.newPacksMin ?? stop.packsMin}pk/min` : '';
+    return `<li class="stop-item" onclick="editStop(${i})">
+      <span class="stop-num ${stop.needsEdit ? 'needs-edit' : ''}">Stop ${i+1}</span> ${typeLabel}
+      <div class="stop-duration">${formatMsShort(dur)}</div>
+      <div class="stop-meta">${time} &bull; Crew: ${stop.crew} &bull; ${stop.rpm}rpm &bull; ${stop.packsMin}pk/min${speedChange}</div>
+      <div class="stop-detail"><strong>${stop.asset || '--'}</strong> -- ${stop.reason || '--'}</div>
+      ${stop.needsEdit ? '<div class="edit-hint">Tap to add details</div>' : ''}
+    </li>`;
+  }).reverse().join('');
+}
+
+// -- Modal --
+let selectedAsset = '';
+let selectedStopType = '';
+
+function openModal() {
+  renderAssetGrid();
+  const modal = document.getElementById('stopModal');
+  const idx = state.editingStopIndex;
+  const stop = state.stops[idx];
+
+  document.getElementById('modalTitle').textContent = idx === state.stops.length - 1 && stop.needsEdit ? 'Log Stop Reason' : `Edit Stop ${idx + 1}`;
+
+  document.querySelectorAll('.asset-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('.stop-type-btn').forEach(b => b.classList.remove('selected-red', 'selected-amber'));
+  selectedAsset = '';
+  selectedStopType = '';
+  document.getElementById('otherAssetGroup').style.display = 'none';
+  document.getElementById('otherAssetInput').value = '';
+  document.getElementById('reasonInput').value = '';
+  document.getElementById('modalRpmInput').value = '';
+  document.getElementById('modalPacksMinInput').value = '';
+
+  if (stop.stopType) {
+    selectedStopType = stop.stopType;
+    const typeBtn = document.querySelector(`.stop-type-btn[data-type="${stop.stopType}"]`);
+    if (typeBtn) typeBtn.classList.add(stop.stopType === 'red' ? 'selected-red' : 'selected-amber');
+  }
+  if (stop.asset) {
+    selectedAsset = stop.asset;
+    const matchBtn = document.querySelector(`.asset-btn[data-asset="${stop.asset}"]`);
+    if (matchBtn) matchBtn.classList.add('selected');
+    else {
+      const otherBtn = document.querySelector('.asset-btn[data-asset=""]');
+      if (otherBtn) otherBtn.classList.add('selected');
+      document.getElementById('otherAssetGroup').style.display = 'block';
+      document.getElementById('otherAssetInput').value = stop.asset;
+      selectedAsset = '';
+    }
+  }
+  if (stop.reason) document.getElementById('reasonInput').value = stop.reason;
+  if (stop.newRpm !== null) document.getElementById('modalRpmInput').value = stop.newRpm;
+  if (stop.newPacksMin !== null) document.getElementById('modalPacksMinInput').value = stop.newPacksMin;
+
+  modal.classList.add('active');
+}
+
+function selectStopType(btn) {
+  document.querySelectorAll('.stop-type-btn').forEach(b => b.classList.remove('selected-red', 'selected-amber'));
+  selectedStopType = btn.dataset.type;
+  btn.classList.add(selectedStopType === 'red' ? 'selected-red' : 'selected-amber');
+}
+
+function closeModal() {
+  document.getElementById('stopModal').classList.remove('active');
+  state.editingStopIndex = null;
+}
+
+function selectAsset(btn) {
+  document.querySelectorAll('.asset-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedAsset = btn.dataset.asset;
+  if (selectedAsset === '') {
+    document.getElementById('otherAssetGroup').style.display = 'block';
+    document.getElementById('otherAssetInput').focus();
+  } else {
+    document.getElementById('otherAssetGroup').style.display = 'none';
+    document.getElementById('otherAssetInput').value = '';
+  }
+}
+
+function saveStopReason() {
+  const idx = state.editingStopIndex;
+  if (idx === null) return;
+  let asset = selectedAsset || document.getElementById('otherAssetInput').value.trim();
+  const reason = document.getElementById('reasonInput').value.trim();
+
+  state.stops[idx].asset = asset;
+  state.stops[idx].reason = reason;
+  state.stops[idx].stopType = selectedStopType;
+
+  const newRpmVal = document.getElementById('modalRpmInput').value.trim();
+  const newPacksVal = document.getElementById('modalPacksMinInput').value.trim();
+  state.stops[idx].newRpm = newRpmVal !== '' ? parseFloat(newRpmVal) : null;
+  state.stops[idx].newPacksMin = newPacksVal !== '' ? parseFloat(newPacksVal) : null;
+
+  if (state.stops[idx].newRpm !== null) { state.rpm = state.stops[idx].newRpm; document.getElementById('rpmInput').value = state.rpm; }
+  if (state.stops[idx].newPacksMin !== null) { state.packsMin = state.stops[idx].newPacksMin; document.getElementById('packsMinInput').value = state.packsMin; }
+  if (asset || reason || selectedStopType) state.stops[idx].needsEdit = false;
+
+  closeModal();
+  renderStops();
+  saveState();
+}
+
+function skipStopReason() { closeModal(); renderStops(); saveState(); }
+function editStop(index) { state.editingStopIndex = index; openModal(); }
+
+// -- Persistence --
+function saveState() {
+  try { localStorage.setItem('dp_rag_study_v2', JSON.stringify(state)); } catch(e) {}
+}
+
+// -- Export --
+function exportCSV() {
+  if (state.stops.length === 0) { alert('No stops to export.'); return; }
+  const rows = [['Stop #','Time','Duration (s)','Type','Asset','Reason','RPM','Packs/min','New RPM','New Packs/min','Crew','SKU']];
+  state.stops.forEach((s, i) => {
+    const dur = s.endTime ? Math.round(s.durationMs / 1000) : '(ongoing)';
+    rows.push([i+1, s.startTime.toLocaleTimeString('en-GB'), dur, s.stopType || '', `"${s.asset}"`, `"${s.reason}"`, s.rpm||0, s.packsMin||0, s.newRpm !== null ? s.newRpm : '', s.newPacksMin !== null ? s.newPacksMin : '', s.crew, `"${s.sku||''}"`]);
+  });
+  rows.push([]);
+  rows.push(['Line', `"${state.line||''}"`]);
+  rows.push(['Shift', `"${state.shift||''}"`]);
+  rows.push(['SKU', `"${state.sku||''}"`]);
+  rows.push(['Study Date', state.sessionStart ? state.sessionStart.toLocaleDateString('en-GB') : '']);
+  rows.push(['Study End', state.sessionEnd ? state.sessionEnd.toLocaleTimeString('en-GB') : '(ongoing)']);
+  rows.push(['Total Run Time (s)', Math.round(state.totalRunMs/1000)]);
+  rows.push(['Total Stop Time (s)', Math.round(state.totalStopMs/1000)]);
+  rows.push(['Total Stops', state.stops.length]);
+  rows.push(['Red Stops', state.stops.filter(s => s.stopType==='red').length]);
+  rows.push(['Amber Stops', state.stops.filter(s => s.stopType==='amber').length]);
+  rows.push(['Output Count', state.outputCount]);
+  rows.push(['Session Notes', `"${(state.sessionNotes||'').replace(/"/g,'""')}"`]);
+
+  const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `rag_study_${(state.line||'line').replace(/[^a-zA-Z0-9]/g,'_')}_${(state.shift||'shift').replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function copyToClipboard() {
+  if (state.stops.length === 0) { alert('No stops to copy.'); return; }
+  let text = `Diamond Peak RAG Study\n`;
+  text += `Date: ${state.sessionStart ? state.sessionStart.toLocaleDateString('en-GB') : 'N/A'}\n`;
+  text += `Line: ${state.line||'N/A'} | Shift: ${state.shift||'N/A'} | SKU: ${state.sku||'N/A'}\n`;
+  text += `Run: ${formatMsShort(state.totalRunMs)} | Stop: ${formatMsShort(state.totalStopMs)} | Stops: ${state.stops.length} (R:${state.stops.filter(s=>s.stopType==='red').length} A:${state.stops.filter(s=>s.stopType==='amber').length})\n`;
+  text += `Output Count: ${state.outputCount}\n\n`;
+  state.stops.forEach((s, i) => {
+    const dur = s.endTime ? formatMsShort(s.durationMs) : '(ongoing)';
+    const time = s.startTime.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
+    const type = s.stopType ? s.stopType.toUpperCase() : '?';
+    const sp = (s.newRpm!==null||s.newPacksMin!==null) ? ` -> ${s.newRpm??s.rpm}rpm/${s.newPacksMin??s.packsMin}pk/min` : '';
+    text += `${i+1}. [${type}] ${time} - ${dur} - ${s.asset||'?'} - ${s.reason||'?'} - ${s.rpm}rpm/${s.packsMin}pk/min${sp}\n`;
+  });
+  if (state.sessionNotes) text += `\nNotes:\n${state.sessionNotes}\n`;
+  navigator.clipboard.writeText(text).then(() => alert('Copied.')).catch(() => {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); alert('Copied.');
+  });
+}
+
+function resetStudy() {
+  if (!confirm('Reset the entire study? All stop data will be lost.')) return;
+  clearInterval(state.timerInterval);
+  state = {
+    status:'idle', sessionStart:null, sessionEnd:null, currentRunStart:null, currentStopStart:null,
+    totalRunMs:0, totalStopMs:0, stops:[], timerInterval:null, editingStopIndex:null,
+    crew: parseInt(document.getElementById('crewInput').value)||4,
+    rpm: parseFloat(document.getElementById('rpmInput').value)||0,
+    packsMin: parseFloat(document.getElementById('packsMinInput').value)||0,
+    sku: document.getElementById('skuInput').value.trim(),
+    line: document.getElementById('lineInput').value.trim(),
+    shift: document.getElementById('shiftInput').value.trim(),
+    sessionNotes: '',
+    outputCount: 0,
+    outputLog: []
+  };
+  document.getElementById('sessionNotes').value = '';
+  document.getElementById('shiftInput').value = '';
+  localStorage.removeItem('dp_rag_study_v2');
+  document.getElementById('timerDisplay').textContent = '00:00:00';
+  document.getElementById('outputCount').textContent = '0';
+  renderOutputLog();
+  updateUI();
+}
+
+function endStudy() {
+  if (state.status === 'ended' || state.status === 'idle') return;
+  if (!confirm('End this study? The timer will stop and no more stops can be logged. Data will be preserved for export.')) return;
+
+  const now = new Date();
+
+  // If running, finalize current run time
+  if (state.status === 'running' && state.currentRunStart) {
+    state.totalRunMs += (now - state.currentRunStart);
+    state.currentRunStart = null;
+  }
+
+  // If stopped, finalize current stop time and close the open stop
+  if (state.status === 'stopped' && state.currentStopStart) {
+    const stopMs = now - state.currentStopStart;
+    state.totalStopMs += stopMs;
+    if (state.stops.length > 0) {
+      const lastStop = state.stops[state.stops.length - 1];
+      if (!lastStop.endTime) {
+        lastStop.endTime = now;
+        lastStop.durationMs = stopMs;
+      }
+    }
+    state.currentStopStart = null;
+  }
+
+  state.sessionEnd = now;
+  state.status = 'ended';
+  clearInterval(state.timerInterval);
+  updateUI();
+  saveState();
+}
+
+// -- Input listeners --
+['rpmInput','packsMinInput','crewInput','skuInput','lineInput','shiftInput'].forEach(id => {
+  document.getElementById(id).addEventListener('change', function() {
+    if (id === 'crewInput') state.crew = parseInt(this.value)||1;
+    else if (id === 'rpmInput') state.rpm = parseFloat(this.value)||0;
+    else if (id === 'packsMinInput') state.packsMin = parseFloat(this.value)||0;
+    else if (id === 'skuInput') state.sku = this.value.trim();
+    else if (id === 'lineInput') state.line = this.value.trim();
+    else if (id === 'shiftInput') state.shift = this.value.trim();
+    saveState();
+  });
+});
+document.getElementById('sessionNotes').addEventListener('input', function() { state.sessionNotes = this.value; saveState(); });
+
+// -- Visualisation --
+function buildTimeline() {
+  if (!state.sessionStart) return [];
+  const segs = [];
+  let cursor = state.sessionStart.getTime();
+  const now = Date.now();
+  const sorted = [...state.stops].sort((a,b) => a.startTime - b.startTime);
+  sorted.forEach(stop => {
+    const ss = stop.startTime.getTime();
+    if (ss > cursor) segs.push({ type:'run', ms: ss - cursor });
+    const se = stop.endTime ? stop.endTime.getTime() : (state.status==='stopped' && stop===sorted[sorted.length-1] ? now : ss);
+    if (se - ss > 0) segs.push({ type: stop.stopType||'stop', ms: se - ss, live: !stop.endTime });
+    cursor = se;
+  });
+  if (state.status === 'running' && cursor < now) segs.push({ type:'run', ms: now - cursor, live: true });
+  return segs;
+}
+
+function renderTimeline() {
+  const bar = document.getElementById('timelineBar');
+  const segs = buildTimeline();
+  if (!segs.length) { bar.innerHTML = ''; return; }
+  const total = segs.reduce((s,x) => s + x.ms, 0);
+  if (!total) { bar.innerHTML = ''; return; }
+  bar.innerHTML = segs.map(seg => {
+    const pct = (seg.ms/total)*100;
+    let cls = 'seg ';
+    if (seg.type==='run') cls += seg.live ? 'seg-live-green' : 'seg-green';
+    else if (seg.type==='red') cls += seg.live ? 'seg-live-red' : 'seg-red';
+    else if (seg.type==='amber') cls += 'seg-amber';
+    else cls += seg.live ? 'seg-live-red' : 'seg-grey';
+    return `<div class="${cls}" style="flex-grow:${pct.toFixed(2)};"></div>`;
+  }).join('');
+}
+
+function updateUptime() {
+  const pctEl = document.getElementById('uptimePct'), fillEl = document.getElementById('uptimeFill');
+  let runMs = state.totalRunMs, stopMs = state.totalStopMs;
+  if (state.status==='running' && state.currentRunStart) runMs += Date.now() - state.currentRunStart.getTime();
+  if (state.status==='stopped' && state.currentStopStart) stopMs += Date.now() - state.currentStopStart.getTime();
+  const total = runMs + stopMs;
+  if (!total) { pctEl.textContent = '--'; fillEl.style.width = '0%'; return; }
+  const pct = (runMs/total)*100;
+  pctEl.textContent = pct.toFixed(1) + '%';
+  fillEl.style.width = pct.toFixed(1) + '%';
+  pctEl.style.color = pct >= 85 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
+}
+
+function updateViz() {
+  const v = document.getElementById('vizCard');
+  if (state.status==='idle' && !state.stops.length && !state.totalRunMs) { v.style.display='none'; return; }
+  v.style.display = 'block';
+  renderTimeline();
+  updateUptime();
+}
+
+setInterval(() => { if (state.status !== 'idle') { updateSummary(); updateViz(); } }, 1000);
+
+// -- Auto-save every 15 minutes --
+setInterval(() => {
+  if (state.status !== 'idle') {
+    saveState();
+    showAutoSaveIndicator();
+  }
+}, 15 * 60 * 1000);
+
+function showAutoSaveIndicator() {
+  let indicator = document.getElementById('autoSaveIndicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = 'autoSaveIndicator';
+    indicator.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 16px;border-radius:20px;font-family:"DM Mono",monospace;font-size:11px;opacity:0;transition:opacity 0.3s;z-index:100;pointer-events:none;';
+    document.body.appendChild(indicator);
+  }
+  const time = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  indicator.textContent = 'Auto-saved at ' + time;
+  indicator.style.opacity = '1';
+  setTimeout(() => { indicator.style.opacity = '0'; }, 2500);
+}
+
+// -- Output Counter --
+function incrementOutput() {
+  const now = new Date();
+  state.outputCount++;
+  state.outputLog.push({
+    qty: state.outputCount,
+    time: now.toISOString(),
+    timeDisplay: now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    elapsed: state.sessionStart ? formatMsShort(now - state.sessionStart) : '--'
+  });
+  document.getElementById('outputCount').textContent = state.outputCount;
+  renderOutputLog();
+  saveState();
+}
+
+function undoLastCount() {
+  if (state.outputLog.length === 0) return;
+  state.outputLog.pop();
+  state.outputCount = state.outputLog.length > 0 ? state.outputLog[state.outputLog.length - 1].qty : 0;
+  document.getElementById('outputCount').textContent = state.outputCount;
+  renderOutputLog();
+  saveState();
+}
+
+function resetOutputCounter() {
+  if (state.outputCount === 0) return;
+  if (!confirm('Reset the output counter? All count data will be lost.')) return;
+  state.outputCount = 0;
+  state.outputLog = [];
+  document.getElementById('outputCount').textContent = '0';
+  renderOutputLog();
+  saveState();
+}
+
+function renderOutputLog() {
+  const list = document.getElementById('outputLog');
+  const rateEl = document.getElementById('outputRate');
+  document.getElementById('outputCount').textContent = state.outputCount;
+
+  if (state.outputLog.length === 0) {
+    list.innerHTML = '';
+    rateEl.textContent = '';
+    return;
+  }
+
+  // Show last 50 entries, newest first
+  const entries = state.outputLog.slice(-50).reverse();
+  list.innerHTML = entries.map(e =>
+    `<li><span class="ol-qty">#${e.qty}</span><span class="ol-time">${e.timeDisplay}</span><span class="ol-elapsed">${e.elapsed}</span></li>`
+  ).join('');
+
+  // Calculate rate if we have 2+ entries
+  if (state.outputLog.length >= 2) {
+    const first = new Date(state.outputLog[0].time);
+    const last = new Date(state.outputLog[state.outputLog.length - 1].time);
+    const mins = (last - first) / 60000;
+    if (mins > 0) {
+      const rate = (state.outputLog.length / mins).toFixed(1);
+      rateEl.innerHTML = `Rate: <span class="rate-val">${rate}</span> counts/min`;
+    } else {
+      rateEl.textContent = '';
+    }
+  } else {
+    rateEl.textContent = '';
+  }
+}
+
+function exportOutputLog() {
+  if (state.outputLog.length === 0) { alert('No output counts to export.'); return; }
+  const rows = [['Count #', 'Time', 'Elapsed']];
+  state.outputLog.forEach(e => {
+    rows.push([e.qty, e.timeDisplay, e.elapsed]);
+  });
+  rows.push([]);
+  rows.push(['Total Count', state.outputCount]);
+  rows.push(['Line', `"${state.line || ''}"`]);
+  rows.push(['Shift', `"${state.shift || ''}"`]);
+  rows.push(['SKU', `"${state.sku || ''}"`]);
+  const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `output_count_${(state.line || 'line').replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// -- Init --
+updateUI();
+renderOutputLog();
+if (state.status !== 'idle' && state.status !== 'ended') { updateTimerDisplay(); updateViz(); }
+if (state.status === 'ended') { updateViz(); }
+</script>
+</body>
+</html>
