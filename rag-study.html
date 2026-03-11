@@ -175,6 +175,26 @@
     min-width: 50px;
   }
 
+  /* Toggle switch */
+  .toggle-switch { position: relative; display: inline-block; width: 52px; min-width: 52px; height: 30px; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: var(--border); border-radius: 30px; transition: .25s;
+  }
+  .toggle-slider:before {
+    content: ''; position: absolute; height: 24px; width: 24px;
+    left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .25s;
+  }
+  .toggle-switch input:checked + .toggle-slider { background: var(--green); }
+  .toggle-switch input:checked + .toggle-slider:before { transform: translateX(22px); }
+  .counter-toggle-row {
+    display: flex; align-items: center; gap: 12px; margin-top: 8px;
+    padding: 10px 14px; background: var(--bg); border-radius: 10px;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .counter-toggle-row span { font-size: 13px; color: var(--text); user-select: none; }
+
   /* Asset config */
   .asset-config { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
   .asset-config-title {
@@ -914,13 +934,13 @@
       <input type="number" id="packsMinInput" min="0" step="0.1" placeholder="0" inputmode="decimal">
       <span class="unit">packs/min</span>
     </div>
-    <div class="input-row" style="margin-top:8px;">
-      <label>Counter</label>
-      <label style="min-width:auto;display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;">
-        <input type="checkbox" id="counterToggle" onchange="toggleCounter()" style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
-        Enable output counter for this study
+    <label class="counter-toggle-row" for="counterToggle">
+      <label class="toggle-switch">
+        <input type="checkbox" id="counterToggle" onchange="toggleCounter()">
+        <span class="toggle-slider"></span>
       </label>
-    </div>
+      <span>Enable output counter</span>
+    </label>
     <div class="asset-config">
       <div class="asset-config-title">Assets / Stations</div>
       <div class="asset-tags" id="assetTags"></div>
