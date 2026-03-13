@@ -638,6 +638,7 @@ h1 {
         <span>/min</span>
       </div>
       <button class="sim-btn sim-btn--start" id="btnStart" onclick="simStart()">START</button>
+      <button class="sim-btn sim-btn--start" id="btnFast" onclick="simFast()" style="background:#a78bfa;border-color:#a78bfa">FAST</button>
       <button class="sim-btn sim-btn--pause" id="btnPause" onclick="simPause()" disabled>PAUSE</button>
       <button class="sim-btn" id="btnReset" onclick="simReset()">RESET</button>
       <button class="sim-btn sim-btn--back" onclick="goBack()">SETUP</button>
@@ -1022,6 +1023,7 @@ function initWeighers() {
 
   // Reset controls
   document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnFast').disabled = false;
   document.getElementById('btnPause').disabled = true;
   document.getElementById('btnPause').textContent = 'PAUSE';
   document.getElementById('progressFill').style.width = '0%';
@@ -1422,6 +1424,7 @@ function simStart() {
   simPaused = false;
 
   document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnFast').disabled = true;
   document.getElementById('btnPause').disabled = false;
 
   const speed = +document.getElementById('simSpeed').value;
@@ -1460,10 +1463,9 @@ function simReset() {
 
 function runInstant() {
   const target = simParams.numBags;
-  let frame = 0;
 
   function batch() {
-    const batchSize = 200;
+    const batchSize = 2000;
     for (let b = 0; b < batchSize; b++) {
       if (Math.min(...weighers.map(w => w.bagWeights.length)) >= target) break;
       weighers.forEach(w => {
@@ -1480,6 +1482,55 @@ function runInstant() {
     } else {
       simTimerId = requestAnimationFrame(batch);
     }
+  }
+  batch();
+}
+
+// Fast mode — runs large batches, updates visuals infrequently
+function simFast() {
+  if (simRunning) return;
+  simRunning = true;
+  simPaused = false;
+
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnFast').disabled = true;
+  document.getElementById('btnPause').disabled = false;
+
+  const target = simParams.numBags;
+  let frameCount = 0;
+
+  function batch() {
+    if (!simRunning || simPaused) return;
+
+    // Run ~500 cycles per animation frame
+    const batchSize = 500;
+    for (let b = 0; b < batchSize; b++) {
+      if (Math.min(...weighers.map(w => w.bagWeights.length)) >= target) break;
+      weighers.forEach(w => {
+        if (w.bagWeights.length < target) w.runCycle();
+      });
+    }
+
+    frameCount++;
+    const minBags = Math.min(...weighers.map(w => w.bagWeights.length));
+    const progress = Math.min(100, (minBags / target) * 100);
+    document.getElementById('progressFill').style.width = progress + '%';
+
+    // Update visuals every 10th frame (~5000 cycles)
+    if (frameCount % 10 === 0) {
+      updateStats();
+    }
+    // Chart even less frequently
+    if (frameCount % 30 === 0) {
+      drawChart();
+    }
+
+    if (minBags >= target) {
+      onComplete();
+      return;
+    }
+
+    simTimerId = requestAnimationFrame(batch);
   }
   batch();
 }
@@ -1531,6 +1582,7 @@ function onComplete() {
   drawChart();
   document.getElementById('progressFill').style.width = '100%';
   document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnFast').disabled = true;
   document.getElementById('btnPause').disabled = true;
 }
 
