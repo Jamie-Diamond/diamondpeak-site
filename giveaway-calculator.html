@@ -347,14 +347,16 @@
   </div>
 
   <div class="gc-method">
-    <strong style="color:var(--ink2);font-weight:500;">Methodology</strong><br>
-    <code>Legal minimum</code> = Nominal Weight &minus; TNE<br>
-    <code>Required mean</code> = Legal minimum + (z &times; SD)<br>
-    <code>Giveaway / pack</code> = Mean fill &minus; Nominal Weight<br>
+    <strong style="color:var(--ink2);font-weight:500;">Methodology &mdash; Three Packer Rules</strong><br><br>
+    Under UK/EU Average Quantity regulations, packers must satisfy three rules simultaneously:<br><br>
+    <code>Rule 1 (Average)</code> Mean &ge; Nominal Weight<br>
+    <code>Rule 2 (TNE)</code> &le;2.5% of packs below T1 (Nominal &minus; TNE) &rarr; Mean &ge; T1 + 1.96 &times; SD<br>
+    <code>Rule 3 (2&times;TNE)</code> Zero packs below T2 (Nominal &minus; 2&times;TNE) &rarr; Mean &ge; T2 + z &times; SD<br><br>
+    <code>Required mean</code> = max(Rule 1, Rule 2, Rule 3) &mdash; the binding constraint<br>
+    <code>Giveaway / pack</code> = Required mean &minus; Nominal Weight<br>
     <code>Annual saving</code> = Giveaway reduction (g) &times; Volume &divide; 1000 &times; Cost (&pound;/kg)<br><br>
     TNE values follow UK/EU Average Quantity (Weights &amp; Measures) regulations.
-    The z-score corresponds to the chosen compliance confidence level &mdash; the proportion
-    of packs that must exceed the legal minimum fill weight.
+    The confidence level applies to Rule 3 (ensuring zero packs below the absolute minimum T2).
   </div>
 
 </div>
@@ -442,19 +444,37 @@
 
     const tne      = tneManual !== '' ? (parseFloat(tneManual) || 0) : getTNE(nominal);
     const z        = CONF[confIdx].z;
-    const legalMin = nominal - tne;
+    const t1       = nominal - tne;       // T1: Tolerable deficiency threshold
+    const t2       = nominal - 2 * tne;   // T2: Absolute minimum threshold
+    const legalMin = t1;                   // alias for chart compatibility
 
-    const reqMeanCur = legalMin + z * currentSD;
-    const reqMeanTgt = legalMin + z * targetSD;
+    // Three Packer Rules — current SD
+    const rule1Mean    = nominal;
+    const rule2MeanCur = t1 + 1.96 * currentSD;
+    const rule3MeanCur = t2 + z * currentSD;
+    const reqMeanCur   = Math.max(rule1Mean, rule2MeanCur, rule3MeanCur);
+
+    // Three Packer Rules — target SD
+    const rule2MeanTgt = t1 + 1.96 * targetSD;
+    const rule3MeanTgt = t2 + z * targetSD;
+    const reqMeanTgt   = Math.max(rule1Mean, rule2MeanTgt, rule3MeanTgt);
+
+    // Binding rule
+    const bindingCur = reqMeanCur === rule1Mean ? 1 : reqMeanCur === rule2MeanCur ? 2 : 3;
+    const bindingTgt = reqMeanTgt === rule1Mean ? 1 : reqMeanTgt === rule2MeanTgt ? 2 : 3;
+    const ruleLabel = r => r === 1 ? 'Average Rule' : r === 2 ? 'TNE Rule' : '2×TNE Rule';
 
     const actualGA  = Math.max(0, currentMean - nominal);
-    const targetGA  = Math.max(0, z * targetSD - tne);
+    const targetGA  = Math.max(0, reqMeanTgt - nominal);
     const gaReduc   = actualGA - targetGA;
     const kgSaved   = Math.max(0, (gaReduc / 1000) * annualVol);
     const saving    = kgSaved * costPerKg;
 
-    const compCur = complianceRate(currentMean, currentSD, legalMin);
-    const compTgt = complianceRate(reqMeanTgt, targetSD, legalMin);
+    // Compliance rates against T1 and T2
+    const compCurT1 = complianceRate(currentMean, currentSD, t1);
+    const compTgtT1 = complianceRate(reqMeanTgt, targetSD, t1);
+    const compCurT2 = complianceRate(currentMean, currentSD, t2);
+    const compTgtT2 = complianceRate(reqMeanTgt, targetSD, t2);
 
     const warnNC   = currentMean < reqMeanCur;
     const warnHigh = targetSD >= currentSD;
@@ -466,7 +486,7 @@
 
     const distData = useMemo(() => {
       const ms = Math.max(currentSD, targetSD, 1);
-      const lo = Math.min(reqMeanTgt, legalMin, nominal) - 4*ms;
+      const lo = Math.min(reqMeanTgt, t2, nominal) - 4*ms;
       const hi = Math.max(currentMean, nominal) + 4*ms;
       const pts = [], N = 220, step = (hi-lo)/N;
       for (let i=0;i<=N;i++){
@@ -478,21 +498,25 @@
           current: cP, target: tP,
           curGA: (x >= nominal && x <= currentMean) ? cP : null,
           tgtGA: (x >= nominal && x <= reqMeanTgt && reqMeanTgt > nominal) ? tP : null,
-          nonC: (x <= legalMin) ? cP : null,
+          nonCT1: (x <= t1) ? cP : null,
+          nonCT2: (x <= t2) ? cP : null,
         });
       }
       return pts;
-    }, [currentMean, currentSD, reqMeanTgt, targetSD, nominal, legalMin]);
+    }, [currentMean, currentSD, reqMeanTgt, targetSD, nominal, t1, t2]);
 
     const sensData = useMemo(() => {
       const pts = [], mx = currentSD * 2;
       for (let s=0.1; s<=mx; s+=mx/80) {
-        const ga = Math.max(0, z*s - tne);
+        const r2 = t1 + 1.96 * s;
+        const r3 = t2 + z * s;
+        const reqM = Math.max(nominal, r2, r3);
+        const ga = Math.max(0, reqM - nominal);
         const sv = Math.max(0, ((actualGA - ga)/1000)*annualVol*costPerKg);
         pts.push({ sd: Math.round(s*100)/100, saving: Math.round(sv) });
       }
       return pts;
-    }, [currentSD, z, tne, actualGA, annualVol, costPerKg]);
+    }, [currentSD, z, tne, t1, t2, nominal, actualGA, annualVol, costPerKg]);
 
     /* ── Tooltips ───────────────────────────── */
 
@@ -523,7 +547,7 @@
 
     return (
       <div>
-        {warnNC && <div className="gc-warn">&#9888; Current mean fill ({fmt(currentMean)} g) is below the required mean ({fmt(reqMeanCur)} g). Packs may be non-compliant.</div>}
+        {warnNC && <div className="gc-warn">&#9888; Current mean fill ({fmt(currentMean)} g) is below the required mean ({fmt(reqMeanCur)} g) set by the {ruleLabel(bindingCur)}. Packs may be non-compliant.</div>}
         {warnHigh && <div className="gc-warn">&#9888; Target SD is not lower than current SD. Reduce the target to see savings.</div>}
 
         <div className="gc-grid">
@@ -567,7 +591,7 @@
                 <input type="number" value={currentMean} min={0} step={0.1}
                   onChange={e=>setCurrentMean(+e.target.value)} />
               </div>
-              <div className="gc-hint">Required minimum: {fmt(reqMeanCur)} g</div>
+              <div className="gc-hint">Required minimum: {fmt(reqMeanCur)} g (binding: {ruleLabel(bindingCur)})</div>
             </div>
 
             <div className="gc-field">
@@ -590,7 +614,7 @@
             </div>
 
             <div className="gc-field">
-              <label>Confidence level</label>
+              <label>Confidence level (Rule 3 — absolute minimum)</label>
               <select value={confIdx} onChange={e=>setConfIdx(+e.target.value)}>
                 {CONF.map((c,i)=><option key={i} value={i}>{c.label}</option>)}
               </select>
@@ -641,23 +665,48 @@
             </div>
             <div className="gc-out-row">
               <span>Target mean fill</span>
-              <span className="gc-out-val">{fmt(Math.max(nominal,reqMeanTgt))} g</span>
+              <span className="gc-out-val">{fmt(reqMeanTgt)} g</span>
+            </div>
+            <div className="gc-out-row">
+              <span>Binding rule</span>
+              <span className="gc-out-val" style={{fontSize:11}}>{ruleLabel(bindingTgt)}</span>
             </div>
 
             <div style={{marginTop:16}}>
-              <div className="gc-panel-title">Compliance</div>
-              <div className="gc-comp-row">
-                <div className="gc-comp-box">
-                  <div className="gc-comp-label">Current</div>
-                  <div className={`gc-comp-val${compCur < CONF[confIdx].pct ? ' warn' : ''}`}>{fmt(compCur,2)}%</div>
+              <div className="gc-panel-title">Three Packer Rules</div>
+              <div style={{fontSize:10,lineHeight:1.5,marginBottom:8,color:'var(--muted)',fontFamily:'DM Mono,monospace'}}>
+                T1 (Nom − TNE) = {fmt(t1)} g &nbsp;|&nbsp; T2 (Nom − 2×TNE) = {fmt(t2)} g
+              </div>
+              <div style={{fontSize:10,lineHeight:1.8,color:'var(--ink2)',fontFamily:'DM Mono,monospace'}}>
+                <div style={{display:'flex',justifyContent:'space-between'}}>
+                  <span>Rule 1: Mean ≥ Nominal</span>
+                  <span style={{fontWeight:500,color: bindingTgt===1 ? 'var(--green)' : 'var(--muted)'}}>{fmt(rule1Mean)} g{bindingTgt===1 ? ' ←' : ''}</span>
                 </div>
-                <div className="gc-comp-box">
-                  <div className="gc-comp-label">Target</div>
-                  <div className="gc-comp-val">{fmt(compTgt,2)}%</div>
+                <div style={{display:'flex',justifyContent:'space-between'}}>
+                  <span>Rule 2: ≤2.5% below T1</span>
+                  <span style={{fontWeight:500,color: bindingTgt===2 ? 'var(--green)' : 'var(--muted)'}}>{fmt(rule2MeanTgt)} g{bindingTgt===2 ? ' ←' : ''}</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between'}}>
+                  <span>Rule 3: ~0% below T2</span>
+                  <span style={{fontWeight:500,color: bindingTgt===3 ? 'var(--green)' : 'var(--muted)'}}>{fmt(rule3MeanTgt)} g{bindingTgt===3 ? ' ←' : ''}</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{marginTop:12}}>
+              <div className="gc-panel-title">Compliance</div>
+              <div style={{fontSize:10,lineHeight:1.8,color:'var(--ink2)',fontFamily:'DM Mono,monospace'}}>
+                <div style={{display:'flex',justifyContent:'space-between'}}>
+                  <span>% above T1 (need ≥97.5%)</span>
+                  <span style={{fontWeight:500,color: compCurT1 >= 97.5 ? 'var(--green)' : '#b53a1e'}}>{fmt(compCurT1,2)}%</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between'}}>
+                  <span>% above T2 (need ~100%)</span>
+                  <span style={{fontWeight:500,color: compCurT2 >= CONF[confIdx].pct ? 'var(--green)' : '#b53a1e'}}>{fmt(compCurT2,2)}%</span>
                 </div>
               </div>
               <div className="gc-hint" style={{textAlign:'center',marginTop:6}}>
-                Legal min: {fmt(legalMin)} g &nbsp;&bull;&nbsp; TNE: {fmt(tne,2)} g
+                TNE: {fmt(tne,2)} g &nbsp;&bull;&nbsp; T1: {fmt(t1)} g &nbsp;&bull;&nbsp; T2: {fmt(t2)} g
               </div>
             </div>
           </div>
@@ -667,7 +716,7 @@
         <div className="gc-chart">
           <div className="gc-chart-title">Fill weight distribution</div>
           <div className="gc-chart-desc">
-            Blue = current distribution at measured mean. Green = target distribution at minimum compliant mean for target SD.
+            Blue = current. Green = target at minimum compliant mean. Red shading = non-compliance zones (T1 lighter, T2 darker).
           </div>
           <ResponsiveContainer width="100%" height={320}>
             <ComposedChart data={distData} margin={{top:10,right:20,left:0,bottom:20}}>
@@ -677,15 +726,18 @@
                 label={{value:'Fill Weight (g)',position:'insideBottom',offset:-10,style:{fill:'#9a9080',fontSize:10,fontFamily:'DM Mono'}}} />
               <YAxis hide />
               <Tooltip content={<DistTip/>} />
-              <Area type="monotone" dataKey="nonC" stroke="none" fill="#b53a1e" fillOpacity={0.15} isAnimationActive={false} dot={false} connectNulls={false} />
+              <Area type="monotone" dataKey="nonCT2" stroke="none" fill="#b53a1e" fillOpacity={0.3} isAnimationActive={false} dot={false} connectNulls={false} />
+              <Area type="monotone" dataKey="nonCT1" stroke="none" fill="#b53a1e" fillOpacity={0.12} isAnimationActive={false} dot={false} connectNulls={false} />
               <Area type="monotone" dataKey="curGA" stroke="none" fill="#1a5276" fillOpacity={0.15} isAnimationActive={false} dot={false} connectNulls={false} />
               <Area type="monotone" dataKey="tgtGA" stroke="none" fill="#1d6840" fillOpacity={0.15} isAnimationActive={false} dot={false} connectNulls={false} />
               <Line type="monotone" dataKey="current" stroke="#1a5276" strokeWidth={2} dot={false} name="Current" />
               <Line type="monotone" dataKey="target" stroke="#1d6840" strokeWidth={2} dot={false} name="Target" />
               <ReferenceLine x={nominal} stroke="#9a9080" strokeWidth={1.5}
                 label={{value:'Nominal',position:'top',fill:'#9a9080',fontSize:10,fontFamily:'DM Mono'}} />
-              <ReferenceLine x={legalMin} stroke="#b53a1e" strokeDasharray="5 3" strokeWidth={1}
-                label={{value:'Legal Min',position:'top',fill:'#b53a1e',fontSize:10,fontFamily:'DM Mono'}} />
+              <ReferenceLine x={t1} stroke="#b53a1e" strokeDasharray="5 3" strokeWidth={1}
+                label={{value:'T1',position:'top',fill:'#b53a1e',fontSize:10,fontFamily:'DM Mono'}} />
+              <ReferenceLine x={t2} stroke="#8b1a0e" strokeDasharray="3 3" strokeWidth={1}
+                label={{value:'T2',position:'insideTopLeft',fill:'#8b1a0e',fontSize:10,fontFamily:'DM Mono'}} />
               <ReferenceLine x={currentMean} stroke="#1a5276" strokeDasharray="5 3" strokeWidth={1}
                 label={{value:'Current',position:'top',fill:'#1a5276',fontSize:10,fontFamily:'DM Mono'}} />
               <ReferenceLine x={reqMeanTgt} stroke="#1d6840" strokeDasharray="5 3" strokeWidth={1}
