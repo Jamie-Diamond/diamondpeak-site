@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Giveaway Reduction Calculator — Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8f5ef;
+    --card: #fff;
+    --ink: #18160f;
+    --ink2: #4a4535;
+    --muted: #9a9080;
+    --border: #ddd8cc;
+    --green: #1d6840;
+    --green-bg: #e6f4ec;
+    --red: #b53a1e;
+    --red-bg: #fdeee9;
+    --blue: #1a5276;
+    --amber: #b87c20;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+
+  .page { max-width: 820px; margin: 0 auto; padding: 36px 16px 72px; }
+  @media(min-width:600px) { .page { padding: 56px 24px 80px; } }
+
+  .back { color: var(--muted); text-decoration: none; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; }
+  .back:hover { color: var(--ink); }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    margin-top: 20px;
+  }
+  h1 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(26px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 10px;
+  }
+  .intro {
+    font-size: 14px;
+    color: var(--ink2);
+    line-height: 1.7;
+    margin-bottom: 36px;
+  }
+
+  /* Grid layout */
+  .gc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media(max-width:640px) { .gc-grid { grid-template-columns: 1fr; } }
+
+  /* Panels */
+  .gc-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  @media(min-width:520px) { .gc-panel { padding: 24px; } }
+  .gc-panel-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Fields */
+  .gc-field { margin-bottom: 14px; }
+  .gc-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink2);
+    margin-bottom: 5px;
+    line-height: 1.3;
+  }
+  .gc-field .gc-hint {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 3px;
+    line-height: 1.5;
+  }
+  .gc-input-row { display: flex; }
+  .gc-affix {
+    background: #ede9e1;
+    border: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .gc-affix-pre { border-right: none; border-radius: 4px 0 0 4px; }
+  .gc-affix-post { border-left: none; border-radius: 0 4px 4px 0; }
+  .gc-panel input[type="number"], .gc-panel select {
+    width: 100%;
+    height: 40px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    padding: 0 10px;
+    outline: none;
+    border-radius: 4px;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+  }
+  .gc-panel input[type="number"]:focus, .gc-panel select:focus { border-color: var(--ink); }
+  .gc-panel input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .gc-has-affix input { border-radius: 0 4px 4px 0; }
+
+  /* Slider */
+  .gc-slider-row { display: flex; align-items: center; gap: 10px; }
+  .gc-slider-row input[type="range"] {
+    flex: 1; height: 5px;
+    -webkit-appearance: none; appearance: none;
+    background: linear-gradient(to right, var(--green) 0%, var(--green) var(--fill,50%), var(--border) var(--fill,50%), var(--border) 100%);
+    border-radius: 999px; outline: none;
+  }
+  .gc-slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--green); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+  .gc-slider-row input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--green); cursor: pointer; border: none;
+  }
+  .gc-slider-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px; font-weight: 500;
+    color: var(--green); min-width: 50px; text-align: right;
+  }
+
+  /* Headline output */
+  .gc-headline {
+    background: var(--ink);
+    color: white;
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .gc-headline::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 0%, rgba(29,104,64,0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .gc-hl-context {
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 6px;
+    position: relative;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .gc-hl-number {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(32px, 7vw, 52px);
+    font-weight: 500;
+    line-height: 1;
+    display: block;
+    margin-bottom: 4px;
+    position: relative;
+    color: #a8e8c0;
+  }
+  .gc-hl-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    position: relative;
+  }
+
+  /* Output rows */
+  .gc-out-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 9px 0;
+    font-size: 12px;
+    color: var(--ink2);
+    border-bottom: 1px solid #eee9df;
+  }
+  .gc-out-row:last-child { border-bottom: none; }
+  .gc-out-val {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--green);
+  }
+  .gc-out-val.negative { color: var(--red); }
+
+  /* Compliance badges */
+  .gc-comp-row { display: flex; gap: 10px; margin-top: 8px; }
+  .gc-comp-box {
+    flex: 1;
+    background: #faf8f4;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+  .gc-comp-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .gc-comp-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--green);
+  }
+  .gc-comp-val.warn { color: var(--red); }
+
+  /* Warnings */
+  .gc-warn {
+    background: #fef6e6;
+    border: 1px solid #e8d4a0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--amber);
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+
+  /* Chart cards */
+  .gc-chart {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .gc-chart-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .gc-chart-desc {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+
+  /* TNE toggle */
+  .gc-tne-toggle {
+    font-size: 10px;
+    color: var(--blue);
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .gc-tne-table {
+    font-size: 11px;
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 6px;
+  }
+  .gc-tne-table th {
+    background: var(--ink);
+    color: white;
+    padding: 4px 8px;
+    text-align: left;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+  .gc-tne-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #eee9df;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+  }
+  .gc-tne-table tr:nth-child(even) td { background: #faf8f4; }
+
+  /* Methodology */
+  .gc-method {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .gc-method code {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    background: #faf8f4;
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+
+  .footer {
+    text-align: center;
+    padding: 24px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <a href="index.html" class="back">&larr; Back to tools</a>
+
+  <div class="kicker">FMCG Manufacturing</div>
+  <h1>Giveaway Reduction<br>Calculator</h1>
+  <p class="intro">
+    Visualise how reducing the standard deviation of pack fill weight reduces giveaway,
+    and quantify the annual financial saving. Enter your current fill data and adjust the
+    target SD to see the impact.
+  </p>
+
+  <div id="gc-root">
+    <p style="text-align:center;padding:2rem;color:var(--muted);font-size:12px;">Loading calculator&hellip;</p>
+  </div>
+
+  <div class="gc-method">
+    <strong style="color:var(--ink2);font-weight:500;">Methodology</strong><br>
+    <code>Legal minimum</code> = Nominal Weight &minus; TNE<br>
+    <code>Required mean</code> = Legal minimum + (z &times; SD)<br>
+    <code>Giveaway / pack</code> = Mean fill &minus; Nominal Weight<br>
+    <code>Annual saving</code> = Giveaway reduction (g) &times; Volume &divide; 1000 &times; Cost (&pound;/kg)<br><br>
+    TNE values follow UK/EU Average Quantity (Weights &amp; Measures) regulations.
+    The z-score corresponds to the chosen compliance confidence level &mdash; the proportion
+    of packs that must exceed the legal minimum fill weight.
+  </div>
+
+</div>
+
+<div class="footer">&copy; 2026 Diamond Peak</div>
+
+<!-- React + Recharts CDN -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/recharts@2.15.0/umd/Recharts.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+
+<script type="text/babel" data-type="module">
+(function(){
+  'use strict';
+
+  const { useState, useMemo } = React;
+  const {
+    ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+    ReferenceLine, ResponsiveContainer, Legend
+  } = Recharts;
+
+  /* ── Maths ────────────────────────────────── */
+
+  function normalPDF(x, mean, sd) {
+    if (sd <= 0) return 0;
+    const z = (x - mean) / sd;
+    return (1 / (sd * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * z * z);
+  }
+
+  function normalCDF(z) {
+    const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+    const sign = z < 0 ? -1 : 1;
+    const t = 1 / (1 + p * Math.abs(z));
+    const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-z*z/2);
+    return 0.5 * (1 + sign * y);
+  }
+
+  function complianceRate(mean, sd, legalMin) {
+    if (sd <= 0) return mean >= legalMin ? 100 : 0;
+    return normalCDF((mean - legalMin) / sd) * 100;
+  }
+
+  /* ── TNE lookup ───────────────────────────── */
+
+  function getTNE(g) {
+    if (g < 5)    return 0;
+    if (g <= 50)  return g * 0.09;
+    if (g <= 100) return 4.5;
+    if (g <= 200) return g * 0.045;
+    if (g <= 300) return 9;
+    if (g <= 500) return g * 0.03;
+    if (g <= 1000) return 15;
+    return g * 0.015;
+  }
+
+  const TNE_ROWS = [
+    ['5 – 50 g','9%'],['50 – 100 g','4.5 g'],['100 – 200 g','4.5%'],
+    ['200 – 300 g','9 g'],['300 – 500 g','3%'],['500 – 1,000 g','15 g'],['1,000 – 10,000 g','1.5%'],
+  ];
+
+  const CONF = [
+    { label: '99.73% (3σ)', z: 3.0, pct: 99.73 },
+    { label: '99.5% (2.81σ)', z: 2.81, pct: 99.5 },
+    { label: '99% (2.58σ)', z: 2.576, pct: 99.0 },
+  ];
+
+  const fmt  = (v,d=1) => v.toFixed(d);
+  const fmtK = v => v.toLocaleString('en-GB',{maximumFractionDigits:0});
+  const fmtGBP = v => '£' + v.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:0});
+
+  /* ── App ──────────────────────────────────── */
+
+  function App() {
+    const [nominal, setNominal]       = useState(200);
+    const [tneManual, setTneManual]   = useState('');
+    const [currentMean, setCurrentMean] = useState(206);
+    const [currentSD, setCurrentSD]   = useState(5);
+    const [targetSD, setTargetSD]     = useState(3.5);
+    const [confIdx, setConfIdx]       = useState(0);
+    const [costPerKg, setCostPerKg]   = useState(3);
+    const [annualVol, setAnnualVol]   = useState(2000000);
+    const [showTNE, setShowTNE]       = useState(false);
+
+    const tne      = tneManual !== '' ? (parseFloat(tneManual) || 0) : getTNE(nominal);
+    const z        = CONF[confIdx].z;
+    const legalMin = nominal - tne;
+
+    const reqMeanCur = legalMin + z * currentSD;
+    const reqMeanTgt = legalMin + z * targetSD;
+
+    const actualGA  = Math.max(0, currentMean - nominal);
+    const targetGA  = Math.max(0, z * targetSD - tne);
+    const gaReduc   = actualGA - targetGA;
+    const kgSaved   = Math.max(0, (gaReduc / 1000) * annualVol);
+    const saving    = kgSaved * costPerKg;
+
+    const compCur = complianceRate(currentMean, currentSD, legalMin);
+    const compTgt = complianceRate(reqMeanTgt, targetSD, legalMin);
+
+    const warnNC   = currentMean < reqMeanCur;
+    const warnHigh = targetSD >= currentSD;
+
+    const sliderMax  = Math.max(currentSD * 2, 1);
+    const sliderFill = ((sliderMax - targetSD) / sliderMax * 100);
+
+    /* ── Chart data ─────────────────────────── */
+
+    const distData = useMemo(() => {
+      const ms = Math.max(currentSD, targetSD, 1);
+      const lo = Math.min(reqMeanTgt, legalMin, nominal) - 4*ms;
+      const hi = Math.max(currentMean, nominal) + 4*ms;
+      const pts = [], N = 220, step = (hi-lo)/N;
+      for (let i=0;i<=N;i++){
+        const x = lo + i*step;
+        const cP = normalPDF(x, currentMean, currentSD);
+        const tP = normalPDF(x, reqMeanTgt, targetSD);
+        pts.push({
+          x: Math.round(x*100)/100,
+          current: cP, target: tP,
+          curGA: (x >= nominal && x <= currentMean) ? cP : null,
+          tgtGA: (x >= nominal && x <= reqMeanTgt && reqMeanTgt > nominal) ? tP : null,
+          nonC: (x <= legalMin) ? cP : null,
+        });
+      }
+      return pts;
+    }, [currentMean, currentSD, reqMeanTgt, targetSD, nominal, legalMin]);
+
+    const sensData = useMemo(() => {
+      const pts = [], mx = currentSD * 2;
+      for (let s=0.1; s<=mx; s+=mx/80) {
+        const ga = Math.max(0, z*s - tne);
+        const sv = Math.max(0, ((actualGA - ga)/1000)*annualVol*costPerKg);
+        pts.push({ sd: Math.round(s*100)/100, saving: Math.round(sv) });
+      }
+      return pts;
+    }, [currentSD, z, tne, actualGA, annualVol, costPerKg]);
+
+    /* ── Tooltips ───────────────────────────── */
+
+    function DistTip({active,payload}) {
+      if(!active||!payload||!payload.length) return null;
+      const d = payload[0].payload;
+      return (
+        <div style={{background:'var(--ink)',color:'#fff',padding:'6px 10px',borderRadius:6,fontSize:11,lineHeight:1.5,fontFamily:'DM Mono,monospace'}}>
+          <div><strong>{fmt(d.x,1)} g</strong></div>
+          {d.current!=null && <div style={{color:'#7cb8d4'}}>Current: {d.current.toExponential(2)}</div>}
+          {d.target!=null && <div style={{color:'#a8e8c0'}}>Target: {d.target.toExponential(2)}</div>}
+        </div>
+      );
+    }
+
+    function SensTip({active,payload}) {
+      if(!active||!payload||!payload.length) return null;
+      const d = payload[0].payload;
+      return (
+        <div style={{background:'var(--ink)',color:'#fff',padding:'6px 10px',borderRadius:6,fontSize:11,fontFamily:'DM Mono,monospace'}}>
+          <div>SD: {d.sd} g</div>
+          <div style={{color:'#a8e8c0',fontWeight:500}}>Saving: {fmtGBP(d.saving)}</div>
+        </div>
+      );
+    }
+
+    /* ── Render ──────────────────────────────── */
+
+    return (
+      <div>
+        {warnNC && <div className="gc-warn">&#9888; Current mean fill ({fmt(currentMean)} g) is below the required mean ({fmt(reqMeanCur)} g). Packs may be non-compliant.</div>}
+        {warnHigh && <div className="gc-warn">&#9888; Target SD is not lower than current SD. Reduce the target to see savings.</div>}
+
+        <div className="gc-grid">
+          {/* INPUTS */}
+          <div className="gc-panel">
+            <div className="gc-panel-title">Inputs</div>
+
+            <div className="gc-field">
+              <label>Nominal weight</label>
+              <div className="gc-input-row gc-has-affix">
+                <span className="gc-affix gc-affix-pre">g</span>
+                <input type="number" value={nominal} min={1} step={1}
+                  onChange={e=>{setNominal(+e.target.value);setTneManual('');}} />
+              </div>
+            </div>
+
+            <div className="gc-field">
+              <label>TNE (Tolerable Negative Error)</label>
+              <div className="gc-input-row gc-has-affix">
+                <span className="gc-affix gc-affix-pre">g</span>
+                <input type="number" value={tneManual!=='' ? tneManual : fmt(tne,2)} step={0.1}
+                  onChange={e=>setTneManual(e.target.value)}
+                  placeholder={fmt(tne,2)+' (auto)'} />
+              </div>
+              <div className="gc-hint">
+                Auto: <strong>{fmt(tne,2)} g</strong> for {nominal} g.{' '}
+                <span className="gc-tne-toggle" onClick={()=>setShowTNE(!showTNE)}>{showTNE ? 'Hide' : 'Show'} table</span>
+              </div>
+              {showTNE && (
+                <table className="gc-tne-table">
+                  <thead><tr><th>Nominal</th><th>TNE</th></tr></thead>
+                  <tbody>{TNE_ROWS.map((r,i)=><tr key={i}><td>{r[0]}</td><td>{r[1]}</td></tr>)}</tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="gc-field">
+              <label>Current mean fill</label>
+              <div className="gc-input-row gc-has-affix">
+                <span className="gc-affix gc-affix-pre">g</span>
+                <input type="number" value={currentMean} min={0} step={0.1}
+                  onChange={e=>setCurrentMean(+e.target.value)} />
+              </div>
+              <div className="gc-hint">Required minimum: {fmt(reqMeanCur)} g</div>
+            </div>
+
+            <div className="gc-field">
+              <label>Current SD</label>
+              <div className="gc-input-row gc-has-affix">
+                <span className="gc-affix gc-affix-pre">g</span>
+                <input type="number" value={currentSD} min={0.01} step={0.1}
+                  onChange={e=>setCurrentSD(+e.target.value)} />
+              </div>
+            </div>
+
+            <div className="gc-field">
+              <label>Target SD &mdash; {fmt(targetSD)} g</label>
+              <div className="gc-slider-row">
+                <input type="range" min={0.1} max={sliderMax} step={0.1} value={targetSD}
+                  style={{'--fill':sliderFill+'%'}}
+                  onChange={e=>setTargetSD(+e.target.value)} />
+                <span className="gc-slider-val">{fmt(targetSD)} g</span>
+              </div>
+            </div>
+
+            <div className="gc-field">
+              <label>Confidence level</label>
+              <select value={confIdx} onChange={e=>setConfIdx(+e.target.value)}>
+                {CONF.map((c,i)=><option key={i} value={i}>{c.label}</option>)}
+              </select>
+            </div>
+
+            <div className="gc-field">
+              <label>Product cost</label>
+              <div className="gc-input-row gc-has-affix">
+                <span className="gc-affix gc-affix-pre">&pound;/kg</span>
+                <input type="number" value={costPerKg} min={0} step={0.1}
+                  onChange={e=>setCostPerKg(+e.target.value)} />
+              </div>
+            </div>
+
+            <div className="gc-field">
+              <label>Annual volume</label>
+              <div className="gc-input-row gc-has-affix">
+                <span className="gc-affix gc-affix-pre">packs</span>
+                <input type="number" value={annualVol} min={0} step={10000}
+                  onChange={e=>setAnnualVol(+e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          {/* OUTPUTS */}
+          <div className="gc-panel">
+            <div className="gc-panel-title">Results</div>
+
+            <div className="gc-headline">
+              <div className="gc-hl-context">Annual Saving</div>
+              <span className="gc-hl-number">{fmtGBP(Math.max(0,saving))}</span>
+              <div className="gc-hl-sub">{fmtK(Math.max(0,Math.round(kgSaved)))} kg / year</div>
+            </div>
+
+            <div className="gc-out-row">
+              <span>Current giveaway</span>
+              <span className="gc-out-val">{fmt(actualGA)} g / pack</span>
+            </div>
+            <div className="gc-out-row">
+              <span>Target giveaway</span>
+              <span className="gc-out-val">{fmt(Math.max(0,targetGA))} g / pack</span>
+            </div>
+            <div className="gc-out-row">
+              <span>Reduction</span>
+              <span className={`gc-out-val${gaReduc<0?' negative':''}`}>
+                {gaReduc>0?'−':''}{fmt(Math.abs(gaReduc))} g / pack
+              </span>
+            </div>
+            <div className="gc-out-row">
+              <span>Target mean fill</span>
+              <span className="gc-out-val">{fmt(Math.max(nominal,reqMeanTgt))} g</span>
+            </div>
+
+            <div style={{marginTop:16}}>
+              <div className="gc-panel-title">Compliance</div>
+              <div className="gc-comp-row">
+                <div className="gc-comp-box">
+                  <div className="gc-comp-label">Current</div>
+                  <div className={`gc-comp-val${compCur < CONF[confIdx].pct ? ' warn' : ''}`}>{fmt(compCur,2)}%</div>
+                </div>
+                <div className="gc-comp-box">
+                  <div className="gc-comp-label">Target</div>
+                  <div className="gc-comp-val">{fmt(compTgt,2)}%</div>
+                </div>
+              </div>
+              <div className="gc-hint" style={{textAlign:'center',marginTop:6}}>
+                Legal min: {fmt(legalMin)} g &nbsp;&bull;&nbsp; TNE: {fmt(tne,2)} g
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* DISTRIBUTION CHART */}
+        <div className="gc-chart">
+          <div className="gc-chart-title">Fill weight distribution</div>
+          <div className="gc-chart-desc">
+            Blue = current distribution at measured mean. Green = target distribution at minimum compliant mean for target SD.
+          </div>
+          <ResponsiveContainer width="100%" height={320}>
+            <ComposedChart data={distData} margin={{top:10,right:20,left:0,bottom:20}}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee9df" />
+              <XAxis dataKey="x" type="number" domain={['auto','auto']}
+                tickFormatter={v=>fmt(v,0)+'g'} tick={{fontSize:10,fontFamily:'DM Mono',fill:'#9a9080'}}
+                label={{value:'Fill Weight (g)',position:'insideBottom',offset:-10,style:{fill:'#9a9080',fontSize:10,fontFamily:'DM Mono'}}} />
+              <YAxis hide />
+              <Tooltip content={<DistTip/>} />
+              <Area type="monotone" dataKey="nonC" stroke="none" fill="#b53a1e" fillOpacity={0.15} isAnimationActive={false} dot={false} connectNulls={false} />
+              <Area type="monotone" dataKey="curGA" stroke="none" fill="#1a5276" fillOpacity={0.15} isAnimationActive={false} dot={false} connectNulls={false} />
+              <Area type="monotone" dataKey="tgtGA" stroke="none" fill="#1d6840" fillOpacity={0.15} isAnimationActive={false} dot={false} connectNulls={false} />
+              <Line type="monotone" dataKey="current" stroke="#1a5276" strokeWidth={2} dot={false} name="Current" />
+              <Line type="monotone" dataKey="target" stroke="#1d6840" strokeWidth={2} dot={false} name="Target" />
+              <ReferenceLine x={nominal} stroke="#9a9080" strokeWidth={1.5}
+                label={{value:'Nominal',position:'top',fill:'#9a9080',fontSize:10,fontFamily:'DM Mono'}} />
+              <ReferenceLine x={legalMin} stroke="#b53a1e" strokeDasharray="5 3" strokeWidth={1}
+                label={{value:'Legal Min',position:'top',fill:'#b53a1e',fontSize:10,fontFamily:'DM Mono'}} />
+              <ReferenceLine x={currentMean} stroke="#1a5276" strokeDasharray="5 3" strokeWidth={1}
+                label={{value:'Current',position:'top',fill:'#1a5276',fontSize:10,fontFamily:'DM Mono'}} />
+              <ReferenceLine x={reqMeanTgt} stroke="#1d6840" strokeDasharray="5 3" strokeWidth={1}
+                label={{value:'Target',position:'top',fill:'#1d6840',fontSize:10,fontFamily:'DM Mono'}} />
+              <Legend verticalAlign="top" height={30}
+                wrapperStyle={{fontSize:10,fontFamily:'DM Mono,monospace'}} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* SENSITIVITY CHART */}
+        <div className="gc-chart">
+          <div className="gc-chart-title">Sensitivity — Annual saving vs SD</div>
+          <div className="gc-chart-desc">
+            Shows how savings change as SD is reduced. Markers show current and target positions.
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={sensData} margin={{top:10,right:20,left:10,bottom:20}}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee9df" />
+              <XAxis dataKey="sd" type="number" domain={['auto','auto']}
+                tickFormatter={v=>v+'g'} tick={{fontSize:10,fontFamily:'DM Mono',fill:'#9a9080'}}
+                label={{value:'Standard Deviation (g)',position:'insideBottom',offset:-10,style:{fill:'#9a9080',fontSize:10,fontFamily:'DM Mono'}}} />
+              <YAxis tickFormatter={v=>'£'+fmtK(v)}
+                tick={{fontSize:10,fontFamily:'DM Mono',fill:'#9a9080'}} />
+              <Tooltip content={<SensTip/>} />
+              <Area type="monotone" dataKey="saving" stroke="#1d6840" fill="#1d6840" fillOpacity={0.08} strokeWidth={2} dot={false} />
+              <ReferenceLine x={currentSD} stroke="#1a5276" strokeDasharray="5 3" strokeWidth={1}
+                label={{value:'Current',position:'top',fill:'#1a5276',fontSize:10,fontFamily:'DM Mono'}} />
+              <ReferenceLine x={targetSD} stroke="#1d6840" strokeDasharray="5 3" strokeWidth={1}
+                label={{value:'Target',position:'top',fill:'#1d6840',fontSize:10,fontFamily:'DM Mono'}} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    );
+  }
+
+  const root = ReactDOM.createRoot(document.getElementById('gc-root'));
+  root.render(<App />);
+})();
+</script>
+</body>
+</html>
