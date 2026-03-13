@@ -568,7 +568,7 @@ h1 {
     <a href="index.html" class="back">&larr; Diamond Peak</a>
     <div class="kicker">FMCG Simulation</div>
     <h1>Multihead Weigher Simulator</h1>
-    <p class="intro">Simulate combinatorial weigher performance with fillet-based bucket filling. Compare scenarios side-by-side to optimise giveaway, throughput and T1 compliance. Includes Yamato-style force dump timeout.</p>
+    <p class="intro">Simulate combinatorial weigher performance. Compare scenarios side-by-side to optimise giveaway, throughput and T1 compliance. Includes Yamato-style force dump timeout.</p>
 
     <div class="form-grid">
       <!-- Product Parameters -->
@@ -576,16 +576,16 @@ h1 {
         <div class="form-section-title">Product Parameters</div>
         <div class="field"><label>Target weight <small>(g)</small></label><input type="number" id="targetWeight" value="800" step="10"></div>
         <div class="field"><label>T1 tolerance <small>(g)</small></label><input type="number" id="t1Tolerance" value="15" step="1"></div>
-        <div class="field"><label>Fillet mean <small>(g)</small></label><input type="number" id="filletMean" value="100" step="5"></div>
-        <div class="field"><label>Fillet std <small>(g)</small></label><input type="number" id="filletStd" value="5" step="1"></div>
+        <div class="field"><label>Item mean <small>(g)</small></label><input type="number" id="filletMean" value="100" step="5"></div>
+        <div class="field"><label>Item std <small>(g)</small></label><input type="number" id="filletStd" value="5" step="1"></div>
       </div>
 
       <!-- Simulation Parameters -->
       <div class="form-section">
         <div class="form-section-title">Simulation Parameters</div>
-        <div class="field"><label>P(1 fillet) <small>%</small></label><input type="number" id="p1" value="15" min="0" max="100"></div>
-        <div class="field"><label>P(2 fillets) <small>%</small></label><input type="number" id="p2" value="70" min="0" max="100"></div>
-        <div class="field"><label>P(3 fillets) <small>%</small></label><input type="number" id="p3" value="15" min="0" max="100"></div>
+        <div class="field"><label>P(1 item) <small>%</small></label><input type="number" id="p1" value="15" min="0" max="100"></div>
+        <div class="field"><label>P(2 items) <small>%</small></label><input type="number" id="p2" value="70" min="0" max="100"></div>
+        <div class="field"><label>P(3 items) <small>%</small></label><input type="number" id="p3" value="15" min="0" max="100"></div>
         <div class="field"><label>Force dump timeout <small>(cycles)</small></label><input type="number" id="forceDump" value="5" min="1" max="20"></div>
         <div class="field"><label>Number of bags</label><input type="number" id="numBags" value="1000" step="100" min="50" max="100000"></div>
       </div>
@@ -734,14 +734,14 @@ class MultiheadWeigher {
     this.targetWeight = targetWeight;
     this.minWeight = minWeight;
     this.shiftMode = shiftMode;
-    this.filletMean = filletMean;
-    this.filletStd = filletStd;
-    this.filletProbs = filletProbs;
+    this.itemMean = filletMean;
+    this.itemStd = filletStd;
+    this.itemProbs = filletProbs;
     this.forceDumpTimeout = forceDumpTimeout;
 
     this.bucketWeights = new Array(numBuckets).fill(0);
     this.bucketCooldowns = new Array(numBuckets).fill(0);
-    this.bucketFilletCounts = new Array(numBuckets).fill(0);
+    this.bucketItemCounts = new Array(numBuckets).fill(0);
     this.lastSelectedIndices = [];
     this.currentWait = 0;
 
@@ -755,13 +755,13 @@ class MultiheadWeigher {
   }
 
   _fillBucket(idx) {
-    const numFillets = weightedChoice(this.filletProbs) + 1; // 1, 2, or 3
+    const numItems = weightedChoice(this.itemProbs) + 1; // 1, 2, or 3
     let total = 0;
-    for (let f = 0; f < numFillets; f++) {
-      total += gaussRandom(this.filletMean, this.filletStd);
+    for (let f = 0; f < numItems; f++) {
+      total += gaussRandom(this.itemMean, this.itemStd);
     }
     this.bucketWeights[idx] = Math.round(total * 10) / 10;
-    this.bucketFilletCounts[idx] = numFillets;
+    this.bucketItemCounts[idx] = numItems;
   }
 
   getAvailableBuckets() {
@@ -939,9 +939,9 @@ function startSimulation() {
     targetWeight,
     minWeight: targetWeight - t1Tolerance,
     t1Tolerance,
-    filletMean,
-    filletStd,
-    filletProbs: [p1/total, p2/total, p3/total],
+    itemMean: filletMean,
+    itemStd: filletStd,
+    itemProbs: [p1/total, p2/total, p3/total],
     forceDumpTimeout: forceDump,
     numBags,
     scenarios: scenarios.map((s, i) => ({...s, color: COLORS[i % COLORS.length]})),
@@ -978,8 +978,8 @@ function initWeighers() {
   simParams.scenarios.forEach((sc, i) => {
     const w = new MultiheadWeigher(
       sc.heads, simParams.targetWeight, simParams.minWeight,
-      sc.shift, simParams.filletMean, simParams.filletStd,
-      simParams.filletProbs, simParams.forceDumpTimeout
+      sc.shift, simParams.itemMean, simParams.itemStd,
+      simParams.itemProbs, simParams.forceDumpTimeout
     );
     weighers.push(w);
 
@@ -1102,11 +1102,11 @@ function drawHeads(canvasEl, weigher, color) {
 
     const weight = weigher.bucketWeights[i];
     const cooldown = weigher.bucketCooldowns[i];
-    const fillets = weigher.bucketFilletCounts[i];
+    const items = weigher.bucketItemCounts[i];
     const isSelected = weigher.lastSelectedIndices.includes(i);
 
-    const minExp = weigher.filletMean * 0.8;
-    const maxExp = weigher.filletMean * 3.2;
+    const minExp = weigher.itemMean * 0.8;
+    const maxExp = weigher.itemMean * 3.2;
     const ratio = Math.max(0, Math.min(1, (weight - minExp) / (maxExp - minExp)));
 
     let fillColor, textColor;
@@ -1181,12 +1181,12 @@ function drawHeads(canvasEl, weigher, color) {
     ctx.fillStyle = textColor;
     ctx.fillText(weight.toFixed(0), hx, hy - 1 * dpr);
 
-    // Fillet dots
+    // Item dots
     const dotY = hy + headR * 0.5;
     const dotSpacing = Math.max(5, headR / 4) * dpr;
     const dotSize = Math.max(2, headR / 10);
-    const startX = hx - ((fillets - 1) * dotSpacing) / 2;
-    for (let f = 0; f < fillets; f++) {
+    const startX = hx - ((items - 1) * dotSpacing) / 2;
+    for (let f = 0; f < items; f++) {
       ctx.beginPath();
       ctx.arc(startX + f * dotSpacing, dotY, dotSize, 0, Math.PI * 2);
       ctx.fillStyle = cooldown === 0 ? '#eab308' : '#64748b';
