@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MHW Simulator — Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f8f5ef;
+  --card: #fff;
+  --ink: #18160f;
+  --ink2: #4a4535;
+  --muted: #9a9080;
+  --border: #ddd8cc;
+  --green: #1d6840;
+  --radius: 8px;
+  /* Dark sim palette */
+  --sim-bg: #0c1220;
+  --sim-panel: #151d2e;
+  --sim-card: #1e2a3e;
+  --sim-border: #2a3a52;
+  --sim-text: #e2e8f0;
+  --sim-muted: #64748b;
+  --sim-accent: #38bdf8;
+  --sim-success: #22c55e;
+  --sim-warning: #eab308;
+  --sim-danger: #ef4444;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'DM Sans', sans-serif; font-weight: 300; background: var(--bg); color: var(--ink); }
+
+/* ── SETUP VIEW ── */
+#setup-view {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.page { max-width: 800px; margin: 0 auto; padding: 36px 16px 72px; }
+@media(min-width:600px) { .page { padding: 48px 24px 80px; } }
+
+.back { color: var(--muted); text-decoration: none; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; }
+.back:hover { color: var(--ink); }
+
+.kicker {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 20px 0 10px;
+}
+
+h1 {
+  font-family: 'Libre Baskerville', serif;
+  font-size: clamp(24px, 5vw, 36px);
+  font-weight: 700;
+  line-height: 1.15;
+  margin-bottom: 6px;
+}
+
+.intro {
+  font-size: 14px;
+  color: var(--ink2);
+  line-height: 1.7;
+  margin-bottom: 32px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+@media(max-width:600px) { .form-grid { grid-template-columns: 1fr; } }
+
+.form-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.form-section-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.form-section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.field:last-child { margin-bottom: 0; }
+
+.field label {
+  font-size: 13px;
+  color: var(--ink2);
+}
+.field label small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.field input[type="number"], .field input[type="text"], .field select {
+  width: 90px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  background: #faf8f4;
+  color: var(--ink);
+  text-align: right;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.field input:focus, .field select:focus {
+  border-color: var(--green);
+}
+
+/* Scenario table */
+.scenario-section {
+  grid-column: 1 / -1;
+}
+
+.scenario-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.scenario-controls button {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.scenario-controls button:hover {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.scenario-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.scenario-table th {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.scenario-table td {
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+.scenario-table tr:not(:last-child) td {
+  border-bottom: 1px solid #eee8dd;
+}
+
+.scenario-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.scenario-table input[type="text"] {
+  width: 120px;
+  text-align: left;
+}
+.scenario-table input[type="number"] {
+  width: 70px;
+}
+.scenario-table input {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  background: #faf8f4;
+  color: var(--ink);
+  outline: none;
+}
+.scenario-table input:focus {
+  border-color: var(--green);
+}
+
+.scenario-remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.scenario-remove:hover {
+  background: #fdeee9;
+  color: #b53a1e;
+}
+
+.start-area {
+  text-align: center;
+  padding: 20px 0 0;
+}
+
+.start-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 14px 40px;
+  background: var(--ink);
+  color: var(--bg);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.02em;
+}
+.start-btn:hover {
+  background: var(--green);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(29,104,64,0.25);
+}
+.start-btn svg { transition: transform 0.2s; }
+.start-btn:hover svg { transform: translateX(3px); }
+
+/* ── SIMULATION VIEW ── */
+#sim-view {
+  display: none;
+  min-height: 100vh;
+  background: var(--sim-bg);
+  color: var(--sim-text);
+  overflow-x: hidden;
+}
+
+/* Header */
+.sim-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--sim-panel);
+  border-bottom: 1px solid var(--sim-border);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sim-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sim-title-mhw {
+  font-family: 'DM Mono', monospace;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--sim-accent);
+  letter-spacing: 0.05em;
+}
+.sim-title-sub {
+  font-size: 13px;
+  color: var(--sim-muted);
+}
+
+.sim-info {
+  display: flex;
+  gap: 24px;
+}
+.sim-info-item {
+  text-align: center;
+}
+.sim-info-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sim-muted);
+}
+.sim-info-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--sim-accent);
+}
+
+.sim-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sim-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 8px 18px;
+  border: 1px solid var(--sim-border);
+  border-radius: 6px;
+  background: var(--sim-card);
+  color: var(--sim-text);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sim-btn:hover { border-color: var(--sim-accent); color: var(--sim-accent); }
+.sim-btn--start { background: var(--sim-success); border-color: var(--sim-success); color: #000; }
+.sim-btn--start:hover { background: #16a34a; border-color: #16a34a; color: #000; }
+.sim-btn--pause { background: var(--sim-warning); border-color: var(--sim-warning); color: #000; }
+.sim-btn--pause:hover { background: #ca8a04; border-color: #ca8a04; color: #000; }
+.sim-btn--back { background: none; border-color: var(--sim-border); color: var(--sim-muted); }
+.sim-btn--back:hover { border-color: var(--sim-muted); color: var(--sim-text); }
+.sim-btn:disabled { opacity: 0.4; cursor: default; }
+
+.speed-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--sim-muted);
+}
+.speed-control input {
+  width: 50px;
+  padding: 5px 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  text-align: center;
+  background: var(--sim-bg);
+  border: 1px solid var(--sim-border);
+  border-radius: 4px;
+  color: var(--sim-text);
+  outline: none;
+}
+.speed-control input:focus { border-color: var(--sim-accent); }
+
+/* Progress */
+.sim-progress {
+  height: 3px;
+  background: var(--sim-card);
+  position: relative;
+}
+.sim-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sim-accent), var(--sim-success));
+  width: 0%;
+  transition: width 0.3s;
+}
+
+/* Scenario panels grid */
+.sim-scenarios {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.sim-scenario-panel {
+  background: var(--sim-panel);
+  border: 1px solid var(--sim-border);
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.scenario-canvas-wrap {
+  width: 280px;
+  height: 280px;
+  flex-shrink: 0;
+}
+.scenario-canvas-wrap canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.scenario-right {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.scenario-name-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.scenario-color-bar {
+  width: 4px;
+  height: 22px;
+  border-radius: 2px;
+}
+.scenario-name-text {
+  font-size: 15px;
+  font-weight: 600;
+}
+.scenario-config-text {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--sim-muted);
+  margin-left: 8px;
+}
+
+.scenario-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.stat-box {
+  background: var(--sim-bg);
+  border: 1px solid var(--sim-border);
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+}
+.stat-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sim-muted);
+  margin-bottom: 4px;
+}
+.stat-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--sim-text);
+}
+.stat-value--good { color: var(--sim-success); }
+.stat-value--warn { color: var(--sim-warning); }
+.stat-value--bad { color: var(--sim-danger); }
+
+.scenario-last-bags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.last-bag-chip {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--sim-bg);
+  border: 1px solid var(--sim-border);
+}
+.last-bag-chip--good { color: var(--sim-success); border-color: #1a4a2e; }
+.last-bag-chip--ok { color: var(--sim-warning); border-color: #4a3a10; }
+.last-bag-chip--bad { color: var(--sim-danger); border-color: #4a1a1a; }
+
+/* Chart */
+.sim-chart-wrap {
+  margin: 0 16px 16px;
+  background: var(--sim-panel);
+  border: 1px solid var(--sim-border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.sim-chart-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sim-muted);
+  margin-bottom: 10px;
+}
+#chartCanvas {
+  width: 100%;
+  height: 200px;
+  display: block;
+}
+
+/* Legend */
+.chart-legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--sim-muted);
+}
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Responsive */
+@media(max-width: 700px) {
+  .sim-scenario-panel {
+    grid-template-columns: 1fr;
+  }
+  .scenario-canvas-wrap {
+    width: 100%;
+    height: 240px;
+  }
+  .scenario-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .sim-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.footer {
+  text-align: center;
+  padding: 24px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+.footer--sim { color: var(--sim-muted); }
+</style>
+</head>
+<body>
+
+<!-- ════════════ SETUP VIEW ════════════ -->
+<div id="setup-view">
+  <div class="page">
+    <a href="index.html" class="back">&larr; Diamond Peak</a>
+    <div class="kicker">FMCG Simulation</div>
+    <h1>Multihead Weigher Simulator</h1>
+    <p class="intro">Simulate combinatorial weigher performance with fillet-based bucket filling. Compare scenarios side-by-side to optimise giveaway, throughput and T1 compliance. Includes Yamato-style force dump timeout.</p>
+
+    <div class="form-grid">
+      <!-- Product Parameters -->
+      <div class="form-section">
+        <div class="form-section-title">Product Parameters</div>
+        <div class="field"><label>Target weight <small>(g)</small></label><input type="number" id="targetWeight" value="800" step="10"></div>
+        <div class="field"><label>T1 tolerance <small>(g)</small></label><input type="number" id="t1Tolerance" value="15" step="1"></div>
+        <div class="field"><label>Fillet mean <small>(g)</small></label><input type="number" id="filletMean" value="100" step="5"></div>
+        <div class="field"><label>Fillet std <small>(g)</small></label><input type="number" id="filletStd" value="5" step="1"></div>
+      </div>
+
+      <!-- Simulation Parameters -->
+      <div class="form-section">
+        <div class="form-section-title">Simulation Parameters</div>
+        <div class="field"><label>P(1 fillet) <small>%</small></label><input type="number" id="p1" value="15" min="0" max="100"></div>
+        <div class="field"><label>P(2 fillets) <small>%</small></label><input type="number" id="p2" value="70" min="0" max="100"></div>
+        <div class="field"><label>P(3 fillets) <small>%</small></label><input type="number" id="p3" value="15" min="0" max="100"></div>
+        <div class="field"><label>Force dump timeout <small>(cycles)</small></label><input type="number" id="forceDump" value="5" min="1" max="20"></div>
+        <div class="field"><label>Number of bags</label><input type="number" id="numBags" value="1000" step="100" min="50" max="100000"></div>
+      </div>
+
+      <!-- Scenarios -->
+      <div class="form-section scenario-section">
+        <div class="form-section-title">Scenarios</div>
+        <div class="scenario-controls">
+          <button onclick="addScenario()">+ Add Scenario</button>
+          <span style="font-size:11px;color:var(--muted)">Up to 6 scenarios</span>
+        </div>
+        <table class="scenario-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Name</th>
+              <th>Heads</th>
+              <th>Shift</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="scenarioBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="start-area">
+      <button class="start-btn" onclick="startSimulation()">
+        Run Simulation
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="footer">&copy; 2026 Diamond Peak</div>
+</div>
+
+<!-- ════════════ SIMULATION VIEW ════════════ -->
+<div id="sim-view">
+  <!-- Header -->
+  <div class="sim-header">
+    <div class="sim-title">
+      <span class="sim-title-mhw">MHW</span>
+      <span class="sim-title-sub">Multihead Weigher Simulator</span>
+    </div>
+    <div class="sim-info" id="simInfo"></div>
+    <div class="sim-controls">
+      <div class="speed-control">
+        <span>SPEED</span>
+        <input type="number" id="simSpeed" value="120" min="0" max="9999">
+        <span>/min</span>
+      </div>
+      <button class="sim-btn sim-btn--start" id="btnStart" onclick="simStart()">START</button>
+      <button class="sim-btn sim-btn--pause" id="btnPause" onclick="simPause()" disabled>PAUSE</button>
+      <button class="sim-btn" id="btnReset" onclick="simReset()">RESET</button>
+      <button class="sim-btn sim-btn--back" onclick="goBack()">SETUP</button>
+    </div>
+  </div>
+  <div class="sim-progress"><div class="sim-progress-fill" id="progressFill"></div></div>
+
+  <!-- Scenarios -->
+  <div class="sim-scenarios" id="simScenarios"></div>
+
+  <!-- Chart -->
+  <div class="sim-chart-wrap">
+    <div class="sim-chart-title">Giveaway Distribution</div>
+    <canvas id="chartCanvas" height="200"></canvas>
+    <div class="chart-legend" id="chartLegend"></div>
+  </div>
+
+  <div class="footer footer--sim">&copy; 2026 Diamond Peak</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  SETUP
+// ══════════════════════════════════════════
+
+const COLORS = ['#22c55e', '#38bdf8', '#f59e0b', '#ef4444', '#a78bfa', '#06b6d4'];
+const defaultScenarios = [
+  { name: '14 Head', heads: 14, shift: 2 },
+  { name: '16 Head', heads: 16, shift: 2 },
+  { name: '18 Head', heads: 18, shift: 2 },
+];
+
+let scenarios = [];
+
+function renderScenarios() {
+  const tbody = document.getElementById('scenarioBody');
+  tbody.innerHTML = '';
+  scenarios.forEach((s, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="scenario-color" style="background:${COLORS[i % COLORS.length]}"></span></td>
+      <td><input type="text" value="${s.name}" onchange="scenarios[${i}].name=this.value"></td>
+      <td><input type="number" value="${s.heads}" min="4" max="36" onchange="scenarios[${i}].heads=+this.value"></td>
+      <td><input type="number" value="${s.shift}" min="1" max="4" onchange="scenarios[${i}].shift=+this.value"></td>
+      <td><button class="scenario-remove" onclick="removeScenario(${i})">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function addScenario() {
+  if (scenarios.length >= 6) return;
+  const n = scenarios.length + 1;
+  const defaultHeads = [14, 16, 18, 20, 22, 24];
+  scenarios.push({ name: `Scenario ${n}`, heads: defaultHeads[scenarios.length] || 14, shift: 2 });
+  renderScenarios();
+}
+
+function removeScenario(i) {
+  if (scenarios.length <= 1) return;
+  scenarios.splice(i, 1);
+  renderScenarios();
+}
+
+// Init default scenarios
+scenarios = defaultScenarios.map(s => ({...s}));
+renderScenarios();
+
+
+// ══════════════════════════════════════════
+//  SIMULATION ENGINE
+// ══════════════════════════════════════════
+
+function gaussRandom(mean, std) {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return mean + std * Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+function weightedChoice(weights) {
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return i;
+  }
+  return weights.length - 1;
+}
+
+class MultiheadWeigher {
+  constructor(numBuckets, targetWeight, minWeight, shiftMode, filletMean, filletStd, filletProbs, forceDumpTimeout) {
+    this.numBuckets = numBuckets;
+    this.targetWeight = targetWeight;
+    this.minWeight = minWeight;
+    this.shiftMode = shiftMode;
+    this.filletMean = filletMean;
+    this.filletStd = filletStd;
+    this.filletProbs = filletProbs;
+    this.forceDumpTimeout = forceDumpTimeout;
+
+    this.bucketWeights = new Array(numBuckets).fill(0);
+    this.bucketCooldowns = new Array(numBuckets).fill(0);
+    this.bucketFilletCounts = new Array(numBuckets).fill(0);
+    this.lastSelectedIndices = [];
+    this.currentWait = 0;
+
+    this.bagWeights = [];
+    this.forceDumps = 0;
+    this.waitCycles = 0;
+    this.totalCycles = 0;
+
+    // Fill all buckets
+    for (let i = 0; i < numBuckets; i++) this._fillBucket(i);
+  }
+
+  _fillBucket(idx) {
+    const numFillets = weightedChoice(this.filletProbs) + 1; // 1, 2, or 3
+    let total = 0;
+    for (let f = 0; f < numFillets; f++) {
+      total += gaussRandom(this.filletMean, this.filletStd);
+    }
+    this.bucketWeights[idx] = Math.round(total * 10) / 10;
+    this.bucketFilletCounts[idx] = numFillets;
+  }
+
+  getAvailableBuckets() {
+    const avail = [];
+    for (let i = 0; i < this.numBuckets; i++) {
+      if (this.bucketCooldowns[i] === 0) avail.push(i);
+    }
+    return avail;
+  }
+
+  findCombination(mustExceedMin) {
+    const available = this.getAvailableBuckets();
+    if (available.length === 0) return null;
+
+    let closestDiff = Infinity;
+    let bestIndices = null;
+
+    // Limit combo size for performance
+    const maxR = Math.min(available.length, 5);
+
+    for (let r = 1; r <= maxR; r++) {
+      this._combinations(available, r, combo => {
+        let weight = 0;
+        for (let i = 0; i < combo.length; i++) weight += this.bucketWeights[combo[i]];
+
+        if (mustExceedMin && weight < this.minWeight) return;
+
+        const diff = Math.abs(weight - this.targetWeight);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          bestIndices = combo.slice();
+        }
+      });
+      if (closestDiff === 0) break;
+    }
+
+    return bestIndices;
+  }
+
+  _combinations(arr, r, callback) {
+    const n = arr.length;
+    const combo = new Array(r);
+    function gen(start, depth) {
+      if (depth === r) { callback(combo); return; }
+      for (let i = start; i <= n - r + depth; i++) {
+        combo[depth] = arr[i];
+        gen(i + 1, depth + 1);
+      }
+    }
+    gen(0, 0);
+  }
+
+  executeDump(indices) {
+    let combined = 0;
+    for (let i = 0; i < indices.length; i++) combined += this.bucketWeights[indices[i]];
+    combined = Math.round(combined * 10) / 10;
+
+    this.lastSelectedIndices = indices.slice();
+
+    for (let i = 0; i < indices.length; i++) {
+      this.bucketCooldowns[indices[i]] = this.shiftMode;
+    }
+
+    for (let i = 0; i < this.numBuckets; i++) {
+      if (this.bucketCooldowns[i] > 0) {
+        this.bucketCooldowns[i]--;
+        if (this.bucketCooldowns[i] === 0) this._fillBucket(i);
+      }
+    }
+
+    this.bagWeights.push(combined);
+    return combined;
+  }
+
+  advanceCycleNoDump() {
+    this.lastSelectedIndices = [];
+    for (let i = 0; i < this.numBuckets; i++) {
+      if (this.bucketCooldowns[i] > 0) {
+        this.bucketCooldowns[i]--;
+        if (this.bucketCooldowns[i] === 0) this._fillBucket(i);
+      }
+    }
+  }
+
+  runCycle() {
+    this.totalCycles++;
+    const best = this.findCombination(true);
+
+    if (best !== null) {
+      const w = this.executeDump(best);
+      this.currentWait = 0;
+      return w;
+    }
+
+    this.currentWait++;
+    if (this.currentWait >= this.forceDumpTimeout) {
+      const force = this.findCombination(false);
+      if (force !== null) {
+        const w = this.executeDump(force);
+        this.forceDumps++;
+        this.currentWait = 0;
+        return w;
+      }
+      this.advanceCycleNoDump();
+      this.waitCycles++;
+      this.currentWait = 0;
+    } else {
+      this.advanceCycleNoDump();
+      this.waitCycles++;
+    }
+    return null;
+  }
+
+  getStats() {
+    if (this.bagWeights.length === 0) return null;
+    const weights = this.bagWeights;
+    const n = weights.length;
+    let sum = 0, min = Infinity, max = -Infinity;
+    let underT1 = 0;
+
+    for (let i = 0; i < n; i++) {
+      sum += weights[i];
+      if (weights[i] < min) min = weights[i];
+      if (weights[i] > max) max = weights[i];
+      if (weights[i] < this.minWeight) underT1++;
+    }
+
+    const mean = sum / n;
+    const avgGiveaway = mean - this.targetWeight;
+
+    let variance = 0;
+    for (let i = 0; i < n; i++) variance += (weights[i] - mean) ** 2;
+    const std = Math.sqrt(variance / n);
+
+    return {
+      count: n,
+      mean: mean,
+      std: std,
+      min: min,
+      max: max,
+      avgGiveaway: avgGiveaway,
+      avgGiveawayPct: (avgGiveaway / this.targetWeight) * 100,
+      underT1Count: underT1,
+      underT1Pct: (underT1 / n) * 100,
+    };
+  }
+}
+
+
+// ══════════════════════════════════════════
+//  SIMULATION CONTROLLER
+// ══════════════════════════════════════════
+
+let simParams = null;
+let weighers = [];
+let simRunning = false;
+let simPaused = false;
+let simTimerId = null;
+let scenarioCanvases = [];
+
+function startSimulation() {
+  // Read params
+  const targetWeight = +document.getElementById('targetWeight').value;
+  const t1Tolerance = +document.getElementById('t1Tolerance').value;
+  const filletMean = +document.getElementById('filletMean').value;
+  const filletStd = +document.getElementById('filletStd').value;
+  const p1 = +document.getElementById('p1').value;
+  const p2 = +document.getElementById('p2').value;
+  const p3 = +document.getElementById('p3').value;
+  const total = p1 + p2 + p3;
+  const forceDump = +document.getElementById('forceDump').value;
+  const numBags = +document.getElementById('numBags').value;
+
+  simParams = {
+    targetWeight,
+    minWeight: targetWeight - t1Tolerance,
+    t1Tolerance,
+    filletMean,
+    filletStd,
+    filletProbs: [p1/total, p2/total, p3/total],
+    forceDumpTimeout: forceDump,
+    numBags,
+    scenarios: scenarios.map((s, i) => ({...s, color: COLORS[i % COLORS.length]})),
+  };
+
+  // Switch view
+  document.getElementById('setup-view').style.display = 'none';
+  document.getElementById('sim-view').style.display = 'block';
+
+  // Build sim info
+  document.getElementById('simInfo').innerHTML = `
+    <div class="sim-info-item"><div class="sim-info-label">Target</div><div class="sim-info-value">${targetWeight}g</div></div>
+    <div class="sim-info-item"><div class="sim-info-label">T1 Min</div><div class="sim-info-value">${simParams.minWeight}g</div></div>
+    <div class="sim-info-item"><div class="sim-info-label">Bags</div><div class="sim-info-value">${numBags.toLocaleString()}</div></div>
+  `;
+
+  // Grid cols
+  const grid = document.getElementById('simScenarios');
+  const cols = simParams.scenarios.length <= 2 ? simParams.scenarios.length : simParams.scenarios.length <= 4 ? 2 : 3;
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+  initWeighers();
+}
+
+function initWeighers() {
+  weighers = [];
+  scenarioCanvases = [];
+
+  const container = document.getElementById('simScenarios');
+  container.innerHTML = '';
+  const legend = document.getElementById('chartLegend');
+  legend.innerHTML = '';
+
+  simParams.scenarios.forEach((sc, i) => {
+    const w = new MultiheadWeigher(
+      sc.heads, simParams.targetWeight, simParams.minWeight,
+      sc.shift, simParams.filletMean, simParams.filletStd,
+      simParams.filletProbs, simParams.forceDumpTimeout
+    );
+    weighers.push(w);
+
+    // Panel
+    const panel = document.createElement('div');
+    panel.className = 'sim-scenario-panel';
+    panel.id = `panel-${i}`;
+    panel.innerHTML = `
+      <div class="scenario-canvas-wrap"><canvas id="headCanvas${i}" width="560" height="560"></canvas></div>
+      <div class="scenario-right">
+        <div class="scenario-name-bar">
+          <span class="scenario-color-bar" style="background:${sc.color}"></span>
+          <span class="scenario-name-text">${sc.name}</span>
+          <span class="scenario-config-text">${sc.heads} heads &middot; shift ${sc.shift}</span>
+        </div>
+        <div class="scenario-stats" id="stats-${i}">
+          <div class="stat-box"><div class="stat-label">Bags</div><div class="stat-value" id="sv-bags-${i}">0</div></div>
+          <div class="stat-box"><div class="stat-label">Mean</div><div class="stat-value" id="sv-mean-${i}">&mdash;</div></div>
+          <div class="stat-box"><div class="stat-label">Giveaway</div><div class="stat-value" id="sv-give-${i}">&mdash;</div></div>
+          <div class="stat-box"><div class="stat-label">Under T1</div><div class="stat-value" id="sv-t1-${i}">&mdash;</div></div>
+        </div>
+        <div class="scenario-last-bags" id="lastBags-${i}"></div>
+      </div>
+    `;
+    container.appendChild(panel);
+
+    const canvas = document.getElementById(`headCanvas${i}`);
+    scenarioCanvases.push(canvas);
+
+    // Legend
+    legend.innerHTML += `<div class="legend-item"><span class="legend-dot" style="background:${sc.color}"></span><span id="legendText-${i}">${sc.name}</span></div>`;
+  });
+
+  // Add target/T1 legend items
+  legend.innerHTML += `<div class="legend-item"><span style="width:12px;height:2px;background:#e2e8f0;border-radius:1px"></span>Target</div>`;
+  legend.innerHTML += `<div class="legend-item"><span style="width:12px;height:2px;background:var(--sim-danger);border-radius:1px"></span>T1 limit</div>`;
+
+  drawAllHeads();
+  drawChart();
+
+  // Reset controls
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnPause').disabled = true;
+  document.getElementById('btnPause').textContent = 'PAUSE';
+  document.getElementById('progressFill').style.width = '0%';
+  simRunning = false;
+  simPaused = false;
+}
+
+function goBack() {
+  simRunning = false;
+  simPaused = false;
+  if (simTimerId) { clearTimeout(simTimerId); simTimerId = null; }
+  document.getElementById('sim-view').style.display = 'none';
+  document.getElementById('setup-view').style.display = 'block';
+}
+
+
+// ── Drawing heads ──
+
+function drawHeads(canvasEl, weigher, color) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvasEl.getBoundingClientRect();
+  const w = rect.width * dpr;
+  const h = rect.height * dpr;
+  canvasEl.width = w;
+  canvasEl.height = h;
+
+  const ctx = canvasEl.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+
+  const cx = w / 2;
+  const cy = h / 2;
+  const n = weigher.numBuckets;
+  const radius = Math.min(w, h) / 2 - 50 * dpr;
+  const headR = Math.max(14 * dpr, Math.min(28 * dpr, radius / 3.2));
+
+  // Center drop zone
+  const dropR = 32 * dpr;
+  ctx.beginPath();
+  ctx.arc(cx, cy, dropR, 0, Math.PI * 2);
+  ctx.fillStyle = '#0c1220';
+  ctx.strokeStyle = '#2a3a52';
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.fill();
+  ctx.stroke();
+
+  // Show last bag weights in center
+  const last = weigher.bagWeights.slice(-5);
+  if (last.length > 0) {
+    ctx.font = `bold ${6 * dpr}px 'DM Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#64748b';
+    ctx.fillText('DROPS', cx, cy - 18 * dpr);
+
+    for (let j = 0; j < last.length; j++) {
+      const g = last[last.length - 1 - j] - weigher.targetWeight;
+      if (g < -(weigher.targetWeight - weigher.minWeight)) ctx.fillStyle = '#ef4444';
+      else if (g < 5) ctx.fillStyle = '#22c55e';
+      else ctx.fillStyle = '#eab308';
+
+      const alpha = 1.0 - j * 0.15;
+      ctx.globalAlpha = alpha;
+      ctx.font = `bold ${7 * dpr}px 'DM Mono', monospace`;
+      ctx.fillText(`${last[last.length - 1 - j].toFixed(0)}`, cx, cy - 6 * dpr + j * 10 * dpr);
+    }
+    ctx.globalAlpha = 1.0;
+  } else {
+    ctx.font = `bold ${8 * dpr}px 'DM Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#64748b';
+    ctx.fillText('DROP', cx, cy + 3 * dpr);
+  }
+
+  // Draw heads
+  for (let i = 0; i < n; i++) {
+    const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+    const hx = cx + radius * Math.cos(angle);
+    const hy = cy + radius * Math.sin(angle);
+
+    const weight = weigher.bucketWeights[i];
+    const cooldown = weigher.bucketCooldowns[i];
+    const fillets = weigher.bucketFilletCounts[i];
+    const isSelected = weigher.lastSelectedIndices.includes(i);
+
+    const minExp = weigher.filletMean * 0.8;
+    const maxExp = weigher.filletMean * 3.2;
+    const ratio = Math.max(0, Math.min(1, (weight - minExp) / (maxExp - minExp)));
+
+    let fillColor, textColor;
+
+    if (cooldown > 0) {
+      fillColor = '#0c1220';
+      textColor = '#64748b';
+
+      // Progress ring
+      const progress = (weigher.shiftMode - cooldown) / weigher.shiftMode;
+      const ringR = headR + 4 * dpr;
+      ctx.beginPath();
+      ctx.arc(hx, hy, ringR, 0, Math.PI * 2);
+      ctx.strokeStyle = '#2a3a52';
+      ctx.lineWidth = 2.5 * dpr;
+      ctx.stroke();
+
+      if (progress > 0) {
+        ctx.beginPath();
+        ctx.arc(hx, hy, ringR, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5 * dpr;
+        ctx.stroke();
+      }
+    } else {
+      // Weight-based color gradient
+      let r, g, b;
+      if (ratio < 0.5) {
+        r = 220;
+        g = Math.floor(80 + ratio * 2 * 170);
+        b = 60;
+      } else {
+        r = Math.floor(220 - (ratio - 0.5) * 2 * 180);
+        g = Math.floor(200 + (ratio - 0.5) * 2 * 55);
+        b = Math.floor(60 + (ratio - 0.5) * 2 * 80);
+      }
+      fillColor = `rgb(${r},${g},${b})`;
+      textColor = ratio > 0.3 ? '#000' : '#fff';
+    }
+
+    // Selection glow
+    if (isSelected) {
+      for (let g = 0; g < 3; g++) {
+        ctx.beginPath();
+        ctx.arc(hx, hy, headR + (6 + g * 4) * dpr, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(234,179,8,${0.4 - g * 0.12})`;
+        ctx.lineWidth = 2 * dpr;
+        ctx.stroke();
+      }
+    }
+
+    // Shadow
+    ctx.beginPath();
+    ctx.arc(hx + 2 * dpr, hy + 2 * dpr, headR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fill();
+
+    // Main circle
+    ctx.beginPath();
+    ctx.arc(hx, hy, headR, 0, Math.PI * 2);
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = isSelected ? '#eab308' : '#2a3a52';
+    ctx.lineWidth = (isSelected ? 2.5 : 1) * dpr;
+    ctx.fill();
+    ctx.stroke();
+
+    // Weight text
+    const fontSize = Math.max(8, Math.min(13, headR / (2 * dpr)));
+    ctx.font = `bold ${fontSize * dpr}px 'DM Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = textColor;
+    ctx.fillText(weight.toFixed(0), hx, hy - 1 * dpr);
+
+    // Fillet dots
+    const dotY = hy + headR * 0.5;
+    const dotSpacing = Math.max(5, headR / 4) * dpr;
+    const dotSize = Math.max(2, headR / 10);
+    const startX = hx - ((fillets - 1) * dotSpacing) / 2;
+    for (let f = 0; f < fillets; f++) {
+      ctx.beginPath();
+      ctx.arc(startX + f * dotSpacing, dotY, dotSize, 0, Math.PI * 2);
+      ctx.fillStyle = cooldown === 0 ? '#eab308' : '#64748b';
+      ctx.fill();
+    }
+  }
+}
+
+function drawAllHeads() {
+  weighers.forEach((w, i) => {
+    drawHeads(scenarioCanvases[i], w, simParams.scenarios[i].color);
+  });
+}
+
+function updateStats() {
+  weighers.forEach((w, i) => {
+    const stats = w.getStats();
+    document.getElementById(`sv-bags-${i}`).textContent = w.bagWeights.length.toLocaleString();
+
+    if (stats) {
+      document.getElementById(`sv-mean-${i}`).textContent = `${stats.mean.toFixed(1)}g`;
+
+      const giveEl = document.getElementById(`sv-give-${i}`);
+      giveEl.textContent = `${stats.avgGiveaway >= 0 ? '+' : ''}${stats.avgGiveaway.toFixed(1)}g`;
+      giveEl.className = 'stat-value ' + (stats.avgGiveaway < 5 ? 'stat-value--good' : 'stat-value--warn');
+
+      const t1El = document.getElementById(`sv-t1-${i}`);
+      t1El.textContent = `${stats.underT1Pct.toFixed(2)}%`;
+      t1El.className = 'stat-value ' + (stats.underT1Pct > 0 ? 'stat-value--bad' : 'stat-value--good');
+
+      // Legend
+      document.getElementById(`legendText-${i}`).textContent = `${simParams.scenarios[i].name} (μ=${stats.avgGiveaway >= 0 ? '+' : ''}${stats.avgGiveaway.toFixed(1)}g)`;
+    }
+
+    // Last bags
+    const lastEl = document.getElementById(`lastBags-${i}`);
+    const lastBags = w.bagWeights.slice(-12);
+    lastEl.innerHTML = lastBags.map(bw => {
+      const g = bw - w.targetWeight;
+      let cls = 'last-bag-chip--ok';
+      if (bw < w.minWeight) cls = 'last-bag-chip--bad';
+      else if (g < 5) cls = 'last-bag-chip--good';
+      return `<span class="last-bag-chip ${cls}">${bw.toFixed(0)}g</span>`;
+    }).join('');
+  });
+}
+
+
+// ── Distribution chart ──
+
+function gaussianSmooth(data, sigma) {
+  const kernelSize = Math.ceil(sigma * 3) * 2 + 1;
+  const kernel = [];
+  let kSum = 0;
+  for (let i = 0; i < kernelSize; i++) {
+    const x = i - Math.floor(kernelSize / 2);
+    const v = Math.exp(-0.5 * (x / sigma) ** 2);
+    kernel.push(v);
+    kSum += v;
+  }
+  for (let i = 0; i < kernelSize; i++) kernel[i] /= kSum;
+
+  const result = new Array(data.length).fill(0);
+  const half = Math.floor(kernelSize / 2);
+  for (let i = 0; i < data.length; i++) {
+    for (let k = 0; k < kernelSize; k++) {
+      const idx = i + k - half;
+      if (idx >= 0 && idx < data.length) {
+        result[i] += data[idx] * kernel[k];
+      }
+    }
+  }
+  return result;
+}
+
+function drawChart() {
+  const canvas = document.getElementById('chartCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const W = rect.width * dpr;
+  const H = rect.height * dpr;
+  canvas.width = W;
+  canvas.height = H;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  // Margins
+  const ml = 50 * dpr, mr = 20 * dpr, mt = 10 * dpr, mb = 30 * dpr;
+  const pw = W - ml - mr;
+  const ph = H - mt - mb;
+
+  // Collect all giveaway data
+  let allGiveaway = [];
+  const seriesData = [];
+
+  weighers.forEach(w => {
+    if (w.bagWeights.length > 10) {
+      const giveaway = w.bagWeights.map(bw => bw - simParams.targetWeight);
+      allGiveaway = allGiveaway.concat(giveaway);
+      seriesData.push(giveaway);
+    } else {
+      seriesData.push(null);
+    }
+  });
+
+  if (allGiveaway.length === 0) {
+    ctx.fillStyle = '#64748b';
+    ctx.font = `${11 * dpr}px 'DM Sans', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('Waiting for data...', W / 2, H / 2);
+    return;
+  }
+
+  const gMin = Math.min(...allGiveaway) - 5;
+  const gMax = Math.max(...allGiveaway) + 5;
+  const numBins = 80;
+  const binWidth = (gMax - gMin) / numBins;
+
+  // Find max percentage for y-axis
+  let yMax = 0;
+  const allCurves = [];
+
+  seriesData.forEach(giveaway => {
+    if (!giveaway) { allCurves.push(null); return; }
+    const counts = new Array(numBins).fill(0);
+    giveaway.forEach(g => {
+      const bin = Math.min(numBins - 1, Math.max(0, Math.floor((g - gMin) / binWidth)));
+      counts[bin]++;
+    });
+    const pcts = counts.map(c => (c / giveaway.length) * 100);
+    const smoothed = gaussianSmooth(pcts, 1.5);
+    const maxVal = Math.max(...smoothed);
+    if (maxVal > yMax) yMax = maxVal;
+    allCurves.push(smoothed);
+  });
+
+  yMax = Math.ceil(yMax * 1.15);
+  if (yMax === 0) yMax = 1;
+
+  // Axes
+  ctx.strokeStyle = '#2a3a52';
+  ctx.lineWidth = 1 * dpr;
+
+  // Y-axis gridlines
+  const yTicks = 5;
+  ctx.font = `${8 * dpr}px 'DM Mono', monospace`;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= yTicks; i++) {
+    const y = mt + ph - (i / yTicks) * ph;
+    const val = (i / yTicks) * yMax;
+    ctx.fillStyle = '#64748b';
+    ctx.fillText(val.toFixed(1) + '%', ml - 6 * dpr, y);
+    ctx.beginPath();
+    ctx.moveTo(ml, y);
+    ctx.lineTo(ml + pw, y);
+    ctx.strokeStyle = '#1e2a3e';
+    ctx.stroke();
+  }
+
+  // X-axis labels
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const xRange = gMax - gMin;
+  const xStep = xRange > 100 ? 20 : xRange > 50 ? 10 : 5;
+  for (let v = Math.ceil(gMin / xStep) * xStep; v <= gMax; v += xStep) {
+    const x = ml + ((v - gMin) / xRange) * pw;
+    ctx.fillStyle = '#64748b';
+    ctx.fillText(`${v}g`, x, mt + ph + 8 * dpr);
+  }
+
+  // Reference lines
+  // Target (0)
+  const zeroX = ml + ((0 - gMin) / xRange) * pw;
+  ctx.setLineDash([6 * dpr, 4 * dpr]);
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(zeroX, mt);
+  ctx.lineTo(zeroX, mt + ph);
+  ctx.stroke();
+
+  // T1 limit
+  const t1X = ml + ((-simParams.t1Tolerance - gMin) / xRange) * pw;
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.setLineDash([3 * dpr, 3 * dpr]);
+  ctx.beginPath();
+  ctx.moveTo(t1X, mt);
+  ctx.lineTo(t1X, mt + ph);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Draw curves
+  allCurves.forEach((curve, idx) => {
+    if (!curve) return;
+    const color = simParams.scenarios[idx].color;
+
+    // Fill
+    ctx.beginPath();
+    for (let b = 0; b < numBins; b++) {
+      const x = ml + ((b + 0.5) * binWidth / xRange) * pw;
+      const y = mt + ph - (curve[b] / yMax) * ph;
+      if (b === 0) ctx.moveTo(x, mt + ph);
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(ml + ((numBins - 0.5) * binWidth / xRange) * pw, mt + ph);
+    ctx.closePath();
+    ctx.fillStyle = color + '30';
+    ctx.fill();
+
+    // Line
+    ctx.beginPath();
+    for (let b = 0; b < numBins; b++) {
+      const x = ml + ((b + 0.5) * binWidth / xRange) * pw;
+      const y = mt + ph - (curve[b] / yMax) * ph;
+      if (b === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5 * dpr;
+    ctx.stroke();
+  });
+}
+
+
+// ── Sim controls ──
+
+function simStart() {
+  if (simRunning) return;
+  simRunning = true;
+  simPaused = false;
+
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnPause').disabled = false;
+
+  const speed = +document.getElementById('simSpeed').value;
+  if (speed === 0) {
+    runInstant();
+  } else {
+    runVisual(speed);
+  }
+}
+
+function simPause() {
+  if (!simRunning) return;
+  simPaused = !simPaused;
+
+  const btn = document.getElementById('btnPause');
+  if (simPaused) {
+    btn.textContent = 'RESUME';
+    btn.classList.remove('sim-btn--pause');
+    btn.classList.add('sim-btn--start');
+    if (simTimerId) { clearTimeout(simTimerId); simTimerId = null; }
+  } else {
+    btn.textContent = 'PAUSE';
+    btn.classList.remove('sim-btn--start');
+    btn.classList.add('sim-btn--pause');
+    const speed = +document.getElementById('simSpeed').value;
+    runVisual(speed);
+  }
+}
+
+function simReset() {
+  simRunning = false;
+  simPaused = false;
+  if (simTimerId) { clearTimeout(simTimerId); simTimerId = null; }
+  initWeighers();
+}
+
+function runInstant() {
+  const target = simParams.numBags;
+  let frame = 0;
+
+  function batch() {
+    const batchSize = 200;
+    for (let b = 0; b < batchSize; b++) {
+      if (Math.min(...weighers.map(w => w.bagWeights.length)) >= target) break;
+      weighers.forEach(w => {
+        if (w.bagWeights.length < target) w.runCycle();
+      });
+    }
+
+    const minBags = Math.min(...weighers.map(w => w.bagWeights.length));
+    const progress = Math.min(100, (minBags / target) * 100);
+    document.getElementById('progressFill').style.width = progress + '%';
+
+    if (minBags >= target) {
+      onComplete();
+    } else {
+      simTimerId = requestAnimationFrame(batch);
+    }
+  }
+  batch();
+}
+
+function runVisual(speed) {
+  const intervalMs = Math.max(8, Math.floor(60000 / speed));
+  let cycleCount = 0;
+
+  function cycle() {
+    if (!simRunning || simPaused) return;
+
+    // Run multiple cycles per frame at high speeds
+    const cyclesPerFrame = Math.max(1, Math.floor(speed / 60));
+    for (let c = 0; c < cyclesPerFrame; c++) {
+      weighers.forEach(w => {
+        if (w.bagWeights.length < simParams.numBags) w.runCycle();
+      });
+    }
+
+    cycleCount++;
+
+    // Update visuals
+    if (cycleCount % 2 === 0 || speed <= 30) {
+      drawAllHeads();
+      updateStats();
+    }
+    if (cycleCount % 8 === 0) {
+      drawChart();
+    }
+
+    const minBags = Math.min(...weighers.map(w => w.bagWeights.length));
+    const progress = Math.min(100, (minBags / simParams.numBags) * 100);
+    document.getElementById('progressFill').style.width = progress + '%';
+
+    if (minBags >= simParams.numBags) {
+      onComplete();
+      return;
+    }
+
+    simTimerId = setTimeout(cycle, intervalMs);
+  }
+  cycle();
+}
+
+function onComplete() {
+  simRunning = false;
+  drawAllHeads();
+  updateStats();
+  drawChart();
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnPause').disabled = true;
+}
+
+// Handle chart resize
+window.addEventListener('resize', () => {
+  if (simParams) {
+    drawAllHeads();
+    drawChart();
+  }
+});
+</script>
+</body>
+</html>
