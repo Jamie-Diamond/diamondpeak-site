@@ -351,12 +351,12 @@
     Under UK/EU Average Quantity regulations, packers must satisfy three rules simultaneously:<br><br>
     <code>Rule 1 (Average)</code> Mean &ge; Nominal Weight<br>
     <code>Rule 2 (TNE)</code> &le;2.5% of packs below T1 (Nominal &minus; TNE) &rarr; Mean &ge; T1 + 1.96 &times; SD<br>
-    <code>Rule 3 (2&times;TNE)</code> Zero packs below T2 (Nominal &minus; 2&times;TNE) &rarr; Mean &ge; T2 + z &times; SD<br><br>
+    <code>Rule 3 (2&times;TNE)</code> Practically no packs below T2 (Nominal &minus; 2&times;TNE). Typical target: 0.5&ndash;1%. Mean &ge; T2 + z &times; SD<br><br>
     <code>Required mean</code> = max(Rule 1, Rule 2, Rule 3) &mdash; the binding constraint<br>
     <code>Giveaway / pack</code> = Required mean &minus; Nominal Weight<br>
     <code>Annual saving</code> = Giveaway reduction (g) &times; Volume &divide; 1000 &times; Cost (&pound;/kg)<br><br>
     TNE values follow UK/EU Average Quantity (Weights &amp; Measures) regulations.
-    The confidence level applies to Rule 3 (ensuring zero packs below the absolute minimum T2).
+    The confidence level controls the target % of packs allowed below T2 &mdash; typically 0.5&ndash;1% depending on the SKU.
   </div>
 
 </div>
@@ -420,9 +420,9 @@
   ];
 
   const CONF = [
-    { label: '99.73% (3σ)', z: 3.0, pct: 99.73 },
-    { label: '99.5% (2.81σ)', z: 2.81, pct: 99.5 },
-    { label: '99% (2.58σ)', z: 2.576, pct: 99.0 },
+    { label: '0.1% below T2 (3.09σ)', z: 3.09, pct: 99.9, t2pct: 0.1 },
+    { label: '0.5% below T2 (2.58σ)', z: 2.576, pct: 99.5, t2pct: 0.5 },
+    { label: '1% below T2 (2.33σ)',   z: 2.326, pct: 99.0, t2pct: 1.0 },
   ];
 
   const fmt  = (v,d=1) => v.toFixed(d);
@@ -437,7 +437,7 @@
     const [currentMean, setCurrentMean] = useState(206);
     const [currentSD, setCurrentSD]   = useState(5);
     const [targetSD, setTargetSD]     = useState(3.5);
-    const [confIdx, setConfIdx]       = useState(0);
+    const [confIdx, setConfIdx]       = useState(1);
     const [costPerKg, setCostPerKg]   = useState(3);
     const [annualVol, setAnnualVol]   = useState(2000000);
     const [showTNE, setShowTNE]       = useState(false);
@@ -687,7 +687,7 @@
                   <span style={{fontWeight:500,color: bindingTgt===2 ? 'var(--green)' : 'var(--muted)'}}>{fmt(rule2MeanTgt)} g{bindingTgt===2 ? ' ←' : ''}</span>
                 </div>
                 <div style={{display:'flex',justifyContent:'space-between'}}>
-                  <span>Rule 3: ~0% below T2</span>
+                  <span>Rule 3: ≤{CONF[confIdx].t2pct}% below T2</span>
                   <span style={{fontWeight:500,color: bindingTgt===3 ? 'var(--green)' : 'var(--muted)'}}>{fmt(rule3MeanTgt)} g{bindingTgt===3 ? ' ←' : ''}</span>
                 </div>
               </div>
@@ -701,7 +701,7 @@
                   <span style={{fontWeight:500,color: compCurT1 >= 97.5 ? 'var(--green)' : '#b53a1e'}}>{fmt(compCurT1,2)}%</span>
                 </div>
                 <div style={{display:'flex',justifyContent:'space-between'}}>
-                  <span>% above T2 (need ~100%)</span>
+                  <span>% above T2 (need ≥{fmt(100 - CONF[confIdx].t2pct,1)}%)</span>
                   <span style={{fontWeight:500,color: compCurT2 >= CONF[confIdx].pct ? 'var(--green)' : '#b53a1e'}}>{fmt(compCurT2,2)}%</span>
                 </div>
               </div>
