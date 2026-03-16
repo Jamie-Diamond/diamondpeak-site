@@ -287,14 +287,18 @@
     }
 
     const totalWeight = methods.reduce((a, m) => a + m.weight, 0);
-    const ensemble_temp = methods.reduce((a, m) => a + m.temp * m.weight, 0) / totalWeight;
+    const ensemble_raw = methods.reduce((a, m) => a + m.temp * m.weight, 0) / totalWeight;
     // Combined uncertainty (inverse-variance weighting)
     const ensemble_var = 1 / methods.reduce((a, m) => a + m.weight / (m.sd * m.sd), 0);
-    const ensemble_sd = Math.sqrt(ensemble_var);
+    const ensemble_sd = Math.sqrt(ensemble_var + biasSd * biasSd); // include bias uncertainty
+
+    // Apply measurement bias: official IRONMAN reading = model prediction + avg bias
+    // (avgBias is typically negative — official reads cooler than satellite/models)
+    const ensemble_temp = ensemble_raw + avgBias;
     const ensemble_lo = ensemble_temp - 1.5 * ensemble_sd;
     const ensemble_hi = ensemble_temp + 1.5 * ensemble_sd;
 
-    /* Wetsuit probabilities (P(temp ≤ threshold)) */
+    /* Wetsuit probabilities (P(temp ≤ threshold)) — based on bias-corrected official reading */
     const probAGWetsuit = normalCDF((AG_THRESHOLD - ensemble_temp) / ensemble_sd) * 100;
     const probProWetsuit = normalCDF((PRO_THRESHOLD - ensemble_temp) / ensemble_sd) * 100;
 
@@ -349,7 +353,12 @@
             <div className="big-label">Predicted Water Temperature — Sept {raceDayOfSept}, {raceYear}</div>
             <div className="big-temp">{fmt(ensemble_temp)}°C</div>
             <div className="big-verdict" style={{color: verdictColor}}>{verdictAG}</div>
-            <div className="big-range" style={{marginTop:6}}>Range: {fmt(ensemble_lo)} – {fmt(ensemble_hi)}°C &nbsp;|&nbsp; {methods.length} methods triangulated</div>
+            <div className="big-range" style={{marginTop:6}}>
+              Range: {fmt(ensemble_lo)} – {fmt(ensemble_hi)}°C &nbsp;|&nbsp; {methods.length} methods triangulated
+            </div>
+            <div className="hint" style={{marginTop:6}}>
+              Includes {fmt(avgBias)}°C measurement bias correction — official IRONMAN readings average {fmt(Math.abs(avgBias))}°C cooler than online SST
+            </div>
           </div>
 
           {/* Gauge — AG focused */}
