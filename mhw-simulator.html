@@ -327,14 +327,6 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
   </div>
   <div class="pbar"><div class="pbar-fill" id="pFill"></div></div>
 
-  <div class="sim-grid" id="simGrid"></div>
-
-  <div class="chart-area">
-    <div class="chart-title">Giveaway Distribution — All Scenarios</div>
-    <canvas id="chartCanvas" height="160"></canvas>
-    <div class="chart-legend" id="chartLegend"></div>
-  </div>
-
   <div class="sim-key" id="simKey">
     <div class="sim-key-item"><div class="sim-key-swatch" style="background:#40c850;color:#000">▽</div> Ready — loaded with product, available for selection</div>
     <div class="sim-key-item"><div class="sim-key-swatch" style="background:#1a1a1a;border-color:#555;color:#555">○</div> Cooling — recently dumped, waiting to refill</div>
@@ -344,6 +336,15 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
     <div class="sim-key-item"><span style="display:inline-block;width:16px;height:8px;border-radius:2px;background:linear-gradient(90deg,#c85032,#c8c832,#28c850)"></span> Weight gradient: low → mid → high</div>
     <div class="sim-key-item"><span style="color:#cccc00;font-size:11px">● ● ●</span> Item count dots (discrete mode)</div>
   </div>
+
+  <div class="sim-grid" id="simGrid"></div>
+
+  <div class="chart-area">
+    <div class="chart-title">Giveaway Distribution — All Scenarios</div>
+    <canvas id="chartCanvas" height="160"></canvas>
+    <div class="chart-legend" id="chartLegend"></div>
+  </div>
+
   <div class="demo-log" id="demoLog"></div>
   <div class="sim-status" id="simStatus">READY</div>
 </div>
