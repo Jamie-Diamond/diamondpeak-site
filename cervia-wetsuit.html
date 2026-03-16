@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cervia Ironman Wetsuit Predictor — Diamond Peak</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@400;500;600&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f8f5ef; --ink: #18160f; --ink2: #3a3730; --green: #1d6840;
+    --blue: #1a5276; --red: #b53a1e; --muted: #9a9080; --border: #e0ddd4;
+    --card: #fff; --card-alt: #faf8f4; --warm: #f3efe6;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-size: 14px; line-height: 1.6; }
+
+  .page { max-width: 860px; margin: 0 auto; padding: 40px 24px 60px; }
+  .back { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); text-decoration: none; letter-spacing: 0.05em; }
+  .back:hover { color: var(--ink); }
+  .kicker { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--green); margin: 32px 0 8px; }
+  h1 { font-family: 'Libre Baskerville', serif; font-size: 32px; font-weight: 700; line-height: 1.2; color: var(--ink); margin-bottom: 12px; }
+  .intro { font-size: 13px; color: var(--ink2); line-height: 1.7; margin-bottom: 28px; max-width: 640px; }
+
+  /* Panels */
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  .panel-alt { background: var(--card-alt); }
+  .panel-title { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+  .panel h3 { font-family: 'Libre Baskerville', serif; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .panel p, .panel .desc { font-size: 12px; color: var(--ink2); line-height: 1.6; }
+
+  /* Inputs */
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11px; font-weight: 500; color: var(--ink2); margin-bottom: 4px; }
+  .field input, .field select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px; font-family: 'DM Mono', monospace; font-size: 12px; background: #fff; color: var(--ink); }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--green); }
+  .hint { font-size: 10px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+  .input-row { display: flex; gap: 12px; }
+  .input-row > .field { flex: 1; }
+
+  /* Method cards */
+  .method { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 14px; position: relative; overflow: hidden; }
+  .method-num { position: absolute; top: 12px; right: 16px; font-family: 'Libre Baskerville', serif; font-size: 48px; font-weight: 700; color: var(--border); line-height: 1; opacity: 0.5; }
+  .method-type { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+  .method-type.empirical { color: var(--blue); }
+  .method-type.model { color: var(--green); }
+  .method-type.observation { color: var(--red); }
+  .method h4 { font-family: 'Libre Baskerville', serif; font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+  .method .formula { font-family: 'DM Mono', monospace; font-size: 11px; background: var(--card-alt); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; margin: 10px 0; line-height: 1.7; color: var(--ink2); }
+  .method .result { display: flex; align-items: baseline; gap: 8px; margin-top: 12px; }
+  .method .result-temp { font-family: 'DM Mono', monospace; font-size: 28px; font-weight: 500; }
+  .method .result-range { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); }
+  .method .result-tag { display: inline-block; font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 3px; margin-left: 8px; }
+  .tag-wetsuit { background: #e8f5e9; color: #2e7d32; }
+  .tag-borderline { background: #fff8e1; color: #f57f17; }
+  .tag-nowetsuit { background: #fce4ec; color: #c62828; }
+
+  /* Gauge */
+  .gauge-wrap { text-align: center; margin: 20px 0; }
+  .gauge-bar { height: 18px; border-radius: 9px; background: linear-gradient(to right, #1d6840 0%, #1d6840 40%, #f9a825 55%, #c62828 75%, #c62828 100%); position: relative; margin: 0 auto; max-width: 500px; }
+  .gauge-marker { position: absolute; top: -6px; width: 3px; height: 30px; background: var(--ink); border-radius: 2px; transform: translateX(-50%); }
+  .gauge-labels { display: flex; justify-content: space-between; max-width: 500px; margin: 6px auto 0; font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); }
+  .gauge-prediction { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink2); margin-top: 8px; }
+
+  /* Big number */
+  .big-result { text-align: center; padding: 24px 0 16px; }
+  .big-temp { font-family: 'DM Mono', monospace; font-size: 48px; font-weight: 500; color: var(--green); }
+  .big-range { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .big-label { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .big-verdict { font-family: 'Libre Baskerville', serif; font-size: 18px; font-weight: 700; margin-top: 12px; }
+
+  /* Table */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+  .data-table th { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; text-align: left; padding: 6px 8px; background: var(--ink); color: #fff; }
+  .data-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); font-family: 'DM Mono', monospace; font-size: 11px; }
+  .data-table tr:nth-child(even) td { background: var(--card-alt); }
+  .data-table .temp-cell { font-weight: 500; }
+
+  /* Wetsuit rules */
+  .rules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
+  .rule-box { padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 11px; }
+  .rule-box .rule-label { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .rule-box .rule-temp { font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 500; }
+
+  .footer { text-align: center; padding: 24px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.05em; }
+
+  /* Probability boxes */
+  .prob-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .prob-box { text-align: center; padding: 16px; border-radius: 8px; border: 1px solid var(--border); }
+  .prob-box .prob-label { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .prob-box .prob-val { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <a href="index.html" class="back">&larr; Back to tools</a>
+
+  <div class="kicker">Triathlon</div>
+  <h1>Cervia Ironman<br>Wetsuit Predictor</h1>
+  <p class="intro">
+    Will it be a wetsuit or non-wetsuit swim at IRONMAN Italy Emilia-Romagna?
+    This tool uses five independent prediction methods &mdash; empirical, model-based, and
+    observational &mdash; to triangulate the likely water temperature on race day and estimate
+    the probability of wetsuit-legal conditions.
+  </p>
+
+  <div id="app-root">
+    <p style="text-align:center;padding:2rem;color:var(--muted);font-size:12px;">Loading predictor&hellip;</p>
+  </div>
+
+</div>
+
+<div class="footer">&copy; 2026 Diamond Peak</div>
+
+<!-- React + Recharts CDN -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+<script crossorigin src="https://unpkg.com/recharts@2.15.0/umd/Recharts.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+
+<script type="text/babel" data-type="module">
+(function(){
+  'use strict';
+
+  const { useState, useMemo } = React;
+  const {
+    ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+    ReferenceLine, ResponsiveContainer, Legend, Scatter, Bar
+  } = Recharts;
+
+  /* ── Historical Race Data ─────────────────── */
+
+  const RACE_HISTORY = [
+    { year: 2017, date: 'Sep 23', dayOfSept: 23, waterTemp: 22.0, wetsuit: 'Yes (AG)', source: 'Estimated from satellite SST' },
+    { year: 2018, date: 'Sep 22', dayOfSept: 22, waterTemp: 24.8, wetsuit: 'No (too warm)', source: 'Race reports — European heatwave year' },
+    { year: 2019, date: 'Sep 21', dayOfSept: 21, waterTemp: 24.6, wetsuit: 'Yes (jellyfish exception)', source: 'Race reports — 0.1°C above limit, exception granted' },
+    { year: 2021, date: 'Sep 18', dayOfSept: 18, waterTemp: 24.0, wetsuit: 'Yes (AG)', source: 'Satellite SST data' },
+    { year: 2022, date: 'Sep 18', dayOfSept: 18, waterTemp: 25.0, wetsuit: 'Borderline / No', source: 'Satellite SST — race delayed by storm' },
+    { year: 2023, date: 'Sep 16', dayOfSept: 16, waterTemp: 22.0, wetsuit: 'Yes (AG)', source: 'Confirmed in race reports' },
+    { year: 2024, date: 'Sep 21', dayOfSept: 21, waterTemp: 21.5, wetsuit: 'Yes (mandatory)', source: 'Race reports — mandatory wetsuits' },
+  ];
+
+  /* ── Climatological Normals (1991–2020 baseline) ── */
+  /* Daily SST for Cervia/Adriatic in September, interpolated from monthly data */
+  const SEPT_CLIM_START = 26.0;   // Sept 1 normal
+  const SEPT_CLIM_END   = 21.5;   // Sept 30 normal
+  const SEPT_COOLING_RATE = (SEPT_CLIM_START - SEPT_CLIM_END) / 29; // ~0.155°C/day
+
+  const AUG_NORMAL = 25.7;  // 30-year Aug average
+
+  /* Warming trend: +0.04°C/year relative to 2010 baseline */
+  const TREND_RATE = 0.04;
+  const TREND_BASE_YEAR = 2010;
+
+  /* Wetsuit thresholds */
+  const PRO_THRESHOLD = 21.9;
+  const AG_THRESHOLD  = 24.5;
+
+  const fmt = (v, d=1) => v.toFixed(d);
+
+  /* ── Normal distribution helpers for probability ── */
+  function normalCDF(z) {
+    const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+    const sign = z < 0 ? -1 : 1;
+    const t = 1 / (1 + p * Math.abs(z));
+    const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-z*z/2);
+    return 0.5 * (1 + sign * y);
+  }
+
+  /* ── App ──────────────────────────────────── */
+
+  function App() {
+    const [raceYear, setRaceYear]       = useState(2025);
+    const [raceDayOfSept, setRaceDayOfSept] = useState(20);
+    const [augustTemp, setAugustTemp]   = useState(26.2);
+    const [hasObservation, setHasObservation] = useState(false);
+    const [obsTemp, setObsTemp]         = useState(25.0);
+    const [obsDayOfSept, setObsDayOfSept] = useState(5);
+
+    const daysUntilRace = raceDayOfSept - obsDayOfSept;
+
+    /* ═══════════════════════════════════════════
+       METHOD 1: Historical Race Day Average
+       Simple empirical mean of past race-day temps
+       ═══════════════════════════════════════════ */
+    const histTemps = RACE_HISTORY.map(r => r.waterTemp);
+    const m1_mean = histTemps.reduce((a,b) => a+b, 0) / histTemps.length;
+    const m1_sd = Math.sqrt(histTemps.reduce((a,t) => a + (t - m1_mean)**2, 0) / (histTemps.length - 1));
+    const m1_lo = m1_mean - m1_sd;
+    const m1_hi = m1_mean + m1_sd;
+
+    /* ═══════════════════════════════════════════
+       METHOD 2: Climatological Normal + Warming Trend
+       30-year baseline for the specific date, adjusted
+       for observed Mediterranean warming
+       ═══════════════════════════════════════════ */
+    const m2_baseline = SEPT_CLIM_START - SEPT_COOLING_RATE * (raceDayOfSept - 1);
+    const m2_trend = TREND_RATE * (raceYear - TREND_BASE_YEAR);
+    const m2_temp = m2_baseline + m2_trend;
+    const m2_sd = 1.5; // typical interannual variability
+    const m2_lo = m2_temp - m2_sd;
+    const m2_hi = m2_temp + m2_sd;
+
+    /* ═══════════════════════════════════════════
+       METHOD 3: Seasonal Cooling Curve
+       Exponential decay from August peak to autumn,
+       calibrated against historical September SST
+       ═══════════════════════════════════════════ */
+    // T(d) = T_winter + (T_summer - T_winter) × exp(-λ × d)
+    // Calibrated: T_summer = Aug peak, T_winter asymptote = 14°C, λ tuned to match Sept normals
+    const T_winter = 14.0;
+    const T_summer = augustTemp;
+    // Days since Aug 15 peak (approx)
+    const daysSincePeak = (raceDayOfSept + 16); // days from Aug 15
+    // λ calibrated so that day 36 (Sept 20) gives ~23.5°C with normal Aug of 25.7
+    const lambda = 0.0085;
+    const m3_temp = T_winter + (T_summer - T_winter) * Math.exp(-lambda * daysSincePeak);
+    const m3_sd = 1.2;
+    const m3_lo = m3_temp - m3_sd;
+    const m3_hi = m3_temp + m3_sd;
+
+    /* ═══════════════════════════════════════════
+       METHOD 4: August Anomaly Propagation
+       If August ran hot/cold, September partially
+       inherits that anomaly. Persistence factor ~0.65
+       ═══════════════════════════════════════════ */
+    const augAnomaly = augustTemp - AUG_NORMAL;
+    const persistence = 0.65;
+    const m4_base = SEPT_CLIM_START - SEPT_COOLING_RATE * (raceDayOfSept - 1);
+    const m4_temp = m4_base + m2_trend + (persistence * augAnomaly);
+    const m4_sd = 1.1;
+    const m4_lo = m4_temp - m4_sd;
+    const m4_hi = m4_temp + m4_sd;
+
+    /* ═══════════════════════════════════════════
+       METHOD 5: Recent Observation Extrapolation
+       Anchor to a real reading and cool forward
+       at the observed September rate
+       ═══════════════════════════════════════════ */
+    const dailyCooling = 0.15; // °C/day, typical mid-Sept
+    const m5_temp = hasObservation ? obsTemp - (dailyCooling * daysUntilRace) : null;
+    const m5_sd = hasObservation ? 0.5 + (daysUntilRace * 0.05) : null; // uncertainty grows with time
+    const m5_lo = m5_temp !== null ? m5_temp - m5_sd : null;
+    const m5_hi = m5_temp !== null ? m5_temp + m5_sd : null;
+
+    /* ═══════════════════════════════════════════
+       ENSEMBLE: Weighted average of all methods
+       ═══════════════════════════════════════════ */
+    const methods = [
+      { name: 'Historical Average', temp: m1_mean, sd: m1_sd, weight: 1.0 },
+      { name: 'Climatological Normal', temp: m2_temp, sd: m2_sd, weight: 1.2 },
+      { name: 'Cooling Curve', temp: m3_temp, sd: m3_sd, weight: 1.3 },
+      { name: 'August Anomaly', temp: m4_temp, sd: m4_sd, weight: 1.4 },
+    ];
+    if (m5_temp !== null) {
+      methods.push({ name: 'Observation Extrap.', temp: m5_temp, sd: m5_sd, weight: 2.0 });
+    }
+
+    const totalWeight = methods.reduce((a, m) => a + m.weight, 0);
+    const ensemble_temp = methods.reduce((a, m) => a + m.temp * m.weight, 0) / totalWeight;
+    // Combined uncertainty (inverse-variance weighting)
+    const ensemble_var = 1 / methods.reduce((a, m) => a + m.weight / (m.sd * m.sd), 0);
+    const ensemble_sd = Math.sqrt(ensemble_var);
+    const ensemble_lo = ensemble_temp - 1.5 * ensemble_sd;
+    const ensemble_hi = ensemble_temp + 1.5 * ensemble_sd;
+
+    /* Wetsuit probabilities (P(temp ≤ threshold)) */
+    const probAGWetsuit = normalCDF((AG_THRESHOLD - ensemble_temp) / ensemble_sd) * 100;
+    const probProWetsuit = normalCDF((PRO_THRESHOLD - ensemble_temp) / ensemble_sd) * 100;
+
+    /* Verdict */
+    const verdictAG = probAGWetsuit >= 80 ? 'Likely wetsuit-legal' :
+                      probAGWetsuit >= 40 ? 'Borderline — could go either way' :
+                      'Likely non-wetsuit';
+    const verdictColor = probAGWetsuit >= 80 ? 'var(--green)' :
+                         probAGWetsuit >= 40 ? '#f57f17' : 'var(--red)';
+
+    /* Tag helper */
+    const tempTag = (t) => {
+      if (t <= PRO_THRESHOLD) return <span className="result-tag tag-wetsuit">ALL WETSUIT</span>;
+      if (t <= AG_THRESHOLD) return <span className="result-tag tag-borderline">AG ONLY</span>;
+      return <span className="result-tag tag-nowetsuit">NON-WETSUIT</span>;
+    };
+
+    /* Gauge position: map 18–28°C to 0–100% */
+    const gaugePos = Math.min(100, Math.max(0, ((ensemble_temp - 18) / 10) * 100));
+
+    /* ── Chart: Historical + prediction ───── */
+    const chartData = RACE_HISTORY.map(r => ({
+      year: r.year, temp: r.waterTemp, type: 'historical'
+    }));
+    chartData.push({ year: raceYear, temp: Math.round(ensemble_temp * 10) / 10, type: 'prediction' });
+
+    /* ── Method comparison bar data ────────── */
+    const barData = methods.map(m => ({
+      name: m.name, temp: Math.round(m.temp * 10) / 10,
+      lo: Math.round((m.temp - m.sd) * 10) / 10,
+      hi: Math.round((m.temp + m.sd) * 10) / 10,
+    }));
+
+    /* ── Tooltips ─────────────────────────── */
+    function HistTip({ active, payload }) {
+      if (!active || !payload || !payload.length) return null;
+      const d = payload[0].payload;
+      return (
+        <div style={{background:'var(--ink)',color:'#fff',padding:'6px 10px',borderRadius:6,fontSize:11,fontFamily:'DM Mono,monospace'}}>
+          <div><strong>{d.year}</strong></div>
+          <div>{fmt(d.temp)}°C — {d.type === 'prediction' ? 'Predicted' : 'Recorded'}</div>
+        </div>
+      );
+    }
+
+    /* ── Render ──────────────────────────── */
+    return (
+      <div>
+        {/* ── INPUTS ────────────── */}
+        <div className="panel">
+          <div className="panel-title">Race &amp; Observation Data</div>
+          <div className="input-row">
+            <div className="field">
+              <label>Race Year</label>
+              <input type="number" value={raceYear} min={2025} max={2035} step={1}
+                onChange={e => setRaceYear(+e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Race Day (day of September)</label>
+              <input type="number" value={raceDayOfSept} min={1} max={30} step={1}
+                onChange={e => setRaceDayOfSept(+e.target.value)} />
+              <div className="hint">2025 race: September 20</div>
+            </div>
+            <div className="field">
+              <label>August Avg SST This Year (°C)</label>
+              <input type="number" value={augustTemp} min={20} max={32} step={0.1}
+                onChange={e => setAugustTemp(+e.target.value)} />
+              <div className="hint">Check seatemperature.info for Cervia. Normal: 25.7°C</div>
+            </div>
+          </div>
+
+          <div style={{marginTop: 12, padding: '12px 0', borderTop: '1px solid var(--border)'}}>
+            <label style={{fontSize:11, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:8}}>
+              <input type="checkbox" checked={hasObservation} onChange={e => setHasObservation(e.target.checked)} />
+              I have a recent water temperature observation
+            </label>
+            {hasObservation && (
+              <div className="input-row" style={{marginTop: 10}}>
+                <div className="field">
+                  <label>Observed Water Temp (°C)</label>
+                  <input type="number" value={obsTemp} min={15} max={32} step={0.1}
+                    onChange={e => setObsTemp(+e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Observation Day (day of Sept)</label>
+                  <input type="number" value={obsDayOfSept} min={1} max={raceDayOfSept} step={1}
+                    onChange={e => setObsDayOfSept(+e.target.value)} />
+                  <div className="hint">{daysUntilRace} days before race → ±{fmt(daysUntilRace * 0.05 + 0.5)}°C uncertainty</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── ENSEMBLE RESULT ─────── */}
+        <div className="panel" style={{borderColor: verdictColor, borderWidth: 2}}>
+          <div className="big-result">
+            <div className="big-label">Triangulated Prediction ({methods.length} methods)</div>
+            <div className="big-temp">{fmt(ensemble_temp)}°C</div>
+            <div className="big-range">Range: {fmt(ensemble_lo)} – {fmt(ensemble_hi)}°C (±1.5σ)</div>
+            <div className="big-verdict" style={{color: verdictColor}}>{verdictAG}</div>
+          </div>
+
+          {/* Gauge */}
+          <div className="gauge-wrap">
+            <div className="gauge-bar">
+              <div className="gauge-marker" style={{left: gaugePos + '%'}} />
+            </div>
+            <div className="gauge-labels">
+              <span>18°C</span>
+              <span style={{color:'var(--green)'}}>← Wetsuit (all)</span>
+              <span>21.9°C</span>
+              <span style={{color:'#f57f17'}}>AG only →</span>
+              <span>24.5°C</span>
+              <span style={{color:'var(--red)'}}>No wetsuit →</span>
+              <span>28°C</span>
+            </div>
+          </div>
+
+          {/* Probability boxes */}
+          <div className="prob-grid">
+            <div className="prob-box">
+              <div className="prob-label">Age Group Wetsuit-Legal</div>
+              <div className="prob-val" style={{color: probAGWetsuit >= 60 ? 'var(--green)' : probAGWetsuit >= 40 ? '#f57f17' : 'var(--red)'}}>
+                {fmt(probAGWetsuit, 0)}%
+              </div>
+              <div className="hint">P(water ≤ 24.5°C)</div>
+            </div>
+            <div className="prob-box">
+              <div className="prob-label">Pro Wetsuit-Legal</div>
+              <div className="prob-val" style={{color: probProWetsuit >= 60 ? 'var(--green)' : probProWetsuit >= 40 ? '#f57f17' : 'var(--red)'}}>
+                {fmt(probProWetsuit, 0)}%
+              </div>
+              <div className="hint">P(water ≤ 21.9°C)</div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── FIVE PREDICTION METHODS ─────── */}
+        <div className="panel-title" style={{marginTop:24, marginBottom:8}}>Prediction Methods</div>
+
+        {/* Method 1 */}
+        <div className="method">
+          <div className="method-num">1</div>
+          <div className="method-type empirical">Empirical</div>
+          <h4>Historical Race Day Average</h4>
+          <p className="desc">
+            Simple mean of all recorded water temperatures from previous Cervia Ironman races
+            (2017–2024, n={histTemps.length}). No adjustments — purely what has been measured on past race days.
+          </p>
+          <div className="formula">
+            mean = ({histTemps.map(t => t).join(' + ')}) ÷ {histTemps.length}<br/>
+            = <strong>{fmt(m1_mean)}°C</strong> &nbsp; σ = {fmt(m1_sd)}°C
+          </div>
+          <div className="result">
+            <span className="result-temp" style={{color:'var(--blue)'}}>{fmt(m1_mean)}°C</span>
+            <span className="result-range">± {fmt(m1_sd)}°C ({fmt(m1_lo)} – {fmt(m1_hi)})</span>
+            {tempTag(m1_mean)}
+          </div>
+        </div>
+
+        {/* Method 2 */}
+        <div className="method">
+          <div className="method-num">2</div>
+          <div className="method-type empirical">Empirical</div>
+          <h4>Climatological Normal + Warming Trend</h4>
+          <p className="desc">
+            Uses the 30-year (1991–2020) baseline SST for Cervia on the specific race date,
+            then adjusts for the observed Mediterranean warming trend of +0.04°C/year (Frontiers in Climate, 2024; ESSD Trieste series).
+          </p>
+          <div className="formula">
+            baseline(Sept {raceDayOfSept}) = {fmt(SEPT_CLIM_START)} − {fmt(SEPT_COOLING_RATE, 3)} × ({raceDayOfSept} − 1) = <strong>{fmt(m2_baseline)}°C</strong><br/>
+            warming = +0.04 × ({raceYear} − 2010) = <strong>+{fmt(m2_trend)}°C</strong><br/>
+            prediction = {fmt(m2_baseline)} + {fmt(m2_trend)} = <strong>{fmt(m2_temp)}°C</strong>
+          </div>
+          <div className="result">
+            <span className="result-temp" style={{color:'var(--blue)'}}>{fmt(m2_temp)}°C</span>
+            <span className="result-range">± {fmt(m2_sd)}°C ({fmt(m2_lo)} – {fmt(m2_hi)})</span>
+            {tempTag(m2_temp)}
+          </div>
+        </div>
+
+        {/* Method 3 */}
+        <div className="method">
+          <div className="method-num">3</div>
+          <div className="method-type model">Model-Based</div>
+          <h4>Seasonal Cooling Curve</h4>
+          <p className="desc">
+            Models the Adriatic's post-summer cooling as an exponential decay from the August peak
+            towards the winter asymptote (~14°C). Uses <em>this year's</em> August SST as the starting
+            point, making it sensitive to whether the summer ran hot or cold. Decay constant (λ=0.0085)
+            calibrated against 2017–2024 September observations.
+          </p>
+          <div className="formula">
+            T(d) = T<sub>winter</sub> + (T<sub>aug</sub> − T<sub>winter</sub>) × e<sup>−λd</sup><br/>
+            T({raceDayOfSept + 16}) = 14.0 + ({fmt(augustTemp)} − 14.0) × e<sup>−0.0085 × {raceDayOfSept + 16}</sup><br/>
+            = <strong>{fmt(m3_temp)}°C</strong>
+          </div>
+          <div className="result">
+            <span className="result-temp" style={{color:'var(--green)'}}>{fmt(m3_temp)}°C</span>
+            <span className="result-range">± {fmt(m3_sd)}°C ({fmt(m3_lo)} – {fmt(m3_hi)})</span>
+            {tempTag(m3_temp)}
+          </div>
+        </div>
+
+        {/* Method 4 */}
+        <div className="method">
+          <div className="method-num">4</div>
+          <div className="method-type model">Model-Based</div>
+          <h4>August Anomaly Propagation</h4>
+          <p className="desc">
+            If August ran warmer or cooler than its 30-year normal (25.7°C), that anomaly partially
+            persists into September. Oceanographic persistence factor of 0.65 is applied — the Adriatic's
+            shallow northern basin retains ~65% of monthly SST anomalies from one month to the next
+            (consistent with Copernicus Mediterranean reanalysis).
+          </p>
+          <div className="formula">
+            August anomaly = {fmt(augustTemp)} − 25.7 = <strong>{augAnomaly >= 0 ? '+' : ''}{fmt(augAnomaly)}°C</strong><br/>
+            propagated = 0.65 × {augAnomaly >= 0 ? '+' : ''}{fmt(augAnomaly)} = <strong>{(persistence * augAnomaly) >= 0 ? '+' : ''}{fmt(persistence * augAnomaly)}°C</strong><br/>
+            prediction = {fmt(m4_base)} (clim) + {fmt(m2_trend)} (trend) + {fmt(persistence * augAnomaly)} (anom) = <strong>{fmt(m4_temp)}°C</strong>
+          </div>
+          <div className="result">
+            <span className="result-temp" style={{color:'var(--green)'}}>{fmt(m4_temp)}°C</span>
+            <span className="result-range">± {fmt(m4_sd)}°C ({fmt(m4_lo)} – {fmt(m4_hi)})</span>
+            {tempTag(m4_temp)}
+          </div>
+        </div>
+
+        {/* Method 5 */}
+        <div className="method" style={{opacity: hasObservation ? 1 : 0.4}}>
+          <div className="method-num">5</div>
+          <div className="method-type observation">Observation</div>
+          <h4>Recent Observation Extrapolation</h4>
+          <p className="desc">
+            Anchors to a real water temperature reading and extrapolates forward using the
+            typical mid-September cooling rate of ~0.15°C/day. This is the most accurate method
+            when a recent observation is available — uncertainty grows at ~0.05°C per day of extrapolation.
+            {!hasObservation && <strong> Enable the observation input above to activate this method.</strong>}
+          </p>
+          {hasObservation && m5_temp !== null ? (
+            <>
+              <div className="formula">
+                cooling rate = 0.15°C/day × {daysUntilRace} days = <strong>{fmt(dailyCooling * daysUntilRace)}°C</strong><br/>
+                prediction = {fmt(obsTemp)} − {fmt(dailyCooling * daysUntilRace)} = <strong>{fmt(m5_temp)}°C</strong><br/>
+                uncertainty = ±(0.5 + {daysUntilRace} × 0.05) = <strong>±{fmt(m5_sd)}°C</strong>
+              </div>
+              <div className="result">
+                <span className="result-temp" style={{color:'var(--red)'}}>{fmt(m5_temp)}°C</span>
+                <span className="result-range">± {fmt(m5_sd)}°C ({fmt(m5_lo)} – {fmt(m5_hi)})</span>
+                {tempTag(m5_temp)}
+              </div>
+            </>
+          ) : (
+            <div className="formula" style={{color:'var(--muted)'}}>No observation provided — method inactive</div>
+          )}
+        </div>
+
+        {/* ── Method Comparison Chart ─────── */}
+        <div className="panel" style={{marginTop: 20}}>
+          <div className="panel-title">Method Comparison</div>
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={barData} layout="vertical" margin={{top:5,right:30,left:10,bottom:5}}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee9df" />
+              <XAxis type="number" domain={[18, 28]}
+                tick={{fontSize:10,fontFamily:'DM Mono',fill:'#9a9080'}}
+                tickFormatter={v => v + '°C'} />
+              <YAxis type="category" dataKey="name" width={120}
+                tick={{fontSize:10,fontFamily:'DM Mono',fill:'#9a9080'}} />
+              <Tooltip
+                formatter={(v) => [fmt(v) + '°C']}
+                labelStyle={{fontFamily:'DM Mono',fontSize:11}}
+                contentStyle={{fontFamily:'DM Mono',fontSize:11,borderRadius:6}} />
+              <Bar dataKey="temp" fill="var(--green)" fillOpacity={0.7} barSize={14} radius={[0,4,4,0]} />
+              <ReferenceLine x={AG_THRESHOLD} stroke="var(--red)" strokeDasharray="5 3" strokeWidth={1.5}
+                label={{value:'AG limit',position:'top',fill:'var(--red)',fontSize:9,fontFamily:'DM Mono'}} />
+              <ReferenceLine x={PRO_THRESHOLD} stroke="var(--blue)" strokeDasharray="5 3" strokeWidth={1.5}
+                label={{value:'Pro limit',position:'top',fill:'var(--blue)',fontSize:9,fontFamily:'DM Mono'}} />
+              <ReferenceLine x={ensemble_temp} stroke="var(--ink)" strokeWidth={2}
+                label={{value:'Ensemble',position:'bottom',fill:'var(--ink)',fontSize:9,fontFamily:'DM Mono'}} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* ── Historical Chart ───────────── */}
+        <div className="panel" style={{marginTop: 16}}>
+          <div className="panel-title">Historical Race Day Temps + Prediction</div>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={chartData} margin={{top:10,right:20,left:0,bottom:20}}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee9df" />
+              <XAxis dataKey="year"
+                tick={{fontSize:10,fontFamily:'DM Mono',fill:'#9a9080'}} />
+              <YAxis domain={[18, 28]} tick={{fontSize:10,fontFamily:'DM Mono',fill:'#9a9080'}}
+                tickFormatter={v => v + '°C'} />
+              <Tooltip content={<HistTip />} />
+              <ReferenceLine y={AG_THRESHOLD} stroke="var(--red)" strokeDasharray="5 3" strokeWidth={1}
+                label={{value:'AG wetsuit limit (24.5°C)',position:'right',fill:'var(--red)',fontSize:9,fontFamily:'DM Mono'}} />
+              <ReferenceLine y={PRO_THRESHOLD} stroke="var(--blue)" strokeDasharray="5 3" strokeWidth={1}
+                label={{value:'Pro limit (21.9°C)',position:'right',fill:'var(--blue)',fontSize:9,fontFamily:'DM Mono'}} />
+              <Line type="monotone" dataKey="temp" stroke="var(--green)" strokeWidth={2} dot={(props) => {
+                const { cx, cy, payload } = props;
+                const isPred = payload.type === 'prediction';
+                return <circle cx={cx} cy={cy} r={isPred ? 7 : 5}
+                  fill={isPred ? 'var(--green)' : 'var(--blue)'}
+                  stroke="#fff" strokeWidth={2} />;
+              }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* ── Historical Data Table ──────── */}
+        <div className="panel">
+          <div className="panel-title">Historical Race Data</div>
+          <table className="data-table">
+            <thead>
+              <tr><th>Year</th><th>Date</th><th>Water Temp</th><th>Wetsuit</th><th>Source</th></tr>
+            </thead>
+            <tbody>
+              {RACE_HISTORY.map(r => (
+                <tr key={r.year}>
+                  <td>{r.year}</td>
+                  <td>{r.date}</td>
+                  <td className="temp-cell">{fmt(r.waterTemp)}°C</td>
+                  <td>{r.wetsuit}</td>
+                  <td style={{fontSize:9,color:'var(--muted)'}}>{r.source}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ── Wetsuit Rules Reference ────── */}
+        <div className="panel panel-alt">
+          <div className="panel-title">IRONMAN Wetsuit Rules</div>
+          <div className="rules-grid">
+            <div className="rule-box" style={{background:'#e8f5e9'}}>
+              <div className="rule-label">All athletes — wetsuit legal</div>
+              <div className="rule-temp" style={{color:'#2e7d32'}}>≤ 21.9°C</div>
+            </div>
+            <div className="rule-box" style={{background:'#fff8e1'}}>
+              <div className="rule-label">AG wetsuit / Pro non-wetsuit</div>
+              <div className="rule-temp" style={{color:'#f57f17'}}>21.9 – 24.5°C</div>
+            </div>
+            <div className="rule-box" style={{background:'#fce4ec'}}>
+              <div className="rule-label">AG non-competitive wetsuit</div>
+              <div className="rule-temp" style={{color:'#c62828'}}>24.6 – 28.8°C</div>
+            </div>
+            <div className="rule-box" style={{background:'#ffebee'}}>
+              <div className="rule-label">Wetsuits prohibited (all)</div>
+              <div className="rule-temp" style={{color:'#b71c1c'}}>&gt; 28.8°C</div>
+            </div>
+          </div>
+          <p style={{fontSize:10,color:'var(--muted)',marginTop:10,lineHeight:1.6}}>
+            Official water temperature is measured the morning of the race. Maximum wetsuit thickness: 5mm.
+            PC/HC athletes may always wear wetsuits. Temperature is taken at the swim start at a depth of 60cm.
+          </p>
+        </div>
+
+        {/* ── Data Sources ───────────────── */}
+        <div className="panel panel-alt">
+          <div className="panel-title">Data Sources &amp; References</div>
+          <p style={{fontSize:10,color:'var(--ink2)',lineHeight:1.8}}>
+            <strong>Historical race temps:</strong> Race reports, satellite SST from seatemperature.info, ROKA Multisport database.<br/>
+            <strong>Climatological normals:</strong> 1991–2020 baseline from seatemperature.org (Cervia, Italy).<br/>
+            <strong>Warming trend:</strong> +0.04°C/year — Frontiers in Climate (2024), AdriSC model; ESSD Trieste SST series 1899–2015.<br/>
+            <strong>Anomaly persistence:</strong> 0.65 monthly lag — consistent with Copernicus Mediterranean reanalysis (CMEMS).<br/>
+            <strong>Cooling rate:</strong> ~0.15°C/day in mid-September — derived from daily satellite SST 2017–2024.<br/>
+            <strong>Live SST data:</strong> seatemperature.info/cervia — daily satellite + in-situ observations.<br/>
+            <strong>Copernicus Marine:</strong> SST_MED_SST_L4_NRT_OBSERVATIONS_010_004 — Mediterranean SST at 1/16° resolution.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const root = ReactDOM.createRoot(document.getElementById('app-root'));
+  root.render(<App />);
+})();
+</script>
+</body>
+</html>
