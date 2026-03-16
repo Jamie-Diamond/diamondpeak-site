@@ -181,6 +181,7 @@
     const [hasObservation, setHasObservation] = useState(false);
     const [obsTemp, setObsTemp]         = useState(25.0);
     const [obsDayOfSept, setObsDayOfSept] = useState(5);
+    const [showInputs, setShowInputs]   = useState(false);
 
     const daysUntilRace = raceDayOfSept - obsDayOfSept;
 
@@ -342,94 +343,104 @@
     /* ── Render ──────────────────────────── */
     return (
       <div>
-        {/* ── INPUTS ────────────── */}
-        <div className="panel">
-          <div className="panel-title">Race &amp; Observation Data</div>
-          <div className="input-row">
-            <div className="field">
-              <label>Race Year</label>
-              <input type="number" value={raceYear} min={2025} max={2035} step={1}
-                onChange={e => setRaceYear(+e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Race Day (day of September)</label>
-              <input type="number" value={raceDayOfSept} min={1} max={30} step={1}
-                onChange={e => setRaceDayOfSept(+e.target.value)} />
-              <div className="hint">2025 race: September 20</div>
-            </div>
-            <div className="field">
-              <label>August Avg SST This Year (°C)</label>
-              <input type="number" value={augustTemp} min={20} max={32} step={0.1}
-                onChange={e => setAugustTemp(+e.target.value)} />
-              <div className="hint">Check seatemperature.info for Cervia. Normal: 25.7°C</div>
-            </div>
-          </div>
-
-          <div style={{marginTop: 12, padding: '12px 0', borderTop: '1px solid var(--border)'}}>
-            <label style={{fontSize:11, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:8}}>
-              <input type="checkbox" checked={hasObservation} onChange={e => setHasObservation(e.target.checked)} />
-              I have a recent water temperature observation
-            </label>
-            {hasObservation && (
-              <div className="input-row" style={{marginTop: 10}}>
-                <div className="field">
-                  <label>Observed Water Temp (°C)</label>
-                  <input type="number" value={obsTemp} min={15} max={32} step={0.1}
-                    onChange={e => setObsTemp(+e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>Observation Day (day of Sept)</label>
-                  <input type="number" value={obsDayOfSept} min={1} max={raceDayOfSept} step={1}
-                    onChange={e => setObsDayOfSept(+e.target.value)} />
-                  <div className="hint">{daysUntilRace} days before race — confidence: {daysUntilRace <= 3 ? 'HIGH' : daysUntilRace <= 7 ? 'MEDIUM' : daysUntilRace <= 14 ? 'LOW' : 'VERY LOW'} (±{fmt(daysUntilRace * 0.04 + 0.3)}°C)</div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── ENSEMBLE RESULT ─────── */}
+        {/* ── VERDICT — THE ANSWER ────────── */}
         <div className="panel" style={{borderColor: verdictColor, borderWidth: 2}}>
           <div className="big-result">
-            <div className="big-label">Triangulated Prediction ({methods.length} methods)</div>
+            <div className="big-label">Predicted Water Temperature — Sept {raceDayOfSept}, {raceYear}</div>
             <div className="big-temp">{fmt(ensemble_temp)}°C</div>
-            <div className="big-range">Range: {fmt(ensemble_lo)} – {fmt(ensemble_hi)}°C (±1.5σ)</div>
             <div className="big-verdict" style={{color: verdictColor}}>{verdictAG}</div>
+            <div className="big-range" style={{marginTop:6}}>Range: {fmt(ensemble_lo)} – {fmt(ensemble_hi)}°C &nbsp;|&nbsp; {methods.length} methods triangulated</div>
           </div>
 
-          {/* Gauge */}
+          {/* Gauge — AG focused */}
           <div className="gauge-wrap">
             <div className="gauge-bar">
               <div className="gauge-marker" style={{left: gaugePos + '%'}} />
             </div>
             <div className="gauge-labels">
               <span>18°C</span>
-              <span style={{color:'var(--green)'}}>← Wetsuit (all)</span>
-              <span>21.9°C</span>
-              <span style={{color:'#f57f17'}}>AG only →</span>
-              <span>24.5°C</span>
+              <span style={{color:'var(--green)'}}>← Wetsuit</span>
+              <span style={{fontWeight:600}}>24.5°C</span>
               <span style={{color:'var(--red)'}}>No wetsuit →</span>
               <span>28°C</span>
             </div>
           </div>
 
-          {/* Probability boxes */}
-          <div className="prob-grid">
-            <div className="prob-box">
-              <div className="prob-label">Age Group Wetsuit-Legal</div>
-              <div className="prob-val" style={{color: probAGWetsuit >= 60 ? 'var(--green)' : probAGWetsuit >= 40 ? '#f57f17' : 'var(--red)'}}>
-                {fmt(probAGWetsuit, 0)}%
-              </div>
-              <div className="hint">P(water ≤ 24.5°C)</div>
+          {/* AG probability — hero */}
+          <div style={{textAlign:'center', margin:'16px 0 8px'}}>
+            <div style={{fontFamily:'DM Mono,monospace', fontSize:9, fontWeight:500, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--muted)', marginBottom:4}}>
+              Probability of wetsuit-legal swim
             </div>
-            <div className="prob-box">
-              <div className="prob-label">Pro Wetsuit-Legal</div>
-              <div className="prob-val" style={{color: probProWetsuit >= 60 ? 'var(--green)' : probProWetsuit >= 40 ? '#f57f17' : 'var(--red)'}}>
-                {fmt(probProWetsuit, 0)}%
-              </div>
-              <div className="hint">P(water ≤ 21.9°C)</div>
+            <div style={{fontFamily:'DM Mono,monospace', fontSize:42, fontWeight:500,
+              color: probAGWetsuit >= 60 ? 'var(--green)' : probAGWetsuit >= 40 ? '#f57f17' : 'var(--red)'}}>
+              {fmt(probAGWetsuit, 0)}%
+            </div>
+            <div className="hint">
+              P(official reading ≤ 24.5°C) &nbsp;|&nbsp; Wetsuit limit for age groupers
+            </div>
+            <div className="hint" style={{marginTop:4, fontStyle:'italic'}}>
+              Pro wetsuit probability (≤ 21.9°C): {fmt(probProWetsuit, 0)}%
             </div>
           </div>
+        </div>
+
+        {/* ── INPUTS — collapsible ────────── */}
+        <div className="panel" style={{paddingBottom: showInputs ? 20 : 12}}>
+          <div onClick={() => setShowInputs(!showInputs)}
+            style={{cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <div className="panel-title" style={{marginBottom:0}}>
+              Adjust Inputs &nbsp; <span style={{fontSize:11, color:'var(--ink2)', textTransform:'none', letterSpacing:0, fontFamily:'DM Sans'}}>
+                Sept {raceDayOfSept} {raceYear} &nbsp;|&nbsp; Aug SST: {fmt(augustTemp)}°C
+                {hasObservation ? ` | Obs: ${fmt(obsTemp)}°C on Sept ${obsDayOfSept}` : ''}
+              </span>
+            </div>
+            <span style={{fontSize:16, color:'var(--muted)', transform: showInputs ? 'rotate(180deg)' : 'none', transition:'transform 0.2s'}}>&#9660;</span>
+          </div>
+          {showInputs && (
+            <div style={{marginTop:14}}>
+              <div className="input-row">
+                <div className="field">
+                  <label>Race Year</label>
+                  <input type="number" value={raceYear} min={2025} max={2035} step={1}
+                    onChange={e => setRaceYear(+e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Race Day (day of September)</label>
+                  <input type="number" value={raceDayOfSept} min={1} max={30} step={1}
+                    onChange={e => setRaceDayOfSept(+e.target.value)} />
+                  <div className="hint">2025 race: September 20</div>
+                </div>
+                <div className="field">
+                  <label>August Avg SST This Year (°C)</label>
+                  <input type="number" value={augustTemp} min={20} max={32} step={0.1}
+                    onChange={e => setAugustTemp(+e.target.value)} />
+                  <div className="hint">Check seatemperature.info for Cervia. Normal: 25.7°C</div>
+                </div>
+              </div>
+
+              <div style={{marginTop: 12, padding: '12px 0', borderTop: '1px solid var(--border)'}}>
+                <label style={{fontSize:11, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:8}}>
+                  <input type="checkbox" checked={hasObservation} onChange={e => setHasObservation(e.target.checked)} />
+                  I have a recent water temperature observation
+                </label>
+                {hasObservation && (
+                  <div className="input-row" style={{marginTop: 10}}>
+                    <div className="field">
+                      <label>Observed Water Temp (°C)</label>
+                      <input type="number" value={obsTemp} min={15} max={32} step={0.1}
+                        onChange={e => setObsTemp(+e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label>Observation Day (day of Sept)</label>
+                      <input type="number" value={obsDayOfSept} min={1} max={raceDayOfSept} step={1}
+                        onChange={e => setObsDayOfSept(+e.target.value)} />
+                      <div className="hint">{daysUntilRace} days before race — confidence: {daysUntilRace <= 3 ? 'HIGH' : daysUntilRace <= 7 ? 'MEDIUM' : daysUntilRace <= 14 ? 'LOW' : 'VERY LOW'} (±{fmt(daysUntilRace * 0.04 + 0.3)}°C)</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── FIVE PREDICTION METHODS ─────── */}
