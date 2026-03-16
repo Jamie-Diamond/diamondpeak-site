@@ -235,15 +235,32 @@
     const m4_hi = m4_temp + m4_sd;
 
     /* ═══════════════════════════════════════════
-       METHOD 5: Recent Observation Extrapolation
-       Anchor to a real reading and cool forward
-       at the observed September rate
+       METHOD 5: Live Anomaly + Observed Cooling Rate
+       Compares observation to today's climatological
+       normal to get a live anomaly, then projects that
+       anomaly forward with decay. Much more robust than
+       naive linear extrapolation.
        ═══════════════════════════════════════════ */
-    const dailyCooling = 0.15; // °C/day, typical mid-Sept
-    const m5_temp = hasObservation ? obsTemp - (dailyCooling * daysUntilRace) : null;
-    const m5_sd = hasObservation ? 0.5 + (daysUntilRace * 0.05) : null; // uncertainty grows with time
+    // Climatological normal for the observation day
+    const obsClim = hasObservation ? SEPT_CLIM_START - SEPT_COOLING_RATE * (obsDayOfSept - 1) + m2_trend : null;
+    // Live anomaly: how far off normal is the sea right now?
+    const liveAnomaly = hasObservation ? obsTemp - obsClim : null;
+    // Anomaly decay: anomalies shrink over time — ~5% per day regression to normal
+    const anomalyDecayRate = 0.05; // per day
+    const anomalyAtRace = hasObservation ? liveAnomaly * Math.exp(-anomalyDecayRate * daysUntilRace) : null;
+    // Race-day climatological normal (already computed as m2_temp)
+    const m5_temp = hasObservation ? m2_temp + anomalyAtRace : null;
+    // Uncertainty: base 0.3°C (measurement) + grows with days out, but slower than naive extrap
+    const m5_sd = hasObservation ? 0.3 + (daysUntilRace * 0.04) : null;
     const m5_lo = m5_temp !== null ? m5_temp - m5_sd : null;
     const m5_hi = m5_temp !== null ? m5_temp + m5_sd : null;
+    // Confidence rating based on days out
+    const m5_confidence = hasObservation ? (
+      daysUntilRace <= 3 ? 'HIGH' : daysUntilRace <= 7 ? 'MEDIUM' : daysUntilRace <= 14 ? 'LOW' : 'VERY LOW'
+    ) : null;
+    const m5_confColor = hasObservation ? (
+      daysUntilRace <= 3 ? 'var(--green)' : daysUntilRace <= 7 ? 'var(--blue)' : daysUntilRace <= 14 ? '#f57f17' : 'var(--red)'
+    ) : null;
 
     /* ═══════════════════════════════════════════
        ENSEMBLE: Weighted average of all methods
@@ -255,7 +272,9 @@
       { name: 'August Anomaly', temp: m4_temp, sd: m4_sd, weight: 1.4 },
     ];
     if (m5_temp !== null) {
-      methods.push({ name: 'Observation Extrap.', temp: m5_temp, sd: m5_sd, weight: 2.0 });
+      // Weight scales with proximity: high weight when close, fades when far out
+      const m5_weight = daysUntilRace <= 3 ? 3.0 : daysUntilRace <= 7 ? 2.0 : daysUntilRace <= 14 ? 1.0 : 0.5;
+      methods.push({ name: 'Live Anomaly', temp: m5_temp, sd: m5_sd, weight: m5_weight });
     }
 
     const totalWeight = methods.reduce((a, m) => a + m.weight, 0);
@@ -354,7 +373,7 @@
                   <label>Observation Day (day of Sept)</label>
                   <input type="number" value={obsDayOfSept} min={1} max={raceDayOfSept} step={1}
                     onChange={e => setObsDayOfSept(+e.target.value)} />
-                  <div className="hint">{daysUntilRace} days before race → ±{fmt(daysUntilRace * 0.05 + 0.5)}°C uncertainty</div>
+                  <div className="hint">{daysUntilRace} days before race — confidence: {daysUntilRace <= 3 ? 'HIGH' : daysUntilRace <= 7 ? 'MEDIUM' : daysUntilRace <= 14 ? 'LOW' : 'VERY LOW'} (±{fmt(daysUntilRace * 0.04 + 0.3)}°C)</div>
                 </div>
               </div>
             )}
@@ -499,24 +518,40 @@
         <div className="method" style={{opacity: hasObservation ? 1 : 0.4}}>
           <div className="method-num">5</div>
           <div className="method-type observation">Observation</div>
-          <h4>Recent Observation Extrapolation</h4>
+          <h4>Live Anomaly + Decaying Persistence</h4>
           <p className="desc">
-            Anchors to a real water temperature reading and extrapolates forward using the
-            typical mid-September cooling rate of ~0.15°C/day. This is the most accurate method
-            when a recent observation is available — uncertainty grows at ~0.05°C per day of extrapolation.
+            Rather than naively extrapolating a reading forward, this method compares
+            the observed SST to the climatological normal <em>for that date</em> to isolate a
+            <strong> live anomaly</strong> — how far off-normal the sea is right now. That anomaly
+            is then projected forward with exponential decay (5%/day regression towards normal),
+            and added to the race-day climatological baseline. This captures the signal (is the
+            sea running hot or cold?) without the noise of assuming a fixed cooling rate.
             {!hasObservation && <strong> Enable the observation input above to activate this method.</strong>}
           </p>
           {hasObservation && m5_temp !== null ? (
             <>
               <div className="formula">
-                cooling rate = 0.15°C/day × {daysUntilRace} days = <strong>{fmt(dailyCooling * daysUntilRace)}°C</strong><br/>
-                prediction = {fmt(obsTemp)} − {fmt(dailyCooling * daysUntilRace)} = <strong>{fmt(m5_temp)}°C</strong><br/>
-                uncertainty = ±(0.5 + {daysUntilRace} × 0.05) = <strong>±{fmt(m5_sd)}°C</strong>
+                clim normal for Sept {obsDayOfSept} = {fmt(obsClim)}°C<br/>
+                live anomaly = {fmt(obsTemp)} − {fmt(obsClim)} = <strong>{liveAnomaly >= 0 ? '+' : ''}{fmt(liveAnomaly)}°C</strong> ({liveAnomaly > 0 ? 'warmer' : liveAnomaly < 0 ? 'cooler' : 'on'} than normal)<br/>
+                anomaly at race day = {liveAnomaly >= 0 ? '+' : ''}{fmt(liveAnomaly)} × e<sup>−0.05 × {daysUntilRace}</sup> = <strong>{anomalyAtRace >= 0 ? '+' : ''}{fmt(anomalyAtRace)}°C</strong><br/>
+                prediction = {fmt(m2_temp)} (clim + trend) + {anomalyAtRace >= 0 ? '+' : ''}{fmt(anomalyAtRace)} = <strong>{fmt(m5_temp)}°C</strong>
               </div>
               <div className="result">
-                <span className="result-temp" style={{color:'var(--red)'}}>{fmt(m5_temp)}°C</span>
+                <span className="result-temp" style={{color: m5_confColor}}>{fmt(m5_temp)}°C</span>
                 <span className="result-range">± {fmt(m5_sd)}°C ({fmt(m5_lo)} – {fmt(m5_hi)})</span>
                 {tempTag(m5_temp)}
+              </div>
+              <div style={{marginTop:8, display:'flex', alignItems:'center', gap:8}}>
+                <span style={{fontFamily:'DM Mono,monospace', fontSize:9, fontWeight:500, letterSpacing:'0.08em',
+                  padding:'2px 8px', borderRadius:3, background: m5_confColor, color:'#fff'}}>
+                  {m5_confidence} CONFIDENCE
+                </span>
+                <span style={{fontSize:10, color:'var(--muted)'}}>
+                  {daysUntilRace} days out — {daysUntilRace <= 3 ? 'anomaly barely decays, high signal' :
+                    daysUntilRace <= 7 ? 'anomaly partially decays, useful signal' :
+                    daysUntilRace <= 14 ? 'anomaly mostly decayed, limited value' :
+                    'anomaly almost fully decayed, minimal added value'}
+                </span>
               </div>
             </>
           ) : (
