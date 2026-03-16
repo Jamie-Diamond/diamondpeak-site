@@ -304,7 +304,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 
       <div class="param-group">
         <div class="param-group-title">Machine Settings</div>
-        <div class="param-hint">Over-Discharge: allow packs above Hi Limit when no ideal combo exists. Timeout: cycles without a valid combo before forcing a dump.</div>
+        <div class="param-hint">Over-Discharge ON: if no combo fits within Hi Limit, the machine drops the closest overweight combo. OFF: the machine stops and waits — no pack is produced until an in-range combo is possible. Timeout: max cycles to wait before forcing any available combo.</div>
         <div class="param-row"><span class="param-label">Over-Discharge</span><select class="param-input" id="overDischarge" style="width:72px"><option value="on" selected>ON</option><option value="off">OFF</option></select><span class="param-unit"></span></div>
         <div class="param-row"><span class="param-label">No-Combo Timeout</span><input class="param-input" type="number" id="forceDump" value="5" min="1" max="20"><span class="param-unit">cy</span></div>
         <div class="param-row"><span class="param-label">Bags to Produce</span><input class="param-input" type="number" id="numBags" value="50000" step="1000" min="50" max="500000"><span class="param-unit"></span></div>
@@ -579,8 +579,9 @@ class MHW {
     }
     if(bestA) return {indices:bestA,zone:'A'};
     if(bestB && this.overDis) return {indices:bestB,zone:'B'};
-    if(bestU) return {indices:bestU,zone:'U'}; // underweight — used for forced situations
-    if(bestB) return {indices:bestB,zone:'B'}; // overweight available but overDis OFF
+    // When overDis OFF, report that B-zone exists but can't be used
+    if(bestB && !this.overDis) return {indices:bestB,zone:'B_blocked'};
+    if(bestU) return {indices:bestU,zone:'U'};
     return null;
   }
 
@@ -626,11 +627,11 @@ class MHW {
       if(result.zone==='A'){
         const wt=this.dump(result.indices);this.wait=0;this.lastZone='A';return wt;
       }
-      if(result.zone==='B' && this.overDis){
+      if(result.zone==='B'){
         const wt=this.dump(result.indices);this.wait=0;this.od++;this.lastZone='B';return wt;
       }
     }
-    // No A-zone combo (and no B if overDis off) — recharge lightest + wait
+    // No A-zone combo (B_blocked, U, or null) — recharge lightest + wait
     this.wait++;
     if(this.wait>=this.fdTimeout){
       // Timeout: force dump closest combo, preferring overweight
@@ -663,7 +664,7 @@ class MHW {
 
     // Zone search
     const result=this.findZoneCombo();
-    if(result && (result.zone==='A' || (result.zone==='B' && this.overDis))){
+    if(result && (result.zone==='A' || result.zone==='B')){
       const idx=result.indices, zone=result.zone;
       const parts=idx.map(i=>`H${i+1}:${this.wt[i].toFixed(0)}g`).join(' + ');
       const wt=this.dump(idx);this.wait=0;
@@ -673,18 +674,19 @@ class MHW {
       const tag=zone==='A'?'ACCEPT':'OVER';
       const cls=zone==='A'?(give<=8?'good':'warn'):'warn';
       lines.push(`<span class="${cls}">✓ ${tag}: ${parts} = <strong>${wt.toFixed(1)}g</strong> (${give>=0?'+':''}${give.toFixed(1)}g)</span>`);
-      if(zone==='B') lines.push(`<span class="warn">Over Hi Limit (${this.hiLimit}g) — no A-zone combo available, over-discharge used.</span>`);
+      if(zone==='B') lines.push(`<span class="warn">Over Hi Limit (${this.hiLimit}g) — no A-zone combo, over-discharge used.</span>`);
       return{weight:wt,log:lines.join('<br>')};
     }
 
-    // No valid combo in A (or B if overDis on)
+    // No usable combo — explain why
     this.wait++;
     if(av.length===0){
-      lines.push(`<span class="warn">✗ NO COMBO — all heads cooling. Packer line would pause here.</span>`);
+      lines.push(`<span class="warn">✗ NO COMBO — all heads cooling. In production the packer line would pause until heads refill.</span>`);
+    } else if(result && result.zone==='B_blocked'){
+      let sumB=0;for(let i=0;i<result.indices.length;i++)sumB+=this.wt[result.indices[i]];
+      lines.push(`<span class="bad">✗ MACHINE WOULD STOP — a combo exists at ${sumB.toFixed(0)}g but it exceeds the Hi Limit (${this.hiLimit}g) and Over-Discharge is OFF. In production, the line halts here until operator intervenes or settings change.</span>`);
     } else if(totalAvailWt<this.min){
-      lines.push(`<span class="warn">✗ NO COMBO — total available ${totalAvailWt.toFixed(0)}g < minimum ${this.min}g. Not enough product in heads.</span>`);
-    } else if(result && result.zone==='B' && !this.overDis){
-      lines.push(`<span class="warn">✗ NO A-ZONE COMBO — overweight combo exists but Over-Discharge is OFF. Machine would stop in production.</span>`);
+      lines.push(`<span class="warn">✗ NO COMBO — total available ${totalAvailWt.toFixed(0)}g &lt; minimum ${this.min}g. Not enough product in heads.</span>`);
     } else {
       lines.push(`<span class="warn">✗ NO COMBO — ${av.length} heads available but no subset sums to ${this.min}–${this.hiLimit}g range.</span>`);
     }
