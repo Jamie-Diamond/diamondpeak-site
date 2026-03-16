@@ -124,7 +124,7 @@
 (function(){
   'use strict';
 
-  const { useState, useMemo } = React;
+  const { useState, useMemo, useEffect } = React;
   const {
     ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
     ReferenceLine, ResponsiveContainer, Legend, Scatter, Bar
@@ -177,13 +177,77 @@
   function App() {
     const [raceYear, setRaceYear]       = useState(2025);
     const [raceDayOfSept, setRaceDayOfSept] = useState(20);
-    const [augustTemp, setAugustTemp]   = useState(26.2);
-    const [hasObservation, setHasObservation] = useState(false);
-    const [obsTemp, setObsTemp]         = useState(25.0);
-    const [obsDayOfSept, setObsDayOfSept] = useState(5);
+    const [augustTempManual, setAugustTempManual] = useState(null);
+    const augustTemp = augustTempManual !== null ? augustTempManual : (liveAugAvg || 26.2);
     const [showInputs, setShowInputs]   = useState(false);
 
-    const daysUntilRace = raceDayOfSept - obsDayOfSept;
+    // Live SST data from Open-Meteo Marine API
+    const [liveStatus, setLiveStatus]   = useState('loading'); // loading | ok | error
+    const [liveTemp, setLiveTemp]       = useState(null);
+    const [liveDate, setLiveDate]       = useState(null);
+    const [liveAugAvg, setLiveAugAvg]   = useState(null);
+    const [liveHistory, setLiveHistory] = useState([]); // last 30 days of SST
+
+    useEffect(() => {
+      const fmtD = d => d.toISOString().slice(0, 10);
+      const BASE = 'https://marine-api.open-meteo.com/v1/marine?latitude=44.26&longitude=12.35&daily=sea_surface_temperature_max&timezone=Europe/Rome';
+
+      // Fetch 1: Recent 60 days (for current SST + recent trend)
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 60);
+      const recentUrl = `${BASE}&start_date=${fmtD(start)}&end_date=${fmtD(end)}`;
+
+      // Fetch 2: Last August (for anomaly model)
+      const augYear = end.getMonth() >= 7 ? end.getFullYear() : end.getFullYear() - 1;
+      const augUrl = `${BASE}&start_date=${augYear}-08-01&end_date=${augYear}-08-31`;
+
+      Promise.all([
+        fetch(recentUrl).then(r => r.json()),
+        fetch(augUrl).then(r => r.json()).catch(() => null),
+      ])
+        .then(([recent, aug]) => {
+          const times = recent.daily.time;
+          const temps = recent.daily.sea_surface_temperature_max;
+
+          // Most recent non-null reading
+          let lastIdx = temps.length - 1;
+          while (lastIdx >= 0 && temps[lastIdx] == null) lastIdx--;
+          if (lastIdx < 0) { setLiveStatus('error'); return; }
+
+          setLiveTemp(temps[lastIdx]);
+          setLiveDate(new Date(times[lastIdx]));
+
+          // August average from dedicated fetch
+          if (aug && aug.daily) {
+            const augTemps = aug.daily.sea_surface_temperature_max.filter(t => t != null);
+            if (augTemps.length > 0) {
+              setLiveAugAvg(augTemps.reduce((a,b) => a+b, 0) / augTemps.length);
+            }
+          }
+
+          // Build history array
+          const hist = times.map((t, i) => ({
+            date: t, temp: temps[i]
+          })).filter(d => d.temp != null);
+          setLiveHistory(hist);
+
+          setLiveStatus('ok');
+        })
+        .catch(() => setLiveStatus('error'));
+    }, []);
+
+    // Use live data when available
+    // Compute days between live observation and race day
+    const raceDate = new Date(raceYear, 8, raceDayOfSept); // month 8 = September
+    const obsDate = liveDate || new Date();
+    const daysBetween = Math.round((raceDate - obsDate) / (1000 * 60 * 60 * 24));
+
+    // Only activate Method 5 if observation is within 30 days of race and before race
+    const hasObservation = liveStatus === 'ok' && liveTemp !== null && liveDate !== null && daysBetween >= 0 && daysBetween <= 30;
+    const obsTemp = liveTemp || 25.0;
+    const obsDayOfSept = liveDate && liveDate.getMonth() === 8 ? liveDate.getDate() : 1;
+    const daysUntilRace = hasObservation ? daysBetween : 15; // fallback
 
     /* ═══════════════════════════════════════════
        METHOD 1: Historical Race Day Average
@@ -393,6 +457,38 @@
           </div>
         </div>
 
+        {/* ── LIVE DATA STATUS ────────────── */}
+        <div className="panel" style={{padding:'12px 20px'}}>
+          <div style={{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}>
+            <span style={{width:8, height:8, borderRadius:'50%', display:'inline-block',
+              background: liveStatus === 'ok' ? 'var(--green)' : liveStatus === 'loading' ? '#f57f17' : 'var(--red)',
+              boxShadow: liveStatus === 'ok' ? '0 0 6px var(--green)' : 'none'}} />
+            <span style={{fontFamily:'DM Mono,monospace', fontSize:10, fontWeight:500, letterSpacing:'0.05em', color:'var(--ink2)'}}>
+              {liveStatus === 'loading' ? 'Fetching live SST from Open-Meteo Marine API...' :
+               liveStatus === 'ok' ? `Live SST: ${fmt(liveTemp)}°C (${liveDate.toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'})})` :
+               'Could not fetch live data — using defaults'}
+            </span>
+            {liveStatus === 'ok' && liveAugAvg && (
+              <span style={{fontFamily:'DM Mono,monospace', fontSize:10, color:'var(--muted)'}}>
+                &nbsp;|&nbsp; Aug avg: {fmt(liveAugAvg)}°C
+              </span>
+            )}
+            {liveStatus === 'ok' && !hasObservation && (
+              <span style={{fontFamily:'DM Mono,monospace', fontSize:10, color:'#f57f17'}}>
+                &nbsp;|&nbsp; Method 5 inactive ({daysBetween > 30 ? `${daysBetween} days from race — too far out` : daysBetween < 0 ? 'race date has passed' : 'no data'})
+              </span>
+            )}
+            {liveStatus === 'ok' && hasObservation && (
+              <span style={{fontFamily:'DM Mono,monospace', fontSize:10, color:'var(--green)'}}>
+                &nbsp;|&nbsp; Method 5 active — {daysBetween} days from race
+              </span>
+            )}
+            <span style={{fontFamily:'DM Mono,monospace', fontSize:9, color:'var(--muted)', marginLeft:'auto'}}>
+              Source: Open-Meteo Marine API &nbsp;|&nbsp; Cervia 44.26°N, 12.35°E
+            </span>
+          </div>
+        </div>
+
         {/* ── INPUTS — collapsible ────────── */}
         <div className="panel" style={{paddingBottom: showInputs ? 20 : 12}}>
           <div onClick={() => setShowInputs(!showInputs)}
@@ -400,7 +496,7 @@
             <div className="panel-title" style={{marginBottom:0}}>
               Adjust Inputs &nbsp; <span style={{fontSize:11, color:'var(--ink2)', textTransform:'none', letterSpacing:0, fontFamily:'DM Sans'}}>
                 Sept {raceDayOfSept} {raceYear} &nbsp;|&nbsp; Aug SST: {fmt(augustTemp)}°C
-                {hasObservation ? ` | Obs: ${fmt(obsTemp)}°C on Sept ${obsDayOfSept}` : ''}
+                {hasObservation ? ` | Live: ${fmt(obsTemp)}°C` : ''}
               </span>
             </div>
             <span style={{fontSize:16, color:'var(--muted)', transform: showInputs ? 'rotate(180deg)' : 'none', transition:'transform 0.2s'}}>&#9660;</span>
@@ -420,33 +516,16 @@
                   <div className="hint">2025 race: September 20</div>
                 </div>
                 <div className="field">
-                  <label>August Avg SST This Year (°C)</label>
-                  <input type="number" value={augustTemp} min={20} max={32} step={0.1}
-                    onChange={e => setAugustTemp(+e.target.value)} />
-                  <div className="hint">Check seatemperature.info for Cervia. Normal: 25.7°C</div>
+                  <label>August Avg SST (°C) {liveAugAvg ? '— auto from API' : ''}</label>
+                  <input type="number" value={fmt(augustTemp, 1)} min={20} max={32} step={0.1}
+                    onChange={e => setAugustTempManual(+e.target.value)} />
+                  <div className="hint">{liveAugAvg ? `Live from Open-Meteo: ${fmt(liveAugAvg)}°C` : 'Default: 26.2°C'} — Normal: 25.7°C</div>
                 </div>
               </div>
-
-              <div style={{marginTop: 12, padding: '12px 0', borderTop: '1px solid var(--border)'}}>
-                <label style={{fontSize:11, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:8}}>
-                  <input type="checkbox" checked={hasObservation} onChange={e => setHasObservation(e.target.checked)} />
-                  I have a recent water temperature observation
-                </label>
-                {hasObservation && (
-                  <div className="input-row" style={{marginTop: 10}}>
-                    <div className="field">
-                      <label>Observed Water Temp (°C)</label>
-                      <input type="number" value={obsTemp} min={15} max={32} step={0.1}
-                        onChange={e => setObsTemp(+e.target.value)} />
-                    </div>
-                    <div className="field">
-                      <label>Observation Day (day of Sept)</label>
-                      <input type="number" value={obsDayOfSept} min={1} max={raceDayOfSept} step={1}
-                        onChange={e => setObsDayOfSept(+e.target.value)} />
-                      <div className="hint">{daysUntilRace} days before race — confidence: {daysUntilRace <= 3 ? 'HIGH' : daysUntilRace <= 7 ? 'MEDIUM' : daysUntilRace <= 14 ? 'LOW' : 'VERY LOW'} (±{fmt(daysUntilRace * 0.04 + 0.3)}°C)</div>
-                    </div>
-                  </div>
-                )}
+              <div className="hint" style={{marginTop:8, padding:'8px 0', borderTop:'1px solid var(--border)'}}>
+                Live observation is fetched automatically from Open-Meteo Marine API (Cervia, 44.26°N 12.35°E).
+                {hasObservation && ` Latest reading: ${fmt(obsTemp)}°C on ${liveDate.toLocaleDateString('en-GB', {day:'numeric',month:'short'})}.`}
+                {!hasObservation && ' No recent September observation available — Method 5 inactive.'}
               </div>
             </div>
           )}
