@@ -1,485 +1,612 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diamond Peak</title>
-    <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg: #f8f5ef;
-            --card: #fff;
-            --ink: #18160f;
-            --ink2: #4a4535;
-            --muted: #9a9080;
-            --border: #ddd8cc;
-            --green: #1d6840;
-            --blue: #1a5276;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f8f5ef;
+  --card: #fff;
+  --ink: #18160f;
+  --ink2: #4a4535;
+  --muted: #9a9080;
+  --border: #ddd8cc;
+  --green: #1d6840;
+  --blue: #1a5276;
+  --hero-bg: #0e0d0a;
+  --hero-ink: #e8e4da;
+}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; -webkit-font-smoothing: antialiased; }
 
-        /* Hero */
-        .hero {
-            text-align: center;
-            padding: 56px 24px 40px;
-            max-width: 720px;
-            margin: 0 auto;
-        }
+/* ── HERO ────────────────────────────── */
+.hero {
+  position: relative;
+  background: var(--hero-bg);
+  color: var(--hero-ink);
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 24px 80px;
+  overflow: hidden;
+}
 
-        .diamond-logo {
-            width: 56px;
-            height: 67px;
-            margin: 0 auto 24px;
-            opacity: 0.85;
-        }
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 40%, rgba(29,104,64,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 30%, rgba(26,82,118,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 50% 80%, rgba(200,194,180,0.04) 0%, transparent 50%);
+  pointer-events: none;
+}
 
-        .eyebrow {
-            font-family: 'DM Mono', monospace;
-            font-size: 10px;
-            letter-spacing: 0.25em;
-            text-transform: uppercase;
-            color: var(--muted);
-            margin-bottom: 12px;
-        }
+.hero-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 128px;
+  pointer-events: none;
+}
 
-        h1 {
-            font-family: 'Libre Baskerville', serif;
-            font-size: clamp(28px, 5vw, 42px);
-            font-weight: 700;
-            line-height: 1.15;
-            margin-bottom: 10px;
-        }
+.hero canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
 
-        .subtitle {
-            font-size: 15px;
-            color: var(--ink2);
-            line-height: 1.6;
-        }
+.hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 680px;
+}
 
-        /* Sections */
-        .page {
-            max-width: 720px;
-            margin: 0 auto;
-            padding: 0 16px 72px;
-        }
-        @media(min-width:600px) { .page { padding: 0 24px 80px; } }
+.diamond-logo {
+  width: 72px;
+  height: 86px;
+  margin: 0 auto 40px;
+  opacity: 0;
+  animation: fadeUp 0.8s ease-out 0.2s forwards;
+  filter: drop-shadow(0 0 40px rgba(200,194,180,0.15));
+}
 
-        .section {
-            margin-bottom: 40px;
-        }
+.hero-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: rgba(200,194,180,0.5);
+  margin-bottom: 20px;
+  opacity: 0;
+  animation: fadeUp 0.8s ease-out 0.35s forwards;
+}
 
-        .section-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
+.hero h1 {
+  font-family: 'Libre Baskerville', serif;
+  font-size: clamp(36px, 6vw, 56px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+  opacity: 0;
+  animation: fadeUp 0.8s ease-out 0.5s forwards;
+}
 
-        .section-label {
-            font-family: 'DM Mono', monospace;
-            font-size: 9px;
-            font-weight: 500;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            color: var(--muted);
-            white-space: nowrap;
-        }
+.hero h1 em {
+  font-style: italic;
+  color: rgba(200,194,180,0.45);
+}
 
-        .section-line {
-            flex: 1;
-            height: 1px;
-            background: var(--border);
-        }
+.hero-sub {
+  font-size: 16px;
+  font-weight: 300;
+  color: rgba(200,194,180,0.55);
+  line-height: 1.7;
+  max-width: 480px;
+  margin: 0 auto 36px;
+  opacity: 0;
+  animation: fadeUp 0.8s ease-out 0.65s forwards;
+}
 
-        /* Subsections */
-        .subsection {
-            margin-left: 20px;
-            margin-bottom: 28px;
-        }
+.hero-scroll {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgba(200,194,180,0.3);
+  text-decoration: none;
+  opacity: 0;
+  animation: fadeUp 0.8s ease-out 0.8s forwards;
+  transition: color 0.3s;
+}
+.hero-scroll:hover { color: rgba(200,194,180,0.6); }
+.hero-scroll svg { animation: bobDown 2s ease-in-out infinite; }
 
-        .subsection .section-header { margin-bottom: 14px; }
+/* ── PAGE BODY ───────────────────────── */
+.page {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 0 20px 80px;
+}
+@media(min-width:600px) { .page { padding: 0 32px 100px; } }
 
-        /* TOC line animation */
-        .toc-line {
-            position: relative;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            margin-bottom: 16px;
-            overflow: hidden;
-        }
-        .toc-line canvas {
-            display: block;
-            width: 100%;
-            height: 100px;
-        }
+/* ── SECTION HEADERS ──────────────────── */
+.section { margin-bottom: 56px; }
 
-        /* Tool cards */
-        .tools {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 12px;
-        }
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+  padding-top: 48px;
+}
 
-        .tool-card {
-            position: relative;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 20px;
-            text-decoration: none;
-            color: var(--ink);
-            transition: all 0.2s;
-        }
+.section-tag {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  position: relative;
+}
 
-        .tool-card:hover {
-            border-color: var(--ink2);
-            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
-            transform: translateY(-2px);
-        }
+.section-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
 
-        .card-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            background: #faf8f4;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            margin-bottom: 12px;
-            font-size: 16px;
-        }
+/* Subsections */
+.subsection { margin-left: 24px; margin-bottom: 32px; }
+.subsection .section-head { padding-top: 0; margin-bottom: 18px; }
 
-        .card-icon--logo {
-            background: var(--card);
-        }
+/* ── TOC LINE ANIMATION ───────────────── */
+.toc-widget {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+.toc-widget canvas { display: block; width: 100%; height: 100px; }
 
-        .card-icon--logo img {
-            width: 24px;
-            height: 24px;
-            object-fit: contain;
-        }
+/* ── TOOL CARDS ───────────────────────── */
+.tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
 
-        .tool-card h3 {
-            font-family: 'DM Sans', sans-serif;
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 6px;
-            color: var(--ink);
-        }
+.tool-card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px;
+  text-decoration: none;
+  color: var(--ink);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
 
-        .tool-card p {
-            font-size: 12px;
-            color: var(--ink2);
-            line-height: 1.6;
-        }
+.tool-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--green), var(--blue));
+  opacity: 0;
+  transition: opacity 0.3s;
+}
 
-        .card-arrow {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            color: var(--border);
-            font-size: 14px;
-            transition: color 0.2s;
-        }
+.tool-card:hover {
+  border-color: transparent;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
+  transform: translateY(-3px);
+}
+.tool-card:hover::before { opacity: 1; }
 
-        .tool-card:hover .card-arrow { color: var(--ink2); }
+.card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #faf8f4, #f0ede5);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 14px;
+  font-size: 18px;
+}
 
-        .card-tag {
-            display: inline-block;
-            font-family: 'DM Mono', monospace;
-            font-size: 9px;
-            font-weight: 500;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--green);
-            background: #e6f4ec;
-            border: 1px solid #c4ddd0;
-            border-radius: 4px;
-            padding: 2px 8px;
-            margin-top: 8px;
-        }
+.card-icon--logo { background: var(--card); }
+.card-icon--logo img { width: 24px; height: 24px; object-fit: contain; }
 
-        .empty-state {
-            color: var(--muted);
-            font-size: 12px;
-            font-style: italic;
-            padding: 12px 0;
-        }
+.tool-card h3 {
+  font-family: 'Libre Baskerville', serif;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--ink);
+  line-height: 1.3;
+}
 
-        .footer {
-            text-align: center;
-            padding: 24px;
-            font-family: 'DM Mono', monospace;
-            font-size: 10px;
-            color: var(--muted);
-            letter-spacing: 0.05em;
-        }
-    </style>
+.tool-card p {
+  font-size: 12px;
+  color: var(--ink2);
+  line-height: 1.65;
+}
+
+.card-arrow {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  color: var(--border);
+  font-size: 14px;
+  transition: all 0.25s;
+}
+.tool-card:hover .card-arrow {
+  color: var(--green);
+  transform: translate(2px, -2px);
+}
+
+.card-tag {
+  display: inline-block;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--green);
+  background: #e6f4ec;
+  border: 1px solid #c4ddd0;
+  border-radius: 4px;
+  padding: 2px 8px;
+  margin-top: 8px;
+}
+
+/* ── FOOTER ───────────────────────────── */
+.footer {
+  text-align: center;
+  padding: 40px 24px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  border-top: 1px solid var(--border);
+  max-width: 840px;
+  margin: 0 auto;
+}
+
+/* ── SCROLL REVEAL ────────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── KEYFRAMES ────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes bobDown {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(4px); }
+}
+</style>
 </head>
 <body>
-    <div class="hero">
-        <svg class="diamond-logo" viewBox="0 0 80 96" fill="none">
-            <polygon points="40,0 10,28 70,28" fill="#c8c2b4"/>
-            <polygon points="10,28 0,36 40,28" fill="#a89e8e"/>
-            <polygon points="70,28 80,36 40,28" fill="#b8ae9e"/>
-            <polygon points="0,36 40,28 80,36" fill="#d4cfc4" opacity="0.9"/>
-            <polygon points="0,36 40,96 40,36" fill="#9a9080"/>
-            <polygon points="80,36 40,96 40,36" fill="#b8ae9e"/>
-            <polygon points="40,0 25,28 40,28" fill="rgba(255,255,255,0.25)"/>
-            <polygon points="40,28 55,28 80,36 40,36" fill="rgba(255,255,255,0.1)"/>
-        </svg>
-        <div class="eyebrow">Diamond Peak</div>
-        <h1>Professional Services</h1>
-        <p class="subtitle">FMCG consulting and AI-driven solutions</p>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<section class="hero">
+  <div class="hero-grain"></div>
+  <canvas id="heroMesh"></canvas>
+  <div class="hero-content">
+    <svg class="diamond-logo" viewBox="0 0 80 96" fill="none">
+      <polygon points="40,0 10,28 70,28" fill="#c8c2b4"/>
+      <polygon points="10,28 0,36 40,28" fill="#a89e8e"/>
+      <polygon points="70,28 80,36 40,28" fill="#b8ae9e"/>
+      <polygon points="0,36 40,28 80,36" fill="#d4cfc4" opacity="0.9"/>
+      <polygon points="0,36 40,96 40,36" fill="#9a9080"/>
+      <polygon points="80,36 40,96 40,36" fill="#b8ae9e"/>
+      <polygon points="40,0 25,28 40,28" fill="rgba(255,255,255,0.25)"/>
+      <polygon points="40,28 55,28 80,36 40,36" fill="rgba(255,255,255,0.1)"/>
+    </svg>
+    <div class="hero-eyebrow">Diamond Peak</div>
+    <h1>Professional Services <em>&</em><br>Consulting Tools</h1>
+    <p class="hero-sub">FMCG consulting, AI-driven solutions, and interactive tools built for practitioners.</p>
+    <a href="#content" class="hero-scroll">
+      Explore
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6l4 4 4-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+  </div>
+</section>
+
+<!-- ═══════════════ CONTENT ═══════════════ -->
+<div class="page" id="content">
+
+  <!-- ── CONSULTING ──────────────── -->
+  <div class="section">
+    <div class="section-head reveal">
+      <span class="section-tag">Consulting</span>
+      <div class="section-rule"></div>
     </div>
 
-    <div class="page">
-        <div class="section">
-            <div class="section-header">
-                <span class="section-label">Consulting</span>
-                <div class="section-line"></div>
-            </div>
-
-            <div class="subsection">
-                <div class="section-header">
-                    <span class="section-label">FMCG</span>
-                    <div class="section-line"></div>
-                </div>
-                <div class="toc-line">
-                    <canvas id="tocCanvas" height="100"></canvas>
-                </div>
-                <script>
-                (function() {
-                  var canvas = document.getElementById('tocCanvas');
-                  var ctx = canvas.getContext('2d');
-                  var dpr = window.devicePixelRatio || 1;
-
-                  var stations = [
-                    { name: 'Infeed',  rate: 1.0 },
-                    { name: 'Process', rate: 1.0 },
-                    { name: 'Fill',    rate: 0.42 },
-                    { name: 'Seal',    rate: 1.0 },
-                    { name: 'Label',   rate: 1.0 },
-                    { name: 'Pack',    rate: 1.0 }
-                  ];
-
-                  var particles = [];
-                  var baseSpeed = 1.8;
-                  var spawnInterval = 38;
-                  var frame = 0;
-                  var W, H, stationW, laneY, stationY;
-
-                  function resize() {
-                    var rect = canvas.getBoundingClientRect();
-                    W = rect.width * dpr;
-                    H = 100 * dpr;
-                    canvas.width = W;
-                    canvas.height = H;
-                    stationW = W / stations.length;
-                    laneY = H * 0.38;
-                    stationY = H * 0.72;
-                  }
-
-                  function spawnParticle() {
-                    particles.push({ x: -8, processed: Array(stations.length).fill(false), waiting: false });
-                  }
-
-                  function tick() {
-                    for (var i = particles.length - 1; i >= 0; i--) {
-                      var p = particles[i];
-                      p.waiting = false;
-                      var nextStation = -1;
-                      for (var s = 0; s < stations.length; s++) {
-                        if (!p.processed[s]) { nextStation = s; break; }
-                      }
-                      if (nextStation === -1) {
-                        p.x += baseSpeed;
-                        if (p.x > W + 10) { particles.splice(i, 1); }
-                        continue;
-                      }
-                      var stationCenterX = stationW * nextStation + stationW * 0.5;
-                      var approachX = stationCenterX - stationW * 0.15;
-                      if (p.x < approachX) {
-                        p.x += baseSpeed;
-                        if (p.x > approachX) p.x = approachX;
-                      } else {
-                        if (Math.random() < stations[nextStation].rate) {
-                          p.processed[nextStation] = true;
-                          p.x = stationCenterX + stationW * 0.15;
-                        } else {
-                          p.waiting = true;
-                        }
-                      }
-                    }
-                  }
-
-                  function bufferCount(stationIdx) {
-                    var count = 0;
-                    var approachX = stationW * stationIdx + stationW * 0.35;
-                    for (var i = 0; i < particles.length; i++) {
-                      if (particles[i].waiting && Math.abs(particles[i].x - approachX) < stationW * 0.3) count++;
-                    }
-                    return count;
-                  }
-
-                  function draw() {
-                    ctx.clearRect(0, 0, W, H);
-                    // Track line
-                    ctx.strokeStyle = '#ddd8cc';
-                    ctx.lineWidth = 1 * dpr;
-                    ctx.beginPath();
-                    ctx.moveTo(0, laneY);
-                    ctx.lineTo(W, laneY);
-                    ctx.stroke();
-
-                    for (var s = 0; s < stations.length; s++) {
-                      var cx = stationW * s + stationW * 0.5;
-                      var bCount = bufferCount(s);
-                      // Buffer zone
-                      if (bCount > 0) {
-                        var bufAlpha = Math.min(bCount / 5, 1) * 0.15;
-                        ctx.fillStyle = 'rgba(210,160,60,' + bufAlpha + ')';
-                        ctx.fillRect(stationW * s, laneY - 14 * dpr, stationW * 0.35, 28 * dpr);
-                      }
-                      // Station box
-                      var isConstraint = stations[s].rate < 1;
-                      var boxW = stationW * 0.5;
-                      var boxH = 18 * dpr;
-                      ctx.fillStyle = isConstraint ? '#e8d4d0' : '#e6f4ec';
-                      ctx.strokeStyle = isConstraint ? '#c0756a' : '#a0ccb0';
-                      ctx.lineWidth = 1 * dpr;
-                      ctx.beginPath();
-                      ctx.roundRect(cx - boxW / 2, stationY - boxH / 2, boxW, boxH, 3 * dpr);
-                      ctx.fill();
-                      ctx.stroke();
-                      // Station label
-                      ctx.fillStyle = isConstraint ? '#8b3a2f' : '#1d6840';
-                      ctx.font = (8 * dpr) + 'px DM Mono, monospace';
-                      ctx.textAlign = 'center';
-                      ctx.textBaseline = 'middle';
-                      ctx.fillText(stations[s].name.toUpperCase(), cx, stationY);
-                      // Constraint marker
-                      if (isConstraint) {
-                        ctx.fillStyle = '#c0756a';
-                        ctx.font = 'bold ' + (7 * dpr) + 'px DM Mono, monospace';
-                        ctx.fillText('CONSTRAINT', cx, stationY + boxH / 2 + 8 * dpr);
-                      }
-                    }
-
-                    // Particles
-                    for (var i = 0; i < particles.length; i++) {
-                      var p = particles[i];
-                      ctx.beginPath();
-                      ctx.arc(p.x, laneY, 4 * dpr, 0, Math.PI * 2);
-                      ctx.fillStyle = p.waiting ? '#d4a03c' : '#1d6840';
-                      ctx.fill();
-                    }
-                  }
-
-                  function loop() {
-                    frame++;
-                    if (frame % spawnInterval === 0) spawnParticle();
-                    tick();
-                    draw();
-                    requestAnimationFrame(loop);
-                  }
-
-                  resize();
-                  window.addEventListener('resize', resize);
-                  // Pre-warm
-                  for (var i = 0; i < 120; i++) {
-                    frame++;
-                    if (frame % spawnInterval === 0) spawnParticle();
-                    tick();
-                  }
-                  loop();
-                })();
-                </script>
-                <div class="tools">
-                    <a href="rag-study.html" class="tool-card">
-                        <div class="card-icon">&#x1F6A6;</div>
-                        <h3>RAG Study Tool</h3>
-                        <p>Red Amber Green production line study — track uptime, log stops, speed changes, live Pareto, optional output counter, and export data.</p>
-                        <span class="card-arrow">&#8599;</span>
-                    </a>
-                    <a href="giveaway-calculator.html" class="tool-card">
-                        <div class="card-icon">&#x2696;</div>
-                        <h3>Giveaway Reduction Calculator</h3>
-                        <p>Visualise how reducing fill weight SD reduces giveaway and quantify the annual financial saving.</p>
-                        <span class="card-arrow">&#8599;</span>
-                    </a>
-                    <a href="mhw-simulator.html" class="tool-card">
-                        <div class="card-icon">&#9878;</div>
-                        <h3>Multihead Weigher Simulator</h3>
-                        <p>Simulate combinatorial weigher giveaway — compare head counts, shift modes, and item distributions side-by-side.</p>
-                        <span class="card-arrow">&#8599;</span>
-                    </a>
-                </div>
-            </div>
-
-            <div class="subsection">
-                <div class="section-header">
-                    <span class="section-label">AI</span>
-                    <div class="section-line"></div>
-                </div>
-                <div class="tools">
-                    <a href="maji/index.html" class="tool-card">
-                        <div class="card-icon card-icon--logo">
-                            <img src="https://cdn.prod.website-files.com/6917572096f0764001bd6b87/6917572096f0764001bd6c40_RGB%20Logo%20Mark%20Full%20Colour.svg" alt="Maji AI" width="24" height="24">
-                        </div>
-                        <h3>Maji AI</h3>
-                        <p>Operational Excellence, On Demand — AI-powered consulting for manufacturing and operations.</p>
-                        <span class="card-tag">Case Study</span>
-                        <span class="card-arrow">&#8599;</span>
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <div class="section">
-            <div class="section-header">
-                <span class="section-label">Resources</span>
-                <div class="section-line"></div>
-            </div>
-            <div class="tools">
-                <a href="stamp-duty.html" class="tool-card">
-                    <div class="card-icon">&#127968;</div>
-                    <h3>Stamp Duty Calculator</h3>
-                    <p>Calculate UK stamp duty land tax for property purchases.</p>
-                    <span class="card-arrow">&#8599;</span>
-                </a>
-                <a href="student-loan.html" class="tool-card">
-                    <div class="card-icon">&#127891;</div>
-                    <h3>Student Loan: Pay Off or Invest?</h3>
-                    <p>Should you clear your student loan or invest in an ISA? See the maths with interactive charts.</p>
-                    <span class="card-arrow">&#8599;</span>
-                </a>
-                <a href="should-you-wait.html" class="tool-card">
-                    <div class="card-icon">&#127968;</div>
-                    <h3>Accept Now, or Wait?</h3>
-                    <p>Mortgage cost reality check for sellers — see how rate changes affect buyer affordability.</p>
-                    <span class="card-arrow">&#8599;</span>
-                </a>
-                <a href="random-number.html" class="tool-card">
-                    <div class="card-icon">&#127922;</div>
-                    <h3>Random Number Generator</h3>
-                    <p>Generate random numbers within any range, with options for unique values and sorting.</p>
-                    <span class="card-arrow">&#8599;</span>
-                </a>
-                <a href="cervia-wetsuit.html" class="tool-card">
-                    <div class="card-icon">&#127754;</div>
-                    <h3>Cervia Ironman Wetsuit Predictor</h3>
-                    <p>Five prediction methods triangulate Adriatic water temperature for IRONMAN Italy — wetsuit or non-wetsuit swim?</p>
-                    <span class="card-arrow">&#8599;</span>
-                </a>
-            </div>
-        </div>
+    <!-- FMCG -->
+    <div class="subsection">
+      <div class="section-head reveal">
+        <span class="section-tag">FMCG</span>
+        <div class="section-rule"></div>
+      </div>
+      <div class="toc-widget reveal">
+        <canvas id="tocCanvas" height="100"></canvas>
+      </div>
+      <div class="tools">
+        <a href="rag-study.html" class="tool-card reveal">
+          <div class="card-icon">&#x1F6A6;</div>
+          <h3>RAG Study Tool</h3>
+          <p>Red Amber Green production line study — track uptime, log stops, speed changes, live Pareto, optional output counter, and export data.</p>
+          <span class="card-arrow">&#8599;</span>
+        </a>
+        <a href="giveaway-calculator.html" class="tool-card reveal">
+          <div class="card-icon">&#x2696;</div>
+          <h3>Giveaway Reduction Calculator</h3>
+          <p>Visualise how reducing fill weight SD reduces giveaway and quantify the annual financial saving.</p>
+          <span class="card-arrow">&#8599;</span>
+        </a>
+        <a href="mhw-simulator.html" class="tool-card reveal">
+          <div class="card-icon">&#9878;</div>
+          <h3>Multihead Weigher Simulator</h3>
+          <p>Simulate combinatorial weigher giveaway — compare head counts, shift modes, and item distributions side-by-side.</p>
+          <span class="card-arrow">&#8599;</span>
+        </a>
+      </div>
     </div>
 
-    <div class="footer">&copy; 2026 Diamond Peak</div>
+    <!-- AI -->
+    <div class="subsection">
+      <div class="section-head reveal">
+        <span class="section-tag">AI</span>
+        <div class="section-rule"></div>
+      </div>
+      <div class="tools">
+        <a href="maji/index.html" class="tool-card reveal">
+          <div class="card-icon card-icon--logo">
+            <img src="https://cdn.prod.website-files.com/6917572096f0764001bd6b87/6917572096f0764001bd6c40_RGB%20Logo%20Mark%20Full%20Colour.svg" alt="Maji AI" width="24" height="24">
+          </div>
+          <h3>Maji AI</h3>
+          <p>Operational Excellence, On Demand — AI-powered consulting for manufacturing and operations.</p>
+          <span class="card-tag">Case Study</span>
+          <span class="card-arrow">&#8599;</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RESOURCES ───────────────── -->
+  <div class="section">
+    <div class="section-head reveal">
+      <span class="section-tag">Resources</span>
+      <div class="section-rule"></div>
+    </div>
+    <div class="tools">
+      <a href="stamp-duty.html" class="tool-card reveal">
+        <div class="card-icon">&#127968;</div>
+        <h3>Stamp Duty Calculator</h3>
+        <p>Calculate UK stamp duty land tax for property purchases.</p>
+        <span class="card-arrow">&#8599;</span>
+      </a>
+      <a href="student-loan.html" class="tool-card reveal">
+        <div class="card-icon">&#127891;</div>
+        <h3>Student Loan: Pay Off or Invest?</h3>
+        <p>Should you clear your student loan or invest in an ISA? See the maths with interactive charts.</p>
+        <span class="card-arrow">&#8599;</span>
+      </a>
+      <a href="should-you-wait.html" class="tool-card reveal">
+        <div class="card-icon">&#127968;</div>
+        <h3>Accept Now, or Wait?</h3>
+        <p>Mortgage cost reality check for sellers — see how rate changes affect buyer affordability.</p>
+        <span class="card-arrow">&#8599;</span>
+      </a>
+      <a href="random-number.html" class="tool-card reveal">
+        <div class="card-icon">&#127922;</div>
+        <h3>Random Number Generator</h3>
+        <p>Generate random numbers within any range, with options for unique values and sorting.</p>
+        <span class="card-arrow">&#8599;</span>
+      </a>
+      <a href="cervia-wetsuit.html" class="tool-card reveal">
+        <div class="card-icon">&#127754;</div>
+        <h3>Cervia Ironman Wetsuit Predictor</h3>
+        <p>Five prediction methods triangulate Adriatic water temperature for IRONMAN Italy — wetsuit or non-wetsuit swim?</p>
+        <span class="card-arrow">&#8599;</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="footer">&copy; 2026 Diamond Peak</div>
+
+<!-- ═══════════════ SCRIPTS ═══════════════ -->
+<script>
+/* ── Hero mesh — subtle floating grid ──────── */
+(function() {
+  var c = document.getElementById('heroMesh');
+  var ctx = c.getContext('2d');
+  var dpr = window.devicePixelRatio || 1;
+  var W, H, cols, rows, pts;
+
+  function resize() {
+    var r = c.getBoundingClientRect();
+    W = r.width * dpr; H = r.height * dpr;
+    c.width = W; c.height = H;
+    cols = Math.ceil(W / 80) + 1;
+    rows = Math.ceil(H / 80) + 1;
+    pts = [];
+    for (var y = 0; y < rows; y++) {
+      for (var x = 0; x < cols; x++) {
+        pts.push({
+          ox: x * 80, oy: y * 80,
+          x: x * 80, y: y * 80,
+          vx: (Math.random() - 0.5) * 0.12,
+          vy: (Math.random() - 0.5) * 0.12,
+          phase: Math.random() * Math.PI * 2
+        });
+      }
+    }
+  }
+
+  function draw(t) {
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(200,194,180,0.035)';
+    ctx.lineWidth = dpr;
+
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      p.x = p.ox + Math.sin(t * 0.0003 + p.phase) * 12;
+      p.y = p.oy + Math.cos(t * 0.0004 + p.phase * 1.3) * 10;
+    }
+
+    // Draw grid lines
+    for (var y = 0; y < rows; y++) {
+      ctx.beginPath();
+      for (var x = 0; x < cols; x++) {
+        var p = pts[y * cols + x];
+        x === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+    }
+    for (var x = 0; x < cols; x++) {
+      ctx.beginPath();
+      for (var y = 0; y < rows; y++) {
+        var p = pts[y * cols + x];
+        y === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+    }
+
+    // Subtle node dots
+    ctx.fillStyle = 'rgba(200,194,180,0.06)';
+    for (var i = 0; i < pts.length; i++) {
+      ctx.beginPath();
+      ctx.arc(pts[i].x, pts[i].y, 1.5 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  resize();
+  window.addEventListener('resize', resize);
+  requestAnimationFrame(draw);
+})();
+
+/* ── TOC production line animation ──────── */
+(function() {
+  var canvas = document.getElementById('tocCanvas');
+  var ctx = canvas.getContext('2d');
+  var dpr = window.devicePixelRatio || 1;
+  var stations = [
+    { name: 'Infeed',  rate: 1.0 },
+    { name: 'Process', rate: 1.0 },
+    { name: 'Fill',    rate: 0.42 },
+    { name: 'Seal',    rate: 1.0 },
+    { name: 'Label',   rate: 1.0 },
+    { name: 'Pack',    rate: 1.0 }
+  ];
+  var particles = [], baseSpeed = 1.8, spawnInterval = 38, frame = 0;
+  var W, H, stationW, laneY, stationY;
+
+  function resize() {
+    var rect = canvas.getBoundingClientRect();
+    W = rect.width * dpr; H = 100 * dpr;
+    canvas.width = W; canvas.height = H;
+    stationW = W / stations.length;
+    laneY = H * 0.38; stationY = H * 0.72;
+  }
+  function spawnParticle() { particles.push({ x: -8, processed: Array(stations.length).fill(false), waiting: false }); }
+  function tick() {
+    for (var i = particles.length - 1; i >= 0; i--) {
+      var p = particles[i]; p.waiting = false;
+      var ns = -1;
+      for (var s = 0; s < stations.length; s++) { if (!p.processed[s]) { ns = s; break; } }
+      if (ns === -1) { p.x += baseSpeed; if (p.x > W + 10) particles.splice(i, 1); continue; }
+      var cx = stationW * ns + stationW * 0.5, ax = cx - stationW * 0.15;
+      if (p.x < ax) { p.x += baseSpeed; if (p.x > ax) p.x = ax; }
+      else if (Math.random() < stations[ns].rate) { p.processed[ns] = true; p.x = cx + stationW * 0.15; }
+      else p.waiting = true;
+    }
+  }
+  function bufferCount(si) {
+    var c = 0, ax = stationW * si + stationW * 0.35;
+    for (var i = 0; i < particles.length; i++) if (particles[i].waiting && Math.abs(particles[i].x - ax) < stationW * 0.3) c++;
+    return c;
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = '#ddd8cc'; ctx.lineWidth = dpr;
+    ctx.beginPath(); ctx.moveTo(0, laneY); ctx.lineTo(W, laneY); ctx.stroke();
+    for (var s = 0; s < stations.length; s++) {
+      var cx = stationW * s + stationW * 0.5, bc = bufferCount(s);
+      if (bc > 0) {
+        ctx.fillStyle = 'rgba(210,160,60,' + (Math.min(bc / 5, 1) * 0.15) + ')';
+        ctx.fillRect(stationW * s, laneY - 14 * dpr, stationW * 0.35, 28 * dpr);
+      }
+      var ic = stations[s].rate < 1, bw = stationW * 0.5, bh = 18 * dpr;
+      ctx.fillStyle = ic ? '#e8d4d0' : '#e6f4ec';
+      ctx.strokeStyle = ic ? '#c0756a' : '#a0ccb0'; ctx.lineWidth = dpr;
+      ctx.beginPath(); ctx.roundRect(cx - bw / 2, stationY - bh / 2, bw, bh, 3 * dpr); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = ic ? '#8b3a2f' : '#1d6840';
+      ctx.font = (8 * dpr) + 'px DM Mono, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(stations[s].name.toUpperCase(), cx, stationY);
+      if (ic) { ctx.fillStyle = '#c0756a'; ctx.font = 'bold ' + (7 * dpr) + 'px DM Mono, monospace'; ctx.fillText('CONSTRAINT', cx, stationY + bh / 2 + 8 * dpr); }
+    }
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i]; ctx.beginPath(); ctx.arc(p.x, laneY, 4 * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = p.waiting ? '#d4a03c' : '#1d6840'; ctx.fill();
+    }
+  }
+  function loop() { frame++; if (frame % spawnInterval === 0) spawnParticle(); tick(); draw(); requestAnimationFrame(loop); }
+  resize(); window.addEventListener('resize', resize);
+  for (var i = 0; i < 120; i++) { frame++; if (frame % spawnInterval === 0) spawnParticle(); tick(); }
+  loop();
+})();
+
+/* ── Scroll reveal ──────────────────────── */
+(function() {
+  var els = document.querySelectorAll('.reveal');
+  var io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) {
+      if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+  els.forEach(function(el, i) {
+    el.style.transitionDelay = (i % 4) * 80 + 'ms';
+    io.observe(el);
+  });
+})();
+</script>
 </body>
 </html>
