@@ -203,6 +203,27 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 .sim-key-bar { width: 20px; height: 8px; border: 1px solid #333; background: #222; position: relative; overflow: hidden; }
 .sim-key-bar-fill { height: 100%; }
 
+/* Machine stop overlay */
+.stop-overlay {
+  display: none;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 1000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 20px;
+  padding: 40px;
+}
+.stop-overlay.active { display: flex; }
+.stop-icon { font-size: 80px; color: #cc3333; animation: stopPulse 1.2s ease-in-out infinite; }
+@keyframes stopPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.05)} }
+.stop-title { font-size: 36px; font-weight: bold; color: #cc3333; letter-spacing: 0.15em; text-transform: uppercase; }
+.stop-reason { font-size: 14px; color: #ccc; max-width: 600px; line-height: 1.6; }
+.stop-restart { padding: 16px 48px; background: var(--green); border: none; border-radius: 4px; color: #000; font-family: inherit; font-size: 18px; font-weight: bold; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; margin-top: 10px; }
+.stop-restart:hover { background: #00ee77; }
+
 /* Per-card demo commentary */
 .card-log {
   border-top: 1px solid var(--border);
@@ -322,6 +343,12 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 
 <!-- ═══ SIM VIEW ═══ -->
 <div id="sim-view">
+  <div class="stop-overlay" id="stopOverlay">
+    <div class="stop-icon">⚠</div>
+    <div class="stop-title">Machine Stopped</div>
+    <div class="stop-reason" id="stopReason">No valid combination within Hi Limit. Over-Discharge is OFF — the machine cannot release overweight packs. In production, an operator must intervene.</div>
+    <button class="stop-restart" onclick="restartMachine()">Restart Machine</button>
+  </div>
   <div class="sim-bar">
     <span class="sim-bar-title">Auto Operation</span>
     <div class="sim-bar-info" id="simInfo"></div>
@@ -996,13 +1023,15 @@ function simPause() {
 
 function simReset() {
   running = false; paused = false; machineStopped = false;
+  document.getElementById('stopOverlay').classList.remove('active');
   if (tid) { clearTimeout(tid); cancelAnimationFrame(tid); tid = null; }
   document.querySelectorAll('.card-log').forEach(el => el.innerHTML = '');
   initSim();
 }
 
 function goBack() {
-  running = false; paused = false;
+  running = false; paused = false; machineStopped = false;
+  document.getElementById('stopOverlay').classList.remove('active');
   if (tid) { clearTimeout(tid); cancelAnimationFrame(tid); tid = null; }
   document.getElementById('sim-view').style.display = 'none';
   document.getElementById('setup-view').style.display = 'flex';
@@ -1026,6 +1055,7 @@ let machineStopped = false; // true when Over-Discharge OFF triggers a stop
 
 function restartMachine() {
   machineStopped = false;
+  document.getElementById('stopOverlay').classList.remove('active');
   document.getElementById('simStatus').innerHTML = 'RUNNING — <strong style="color:#00cccc">DEMO</strong> (restarted)';
   // Log the restart in affected scenarios
   SP.scenarios.forEach((sc, i) => {
@@ -1057,7 +1087,8 @@ function runDemo() {
       drawScenarioCanvas(scIdx); updateCards();
       if (result.stopped) {
         machineStopped = true;
-        document.getElementById('simStatus').innerHTML = '<strong style="color:#cc3333">STOPPED</strong> — Over-Discharge OFF, no valid combo. <button class="cbtn cbtn--go" style="margin-left:8px;padding:4px 12px;font-size:10px" onclick="restartMachine()">RESTART MACHINE</button>';
+        document.getElementById('simStatus').innerHTML = '<strong style="color:#cc3333">STOPPED</strong> — Over-Discharge OFF, no valid combo';
+        document.getElementById('stopOverlay').classList.add('active');
         return;
       }
     }
