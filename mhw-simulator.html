@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MHW Simulator v3.1 — Diamond Peak</title>
+<title>MHW Simulator v3.2 — Diamond Peak</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Share+Tech+Mono&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -240,7 +240,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 <!-- ═══ SETUP ═══ -->
 <div id="setup-view">
   <div class="setup-header">
-    <span class="setup-title">MHW Simulator v3.1 — Program Setup</span>
+    <span class="setup-title">MHW Simulator v3.2 — Program Setup</span>
     <a href="index.html" class="back-link">&larr; DIAMOND PEAK</a>
   </div>
   <div class="setup-body">
@@ -288,14 +288,16 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
       </div>
 
       <div class="param-group">
-        <div class="param-group-title">Product</div>
+        <div class="param-group-title">Weight Limits</div>
         <div class="param-row"><span class="param-label">Target Weight</span><input class="param-input" type="number" id="targetWeight" value="800" step="10"><span class="param-unit">g</span></div>
-        <div class="param-row"><span class="param-label">T1 Tolerance</span><input class="param-input" type="number" id="t1Tolerance" value="15" step="1"><span class="param-unit">g</span></div>
+        <div class="param-row"><span class="param-label">T1 Tolerance (−)</span><input class="param-input" type="number" id="t1Tolerance" value="15" step="1"><span class="param-unit">g</span></div>
+        <div class="param-row"><span class="param-label">Hi Limit (+)</span><input class="param-input" type="number" id="hiLimit" value="30" step="5"><span class="param-unit">g</span></div>
       </div>
 
       <div class="param-group">
-        <div class="param-group-title">Simulation</div>
-        <div class="param-row"><span class="param-label">Force Dump</span><input class="param-input" type="number" id="forceDump" value="5" min="1" max="20"><span class="param-unit">cy</span></div>
+        <div class="param-group-title">Machine Settings</div>
+        <div class="param-row"><span class="param-label">Over-Discharge</span><select class="param-input" id="overDischarge" style="width:72px"><option value="on" selected>ON</option><option value="off">OFF</option></select><span class="param-unit"></span></div>
+        <div class="param-row"><span class="param-label">No-Combo Timeout</span><input class="param-input" type="number" id="forceDump" value="5" min="1" max="20"><span class="param-unit">cy</span></div>
         <div class="param-row"><span class="param-label">Bags</span><input class="param-input" type="number" id="numBags" value="50000" step="1000" min="50" max="500000"><span class="param-unit"></span></div>
       </div>
 
@@ -501,11 +503,17 @@ function gauss(m,s){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random(
 function wChoice(w){const t=w.reduce((a,b)=>a+b,0);let r=Math.random()*t;for(let i=0;i<w.length;i++){r-=w[i];if(r<=0)return i;}return w.length-1;}
 
 class MHW {
-  constructor(nBuckets,disabled,target,min,shift,mode,modeParams,fdTimeout){
-    this.n=nBuckets;this.dis=new Set(disabled);this.target=target;this.min=min;this.shift=shift;
+  // Yamato-style zone-based combination weigher
+  // A-zone: min_weight ≤ w ≤ hi_limit (ACCEPT)
+  // B-zone: w > hi_limit (OVER — only if overDischarge ON)
+  // Under: w < min_weight
+  constructor(nBuckets,disabled,target,min,hiLimit,overDischarge,shift,mode,modeParams,fdTimeout){
+    this.n=nBuckets;this.dis=new Set(disabled);this.target=target;this.min=min;
+    this.hiLimit=hiLimit;this.overDis=overDischarge;this.shift=shift;
     this.mode=mode;this.mp=modeParams;this.fdTimeout=fdTimeout;
     this.wt=new Float64Array(nBuckets);this.cd=new Int8Array(nBuckets);this.ic=new Int8Array(nBuckets);
-    this.sel=[];this.wait=0;this.bags=[];this.fd=0;this.wc=0;this.tc=0;
+    this.sel=[];this.wait=0;this.bags=[];this.fd=0;this.od=0;this.wc=0;this.tc=0;
+    this.lastZone='';
     for(let i=0;i<nBuckets;i++)if(!this.dis.has(i))this._fill(i);
   }
   _fill(i){
@@ -513,7 +521,6 @@ class MHW {
       this.wt[i]=Math.round(gauss(this.mp.fillMean,this.mp.fillStd)*10)/10;
       this.ic[i]=1;
     } else {
-      // itemCounts = [1,2,3,...], itemProbs = matching probabilities
       const chosen = this.mp.itemCounts[wChoice(this.mp.itemProbs)];
       let t=0;
       for(let f=0;f<chosen;f++)t+=gauss(this.mp.itemMean,this.mp.itemStd);
@@ -521,14 +528,62 @@ class MHW {
     }
   }
   avail(){const a=[];for(let i=0;i<this.n;i++)if(!this.cd[i]&&!this.dis.has(i))a.push(i);return a;}
-  findCombo(mustMin){
+
+  // Zone-based combination search (Yamato logic)
+  // Returns { indices, weight, zone } or null
+  findZoneCombo(){
     const av=this.avail();if(!av.length)return null;
-    let best=Infinity,bi=null;const mx=Math.min(av.length,5);
-    for(let r=1;r<=mx;r++){this._combos(av,r,c=>{let w=0;for(let i=0;i<c.length;i++)w+=this.wt[c[i]];
-      if(mustMin&&w<this.min)return;const d=Math.abs(w-this.target);if(d<best){best=d;bi=c.slice();}});if(!best)break;}
-    return bi;
+    let bestA=null,bestAdiff=Infinity; // A-zone: min ≤ w ≤ hiLimit, closest to target
+    let bestB=null,bestBdiff=Infinity; // B-zone: w > hiLimit, closest to target
+    let bestU=null,bestUdiff=Infinity; // Under: w < min, closest to target (for recharge info)
+    const mx=Math.min(av.length,5);
+    for(let r=1;r<=mx;r++){
+      this._combos(av,r,c=>{
+        let w=0;for(let i=0;i<c.length;i++)w+=this.wt[c[i]];
+        const d=Math.abs(w-this.target);
+        if(w>=this.min && w<=this.hiLimit){
+          if(d<bestAdiff){bestAdiff=d;bestA=c.slice();}
+        } else if(w>this.hiLimit){
+          if(d<bestBdiff){bestBdiff=d;bestB=c.slice();}
+        } else {
+          if(d<bestUdiff){bestUdiff=d;bestU=c.slice();}
+        }
+      });
+      if(bestAdiff===0)break;
+    }
+    if(bestA) return {indices:bestA,zone:'A'};
+    if(bestB && this.overDis) return {indices:bestB,zone:'B'};
+    if(bestU) return {indices:bestU,zone:'U'}; // underweight — used for forced situations
+    if(bestB) return {indices:bestB,zone:'B'}; // overweight available but overDis OFF
+    return null;
   }
+
+  // Force combo: find closest to target regardless of zone, prefer overweight
+  findForcedCombo(){
+    const av=this.avail();if(!av.length)return null;
+    let bestOver=null,bestOverDiff=Infinity;
+    let bestAny=null,bestAnyDiff=Infinity;
+    const mx=Math.min(av.length,5);
+    for(let r=1;r<=mx;r++){
+      this._combos(av,r,c=>{
+        let w=0;for(let i=0;i<c.length;i++)w+=this.wt[c[i]];
+        const d=Math.abs(w-this.target);
+        if(w>=this.min && d<bestOverDiff){bestOverDiff=d;bestOver=c.slice();}
+        if(d<bestAnyDiff){bestAnyDiff=d;bestAny=c.slice();}
+      });
+    }
+    return bestOver||bestAny;
+  }
+
   _combos(a,r,cb){const n=a.length,c=new Array(r);(function g(s,d){if(d===r){cb(c);return;}for(let i=s;i<=n-r+d;i++){c[d]=a[i];g(i+1,d+1);}})(0,0);}
+
+  // Recharge: refill the lightest available bucket (Yamato behaviour when no combo found)
+  _rechargeLightest(){
+    const av=this.avail();if(!av.length)return -1;
+    let li=av[0];for(let i=1;i<av.length;i++)if(this.wt[av[i]]<this.wt[li])li=av[i];
+    this._fill(li);return li;
+  }
+
   dump(idx){
     let w=0;for(let i=0;i<idx.length;i++)w+=this.wt[idx[i]];
     w=Math.round(w*10)/10;this.sel=idx.slice();
@@ -537,105 +592,95 @@ class MHW {
     this.bags.push(w);return w;
   }
   advance(){this.sel=[];for(let i=0;i<this.n;i++)if(this.cd[i]>0&&!this.dis.has(i)){this.cd[i]--;if(!this.cd[i])this._fill(i);}}
+
   cycle(){
-    this.tc++;const b=this.findCombo(true);
-    if(b){this.dump(b);this.wait=0;return this.bags[this.bags.length-1];}
+    this.tc++;
+    const result=this.findZoneCombo();
+    if(result){
+      if(result.zone==='A'){
+        const wt=this.dump(result.indices);this.wait=0;this.lastZone='A';return wt;
+      }
+      if(result.zone==='B' && this.overDis){
+        const wt=this.dump(result.indices);this.wait=0;this.od++;this.lastZone='B';return wt;
+      }
+    }
+    // No A-zone combo (and no B if overDis off) — recharge lightest + wait
     this.wait++;
-    if(this.wait>=this.fdTimeout){const f=this.findCombo(false);if(f){this.dump(f);this.fd++;this.wait=0;return this.bags[this.bags.length-1];}
-      this.advance();this.wc++;this.wait=0;}else{this.advance();this.wc++;}return null;
+    if(this.wait>=this.fdTimeout){
+      // Timeout: force dump closest combo, preferring overweight
+      const f=this.findForcedCombo();
+      if(f){const wt=this.dump(f);this.fd++;this.wait=0;this.lastZone='F';return wt;}
+      this._rechargeLightest();
+      this.advance();this.wc++;this.wait=0;
+    } else {
+      this._rechargeLightest();
+      this.advance();this.wc++;
+    }
+    return null;
   }
   // Returns { weight: number|null, log: string }
   cycleWithLog(){
     this.tc++;
     const av=this.avail();
-    const cooling=[];const coolDetail=[];
-    for(let i=0;i<this.n;i++){
-      if(this.cd[i]>0&&!this.dis.has(i)){cooling.push(i+1);coolDetail.push(`H${i+1}(${this.cd[i]} cycle${this.cd[i]>1?'s':''} left)`);}
-    }
+    const cooling=[];
+    for(let i=0;i<this.n;i++)if(this.cd[i]>0&&!this.dis.has(i))cooling.push(i+1);
     const disCount=[...this.dis].length;
     const totalActive=this.n-disCount;
-    const avWts=av.map(i=>({h:i+1,w:this.wt[i]}));
     const totalAvailWt=av.reduce((s,i)=>s+this.wt[i],0);
 
     let lines=[];
+    // Status line
+    let st=`<span class="info">Cycle ${this.tc}</span> — ${av.length}/${totalActive} heads ready`;
+    if(cooling.length) st+=` · <span class="warn">${cooling.length} cooling</span>`;
+    if(disCount) st+=` · <span class="bad">${disCount} off</span>`;
+    lines.push(st);
 
-    // Line 1: Status overview
-    let status=`<span class="info">━━ Cycle ${this.tc} ━━</span>  `;
-    status+=`<strong>${av.length}</strong> of ${totalActive} active heads ready`;
-    if(cooling.length) status+=` · <span class="warn">${cooling.length} cooling down</span> [${coolDetail.join(', ')}]`;
-    if(disCount) status+=` · <span class="bad">${disCount} disabled</span>`;
-    lines.push(status);
-
-    // Line 2: Available head weights
-    if(av.length>0){
-      const sorted=[...avWts].sort((a,b)=>b.w-a.w);
-      const weightList=sorted.map(a=>`H${a.h}=${a.w.toFixed(1)}g`).join(', ');
-      lines.push(`<span class="dim">Available weights: ${weightList} · Total: ${totalAvailWt.toFixed(1)}g · Target: ${this.target}g (min ${this.min}g)</span>`);
-    }
-
-    // Try valid combo
-    const best=this.findCombo(true);
-    if(best){
-      const headsBefore=best.map(i=>`H${i+1}=${this.wt[i].toFixed(1)}g`);
-      const wt=this.dump(best);this.wait=0;
-      const heads=best.map(i=>i+1).join(' + ');
+    // Zone search
+    const result=this.findZoneCombo();
+    if(result && (result.zone==='A' || (result.zone==='B' && this.overDis))){
+      const idx=result.indices, zone=result.zone;
+      const parts=idx.map(i=>`H${i+1}:${this.wt[i].toFixed(0)}g`).join(' + ');
+      const wt=this.dump(idx);this.wait=0;
+      if(zone==='B')this.od++;
+      this.lastZone=zone;
       const give=wt-this.target;
-      const givePct=((give/this.target)*100).toFixed(2);
-
-      let dropLine=`<span class="good">✓ COMBINATION FOUND</span> — selected heads [${heads}] → ${headsBefore.join(' + ')}`;
-      lines.push(dropLine);
-
-      let qualityLine;
-      if(give<=2){
-        qualityLine=`<span class="good">Excellent drop: ${wt.toFixed(1)}g — only +${give.toFixed(1)}g giveaway (${givePct}%). Near-perfect target match.</span>`;
-      }else if(give<=8){
-        qualityLine=`<span class="good">Good drop: ${wt.toFixed(1)}g — +${give.toFixed(1)}g giveaway (${givePct}%). Acceptable overshoot.</span>`;
-      }else if(give<=20){
-        qualityLine=`<span class="warn">Fair drop: ${wt.toFixed(1)}g — +${give.toFixed(1)}g giveaway (${givePct}%). Higher than ideal but within reason.</span>`;
-      }else{
-        qualityLine=`<span class="warn">Heavy drop: ${wt.toFixed(1)}g — +${give.toFixed(1)}g giveaway (${givePct}%). Significant overshoot — limited head options likely the cause.</span>`;
-      }
-      if(wt<this.min) qualityLine=`<span class="bad">UNDERWEIGHT: ${wt.toFixed(1)}g is below T1 minimum of ${this.min}g! (${give.toFixed(1)}g under target)</span>`;
-      lines.push(qualityLine);
-
-      // Cooldown explanation
-      const shiftName=this.shift===1?'single':this.shift===2?'double':'triple';
-      lines.push(`<span class="dim">Heads [${heads}] now cooling for ${this.shift} cycle${this.shift>1?'s':''} (${shiftName} shift). They will refill and become available again after cooldown.</span>`);
-
+      const tag=zone==='A'?'ACCEPT':'OVER';
+      const cls=zone==='A'?(give<=8?'good':'warn'):'warn';
+      lines.push(`<span class="${cls}">✓ ${tag}: ${parts} = <strong>${wt.toFixed(1)}g</strong> (${give>=0?'+':''}${give.toFixed(1)}g)</span>`);
+      if(zone==='B') lines.push(`<span class="warn">Over Hi Limit (${this.hiLimit}g) — no A-zone combo available, over-discharge used.</span>`);
       return{weight:wt,log:lines.join('<br>')};
     }
 
-    // No valid combo
+    // No valid combo in A (or B if overDis on)
     this.wait++;
-    let reason='';
     if(av.length===0){
-      reason=`All active heads are cooling down — zero available this cycle.`;
-    }else if(totalAvailWt<this.min){
-      reason=`Total available weight (${totalAvailWt.toFixed(1)}g) is less than the minimum target (${this.min}g). No possible combination can reach the target.`;
-    }else{
-      reason=`Tried all bucket combinations from ${av.length} heads but none hit the minimum of ${this.min}g without excessive giveaway. The weigher algorithm couldn't find a subset summing close to ${this.target}g.`;
+      lines.push(`<span class="warn">✗ NO COMBO — all heads cooling. Packer line would pause here.</span>`);
+    } else if(totalAvailWt<this.min){
+      lines.push(`<span class="warn">✗ NO COMBO — total available ${totalAvailWt.toFixed(0)}g < minimum ${this.min}g. Not enough product in heads.</span>`);
+    } else if(result && result.zone==='B' && !this.overDis){
+      lines.push(`<span class="warn">✗ NO A-ZONE COMBO — overweight combo exists but Over-Discharge is OFF. Machine would stop in production.</span>`);
+    } else {
+      lines.push(`<span class="warn">✗ NO COMBO — ${av.length} heads available but no subset sums to ${this.min}–${this.hiLimit}g range.</span>`);
     }
 
-    lines.push(`<span class="warn">✗ NO VALID COMBINATION</span> — ${reason}`);
-    lines.push(`<span class="warn">Waiting: ${this.wait} of ${this.fdTimeout} cycles before force dump.</span>`);
+    // Recharge lightest bucket (Yamato behaviour)
+    const rh=this._rechargeLightest();
+    if(rh>=0) lines.push(`<span class="dim">Recharging H${rh+1} (lightest bucket) with fresh product.</span>`);
 
     if(this.wait>=this.fdTimeout){
-      const f=this.findCombo(false);
+      const f=this.findForcedCombo();
       if(f){
-        const headsBefore=f.map(i=>`H${i+1}=${this.wt[i].toFixed(1)}g`);
-        const wt=this.dump(f);this.fd++;this.wait=0;
-        const heads=f.map(i=>i+1).join(' + ');
+        const parts=f.map(i=>`H${i+1}:${this.wt[i].toFixed(0)}g`).join(' + ');
+        const wt=this.dump(f);this.fd++;this.wait=0;this.lastZone='F';
         const give=wt-this.target;
-        lines.push(`<span class="bad">⚠ FORCE DUMP TRIGGERED! Timeout of ${this.fdTimeout} cycles reached — the machine cannot wait any longer.</span>`);
-        lines.push(`<span class="bad">Forced drop: heads [${heads}] → ${headsBefore.join(' + ')} = ${wt.toFixed(1)}g (${give>=0?'+':''}${give.toFixed(1)}g from target). ${wt<this.min?'THIS BAG IS UNDERWEIGHT!':'Weight is poor but product must keep moving.'}</span>`);
+        lines.push(`<span class="bad">⚠ FORCED DUMP (${this.fdTimeout}-cycle timeout): ${parts} = ${wt.toFixed(1)}g (${give>=0?'+':''}${give.toFixed(1)}g). ${wt<this.min?'UNDERWEIGHT!':'Suboptimal but must keep line moving.'}</span>`);
         return{weight:wt,log:lines.join('<br>')};
       }
       this.advance();this.wc++;this.wait=0;
-      lines.push(`<span class="bad">No heads available at all — completely stalled. Skipping cycle and waiting for refills.</span>`);
+      lines.push(`<span class="bad">No heads available — stalled. Waiting for refills.</span>`);
     } else {
+      lines.push(`<span class="dim">Wait ${this.wait}/${this.fdTimeout} — holding for better options.</span>`);
       this.advance();this.wc++;
-      const remaining=this.fdTimeout-this.wait;
-      lines.push(`<span class="dim">Holding — waiting for cooling heads to come back online. ${remaining} cycle${remaining>1?'s':''} until force dump is triggered.</span>`);
     }
     return{weight:null,log:lines.join('<br>')};
   }
@@ -644,7 +689,7 @@ class MHW {
     const w=this.bags,n=w.length;let s=0,mn=1e9,mx=-1e9,ut=0;
     for(let i=0;i<n;i++){s+=w[i];if(w[i]<mn)mn=w[i];if(w[i]>mx)mx=w[i];if(w[i]<this.min)ut++;}
     const mean=s/n;let v=0;for(let i=0;i<n;i++)v+=(w[i]-mean)**2;
-    return{count:n,mean,std:Math.sqrt(v/n),min:mn,max:mx,give:mean-this.target,givePct:((mean-this.target)/this.target)*100,ut,utPct:(ut/n)*100};
+    return{count:n,mean,std:Math.sqrt(v/n),min:mn,max:mx,give:mean-this.target,givePct:((mean-this.target)/this.target)*100,ut,utPct:(ut/n)*100,od:this.od,fd:this.fd};
   }
 }
 
@@ -663,17 +708,19 @@ function startSimulation(){
   } else {
     modeParams={fillMean:+document.getElementById('fillMean').value,fillStd:+document.getElementById('fillStd').value};
   }
-  SP={masterBuckets,tw,min:tw-t1,t1,mode:productMode,mp:modeParams,fd:+document.getElementById('forceDump').value,
+  const hl=tw + (+document.getElementById('hiLimit').value);
+  const odOn=document.getElementById('overDischarge').value==='on';
+  SP={masterBuckets,tw,min:tw-t1,t1,hiLimit:hl,overDis:odOn,mode:productMode,mp:modeParams,fd:+document.getElementById('forceDump').value,
     bags:+document.getElementById('numBags').value,
     scenarios:setupScenarios.map((s,i)=>({name:s.name,shift:s.shift,disabled:[...s.disabled],color:SCOLORS[i%SCOLORS.length],active:masterBuckets-s.disabled.length}))};
   document.getElementById('setup-view').style.display='none';
   document.getElementById('sim-view').style.display='flex';
-  document.getElementById('simInfo').innerHTML=`<span>TARGET <strong>${tw}g</strong></span><span>T1 <strong>${SP.min}g</strong></span><span>BAGS <strong>${SP.bags.toLocaleString()}</strong></span><span>MODE <strong>${productMode.toUpperCase()}</strong></span>`;
+  document.getElementById('simInfo').innerHTML=`<span>TARGET <strong>${tw}g</strong></span><span>T1 <strong>${SP.min}g</strong></span><span>HI <strong>${hl}g</strong></span><span>OD <strong>${odOn?'ON':'OFF'}</strong></span><span>BAGS <strong>${SP.bags.toLocaleString()}</strong></span>`;
   initSim();
 }
 
 function initSim(){
-  weighers=SP.scenarios.map(sc=>new MHW(SP.masterBuckets,sc.disabled,SP.tw,SP.min,sc.shift,SP.mode,SP.mp,SP.fd));
+  weighers=SP.scenarios.map(sc=>new MHW(SP.masterBuckets,sc.disabled,SP.tw,SP.min,SP.hiLimit,SP.overDis,sc.shift,SP.mode,SP.mp,SP.fd));
   // Grid cols
   const g=document.getElementById('simGrid');
   const cols=SP.scenarios.length;
@@ -719,6 +766,7 @@ function buildCards(){
   });
   leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#e0e0e0;display:inline-block"></span>Target</div>`;
   leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#cc3333;display:inline-block"></span>T1</div>`;
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#ff9933;display:inline-block"></span>Hi Limit</div>`;
 }
 
 function updateCards(){
@@ -752,6 +800,7 @@ function updateCards(){
   });
   leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#e0e0e0;display:inline-block"></span>Target</div>`;
   leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#cc3333;display:inline-block"></span>T1</div>`;
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#ff9933;display:inline-block"></span>Hi Limit</div>`;
 }
 
 // ═══ CANVAS DRAWING ═══
@@ -774,7 +823,8 @@ function drawScenarioCanvas(idx){
     ctx.font=`bold ${5*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.fillStyle='#555';ctx.fillText('DROPS',cx,cy-14*dpr);
     for(let j=0;j<last.length;j++){
       const g=last[last.length-1-j]-w.target;
-      ctx.fillStyle=last[last.length-1-j]<w.min?'#cc3333':g<5?'#00cc66':'#cccc00';
+      const bw=last[last.length-1-j];
+      ctx.fillStyle=bw<w.min?'#cc3333':bw>w.hiLimit?'#ff9933':g<5?'#00cc66':'#cccc00';
       ctx.globalAlpha=1-j*0.2;ctx.font=`bold ${6*dpr}px 'Share Tech Mono'`;
       ctx.fillText(last[last.length-1-j].toFixed(0),cx,cy-4*dpr+j*9*dpr);
     }ctx.globalAlpha=1;
@@ -836,7 +886,8 @@ function drawChart(){
   const xR=gMx-gMn,xS=xR>100?20:xR>50?10:5;ctx.textAlign='center';ctx.textBaseline='top';
   for(let v=Math.ceil(gMn/xS)*xS;v<=gMx;v+=xS){ctx.fillStyle='#555';ctx.fillText(v+'g',ml+((v-gMn)/xR)*pw,mt+ph+4*dpr);}
   const zx=ml+((0-gMn)/xR)*pw;ctx.setLineDash([5*dpr,3*dpr]);ctx.strokeStyle='#e0e0e0';ctx.lineWidth=1*dpr;ctx.beginPath();ctx.moveTo(zx,mt);ctx.lineTo(zx,mt+ph);ctx.stroke();
-  const tx=ml+((-SP.t1-gMn)/xR)*pw;ctx.strokeStyle='#cc3333';ctx.setLineDash([3*dpr,3*dpr]);ctx.beginPath();ctx.moveTo(tx,mt);ctx.lineTo(tx,mt+ph);ctx.stroke();ctx.setLineDash([]);
+  const tx=ml+((-SP.t1-gMn)/xR)*pw;ctx.strokeStyle='#cc3333';ctx.setLineDash([3*dpr,3*dpr]);ctx.beginPath();ctx.moveTo(tx,mt);ctx.lineTo(tx,mt+ph);ctx.stroke();
+  const hx2=ml+((SP.hiLimit-SP.tw-gMn)/xR)*pw;ctx.strokeStyle='#ff9933';ctx.beginPath();ctx.moveTo(hx2,mt);ctx.lineTo(hx2,mt+ph);ctx.stroke();ctx.setLineDash([]);
   curves.forEach((cv,idx)=>{if(!cv)return;const co=SP.scenarios[idx].color;
     ctx.beginPath();for(let b=0;b<nb;b++){const x=ml+((b+0.5)*bw/xR)*pw,y=mt+ph-(cv[b]/yM)*ph;if(!b)ctx.moveTo(x,mt+ph);ctx.lineTo(x,y);}
     ctx.lineTo(ml+((nb-0.5)*bw/xR)*pw,mt+ph);ctx.closePath();ctx.fillStyle=co+'30';ctx.fill();
