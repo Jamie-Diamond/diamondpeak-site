@@ -189,9 +189,10 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 
 /* Visual key */
 .sim-key {
-  display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 14px;
-  border-top: 1px solid var(--border); background: #0d0d0d; font-size: 9px; color: var(--dim);
+  display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 14px;
+  border-bottom: 2px solid var(--border); background: var(--panel); font-size: 9px; color: var(--text);
 }
+.sim-key-title { font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan); width: 100%; margin-bottom: 2px; }
 .sim-key-item { display: flex; align-items: center; gap: 5px; }
 .sim-key-swatch {
   width: 16px; height: 16px; border-radius: 50%; border: 1px solid #555;
@@ -330,7 +331,8 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
   <div class="pbar"><div class="pbar-fill" id="pFill"></div></div>
 
   <div class="sim-key" id="simKey">
-    <div class="sim-key-item"><div class="sim-key-swatch" style="background:#40c850;color:#000">▽</div> Ready — loaded with product, available for selection</div>
+    <div class="sim-key-title">Head Status Key</div>
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:#40c850;color:#000">▽</div> Ready — available for selection</div>
     <div class="sim-key-item"><div class="sim-key-swatch" style="background:#1a1a1a;border-color:#555;color:#555">○</div> Cooling — recently dumped, waiting to refill</div>
     <div class="sim-key-item"><div class="sim-key-swatch" style="background:transparent;border:2px solid var(--cyan)"></div> Cooldown progress ring</div>
     <div class="sim-key-item"><div class="sim-key-swatch" style="background:#1a1a1a;border-color:#cc3333;color:#cc3333;font-size:7px">✕</div> Disabled — out of action</div>
@@ -372,21 +374,36 @@ let itemRows = [
   { count: 3, pct: 15 },
 ];
 
+function itemTotal() { return itemRows.reduce((s, r) => s + r.pct, 0); }
+
+function updateItemPct(i, val) {
+  const others = itemTotal() - itemRows[i].pct;
+  const maxAllowed = 100 - others;
+  itemRows[i].pct = Math.max(0, Math.min(val, maxAllowed));
+  renderItemRows();
+}
+
 function renderItemRows() {
   const el = document.getElementById('itemRows');
   el.innerHTML = '';
+  const tot = itemTotal();
   itemRows.forEach((r, i) => {
     el.innerHTML += `<div class="param-row">
       <span class="param-label">${r.count} item${r.count > 1 ? 's' : ''}</span>
       <input class="param-input" type="number" value="${r.pct}" min="0" max="100"
-        onchange="itemRows[${i}].pct=+this.value"><span class="param-unit">%</span>
+        onchange="updateItemPct(${i},+this.value)"><span class="param-unit">%</span>
     </div>`;
   });
+  const cls = tot > 100 ? 'color:var(--red)' : tot < 100 ? 'color:var(--yellow)' : 'color:var(--green)';
+  el.innerHTML += `<div style="font-size:9px;text-align:right;margin-top:3px;${cls}">Total: ${tot}%${tot!==100?' (must = 100%)':''}</div>`;
 }
 
 function addItemRow() {
+  const tot = itemTotal();
+  if (tot >= 100) return; // can't add if already at 100%
   const maxCount = itemRows.length ? Math.max(...itemRows.map(r => r.count)) + 1 : 1;
-  itemRows.push({ count: maxCount, pct: 10 });
+  const remaining = 100 - tot;
+  itemRows.push({ count: maxCount, pct: Math.min(10, remaining) });
   renderItemRows();
 }
 
@@ -503,7 +520,7 @@ function gauss(m,s){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random(
 function wChoice(w){const t=w.reduce((a,b)=>a+b,0);let r=Math.random()*t;for(let i=0;i<w.length;i++){r-=w[i];if(r<=0)return i;}return w.length-1;}
 
 class MHW {
-  // Yamato-style zone-based combination weigher
+  // Zone-based combination weigher
   // A-zone: min_weight ≤ w ≤ hi_limit (ACCEPT)
   // B-zone: w > hi_limit (OVER — only if overDischarge ON)
   // Under: w < min_weight
@@ -529,7 +546,7 @@ class MHW {
   }
   avail(){const a=[];for(let i=0;i<this.n;i++)if(!this.cd[i]&&!this.dis.has(i))a.push(i);return a;}
 
-  // Zone-based combination search (Yamato logic)
+  // Zone-based combination search (MHW logic)
   // Returns { indices, weight, zone } or null
   findZoneCombo(){
     const av=this.avail();if(!av.length)return null;
@@ -577,7 +594,7 @@ class MHW {
 
   _combos(a,r,cb){const n=a.length,c=new Array(r);(function g(s,d){if(d===r){cb(c);return;}for(let i=s;i<=n-r+d;i++){c[d]=a[i];g(i+1,d+1);}})(0,0);}
 
-  // Recharge: refill the lightest available bucket (Yamato behaviour when no combo found)
+  // Recharge: refill the lightest available bucket (MHW behaviour when no combo found)
   _rechargeLightest(){
     const av=this.avail();if(!av.length)return -1;
     let li=av[0];for(let i=1;i<av.length;i++)if(this.wt[av[i]]<this.wt[li])li=av[i];
@@ -663,7 +680,7 @@ class MHW {
       lines.push(`<span class="warn">✗ NO COMBO — ${av.length} heads available but no subset sums to ${this.min}–${this.hiLimit}g range.</span>`);
     }
 
-    // Recharge lightest bucket (Yamato behaviour)
+    // Recharge lightest bucket (MHW behaviour)
     const rh=this._rechargeLightest();
     if(rh>=0) lines.push(`<span class="dim">Recharging H${rh+1} (lightest bucket) with fresh product.</span>`);
 
@@ -700,10 +717,11 @@ function startSimulation(){
   const tw=+document.getElementById('targetWeight').value, t1=+document.getElementById('t1Tolerance').value;
   let modeParams;
   if(productMode==='discrete'){
+    const tot=itemTotal();
+    if(tot!==100){alert('Item probabilities must total exactly 100%. Currently: '+tot+'%');return;}
     const counts=itemRows.map(r=>r.count);
     const rawPcts=itemRows.map(r=>r.pct);
-    const tot=rawPcts.reduce((a,b)=>a+b,0);
-    const probs=rawPcts.map(p=>p/tot);
+    const probs=rawPcts.map(p=>p/100);
     modeParams={itemMean:+document.getElementById('itemMean').value,itemStd:+document.getElementById('itemStd').value,itemCounts:counts,itemProbs:probs};
   } else {
     modeParams={fillMean:+document.getElementById('fillMean').value,fillStd:+document.getElementById('fillStd').value};
