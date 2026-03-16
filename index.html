@@ -36,7 +36,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 /* ── HERO ────────────────────────────── */
 .hero {
   position: relative;
-  background: var(--hero-bg);
+  background: transparent;
   color: var(--hero-ink);
   min-height: 100vh;
   display: flex;
@@ -462,9 +462,13 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 <script>
 /* ── Force scroll to top on load ──────── */
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+// Strip #content hash so browser doesn't auto-scroll to anchor
+if (window.location.hash) {
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+}
 window.scrollTo(0, 0);
-document.addEventListener('DOMContentLoaded', function() { setTimeout(function(){ window.scrollTo(0, 0); }, 0); });
-window.addEventListener('load', function() { setTimeout(function(){ window.scrollTo(0, 0); }, 0); });
+document.addEventListener('DOMContentLoaded', function() { window.scrollTo(0, 0); });
+window.addEventListener('load', function() { window.scrollTo(0, 0); });
 
 /* ── Shared noise functions ──────── */
 function _hash(x, y) {
@@ -503,11 +507,17 @@ function topoNoise(x, y) {
 
   function draw() {
     time += 0.001;
-    ctx.clearRect(0, 0, W, H);
 
     // Figure out where the hero ends in viewport coordinates
     var heroRect = heroEl.getBoundingClientRect();
     var heroCutY = heroRect.bottom * dpr; // pixel Y where dark meets light
+
+    // Paint backgrounds — dark zone gets hero bg, rest is clear (page bg shows)
+    ctx.clearRect(0, 0, W, H);
+    if (heroCutY > 0) {
+      ctx.fillStyle = '#06080a';
+      ctx.fillRect(0, 0, W, Math.min(heroCutY, H));
+    }
 
     // How much of page has scrolled — offset the noise field so topo scrolls with page
     var scrollPx = window.scrollY * dpr;
