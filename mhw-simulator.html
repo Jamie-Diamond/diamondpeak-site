@@ -6,656 +6,242 @@
 <title>MHW Simulator — Diamond Peak</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Share+Tech+Mono&display=swap');
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
-
 :root {
-  --hmi-bg: #2a2a2a;
-  --hmi-panel: #3a3a3a;
-  --hmi-dark: #1a1a1a;
-  --hmi-border: #555;
-  --hmi-border-light: #666;
-  --hmi-text: #e0e0e0;
-  --hmi-text-dim: #999;
-  --hmi-green: #00cc66;
-  --hmi-yellow: #cccc00;
-  --hmi-red: #cc3333;
-  --hmi-blue: #3399ff;
-  --hmi-cyan: #00cccc;
-  --hmi-orange: #ff9933;
-  --hmi-white: #ffffff;
+  --bg: #2a2a2a; --panel: #3a3a3a; --dark: #1a1a1a; --border: #555;
+  --text: #e0e0e0; --dim: #999; --green: #00cc66; --yellow: #cccc00;
+  --red: #cc3333; --blue: #3399ff; --cyan: #00cccc; --orange: #ff9933; --white: #fff;
 }
+body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
 
-body {
-  font-family: 'Share Tech Mono', 'DM Mono', monospace;
-  background: var(--hmi-bg);
-  color: var(--hmi-text);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
+/* ═══ SETUP ═══ */
+#setup-view { min-height: 100vh; display: flex; flex-direction: column; }
+.setup-header { background: var(--dark); border-bottom: 2px solid var(--border); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; }
+.setup-title { font-size: 15px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--white); }
+.back-link { color: var(--dim); text-decoration: none; font-size: 11px; letter-spacing: 0.05em; }
+.back-link:hover { color: var(--white); }
 
-/* ═══ SETUP VIEW ═══ */
-#setup-view {
-  min-height: 100vh;
-  background: var(--hmi-bg);
-  display: flex;
-  flex-direction: column;
-}
+.setup-body { display: grid; grid-template-columns: 280px 1fr; flex: 1; min-height: 0; }
+@media(max-width:800px) { .setup-body { grid-template-columns: 1fr; } }
 
-.setup-header {
-  background: var(--hmi-dark);
-  border-bottom: 2px solid var(--hmi-border);
-  padding: 12px 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+.params-panel { background: var(--dark); border-right: 2px solid var(--border); padding: 14px; overflow-y: auto; }
+.param-group { margin-bottom: 14px; }
+.param-group-title { font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 8px; }
+.param-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.param-label { font-size: 11px; color: var(--dim); }
+.param-input { width: 72px; padding: 3px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 2px; color: var(--green); font-family: inherit; font-size: 12px; text-align: right; outline: none; }
+.param-input:focus { border-color: var(--cyan); }
+.param-unit { font-size: 9px; color: var(--dim); margin-left: 3px; width: 14px; }
 
-.setup-title {
-  font-size: 16px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--hmi-white);
-}
+.master-box { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; }
+.master-box label { font-size: 10px; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.1em; }
+.master-box input { width: 52px; padding: 4px 6px; background: var(--dark); border: 2px solid var(--cyan); border-radius: 2px; color: var(--cyan); font-family: inherit; font-size: 16px; text-align: center; outline: none; }
 
-.back-link {
-  color: var(--hmi-text-dim);
-  text-decoration: none;
-  font-size: 12px;
-  letter-spacing: 0.05em;
-}
-.back-link:hover { color: var(--hmi-white); }
+/* Product mode toggle */
+.mode-toggle { display: flex; border: 1px solid var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+.mode-btn { flex: 1; padding: 8px 4px; font-family: inherit; font-size: 10px; text-align: center; background: var(--bg); color: var(--dim); border: none; cursor: pointer; letter-spacing: 0.05em; transition: all 0.12s; }
+.mode-btn:first-child { border-right: 1px solid var(--border); }
+.mode-btn--active { background: var(--cyan); color: #000; font-weight: bold; }
+.mode-label { font-size: 9px; display: block; margin-top: 2px; }
 
-.setup-body {
-  display: grid;
-  grid-template-columns: 300px 1fr;
-  flex: 1;
-  min-height: 0;
-}
-
-@media(max-width: 800px) {
-  .setup-body { grid-template-columns: 1fr; }
-}
-
-/* Left: Parameters */
-.params-panel {
-  background: var(--hmi-dark);
-  border-right: 2px solid var(--hmi-border);
-  padding: 16px;
-  overflow-y: auto;
-}
-
-.param-group {
-  margin-bottom: 16px;
-}
-
-.param-group-title {
-  font-size: 10px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--hmi-cyan);
-  border-bottom: 1px solid var(--hmi-border);
-  padding-bottom: 6px;
-  margin-bottom: 10px;
-}
-
-.param-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.param-label {
-  font-size: 11px;
-  color: var(--hmi-text-dim);
-}
-
-.param-input {
-  width: 80px;
-  padding: 4px 8px;
-  background: var(--hmi-bg);
-  border: 1px solid var(--hmi-border);
-  border-radius: 2px;
-  color: var(--hmi-green);
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 13px;
-  text-align: right;
-  outline: none;
-}
-.param-input:focus { border-color: var(--hmi-cyan); }
-
-.param-unit {
-  font-size: 10px;
-  color: var(--hmi-text-dim);
-  margin-left: 4px;
-  width: 16px;
-}
-
-.master-buckets {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: var(--hmi-bg);
-  border: 1px solid var(--hmi-border);
-  border-radius: 3px;
-}
-
-.master-buckets label {
-  font-size: 11px;
-  color: var(--hmi-cyan);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.master-buckets input {
-  width: 60px;
-  padding: 6px 8px;
-  background: var(--hmi-dark);
-  border: 2px solid var(--hmi-cyan);
-  border-radius: 2px;
-  color: var(--hmi-cyan);
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 18px;
-  text-align: center;
-  outline: none;
-}
-
-.run-btn {
-  width: 100%;
-  padding: 14px;
-  margin-top: 8px;
-  background: var(--hmi-green);
-  border: none;
-  border-radius: 3px;
-  color: #000;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 14px;
-  font-weight: bold;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.15s;
-}
+.run-btn { width: 100%; padding: 12px; margin-top: 6px; background: var(--green); border: none; border-radius: 3px; color: #000; font-family: inherit; font-size: 13px; font-weight: bold; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
 .run-btn:hover { background: #00ee77; }
 
-/* Right: Scenario tabs + visual */
-.scenario-panel {
-  display: flex;
-  flex-direction: column;
-  background: var(--hmi-bg);
-}
+/* Scenario panel */
+.scenario-panel { display: flex; flex-direction: column; background: var(--bg); }
+.scenario-tabs { display: flex; background: var(--dark); border-bottom: 2px solid var(--border); padding: 0 6px; gap: 2px; align-items: flex-end; }
+.stab { padding: 6px 14px; font-family: inherit; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); background: var(--panel); border: 1px solid var(--border); border-bottom: none; border-radius: 3px 3px 0 0; cursor: pointer; position: relative; top: 2px; }
+.stab:hover { color: var(--white); }
+.stab--active { color: var(--white); background: var(--bg); border-bottom: 2px solid var(--bg); z-index: 1; }
+.stab-add { padding: 6px 12px; font-size: 14px; color: var(--dim); background: none; border: 1px dashed var(--border); border-bottom: none; border-radius: 3px 3px 0 0; cursor: pointer; position: relative; top: 2px; }
+.stab-add:hover { color: var(--green); border-color: var(--green); }
+.stab-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
 
-.scenario-tabs {
-  display: flex;
-  background: var(--hmi-dark);
-  border-bottom: 2px solid var(--hmi-border);
-  padding: 0 8px;
-  gap: 2px;
-  align-items: flex-end;
-}
+.scenario-content { flex: 1; display: flex; flex-direction: column; padding: 12px; gap: 8px; }
+.sc-info-bar { display: flex; align-items: center; gap: 12px; padding: 6px 10px; background: var(--dark); border: 1px solid var(--border); border-radius: 3px; flex-wrap: wrap; }
+.sc-info-bar label { font-size: 10px; color: var(--dim); }
+.sc-info-bar input[type="text"] { width: 120px; padding: 3px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 2px; color: var(--white); font-family: inherit; font-size: 11px; outline: none; }
+.sc-info-bar input:focus { border-color: var(--cyan); }
+.sc-info-bar select { padding: 3px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 2px; color: var(--green); font-family: inherit; font-size: 11px; outline: none; }
+.sc-active { font-size: 13px; color: var(--green); margin-left: auto; }
+.sc-active .off { color: var(--red); font-size: 11px; }
+.sc-remove { background: none; border: 1px solid var(--border); border-radius: 2px; color: var(--red); font-family: inherit; font-size: 10px; padding: 2px 8px; cursor: pointer; }
+.sc-remove:hover { background: var(--red); color: #000; }
+.head-selector { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 280px; }
+.head-selector canvas { display: block; max-width: 100%; }
+.head-hint { text-align: center; font-size: 9px; color: var(--dim); letter-spacing: 0.05em; }
 
-.scenario-tab {
-  padding: 8px 18px;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--hmi-text-dim);
-  background: var(--hmi-panel);
-  border: 1px solid var(--hmi-border);
-  border-bottom: none;
-  border-radius: 3px 3px 0 0;
-  cursor: pointer;
-  position: relative;
-  top: 2px;
-  transition: all 0.15s;
-}
-.scenario-tab:hover { color: var(--hmi-white); background: var(--hmi-bg); }
-.scenario-tab--active {
-  color: var(--hmi-white);
-  background: var(--hmi-bg);
-  border-color: var(--hmi-border);
-  border-bottom: 2px solid var(--hmi-bg);
-  z-index: 1;
-}
+/* ═══ SIM VIEW ═══ */
+#sim-view { display: none; min-height: 100vh; flex-direction: column; }
+.sim-bar { background: var(--dark); border-bottom: 2px solid var(--border); padding: 6px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.sim-bar-title { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--white); }
+.sim-bar-info { display: flex; gap: 16px; }
+.sim-bar-info span { font-size: 11px; color: var(--dim); }
+.sim-bar-info strong { color: var(--green); }
+.sim-bar-controls { display: flex; gap: 4px; align-items: center; }
+.cbtn { font-family: inherit; font-size: 10px; padding: 5px 14px; border: 1px solid var(--border); border-radius: 2px; background: var(--panel); color: var(--text); cursor: pointer; letter-spacing: 0.04em; text-transform: uppercase; }
+.cbtn:hover { border-color: var(--white); color: var(--white); }
+.cbtn:disabled { opacity: 0.35; cursor: default; }
+.cbtn--go { background: var(--green); color: #000; border-color: var(--green); }
+.cbtn--go:hover { background: #00ee77; }
+.cbtn--fast { background: #9966ff; color: #fff; border-color: #9966ff; }
+.cbtn--pause { background: var(--yellow); color: #000; border-color: var(--yellow); }
+.cbtn--stop { background: var(--red); color: #fff; border-color: var(--red); }
+.pbar { height: 3px; background: var(--dark); }
+.pbar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--green), var(--cyan)); transition: width 0.3s; }
 
-.scenario-tab-add {
-  padding: 8px 14px;
-  font-size: 16px;
-  color: var(--hmi-text-dim);
-  background: none;
-  border: 1px dashed var(--hmi-border);
-  border-bottom: none;
-  border-radius: 3px 3px 0 0;
-  cursor: pointer;
-  position: relative;
-  top: 2px;
-}
-.scenario-tab-add:hover { color: var(--hmi-green); border-color: var(--hmi-green); }
-
-.scenario-tab-color {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 6px;
-}
-
-.scenario-content {
+/* All scenarios side-by-side */
+.sim-grid {
+  display: grid;
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 16px;
-  gap: 12px;
-}
-
-.scenario-info-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 8px 12px;
-  background: var(--hmi-dark);
-  border: 1px solid var(--hmi-border);
-  border-radius: 3px;
-}
-
-.scenario-info-bar label {
-  font-size: 11px;
-  color: var(--hmi-text-dim);
-}
-
-.scenario-info-bar input[type="text"] {
-  width: 140px;
-  padding: 4px 8px;
-  background: var(--hmi-bg);
-  border: 1px solid var(--hmi-border);
-  border-radius: 2px;
-  color: var(--hmi-white);
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 12px;
-  outline: none;
-}
-.scenario-info-bar input[type="text"]:focus { border-color: var(--hmi-cyan); }
-
-.scenario-info-bar select {
-  padding: 4px 8px;
-  background: var(--hmi-bg);
-  border: 1px solid var(--hmi-border);
-  border-radius: 2px;
-  color: var(--hmi-green);
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 12px;
-  outline: none;
-}
-
-.active-count {
-  font-size: 14px;
-  color: var(--hmi-green);
-  margin-left: auto;
-}
-.active-count .disabled-count {
-  color: var(--hmi-red);
-  font-size: 12px;
-}
-
-.scenario-remove-btn {
-  background: none;
-  border: 1px solid var(--hmi-border);
-  border-radius: 2px;
-  color: var(--hmi-red);
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 11px;
-  padding: 3px 10px;
-  cursor: pointer;
-}
-.scenario-remove-btn:hover { background: var(--hmi-red); color: #000; }
-
-/* Circular head selector */
-.head-selector {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
-
-.head-selector canvas {
-  display: block;
-  max-width: 100%;
-}
-
-.head-hint {
-  text-align: center;
-  font-size: 10px;
-  color: var(--hmi-text-dim);
-  letter-spacing: 0.05em;
-}
-
-/* ═══ SIMULATION VIEW ═══ */
-#sim-view {
-  display: none;
-  min-height: 100vh;
-  background: var(--hmi-bg);
-  flex-direction: column;
-}
-
-.sim-top-bar {
-  background: var(--hmi-dark);
-  border-bottom: 2px solid var(--hmi-border);
-  padding: 8px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
   gap: 8px;
 }
 
-.sim-top-title {
-  font-size: 14px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--hmi-white);
-}
-
-.sim-top-info {
-  display: flex;
-  gap: 20px;
-}
-.sim-top-info span {
-  font-size: 12px;
-  color: var(--hmi-text-dim);
-}
-.sim-top-info strong {
-  color: var(--hmi-green);
-}
-
-.sim-top-controls {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.sim-ctrl-btn {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 11px;
-  padding: 6px 16px;
-  border: 1px solid var(--hmi-border);
-  border-radius: 2px;
-  background: var(--hmi-panel);
-  color: var(--hmi-text);
-  cursor: pointer;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  transition: all 0.12s;
-}
-.sim-ctrl-btn:hover { border-color: var(--hmi-white); color: var(--hmi-white); }
-.sim-ctrl-btn:disabled { opacity: 0.35; cursor: default; }
-.sim-ctrl-btn--go { background: var(--hmi-green); color: #000; border-color: var(--hmi-green); }
-.sim-ctrl-btn--go:hover { background: #00ee77; }
-.sim-ctrl-btn--fast { background: #9966ff; color: #fff; border-color: #9966ff; }
-.sim-ctrl-btn--fast:hover { background: #aa77ff; }
-.sim-ctrl-btn--pause { background: var(--hmi-yellow); color: #000; border-color: var(--hmi-yellow); }
-.sim-ctrl-btn--stop { background: var(--hmi-red); color: #fff; border-color: var(--hmi-red); }
-.sim-ctrl-btn--stop:hover { background: #ee4444; }
-
-.sim-progress-bar {
-  height: 3px;
-  background: var(--hmi-dark);
-}
-.sim-progress-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--hmi-green), var(--hmi-cyan));
-  transition: width 0.3s;
-}
-
-/* Scenario tabs in sim */
-.sim-scenario-tabs {
-  display: flex;
-  background: var(--hmi-dark);
-  border-bottom: 2px solid var(--hmi-border);
-  padding: 0 8px;
-  gap: 2px;
-}
-.sim-stab {
-  padding: 6px 16px;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--hmi-text-dim);
-  background: var(--hmi-panel);
-  border: 1px solid var(--hmi-border);
-  border-bottom: none;
-  border-radius: 3px 3px 0 0;
-  cursor: pointer;
-  position: relative;
-  top: 2px;
-}
-.sim-stab:hover { color: var(--hmi-white); }
-.sim-stab--active {
-  color: var(--hmi-white);
-  background: var(--hmi-bg);
-  border-bottom: 2px solid var(--hmi-bg);
-}
-
-/* HMI main layout */
-.hmi-layout {
-  display: grid;
-  grid-template-columns: 220px 1fr 240px;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-@media(max-width: 900px) {
-  .hmi-layout { grid-template-columns: 1fr; }
-}
-
-/* Left: Individual heads list */
-.hmi-left {
-  background: var(--hmi-dark);
-  border-right: 1px solid var(--hmi-border);
-  padding: 10px 8px;
-  overflow-y: auto;
-}
-
-.individual-title {
-  font-size: 10px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--hmi-cyan);
-  border: 1px solid var(--hmi-border);
-  display: inline-block;
-  padding: 3px 10px;
-  margin-bottom: 8px;
-}
-
-.head-row {
-  display: grid;
-  grid-template-columns: 22px 18px 1fr 42px;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 4px;
-  margin-bottom: 1px;
-  border-radius: 2px;
-}
-.head-row--selected { background: rgba(255,255,255,0.06); }
-.head-row--disabled { opacity: 0.3; }
-
-.head-num {
-  font-size: 11px;
-  color: var(--hmi-text-dim);
-  text-align: right;
-}
-
-.head-status {
-  font-size: 10px;
-  text-align: center;
-}
-.head-status--ok { color: var(--hmi-green); }
-.head-status--cool { color: var(--hmi-yellow); }
-.head-status--selected { color: var(--hmi-orange); }
-.head-status--disabled { color: var(--hmi-red); }
-
-.head-bar-wrap {
-  height: 12px;
-  background: var(--hmi-bg);
-  border: 1px solid var(--hmi-border);
-  position: relative;
-}
-.head-bar-fill {
-  height: 100%;
-  background: var(--hmi-blue);
-  transition: width 0.15s;
-}
-
-.head-weight {
-  font-size: 11px;
-  text-align: right;
-  color: var(--hmi-white);
-}
-
-/* Center: Circular display */
-.hmi-center {
+.sim-card {
+  background: var(--dark);
+  border: 1px solid var(--border);
+  border-radius: 4px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.sim-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.sim-card-dot { width: 8px; height: 8px; border-radius: 50%; }
+.sim-card-name { font-size: 11px; color: var(--white); }
+.sim-card-config { font-size: 9px; color: var(--dim); margin-left: auto; }
+
+.sim-card-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+.sim-card-canvas-wrap {
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
+  padding: 8px;
 }
+.sim-card-canvas-wrap canvas { display: block; }
 
-.hmi-center canvas {
-  display: block;
-  max-width: 100%;
+/* Stats row */
+.sim-card-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--border);
 }
+.sstat {
+  padding: 5px 6px;
+  text-align: center;
+  border-right: 1px solid #333;
+}
+.sstat:last-child { border-right: none; }
+.sstat-label { font-size: 7px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+.sstat-value { font-size: 12px; color: var(--green); margin-top: 1px; }
+.sstat-value--warn { color: var(--yellow); }
+.sstat-value--bad { color: var(--red); }
 
-/* Right: Stats */
-.hmi-right {
-  background: var(--hmi-dark);
-  border-left: 1px solid var(--hmi-border);
-  padding: 12px;
+/* Head list (compact) */
+.sim-card-heads {
+  max-height: 160px;
   overflow-y: auto;
+  border-top: 1px solid var(--border);
+  padding: 3px 4px;
 }
-
-.feeder-box {
-  border: 1px solid var(--hmi-border);
-  margin-bottom: 12px;
-}
-.feeder-title {
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--hmi-cyan);
-  background: var(--hmi-panel);
-  padding: 4px 10px;
-  border-bottom: 1px solid var(--hmi-border);
-}
-.feeder-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 10px;
-  border-bottom: 1px solid #333;
-}
-.feeder-row:last-child { border-bottom: none; }
-.feeder-label { font-size: 11px; color: var(--hmi-text-dim); }
-.feeder-value { font-size: 12px; color: var(--hmi-green); }
-.feeder-value--warn { color: var(--hmi-yellow); }
-.feeder-value--bad { color: var(--hmi-red); }
-
-/* Chart area */
-.chart-area {
-  border-top: 2px solid var(--hmi-border);
-  padding: 12px 16px;
-  background: var(--hmi-dark);
-}
-.chart-title {
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--hmi-cyan);
-  margin-bottom: 8px;
-}
-#chartCanvas {
-  width: 100%;
-  height: 180px;
-  display: block;
-}
-.chart-legend {
-  display: flex;
-  gap: 16px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
-.legend-item {
-  display: flex;
+.hrow {
+  display: grid;
+  grid-template-columns: 18px 14px 1fr 36px;
   align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  color: var(--hmi-text-dim);
+  gap: 3px;
+  padding: 1px 2px;
+  font-size: 9px;
 }
-.legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
+.hrow--sel { background: rgba(255,153,51,0.1); }
+.hrow--off { opacity: 0.25; }
+.hnum { color: var(--dim); text-align: right; }
+.hstat { text-align: center; }
+.hbar { height: 8px; background: #222; border: 1px solid #333; }
+.hbar-fill { height: 100%; background: var(--blue); }
+.hwt { text-align: right; color: var(--white); }
 
-/* Bottom bar */
-.sim-bottom-bar {
-  display: flex;
-  align-items: center;
-  background: var(--hmi-dark);
-  border-top: 2px solid var(--hmi-border);
-  padding: 8px 16px;
-  gap: 12px;
-}
+/* Chart */
+.chart-area { border-top: 2px solid var(--border); padding: 10px 14px; background: var(--dark); }
+.chart-title { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cyan); margin-bottom: 6px; }
+#chartCanvas { width: 100%; height: 160px; display: block; }
+.chart-legend { display: flex; gap: 14px; margin-top: 6px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--dim); }
+.legend-dot { width: 7px; height: 7px; border-radius: 50%; }
 
-.sim-bottom-bar .status-text {
-  font-size: 11px;
-  color: var(--hmi-text-dim);
-}
-.sim-bottom-bar .status-text strong {
-  color: var(--hmi-green);
-}
+.sim-status { background: var(--dark); border-top: 2px solid var(--border); padding: 6px 14px; font-size: 10px; color: var(--dim); }
 </style>
 </head>
 <body>
 
-<!-- ═══════ SETUP VIEW ═══════ -->
+<!-- ═══ SETUP ═══ -->
 <div id="setup-view">
   <div class="setup-header">
     <span class="setup-title">MHW Simulator — Program Setup</span>
     <a href="index.html" class="back-link">&larr; DIAMOND PEAK</a>
   </div>
-
   <div class="setup-body">
-    <!-- Left: Parameters -->
     <div class="params-panel">
-      <div class="master-buckets">
+      <div class="master-box">
         <label>Total Heads</label>
-        <input type="number" id="masterBuckets" value="14" min="4" max="36" onchange="onMasterBucketsChange()">
+        <input type="number" id="masterBuckets" value="14" min="4" max="36" onchange="onMasterChange()">
+      </div>
+
+      <!-- Product mode -->
+      <div class="param-group-title">Product Mode</div>
+      <div class="mode-toggle">
+        <button class="mode-btn mode-btn--active" id="modeDiscrete" onclick="setMode('discrete')">
+          DISCRETE<span class="mode-label">e.g. Fish fillets</span>
+        </button>
+        <button class="mode-btn" id="modeContinuous" onclick="setMode('continuous')">
+          CONTINUOUS<span class="mode-label">e.g. Crisps / powder</span>
+        </button>
+      </div>
+
+      <!-- Discrete params -->
+      <div id="discreteParams">
+        <div class="param-group">
+          <div class="param-group-title">Item Weight</div>
+          <div class="param-row"><span class="param-label">Item Mean</span><input class="param-input" type="number" id="itemMean" value="100" step="5"><span class="param-unit">g</span></div>
+          <div class="param-row"><span class="param-label">Item Std</span><input class="param-input" type="number" id="itemStd" value="5" step="1"><span class="param-unit">g</span></div>
+        </div>
+        <div class="param-group">
+          <div class="param-group-title">Items per Bucket</div>
+          <div class="param-row"><span class="param-label">P(1 item)</span><input class="param-input" type="number" id="p1" value="15" min="0" max="100"><span class="param-unit">%</span></div>
+          <div class="param-row"><span class="param-label">P(2 items)</span><input class="param-input" type="number" id="p2" value="70" min="0" max="100"><span class="param-unit">%</span></div>
+          <div class="param-row"><span class="param-label">P(3 items)</span><input class="param-input" type="number" id="p3" value="15" min="0" max="100"><span class="param-unit">%</span></div>
+        </div>
+      </div>
+
+      <!-- Continuous params -->
+      <div id="continuousParams" style="display:none">
+        <div class="param-group">
+          <div class="param-group-title">Bucket Fill Weight</div>
+          <div class="param-row"><span class="param-label">Fill Mean</span><input class="param-input" type="number" id="fillMean" value="200" step="5"><span class="param-unit">g</span></div>
+          <div class="param-row"><span class="param-label">Fill Std</span><input class="param-input" type="number" id="fillStd" value="8" step="1"><span class="param-unit">g</span></div>
+        </div>
       </div>
 
       <div class="param-group">
         <div class="param-group-title">Product</div>
         <div class="param-row"><span class="param-label">Target Weight</span><input class="param-input" type="number" id="targetWeight" value="800" step="10"><span class="param-unit">g</span></div>
         <div class="param-row"><span class="param-label">T1 Tolerance</span><input class="param-input" type="number" id="t1Tolerance" value="15" step="1"><span class="param-unit">g</span></div>
-      </div>
-
-      <div class="param-group">
-        <div class="param-group-title">Item Weight</div>
-        <div class="param-row"><span class="param-label">Mean</span><input class="param-input" type="number" id="itemMean" value="100" step="5"><span class="param-unit">g</span></div>
-        <div class="param-row"><span class="param-label">Std Dev</span><input class="param-input" type="number" id="itemStd" value="5" step="1"><span class="param-unit">g</span></div>
-      </div>
-
-      <div class="param-group">
-        <div class="param-group-title">Items per Bucket</div>
-        <div class="param-row"><span class="param-label">P(1 item)</span><input class="param-input" type="number" id="p1" value="15" min="0" max="100"><span class="param-unit">%</span></div>
-        <div class="param-row"><span class="param-label">P(2 items)</span><input class="param-input" type="number" id="p2" value="70" min="0" max="100"><span class="param-unit">%</span></div>
-        <div class="param-row"><span class="param-label">P(3 items)</span><input class="param-input" type="number" id="p3" value="15" min="0" max="100"><span class="param-unit">%</span></div>
       </div>
 
       <div class="param-group">
@@ -667,7 +253,6 @@ body {
       <button class="run-btn" onclick="startSimulation()">&#9654; Run Simulation</button>
     </div>
 
-    <!-- Right: Scenario tabs + visual head selector -->
     <div class="scenario-panel">
       <div class="scenario-tabs" id="setupTabs"></div>
       <div class="scenario-content" id="setupContent"></div>
@@ -675,1019 +260,432 @@ body {
   </div>
 </div>
 
-<!-- ═══════ SIMULATION VIEW ═══════ -->
+<!-- ═══ SIM VIEW ═══ -->
 <div id="sim-view">
-  <div class="sim-top-bar">
-    <span class="sim-top-title">Auto Operation</span>
-    <div class="sim-top-info" id="simTopInfo"></div>
-    <div class="sim-top-controls">
-      <button class="sim-ctrl-btn sim-ctrl-btn--go" id="btnStart" onclick="simStart()">START</button>
-      <button class="sim-ctrl-btn sim-ctrl-btn--fast" id="btnFast" onclick="simFast()">FAST</button>
-      <button class="sim-ctrl-btn sim-ctrl-btn--pause" id="btnPause" onclick="simPause()" disabled>PAUSE</button>
-      <button class="sim-ctrl-btn sim-ctrl-btn--stop" onclick="simReset()">RESET</button>
-      <button class="sim-ctrl-btn" onclick="goBack()">SETUP</button>
+  <div class="sim-bar">
+    <span class="sim-bar-title">Auto Operation</span>
+    <div class="sim-bar-info" id="simInfo"></div>
+    <div class="sim-bar-controls">
+      <button class="cbtn cbtn--go" id="btnStart" onclick="simStart()">START</button>
+      <button class="cbtn cbtn--fast" id="btnFast" onclick="simFastRun()">FAST</button>
+      <button class="cbtn cbtn--pause" id="btnPause" onclick="simPause()" disabled>PAUSE</button>
+      <button class="cbtn cbtn--stop" onclick="simReset()">RESET</button>
+      <button class="cbtn" onclick="goBack()">SETUP</button>
     </div>
   </div>
-  <div class="sim-progress-bar"><div class="sim-progress-fill" id="progressFill"></div></div>
+  <div class="pbar"><div class="pbar-fill" id="pFill"></div></div>
 
-  <div class="sim-scenario-tabs" id="simTabs"></div>
-
-  <div class="hmi-layout" id="hmiLayout">
-    <div class="hmi-left" id="hmiLeft"></div>
-    <div class="hmi-center"><canvas id="simCanvas" width="800" height="800"></canvas></div>
-    <div class="hmi-right" id="hmiRight"></div>
-  </div>
+  <div class="sim-grid" id="simGrid"></div>
 
   <div class="chart-area">
     <div class="chart-title">Giveaway Distribution — All Scenarios</div>
-    <canvas id="chartCanvas" height="180"></canvas>
+    <canvas id="chartCanvas" height="160"></canvas>
     <div class="chart-legend" id="chartLegend"></div>
   </div>
 
-  <div class="sim-bottom-bar">
-    <span class="status-text" id="statusText">READY</span>
-  </div>
+  <div class="sim-status" id="simStatus">READY</div>
 </div>
 
 <script>
-// ══════════════════════════════════════
-//  COLORS
-// ══════════════════════════════════════
 const SCOLORS = ['#00cc66','#3399ff','#ff9933','#cc3333','#cc66ff','#00cccc'];
 
-// ══════════════════════════════════════
-//  SCENARIO SETUP
-// ══════════════════════════════════════
+// ═══ PRODUCT MODE ═══
+let productMode = 'discrete'; // or 'continuous'
+
+function setMode(m) {
+  productMode = m;
+  document.getElementById('modeDiscrete').className = 'mode-btn' + (m === 'discrete' ? ' mode-btn--active' : '');
+  document.getElementById('modeContinuous').className = 'mode-btn' + (m === 'continuous' ? ' mode-btn--active' : '');
+  document.getElementById('discreteParams').style.display = m === 'discrete' ? 'block' : 'none';
+  document.getElementById('continuousParams').style.display = m === 'continuous' ? 'block' : 'none';
+}
+
+// ═══ SETUP SCENARIOS ═══
 let masterBuckets = 14;
 let setupScenarios = [
   { name: 'S1 — All Active', shift: 2, disabled: [] },
-  { name: 'S2 — 2 Disabled', shift: 2, disabled: [12, 13] },
-  { name: 'S3 — 4 Disabled', shift: 2, disabled: [10, 11, 12, 13] },
+  { name: 'S2 — 2 Off', shift: 2, disabled: [12, 13] },
+  { name: 'S3 — 4 Off', shift: 2, disabled: [10, 11, 12, 13] },
 ];
-let activeSetupTab = 0;
+let activeTab = 0;
 
-function onMasterBucketsChange() {
+function onMasterChange() {
   masterBuckets = Math.max(4, Math.min(36, +document.getElementById('masterBuckets').value));
-  // Remove disabled indices that exceed new count
-  setupScenarios.forEach(s => {
-    s.disabled = s.disabled.filter(i => i < masterBuckets);
-  });
-  renderSetupTabs();
+  setupScenarios.forEach(s => { s.disabled = s.disabled.filter(i => i < masterBuckets); });
+  renderTabs();
 }
 
-function renderSetupTabs() {
-  const tabsEl = document.getElementById('setupTabs');
-  tabsEl.innerHTML = '';
-
+function renderTabs() {
+  const el = document.getElementById('setupTabs');
+  el.innerHTML = '';
   setupScenarios.forEach((s, i) => {
-    const tab = document.createElement('button');
-    tab.className = 'scenario-tab' + (i === activeSetupTab ? ' scenario-tab--active' : '');
-    tab.innerHTML = `<span class="scenario-tab-color" style="background:${SCOLORS[i % SCOLORS.length]}"></span>${s.name}`;
-    tab.onclick = () => { activeSetupTab = i; renderSetupTabs(); };
-    tabsEl.appendChild(tab);
+    const t = document.createElement('button');
+    t.className = 'stab' + (i === activeTab ? ' stab--active' : '');
+    t.innerHTML = `<span class="stab-dot" style="background:${SCOLORS[i%SCOLORS.length]}"></span>${s.name}`;
+    t.onclick = () => { activeTab = i; renderTabs(); };
+    el.appendChild(t);
   });
-
   if (setupScenarios.length < 6) {
-    const addBtn = document.createElement('button');
-    addBtn.className = 'scenario-tab-add';
-    addBtn.textContent = '+';
-    addBtn.onclick = () => {
-      const n = setupScenarios.length + 1;
-      setupScenarios.push({ name: `S${n}`, shift: 2, disabled: [] });
-      activeSetupTab = setupScenarios.length - 1;
-      renderSetupTabs();
-    };
-    tabsEl.appendChild(addBtn);
+    const a = document.createElement('button');
+    a.className = 'stab-add'; a.textContent = '+';
+    a.onclick = () => { setupScenarios.push({ name: `S${setupScenarios.length+1}`, shift: 2, disabled: [] }); activeTab = setupScenarios.length - 1; renderTabs(); };
+    el.appendChild(a);
   }
-
-  renderSetupContent();
+  renderContent();
 }
 
-function renderSetupContent() {
+function renderContent() {
   const el = document.getElementById('setupContent');
-  const s = setupScenarios[activeSetupTab];
-  const activeCount = masterBuckets - s.disabled.length;
-
+  const s = setupScenarios[activeTab];
+  const active = masterBuckets - s.disabled.length;
   el.innerHTML = `
-    <div class="scenario-info-bar">
-      <label>Name</label>
-      <input type="text" value="${s.name}" onchange="setupScenarios[${activeSetupTab}].name=this.value; renderSetupTabs()">
-      <label>Shift</label>
-      <select onchange="setupScenarios[${activeSetupTab}].shift=+this.value">
-        <option value="2" ${s.shift===2?'selected':''}>Double</option>
-        <option value="3" ${s.shift===3?'selected':''}>Triple</option>
-      </select>
-      <span class="active-count">${activeCount} ACTIVE ${s.disabled.length > 0 ? `<span class="disabled-count">(${s.disabled.length} OFF)</span>` : ''}</span>
-      ${setupScenarios.length > 1 ? `<button class="scenario-remove-btn" onclick="removeSetupScenario(${activeSetupTab})">REMOVE</button>` : ''}
+    <div class="sc-info-bar">
+      <label>Name</label><input type="text" value="${s.name}" onchange="setupScenarios[${activeTab}].name=this.value;renderTabs()">
+      <label>Shift</label><select onchange="setupScenarios[${activeTab}].shift=+this.value"><option value="2" ${s.shift===2?'selected':''}>Double</option><option value="3" ${s.shift===3?'selected':''}>Triple</option></select>
+      <span class="sc-active">${active} ACTIVE${s.disabled.length?` <span class="off">(${s.disabled.length} OFF)</span>`:''}</span>
+      ${setupScenarios.length>1?`<button class="sc-remove" onclick="setupScenarios.splice(${activeTab},1);activeTab=Math.min(activeTab,setupScenarios.length-1);renderTabs()">DEL</button>`:''}
     </div>
-    <div class="head-selector"><canvas id="setupHeadCanvas" width="600" height="600"></canvas></div>
-    <div class="head-hint">CLICK A HEAD TO TOGGLE ON / OFF</div>
-  `;
-
+    <div class="head-selector"><canvas id="setupCanvas" width="500" height="500"></canvas></div>
+    <div class="head-hint">CLICK A HEAD TO TOGGLE ON / OFF</div>`;
   drawSetupHeads();
-
-  // Add click handler
-  const canvas = document.getElementById('setupHeadCanvas');
-  canvas.onclick = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const mx = (e.clientX - rect.left) * dpr;
-    const my = (e.clientY - rect.top) * dpr;
-
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-    const radius = Math.min(canvas.width, canvas.height) / 2 - 60 * dpr;
-    const headR = Math.max(16 * dpr, Math.min(30 * dpr, radius / 3));
-
-    for (let i = 0; i < masterBuckets; i++) {
-      const angle = (2 * Math.PI * i) / masterBuckets - Math.PI / 2;
-      const hx = cx + radius * Math.cos(angle);
-      const hy = cy + radius * Math.sin(angle);
-      const dist = Math.sqrt((mx - hx) ** 2 + (my - hy) ** 2);
-      if (dist <= headR + 4) {
-        const idx = s.disabled.indexOf(i);
-        if (idx >= 0) s.disabled.splice(idx, 1);
-        else s.disabled.push(i);
-        renderSetupContent();
-        return;
+  document.getElementById('setupCanvas').onclick = (e) => {
+    const c = document.getElementById('setupCanvas'), rect = c.getBoundingClientRect(), dpr = devicePixelRatio||1;
+    const mx = (e.clientX-rect.left)*dpr, my = (e.clientY-rect.top)*dpr;
+    const cx = c.width/2, cy = c.height/2, R = Math.min(c.width,c.height)/2-50*dpr;
+    const hR = Math.max(14*dpr, Math.min(28*dpr, R/3));
+    for (let i=0;i<masterBuckets;i++){
+      const a=(2*Math.PI*i)/masterBuckets-Math.PI/2;
+      const hx=cx+R*Math.cos(a), hy=cy+R*Math.sin(a);
+      if (Math.sqrt((mx-hx)**2+(my-hy)**2) <= hR+4) {
+        const idx=s.disabled.indexOf(i); idx>=0?s.disabled.splice(idx,1):s.disabled.push(i); renderContent(); return;
       }
     }
   };
-}
-
-function removeSetupScenario(i) {
-  setupScenarios.splice(i, 1);
-  if (activeSetupTab >= setupScenarios.length) activeSetupTab = setupScenarios.length - 1;
-  renderSetupTabs();
 }
 
 function drawSetupHeads() {
-  const canvas = document.getElementById('setupHeadCanvas');
-  if (!canvas) return;
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.parentElement.getBoundingClientRect();
-  const size = Math.min(rect.width, rect.height, 500) * dpr;
-  canvas.width = size;
-  canvas.height = size;
-  canvas.style.width = (size / dpr) + 'px';
-  canvas.style.height = (size / dpr) + 'px';
+  const c = document.getElementById('setupCanvas'); if(!c)return;
+  const dpr = devicePixelRatio||1, rect = c.parentElement.getBoundingClientRect();
+  const sz = Math.min(rect.width, rect.height, 460)*dpr;
+  c.width=sz; c.height=sz; c.style.width=(sz/dpr)+'px'; c.style.height=(sz/dpr)+'px';
+  const ctx=c.getContext('2d'), s=setupScenarios[activeTab], n=masterBuckets;
+  const cx=sz/2, cy=sz/2, R=sz/2-50*dpr, hR=Math.max(14*dpr,Math.min(28*dpr,R/3));
+  const col=SCOLORS[activeTab%SCOLORS.length];
+  ctx.clearRect(0,0,sz,sz);
+  // Rings
+  ctx.beginPath();ctx.arc(cx,cy,R+hR+10*dpr,0,Math.PI*2);ctx.strokeStyle='#444';ctx.lineWidth=2*dpr;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,R-hR-10*dpr,0,Math.PI*2);ctx.strokeStyle='#444';ctx.lineWidth=2*dpr;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,26*dpr,0,Math.PI*2);ctx.fillStyle='#1a1a1a';ctx.strokeStyle='#555';ctx.lineWidth=2*dpr;ctx.fill();ctx.stroke();
+  ctx.font=`bold ${8*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#666';ctx.fillText('W',cx,cy);
 
-  const ctx = canvas.getContext('2d');
-  const s = setupScenarios[activeSetupTab];
-  const n = masterBuckets;
-  const cx = size / 2;
-  const cy = size / 2;
-  const radius = size / 2 - 55 * dpr;
-  const headR = Math.max(16 * dpr, Math.min(30 * dpr, radius / 3));
-  const color = SCOLORS[activeSetupTab % SCOLORS.length];
+  for(let i=0;i<n;i++){
+    const a=(2*Math.PI*i)/n-Math.PI/2, hx=cx+R*Math.cos(a), hy=cy+R*Math.sin(a);
+    const off=s.disabled.includes(i);
+    // Dividers
+    const da=a+Math.PI/n;
+    ctx.beginPath();ctx.moveTo(cx+(R-hR-10*dpr)*Math.cos(da),cy+(R-hR-10*dpr)*Math.sin(da));
+    ctx.lineTo(cx+(R+hR+10*dpr)*Math.cos(da),cy+(R+hR+10*dpr)*Math.sin(da));ctx.strokeStyle='#333';ctx.lineWidth=1*dpr;ctx.stroke();
+    // Head
+    ctx.beginPath();ctx.arc(hx,hy,hR,0,Math.PI*2);
+    ctx.fillStyle=off?'#1a1a1a':'#2a3a2a'; ctx.strokeStyle=off?'#cc3333':col; ctx.lineWidth=2*dpr; ctx.fill();ctx.stroke();
+    if(off){const xr=hR*0.35;ctx.strokeStyle='#cc3333';ctx.lineWidth=2*dpr;ctx.beginPath();ctx.moveTo(hx-xr,hy-xr);ctx.lineTo(hx+xr,hy+xr);ctx.moveTo(hx+xr,hy-xr);ctx.lineTo(hx-xr,hy+xr);ctx.stroke();}
+    else{const ts=hR*0.35;ctx.beginPath();ctx.moveTo(hx,hy-ts);ctx.lineTo(hx-ts*0.8,hy+ts*0.5);ctx.lineTo(hx+ts*0.8,hy+ts*0.5);ctx.closePath();ctx.strokeStyle=col;ctx.lineWidth=1.5*dpr;ctx.stroke();}
+    // Num
+    const nd=R+hR+22*dpr;
+    ctx.font=`${8*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=off?'#555':'#ccc';
+    ctx.fillText(''+(i+1),cx+nd*Math.cos(a),cy+nd*Math.sin(a));
+  }
+}
 
-  ctx.clearRect(0, 0, size, size);
+renderTabs();
+window.addEventListener('resize',()=>{if(document.getElementById('setupCanvas'))drawSetupHeads();});
 
-  // Outer ring
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius + headR + 12 * dpr, 0, Math.PI * 2);
-  ctx.strokeStyle = '#444';
-  ctx.lineWidth = 2 * dpr;
-  ctx.stroke();
+// ═══ ENGINE ═══
+function gauss(m,s){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return m+s*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function wChoice(w){const t=w.reduce((a,b)=>a+b,0);let r=Math.random()*t;for(let i=0;i<w.length;i++){r-=w[i];if(r<=0)return i;}return w.length-1;}
 
-  // Inner ring
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius - headR - 12 * dpr, 0, Math.PI * 2);
-  ctx.strokeStyle = '#444';
-  ctx.lineWidth = 2 * dpr;
-  ctx.stroke();
-
-  // Center
-  ctx.beginPath();
-  ctx.arc(cx, cy, 30 * dpr, 0, Math.PI * 2);
-  ctx.fillStyle = '#1a1a1a';
-  ctx.strokeStyle = '#555';
-  ctx.lineWidth = 2 * dpr;
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.font = `bold ${8 * dpr}px 'Share Tech Mono', monospace`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#999';
-  ctx.fillText('W', cx, cy);
-
-  // Heads
-  for (let i = 0; i < n; i++) {
-    const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-    const hx = cx + radius * Math.cos(angle);
-    const hy = cy + radius * Math.sin(angle);
-    const isDisabled = s.disabled.includes(i);
-
-    // Segment lines
-    ctx.beginPath();
-    ctx.moveTo(cx + (radius - headR - 12 * dpr) * Math.cos(angle + Math.PI / n), cy + (radius - headR - 12 * dpr) * Math.sin(angle + Math.PI / n));
-    ctx.lineTo(cx + (radius + headR + 12 * dpr) * Math.cos(angle + Math.PI / n), cy + (radius + headR + 12 * dpr) * Math.sin(angle + Math.PI / n));
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1 * dpr;
-    ctx.stroke();
-
-    // Head circle
-    ctx.beginPath();
-    ctx.arc(hx, hy, headR, 0, Math.PI * 2);
-
-    if (isDisabled) {
-      ctx.fillStyle = '#1a1a1a';
-      ctx.strokeStyle = '#cc3333';
-      ctx.lineWidth = 2 * dpr;
-      ctx.fill();
-      ctx.stroke();
-
-      // X mark
-      const xr = headR * 0.4;
-      ctx.strokeStyle = '#cc3333';
-      ctx.lineWidth = 2 * dpr;
-      ctx.beginPath();
-      ctx.moveTo(hx - xr, hy - xr); ctx.lineTo(hx + xr, hy + xr);
-      ctx.moveTo(hx + xr, hy - xr); ctx.lineTo(hx - xr, hy + xr);
-      ctx.stroke();
+class MHW {
+  constructor(nBuckets,disabled,target,min,shift,mode,modeParams,fdTimeout){
+    this.n=nBuckets;this.dis=new Set(disabled);this.target=target;this.min=min;this.shift=shift;
+    this.mode=mode;this.mp=modeParams;this.fdTimeout=fdTimeout;
+    this.wt=new Float64Array(nBuckets);this.cd=new Int8Array(nBuckets);this.ic=new Int8Array(nBuckets);
+    this.sel=[];this.wait=0;this.bags=[];this.fd=0;this.wc=0;this.tc=0;
+    for(let i=0;i<nBuckets;i++)if(!this.dis.has(i))this._fill(i);
+  }
+  _fill(i){
+    if(this.mode==='continuous'){
+      this.wt[i]=Math.round(gauss(this.mp.fillMean,this.mp.fillStd)*10)/10;
+      this.ic[i]=1;
     } else {
-      ctx.fillStyle = '#2a3a2a';
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2 * dpr;
-      ctx.fill();
-      ctx.stroke();
-
-      // Triangle marker (like the Yamato HMI)
-      const triSize = headR * 0.35;
-      ctx.beginPath();
-      ctx.moveTo(hx, hy - triSize);
-      ctx.lineTo(hx - triSize * 0.8, hy + triSize * 0.5);
-      ctx.lineTo(hx + triSize * 0.8, hy + triSize * 0.5);
-      ctx.closePath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5 * dpr;
-      ctx.stroke();
+      const ni=wChoice(this.mp.itemProbs)+1;let t=0;
+      for(let f=0;f<ni;f++)t+=gauss(this.mp.itemMean,this.mp.itemStd);
+      this.wt[i]=Math.round(t*10)/10;this.ic[i]=ni;
     }
-
-    // Number
-    const numR = radius + headR + 24 * dpr;
-    const nx = cx + numR * Math.cos(angle);
-    const ny = cy + numR * Math.sin(angle);
-    ctx.font = `${9 * dpr}px 'Share Tech Mono', monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = isDisabled ? '#666' : '#ccc';
-    ctx.fillText((i + 1).toString(), nx, ny);
+  }
+  avail(){const a=[];for(let i=0;i<this.n;i++)if(!this.cd[i]&&!this.dis.has(i))a.push(i);return a;}
+  findCombo(mustMin){
+    const av=this.avail();if(!av.length)return null;
+    let best=Infinity,bi=null;const mx=Math.min(av.length,5);
+    for(let r=1;r<=mx;r++){this._combos(av,r,c=>{let w=0;for(let i=0;i<c.length;i++)w+=this.wt[c[i]];
+      if(mustMin&&w<this.min)return;const d=Math.abs(w-this.target);if(d<best){best=d;bi=c.slice();}});if(!best)break;}
+    return bi;
+  }
+  _combos(a,r,cb){const n=a.length,c=new Array(r);(function g(s,d){if(d===r){cb(c);return;}for(let i=s;i<=n-r+d;i++){c[d]=a[i];g(i+1,d+1);}})(0,0);}
+  dump(idx){
+    let w=0;for(let i=0;i<idx.length;i++)w+=this.wt[idx[i]];
+    w=Math.round(w*10)/10;this.sel=idx.slice();
+    for(let i=0;i<idx.length;i++)this.cd[idx[i]]=this.shift;
+    for(let i=0;i<this.n;i++)if(this.cd[i]>0&&!this.dis.has(i)){this.cd[i]--;if(!this.cd[i])this._fill(i);}
+    this.bags.push(w);return w;
+  }
+  advance(){this.sel=[];for(let i=0;i<this.n;i++)if(this.cd[i]>0&&!this.dis.has(i)){this.cd[i]--;if(!this.cd[i])this._fill(i);}}
+  cycle(){
+    this.tc++;const b=this.findCombo(true);
+    if(b){this.dump(b);this.wait=0;return this.bags[this.bags.length-1];}
+    this.wait++;
+    if(this.wait>=this.fdTimeout){const f=this.findCombo(false);if(f){this.dump(f);this.fd++;this.wait=0;return this.bags[this.bags.length-1];}
+      this.advance();this.wc++;this.wait=0;}else{this.advance();this.wc++;}return null;
+  }
+  stats(){
+    if(!this.bags.length)return null;
+    const w=this.bags,n=w.length;let s=0,mn=1e9,mx=-1e9,ut=0;
+    for(let i=0;i<n;i++){s+=w[i];if(w[i]<mn)mn=w[i];if(w[i]>mx)mx=w[i];if(w[i]<this.min)ut++;}
+    const mean=s/n;let v=0;for(let i=0;i<n;i++)v+=(w[i]-mean)**2;
+    return{count:n,mean,std:Math.sqrt(v/n),min:mn,max:mx,give:mean-this.target,givePct:((mean-this.target)/this.target)*100,ut,utPct:(ut/n)*100};
   }
 }
 
-// Init
-renderSetupTabs();
-window.addEventListener('resize', () => { if (document.getElementById('setupHeadCanvas')) drawSetupHeads(); });
+// ═══ SIM CONTROLLER ═══
+let SP=null,weighers=[],running=false,paused=false,tid=null;
 
-
-// ══════════════════════════════════════
-//  SIMULATION ENGINE
-// ══════════════════════════════════════
-
-function gaussRandom(mean, std) {
-  let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  return mean + std * Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+function startSimulation(){
+  const tw=+document.getElementById('targetWeight').value, t1=+document.getElementById('t1Tolerance').value;
+  let modeParams;
+  if(productMode==='discrete'){
+    const p1=+document.getElementById('p1').value,p2=+document.getElementById('p2').value,p3=+document.getElementById('p3').value,tot=p1+p2+p3;
+    modeParams={itemMean:+document.getElementById('itemMean').value,itemStd:+document.getElementById('itemStd').value,itemProbs:[p1/tot,p2/tot,p3/tot]};
+  } else {
+    modeParams={fillMean:+document.getElementById('fillMean').value,fillStd:+document.getElementById('fillStd').value};
+  }
+  SP={masterBuckets,tw,min:tw-t1,t1,mode:productMode,mp:modeParams,fd:+document.getElementById('forceDump').value,
+    bags:+document.getElementById('numBags').value,
+    scenarios:setupScenarios.map((s,i)=>({name:s.name,shift:s.shift,disabled:[...s.disabled],color:SCOLORS[i%SCOLORS.length],active:masterBuckets-s.disabled.length}))};
+  document.getElementById('setup-view').style.display='none';
+  document.getElementById('sim-view').style.display='flex';
+  document.getElementById('simInfo').innerHTML=`<span>TARGET <strong>${tw}g</strong></span><span>T1 <strong>${SP.min}g</strong></span><span>BAGS <strong>${SP.bags.toLocaleString()}</strong></span><span>MODE <strong>${productMode.toUpperCase()}</strong></span>`;
+  initSim();
 }
 
-function weightedChoice(weights) {
-  const total = weights.reduce((a, b) => a + b, 0);
-  let r = Math.random() * total;
-  for (let i = 0; i < weights.length; i++) {
-    r -= weights[i];
-    if (r <= 0) return i;
-  }
-  return weights.length - 1;
+function initSim(){
+  weighers=SP.scenarios.map(sc=>new MHW(SP.masterBuckets,sc.disabled,SP.tw,SP.min,sc.shift,SP.mode,SP.mp,SP.fd));
+  // Grid cols
+  const g=document.getElementById('simGrid');
+  const cols=SP.scenarios.length;
+  g.style.gridTemplateColumns=`repeat(${cols},1fr)`;
+  buildCards();drawAllCanvases();drawChart();
+  document.getElementById('btnStart').disabled=false;document.getElementById('btnFast').disabled=false;
+  document.getElementById('btnPause').disabled=true;document.getElementById('btnPause').textContent='PAUSE';
+  document.getElementById('pFill').style.width='0%';document.getElementById('simStatus').innerHTML='READY';
+  running=false;paused=false;
 }
 
-class MultiheadWeigher {
-  constructor(numBuckets, disabledIndices, targetWeight, minWeight, shiftMode, itemMean, itemStd, itemProbs, forceDumpTimeout) {
-    this.numBuckets = numBuckets;
-    this.disabledIndices = new Set(disabledIndices);
-    this.targetWeight = targetWeight;
-    this.minWeight = minWeight;
-    this.shiftMode = shiftMode;
-    this.itemMean = itemMean;
-    this.itemStd = itemStd;
-    this.itemProbs = itemProbs;
-    this.forceDumpTimeout = forceDumpTimeout;
-
-    this.bucketWeights = new Array(numBuckets).fill(0);
-    this.bucketCooldowns = new Array(numBuckets).fill(0);
-    this.bucketItemCounts = new Array(numBuckets).fill(0);
-    this.lastSelectedIndices = [];
-    this.currentWait = 0;
-
-    this.bagWeights = [];
-    this.forceDumps = 0;
-    this.waitCycles = 0;
-    this.totalCycles = 0;
-
-    for (let i = 0; i < numBuckets; i++) {
-      if (!this.disabledIndices.has(i)) this._fillBucket(i);
+function buildCards(){
+  const g=document.getElementById('simGrid');g.innerHTML='';
+  const leg=document.getElementById('chartLegend');leg.innerHTML='';
+  SP.scenarios.forEach((sc,i)=>{
+    const w=weighers[i],st=w.stats();
+    const card=document.createElement('div');card.className='sim-card';card.id='card'+i;
+    let heads='';
+    for(let h=0;h<w.n;h++){
+      const off=w.dis.has(h),sel=w.sel.includes(h),cool=w.cd[h]>0;
+      let cls=off?' hrow--off':sel?' hrow--sel':'';
+      let sym=off?'<span style="color:#cc3333">&#10005;</span>':sel?'<span style="color:#ff9933">F</span>':cool?'<span style="color:#cccc00">O</span>':'<span style="color:#00cc66">&#9651;</span>';
+      const maxW=SP.mode==='continuous'?SP.mp.fillMean*1.5:SP.mp.itemMean*3.5;
+      const pct=off?0:Math.min(100,(w.wt[h]/maxW)*100);
+      heads+=`<div class="hrow${cls}"><span class="hnum">${h+1}</span><span class="hstat">${sym}</span><div class="hbar"><div class="hbar-fill" style="width:${pct}%"></div></div><span class="hwt">${off?'---':w.wt[h].toFixed(1)}</span></div>`;
     }
-  }
-
-  _fillBucket(idx) {
-    const numItems = weightedChoice(this.itemProbs) + 1;
-    let total = 0;
-    for (let f = 0; f < numItems; f++) total += gaussRandom(this.itemMean, this.itemStd);
-    this.bucketWeights[idx] = Math.round(total * 10) / 10;
-    this.bucketItemCounts[idx] = numItems;
-  }
-
-  getAvailableBuckets() {
-    const avail = [];
-    for (let i = 0; i < this.numBuckets; i++) {
-      if (this.bucketCooldowns[i] === 0 && !this.disabledIndices.has(i)) avail.push(i);
-    }
-    return avail;
-  }
-
-  findCombination(mustExceedMin) {
-    const available = this.getAvailableBuckets();
-    if (available.length === 0) return null;
-    let closestDiff = Infinity;
-    let bestIndices = null;
-    const maxR = Math.min(available.length, 5);
-    for (let r = 1; r <= maxR; r++) {
-      this._combinations(available, r, combo => {
-        let weight = 0;
-        for (let i = 0; i < combo.length; i++) weight += this.bucketWeights[combo[i]];
-        if (mustExceedMin && weight < this.minWeight) return;
-        const diff = Math.abs(weight - this.targetWeight);
-        if (diff < closestDiff) { closestDiff = diff; bestIndices = combo.slice(); }
-      });
-      if (closestDiff === 0) break;
-    }
-    return bestIndices;
-  }
-
-  _combinations(arr, r, callback) {
-    const n = arr.length;
-    const combo = new Array(r);
-    function gen(start, depth) {
-      if (depth === r) { callback(combo); return; }
-      for (let i = start; i <= n - r + depth; i++) { combo[depth] = arr[i]; gen(i + 1, depth + 1); }
-    }
-    gen(0, 0);
-  }
-
-  executeDump(indices) {
-    let combined = 0;
-    for (let i = 0; i < indices.length; i++) combined += this.bucketWeights[indices[i]];
-    combined = Math.round(combined * 10) / 10;
-    this.lastSelectedIndices = indices.slice();
-    for (let i = 0; i < indices.length; i++) this.bucketCooldowns[indices[i]] = this.shiftMode;
-    for (let i = 0; i < this.numBuckets; i++) {
-      if (this.bucketCooldowns[i] > 0 && !this.disabledIndices.has(i)) {
-        this.bucketCooldowns[i]--;
-        if (this.bucketCooldowns[i] === 0) this._fillBucket(i);
-      }
-    }
-    this.bagWeights.push(combined);
-    return combined;
-  }
-
-  advanceCycleNoDump() {
-    this.lastSelectedIndices = [];
-    for (let i = 0; i < this.numBuckets; i++) {
-      if (this.bucketCooldowns[i] > 0 && !this.disabledIndices.has(i)) {
-        this.bucketCooldowns[i]--;
-        if (this.bucketCooldowns[i] === 0) this._fillBucket(i);
-      }
-    }
-  }
-
-  runCycle() {
-    this.totalCycles++;
-    const best = this.findCombination(true);
-    if (best !== null) { this.executeDump(best); this.currentWait = 0; return this.bagWeights[this.bagWeights.length - 1]; }
-    this.currentWait++;
-    if (this.currentWait >= this.forceDumpTimeout) {
-      const force = this.findCombination(false);
-      if (force !== null) { this.executeDump(force); this.forceDumps++; this.currentWait = 0; return this.bagWeights[this.bagWeights.length - 1]; }
-      this.advanceCycleNoDump(); this.waitCycles++; this.currentWait = 0;
-    } else { this.advanceCycleNoDump(); this.waitCycles++; }
-    return null;
-  }
-
-  getStats() {
-    if (this.bagWeights.length === 0) return null;
-    const w = this.bagWeights, n = w.length;
-    let sum = 0, min = Infinity, max = -Infinity, underT1 = 0;
-    for (let i = 0; i < n; i++) { sum += w[i]; if (w[i] < min) min = w[i]; if (w[i] > max) max = w[i]; if (w[i] < this.minWeight) underT1++; }
-    const mean = sum / n;
-    let variance = 0;
-    for (let i = 0; i < n; i++) variance += (w[i] - mean) ** 2;
-    return {
-      count: n, mean, std: Math.sqrt(variance / n), min, max,
-      avgGiveaway: mean - this.targetWeight,
-      avgGiveawayPct: ((mean - this.targetWeight) / this.targetWeight) * 100,
-      underT1Count: underT1, underT1Pct: (underT1 / n) * 100,
-    };
-  }
-}
-
-
-// ══════════════════════════════════════
-//  SIMULATION CONTROLLER
-// ══════════════════════════════════════
-
-let simParams = null;
-let weighers = [];
-let simRunning = false;
-let simPaused = false;
-let simTimerId = null;
-let activeSimTab = 0;
-
-function startSimulation() {
-  const targetWeight = +document.getElementById('targetWeight').value;
-  const t1Tolerance = +document.getElementById('t1Tolerance').value;
-  const itemMean = +document.getElementById('itemMean').value;
-  const itemStd = +document.getElementById('itemStd').value;
-  const p1 = +document.getElementById('p1').value;
-  const p2 = +document.getElementById('p2').value;
-  const p3 = +document.getElementById('p3').value;
-  const total = p1 + p2 + p3;
-  const forceDump = +document.getElementById('forceDump').value;
-  const numBags = +document.getElementById('numBags').value;
-
-  simParams = {
-    masterBuckets, targetWeight, minWeight: targetWeight - t1Tolerance,
-    t1Tolerance, itemMean, itemStd, itemProbs: [p1/total, p2/total, p3/total],
-    forceDumpTimeout: forceDump, numBags,
-    scenarios: setupScenarios.map((s, i) => ({
-      name: s.name, shift: s.shift, disabled: [...s.disabled], color: SCOLORS[i % SCOLORS.length],
-      activeHeads: masterBuckets - s.disabled.length,
-    })),
-  };
-
-  document.getElementById('setup-view').style.display = 'none';
-  document.getElementById('sim-view').style.display = 'flex';
-
-  document.getElementById('simTopInfo').innerHTML = `
-    <span>TARGET <strong>${targetWeight}g</strong></span>
-    <span>T1 MIN <strong>${simParams.minWeight}g</strong></span>
-    <span>BAGS <strong>${numBags.toLocaleString()}</strong></span>
-  `;
-
-  activeSimTab = 0;
-  initWeighers();
-}
-
-function initWeighers() {
-  weighers = [];
-  simParams.scenarios.forEach(sc => {
-    weighers.push(new MultiheadWeigher(
-      simParams.masterBuckets, sc.disabled, simParams.targetWeight, simParams.minWeight,
-      sc.shift, simParams.itemMean, simParams.itemStd, simParams.itemProbs, simParams.forceDumpTimeout
-    ));
+    card.innerHTML=`
+      <div class="sim-card-header"><span class="sim-card-dot" style="background:${sc.color}"></span><span class="sim-card-name">${sc.name}</span><span class="sim-card-config">${sc.active}/${SP.masterBuckets} heads &middot; shift ${sc.shift}</span></div>
+      <div class="sim-card-body">
+        <div class="sim-card-canvas-wrap"><canvas id="cv${i}" width="400" height="400"></canvas></div>
+      </div>
+      <div class="sim-card-stats">
+        <div class="sstat"><div class="sstat-label">Bags</div><div class="sstat-value" id="vBags${i}">${w.bags.length}</div></div>
+        <div class="sstat"><div class="sstat-label">Giveaway</div><div class="sstat-value${st&&st.give>10?' sstat-value--warn':''}" id="vGive${i}">${st?(st.give>=0?'+':'')+st.give.toFixed(1)+'g':'---'}</div></div>
+        <div class="sstat"><div class="sstat-label">Give %</div><div class="sstat-value${st&&st.givePct>2?' sstat-value--warn':''}" id="vGiveP${i}">${st?st.givePct.toFixed(2)+'%':'---'}</div></div>
+        <div class="sstat"><div class="sstat-label">Under T1</div><div class="sstat-value${st&&st.utPct>0?' sstat-value--bad':''}" id="vT1${i}">${st?st.utPct.toFixed(2)+'%':'---'}</div></div>
+      </div>
+      <div class="sim-card-heads" id="heads${i}">${heads}</div>`;
+    g.appendChild(card);
+    const lbl=st?`${sc.name} (μ=${st.give>=0?'+':''}${st.give.toFixed(1)}g)`:sc.name;
+    leg.innerHTML+=`<div class="legend-item"><span class="legend-dot" style="background:${sc.color}"></span>${lbl}</div>`;
   });
-
-  renderSimTabs();
-  renderSimView();
-  drawSimCanvas();
-  drawChart();
-
-  document.getElementById('btnStart').disabled = false;
-  document.getElementById('btnFast').disabled = false;
-  document.getElementById('btnPause').disabled = true;
-  document.getElementById('btnPause').textContent = 'PAUSE';
-  document.getElementById('progressFill').style.width = '0%';
-  document.getElementById('statusText').innerHTML = 'READY';
-  simRunning = false;
-  simPaused = false;
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#e0e0e0;display:inline-block"></span>Target</div>`;
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#cc3333;display:inline-block"></span>T1</div>`;
 }
 
-function renderSimTabs() {
-  const el = document.getElementById('simTabs');
-  el.innerHTML = '';
-  simParams.scenarios.forEach((sc, i) => {
-    const tab = document.createElement('button');
-    tab.className = 'sim-stab' + (i === activeSimTab ? ' sim-stab--active' : '');
-    tab.innerHTML = `<span class="scenario-tab-color" style="background:${sc.color};display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px"></span>${sc.name}`;
-    tab.onclick = () => { activeSimTab = i; renderSimTabs(); renderSimView(); drawSimCanvas(); };
-    el.appendChild(tab);
+function updateCards(){
+  SP.scenarios.forEach((sc,i)=>{
+    const w=weighers[i],st=w.stats();
+    document.getElementById('vBags'+i).textContent=w.bags.length.toLocaleString();
+    if(st){
+      const ge=document.getElementById('vGive'+i);ge.textContent=(st.give>=0?'+':'')+st.give.toFixed(1)+'g';ge.className='sstat-value'+(st.give>10?' sstat-value--warn':'');
+      const gp=document.getElementById('vGiveP'+i);gp.textContent=st.givePct.toFixed(2)+'%';gp.className='sstat-value'+(st.givePct>2?' sstat-value--warn':'');
+      const t1=document.getElementById('vT1'+i);t1.textContent=st.utPct.toFixed(2)+'%';t1.className='sstat-value'+(st.utPct>0?' sstat-value--bad':'');
+    }
+    // Head list
+    const hel=document.getElementById('heads'+i);
+    let h='';
+    for(let j=0;j<w.n;j++){
+      const off=w.dis.has(j),sel=w.sel.includes(j),cool=w.cd[j]>0;
+      let cls=off?' hrow--off':sel?' hrow--sel':'';
+      let sym=off?'<span style="color:#cc3333">&#10005;</span>':sel?'<span style="color:#ff9933">F</span>':cool?'<span style="color:#cccc00">O</span>':'<span style="color:#00cc66">&#9651;</span>';
+      const maxW=SP.mode==='continuous'?SP.mp.fillMean*1.5:SP.mp.itemMean*3.5;
+      const pct=off?0:Math.min(100,(w.wt[j]/maxW)*100);
+      h+=`<div class="hrow${cls}"><span class="hnum">${j+1}</span><span class="hstat">${sym}</span><div class="hbar"><div class="hbar-fill" style="width:${pct}%"></div></div><span class="hwt">${off?'---':w.wt[j].toFixed(1)}</span></div>`;
+    }
+    hel.innerHTML=h;
   });
-
   // Legend
-  const legend = document.getElementById('chartLegend');
-  legend.innerHTML = '';
-  simParams.scenarios.forEach((sc, i) => {
-    const stats = weighers[i].getStats();
-    const lbl = stats ? `${sc.name} (μ=${stats.avgGiveaway >= 0 ? '+' : ''}${stats.avgGiveaway.toFixed(1)}g)` : sc.name;
-    legend.innerHTML += `<div class="legend-item"><span class="legend-dot" style="background:${sc.color}"></span>${lbl}</div>`;
+  const leg=document.getElementById('chartLegend');leg.innerHTML='';
+  SP.scenarios.forEach((sc,i)=>{
+    const st=weighers[i].stats();
+    const lbl=st?`${sc.name} (μ=${st.give>=0?'+':''}${st.give.toFixed(1)}g)`:sc.name;
+    leg.innerHTML+=`<div class="legend-item"><span class="legend-dot" style="background:${sc.color}"></span>${lbl}</div>`;
   });
-  legend.innerHTML += `<div class="legend-item"><span style="width:10px;height:2px;background:#e0e0e0;display:inline-block;border-radius:1px"></span>Target</div>`;
-  legend.innerHTML += `<div class="legend-item"><span style="width:10px;height:2px;background:#cc3333;display:inline-block;border-radius:1px"></span>T1</div>`;
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#e0e0e0;display:inline-block"></span>Target</div>`;
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#cc3333;display:inline-block"></span>T1</div>`;
 }
 
-function renderSimView() {
-  const w = weighers[activeSimTab];
-  const sc = simParams.scenarios[activeSimTab];
+// ═══ CANVAS DRAWING ═══
+function drawAllCanvases(){SP.scenarios.forEach((_,i)=>drawScenarioCanvas(i));}
 
-  // Left: Individual heads
-  const left = document.getElementById('hmiLeft');
-  let html = '<div class="individual-title">INDIVIDUAL</div>';
-  for (let i = 0; i < w.numBuckets; i++) {
-    const isDisabled = w.disabledIndices.has(i);
-    const isSelected = w.lastSelectedIndices.includes(i);
-    const cooldown = w.bucketCooldowns[i];
-    const weight = w.bucketWeights[i];
+function drawScenarioCanvas(idx){
+  const c=document.getElementById('cv'+idx);if(!c)return;
+  const dpr=devicePixelRatio||1,wrap=c.parentElement,sz=Math.min(wrap.clientWidth,wrap.clientHeight,380)*dpr;
+  c.width=sz;c.height=sz;c.style.width=(sz/dpr)+'px';c.style.height=(sz/dpr)+'px';
+  const ctx=c.getContext('2d'),w=weighers[idx],sc=SP.scenarios[idx];
+  const n=w.n,cx=sz/2,cy=sz/2,R=sz/2-40*dpr,hR=Math.max(10*dpr,Math.min(22*dpr,R/3.2)),col=sc.color;
+  ctx.clearRect(0,0,sz,sz);
+  // Rings
+  ctx.beginPath();ctx.arc(cx,cy,R+hR+8*dpr,0,Math.PI*2);ctx.strokeStyle='#444';ctx.lineWidth=1.5*dpr;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,R-hR-8*dpr,0,Math.PI*2);ctx.strokeStyle='#444';ctx.lineWidth=1.5*dpr;ctx.stroke();
+  // Center
+  const dr=24*dpr;ctx.beginPath();ctx.arc(cx,cy,dr,0,Math.PI*2);ctx.fillStyle='#1a1a1a';ctx.strokeStyle='#555';ctx.lineWidth=1.5*dpr;ctx.fill();ctx.stroke();
+  const last=w.bags.slice(-4);
+  if(last.length){
+    ctx.font=`bold ${5*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.fillStyle='#555';ctx.fillText('DROPS',cx,cy-14*dpr);
+    for(let j=0;j<last.length;j++){
+      const g=last[last.length-1-j]-w.target;
+      ctx.fillStyle=last[last.length-1-j]<w.min?'#cc3333':g<5?'#00cc66':'#cccc00';
+      ctx.globalAlpha=1-j*0.2;ctx.font=`bold ${6*dpr}px 'Share Tech Mono'`;
+      ctx.fillText(last[last.length-1-j].toFixed(0),cx,cy-4*dpr+j*9*dpr);
+    }ctx.globalAlpha=1;
+  } else {ctx.font=`bold ${7*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#555';ctx.fillText('W',cx,cy);}
 
-    let statusClass = 'head-status--ok';
-    let statusChar = '&#9651;'; // triangle
-    let rowClass = '';
+  for(let i=0;i<n;i++){
+    const a=(2*Math.PI*i)/n-Math.PI/2,hx=cx+R*Math.cos(a),hy=cy+R*Math.sin(a);
+    const off=w.dis.has(i),sel=w.sel.includes(i),cool=w.cd[i],wt=w.wt[i],items=w.ic[i];
+    // Dividers
+    const da=a+Math.PI/n;ctx.beginPath();
+    ctx.moveTo(cx+(R-hR-8*dpr)*Math.cos(da),cy+(R-hR-8*dpr)*Math.sin(da));
+    ctx.lineTo(cx+(R+hR+8*dpr)*Math.cos(da),cy+(R+hR+8*dpr)*Math.sin(da));ctx.strokeStyle='#333';ctx.lineWidth=1*dpr;ctx.stroke();
 
-    if (isDisabled) { statusClass = 'head-status--disabled'; statusChar = '&#10005;'; rowClass = ' head-row--disabled'; }
-    else if (isSelected) { statusClass = 'head-status--selected'; statusChar = 'F'; rowClass = ' head-row--selected'; }
-    else if (cooldown > 0) { statusClass = 'head-status--cool'; statusChar = 'O'; }
-
-    const maxWeight = w.itemMean * 3.5;
-    const barPct = isDisabled ? 0 : Math.min(100, (weight / maxWeight) * 100);
-
-    html += `<div class="head-row${rowClass}">
-      <span class="head-num">${i + 1}</span>
-      <span class="head-status ${statusClass}">${statusChar}</span>
-      <div class="head-bar-wrap"><div class="head-bar-fill" style="width:${barPct}%"></div></div>
-      <span class="head-weight">${isDisabled ? '---' : weight.toFixed(1)}</span>
-    </div>`;
-  }
-  left.innerHTML = html;
-
-  // Right: Stats
-  const right = document.getElementById('hmiRight');
-  const stats = w.getStats();
-
-  let statsHtml = `
-    <div class="feeder-box">
-      <div class="feeder-title">Feeder</div>
-      <div class="feeder-row"><span class="feeder-label">TARGET WT</span><span class="feeder-value">${simParams.targetWeight.toFixed(1)} g</span></div>
-      <div class="feeder-row"><span class="feeder-label">AVERAGE WT</span><span class="feeder-value">${stats ? stats.mean.toFixed(1) + ' g' : '---'}</span></div>
-      <div class="feeder-row"><span class="feeder-label">AVE HEAD</span><span class="feeder-value">${(simParams.targetWeight / sc.activeHeads).toFixed(1)}</span></div>
-      <div class="feeder-row"><span class="feeder-label">STD.DEV.</span><span class="feeder-value">${stats ? stats.std.toFixed(2) + ' g' : '---'}</span></div>
-    </div>
-    <div class="feeder-box">
-      <div class="feeder-title">Giveaway</div>
-      <div class="feeder-row"><span class="feeder-label">AVG GIVEAWAY</span><span class="feeder-value ${stats && stats.avgGiveaway > 10 ? 'feeder-value--warn' : ''}">${stats ? (stats.avgGiveaway >= 0 ? '+' : '') + stats.avgGiveaway.toFixed(1) + ' g' : '---'}</span></div>
-      <div class="feeder-row"><span class="feeder-label">GIVEAWAY %</span><span class="feeder-value ${stats && stats.avgGiveawayPct > 2 ? 'feeder-value--warn' : ''}">${stats ? stats.avgGiveawayPct.toFixed(2) + ' %' : '---'}</span></div>
-    </div>
-    <div class="feeder-box">
-      <div class="feeder-title">Compliance</div>
-      <div class="feeder-row"><span class="feeder-label">BAGS</span><span class="feeder-value">${w.bagWeights.length.toLocaleString()}</span></div>
-      <div class="feeder-row"><span class="feeder-label">UNDER T1</span><span class="feeder-value ${stats && stats.underT1Pct > 0 ? 'feeder-value--bad' : ''}">${stats ? stats.underT1Pct.toFixed(2) + ' %' : '---'}</span></div>
-      <div class="feeder-row"><span class="feeder-label">FORCE DUMPS</span><span class="feeder-value ${w.forceDumps > 0 ? 'feeder-value--warn' : ''}">${w.forceDumps}</span></div>
-      <div class="feeder-row"><span class="feeder-label">ACTIVE HEADS</span><span class="feeder-value">${sc.activeHeads} / ${simParams.masterBuckets}</span></div>
-    </div>
-  `;
-  right.innerHTML = statsHtml;
-}
-
-// ── Circular HMI canvas ──
-function drawSimCanvas() {
-  const canvas = document.getElementById('simCanvas');
-  const dpr = window.devicePixelRatio || 1;
-  const container = canvas.parentElement;
-  const cSize = Math.min(container.clientWidth, container.clientHeight, 520);
-  const size = cSize * dpr;
-  canvas.width = size;
-  canvas.height = size;
-  canvas.style.width = cSize + 'px';
-  canvas.style.height = cSize + 'px';
-
-  const ctx = canvas.getContext('2d');
-  const w = weighers[activeSimTab];
-  const sc = simParams.scenarios[activeSimTab];
-  const n = w.numBuckets;
-  const cx = size / 2;
-  const cy = size / 2;
-  const radius = size / 2 - 50 * dpr;
-  const headR = Math.max(14 * dpr, Math.min(26 * dpr, radius / 3.2));
-  const color = sc.color;
-
-  ctx.clearRect(0, 0, size, size);
-
-  // Outer ring
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius + headR + 10 * dpr, 0, Math.PI * 2);
-  ctx.strokeStyle = '#444';
-  ctx.lineWidth = 2 * dpr;
-  ctx.stroke();
-
-  // Inner ring
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius - headR - 10 * dpr, 0, Math.PI * 2);
-  ctx.strokeStyle = '#444';
-  ctx.lineWidth = 2 * dpr;
-  ctx.stroke();
-
-  // Center dump zone
-  const dropR = 34 * dpr;
-  ctx.beginPath();
-  ctx.arc(cx, cy, dropR, 0, Math.PI * 2);
-  ctx.fillStyle = '#1a1a1a';
-  ctx.strokeStyle = '#555';
-  ctx.lineWidth = 2 * dpr;
-  ctx.fill();
-  ctx.stroke();
-
-  // Last 5 bag weights in center
-  const last = w.bagWeights.slice(-5);
-  if (last.length > 0) {
-    ctx.font = `bold ${7 * dpr}px 'Share Tech Mono', monospace`;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#666';
-    ctx.fillText('DROPS', cx, cy - 20 * dpr);
-
-    for (let j = 0; j < last.length; j++) {
-      const g = last[last.length - 1 - j] - w.targetWeight;
-      ctx.fillStyle = last[last.length - 1 - j] < w.minWeight ? '#cc3333' : g < 5 ? '#00cc66' : '#cccc00';
-      ctx.globalAlpha = 1.0 - j * 0.15;
-      ctx.font = `bold ${8 * dpr}px 'Share Tech Mono', monospace`;
-      ctx.fillText(last[last.length - 1 - j].toFixed(0), cx, cy - 8 * dpr + j * 11 * dpr);
-    }
-    ctx.globalAlpha = 1.0;
-  } else {
-    ctx.font = `bold ${9 * dpr}px 'Share Tech Mono', monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#666';
-    ctx.fillText('W', cx, cy);
-  }
-
-  // Heads
-  for (let i = 0; i < n; i++) {
-    const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-    const hx = cx + radius * Math.cos(angle);
-    const hy = cy + radius * Math.sin(angle);
-    const isDisabled = w.disabledIndices.has(i);
-    const isSelected = w.lastSelectedIndices.includes(i);
-    const cooldown = w.bucketCooldowns[i];
-    const weight = w.bucketWeights[i];
-    const items = w.bucketItemCounts[i];
-
-    // Segment dividers
-    ctx.beginPath();
-    ctx.moveTo(cx + (radius - headR - 10 * dpr) * Math.cos(angle + Math.PI / n), cy + (radius - headR - 10 * dpr) * Math.sin(angle + Math.PI / n));
-    ctx.lineTo(cx + (radius + headR + 10 * dpr) * Math.cos(angle + Math.PI / n), cy + (radius + headR + 10 * dpr) * Math.sin(angle + Math.PI / n));
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1 * dpr;
-    ctx.stroke();
-
-    if (isDisabled) {
-      // Disabled head
-      ctx.beginPath();
-      ctx.arc(hx, hy, headR, 0, Math.PI * 2);
-      ctx.fillStyle = '#1a1a1a';
-      ctx.strokeStyle = '#cc3333';
-      ctx.lineWidth = 2 * dpr;
-      ctx.fill();
-      ctx.stroke();
-
-      const xr = headR * 0.35;
-      ctx.strokeStyle = '#cc3333';
-      ctx.lineWidth = 2 * dpr;
-      ctx.beginPath();
-      ctx.moveTo(hx - xr, hy - xr); ctx.lineTo(hx + xr, hy + xr);
-      ctx.moveTo(hx + xr, hy - xr); ctx.lineTo(hx - xr, hy + xr);
-      ctx.stroke();
+    if(off){
+      ctx.beginPath();ctx.arc(hx,hy,hR,0,Math.PI*2);ctx.fillStyle='#1a1a1a';ctx.strokeStyle='#cc3333';ctx.lineWidth=1.5*dpr;ctx.fill();ctx.stroke();
+      const xr=hR*0.3;ctx.strokeStyle='#cc3333';ctx.lineWidth=1.5*dpr;ctx.beginPath();ctx.moveTo(hx-xr,hy-xr);ctx.lineTo(hx+xr,hy+xr);ctx.moveTo(hx+xr,hy-xr);ctx.lineTo(hx-xr,hy+xr);ctx.stroke();
     } else {
-      // Weight-based fill color
-      const minExp = w.itemMean * 0.8;
-      const maxExp = w.itemMean * 3.2;
-      const ratio = Math.max(0, Math.min(1, (weight - minExp) / (maxExp - minExp)));
-
-      let fillColor, textColor;
-      if (cooldown > 0) {
-        fillColor = '#1a1a1a';
-        textColor = '#666';
-      } else {
-        let r, g, b;
-        if (ratio < 0.5) { r = 220; g = Math.floor(80 + ratio * 2 * 170); b = 60; }
-        else { r = Math.floor(220 - (ratio - 0.5) * 2 * 180); g = Math.floor(200 + (ratio - 0.5) * 2 * 55); b = Math.floor(60 + (ratio - 0.5) * 2 * 80); }
-        fillColor = `rgb(${r},${g},${b})`;
-        textColor = ratio > 0.3 ? '#000' : '#fff';
+      const minE=SP.mode==='continuous'?SP.mp.fillMean*0.7:SP.mp.itemMean*0.8;
+      const maxE=SP.mode==='continuous'?SP.mp.fillMean*1.3:SP.mp.itemMean*3.2;
+      const ratio=Math.max(0,Math.min(1,(wt-minE)/(maxE-minE)));
+      let fc,tc;
+      if(cool>0){fc='#1a1a1a';tc='#555';
+        const prog=(w.shift-cool)/w.shift;ctx.beginPath();ctx.arc(hx,hy,hR+3*dpr,-Math.PI/2,-Math.PI/2+prog*Math.PI*2);ctx.strokeStyle=col;ctx.lineWidth=2*dpr;ctx.stroke();
+      }else{
+        let r,g,b;if(ratio<0.5){r=200;g=Math.floor(80+ratio*2*160);b=50;}else{r=Math.floor(200-(ratio-0.5)*2*160);g=Math.floor(200+(ratio-0.5)*2*55);b=Math.floor(50+(ratio-0.5)*2*80);}
+        fc=`rgb(${r},${g},${b})`;tc=ratio>0.3?'#000':'#fff';
       }
-
-      // Selection glow
-      if (isSelected) {
-        for (let g = 0; g < 3; g++) {
-          ctx.beginPath();
-          ctx.arc(hx, hy, headR + (4 + g * 3) * dpr, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(255,153,51,${0.5 - g * 0.15})`;
-          ctx.lineWidth = 2 * dpr;
-          ctx.stroke();
-        }
-      }
-
-      // Cooldown progress ring
-      if (cooldown > 0) {
-        const progress = (w.shiftMode - cooldown) / w.shiftMode;
-        ctx.beginPath();
-        ctx.arc(hx, hy, headR + 3 * dpr, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2.5 * dpr;
-        ctx.stroke();
-      }
-
-      // Head circle
-      ctx.beginPath();
-      ctx.arc(hx, hy, headR, 0, Math.PI * 2);
-      ctx.fillStyle = fillColor;
-      ctx.strokeStyle = isSelected ? '#ff9933' : '#555';
-      ctx.lineWidth = (isSelected ? 2.5 : 1.5) * dpr;
-      ctx.fill();
-      ctx.stroke();
-
-      // Weight text
-      const fontSize = Math.max(8, Math.min(12, headR / (2 * dpr)));
-      ctx.font = `bold ${fontSize * dpr}px 'Share Tech Mono', monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = textColor;
-      ctx.fillText(weight.toFixed(0), hx, hy);
-
-      // Status marker outside
-      const markerDist = headR + 16 * dpr;
-      const mx = hx + (markerDist - headR) * Math.cos(angle) * 0;
-      const my = hy;
-
-      // Item dots below
-      if (cooldown === 0) {
-        const dotY = hy + headR + 6 * dpr;
-        const dotSpacing = 5 * dpr;
-        const dotSize = 2 * dpr;
-        const startX = hx - ((items - 1) * dotSpacing) / 2;
-        for (let f = 0; f < items; f++) {
-          ctx.beginPath();
-          ctx.arc(startX + f * dotSpacing, dotY, dotSize, 0, Math.PI * 2);
-          ctx.fillStyle = '#cccc00';
-          ctx.fill();
-        }
-      }
+      if(sel){for(let g=0;g<2;g++){ctx.beginPath();ctx.arc(hx,hy,hR+(3+g*3)*dpr,0,Math.PI*2);ctx.strokeStyle=`rgba(255,153,51,${0.5-g*0.2})`;ctx.lineWidth=1.5*dpr;ctx.stroke();}}
+      ctx.beginPath();ctx.arc(hx,hy,hR,0,Math.PI*2);ctx.fillStyle=fc;ctx.strokeStyle=sel?'#ff9933':'#555';ctx.lineWidth=(sel?2:1)*dpr;ctx.fill();ctx.stroke();
+      const fs=Math.max(6,Math.min(10,hR/(2*dpr)));
+      ctx.font=`bold ${fs*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=tc;ctx.fillText(wt.toFixed(0),hx,hy);
+      if(cool===0&&SP.mode==='discrete'){const dotY=hy+hR+4*dpr,ds=4*dpr,dz=1.5*dpr,sx=hx-((items-1)*ds)/2;
+        for(let f=0;f<items;f++){ctx.beginPath();ctx.arc(sx+f*ds,dotY,dz,0,Math.PI*2);ctx.fillStyle='#cccc00';ctx.fill();}}
     }
-
-    // Number label outside ring
-    const numDist = radius + headR + 22 * dpr;
-    const nx = cx + numDist * Math.cos(angle);
-    const ny = cy + numDist * Math.sin(angle);
-    ctx.font = `${8 * dpr}px 'Share Tech Mono', monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = isDisabled ? '#555' : isSelected ? '#ff9933' : '#999';
-    ctx.fillText((i + 1).toString(), nx, ny);
+    const nd=R+hR+16*dpr;ctx.font=`${7*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=off?'#444':sel?'#ff9933':'#888';ctx.fillText(''+(i+1),cx+nd*Math.cos(a),cy+nd*Math.sin(a));
   }
 }
 
+// ═══ CHART ═══
+function gSmooth(d,sig){const ks=Math.ceil(sig*3)*2+1,k=[];let s=0;for(let i=0;i<ks;i++){const x=i-Math.floor(ks/2),v=Math.exp(-0.5*(x/sig)**2);k.push(v);s+=v;}for(let i=0;i<ks;i++)k[i]/=s;
+  const r=new Array(d.length).fill(0),h=Math.floor(ks/2);for(let i=0;i<d.length;i++)for(let j=0;j<ks;j++){const idx=i+j-h;if(idx>=0&&idx<d.length)r[i]+=d[idx]*k[j];}return r;}
 
-// ── Chart ──
-
-function gaussianSmooth(data, sigma) {
-  const ks = Math.ceil(sigma * 3) * 2 + 1;
-  const kernel = [];
-  let kSum = 0;
-  for (let i = 0; i < ks; i++) { const x = i - Math.floor(ks / 2); const v = Math.exp(-0.5 * (x / sigma) ** 2); kernel.push(v); kSum += v; }
-  for (let i = 0; i < ks; i++) kernel[i] /= kSum;
-  const result = new Array(data.length).fill(0);
-  const half = Math.floor(ks / 2);
-  for (let i = 0; i < data.length; i++) {
-    for (let k = 0; k < ks; k++) { const idx = i + k - half; if (idx >= 0 && idx < data.length) result[i] += data[idx] * kernel[k]; }
-  }
-  return result;
+function drawChart(){
+  const c=document.getElementById('chartCanvas'),dpr=devicePixelRatio||1,rect=c.getBoundingClientRect();
+  const W=rect.width*dpr,H=rect.height*dpr;c.width=W;c.height=H;const ctx=c.getContext('2d');ctx.clearRect(0,0,W,H);
+  const ml=45*dpr,mr=15*dpr,mt=8*dpr,mb=24*dpr,pw=W-ml-mr,ph=H-mt-mb;
+  let allG=[];const sd=[];
+  weighers.forEach(w=>{if(w.bags.length>10){const g=w.bags.map(b=>b-SP.tw);allG=allG.concat(g);sd.push(g);}else sd.push(null);});
+  if(!allG.length){ctx.fillStyle='#555';ctx.font=`${10*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.fillText('WAITING FOR DATA...',W/2,H/2);return;}
+  const gMn=Math.min(...allG)-5,gMx=Math.max(...allG)+5,nb=80,bw=(gMx-gMn)/nb;
+  let yM=0;const curves=[];
+  sd.forEach(g=>{if(!g){curves.push(null);return;}const cn=new Array(nb).fill(0);g.forEach(v=>{const b=Math.min(nb-1,Math.max(0,Math.floor((v-gMn)/bw)));cn[b]++;});
+    const p=cn.map(c=>(c/g.length)*100),s=gSmooth(p,1.5);const mx=Math.max(...s);if(mx>yM)yM=mx;curves.push(s);});
+  yM=Math.ceil(yM*1.15)||1;
+  ctx.font=`${7*dpr}px 'Share Tech Mono'`;
+  for(let i=0;i<=4;i++){const y=mt+ph-(i/4)*ph;ctx.fillStyle='#555';ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText(((i/4)*yM).toFixed(1)+'%',ml-4*dpr,y);
+    ctx.beginPath();ctx.moveTo(ml,y);ctx.lineTo(ml+pw,y);ctx.strokeStyle='#333';ctx.lineWidth=1*dpr;ctx.stroke();}
+  const xR=gMx-gMn,xS=xR>100?20:xR>50?10:5;ctx.textAlign='center';ctx.textBaseline='top';
+  for(let v=Math.ceil(gMn/xS)*xS;v<=gMx;v+=xS){ctx.fillStyle='#555';ctx.fillText(v+'g',ml+((v-gMn)/xR)*pw,mt+ph+4*dpr);}
+  const zx=ml+((0-gMn)/xR)*pw;ctx.setLineDash([5*dpr,3*dpr]);ctx.strokeStyle='#e0e0e0';ctx.lineWidth=1*dpr;ctx.beginPath();ctx.moveTo(zx,mt);ctx.lineTo(zx,mt+ph);ctx.stroke();
+  const tx=ml+((-SP.t1-gMn)/xR)*pw;ctx.strokeStyle='#cc3333';ctx.setLineDash([3*dpr,3*dpr]);ctx.beginPath();ctx.moveTo(tx,mt);ctx.lineTo(tx,mt+ph);ctx.stroke();ctx.setLineDash([]);
+  curves.forEach((cv,idx)=>{if(!cv)return;const co=SP.scenarios[idx].color;
+    ctx.beginPath();for(let b=0;b<nb;b++){const x=ml+((b+0.5)*bw/xR)*pw,y=mt+ph-(cv[b]/yM)*ph;if(!b)ctx.moveTo(x,mt+ph);ctx.lineTo(x,y);}
+    ctx.lineTo(ml+((nb-0.5)*bw/xR)*pw,mt+ph);ctx.closePath();ctx.fillStyle=co+'30';ctx.fill();
+    ctx.beginPath();for(let b=0;b<nb;b++){const x=ml+((b+0.5)*bw/xR)*pw,y=mt+ph-(cv[b]/yM)*ph;if(!b)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+    ctx.strokeStyle=co;ctx.lineWidth=2*dpr;ctx.stroke();});
 }
 
-function drawChart() {
-  const canvas = document.getElementById('chartCanvas');
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  const W = rect.width * dpr;
-  const H = rect.height * dpr;
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, W, H);
+// ═══ SIM CONTROLS ═══
+function simStart(){if(running)return;running=true;paused=false;
+  document.getElementById('btnStart').disabled=true;document.getElementById('btnFast').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('simStatus').innerHTML='RUNNING — <strong style="color:#00cc66">VISUAL</strong>';runVisual();}
 
-  const ml = 50 * dpr, mr = 20 * dpr, mt = 10 * dpr, mb = 28 * dpr;
-  const pw = W - ml - mr;
-  const ph = H - mt - mb;
+function simFastRun(){if(running)return;running=true;paused=false;
+  document.getElementById('btnStart').disabled=true;document.getElementById('btnFast').disabled=true;document.getElementById('btnPause').disabled=false;
+  document.getElementById('simStatus').innerHTML='RUNNING — <strong style="color:#9966ff">FAST</strong>';runFast();}
 
-  let allGiveaway = [];
-  const seriesData = [];
-  weighers.forEach(w => {
-    if (w.bagWeights.length > 10) {
-      const g = w.bagWeights.map(bw => bw - simParams.targetWeight);
-      allGiveaway = allGiveaway.concat(g);
-      seriesData.push(g);
-    } else seriesData.push(null);
-  });
+function simPause(){if(!running)return;paused=!paused;const b=document.getElementById('btnPause');
+  if(paused){b.textContent='RESUME';if(tid){clearTimeout(tid);cancelAnimationFrame(tid);tid=null;}document.getElementById('simStatus').innerHTML='<strong style="color:#cccc00">PAUSED</strong>';}
+  else{b.textContent='PAUSE';document.getElementById('simStatus').innerHTML='RESUMING...';}}
 
-  if (allGiveaway.length === 0) {
-    ctx.fillStyle = '#666';
-    ctx.font = `${11 * dpr}px 'Share Tech Mono', monospace`;
-    ctx.textAlign = 'center';
-    ctx.fillText('WAITING FOR DATA...', W / 2, H / 2);
-    return;
-  }
+function simReset(){running=false;paused=false;if(tid){clearTimeout(tid);cancelAnimationFrame(tid);tid=null;}initSim();}
+function goBack(){running=false;paused=false;if(tid){clearTimeout(tid);cancelAnimationFrame(tid);tid=null;}document.getElementById('sim-view').style.display='none';document.getElementById('setup-view').style.display='flex';}
 
-  const gMin = Math.min(...allGiveaway) - 5;
-  const gMax = Math.max(...allGiveaway) + 5;
-  const numBins = 80;
-  const binWidth = (gMax - gMin) / numBins;
-
-  let yMax = 0;
-  const allCurves = [];
-  seriesData.forEach(g => {
-    if (!g) { allCurves.push(null); return; }
-    const counts = new Array(numBins).fill(0);
-    g.forEach(v => { const bin = Math.min(numBins - 1, Math.max(0, Math.floor((v - gMin) / binWidth))); counts[bin]++; });
-    const pcts = counts.map(c => (c / g.length) * 100);
-    const smoothed = gaussianSmooth(pcts, 1.5);
-    const maxVal = Math.max(...smoothed);
-    if (maxVal > yMax) yMax = maxVal;
-    allCurves.push(smoothed);
-  });
-  yMax = Math.ceil(yMax * 1.15) || 1;
-
-  // Grid
-  ctx.font = `${8 * dpr}px 'Share Tech Mono', monospace`;
-  for (let i = 0; i <= 4; i++) {
-    const y = mt + ph - (i / 4) * ph;
-    ctx.fillStyle = '#666';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(((i / 4) * yMax).toFixed(1) + '%', ml - 6 * dpr, y);
-    ctx.beginPath();
-    ctx.moveTo(ml, y);
-    ctx.lineTo(ml + pw, y);
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1 * dpr;
-    ctx.stroke();
-  }
-
-  // X labels
-  const xRange = gMax - gMin;
-  const xStep = xRange > 100 ? 20 : xRange > 50 ? 10 : 5;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  for (let v = Math.ceil(gMin / xStep) * xStep; v <= gMax; v += xStep) {
-    const x = ml + ((v - gMin) / xRange) * pw;
-    ctx.fillStyle = '#666';
-    ctx.fillText(`${v}g`, x, mt + ph + 6 * dpr);
-  }
-
-  // Target line
-  const zeroX = ml + ((0 - gMin) / xRange) * pw;
-  ctx.setLineDash([6 * dpr, 4 * dpr]);
-  ctx.strokeStyle = '#e0e0e0';
-  ctx.lineWidth = 1 * dpr;
-  ctx.beginPath(); ctx.moveTo(zeroX, mt); ctx.lineTo(zeroX, mt + ph); ctx.stroke();
-
-  // T1 line
-  const t1X = ml + ((-simParams.t1Tolerance - gMin) / xRange) * pw;
-  ctx.strokeStyle = '#cc3333';
-  ctx.setLineDash([3 * dpr, 3 * dpr]);
-  ctx.beginPath(); ctx.moveTo(t1X, mt); ctx.lineTo(t1X, mt + ph); ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Curves
-  allCurves.forEach((curve, idx) => {
-    if (!curve) return;
-    const col = simParams.scenarios[idx].color;
-    ctx.beginPath();
-    for (let b = 0; b < numBins; b++) {
-      const x = ml + ((b + 0.5) * binWidth / xRange) * pw;
-      const y = mt + ph - (curve[b] / yMax) * ph;
-      if (b === 0) ctx.moveTo(x, mt + ph);
-      ctx.lineTo(x, y);
-    }
-    ctx.lineTo(ml + ((numBins - 0.5) * binWidth / xRange) * pw, mt + ph);
-    ctx.closePath();
-    ctx.fillStyle = col + '30';
-    ctx.fill();
-
-    ctx.beginPath();
-    for (let b = 0; b < numBins; b++) {
-      const x = ml + ((b + 0.5) * binWidth / xRange) * pw;
-      const y = mt + ph - (curve[b] / yMax) * ph;
-      if (b === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 2 * dpr;
-    ctx.stroke();
-  });
+function runFast(){
+  const tgt=SP.bags;let fc=0;
+  function batch(){if(!running||paused)return;
+    for(let b=0;b<500;b++){if(Math.min(...weighers.map(w=>w.bags.length))>=tgt)break;weighers.forEach(w=>{if(w.bags.length<tgt)w.cycle();});}
+    fc++;const mn=Math.min(...weighers.map(w=>w.bags.length));document.getElementById('pFill').style.width=Math.min(100,(mn/tgt)*100)+'%';
+    if(fc%10===0){updateCards();}if(fc%30===0){drawChart();}
+    if(mn>=tgt){onDone();return;}tid=requestAnimationFrame(batch);}batch();
 }
 
-
-// ── Sim controls ──
-
-function simStart() {
-  if (simRunning) return;
-  simRunning = true; simPaused = false;
-  document.getElementById('btnStart').disabled = true;
-  document.getElementById('btnFast').disabled = true;
-  document.getElementById('btnPause').disabled = false;
-  document.getElementById('statusText').innerHTML = 'RUNNING — <strong style="color:#00cc66">VISUAL MODE</strong>';
-  runVisual(120);
+function runVisual(){
+  let cc=0;
+  function cycle(){if(!running||paused)return;
+    const cpf=2;for(let c=0;c<cpf;c++)weighers.forEach(w=>{if(w.bags.length<SP.bags)w.cycle();});
+    cc++;if(cc%2===0){drawAllCanvases();updateCards();}if(cc%8===0)drawChart();
+    const mn=Math.min(...weighers.map(w=>w.bags.length));document.getElementById('pFill').style.width=Math.min(100,(mn/SP.bags)*100)+'%';
+    if(mn>=SP.bags){onDone();return;}tid=setTimeout(cycle,16);}cycle();
 }
 
-function simFast() {
-  if (simRunning) return;
-  simRunning = true; simPaused = false;
-  document.getElementById('btnStart').disabled = true;
-  document.getElementById('btnFast').disabled = true;
-  document.getElementById('btnPause').disabled = false;
-  document.getElementById('statusText').innerHTML = 'RUNNING — <strong style="color:#9966ff">FAST MODE</strong>';
-  runFast();
-}
+function onDone(){running=false;drawAllCanvases();updateCards();drawChart();
+  document.getElementById('pFill').style.width='100%';document.getElementById('btnStart').disabled=true;document.getElementById('btnFast').disabled=true;document.getElementById('btnPause').disabled=true;
+  document.getElementById('simStatus').innerHTML='<strong style="color:#00cc66">COMPLETE</strong>';}
 
-function simPause() {
-  if (!simRunning) return;
-  simPaused = !simPaused;
-  const btn = document.getElementById('btnPause');
-  if (simPaused) {
-    btn.textContent = 'RESUME';
-    if (simTimerId) { clearTimeout(simTimerId); cancelAnimationFrame(simTimerId); simTimerId = null; }
-    document.getElementById('statusText').innerHTML = '<strong style="color:#cccc00">PAUSED</strong>';
-  } else {
-    btn.textContent = 'PAUSE';
-    // Resume in whatever mode was running
-    document.getElementById('statusText').innerHTML = 'RUNNING...';
-  }
-}
-
-function simReset() {
-  simRunning = false; simPaused = false;
-  if (simTimerId) { clearTimeout(simTimerId); cancelAnimationFrame(simTimerId); simTimerId = null; }
-  initWeighers();
-}
-
-function goBack() {
-  simRunning = false; simPaused = false;
-  if (simTimerId) { clearTimeout(simTimerId); cancelAnimationFrame(simTimerId); simTimerId = null; }
-  document.getElementById('sim-view').style.display = 'none';
-  document.getElementById('setup-view').style.display = 'flex';
-}
-
-function runFast() {
-  const target = simParams.numBags;
-  let frameCount = 0;
-  function batch() {
-    if (!simRunning || simPaused) return;
-    for (let b = 0; b < 500; b++) {
-      if (Math.min(...weighers.map(w => w.bagWeights.length)) >= target) break;
-      weighers.forEach(w => { if (w.bagWeights.length < target) w.runCycle(); });
-    }
-    frameCount++;
-    const minBags = Math.min(...weighers.map(w => w.bagWeights.length));
-    document.getElementById('progressFill').style.width = Math.min(100, (minBags / target) * 100) + '%';
-    if (frameCount % 10 === 0) { renderSimView(); renderSimTabs(); }
-    if (frameCount % 30 === 0) drawChart();
-    if (minBags >= target) { onComplete(); return; }
-    simTimerId = requestAnimationFrame(batch);
-  }
-  batch();
-}
-
-function runVisual(speed) {
-  const intervalMs = Math.max(8, Math.floor(60000 / speed));
-  let cycleCount = 0;
-  function cycle() {
-    if (!simRunning || simPaused) return;
-    const cpf = Math.max(1, Math.floor(speed / 60));
-    for (let c = 0; c < cpf; c++) {
-      weighers.forEach(w => { if (w.bagWeights.length < simParams.numBags) w.runCycle(); });
-    }
-    cycleCount++;
-    if (cycleCount % 2 === 0) { drawSimCanvas(); renderSimView(); }
-    if (cycleCount % 8 === 0) { drawChart(); renderSimTabs(); }
-    const minBags = Math.min(...weighers.map(w => w.bagWeights.length));
-    document.getElementById('progressFill').style.width = Math.min(100, (minBags / simParams.numBags) * 100) + '%';
-    if (minBags >= simParams.numBags) { onComplete(); return; }
-    simTimerId = setTimeout(cycle, intervalMs);
-  }
-  cycle();
-}
-
-function onComplete() {
-  simRunning = false;
-  drawSimCanvas(); renderSimView(); drawChart(); renderSimTabs();
-  document.getElementById('progressFill').style.width = '100%';
-  document.getElementById('btnStart').disabled = true;
-  document.getElementById('btnFast').disabled = true;
-  document.getElementById('btnPause').disabled = true;
-  document.getElementById('statusText').innerHTML = '<strong style="color:#00cc66">COMPLETE</strong>';
-}
-
-window.addEventListener('resize', () => {
-  if (simParams && document.getElementById('sim-view').style.display !== 'none') {
-    drawSimCanvas();
-    drawChart();
-  }
-});
+window.addEventListener('resize',()=>{if(SP&&document.getElementById('sim-view').style.display!=='none'){drawAllCanvases();drawChart();}});
 </script>
 </body>
 </html>
