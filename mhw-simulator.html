@@ -32,6 +32,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 .param-input { width: 72px; padding: 3px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 2px; color: var(--green); font-family: inherit; font-size: 12px; text-align: right; outline: none; }
 .param-input:focus { border-color: var(--cyan); }
 .param-unit { font-size: 9px; color: var(--dim); margin-left: 3px; width: 14px; }
+.param-hint { font-size: 8px; color: #777; line-height: 1.3; margin: -2px 0 6px 0; }
 
 .master-box { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; }
 .master-box label { font-size: 10px; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.1em; }
@@ -250,9 +251,11 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
         <label>Total Heads</label>
         <input type="number" id="masterBuckets" value="14" min="4" max="36" onchange="onMasterChange()">
       </div>
+      <div class="param-hint">Number of weigh buckets on the machine. Each head weighs product independently; the computer finds the best combination.</div>
 
       <!-- Product mode -->
       <div class="param-group-title">Product Mode</div>
+      <div class="param-hint">Discrete: countable items (e.g. chicken fillets, sweets). Continuous: free-flowing product (e.g. crisps, powder, rice).</div>
       <div class="mode-toggle">
         <button class="mode-btn mode-btn--active" id="modeDiscrete" onclick="setMode('discrete')">
           DISCRETE<span class="mode-label">e.g. Fish fillets</span>
@@ -266,11 +269,13 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
       <div id="discreteParams">
         <div class="param-group">
           <div class="param-group-title">Item Weight</div>
+          <div class="param-hint">Average weight and natural variation of each individual item placed into a bucket.</div>
           <div class="param-row"><span class="param-label">Item Mean</span><input class="param-input" type="number" id="itemMean" value="100" step="5"><span class="param-unit">g</span></div>
           <div class="param-row"><span class="param-label">Item Std</span><input class="param-input" type="number" id="itemStd" value="5" step="1"><span class="param-unit">g</span></div>
         </div>
         <div class="param-group">
           <div class="param-group-title">Items per Bucket</div>
+          <div class="param-hint">How many items land in each bucket. E.g. 70% get 2 fillets, 15% get 1 or 3. Must total 100%.</div>
           <div id="itemRows"></div>
           <div style="display:flex;gap:4px;margin-top:6px">
             <button class="cbtn" style="font-size:9px;padding:3px 10px" onclick="addItemRow()">+ ADD</button>
@@ -283,6 +288,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
       <div id="continuousParams" style="display:none">
         <div class="param-group">
           <div class="param-group-title">Bucket Fill Weight</div>
+          <div class="param-hint">Average weight and variation of each bucket fill. The feeder vibrates product into each bucket.</div>
           <div class="param-row"><span class="param-label">Fill Mean</span><input class="param-input" type="number" id="fillMean" value="200" step="5"><span class="param-unit">g</span></div>
           <div class="param-row"><span class="param-label">Fill Std</span><input class="param-input" type="number" id="fillStd" value="8" step="1"><span class="param-unit">g</span></div>
         </div>
@@ -290,6 +296,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 
       <div class="param-group">
         <div class="param-group-title">Weight Limits</div>
+        <div class="param-hint">Target: desired pack weight. T1: max allowed underweight (legal tolerance). Hi Limit: max overweight before flagging as "over-discharge".</div>
         <div class="param-row"><span class="param-label">Target Weight</span><input class="param-input" type="number" id="targetWeight" value="800" step="10"><span class="param-unit">g</span></div>
         <div class="param-row"><span class="param-label">T1 Tolerance (−)</span><input class="param-input" type="number" id="t1Tolerance" value="15" step="1"><span class="param-unit">g</span></div>
         <div class="param-row"><span class="param-label">Hi Limit (+)</span><input class="param-input" type="number" id="hiLimit" value="30" step="5"><span class="param-unit">g</span></div>
@@ -297,9 +304,10 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 
       <div class="param-group">
         <div class="param-group-title">Machine Settings</div>
+        <div class="param-hint">Over-Discharge: allow packs above Hi Limit when no ideal combo exists. Timeout: cycles without a valid combo before forcing a dump.</div>
         <div class="param-row"><span class="param-label">Over-Discharge</span><select class="param-input" id="overDischarge" style="width:72px"><option value="on" selected>ON</option><option value="off">OFF</option></select><span class="param-unit"></span></div>
         <div class="param-row"><span class="param-label">No-Combo Timeout</span><input class="param-input" type="number" id="forceDump" value="5" min="1" max="20"><span class="param-unit">cy</span></div>
-        <div class="param-row"><span class="param-label">Bags</span><input class="param-input" type="number" id="numBags" value="50000" step="1000" min="50" max="500000"><span class="param-unit"></span></div>
+        <div class="param-row"><span class="param-label">Bags to Produce</span><input class="param-input" type="number" id="numBags" value="50000" step="1000" min="50" max="500000"><span class="param-unit"></span></div>
       </div>
 
       <button class="run-btn" onclick="startSimulation()">&#9654; Run Simulation</button>
@@ -460,6 +468,7 @@ function renderContent() {
       <span class="sc-active">${active} ACTIVE${s.disabled.length?` <span class="off">(${s.disabled.length} OFF)</span>`:''}</span>
       ${setupScenarios.length>1?`<button class="sc-remove" onclick="setupScenarios.splice(${activeTab},1);activeTab=Math.min(activeTab,setupScenarios.length-1);renderTabs()">DEL</button>`:''}
     </div>
+    <div class="param-hint" style="padding:4px 10px">Shift = how many cycles a head takes to refill after dumping. Single (1 cycle), Double (2), Triple (3). More heads disabled = fewer combinations available = higher giveaway.</div>
     <div class="head-selector"><canvas id="setupCanvas" width="500" height="500"></canvas></div>
     <div class="head-hint">CLICK A HEAD TO TOGGLE ON / OFF</div>`;
   drawSetupHeads();
