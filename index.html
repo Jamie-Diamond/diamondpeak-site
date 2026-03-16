@@ -23,6 +23,16 @@
 html { scroll-behavior: smooth; }
 body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; -webkit-font-smoothing: antialiased; }
 
+/* ── FULL-PAGE TOPO CANVAS ───────────── */
+#topoCanvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* ── HERO ────────────────────────────── */
 .hero {
   position: relative;
@@ -36,14 +46,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
   text-align: center;
   padding: 60px 24px 80px;
   overflow: hidden;
-}
-
-.hero canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
+  z-index: 1;
 }
 
 .hero-content {
@@ -132,20 +135,6 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
   width: 1px;
   height: 14px;
   background: rgba(200,194,180,0.15);
-}
-
-/* ── CONTENT AREA ────────────────────── */
-.content-wrap {
-  position: relative;
-  overflow: hidden;
-}
-.content-wrap canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
 }
 
 /* ── PAGE BODY ───────────────────────── */
@@ -342,9 +331,11 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 </head>
 <body>
 
+<!-- ═══════════════ FULL-PAGE TOPO ═══════════════ -->
+<canvas id="topoCanvas"></canvas>
+
 <!-- ═══════════════ HERO ═══════════════ -->
 <section class="hero">
-  <canvas id="heroCanvas"></canvas>
   <div class="hero-content">
     <img class="diamond-logo" src="logo-mark.png" alt="Diamond Peak Consulting">
     <h1>Professional Services <em>&</em><br>Consulting Tools</h1>
@@ -364,118 +355,116 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 </section>
 
 <!-- ═══════════════ CONTENT ═══════════════ -->
-<div class="content-wrap">
-  <canvas id="bgCanvas"></canvas>
-  <div class="page" id="content">
+<div class="page" id="content">
 
-    <!-- ── CONSULTING ──────────────── -->
-    <div class="section">
+  <!-- ── CONSULTING ──────────────── -->
+  <div class="section">
+    <div class="section-head reveal">
+      <span class="section-tag">Consulting</span>
+      <div class="section-rule"></div>
+    </div>
+
+    <!-- FMCG -->
+    <div class="subsection">
       <div class="section-head reveal">
-        <span class="section-tag">Consulting</span>
+        <span class="section-tag">FMCG</span>
         <div class="section-rule"></div>
       </div>
-
-      <!-- FMCG -->
-      <div class="subsection">
-        <div class="section-head reveal">
-          <span class="section-tag">FMCG</span>
-          <div class="section-rule"></div>
-        </div>
-        <div class="toc-widget reveal">
-          <canvas id="tocCanvas" height="100"></canvas>
-        </div>
-        <div class="tools">
-          <a href="rag-study.html" class="tool-card reveal">
-            <div class="card-icon">&#x1F6A6;</div>
-            <h3>RAG Study Tool</h3>
-            <p>Red Amber Green production line study — track uptime, log stops, speed changes, live Pareto, optional output counter, and export data.</p>
-            <span class="card-arrow">&#8599;</span>
-          </a>
-          <a href="giveaway-calculator.html" class="tool-card reveal">
-            <div class="card-icon">&#x2696;</div>
-            <h3>Giveaway Reduction Calculator</h3>
-            <p>Visualise how reducing fill weight SD reduces giveaway and quantify the annual financial saving.</p>
-            <span class="card-arrow">&#8599;</span>
-          </a>
-          <a href="mhw-simulator.html" class="tool-card reveal">
-            <div class="card-icon">&#9878;</div>
-            <h3>Multihead Weigher Simulator</h3>
-            <p>Simulate combinatorial weigher giveaway — compare head counts, shift modes, and item distributions side-by-side.</p>
-            <span class="card-arrow">&#8599;</span>
-          </a>
-        </div>
+      <div class="toc-widget reveal">
+        <canvas id="tocCanvas" height="100"></canvas>
       </div>
-
-      <!-- AI -->
-      <div class="subsection">
-        <div class="section-head reveal">
-          <span class="section-tag">AI</span>
-          <div class="section-rule"></div>
-        </div>
-        <div class="tools">
-          <a href="https://jamie-diamond.github.io/maji-site/index.html" class="tool-card reveal">
-            <div class="card-icon card-icon--logo">
-              <img src="https://cdn.prod.website-files.com/6917572096f0764001bd6b87/6917572096f0764001bd6c40_RGB%20Logo%20Mark%20Full%20Colour.svg" alt="Maji AI" width="24" height="24">
-            </div>
-            <h3>Maji AI</h3>
-            <p>Operational Excellence, On Demand — AI-powered consulting for manufacturing and operations.</p>
-            <span class="card-tag">Case Study</span>
-            <span class="card-arrow">&#8599;</span>
-          </a>
-        </div>
+      <div class="tools">
+        <a href="rag-study.html" class="tool-card reveal">
+          <div class="card-icon">&#x1F6A6;</div>
+          <h3>RAG Study Tool</h3>
+          <p>Red Amber Green production line study — track uptime, log stops, speed changes, live Pareto, optional output counter, and export data.</p>
+          <span class="card-arrow">&#8599;</span>
+        </a>
+        <a href="giveaway-calculator.html" class="tool-card reveal">
+          <div class="card-icon">&#x2696;</div>
+          <h3>Giveaway Reduction Calculator</h3>
+          <p>Visualise how reducing fill weight SD reduces giveaway and quantify the annual financial saving.</p>
+          <span class="card-arrow">&#8599;</span>
+        </a>
+        <a href="mhw-simulator.html" class="tool-card reveal">
+          <div class="card-icon">&#9878;</div>
+          <h3>Multihead Weigher Simulator</h3>
+          <p>Simulate combinatorial weigher giveaway — compare head counts, shift modes, and item distributions side-by-side.</p>
+          <span class="card-arrow">&#8599;</span>
+        </a>
       </div>
     </div>
 
-    <!-- ── RESOURCES ───────────────── -->
-    <div class="section">
+    <!-- AI -->
+    <div class="subsection">
       <div class="section-head reveal">
-        <span class="section-tag">Resources</span>
+        <span class="section-tag">AI</span>
         <div class="section-rule"></div>
       </div>
       <div class="tools">
-        <a href="stamp-duty.html" class="tool-card reveal">
-          <div class="card-icon">&#127968;</div>
-          <h3>Stamp Duty Calculator</h3>
-          <p>Calculate UK stamp duty land tax for property purchases.</p>
-          <span class="card-arrow">&#8599;</span>
-        </a>
-        <a href="student-loan.html" class="tool-card reveal">
-          <div class="card-icon">&#127891;</div>
-          <h3>Student Loan: Pay Off or Invest?</h3>
-          <p>Should you clear your student loan or invest in an ISA? See the maths with interactive charts.</p>
-          <span class="card-arrow">&#8599;</span>
-        </a>
-        <a href="should-you-wait.html" class="tool-card reveal">
-          <div class="card-icon">&#127968;</div>
-          <h3>Accept Now, or Wait?</h3>
-          <p>Mortgage cost reality check for sellers — see how rate changes affect buyer affordability.</p>
-          <span class="card-arrow">&#8599;</span>
-        </a>
-        <a href="random-number.html" class="tool-card reveal">
-          <div class="card-icon">&#127922;</div>
-          <h3>Random Number Generator</h3>
-          <p>Generate random numbers within any range, with options for unique values and sorting.</p>
-          <span class="card-arrow">&#8599;</span>
-        </a>
-        <a href="cervia-wetsuit.html" class="tool-card reveal">
-          <div class="card-icon">&#127754;</div>
-          <h3>Cervia Ironman Wetsuit Predictor</h3>
-          <p>Five prediction methods triangulate Adriatic water temperature for IRONMAN Italy — wetsuit or non-wetsuit swim?</p>
+        <a href="https://jamie-diamond.github.io/maji-site/index.html" class="tool-card reveal">
+          <div class="card-icon card-icon--logo">
+            <img src="https://cdn.prod.website-files.com/6917572096f0764001bd6b87/6917572096f0764001bd6c40_RGB%20Logo%20Mark%20Full%20Colour.svg" alt="Maji AI" width="24" height="24">
+          </div>
+          <h3>Maji AI</h3>
+          <p>Operational Excellence, On Demand — AI-powered consulting for manufacturing and operations.</p>
+          <span class="card-tag">Case Study</span>
           <span class="card-arrow">&#8599;</span>
         </a>
       </div>
     </div>
   </div>
-  <div class="footer">&copy; 2026 Diamond Peak</div>
+
+  <!-- ── RESOURCES ───────────────── -->
+  <div class="section">
+    <div class="section-head reveal">
+      <span class="section-tag">Resources</span>
+      <div class="section-rule"></div>
+    </div>
+    <div class="tools">
+      <a href="stamp-duty.html" class="tool-card reveal">
+        <div class="card-icon">&#127968;</div>
+        <h3>Stamp Duty Calculator</h3>
+        <p>Calculate UK stamp duty land tax for property purchases.</p>
+        <span class="card-arrow">&#8599;</span>
+      </a>
+      <a href="student-loan.html" class="tool-card reveal">
+        <div class="card-icon">&#127891;</div>
+        <h3>Student Loan: Pay Off or Invest?</h3>
+        <p>Should you clear your student loan or invest in an ISA? See the maths with interactive charts.</p>
+        <span class="card-arrow">&#8599;</span>
+      </a>
+      <a href="should-you-wait.html" class="tool-card reveal">
+        <div class="card-icon">&#127968;</div>
+        <h3>Accept Now, or Wait?</h3>
+        <p>Mortgage cost reality check for sellers — see how rate changes affect buyer affordability.</p>
+        <span class="card-arrow">&#8599;</span>
+      </a>
+      <a href="random-number.html" class="tool-card reveal">
+        <div class="card-icon">&#127922;</div>
+        <h3>Random Number Generator</h3>
+        <p>Generate random numbers within any range, with options for unique values and sorting.</p>
+        <span class="card-arrow">&#8599;</span>
+      </a>
+      <a href="cervia-wetsuit.html" class="tool-card reveal">
+        <div class="card-icon">&#127754;</div>
+        <h3>Cervia Ironman Wetsuit Predictor</h3>
+        <p>Five prediction methods triangulate Adriatic water temperature for IRONMAN Italy — wetsuit or non-wetsuit swim?</p>
+        <span class="card-arrow">&#8599;</span>
+      </a>
+    </div>
+  </div>
 </div>
+
+<div class="footer">&copy; 2026 Diamond Peak</div>
 
 <!-- ═══════════════ SCRIPTS ═══════════════ -->
 <script>
 /* ── Force scroll to top on load ──────── */
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 window.scrollTo(0, 0);
-document.addEventListener('DOMContentLoaded', function() { window.scrollTo(0, 0); });
-window.addEventListener('load', function() { window.scrollTo(0, 0); });
+document.addEventListener('DOMContentLoaded', function() { setTimeout(function(){ window.scrollTo(0, 0); }, 0); });
+window.addEventListener('load', function() { setTimeout(function(){ window.scrollTo(0, 0); }, 0); });
 
 /* ── Shared noise functions ──────── */
 function _hash(x, y) {
@@ -492,149 +481,52 @@ function _smooth(x, y) {
   var c = _hash(ix, iy + 1), d = _hash(ix + 1, iy + 1);
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
-function _noise(x, y) {
-  return _smooth(x, y) * 0.5 + _smooth(x * 2.1, y * 2.1) * 0.3 + _smooth(x * 4.3, y * 4.3) * 0.2;
+function topoNoise(x, y) {
+  return _smooth(x, y) * 0.45 + _smooth(x * 2.03, y * 2.03) * 0.3 +
+         _smooth(x * 4.07, y * 4.07) * 0.15 + _smooth(x * 8.1, y * 8.1) * 0.1;
 }
 
-/* ── Hero — 3D topographic mountain terrain (DARK) ──────── */
+/* ── Single full-page topo canvas ──────── */
 (function() {
-  var c = document.getElementById('heroCanvas');
+  var c = document.getElementById('topoCanvas');
   var ctx = c.getContext('2d');
   var dpr = window.devicePixelRatio || 1;
   var W, H, time = 0;
-  var mouse = { x: 0.5, y: 0.5 };
-
-  document.querySelector('.hero').addEventListener('mousemove', function(e) {
-    var r = c.getBoundingClientRect();
-    mouse.x = (e.clientX - r.left) / r.width;
-    mouse.y = (e.clientY - r.top) / r.height;
-  });
+  var heroEl = document.querySelector('.hero');
 
   function resize() {
-    var r = c.getBoundingClientRect();
-    W = r.width * dpr; H = r.height * dpr;
-    c.width = W; c.height = H;
-  }
-
-  function draw() {
-    time += 0.003;
-    ctx.fillStyle = '#06080a';
-    ctx.fillRect(0, 0, W, H);
-
-    var cols = 100, rows = 260;
-    var cellW = W / cols;
-    var baseY = H * 0.08;
-    var mx = mouse.x - 0.5, my = mouse.y - 0.5;
-
-    for (var z = rows; z >= 0; z--) {
-      var zRatio = z / rows;
-      var depth = 1 - zRatio * 0.4;
-      var yOff = baseY + zRatio * H * 0.9;
-
-      // Strong contrast — bright in front, visible in back
-      var alpha = (0.3 + zRatio * 0.6) * depth;
-
-      ctx.beginPath();
-      for (var x = 0; x <= cols; x++) {
-        var xRatio = x / cols;
-        var nx = xRatio * 3.5 + time * 0.3 + mx * 0.3;
-        var nz = zRatio * 4.0 + time * 0.15 + my * 0.3;
-        var h = _noise(nx, nz);
-
-        var centerDist = Math.abs(xRatio - 0.5);
-        var ridge = Math.max(0, 1 - centerDist * 2.8);
-        ridge = ridge * ridge;
-        h = h * (0.35 + ridge * 1.6);
-
-        var peak2 = Math.max(0, 1 - Math.abs(xRatio - 0.28) * 4);
-        var peak3 = Math.max(0, 1 - Math.abs(xRatio - 0.74) * 5);
-        h += peak2 * peak2 * 0.3 * _noise(nx * 1.5, nz * 1.5);
-        h += peak3 * peak3 * 0.25 * _noise(nx * 1.8 + 5, nz * 1.8);
-
-        var elevation = h * 180 * dpr * depth;
-        var px = x * cellW;
-        var py = yOff - elevation;
-
-        if (x === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-
-      // Green-cyan palette, brighter
-      var rv = Math.floor(15 + zRatio * 40);
-      var gv = Math.floor(160 + zRatio * 55);
-      var bv = Math.floor(90 + (1 - zRatio) * 110);
-      ctx.strokeStyle = 'rgba(' + rv + ',' + gv + ',' + bv + ',' + alpha + ')';
-      ctx.lineWidth = (0.5 + zRatio * 0.8) * dpr;
-      ctx.stroke();
-
-      // Fill below
-      ctx.lineTo(W, H);
-      ctx.lineTo(0, H);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(6,8,10,' + (0.25 + zRatio * 0.6) + ')';
-      ctx.fill();
-    }
-
-    // Floating particles
-    ctx.fillStyle = 'rgba(200,194,180,0.4)';
-    for (var i = 0; i < 80; i++) {
-      var px = ((_hash(i, 0) * W + time * (20 + _hash(i, 1) * 50) * dpr) % (W + 20)) - 10;
-      var py = _hash(i, 2) * H * 0.55;
-      var sz = (0.5 + _hash(i, 3) * 2) * dpr;
-      var twinkle = 0.3 + 0.7 * Math.sin(time * 2.5 + _hash(i, 4) * 6.28);
-      ctx.globalAlpha = twinkle * (0.2 + _hash(i, 5) * 0.4);
-      ctx.beginPath();
-      ctx.arc(px, py, sz, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    requestAnimationFrame(draw);
-  }
-
-  resize();
-  window.addEventListener('resize', resize);
-  requestAnimationFrame(draw);
-})();
-
-/* ── Background contours (LIGHT — topographic map style) ──────── */
-(function() {
-  var c = document.getElementById('bgCanvas');
-  var ctx = c.getContext('2d');
-  var dpr = window.devicePixelRatio || 1;
-  var W, H, time = 0;
-
-  function resize() {
-    var r = c.parentElement.getBoundingClientRect();
-    W = r.width * dpr; H = r.height * dpr;
-    c.width = W; c.height = H;
-    c.style.width = r.width + 'px';
-    c.style.height = r.height + 'px';
-  }
-
-  // Higher-detail noise for topo
-  function topoNoise(x, y) {
-    return _smooth(x, y) * 0.45 + _smooth(x * 2.03, y * 2.03) * 0.3 +
-           _smooth(x * 4.07, y * 4.07) * 0.15 + _smooth(x * 8.1, y * 8.1) * 0.1;
+    W = window.innerWidth * dpr;
+    H = window.innerHeight * dpr;
+    c.width = W;
+    c.height = H;
   }
 
   function draw() {
     time += 0.001;
     ctx.clearRect(0, 0, W, H);
 
-    // Sample a height field and draw iso-contour lines (like a real topo map)
-    var gridRes = 4 * dpr; // pixel spacing of sample grid
+    // Figure out where the hero ends in viewport coordinates
+    var heroRect = heroEl.getBoundingClientRect();
+    var heroCutY = heroRect.bottom * dpr; // pixel Y where dark meets light
+
+    // How much of page has scrolled — offset the noise field so topo scrolls with page
+    var scrollPx = window.scrollY * dpr;
+    var totalH = document.documentElement.scrollHeight * dpr;
+
+    var gridRes = 4 * dpr;
     var gCols = Math.ceil(W / gridRes) + 1;
     var gRows = Math.ceil(H / gridRes) + 1;
-    var numLevels = 28; // number of contour elevation levels
+    var numLevels = 30;
 
-    // Build height field
+    // Build height field — offset by scroll so the map is continuous
     var heights = new Float32Array(gCols * gRows);
     var hMin = 1, hMax = 0;
     for (var gy = 0; gy < gRows; gy++) {
       for (var gx = 0; gx < gCols; gx++) {
-        var nx = gx / gCols * 5 + time * 0.3;
-        var ny = gy / gRows * 5 + time * 0.15;
+        // Map canvas pixels to a global coordinate space that includes scroll
+        var globalY = (gy * gridRes + scrollPx) / totalH;
+        var nx = gx / gCols * 6 + time * 0.3;
+        var ny = globalY * 8 + time * 0.12;
         var h = topoNoise(nx, ny);
         heights[gy * gCols + gx] = h;
         if (h < hMin) hMin = h;
@@ -642,83 +534,117 @@ function _noise(x, y) {
       }
     }
 
-    // March through cells to find contour crossings (marching squares)
+    // For each contour level, march squares and draw segments
+    // Color changes based on whether the segment is in dark or light zone
     for (var lvl = 0; lvl < numLevels; lvl++) {
       var threshold = hMin + (hMax - hMin) * (lvl + 1) / (numLevels + 1);
-
-      // Color: cycle through sage / tan / dusty teal
-      var t = lvl / numLevels;
-      var hue, sat, lum;
-      if (t < 0.33) {
-        hue = 145; sat = 28; lum = 50;
-      } else if (t < 0.66) {
-        hue = 38; sat = 32; lum = 55;
-      } else {
-        hue = 175; sat = 22; lum = 48;
-      }
-      // Every 5th contour is bolder (index contour, like real topo maps)
       var isIndex = (lvl % 5 === 0);
-      var alpha = isIndex ? 0.14 : 0.07;
-      var lw = isIndex ? 1.4 * dpr : 0.7 * dpr;
+      var t = lvl / numLevels;
 
-      ctx.strokeStyle = 'hsla(' + hue + ',' + sat + '%,' + lum + '%,' + alpha + ')';
-      ctx.lineWidth = lw;
+      // We'll batch dark-zone and light-zone segments separately
+      var darkSegs = [];
+      var lightSegs = [];
 
-      // Simple marching squares — draw segments
-      ctx.beginPath();
       for (var cy = 0; cy < gRows - 1; cy++) {
         for (var cx = 0; cx < gCols - 1; cx++) {
           var i00 = cy * gCols + cx;
           var v00 = heights[i00], v10 = heights[i00 + 1];
           var v01 = heights[i00 + gCols], v11 = heights[i00 + gCols + 1];
 
-          // Classify corners
           var code = 0;
           if (v00 >= threshold) code |= 1;
           if (v10 >= threshold) code |= 2;
           if (v11 >= threshold) code |= 4;
           if (v01 >= threshold) code |= 8;
-
           if (code === 0 || code === 15) continue;
 
           var x0 = cx * gridRes, y0 = cy * gridRes;
           var x1 = x0 + gridRes, y1 = y0 + gridRes;
+          var midY = (y0 + y1) * 0.5;
 
-          // Interpolation helpers
-          function lerp(a, b, va, vb) { var t = (threshold - va) / (vb - va); return a + t * (b - a); }
-          var top    = { x: lerp(x0, x1, v00, v10), y: y0 };
-          var bottom = { x: lerp(x0, x1, v01, v11), y: y1 };
-          var left   = { x: x0, y: lerp(y0, y1, v00, v01) };
-          var right  = { x: x1, y: lerp(y0, y1, v10, v11) };
+          function lerp(a, b, va, vb) { var tt = (threshold - va) / (vb - va); return a + tt * (b - a); }
+          var top    = [lerp(x0, x1, v00, v10), y0];
+          var bottom = [lerp(x0, x1, v01, v11), y1];
+          var left   = [x0, lerp(y0, y1, v00, v01)];
+          var right  = [x1, lerp(y0, y1, v10, v11)];
 
-          // Draw line segments based on case
+          var segs = midY < heroCutY ? darkSegs : lightSegs;
+
           switch(code) {
-            case 1: case 14: ctx.moveTo(top.x, top.y); ctx.lineTo(left.x, left.y); break;
-            case 2: case 13: ctx.moveTo(top.x, top.y); ctx.lineTo(right.x, right.y); break;
-            case 3: case 12: ctx.moveTo(left.x, left.y); ctx.lineTo(right.x, right.y); break;
-            case 4: case 11: ctx.moveTo(right.x, right.y); ctx.lineTo(bottom.x, bottom.y); break;
-            case 6: case 9:  ctx.moveTo(top.x, top.y); ctx.lineTo(bottom.x, bottom.y); break;
-            case 7: case 8:  ctx.moveTo(left.x, left.y); ctx.lineTo(bottom.x, bottom.y); break;
+            case 1: case 14: segs.push(top, left); break;
+            case 2: case 13: segs.push(top, right); break;
+            case 3: case 12: segs.push(left, right); break;
+            case 4: case 11: segs.push(right, bottom); break;
+            case 6: case 9:  segs.push(top, bottom); break;
+            case 7: case 8:  segs.push(left, bottom); break;
             case 5:
-              ctx.moveTo(top.x, top.y); ctx.lineTo(right.x, right.y);
-              ctx.moveTo(left.x, left.y); ctx.lineTo(bottom.x, bottom.y);
+              segs.push(top, right);
+              segs.push(left, bottom);
               break;
             case 10:
-              ctx.moveTo(top.x, top.y); ctx.lineTo(left.x, left.y);
-              ctx.moveTo(right.x, right.y); ctx.lineTo(bottom.x, bottom.y);
+              segs.push(top, left);
+              segs.push(right, bottom);
               break;
           }
         }
       }
-      ctx.stroke();
+
+      // Draw dark zone segments — blue-cyan-green
+      if (darkSegs.length > 0) {
+        var dr = Math.floor(20 + t * 30);
+        var dg = Math.floor(120 + t * 80);
+        var db = Math.floor(160 + (1 - t) * 60);
+        var da = isIndex ? 0.35 : 0.18;
+        ctx.strokeStyle = 'rgba(' + dr + ',' + dg + ',' + db + ',' + da + ')';
+        ctx.lineWidth = isIndex ? 1.6 * dpr : 0.8 * dpr;
+        ctx.beginPath();
+        for (var i = 0; i < darkSegs.length; i += 2) {
+          ctx.moveTo(darkSegs[i][0], darkSegs[i][1]);
+          ctx.lineTo(darkSegs[i+1][0], darkSegs[i+1][1]);
+        }
+        ctx.stroke();
+      }
+
+      // Draw light zone segments — warm earth tones
+      if (lightSegs.length > 0) {
+        var hue, sat, lum;
+        if (t < 0.33) { hue = 145; sat = 28; lum = 50; }
+        else if (t < 0.66) { hue = 38; sat = 32; lum = 55; }
+        else { hue = 175; sat = 22; lum = 48; }
+        var la = isIndex ? 0.14 : 0.07;
+        ctx.strokeStyle = 'hsla(' + hue + ',' + sat + '%,' + lum + '%,' + la + ')';
+        ctx.lineWidth = isIndex ? 1.4 * dpr : 0.7 * dpr;
+        ctx.beginPath();
+        for (var i = 0; i < lightSegs.length; i += 2) {
+          ctx.moveTo(lightSegs[i][0], lightSegs[i][1]);
+          ctx.lineTo(lightSegs[i+1][0], lightSegs[i+1][1]);
+        }
+        ctx.stroke();
+      }
+    }
+
+    // Floating particles in dark zone only
+    var particleAlpha = Math.max(0, Math.min(1, heroCutY / H));
+    if (particleAlpha > 0.01) {
+      for (var i = 0; i < 80; i++) {
+        var px = ((_hash(i, 0) * W + time * (20 + _hash(i, 1) * 50) * dpr) % (W + 20)) - 10;
+        var py = _hash(i, 2) * heroCutY;
+        var sz = (0.5 + _hash(i, 3) * 2) * dpr;
+        var twinkle = 0.3 + 0.7 * Math.sin(time * 2.5 + _hash(i, 4) * 6.28);
+        ctx.globalAlpha = twinkle * (0.15 + _hash(i, 5) * 0.3) * particleAlpha;
+        ctx.fillStyle = 'rgba(200,194,180,1)';
+        ctx.beginPath();
+        ctx.arc(px, py, sz, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
     }
 
     requestAnimationFrame(draw);
   }
 
-  var ro = new ResizeObserver(resize);
-  ro.observe(c.parentElement);
   resize();
+  window.addEventListener('resize', resize);
   requestAnimationFrame(draw);
 })();
 
