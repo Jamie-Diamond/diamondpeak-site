@@ -604,7 +604,7 @@ function topoNoise(x, y) {
         var dr = Math.floor(20 + t * 30);
         var dg = Math.floor(120 + t * 80);
         var db = Math.floor(160 + (1 - t) * 60);
-        var da = isIndex ? 0.22 : 0.10;
+        var da = isIndex ? 0.14 : 0.06;
         ctx.strokeStyle = 'rgba(' + dr + ',' + dg + ',' + db + ',' + da + ')';
         ctx.lineWidth = isIndex ? 1.6 * dpr : 0.8 * dpr;
         ctx.beginPath();
