@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MHW Simulator v3.6 — maji</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Share+Tech+Mono&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #2a2a2a; --panel: #3a3a3a; --dark: #1a1a1a; --border: #555;
+  --text: #e0e0e0; --dim: #999; --green: #00cc66; --yellow: #cccc00;
+  --red: #cc3333; --blue: #3399ff; --cyan: #00cccc; --orange: #ff9933; --white: #fff;
+}
+body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+/* ═══ SETUP ═══ */
+#setup-view { min-height: 100vh; display: flex; flex-direction: column; }
+.setup-header { background: var(--dark); border-bottom: 2px solid var(--border); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; }
+.setup-title { font-size: 15px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--white); }
+.back-link { color: var(--dim); text-decoration: none; font-size: 11px; letter-spacing: 0.05em; }
+.back-link:hover { color: var(--white); }
+
+.setup-body { display: grid; grid-template-columns: 280px 1fr; flex: 1; min-height: 0; }
+@media(max-width:800px) { .setup-body { grid-template-columns: 1fr; } }
+
+.params-panel { background: var(--dark); border-right: 2px solid var(--border); padding: 14px; overflow-y: auto; }
+.param-group { margin-bottom: 14px; }
+.param-group-title { font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 8px; }
+.param-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.param-label { font-size: 11px; color: var(--dim); }
+.param-input { width: 72px; padding: 3px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 2px; color: var(--green); font-family: inherit; font-size: 12px; text-align: right; outline: none; }
+.param-input:focus { border-color: var(--cyan); }
+.param-unit { font-size: 9px; color: var(--dim); margin-left: 3px; width: 14px; }
+.param-hint { font-size: 8px; color: #777; line-height: 1.3; margin: -2px 0 6px 0; }
+
+.master-box { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; }
+.master-box label { font-size: 10px; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.1em; }
+.master-box input { width: 52px; padding: 4px 6px; background: var(--dark); border: 2px solid var(--cyan); border-radius: 2px; color: var(--cyan); font-family: inherit; font-size: 16px; text-align: center; outline: none; }
+
+/* Product mode toggle */
+.mode-toggle { display: flex; border: 1px solid var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+.mode-btn { flex: 1; padding: 8px 4px; font-family: inherit; font-size: 10px; text-align: center; background: var(--bg); color: var(--dim); border: none; cursor: pointer; letter-spacing: 0.05em; transition: all 0.12s; }
+.mode-btn:first-child { border-right: 1px solid var(--border); }
+.mode-btn--active { background: var(--cyan); color: #000; font-weight: bold; }
+.mode-label { font-size: 9px; display: block; margin-top: 2px; }
+
+.run-btn { width: 100%; padding: 12px; margin-top: 6px; background: var(--green); border: none; border-radius: 3px; color: #000; font-family: inherit; font-size: 13px; font-weight: bold; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+.run-btn:hover { background: #00ee77; }
+
+/* Scenario panel */
+.scenario-panel { display: flex; flex-direction: column; background: var(--bg); }
+.scenario-tabs { display: flex; background: var(--dark); border-bottom: 2px solid var(--border); padding: 0 6px; gap: 2px; align-items: flex-end; }
+.stab { padding: 6px 14px; font-family: inherit; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); background: var(--panel); border: 1px solid var(--border); border-bottom: none; border-radius: 3px 3px 0 0; cursor: pointer; position: relative; top: 2px; }
+.stab:hover { color: var(--white); }
+.stab--active { color: var(--white); background: var(--bg); border-bottom: 2px solid var(--bg); z-index: 1; }
+.stab-add { padding: 6px 12px; font-size: 14px; color: var(--dim); background: none; border: 1px dashed var(--border); border-bottom: none; border-radius: 3px 3px 0 0; cursor: pointer; position: relative; top: 2px; }
+.stab-add:hover { color: var(--green); border-color: var(--green); }
+.stab-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+
+.scenario-content { flex: 1; display: flex; flex-direction: column; padding: 12px; gap: 8px; }
+.sc-info-bar { display: flex; align-items: center; gap: 12px; padding: 6px 10px; background: var(--dark); border: 1px solid var(--border); border-radius: 3px; flex-wrap: wrap; }
+.sc-info-bar label { font-size: 10px; color: var(--dim); }
+.sc-info-bar input[type="text"] { width: 120px; padding: 3px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 2px; color: var(--white); font-family: inherit; font-size: 11px; outline: none; }
+.sc-info-bar input:focus { border-color: var(--cyan); }
+.sc-info-bar select { padding: 3px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 2px; color: var(--green); font-family: inherit; font-size: 11px; outline: none; }
+.sc-active { font-size: 13px; color: var(--green); margin-left: auto; }
+.sc-active .off { color: var(--red); font-size: 11px; }
+.sc-remove { background: none; border: 1px solid var(--border); border-radius: 2px; color: var(--red); font-family: inherit; font-size: 10px; padding: 2px 8px; cursor: pointer; }
+.sc-remove:hover { background: var(--red); color: #000; }
+.head-selector { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 280px; }
+.head-selector canvas { display: block; max-width: 100%; }
+.head-hint { text-align: center; font-size: 9px; color: var(--dim); letter-spacing: 0.05em; }
+
+/* ═══ SIM VIEW ═══ */
+#sim-view { display: none; min-height: 100vh; flex-direction: column; }
+.sim-bar { background: var(--dark); border-bottom: 2px solid var(--border); padding: 6px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.sim-bar-title { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--white); }
+.sim-bar-info { display: flex; gap: 16px; }
+.sim-bar-info span { font-size: 11px; color: var(--dim); }
+.sim-bar-info strong { color: var(--green); }
+.sim-bar-controls { display: flex; gap: 4px; align-items: center; }
+.cbtn { font-family: inherit; font-size: 10px; padding: 5px 14px; border: 1px solid var(--border); border-radius: 2px; background: var(--panel); color: var(--text); cursor: pointer; letter-spacing: 0.04em; text-transform: uppercase; }
+.cbtn:hover { border-color: var(--white); color: var(--white); }
+.cbtn:disabled { opacity: 0.35; cursor: default; }
+.cbtn--go { background: var(--green); color: #000; border-color: var(--green); }
+.cbtn--go:hover { background: #00ee77; }
+.cbtn--fast { background: #9966ff; color: #fff; border-color: #9966ff; }
+.cbtn--pause { background: var(--yellow); color: #000; border-color: var(--yellow); }
+.cbtn--stop { background: var(--red); color: #fff; border-color: var(--red); }
+.pbar { height: 3px; background: var(--dark); }
+.pbar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--green), var(--cyan)); transition: width 0.3s; }
+
+/* All scenarios side-by-side */
+.sim-grid {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  gap: 8px;
+}
+
+.sim-card {
+  background: var(--dark);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.sim-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.sim-card-dot { width: 8px; height: 8px; border-radius: 50%; }
+.sim-card-name { font-size: 11px; color: var(--white); }
+.sim-card-config { font-size: 9px; color: var(--dim); margin-left: auto; }
+
+.sim-card-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+.sim-card-canvas-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+.sim-card-canvas-wrap canvas { display: block; }
+
+/* Stats row */
+.sim-card-stats {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  border-top: 1px solid var(--border);
+}
+.sstat {
+  padding: 5px 6px;
+  text-align: center;
+  border-right: 1px solid #333;
+}
+.sstat:last-child { border-right: none; }
+.sstat-label { font-size: 7px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+.sstat-value { font-size: 12px; color: var(--green); margin-top: 1px; }
+.sstat-value--warn { color: var(--yellow); }
+.sstat-value--bad { color: var(--red); }
+
+/* Head list (compact) */
+.sim-card-heads {
+  max-height: 160px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  padding: 3px 4px;
+}
+.hrow {
+  display: grid;
+  grid-template-columns: 18px 14px 1fr 36px;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 2px;
+  font-size: 9px;
+}
+.hrow--sel { background: rgba(255,153,51,0.1); }
+.hrow--off { opacity: 0.25; }
+.hnum { color: var(--dim); text-align: right; }
+.hstat { text-align: center; }
+.hbar { height: 8px; background: #222; border: 1px solid #333; }
+.hbar-fill { height: 100%; background: var(--blue); }
+.hwt { text-align: right; color: var(--white); }
+
+/* Chart */
+.chart-area { border-top: 2px solid var(--border); padding: 10px 14px; background: var(--dark); }
+.chart-title { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cyan); margin-bottom: 6px; }
+#chartCanvas { width: 100%; height: 160px; display: block; }
+.chart-legend { display: flex; gap: 14px; margin-top: 6px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--dim); }
+.legend-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+.sim-status { background: var(--dark); border-top: 2px solid var(--border); padding: 6px 14px; font-size: 10px; color: var(--dim); }
+
+/* Visual key */
+.sim-key {
+  display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 14px;
+  border-bottom: 2px solid var(--border); background: var(--panel); font-size: 9px; color: var(--text);
+}
+.sim-key-title { font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan); width: 100%; margin-bottom: 2px; }
+.sim-key-item { display: flex; align-items: center; gap: 5px; }
+.sim-key-swatch {
+  width: 16px; height: 16px; border-radius: 50%; border: 1px solid #555;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: bold; flex-shrink: 0;
+}
+.sim-key-bar { width: 20px; height: 8px; border: 1px solid #333; background: #222; position: relative; overflow: hidden; }
+.sim-key-bar-fill { height: 100%; }
+
+/* Machine stop overlay */
+.stop-overlay {
+  display: none;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 1000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 20px;
+  padding: 40px;
+}
+.stop-overlay.active { display: flex; }
+.stop-icon { font-size: 80px; color: #cc3333; animation: stopPulse 1.2s ease-in-out infinite; }
+@keyframes stopPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.05)} }
+.stop-title { font-size: 36px; font-weight: bold; color: #cc3333; letter-spacing: 0.15em; text-transform: uppercase; }
+.stop-reason { font-size: 14px; color: #ccc; max-width: 600px; line-height: 1.6; }
+.stop-restart { padding: 16px 48px; background: var(--green); border: none; border-radius: 4px; color: #000; font-family: inherit; font-size: 18px; font-weight: bold; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; margin-top: 10px; }
+.stop-restart:hover { background: #00ee77; }
+
+/* Per-card demo commentary */
+.card-log {
+  border-top: 1px solid var(--border);
+  background: #0a0a0a;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--dim);
+  transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+}
+.card-log.collapsed {
+  max-height: 0;
+  padding: 0 8px;
+  opacity: 0;
+  overflow: hidden;
+}
+.demo-line { padding: 3px 0 3px 6px; border-bottom: 1px solid #151515; border-left: 2px solid var(--cyan); margin-bottom: 2px; background: rgba(0,204,204,0.02); }
+.demo-line .good { color: var(--green); }
+.demo-line .warn { color: var(--yellow); }
+.demo-line .bad { color: var(--red); }
+.demo-line .info { color: var(--blue); }
+.demo-line .dim { color: #666; font-style: italic; }
+
+/* Shared bottom log (hidden, kept for compat) */
+.demo-log { display: none; }
+
+/* Mode toggle in sim bar */
+.mode-sw { display: flex; border: 1px solid var(--border); border-radius: 2px; overflow: hidden; }
+.mode-sw button { font-family: inherit; font-size: 9px; padding: 4px 10px; border: none; cursor: pointer; letter-spacing: 0.04em; text-transform: uppercase; background: var(--panel); color: var(--dim); }
+.mode-sw button.active { background: var(--cyan); color: #000; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<!-- ═══ SETUP ═══ -->
+<div id="setup-view">
+  <div class="setup-header">
+    <span class="setup-title">MHW Simulator v3.6 — Program Setup</span>
+  </div>
+  <div class="setup-body">
+    <div class="params-panel">
+      <div class="master-box">
+        <label>Total Heads</label>
+        <input type="number" id="masterBuckets" value="14" min="4" max="36" onchange="onMasterChange()">
+      </div>
+      <div class="param-hint">Number of weigh buckets on the machine. Each head weighs product independently; the computer finds the best combination.</div>
+
+      <!-- Product mode -->
+      <div class="param-group-title">Product Mode</div>
+      <div class="param-hint">Discrete: countable items (e.g. chicken fillets, sweets). Continuous: free-flowing product (e.g. crisps, powder, rice).</div>
+      <div class="mode-toggle">
+        <button class="mode-btn mode-btn--active" id="modeDiscrete" onclick="setMode('discrete')">
+          DISCRETE<span class="mode-label">e.g. Fish fillets</span>
+        </button>
+        <button class="mode-btn" id="modeContinuous" onclick="setMode('continuous')">
+          CONTINUOUS<span class="mode-label">e.g. Crisps / powder</span>
+        </button>
+      </div>
+
+      <!-- Discrete params -->
+      <div id="discreteParams">
+        <div class="param-group">
+          <div class="param-group-title">Item Weight</div>
+          <div class="param-hint">Average weight and natural variation of each individual item placed into a bucket.</div>
+          <div class="param-row"><span class="param-label">Item Mean</span><input class="param-input" type="number" id="itemMean" value="100" step="5"><span class="param-unit">g</span></div>
+          <div class="param-row"><span class="param-label">Item Std</span><input class="param-input" type="number" id="itemStd" value="5" step="1"><span class="param-unit">g</span></div>
+        </div>
+        <div class="param-group">
+          <div class="param-group-title">Items per Bucket</div>
+          <div class="param-hint">How many items land in each bucket. E.g. 70% get 2 fillets, 15% get 1 or 3. Must total 100%.</div>
+          <div id="itemRows"></div>
+          <div style="display:flex;gap:4px;margin-top:6px">
+            <button class="cbtn" style="font-size:9px;padding:3px 10px" onclick="addItemRow()">+ ADD</button>
+            <button class="cbtn" style="font-size:9px;padding:3px 10px" onclick="removeItemRow()">- REMOVE</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Continuous params -->
+      <div id="continuousParams" style="display:none">
+        <div class="param-group">
+          <div class="param-group-title">Bucket Fill Weight</div>
+          <div class="param-hint">Average weight and variation of each bucket fill. The feeder vibrates product into each bucket.</div>
+          <div class="param-row"><span class="param-label">Fill Mean</span><input class="param-input" type="number" id="fillMean" value="200" step="5"><span class="param-unit">g</span></div>
+          <div class="param-row"><span class="param-label">Fill Std</span><input class="param-input" type="number" id="fillStd" value="8" step="1"><span class="param-unit">g</span></div>
+        </div>
+      </div>
+
+      <div class="param-group">
+        <div class="param-group-title">Weight Limits</div>
+        <div class="param-hint">Target: desired pack weight. T1: max allowed underweight (legal tolerance). Hi Limit: max overweight before flagging as "over-discharge".</div>
+        <div class="param-row"><span class="param-label">Target Weight</span><input class="param-input" type="number" id="targetWeight" value="800" step="10"><span class="param-unit">g</span></div>
+        <div class="param-row"><span class="param-label">T1 Tolerance (−)</span><input class="param-input" type="number" id="t1Tolerance" value="15" step="1"><span class="param-unit">g</span></div>
+        <div class="param-row"><span class="param-label">Hi Limit (+)</span><input class="param-input" type="number" id="hiLimit" value="30" step="5"><span class="param-unit">g</span></div>
+      </div>
+
+      <div class="param-group">
+        <div class="param-group-title">Machine Settings</div>
+        <div class="param-hint">Over-Discharge ON: if no combo fits within Hi Limit, the machine drops the closest overweight combo. OFF: the machine stops and waits — no pack is produced until an in-range combo is possible. Timeout: max cycles to wait before forcing any available combo.</div>
+        <div class="param-row"><span class="param-label">Over-Discharge</span><select class="param-input" id="overDischarge" style="width:72px"><option value="on" selected>ON</option><option value="off">OFF</option></select><span class="param-unit"></span></div>
+        <div class="param-row"><span class="param-label">No-Combo Timeout</span><input class="param-input" type="number" id="forceDump" value="5" min="1" max="20"><span class="param-unit">cy</span></div>
+      </div>
+
+      <div class="param-group">
+        <div class="param-group-title">Run Settings</div>
+        <div class="param-row"><span class="param-label">Bags to Produce</span><input class="param-input" type="number" id="numBags" value="50000" step="1000" min="50" max="1000000"><span class="param-unit"></span></div>
+      </div>
+
+      <button class="run-btn" onclick="startSimulation()">&#9654; Run Simulation</button>
+    </div>
+
+    <div class="scenario-panel">
+      <div class="scenario-tabs" id="setupTabs"></div>
+      <div class="scenario-content" id="setupContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SIM VIEW ═══ -->
+<div id="sim-view">
+  <div class="stop-overlay" id="stopOverlay">
+    <div class="stop-icon">⚠</div>
+    <div class="stop-title">Machine Stopped</div>
+    <div class="stop-reason" id="stopReason">No valid combination within Hi Limit. Over-Discharge is OFF — the machine cannot release overweight packs. In production, an operator must intervene.</div>
+    <button class="stop-restart" onclick="restartMachine()">Restart Machine</button>
+  </div>
+  <div class="sim-bar">
+    <span class="sim-bar-title">Auto Operation</span>
+    <div class="sim-bar-info" id="simInfo"></div>
+    <div class="sim-bar-controls">
+      <div class="mode-sw">
+        <button id="swDemo" class="active" onclick="setSimMode('demo')">DEMO</button>
+        <button id="swFast" onclick="setSimMode('fast')">FAST</button>
+      </div>
+      <button class="cbtn cbtn--go" id="btnStart" onclick="simGo()">START</button>
+      <button class="cbtn cbtn--pause" id="btnPause" onclick="simPause()" disabled>PAUSE</button>
+      <button class="cbtn cbtn--stop" onclick="simReset()">RESET</button>
+      <button class="cbtn" onclick="goBack()">SETUP</button>
+    </div>
+  </div>
+  <div class="pbar"><div class="pbar-fill" id="pFill"></div></div>
+
+  <div class="sim-key" id="simKey">
+    <div class="sim-key-title">Head Status Key</div>
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:#40c850;color:#000">▽</div> Ready — available for selection</div>
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:#1a1a1a;border-color:#555;color:#555">○</div> Cooling — recently dumped, waiting to refill</div>
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:transparent;border:2px solid var(--cyan)"></div> Cooldown progress ring</div>
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:#1a1a1a;border-color:#cc3333;color:#cc3333;font-size:7px">✕</div> Disabled — out of action</div>
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:#ff9933;color:#000;font-weight:bold">F</div> Selected for current drop</div>
+    <div class="sim-key-item"><span style="display:inline-block;width:16px;height:8px;border-radius:2px;background:linear-gradient(90deg,#c85032,#c8c832,#28c850)"></span> Weight gradient: low → mid → high</div>
+    <div class="sim-key-item"><span style="color:#cccc00;font-size:11px">● ● ●</span> Item count dots (discrete mode)</div>
+  </div>
+
+  <div class="sim-grid" id="simGrid"></div>
+
+  <div class="chart-area">
+    <div class="chart-title">Giveaway Distribution — All Scenarios</div>
+    <canvas id="chartCanvas" height="160"></canvas>
+    <div class="chart-legend" id="chartLegend"></div>
+  </div>
+
+  <div class="demo-log" id="demoLog"></div>
+  <div class="sim-status" id="simStatus">READY</div>
+</div>
+
+<script>
+const SCOLORS = ['#00cc66','#3399ff','#ff9933','#cc3333','#cc66ff','#00cccc'];
+
+// ═══ PRODUCT MODE ═══
+let productMode = 'discrete';
+
+function setMode(m) {
+  productMode = m;
+  document.getElementById('modeDiscrete').className = 'mode-btn' + (m === 'discrete' ? ' mode-btn--active' : '');
+  document.getElementById('modeContinuous').className = 'mode-btn' + (m === 'continuous' ? ' mode-btn--active' : '');
+  document.getElementById('discreteParams').style.display = m === 'discrete' ? 'block' : 'none';
+  document.getElementById('continuousParams').style.display = m === 'continuous' ? 'block' : 'none';
+}
+
+// ═══ DYNAMIC ITEM ROWS ═══
+let itemRows = [
+  { count: 1, pct: 15 },
+  { count: 2, pct: 70 },
+  { count: 3, pct: 15 },
+];
+
+function itemTotal() { return itemRows.reduce((s, r) => s + r.pct, 0); }
+
+function updateItemPct(i, val) {
+  const others = itemTotal() - itemRows[i].pct;
+  const maxAllowed = 100 - others;
+  itemRows[i].pct = Math.max(0, Math.min(val, maxAllowed));
+  renderItemRows();
+}
+
+function renderItemRows() {
+  const el = document.getElementById('itemRows');
+  el.innerHTML = '';
+  const tot = itemTotal();
+  itemRows.forEach((r, i) => {
+    el.innerHTML += `<div class="param-row">
+      <span class="param-label">${r.count} item${r.count > 1 ? 's' : ''}</span>
+      <input class="param-input" type="number" value="${r.pct}" min="0" max="100"
+        onchange="updateItemPct(${i},+this.value)"><span class="param-unit">%</span>
+    </div>`;
+  });
+  const cls = tot > 100 ? 'color:var(--red)' : tot < 100 ? 'color:var(--yellow)' : 'color:var(--green)';
+  el.innerHTML += `<div style="font-size:9px;text-align:right;margin-top:3px;${cls}">Total: ${tot}%${tot!==100?' (must = 100%)':''}</div>`;
+}
+
+function addItemRow() {
+  const tot = itemTotal();
+  if (tot >= 100) return; // can't add if already at 100%
+  const maxCount = itemRows.length ? Math.max(...itemRows.map(r => r.count)) + 1 : 1;
+  const remaining = 100 - tot;
+  itemRows.push({ count: maxCount, pct: Math.min(10, remaining) });
+  renderItemRows();
+}
+
+function removeItemRow() {
+  if (itemRows.length <= 1) return;
+  itemRows.pop();
+  renderItemRows();
+}
+
+renderItemRows();
+
+// ═══ SETUP SCENARIOS ═══
+let masterBuckets = 14;
+let setupScenarios = [
+  { name: 'S1 — All Active', shift: 2, disabled: [] },
+  { name: 'S2 — 2 Off', shift: 2, disabled: [12, 13] },
+  { name: 'S3 — 4 Off', shift: 2, disabled: [10, 11, 12, 13] },
+];
+let activeTab = 0;
+
+function onMasterChange() {
+  masterBuckets = Math.max(4, Math.min(36, +document.getElementById('masterBuckets').value));
+  setupScenarios.forEach(s => { s.disabled = s.disabled.filter(i => i < masterBuckets); });
+  renderTabs();
+}
+
+function renderTabs() {
+  const el = document.getElementById('setupTabs');
+  el.innerHTML = '';
+  setupScenarios.forEach((s, i) => {
+    const t = document.createElement('button');
+    t.className = 'stab' + (i === activeTab ? ' stab--active' : '');
+    t.innerHTML = `<span class="stab-dot" style="background:${SCOLORS[i%SCOLORS.length]}"></span>${s.name}`;
+    t.onclick = () => { activeTab = i; renderTabs(); };
+    el.appendChild(t);
+  });
+  if (setupScenarios.length < 4) {
+    const a = document.createElement('button');
+    a.className = 'stab-add'; a.textContent = '+';
+    a.onclick = () => { setupScenarios.push({ name: `S${setupScenarios.length+1}`, shift: 2, disabled: [] }); activeTab = setupScenarios.length - 1; renderTabs(); };
+    el.appendChild(a);
+  }
+  renderContent();
+}
+
+function renderContent() {
+  const el = document.getElementById('setupContent');
+  const s = setupScenarios[activeTab];
+  const active = masterBuckets - s.disabled.length;
+  el.innerHTML = `
+    <div class="sc-info-bar">
+      <label>Name</label><input type="text" value="${s.name}" onchange="setupScenarios[${activeTab}].name=this.value;renderTabs()">
+      <label>Shift</label><select onchange="setupScenarios[${activeTab}].shift=+this.value"><option value="1" ${s.shift===1?'selected':''}>Single</option><option value="2" ${s.shift===2?'selected':''}>Double</option><option value="3" ${s.shift===3?'selected':''}>Triple</option></select>
+      <span class="sc-active">${active} ACTIVE${s.disabled.length?` <span class="off">(${s.disabled.length} OFF)</span>`:''}</span>
+      ${setupScenarios.length>1?`<button class="sc-remove" onclick="setupScenarios.splice(${activeTab},1);activeTab=Math.min(activeTab,setupScenarios.length-1);renderTabs()">DEL</button>`:''}
+    </div>
+    <div class="param-hint" style="padding:4px 10px">Shift = how many cycles a head takes to refill after dumping. Single (1 cycle), Double (2), Triple (3). More heads disabled = fewer combinations available = higher giveaway.</div>
+    <div class="head-selector"><canvas id="setupCanvas" width="500" height="500"></canvas></div>
+    <div class="head-hint">CLICK A HEAD TO TOGGLE ON / OFF</div>`;
+  drawSetupHeads();
+  document.getElementById('setupCanvas').onclick = (e) => {
+    const c = document.getElementById('setupCanvas'), rect = c.getBoundingClientRect(), dpr = devicePixelRatio||1;
+    const mx = (e.clientX-rect.left)*dpr, my = (e.clientY-rect.top)*dpr;
+    const cx = c.width/2, cy = c.height/2, R = Math.min(c.width,c.height)/2-50*dpr;
+    const hR = Math.max(14*dpr, Math.min(28*dpr, R/3));
+    for (let i=0;i<masterBuckets;i++){
+      const a=(2*Math.PI*i)/masterBuckets-Math.PI/2;
+      const hx=cx+R*Math.cos(a), hy=cy+R*Math.sin(a);
+      if (Math.sqrt((mx-hx)**2+(my-hy)**2) <= hR+4) {
+        const idx=s.disabled.indexOf(i); idx>=0?s.disabled.splice(idx,1):s.disabled.push(i); renderContent(); return;
+      }
+    }
+  };
+}
+
+function drawSetupHeads() {
+  const c = document.getElementById('setupCanvas'); if(!c)return;
+  const dpr = devicePixelRatio||1, rect = c.parentElement.getBoundingClientRect();
+  const sz = Math.min(rect.width, rect.height, 460)*dpr;
+  c.width=sz; c.height=sz; c.style.width=(sz/dpr)+'px'; c.style.height=(sz/dpr)+'px';
+  const ctx=c.getContext('2d'), s=setupScenarios[activeTab], n=masterBuckets;
+  const cx=sz/2, cy=sz/2, R=sz/2-50*dpr, hR=Math.max(14*dpr,Math.min(28*dpr,R/3));
+  const col=SCOLORS[activeTab%SCOLORS.length];
+  ctx.clearRect(0,0,sz,sz);
+  // Rings
+  ctx.beginPath();ctx.arc(cx,cy,R+hR+10*dpr,0,Math.PI*2);ctx.strokeStyle='#444';ctx.lineWidth=2*dpr;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,R-hR-10*dpr,0,Math.PI*2);ctx.strokeStyle='#444';ctx.lineWidth=2*dpr;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,26*dpr,0,Math.PI*2);ctx.fillStyle='#1a1a1a';ctx.strokeStyle='#555';ctx.lineWidth=2*dpr;ctx.fill();ctx.stroke();
+  ctx.font=`bold ${8*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#666';ctx.fillText('W',cx,cy);
+
+  for(let i=0;i<n;i++){
+    const a=(2*Math.PI*i)/n-Math.PI/2, hx=cx+R*Math.cos(a), hy=cy+R*Math.sin(a);
+    const off=s.disabled.includes(i);
+    // Dividers
+    const da=a+Math.PI/n;
+    ctx.beginPath();ctx.moveTo(cx+(R-hR-10*dpr)*Math.cos(da),cy+(R-hR-10*dpr)*Math.sin(da));
+    ctx.lineTo(cx+(R+hR+10*dpr)*Math.cos(da),cy+(R+hR+10*dpr)*Math.sin(da));ctx.strokeStyle='#333';ctx.lineWidth=1*dpr;ctx.stroke();
+    // Head
+    ctx.beginPath();ctx.arc(hx,hy,hR,0,Math.PI*2);
+    ctx.fillStyle=off?'#1a1a1a':'#2a3a2a'; ctx.strokeStyle=off?'#cc3333':col; ctx.lineWidth=2*dpr; ctx.fill();ctx.stroke();
+    if(off){const xr=hR*0.35;ctx.strokeStyle='#cc3333';ctx.lineWidth=2*dpr;ctx.beginPath();ctx.moveTo(hx-xr,hy-xr);ctx.lineTo(hx+xr,hy+xr);ctx.moveTo(hx+xr,hy-xr);ctx.lineTo(hx-xr,hy+xr);ctx.stroke();}
+    else{const ts=hR*0.35;ctx.beginPath();ctx.moveTo(hx,hy-ts);ctx.lineTo(hx-ts*0.8,hy+ts*0.5);ctx.lineTo(hx+ts*0.8,hy+ts*0.5);ctx.closePath();ctx.strokeStyle=col;ctx.lineWidth=1.5*dpr;ctx.stroke();}
+    // Num
+    const nd=R+hR+22*dpr;
+    ctx.font=`${8*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=off?'#555':'#ccc';
+    ctx.fillText(''+(i+1),cx+nd*Math.cos(a),cy+nd*Math.sin(a));
+  }
+}
+
+renderTabs();
+window.addEventListener('resize',()=>{if(document.getElementById('setupCanvas'))drawSetupHeads();});
+
+// ═══ ENGINE ═══
+function gauss(m,s){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return m+s*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function wChoice(w){const t=w.reduce((a,b)=>a+b,0);let r=Math.random()*t;for(let i=0;i<w.length;i++){r-=w[i];if(r<=0)return i;}return w.length-1;}
+
+class MHW {
+  // Zone-based combination weigher
+  // A-zone: min_weight ≤ w ≤ hi_limit (ACCEPT)
+  // B-zone: w > hi_limit (OVER — only if overDischarge ON)
+  // Under: w < min_weight
+  constructor(nBuckets,disabled,target,min,hiLimit,overDischarge,shift,mode,modeParams,fdTimeout){
+    this.n=nBuckets;this.dis=new Set(disabled);this.target=target;this.min=min;
+    this.hiLimit=hiLimit;this.overDis=overDischarge;this.shift=shift;
+    this.mode=mode;this.mp=modeParams;this.fdTimeout=fdTimeout;
+    this.wt=new Float64Array(nBuckets);this.cd=new Int8Array(nBuckets);this.ic=new Int8Array(nBuckets);
+    this.sel=[];this.wait=0;this.bags=[];this.fd=0;this.od=0;this.wc=0;this.tc=0;this.stops=0;
+    this.lastZone='';
+    // Incremental stats tracking
+    this._sum=0;this._sum2=0;this._mn=1e9;this._mx=-1e9;this._ut=0;
+    // Histogram for chart: bins from -50 to +100 giveaway, 0.5g resolution = 300 bins
+    this._histMin=-50;this._histBW=0.5;this._histN=300;this._hist=new Uint32Array(this._histN);
+    for(let i=0;i<nBuckets;i++)if(!this.dis.has(i))this._fill(i);
+  }
+  _fill(i){
+    if(this.mode==='continuous'){
+      this.wt[i]=Math.round(gauss(this.mp.fillMean,this.mp.fillStd)*10)/10;
+      this.ic[i]=1;
+    } else {
+      const chosen = this.mp.itemCounts[wChoice(this.mp.itemProbs)];
+      let t=0;
+      for(let f=0;f<chosen;f++)t+=gauss(this.mp.itemMean,this.mp.itemStd);
+      this.wt[i]=Math.round(t*10)/10;this.ic[i]=chosen;
+    }
+  }
+  avail(){const a=[];for(let i=0;i<this.n;i++)if(!this.cd[i]&&!this.dis.has(i))a.push(i);return a;}
+
+  // Zone-based combination search (MHW logic)
+  // Returns { indices, zone, totalCombos, aCount, bCount, uCount } or null
+  findZoneCombo(){
+    const av=this.avail();if(!av.length)return null;
+    let bestA=null,bestAdiff=Infinity;
+    let bestB=null,bestBdiff=Infinity;
+    let bestU=null,bestUdiff=Infinity;
+    let totalCombos=0,aCount=0,bCount=0,uCount=0;
+    const mx=Math.min(av.length,5);
+    for(let r=1;r<=mx;r++){
+      this._combos(av,r,c=>{
+        let w=0;for(let i=0;i<c.length;i++)w+=this.wt[c[i]];
+        totalCombos++;
+        const d=Math.abs(w-this.target);
+        if(w>=this.min && w<=this.hiLimit){
+          aCount++;
+          if(d<bestAdiff){bestAdiff=d;bestA=c.slice();}
+        } else if(w>this.hiLimit){
+          bCount++;
+          if(d<bestBdiff){bestBdiff=d;bestB=c.slice();}
+        } else {
+          uCount++;
+          if(d<bestUdiff){bestUdiff=d;bestU=c.slice();}
+        }
+      });
+      if(bestAdiff===0)break;
+    }
+    const stats={totalCombos,aCount,bCount,uCount};
+    if(bestA) return {indices:bestA,zone:'A',...stats};
+    if(bestB && this.overDis) return {indices:bestB,zone:'B',...stats};
+    if(bestB && !this.overDis) return {indices:bestB,zone:'B_blocked',...stats};
+    if(bestU) return {indices:bestU,zone:'U',...stats};
+    return {indices:null,zone:'none',...stats};
+  }
+
+  // Force combo: find closest to target regardless of zone, prefer overweight
+  findForcedCombo(){
+    const av=this.avail();if(!av.length)return null;
+    let bestOver=null,bestOverDiff=Infinity;
+    let bestAny=null,bestAnyDiff=Infinity;
+    const mx=Math.min(av.length,5);
+    for(let r=1;r<=mx;r++){
+      this._combos(av,r,c=>{
+        let w=0;for(let i=0;i<c.length;i++)w+=this.wt[c[i]];
+        const d=Math.abs(w-this.target);
+        if(w>=this.min && d<bestOverDiff){bestOverDiff=d;bestOver=c.slice();}
+        if(d<bestAnyDiff){bestAnyDiff=d;bestAny=c.slice();}
+      });
+    }
+    return bestOver||bestAny;
+  }
+
+  _combos(a,r,cb){const n=a.length,c=new Array(r);(function g(s,d){if(d===r){cb(c);return;}for(let i=s;i<=n-r+d;i++){c[d]=a[i];g(i+1,d+1);}})(0,0);}
+
+  // Recharge: refill the lightest available bucket (MHW behaviour when no combo found)
+  _rechargeLightest(){
+    const av=this.avail();if(!av.length)return -1;
+    let li=av[0];for(let i=1;i<av.length;i++)if(this.wt[av[i]]<this.wt[li])li=av[i];
+    this._fill(li);return li;
+  }
+
+  dump(idx){
+    let w=0;for(let i=0;i<idx.length;i++)w+=this.wt[idx[i]];
+    w=Math.round(w*10)/10;this.sel=idx.slice();
+    for(let i=0;i<idx.length;i++)this.cd[idx[i]]=this.shift;
+    for(let i=0;i<this.n;i++)if(this.cd[i]>0&&!this.dis.has(i)){this.cd[i]--;if(!this.cd[i])this._fill(i);}
+    this.bags.push(w);
+    this._sum+=w;this._sum2+=w*w;if(w<this._mn)this._mn=w;if(w>this._mx)this._mx=w;if(w<this.min)this._ut++;
+    const hb=Math.floor((w-this.target-this._histMin)/this._histBW);if(hb>=0&&hb<this._histN)this._hist[hb]++;
+    return w;
+  }
+  advance(){this.sel=[];for(let i=0;i<this.n;i++)if(this.cd[i]>0&&!this.dis.has(i)){this.cd[i]--;if(!this.cd[i])this._fill(i);}}
+
+  cycle(){
+    this.tc++;
+    const result=this.findZoneCombo();
+    if(result && result.indices){
+      if(result.zone==='A'){
+        const wt=this.dump(result.indices);this.wait=0;this.lastZone='A';return wt;
+      }
+      if(result.zone==='B'){
+        const wt=this.dump(result.indices);this.wait=0;this.od++;this.lastZone='B';return wt;
+      }
+    }
+    // No A-zone combo (B_blocked, U, none, or null) — recharge lightest + wait
+    if(result && result.zone==='B_blocked') this.stops++;
+    this.wait++;
+    if(this.wait>=this.fdTimeout){
+      // Timeout: force dump closest combo, preferring overweight
+      const f=this.findForcedCombo();
+      if(f){const wt=this.dump(f);this.fd++;this.wait=0;this.lastZone='F';return wt;}
+      this._rechargeLightest();
+      this.advance();this.wc++;this.wait=0;
+    } else {
+      this._rechargeLightest();
+      this.advance();this.wc++;
+    }
+    return null;
+  }
+  // Returns { weight: number|null, log: string, stopped: boolean }
+  cycleWithLog(){
+    this.tc++;
+    const av=this.avail();
+    const cooling=[];
+    for(let i=0;i<this.n;i++)if(this.cd[i]>0&&!this.dis.has(i))cooling.push(i+1);
+    const disCount=[...this.dis].length;
+    const totalActive=this.n-disCount;
+    const totalAvailWt=av.reduce((s,i)=>s+this.wt[i],0);
+
+    let lines=[];
+    // Status line
+    let st=`<span class="info">Cycle ${this.tc}</span> — ${av.length}/${totalActive} heads ready`;
+    if(cooling.length) st+=` · <span class="warn">${cooling.length} cooling</span>`;
+    if(disCount) st+=` · <span class="bad">${disCount} off</span>`;
+    lines.push(st);
+
+    // Zone search
+    const result=this.findZoneCombo();
+    const comboInfo=result?`Evaluated ${result.totalCombos.toLocaleString()} combinations: ${result.aCount} in A-zone, ${result.bCount} over Hi Limit, ${result.uCount} underweight.`:'No heads available to form combinations.';
+
+    if(result && result.indices && (result.zone==='A' || result.zone==='B')){
+      const idx=result.indices, zone=result.zone;
+      const parts=idx.map(i=>`H${i+1}:${this.wt[i].toFixed(0)}g`).join(' + ');
+      const wt=this.dump(idx);this.wait=0;
+      if(zone==='B')this.od++;
+      this.lastZone=zone;
+      const give=wt-this.target;
+      if(zone==='A'){
+        const cls=give<=8?'good':'warn';
+        lines.push(`<span class="${cls}">✓ ACCEPT: ${parts} = <strong>${wt.toFixed(1)}g</strong> (${give>=0?'+':''}${give.toFixed(1)}g giveaway)</span>`);
+        lines.push(`<span class="dim">${comboInfo} Best A-zone match selected.</span>`);
+      } else {
+        lines.push(`<span class="warn">✓ OVER-DISCHARGE: ${parts} = <strong>${wt.toFixed(1)}g</strong> (${give>=0?'+':''}${give.toFixed(1)}g)</span>`);
+        lines.push(`<span class="warn">${comboInfo} No A-zone combos available — over-discharge engaged. Pack exceeds Hi Limit (${this.hiLimit}g) but Over-Discharge is ON so the machine accepts it rather than stopping.</span>`);
+      }
+      return{weight:wt,log:lines.join('<br>'),stopped:false};
+    }
+
+    // No usable combo — explain why
+    this.wait++;
+    lines.push(`<span class="dim">${comboInfo}</span>`);
+
+    if(av.length===0){
+      lines.push(`<span class="warn">✗ NO COMBO — all heads cooling. No product available to combine. In production the packer line pauses until heads refill.</span>`);
+    } else if(result && result.zone==='B_blocked'){
+      let sumB=0;for(let i=0;i<result.indices.length;i++)sumB+=this.wt[result.indices[i]];
+      lines.push(`<span class="bad">✗ MACHINE STOPPED — ${result.bCount} overweight combo${result.bCount>1?'s':''} found (best: ${sumB.toFixed(0)}g) but all exceed Hi Limit (${this.hiLimit}g). Over-Discharge is OFF so the machine will not release these packs. In production the line halts here and an operator must intervene — either adjusting settings, enabling Over-Discharge, or clearing product.</span>`);
+      // Recharge and advance but flag as stopped
+      const rh=this._rechargeLightest();
+      if(rh>=0) lines.push(`<span class="dim">Recharging H${rh+1} with fresh product while stopped.</span>`);
+      this.advance();this.wc++;
+      return{weight:null,log:lines.join('<br>'),stopped:true};
+    } else if(totalAvailWt<this.min){
+      lines.push(`<span class="warn">✗ NO COMBO — total available ${totalAvailWt.toFixed(0)}g &lt; minimum ${this.min}g. Not enough product weight across heads to reach target.</span>`);
+    } else {
+      lines.push(`<span class="warn">✗ NO COMBO — ${av.length} heads available but no subset sums within ${this.min}–${this.hiLimit}g. Waiting for cooldowns to free better options.</span>`);
+    }
+
+    // Recharge lightest bucket
+    const rh=this._rechargeLightest();
+    if(rh>=0) lines.push(`<span class="dim">Recharging H${rh+1} (lightest) with fresh product.</span>`);
+
+    if(this.wait>=this.fdTimeout){
+      const f=this.findForcedCombo();
+      if(f){
+        const parts=f.map(i=>`H${i+1}:${this.wt[i].toFixed(0)}g`).join(' + ');
+        const wt=this.dump(f);this.fd++;this.wait=0;this.lastZone='F';
+        const give=wt-this.target;
+        lines.push(`<span class="bad">⚠ FORCED DUMP after ${this.fdTimeout}-cycle timeout: ${parts} = ${wt.toFixed(1)}g (${give>=0?'+':''}${give.toFixed(1)}g). ${wt<this.min?'UNDERWEIGHT — below T1!':'Suboptimal weight but line must keep moving.'}</span>`);
+        return{weight:wt,log:lines.join('<br>'),stopped:false};
+      }
+      this.advance();this.wc++;this.wait=0;
+      lines.push(`<span class="bad">No heads available — fully stalled.</span>`);
+    } else {
+      lines.push(`<span class="dim">Wait ${this.wait}/${this.fdTimeout} — holding for cooldowns.</span>`);
+      this.advance();this.wc++;
+    }
+    return{weight:null,log:lines.join('<br>'),stopped:false};
+  }
+  stats(){
+    const n=this.bags.length;if(!n)return null;
+    const mean=this._sum/n;
+    const variance=this._sum2/n-mean*mean;
+    const std=Math.sqrt(Math.max(0,variance));
+    return{count:n,mean,std,min:this._mn,max:this._mx,give:mean-this.target,givePct:((mean-this.target)/this.target)*100,ut:this._ut,utPct:(this._ut/n)*100,od:this.od,fd:this.fd,stops:this.stops};
+  }
+}
+
+// ═══ SIM CONTROLLER ═══
+let SP=null,weighers=[],running=false,paused=false,tid=null;
+
+function startSimulation(){
+  const tw=+document.getElementById('targetWeight').value, t1=+document.getElementById('t1Tolerance').value;
+  let modeParams;
+  if(productMode==='discrete'){
+    const tot=itemTotal();
+    if(tot!==100){alert('Item probabilities must total exactly 100%. Currently: '+tot+'%');return;}
+    const counts=itemRows.map(r=>r.count);
+    const rawPcts=itemRows.map(r=>r.pct);
+    const probs=rawPcts.map(p=>p/100);
+    modeParams={itemMean:+document.getElementById('itemMean').value,itemStd:+document.getElementById('itemStd').value,itemCounts:counts,itemProbs:probs};
+  } else {
+    modeParams={fillMean:+document.getElementById('fillMean').value,fillStd:+document.getElementById('fillStd').value};
+  }
+  const hl=tw + (+document.getElementById('hiLimit').value);
+  const odOn=document.getElementById('overDischarge').value==='on';
+  SP={masterBuckets,tw,min:tw-t1,t1,hiLimit:hl,overDis:odOn,mode:productMode,mp:modeParams,fd:+document.getElementById('forceDump').value,
+    bags:+document.getElementById('numBags').value,
+    scenarios:setupScenarios.map((s,i)=>({name:s.name,shift:s.shift,disabled:[...s.disabled],color:SCOLORS[i%SCOLORS.length],active:masterBuckets-s.disabled.length}))};
+  document.getElementById('setup-view').style.display='none';
+  document.getElementById('sim-view').style.display='flex';
+  document.getElementById('simInfo').innerHTML=`<span>TARGET <strong>${tw}g</strong></span><span>T1 <strong>${SP.min}g</strong></span><span>HI <strong>${hl}g</strong></span><span>OD <strong>${odOn?'ON':'OFF'}</strong></span><span>BAGS <strong>${SP.bags.toLocaleString()}</strong></span>`;
+  initSim();
+}
+
+function initSim(){
+  weighers=SP.scenarios.map(sc=>new MHW(SP.masterBuckets,sc.disabled,SP.tw,SP.min,SP.hiLimit,SP.overDis,sc.shift,SP.mode,SP.mp,SP.fd));
+  // Grid cols
+  const g=document.getElementById('simGrid');
+  const cols=SP.scenarios.length;
+  g.style.gridTemplateColumns=`repeat(${cols},1fr)`;
+  buildCards();drawAllCanvases();drawChart();
+  document.getElementById('btnStart').disabled=false;
+  document.getElementById('btnPause').disabled=true;document.getElementById('btnPause').textContent='PAUSE';
+  document.getElementById('pFill').style.width='0%';document.getElementById('simStatus').innerHTML='READY';
+  running=false;paused=false;
+}
+
+function buildCards(){
+  const g=document.getElementById('simGrid');g.innerHTML='';
+  const leg=document.getElementById('chartLegend');leg.innerHTML='';
+  SP.scenarios.forEach((sc,i)=>{
+    const w=weighers[i],st=w.stats();
+    const card=document.createElement('div');card.className='sim-card';card.id='card'+i;
+    let heads='';
+    for(let h=0;h<w.n;h++){
+      const off=w.dis.has(h),sel=w.sel.includes(h),cool=w.cd[h]>0;
+      let cls=off?' hrow--off':sel?' hrow--sel':'';
+      let sym=off?'<span style="color:#cc3333">&#10005;</span>':sel?'<span style="color:#ff9933">F</span>':cool?'<span style="color:#cccc00">O</span>':'<span style="color:#00cc66">&#9651;</span>';
+      const maxW=SP.mode==='continuous'?SP.mp.fillMean*1.5:SP.mp.itemMean*3.5;
+      const pct=off?0:Math.min(100,(w.wt[h]/maxW)*100);
+      heads+=`<div class="hrow${cls}"><span class="hnum">${h+1}</span><span class="hstat">${sym}</span><div class="hbar"><div class="hbar-fill" style="width:${pct}%"></div></div><span class="hwt">${off?'---':w.wt[h].toFixed(1)}</span></div>`;
+    }
+    card.innerHTML=`
+      <div class="sim-card-header"><span class="sim-card-dot" style="background:${sc.color}"></span><span class="sim-card-name">${sc.name}</span><span class="sim-card-config">${sc.active}/${SP.masterBuckets} heads &middot; shift ${sc.shift}</span></div>
+      <div class="sim-card-body">
+        <div class="sim-card-canvas-wrap"><canvas id="cv${i}" width="400" height="400"></canvas></div>
+      </div>
+      <div class="sim-card-stats">
+        <div class="sstat"><div class="sstat-label">Bags</div><div class="sstat-value" id="vBags${i}">${w.bags.length}</div></div>
+        <div class="sstat"><div class="sstat-label">Giveaway</div><div class="sstat-value${st&&st.give>10?' sstat-value--warn':''}" id="vGive${i}">${st?(st.give>=0?'+':'')+st.give.toFixed(1)+'g':'---'}</div></div>
+        <div class="sstat"><div class="sstat-label">Give %</div><div class="sstat-value${st&&st.givePct>2?' sstat-value--warn':''}" id="vGiveP${i}">${st?st.givePct.toFixed(2)+'%':'---'}</div></div>
+        <div class="sstat"><div class="sstat-label">Std Dev</div><div class="sstat-value" id="vStd${i}">${st?st.std.toFixed(1)+'g':'---'}</div></div>
+        <div class="sstat"><div class="sstat-label">Under T1</div><div class="sstat-value${st&&st.utPct>0?' sstat-value--bad':''}" id="vT1${i}">${st?st.utPct.toFixed(2)+'%':'---'}</div></div>
+        <div class="sstat"><div class="sstat-label">Restarts</div><div class="sstat-value${st&&st.stops>0?' sstat-value--warn':''}" id="vStops${i}">${st?st.stops:'0'}</div></div>
+      </div>
+      <div class="sim-card-heads" id="heads${i}">${heads}</div>
+      <div class="card-log ${simMode==='demo'?'':'collapsed'}" id="clog${i}"></div>`;
+    g.appendChild(card);
+    const lbl=st?`${sc.name} (μ=${st.give>=0?'+':''}${st.give.toFixed(1)}g)`:sc.name;
+    leg.innerHTML+=`<div class="legend-item"><span class="legend-dot" style="background:${sc.color}"></span>${lbl}</div>`;
+  });
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#e0e0e0;display:inline-block"></span>Target</div>`;
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#cc3333;display:inline-block"></span>T1</div>`;
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#ff9933;display:inline-block"></span>Hi Limit</div>`;
+}
+
+function updateCards(){
+  SP.scenarios.forEach((sc,i)=>{
+    const w=weighers[i],st=w.stats();
+    document.getElementById('vBags'+i).textContent=w.bags.length.toLocaleString();
+    if(st){
+      const ge=document.getElementById('vGive'+i);ge.textContent=(st.give>=0?'+':'')+st.give.toFixed(1)+'g';ge.className='sstat-value'+(st.give>10?' sstat-value--warn':'');
+      const gp=document.getElementById('vGiveP'+i);gp.textContent=st.givePct.toFixed(2)+'%';gp.className='sstat-value'+(st.givePct>2?' sstat-value--warn':'');
+      const t1=document.getElementById('vT1'+i);t1.textContent=st.utPct.toFixed(2)+'%';t1.className='sstat-value'+(st.utPct>0?' sstat-value--bad':'');
+      document.getElementById('vStd'+i).textContent=st.std.toFixed(1)+'g';
+      const stp=document.getElementById('vStops'+i);stp.textContent=st.stops;stp.className='sstat-value'+(st.stops>0?' sstat-value--warn':'');
+    }
+    // Head list
+    const hel=document.getElementById('heads'+i);
+    let h='';
+    for(let j=0;j<w.n;j++){
+      const off=w.dis.has(j),sel=w.sel.includes(j),cool=w.cd[j]>0;
+      let cls=off?' hrow--off':sel?' hrow--sel':'';
+      let sym=off?'<span style="color:#cc3333">&#10005;</span>':sel?'<span style="color:#ff9933">F</span>':cool?'<span style="color:#cccc00">O</span>':'<span style="color:#00cc66">&#9651;</span>';
+      const maxW=SP.mode==='continuous'?SP.mp.fillMean*1.5:SP.mp.itemMean*3.5;
+      const pct=off?0:Math.min(100,(w.wt[j]/maxW)*100);
+      h+=`<div class="hrow${cls}"><span class="hnum">${j+1}</span><span class="hstat">${sym}</span><div class="hbar"><div class="hbar-fill" style="width:${pct}%"></div></div><span class="hwt">${off?'---':w.wt[j].toFixed(1)}</span></div>`;
+    }
+    hel.innerHTML=h;
+  });
+  // Legend
+  const leg=document.getElementById('chartLegend');leg.innerHTML='';
+  SP.scenarios.forEach((sc,i)=>{
+    const st=weighers[i].stats();
+    const lbl=st?`${sc.name} (μ=${st.give>=0?'+':''}${st.give.toFixed(1)}g)`:sc.name;
+    leg.innerHTML+=`<div class="legend-item"><span class="legend-dot" style="background:${sc.color}"></span>${lbl}</div>`;
+  });
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#e0e0e0;display:inline-block"></span>Target</div>`;
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#cc3333;display:inline-block"></span>T1</div>`;
+  leg.innerHTML+=`<div class="legend-item"><span style="width:10px;height:2px;background:#ff9933;display:inline-block"></span>Hi Limit</div>`;
+}
+
+// ═══ CANVAS DRAWING ═══
+function drawAllCanvases(){SP.scenarios.forEach((_,i)=>drawScenarioCanvas(i));}
+
+function drawScenarioCanvas(idx){
+  const c=document.getElementById('cv'+idx);if(!c)return;
+  const dpr=devicePixelRatio||1,wrap=c.parentElement,sz=Math.min(wrap.clientWidth,wrap.clientHeight,380)*dpr;
+  c.width=sz;c.height=sz;c.style.width=(sz/dpr)+'px';c.style.height=(sz/dpr)+'px';
+  const ctx=c.getContext('2d'),w=weighers[idx],sc=SP.scenarios[idx];
+  const n=w.n,cx=sz/2,cy=sz/2,R=sz/2-40*dpr,hR=Math.max(10*dpr,Math.min(22*dpr,R/3.2)),col=sc.color;
+  ctx.clearRect(0,0,sz,sz);
+  // Rings
+  ctx.beginPath();ctx.arc(cx,cy,R+hR+8*dpr,0,Math.PI*2);ctx.strokeStyle='#444';ctx.lineWidth=1.5*dpr;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,R-hR-8*dpr,0,Math.PI*2);ctx.strokeStyle='#444';ctx.lineWidth=1.5*dpr;ctx.stroke();
+  // Center
+  const dr=24*dpr;ctx.beginPath();ctx.arc(cx,cy,dr,0,Math.PI*2);ctx.fillStyle='#1a1a1a';ctx.strokeStyle='#555';ctx.lineWidth=1.5*dpr;ctx.fill();ctx.stroke();
+  const last=w.bags.slice(-4);
+  if(last.length){
+    ctx.font=`bold ${5*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.fillStyle='#555';ctx.fillText('DROPS',cx,cy-14*dpr);
+    for(let j=0;j<last.length;j++){
+      const g=last[last.length-1-j]-w.target;
+      const bw=last[last.length-1-j];
+      ctx.fillStyle=bw<w.min?'#cc3333':bw>w.hiLimit?'#ff9933':g<5?'#00cc66':'#cccc00';
+      ctx.globalAlpha=1-j*0.2;ctx.font=`bold ${6*dpr}px 'Share Tech Mono'`;
+      ctx.fillText(last[last.length-1-j].toFixed(0),cx,cy-4*dpr+j*9*dpr);
+    }ctx.globalAlpha=1;
+  } else {ctx.font=`bold ${7*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#555';ctx.fillText('W',cx,cy);}
+
+  for(let i=0;i<n;i++){
+    const a=(2*Math.PI*i)/n-Math.PI/2,hx=cx+R*Math.cos(a),hy=cy+R*Math.sin(a);
+    const off=w.dis.has(i),sel=w.sel.includes(i),cool=w.cd[i],wt=w.wt[i],items=w.ic[i];
+    // Dividers
+    const da=a+Math.PI/n;ctx.beginPath();
+    ctx.moveTo(cx+(R-hR-8*dpr)*Math.cos(da),cy+(R-hR-8*dpr)*Math.sin(da));
+    ctx.lineTo(cx+(R+hR+8*dpr)*Math.cos(da),cy+(R+hR+8*dpr)*Math.sin(da));ctx.strokeStyle='#333';ctx.lineWidth=1*dpr;ctx.stroke();
+
+    if(off){
+      ctx.beginPath();ctx.arc(hx,hy,hR,0,Math.PI*2);ctx.fillStyle='#1a1a1a';ctx.strokeStyle='#cc3333';ctx.lineWidth=1.5*dpr;ctx.fill();ctx.stroke();
+      const xr=hR*0.3;ctx.strokeStyle='#cc3333';ctx.lineWidth=1.5*dpr;ctx.beginPath();ctx.moveTo(hx-xr,hy-xr);ctx.lineTo(hx+xr,hy+xr);ctx.moveTo(hx+xr,hy-xr);ctx.lineTo(hx-xr,hy+xr);ctx.stroke();
+    } else {
+      const minE=SP.mode==='continuous'?SP.mp.fillMean*0.7:SP.mp.itemMean*0.8;
+      const maxE=SP.mode==='continuous'?SP.mp.fillMean*1.3:SP.mp.itemMean*3.2;
+      const ratio=Math.max(0,Math.min(1,(wt-minE)/(maxE-minE)));
+      let fc,tc;
+      if(cool>0){fc='#1a1a1a';tc='#555';
+        const prog=(w.shift-cool)/w.shift;ctx.beginPath();ctx.arc(hx,hy,hR+3*dpr,-Math.PI/2,-Math.PI/2+prog*Math.PI*2);ctx.strokeStyle=col;ctx.lineWidth=2*dpr;ctx.stroke();
+      }else{
+        let r,g,b;if(ratio<0.5){r=200;g=Math.floor(80+ratio*2*160);b=50;}else{r=Math.floor(200-(ratio-0.5)*2*160);g=Math.floor(200+(ratio-0.5)*2*55);b=Math.floor(50+(ratio-0.5)*2*80);}
+        fc=`rgb(${r},${g},${b})`;tc=ratio>0.3?'#000':'#fff';
+      }
+      if(sel){for(let g=0;g<2;g++){ctx.beginPath();ctx.arc(hx,hy,hR+(3+g*3)*dpr,0,Math.PI*2);ctx.strokeStyle=`rgba(255,153,51,${0.5-g*0.2})`;ctx.lineWidth=1.5*dpr;ctx.stroke();}}
+      ctx.beginPath();ctx.arc(hx,hy,hR,0,Math.PI*2);ctx.fillStyle=fc;ctx.strokeStyle=sel?'#ff9933':'#555';ctx.lineWidth=(sel?2:1)*dpr;ctx.fill();ctx.stroke();
+      const fs=Math.max(6,Math.min(10,hR/(2*dpr)));
+      ctx.font=`bold ${fs*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=tc;ctx.fillText(wt.toFixed(0),hx,hy);
+      if(cool===0&&SP.mode==='discrete'){const dotY=hy+hR+4*dpr,ds=4*dpr,dz=1.5*dpr,sx=hx-((items-1)*ds)/2;
+        for(let f=0;f<items;f++){ctx.beginPath();ctx.arc(sx+f*ds,dotY,dz,0,Math.PI*2);ctx.fillStyle='#cccc00';ctx.fill();}}
+    }
+    const nd=R+hR+16*dpr;ctx.font=`${7*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=off?'#444':sel?'#ff9933':'#888';ctx.fillText(''+(i+1),cx+nd*Math.cos(a),cy+nd*Math.sin(a));
+  }
+}
+
+// ═══ CHART ═══
+function gSmooth(d,sig){const ks=Math.ceil(sig*3)*2+1,k=[];let s=0;for(let i=0;i<ks;i++){const x=i-Math.floor(ks/2),v=Math.exp(-0.5*(x/sig)**2);k.push(v);s+=v;}for(let i=0;i<ks;i++)k[i]/=s;
+  const r=new Array(d.length).fill(0),h=Math.floor(ks/2);for(let i=0;i<d.length;i++)for(let j=0;j<ks;j++){const idx=i+j-h;if(idx>=0&&idx<d.length)r[i]+=d[idx]*k[j];}return r;}
+
+function drawChart(){
+  const c=document.getElementById('chartCanvas'),dpr=devicePixelRatio||1,rect=c.getBoundingClientRect();
+  const W=rect.width*dpr,H=rect.height*dpr;c.width=W;c.height=H;const ctx=c.getContext('2d');ctx.clearRect(0,0,W,H);
+  const ml=45*dpr,mr=15*dpr,mt=8*dpr,mb=24*dpr,pw=W-ml-mr,ph=H-mt-mb;
+  // Use pre-built histograms — O(bins) not O(bags)
+  let hasData=false;
+  weighers.forEach(w=>{if(w.bags.length>10)hasData=true;});
+  if(!hasData){ctx.fillStyle='#555';ctx.font=`${10*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.fillText('WAITING FOR DATA...',W/2,H/2);return;}
+  // Find range trimmed to 0.5th–99.5th percentile to crop tails
+  let totalBags=0;
+  weighers.forEach(w=>{if(w.bags.length>10)totalBags+=w.bags.length;});
+  // Merge all histograms to find percentile bounds
+  const merged=new Float64Array(weighers.length?weighers[0]._histN:300);
+  weighers.forEach(w=>{if(w.bags.length<=10)return;for(let b=0;b<w._histN;b++)merged[b]+=w._hist[b];});
+  const loThresh=totalBags*0.005,hiThresh=totalBags*0.995;
+  let cum=0,gMn=-50,gMx=100;
+  const hMin=weighers[0]._histMin,hBW=weighers[0]._histBW,hN=weighers[0]._histN;
+  for(let b=0;b<hN;b++){cum+=merged[b];if(cum>=loThresh){gMn=hMin+b*hBW;break;}}
+  cum=0;for(let b=hN-1;b>=0;b--){cum+=merged[b];if(cum>=totalBags-hiThresh){gMx=hMin+(b+1)*hBW;break;}}
+  gMn-=3;gMx+=3;const nb=200,bw=(gMx-gMn)/nb;
+  let yM=0;const curves=[];
+  weighers.forEach(w=>{if(w.bags.length<=10){curves.push(null);return;}
+    const cn=new Array(nb).fill(0);
+    for(let hb=0;hb<w._histN;hb++){if(!w._hist[hb])continue;const gv=w._histMin+hb*w._histBW;const db=Math.min(nb-1,Math.max(0,Math.floor((gv-gMn)/bw)));cn[db]+=w._hist[hb];}
+    const p=cn.map(c=>(c/w.bags.length)*100),s=gSmooth(p,3);const mx=Math.max(...s);if(mx>yM)yM=mx;curves.push(s);});
+  yM=Math.ceil(yM*1.15)||1;
+  ctx.font=`${7*dpr}px 'Share Tech Mono'`;
+  for(let i=0;i<=4;i++){const y=mt+ph-(i/4)*ph;ctx.fillStyle='#555';ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText(((i/4)*yM).toFixed(1)+'%',ml-4*dpr,y);
+    ctx.beginPath();ctx.moveTo(ml,y);ctx.lineTo(ml+pw,y);ctx.strokeStyle='#333';ctx.lineWidth=1*dpr;ctx.stroke();}
+  const xR=gMx-gMn,xS=xR>100?20:xR>50?10:5;ctx.textAlign='center';ctx.textBaseline='top';
+  for(let v=Math.ceil(gMn/xS)*xS;v<=gMx;v+=xS){ctx.fillStyle='#555';ctx.fillText(v+'g',ml+((v-gMn)/xR)*pw,mt+ph+4*dpr);}
+  const zx=ml+((0-gMn)/xR)*pw;ctx.setLineDash([5*dpr,3*dpr]);ctx.strokeStyle='#e0e0e0';ctx.lineWidth=1*dpr;ctx.beginPath();ctx.moveTo(zx,mt);ctx.lineTo(zx,mt+ph);ctx.stroke();
+  const tx=ml+((-SP.t1-gMn)/xR)*pw;ctx.strokeStyle='#cc3333';ctx.setLineDash([3*dpr,3*dpr]);ctx.beginPath();ctx.moveTo(tx,mt);ctx.lineTo(tx,mt+ph);ctx.stroke();
+  const hx2=ml+((SP.hiLimit-SP.tw-gMn)/xR)*pw;ctx.strokeStyle='#ff9933';ctx.beginPath();ctx.moveTo(hx2,mt);ctx.lineTo(hx2,mt+ph);ctx.stroke();ctx.setLineDash([]);
+  curves.forEach((cv,idx)=>{if(!cv)return;const co=SP.scenarios[idx].color;
+    ctx.beginPath();for(let b=0;b<nb;b++){const x=ml+((b+0.5)*bw/xR)*pw,y=mt+ph-(cv[b]/yM)*ph;if(!b)ctx.moveTo(x,mt+ph);ctx.lineTo(x,y);}
+    ctx.lineTo(ml+((nb-0.5)*bw/xR)*pw,mt+ph);ctx.closePath();ctx.fillStyle=co+'30';ctx.fill();
+    ctx.beginPath();for(let b=0;b<nb;b++){const x=ml+((b+0.5)*bw/xR)*pw,y=mt+ph-(cv[b]/yM)*ph;if(!b)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+    ctx.strokeStyle=co;ctx.lineWidth=2*dpr;ctx.stroke();});
+}
+
+// ═══ SIM MODE & CONTROLS ═══
+let simMode = 'demo'; // 'demo' or 'fast'
+
+function toggleCardLogs(show) {
+  document.querySelectorAll('.card-log').forEach(el => {
+    if (show) el.classList.remove('collapsed');
+    else el.classList.add('collapsed');
+  });
+}
+
+function setSimMode(m) {
+  simMode = m;
+  document.getElementById('swDemo').className = m === 'demo' ? 'active' : '';
+  document.getElementById('swFast').className = m === 'fast' ? 'active' : '';
+  toggleCardLogs(m === 'demo');
+  // If running, switch mode live
+  if (running && !paused) {
+    if (tid) { clearTimeout(tid); cancelAnimationFrame(tid); tid = null; }
+    if (m === 'demo') { document.getElementById('simStatus').innerHTML='RUNNING — <strong style="color:#00cccc">DEMO</strong>'; runDemo(); }
+    else { document.getElementById('simStatus').innerHTML='RUNNING — <strong style="color:#9966ff">FAST</strong>'; runFast(); }
+  }
+}
+
+function simGo() {
+  if (running) return;
+  running = true; paused = false; machineStopped = false;
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnPause').disabled = false;
+  document.querySelectorAll('.card-log').forEach(el => el.innerHTML = '');
+  if (simMode === 'demo') {
+    document.getElementById('simStatus').innerHTML = 'RUNNING — <strong style="color:#00cccc">DEMO</strong>';
+    runDemo();
+  } else {
+    document.getElementById('simStatus').innerHTML = 'RUNNING — <strong style="color:#9966ff">FAST</strong>';
+    runFast();
+  }
+}
+
+function simPause() {
+  if (!running) return;
+  paused = !paused;
+  const b = document.getElementById('btnPause');
+  if (paused) {
+    b.textContent = 'RESUME';
+    if (tid) { clearTimeout(tid); cancelAnimationFrame(tid); tid = null; }
+    document.getElementById('simStatus').innerHTML = '<strong style="color:#cccc00">PAUSED</strong>';
+  } else {
+    b.textContent = 'PAUSE';
+    if (simMode === 'demo') { runDemo(); } else { runFast(); }
+  }
+}
+
+function simReset() {
+  running = false; paused = false; machineStopped = false;
+  document.getElementById('stopOverlay').classList.remove('active');
+  if (tid) { clearTimeout(tid); cancelAnimationFrame(tid); tid = null; }
+  document.querySelectorAll('.card-log').forEach(el => el.innerHTML = '');
+  initSim();
+}
+
+function goBack() {
+  running = false; paused = false; machineStopped = false;
+  document.getElementById('stopOverlay').classList.remove('active');
+  if (tid) { clearTimeout(tid); cancelAnimationFrame(tid); tid = null; }
+  document.getElementById('sim-view').style.display = 'none';
+  document.getElementById('setup-view').style.display = 'flex';
+}
+
+// ── DEMO MODE ──
+const MAX_LOG_LINES = 80;
+
+function appendLog(scIdx, color, logHtml) {
+  const el = document.getElementById('clog' + scIdx);
+  if (!el) return;
+  const div = document.createElement('div');
+  div.className = 'demo-line';
+  div.style.borderLeftColor = color;
+  div.innerHTML = logHtml;
+  el.insertBefore(div, el.firstChild);
+  while (el.children.length > 20) el.removeChild(el.lastChild);
+}
+
+let machineStopped = false; // true when Over-Discharge OFF triggers a stop
+
+function restartMachine() {
+  machineStopped = false;
+  document.getElementById('stopOverlay').classList.remove('active');
+  document.getElementById('simStatus').innerHTML = 'RUNNING — <strong style="color:#00cccc">DEMO</strong> (restarted)';
+  // Log the restart in affected scenarios
+  SP.scenarios.forEach((sc, i) => {
+    appendLog(i, sc.color, '<span class="good">▶ MACHINE RESTARTED by operator.</span>');
+  });
+  if (simMode === 'demo') runDemo(); else runFast();
+}
+
+function runDemo() {
+  const tgt = SP.bags;
+  const DELAY_PER_SCENARIO = 1500;
+  const DELAY_BETWEEN_CYCLES = 800;
+
+  function stepScenario(scIdx) {
+    if (!running || paused || machineStopped) return;
+    if (scIdx >= SP.scenarios.length) {
+      drawAllCanvases(); updateCards();
+      const mn = Math.min(...weighers.map(w => w.bags.length));
+      document.getElementById('pFill').style.width = Math.min(100, (mn / tgt) * 100) + '%';
+      if (mn % 3 === 0) drawChart();
+      if (mn >= tgt) { onDone(); return; }
+      tid = setTimeout(() => stepScenario(0), DELAY_BETWEEN_CYCLES);
+      return;
+    }
+    const sc = SP.scenarios[scIdx], w = weighers[scIdx];
+    if (w.bags.length < tgt) {
+      const result = w.cycleWithLog();
+      appendLog(scIdx, sc.color, result.log);
+      drawScenarioCanvas(scIdx); updateCards();
+      if (result.stopped) {
+        machineStopped = true;
+        document.getElementById('simStatus').innerHTML = '<strong style="color:#cc3333">STOPPED</strong> — Over-Discharge OFF, no valid combo';
+        document.getElementById('stopOverlay').classList.add('active');
+        return;
+      }
+    }
+    tid = setTimeout(() => stepScenario(scIdx + 1), DELAY_PER_SCENARIO);
+  }
+  stepScenario(0);
+}
+
+// ── FAST MODE ──
+function runFast() {
+  const tgt = SP.bags; let fc = 0;
+  function batch() {
+    if (!running || paused) return;
+    for (let b = 0; b < 500; b++) {
+      if (Math.min(...weighers.map(w => w.bags.length)) >= tgt) break;
+      weighers.forEach(w => { if (w.bags.length < tgt) w.cycle(); });
+    }
+    fc++;
+    const mn = Math.min(...weighers.map(w => w.bags.length));
+    document.getElementById('pFill').style.width = Math.min(100, (mn / tgt) * 100) + '%';
+    if (fc % 10 === 0) { updateCards(); }
+    if (fc % 50 === 0) { drawChart(); }
+    if (mn >= tgt) { onDone(); return; }
+    tid = requestAnimationFrame(batch);
+  }
+  batch();
+}
+
+function onDone() {
+  running = false;
+  drawAllCanvases(); updateCards(); drawChart();
+  document.getElementById('pFill').style.width = '100%';
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnPause').disabled = true;
+  const totalStops=weighers.reduce((s,w)=>s+w.stops,0);
+  let statusMsg='<strong style="color:#00cc66">COMPLETE</strong>';
+  if(totalStops>0) statusMsg+=` &mdash; <span style="color:#ff9933">Line required ${totalStops} restart${totalStops>1?'s':''}</span>`;
+  document.getElementById('simStatus').innerHTML = statusMsg;
+}
+
+window.addEventListener('resize',()=>{if(SP&&document.getElementById('sim-view').style.display!=='none'){drawAllCanvases();drawChart();}});
+</script>
+</body>
+</html>
