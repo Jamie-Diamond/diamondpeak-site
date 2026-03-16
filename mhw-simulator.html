@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MHW Simulator v3 — Diamond Peak</title>
+<title>MHW Simulator v3.1 — Diamond Peak</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Share+Tech+Mono&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -201,27 +201,33 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 .sim-key-bar { width: 20px; height: 8px; border: 1px solid #333; background: #222; position: relative; overflow: hidden; }
 .sim-key-bar-fill { height: 100%; }
 
-/* Demo commentary */
-.demo-log {
-  border-top: 2px solid var(--border);
-  background: #111;
-  max-height: 260px;
+/* Per-card demo commentary */
+.card-log {
+  border-top: 1px solid var(--border);
+  background: #0a0a0a;
+  max-height: 200px;
   overflow-y: auto;
-  padding: 10px 14px;
-  font-size: 11px;
-  line-height: 1.7;
+  padding: 6px 8px;
+  font-size: 10px;
+  line-height: 1.6;
   color: var(--dim);
+  transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
 }
-.demo-log:empty { display: none; }
-.demo-line { padding: 4px 0 4px 8px; border-bottom: 1px solid #1a1a1a; border-left: 3px solid transparent; margin-bottom: 2px; }
-.demo-line.demo-line--scenario { border-left-color: var(--cyan); background: rgba(0,204,204,0.03); }
-.demo-line .cycle-num { color: var(--cyan); }
-.demo-line .sc-name { font-weight: bold; }
+.card-log.collapsed {
+  max-height: 0;
+  padding: 0 8px;
+  opacity: 0;
+  overflow: hidden;
+}
+.demo-line { padding: 3px 0 3px 6px; border-bottom: 1px solid #151515; border-left: 2px solid var(--cyan); margin-bottom: 2px; background: rgba(0,204,204,0.02); }
 .demo-line .good { color: var(--green); }
 .demo-line .warn { color: var(--yellow); }
 .demo-line .bad { color: var(--red); }
 .demo-line .info { color: var(--blue); }
 .demo-line .dim { color: #666; font-style: italic; }
+
+/* Shared bottom log (hidden, kept for compat) */
+.demo-log { display: none; }
 
 /* Mode toggle in sim bar */
 .mode-sw { display: flex; border: 1px solid var(--border); border-radius: 2px; overflow: hidden; }
@@ -234,7 +240,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 <!-- ═══ SETUP ═══ -->
 <div id="setup-view">
   <div class="setup-header">
-    <span class="setup-title">MHW Simulator v3 — Program Setup</span>
+    <span class="setup-title">MHW Simulator v3.1 — Program Setup</span>
     <a href="index.html" class="back-link">&larr; DIAMOND PEAK</a>
   </div>
   <div class="setup-body">
@@ -704,7 +710,8 @@ function buildCards(){
         <div class="sstat"><div class="sstat-label">Give %</div><div class="sstat-value${st&&st.givePct>2?' sstat-value--warn':''}" id="vGiveP${i}">${st?st.givePct.toFixed(2)+'%':'---'}</div></div>
         <div class="sstat"><div class="sstat-label">Under T1</div><div class="sstat-value${st&&st.utPct>0?' sstat-value--bad':''}" id="vT1${i}">${st?st.utPct.toFixed(2)+'%':'---'}</div></div>
       </div>
-      <div class="sim-card-heads" id="heads${i}">${heads}</div>`;
+      <div class="sim-card-heads" id="heads${i}">${heads}</div>
+      <div class="card-log ${simMode==='demo'?'':'collapsed'}" id="clog${i}"></div>`;
     g.appendChild(card);
     const lbl=st?`${sc.name} (μ=${st.give>=0?'+':''}${st.give.toFixed(1)}g)`:sc.name;
     leg.innerHTML+=`<div class="legend-item"><span class="legend-dot" style="background:${sc.color}"></span>${lbl}</div>`;
@@ -839,10 +846,18 @@ function drawChart(){
 // ═══ SIM MODE & CONTROLS ═══
 let simMode = 'demo'; // 'demo' or 'fast'
 
+function toggleCardLogs(show) {
+  document.querySelectorAll('.card-log').forEach(el => {
+    if (show) el.classList.remove('collapsed');
+    else el.classList.add('collapsed');
+  });
+}
+
 function setSimMode(m) {
   simMode = m;
   document.getElementById('swDemo').className = m === 'demo' ? 'active' : '';
   document.getElementById('swFast').className = m === 'fast' ? 'active' : '';
+  toggleCardLogs(m === 'demo');
   // If running, switch mode live
   if (running && !paused) {
     if (tid) { clearTimeout(tid); cancelAnimationFrame(tid); tid = null; }
@@ -856,7 +871,7 @@ function simGo() {
   running = true; paused = false;
   document.getElementById('btnStart').disabled = true;
   document.getElementById('btnPause').disabled = false;
-  document.getElementById('demoLog').innerHTML = '';
+  document.querySelectorAll('.card-log').forEach(el => el.innerHTML = '');
   if (simMode === 'demo') {
     document.getElementById('simStatus').innerHTML = 'RUNNING — <strong style="color:#00cccc">DEMO</strong>';
     runDemo();
@@ -883,7 +898,7 @@ function simPause() {
 function simReset() {
   running = false; paused = false;
   if (tid) { clearTimeout(tid); cancelAnimationFrame(tid); tid = null; }
-  document.getElementById('demoLog').innerHTML = '';
+  document.querySelectorAll('.card-log').forEach(el => el.innerHTML = '');
   initSim();
 }
 
@@ -897,14 +912,15 @@ function goBack() {
 // ── DEMO MODE ──
 const MAX_LOG_LINES = 80;
 
-function appendLog(scName, color, logHtml) {
-  const el = document.getElementById('demoLog');
+function appendLog(scIdx, color, logHtml) {
+  const el = document.getElementById('clog' + scIdx);
+  if (!el) return;
   const div = document.createElement('div');
-  div.className = 'demo-line demo-line--scenario';
+  div.className = 'demo-line';
   div.style.borderLeftColor = color;
-  div.innerHTML = `<span class="sc-name" style="color:${color}">[${scName}]</span><br>${logHtml}`;
+  div.innerHTML = logHtml;
   el.appendChild(div);
-  while (el.children.length > MAX_LOG_LINES) el.removeChild(el.firstChild);
+  while (el.children.length > 20) el.removeChild(el.firstChild);
   el.scrollTop = el.scrollHeight;
 }
 
@@ -928,7 +944,7 @@ function runDemo() {
     const sc = SP.scenarios[scIdx], w = weighers[scIdx];
     if (w.bags.length < tgt) {
       const result = w.cycleWithLog();
-      appendLog(sc.name, sc.color, result.log);
+      appendLog(scIdx, sc.color, result.log);
       drawScenarioCanvas(scIdx); updateCards();
     }
     tid = setTimeout(() => stepScenario(scIdx + 1), DELAY_PER_SCENARIO);
