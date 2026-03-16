@@ -187,25 +187,41 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 
 .sim-status { background: var(--dark); border-top: 2px solid var(--border); padding: 6px 14px; font-size: 10px; color: var(--dim); }
 
+/* Visual key */
+.sim-key {
+  display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 14px;
+  border-top: 1px solid var(--border); background: #0d0d0d; font-size: 9px; color: var(--dim);
+}
+.sim-key-item { display: flex; align-items: center; gap: 5px; }
+.sim-key-swatch {
+  width: 16px; height: 16px; border-radius: 50%; border: 1px solid #555;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: bold; flex-shrink: 0;
+}
+.sim-key-bar { width: 20px; height: 8px; border: 1px solid #333; background: #222; position: relative; overflow: hidden; }
+.sim-key-bar-fill { height: 100%; }
+
 /* Demo commentary */
 .demo-log {
   border-top: 2px solid var(--border);
   background: #111;
-  max-height: 180px;
+  max-height: 260px;
   overflow-y: auto;
-  padding: 8px 14px;
-  font-size: 10px;
-  line-height: 1.6;
+  padding: 10px 14px;
+  font-size: 11px;
+  line-height: 1.7;
   color: var(--dim);
 }
 .demo-log:empty { display: none; }
-.demo-line { padding: 2px 0; border-bottom: 1px solid #1a1a1a; }
+.demo-line { padding: 4px 0 4px 8px; border-bottom: 1px solid #1a1a1a; border-left: 3px solid transparent; margin-bottom: 2px; }
+.demo-line.demo-line--scenario { border-left-color: var(--cyan); background: rgba(0,204,204,0.03); }
 .demo-line .cycle-num { color: var(--cyan); }
 .demo-line .sc-name { font-weight: bold; }
 .demo-line .good { color: var(--green); }
 .demo-line .warn { color: var(--yellow); }
 .demo-line .bad { color: var(--red); }
 .demo-line .info { color: var(--blue); }
+.demo-line .dim { color: #666; font-style: italic; }
 
 /* Mode toggle in sim bar */
 .mode-sw { display: flex; border: 1px solid var(--border); border-radius: 2px; overflow: hidden; }
@@ -313,6 +329,15 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
     <div class="chart-legend" id="chartLegend"></div>
   </div>
 
+  <div class="sim-key" id="simKey">
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:#40c850;color:#000">▽</div> Ready — loaded with product, available for selection</div>
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:#1a1a1a;border-color:#555;color:#555">○</div> Cooling — recently dumped, waiting to refill</div>
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:transparent;border:2px solid var(--cyan)"></div> Cooldown progress ring</div>
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:#1a1a1a;border-color:#cc3333;color:#cc3333;font-size:7px">✕</div> Disabled — out of action</div>
+    <div class="sim-key-item"><div class="sim-key-swatch" style="background:#ff9933;color:#000;font-weight:bold">F</div> Selected for current drop</div>
+    <div class="sim-key-item"><span style="display:inline-block;width:16px;height:8px;border-radius:2px;background:linear-gradient(90deg,#c85032,#c8c832,#28c850)"></span> Weight gradient: low → mid → high</div>
+    <div class="sim-key-item"><span style="color:#cccc00;font-size:11px">● ● ●</span> Item count dots (discrete mode)</div>
+  </div>
   <div class="demo-log" id="demoLog"></div>
   <div class="sim-status" id="simStatus">READY</div>
 </div>
@@ -516,51 +541,96 @@ class MHW {
   cycleWithLog(){
     this.tc++;
     const av=this.avail();
-    const cooling=[];for(let i=0;i<this.n;i++)if(this.cd[i]>0&&!this.dis.has(i))cooling.push(i+1);
+    const cooling=[];const coolDetail=[];
+    for(let i=0;i<this.n;i++){
+      if(this.cd[i]>0&&!this.dis.has(i)){cooling.push(i+1);coolDetail.push(`H${i+1}(${this.cd[i]} cycle${this.cd[i]>1?'s':''} left)`);}
+    }
     const disCount=[...this.dis].length;
+    const totalActive=this.n-disCount;
     const avWts=av.map(i=>({h:i+1,w:this.wt[i]}));
+    const totalAvailWt=av.reduce((s,i)=>s+this.wt[i],0);
 
-    let log='';
-    log+=`<span class="info">Cycle ${this.tc}</span> `;
-    log+=`${av.length} heads available`;
-    if(cooling.length) log+=`, ${cooling.length} cooling [${cooling.join(',')}]`;
-    if(disCount) log+=`, ${disCount} disabled`;
-    log+='. ';
+    let lines=[];
+
+    // Line 1: Status overview
+    let status=`<span class="info">━━ Cycle ${this.tc} ━━</span>  `;
+    status+=`<strong>${av.length}</strong> of ${totalActive} active heads ready`;
+    if(cooling.length) status+=` · <span class="warn">${cooling.length} cooling down</span> [${coolDetail.join(', ')}]`;
+    if(disCount) status+=` · <span class="bad">${disCount} disabled</span>`;
+    lines.push(status);
+
+    // Line 2: Available head weights
+    if(av.length>0){
+      const sorted=[...avWts].sort((a,b)=>b.w-a.w);
+      const weightList=sorted.map(a=>`H${a.h}=${a.w.toFixed(1)}g`).join(', ');
+      lines.push(`<span class="dim">Available weights: ${weightList} · Total: ${totalAvailWt.toFixed(1)}g · Target: ${this.target}g (min ${this.min}g)</span>`);
+    }
 
     // Try valid combo
     const best=this.findCombo(true);
     if(best){
+      const headsBefore=best.map(i=>`H${i+1}=${this.wt[i].toFixed(1)}g`);
       const wt=this.dump(best);this.wait=0;
-      const heads=best.map(i=>i+1).join('+');
-      const bucketWts=best.map(i=>`H${i+1}:${this.wt[i]?this.wt[i].toFixed(0):'-'}`);
+      const heads=best.map(i=>i+1).join(' + ');
       const give=wt-this.target;
-      if(give<5) log+=`<span class="good">Dropped ${wt.toFixed(1)}g using heads [${heads}] — giveaway ${give>=0?'+':''}${give.toFixed(1)}g</span>`;
-      else log+=`<span class="warn">Dropped ${wt.toFixed(1)}g using heads [${heads}] — giveaway +${give.toFixed(1)}g (high)</span>`;
-      return{weight:wt,log};
+      const givePct=((give/this.target)*100).toFixed(2);
+
+      let dropLine=`<span class="good">✓ COMBINATION FOUND</span> — selected heads [${heads}] → ${headsBefore.join(' + ')}`;
+      lines.push(dropLine);
+
+      let qualityLine;
+      if(give<=2){
+        qualityLine=`<span class="good">Excellent drop: ${wt.toFixed(1)}g — only +${give.toFixed(1)}g giveaway (${givePct}%). Near-perfect target match.</span>`;
+      }else if(give<=8){
+        qualityLine=`<span class="good">Good drop: ${wt.toFixed(1)}g — +${give.toFixed(1)}g giveaway (${givePct}%). Acceptable overshoot.</span>`;
+      }else if(give<=20){
+        qualityLine=`<span class="warn">Fair drop: ${wt.toFixed(1)}g — +${give.toFixed(1)}g giveaway (${givePct}%). Higher than ideal but within reason.</span>`;
+      }else{
+        qualityLine=`<span class="warn">Heavy drop: ${wt.toFixed(1)}g — +${give.toFixed(1)}g giveaway (${givePct}%). Significant overshoot — limited head options likely the cause.</span>`;
+      }
+      if(wt<this.min) qualityLine=`<span class="bad">UNDERWEIGHT: ${wt.toFixed(1)}g is below T1 minimum of ${this.min}g! (${give.toFixed(1)}g under target)</span>`;
+      lines.push(qualityLine);
+
+      // Cooldown explanation
+      const shiftName=this.shift===1?'single':this.shift===2?'double':'triple';
+      lines.push(`<span class="dim">Heads [${heads}] now cooling for ${this.shift} cycle${this.shift>1?'s':''} (${shiftName} shift). They will refill and become available again after cooldown.</span>`);
+
+      return{weight:wt,log:lines.join('<br>')};
     }
 
     // No valid combo
     this.wait++;
-    log+=`<span class="warn">No valid combination >= ${this.min}g from ${av.length} heads. `;
-    if(av.length<=4) log+=`Only heads [${av.map(i=>i+1).join(',')}] with weights [${avWts.map(a=>a.w.toFixed(0)+'g').join(', ')}]. `;
-    log+=`Wait ${this.wait}/${this.fdTimeout}. </span>`;
+    let reason='';
+    if(av.length===0){
+      reason=`All active heads are cooling down — zero available this cycle.`;
+    }else if(totalAvailWt<this.min){
+      reason=`Total available weight (${totalAvailWt.toFixed(1)}g) is less than the minimum target (${this.min}g). No possible combination can reach the target.`;
+    }else{
+      reason=`Tried all bucket combinations from ${av.length} heads but none hit the minimum of ${this.min}g without excessive giveaway. The weigher algorithm couldn't find a subset summing close to ${this.target}g.`;
+    }
+
+    lines.push(`<span class="warn">✗ NO VALID COMBINATION</span> — ${reason}`);
+    lines.push(`<span class="warn">Waiting: ${this.wait} of ${this.fdTimeout} cycles before force dump.</span>`);
 
     if(this.wait>=this.fdTimeout){
       const f=this.findCombo(false);
       if(f){
+        const headsBefore=f.map(i=>`H${i+1}=${this.wt[i].toFixed(1)}g`);
         const wt=this.dump(f);this.fd++;this.wait=0;
-        const heads=f.map(i=>i+1).join('+');
+        const heads=f.map(i=>i+1).join(' + ');
         const give=wt-this.target;
-        log+=`<span class="bad">FORCE DUMP! Timeout reached — must drop. Used heads [${heads}] = ${wt.toFixed(1)}g (${give>=0?'+':''}${give.toFixed(1)}g). Poor weight but can't wait longer.</span>`;
-        return{weight:wt,log};
+        lines.push(`<span class="bad">⚠ FORCE DUMP TRIGGERED! Timeout of ${this.fdTimeout} cycles reached — the machine cannot wait any longer.</span>`);
+        lines.push(`<span class="bad">Forced drop: heads [${heads}] → ${headsBefore.join(' + ')} = ${wt.toFixed(1)}g (${give>=0?'+':''}${give.toFixed(1)}g from target). ${wt<this.min?'THIS BAG IS UNDERWEIGHT!':'Weight is poor but product must keep moving.'}</span>`);
+        return{weight:wt,log:lines.join('<br>')};
       }
       this.advance();this.wc++;this.wait=0;
-      log+=`<span class="bad">No heads available at all — skipping cycle.</span>`;
+      lines.push(`<span class="bad">No heads available at all — completely stalled. Skipping cycle and waiting for refills.</span>`);
     } else {
       this.advance();this.wc++;
-      log+=`Waiting for cooldowns to free up better options...`;
+      const remaining=this.fdTimeout-this.wait;
+      lines.push(`<span class="dim">Holding — waiting for cooling heads to come back online. ${remaining} cycle${remaining>1?'s':''} until force dump is triggered.</span>`);
     }
-    return{weight:null,log};
+    return{weight:null,log:lines.join('<br>')};
   }
   stats(){
     if(!this.bags.length)return null;
@@ -830,34 +900,40 @@ const MAX_LOG_LINES = 80;
 function appendLog(scName, color, logHtml) {
   const el = document.getElementById('demoLog');
   const div = document.createElement('div');
-  div.className = 'demo-line';
-  div.innerHTML = `<span class="sc-name" style="color:${color}">${scName}</span> — ${logHtml}`;
+  div.className = 'demo-line demo-line--scenario';
+  div.style.borderLeftColor = color;
+  div.innerHTML = `<span class="sc-name" style="color:${color}">[${scName}]</span><br>${logHtml}`;
   el.appendChild(div);
-  // Trim old lines
   while (el.children.length > MAX_LOG_LINES) el.removeChild(el.firstChild);
   el.scrollTop = el.scrollHeight;
 }
 
 function runDemo() {
   const tgt = SP.bags;
-  function step() {
+  const DELAY_PER_SCENARIO = 1500; // ms between each scenario within a cycle
+  const DELAY_BETWEEN_CYCLES = 800; // ms gap between cycles
+
+  function stepScenario(scIdx) {
     if (!running || paused) return;
-    // One cycle per scenario
-    SP.scenarios.forEach((sc, i) => {
-      const w = weighers[i];
-      if (w.bags.length < tgt) {
-        const result = w.cycleWithLog();
-        appendLog(sc.name, sc.color, result.log);
-      }
-    });
-    drawAllCanvases(); updateCards();
-    const mn = Math.min(...weighers.map(w => w.bags.length));
-    document.getElementById('pFill').style.width = Math.min(100, (mn / tgt) * 100) + '%';
-    if (mn % 5 === 0) drawChart();
-    if (mn >= tgt) { onDone(); return; }
-    tid = setTimeout(step, 800); // Slow: ~1.2 cycles/sec for readability
+    if (scIdx >= SP.scenarios.length) {
+      // All scenarios done for this cycle — update visuals and move to next cycle
+      drawAllCanvases(); updateCards();
+      const mn = Math.min(...weighers.map(w => w.bags.length));
+      document.getElementById('pFill').style.width = Math.min(100, (mn / tgt) * 100) + '%';
+      if (mn % 3 === 0) drawChart();
+      if (mn >= tgt) { onDone(); return; }
+      tid = setTimeout(() => stepScenario(0), DELAY_BETWEEN_CYCLES);
+      return;
+    }
+    const sc = SP.scenarios[scIdx], w = weighers[scIdx];
+    if (w.bags.length < tgt) {
+      const result = w.cycleWithLog();
+      appendLog(sc.name, sc.color, result.log);
+      drawScenarioCanvas(scIdx); updateCards();
+    }
+    tid = setTimeout(() => stepScenario(scIdx + 1), DELAY_PER_SCENARIO);
   }
-  step();
+  stepScenario(0);
 }
 
 // ── FAST MODE ──
