@@ -180,14 +180,14 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 /* ── TOC LINE ANIMATION ───────────────── */
 .toc-widget {
   position: relative;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: linear-gradient(135deg, #0e1117, #151922);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
   margin-bottom: 18px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.04);
 }
-.toc-widget canvas { display: block; width: 100%; height: 100px; position: relative; z-index: 1; }
+.toc-widget canvas { display: block; width: 100%; height: 140px; position: relative; z-index: 1; }
 
 /* ── TOOL CARDS ───────────────────────── */
 .tools {
@@ -648,73 +648,223 @@ function topoNoise(x, y) {
   requestAnimationFrame(draw);
 })();
 
-/* ── TOC production line animation ──────── */
+/* ── TOC production line animation (modernised) ──────── */
 (function() {
   var canvas = document.getElementById('tocCanvas');
   var ctx = canvas.getContext('2d');
   var dpr = window.devicePixelRatio || 1;
   var stations = [
-    { name: 'Infeed',  rate: 1.0 },
-    { name: 'Process', rate: 1.0 },
-    { name: 'Fill',    rate: 0.42 },
-    { name: 'Seal',    rate: 1.0 },
-    { name: 'Label',   rate: 1.0 },
-    { name: 'Pack',    rate: 1.0 }
+    { name: 'Infeed',  rate: 1.0,  icon: '\u25B6' },
+    { name: 'Process', rate: 1.0,  icon: '\u2699' },
+    { name: 'Fill',    rate: 0.42, icon: '\u25BD' },
+    { name: 'Seal',    rate: 1.0,  icon: '\u25A0' },
+    { name: 'Label',   rate: 1.0,  icon: '\u2637' },
+    { name: 'Pack',    rate: 1.0,  icon: '\u25A3' }
   ];
-  var particles = [], baseSpeed = 1.8, spawnInterval = 38, frame = 0;
-  var W, H, stationW, laneY, stationY;
+  var particles = [], baseSpeed = 1.6, spawnInterval = 34, frame = 0, time = 0;
+  var W, H, stationW, laneY;
 
   function resize() {
     var rect = canvas.getBoundingClientRect();
-    W = rect.width * dpr; H = 100 * dpr;
+    W = rect.width * dpr; H = 140 * dpr;
     canvas.width = W; canvas.height = H;
     stationW = W / stations.length;
-    laneY = H * 0.38; stationY = H * 0.72;
+    laneY = H * 0.42;
   }
-  function spawnParticle() { particles.push({ x: -8, processed: Array(stations.length).fill(false), waiting: false }); }
+
+  function spawnParticle() {
+    particles.push({ x: -8 * dpr, processed: Array(stations.length).fill(false), waiting: false, birth: time });
+  }
+
   function tick() {
     for (var i = particles.length - 1; i >= 0; i--) {
       var p = particles[i]; p.waiting = false;
       var ns = -1;
       for (var s = 0; s < stations.length; s++) { if (!p.processed[s]) { ns = s; break; } }
-      if (ns === -1) { p.x += baseSpeed; if (p.x > W + 10) particles.splice(i, 1); continue; }
-      var cx = stationW * ns + stationW * 0.5, ax = cx - stationW * 0.15;
-      if (p.x < ax) { p.x += baseSpeed; if (p.x > ax) p.x = ax; }
-      else if (Math.random() < stations[ns].rate) { p.processed[ns] = true; p.x = cx + stationW * 0.15; }
+      if (ns === -1) { p.x += baseSpeed * dpr; if (p.x > W + 10) particles.splice(i, 1); continue; }
+      var cx = stationW * ns + stationW * 0.5, ax = cx - stationW * 0.18;
+      if (p.x < ax) { p.x += baseSpeed * dpr; if (p.x > ax) p.x = ax; }
+      else if (Math.random() < stations[ns].rate) { p.processed[ns] = true; p.x = cx + stationW * 0.18; }
       else p.waiting = true;
     }
   }
+
   function bufferCount(si) {
-    var c = 0, ax = stationW * si + stationW * 0.35;
+    var c = 0, ax = stationW * si + stationW * 0.32;
     for (var i = 0; i < particles.length; i++) if (particles[i].waiting && Math.abs(particles[i].x - ax) < stationW * 0.3) c++;
     return c;
   }
+
   function draw() {
+    time += 0.016;
     ctx.clearRect(0, 0, W, H);
-    ctx.strokeStyle = '#ddd8cc'; ctx.lineWidth = dpr;
-    ctx.beginPath(); ctx.moveTo(0, laneY); ctx.lineTo(W, laneY); ctx.stroke();
+
+    // Conveyor belt — dashed animated line
+    var dashLen = 12 * dpr, gapLen = 8 * dpr;
+    var offset = (time * 40 * dpr) % (dashLen + gapLen);
+    ctx.setLineDash([dashLen, gapLen]);
+    ctx.lineDashOffset = -offset;
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(0, laneY);
+    ctx.lineTo(W, laneY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Thin centre line
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(0, laneY);
+    ctx.lineTo(W, laneY);
+    ctx.stroke();
+
+    // Stations
     for (var s = 0; s < stations.length; s++) {
-      var cx = stationW * s + stationW * 0.5, bc = bufferCount(s);
+      var cx = stationW * s + stationW * 0.5;
+      var bc = bufferCount(s);
+      var isConstraint = stations[s].rate < 1;
+      var stY = H * 0.72;
+      var bw = stationW * 0.6;
+      var bh = 28 * dpr;
+      var rad = 6 * dpr;
+
+      // Buffer glow behind station
       if (bc > 0) {
-        ctx.fillStyle = 'rgba(210,160,60,' + (Math.min(bc / 5, 1) * 0.15) + ')';
-        ctx.fillRect(stationW * s, laneY - 14 * dpr, stationW * 0.35, 28 * dpr);
+        var intensity = Math.min(bc / 5, 1);
+        var grd = ctx.createRadialGradient(cx, laneY, 0, cx, laneY, stationW * 0.4);
+        grd.addColorStop(0, 'rgba(234,179,8,' + intensity * 0.2 + ')');
+        grd.addColorStop(1, 'rgba(234,179,8,0)');
+        ctx.fillStyle = grd;
+        ctx.fillRect(stationW * s, laneY - 25 * dpr, stationW, 50 * dpr);
       }
-      var ic = stations[s].rate < 1, bw = stationW * 0.5, bh = 18 * dpr;
-      ctx.fillStyle = ic ? '#e8d4d0' : '#e6f4ec';
-      ctx.strokeStyle = ic ? '#c0756a' : '#a0ccb0'; ctx.lineWidth = dpr;
-      ctx.beginPath(); ctx.roundRect(cx - bw / 2, stationY - bh / 2, bw, bh, 3 * dpr); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = ic ? '#8b3a2f' : '#1d6840';
-      ctx.font = (8 * dpr) + 'px DM Mono, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(stations[s].name.toUpperCase(), cx, stationY);
-      if (ic) { ctx.fillStyle = '#c0756a'; ctx.font = 'bold ' + (7 * dpr) + 'px DM Mono, monospace'; ctx.fillText('CONSTRAINT', cx, stationY + bh / 2 + 8 * dpr); }
+
+      // Station box — rounded rect with gradient
+      var boxGrad = ctx.createLinearGradient(cx - bw/2, stY - bh/2, cx + bw/2, stY + bh/2);
+      if (isConstraint) {
+        boxGrad.addColorStop(0, 'rgba(239,68,68,0.2)');
+        boxGrad.addColorStop(1, 'rgba(239,68,68,0.08)');
+      } else {
+        boxGrad.addColorStop(0, 'rgba(34,197,94,0.15)');
+        boxGrad.addColorStop(1, 'rgba(34,197,94,0.05)');
+      }
+      ctx.fillStyle = boxGrad;
+      ctx.beginPath();
+      ctx.roundRect(cx - bw/2, stY - bh/2, bw, bh, rad);
+      ctx.fill();
+
+      // Station border
+      ctx.strokeStyle = isConstraint ? 'rgba(239,68,68,0.4)' : 'rgba(34,197,94,0.2)';
+      ctx.lineWidth = 1 * dpr;
+      ctx.stroke();
+
+      // Connector line from belt to station
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 1 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(cx, laneY + 4 * dpr);
+      ctx.lineTo(cx, stY - bh/2 - 4 * dpr);
+      ctx.stroke();
+
+      // Small dot at connector top
+      ctx.fillStyle = isConstraint ? 'rgba(239,68,68,0.5)' : 'rgba(34,197,94,0.3)';
+      ctx.beginPath();
+      ctx.arc(cx, laneY + 4 * dpr, 2 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Station name
+      ctx.fillStyle = isConstraint ? 'rgba(252,165,165,0.9)' : 'rgba(200,200,200,0.7)';
+      ctx.font = '600 ' + (8 * dpr) + 'px DM Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(stations[s].name.toUpperCase(), cx, stY);
+
+      // Constraint badge
+      if (isConstraint) {
+        var badgeY = stY + bh/2 + 10 * dpr;
+        ctx.fillStyle = 'rgba(239,68,68,0.15)';
+        var badgeW = 56 * dpr, badgeH = 14 * dpr;
+        ctx.beginPath();
+        ctx.roundRect(cx - badgeW/2, badgeY - badgeH/2, badgeW, badgeH, 3 * dpr);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(239,68,68,0.3)';
+        ctx.lineWidth = 0.5 * dpr;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(252,165,165,0.8)';
+        ctx.font = '700 ' + (6 * dpr) + 'px DM Mono, monospace';
+        ctx.fillText('CONSTRAINT', cx, badgeY);
+
+        // Pulse ring around constraint
+        var pulse = (Math.sin(time * 3) + 1) * 0.5;
+        ctx.strokeStyle = 'rgba(239,68,68,' + (0.15 * pulse) + ')';
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.beginPath();
+        ctx.roundRect(cx - bw/2 - 4*dpr*pulse, stY - bh/2 - 4*dpr*pulse, bw + 8*dpr*pulse, bh + 8*dpr*pulse, rad + 2*dpr);
+        ctx.stroke();
+      }
+
+      // Throughput indicator — small bar above station
+      var rate = stations[s].rate;
+      var barW = bw * 0.6;
+      var barH = 3 * dpr;
+      var barY = stY - bh/2 - 8 * dpr;
+      // Background
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.beginPath();
+      ctx.roundRect(cx - barW/2, barY, barW, barH, 1.5*dpr);
+      ctx.fill();
+      // Fill
+      ctx.fillStyle = isConstraint ? 'rgba(239,68,68,0.5)' : 'rgba(34,197,94,0.4)';
+      ctx.beginPath();
+      ctx.roundRect(cx - barW/2, barY, barW * rate, barH, 1.5*dpr);
+      ctx.fill();
     }
+
+    // Particles — glowing orbs
     for (var i = 0; i < particles.length; i++) {
-      var p = particles[i]; ctx.beginPath(); ctx.arc(p.x, laneY, 4 * dpr, 0, Math.PI * 2);
-      ctx.fillStyle = p.waiting ? '#d4a03c' : '#1d6840'; ctx.fill();
+      var p = particles[i];
+      var r = 5 * dpr;
+
+      // Glow
+      var glowGrad = ctx.createRadialGradient(p.x, laneY, 0, p.x, laneY, r * 3);
+      if (p.waiting) {
+        glowGrad.addColorStop(0, 'rgba(234,179,8,0.25)');
+        glowGrad.addColorStop(1, 'rgba(234,179,8,0)');
+      } else {
+        glowGrad.addColorStop(0, 'rgba(34,197,94,0.2)');
+        glowGrad.addColorStop(1, 'rgba(34,197,94,0)');
+      }
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(p.x, laneY, r * 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Core dot
+      ctx.fillStyle = p.waiting ? '#eab308' : '#22c55e';
+      ctx.beginPath();
+      ctx.arc(p.x, laneY, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bright centre
+      ctx.fillStyle = p.waiting ? 'rgba(253,224,71,0.7)' : 'rgba(134,239,172,0.6)';
+      ctx.beginPath();
+      ctx.arc(p.x, laneY, r * 0.4, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
-  function loop() { frame++; if (frame % spawnInterval === 0) spawnParticle(); tick(); draw(); requestAnimationFrame(loop); }
-  resize(); window.addEventListener('resize', resize);
+
+  function loop() {
+    frame++;
+    if (frame % spawnInterval === 0) spawnParticle();
+    tick();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  window.addEventListener('resize', resize);
+  // Pre-warm
   for (var i = 0; i < 120; i++) { frame++; if (frame % spawnInterval === 0) spawnParticle(); tick(); }
   loop();
 })();
