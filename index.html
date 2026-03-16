@@ -17,8 +17,6 @@
   --blue: #1a5276;
   --hero-bg: #06080a;
   --hero-ink: #e8e4da;
-  --glow-green: #2ecc71;
-  --glow-blue: #3498db;
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -48,17 +46,6 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
   pointer-events: none;
 }
 
-/* Vignette overlay */
-.hero::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 70% 60% at 50% 50%, transparent 0%, rgba(6,8,10,0.7) 100%);
-  pointer-events: none;
-  z-index: 1;
-}
-
 .hero-content {
   position: relative;
   z-index: 2;
@@ -66,12 +53,12 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 }
 
 .diamond-logo {
-  width: clamp(200px, 30vw, 320px);
-  height: clamp(200px, 30vw, 320px);
+  width: clamp(280px, 42vw, 450px);
+  height: clamp(280px, 42vw, 450px);
   margin: 0 auto 48px;
   opacity: 0;
   animation: logoReveal 1.4s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
-  filter: invert(1) brightness(0.9) drop-shadow(0 0 60px rgba(46,204,113,0.15)) drop-shadow(0 0 120px rgba(52,152,219,0.1));
+  filter: invert(1) brightness(0.92) drop-shadow(0 0 80px rgba(46,204,113,0.2)) drop-shadow(0 0 160px rgba(52,152,219,0.12));
   object-fit: contain;
 }
 
@@ -147,8 +134,24 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
   background: rgba(200,194,180,0.15);
 }
 
+/* ── CONTENT AREA ────────────────────── */
+.content-wrap {
+  position: relative;
+  overflow: hidden;
+}
+.content-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* ── PAGE BODY ───────────────────────── */
 .page {
+  position: relative;
+  z-index: 1;
   max-width: 840px;
   margin: 0 auto;
   padding: 0 20px 80px;
@@ -195,7 +198,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
-.toc-widget canvas { display: block; width: 100%; height: 100px; }
+.toc-widget canvas { display: block; width: 100%; height: 100px; position: relative; z-index: 1; }
 
 /* ── TOOL CARDS ───────────────────────── */
 .tools {
@@ -206,7 +209,9 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 
 .tool-card {
   position: relative;
-  background: var(--card);
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 22px;
@@ -228,6 +233,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 
 .tool-card:hover {
   border-color: transparent;
+  background: rgba(255,255,255,0.95);
   box-shadow: 0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
   transform: translateY(-3px);
 }
@@ -294,6 +300,8 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 
 /* ── FOOTER ───────────────────────────── */
 .footer {
+  position: relative;
+  z-index: 1;
   text-align: center;
   padding: 40px 24px;
   font-family: 'DM Mono', monospace;
@@ -318,9 +326,9 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 
 /* ── KEYFRAMES ────────────────────────── */
 @keyframes logoReveal {
-  0%   { opacity: 0; transform: scale(0.7) translateY(30px); filter: invert(1) brightness(0.9) drop-shadow(0 0 0px rgba(46,204,113,0)) drop-shadow(0 0 0px rgba(52,152,219,0)); }
+  0%   { opacity: 0; transform: scale(0.7) translateY(30px); filter: invert(1) brightness(0.92) drop-shadow(0 0 0px rgba(46,204,113,0)) drop-shadow(0 0 0px rgba(52,152,219,0)); }
   60%  { opacity: 1; transform: scale(1.03) translateY(-4px); }
-  100% { opacity: 1; transform: scale(1) translateY(0); filter: invert(1) brightness(0.9) drop-shadow(0 0 60px rgba(46,204,113,0.15)) drop-shadow(0 0 120px rgba(52,152,219,0.1)); }
+  100% { opacity: 1; transform: scale(1) translateY(0); filter: invert(1) brightness(0.92) drop-shadow(0 0 80px rgba(46,204,113,0.2)) drop-shadow(0 0 160px rgba(52,152,219,0.12)); }
 }
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(16px); }
@@ -356,112 +364,138 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 </section>
 
 <!-- ═══════════════ CONTENT ═══════════════ -->
-<div class="page" id="content">
+<div class="content-wrap">
+  <canvas id="bgCanvas"></canvas>
+  <div class="page" id="content">
 
-  <!-- ── CONSULTING ──────────────── -->
-  <div class="section">
-    <div class="section-head reveal">
-      <span class="section-tag">Consulting</span>
-      <div class="section-rule"></div>
-    </div>
-
-    <!-- FMCG -->
-    <div class="subsection">
+    <!-- ── CONSULTING ──────────────── -->
+    <div class="section">
       <div class="section-head reveal">
-        <span class="section-tag">FMCG</span>
+        <span class="section-tag">Consulting</span>
         <div class="section-rule"></div>
       </div>
-      <div class="toc-widget reveal">
-        <canvas id="tocCanvas" height="100"></canvas>
+
+      <!-- FMCG -->
+      <div class="subsection">
+        <div class="section-head reveal">
+          <span class="section-tag">FMCG</span>
+          <div class="section-rule"></div>
+        </div>
+        <div class="toc-widget reveal">
+          <canvas id="tocCanvas" height="100"></canvas>
+        </div>
+        <div class="tools">
+          <a href="rag-study.html" class="tool-card reveal">
+            <div class="card-icon">&#x1F6A6;</div>
+            <h3>RAG Study Tool</h3>
+            <p>Red Amber Green production line study — track uptime, log stops, speed changes, live Pareto, optional output counter, and export data.</p>
+            <span class="card-arrow">&#8599;</span>
+          </a>
+          <a href="giveaway-calculator.html" class="tool-card reveal">
+            <div class="card-icon">&#x2696;</div>
+            <h3>Giveaway Reduction Calculator</h3>
+            <p>Visualise how reducing fill weight SD reduces giveaway and quantify the annual financial saving.</p>
+            <span class="card-arrow">&#8599;</span>
+          </a>
+          <a href="mhw-simulator.html" class="tool-card reveal">
+            <div class="card-icon">&#9878;</div>
+            <h3>Multihead Weigher Simulator</h3>
+            <p>Simulate combinatorial weigher giveaway — compare head counts, shift modes, and item distributions side-by-side.</p>
+            <span class="card-arrow">&#8599;</span>
+          </a>
+        </div>
       </div>
-      <div class="tools">
-        <a href="rag-study.html" class="tool-card reveal">
-          <div class="card-icon">&#x1F6A6;</div>
-          <h3>RAG Study Tool</h3>
-          <p>Red Amber Green production line study — track uptime, log stops, speed changes, live Pareto, optional output counter, and export data.</p>
-          <span class="card-arrow">&#8599;</span>
-        </a>
-        <a href="giveaway-calculator.html" class="tool-card reveal">
-          <div class="card-icon">&#x2696;</div>
-          <h3>Giveaway Reduction Calculator</h3>
-          <p>Visualise how reducing fill weight SD reduces giveaway and quantify the annual financial saving.</p>
-          <span class="card-arrow">&#8599;</span>
-        </a>
-        <a href="mhw-simulator.html" class="tool-card reveal">
-          <div class="card-icon">&#9878;</div>
-          <h3>Multihead Weigher Simulator</h3>
-          <p>Simulate combinatorial weigher giveaway — compare head counts, shift modes, and item distributions side-by-side.</p>
-          <span class="card-arrow">&#8599;</span>
-        </a>
+
+      <!-- AI -->
+      <div class="subsection">
+        <div class="section-head reveal">
+          <span class="section-tag">AI</span>
+          <div class="section-rule"></div>
+        </div>
+        <div class="tools">
+          <a href="https://jamie-diamond.github.io/maji-site/index.html" class="tool-card reveal">
+            <div class="card-icon card-icon--logo">
+              <img src="https://cdn.prod.website-files.com/6917572096f0764001bd6b87/6917572096f0764001bd6c40_RGB%20Logo%20Mark%20Full%20Colour.svg" alt="Maji AI" width="24" height="24">
+            </div>
+            <h3>Maji AI</h3>
+            <p>Operational Excellence, On Demand — AI-powered consulting for manufacturing and operations.</p>
+            <span class="card-tag">Case Study</span>
+            <span class="card-arrow">&#8599;</span>
+          </a>
+        </div>
       </div>
     </div>
 
-    <!-- AI -->
-    <div class="subsection">
+    <!-- ── RESOURCES ───────────────── -->
+    <div class="section">
       <div class="section-head reveal">
-        <span class="section-tag">AI</span>
+        <span class="section-tag">Resources</span>
         <div class="section-rule"></div>
       </div>
       <div class="tools">
-        <a href="https://jamie-diamond.github.io/maji-site/index.html" class="tool-card reveal">
-          <div class="card-icon card-icon--logo">
-            <img src="https://cdn.prod.website-files.com/6917572096f0764001bd6b87/6917572096f0764001bd6c40_RGB%20Logo%20Mark%20Full%20Colour.svg" alt="Maji AI" width="24" height="24">
-          </div>
-          <h3>Maji AI</h3>
-          <p>Operational Excellence, On Demand — AI-powered consulting for manufacturing and operations.</p>
-          <span class="card-tag">Case Study</span>
+        <a href="stamp-duty.html" class="tool-card reveal">
+          <div class="card-icon">&#127968;</div>
+          <h3>Stamp Duty Calculator</h3>
+          <p>Calculate UK stamp duty land tax for property purchases.</p>
+          <span class="card-arrow">&#8599;</span>
+        </a>
+        <a href="student-loan.html" class="tool-card reveal">
+          <div class="card-icon">&#127891;</div>
+          <h3>Student Loan: Pay Off or Invest?</h3>
+          <p>Should you clear your student loan or invest in an ISA? See the maths with interactive charts.</p>
+          <span class="card-arrow">&#8599;</span>
+        </a>
+        <a href="should-you-wait.html" class="tool-card reveal">
+          <div class="card-icon">&#127968;</div>
+          <h3>Accept Now, or Wait?</h3>
+          <p>Mortgage cost reality check for sellers — see how rate changes affect buyer affordability.</p>
+          <span class="card-arrow">&#8599;</span>
+        </a>
+        <a href="random-number.html" class="tool-card reveal">
+          <div class="card-icon">&#127922;</div>
+          <h3>Random Number Generator</h3>
+          <p>Generate random numbers within any range, with options for unique values and sorting.</p>
+          <span class="card-arrow">&#8599;</span>
+        </a>
+        <a href="cervia-wetsuit.html" class="tool-card reveal">
+          <div class="card-icon">&#127754;</div>
+          <h3>Cervia Ironman Wetsuit Predictor</h3>
+          <p>Five prediction methods triangulate Adriatic water temperature for IRONMAN Italy — wetsuit or non-wetsuit swim?</p>
           <span class="card-arrow">&#8599;</span>
         </a>
       </div>
     </div>
   </div>
-
-  <!-- ── RESOURCES ───────────────── -->
-  <div class="section">
-    <div class="section-head reveal">
-      <span class="section-tag">Resources</span>
-      <div class="section-rule"></div>
-    </div>
-    <div class="tools">
-      <a href="stamp-duty.html" class="tool-card reveal">
-        <div class="card-icon">&#127968;</div>
-        <h3>Stamp Duty Calculator</h3>
-        <p>Calculate UK stamp duty land tax for property purchases.</p>
-        <span class="card-arrow">&#8599;</span>
-      </a>
-      <a href="student-loan.html" class="tool-card reveal">
-        <div class="card-icon">&#127891;</div>
-        <h3>Student Loan: Pay Off or Invest?</h3>
-        <p>Should you clear your student loan or invest in an ISA? See the maths with interactive charts.</p>
-        <span class="card-arrow">&#8599;</span>
-      </a>
-      <a href="should-you-wait.html" class="tool-card reveal">
-        <div class="card-icon">&#127968;</div>
-        <h3>Accept Now, or Wait?</h3>
-        <p>Mortgage cost reality check for sellers — see how rate changes affect buyer affordability.</p>
-        <span class="card-arrow">&#8599;</span>
-      </a>
-      <a href="random-number.html" class="tool-card reveal">
-        <div class="card-icon">&#127922;</div>
-        <h3>Random Number Generator</h3>
-        <p>Generate random numbers within any range, with options for unique values and sorting.</p>
-        <span class="card-arrow">&#8599;</span>
-      </a>
-      <a href="cervia-wetsuit.html" class="tool-card reveal">
-        <div class="card-icon">&#127754;</div>
-        <h3>Cervia Ironman Wetsuit Predictor</h3>
-        <p>Five prediction methods triangulate Adriatic water temperature for IRONMAN Italy — wetsuit or non-wetsuit swim?</p>
-        <span class="card-arrow">&#8599;</span>
-      </a>
-    </div>
-  </div>
+  <div class="footer">&copy; 2026 Diamond Peak</div>
 </div>
-
-<div class="footer">&copy; 2026 Diamond Peak</div>
 
 <!-- ═══════════════ SCRIPTS ═══════════════ -->
 <script>
-/* ── Hero — 3D topographic mountain terrain ──────── */
+/* ── Force scroll to top on load ──────── */
+window.addEventListener('beforeunload', function() { window.scrollTo(0, 0); });
+history.scrollRestoration = 'manual';
+window.scrollTo(0, 0);
+
+/* ── Shared noise functions ──────── */
+function _hash(x, y) {
+  var h = x * 374761393 + y * 668265263;
+  h = (h ^ (h >> 13)) * 1274126177;
+  return ((h ^ (h >> 16)) & 0x7fffffff) / 0x7fffffff;
+}
+function _smooth(x, y) {
+  var ix = Math.floor(x), iy = Math.floor(y);
+  var fx = x - ix, fy = y - iy;
+  fx = fx * fx * (3 - 2 * fx);
+  fy = fy * fy * (3 - 2 * fy);
+  var a = _hash(ix, iy), b = _hash(ix + 1, iy);
+  var c = _hash(ix, iy + 1), d = _hash(ix + 1, iy + 1);
+  return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+}
+function _noise(x, y) {
+  return _smooth(x, y) * 0.5 + _smooth(x * 2.1, y * 2.1) * 0.3 + _smooth(x * 4.3, y * 4.3) * 0.2;
+}
+
+/* ── Hero — 3D topographic mountain terrain (DARK) ──────── */
 (function() {
   var c = document.getElementById('heroCanvas');
   var ctx = c.getContext('2d');
@@ -481,67 +515,42 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
     c.width = W; c.height = H;
   }
 
-  // Simplex-like noise
-  function hash(x, y) {
-    var h = x * 374761393 + y * 668265263;
-    h = (h ^ (h >> 13)) * 1274126177;
-    return ((h ^ (h >> 16)) & 0x7fffffff) / 0x7fffffff;
-  }
-  function smooth(x, y) {
-    var ix = Math.floor(x), iy = Math.floor(y);
-    var fx = x - ix, fy = y - iy;
-    fx = fx * fx * (3 - 2 * fx);
-    fy = fy * fy * (3 - 2 * fy);
-    var a = hash(ix, iy), b = hash(ix + 1, iy);
-    var c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1);
-    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
-  }
-  function noise(x, y) {
-    return smooth(x, y) * 0.5 + smooth(x * 2.1, y * 2.1) * 0.3 + smooth(x * 4.3, y * 4.3) * 0.2;
-  }
-
   function draw() {
     time += 0.003;
     ctx.fillStyle = '#06080a';
     ctx.fillRect(0, 0, W, H);
 
-    var cols = 70, rows = 50;
-    var cellW = W / cols, cellH = H / (rows * 0.6);
-    var perspective = 0.45;
-    var baseY = H * 0.28;
+    var cols = 80, rows = 55;
+    var cellW = W / cols;
+    var baseY = H * 0.25;
     var mx = mouse.x - 0.5, my = mouse.y - 0.5;
 
-    // Draw terrain as horizontal contour lines (back to front)
     for (var z = rows; z >= 0; z--) {
       var zRatio = z / rows;
-      var depth = 1 - zRatio * perspective;
-      var yOff = baseY + zRatio * H * 0.7;
+      var depth = 1 - zRatio * 0.45;
+      var yOff = baseY + zRatio * H * 0.72;
 
-      // Fade and color based on depth
-      var alpha = (0.08 + zRatio * 0.25) * depth;
-      var green = Math.floor(30 + zRatio * 50);
-      var blue = Math.floor(50 + (1 - zRatio) * 80);
+      // Much stronger alpha values
+      var alpha = (0.2 + zRatio * 0.55) * depth;
 
       ctx.beginPath();
       for (var x = 0; x <= cols; x++) {
         var xRatio = x / cols;
-        var nx = xRatio * 3.5 + time * 0.3 + mx * 0.2;
-        var nz = zRatio * 3.5 + time * 0.15 + my * 0.2;
-        var h = noise(nx, nz);
+        var nx = xRatio * 3.5 + time * 0.3 + mx * 0.3;
+        var nz = zRatio * 3.5 + time * 0.15 + my * 0.3;
+        var h = _noise(nx, nz);
 
-        // Mountain ridge: boost center heights
         var centerDist = Math.abs(xRatio - 0.5);
         var ridge = Math.max(0, 1 - centerDist * 2.8);
         ridge = ridge * ridge;
         h = h * (0.4 + ridge * 1.5);
 
-        // Secondary peaks
         var peak2 = Math.max(0, 1 - Math.abs(xRatio - 0.3) * 4);
         var peak3 = Math.max(0, 1 - Math.abs(xRatio - 0.72) * 5);
-        h += peak2 * peak2 * 0.3 * noise(nx * 1.5, nz * 1.5);
-        h += peak3 * peak3 * 0.25 * noise(nx * 1.8 + 5, nz * 1.8);
+        h += peak2 * peak2 * 0.3 * _noise(nx * 1.5, nz * 1.5);
+        h += peak3 * peak3 * 0.25 * _noise(nx * 1.8 + 5, nz * 1.8);
 
-        var elevation = h * 180 * dpr * depth;
+        var elevation = h * 200 * dpr * depth;
         var px = x * cellW;
         var py = yOff - elevation;
 
@@ -549,48 +558,115 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
         else ctx.lineTo(px, py);
       }
 
-      // Stroke the contour line
-      ctx.strokeStyle = 'rgba(' + green + ','+  (120 + Math.floor(zRatio * 80)) + ',' + blue + ',' + alpha + ')';
-      ctx.lineWidth = (0.6 + zRatio * 0.8) * dpr;
+      // Green-cyan-blue gradient based on depth
+      var r = Math.floor(20 + zRatio * 30);
+      var g = Math.floor(140 + zRatio * 60);
+      var b = Math.floor(80 + (1 - zRatio) * 100);
+      ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+      ctx.lineWidth = (0.8 + zRatio * 1.2) * dpr;
       ctx.stroke();
 
-      // Fill below to create solid mountain effect
+      // Fill below — darker toward front
       ctx.lineTo(W, H);
       ctx.lineTo(0, H);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(6,8,10,' + (0.3 + zRatio * 0.5) + ')';
+      ctx.fillStyle = 'rgba(6,8,10,' + (0.35 + zRatio * 0.55) + ')';
       ctx.fill();
     }
 
-    // Floating particles (stars/dust)
-    ctx.fillStyle = 'rgba(200,194,180,0.3)';
-    for (var i = 0; i < 60; i++) {
-      var seed = i * 127.1 + 311.7;
-      var px = ((hash(i, 0) * W + time * (20 + hash(i, 1) * 40) * dpr) % (W + 20)) - 10;
-      var py = hash(i, 2) * H * 0.6;
-      var sz = (0.5 + hash(i, 3) * 1.5) * dpr;
-      var twinkle = 0.3 + 0.7 * Math.sin(time * 2 + hash(i, 4) * 6.28);
-      ctx.globalAlpha = twinkle * (0.15 + hash(i, 5) * 0.35);
+    // Floating particles
+    ctx.fillStyle = 'rgba(200,194,180,0.4)';
+    for (var i = 0; i < 80; i++) {
+      var px = ((_hash(i, 0) * W + time * (20 + _hash(i, 1) * 50) * dpr) % (W + 20)) - 10;
+      var py = _hash(i, 2) * H * 0.55;
+      var sz = (0.5 + _hash(i, 3) * 2) * dpr;
+      var twinkle = 0.3 + 0.7 * Math.sin(time * 2.5 + _hash(i, 4) * 6.28);
+      ctx.globalAlpha = twinkle * (0.2 + _hash(i, 5) * 0.4);
       ctx.beginPath();
       ctx.arc(px, py, sz, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
 
-    // Horizontal scan line (subtle)
-    var scanY = (time * 60 * dpr) % H;
-    ctx.strokeStyle = 'rgba(46,204,113,0.03)';
-    ctx.lineWidth = 1 * dpr;
-    ctx.beginPath();
-    ctx.moveTo(0, scanY);
-    ctx.lineTo(W, scanY);
-    ctx.stroke();
-
     requestAnimationFrame(draw);
   }
 
   resize();
   window.addEventListener('resize', resize);
+  requestAnimationFrame(draw);
+})();
+
+/* ── Background contours (LIGHT — warm earth tones) ──────── */
+(function() {
+  var c = document.getElementById('bgCanvas');
+  var ctx = c.getContext('2d');
+  var dpr = window.devicePixelRatio || 1;
+  var W, H, time = 0;
+
+  function resize() {
+    var r = c.parentElement.getBoundingClientRect();
+    W = r.width * dpr; H = r.height * dpr;
+    c.width = W; c.height = H;
+    c.style.width = r.width + 'px';
+    c.style.height = r.height + 'px';
+  }
+
+  function draw() {
+    time += 0.0015;
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw topographic contour lines — like a topo map
+    var spacing = 40 * dpr;
+    var numLines = Math.ceil(H / spacing) + 8;
+
+    for (var i = 0; i < numLines; i++) {
+      var baseY = i * spacing - 100 * dpr;
+      var iRatio = i / numLines;
+
+      ctx.beginPath();
+      var steps = 100;
+      for (var s = 0; s <= steps; s++) {
+        var xRatio = s / steps;
+        var px = xRatio * W;
+
+        // Layered noise for organic contour shape
+        var n1 = _noise(xRatio * 4 + time * 0.4, iRatio * 3 + time * 0.2);
+        var n2 = _noise(xRatio * 2 + 10, iRatio * 2 + time * 0.15);
+        var wave = (n1 * 0.65 + n2 * 0.35) * spacing * 2.5;
+
+        var py = baseY + wave;
+
+        if (s === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+
+      // Warm earth tones: tan, green-brown, sage
+      var hue, sat, light;
+      var cycle = (iRatio * 3 + time * 0.5) % 1;
+      if (cycle < 0.33) {
+        // Sage green
+        hue = 140; sat = 25; light = 55;
+      } else if (cycle < 0.66) {
+        // Warm tan
+        hue = 35; sat = 30; light = 60;
+      } else {
+        // Dusty blue-green
+        hue = 170; sat = 20; light = 50;
+      }
+
+      var alpha = 0.06 + 0.04 * Math.sin(iRatio * Math.PI);
+      ctx.strokeStyle = 'hsla(' + hue + ',' + sat + '%,' + light + '%,' + alpha + ')';
+      ctx.lineWidth = (0.6 + 0.4 * Math.sin(iRatio * Math.PI * 2)) * dpr;
+      ctx.stroke();
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  // Use ResizeObserver to handle dynamic height
+  var ro = new ResizeObserver(resize);
+  ro.observe(c.parentElement);
+  resize();
   requestAnimationFrame(draw);
 })();
 
