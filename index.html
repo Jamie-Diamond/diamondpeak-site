@@ -73,12 +73,13 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
 }
 
 .diamond-logo {
-  width: 72px;
-  height: 86px;
+  width: 100px;
+  height: 100px;
   margin: 0 auto 40px;
   opacity: 0;
   animation: fadeUp 0.8s ease-out 0.2s forwards;
-  filter: drop-shadow(0 0 40px rgba(200,194,180,0.15));
+  filter: drop-shadow(0 0 40px rgba(200,194,180,0.15)) invert(1) brightness(0.85);
+  object-fit: contain;
 }
 
 .hero-eyebrow {
@@ -325,16 +326,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
   <div class="hero-grain"></div>
   <canvas id="heroMesh"></canvas>
   <div class="hero-content">
-    <svg class="diamond-logo" viewBox="0 0 80 96" fill="none">
-      <polygon points="40,0 10,28 70,28" fill="#c8c2b4"/>
-      <polygon points="10,28 0,36 40,28" fill="#a89e8e"/>
-      <polygon points="70,28 80,36 40,28" fill="#b8ae9e"/>
-      <polygon points="0,36 40,28 80,36" fill="#d4cfc4" opacity="0.9"/>
-      <polygon points="0,36 40,96 40,36" fill="#9a9080"/>
-      <polygon points="80,36 40,96 40,36" fill="#b8ae9e"/>
-      <polygon points="40,0 25,28 40,28" fill="rgba(255,255,255,0.25)"/>
-      <polygon points="40,28 55,28 80,36 40,36" fill="rgba(255,255,255,0.1)"/>
-    </svg>
+    <img class="diamond-logo" src="logo-mark.png" alt="Diamond Peak Consulting">
     <div class="hero-eyebrow">Diamond Peak</div>
     <h1>Professional Services <em>&</em><br>Consulting Tools</h1>
     <p class="hero-sub">FMCG consulting, AI-driven solutions, and interactive tools built for practitioners.</p>
@@ -393,7 +385,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-se
         <div class="section-rule"></div>
       </div>
       <div class="tools">
-        <a href="maji/index.html" class="tool-card reveal">
+        <a href="https://jamie-diamond.github.io/maji-site/index.html" class="tool-card reveal">
           <div class="card-icon card-icon--logo">
             <img src="https://cdn.prod.website-files.com/6917572096f0764001bd6b87/6917572096f0764001bd6c40_RGB%20Logo%20Mark%20Full%20Colour.svg" alt="Maji AI" width="24" height="24">
           </div>
