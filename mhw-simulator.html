@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MHW Simulator v3.4 — Diamond Peak</title>
+<title>MHW Simulator v3.5 — Diamond Peak</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Share+Tech+Mono&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -141,7 +141,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 /* Stats row */
 .sim-card-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   border-top: 1px solid var(--border);
 }
 .sstat {
@@ -263,7 +263,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 <!-- ═══ SETUP ═══ -->
 <div id="setup-view">
   <div class="setup-header">
-    <span class="setup-title">MHW Simulator v3.4 — Program Setup</span>
+    <span class="setup-title">MHW Simulator v3.5 — Program Setup</span>
     <a href="index.html" class="back-link">&larr; DIAMOND PEAK</a>
   </div>
   <div class="setup-body">
@@ -332,7 +332,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 
       <div class="param-group">
         <div class="param-group-title">Run Settings</div>
-        <div class="param-row"><span class="param-label">Bags to Produce</span><input class="param-input" type="number" id="numBags" value="50000" step="1000" min="50" max="300000"><span class="param-unit"></span></div>
+        <div class="param-row"><span class="param-label">Bags to Produce</span><input class="param-input" type="number" id="numBags" value="50000" step="1000" min="50" max="250000"><span class="param-unit"></span></div>
       </div>
 
       <button class="run-btn" onclick="startSimulation()">&#9654; Run Simulation</button>
@@ -569,7 +569,7 @@ class MHW {
     this.hiLimit=hiLimit;this.overDis=overDischarge;this.shift=shift;
     this.mode=mode;this.mp=modeParams;this.fdTimeout=fdTimeout;
     this.wt=new Float64Array(nBuckets);this.cd=new Int8Array(nBuckets);this.ic=new Int8Array(nBuckets);
-    this.sel=[];this.wait=0;this.bags=[];this.fd=0;this.od=0;this.wc=0;this.tc=0;
+    this.sel=[];this.wait=0;this.bags=[];this.fd=0;this.od=0;this.wc=0;this.tc=0;this.stops=0;
     this.lastZone='';
     for(let i=0;i<nBuckets;i++)if(!this.dis.has(i))this._fill(i);
   }
@@ -668,6 +668,7 @@ class MHW {
       }
     }
     // No A-zone combo (B_blocked, U, none, or null) — recharge lightest + wait
+    if(result && result.zone==='B_blocked') this.stops++;
     this.wait++;
     if(this.wait>=this.fdTimeout){
       // Timeout: force dump closest combo, preferring overweight
@@ -766,7 +767,7 @@ class MHW {
     const w=this.bags,n=w.length;let s=0,mn=1e9,mx=-1e9,ut=0;
     for(let i=0;i<n;i++){s+=w[i];if(w[i]<mn)mn=w[i];if(w[i]>mx)mx=w[i];if(w[i]<this.min)ut++;}
     const mean=s/n;let v=0;for(let i=0;i<n;i++)v+=(w[i]-mean)**2;
-    return{count:n,mean,std:Math.sqrt(v/n),min:mn,max:mx,give:mean-this.target,givePct:((mean-this.target)/this.target)*100,ut,utPct:(ut/n)*100,od:this.od,fd:this.fd};
+    return{count:n,mean,std:Math.sqrt(v/n),min:mn,max:mx,give:mean-this.target,givePct:((mean-this.target)/this.target)*100,ut,utPct:(ut/n)*100,od:this.od,fd:this.fd,stops:this.stops};
   }
 }
 
@@ -834,7 +835,9 @@ function buildCards(){
         <div class="sstat"><div class="sstat-label">Bags</div><div class="sstat-value" id="vBags${i}">${w.bags.length}</div></div>
         <div class="sstat"><div class="sstat-label">Giveaway</div><div class="sstat-value${st&&st.give>10?' sstat-value--warn':''}" id="vGive${i}">${st?(st.give>=0?'+':'')+st.give.toFixed(1)+'g':'---'}</div></div>
         <div class="sstat"><div class="sstat-label">Give %</div><div class="sstat-value${st&&st.givePct>2?' sstat-value--warn':''}" id="vGiveP${i}">${st?st.givePct.toFixed(2)+'%':'---'}</div></div>
+        <div class="sstat"><div class="sstat-label">Std Dev</div><div class="sstat-value" id="vStd${i}">${st?st.std.toFixed(1)+'g':'---'}</div></div>
         <div class="sstat"><div class="sstat-label">Under T1</div><div class="sstat-value${st&&st.utPct>0?' sstat-value--bad':''}" id="vT1${i}">${st?st.utPct.toFixed(2)+'%':'---'}</div></div>
+        <div class="sstat"><div class="sstat-label">Restarts</div><div class="sstat-value${st&&st.stops>0?' sstat-value--warn':''}" id="vStops${i}">${st?st.stops:'0'}</div></div>
       </div>
       <div class="sim-card-heads" id="heads${i}">${heads}</div>
       <div class="card-log ${simMode==='demo'?'':'collapsed'}" id="clog${i}"></div>`;
@@ -855,6 +858,8 @@ function updateCards(){
       const ge=document.getElementById('vGive'+i);ge.textContent=(st.give>=0?'+':'')+st.give.toFixed(1)+'g';ge.className='sstat-value'+(st.give>10?' sstat-value--warn':'');
       const gp=document.getElementById('vGiveP'+i);gp.textContent=st.givePct.toFixed(2)+'%';gp.className='sstat-value'+(st.givePct>2?' sstat-value--warn':'');
       const t1=document.getElementById('vT1'+i);t1.textContent=st.utPct.toFixed(2)+'%';t1.className='sstat-value'+(st.utPct>0?' sstat-value--bad':'');
+      document.getElementById('vStd'+i).textContent=st.std.toFixed(1)+'g';
+      const stp=document.getElementById('vStops'+i);stp.textContent=st.stops;stp.className='sstat-value'+(st.stops>0?' sstat-value--warn':'');
     }
     // Head list
     const hel=document.getElementById('heads'+i);
@@ -1127,7 +1132,10 @@ function onDone() {
   document.getElementById('pFill').style.width = '100%';
   document.getElementById('btnStart').disabled = true;
   document.getElementById('btnPause').disabled = true;
-  document.getElementById('simStatus').innerHTML = '<strong style="color:#00cc66">COMPLETE</strong>';
+  const totalStops=weighers.reduce((s,w)=>s+w.stops,0);
+  let statusMsg='<strong style="color:#00cc66">COMPLETE</strong>';
+  if(totalStops>0) statusMsg+=` &mdash; <span style="color:#ff9933">Line required ${totalStops} restart${totalStops>1?'s':''}</span>`;
+  document.getElementById('simStatus').innerHTML = statusMsg;
 }
 
 window.addEventListener('resize',()=>{if(SP&&document.getElementById('sim-view').style.display!=='none'){drawAllCanvases();drawChart();}});
