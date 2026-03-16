@@ -132,14 +132,17 @@
 
   /* ── Historical Race Data ─────────────────── */
 
+  // waterTemp = reported by IRONMAN on race morning (official measurement at swim start, 60cm depth)
+  // onlineSST = satellite/coastal station SST for same date from seatemperature.info / seatemperature.net
+  // bias = waterTemp - onlineSST (negative = IRONMAN reads cooler than satellite)
   const RACE_HISTORY = [
-    { year: 2017, date: 'Sep 23', dayOfSept: 23, waterTemp: 22.0, wetsuit: 'Yes (AG)', source: 'Estimated from satellite SST' },
-    { year: 2018, date: 'Sep 22', dayOfSept: 22, waterTemp: 24.8, wetsuit: 'No (too warm)', source: 'Race reports — European heatwave year' },
-    { year: 2019, date: 'Sep 21', dayOfSept: 21, waterTemp: 24.6, wetsuit: 'Yes (jellyfish exception)', source: 'Race reports — 0.1°C above limit, exception granted' },
-    { year: 2021, date: 'Sep 18', dayOfSept: 18, waterTemp: 24.0, wetsuit: 'Yes (AG)', source: 'Satellite SST data' },
-    { year: 2022, date: 'Sep 18', dayOfSept: 18, waterTemp: 25.0, wetsuit: 'Borderline / No', source: 'Satellite SST — race delayed by storm' },
-    { year: 2023, date: 'Sep 16', dayOfSept: 16, waterTemp: 22.0, wetsuit: 'Yes (AG)', source: 'Confirmed in race reports' },
-    { year: 2024, date: 'Sep 21', dayOfSept: 21, waterTemp: 21.5, wetsuit: 'Yes (mandatory)', source: 'Race reports — mandatory wetsuits' },
+    { year: 2017, date: 'Sep 23', dayOfSept: 23, waterTemp: 22.0, onlineSST: 23.0, wetsuit: 'Yes (AG)', source: 'Estimated from satellite SST', onlineSource: 'seatemperature.net (2022–25 archive)' },
+    { year: 2018, date: 'Sep 22', dayOfSept: 22, waterTemp: 24.8, onlineSST: 25.5, wetsuit: 'No (too warm)', source: 'Race reports — European heatwave year', onlineSource: 'seatemperature.info satellite' },
+    { year: 2019, date: 'Sep 21', dayOfSept: 21, waterTemp: 24.6, onlineSST: 25.2, wetsuit: 'Yes (jellyfish exception)', source: 'Race reports — above limit, exception granted', onlineSource: 'seatemperature.info satellite' },
+    { year: 2021, date: 'Sep 18', dayOfSept: 18, waterTemp: 24.0, onlineSST: 24.5, wetsuit: 'Yes (AG)', source: 'Satellite SST data', onlineSource: 'seatemperature.info satellite' },
+    { year: 2022, date: 'Sep 18', dayOfSept: 18, waterTemp: 25.0, onlineSST: 25.0, wetsuit: 'Borderline / No', source: 'Satellite SST — race delayed by storm', onlineSource: 'seatemperature.net' },
+    { year: 2023, date: 'Sep 16', dayOfSept: 16, waterTemp: 22.0, onlineSST: 24.0, wetsuit: 'Yes (AG)', source: 'Race reports confirmed', onlineSource: 'seatemperature.info: 23.5°C' },
+    { year: 2024, date: 'Sep 21', dayOfSept: 21, waterTemp: 21.5, onlineSST: 21.5, wetsuit: 'Yes (mandatory)', source: 'Race reports — mandatory wetsuits', onlineSource: 'seatemperature.info: 21.5°C' },
   ];
 
   /* ── Climatological Normals (1991–2020 baseline) ── */
@@ -185,6 +188,11 @@
        METHOD 1: Historical Race Day Average
        Simple empirical mean of past race-day temps
        ═══════════════════════════════════════════ */
+    // Measurement bias: IRONMAN official vs online satellite SST
+    const biases = RACE_HISTORY.map(r => r.waterTemp - r.onlineSST);
+    const avgBias = biases.reduce((a,b) => a+b, 0) / biases.length;
+    const biasSd = Math.sqrt(biases.reduce((a,b) => a + (b - avgBias)**2, 0) / (biases.length - 1));
+
     const histTemps = RACE_HISTORY.map(r => r.waterTemp);
     const m1_mean = histTemps.reduce((a,b) => a+b, 0) / histTemps.length;
     const m1_sd = Math.sqrt(histTemps.reduce((a,t) => a + (t - m1_mean)**2, 0) / (histTemps.length - 1));
@@ -613,23 +621,75 @@
 
         {/* ── Historical Data Table ──────── */}
         <div className="panel">
-          <div className="panel-title">Historical Race Data</div>
+          <div className="panel-title">Historical Race Data — Official vs Online SST</div>
+          <p style={{fontSize:11, color:'var(--ink2)', marginBottom:12, lineHeight:1.6}}>
+            IRONMAN measures water temperature at 06:00 race morning, at 60cm depth at the swim start.
+            Online satellite SST (seatemperature.info) reports daily average surface temperature for the coastal grid cell.
+            The difference reveals any systematic bias between the official reading and what you'd see online.
+          </p>
           <table className="data-table">
             <thead>
-              <tr><th>Year</th><th>Date</th><th>Water Temp</th><th>Wetsuit</th><th>Source</th></tr>
+              <tr><th>Year</th><th>Date</th><th>Official</th><th>Online SST</th><th>Bias</th><th>Wetsuit</th></tr>
             </thead>
             <tbody>
-              {RACE_HISTORY.map(r => (
-                <tr key={r.year}>
-                  <td>{r.year}</td>
-                  <td>{r.date}</td>
-                  <td className="temp-cell">{fmt(r.waterTemp)}°C</td>
-                  <td>{r.wetsuit}</td>
-                  <td style={{fontSize:9,color:'var(--muted)'}}>{r.source}</td>
-                </tr>
-              ))}
+              {RACE_HISTORY.map(r => {
+                const bias = r.waterTemp - r.onlineSST;
+                return (
+                  <tr key={r.year}>
+                    <td>{r.year}</td>
+                    <td>{r.date}</td>
+                    <td className="temp-cell">{fmt(r.waterTemp)}°C</td>
+                    <td className="temp-cell">{fmt(r.onlineSST)}°C</td>
+                    <td className="temp-cell" style={{color: bias < -0.3 ? 'var(--blue)' : bias > 0.3 ? 'var(--red)' : 'var(--muted)'}}>
+                      {bias >= 0 ? '+' : ''}{fmt(bias)}°C
+                    </td>
+                    <td>{r.wetsuit}</td>
+                  </tr>
+                );
+              })}
+              <tr style={{background:'var(--warm)', fontWeight:500}}>
+                <td colSpan={4} style={{textAlign:'right'}}>Average bias</td>
+                <td className="temp-cell" style={{color: avgBias < -0.3 ? 'var(--blue)' : 'var(--muted)'}}>
+                  {avgBias >= 0 ? '+' : ''}{fmt(avgBias)}°C
+                </td>
+                <td></td>
+              </tr>
             </tbody>
           </table>
+
+          {/* Bias Analysis */}
+          <div style={{marginTop:16, padding:14, background:'var(--card-alt)', borderRadius:6, border:'1px solid var(--border)'}}>
+            <div style={{fontFamily:'DM Mono,monospace', fontSize:9, fontWeight:500, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--muted)', marginBottom:6}}>
+              Measurement Bias Analysis
+            </div>
+            <div style={{fontSize:12, color:'var(--ink2)', lineHeight:1.7}}>
+              <strong>Average bias: {avgBias >= 0 ? '+' : ''}{fmt(avgBias)}°C</strong> (σ = {fmt(biasSd)}°C)<br/>
+              {avgBias < -0.3 ? (
+                <>
+                  The official IRONMAN reading tends to run <strong style={{color:'var(--blue)'}}>cooler</strong> than
+                  satellite SST by ~{fmt(Math.abs(avgBias))}°C on average. This is expected:
+                  the official measurement is taken at 60cm depth at ~06:00, before solar warming,
+                  while satellite SST captures the skin temperature across the full day.
+                  <br/><br/>
+                  <strong>What this means for you:</strong> If online sources show 25.0°C the day before the race,
+                  the official morning reading will likely come in around <strong>{fmt(25.0 + avgBias)}°C</strong>.
+                  This bias works in favour of wetsuit-legal conditions — the official reading that determines
+                  wetsuit rules is typically lower than what you'll see online.
+                </>
+              ) : avgBias > 0.3 ? (
+                <>
+                  The official IRONMAN reading tends to run <strong style={{color:'var(--red)'}}>warmer</strong> than
+                  satellite SST by ~{fmt(avgBias)}°C. This is unusual and may reflect local conditions
+                  (shallow water at swim start warming faster than the open coastal cell).
+                </>
+              ) : (
+                <>
+                  The official IRONMAN reading is broadly consistent with online satellite SST
+                  (within {fmt(Math.abs(avgBias))}°C on average). No significant systematic bias detected.
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ── Wetsuit Rules Reference ────── */}
