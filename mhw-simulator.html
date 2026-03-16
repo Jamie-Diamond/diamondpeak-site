@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MHW Simulator v3.2 — Diamond Peak</title>
+<title>MHW Simulator v3.4 — Diamond Peak</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Share+Tech+Mono&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -242,7 +242,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
 <!-- ═══ SETUP ═══ -->
 <div id="setup-view">
   <div class="setup-header">
-    <span class="setup-title">MHW Simulator v3.2 — Program Setup</span>
+    <span class="setup-title">MHW Simulator v3.4 — Program Setup</span>
     <a href="index.html" class="back-link">&larr; DIAMOND PEAK</a>
   </div>
   <div class="setup-body">
@@ -307,7 +307,7 @@ body { font-family: 'Share Tech Mono', 'DM Mono', monospace; background: var(--b
         <div class="param-hint">Over-Discharge ON: if no combo fits within Hi Limit, the machine drops the closest overweight combo. OFF: the machine stops and waits — no pack is produced until an in-range combo is possible. Timeout: max cycles to wait before forcing any available combo.</div>
         <div class="param-row"><span class="param-label">Over-Discharge</span><select class="param-input" id="overDischarge" style="width:72px"><option value="on" selected>ON</option><option value="off">OFF</option></select><span class="param-unit"></span></div>
         <div class="param-row"><span class="param-label">No-Combo Timeout</span><input class="param-input" type="number" id="forceDump" value="5" min="1" max="20"><span class="param-unit">cy</span></div>
-        <div class="param-row"><span class="param-label">Bags to Produce</span><input class="param-input" type="number" id="numBags" value="50000" step="1000" min="50" max="500000"><span class="param-unit"></span></div>
+        <div class="param-row"><span class="param-label">Bags to Produce</span><input class="param-input" type="number" id="numBags" value="50000" step="1000" min="50" max="300000"><span class="param-unit"></span></div>
       </div>
 
       <button class="run-btn" onclick="startSimulation()">&#9654; Run Simulation</button>
@@ -556,33 +556,38 @@ class MHW {
   avail(){const a=[];for(let i=0;i<this.n;i++)if(!this.cd[i]&&!this.dis.has(i))a.push(i);return a;}
 
   // Zone-based combination search (MHW logic)
-  // Returns { indices, weight, zone } or null
+  // Returns { indices, zone, totalCombos, aCount, bCount, uCount } or null
   findZoneCombo(){
     const av=this.avail();if(!av.length)return null;
-    let bestA=null,bestAdiff=Infinity; // A-zone: min ≤ w ≤ hiLimit, closest to target
-    let bestB=null,bestBdiff=Infinity; // B-zone: w > hiLimit, closest to target
-    let bestU=null,bestUdiff=Infinity; // Under: w < min, closest to target (for recharge info)
+    let bestA=null,bestAdiff=Infinity;
+    let bestB=null,bestBdiff=Infinity;
+    let bestU=null,bestUdiff=Infinity;
+    let totalCombos=0,aCount=0,bCount=0,uCount=0;
     const mx=Math.min(av.length,5);
     for(let r=1;r<=mx;r++){
       this._combos(av,r,c=>{
         let w=0;for(let i=0;i<c.length;i++)w+=this.wt[c[i]];
+        totalCombos++;
         const d=Math.abs(w-this.target);
         if(w>=this.min && w<=this.hiLimit){
+          aCount++;
           if(d<bestAdiff){bestAdiff=d;bestA=c.slice();}
         } else if(w>this.hiLimit){
+          bCount++;
           if(d<bestBdiff){bestBdiff=d;bestB=c.slice();}
         } else {
+          uCount++;
           if(d<bestUdiff){bestUdiff=d;bestU=c.slice();}
         }
       });
       if(bestAdiff===0)break;
     }
-    if(bestA) return {indices:bestA,zone:'A'};
-    if(bestB && this.overDis) return {indices:bestB,zone:'B'};
-    // When overDis OFF, report that B-zone exists but can't be used
-    if(bestB && !this.overDis) return {indices:bestB,zone:'B_blocked'};
-    if(bestU) return {indices:bestU,zone:'U'};
-    return null;
+    const stats={totalCombos,aCount,bCount,uCount};
+    if(bestA) return {indices:bestA,zone:'A',...stats};
+    if(bestB && this.overDis) return {indices:bestB,zone:'B',...stats};
+    if(bestB && !this.overDis) return {indices:bestB,zone:'B_blocked',...stats};
+    if(bestU) return {indices:bestU,zone:'U',...stats};
+    return {indices:null,zone:'none',...stats};
   }
 
   // Force combo: find closest to target regardless of zone, prefer overweight
@@ -623,7 +628,7 @@ class MHW {
   cycle(){
     this.tc++;
     const result=this.findZoneCombo();
-    if(result){
+    if(result && result.indices){
       if(result.zone==='A'){
         const wt=this.dump(result.indices);this.wait=0;this.lastZone='A';return wt;
       }
@@ -631,7 +636,7 @@ class MHW {
         const wt=this.dump(result.indices);this.wait=0;this.od++;this.lastZone='B';return wt;
       }
     }
-    // No A-zone combo (B_blocked, U, or null) — recharge lightest + wait
+    // No A-zone combo (B_blocked, U, none, or null) — recharge lightest + wait
     this.wait++;
     if(this.wait>=this.fdTimeout){
       // Timeout: force dump closest combo, preferring overweight
@@ -645,7 +650,7 @@ class MHW {
     }
     return null;
   }
-  // Returns { weight: number|null, log: string }
+  // Returns { weight: number|null, log: string, stopped: boolean }
   cycleWithLog(){
     this.tc++;
     const av=this.avail();
@@ -664,36 +669,49 @@ class MHW {
 
     // Zone search
     const result=this.findZoneCombo();
-    if(result && (result.zone==='A' || result.zone==='B')){
+    const comboInfo=result?`Evaluated ${result.totalCombos.toLocaleString()} combinations: ${result.aCount} in A-zone, ${result.bCount} over Hi Limit, ${result.uCount} underweight.`:'No heads available to form combinations.';
+
+    if(result && result.indices && (result.zone==='A' || result.zone==='B')){
       const idx=result.indices, zone=result.zone;
       const parts=idx.map(i=>`H${i+1}:${this.wt[i].toFixed(0)}g`).join(' + ');
       const wt=this.dump(idx);this.wait=0;
       if(zone==='B')this.od++;
       this.lastZone=zone;
       const give=wt-this.target;
-      const tag=zone==='A'?'ACCEPT':'OVER';
-      const cls=zone==='A'?(give<=8?'good':'warn'):'warn';
-      lines.push(`<span class="${cls}">✓ ${tag}: ${parts} = <strong>${wt.toFixed(1)}g</strong> (${give>=0?'+':''}${give.toFixed(1)}g)</span>`);
-      if(zone==='B') lines.push(`<span class="warn">Over Hi Limit (${this.hiLimit}g) — no A-zone combo, over-discharge used.</span>`);
-      return{weight:wt,log:lines.join('<br>')};
+      if(zone==='A'){
+        const cls=give<=8?'good':'warn';
+        lines.push(`<span class="${cls}">✓ ACCEPT: ${parts} = <strong>${wt.toFixed(1)}g</strong> (${give>=0?'+':''}${give.toFixed(1)}g giveaway)</span>`);
+        lines.push(`<span class="dim">${comboInfo} Best A-zone match selected.</span>`);
+      } else {
+        lines.push(`<span class="warn">✓ OVER-DISCHARGE: ${parts} = <strong>${wt.toFixed(1)}g</strong> (${give>=0?'+':''}${give.toFixed(1)}g)</span>`);
+        lines.push(`<span class="warn">${comboInfo} No A-zone combos available — over-discharge engaged. Pack exceeds Hi Limit (${this.hiLimit}g) but Over-Discharge is ON so the machine accepts it rather than stopping.</span>`);
+      }
+      return{weight:wt,log:lines.join('<br>'),stopped:false};
     }
 
     // No usable combo — explain why
     this.wait++;
+    lines.push(`<span class="dim">${comboInfo}</span>`);
+
     if(av.length===0){
-      lines.push(`<span class="warn">✗ NO COMBO — all heads cooling. In production the packer line would pause until heads refill.</span>`);
+      lines.push(`<span class="warn">✗ NO COMBO — all heads cooling. No product available to combine. In production the packer line pauses until heads refill.</span>`);
     } else if(result && result.zone==='B_blocked'){
       let sumB=0;for(let i=0;i<result.indices.length;i++)sumB+=this.wt[result.indices[i]];
-      lines.push(`<span class="bad">✗ MACHINE WOULD STOP — a combo exists at ${sumB.toFixed(0)}g but it exceeds the Hi Limit (${this.hiLimit}g) and Over-Discharge is OFF. In production, the line halts here until operator intervenes or settings change.</span>`);
+      lines.push(`<span class="bad">✗ MACHINE STOPPED — ${result.bCount} overweight combo${result.bCount>1?'s':''} found (best: ${sumB.toFixed(0)}g) but all exceed Hi Limit (${this.hiLimit}g). Over-Discharge is OFF so the machine will not release these packs. In production the line halts here and an operator must intervene — either adjusting settings, enabling Over-Discharge, or clearing product.</span>`);
+      // Recharge and advance but flag as stopped
+      const rh=this._rechargeLightest();
+      if(rh>=0) lines.push(`<span class="dim">Recharging H${rh+1} with fresh product while stopped.</span>`);
+      this.advance();this.wc++;
+      return{weight:null,log:lines.join('<br>'),stopped:true};
     } else if(totalAvailWt<this.min){
-      lines.push(`<span class="warn">✗ NO COMBO — total available ${totalAvailWt.toFixed(0)}g &lt; minimum ${this.min}g. Not enough product in heads.</span>`);
+      lines.push(`<span class="warn">✗ NO COMBO — total available ${totalAvailWt.toFixed(0)}g &lt; minimum ${this.min}g. Not enough product weight across heads to reach target.</span>`);
     } else {
-      lines.push(`<span class="warn">✗ NO COMBO — ${av.length} heads available but no subset sums to ${this.min}–${this.hiLimit}g range.</span>`);
+      lines.push(`<span class="warn">✗ NO COMBO — ${av.length} heads available but no subset sums within ${this.min}–${this.hiLimit}g. Waiting for cooldowns to free better options.</span>`);
     }
 
-    // Recharge lightest bucket (MHW behaviour)
+    // Recharge lightest bucket
     const rh=this._rechargeLightest();
-    if(rh>=0) lines.push(`<span class="dim">Recharging H${rh+1} (lightest bucket) with fresh product.</span>`);
+    if(rh>=0) lines.push(`<span class="dim">Recharging H${rh+1} (lightest) with fresh product.</span>`);
 
     if(this.wait>=this.fdTimeout){
       const f=this.findForcedCombo();
@@ -701,16 +719,16 @@ class MHW {
         const parts=f.map(i=>`H${i+1}:${this.wt[i].toFixed(0)}g`).join(' + ');
         const wt=this.dump(f);this.fd++;this.wait=0;this.lastZone='F';
         const give=wt-this.target;
-        lines.push(`<span class="bad">⚠ FORCED DUMP (${this.fdTimeout}-cycle timeout): ${parts} = ${wt.toFixed(1)}g (${give>=0?'+':''}${give.toFixed(1)}g). ${wt<this.min?'UNDERWEIGHT!':'Suboptimal but must keep line moving.'}</span>`);
-        return{weight:wt,log:lines.join('<br>')};
+        lines.push(`<span class="bad">⚠ FORCED DUMP after ${this.fdTimeout}-cycle timeout: ${parts} = ${wt.toFixed(1)}g (${give>=0?'+':''}${give.toFixed(1)}g). ${wt<this.min?'UNDERWEIGHT — below T1!':'Suboptimal weight but line must keep moving.'}</span>`);
+        return{weight:wt,log:lines.join('<br>'),stopped:false};
       }
       this.advance();this.wc++;this.wait=0;
-      lines.push(`<span class="bad">No heads available — stalled. Waiting for refills.</span>`);
+      lines.push(`<span class="bad">No heads available — fully stalled.</span>`);
     } else {
-      lines.push(`<span class="dim">Wait ${this.wait}/${this.fdTimeout} — holding for better options.</span>`);
+      lines.push(`<span class="dim">Wait ${this.wait}/${this.fdTimeout} — holding for cooldowns.</span>`);
       this.advance();this.wc++;
     }
-    return{weight:null,log:lines.join('<br>')};
+    return{weight:null,log:lines.join('<br>'),stopped:false};
   }
   stats(){
     if(!this.bags.length)return null;
@@ -949,7 +967,7 @@ function setSimMode(m) {
 
 function simGo() {
   if (running) return;
-  running = true; paused = false;
+  running = true; paused = false; machineStopped = false;
   document.getElementById('btnStart').disabled = true;
   document.getElementById('btnPause').disabled = false;
   document.querySelectorAll('.card-log').forEach(el => el.innerHTML = '');
@@ -977,7 +995,7 @@ function simPause() {
 }
 
 function simReset() {
-  running = false; paused = false;
+  running = false; paused = false; machineStopped = false;
   if (tid) { clearTimeout(tid); cancelAnimationFrame(tid); tid = null; }
   document.querySelectorAll('.card-log').forEach(el => el.innerHTML = '');
   initSim();
@@ -1000,20 +1018,30 @@ function appendLog(scIdx, color, logHtml) {
   div.className = 'demo-line';
   div.style.borderLeftColor = color;
   div.innerHTML = logHtml;
-  el.appendChild(div);
-  while (el.children.length > 20) el.removeChild(el.firstChild);
-  el.scrollTop = el.scrollHeight;
+  el.insertBefore(div, el.firstChild);
+  while (el.children.length > 20) el.removeChild(el.lastChild);
+}
+
+let machineStopped = false; // true when Over-Discharge OFF triggers a stop
+
+function restartMachine() {
+  machineStopped = false;
+  document.getElementById('simStatus').innerHTML = 'RUNNING — <strong style="color:#00cccc">DEMO</strong> (restarted)';
+  // Log the restart in affected scenarios
+  SP.scenarios.forEach((sc, i) => {
+    appendLog(i, sc.color, '<span class="good">▶ MACHINE RESTARTED by operator.</span>');
+  });
+  if (simMode === 'demo') runDemo(); else runFast();
 }
 
 function runDemo() {
   const tgt = SP.bags;
-  const DELAY_PER_SCENARIO = 1500; // ms between each scenario within a cycle
-  const DELAY_BETWEEN_CYCLES = 800; // ms gap between cycles
+  const DELAY_PER_SCENARIO = 1500;
+  const DELAY_BETWEEN_CYCLES = 800;
 
   function stepScenario(scIdx) {
-    if (!running || paused) return;
+    if (!running || paused || machineStopped) return;
     if (scIdx >= SP.scenarios.length) {
-      // All scenarios done for this cycle — update visuals and move to next cycle
       drawAllCanvases(); updateCards();
       const mn = Math.min(...weighers.map(w => w.bags.length));
       document.getElementById('pFill').style.width = Math.min(100, (mn / tgt) * 100) + '%';
@@ -1027,6 +1055,11 @@ function runDemo() {
       const result = w.cycleWithLog();
       appendLog(scIdx, sc.color, result.log);
       drawScenarioCanvas(scIdx); updateCards();
+      if (result.stopped) {
+        machineStopped = true;
+        document.getElementById('simStatus').innerHTML = '<strong style="color:#cc3333">STOPPED</strong> — Over-Discharge OFF, no valid combo. <button class="cbtn cbtn--go" style="margin-left:8px;padding:4px 12px;font-size:10px" onclick="restartMachine()">RESTART MACHINE</button>';
+        return;
+      }
     }
     tid = setTimeout(() => stepScenario(scIdx + 1), DELAY_PER_SCENARIO);
   }
