@@ -966,10 +966,18 @@ function drawChart(){
   let hasData=false;
   weighers.forEach(w=>{if(w.bags.length>10)hasData=true;});
   if(!hasData){ctx.fillStyle='#555';ctx.font=`${10*dpr}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.fillText('WAITING FOR DATA...',W/2,H/2);return;}
-  // Find active range from histograms
-  let gMn=1e9,gMx=-1e9;
-  weighers.forEach(w=>{if(w.bags.length<=10)return;for(let b=0;b<w._histN;b++)if(w._hist[b]>0){const v=w._histMin+b*w._histBW;if(v<gMn)gMn=v;if(v+w._histBW>gMx)gMx=v+w._histBW;}});
-  gMn-=5;gMx+=5;const nb=80,bw=(gMx-gMn)/nb;
+  // Find range trimmed to 0.5th–99.5th percentile to crop tails
+  let totalBags=0;
+  weighers.forEach(w=>{if(w.bags.length>10)totalBags+=w.bags.length;});
+  // Merge all histograms to find percentile bounds
+  const merged=new Float64Array(weighers.length?weighers[0]._histN:300);
+  weighers.forEach(w=>{if(w.bags.length<=10)return;for(let b=0;b<w._histN;b++)merged[b]+=w._hist[b];});
+  const loThresh=totalBags*0.005,hiThresh=totalBags*0.995;
+  let cum=0,gMn=-50,gMx=100;
+  const hMin=weighers[0]._histMin,hBW=weighers[0]._histBW,hN=weighers[0]._histN;
+  for(let b=0;b<hN;b++){cum+=merged[b];if(cum>=loThresh){gMn=hMin+b*hBW;break;}}
+  cum=0;for(let b=hN-1;b>=0;b--){cum+=merged[b];if(cum>=totalBags-hiThresh){gMx=hMin+(b+1)*hBW;break;}}
+  gMn-=3;gMx+=3;const nb=80,bw=(gMx-gMn)/nb;
   let yM=0;const curves=[];
   weighers.forEach(w=>{if(w.bags.length<=10){curves.push(null);return;}
     const cn=new Array(nb).fill(0);
