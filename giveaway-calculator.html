@@ -441,15 +441,18 @@
     const [costPerKg, setCostPerKg]   = useState(3);
     const [annualVol, setAnnualVol]   = useState(2000000);
     const [showTNE, setShowTNE]       = useState(false);
+    const [safetyMargin, setSafetyMargin] = useState(1);
+    const [targetGAInput, setTargetGAInput] = useState(2);
 
     const tne      = tneManual !== '' ? (parseFloat(tneManual) || 0) : getTNE(nominal);
     const z        = CONF[confIdx].z;
     const t1       = nominal - tne;       // T1: Tolerable deficiency threshold
     const t2       = nominal - 2 * tne;   // T2: Absolute minimum threshold
     const legalMin = t1;                   // alias for chart compatibility
+    const sm       = Math.max(0, safetyMargin);
 
     // Three Packer Rules — current SD
-    const rule1Mean    = nominal;
+    const rule1Mean    = nominal + sm;
     const rule2MeanCur = t1 + 1.96 * currentSD;
     const rule3MeanCur = t2 + z * currentSD;
     const reqMeanCur   = Math.max(rule1Mean, rule2MeanCur, rule3MeanCur);
@@ -475,6 +478,15 @@
     const compTgtT1 = complianceRate(reqMeanTgt, targetSD, t1);
     const compCurT2 = complianceRate(currentMean, currentSD, t2);
     const compTgtT2 = complianceRate(reqMeanTgt, targetSD, t2);
+
+    // Reverse calc: target giveaway → required SD
+    const tgaVal = Math.max(sm, targetGAInput);
+    const sdFromR2 = (tne + tgaVal) / 1.96;
+    const sdFromR3 = (2 * tne + tgaVal) / z;
+    const reqSD = Math.min(sdFromR2, sdFromR3);
+    const reqSDPct = (reqSD / nominal) * 100;
+    const bindSDRule = sdFromR2 <= sdFromR3 ? 2 : 3;
+    const tgaPct = (tgaVal / nominal) * 100;
 
     const warnNC   = currentMean < reqMeanCur;
     const warnHigh = targetSD >= currentSD;
@@ -510,13 +522,13 @@
       for (let s=0.1; s<=mx; s+=mx/80) {
         const r2 = t1 + 1.96 * s;
         const r3 = t2 + z * s;
-        const reqM = Math.max(nominal, r2, r3);
+        const reqM = Math.max(nominal + sm, r2, r3);
         const ga = Math.max(0, reqM - nominal);
         const sv = Math.max(0, ((actualGA - ga)/1000)*annualVol*costPerKg);
         pts.push({ sd: Math.round(s*100)/100, saving: Math.round(sv) });
       }
       return pts;
-    }, [currentSD, z, tne, t1, t2, nominal, actualGA, annualVol, costPerKg]);
+    }, [currentSD, z, tne, t1, t2, nominal, sm, actualGA, annualVol, costPerKg]);
 
     /* ── Tooltips ───────────────────────────── */
 
@@ -621,6 +633,16 @@
             </div>
 
             <div className="gc-field">
+              <label>Safety margin / positive bias</label>
+              <div className="gc-input-row gc-has-affix">
+                <span className="gc-affix gc-affix-pre">g</span>
+                <input type="number" value={safetyMargin} min={0} step={0.1}
+                  onChange={e=>setSafetyMargin(+e.target.value)} />
+              </div>
+              <div className="gc-hint">Min overfill above nominal for process drift. Typically 0.5–2 g.</div>
+            </div>
+
+            <div className="gc-field">
               <label>Product cost</label>
               <div className="gc-input-row gc-has-affix">
                 <span className="gc-affix gc-affix-pre">&pound;/kg</span>
@@ -679,7 +701,7 @@
               </div>
               <div style={{fontSize:10,lineHeight:1.8,color:'var(--ink2)',fontFamily:'DM Mono,monospace'}}>
                 <div style={{display:'flex',justifyContent:'space-between'}}>
-                  <span>Rule 1: Mean ≥ Nominal</span>
+                  <span>Rule 1: Mean ≥ Nominal + {fmt(sm)} g bias</span>
                   <span style={{fontWeight:500,color: bindingTgt===1 ? 'var(--green)' : 'var(--muted)'}}>{fmt(rule1Mean)} g{bindingTgt===1 ? ' ←' : ''}</span>
                 </div>
                 <div style={{display:'flex',justifyContent:'space-between'}}>
@@ -710,6 +732,32 @@
               </div>
             </div>
           </div>
+        </div>
+
+        {/* REVERSE CALC: Target GA → Required SD */}
+        <div className="gc-chart" style={{background:'#f6f4ef'}}>
+          <div className="gc-chart-title">Target Giveaway → Required SD</div>
+          <div className="gc-chart-desc">Set your target giveaway and see the SD you need to achieve it while meeting all three packer rules.</div>
+          <div style={{display:'flex',gap:16,flexWrap:'wrap',alignItems:'flex-end',marginBottom:12}}>
+            <div className="gc-field" style={{flex:'1 1 140px',marginBottom:0}}>
+              <label>Target giveaway</label>
+              <div className="gc-input-row gc-has-affix">
+                <span className="gc-affix gc-affix-pre">g</span>
+                <input type="number" value={targetGAInput} min={0} step={0.1}
+                  onChange={e=>setTargetGAInput(+e.target.value)} />
+              </div>
+              <div className="gc-hint">{fmt(tgaPct,2)}% of nominal</div>
+            </div>
+            <div style={{flex:'1 1 200px',background:'#fff',borderRadius:6,padding:'12px 16px',border:'1px solid var(--border)'}}>
+              <div style={{fontSize:9,textTransform:'uppercase',letterSpacing:'0.1em',color:'var(--muted)',fontFamily:'DM Mono,monospace',marginBottom:4}}>Required SD</div>
+              <div style={{fontSize:24,fontWeight:600,color:'var(--green)',fontFamily:'DM Mono,monospace'}}>{fmt(reqSD,2)} g</div>
+              <div style={{fontSize:11,color:'var(--ink2)',fontFamily:'DM Mono,monospace'}}>{fmt(reqSDPct,2)}% of nominal</div>
+              <div style={{fontSize:9,color:'var(--muted)',fontFamily:'DM Mono,monospace',marginTop:4}}>Binding: {ruleLabel(bindSDRule)}</div>
+            </div>
+          </div>
+          {targetGAInput < sm && <div className="gc-warn" style={{fontSize:10}}>Target giveaway below safety margin ({fmt(sm)} g). Min giveaway = safety margin.</div>}
+          {reqSD < currentSD && <div style={{fontSize:11,color:'var(--green)',fontWeight:500}}>Current SD: {fmt(currentSD)} g — reduce by {fmt(currentSD - reqSD,2)} g ({fmt(((currentSD-reqSD)/currentSD)*100,1)}%) to hit this target.</div>}
+          {reqSD >= currentSD && <div style={{fontSize:11,color:'var(--green)',fontWeight:500}}>Your current SD ({fmt(currentSD)} g) already achieves this giveaway target.</div>}
         </div>
 
         {/* DISTRIBUTION CHART */}
