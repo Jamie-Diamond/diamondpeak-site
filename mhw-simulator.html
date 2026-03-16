@@ -405,7 +405,7 @@ function renderContent() {
   el.innerHTML = `
     <div class="sc-info-bar">
       <label>Name</label><input type="text" value="${s.name}" onchange="setupScenarios[${activeTab}].name=this.value;renderTabs()">
-      <label>Shift</label><select onchange="setupScenarios[${activeTab}].shift=+this.value"><option value="2" ${s.shift===2?'selected':''}>Double</option><option value="3" ${s.shift===3?'selected':''}>Triple</option></select>
+      <label>Shift</label><select onchange="setupScenarios[${activeTab}].shift=+this.value"><option value="1" ${s.shift===1?'selected':''}>Single</option><option value="2" ${s.shift===2?'selected':''}>Double</option><option value="3" ${s.shift===3?'selected':''}>Triple</option></select>
       <span class="sc-active">${active} ACTIVE${s.disabled.length?` <span class="off">(${s.disabled.length} OFF)</span>`:''}</span>
       ${setupScenarios.length>1?`<button class="sc-remove" onclick="setupScenarios.splice(${activeTab},1);activeTab=Math.min(activeTab,setupScenarios.length-1);renderTabs()">DEL</button>`:''}
     </div>
