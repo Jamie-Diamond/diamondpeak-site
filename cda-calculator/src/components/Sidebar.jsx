@@ -11,9 +11,9 @@ const DEFAULTS = {
   windMode: 'auto',
   wind_speed_kmh: 0,
   wind_dir_deg: 0,
-  minDuration: 30,
-  maxPowerCV: 5,
-  maxSpeedCV: 4,
+  minDuration: 20,
+  maxPowerCV: 15,
+  maxSpeedCV: 8,
   maxGradientDeg: 3,
   minSpeed_ms: 5,
 };
@@ -30,6 +30,13 @@ export default function Sidebar({
 }) {
   const [inputs, setInputs] = useState(() => {
     const saved = loadSidebarInputs();
+    if (saved) {
+      // Reset stale filter defaults from earlier versions
+      if (saved.maxPowerCV === 5) saved.maxPowerCV = DEFAULTS.maxPowerCV;
+      if (saved.maxSpeedCV === 4) saved.maxSpeedCV = DEFAULTS.maxSpeedCV;
+      if (saved.minDuration === 30) saved.minDuration = DEFAULTS.minDuration;
+      if (saved.windMode === 'manual') saved.windMode = DEFAULTS.windMode;
+    }
     return saved ? { ...DEFAULTS, ...saved } : DEFAULTS;
   });
   const [filtersOpen, setFiltersOpen] = useState(false);
