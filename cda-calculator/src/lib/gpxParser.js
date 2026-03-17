@@ -23,6 +23,33 @@ function bearing(lat1, lon1, lat2, lon2) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
+function extractTemp(trkpt) {
+  const extensions = trkpt.getElementsByTagName('extensions')[0];
+  if (!extensions) return null;
+
+  const tags = ['gpxtpx:atemp', 'ns3:atemp', 'atemp'];
+  for (const tag of tags) {
+    const el = extensions.getElementsByTagName(tag)[0];
+    if (el && el.textContent) {
+      const v = parseFloat(el.textContent);
+      if (!isNaN(v)) return v;
+    }
+  }
+  // Check nested (e.g. TrackPointExtension)
+  for (const child of extensions.childNodes) {
+    if (child.nodeType !== 1) continue;
+    for (const sub of child.childNodes) {
+      if (sub.nodeType !== 1) continue;
+      const subName = sub.localName || sub.nodeName.split(':').pop();
+      if (subName === 'atemp') {
+        const v = parseFloat(sub.textContent);
+        if (!isNaN(v)) return v;
+      }
+    }
+  }
+  return null;
+}
+
 function extractPower(trkpt) {
   const extensions = trkpt.getElementsByTagName('extensions')[0];
   if (!extensions) return null;
@@ -95,6 +122,7 @@ export function parseGPX(xmlString, filename) {
   // Extract raw points
   const raw = [];
   let powerCount = 0;
+  const temps = [];
   for (const pt of trkpts) {
     const lat = parseFloat(pt.getAttribute('lat'));
     const lon = parseFloat(pt.getAttribute('lon'));
@@ -104,6 +132,8 @@ export function parseGPX(xmlString, filename) {
     const time = timeEl ? new Date(timeEl.textContent) : null;
     const power = extractPower(pt);
     if (power !== null) powerCount++;
+    const temp = extractTemp(pt);
+    if (temp !== null) temps.push(temp);
 
     if (time && !isNaN(lat) && !isNaN(lon)) {
       raw.push({ lat, lon, ele: isNaN(ele) ? 0 : ele, time, power });
@@ -111,6 +141,8 @@ export function parseGPX(xmlString, filename) {
   }
 
   const hasPower = powerCount / raw.length > 0.5;
+  const hasTemp = temps.length > raw.length * 0.5;
+  const meanTemp_C = hasTemp ? temps.reduce((s, v) => s + v, 0) / temps.length : null;
 
   // Compute deltas
   const points = [];
@@ -196,6 +228,8 @@ export function parseGPX(xmlString, filename) {
   return {
     filename,
     hasPower,
+    hasTemp,
+    meanTemp_C,
     pointCount: trackpoints.length,
     durationS: lastPt ? lastPt.elapsed_s : 0,
     distanceM: cumDist + (lastPt ? lastPt.distance_delta : 0),

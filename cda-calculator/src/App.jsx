@@ -85,20 +85,14 @@ export default function App() {
   }, [segments, calculate]);
 
   const handleEstimateWind = useCallback(
-    (paramSet, filters) => {
+    (paramSet, filters, autoCalc = false) => {
       if (!rideData) return;
       setParams(paramSet);
-      // Detect segments then estimate wind
-      const doEstimate = () => {
-        runWindEstimation(segments, paramSet);
-      };
+      pendingWindRef.current = { paramSet, autoCalc };
       if (segments.length > 0) {
-        doEstimate();
+        runWindEstimation(segments, paramSet);
       } else {
-        // Need to wait for segmentation
         runDetection(rideData.trackpoints, filters);
-        // Will use effect to trigger
-        pendingWindRef.current = paramSet;
       }
     },
     [rideData, segments, runDetection, runWindEstimation]
@@ -106,12 +100,27 @@ export default function App() {
 
   const pendingWindRef = useRef(null);
   React.useEffect(() => {
-    if (segments.length > 0 && pendingWindRef.current) {
-      const paramSet = pendingWindRef.current;
-      pendingWindRef.current = null;
+    if (segments.length > 0 && pendingWindRef.current && !pendingCalcRef.current) {
+      const { paramSet } = pendingWindRef.current;
       runWindEstimation(segments, paramSet);
     }
   }, [segments, runWindEstimation]);
+
+  // When wind estimation completes and autoCalc was requested, trigger calculation
+  React.useEffect(() => {
+    if (windResult?.feasible && pendingWindRef.current?.autoCalc && segments.length > 0) {
+      const { paramSet } = pendingWindRef.current;
+      pendingWindRef.current = null;
+      const windVec = {
+        speed_ms: windResult.wind_speed_ms,
+        dir_deg: windResult.wind_dir_deg,
+      };
+      setWind(windVec);
+      calculate(segments, windVec, paramSet);
+    } else if (windResult && !windResult.feasible && pendingWindRef.current?.autoCalc) {
+      pendingWindRef.current = null;
+    }
+  }, [windResult, segments, calculate]);
 
   // Determine app state
   let appState = 'IDLE';
@@ -145,6 +154,7 @@ export default function App() {
             hasRide={!!rideData}
             calculating={calculating || segmenting}
             onParamsChange={handleParamsChange}
+            rideData={rideData}
           />
         )}
 
@@ -202,6 +212,12 @@ export default function App() {
                   <span className="ride-stat-label">Elevation</span>
                   <span className="ride-stat-value">{Math.round(rideData.elevationGainM)} m</span>
                 </div>
+                {rideData.hasTemp && (
+                  <div className="ride-stat">
+                    <span className="ride-stat-label">Avg Temp</span>
+                    <span className="ride-stat-value">{Math.round(rideData.meanTemp_C)}°C</span>
+                  </div>
+                )}
                 {segments.length > 0 && (
                   <div className="ride-stat">
                     <span className="ride-stat-label">Segments</span>

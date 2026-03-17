@@ -8,7 +8,7 @@ const DEFAULTS = {
   Cm: 3.0,
   eta: 0.976,
   temp_C: 15,
-  windMode: 'manual',
+  windMode: 'auto',
   wind_speed_kmh: 0,
   wind_dir_deg: 0,
   minDuration: 30,
@@ -26,6 +26,7 @@ export default function Sidebar({
   hasRide,
   calculating,
   onParamsChange,
+  rideData,
 }) {
   const [inputs, setInputs] = useState(() => {
     const saved = loadSidebarInputs();
@@ -38,15 +39,21 @@ export default function Sidebar({
     if (onParamsChange) onParamsChange(inputs);
   }, [inputs, onParamsChange]);
 
+  // Auto-populate temperature from GPX data
+  useEffect(() => {
+    if (rideData?.hasTemp && rideData.meanTemp_C != null) {
+      setInputs((prev) => ({
+        ...prev,
+        temp_C: Math.round(rideData.meanTemp_C),
+      }));
+    }
+  }, [rideData]);
+
   const set = useCallback((key, value) => {
     setInputs((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   const handleCalculate = () => {
-    const wind = {
-      speed_ms: inputs.wind_speed_kmh / 3.6,
-      dir_deg: inputs.wind_dir_deg,
-    };
     const params = {
       mass_kg: inputs.mass_kg,
       Crr: inputs.Crr,
@@ -61,7 +68,17 @@ export default function Sidebar({
       maxGradientDeg: inputs.maxGradientDeg,
       minSpeed_ms: inputs.minSpeed_ms,
     };
-    onCalculate(wind, params, filters);
+
+    if (inputs.windMode === 'auto') {
+      // Auto mode: estimate wind first, then calculate
+      onEstimateWind(params, filters, true); // true = autoCalc after
+    } else {
+      const wind = {
+        speed_ms: inputs.wind_speed_kmh / 3.6,
+        dir_deg: inputs.wind_dir_deg,
+      };
+      onCalculate(wind, params, filters);
+    }
   };
 
   const handleEstimateWind = () => {
@@ -79,7 +96,7 @@ export default function Sidebar({
       maxGradientDeg: inputs.maxGradientDeg,
       minSpeed_ms: inputs.minSpeed_ms,
     };
-    onEstimateWind(params, filters);
+    onEstimateWind(params, filters, false);
   };
 
   const acceptWind = () => {
@@ -143,7 +160,7 @@ export default function Sidebar({
           />
         </div>
         <div className="sidebar-field">
-          <label>Temperature (°C)</label>
+          <label>Temperature (°C){rideData?.hasTemp ? ' — from GPX' : ''}</label>
           <input
             type="number"
             value={inputs.temp_C}

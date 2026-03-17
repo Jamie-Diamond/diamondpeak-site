@@ -42,6 +42,8 @@ export function useRideData() {
       await cacheRide(key, {
         filename: data.filename,
         hasPower: data.hasPower,
+        hasTemp: data.hasTemp,
+        meanTemp_C: data.meanTemp_C,
         pointCount: data.pointCount,
         durationS: data.durationS,
         distanceM: data.distanceM,
