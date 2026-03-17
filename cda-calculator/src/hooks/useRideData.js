@@ -18,7 +18,7 @@ export function useRideData() {
 
       // Check cache first
       const cached = await getCachedRide(key);
-      if (cached) {
+      if (cached && cached.hasTemp !== undefined) {
         // Restore Date objects
         const trackpoints = cached.trackpoints.map((p) => ({
           ...p,
