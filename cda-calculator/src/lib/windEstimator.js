@@ -1,8 +1,10 @@
 /**
  * Wind back-calculation via grid search + Nelder-Mead optimiser.
- * Minimises CdA variance across segments.
+ * Minimises CdA variance across segments, penalising segment dropout.
  */
 import { computeCdA } from './physics.js';
+
+const MAX_WIND_MS = 8; // ~29 km/h — realistic upper bound for cycling conditions
 
 function median(arr) {
   const sorted = [...arr].sort((a, b) => a - b);
@@ -37,7 +39,10 @@ function objective(segments, params, Vw, thetaW) {
   if (cdas.length < 3) return Infinity;
   const filtered = iqrFilter(cdas);
   if (filtered.length < 3) return Infinity;
-  return variance(filtered);
+
+  // Penalise segment dropout: high wind that nulls out segments should score worse
+  const dropoutRate = 1 - cdas.length / segments.length;
+  return variance(filtered) * (1 + 10 * dropoutRate);
 }
 
 function bearingOctant(deg) {
@@ -87,7 +92,7 @@ function nelderMead(fn, initial, { maxIter = 300, tol = 1e-7 } = {}) {
 
     // Reflect
     const reflected = centroid.map((c, j) => c + alpha * (c - worst.x[j]));
-    reflected[0] = Math.max(0, Math.min(15, reflected[0])); // clamp V
+    reflected[0] = Math.max(0, Math.min(MAX_WIND_MS, reflected[0]));
     const fr = fn(reflected[0], reflected[1]);
 
     if (fr < secondWorst.f && fr >= best.f) {
@@ -98,7 +103,7 @@ function nelderMead(fn, initial, { maxIter = 300, tol = 1e-7 } = {}) {
     if (fr < best.f) {
       // Expand
       const expanded = centroid.map((c, j) => c + gamma * (reflected[j] - c));
-      expanded[0] = Math.max(0, Math.min(15, expanded[0]));
+      expanded[0] = Math.max(0, Math.min(MAX_WIND_MS, expanded[0]));
       const fe = fn(expanded[0], expanded[1]);
       simplex[simplex.length - 1] = fe < fr ? { x: expanded, f: fe } : { x: reflected, f: fr };
       continue;
@@ -106,7 +111,7 @@ function nelderMead(fn, initial, { maxIter = 300, tol = 1e-7 } = {}) {
 
     // Contract
     const contracted = centroid.map((c, j) => c + rho * (worst.x[j] - c));
-    contracted[0] = Math.max(0, Math.min(15, contracted[0]));
+    contracted[0] = Math.max(0, Math.min(MAX_WIND_MS, contracted[0]));
     const fc = fn(contracted[0], contracted[1]);
     if (fc < worst.f) {
       simplex[simplex.length - 1] = { x: contracted, f: fc };
@@ -118,7 +123,7 @@ function nelderMead(fn, initial, { maxIter = 300, tol = 1e-7 } = {}) {
       for (let j = 0; j < n; j++) {
         simplex[i].x[j] = best.x[j] + sigma * (simplex[i].x[j] - best.x[j]);
       }
-      simplex[i].x[0] = Math.max(0, Math.min(15, simplex[i].x[0]));
+      simplex[i].x[0] = Math.max(0, Math.min(MAX_WIND_MS, simplex[i].x[0]));
       simplex[i].f = fn(simplex[i].x[0], simplex[i].x[1]);
     }
   }
@@ -146,13 +151,13 @@ export function estimateWind(segments, params) {
 
   const fn = (Vw, thetaW) => objective(segments, params, Vw, thetaW);
 
-  // Step 1: Coarse grid search
+  // Step 1: Fine grid search (0.5 m/s steps, 15° steps)
   let bestV = 0;
   let bestTheta = 0;
   let bestObj = Infinity;
 
-  for (let v = 0; v <= 12; v += 1) {
-    for (let theta = 0; theta < 360; theta += 22.5) {
+  for (let v = 0; v <= MAX_WIND_MS; v += 0.5) {
+    for (let theta = 0; theta < 360; theta += 15) {
       const obj = fn(v, theta);
       if (obj < bestObj) {
         bestObj = obj;
@@ -165,11 +170,11 @@ export function estimateWind(segments, params) {
   // Step 2: Nelder-Mead refinement
   const result = nelderMead(fn, [
     [bestV, bestTheta],
-    [bestV + 0.5, bestTheta + 15],
-    [bestV + 0.3, bestTheta - 15],
+    [bestV + 0.3, bestTheta + 10],
+    [bestV + 0.2, bestTheta - 10],
   ]);
 
-  const windSpeed = Math.max(0, Math.min(15, result.x[0]));
+  const windSpeed = Math.max(0, Math.min(MAX_WIND_MS, result.x[0]));
   const windDir = ((result.x[1] % 360) + 360) % 360;
   const finalVariance = result.f;
 
