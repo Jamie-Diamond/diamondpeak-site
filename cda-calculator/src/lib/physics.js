@@ -50,9 +50,10 @@ export function computeCdA(segment, wind, params) {
 /**
  * Compute CdA for all segments, filtering nulls.
  */
-export function computeAllSegments(segments, wind, params) {
+export function computeAllSegments(segments, defaultWind, params) {
   return segments
     .map((segment) => {
+      const wind = segment.wind || defaultWind;
       const cda = computeCdA(segment, wind, params);
       return cda !== null ? { segment, cda } : null;
     })

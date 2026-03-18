@@ -1,26 +1,26 @@
 import React, { useCallback, useState } from 'react';
 
-export default function FileUpload({ onFile, disabled }) {
+export default function FileUpload({ onFiles, disabled }) {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDrop = useCallback(
     (e) => {
       e.preventDefault();
       setDragOver(false);
-      const file = e.dataTransfer?.files?.[0];
-      if (file && file.name.toLowerCase().endsWith('.gpx')) {
-        onFile(file);
-      }
+      const files = [...(e.dataTransfer?.files || [])].filter((f) =>
+        f.name.toLowerCase().endsWith('.gpx')
+      );
+      if (files.length > 0) onFiles(files);
     },
-    [onFile]
+    [onFiles]
   );
 
   const handleChange = useCallback(
     (e) => {
-      const file = e.target.files?.[0];
-      if (file) onFile(file);
+      const files = [...(e.target.files || [])];
+      if (files.length > 0) onFiles(files);
     },
-    [onFile]
+    [onFiles]
   );
 
   return (
@@ -40,11 +40,12 @@ export default function FileUpload({ onFile, disabled }) {
           <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
       </div>
-      <p className="file-upload-label">Drop a GPX file here</p>
-      <p className="file-upload-sub">or click to browse</p>
+      <p className="file-upload-label">Drop GPX files here</p>
+      <p className="file-upload-sub">or click to browse — multiple files supported</p>
       <input
         type="file"
         accept=".gpx"
+        multiple
         onChange={handleChange}
         disabled={disabled}
         className="file-upload-input"

@@ -23,17 +23,16 @@ export default function Sidebar({
   onEstimateWind,
   windResult,
   hasSegments,
-  hasRide,
+  hasRides,
   calculating,
   onParamsChange,
-  rideData,
-  weather,
+  rides,
+  weatherMap,
   weatherLoading,
 }) {
   const [inputs, setInputs] = useState(() => {
     const saved = loadSidebarInputs();
     if (saved) {
-      // Reset stale filter defaults from earlier versions
       if (saved.maxPowerCV <= 5 || saved.maxPowerCV === 12 || saved.maxPowerCV === 15) saved.maxPowerCV = DEFAULTS.maxPowerCV;
       if (saved.maxSpeedCV <= 4 || saved.maxSpeedCV === 6 || saved.maxSpeedCV === 8) saved.maxSpeedCV = DEFAULTS.maxSpeedCV;
       if (saved.minDuration === 30) saved.minDuration = DEFAULTS.minDuration;
@@ -48,15 +47,16 @@ export default function Sidebar({
     if (onParamsChange) onParamsChange(inputs);
   }, [inputs, onParamsChange]);
 
-  // Auto-populate temperature from GPX data
+  // Auto-populate temperature from GPX data (average across all rides)
   useEffect(() => {
-    if (rideData?.hasTemp && rideData.meanTemp_C != null) {
-      setInputs((prev) => ({
-        ...prev,
-        temp_C: Math.round(rideData.meanTemp_C),
-      }));
+    if (rides && rides.length > 0) {
+      const tempsRides = rides.filter((r) => r.hasTemp && r.meanTemp_C != null);
+      if (tempsRides.length > 0) {
+        const avgTemp = tempsRides.reduce((s, r) => s + r.meanTemp_C, 0) / tempsRides.length;
+        setInputs((prev) => ({ ...prev, temp_C: Math.round(avgTemp) }));
+      }
     }
-  }, [rideData]);
+  }, [rides]);
 
   const set = useCallback((key, value) => {
     setInputs((prev) => ({ ...prev, [key]: value }));
@@ -78,15 +78,11 @@ export default function Sidebar({
       minSpeed_ms: inputs.minSpeed_ms,
     };
 
-    if (inputs.windMode === 'weather' && weather) {
-      const wind = {
-        speed_ms: weather.wind_speed_kmh / 3.6,
-        dir_deg: weather.wind_dir_deg,
-      };
-      onCalculate(wind, params, filters);
+    if (inputs.windMode === 'weather') {
+      // Weather mode: segments already tagged with per-ride wind
+      onCalculate(null, params, filters);
     } else if (inputs.windMode === 'auto') {
-      // Auto mode: estimate wind first, then calculate
-      onEstimateWind(params, filters, true); // true = autoCalc after
+      onEstimateWind(params, filters, true);
     } else {
       const wind = {
         speed_ms: inputs.wind_speed_kmh / 3.6,
@@ -124,6 +120,9 @@ export default function Sidebar({
       }));
     }
   };
+
+  const hasAnyTemp = rides?.some((r) => r.hasTemp);
+  const hasAllWeather = rides?.length > 0 && rides.every((r) => weatherMap?.[r.id]);
 
   return (
     <aside className="sidebar">
@@ -175,7 +174,7 @@ export default function Sidebar({
           />
         </div>
         <div className="sidebar-field">
-          <label>Temperature (°C){rideData?.hasTemp ? ' — from GPX' : ''}</label>
+          <label>Temperature (°C){hasAnyTemp ? ' — from GPX' : ''}</label>
           <input
             type="number"
             value={inputs.temp_C}
@@ -216,23 +215,23 @@ export default function Sidebar({
             {weatherLoading && (
               <div className="wind-weather-loading">Fetching weather data...</div>
             )}
-            {weather && (
-              <div className="wind-result-card">
-                <div className="wind-result-value">
-                  {weather.wind_speed_kmh} km/h from {weather.wind_dir_deg}° ({weather.wind_dir_cardinal})
+            {rides && rides.map((ride) => {
+              const w = weatherMap?.[ride.id];
+              return (
+                <div key={ride.id} className="wind-ride-card">
+                  <div className="wind-ride-name">{ride.filename}</div>
+                  {w ? (
+                    <div className="wind-ride-detail">
+                      {w.wind_speed_kmh} km/h from {w.wind_dir_deg}° ({w.wind_dir_cardinal})
+                    </div>
+                  ) : (
+                    <div className="wind-ride-detail muted">Loading...</div>
+                  )}
                 </div>
-                <div className="wind-result-meta">
-                  <span className="weather-source">
-                    {weather.source} — {weather.temp_C}°C avg
-                  </span>
-                </div>
-                <div className="compass-container">
-                  <WindCompass direction={weather.wind_dir_deg} size={72} />
-                </div>
-              </div>
-            )}
-            {!weatherLoading && !weather && (
-              <div className="error-card">Could not fetch weather — try Manual mode</div>
+              );
+            })}
+            {!weatherLoading && !hasAllWeather && rides?.length > 0 && (
+              <div className="error-card">Could not fetch weather for all rides</div>
             )}
           </div>
         )}
@@ -354,7 +353,7 @@ export default function Sidebar({
         <button
           className="btn btn-primary btn-full"
           onClick={handleCalculate}
-          disabled={!hasRide || calculating}
+          disabled={!hasRides || calculating}
         >
           {calculating ? 'Calculating...' : 'Calculate CdA'}
         </button>

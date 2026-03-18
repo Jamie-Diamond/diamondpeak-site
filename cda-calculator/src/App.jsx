@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { useRideData } from './hooks/useRideData.js';
 import { useSegments } from './hooks/useSegments.js';
 import { useResults } from './hooks/useResults.js';
+import { fetchRideWeather } from './lib/weatherFetch.js';
 import FileUpload from './components/FileUpload.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import ResultsPanel from './components/ResultsPanel.jsx';
@@ -10,11 +11,7 @@ import Timeline from './components/Timeline.jsx';
 import Histogram from './components/Histogram.jsx';
 import SegmentTable from './components/SegmentTable.jsx';
 import SensitivityTable from './components/SensitivityTable.jsx';
-import { fetchRideWeather } from './lib/weatherFetch.js';
 import './App.css';
-
-// State machine: IDLE → FILE_LOADING → PARSED/CACHE_HIT → READY → CALCULATING → RESULTS
-// ERROR can occur from any state
 
 function formatDuration(seconds) {
   const h = Math.floor(seconds / 3600);
@@ -28,13 +25,13 @@ function formatDistance(metres) {
 }
 
 export default function App() {
-  const { rideData, loading: rideLoading, error: rideError, fromCache, loadFile, clearRide } = useRideData();
+  const { rides, loading: rideLoading, error: rideError, loadFiles, removeRide, clearAllRides } = useRideData();
   const { segments, segmenting, runDetection, clearSegments } = useSegments();
-  const { results, windResult, calculating, error: calcError, calculate, runWindEstimation, clearResults, setWindResult } = useResults();
+  const { results, windResult, calculating, error: calcError, calculate, runWindEstimation, clearResults } = useResults();
 
   const [wind, setWind] = useState(null);
   const [params, setParams] = useState(null);
-  const [weather, setWeather] = useState(null);
+  const [weatherMap, setWeatherMap] = useState({});
   const [weatherLoading, setWeatherLoading] = useState(false);
   const paramsRef = useRef(null);
 
@@ -42,53 +39,75 @@ export default function App() {
     paramsRef.current = inputs;
   }, []);
 
-  // When ride is loaded, auto-detect segments
+  // Load files
   const handleFileLoad = useCallback(
-    async (file) => {
+    async (files) => {
       clearResults();
       clearSegments();
-      await loadFile(file);
+      await loadFiles(files);
     },
-    [loadFile, clearResults, clearSegments]
+    [loadFiles, clearResults, clearSegments]
   );
 
-  // Fetch weather for the ride date/location
-  React.useEffect(() => {
-    if (rideData && rideData.trackpoints.length > 0) {
-      setWeatherLoading(true);
-      fetchRideWeather(rideData)
-        .then((w) => { setWeather(w); setWeatherLoading(false); })
-        .catch(() => setWeatherLoading(false));
-    } else {
-      setWeather(null);
-    }
-  }, [rideData]);
+  // Add more files without clearing existing
+  const handleAddFiles = useCallback(
+    async (files) => {
+      clearResults();
+      clearSegments();
+      await loadFiles(files);
+    },
+    [loadFiles, clearResults, clearSegments]
+  );
 
-  // After rideData changes, auto-run segment detection
+  // Fetch weather for all rides that don't have it yet
   React.useEffect(() => {
-    if (rideData && rideData.trackpoints.length > 0 && paramsRef.current) {
+    if (rides.length === 0) return;
+    const missing = rides.filter((r) => !weatherMap[r.id]);
+    if (missing.length === 0) return;
+
+    setWeatherLoading(true);
+    Promise.all(
+      missing.map(async (ride) => {
+        const w = await fetchRideWeather(ride);
+        return { id: ride.id, weather: w };
+      })
+    ).then((results) => {
+      setWeatherMap((prev) => {
+        const next = { ...prev };
+        for (const { id, weather } of results) {
+          if (weather) next[id] = weather;
+        }
+        return next;
+      });
+      setWeatherLoading(false);
+    });
+  }, [rides]);
+
+  // Auto-detect segments when rides or weather change
+  React.useEffect(() => {
+    if (rides.length > 0 && paramsRef.current) {
       const inputs = paramsRef.current;
-      runDetection(rideData.trackpoints, {
+      runDetection(rides, {
         minDuration: inputs.minDuration,
         maxPowerCV: inputs.maxPowerCV,
         maxSpeedCV: inputs.maxSpeedCV,
         maxGradientDeg: inputs.maxGradientDeg,
         minSpeed_ms: inputs.minSpeed_ms,
-      });
+      }, weatherMap);
     }
-  }, [rideData, runDetection]);
+  }, [rides, weatherMap, runDetection]);
 
   const pendingCalcRef = useRef(null);
 
   const handleCalculateClick = useCallback(
     (windVec, paramSet, filters) => {
-      if (!rideData) return;
+      if (rides.length === 0) return;
       setWind(windVec);
       setParams(paramSet);
       pendingCalcRef.current = { windVec, paramSet };
-      runDetection(rideData.trackpoints, filters);
+      runDetection(rides, filters, weatherMap);
     },
-    [rideData, runDetection]
+    [rides, weatherMap, runDetection]
   );
 
   React.useEffect(() => {
@@ -101,16 +120,16 @@ export default function App() {
 
   const handleEstimateWind = useCallback(
     (paramSet, filters, autoCalc = false) => {
-      if (!rideData) return;
+      if (rides.length === 0) return;
       setParams(paramSet);
       pendingWindRef.current = { paramSet, autoCalc };
       if (segments.length > 0) {
         runWindEstimation(segments, paramSet);
       } else {
-        runDetection(rideData.trackpoints, filters);
+        runDetection(rides, filters, weatherMap);
       }
     },
-    [rideData, segments, runDetection, runWindEstimation]
+    [rides, segments, weatherMap, runDetection, runWindEstimation]
   );
 
   const pendingWindRef = useRef(null);
@@ -121,7 +140,6 @@ export default function App() {
     }
   }, [segments, runWindEstimation]);
 
-  // When wind estimation completes and autoCalc was requested, trigger calculation
   React.useEffect(() => {
     if (windResult?.feasible && pendingWindRef.current?.autoCalc && segments.length > 0) {
       const { paramSet } = pendingWindRef.current;
@@ -137,18 +155,25 @@ export default function App() {
     }
   }, [windResult, segments, calculate]);
 
+  // For map/timeline, use first ride's trackpoints
+  const primaryRide = rides[0] || null;
+  const allTrackpoints = primaryRide ? primaryRide.trackpoints : [];
+
   // Determine app state
   let appState = 'IDLE';
   if (rideLoading) appState = 'FILE_LOADING';
   else if (rideError) appState = 'ERROR';
-  else if (rideData && fromCache) appState = segments.length > 0 ? 'READY' : 'CACHE_HIT';
-  else if (rideData && segmenting) appState = 'SEGMENTING';
-  else if (rideData && segments.length > 0 && !results) appState = 'READY';
-  else if (rideData && !results) appState = 'PARSED';
+  else if (rides.length > 0 && segmenting) appState = 'SEGMENTING';
+  else if (rides.length > 0 && segments.length > 0 && !results) appState = 'READY';
+  else if (rides.length > 0 && !results) appState = 'PARSED';
   else if (calculating) appState = 'CALCULATING';
   else if (results) appState = 'RESULTS';
 
   const error = rideError || calcError;
+
+  const totalSegments = segments.length;
+  const totalDistance = rides.reduce((s, r) => s + r.distanceM, 0);
+  const totalDuration = rides.reduce((s, r) => s + r.durationS, 0);
 
   return (
     <div className="app">
@@ -159,30 +184,29 @@ export default function App() {
       </header>
 
       <div className="app-layout">
-        {/* Sidebar — only show after a file is loaded */}
-        {rideData && (
+        {rides.length > 0 && (
           <Sidebar
             onCalculate={handleCalculateClick}
             onEstimateWind={handleEstimateWind}
             windResult={windResult}
             hasSegments={segments.length > 0}
-            hasRide={!!rideData}
+            hasRides={rides.length > 0}
             calculating={calculating || segmenting}
             onParamsChange={handleParamsChange}
-            rideData={rideData}
-            weather={weather}
+            rides={rides}
+            weatherMap={weatherMap}
             weatherLoading={weatherLoading}
           />
         )}
 
         <main className="main-content">
-          {/* IDLE / Upload */}
-          {appState === 'IDLE' && (
+          {/* Upload — always show when no rides or as add-more */}
+          {rides.length === 0 && (
             <div className="upload-section">
-              <FileUpload onFile={handleFileLoad} disabled={rideLoading} />
+              <FileUpload onFiles={handleFileLoad} disabled={rideLoading} />
               <div className="upload-info">
-                <p>Upload a GPX file with power data from your ride.</p>
-                <p className="upload-info-sub">All processing happens in your browser — no data leaves your device.</p>
+                <p>Upload GPX files with power data from your rides.</p>
+                <p className="upload-info-sub">Multiple files supported — each ride uses its own weather data. All processing happens in your browser.</p>
               </div>
             </div>
           )}
@@ -191,7 +215,7 @@ export default function App() {
           {appState === 'FILE_LOADING' && (
             <div className="status-card">
               <div className="spinner" />
-              <span>Parsing GPX file...</span>
+              <span>Parsing GPX files...</span>
             </div>
           )}
 
@@ -202,46 +226,93 @@ export default function App() {
             </div>
           )}
 
-          {/* Ride summary */}
-          {rideData && (
+          {/* Rides summary */}
+          {rides.length > 0 && (
             <div className="ride-summary">
               <div className="ride-summary-header">
-                <span className="ride-filename">{rideData.filename}</span>
-                {fromCache && <span className="cache-badge">Loaded from cache</span>}
-                <button className="btn-link" onClick={() => { clearRide(); clearSegments(); clearResults(); }}>
-                  New file
+                <span className="ride-filename">
+                  {rides.length} ride{rides.length > 1 ? 's' : ''} loaded
+                </span>
+                <button className="btn-link" onClick={() => { clearAllRides(); clearSegments(); clearResults(); setWeatherMap({}); }}>
+                  Clear all
                 </button>
               </div>
-              <div className="ride-stats">
-                <div className="ride-stat">
-                  <span className="ride-stat-label">Distance</span>
-                  <span className="ride-stat-value">{formatDistance(rideData.distanceM)}</span>
-                </div>
-                <div className="ride-stat">
-                  <span className="ride-stat-label">Duration</span>
-                  <span className="ride-stat-value">{formatDuration(rideData.durationS)}</span>
-                </div>
-                <div className="ride-stat">
-                  <span className="ride-stat-label">Points</span>
-                  <span className="ride-stat-value">{rideData.pointCount.toLocaleString()}</span>
-                </div>
-                <div className="ride-stat">
-                  <span className="ride-stat-label">Elevation</span>
-                  <span className="ride-stat-value">{Math.round(rideData.elevationGainM)} m</span>
-                </div>
-                {rideData.hasTemp && (
-                  <div className="ride-stat">
-                    <span className="ride-stat-label">Avg Temp</span>
-                    <span className="ride-stat-value">{Math.round(rideData.meanTemp_C)}°C</span>
+
+              {/* Per-ride cards */}
+              {rides.map((ride) => (
+                <div key={ride.id} className="ride-card">
+                  <div className="ride-card-header">
+                    <span className="ride-card-name">{ride.filename}</span>
+                    {rides.length > 1 && (
+                      <button className="btn-link btn-sm" onClick={() => { removeRide(ride.id); clearResults(); clearSegments(); }}>
+                        remove
+                      </button>
+                    )}
                   </div>
-                )}
-                {segments.length > 0 && (
+                  <div className="ride-stats ride-stats-compact">
+                    <div className="ride-stat">
+                      <span className="ride-stat-label">Dist</span>
+                      <span className="ride-stat-value">{formatDistance(ride.distanceM)}</span>
+                    </div>
+                    <div className="ride-stat">
+                      <span className="ride-stat-label">Dur</span>
+                      <span className="ride-stat-value">{formatDuration(ride.durationS)}</span>
+                    </div>
+                    <div className="ride-stat">
+                      <span className="ride-stat-label">Pts</span>
+                      <span className="ride-stat-value">{ride.pointCount.toLocaleString()}</span>
+                    </div>
+                    {ride.hasTemp && (
+                      <div className="ride-stat">
+                        <span className="ride-stat-label">Temp</span>
+                        <span className="ride-stat-value">{Math.round(ride.meanTemp_C)}°C</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* Add more files */}
+              <div className="add-rides">
+                <label className="btn-link add-rides-btn">
+                  + Add more rides
+                  <input
+                    type="file"
+                    accept=".gpx"
+                    multiple
+                    onChange={(e) => handleAddFiles([...e.target.files])}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+
+              {/* Totals */}
+              {rides.length > 1 && (
+                <div className="ride-stats">
+                  <div className="ride-stat">
+                    <span className="ride-stat-label">Total dist</span>
+                    <span className="ride-stat-value">{formatDistance(totalDistance)}</span>
+                  </div>
+                  <div className="ride-stat">
+                    <span className="ride-stat-label">Total dur</span>
+                    <span className="ride-stat-value">{formatDuration(totalDuration)}</span>
+                  </div>
+                  {totalSegments > 0 && (
+                    <div className="ride-stat">
+                      <span className="ride-stat-label">Segments</span>
+                      <span className="ride-stat-value">{totalSegments}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {rides.length === 1 && totalSegments > 0 && (
+                <div className="ride-stats">
                   <div className="ride-stat">
                     <span className="ride-stat-label">Segments</span>
-                    <span className="ride-stat-value">{segments.length}</span>
+                    <span className="ride-stat-value">{totalSegments}</span>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -262,27 +333,29 @@ export default function App() {
           )}
 
           {/* Segment warning */}
-          {rideData && !segmenting && segments.length > 0 && segments.length < 8 && !results && (
+          {rides.length > 0 && !segmenting && segments.length > 0 && segments.length < 8 && !results && (
             <div className="warn-card">
-              Only {segments.length} valid segments found (minimum 8 recommended for wind estimation) — try relaxing the filter thresholds.
+              Only {segments.length} valid segments found (minimum 8 recommended) — try adding more rides or relaxing filter thresholds.
             </div>
           )}
 
           {/* Results */}
-          {results && wind && (
+          {results && (
             <>
-              <ResultsPanel results={results} wind={wind} />
+              <ResultsPanel results={results} wind={wind || { speed_ms: 0, dir_deg: 0 }} />
 
-              <div className="results-grid">
-                <MapView trackpoints={rideData.trackpoints} segments={segments} results={results} />
-                <Timeline trackpoints={rideData.trackpoints} segments={segments} results={results} />
-              </div>
+              {allTrackpoints.length > 0 && (
+                <div className="results-grid">
+                  <MapView trackpoints={allTrackpoints} segments={segments} results={results} />
+                  <Timeline trackpoints={allTrackpoints} segments={segments} results={results} />
+                </div>
+              )}
 
               <div className="results-grid">
                 <Histogram results={results} />
                 <SensitivityTable
                   segments={segments}
-                  wind={wind}
+                  wind={wind || { speed_ms: 0, dir_deg: 0 }}
                   params={params}
                   baseCdA={results.median}
                 />

@@ -14,8 +14,8 @@ export default function SensitivityTable({ segments, wind, params, baseCdA }) {
     const perturb = (label, baseVal, unit, delta, makeMod) => {
       const pLo = makeMod(-delta);
       const pHi = makeMod(delta);
-      const loResults = computeAllSegments(segments, pLo.wind, pLo.params);
-      const hiResults = computeAllSegments(segments, pHi.wind, pHi.params);
+      const loResults = computeAllSegments(pLo.segments || segments, pLo.wind, pLo.params);
+      const hiResults = computeAllSegments(pHi.segments || segments, pHi.wind, pHi.params);
       const loMedian = loResults.length > 0 ? median(loResults.map((r) => r.cda)) : baseCdA;
       const hiMedian = hiResults.length > 0 ? median(hiResults.map((r) => r.cda)) : baseCdA;
       return {
@@ -39,10 +39,13 @@ export default function SensitivityTable({ segments, wind, params, baseCdA }) {
       perturb('Wind speed', (wind.speed_ms * 3.6).toFixed(1), ' km/h', 2 / 3.6, (d) => ({
         wind: { ...wind, speed_ms: Math.max(0, wind.speed_ms + d) },
         params,
+        // Also perturb per-segment wind
+        segments: segments.map((s) => s.wind ? { ...s, wind: { ...s.wind, speed_ms: Math.max(0, s.wind.speed_ms + d) } } : s),
       })),
       perturb('Wind dir', wind.dir_deg, '°', 15, (d) => ({
         wind: { ...wind, dir_deg: ((wind.dir_deg + d) % 360 + 360) % 360 },
         params,
+        segments: segments.map((s) => s.wind ? { ...s, wind: { ...s.wind, dir_deg: ((s.wind.dir_deg + d) % 360 + 360) % 360 } } : s),
       })),
       perturb('Temperature', params.temp_C, '°C', 5, (d) => ({
         wind,
