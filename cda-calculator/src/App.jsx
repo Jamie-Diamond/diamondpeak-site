@@ -10,6 +10,7 @@ import Timeline from './components/Timeline.jsx';
 import Histogram from './components/Histogram.jsx';
 import SegmentTable from './components/SegmentTable.jsx';
 import SensitivityTable from './components/SensitivityTable.jsx';
+import { fetchRideWeather } from './lib/weatherFetch.js';
 import './App.css';
 
 // State machine: IDLE → FILE_LOADING → PARSED/CACHE_HIT → READY → CALCULATING → RESULTS
@@ -33,6 +34,8 @@ export default function App() {
 
   const [wind, setWind] = useState(null);
   const [params, setParams] = useState(null);
+  const [weather, setWeather] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
   const paramsRef = useRef(null);
 
   const handleParamsChange = useCallback((inputs) => {
@@ -48,6 +51,18 @@ export default function App() {
     },
     [loadFile, clearResults, clearSegments]
   );
+
+  // Fetch weather for the ride date/location
+  React.useEffect(() => {
+    if (rideData && rideData.trackpoints.length > 0) {
+      setWeatherLoading(true);
+      fetchRideWeather(rideData)
+        .then((w) => { setWeather(w); setWeatherLoading(false); })
+        .catch(() => setWeatherLoading(false));
+    } else {
+      setWeather(null);
+    }
+  }, [rideData]);
 
   // After rideData changes, auto-run segment detection
   React.useEffect(() => {
@@ -155,6 +170,8 @@ export default function App() {
             calculating={calculating || segmenting}
             onParamsChange={handleParamsChange}
             rideData={rideData}
+            weather={weather}
+            weatherLoading={weatherLoading}
           />
         )}
 

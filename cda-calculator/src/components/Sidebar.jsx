@@ -8,7 +8,7 @@ const DEFAULTS = {
   Cm: 3.0,
   eta: 0.976,
   temp_C: 15,
-  windMode: 'auto',
+  windMode: 'weather',
   wind_speed_kmh: 0,
   wind_dir_deg: 0,
   minDuration: 20,
@@ -27,6 +27,8 @@ export default function Sidebar({
   calculating,
   onParamsChange,
   rideData,
+  weather,
+  weatherLoading,
 }) {
   const [inputs, setInputs] = useState(() => {
     const saved = loadSidebarInputs();
@@ -35,7 +37,7 @@ export default function Sidebar({
       if (saved.maxPowerCV <= 5 || saved.maxPowerCV === 15) saved.maxPowerCV = DEFAULTS.maxPowerCV;
       if (saved.maxSpeedCV <= 4 || saved.maxSpeedCV === 8) saved.maxSpeedCV = DEFAULTS.maxSpeedCV;
       if (saved.minDuration === 30) saved.minDuration = DEFAULTS.minDuration;
-      if (saved.windMode === 'manual') saved.windMode = DEFAULTS.windMode;
+      if (saved.windMode === 'manual' || saved.windMode === 'auto') saved.windMode = DEFAULTS.windMode;
     }
     return saved ? { ...DEFAULTS, ...saved } : DEFAULTS;
   });
@@ -76,7 +78,13 @@ export default function Sidebar({
       minSpeed_ms: inputs.minSpeed_ms,
     };
 
-    if (inputs.windMode === 'auto') {
+    if (inputs.windMode === 'weather' && weather) {
+      const wind = {
+        speed_ms: weather.wind_speed_kmh / 3.6,
+        dir_deg: weather.wind_dir_deg,
+      };
+      onCalculate(wind, params, filters);
+    } else if (inputs.windMode === 'auto') {
       // Auto mode: estimate wind first, then calculate
       onEstimateWind(params, filters, true); // true = autoCalc after
     } else {
@@ -184,48 +192,52 @@ export default function Sidebar({
         <div className="section-tag">Wind</div>
         <div className="wind-toggle">
           <button
-            className={`toggle-btn ${inputs.windMode === 'manual' ? 'active' : ''}`}
-            onClick={() => set('windMode', 'manual')}
+            className={`toggle-btn ${inputs.windMode === 'weather' ? 'active' : ''}`}
+            onClick={() => set('windMode', 'weather')}
           >
-            Manual
+            Weather
           </button>
           <button
             className={`toggle-btn ${inputs.windMode === 'auto' ? 'active' : ''}`}
             onClick={() => set('windMode', 'auto')}
           >
-            Auto-estimate
+            Estimate
+          </button>
+          <button
+            className={`toggle-btn ${inputs.windMode === 'manual' ? 'active' : ''}`}
+            onClick={() => set('windMode', 'manual')}
+          >
+            Manual
           </button>
         </div>
 
-        {inputs.windMode === 'manual' ? (
-          <>
-            <div className="sidebar-field">
-              <label>Wind speed (km/h)</label>
-              <input
-                type="number"
-                value={inputs.wind_speed_kmh}
-                onChange={(e) => set('wind_speed_kmh', parseFloat(e.target.value) || 0)}
-                min={0}
-                max={80}
-                step={0.5}
-              />
-            </div>
-            <div className="sidebar-field">
-              <label>Wind direction (°)</label>
-              <input
-                type="number"
-                value={inputs.wind_dir_deg}
-                onChange={(e) => set('wind_dir_deg', parseFloat(e.target.value) || 0)}
-                min={0}
-                max={359}
-                step={1}
-              />
-            </div>
-            <div className="compass-container">
-              <WindCompass direction={inputs.wind_dir_deg} size={72} />
-            </div>
-          </>
-        ) : (
+        {inputs.windMode === 'weather' && (
+          <div className="wind-weather">
+            {weatherLoading && (
+              <div className="wind-weather-loading">Fetching weather data...</div>
+            )}
+            {weather && (
+              <div className="wind-result-card">
+                <div className="wind-result-value">
+                  {weather.wind_speed_kmh} km/h from {weather.wind_dir_deg}° ({weather.wind_dir_cardinal})
+                </div>
+                <div className="wind-result-meta">
+                  <span className="weather-source">
+                    {weather.source} — {weather.temp_C}°C avg
+                  </span>
+                </div>
+                <div className="compass-container">
+                  <WindCompass direction={weather.wind_dir_deg} size={72} />
+                </div>
+              </div>
+            )}
+            {!weatherLoading && !weather && (
+              <div className="error-card">Could not fetch weather — try Manual mode</div>
+            )}
+          </div>
+        )}
+
+        {inputs.windMode === 'auto' && (
           <div className="wind-auto">
             <button
               className="btn btn-secondary"
@@ -253,6 +265,36 @@ export default function Sidebar({
               <div className="error-card">{windResult.reason}</div>
             )}
           </div>
+        )}
+
+        {inputs.windMode === 'manual' && (
+          <>
+            <div className="sidebar-field">
+              <label>Wind speed (km/h)</label>
+              <input
+                type="number"
+                value={inputs.wind_speed_kmh}
+                onChange={(e) => set('wind_speed_kmh', parseFloat(e.target.value) || 0)}
+                min={0}
+                max={80}
+                step={0.5}
+              />
+            </div>
+            <div className="sidebar-field">
+              <label>Wind direction (°)</label>
+              <input
+                type="number"
+                value={inputs.wind_dir_deg}
+                onChange={(e) => set('wind_dir_deg', parseFloat(e.target.value) || 0)}
+                min={0}
+                max={359}
+                step={1}
+              />
+            </div>
+            <div className="compass-container">
+              <WindCompass direction={inputs.wind_dir_deg} size={72} />
+            </div>
+          </>
         )}
       </div>
 
