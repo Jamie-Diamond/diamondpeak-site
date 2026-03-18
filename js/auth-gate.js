@@ -5,16 +5,16 @@
      <script src="js/auth-gate.js" data-password-hash="YOUR_SHA256_HASH"></script>
 
    Generate a hash:  echo -n "yourpassword" | shasum -a 256
-   Default password: maji2024
+   Default password: dpcltd
    ============================================= */
 
 (function () {
   'use strict';
 
-  // Default hash = sha256("maji2024")
+  // Default hash = sha256("dpcltd")
   var scriptTag = document.currentScript;
   var HASH = scriptTag?.getAttribute('data-password-hash')
-    || '5966b4dd75d2433be589e3875cb7cc36025b8b9f9307a08be600b2bb173e4773';
+    || '7f1ad6bb5f99d27959be4521a6856bce1479fe55846057887bc4e9642fd9adea';
   var SESSION_KEY = 'maji_auth';
 
   // Check if already authed this session
