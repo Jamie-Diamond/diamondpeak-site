@@ -56,7 +56,8 @@ export function detectSegments(trackpoints, filters = {}) {
 
   for (let i = 0; i <= trackpoints.length - windowSize; i++) {
     const window = trackpoints.slice(i, i + windowSize);
-    const powers = window.map((p) => p.power).filter((p) => p != null);
+    // Use smoothed power for steadiness check (less noisy), fall back to raw
+    const powers = window.map((p) => p.power_smooth ?? p.power).filter((p) => p != null);
     const speeds = window.map((p) => p.v_ground);
     const gradients = window.map((p) => p.gradient);
 

@@ -175,6 +175,10 @@ export function parseGPX(xmlString, filename) {
   // Rolling 5-point centred average for speed
   const smoothSpeed = rollingAverage(rawSpeed, 5);
 
+  // 10-point smoothed power (like cycling's "10s power") for steadier segment detection
+  const rawPowers = filtered.map((p) => p.power);
+  const smoothPower = rollingAverage(rawPowers, 10);
+
   // Compute raw gradient
   const rawGradient = [];
   for (let i = 0; i < filtered.length; i++) {
@@ -214,6 +218,7 @@ export function parseGPX(xmlString, filename) {
       ele: p.ele,
       time: p.time,
       power: p.power,
+      power_smooth: smoothPower[i],
       distance_delta: p.distance_delta,
       time_delta: p.time_delta,
       v_ground: smoothSpeed[i],

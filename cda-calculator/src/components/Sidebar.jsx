@@ -12,8 +12,8 @@ const DEFAULTS = {
   wind_speed_kmh: 0,
   wind_dir_deg: 0,
   minDuration: 20,
-  maxPowerCV: 12,
-  maxSpeedCV: 6,
+  maxPowerCV: 8,
+  maxSpeedCV: 5,
   maxGradientDeg: 3,
   minSpeed_ms: 5,
 };
@@ -34,8 +34,8 @@ export default function Sidebar({
     const saved = loadSidebarInputs();
     if (saved) {
       // Reset stale filter defaults from earlier versions
-      if (saved.maxPowerCV <= 5 || saved.maxPowerCV === 15) saved.maxPowerCV = DEFAULTS.maxPowerCV;
-      if (saved.maxSpeedCV <= 4 || saved.maxSpeedCV === 8) saved.maxSpeedCV = DEFAULTS.maxSpeedCV;
+      if (saved.maxPowerCV <= 5 || saved.maxPowerCV === 12 || saved.maxPowerCV === 15) saved.maxPowerCV = DEFAULTS.maxPowerCV;
+      if (saved.maxSpeedCV <= 4 || saved.maxSpeedCV === 6 || saved.maxSpeedCV === 8) saved.maxSpeedCV = DEFAULTS.maxSpeedCV;
       if (saved.minDuration === 30) saved.minDuration = DEFAULTS.minDuration;
       if (saved.windMode === 'manual' || saved.windMode === 'auto') saved.windMode = DEFAULTS.windMode;
     }
