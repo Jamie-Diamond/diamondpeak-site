@@ -150,7 +150,7 @@
   .disc-swim { background: rgba(41,128,185,0.12); color: var(--swim); }
   .disc-bike { background: rgba(39,174,96,0.12); color: var(--bike); }
   .disc-run { background: rgba(230,126,34,0.12); color: var(--run); }
-  .disc-t1, .disc-t2 { background: rgba(127,140,141,0.12); color: var(--t-col); }
+  .disc-t1, .disc-t2, .disc-pre-race { background: rgba(127,140,141,0.12); color: var(--t-col); }
   .time-input-sm { width: 56px; height: 28px; border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-family: 'DM Mono', monospace; font-size: 11px; text-align: center; outline: none; background: white; }
   .time-input-sm:focus { border-color: var(--ink); }
 
@@ -179,6 +179,54 @@
   .custom-form input { height: 32px; border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; font-family: 'DM Mono', monospace; font-size: 11px; outline: none; background: white; }
   .custom-form input:focus { border-color: var(--ink); }
   .custom-form label { font-size: 9px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; display: block; }
+
+  /* Race cards (printable) */
+  .race-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 10px; }
+  .race-card {
+    background: white; border: 1.5px solid var(--border); border-radius: 8px; padding: 16px; break-inside: avoid;
+  }
+  .race-card-head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid var(--border);
+  }
+  .race-card-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .race-card-title { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
+  .race-card-meta { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; margin-left: auto; }
+  .race-card-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 10px; }
+  .race-card-stat { text-align: center; padding: 6px 4px; background: #faf8f4; border-radius: 4px; }
+  .race-card-stat-val { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; color: var(--green); }
+  .race-card-stat-label { font-size: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-family: 'DM Mono', monospace; }
+  .race-card-items { list-style: none; }
+  .race-card-items li {
+    display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid #f0ede5;
+    font-size: 11px; color: var(--ink2);
+  }
+  .race-card-items li:last-child { border-bottom: none; }
+  .race-card-items .item-time { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; color: var(--ink); min-width: 44px; }
+  .race-card-items .item-name { flex: 1; }
+  .race-card-items .item-carbs { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--green); font-weight: 500; }
+  .race-card-empty { font-size: 10px; color: var(--muted); font-style: italic; padding: 8px 0; }
+
+  .print-btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border: 1px solid var(--green);
+    border-radius: 6px; background: var(--green); color: white; font-family: 'DM Mono', monospace;
+    font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.15s; margin-top: 12px;
+  }
+  .print-btn:hover { background: #165c38; }
+
+  /* Print styles */
+  @media print {
+    body { background: white; }
+    .page { padding: 0; max-width: 100%; }
+    .back, .kicker, h1, .intro, .sec-head, .presets, .method,
+    .food-grid, .custom-form, .add-row, .add-food-row,
+    .sched-rm, .time-input-sm, .btn-sm, .print-btn,
+    #raceSetup, #aidSection, #foodLibrary, #schedSection, #graphSection { display: none !important; }
+    #printSection { display: block !important; }
+    .race-cards { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .race-card { border: 1.5px solid #ccc; page-break-inside: avoid; }
+    .panel { border: none; padding: 0; }
+    .headline { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
 
   /* Method footer */
   .method { font-size: 11px; color: var(--muted); line-height: 1.7; margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); }
@@ -308,6 +356,7 @@
   }
 
   function getDisciplineAtTime(segs, timeMin) {
+    if (timeMin < 0) return 'Pre-Race';
     for (var i = 0; i < segs.length; i++) {
       if (timeMin >= segs[i].start && timeMin < segs[i].start + segs[i].dur) return segs[i].name;
     }
@@ -342,8 +391,11 @@
   }
 
   /* Absorption model: returns { glucose: Float32Array, fructose: Float32Array } indexed by minute */
+  var PRE_RACE_OFFSET = 30; // minutes before race start
+
   function calcAbsorption(totalMin) {
-    var n = Math.ceil(totalMin) + 1;
+    // Array covers from -PRE_RACE_OFFSET to totalMin
+    var n = Math.ceil(totalMin + PRE_RACE_OFFSET) + 1;
     var glu = new Float32Array(n);
     var fru = new Float32Array(n);
 
@@ -354,20 +406,19 @@
 
       var window = FORM_WINDOW[food.form] || 20;
       var halfW = window / 2;
-      var peak = entry.timeMin + halfW;
-      var sigma = halfW / 2.5; // bell curve width
+      var peak = entry.timeMin + halfW + PRE_RACE_OFFSET; // shift into array space
+      var sigma = halfW / 2.5;
 
-      // Total area under curve should equal the grams
-      // Using gaussian: integral = sigma * sqrt(2*pi) * amplitude
-      // So amplitude = grams / (sigma * sqrt(2*pi))
       var sqrt2pi = 2.5066283;
       var gluAmp = food.glucose / (sigma * sqrt2pi);
       var fruAmp = food.fructose / (sigma * sqrt2pi);
 
-      for (var m = Math.max(0, Math.floor(entry.timeMin)); m < Math.min(n, Math.ceil(entry.timeMin + window + sigma * 3)); m++) {
+      var startM = Math.max(0, Math.floor(entry.timeMin + PRE_RACE_OFFSET));
+      var endM = Math.min(n, Math.ceil(entry.timeMin + PRE_RACE_OFFSET + window + sigma * 3));
+      for (var m = startM; m < endM; m++) {
         var x = m - peak;
         var g = Math.exp(-0.5 * (x / sigma) * (x / sigma));
-        glu[m] += gluAmp * g * 60; // convert g/min to g/hr for display
+        glu[m] += gluAmp * g * 60;
         fru[m] += fruAmp * g * 60;
       }
     }
@@ -412,6 +463,7 @@
     var html = '';
 
     /* ── 1. RACE SETUP ──────────────────── */
+    html += '<div id="raceSetup">';
     html += '<div class="sec-head"><span class="sec-tag">Race Setup</span><div class="sec-rule"></div></div>';
 
     // Presets
@@ -489,6 +541,8 @@
     html += '</div>'; // end grid
 
     /* ── 2. AID STATIONS ────────────────── */
+    html += '</div>'; // end #raceSetup
+    html += '<div id="aidSection">';
     html += '<div class="sec-head"><span class="sec-tag">Aid Stations</span><div class="sec-rule"></div></div>';
     html += '<div class="panel">';
     html += '<div class="panel-title">Mark aid station locations on the course</div>';
@@ -518,6 +572,8 @@
     html += '</div>';
 
     /* ── 3. FOOD LIBRARY ────────────────── */
+    html += '</div>'; // end #aidSection
+    html += '<div id="foodLibrary">';
     html += '<div class="sec-head"><span class="sec-tag">Food Library</span><div class="sec-rule"></div></div>';
     html += '<div class="panel">';
     html += '<div class="panel-title">Click a food to add it to your fuelling plan</div>';
@@ -547,6 +603,8 @@
     html += '</div>';
 
     /* ── 4. FUELLING PLAN ───────────────── */
+    html += '</div>'; // end #foodLibrary
+    html += '<div id="schedSection">';
     html += '<div class="sec-head"><span class="sec-tag">Fuelling Plan</span><div class="sec-rule"></div></div>';
 
     // Summary stats
@@ -583,7 +641,7 @@
         var disc = getDisciplineAtTime(race.segs, entry.timeMin);
         var discCls = disc.toLowerCase().replace(' ', '');
         html += '<tr>';
-        html += '<td><input type="number" class="time-input-sm sched-time" data-idx="' + idx + '" value="' + Math.round(entry.timeMin) + '" min="0" max="' + Math.round(race.total) + '"> min</td>';
+        html += '<td><input type="number" class="time-input-sm sched-time" data-idx="' + idx + '" value="' + Math.round(entry.timeMin) + '" min="-30" max="' + Math.round(race.total) + '"> min</td>';
         html += '<td><span class="sched-disc disc-' + discCls + '">' + disc + '</span></td>';
         html += '<td>' + food.icon + ' ' + food.name + '</td>';
         html += '<td style="font-family:\'DM Mono\',monospace;font-weight:500">' + food.carbs + 'g</td>';
@@ -597,6 +655,8 @@
     html += '</div>';
 
     /* ── 5. ABSORPTION GRAPH ────────────── */
+    html += '</div>'; // end #schedSection
+    html += '<div id="graphSection">';
     html += '<div class="sec-head"><span class="sec-tag">Absorption Graph</span><div class="sec-rule"></div></div>';
     html += '<div class="panel">';
     html += '<div class="panel-title">Glucose &amp; fructose absorption rate over time</div>';
@@ -609,6 +669,100 @@
     html += '<div class="legend-item"><div class="legend-swatch" style="background:var(--red);width:6px;height:6px;border-radius:50%"></div> Aid station</div>';
     html += '</div>';
     html += '</div>';
+    html += '</div>'; // end #graphSection
+
+    /* ── 6. PRINTABLE RACE CARDS ────────── */
+    html += '<div id="printSection">';
+    html += '<div class="sec-head"><span class="sec-tag">Race Day Cards</span><div class="sec-rule"></div></div>';
+    html += '<div class="panel">';
+    html += '<div class="panel-title">Per-leg fuelling summary &mdash; print or screenshot for race day</div>';
+
+    // Build per-leg data
+    var legColors = { 'Pre-Race': '#7f8c8d', 'Swim': '#2980b9', 'T1': '#7f8c8d', 'Bike': '#27ae60', 'T2': '#7f8c8d', 'Run': '#e67e22' };
+    var legs = [];
+
+    // Pre-race leg (items with negative time)
+    var preItems = [];
+    var sortedAll = state.schedule.slice().sort(function(a, b) { return a.timeMin - b.timeMin; });
+    for (var pr2 = 0; pr2 < sortedAll.length; pr2++) {
+      if (sortedAll[pr2].timeMin < 0) preItems.push(sortedAll[pr2]);
+    }
+    if (preItems.length > 0) {
+      legs.push({ name: 'Pre-Race', dur: 30, start: -30, items: preItems, color: '#7f8c8d' });
+    }
+
+    // Race legs
+    for (var lg = 0; lg < race.segs.length; lg++) {
+      var seg = race.segs[lg];
+      var legItems = [];
+      for (var li = 0; li < sortedAll.length; li++) {
+        var t = sortedAll[li].timeMin;
+        if (t >= 0 && t >= seg.start && t < seg.start + seg.dur) {
+          legItems.push(sortedAll[li]);
+        }
+      }
+      legs.push({ name: seg.name, dur: seg.dur, start: seg.start, dist: seg.dist, items: legItems, color: seg.color });
+    }
+
+    html += '<div class="race-cards">';
+    for (var lc = 0; lc < legs.length; lc++) {
+      var leg = legs[lc];
+      var legCarbs = 0, legGlu = 0, legFru = 0;
+      for (var lci = 0; lci < leg.items.length; lci++) {
+        var lf = getFoodById(leg.items[lci].foodId);
+        if (lf) { legCarbs += lf.carbs; legGlu += lf.glucose; legFru += lf.fructose; }
+      }
+      var legHrs = leg.dur / 60;
+      var legCarbHr = legHrs > 0 ? Math.round(legCarbs / legHrs) : 0;
+
+      html += '<div class="race-card">';
+      html += '<div class="race-card-head">';
+      html += '<div class="race-card-dot" style="background:' + (legColors[leg.name] || leg.color) + '"></div>';
+      html += '<div class="race-card-title">' + leg.name + '</div>';
+      html += '<div class="race-card-meta">' + fmtHM(leg.dur);
+      if (leg.dist) html += ' &middot; ' + leg.dist + ' km';
+      html += '</div></div>';
+
+      html += '<div class="race-card-stats">';
+      html += '<div class="race-card-stat"><div class="race-card-stat-val">' + legCarbs + 'g</div><div class="race-card-stat-label">Carbs</div></div>';
+      html += '<div class="race-card-stat"><div class="race-card-stat-val">' + legCarbHr + '</div><div class="race-card-stat-label">g/hr</div></div>';
+      html += '<div class="race-card-stat"><div class="race-card-stat-val" style="font-size:11px;color:var(--blue)">' + legGlu + '<span style="color:var(--muted);font-size:9px"> / </span><span style="color:#c0392b">' + legFru + '</span></div><div class="race-card-stat-label">G / F</div></div>';
+      html += '</div>';
+
+      if (leg.items.length === 0) {
+        html += '<div class="race-card-empty">No fuelling scheduled</div>';
+      } else {
+        html += '<ul class="race-card-items">';
+        for (var ri = 0; ri < leg.items.length; ri++) {
+          var rItem = leg.items[ri];
+          var rFood = getFoodById(rItem.foodId);
+          if (!rFood) continue;
+          var relTime = rItem.timeMin - leg.start;
+          var timeLabel = leg.name === 'Pre-Race' ? (Math.round(rItem.timeMin) + ' min') : fmtHM(relTime) + ' in';
+          html += '<li>';
+          html += '<span class="item-time">' + timeLabel + '</span>';
+          html += '<span class="item-name">' + rFood.icon + ' ' + rFood.name + '</span>';
+          html += '<span class="item-carbs">' + rFood.carbs + 'g</span>';
+          html += '</li>';
+        }
+        html += '</ul>';
+      }
+      html += '</div>'; // end race-card
+    }
+    html += '</div>'; // end race-cards
+
+    // Total summary row
+    html += '<div style="margin-top:12px;padding:14px 16px;background:var(--ink);border-radius:6px;color:white;display:flex;flex-wrap:wrap;gap:20px;align-items:center;font-family:\'DM Mono\',monospace;font-size:12px;position:relative;overflow:hidden">';
+    html += '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 0%,rgba(29,104,64,0.12),transparent 60%);pointer-events:none"></div>';
+    html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Total</span><br><span style="color:#a8e8c0;font-size:18px;font-weight:500">' + totalCarbs + 'g</span></div>';
+    html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Avg g/hr</span><br><span style="color:#a8e8c0;font-weight:500">' + Math.round(carbsPerHr) + '</span></div>';
+    html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Glucose</span><br><span style="color:#5dade2;font-weight:500">' + totalGlu + 'g</span></div>';
+    html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Fructose</span><br><span style="color:#e74c3c;font-weight:500">' + totalFru + 'g</span></div>';
+    html += '<div style="position:relative;margin-left:auto"><button class="print-btn" id="printBtn">\u{1F5A8} Print race cards</button></div>';
+    html += '</div>';
+
+    html += '</div>'; // end panel
+    html += '</div>'; // end #printSection
 
     document.getElementById('app').innerHTML = html;
     bindEvents();
@@ -635,17 +789,16 @@
     var gW = W - padL - padR;
     var gH = H - padT - padB;
 
-    var totalMin = Math.max(race.total, 60);
-    var maxRate = 120; // g/hr max on Y axis
-
-    // Find actual max
-    for (var m = 0; m < absorption.minutes; m++) {
-      var combined = absorption.glucose[m] + absorption.fructose[m];
-      if (combined > maxRate * 0.9) maxRate = Math.ceil(combined / 10) * 10 + 20;
+    var preRaceMin = 30; // show 30 min before race start
+    var hasPreRace = false;
+    for (var pm = 0; pm < state.schedule.length; pm++) {
+      if (state.schedule[pm].timeMin < 0) { hasPreRace = true; break; }
     }
-    if (maxRate < 120) maxRate = 120;
+    var timeOffset = hasPreRace ? preRaceMin : 0;
+    var totalMin = Math.max(race.total + timeOffset, 60);
+    var maxRate = 150; // g/hr max on Y axis — capped
 
-    function xAt(min) { return padL + (min / totalMin) * gW; }
+    function xAt(min) { return padL + ((min + timeOffset) / totalMin) * gW; }
     function yAt(val) { return padT + gH - (val / maxRate) * gH; }
 
     // Background
@@ -697,11 +850,12 @@
     ctx.restore();
 
     // X axis time labels
-    var stepMin = totalMin > 360 ? 60 : totalMin > 120 ? 30 : 15;
+    var stepMin = race.total > 360 ? 60 : race.total > 120 ? 30 : 15;
     ctx.fillStyle = '#9a9080';
     ctx.font = '10px "DM Mono", monospace';
     ctx.textAlign = 'center';
-    for (var t = 0; t <= totalMin; t += stepMin) {
+    var xStart = hasPreRace ? -timeOffset : 0;
+    for (var t = 0; t <= race.total; t += stepMin) {
       var xp = xAt(t);
       ctx.fillText(fmtHM(t), xp, H - padB + 16);
       ctx.strokeStyle = '#eee9df';
@@ -709,6 +863,12 @@
       ctx.moveTo(xp, padT);
       ctx.lineTo(xp, padT + gH);
       ctx.stroke();
+    }
+    // Pre-race time labels
+    if (hasPreRace) {
+      ctx.fillStyle = '#9a9080';
+      ctx.fillText('-30m', xAt(-30), H - padB + 16);
+      ctx.fillText('-15m', xAt(-15), H - padB + 16);
     }
 
     // Max absorption limit lines
@@ -748,16 +908,39 @@
       ctx.fillText(aids[ai].label, ax, padT + gH + 16);
     }
 
+    // Pre-race shading
+    if (hasPreRace) {
+      ctx.fillStyle = 'rgba(127,140,141,0.06)';
+      ctx.fillRect(xAt(-timeOffset), padT, xAt(0) - xAt(-timeOffset), gH);
+      ctx.fillStyle = 'rgba(127,140,141,0.4)';
+      ctx.font = '500 9px "DM Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Pre-Race', (xAt(-timeOffset) + xAt(0)) / 2, padT + 12);
+      // Race start line
+      ctx.strokeStyle = 'rgba(24,22,15,0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(xAt(0), padT); ctx.lineTo(xAt(0), padT + gH); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(24,22,15,0.5)';
+      ctx.font = '8px "DM Mono", monospace';
+      ctx.fillText('START', xAt(0), padT + gH + 24);
+    }
+
     // Draw absorption curves
+    var OFF = PRE_RACE_OFFSET;
+    var startIdx = hasPreRace ? 0 : OFF;
+    var endIdx = Math.min(absorption.minutes, Math.ceil(race.total) + OFF + 1);
+
     if (absorption.minutes > 1 && state.schedule.length > 0) {
       // Combined fill
       ctx.fillStyle = 'rgba(29,104,64,0.08)';
       ctx.beginPath();
-      ctx.moveTo(xAt(0), yAt(0));
-      for (var m2 = 0; m2 < absorption.minutes && m2 <= totalMin; m2++) {
-        ctx.lineTo(xAt(m2), yAt(absorption.glucose[m2] + absorption.fructose[m2]));
+      ctx.moveTo(xAt(startIdx - OFF), yAt(0));
+      for (var m2 = startIdx; m2 < endIdx; m2++) {
+        ctx.lineTo(xAt(m2 - OFF), yAt(absorption.glucose[m2] + absorption.fructose[m2]));
       }
-      ctx.lineTo(xAt(Math.min(absorption.minutes - 1, totalMin)), yAt(0));
+      ctx.lineTo(xAt(endIdx - 1 - OFF), yAt(0));
       ctx.closePath();
       ctx.fill();
 
@@ -765,9 +948,9 @@
       ctx.strokeStyle = '#2980b9';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      for (var m3 = 0; m3 < absorption.minutes && m3 <= totalMin; m3++) {
-        if (m3 === 0) ctx.moveTo(xAt(m3), yAt(absorption.glucose[m3]));
-        else ctx.lineTo(xAt(m3), yAt(absorption.glucose[m3]));
+      for (var m3 = startIdx; m3 < endIdx; m3++) {
+        if (m3 === startIdx) ctx.moveTo(xAt(m3 - OFF), yAt(absorption.glucose[m3]));
+        else ctx.lineTo(xAt(m3 - OFF), yAt(absorption.glucose[m3]));
       }
       ctx.stroke();
 
@@ -775,21 +958,21 @@
       ctx.strokeStyle = '#c0392b';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      for (var m4 = 0; m4 < absorption.minutes && m4 <= totalMin; m4++) {
-        if (m4 === 0) ctx.moveTo(xAt(m4), yAt(absorption.fructose[m4]));
-        else ctx.lineTo(xAt(m4), yAt(absorption.fructose[m4]));
+      for (var m4 = startIdx; m4 < endIdx; m4++) {
+        if (m4 === startIdx) ctx.moveTo(xAt(m4 - OFF), yAt(absorption.fructose[m4]));
+        else ctx.lineTo(xAt(m4 - OFF), yAt(absorption.fructose[m4]));
       }
       ctx.stroke();
 
       // Combined line
-      ctx.strokeStyle = 'var(--green)';
+      ctx.strokeStyle = '#1d6840';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
-      for (var m5 = 0; m5 < absorption.minutes && m5 <= totalMin; m5++) {
+      for (var m5 = startIdx; m5 < endIdx; m5++) {
         var comb = absorption.glucose[m5] + absorption.fructose[m5];
-        if (m5 === 0) ctx.moveTo(xAt(m5), yAt(comb));
-        else ctx.lineTo(xAt(m5), yAt(comb));
+        if (m5 === startIdx) ctx.moveTo(xAt(m5 - OFF), yAt(comb));
+        else ctx.lineTo(xAt(m5 - OFF), yAt(comb));
       }
       ctx.stroke();
       ctx.setLineDash([]);
@@ -946,6 +1129,14 @@
           icon: '\uD83C\uDF7D'
         });
         render();
+      });
+    }
+
+    // Print button
+    var printBtn = document.getElementById('printBtn');
+    if (printBtn) {
+      printBtn.addEventListener('click', function() {
+        window.print();
       });
     }
   }
