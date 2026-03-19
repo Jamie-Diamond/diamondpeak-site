@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sweat Rate Calculator — Diamond Peak</title>
+<script src="js/auth-gate.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8f5ef;
+    --card: #fff;
+    --ink: #18160f;
+    --ink2: #4a4535;
+    --muted: #9a9080;
+    --border: #ddd8cc;
+    --green: #1d6840;
+    --green-bg: #e6f4ec;
+    --red: #b53a1e;
+    --red-bg: #fdeee9;
+    --amber: #b87c20;
+    --amber-bg: #fef6e6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+
+  .page { max-width: 820px; margin: 0 auto; padding: 36px 16px 72px; }
+  @media(min-width:600px) { .page { padding: 56px 24px 80px; } }
+
+  .back { color: var(--muted); text-decoration: none; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; }
+  .back:hover { color: var(--ink); }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    margin-top: 20px;
+  }
+  h1 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(26px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 10px;
+  }
+  .intro {
+    font-size: 14px;
+    color: var(--ink2);
+    line-height: 1.7;
+    margin-bottom: 36px;
+  }
+
+  /* Grid layout */
+  .sr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media(max-width:640px) { .sr-grid { grid-template-columns: 1fr; } }
+
+  /* Panels */
+  .sr-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  @media(min-width:520px) { .sr-panel { padding: 24px; } }
+  .sr-panel-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Fields */
+  .sr-field { margin-bottom: 14px; }
+  .sr-field:last-child { margin-bottom: 0; }
+  .sr-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink2);
+    margin-bottom: 5px;
+    line-height: 1.3;
+  }
+  .sr-field .sr-hint {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 3px;
+    line-height: 1.5;
+  }
+  .sr-input-row { display: flex; }
+  .sr-affix {
+    background: #ede9e1;
+    border: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .sr-affix-pre { border-right: none; border-radius: 4px 0 0 4px; }
+  .sr-panel input[type="number"] {
+    width: 100%;
+    height: 40px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    padding: 0 10px;
+    outline: none;
+    border-radius: 4px;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+  }
+  .sr-panel input[type="number"]:focus { border-color: var(--ink); }
+  .sr-panel input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .sr-has-affix input { border-radius: 0 4px 4px 0; }
+
+  /* Headline output */
+  .sr-headline {
+    background: var(--ink);
+    color: white;
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .sr-headline::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 0%, rgba(29,104,64,0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .sr-hl-context {
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 6px;
+    position: relative;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .sr-hl-number {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(32px, 7vw, 52px);
+    font-weight: 500;
+    line-height: 1;
+    display: block;
+    margin-bottom: 4px;
+    position: relative;
+    color: #a8e8c0;
+  }
+  .sr-hl-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    position: relative;
+  }
+
+  /* Output rows */
+  .sr-out-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 9px 0;
+    font-size: 12px;
+    color: var(--ink2);
+    border-bottom: 1px solid #eee9df;
+  }
+  .sr-out-row:last-child { border-bottom: none; }
+  .sr-out-val {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--green);
+  }
+
+  /* Status table */
+  .sr-status-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: 11px;
+  }
+  .sr-status-table th {
+    background: var(--ink);
+    color: white;
+    padding: 6px 10px;
+    text-align: left;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+  .sr-status-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #eee9df;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--ink2);
+  }
+  .sr-status-table tr:nth-child(even) td { background: #faf8f4; }
+  .sr-status-table tr.sr-active td {
+    background: var(--green-bg);
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  /* Recommendation */
+  .sr-rec {
+    background: var(--green-bg);
+    border: 1px solid #b8dcc6;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--green);
+    line-height: 1.6;
+    text-align: center;
+  }
+  .sr-rec strong {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* Methodology */
+  .sr-method {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .sr-method code {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    background: #faf8f4;
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+
+  .footer {
+    text-align: center;
+    padding: 24px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <a href="index.html" class="back">&larr; Back to tools</a>
+
+  <div class="kicker">NUTRITION &amp; PHYSIOLOGY</div>
+  <h1>Sweat Rate<br>Calculator</h1>
+  <p class="intro">
+    Estimate your hourly sweat rate by comparing pre- and post-exercise body weight,
+    accounting for fluid intake during the session. Use the results to plan your hydration
+    strategy for training and racing.
+  </p>
+
+  <div class="sr-grid">
+
+    <!-- INPUTS -->
+    <div class="sr-panel">
+      <div class="sr-panel-title">Inputs</div>
+
+      <div class="sr-field">
+        <label>Pre-exercise weight</label>
+        <div class="sr-input-row sr-has-affix">
+          <span class="sr-affix sr-affix-pre">kg</span>
+          <input type="number" id="preWeight" value="70.0" min="40" max="120" step="0.1">
+        </div>
+      </div>
+
+      <div class="sr-field">
+        <label>Post-exercise weight</label>
+        <div class="sr-input-row sr-has-affix">
+          <span class="sr-affix sr-affix-pre">kg</span>
+          <input type="number" id="postWeight" value="69.2" min="40" max="120" step="0.1">
+        </div>
+      </div>
+
+      <div class="sr-field">
+        <label>Fluid consumed during exercise</label>
+        <div class="sr-input-row sr-has-affix">
+          <span class="sr-affix sr-affix-pre">ml</span>
+          <input type="number" id="fluidConsumed" value="500" min="0" max="3000" step="1">
+        </div>
+      </div>
+
+      <div class="sr-field">
+        <label>Duration</label>
+        <div class="sr-input-row sr-has-affix">
+          <span class="sr-affix sr-affix-pre">min</span>
+          <input type="number" id="duration" value="60" min="10" max="300" step="1">
+        </div>
+      </div>
+    </div>
+
+    <!-- OUTPUTS -->
+    <div class="sr-panel">
+      <div class="sr-panel-title">Results</div>
+
+      <div class="sr-headline">
+        <div class="sr-hl-context">Sweat Rate</div>
+        <span class="sr-hl-number" id="outRate">1,300 ml/hr</span>
+        <div class="sr-hl-sub" id="outRateSub">hourly fluid loss</div>
+      </div>
+
+      <div class="sr-out-row">
+        <span>Total fluid lost</span>
+        <span class="sr-out-val" id="outTotalLoss">1,300 ml</span>
+      </div>
+      <div class="sr-out-row">
+        <span>Body weight lost</span>
+        <span class="sr-out-val" id="outPctLoss">1.14%</span>
+      </div>
+      <div class="sr-out-row">
+        <span>Dehydration status</span>
+        <span class="sr-out-val" id="outStatus">Mild dehydration</span>
+      </div>
+
+      <div class="sr-rec" id="outRec">
+        Aim to drink <strong id="outRecAmount">325</strong> ml every 15 minutes during exercise.
+      </div>
+
+      <!-- Status table -->
+      <table class="sr-status-table" id="statusTable">
+        <thead>
+          <tr>
+            <th>% Body Weight Lost</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-level="0"><td>&lt; 1%</td><td>Well hydrated</td></tr>
+          <tr data-level="1"><td>1 &ndash; 2%</td><td>Mild dehydration</td></tr>
+          <tr data-level="2"><td>2 &ndash; 3%</td><td>Moderate dehydration</td></tr>
+          <tr data-level="3"><td>3 &ndash; 4%</td><td>Significant dehydration</td></tr>
+          <tr data-level="4"><td>&gt; 4%</td><td>Severe dehydration</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="sr-method">
+    <strong style="color:var(--ink2);font-weight:500;">Methodology</strong><br><br>
+    <code>Total fluid lost</code> = (Pre-weight &minus; Post-weight) &times; 1000 + Fluid consumed<br>
+    <code>Sweat rate</code> = Total fluid lost &divide; (Duration &divide; 60)<br>
+    <code>% Body weight lost</code> = (Pre-weight &minus; Post-weight) &divide; Pre-weight &times; 100<br><br>
+    Weight change is assumed to represent fluid loss only. For best accuracy, weigh yourself
+    nude or in dry clothing before and after exercise, and account for any urination during the session.
+    The 15-minute drinking recommendation divides the hourly sweat rate into four equal portions.
+  </div>
+
+</div>
+
+<div class="footer">&copy; 2026 Diamond Peak</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var preEl    = document.getElementById('preWeight');
+  var postEl   = document.getElementById('postWeight');
+  var fluidEl  = document.getElementById('fluidConsumed');
+  var durEl    = document.getElementById('duration');
+
+  var outRate      = document.getElementById('outRate');
+  var outTotalLoss = document.getElementById('outTotalLoss');
+  var outPctLoss   = document.getElementById('outPctLoss');
+  var outStatus    = document.getElementById('outStatus');
+  var outRecAmount = document.getElementById('outRecAmount');
+  var statusTable  = document.getElementById('statusTable');
+
+  var statusLevels = [
+    { max: 1, label: 'Well hydrated' },
+    { max: 2, label: 'Mild dehydration' },
+    { max: 3, label: 'Moderate dehydration' },
+    { max: 4, label: 'Significant dehydration' },
+    { max: Infinity, label: 'Severe dehydration' }
+  ];
+
+  function fmtNum(v) {
+    return Math.round(v).toLocaleString('en-GB');
+  }
+
+  function calculate() {
+    var pre      = parseFloat(preEl.value) || 70;
+    var post     = parseFloat(postEl.value) || 69.2;
+    var fluid    = parseFloat(fluidEl.value) || 0;
+    var duration = parseFloat(durEl.value) || 60;
+
+    // Clamp
+    pre      = Math.max(40, Math.min(120, pre));
+    post     = Math.max(40, Math.min(120, post));
+    fluid    = Math.max(0, Math.min(3000, fluid));
+    duration = Math.max(10, Math.min(300, duration));
+
+    var weightDiff = pre - post;
+    var totalLoss  = weightDiff * 1000 + fluid;
+    var rate       = totalLoss / (duration / 60);
+    var pctLoss    = (weightDiff / pre) * 100;
+
+    // Determine status level
+    var absPct = Math.abs(pctLoss);
+    var level = 0;
+    for (var i = 0; i < statusLevels.length; i++) {
+      if (absPct < statusLevels[i].max) {
+        level = i;
+        break;
+      }
+    }
+    var statusLabel = statusLevels[level].label;
+
+    // Per 15 min recommendation
+    var per15 = Math.max(0, Math.round(rate / 4));
+
+    // Update outputs
+    outRate.textContent      = fmtNum(Math.max(0, rate)) + ' ml/hr';
+    outTotalLoss.textContent = fmtNum(Math.max(0, totalLoss)) + ' ml';
+    outPctLoss.textContent   = pctLoss.toFixed(2) + '%';
+    outStatus.textContent    = statusLabel;
+    outRecAmount.textContent = fmtNum(per15);
+
+    // Highlight active row in status table
+    var rows = statusTable.querySelectorAll('tbody tr');
+    for (var j = 0; j < rows.length; j++) {
+      if (parseInt(rows[j].getAttribute('data-level'), 10) === level) {
+        rows[j].classList.add('sr-active');
+      } else {
+        rows[j].classList.remove('sr-active');
+      }
+    }
+  }
+
+  // Bind real-time calculation
+  [preEl, postEl, fluidEl, durEl].forEach(function(el) {
+    el.addEventListener('input', calculate);
+  });
+
+  // Initial calculation
+  calculate();
+})();
+</script>
+</body>
+</html>

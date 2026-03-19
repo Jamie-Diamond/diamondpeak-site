@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Power-to-Weight Ratio Calculator — Diamond Peak</title>
+<script src="js/auth-gate.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8f5ef;
+    --card: #fff;
+    --ink: #18160f;
+    --ink2: #4a4535;
+    --muted: #9a9080;
+    --border: #ddd8cc;
+    --green: #1d6840;
+    --green-bg: #e6f4ec;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+
+  .page { max-width: 820px; margin: 0 auto; padding: 36px 16px 72px; }
+  @media(min-width:600px) { .page { padding: 56px 24px 80px; } }
+
+  .back { color: var(--muted); text-decoration: none; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; }
+  .back:hover { color: var(--ink); }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    margin-top: 20px;
+  }
+  h1 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(26px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 10px;
+  }
+  .intro {
+    font-size: 14px;
+    color: var(--ink2);
+    line-height: 1.7;
+    margin-bottom: 36px;
+  }
+
+  /* Panels */
+  .gc-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  @media(min-width:520px) { .gc-panel { padding: 24px; } }
+  .gc-panel-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Fields */
+  .gc-field { margin-bottom: 18px; }
+  .gc-field:last-child { margin-bottom: 0; }
+  .gc-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink2);
+    margin-bottom: 5px;
+    line-height: 1.3;
+  }
+
+  /* Slider */
+  .gc-slider-row { display: flex; align-items: center; gap: 10px; }
+  .gc-slider-row input[type="range"] {
+    flex: 1; height: 5px;
+    -webkit-appearance: none; appearance: none;
+    background: linear-gradient(to right, var(--green) 0%, var(--green) var(--fill,50%), var(--border) var(--fill,50%), var(--border) 100%);
+    border-radius: 999px; outline: none;
+  }
+  .gc-slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--green); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+  .gc-slider-row input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--green); cursor: pointer; border: none;
+  }
+  .gc-slider-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px; font-weight: 500;
+    color: var(--green); min-width: 60px; text-align: right;
+  }
+
+  /* Headline output (dark card) */
+  .gc-headline {
+    background: var(--ink);
+    color: white;
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .gc-headline::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 0%, rgba(29,104,64,0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .gc-hl-context {
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 6px;
+    position: relative;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .gc-hl-number {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(36px, 8vw, 56px);
+    font-weight: 500;
+    line-height: 1;
+    display: block;
+    margin-bottom: 4px;
+    position: relative;
+    color: #a8e8c0;
+  }
+  .gc-hl-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    position: relative;
+  }
+  .gc-hl-category {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: #a8e8c0;
+    margin-top: 8px;
+    position: relative;
+    letter-spacing: 0.05em;
+  }
+
+  /* Output rows */
+  .gc-out-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 9px 0;
+    font-size: 12px;
+    color: var(--ink2);
+    border-bottom: 1px solid #eee9df;
+  }
+  .gc-out-row:last-child { border-bottom: none; }
+  .gc-out-val {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--green);
+  }
+
+  /* Gradient bar */
+  .pw-bar-wrap {
+    margin-top: 20px;
+    margin-bottom: 24px;
+  }
+  .pw-bar-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .pw-bar {
+    position: relative;
+    height: 18px;
+    border-radius: 9px;
+    background: linear-gradient(to right, #ddd8cc 0%, #b8c9a8 25%, #6aad6a 50%, #1d6840 75%, #0e3a22 100%);
+    overflow: visible;
+  }
+  .pw-bar-labels {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .pw-marker {
+    position: absolute;
+    top: -6px;
+    width: 4px;
+    height: 30px;
+    background: var(--ink);
+    border-radius: 2px;
+    transform: translateX(-50%);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    transition: left 0.3s ease;
+  }
+  .pw-marker::after {
+    content: attr(data-label);
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  /* Benchmark table */
+  .pw-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .pw-table th {
+    background: var(--ink);
+    color: white;
+    padding: 8px 12px;
+    text-align: left;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .pw-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee9df;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--ink2);
+  }
+  .pw-table tr:nth-child(even) td { background: #faf8f4; }
+  .pw-table tr.pw-highlight td {
+    background: var(--green-bg);
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  /* Methodology */
+  .gc-method {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .gc-method code {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    background: #faf8f4;
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <a href="index.html" class="back">&larr; Back</a>
+
+  <div class="kicker">POWER &amp; PERFORMANCE</div>
+  <h1>Power-to-Weight<br>Ratio Calculator</h1>
+  <p class="intro">
+    Calculate your cycling power-to-weight ratio and see how you compare
+    against benchmark categories from recreational rider to World Tour professional.
+    Adjust your FTP and body weight to explore the relationship in real time.
+  </p>
+
+  <!-- Output: dark card -->
+  <div class="gc-headline" id="output-card">
+    <div class="gc-hl-context">Your Power-to-Weight</div>
+    <span class="gc-hl-number" id="out-wkg">3.33</span>
+    <div class="gc-hl-sub" id="out-ftp">250 W @ 75 kg</div>
+    <div class="gc-hl-category" id="out-category">Cat 3</div>
+  </div>
+
+  <!-- Output rows -->
+  <div style="margin-bottom: 24px;">
+    <div class="gc-out-row">
+      <span>FTP</span>
+      <span class="gc-out-val" id="out-ftp-val">250 W</span>
+    </div>
+    <div class="gc-out-row">
+      <span>Body weight</span>
+      <span class="gc-out-val" id="out-weight-val">75 kg</span>
+    </div>
+    <div class="gc-out-row">
+      <span>W/kg</span>
+      <span class="gc-out-val" id="out-wkg-val">3.33</span>
+    </div>
+    <div class="gc-out-row">
+      <span>Male category</span>
+      <span class="gc-out-val" id="out-cat-male">Cat 3</span>
+    </div>
+    <div class="gc-out-row">
+      <span>Female category</span>
+      <span class="gc-out-val" id="out-cat-female">Cat 2</span>
+    </div>
+  </div>
+
+  <!-- Gradient bar -->
+  <div class="pw-bar-wrap">
+    <div class="pw-bar-label">Position on the spectrum</div>
+    <div class="pw-bar" id="pw-bar">
+      <div class="pw-marker" id="pw-marker" data-label="3.33"></div>
+    </div>
+    <div class="pw-bar-labels">
+      <span>Recreational</span>
+      <span>Cat 4</span>
+      <span>Cat 2</span>
+      <span>Pro</span>
+      <span>World Tour</span>
+    </div>
+  </div>
+
+  <!-- Input panel -->
+  <div class="gc-panel">
+    <div class="gc-panel-title">Inputs</div>
+
+    <div class="gc-field">
+      <label>FTP (Functional Threshold Power)</label>
+      <div class="gc-slider-row">
+        <input type="range" id="ftp-slider" min="100" max="500" value="250" step="1">
+        <span class="gc-slider-val" id="ftp-display">250 W</span>
+      </div>
+    </div>
+
+    <div class="gc-field">
+      <label>Body weight</label>
+      <div class="gc-slider-row">
+        <input type="range" id="weight-slider" min="40" max="120" value="75" step="0.5">
+        <span class="gc-slider-val" id="weight-display">75 kg</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Benchmark table -->
+  <div class="gc-panel">
+    <div class="gc-panel-title">Benchmark Categories</div>
+    <table class="pw-table" id="pw-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Male W/kg</th>
+          <th>Female W/kg</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-cat="wtp"><td>World Tour Pro</td><td>6.0+</td><td>5.5+</td></tr>
+        <tr data-cat="dp"><td>Domestic Pro</td><td>5.2 &ndash; 5.9</td><td>4.7 &ndash; 5.4</td></tr>
+        <tr data-cat="c1"><td>Cat 1</td><td>4.6 &ndash; 5.1</td><td>4.1 &ndash; 4.6</td></tr>
+        <tr data-cat="c2"><td>Cat 2</td><td>4.0 &ndash; 4.5</td><td>3.5 &ndash; 4.0</td></tr>
+        <tr data-cat="c3"><td>Cat 3</td><td>3.4 &ndash; 3.9</td><td>2.9 &ndash; 3.4</td></tr>
+        <tr data-cat="c4"><td>Cat 4</td><td>2.5 &ndash; 3.3</td><td>2.0 &ndash; 2.8</td></tr>
+        <tr data-cat="rec"><td>Recreational</td><td>&lt; 2.5</td><td>&lt; 2.0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="gc-method">
+    <strong style="color:var(--ink2);font-weight:500;">About this calculator</strong><br><br>
+    <code>W/kg</code> = FTP (watts) &divide; Body weight (kg)<br><br>
+    FTP (Functional Threshold Power) represents the highest average power you can sustain for approximately one hour.
+    The benchmark categories are based on widely-used cycling classification standards.
+    Male and female ranges reflect physiological differences in typical power output at elite levels.
+  </div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var ftpSlider = document.getElementById('ftp-slider');
+  var weightSlider = document.getElementById('weight-slider');
+  var ftpDisplay = document.getElementById('ftp-display');
+  var weightDisplay = document.getElementById('weight-display');
+  var outWkg = document.getElementById('out-wkg');
+  var outFtp = document.getElementById('out-ftp');
+  var outCategory = document.getElementById('out-category');
+  var outFtpVal = document.getElementById('out-ftp-val');
+  var outWeightVal = document.getElementById('out-weight-val');
+  var outWkgVal = document.getElementById('out-wkg-val');
+  var outCatMale = document.getElementById('out-cat-male');
+  var outCatFemale = document.getElementById('out-cat-female');
+  var pwMarker = document.getElementById('pw-marker');
+  var tableRows = document.querySelectorAll('#pw-table tbody tr');
+
+  var maleCats = [
+    { key: 'wtp', label: 'World Tour Pro', min: 6.0, max: Infinity },
+    { key: 'dp',  label: 'Domestic Pro',   min: 5.2, max: 5.9 },
+    { key: 'c1',  label: 'Cat 1',          min: 4.6, max: 5.1 },
+    { key: 'c2',  label: 'Cat 2',          min: 4.0, max: 4.5 },
+    { key: 'c3',  label: 'Cat 3',          min: 3.4, max: 3.9 },
+    { key: 'c4',  label: 'Cat 4',          min: 2.5, max: 3.3 },
+    { key: 'rec', label: 'Recreational',   min: 0,   max: 2.4999 }
+  ];
+
+  var femaleCats = [
+    { key: 'wtp', label: 'World Tour Pro', min: 5.5, max: Infinity },
+    { key: 'dp',  label: 'Domestic Pro',   min: 4.7, max: 5.4 },
+    { key: 'c1',  label: 'Cat 1',          min: 4.1, max: 4.6 },
+    { key: 'c2',  label: 'Cat 2',          min: 3.5, max: 4.0 },
+    { key: 'c3',  label: 'Cat 3',          min: 2.9, max: 3.4 },
+    { key: 'c4',  label: 'Cat 4',          min: 2.0, max: 2.8 },
+    { key: 'rec', label: 'Recreational',   min: 0,   max: 1.9999 }
+  ];
+
+  function getCategoryLabel(wkg, cats) {
+    for (var i = 0; i < cats.length; i++) {
+      if (wkg >= cats[i].min) return cats[i].label;
+    }
+    return 'Recreational';
+  }
+
+  function getCategoryKey(wkg, cats) {
+    for (var i = 0; i < cats.length; i++) {
+      if (wkg >= cats[i].min) return cats[i].key;
+    }
+    return 'rec';
+  }
+
+  function getBarPosition(wkg) {
+    // Map W/kg to 0-100% position
+    // 0 W/kg = 0%, 7 W/kg = 100%
+    var minWkg = 0;
+    var maxWkg = 7;
+    var pct = ((wkg - minWkg) / (maxWkg - minWkg)) * 100;
+    return Math.max(0, Math.min(100, pct));
+  }
+
+  function updateSliderFill(slider) {
+    var min = parseFloat(slider.min);
+    var max = parseFloat(slider.max);
+    var val = parseFloat(slider.value);
+    var pct = ((val - min) / (max - min)) * 100;
+    slider.style.setProperty('--fill', pct + '%');
+  }
+
+  function calculate() {
+    var ftp = parseFloat(ftpSlider.value);
+    var weight = parseFloat(weightSlider.value);
+    var wkg = ftp / weight;
+    var wkgStr = wkg.toFixed(2);
+
+    // Update slider displays
+    ftpDisplay.textContent = ftp + ' W';
+    weightDisplay.textContent = weight + ' kg';
+    updateSliderFill(ftpSlider);
+    updateSliderFill(weightSlider);
+
+    // Update dark card
+    outWkg.textContent = wkgStr;
+    outFtp.textContent = ftp + ' W @ ' + weight + ' kg';
+
+    var maleCat = getCategoryLabel(wkg, maleCats);
+    outCategory.textContent = maleCat;
+
+    // Update output rows
+    outFtpVal.textContent = ftp + ' W';
+    outWeightVal.textContent = weight + ' kg';
+    outWkgVal.textContent = wkgStr;
+    outCatMale.textContent = getCategoryLabel(wkg, maleCats);
+    outCatFemale.textContent = getCategoryLabel(wkg, femaleCats);
+
+    // Update gradient bar marker
+    var pos = getBarPosition(wkg);
+    pwMarker.style.left = pos + '%';
+    pwMarker.setAttribute('data-label', wkgStr);
+
+    // Highlight matching table row (based on male categories)
+    var maleKey = getCategoryKey(wkg, maleCats);
+    for (var i = 0; i < tableRows.length; i++) {
+      var row = tableRows[i];
+      if (row.getAttribute('data-cat') === maleKey) {
+        row.classList.add('pw-highlight');
+      } else {
+        row.classList.remove('pw-highlight');
+      }
+    }
+  }
+
+  ftpSlider.addEventListener('input', calculate);
+  weightSlider.addEventListener('input', calculate);
+
+  // Initial calculation
+  calculate();
+})();
+</script>
+</body>
+</html>

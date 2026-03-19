@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Run Pace Converter — Diamond Peak</title>
+<script src="js/auth-gate.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8f5ef;
+    --card: #fff;
+    --ink: #18160f;
+    --ink2: #4a4535;
+    --muted: #9a9080;
+    --border: #ddd8cc;
+    --green: #1d6840;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+
+  .page { max-width: 820px; margin: 0 auto; padding: 36px 16px 72px; }
+  @media(min-width:600px) { .page { padding: 56px 24px 80px; } }
+
+  .back { color: var(--muted); text-decoration: none; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; }
+  .back:hover { color: var(--ink); }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    margin-top: 20px;
+  }
+  h1 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(26px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 10px;
+  }
+  .intro {
+    font-size: 14px;
+    color: var(--ink2);
+    line-height: 1.7;
+    margin-bottom: 36px;
+  }
+
+  /* Pace grid — 2x2 */
+  .pace-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  @media(max-width:540px) { .pace-grid { grid-template-columns: 1fr; } }
+
+  .pace-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  @media(min-width:520px) { .pace-card { padding: 24px; } }
+
+  .pace-card-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .pace-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pace-inputs label {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    flex-shrink: 0;
+  }
+  .pace-inputs input[type="number"] {
+    width: 100%;
+    height: 44px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    padding: 0 10px;
+    outline: none;
+    border-radius: 4px;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+    text-align: center;
+  }
+  .pace-inputs input[type="number"]:focus { border-color: var(--ink); }
+  .pace-inputs input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+  .pace-sep {
+    font-family: 'DM Mono', monospace;
+    font-size: 20px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .speed-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .speed-input input[type="number"] {
+    width: 100%;
+    height: 44px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    padding: 0 10px;
+    outline: none;
+    border-radius: 4px;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+    text-align: center;
+  }
+  .speed-input input[type="number"]:focus { border-color: var(--ink); }
+  .speed-input input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .speed-unit {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    flex-shrink: 0;
+    min-width: 36px;
+  }
+
+  /* Headline card */
+  .headline-card {
+    background: var(--ink);
+    color: white;
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    margin-bottom: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .headline-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 0%, rgba(29,104,64,0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .hl-context {
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 6px;
+    position: relative;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .hl-number {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(28px, 6vw, 44px);
+    font-weight: 500;
+    line-height: 1;
+    display: block;
+    margin-bottom: 4px;
+    position: relative;
+    color: #a8e8c0;
+  }
+  .hl-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    position: relative;
+  }
+
+  /* Race time table */
+  .race-table-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  @media(min-width:520px) { .race-table-card { padding: 24px; } }
+
+  .race-table-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .race-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .race-table th {
+    text-align: left;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+  }
+  .race-table th:last-child { text-align: right; }
+  .race-table td {
+    padding: 10px 0;
+    font-size: 13px;
+    color: var(--ink2);
+    border-bottom: 1px solid #eee9df;
+  }
+  .race-table tr:last-child td { border-bottom: none; }
+  .race-table td:last-child {
+    text-align: right;
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--green);
+  }
+  .race-dist {
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .race-km {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    margin-left: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <a href="index.html" class="back">&larr; Back to tools</a>
+
+  <div class="kicker">RACE PLANNING</div>
+  <h1>Run Pace<br>Converter</h1>
+  <p class="intro">
+    Enter a pace or speed in any of the four formats below and the others will update
+    instantly. The race time table shows predicted finish times at your current pace.
+  </p>
+
+  <!-- Headline -->
+  <div class="headline-card">
+    <div class="hl-context">Current Pace</div>
+    <span class="hl-number" id="hl-pace">5:00 /km</span>
+    <div class="hl-sub" id="hl-speed">12.00 km/h &middot; 8:03 /mi &middot; 7.46 mph</div>
+  </div>
+
+  <!-- 2x2 input grid -->
+  <div class="pace-grid">
+
+    <!-- min/km -->
+    <div class="pace-card">
+      <div class="pace-card-title">Pace &mdash; min / km</div>
+      <div class="pace-inputs">
+        <input type="number" id="minkm-min" min="0" max="59" step="1" value="5" aria-label="Minutes per km">
+        <span class="pace-sep">:</span>
+        <input type="number" id="minkm-sec" min="0" max="59" step="1" value="0" aria-label="Seconds per km">
+        <label>/km</label>
+      </div>
+    </div>
+
+    <!-- min/mile -->
+    <div class="pace-card">
+      <div class="pace-card-title">Pace &mdash; min / mile</div>
+      <div class="pace-inputs">
+        <input type="number" id="minmi-min" min="0" max="59" step="1" value="8" aria-label="Minutes per mile">
+        <span class="pace-sep">:</span>
+        <input type="number" id="minmi-sec" min="0" max="59" step="1" value="3" aria-label="Seconds per mile">
+        <label>/mi</label>
+      </div>
+    </div>
+
+    <!-- km/h -->
+    <div class="pace-card">
+      <div class="pace-card-title">Speed &mdash; km/h</div>
+      <div class="speed-input">
+        <input type="number" id="kmh" min="0.1" max="99" step="0.01" value="12.00" aria-label="Kilometres per hour">
+        <span class="speed-unit">km/h</span>
+      </div>
+    </div>
+
+    <!-- mph -->
+    <div class="pace-card">
+      <div class="pace-card-title">Speed &mdash; mph</div>
+      <div class="speed-input">
+        <input type="number" id="mph" min="0.1" max="99" step="0.01" value="7.46" aria-label="Miles per hour">
+        <span class="speed-unit">mph</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Race time table -->
+  <div class="race-table-card">
+    <div class="race-table-title">Predicted Race Times</div>
+    <table class="race-table">
+      <thead>
+        <tr><th>Distance</th><th>Finish Time</th></tr>
+      </thead>
+      <tbody id="race-tbody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var KM_PER_MILE = 1.609344;
+
+  var updating = false;
+
+  // Elements
+  var minkmMin = document.getElementById('minkm-min');
+  var minkmSec = document.getElementById('minkm-sec');
+  var minmiMin = document.getElementById('minmi-min');
+  var minmiSec = document.getElementById('minmi-sec');
+  var kmhInput = document.getElementById('kmh');
+  var mphInput = document.getElementById('mph');
+  var hlPace   = document.getElementById('hl-pace');
+  var hlSpeed  = document.getElementById('hl-speed');
+  var raceTbody = document.getElementById('race-tbody');
+
+  var races = [
+    { name: '1 km',          km: 1 },
+    { name: '1 mile',        km: KM_PER_MILE },
+    { name: '5K',            km: 5 },
+    { name: '10K',           km: 10 },
+    { name: 'Half Marathon', km: 21.0975 },
+    { name: 'Marathon',      km: 42.195 },
+  ];
+
+  // --- Helpers ---
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function formatTime(totalSeconds) {
+    if (!isFinite(totalSeconds) || totalSeconds <= 0) return '--:--';
+    var h = Math.floor(totalSeconds / 3600);
+    var m = Math.floor((totalSeconds % 3600) / 60);
+    var s = Math.round(totalSeconds % 60);
+    if (s === 60) { m++; s = 0; }
+    if (m === 60) { h++; m = 0; }
+    if (h > 0) return h + ':' + pad(m) + ':' + pad(s);
+    return m + ':' + pad(s);
+  }
+
+  function formatPace(totalSeconds) {
+    if (!isFinite(totalSeconds) || totalSeconds <= 0) return '--:--';
+    var m = Math.floor(totalSeconds / 60);
+    var s = Math.round(totalSeconds % 60);
+    if (s === 60) { m++; s = 0; }
+    return m + ':' + pad(s);
+  }
+
+  // --- Core: seconds per km is the canonical value ---
+
+  function getSecsPerKm() {
+    var m = parseInt(minkmMin.value, 10) || 0;
+    var s = parseInt(minkmSec.value, 10) || 0;
+    return m * 60 + s;
+  }
+
+  function updateFromSecsPerKm(secPerKm, source) {
+    if (updating) return;
+    updating = true;
+
+    if (secPerKm <= 0 || !isFinite(secPerKm)) {
+      updating = false;
+      return;
+    }
+
+    var secPerMile = secPerKm * KM_PER_MILE;
+    var kmh = 3600 / secPerKm;
+    var mph = 3600 / secPerMile;
+
+    // Update all fields except the source
+    if (source !== 'minkm') {
+      minkmMin.value = Math.floor(secPerKm / 60);
+      minkmSec.value = Math.round(secPerKm % 60);
+    }
+    if (source !== 'minmi') {
+      minmiMin.value = Math.floor(secPerMile / 60);
+      minmiSec.value = Math.round(secPerMile % 60);
+    }
+    if (source !== 'kmh') {
+      kmhInput.value = kmh.toFixed(2);
+    }
+    if (source !== 'mph') {
+      mphInput.value = mph.toFixed(2);
+    }
+
+    // Headline
+    hlPace.textContent = formatPace(secPerKm) + ' /km';
+    hlSpeed.textContent = kmh.toFixed(2) + ' km/h \u00B7 '
+      + formatPace(secPerMile) + ' /mi \u00B7 '
+      + mph.toFixed(2) + ' mph';
+
+    // Race table
+    var html = '';
+    for (var i = 0; i < races.length; i++) {
+      var r = races[i];
+      var t = secPerKm * r.km;
+      html += '<tr>'
+        + '<td><span class="race-dist">' + r.name + '</span><span class="race-km">' + r.km.toFixed(r.km % 1 === 0 ? 0 : 2) + ' km</span></td>'
+        + '<td>' + formatTime(t) + '</td>'
+        + '</tr>';
+    }
+    raceTbody.innerHTML = html;
+
+    updating = false;
+  }
+
+  // --- Event listeners ---
+
+  function onMinKmChange() {
+    updateFromSecsPerKm(getSecsPerKm(), 'minkm');
+  }
+
+  function onMinMiChange() {
+    var m = parseInt(minmiMin.value, 10) || 0;
+    var s = parseInt(minmiSec.value, 10) || 0;
+    var secPerMile = m * 60 + s;
+    var secPerKm = secPerMile / KM_PER_MILE;
+    updateFromSecsPerKm(secPerKm, 'minmi');
+  }
+
+  function onKmhChange() {
+    var v = parseFloat(kmhInput.value);
+    if (v > 0) {
+      var secPerKm = 3600 / v;
+      updateFromSecsPerKm(secPerKm, 'kmh');
+    }
+  }
+
+  function onMphChange() {
+    var v = parseFloat(mphInput.value);
+    if (v > 0) {
+      var secPerMile = 3600 / v;
+      var secPerKm = secPerMile / KM_PER_MILE;
+      updateFromSecsPerKm(secPerKm, 'mph');
+    }
+  }
+
+  minkmMin.addEventListener('input', onMinKmChange);
+  minkmSec.addEventListener('input', onMinKmChange);
+  minmiMin.addEventListener('input', onMinMiChange);
+  minmiSec.addEventListener('input', onMinMiChange);
+  kmhInput.addEventListener('input', onKmhChange);
+  mphInput.addEventListener('input', onMphChange);
+
+  // Initial render with default 5:00 /km
+  updateFromSecsPerKm(300, 'minkm');
+
+})();
+</script>
+</body>
+</html>
