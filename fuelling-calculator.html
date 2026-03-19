@@ -39,26 +39,19 @@
   h1 { font-family: 'Libre Baskerville', serif; font-size: clamp(26px, 5vw, 38px); font-weight: 700; line-height: 1.15; margin-bottom: 10px; }
   .intro { font-size: 14px; color: var(--ink2); line-height: 1.7; margin-bottom: 28px; }
 
-  /* Section headings */
   .sec-head { display: flex; align-items: center; gap: 12px; margin: 32px 0 16px; }
   .sec-tag { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
   .sec-rule { flex: 1; height: 1px; background: var(--border); }
 
-  /* Panels */
   .panel { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
   @media(min-width:520px) { .panel { padding: 24px; } }
   .panel-title { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 
-  /* Grid layouts */
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-  @media(max-width:700px) { .grid-2 { grid-template-columns: 1fr; } .grid-3 { grid-template-columns: 1fr 1fr; } }
-  @media(max-width:480px) { .grid-3 { grid-template-columns: 1fr; } }
+  @media(max-width:700px) { .grid-2 { grid-template-columns: 1fr; } }
 
-  /* Fields */
   .field { margin-bottom: 12px; }
   .field label { display: block; font-size: 11px; font-weight: 500; color: var(--ink2); margin-bottom: 4px; }
-  .field-hint { font-size: 10px; color: var(--muted); margin-top: 2px; }
   .field input[type="number"], .field select {
     width: 100%; height: 36px; border: 1px solid var(--border); background: white; color: var(--ink);
     font-family: 'DM Mono', monospace; font-size: 13px; padding: 0 8px; outline: none; border-radius: 4px;
@@ -68,9 +61,7 @@
   .field input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
   .field-row { display: flex; gap: 8px; align-items: flex-end; }
   .field-row .field { flex: 1; margin-bottom: 0; }
-  .field-unit { font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace; padding-bottom: 10px; }
 
-  /* Preset buttons */
   .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
   .preset-btn {
     padding: 6px 14px; border: 1px solid var(--border); border-radius: 4px; background: var(--card);
@@ -79,18 +70,6 @@
   .preset-btn:hover { border-color: var(--ink); }
   .preset-btn.active { background: var(--green-bg); border-color: var(--green); color: var(--green); font-weight: 500; }
 
-  /* Slider */
-  .slider-row { display: flex; align-items: center; gap: 8px; }
-  .slider-row input[type="range"] {
-    flex: 1; height: 5px; -webkit-appearance: none; appearance: none;
-    background: linear-gradient(to right, var(--green) 0%, var(--green) var(--fill,50%), var(--border) var(--fill,50%), var(--border) 100%);
-    border-radius: 999px; outline: none;
-  }
-  .slider-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--green); cursor: pointer; }
-  .slider-row input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--green); cursor: pointer; border: none; }
-  .slider-val { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; color: var(--green); min-width: 50px; text-align: right; }
-
-  /* Dark headline */
   .headline { background: var(--ink); color: white; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 16px; position: relative; overflow: hidden; }
   .headline::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 30% 0%, rgba(29,104,64,0.12), transparent 60%); pointer-events: none; }
   .hl-context { font-size: 10px; color: rgba(255,255,255,0.4); font-family: 'DM Mono', monospace; letter-spacing: 0.1em; text-transform: uppercase; position: relative; margin-bottom: 4px; }
@@ -102,7 +81,6 @@
   .hl-metric-val { font-family: 'DM Mono', monospace; font-size: 20px; font-weight: 500; color: #a8e8c0; }
   .hl-metric-label { font-size: 9px; color: rgba(255,255,255,0.4); font-family: 'DM Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; }
 
-  /* Race timeline bar */
   .race-bar { display: flex; height: 32px; border-radius: 6px; overflow: hidden; margin: 12px 0; }
   .race-bar-seg { display: flex; align-items: center; justify-content: center; color: white; font-size: 9px; font-weight: 500; font-family: 'DM Mono', monospace; letter-spacing: 0.04em; min-width: 0; overflow: hidden; white-space: nowrap; padding: 0 4px; }
 
@@ -153,7 +131,7 @@
   .food-name { font-size: 11px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .food-macros { font-size: 9px; font-family: 'DM Mono', monospace; color: var(--muted); }
   .food-macros .glu { color: var(--blue); }
-  .food-macros .fru { color: var(--orange, #c0392b); }
+  .food-macros .fru { color: #c0392b; }
 
   /* Scheduled items */
   .sched-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
@@ -170,24 +148,31 @@
   .time-input-sm { width: 56px; height: 28px; border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-family: 'DM Mono', monospace; font-size: 11px; text-align: center; outline: none; background: white; }
   .time-input-sm:focus { border-color: var(--ink); }
 
-  /* Add to plan modal / dropdown */
-  .add-food-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-  .add-food-row select { height: 32px; border: 1px solid var(--border); border-radius: 4px; padding: 0 8px; font-family: 'DM Mono', monospace; font-size: 11px; outline: none; background: white; min-width: 160px; }
-  .add-food-row select:focus { border-color: var(--ink); }
-
   /* Graph canvas */
   .graph-wrap { position: relative; width: 100%; height: 280px; margin-top: 10px; background: white; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
   .graph-wrap canvas { width: 100%; height: 100%; display: block; }
+  .graph-wrap-sm { height: 180px; }
 
-  /* Legend */
   .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; font-size: 10px; font-family: 'DM Mono', monospace; color: var(--ink2); }
   .legend-item { display: flex; align-items: center; gap: 4px; }
   .legend-swatch { width: 14px; height: 3px; border-radius: 2px; }
 
-  /* Status badges */
-  .status-ok { color: var(--green); }
-  .status-warn { color: var(--amber); }
-  .status-over { color: var(--red); }
+  /* Collapsible section */
+  .collapse-head {
+    display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+    padding: 10px 0; margin-top: 6px;
+  }
+  .collapse-head .chevron {
+    width: 16px; height: 16px; color: var(--muted); transition: transform 0.2s;
+    display: flex; align-items: center; justify-content: center; font-size: 12px;
+  }
+  .collapse-head.open .chevron { transform: rotate(90deg); }
+  .collapse-head .collapse-label {
+    font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .collapse-body { display: none; }
+  .collapse-body.open { display: block; }
 
   /* Custom food form */
   .custom-form { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto; gap: 6px; align-items: end; margin-top: 10px; }
@@ -196,7 +181,7 @@
   .custom-form input:focus { border-color: var(--ink); }
   .custom-form label { font-size: 9px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; display: block; }
 
-  /* Race cards (printable) */
+  /* Race cards */
   .race-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 10px; }
   .race-card {
     background: white; border: 1.5px solid var(--border); border-radius: 8px; padding: 16px; break-inside: avoid;
@@ -224,26 +209,56 @@
   .race-card-items .item-aid { font-size: 8px; color: var(--red); font-family: 'DM Mono', monospace; background: var(--red-bg); padding: 1px 4px; border-radius: 2px; }
   .race-card-empty { font-size: 10px; color: var(--muted); font-style: italic; padding: 8px 0; }
 
-  /* Top-tube card (bike) */
-  .race-card-toptube {
+  /* Top-tube card — vertical table like Caleb Ewan race card */
+  .tt-card {
     grid-column: 1 / -1;
-    background: white; border: 2px solid var(--bike); border-radius: 6px;
-    padding: 10px 16px; break-inside: avoid;
+    display: inline-block; /* shrink to content width */
+    background: white; border: 3px solid var(--bike); border-radius: 4px;
+    break-inside: avoid; max-width: 320px;
   }
-  .race-card-toptube .race-card-head { margin-bottom: 6px; padding-bottom: 6px; border-bottom-color: var(--bike); }
-  .race-card-toptube .tt-items {
-    display: flex; flex-wrap: wrap; gap: 0; list-style: none;
+  .tt-header {
+    background: var(--bike); color: white; padding: 6px 12px;
+    font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.08em; text-align: center;
   }
-  .race-card-toptube .tt-items li {
-    display: flex; align-items: center; gap: 4px; padding: 3px 8px;
-    font-size: 10px; color: var(--ink2); border-right: 1px solid #e8e4da;
-    font-family: 'DM Mono', monospace; white-space: nowrap;
+  .tt-table { width: 100%; border-collapse: collapse; }
+  .tt-table th {
+    padding: 4px 8px; font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink);
+    background: #f0eddf; border-bottom: 2px solid var(--bike);
   }
-  .race-card-toptube .tt-items li:last-child { border-right: none; }
-  .race-card-toptube .tt-time { font-weight: 500; color: var(--ink); }
-  .race-card-toptube .tt-dist { color: var(--muted); font-size: 9px; }
-  .race-card-toptube .tt-carbs { color: var(--green); font-weight: 500; }
-  .race-card-toptube .tt-aid { color: var(--red); font-size: 8px; }
+  .tt-table td {
+    padding: 6px 8px; border-bottom: 1px solid #e8e4da; vertical-align: middle;
+    font-family: 'DM Mono', monospace; font-size: 11px;
+  }
+  .tt-table tr:last-child td { border-bottom: none; }
+  .tt-table .tt-time-col { font-weight: 500; color: var(--ink); white-space: nowrap; min-width: 50px; text-align: center; }
+  .tt-table .tt-nutr-col { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-height: 28px; }
+  .tt-food-chip {
+    display: inline-flex; align-items: center; gap: 2px; padding: 2px 6px;
+    background: #f4f2ec; border: 1px solid var(--border); border-radius: 3px;
+    font-size: 12px; white-space: nowrap;
+  }
+  .tt-food-chip .tt-chip-label { font-size: 9px; color: var(--ink2); }
+  .tt-food-chip .tt-chip-carbs { font-size: 8px; color: var(--green); font-weight: 500; }
+  .tt-food-chip.tt-aid-chip { border-color: var(--red); background: #fdf6f4; }
+  .tt-table .tt-finish { font-weight: 500; color: var(--red); text-transform: uppercase; text-align: center; }
+
+  /* Aid station pickup card */
+  .aid-pickup-card {
+    background: white; border: 2px solid var(--red); border-radius: 8px; padding: 16px; break-inside: avoid;
+  }
+  .aid-pickup-head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 8px;
+    border-bottom: 2px solid var(--red); font-family: 'DM Mono', monospace;
+    font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--red);
+  }
+  .aid-pickup-items { list-style: none; }
+  .aid-pickup-items li {
+    display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0ede5;
+    font-size: 11px;
+  }
+  .aid-pickup-items li:last-child { border-bottom: none; }
 
   /* Packing list card */
   .pack-card { background: #faf8f4; border: 1.5px solid var(--border); border-radius: 8px; padding: 16px; }
@@ -252,7 +267,6 @@
   .pack-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: white; border-radius: 4px; font-size: 11px; }
   .pack-qty { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--green); min-width: 28px; text-align: center; }
   .pack-name { color: var(--ink2); }
-  .pack-note { font-size: 9px; color: var(--muted); font-family: 'DM Mono', monospace; margin-left: auto; }
 
   .print-btn {
     display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border: 1px solid var(--green);
@@ -279,13 +293,12 @@
     #raceSetup, #aidSection, #foodLibrary, #schedSection, #graphSection { display: none !important; }
     #printSection { display: block !important; }
     .race-cards { grid-template-columns: 1fr 1fr; gap: 10px; }
-    .race-card-toptube { grid-column: 1 / -1; }
+    .tt-card { grid-column: 1 / -1; }
     .race-card { border: 1.5px solid #ccc; page-break-inside: avoid; }
     .panel { border: none; padding: 0; }
     .headline { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   }
 
-  /* Method footer */
   .method { font-size: 11px; color: var(--muted); line-height: 1.7; margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); }
   .method code { font-family: 'DM Mono', monospace; font-size: 10px; background: #faf8f4; padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border); }
   .method strong { color: var(--ink2); font-weight: 500; }
@@ -309,11 +322,13 @@
     <strong>Absorption model</strong><br><br>
     Glucose is absorbed via SGLT1 transporters at a maximum rate of <code>~60 g/hr</code>.
     Fructose uses the GLUT5 transporter at <code>~30 g/hr</code>.
-    Combined 2:1 glucose:fructose products can deliver up to <code>~90 g/hr</code> of total carbohydrate.<br><br>
-    The graph models each food item's absorption over a window based on form:
-    <code>Liquid ~15 min</code> <code>Gel ~20 min</code> <code>Solid ~35 min</code>.
-    Absorption is modelled as a bell-shaped curve peaking at the midpoint of the window,
-    capped at physiological transport limits (60 g/hr glucose, 30 g/hr fructose).<br><br>
+    Combined 2:1 glucose:fructose products can deliver up to <code>~90 g/hr</code> of total carbohydrate.
+    With training and gut conditioning, rates up to <code>~120 g/hr</code> are achievable.
+    Above <code>120 g/hr</code> you risk GI distress.<br><br>
+    The graph shows colour-coded zones:
+    <span style="color:var(--green)">green &le; 90</span>,
+    <span style="color:var(--amber)">amber 90&ndash;120</span>,
+    <span style="color:var(--red)">red &gt; 120 g/hr</span>.<br><br>
     Individual absorption rates vary with training, gut conditioning, and race intensity.
     Always practise your fuelling strategy in training before race day.
   </div>
@@ -323,10 +338,6 @@
 <script>
 (function(){
   'use strict';
-
-  /* ══════════════════════════════════════════════
-     DATA
-     ══════════════════════════════════════════════ */
 
   var PRESETS = [
     { name: 'Sprint Tri', swim: 0.75, bike: 20, run: 5, type: 'tri' },
@@ -363,17 +374,13 @@
   ];
 
   var PORTIONS = [
-    { label: '1',   value: 1 },
-    { label: '\u00BD',  value: 0.5 },
+    { label: '1', value: 1 },
+    { label: '\u00BD', value: 0.5 },
     { label: '\u2153', value: 1/3 },
-    { label: '\u00BC',  value: 0.25 }
+    { label: '\u00BC', value: 0.25 }
   ];
 
-  var FORM_WINDOW = { liquid: 15, gel: 20, solid: 35 }; // absorption window in minutes
-
-  /* ══════════════════════════════════════════════
-     STATE
-     ══════════════════════════════════════════════ */
+  var FORM_WINDOW = { liquid: 15, gel: 20, solid: 35 };
 
   var state = {
     preset: 'Olympic Tri',
@@ -382,21 +389,20 @@
     bikeSpeed: 30, runPace: 5.5,
     t1: 3, t2: 2,
     aidStations: [],
-    schedule: [],     // { foodId, timeMin, portion, fromAid }
+    schedule: [],
     customFoods: [],
     raceType: 'tri',
-    // Complexity toggles
     showSodium: false,
     showFluid: true,
     showAid: true,
     showGraph: true,
     showPacking: true,
-    showTopTube: true
+    showTopTube: true,
+    showFluidGraph: false,
+    showSodiumGraph: false
   };
 
-  /* ══════════════════════════════════════════════
-     CALCULATIONS
-     ══════════════════════════════════════════════ */
+  /* ── CALCULATIONS ────────────────────── */
 
   function calcRace() {
     var swimPaceSec100 = state.swimPaceMin * 60 + state.swimPaceSec;
@@ -406,15 +412,12 @@
     var t1 = state.swimDist > 0 && state.bikeDist > 0 ? state.t1 : 0;
     var t2 = state.bikeDist > 0 && state.runDist > 0 ? state.t2 : 0;
     var total = swimMin + t1 + bikeMin + t2 + runMin;
-
-    var segs = [];
-    var t = 0;
+    var segs = [], t = 0;
     if (swimMin > 0) { segs.push({ name: 'Swim', dur: swimMin, start: t, dist: state.swimDist, color: 'var(--swim)' }); t += swimMin; }
     if (t1 > 0)      { segs.push({ name: 'T1',   dur: t1,      start: t, dist: 0, color: 'var(--t-col)' }); t += t1; }
     if (bikeMin > 0)  { segs.push({ name: 'Bike', dur: bikeMin, start: t, dist: state.bikeDist, color: 'var(--bike)' }); t += bikeMin; }
     if (t2 > 0)       { segs.push({ name: 'T2',   dur: t2,      start: t, dist: 0, color: 'var(--t-col)' }); t += t2; }
     if (runMin > 0)   { segs.push({ name: 'Run',  dur: runMin,  start: t, dist: state.runDist, color: 'var(--run)' }); t += runMin; }
-
     return { swimMin: swimMin, bikeMin: bikeMin, runMin: runMin, t1: t1, t2: t2, total: total, segs: segs };
   }
 
@@ -426,72 +429,55 @@
     return segs.length > 0 ? segs[segs.length - 1].name : '';
   }
 
-  // Get distance into a segment at a given race time
   function getDistAtTime(segs, timeMin) {
     if (timeMin < 0) return { dist: 0, seg: null };
     for (var i = 0; i < segs.length; i++) {
       var seg = segs[i];
-      if (timeMin >= seg.start && timeMin < seg.start + seg.dur) {
-        if (seg.dist > 0) {
-          var frac = (timeMin - seg.start) / seg.dur;
-          return { dist: Math.round(frac * seg.dist * 10) / 10, seg: seg };
-        }
-        return { dist: 0, seg: seg };
+      if (timeMin >= seg.start && timeMin < seg.start + seg.dur && seg.dist > 0) {
+        var frac = (timeMin - seg.start) / seg.dur;
+        return { dist: Math.round(frac * seg.dist * 10) / 10, seg: seg };
       }
     }
     return { dist: 0, seg: null };
   }
 
   function getAllFoods() { return FOODS.concat(state.customFoods); }
-
   function getFoodById(id) {
     var all = getAllFoods();
-    for (var i = 0; i < all.length; i++) { if (all[i].id === id) return all[i]; }
+    for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
     return null;
   }
 
   function fmtTime(min) {
     if (min < 0) min = 0;
-    var h = Math.floor(min / 60);
-    var m = Math.floor(min % 60);
-    var s = Math.round((min - Math.floor(min)) * 60);
-    if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-    return m + ':' + String(s).padStart(2, '0');
+    var h = Math.floor(min / 60), m = Math.floor(min % 60), s = Math.round((min - Math.floor(min)) * 60);
+    if (h > 0) return h + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    return m + ':' + String(s).padStart(2,'0');
   }
-
   function fmtHM(min) {
-    var h = Math.floor(min / 60);
-    var m = Math.round(min % 60);
-    if (h > 0 && m > 0) return h + 'h ' + m + 'm';
+    var h = Math.floor(min / 60), m = Math.round(min % 60);
+    if (h > 0 && m > 0) return h + 'h' + String(m).padStart(2,'0');
     if (h > 0) return h + 'h';
-    return m + 'm';
+    return m + "'";
   }
 
-  /* Absorption model — capped at physiological transport limits */
   var PRE_RACE_OFFSET = 30;
 
   function calcAbsorption(totalMin) {
     var n = Math.ceil(totalMin + PRE_RACE_OFFSET) + 1;
-    var glu = new Float32Array(n);
-    var fru = new Float32Array(n);
-
+    var glu = new Float32Array(n), fru = new Float32Array(n);
     for (var s = 0; s < state.schedule.length; s++) {
-      var entry = state.schedule[s];
-      var food = getFoodById(entry.foodId);
+      var entry = state.schedule[s], food = getFoodById(entry.foodId);
       if (!food || food.carbs === 0) continue;
       var por = entry.portion || 1;
-
-      var window = FORM_WINDOW[food.form] || 20;
-      var halfW = window / 2;
+      var w = FORM_WINDOW[food.form] || 20, halfW = w / 2;
       var peak = entry.timeMin + halfW + PRE_RACE_OFFSET;
       var sigma = halfW / 2.5;
-
       var sqrt2pi = 2.5066283;
       var gluAmp = (food.glucose * por) / (sigma * sqrt2pi);
       var fruAmp = (food.fructose * por) / (sigma * sqrt2pi);
-
       var startM = Math.max(0, Math.floor(entry.timeMin + PRE_RACE_OFFSET));
-      var endM = Math.min(n, Math.ceil(entry.timeMin + PRE_RACE_OFFSET + window + sigma * 3));
+      var endM = Math.min(n, Math.ceil(entry.timeMin + PRE_RACE_OFFSET + w + sigma * 3));
       for (var m = startM; m < endM; m++) {
         var x = m - peak;
         var g = Math.exp(-0.5 * (x / sigma) * (x / sigma));
@@ -499,29 +485,52 @@
         fru[m] += fruAmp * g * 60;
       }
     }
-
-    // Cap at physiological transport limits
-    for (var c = 0; c < n; c++) {
-      if (glu[c] > 60) glu[c] = 60;
-      if (fru[c] > 30) fru[c] = 30;
-    }
-
+    // NO cap — show actual absorption rates so danger zones are visible
     return { glucose: glu, fructose: fru, minutes: n };
+  }
+
+  // Calculate fluid and sodium timelines (cumulative, in hourly rate windows)
+  function calcFluidTimeline(totalMin) {
+    var n = Math.ceil(totalMin + PRE_RACE_OFFSET) + 1;
+    var ml = new Float32Array(n), na = new Float32Array(n);
+    // Use a spreading model similar to absorption but for fluid/sodium
+    for (var s = 0; s < state.schedule.length; s++) {
+      var entry = state.schedule[s], food = getFoodById(entry.foodId);
+      if (!food) continue;
+      var por = entry.portion || 1;
+      var entryMl = (food.ml || 0) * por;
+      var entryNa = (food.na || 0) * por;
+      if (entryMl === 0 && entryNa === 0) continue;
+      // Spread consumption over a window (drinking/absorbing)
+      var w = food.form === 'liquid' ? 10 : 5; // minutes
+      var halfW = w / 2;
+      var peak = entry.timeMin + halfW + PRE_RACE_OFFSET;
+      var sigma = halfW / 2;
+      var sqrt2pi = 2.5066283;
+      var mlAmp = entryMl / (sigma * sqrt2pi);
+      var naAmp = entryNa / (sigma * sqrt2pi);
+      var startM = Math.max(0, Math.floor(entry.timeMin + PRE_RACE_OFFSET));
+      var endM = Math.min(n, Math.ceil(entry.timeMin + PRE_RACE_OFFSET + w + sigma * 3));
+      for (var m = startM; m < endM; m++) {
+        var x = m - peak;
+        var g = Math.exp(-0.5 * (x / sigma) * (x / sigma));
+        ml[m] += mlAmp * g * 60; // ml/hr
+        na[m] += naAmp * g * 60; // mg/hr
+      }
+    }
+    return { ml: ml, na: na, minutes: n };
   }
 
   function aidStationTimes(race) {
     var times = [];
     for (var i = 0; i < state.aidStations.length; i++) {
-      var aid = state.aidStations[i];
-      var km = aid.km;
-      var disc = aid.discipline || 'bike';
+      var aid = state.aidStations[i], km = aid.km, disc = aid.discipline || 'bike';
       var tMin = 0;
       for (var s = 0; s < race.segs.length; s++) {
         var seg = race.segs[s];
         if (seg.name.toLowerCase() === disc) {
           var speed = disc === 'bike' ? state.bikeSpeed : (60 / state.runPace);
-          var distIntoSeg = Math.min(km, seg.dist);
-          tMin = seg.start + (distIntoSeg / speed) * 60;
+          tMin = seg.start + (Math.min(km, seg.dist) / speed) * 60;
           break;
         }
       }
@@ -530,125 +539,106 @@
     return times.sort(function(a, b) { return a.timeMin - b.timeMin; });
   }
 
-  /* ══════════════════════════════════════════════
-     RENDER
-     ══════════════════════════════════════════════ */
+  // Find which aid station an item would be picked up from
+  function findNearestAidStation(itemTimeMin, race, aids) {
+    var best = null, bestDiff = Infinity;
+    for (var i = 0; i < aids.length; i++) {
+      var diff = itemTimeMin - aids[i].timeMin;
+      // Item must be AT or AFTER the aid station (you've passed it)
+      if (diff >= 0 && diff < bestDiff) {
+        bestDiff = diff;
+        best = aids[i];
+      }
+    }
+    return best;
+  }
+
+  /* ── RENDER ──────────────────────────── */
 
   function render() {
     var race = calcRace();
     var absorption = calcAbsorption(race.total);
+    var fluidTimeline = calcFluidTimeline(race.total);
     var aids = aidStationTimes(race);
     var allFoods = getAllFoods();
-
     var html = '';
 
-    /* ── COMPLEXITY TOGGLES ─────────────── */
+    /* ── TOGGLES ─────────────────────── */
     html += '<div class="toggles-bar">';
-    html += '<label class="toggle-item"><input type="checkbox" id="togSodium"' + (state.showSodium ? ' checked' : '') + '><span class="toggle-track"></span>Sodium</label>';
-    html += '<label class="toggle-item"><input type="checkbox" id="togFluid"' + (state.showFluid ? ' checked' : '') + '><span class="toggle-track"></span>Fluid</label>';
-    html += '<label class="toggle-item"><input type="checkbox" id="togAid"' + (state.showAid ? ' checked' : '') + '><span class="toggle-track"></span>Aid stations</label>';
-    html += '<label class="toggle-item"><input type="checkbox" id="togGraph"' + (state.showGraph ? ' checked' : '') + '><span class="toggle-track"></span>Absorption graph</label>';
-    html += '<label class="toggle-item"><input type="checkbox" id="togPacking"' + (state.showPacking ? ' checked' : '') + '><span class="toggle-track"></span>Packing list</label>';
-    html += '<label class="toggle-item"><input type="checkbox" id="togTopTube"' + (state.showTopTube ? ' checked' : '') + '><span class="toggle-track"></span>Top tube card</label>';
-    html += '</div>';
-
-    /* ── 1. RACE SETUP ──────────────────── */
-    html += '<div id="raceSetup">';
-    html += '<div class="sec-head"><span class="sec-tag">Race Setup</span><div class="sec-rule"></div></div>';
-
-    html += '<div class="presets">';
-    for (var p = 0; p < PRESETS.length; p++) {
-      var pr = PRESETS[p];
-      var active = state.preset === pr.name ? ' active' : '';
-      html += '<button class="preset-btn' + active + '" data-preset="' + p + '">' + pr.name + '</button>';
+    var togs = [
+      ['togSodium','showSodium','Sodium'],['togFluid','showFluid','Fluid'],
+      ['togAid','showAid','Aid stations'],['togGraph','showGraph','Absorption graph'],
+      ['togFluidGraph','showFluidGraph','Fluid graph'],['togSodiumGraph','showSodiumGraph','Sodium graph'],
+      ['togPacking','showPacking','Packing list'],['togTopTube','showTopTube','Top tube card']
+    ];
+    for (var tgi = 0; tgi < togs.length; tgi++) {
+      html += '<label class="toggle-item"><input type="checkbox" id="' + togs[tgi][0] + '"' + (state[togs[tgi][1]] ? ' checked' : '') + '><span class="toggle-track"></span>' + togs[tgi][2] + '</label>';
     }
     html += '</div>';
 
+    /* ── 1. RACE SETUP ───────────────── */
+    html += '<div id="raceSetup">';
+    html += '<div class="sec-head"><span class="sec-tag">Race Setup</span><div class="sec-rule"></div></div>';
+    html += '<div class="presets">';
+    for (var p = 0; p < PRESETS.length; p++) {
+      html += '<button class="preset-btn' + (state.preset === PRESETS[p].name ? ' active' : '') + '" data-preset="' + p + '">' + PRESETS[p].name + '</button>';
+    }
+    html += '</div>';
     html += '<div class="grid-2">';
 
-    // Left: discipline inputs
-    html += '<div class="panel">';
-    html += '<div class="panel-title">Discipline Speeds</div>';
-
+    html += '<div class="panel"><div class="panel-title">Discipline Speeds</div>';
     if (state.raceType === 'tri' || state.raceType === 'custom') {
       html += '<div class="field-row">';
       html += '<div class="field"><label>Swim (km)</label><input type="number" id="swimDist" min="0" max="20" step="0.1" value="' + state.swimDist + '"></div>';
       html += '<div class="field"><label>Swim pace (/100m)</label><div style="display:flex;align-items:center;gap:2px"><input type="number" id="swimPaceMin" min="0" max="5" step="1" value="' + state.swimPaceMin + '" style="width:48px;text-align:center"><span style="font-family:\'DM Mono\',monospace;font-size:13px;color:var(--muted)">:</span><input type="number" id="swimPaceSec" min="0" max="59" step="1" value="' + String(state.swimPaceSec).padStart(2,'0') + '" style="width:48px;text-align:center"></div></div>';
       html += '</div>';
     }
-
     if (state.raceType !== 'run') {
-      html += '<div class="field-row" style="margin-top:8px">';
-      html += '<div class="field"><label>Bike (km)</label><input type="number" id="bikeDist" min="0" max="300" step="1" value="' + state.bikeDist + '"></div>';
-      html += '<div class="field"><label>Bike speed (km/h)</label><input type="number" id="bikeSpeed" min="10" max="50" step="0.5" value="' + state.bikeSpeed + '"></div>';
-      html += '</div>';
+      html += '<div class="field-row" style="margin-top:8px"><div class="field"><label>Bike (km)</label><input type="number" id="bikeDist" min="0" max="300" step="1" value="' + state.bikeDist + '"></div>';
+      html += '<div class="field"><label>Bike speed (km/h)</label><input type="number" id="bikeSpeed" min="10" max="50" step="0.5" value="' + state.bikeSpeed + '"></div></div>';
     }
-
     if (state.raceType !== 'bike') {
-      html += '<div class="field-row" style="margin-top:8px">';
-      html += '<div class="field"><label>Run (km)</label><input type="number" id="runDist" min="0" max="100" step="0.1" value="' + state.runDist + '"></div>';
-      html += '<div class="field"><label>Run pace (min/km)</label><input type="number" id="runPace" min="2.5" max="10" step="0.1" value="' + state.runPace + '"></div>';
-      html += '</div>';
+      html += '<div class="field-row" style="margin-top:8px"><div class="field"><label>Run (km)</label><input type="number" id="runDist" min="0" max="100" step="0.1" value="' + state.runDist + '"></div>';
+      html += '<div class="field"><label>Run pace (min/km)</label><input type="number" id="runPace" min="2.5" max="10" step="0.1" value="' + state.runPace + '"></div></div>';
     }
-
     if (state.raceType === 'tri' || state.raceType === 'custom') {
-      html += '<div class="field-row" style="margin-top:8px">';
-      html += '<div class="field"><label>T1 (min)</label><input type="number" id="t1" min="0" max="15" step="0.5" value="' + state.t1 + '"></div>';
-      html += '<div class="field"><label>T2 (min)</label><input type="number" id="t2" min="0" max="15" step="0.5" value="' + state.t2 + '"></div>';
-      html += '</div>';
+      html += '<div class="field-row" style="margin-top:8px"><div class="field"><label>T1 (min)</label><input type="number" id="t1" min="0" max="15" step="0.5" value="' + state.t1 + '"></div>';
+      html += '<div class="field"><label>T2 (min)</label><input type="number" id="t2" min="0" max="15" step="0.5" value="' + state.t2 + '"></div></div>';
     }
+    html += '</div>';
 
-    html += '</div>'; // end left panel
-
-    // Right: summary
     html += '<div>';
-    html += '<div class="headline"><div class="hl-context">Total Race Time</div>';
-    html += '<div class="hl-number">' + fmtTime(race.total) + '</div>';
-    html += '<div class="hl-sub">' + fmtHM(race.total) + '</div></div>';
-
-    html += '<div class="headline" style="padding:14px 20px">';
-    html += '<div class="hl-grid">';
+    html += '<div class="headline"><div class="hl-context">Total Race Time</div><div class="hl-number">' + fmtTime(race.total) + '</div><div class="hl-sub">' + fmtHM(race.total) + '</div></div>';
+    html += '<div class="headline" style="padding:14px 20px"><div class="hl-grid">';
     for (var si = 0; si < race.segs.length; si++) {
       var seg = race.segs[si];
       if (seg.name === 'T1' || seg.name === 'T2') continue;
       html += '<div class="hl-metric"><div class="hl-metric-val">' + fmtTime(seg.dur) + '</div><div class="hl-metric-label">' + seg.name + (seg.dist ? ' (' + seg.dist + ' km)' : '') + '</div></div>';
     }
     html += '</div></div>';
-
     if (race.total > 0) {
       html += '<div class="race-bar">';
       for (var bi = 0; bi < race.segs.length; bi++) {
-        var bseg = race.segs[bi];
-        var pct = (bseg.dur / race.total * 100);
-        html += '<div class="race-bar-seg" style="flex:' + pct + ';background:' + bseg.color + '">' + (pct > 6 ? bseg.name : '') + '</div>';
+        var pct = race.segs[bi].dur / race.total * 100;
+        html += '<div class="race-bar-seg" style="flex:' + pct + ';background:' + race.segs[bi].color + '">' + (pct > 6 ? race.segs[bi].name : '') + '</div>';
       }
       html += '</div>';
     }
+    html += '</div></div>'; // end grid
+
+    /* ── 2. AID STATIONS ─────────────── */
     html += '</div>';
-    html += '</div>'; // end grid
-
-    /* ── 2. AID STATIONS ────────────────── */
-    html += '</div>'; // end #raceSetup
     if (state.showAid) {
-      html += '<div id="aidSection">';
-      html += '<div class="sec-head"><span class="sec-tag">Aid Stations</span><div class="sec-rule"></div></div>';
-      html += '<div class="panel">';
-      html += '<div class="panel-title">Mark aid station locations on the course</div>';
-
-      html += '<div class="add-row">';
-      html += '<select id="aidDisc">';
+      html += '<div id="aidSection"><div class="sec-head"><span class="sec-tag">Aid Stations</span><div class="sec-rule"></div></div>';
+      html += '<div class="panel"><div class="panel-title">Mark aid station locations on the course</div>';
+      html += '<div class="add-row"><select id="aidDisc">';
       if (state.bikeDist > 0) html += '<option value="bike">Bike</option>';
       if (state.runDist > 0) html += '<option value="run">Run</option>';
-      html += '</select>';
-      html += '<input type="number" id="aidKm" placeholder="km" min="0" step="1">';
-      html += '<button class="btn-sm" id="addAid">+ Add</button>';
-      html += '</div>';
-
+      html += '</select><input type="number" id="aidKm" placeholder="km" min="0" step="1"><button class="btn-sm" id="addAid">+ Add</button></div>';
       if (state.aidStations.length > 0) {
         html += '<div class="aid-list">';
         for (var a = 0; a < state.aidStations.length; a++) {
-          var aid = state.aidStations[a];
-          var aidT = 0;
+          var aid = state.aidStations[a], aidT = 0;
           for (var at = 0; at < aids.length; at++) {
             if (aids[at].km === aid.km && aids[at].discipline === aid.discipline) { aidT = aids[at].timeMin; break; }
           }
@@ -659,29 +649,19 @@
       html += '</div></div>';
     }
 
-    /* ── 3. FOOD LIBRARY ────────────────── */
-    html += '<div id="foodLibrary">';
-    html += '<div class="sec-head"><span class="sec-tag">Food Library</span><div class="sec-rule"></div></div>';
-    html += '<div class="panel">';
-    html += '<div class="panel-title">Click a food to add it to your fuelling plan</div>';
-
+    /* ── 3. FOOD LIBRARY ─────────────── */
+    html += '<div id="foodLibrary"><div class="sec-head"><span class="sec-tag">Food Library</span><div class="sec-rule"></div></div>';
+    html += '<div class="panel"><div class="panel-title">Click a food to add it to your fuelling plan</div>';
     html += '<div class="food-grid">';
     for (var f = 0; f < allFoods.length; f++) {
       var fd = allFoods[f];
-      var macroStr = fd.carbs + 'g <span class="glu">G:' + fd.glucose + '</span> <span class="fru">F:' + fd.fructose + '</span>';
-      if (state.showFluid && fd.ml > 0) macroStr += ' ' + fd.ml + 'ml';
-      if (state.showSodium && fd.na > 0) macroStr += ' Na:' + fd.na + 'mg';
-      html += '<div class="food-card" data-food="' + fd.id + '">';
-      html += '<div class="food-icon">' + fd.icon + '</div>';
-      html += '<div class="food-info"><div class="food-name">' + fd.name + '</div>';
-      html += '<div class="food-macros">' + macroStr + '</div>';
-      html += '</div></div>';
+      var mStr = fd.carbs + 'g <span class="glu">G:' + fd.glucose + '</span> <span class="fru">F:' + fd.fructose + '</span>';
+      if (state.showFluid && fd.ml > 0) mStr += ' ' + fd.ml + 'ml';
+      if (state.showSodium && fd.na > 0) mStr += ' Na:' + fd.na + 'mg';
+      html += '<div class="food-card" data-food="' + fd.id + '"><div class="food-icon">' + fd.icon + '</div><div class="food-info"><div class="food-name">' + fd.name + '</div><div class="food-macros">' + mStr + '</div></div></div>';
     }
     html += '</div>';
-
-    // Custom food form
-    html += '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">';
-    html += '<div style="font-size:10px;font-weight:500;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em;font-family:\'DM Mono\',monospace">Add custom food</div>';
+    html += '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;font-weight:500;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em;font-family:\'DM Mono\',monospace">Add custom food</div>';
     html += '<div class="custom-form">';
     html += '<div><label>Name</label><input id="cfName" type="text" placeholder="My gel" style="width:100%"></div>';
     html += '<div><label>Glucose (g)</label><input id="cfGlu" type="number" min="0" value="15" style="width:100%"></div>';
@@ -690,79 +670,60 @@
     html += '<div><label>Sodium (mg)</label><input id="cfNa" type="number" min="0" value="0" style="width:100%"></div>';
     html += '<div><label>Form</label><select id="cfForm" style="width:100%;height:32px;border:1px solid var(--border);border-radius:4px;font-family:\'DM Mono\',monospace;font-size:11px;padding:0 4px;outline:none"><option value="gel">Gel</option><option value="liquid">Liquid</option><option value="solid">Solid</option></select></div>';
     html += '<div><label>&nbsp;</label><button class="btn-sm" id="addCustom">+ Add</button></div>';
-    html += '</div></div>';
+    html += '</div></div></div>';
 
+    /* ── 4. FUELLING PLAN ────────────── */
     html += '</div>';
+    html += '<div id="schedSection"><div class="sec-head"><span class="sec-tag">Fuelling Plan</span><div class="sec-rule"></div></div>';
 
-    /* ── 4. FUELLING PLAN ───────────────── */
-    html += '</div>'; // end #foodLibrary
-    html += '<div id="schedSection">';
-    html += '<div class="sec-head"><span class="sec-tag">Fuelling Plan</span><div class="sec-rule"></div></div>';
-
-    // Summary stats
     var totalGlu = 0, totalFru = 0, totalCarbs = 0, totalMl = 0, totalNa = 0;
     for (var ts = 0; ts < state.schedule.length; ts++) {
-      var tf = getFoodById(state.schedule[ts].foodId);
-      var por = state.schedule[ts].portion || 1;
-      if (tf) {
-        totalGlu += Math.round(tf.glucose * por);
-        totalFru += Math.round(tf.fructose * por);
-        totalCarbs += Math.round(tf.carbs * por);
-        totalMl += Math.round((tf.ml || 0) * por);
-        totalNa += Math.round((tf.na || 0) * por);
-      }
+      var tf = getFoodById(state.schedule[ts].foodId), por = state.schedule[ts].portion || 1;
+      if (tf) { totalGlu += Math.round(tf.glucose * por); totalFru += Math.round(tf.fructose * por); totalCarbs += Math.round(tf.carbs * por); totalMl += Math.round((tf.ml||0)*por); totalNa += Math.round((tf.na||0)*por); }
     }
     var raceHrs = race.total / 60;
     var carbsPerHr = raceHrs > 0 ? totalCarbs / raceHrs : 0;
-    var mlPerHr = raceHrs > 0 ? totalMl / raceHrs : 0;
-    var naPerHr = raceHrs > 0 ? totalNa / raceHrs : 0;
 
-    // Determine columns for headline grid
     var hlCols = 3;
     if (state.showFluid) hlCols++;
     if (state.showSodium) hlCols++;
 
-    html += '<div class="headline" style="padding:16px 20px">';
-    html += '<div class="hl-grid" style="grid-template-columns:repeat(' + Math.min(hlCols, 5) + ',1fr)">';
+    html += '<div class="headline" style="padding:16px 20px"><div class="hl-grid" style="grid-template-columns:repeat(' + Math.min(hlCols,5) + ',1fr)">';
     html += '<div class="hl-metric"><div class="hl-metric-val">' + Math.round(carbsPerHr) + '</div><div class="hl-metric-label">carbs g/hr</div></div>';
     html += '<div class="hl-metric"><div class="hl-metric-val">' + totalCarbs + 'g</div><div class="hl-metric-label">total carbs</div></div>';
     html += '<div class="hl-metric"><div class="hl-metric-val" style="font-size:14px;color:#5dade2">' + totalGlu + '<span style="font-size:10px;color:rgba(255,255,255,0.3)"> / </span><span style="color:#e74c3c">' + totalFru + '</span></div><div class="hl-metric-label">glucose / fructose</div></div>';
-    if (state.showFluid) {
-      html += '<div class="hl-metric"><div class="hl-metric-val" style="color:#5dade2">' + Math.round(mlPerHr) + '</div><div class="hl-metric-label">fluid ml/hr</div></div>';
-    }
-    if (state.showSodium) {
-      html += '<div class="hl-metric"><div class="hl-metric-val" style="color:#e8a838">' + Math.round(naPerHr) + '</div><div class="hl-metric-label">sodium mg/hr</div></div>';
-    }
+    if (state.showFluid) html += '<div class="hl-metric"><div class="hl-metric-val" style="color:#5dade2">' + Math.round(totalMl / Math.max(raceHrs,0.01)) + '</div><div class="hl-metric-label">fluid ml/hr</div></div>';
+    if (state.showSodium) html += '<div class="hl-metric"><div class="hl-metric-val" style="color:#e8a838">' + Math.round(totalNa / Math.max(raceHrs,0.01)) + '</div><div class="hl-metric-label">sodium mg/hr</div></div>';
     html += '</div></div>';
 
-    html += '<div class="panel">';
-    html += '<div class="panel-title">Scheduled items \u2014 click food cards above to add</div>';
-
+    html += '<div class="panel"><div class="panel-title">Scheduled items \u2014 click food cards above to add</div>';
     if (state.schedule.length === 0) {
-      html += '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">No food scheduled yet. Click items in the food library above to add them to your plan.</div>';
+      html += '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">No food scheduled yet. Click items in the food library above.</div>';
     } else {
-      // Table header
-      var thHtml = '<th>Time</th><th></th><th>Item</th><th>Portion</th><th>Carbs</th>';
-      if (state.showFluid) thHtml += '<th>Fluid</th>';
-      if (state.showSodium) thHtml += '<th>Na</th>';
-      if (state.showAid) thHtml += '<th>Aid</th>';
-      thHtml += '<th></th>';
-      html += '<table class="sched-table"><thead><tr>' + thHtml + '</tr></thead><tbody>';
-
-      var sorted = state.schedule.slice().sort(function(a, b) { return a.timeMin - b.timeMin; });
+      var thH = '<th>Time</th><th></th><th>Item</th><th>Portion</th><th>Carbs</th>';
+      if (state.showFluid) thH += '<th>Fluid</th>';
+      if (state.showSodium) thH += '<th>Na</th>';
+      if (state.showAid) thH += '<th>\u26F3</th>';
+      thH += '<th></th>';
+      html += '<table class="sched-table"><thead><tr>' + thH + '</tr></thead><tbody>';
+      var sorted = state.schedule.slice().sort(function(a,b){return a.timeMin-b.timeMin;});
       for (var si2 = 0; si2 < sorted.length; si2++) {
-        var entry = sorted[si2];
-        var idx = state.schedule.indexOf(entry);
+        var entry = sorted[si2], idx = state.schedule.indexOf(entry);
         var food = getFoodById(entry.foodId);
         if (!food) continue;
-        var por2 = entry.portion || 1;
+        var p2 = entry.portion || 1;
         var disc = getDisciplineAtTime(race.segs, entry.timeMin);
-        var discCls = disc.toLowerCase().replace(/[ -]/g, '');
-        var eCarbs = Math.round(food.carbs * por2);
-        var eGlu = Math.round(food.glucose * por2);
-        var eFru = Math.round(food.fructose * por2);
-        var eMl = Math.round((food.ml || 0) * por2);
-        var eNa = Math.round((food.na || 0) * por2);
+        var discCls = disc.toLowerCase().replace(/[ -]/g,'');
+        var eC = Math.round(food.carbs*p2), eG = Math.round(food.glucose*p2), eF = Math.round(food.fructose*p2);
+        var eMl = Math.round((food.ml||0)*p2), eNa = Math.round((food.na||0)*p2);
+
+        // Validate aid pickup — must be after an actual aid station
+        var isAid = entry.fromAid ? true : false;
+        var aidValid = true;
+        if (isAid) {
+          var nearestAid = findNearestAidStation(entry.timeMin, race, aids);
+          aidValid = !!nearestAid;
+        }
 
         html += '<tr>';
         html += '<td><input type="number" class="time-input-sm sched-time" data-idx="' + idx + '" value="' + Math.round(entry.timeMin) + '" min="-30" max="' + Math.round(race.total) + '"> min</td>';
@@ -770,152 +731,152 @@
         html += '<td>' + food.icon + ' ' + food.name + '</td>';
         html += '<td><select class="sched-portion" data-idx="' + idx + '" style="width:52px;height:26px;border:1px solid var(--border);border-radius:3px;font-family:\'DM Mono\',monospace;font-size:11px;text-align:center;outline:none;background:white">';
         for (var pi = 0; pi < PORTIONS.length; pi++) {
-          var sel = (Math.abs(por2 - PORTIONS[pi].value) < 0.01) ? ' selected' : '';
-          html += '<option value="' + PORTIONS[pi].value + '"' + sel + '>' + PORTIONS[pi].label + '</option>';
+          html += '<option value="' + PORTIONS[pi].value + '"' + (Math.abs(p2-PORTIONS[pi].value)<0.01?' selected':'') + '>' + PORTIONS[pi].label + '</option>';
         }
         html += '</select></td>';
-        html += '<td style="font-family:\'DM Mono\',monospace;font-weight:500;font-size:11px">' + eCarbs + 'g <span style="font-size:9px;font-weight:400;color:var(--muted)"><span style="color:var(--blue)">' + eGlu + '</span>/<span style="color:#c0392b">' + eFru + '</span></span></td>';
-        if (state.showFluid) {
-          html += '<td style="font-family:\'DM Mono\',monospace;font-size:11px;color:' + (eMl > 0 ? 'var(--blue)' : 'var(--muted)') + '">' + (eMl > 0 ? eMl + 'ml' : '\u2014') + '</td>';
-        }
-        if (state.showSodium) {
-          html += '<td style="font-family:\'DM Mono\',monospace;font-size:11px;color:' + (eNa > 0 ? '#e8a838' : 'var(--muted)') + '">' + (eNa > 0 ? eNa + 'mg' : '\u2014') + '</td>';
-        }
+        html += '<td style="font-family:\'DM Mono\',monospace;font-weight:500;font-size:11px">' + eC + 'g <span style="font-size:9px;font-weight:400;color:var(--muted)"><span style="color:var(--blue)">' + eG + '</span>/<span style="color:#c0392b">' + eF + '</span></span></td>';
+        if (state.showFluid) html += '<td style="font-family:\'DM Mono\',monospace;font-size:11px;color:' + (eMl>0?'var(--blue)':'var(--muted)') + '">' + (eMl>0?eMl+'ml':'\u2014') + '</td>';
+        if (state.showSodium) html += '<td style="font-family:\'DM Mono\',monospace;font-size:11px;color:' + (eNa>0?'#e8a838':'var(--muted)') + '">' + (eNa>0?eNa+'mg':'\u2014') + '</td>';
         if (state.showAid) {
-          var isAid = entry.fromAid ? true : false;
-          html += '<td><label class="aid-toggle' + (isAid ? ' is-aid' : '') + '"><input type="checkbox" class="sched-aid" data-idx="' + idx + '"' + (isAid ? ' checked' : '') + '>' + (isAid ? '\u26F3' : '') + '</label></td>';
+          html += '<td><label class="aid-toggle' + (isAid?' is-aid':'') + '" title="Pick up from aid station"><input type="checkbox" class="sched-aid" data-idx="' + idx + '"' + (isAid?' checked':'') + '>\u26F3</label>';
+          if (isAid && !aidValid) html += '<span style="font-size:8px;color:var(--red)" title="No aid station before this time">\u26A0</span>';
+          html += '</td>';
         }
         html += '<td><span class="sched-rm" data-rm="' + idx + '">&times;</span></td>';
         html += '</tr>';
       }
       html += '</tbody></table>';
     }
-
     html += '</div>';
 
-    /* ── 5. ABSORPTION GRAPH ────────────── */
-    html += '</div>'; // end #schedSection
+    /* ── 5. ABSORPTION GRAPH ─────────── */
+    html += '</div>';
     if (state.showGraph) {
-      html += '<div id="graphSection">';
-      html += '<div class="sec-head"><span class="sec-tag">Absorption Graph</span><div class="sec-rule"></div></div>';
-      html += '<div class="panel">';
-      html += '<div class="panel-title">Glucose &amp; fructose absorption rate over time (capped at transport limits)</div>';
+      html += '<div id="graphSection"><div class="sec-head"><span class="sec-tag">Absorption Graph</span><div class="sec-rule"></div></div>';
+      html += '<div class="panel"><div class="panel-title">Glucose &amp; fructose absorption rate \u2014 zone coloured</div>';
       html += '<div class="graph-wrap"><canvas id="absGraph"></canvas></div>';
       html += '<div class="legend">';
-      html += '<div class="legend-item"><div class="legend-swatch" style="background:#2980b9"></div> Glucose (g/hr)</div>';
-      html += '<div class="legend-item"><div class="legend-swatch" style="background:#c0392b"></div> Fructose (g/hr)</div>';
-      html += '<div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> Combined (g/hr)</div>';
-      html += '<div class="legend-item"><div class="legend-swatch" style="background:#e74c3c;height:1px;border-top:1px dashed #e74c3c"></div> Max limits</div>';
-      if (state.showAid) html += '<div class="legend-item"><div class="legend-swatch" style="background:var(--red);width:6px;height:6px;border-radius:50%"></div> Aid station</div>';
-      html += '</div>';
-      html += '</div></div>';
+      html += '<div class="legend-item"><div class="legend-swatch" style="background:#2980b9"></div> Glucose</div>';
+      html += '<div class="legend-item"><div class="legend-swatch" style="background:#c0392b"></div> Fructose</div>';
+      html += '<div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> Combined</div>';
+      html += '<div class="legend-item"><div style="width:28px;height:10px;border-radius:2px;background:linear-gradient(to right,#e6f4ec,#fdf3e0,#fdeee9)"></div> Zone: green \u2264 90 / amber 90\u2013120 / red &gt;120</div>';
+      html += '</div></div></div>';
     }
 
-    /* ── 6. PRINTABLE RACE CARDS ────────── */
-    html += '<div id="printSection">';
-    html += '<div class="sec-head"><span class="sec-tag">Race Day Cards</span><div class="sec-rule"></div></div>';
-    html += '<div class="panel">';
-    html += '<div class="panel-title">Per-leg fuelling summary \u2014 print or screenshot for race day</div>';
+    /* ── 5b. FLUID GRAPH ─────────────── */
+    if (state.showFluidGraph) {
+      html += '<div id="fluidGraphSection"><div class="sec-head"><span class="sec-tag">Fluid Intake Graph</span><div class="sec-rule"></div></div>';
+      html += '<div class="panel"><div class="panel-title">Fluid intake rate (ml/hr) over time</div>';
+      html += '<div class="graph-wrap graph-wrap-sm"><canvas id="fluidGraph"></canvas></div></div></div>';
+    }
 
-    var legColors = { 'Pre-Race': '#7f8c8d', 'Swim': '#2980b9', 'T1': '#7f8c8d', 'Bike': '#27ae60', 'T2': '#7f8c8d', 'Run': '#e67e22' };
+    /* ── 5c. SODIUM GRAPH ────────────── */
+    if (state.showSodiumGraph) {
+      html += '<div id="sodiumGraphSection"><div class="sec-head"><span class="sec-tag">Sodium Intake Graph</span><div class="sec-rule"></div></div>';
+      html += '<div class="panel"><div class="panel-title">Sodium intake rate (mg/hr) over time</div>';
+      html += '<div class="graph-wrap graph-wrap-sm"><canvas id="sodiumGraph"></canvas></div></div></div>';
+    }
+
+    /* ── 6. RACE DAY CARDS ───────────── */
+    html += '<div id="printSection"><div class="sec-head"><span class="sec-tag">Race Day Cards</span><div class="sec-rule"></div></div>';
+    html += '<div class="panel"><div class="panel-title">Per-leg fuelling summary \u2014 print or screenshot for race day</div>';
+
+    var legColors = { 'Pre-Race':'#7f8c8d','Swim':'#2980b9','T1':'#7f8c8d','Bike':'#27ae60','T2':'#7f8c8d','Run':'#e67e22' };
     var legs = [];
-
-    // Pre-race leg
+    var sortedAll = state.schedule.slice().sort(function(a,b){return a.timeMin-b.timeMin;});
     var preItems = [];
-    var sortedAll = state.schedule.slice().sort(function(a, b) { return a.timeMin - b.timeMin; });
-    for (var pr2 = 0; pr2 < sortedAll.length; pr2++) {
-      if (sortedAll[pr2].timeMin < 0) preItems.push(sortedAll[pr2]);
-    }
-    if (preItems.length > 0) {
-      legs.push({ name: 'Pre-Race', dur: 30, start: -30, items: preItems, color: '#7f8c8d', dist: 0 });
-    }
-
+    for (var pr2 = 0; pr2 < sortedAll.length; pr2++) { if (sortedAll[pr2].timeMin < 0) preItems.push(sortedAll[pr2]); }
+    if (preItems.length > 0) legs.push({ name:'Pre-Race', dur:30, start:-30, items:preItems, color:'#7f8c8d', dist:0 });
     for (var lg = 0; lg < race.segs.length; lg++) {
-      var seg2 = race.segs[lg];
-      var legItems = [];
+      var seg2 = race.segs[lg], legItems = [];
       for (var li = 0; li < sortedAll.length; li++) {
         var t2 = sortedAll[li].timeMin;
-        if (t2 >= 0 && t2 >= seg2.start && t2 < seg2.start + seg2.dur) {
-          legItems.push(sortedAll[li]);
-        }
+        if (t2 >= 0 && t2 >= seg2.start && t2 < seg2.start + seg2.dur) legItems.push(sortedAll[li]);
       }
-      legs.push({ name: seg2.name, dur: seg2.dur, start: seg2.start, dist: seg2.dist, items: legItems, color: seg2.color });
+      legs.push({ name:seg2.name, dur:seg2.dur, start:seg2.start, dist:seg2.dist, items:legItems, color:seg2.color });
     }
 
     html += '<div class="race-cards">';
-    for (var lc = 0; lc < legs.length; lc++) {
-      var leg = legs[lc];
-      var isBike = leg.name === 'Bike';
 
-      // Calculate leg totals
-      var legCarbs = 0, legGlu = 0, legFru = 0, legMl = 0, legNa = 0;
+    for (var lc = 0; lc < legs.length; lc++) {
+      var leg = legs[lc], isBike = leg.name === 'Bike';
+      var legC = 0, legG = 0, legF = 0, legMl = 0, legNa = 0;
       for (var lci = 0; lci < leg.items.length; lci++) {
-        var lf = getFoodById(leg.items[lci].foodId);
-        var lp = leg.items[lci].portion || 1;
-        if (lf) {
-          legCarbs += Math.round(lf.carbs * lp);
-          legGlu += Math.round(lf.glucose * lp);
-          legFru += Math.round(lf.fructose * lp);
-          legMl += Math.round((lf.ml || 0) * lp);
-          legNa += Math.round((lf.na || 0) * lp);
-        }
+        var lf = getFoodById(leg.items[lci].foodId), lp = leg.items[lci].portion || 1;
+        if (lf) { legC += Math.round(lf.carbs*lp); legG += Math.round(lf.glucose*lp); legF += Math.round(lf.fructose*lp); legMl += Math.round((lf.ml||0)*lp); legNa += Math.round((lf.na||0)*lp); }
       }
       var legHrs = leg.dur / 60;
-      var legCarbHr = legHrs > 0 ? Math.round(legCarbs / legHrs) : 0;
+      var legCHr = legHrs > 0 ? Math.round(legC / legHrs) : 0;
 
-      // ── TOP TUBE CARD (bike only) ──
+      /* ── TOP TUBE CARD (Caleb Ewan style vertical table) ── */
       if (isBike && state.showTopTube && leg.items.length > 0) {
-        html += '<div class="race-card-toptube">';
-        html += '<div class="race-card-head">';
-        html += '<div class="race-card-dot" style="background:var(--bike)"></div>';
-        html += '<div class="race-card-title">Bike \u2014 Top Tube Card</div>';
-        html += '<div class="race-card-meta">' + fmtHM(leg.dur) + ' \u00B7 ' + (leg.dist || 0) + ' km \u00B7 ' + legCarbs + 'g carbs \u00B7 ' + legCarbHr + ' g/hr</div>';
-        html += '</div>';
-        html += '<ul class="tt-items">';
-        for (var tti = 0; tti < leg.items.length; tti++) {
-          var ttItem = leg.items[tti];
-          var ttFood = getFoodById(ttItem.foodId);
-          if (!ttFood) continue;
-          var ttPor = ttItem.portion || 1;
-          var relT = ttItem.timeMin - leg.start;
-          var distInfo = getDistAtTime(race.segs, ttItem.timeMin);
-          var ttCarbs = Math.round(ttFood.carbs * ttPor);
-          var porLabel = ttPor === 1 ? '' : ttPor === 0.5 ? '\u00BD' : ttPor < 0.3 ? '\u00BC' : '\u2153';
-          html += '<li>';
-          html += '<span class="tt-time">' + fmtHM(relT) + '</span>';
-          if (distInfo.dist > 0) html += '<span class="tt-dist">' + distInfo.dist + 'km</span>';
-          html += '<span>' + ttFood.icon + (porLabel ? '<span style="font-size:8px">' + porLabel + '</span>' : '') + '</span>';
-          html += '<span class="tt-carbs">' + ttCarbs + 'g</span>';
-          if (ttItem.fromAid) html += '<span class="tt-aid">\u26F3</span>';
-          html += '</li>';
+        html += '<div class="tt-card">';
+        html += '<div class="tt-header">Bike \u2014 ' + (leg.dist||0) + ' km \u2014 ' + fmtHM(leg.dur) + '</div>';
+        html += '<table class="tt-table"><thead><tr><th>Time</th><th>Nutrition</th></tr></thead><tbody>';
+
+        // Build time slots at 20-min intervals
+        var bikeEnd = leg.dur;
+        var slotInterval = bikeEnd > 180 ? 20 : 15;
+        if (bikeEnd > 300) slotInterval = 30;
+
+        for (var slot = 0; slot <= bikeEnd; slot += slotInterval) {
+          var slotStart = slot;
+          var slotEnd = Math.min(slot + slotInterval, bikeEnd);
+          var slotItems = [];
+          for (var sli = 0; sli < leg.items.length; sli++) {
+            var relT = leg.items[sli].timeMin - leg.start;
+            if (relT >= slotStart && relT < slotEnd) slotItems.push(leg.items[sli]);
+          }
+          var isFinish = (slot + slotInterval >= bikeEnd && slot > 0);
+
+          html += '<tr>';
+          // Time label like the Caleb Ewan card
+          var slotMinutes = slotStart;
+          var slotLabel = slotMinutes === 0 ? "0'" : fmtHM(slotMinutes);
+          html += '<td class="tt-time-col">' + slotLabel + '</td>';
+          html += '<td>';
+          if (slotItems.length > 0) {
+            html += '<div class="tt-nutr-col">';
+            for (var sti = 0; sti < slotItems.length; sti++) {
+              var stFood = getFoodById(slotItems[sti].foodId);
+              if (!stFood) continue;
+              var stPor = slotItems[sti].portion || 1;
+              var stC = Math.round(stFood.carbs * stPor);
+              var porL = stPor === 1 ? '' : stPor === 0.5 ? '\u00BD' : stPor < 0.3 ? '\u00BC' : '\u2153';
+              var chipCls = slotItems[sti].fromAid ? ' tt-aid-chip' : '';
+              html += '<span class="tt-food-chip' + chipCls + '">';
+              html += '<span style="font-size:16px">' + stFood.icon + '</span>';
+              if (porL) html += '<span style="font-size:8px;color:var(--muted)">' + porL + '</span>';
+              if (stC > 0) html += '<span class="tt-chip-carbs">' + stC + 'g</span>';
+              if (slotItems[sti].fromAid) html += '<span style="font-size:7px;color:var(--red)">\u26F3</span>';
+              html += '</span>';
+            }
+            html += '</div>';
+          }
+          html += '</td></tr>';
         }
-        html += '</ul></div>';
+
+        // Finish row
+        html += '<tr><td class="tt-finish" colspan="2">FINISH (' + fmtHM(bikeEnd) + ')</td></tr>';
+        html += '</tbody></table></div>';
       }
 
-      // ── STANDARD RACE CARD ──
+      /* ── STANDARD RACE CARD ── */
       html += '<div class="race-card">';
-      html += '<div class="race-card-head">';
-      html += '<div class="race-card-dot" style="background:' + (legColors[leg.name] || leg.color) + '"></div>';
+      html += '<div class="race-card-head"><div class="race-card-dot" style="background:' + (legColors[leg.name]||leg.color) + '"></div>';
       html += '<div class="race-card-title">' + leg.name + '</div>';
-      html += '<div class="race-card-meta">' + fmtHM(leg.dur);
-      if (leg.dist) html += ' \u00B7 ' + leg.dist + ' km';
-      html += '</div></div>';
+      html += '<div class="race-card-meta">' + fmtHM(leg.dur) + (leg.dist ? ' \u00B7 ' + leg.dist + ' km' : '') + '</div></div>';
 
-      // Stats row
       var statCols = 4;
       if (state.showFluid) statCols++;
       if (state.showSodium) statCols++;
       html += '<div class="race-card-stats" style="grid-template-columns:repeat(' + statCols + ',1fr)">';
-      html += '<div class="race-card-stat"><div class="race-card-stat-val">' + legCarbs + 'g</div><div class="race-card-stat-label">Carbs</div></div>';
-      html += '<div class="race-card-stat"><div class="race-card-stat-val">' + legCarbHr + '</div><div class="race-card-stat-label">g/hr</div></div>';
-      html += '<div class="race-card-stat"><div class="race-card-stat-val" style="font-size:11px;color:var(--blue)">' + legGlu + '<span style="color:var(--muted);font-size:9px"> / </span><span style="color:#c0392b">' + legFru + '</span></div><div class="race-card-stat-label">G / F</div></div>';
+      html += '<div class="race-card-stat"><div class="race-card-stat-val">' + legC + 'g</div><div class="race-card-stat-label">Carbs</div></div>';
+      html += '<div class="race-card-stat"><div class="race-card-stat-val">' + legCHr + '</div><div class="race-card-stat-label">g/hr</div></div>';
+      html += '<div class="race-card-stat"><div class="race-card-stat-val" style="font-size:11px;color:var(--blue)">' + legG + '<span style="color:var(--muted);font-size:9px"> / </span><span style="color:#c0392b">' + legF + '</span></div><div class="race-card-stat-label">G / F</div></div>';
       html += '<div class="race-card-stat"><div class="race-card-stat-val" style="font-size:11px">' + leg.items.length + '</div><div class="race-card-stat-label">Items</div></div>';
-      if (state.showFluid) {
-        html += '<div class="race-card-stat"><div class="race-card-stat-val" style="color:var(--blue)">' + legMl + '</div><div class="race-card-stat-label">ml</div></div>';
-      }
-      if (state.showSodium) {
-        html += '<div class="race-card-stat"><div class="race-card-stat-val" style="color:#e8a838">' + legNa + '</div><div class="race-card-stat-label">Na mg</div></div>';
-      }
+      if (state.showFluid) html += '<div class="race-card-stat"><div class="race-card-stat-val" style="color:var(--blue)">' + legMl + '</div><div class="race-card-stat-label">ml</div></div>';
+      if (state.showSodium) html += '<div class="race-card-stat"><div class="race-card-stat-val" style="color:#e8a838">' + legNa + '</div><div class="race-card-stat-label">Na mg</div></div>';
       html += '</div>';
 
       if (leg.items.length === 0) {
@@ -923,94 +884,85 @@
       } else {
         html += '<ul class="race-card-items">';
         for (var ri = 0; ri < leg.items.length; ri++) {
-          var rItem = leg.items[ri];
-          var rFood = getFoodById(rItem.foodId);
+          var rItem = leg.items[ri], rFood = getFoodById(rItem.foodId);
           if (!rFood) continue;
-          var rPor = rItem.portion || 1;
-          var relTime = rItem.timeMin - leg.start;
-          var timeLabel = leg.name === 'Pre-Race' ? (Math.round(rItem.timeMin) + ' min') : fmtHM(relTime) + ' in';
-          var porLabel2 = rPor === 1 ? '' : rPor === 0.5 ? ' (\u00BD)' : rPor < 0.3 ? ' (\u00BC)' : ' (\u2153)';
-          var rCarbs = Math.round(rFood.carbs * rPor);
-          var rMl = Math.round((rFood.ml || 0) * rPor);
-          var rNa = Math.round((rFood.na || 0) * rPor);
-
-          // Distance marker
-          var distInfo2 = getDistAtTime(race.segs, rItem.timeMin);
-          var distLabel = distInfo2.dist > 0 ? distInfo2.dist + 'km' : '';
-
-          html += '<li>';
-          html += '<span class="item-time">' + timeLabel + '</span>';
-          if (distLabel) html += '<span class="item-dist">' + distLabel + '</span>';
-          html += '<span class="item-name">' + rFood.icon + ' ' + rFood.name + porLabel2 + '</span>';
+          var rP = rItem.portion||1, relTime = rItem.timeMin - leg.start;
+          var tLabel = leg.name === 'Pre-Race' ? (Math.round(rItem.timeMin)+"'") : fmtHM(relTime)+' in';
+          var pLabel = rP===1?'':rP===0.5?' (\u00BD)':rP<0.3?' (\u00BC)':' (\u2153)';
+          var rC = Math.round(rFood.carbs*rP), rMl = Math.round((rFood.ml||0)*rP), rNa = Math.round((rFood.na||0)*rP);
+          var dInfo = getDistAtTime(race.segs, rItem.timeMin);
+          html += '<li><span class="item-time">' + tLabel + '</span>';
+          if (dInfo.dist > 0) html += '<span class="item-dist">' + dInfo.dist + 'km</span>';
+          html += '<span class="item-name">' + rFood.icon + ' ' + rFood.name + pLabel + '</span>';
           if (rItem.fromAid) html += '<span class="item-aid">\u26F3 aid</span>';
-          html += '<span class="item-carbs">' + rCarbs + 'g';
+          html += '<span class="item-carbs">' + rC + 'g';
           if (state.showFluid && rMl > 0) html += ' <span style="color:var(--blue);font-size:9px">' + rMl + 'ml</span>';
           if (state.showSodium && rNa > 0) html += ' <span style="color:#e8a838;font-size:9px">' + rNa + 'mg</span>';
-          html += '</span>';
-          html += '</li>';
+          html += '</span></li>';
         }
         html += '</ul>';
       }
-      html += '</div>'; // end race-card
+      html += '</div>';
     }
-    html += '</div>'; // end race-cards
+    html += '</div>';
 
-    /* ── 7. PACKING LIST ──────────────── */
+    /* ── 7. AID STATION PICKUP CARDS ──── */
+    if (state.showAid && aids.length > 0) {
+      // Group aid-flagged items by their nearest aid station
+      var aidPickupMap = {}; // aid index -> items
+      for (var api = 0; api < state.schedule.length; api++) {
+        var ae = state.schedule[api];
+        if (!ae.fromAid) continue;
+        var nearest = findNearestAidStation(ae.timeMin, race, aids);
+        if (!nearest) continue;
+        var aidKey = nearest.discipline + '_' + nearest.km;
+        if (!aidPickupMap[aidKey]) aidPickupMap[aidKey] = { station: nearest, items: [] };
+        aidPickupMap[aidKey].items.push(ae);
+      }
+      var aidPickupKeys = Object.keys(aidPickupMap);
+      if (aidPickupKeys.length > 0) {
+        html += '<div style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px">';
+        for (var apk = 0; apk < aidPickupKeys.length; apk++) {
+          var ap = aidPickupMap[aidPickupKeys[apk]];
+          html += '<div class="aid-pickup-card">';
+          html += '<div class="aid-pickup-head">\u26F3 Aid Station \u2014 ' + ap.station.discipline + ' ' + ap.station.km + ' km (@ ' + fmtHM(ap.station.timeMin) + ')</div>';
+          html += '<ul class="aid-pickup-items">';
+          for (var apii = 0; apii < ap.items.length; apii++) {
+            var aFood = getFoodById(ap.items[apii].foodId);
+            if (!aFood) continue;
+            var aPor = ap.items[apii].portion||1;
+            var aPLabel = aPor===1?'':aPor===0.5?' (\u00BD)':aPor<0.3?' (\u00BC)':' (\u2153)';
+            html += '<li><span style="font-size:16px">' + aFood.icon + '</span><span>' + aFood.name + aPLabel + '</span><span style="margin-left:auto;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--green);font-weight:500">' + Math.round(aFood.carbs*aPor) + 'g</span></li>';
+          }
+          html += '</ul></div>';
+        }
+        html += '</div>';
+      }
+    }
+
+    /* ── 8. PACKING LIST ─────────────── */
     if (state.showPacking && state.schedule.length > 0) {
       html += '<div style="margin-top:16px">';
-      // Per-leg packing (exclude aid station items)
       for (var pk = 0; pk < legs.length; pk++) {
-        var pLeg = legs[pk];
-        var packMap = {}; // foodId -> { name, icon, qty, portions }
+        var pLeg = legs[pk], packMap = {};
         for (var pki = 0; pki < pLeg.items.length; pki++) {
           var pEntry = pLeg.items[pki];
-          if (pEntry.fromAid) continue; // skip aid station pickups
+          if (pEntry.fromAid) continue;
           var pFood = getFoodById(pEntry.foodId);
           if (!pFood) continue;
-          var pPor = pEntry.portion || 1;
-          var key = pEntry.foodId + '_' + pPor;
+          var pPor = pEntry.portion||1, key = pEntry.foodId + '_' + pPor;
           if (!packMap[key]) {
-            var porL = pPor === 1 ? '' : pPor === 0.5 ? ' (\u00BD)' : pPor < 0.3 ? ' (\u00BC)' : ' (\u2153)';
-            packMap[key] = { name: pFood.name + porL, icon: pFood.icon, qty: 0 };
+            var pL = pPor===1?'':pPor===0.5?' (\u00BD)':pPor<0.3?' (\u00BC)':' (\u2153)';
+            packMap[key] = { name: pFood.name+pL, icon: pFood.icon, qty: 0 };
           }
           packMap[key].qty++;
         }
         var packKeys = Object.keys(packMap);
         if (packKeys.length === 0) continue;
-
-        html += '<div class="pack-card" style="margin-bottom:8px">';
-        html += '<div class="pack-card-head">\uD83C\uDF92 Pack for ' + pLeg.name + '</div>';
-        html += '<div class="pack-items">';
+        html += '<div class="pack-card" style="margin-bottom:8px"><div class="pack-card-head">\uD83C\uDF92 Pack for ' + pLeg.name + '</div><div class="pack-items">';
         for (var pj = 0; pj < packKeys.length; pj++) {
           var pk2 = packMap[packKeys[pj]];
           html += '<div class="pack-item"><span class="pack-qty">' + pk2.qty + '\u00D7</span><span>' + pk2.icon + '</span><span class="pack-name">' + pk2.name + '</span></div>';
-        }
-        html += '</div></div>';
-      }
-
-      // Aid station pickups summary
-      var aidPickups = {};
-      for (var api = 0; api < state.schedule.length; api++) {
-        var ae = state.schedule[api];
-        if (!ae.fromAid) continue;
-        var af = getFoodById(ae.foodId);
-        if (!af) continue;
-        var apor = ae.portion || 1;
-        var akey = ae.foodId + '_' + apor;
-        if (!aidPickups[akey]) {
-          var aPorL = apor === 1 ? '' : apor === 0.5 ? ' (\u00BD)' : apor < 0.3 ? ' (\u00BC)' : ' (\u2153)';
-          aidPickups[akey] = { name: af.name + aPorL, icon: af.icon, qty: 0 };
-        }
-        aidPickups[akey].qty++;
-      }
-      var aidKeys = Object.keys(aidPickups);
-      if (aidKeys.length > 0) {
-        html += '<div class="pack-card" style="margin-bottom:8px;border-color:var(--red);background:#fdf6f4">';
-        html += '<div class="pack-card-head">\u26F3 Picking up from aid stations</div>';
-        html += '<div class="pack-items">';
-        for (var ak = 0; ak < aidKeys.length; ak++) {
-          var ap = aidPickups[aidKeys[ak]];
-          html += '<div class="pack-item"><span class="pack-qty" style="color:var(--red)">' + ap.qty + '\u00D7</span><span>' + ap.icon + '</span><span class="pack-name">' + ap.name + '</span></div>';
         }
         html += '</div></div>';
       }
@@ -1024,30 +976,27 @@
     html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Carbs/hr</span><br><span style="color:#a8e8c0;font-weight:500">' + Math.round(carbsPerHr) + '</span></div>';
     if (state.showFluid) {
       html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Total Fluid</span><br><span style="color:#5dade2;font-size:18px;font-weight:500">' + totalMl + 'ml</span></div>';
-      html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Fluid/hr</span><br><span style="color:#5dade2;font-weight:500">' + Math.round(mlPerHr) + 'ml</span></div>';
+      html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Fluid/hr</span><br><span style="color:#5dade2;font-weight:500">' + Math.round(totalMl/Math.max(raceHrs,0.01)) + 'ml</span></div>';
     }
     if (state.showSodium) {
       html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Total Na</span><br><span style="color:#e8a838;font-size:18px;font-weight:500">' + totalNa + 'mg</span></div>';
-      html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Na/hr</span><br><span style="color:#e8a838;font-weight:500">' + Math.round(naPerHr) + 'mg</span></div>';
+      html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Na/hr</span><br><span style="color:#e8a838;font-weight:500">' + Math.round(totalNa/Math.max(raceHrs,0.01)) + 'mg</span></div>';
     }
     html += '<div style="position:relative;margin-left:auto"><button class="print-btn" id="printBtn">\uD83D\uDDA8 Print race cards</button></div>';
     html += '</div>';
 
-    html += '</div>'; // end panel
-    html += '</div>'; // end #printSection
+    html += '</div></div>';
 
     document.getElementById('app').innerHTML = html;
     bindEvents();
-    if (state.showGraph) {
-      drawGraph(race, absorption, aids);
-    }
+    if (state.showGraph) drawAbsorptionGraph(race, absorption, aids);
+    if (state.showFluidGraph) drawSimpleGraph('fluidGraph', race, fluidTimeline.ml, fluidTimeline.minutes, '#2980b9', 'ml/hr', aids);
+    if (state.showSodiumGraph) drawSimpleGraph('sodiumGraph', race, fluidTimeline.na, fluidTimeline.minutes, '#e8a838', 'mg/hr', aids);
   }
 
-  /* ══════════════════════════════════════════════
-     GRAPH DRAWING
-     ══════════════════════════════════════════════ */
+  /* ── ABSORPTION GRAPH (with danger zones) ── */
 
-  function drawGraph(race, absorption, aids) {
+  function drawAbsorptionGraph(race, absorption, aids) {
     var canvas = document.getElementById('absGraph');
     if (!canvas) return;
     var wrap = canvas.parentElement;
@@ -1056,319 +1005,302 @@
     canvas.height = wrap.clientHeight * dpr;
     var ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
-    var W = wrap.clientWidth;
-    var H = wrap.clientHeight;
-
+    var W = wrap.clientWidth, H = wrap.clientHeight;
     var padL = 40, padR = 10, padT = 16, padB = 36;
-    var gW = W - padL - padR;
-    var gH = H - padT - padB;
+    var gW = W-padL-padR, gH = H-padT-padB;
 
-    var preRaceMin = 30;
     var hasPreRace = false;
-    for (var pm = 0; pm < state.schedule.length; pm++) {
-      if (state.schedule[pm].timeMin < 0) { hasPreRace = true; break; }
-    }
-    var timeOffset = hasPreRace ? preRaceMin : 0;
+    for (var pm = 0; pm < state.schedule.length; pm++) { if (state.schedule[pm].timeMin < 0) { hasPreRace = true; break; } }
+    var timeOffset = hasPreRace ? 30 : 0;
     var totalMin = Math.max(race.total + timeOffset, 60);
-    var maxRate = 150;
+
+    // Find max for Y scale
+    var maxVal = 100;
+    var OFF = PRE_RACE_OFFSET;
+    var startIdx = hasPreRace ? 0 : OFF;
+    var endIdx = Math.min(absorption.minutes, Math.ceil(race.total) + OFF + 1);
+    for (var mv = startIdx; mv < endIdx; mv++) {
+      var c = absorption.glucose[mv] + absorption.fructose[mv];
+      if (c > maxVal) maxVal = c;
+    }
+    maxVal = Math.ceil(maxVal / 20) * 20 + 20;
+    if (maxVal < 100) maxVal = 100;
 
     function xAt(min) { return padL + ((min + timeOffset) / totalMin) * gW; }
-    function yAt(val) { return padT + gH - (val / maxRate) * gH; }
+    function yAt(val) { return padT + gH - (val / maxVal) * gH; }
 
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, W, H);
 
+    // Danger zone backgrounds
+    // Green zone: 0-90
+    ctx.fillStyle = 'rgba(29,104,64,0.04)';
+    ctx.fillRect(padL, yAt(90), gW, yAt(0) - yAt(90));
+    // Amber zone: 90-120
+    ctx.fillStyle = 'rgba(184,124,32,0.06)';
+    ctx.fillRect(padL, yAt(120), gW, yAt(90) - yAt(120));
+    // Red zone: 120+
+    if (maxVal > 120) {
+      ctx.fillStyle = 'rgba(181,58,30,0.06)';
+      ctx.fillRect(padL, padT, gW, yAt(120) - padT);
+    }
+
+    // Zone boundary labels
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(29,104,64,0.4)';
+    ctx.beginPath(); ctx.moveTo(padL, yAt(90)); ctx.lineTo(W-padR, yAt(90)); ctx.stroke();
+    ctx.strokeStyle = 'rgba(184,124,32,0.5)';
+    ctx.beginPath(); ctx.moveTo(padL, yAt(120)); ctx.lineTo(W-padR, yAt(120)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.font = '8px "DM Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(29,104,64,0.6)';
+    ctx.fillText('\u2264 90 g/hr optimal', padL+4, yAt(90)+11);
+    ctx.fillStyle = 'rgba(184,124,32,0.7)';
+    ctx.fillText('90\u2013120 trained', padL+4, yAt(120)+11);
+    if (maxVal > 120) {
+      ctx.fillStyle = 'rgba(181,58,30,0.7)';
+      ctx.fillText('\u26A0 >120 GI risk', padL+4, yAt(120)-4);
+    }
+
     // Race segment backgrounds
     for (var s = 0; s < race.segs.length; s++) {
       var seg = race.segs[s];
-      var x1 = xAt(seg.start);
-      var x2 = xAt(seg.start + seg.dur);
-      ctx.fillStyle = seg.name === 'Swim' ? 'rgba(41,128,185,0.04)' :
-                      seg.name === 'Bike' ? 'rgba(39,174,96,0.04)' :
-                      seg.name === 'Run' ? 'rgba(230,126,34,0.04)' : 'rgba(127,140,141,0.04)';
-      ctx.fillRect(x1, padT, x2 - x1, gH);
+      var x1 = xAt(seg.start), x2 = xAt(seg.start + seg.dur);
       if (seg.dur / totalMin > 0.05) {
-        ctx.fillStyle = seg.name === 'Swim' ? 'rgba(41,128,185,0.5)' :
-                        seg.name === 'Bike' ? 'rgba(39,174,96,0.5)' :
-                        seg.name === 'Run' ? 'rgba(230,126,34,0.5)' : 'rgba(127,140,141,0.5)';
+        ctx.fillStyle = seg.name==='Swim'?'rgba(41,128,185,0.5)':seg.name==='Bike'?'rgba(39,174,96,0.5)':seg.name==='Run'?'rgba(230,126,34,0.5)':'rgba(127,140,141,0.5)';
         ctx.font = '500 9px "DM Mono", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(seg.name, (x1 + x2) / 2, padT + 12);
+        ctx.fillText(seg.name, (x1+x2)/2, padT+12);
       }
     }
 
     // Grid lines
     ctx.strokeStyle = '#eee9df';
     ctx.lineWidth = 1;
-    for (var y = 0; y <= maxRate; y += 20) {
-      ctx.beginPath();
-      ctx.moveTo(padL, yAt(y));
-      ctx.lineTo(W - padR, yAt(y));
-      ctx.stroke();
-      ctx.fillStyle = '#9a9080';
-      ctx.font = '10px "DM Mono", monospace';
-      ctx.textAlign = 'right';
-      ctx.fillText(y, padL - 4, yAt(y) + 3);
+    for (var y = 0; y <= maxVal; y += 20) {
+      ctx.beginPath(); ctx.moveTo(padL, yAt(y)); ctx.lineTo(W-padR, yAt(y)); ctx.stroke();
+      ctx.fillStyle = '#9a9080'; ctx.font = '10px "DM Mono", monospace'; ctx.textAlign = 'right';
+      ctx.fillText(y, padL-4, yAt(y)+3);
     }
 
-    // Y axis label
-    ctx.save();
-    ctx.translate(10, padT + gH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillStyle = '#9a9080';
-    ctx.font = '9px "DM Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('g/hr', 0, 0);
+    ctx.save(); ctx.translate(10, padT+gH/2); ctx.rotate(-Math.PI/2);
+    ctx.fillStyle = '#9a9080'; ctx.font = '9px "DM Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText('g/hr', 0, 0);
     ctx.restore();
 
-    // X axis time labels
     var stepMin = race.total > 360 ? 60 : race.total > 120 ? 30 : 15;
-    ctx.fillStyle = '#9a9080';
-    ctx.font = '10px "DM Mono", monospace';
-    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9a9080'; ctx.font = '10px "DM Mono", monospace'; ctx.textAlign = 'center';
     for (var t3 = 0; t3 <= race.total; t3 += stepMin) {
-      var xp = xAt(t3);
-      ctx.fillText(fmtHM(t3), xp, H - padB + 16);
-      ctx.strokeStyle = '#eee9df';
-      ctx.beginPath();
-      ctx.moveTo(xp, padT);
-      ctx.lineTo(xp, padT + gH);
-      ctx.stroke();
+      ctx.fillText(fmtHM(t3), xAt(t3), H-padB+16);
+      ctx.strokeStyle = '#eee9df'; ctx.beginPath(); ctx.moveTo(xAt(t3), padT); ctx.lineTo(xAt(t3), padT+gH); ctx.stroke();
     }
     if (hasPreRace) {
       ctx.fillStyle = '#9a9080';
-      ctx.fillText('-30m', xAt(-30), H - padB + 16);
-      ctx.fillText('-15m', xAt(-15), H - padB + 16);
+      ctx.fillText("-30'", xAt(-30), H-padB+16);
+      ctx.fillText("-15'", xAt(-15), H-padB+16);
+      // Pre-race zone
+      ctx.fillStyle = 'rgba(127,140,141,0.06)';
+      ctx.fillRect(xAt(-timeOffset), padT, xAt(0)-xAt(-timeOffset), gH);
+      ctx.fillStyle = 'rgba(127,140,141,0.4)'; ctx.font = '500 9px "DM Mono", monospace'; ctx.textAlign = 'center';
+      ctx.fillText('Pre-Race', (xAt(-timeOffset)+xAt(0))/2, padT+12);
+      ctx.strokeStyle = 'rgba(24,22,15,0.3)'; ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(xAt(0), padT); ctx.lineTo(xAt(0), padT+gH); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = 'rgba(24,22,15,0.5)'; ctx.font = '8px "DM Mono", monospace';
+      ctx.fillText('START', xAt(0), padT+gH+24);
     }
 
-    // Max absorption limit lines
-    ctx.setLineDash([4, 4]);
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(41,128,185,0.5)';
-    ctx.beginPath(); ctx.moveTo(padL, yAt(60)); ctx.lineTo(W - padR, yAt(60)); ctx.stroke();
-    ctx.fillStyle = 'rgba(41,128,185,0.5)';
-    ctx.font = '8px "DM Mono", monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('Glucose max 60 g/hr', padL + 4, yAt(60) - 3);
-
-    ctx.strokeStyle = 'rgba(192,57,43,0.5)';
-    ctx.beginPath(); ctx.moveTo(padL, yAt(30)); ctx.lineTo(W - padR, yAt(30)); ctx.stroke();
-    ctx.fillStyle = 'rgba(192,57,43,0.5)';
-    ctx.fillText('Fructose max 30 g/hr', padL + 4, yAt(30) - 3);
-
-    ctx.strokeStyle = 'rgba(29,104,64,0.5)';
-    ctx.beginPath(); ctx.moveTo(padL, yAt(90)); ctx.lineTo(W - padR, yAt(90)); ctx.stroke();
-    ctx.fillStyle = 'rgba(29,104,64,0.5)';
-    ctx.fillText('Combined max 90 g/hr', padL + 4, yAt(90) - 3);
-    ctx.setLineDash([]);
-
-    // Aid station markers
+    // Aid markers
     if (state.showAid) {
       for (var ai = 0; ai < aids.length; ai++) {
         var ax = xAt(aids[ai].timeMin);
-        ctx.strokeStyle = 'rgba(181,58,30,0.4)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([2, 2]);
-        ctx.beginPath(); ctx.moveTo(ax, padT); ctx.lineTo(ax, padT + gH); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#b53a1e';
-        ctx.beginPath(); ctx.arc(ax, padT + gH + 6, 3, 0, Math.PI * 2); ctx.fill();
-        ctx.font = '8px "DM Mono", monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(aids[ai].label, ax, padT + gH + 16);
+        ctx.strokeStyle = 'rgba(181,58,30,0.4)'; ctx.lineWidth = 1; ctx.setLineDash([2,2]);
+        ctx.beginPath(); ctx.moveTo(ax, padT); ctx.lineTo(ax, padT+gH); ctx.stroke();
+        ctx.setLineDash([]); ctx.fillStyle = '#b53a1e';
+        ctx.beginPath(); ctx.arc(ax, padT+gH+6, 3, 0, Math.PI*2); ctx.fill();
+        ctx.font = '8px "DM Mono", monospace'; ctx.textAlign = 'center';
+        ctx.fillText(aids[ai].label, ax, padT+gH+16);
       }
     }
 
-    // Pre-race shading
-    if (hasPreRace) {
-      ctx.fillStyle = 'rgba(127,140,141,0.06)';
-      ctx.fillRect(xAt(-timeOffset), padT, xAt(0) - xAt(-timeOffset), gH);
-      ctx.fillStyle = 'rgba(127,140,141,0.4)';
-      ctx.font = '500 9px "DM Mono", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Pre-Race', (xAt(-timeOffset) + xAt(0)) / 2, padT + 12);
-      ctx.strokeStyle = 'rgba(24,22,15,0.3)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath(); ctx.moveTo(xAt(0), padT); ctx.lineTo(xAt(0), padT + gH); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(24,22,15,0.5)';
-      ctx.font = '8px "DM Mono", monospace';
-      ctx.fillText('START', xAt(0), padT + gH + 24);
-    }
-
-    // Draw absorption curves
-    var OFF = PRE_RACE_OFFSET;
-    var startIdx = hasPreRace ? 0 : OFF;
-    var endIdx = Math.min(absorption.minutes, Math.ceil(race.total) + OFF + 1);
-
+    // Draw curves
     if (absorption.minutes > 1 && state.schedule.length > 0) {
-      // Combined fill
-      ctx.fillStyle = 'rgba(29,104,64,0.08)';
-      ctx.beginPath();
-      ctx.moveTo(xAt(startIdx - OFF), yAt(0));
-      for (var m2 = startIdx; m2 < endIdx; m2++) {
-        ctx.lineTo(xAt(m2 - OFF), yAt(absorption.glucose[m2] + absorption.fructose[m2]));
+      // Combined fill with zone colouring
+      for (var mz = startIdx; mz < endIdx - 1; mz++) {
+        var comb1 = absorption.glucose[mz] + absorption.fructose[mz];
+        var comb2 = absorption.glucose[mz+1] + absorption.fructose[mz+1];
+        var avgC = (comb1 + comb2) / 2;
+        ctx.fillStyle = avgC > 120 ? 'rgba(181,58,30,0.15)' : avgC > 90 ? 'rgba(184,124,32,0.12)' : 'rgba(29,104,64,0.08)';
+        ctx.beginPath();
+        ctx.moveTo(xAt(mz-OFF), yAt(0));
+        ctx.lineTo(xAt(mz-OFF), yAt(comb1));
+        ctx.lineTo(xAt(mz+1-OFF), yAt(comb2));
+        ctx.lineTo(xAt(mz+1-OFF), yAt(0));
+        ctx.closePath(); ctx.fill();
       }
-      ctx.lineTo(xAt(endIdx - 1 - OFF), yAt(0));
-      ctx.closePath();
-      ctx.fill();
 
-      // Glucose line
-      ctx.strokeStyle = '#2980b9';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
+      ctx.strokeStyle = '#2980b9'; ctx.lineWidth = 2; ctx.beginPath();
       for (var m3 = startIdx; m3 < endIdx; m3++) {
-        if (m3 === startIdx) ctx.moveTo(xAt(m3 - OFF), yAt(absorption.glucose[m3]));
-        else ctx.lineTo(xAt(m3 - OFF), yAt(absorption.glucose[m3]));
+        if (m3===startIdx) ctx.moveTo(xAt(m3-OFF), yAt(absorption.glucose[m3]));
+        else ctx.lineTo(xAt(m3-OFF), yAt(absorption.glucose[m3]));
       }
       ctx.stroke();
 
-      // Fructose line
-      ctx.strokeStyle = '#c0392b';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
+      ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2; ctx.beginPath();
       for (var m4 = startIdx; m4 < endIdx; m4++) {
-        if (m4 === startIdx) ctx.moveTo(xAt(m4 - OFF), yAt(absorption.fructose[m4]));
-        else ctx.lineTo(xAt(m4 - OFF), yAt(absorption.fructose[m4]));
+        if (m4===startIdx) ctx.moveTo(xAt(m4-OFF), yAt(absorption.fructose[m4]));
+        else ctx.lineTo(xAt(m4-OFF), yAt(absorption.fructose[m4]));
       }
       ctx.stroke();
 
-      // Combined line
-      ctx.strokeStyle = '#1d6840';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([3, 3]);
-      ctx.beginPath();
+      ctx.strokeStyle = '#1d6840'; ctx.lineWidth = 1.5; ctx.setLineDash([3,3]); ctx.beginPath();
       for (var m5 = startIdx; m5 < endIdx; m5++) {
-        var comb = absorption.glucose[m5] + absorption.fructose[m5];
-        if (m5 === startIdx) ctx.moveTo(xAt(m5 - OFF), yAt(comb));
-        else ctx.lineTo(xAt(m5 - OFF), yAt(comb));
+        var cb = absorption.glucose[m5]+absorption.fructose[m5];
+        if (m5===startIdx) ctx.moveTo(xAt(m5-OFF), yAt(cb));
+        else ctx.lineTo(xAt(m5-OFF), yAt(cb));
       }
-      ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.stroke(); ctx.setLineDash([]);
     }
 
-    // Food dots on x axis
+    // Food dots
     for (var sd = 0; sd < state.schedule.length; sd++) {
       var sx = xAt(state.schedule[sd].timeMin);
-      ctx.fillStyle = '#1d6840';
-      ctx.beginPath(); ctx.arc(sx, padT + gH, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'white';
-      ctx.beginPath(); ctx.arc(sx, padT + gH, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1d6840'; ctx.beginPath(); ctx.arc(sx, padT+gH, 4, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(sx, padT+gH, 2, 0, Math.PI*2); ctx.fill();
     }
   }
 
-  /* ══════════════════════════════════════════════
-     EVENTS
-     ══════════════════════════════════════════════ */
+  /* ── SIMPLE LINE GRAPH (fluid / sodium) ── */
+
+  function drawSimpleGraph(canvasId, race, dataArr, dataLen, color, unit, aids) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    var wrap = canvas.parentElement;
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = wrap.clientWidth * dpr;
+    canvas.height = wrap.clientHeight * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    var W = wrap.clientWidth, H = wrap.clientHeight;
+    var padL = 46, padR = 10, padT = 12, padB = 30;
+    var gW = W-padL-padR, gH = H-padT-padB;
+
+    var hasPreRace = false;
+    for (var pm = 0; pm < state.schedule.length; pm++) { if (state.schedule[pm].timeMin < 0) { hasPreRace = true; break; } }
+    var timeOffset = hasPreRace ? 30 : 0;
+    var totalMin = Math.max(race.total + timeOffset, 60);
+    var OFF = PRE_RACE_OFFSET;
+    var startIdx = hasPreRace ? 0 : OFF;
+    var endIdx = Math.min(dataLen, Math.ceil(race.total) + OFF + 1);
+
+    var maxVal = 100;
+    for (var mv = startIdx; mv < endIdx; mv++) { if (dataArr[mv] > maxVal) maxVal = dataArr[mv]; }
+    maxVal = Math.ceil(maxVal / 50) * 50 + 50;
+
+    function xAt(min) { return padL + ((min+timeOffset)/totalMin)*gW; }
+    function yAt(val) { return padT + gH - (val/maxVal)*gH; }
+
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+
+    // Race segment bgs
+    for (var s = 0; s < race.segs.length; s++) {
+      var seg = race.segs[s], x1 = xAt(seg.start), x2 = xAt(seg.start+seg.dur);
+      ctx.fillStyle = seg.name==='Swim'?'rgba(41,128,185,0.04)':seg.name==='Bike'?'rgba(39,174,96,0.04)':seg.name==='Run'?'rgba(230,126,34,0.04)':'rgba(127,140,141,0.04)';
+      ctx.fillRect(x1, padT, x2-x1, gH);
+      if (seg.dur/totalMin>0.05) {
+        ctx.fillStyle = seg.name==='Swim'?'rgba(41,128,185,0.5)':seg.name==='Bike'?'rgba(39,174,96,0.5)':seg.name==='Run'?'rgba(230,126,34,0.5)':'rgba(127,140,141,0.5)';
+        ctx.font = '500 9px "DM Mono", monospace'; ctx.textAlign = 'center';
+        ctx.fillText(seg.name, (x1+x2)/2, padT+10);
+      }
+    }
+
+    // Grid
+    ctx.strokeStyle = '#eee9df'; ctx.lineWidth = 1;
+    var step = maxVal > 500 ? 200 : maxVal > 200 ? 100 : 50;
+    for (var y = 0; y <= maxVal; y += step) {
+      ctx.beginPath(); ctx.moveTo(padL, yAt(y)); ctx.lineTo(W-padR, yAt(y)); ctx.stroke();
+      ctx.fillStyle = '#9a9080'; ctx.font = '10px "DM Mono", monospace'; ctx.textAlign = 'right';
+      ctx.fillText(y, padL-4, yAt(y)+3);
+    }
+    ctx.save(); ctx.translate(10, padT+gH/2); ctx.rotate(-Math.PI/2);
+    ctx.fillStyle = '#9a9080'; ctx.font = '9px "DM Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText(unit, 0, 0);
+    ctx.restore();
+
+    var stepMin = race.total > 360 ? 60 : race.total > 120 ? 30 : 15;
+    ctx.fillStyle = '#9a9080'; ctx.font = '10px "DM Mono", monospace'; ctx.textAlign = 'center';
+    for (var t3 = 0; t3 <= race.total; t3 += stepMin) { ctx.fillText(fmtHM(t3), xAt(t3), H-padB+14); }
+
+    // Fill
+    if (dataLen > 1 && state.schedule.length > 0) {
+      ctx.fillStyle = color.replace(')', ',0.1)').replace('rgb', 'rgba');
+      ctx.beginPath(); ctx.moveTo(xAt(startIdx-OFF), yAt(0));
+      for (var m2 = startIdx; m2 < endIdx; m2++) ctx.lineTo(xAt(m2-OFF), yAt(dataArr[m2]));
+      ctx.lineTo(xAt(endIdx-1-OFF), yAt(0)); ctx.closePath(); ctx.fill();
+
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+      for (var m3 = startIdx; m3 < endIdx; m3++) {
+        if (m3===startIdx) ctx.moveTo(xAt(m3-OFF), yAt(dataArr[m3]));
+        else ctx.lineTo(xAt(m3-OFF), yAt(dataArr[m3]));
+      }
+      ctx.stroke();
+    }
+
+    // Food dots
+    for (var sd = 0; sd < state.schedule.length; sd++) {
+      var sx = xAt(state.schedule[sd].timeMin);
+      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(sx, padT+gH, 3, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
+  /* ── EVENTS ──────────────────────────── */
 
   function bindEvents() {
-    // Complexity toggles
     var toggles = [
-      ['togSodium', 'showSodium'], ['togFluid', 'showFluid'],
-      ['togAid', 'showAid'], ['togGraph', 'showGraph'],
-      ['togPacking', 'showPacking'], ['togTopTube', 'showTopTube']
+      ['togSodium','showSodium'],['togFluid','showFluid'],['togAid','showAid'],
+      ['togGraph','showGraph'],['togFluidGraph','showFluidGraph'],['togSodiumGraph','showSodiumGraph'],
+      ['togPacking','showPacking'],['togTopTube','showTopTube']
     ];
     for (var tg = 0; tg < toggles.length; tg++) {
       var togEl = document.getElementById(toggles[tg][0]);
-      if (togEl) {
-        (function(key) {
-          togEl.addEventListener('change', function() {
-            state[key] = this.checked;
-            render();
-          });
-        })(toggles[tg][1]);
-      }
+      if (togEl) (function(key){ togEl.addEventListener('change', function(){ state[key]=this.checked; render(); }); })(toggles[tg][1]);
     }
 
-    // Presets
     var presetBtns = document.querySelectorAll('.preset-btn');
     for (var p = 0; p < presetBtns.length; p++) {
       presetBtns[p].addEventListener('click', function() {
-        var idx = +this.getAttribute('data-preset');
-        var pr = PRESETS[idx];
-        state.preset = pr.name;
-        state.raceType = pr.type;
-        if (pr.name !== 'Custom') {
-          state.swimDist = pr.swim;
-          state.bikeDist = pr.bike;
-          state.runDist = pr.run;
-        }
+        var pr = PRESETS[+this.getAttribute('data-preset')];
+        state.preset = pr.name; state.raceType = pr.type;
+        if (pr.name !== 'Custom') { state.swimDist = pr.swim; state.bikeDist = pr.bike; state.runDist = pr.run; }
         render();
       });
     }
 
-    // Number inputs
-    var fields = [
-      ['swimDist', 'swimDist'],
-      ['bikeDist', 'bikeDist'], ['bikeSpeed', 'bikeSpeed'],
-      ['runDist', 'runDist'], ['runPace', 'runPace'],
-      ['t1', 't1'], ['t2', 't2']
-    ];
+    var fields = [['swimDist','swimDist'],['bikeDist','bikeDist'],['bikeSpeed','bikeSpeed'],['runDist','runDist'],['runPace','runPace'],['t1','t1'],['t2','t2']];
     for (var f = 0; f < fields.length; f++) {
       var el = document.getElementById(fields[f][0]);
-      if (el) {
-        (function(key) {
-          el.addEventListener('input', function() {
-            state[key] = +this.value || 0;
-            state.preset = 'Custom';
-            render();
-          });
-        })(fields[f][1]);
-      }
+      if (el) (function(key){ el.addEventListener('input', function(){ state[key]=+this.value||0; state.preset='Custom'; render(); }); })(fields[f][1]);
     }
 
-    // Swim pace inputs
-    var swimPaceMinEl = document.getElementById('swimPaceMin');
-    var swimPaceSecEl = document.getElementById('swimPaceSec');
-    if (swimPaceMinEl) {
-      swimPaceMinEl.addEventListener('input', function() {
-        state.swimPaceMin = +this.value || 0;
-        state.preset = 'Custom';
-        render();
-      });
-    }
-    if (swimPaceSecEl) {
-      swimPaceSecEl.addEventListener('input', function() {
-        state.swimPaceSec = +this.value || 0;
-        state.preset = 'Custom';
-        render();
-      });
-    }
+    var spMin = document.getElementById('swimPaceMin'), spSec = document.getElementById('swimPaceSec');
+    if (spMin) spMin.addEventListener('input', function(){ state.swimPaceMin=+this.value||0; state.preset='Custom'; render(); });
+    if (spSec) spSec.addEventListener('input', function(){ state.swimPaceSec=+this.value||0; state.preset='Custom'; render(); });
 
-    // Add aid station
     var addAidBtn = document.getElementById('addAid');
-    if (addAidBtn) {
-      addAidBtn.addEventListener('click', function() {
-        var km = +document.getElementById('aidKm').value;
-        var disc = document.getElementById('aidDisc').value;
-        if (km > 0) {
-          state.aidStations.push({ km: km, discipline: disc });
-          state.aidStations.sort(function(a, b) { return a.km - b.km; });
-          render();
-        }
-      });
-    }
+    if (addAidBtn) addAidBtn.addEventListener('click', function(){
+      var km=+document.getElementById('aidKm').value, disc=document.getElementById('aidDisc').value;
+      if (km>0) { state.aidStations.push({km:km,discipline:disc}); state.aidStations.sort(function(a,b){return a.km-b.km;}); render(); }
+    });
 
-    // Remove aid station
     var aidRms = document.querySelectorAll('.aid-rm');
-    for (var ar = 0; ar < aidRms.length; ar++) {
-      aidRms[ar].addEventListener('click', function() {
-        var idx = +this.getAttribute('data-aid');
-        state.aidStations.splice(idx, 1);
-        render();
-      });
-    }
+    for (var ar = 0; ar < aidRms.length; ar++) aidRms[ar].addEventListener('click', function(){ state.aidStations.splice(+this.getAttribute('data-aid'),1); render(); });
 
-    // Food cards — click to add to schedule
     var foodCards = document.querySelectorAll('.food-card');
     for (var fc = 0; fc < foodCards.length; fc++) {
-      foodCards[fc].addEventListener('click', function() {
+      foodCards[fc].addEventListener('click', function(){
         var foodId = this.getAttribute('data-food');
         var lastTime = 0;
-        for (var i = 0; i < state.schedule.length; i++) {
-          if (state.schedule[i].timeMin > lastTime) lastTime = state.schedule[i].timeMin;
-        }
+        for (var i = 0; i < state.schedule.length; i++) if (state.schedule[i].timeMin > lastTime) lastTime = state.schedule[i].timeMin;
         var newTime = state.schedule.length === 0 ? 15 : lastTime + 15;
         var race = calcRace();
         if (newTime > race.total) newTime = Math.max(0, race.total - 5);
@@ -1377,97 +1309,45 @@
       });
     }
 
-    // Portion change
     var portionSels = document.querySelectorAll('.sched-portion');
-    for (var ps = 0; ps < portionSels.length; ps++) {
-      portionSels[ps].addEventListener('change', function() {
-        var idx = +this.getAttribute('data-idx');
-        state.schedule[idx].portion = +this.value || 1;
-        render();
-      });
-    }
+    for (var ps = 0; ps < portionSels.length; ps++) portionSels[ps].addEventListener('change', function(){ state.schedule[+this.getAttribute('data-idx')].portion = +this.value||1; render(); });
 
-    // Aid station pickup toggle
     var aidToggles = document.querySelectorAll('.sched-aid');
-    for (var at2 = 0; at2 < aidToggles.length; at2++) {
-      aidToggles[at2].addEventListener('change', function() {
-        var idx = +this.getAttribute('data-idx');
-        state.schedule[idx].fromAid = this.checked;
-        render();
-      });
-    }
+    for (var at2 = 0; at2 < aidToggles.length; at2++) aidToggles[at2].addEventListener('change', function(){ state.schedule[+this.getAttribute('data-idx')].fromAid = this.checked; render(); });
 
-    // Remove scheduled item
     var schedRms = document.querySelectorAll('.sched-rm');
-    for (var sr = 0; sr < schedRms.length; sr++) {
-      schedRms[sr].addEventListener('click', function() {
-        var idx = +this.getAttribute('data-rm');
-        state.schedule.splice(idx, 1);
-        render();
-      });
-    }
+    for (var sr = 0; sr < schedRms.length; sr++) schedRms[sr].addEventListener('click', function(){ state.schedule.splice(+this.getAttribute('data-rm'),1); render(); });
 
-    // Edit scheduled time
     var schedTimes = document.querySelectorAll('.sched-time');
-    for (var st = 0; st < schedTimes.length; st++) {
-      schedTimes[st].addEventListener('change', function() {
-        var idx = +this.getAttribute('data-idx');
-        state.schedule[idx].timeMin = +this.value || 0;
-        render();
-      });
-    }
+    for (var st = 0; st < schedTimes.length; st++) schedTimes[st].addEventListener('change', function(){ state.schedule[+this.getAttribute('data-idx')].timeMin = +this.value||0; render(); });
 
-    // Add custom food
     var addCustomBtn = document.getElementById('addCustom');
-    if (addCustomBtn) {
-      addCustomBtn.addEventListener('click', function() {
-        var name = document.getElementById('cfName').value.trim();
-        var glu = +document.getElementById('cfGlu').value || 0;
-        var fru = +document.getElementById('cfFru').value || 0;
-        var cfml = +document.getElementById('cfMl').value || 0;
-        var cfna = +document.getElementById('cfNa').value || 0;
-        var form = document.getElementById('cfForm').value;
-        if (!name) return;
-        state.customFoods.push({
-          id: 'custom-' + Date.now(),
-          name: name,
-          carbs: glu + fru,
-          glucose: glu,
-          fructose: fru,
-          ml: cfml,
-          na: cfna,
-          form: form,
-          icon: '\uD83C\uDF7D'
-        });
-        render();
+    if (addCustomBtn) addCustomBtn.addEventListener('click', function(){
+      var name = document.getElementById('cfName').value.trim();
+      if (!name) return;
+      var glu=+document.getElementById('cfGlu').value||0, fru=+document.getElementById('cfFru').value||0;
+      state.customFoods.push({
+        id: 'custom-'+Date.now(), name: name, carbs: glu+fru, glucose: glu, fructose: fru,
+        ml: +document.getElementById('cfMl').value||0, na: +document.getElementById('cfNa').value||0,
+        form: document.getElementById('cfForm').value, icon: '\uD83C\uDF7D'
       });
-    }
+      render();
+    });
 
-    // Print button
     var printBtn = document.getElementById('printBtn');
-    if (printBtn) {
-      printBtn.addEventListener('click', function() {
-        window.print();
-      });
-    }
+    if (printBtn) printBtn.addEventListener('click', function(){ window.print(); });
   }
-
-  /* ══════════════════════════════════════════════
-     INIT
-     ══════════════════════════════════════════════ */
 
   render();
 
   var resizeTimer;
-  window.addEventListener('resize', function() {
+  window.addEventListener('resize', function(){
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function() {
-      if (state.showGraph) {
-        var race = calcRace();
-        var absorption = calcAbsorption(race.total);
-        var aids = aidStationTimes(race);
-        drawGraph(race, absorption, aids);
-      }
+    resizeTimer = setTimeout(function(){
+      var race = calcRace(), abs = calcAbsorption(race.total), fl = calcFluidTimeline(race.total), aids = aidStationTimes(race);
+      if (state.showGraph) drawAbsorptionGraph(race, abs, aids);
+      if (state.showFluidGraph) drawSimpleGraph('fluidGraph', race, fl.ml, fl.minutes, '#2980b9', 'ml/hr', aids);
+      if (state.showSodiumGraph) drawSimpleGraph('sodiumGraph', race, fl.na, fl.minutes, '#e8a838', 'mg/hr', aids);
     }, 150);
   });
 
