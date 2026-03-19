@@ -106,6 +106,22 @@
   .race-bar { display: flex; height: 32px; border-radius: 6px; overflow: hidden; margin: 12px 0; }
   .race-bar-seg { display: flex; align-items: center; justify-content: center; color: white; font-size: 9px; font-weight: 500; font-family: 'DM Mono', monospace; letter-spacing: 0.04em; min-width: 0; overflow: hidden; white-space: nowrap; padding: 0 4px; }
 
+  /* Toggle switches */
+  .toggles-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; padding: 14px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+  .toggle-item { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: 'DM Mono', monospace; color: var(--ink2); cursor: pointer; user-select: none; }
+  .toggle-item input { display: none; }
+  .toggle-track {
+    position: relative; width: 32px; height: 18px; border-radius: 9px;
+    background: var(--border); transition: background 0.2s; flex-shrink: 0;
+  }
+  .toggle-track::after {
+    content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: white; transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .toggle-item input:checked + .toggle-track { background: var(--green); }
+  .toggle-item input:checked + .toggle-track::after { transform: translateX(14px); }
+
   /* Aid stations */
   .aid-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .aid-chip {
@@ -116,7 +132,7 @@
   .aid-chip .aid-rm:hover { color: var(--red); }
   .aid-time { color: var(--muted); font-size: 9px; }
   .add-row { display: flex; gap: 8px; margin-top: 8px; }
-  .add-row input { width: 100px; height: 32px; border: 1px solid var(--border); border-radius: 4px; padding: 0 8px; font-family: 'DM Mono', monospace; font-size: 12px; outline: none; background: white; }
+  .add-row input, .add-row select { width: 100px; height: 32px; border: 1px solid var(--border); border-radius: 4px; padding: 0 8px; font-family: 'DM Mono', monospace; font-size: 12px; outline: none; background: white; }
   .add-row input:focus { border-color: var(--ink); }
   .btn-sm {
     padding: 0 12px; height: 32px; border: 1px solid var(--green); border-radius: 4px; background: var(--green-bg);
@@ -174,9 +190,9 @@
   .status-over { color: var(--red); }
 
   /* Custom food form */
-  .custom-form { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 6px; align-items: end; margin-top: 10px; }
+  .custom-form { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto; gap: 6px; align-items: end; margin-top: 10px; }
   @media(max-width:600px) { .custom-form { grid-template-columns: 1fr 1fr; } }
-  .custom-form input { height: 32px; border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; font-family: 'DM Mono', monospace; font-size: 11px; outline: none; background: white; }
+  .custom-form input, .custom-form select { height: 32px; border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; font-family: 'DM Mono', monospace; font-size: 11px; outline: none; background: white; }
   .custom-form input:focus { border-color: var(--ink); }
   .custom-form label { font-size: 9px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; display: block; }
 
@@ -202,9 +218,41 @@
   }
   .race-card-items li:last-child { border-bottom: none; }
   .race-card-items .item-time { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; color: var(--ink); min-width: 44px; }
+  .race-card-items .item-dist { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); min-width: 40px; }
   .race-card-items .item-name { flex: 1; }
   .race-card-items .item-carbs { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--green); font-weight: 500; }
+  .race-card-items .item-aid { font-size: 8px; color: var(--red); font-family: 'DM Mono', monospace; background: var(--red-bg); padding: 1px 4px; border-radius: 2px; }
   .race-card-empty { font-size: 10px; color: var(--muted); font-style: italic; padding: 8px 0; }
+
+  /* Top-tube card (bike) */
+  .race-card-toptube {
+    grid-column: 1 / -1;
+    background: white; border: 2px solid var(--bike); border-radius: 6px;
+    padding: 10px 16px; break-inside: avoid;
+  }
+  .race-card-toptube .race-card-head { margin-bottom: 6px; padding-bottom: 6px; border-bottom-color: var(--bike); }
+  .race-card-toptube .tt-items {
+    display: flex; flex-wrap: wrap; gap: 0; list-style: none;
+  }
+  .race-card-toptube .tt-items li {
+    display: flex; align-items: center; gap: 4px; padding: 3px 8px;
+    font-size: 10px; color: var(--ink2); border-right: 1px solid #e8e4da;
+    font-family: 'DM Mono', monospace; white-space: nowrap;
+  }
+  .race-card-toptube .tt-items li:last-child { border-right: none; }
+  .race-card-toptube .tt-time { font-weight: 500; color: var(--ink); }
+  .race-card-toptube .tt-dist { color: var(--muted); font-size: 9px; }
+  .race-card-toptube .tt-carbs { color: var(--green); font-weight: 500; }
+  .race-card-toptube .tt-aid { color: var(--red); font-size: 8px; }
+
+  /* Packing list card */
+  .pack-card { background: #faf8f4; border: 1.5px solid var(--border); border-radius: 8px; padding: 16px; }
+  .pack-card-head { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink2); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid var(--border); }
+  .pack-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px; }
+  .pack-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: white; border-radius: 4px; font-size: 11px; }
+  .pack-qty { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--green); min-width: 28px; text-align: center; }
+  .pack-name { color: var(--ink2); }
+  .pack-note { font-size: 9px; color: var(--muted); font-family: 'DM Mono', monospace; margin-left: auto; }
 
   .print-btn {
     display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border: 1px solid var(--green);
@@ -213,16 +261,25 @@
   }
   .print-btn:hover { background: #165c38; }
 
+  /* Aid toggle in schedule */
+  .aid-toggle {
+    display: inline-flex; align-items: center; gap: 3px; font-size: 8px; font-family: 'DM Mono', monospace;
+    color: var(--muted); cursor: pointer; user-select: none;
+  }
+  .aid-toggle input { width: 12px; height: 12px; accent-color: var(--red); }
+  .aid-toggle.is-aid { color: var(--red); }
+
   /* Print styles */
   @media print {
     body { background: white; }
     .page { padding: 0; max-width: 100%; }
-    .back, .kicker, h1, .intro, .sec-head, .presets, .method,
+    .back, .kicker, h1, .intro, .sec-head, .presets, .method, .toggles-bar,
     .food-grid, .custom-form, .add-row, .add-food-row,
-    .sched-rm, .time-input-sm, .btn-sm, .print-btn,
+    .sched-rm, .time-input-sm, .btn-sm, .print-btn, .aid-toggle,
     #raceSetup, #aidSection, #foodLibrary, #schedSection, #graphSection { display: none !important; }
     #printSection { display: block !important; }
     .race-cards { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .race-card-toptube { grid-column: 1 / -1; }
     .race-card { border: 1.5px solid #ccc; page-break-inside: avoid; }
     .panel { border: none; padding: 0; }
     .headline { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -232,16 +289,6 @@
   .method { font-size: 11px; color: var(--muted); line-height: 1.7; margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); }
   .method code { font-family: 'DM Mono', monospace; font-size: 10px; background: #faf8f4; padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border); }
   .method strong { color: var(--ink2); font-weight: 500; }
-
-  /* Timeline markers */
-  .timeline-wrap { position: relative; height: 60px; margin: 8px 0 4px; }
-  .timeline-track { position: absolute; top: 28px; left: 40px; right: 10px; height: 4px; background: var(--border); border-radius: 2px; }
-  .timeline-seg { position: absolute; top: 0; height: 100%; border-radius: 2px; }
-  .timeline-marker { position: absolute; top: 14px; transform: translateX(-50%); text-align: center; }
-  .timeline-marker-line { width: 1px; height: 22px; background: var(--muted); margin: 0 auto; }
-  .timeline-marker-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); border: 2px solid white; margin: -2px auto 0; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
-  .timeline-marker-label { font-size: 8px; font-family: 'DM Mono', monospace; color: var(--muted); margin-top: 2px; white-space: nowrap; }
-  .timeline-food-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); border: 1.5px solid white; margin: -1px auto 0; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
 </style>
 </head>
 <body>
@@ -265,7 +312,8 @@
     Combined 2:1 glucose:fructose products can deliver up to <code>~90 g/hr</code> of total carbohydrate.<br><br>
     The graph models each food item's absorption over a window based on form:
     <code>Liquid ~15 min</code> <code>Gel ~20 min</code> <code>Solid ~35 min</code>.
-    Absorption is modelled as a bell-shaped curve peaking at the midpoint of the window.<br><br>
+    Absorption is modelled as a bell-shaped curve peaking at the midpoint of the window,
+    capped at physiological transport limits (60 g/hr glucose, 30 g/hr fructose).<br><br>
     Individual absorption rates vary with training, gut conditioning, and race intensity.
     Always practise your fuelling strategy in training before race day.
   </div>
@@ -291,24 +339,27 @@
   ];
 
   var FOODS = [
-    { id: 'sis-iso',     name: 'SiS GO Isotonic Gel',   carbs: 22, glucose: 14, fructose: 8,  ml: 60,  form: 'gel',    icon: '\uD83C\uDF6F' },
-    { id: 'sis-beta',    name: 'SiS Beta Fuel Gel',     carbs: 40, glucose: 24, fructose: 16, ml: 60,  form: 'gel',    icon: '\uD83C\uDF6F' },
-    { id: 'maurten100',  name: 'Maurten Gel 100',       carbs: 25, glucose: 17, fructose: 8,  ml: 40,  form: 'gel',    icon: '\uD83C\uDF6F' },
-    { id: 'maurten160',  name: 'Maurten Gel 160',       carbs: 40, glucose: 24, fructose: 16, ml: 60,  form: 'gel',    icon: '\uD83C\uDF6F' },
-    { id: 'torq-gel',    name: 'Torq Energy Gel',       carbs: 28, glucose: 18, fructose: 10, ml: 45,  form: 'gel',    icon: '\uD83C\uDF6F' },
-    { id: 'clif-blok',   name: 'Clif Bloks (3 pieces)', carbs: 24, glucose: 16, fructose: 8,  ml: 0,   form: 'solid',  icon: '\uD83C\uDF6C' },
-    { id: 'clif-bar',    name: 'Clif Bar',              carbs: 42, glucose: 28, fructose: 14, ml: 0,   form: 'solid',  icon: '\uD83C\uDF6B' },
-    { id: 'banana',      name: 'Banana',                carbs: 25, glucose: 12, fructose: 6,  ml: 0,   form: 'solid',  icon: '\uD83C\uDF4C' },
-    { id: 'rice-cake',   name: 'Rice cake (homemade)',   carbs: 30, glucose: 22, fructose: 3,  ml: 0,   form: 'solid',  icon: '\uD83C\uDF59' },
-    { id: 'haribo',      name: 'Haribo (handful)',       carbs: 20, glucose: 10, fructose: 10, ml: 0,   form: 'solid',  icon: '\uD83C\uDF6C' },
-    { id: 'maurten-d160',name: 'Maurten Drink 160',     carbs: 40, glucose: 24, fructose: 16, ml: 500, form: 'liquid', icon: '\uD83E\uDD64' },
-    { id: 'maurten-d320',name: 'Maurten Drink 320',     carbs: 80, glucose: 48, fructose: 32, ml: 500, form: 'liquid', icon: '\uD83E\uDD64' },
-    { id: 'sis-beta-d',  name: 'SiS Beta Fuel Drink',   carbs: 80, glucose: 48, fructose: 32, ml: 500, form: 'liquid', icon: '\uD83E\uDD64' },
-    { id: 'sis-go-elec', name: 'SiS GO Electrolyte',    carbs: 36, glucose: 22, fructose: 14, ml: 500, form: 'liquid', icon: '\uD83E\uDD64' },
-    { id: 'cola250',     name: 'Cola (250 ml)',          carbs: 27, glucose: 13, fructose: 14, ml: 250, form: 'liquid', icon: '\uD83E\uDD64' },
-    { id: 'water',       name: 'Water (500 ml)',         carbs: 0,  glucose: 0,  fructose: 0,  ml: 500, form: 'liquid', icon: '\uD83D\uDCA7' },
-    { id: 'water250',    name: 'Water (250 ml)',         carbs: 0,  glucose: 0,  fructose: 0,  ml: 250, form: 'liquid', icon: '\uD83D\uDCA7' },
-    { id: 'electrolyte', name: 'Electrolyte tab (500ml)',carbs: 4,  glucose: 4,  fructose: 0,  ml: 500, form: 'liquid', icon: '\uD83D\uDCA7' }
+    { id: 'sis-iso',     name: 'SiS GO Isotonic Gel',   carbs: 22, glucose: 14, fructose: 8,  ml: 60,  na: 10,  form: 'gel',    icon: '\uD83C\uDF6F' },
+    { id: 'sis-beta',    name: 'SiS Beta Fuel Gel',     carbs: 40, glucose: 24, fructose: 16, ml: 60,  na: 30,  form: 'gel',    icon: '\uD83C\uDF6F' },
+    { id: 'maurten100',  name: 'Maurten Gel 100',       carbs: 25, glucose: 17, fructose: 8,  ml: 40,  na: 20,  form: 'gel',    icon: '\uD83C\uDF6F' },
+    { id: 'maurten160',  name: 'Maurten Gel 160',       carbs: 40, glucose: 24, fructose: 16, ml: 60,  na: 30,  form: 'gel',    icon: '\uD83C\uDF6F' },
+    { id: 'torq-gel',    name: 'Torq Energy Gel',       carbs: 28, glucose: 18, fructose: 10, ml: 45,  na: 20,  form: 'gel',    icon: '\uD83C\uDF6F' },
+    { id: 'clif-blok',   name: 'Clif Bloks (3 pieces)', carbs: 24, glucose: 16, fructose: 8,  ml: 0,   na: 70,  form: 'solid',  icon: '\uD83C\uDF6C' },
+    { id: 'clif-bar',    name: 'Clif Bar',              carbs: 42, glucose: 28, fructose: 14, ml: 0,   na: 150, form: 'solid',  icon: '\uD83C\uDF6B' },
+    { id: 'banana',      name: 'Banana',                carbs: 25, glucose: 12, fructose: 6,  ml: 0,   na: 1,   form: 'solid',  icon: '\uD83C\uDF4C' },
+    { id: 'rice-cake',   name: 'Rice cake (homemade)',   carbs: 30, glucose: 22, fructose: 3,  ml: 0,   na: 80,  form: 'solid',  icon: '\uD83C\uDF59' },
+    { id: 'haribo',      name: 'Haribo (handful)',       carbs: 20, glucose: 10, fructose: 10, ml: 0,   na: 10,  form: 'solid',  icon: '\uD83C\uDF6C' },
+    { id: 'maurten-d160',name: 'Maurten Drink 160',     carbs: 40, glucose: 24, fructose: 16, ml: 500, na: 140, form: 'liquid', icon: '\uD83E\uDD64' },
+    { id: 'maurten-d320',name: 'Maurten Drink 320',     carbs: 80, glucose: 48, fructose: 32, ml: 500, na: 230, form: 'liquid', icon: '\uD83E\uDD64' },
+    { id: 'sis-beta-d',  name: 'SiS Beta Fuel Drink',   carbs: 80, glucose: 48, fructose: 32, ml: 500, na: 250, form: 'liquid', icon: '\uD83E\uDD64' },
+    { id: 'sis-go-elec', name: 'SiS GO Electrolyte',    carbs: 36, glucose: 22, fructose: 14, ml: 500, na: 350, form: 'liquid', icon: '\uD83E\uDD64' },
+    { id: 'precision-h', name: 'Precision Fuel 1500',    carbs: 0,  glucose: 0,  fructose: 0,  ml: 500, na: 1500,form: 'liquid', icon: '\uD83E\uDD64' },
+    { id: 'precision-l', name: 'Precision Fuel 500',     carbs: 0,  glucose: 0,  fructose: 0,  ml: 500, na: 500, form: 'liquid', icon: '\uD83E\uDD64' },
+    { id: 'salt-cap',    name: 'Salt capsule',           carbs: 0,  glucose: 0,  fructose: 0,  ml: 0,   na: 250, form: 'solid',  icon: '\uD83D\uDC8A' },
+    { id: 'cola250',     name: 'Cola (250 ml)',          carbs: 27, glucose: 13, fructose: 14, ml: 250, na: 5,   form: 'liquid', icon: '\uD83E\uDD64' },
+    { id: 'water',       name: 'Water (500 ml)',         carbs: 0,  glucose: 0,  fructose: 0,  ml: 500, na: 0,   form: 'liquid', icon: '\uD83D\uDCA7' },
+    { id: 'water250',    name: 'Water (250 ml)',         carbs: 0,  glucose: 0,  fructose: 0,  ml: 250, na: 0,   form: 'liquid', icon: '\uD83D\uDCA7' },
+    { id: 'electrolyte', name: 'Electrolyte tab (500ml)',carbs: 4,  glucose: 4,  fructose: 0,  ml: 500, na: 360, form: 'liquid', icon: '\uD83D\uDCA7' }
   ];
 
   var PORTIONS = [
@@ -327,16 +378,20 @@
   var state = {
     preset: 'Olympic Tri',
     swimDist: 1.5, bikeDist: 40, runDist: 10,
-    swimPaceMin: 1,   // swim pace minutes per 100m
-    swimPaceSec: 50,   // swim pace seconds per 100m
-    bikeSpeed: 30,   // km/h
-    runPace: 5.5,    // min/km
-    t1: 3,           // minutes
-    t2: 2,           // minutes
-    aidStations: [],  // array of { km: number } — distance into bike or run leg
-    schedule: [],     // array of { foodId: string, timeMin: number, portion: number }
-    customFoods: [],  // array of food objects with custom IDs
-    raceType: 'tri'
+    swimPaceMin: 1, swimPaceSec: 50,
+    bikeSpeed: 30, runPace: 5.5,
+    t1: 3, t2: 2,
+    aidStations: [],
+    schedule: [],     // { foodId, timeMin, portion, fromAid }
+    customFoods: [],
+    raceType: 'tri',
+    // Complexity toggles
+    showSodium: false,
+    showFluid: true,
+    showAid: true,
+    showGraph: true,
+    showPacking: true,
+    showTopTube: true
   };
 
   /* ══════════════════════════════════════════════
@@ -344,7 +399,7 @@
      ══════════════════════════════════════════════ */
 
   function calcRace() {
-    var swimPaceSec100 = state.swimPaceMin * 60 + state.swimPaceSec; // seconds per 100m
+    var swimPaceSec100 = state.swimPaceMin * 60 + state.swimPaceSec;
     var swimMin = state.swimDist > 0 ? (state.swimDist * 1000 / 100) * swimPaceSec100 / 60 : 0;
     var bikeMin = state.bikeDist > 0 ? (state.bikeDist / state.bikeSpeed) * 60 : 0;
     var runMin = state.runDist > 0 ? state.runDist * state.runPace : 0;
@@ -352,7 +407,6 @@
     var t2 = state.bikeDist > 0 && state.runDist > 0 ? state.t2 : 0;
     var total = swimMin + t1 + bikeMin + t2 + runMin;
 
-    // Build segments array with cumulative start times
     var segs = [];
     var t = 0;
     if (swimMin > 0) { segs.push({ name: 'Swim', dur: swimMin, start: t, dist: state.swimDist, color: 'var(--swim)' }); t += swimMin; }
@@ -372,9 +426,23 @@
     return segs.length > 0 ? segs[segs.length - 1].name : '';
   }
 
-  function getAllFoods() {
-    return FOODS.concat(state.customFoods);
+  // Get distance into a segment at a given race time
+  function getDistAtTime(segs, timeMin) {
+    if (timeMin < 0) return { dist: 0, seg: null };
+    for (var i = 0; i < segs.length; i++) {
+      var seg = segs[i];
+      if (timeMin >= seg.start && timeMin < seg.start + seg.dur) {
+        if (seg.dist > 0) {
+          var frac = (timeMin - seg.start) / seg.dur;
+          return { dist: Math.round(frac * seg.dist * 10) / 10, seg: seg };
+        }
+        return { dist: 0, seg: seg };
+      }
+    }
+    return { dist: 0, seg: null };
   }
+
+  function getAllFoods() { return FOODS.concat(state.customFoods); }
 
   function getFoodById(id) {
     var all = getAllFoods();
@@ -399,11 +467,10 @@
     return m + 'm';
   }
 
-  /* Absorption model: returns { glucose: Float32Array, fructose: Float32Array } indexed by minute */
-  var PRE_RACE_OFFSET = 30; // minutes before race start
+  /* Absorption model — capped at physiological transport limits */
+  var PRE_RACE_OFFSET = 30;
 
   function calcAbsorption(totalMin) {
-    // Array covers from -PRE_RACE_OFFSET to totalMin
     var n = Math.ceil(totalMin + PRE_RACE_OFFSET) + 1;
     var glu = new Float32Array(n);
     var fru = new Float32Array(n);
@@ -416,7 +483,7 @@
 
       var window = FORM_WINDOW[food.form] || 20;
       var halfW = window / 2;
-      var peak = entry.timeMin + halfW + PRE_RACE_OFFSET; // shift into array space
+      var peak = entry.timeMin + halfW + PRE_RACE_OFFSET;
       var sigma = halfW / 2.5;
 
       var sqrt2pi = 2.5066283;
@@ -433,10 +500,15 @@
       }
     }
 
+    // Cap at physiological transport limits
+    for (var c = 0; c < n; c++) {
+      if (glu[c] > 60) glu[c] = 60;
+      if (fru[c] > 30) fru[c] = 30;
+    }
+
     return { glucose: glu, fructose: fru, minutes: n };
   }
 
-  // Convert aid station distances to race times
   function aidStationTimes(race) {
     var times = [];
     for (var i = 0; i < state.aidStations.length; i++) {
@@ -444,12 +516,10 @@
       var km = aid.km;
       var disc = aid.discipline || 'bike';
       var tMin = 0;
-
-      // Find the segment
       for (var s = 0; s < race.segs.length; s++) {
         var seg = race.segs[s];
         if (seg.name.toLowerCase() === disc) {
-          var speed = disc === 'bike' ? state.bikeSpeed : (60 / state.runPace); // km/h
+          var speed = disc === 'bike' ? state.bikeSpeed : (60 / state.runPace);
           var distIntoSeg = Math.min(km, seg.dist);
           tMin = seg.start + (distIntoSeg / speed) * 60;
           break;
@@ -472,11 +542,20 @@
 
     var html = '';
 
+    /* ── COMPLEXITY TOGGLES ─────────────── */
+    html += '<div class="toggles-bar">';
+    html += '<label class="toggle-item"><input type="checkbox" id="togSodium"' + (state.showSodium ? ' checked' : '') + '><span class="toggle-track"></span>Sodium</label>';
+    html += '<label class="toggle-item"><input type="checkbox" id="togFluid"' + (state.showFluid ? ' checked' : '') + '><span class="toggle-track"></span>Fluid</label>';
+    html += '<label class="toggle-item"><input type="checkbox" id="togAid"' + (state.showAid ? ' checked' : '') + '><span class="toggle-track"></span>Aid stations</label>';
+    html += '<label class="toggle-item"><input type="checkbox" id="togGraph"' + (state.showGraph ? ' checked' : '') + '><span class="toggle-track"></span>Absorption graph</label>';
+    html += '<label class="toggle-item"><input type="checkbox" id="togPacking"' + (state.showPacking ? ' checked' : '') + '><span class="toggle-track"></span>Packing list</label>';
+    html += '<label class="toggle-item"><input type="checkbox" id="togTopTube"' + (state.showTopTube ? ' checked' : '') + '><span class="toggle-track"></span>Top tube card</label>';
+    html += '</div>';
+
     /* ── 1. RACE SETUP ──────────────────── */
     html += '<div id="raceSetup">';
     html += '<div class="sec-head"><span class="sec-tag">Race Setup</span><div class="sec-rule"></div></div>';
 
-    // Presets
     html += '<div class="presets">';
     for (var p = 0; p < PRESETS.length; p++) {
       var pr = PRESETS[p];
@@ -485,7 +564,6 @@
     }
     html += '</div>';
 
-    // Race inputs
     html += '<div class="grid-2">';
 
     // Left: discipline inputs
@@ -537,7 +615,6 @@
     }
     html += '</div></div>';
 
-    // Race bar
     if (race.total > 0) {
       html += '<div class="race-bar">';
       for (var bi = 0; bi < race.segs.length; bi++) {
@@ -547,42 +624,42 @@
       }
       html += '</div>';
     }
-    html += '</div>'; // end right
+    html += '</div>';
     html += '</div>'; // end grid
 
     /* ── 2. AID STATIONS ────────────────── */
     html += '</div>'; // end #raceSetup
-    html += '<div id="aidSection">';
-    html += '<div class="sec-head"><span class="sec-tag">Aid Stations</span><div class="sec-rule"></div></div>';
-    html += '<div class="panel">';
-    html += '<div class="panel-title">Mark aid station locations on the course</div>';
+    if (state.showAid) {
+      html += '<div id="aidSection">';
+      html += '<div class="sec-head"><span class="sec-tag">Aid Stations</span><div class="sec-rule"></div></div>';
+      html += '<div class="panel">';
+      html += '<div class="panel-title">Mark aid station locations on the course</div>';
 
-    // Add aid station form
-    html += '<div class="add-row">';
-    html += '<select id="aidDisc">';
-    if (state.bikeDist > 0) html += '<option value="bike">Bike</option>';
-    if (state.runDist > 0) html += '<option value="run">Run</option>';
-    html += '</select>';
-    html += '<input type="number" id="aidKm" placeholder="km" min="0" step="1">';
-    html += '<button class="btn-sm" id="addAid">+ Add</button>';
-    html += '</div>';
-
-    if (state.aidStations.length > 0) {
-      html += '<div class="aid-list">';
-      for (var a = 0; a < state.aidStations.length; a++) {
-        var aid = state.aidStations[a];
-        var aidT = 0;
-        for (var at = 0; at < aids.length; at++) {
-          if (aids[at].km === aid.km && aids[at].discipline === aid.discipline) { aidT = aids[at].timeMin; break; }
-        }
-        html += '<div class="aid-chip"><span>' + aid.discipline + ' ' + aid.km + ' km</span><span class="aid-time">@ ' + fmtTime(aidT) + '</span><span class="aid-rm" data-aid="' + a + '">&times;</span></div>';
-      }
+      html += '<div class="add-row">';
+      html += '<select id="aidDisc">';
+      if (state.bikeDist > 0) html += '<option value="bike">Bike</option>';
+      if (state.runDist > 0) html += '<option value="run">Run</option>';
+      html += '</select>';
+      html += '<input type="number" id="aidKm" placeholder="km" min="0" step="1">';
+      html += '<button class="btn-sm" id="addAid">+ Add</button>';
       html += '</div>';
+
+      if (state.aidStations.length > 0) {
+        html += '<div class="aid-list">';
+        for (var a = 0; a < state.aidStations.length; a++) {
+          var aid = state.aidStations[a];
+          var aidT = 0;
+          for (var at = 0; at < aids.length; at++) {
+            if (aids[at].km === aid.km && aids[at].discipline === aid.discipline) { aidT = aids[at].timeMin; break; }
+          }
+          html += '<div class="aid-chip"><span>' + aid.discipline + ' ' + aid.km + ' km</span><span class="aid-time">@ ' + fmtTime(aidT) + '</span><span class="aid-rm" data-aid="' + a + '">&times;</span></div>';
+        }
+        html += '</div>';
+      }
+      html += '</div></div>';
     }
-    html += '</div>';
 
     /* ── 3. FOOD LIBRARY ────────────────── */
-    html += '</div>'; // end #aidSection
     html += '<div id="foodLibrary">';
     html += '<div class="sec-head"><span class="sec-tag">Food Library</span><div class="sec-rule"></div></div>';
     html += '<div class="panel">';
@@ -591,10 +668,13 @@
     html += '<div class="food-grid">';
     for (var f = 0; f < allFoods.length; f++) {
       var fd = allFoods[f];
+      var macroStr = fd.carbs + 'g <span class="glu">G:' + fd.glucose + '</span> <span class="fru">F:' + fd.fructose + '</span>';
+      if (state.showFluid && fd.ml > 0) macroStr += ' ' + fd.ml + 'ml';
+      if (state.showSodium && fd.na > 0) macroStr += ' Na:' + fd.na + 'mg';
       html += '<div class="food-card" data-food="' + fd.id + '">';
       html += '<div class="food-icon">' + fd.icon + '</div>';
       html += '<div class="food-info"><div class="food-name">' + fd.name + '</div>';
-      html += '<div class="food-macros">' + fd.carbs + 'g &mdash; <span class="glu">G:' + fd.glucose + '</span> <span class="fru">F:' + fd.fructose + '</span>' + (fd.ml > 0 ? ' &mdash; ' + fd.ml + 'ml' : '') + '</div>';
+      html += '<div class="food-macros">' + macroStr + '</div>';
       html += '</div></div>';
     }
     html += '</div>';
@@ -607,6 +687,7 @@
     html += '<div><label>Glucose (g)</label><input id="cfGlu" type="number" min="0" value="15" style="width:100%"></div>';
     html += '<div><label>Fructose (g)</label><input id="cfFru" type="number" min="0" value="10" style="width:100%"></div>';
     html += '<div><label>Fluid (ml)</label><input id="cfMl" type="number" min="0" value="0" style="width:100%"></div>';
+    html += '<div><label>Sodium (mg)</label><input id="cfNa" type="number" min="0" value="0" style="width:100%"></div>';
     html += '<div><label>Form</label><select id="cfForm" style="width:100%;height:32px;border:1px solid var(--border);border-radius:4px;font-family:\'DM Mono\',monospace;font-size:11px;padding:0 4px;outline:none"><option value="gel">Gel</option><option value="liquid">Liquid</option><option value="solid">Solid</option></select></div>';
     html += '<div><label>&nbsp;</label><button class="btn-sm" id="addCustom">+ Add</button></div>';
     html += '</div></div>';
@@ -619,62 +700,91 @@
     html += '<div class="sec-head"><span class="sec-tag">Fuelling Plan</span><div class="sec-rule"></div></div>';
 
     // Summary stats
-    var totalGlu = 0, totalFru = 0, totalCarbs = 0, totalMl = 0;
+    var totalGlu = 0, totalFru = 0, totalCarbs = 0, totalMl = 0, totalNa = 0;
     for (var ts = 0; ts < state.schedule.length; ts++) {
       var tf = getFoodById(state.schedule[ts].foodId);
       var por = state.schedule[ts].portion || 1;
-      if (tf) { totalGlu += Math.round(tf.glucose * por); totalFru += Math.round(tf.fructose * por); totalCarbs += Math.round(tf.carbs * por); totalMl += Math.round((tf.ml || 0) * por); }
+      if (tf) {
+        totalGlu += Math.round(tf.glucose * por);
+        totalFru += Math.round(tf.fructose * por);
+        totalCarbs += Math.round(tf.carbs * por);
+        totalMl += Math.round((tf.ml || 0) * por);
+        totalNa += Math.round((tf.na || 0) * por);
+      }
     }
     var raceHrs = race.total / 60;
     var carbsPerHr = raceHrs > 0 ? totalCarbs / raceHrs : 0;
     var mlPerHr = raceHrs > 0 ? totalMl / raceHrs : 0;
+    var naPerHr = raceHrs > 0 ? totalNa / raceHrs : 0;
+
+    // Determine columns for headline grid
+    var hlCols = 3;
+    if (state.showFluid) hlCols++;
+    if (state.showSodium) hlCols++;
 
     html += '<div class="headline" style="padding:16px 20px">';
-    html += '<div class="hl-grid" style="grid-template-columns:repeat(3,1fr)">';
+    html += '<div class="hl-grid" style="grid-template-columns:repeat(' + Math.min(hlCols, 5) + ',1fr)">';
     html += '<div class="hl-metric"><div class="hl-metric-val">' + Math.round(carbsPerHr) + '</div><div class="hl-metric-label">carbs g/hr</div></div>';
     html += '<div class="hl-metric"><div class="hl-metric-val">' + totalCarbs + 'g</div><div class="hl-metric-label">total carbs</div></div>';
-    html += '<div class="hl-metric"><div class="hl-metric-val" style="color:#5dade2">' + Math.round(mlPerHr) + '</div><div class="hl-metric-label">fluid ml/hr</div></div>';
-    html += '</div>';
-    html += '<div class="hl-grid" style="grid-template-columns:repeat(3,1fr);margin-top:8px">';
-    html += '<div class="hl-metric"><div class="hl-metric-val" style="font-size:16px;color:#5dade2">' + totalGlu + 'g</div><div class="hl-metric-label">glucose</div></div>';
-    html += '<div class="hl-metric"><div class="hl-metric-val" style="font-size:16px;color:#e74c3c">' + totalFru + 'g</div><div class="hl-metric-label">fructose</div></div>';
-    html += '<div class="hl-metric"><div class="hl-metric-val" style="font-size:16px;color:#5dade2">' + totalMl + '</div><div class="hl-metric-label">total fluid (ml)</div></div>';
+    html += '<div class="hl-metric"><div class="hl-metric-val" style="font-size:14px;color:#5dade2">' + totalGlu + '<span style="font-size:10px;color:rgba(255,255,255,0.3)"> / </span><span style="color:#e74c3c">' + totalFru + '</span></div><div class="hl-metric-label">glucose / fructose</div></div>';
+    if (state.showFluid) {
+      html += '<div class="hl-metric"><div class="hl-metric-val" style="color:#5dade2">' + Math.round(mlPerHr) + '</div><div class="hl-metric-label">fluid ml/hr</div></div>';
+    }
+    if (state.showSodium) {
+      html += '<div class="hl-metric"><div class="hl-metric-val" style="color:#e8a838">' + Math.round(naPerHr) + '</div><div class="hl-metric-label">sodium mg/hr</div></div>';
+    }
     html += '</div></div>';
 
     html += '<div class="panel">';
-    html += '<div class="panel-title">Scheduled items — click food cards above to add</div>';
+    html += '<div class="panel-title">Scheduled items \u2014 click food cards above to add</div>';
 
     if (state.schedule.length === 0) {
       html += '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">No food scheduled yet. Click items in the food library above to add them to your plan.</div>';
     } else {
-      html += '<table class="sched-table"><thead><tr><th>Time</th><th></th><th>Item</th><th>Portion</th><th>Carbs</th><th>Fluid</th><th></th></tr></thead><tbody>';
-      // Sort by time
+      // Table header
+      var thHtml = '<th>Time</th><th></th><th>Item</th><th>Portion</th><th>Carbs</th>';
+      if (state.showFluid) thHtml += '<th>Fluid</th>';
+      if (state.showSodium) thHtml += '<th>Na</th>';
+      if (state.showAid) thHtml += '<th>Aid</th>';
+      thHtml += '<th></th>';
+      html += '<table class="sched-table"><thead><tr>' + thHtml + '</tr></thead><tbody>';
+
       var sorted = state.schedule.slice().sort(function(a, b) { return a.timeMin - b.timeMin; });
       for (var si2 = 0; si2 < sorted.length; si2++) {
         var entry = sorted[si2];
         var idx = state.schedule.indexOf(entry);
         var food = getFoodById(entry.foodId);
         if (!food) continue;
-        var por = entry.portion || 1;
+        var por2 = entry.portion || 1;
         var disc = getDisciplineAtTime(race.segs, entry.timeMin);
         var discCls = disc.toLowerCase().replace(/[ -]/g, '');
-        var eCarbs = Math.round(food.carbs * por);
-        var eGlu = Math.round(food.glucose * por);
-        var eFru = Math.round(food.fructose * por);
-        var eMl = Math.round((food.ml || 0) * por);
+        var eCarbs = Math.round(food.carbs * por2);
+        var eGlu = Math.round(food.glucose * por2);
+        var eFru = Math.round(food.fructose * por2);
+        var eMl = Math.round((food.ml || 0) * por2);
+        var eNa = Math.round((food.na || 0) * por2);
+
         html += '<tr>';
         html += '<td><input type="number" class="time-input-sm sched-time" data-idx="' + idx + '" value="' + Math.round(entry.timeMin) + '" min="-30" max="' + Math.round(race.total) + '"> min</td>';
         html += '<td><span class="sched-disc disc-' + discCls + '">' + disc + '</span></td>';
         html += '<td>' + food.icon + ' ' + food.name + '</td>';
-        // Portion selector
         html += '<td><select class="sched-portion" data-idx="' + idx + '" style="width:52px;height:26px;border:1px solid var(--border);border-radius:3px;font-family:\'DM Mono\',monospace;font-size:11px;text-align:center;outline:none;background:white">';
         for (var pi = 0; pi < PORTIONS.length; pi++) {
-          var sel = (Math.abs(por - PORTIONS[pi].value) < 0.01) ? ' selected' : '';
+          var sel = (Math.abs(por2 - PORTIONS[pi].value) < 0.01) ? ' selected' : '';
           html += '<option value="' + PORTIONS[pi].value + '"' + sel + '>' + PORTIONS[pi].label + '</option>';
         }
         html += '</select></td>';
         html += '<td style="font-family:\'DM Mono\',monospace;font-weight:500;font-size:11px">' + eCarbs + 'g <span style="font-size:9px;font-weight:400;color:var(--muted)"><span style="color:var(--blue)">' + eGlu + '</span>/<span style="color:#c0392b">' + eFru + '</span></span></td>';
-        html += '<td style="font-family:\'DM Mono\',monospace;font-size:11px;color:' + (eMl > 0 ? 'var(--blue)' : 'var(--muted)') + '">' + (eMl > 0 ? eMl + 'ml' : '\u2014') + '</td>';
+        if (state.showFluid) {
+          html += '<td style="font-family:\'DM Mono\',monospace;font-size:11px;color:' + (eMl > 0 ? 'var(--blue)' : 'var(--muted)') + '">' + (eMl > 0 ? eMl + 'ml' : '\u2014') + '</td>';
+        }
+        if (state.showSodium) {
+          html += '<td style="font-family:\'DM Mono\',monospace;font-size:11px;color:' + (eNa > 0 ? '#e8a838' : 'var(--muted)') + '">' + (eNa > 0 ? eNa + 'mg' : '\u2014') + '</td>';
+        }
+        if (state.showAid) {
+          var isAid = entry.fromAid ? true : false;
+          html += '<td><label class="aid-toggle' + (isAid ? ' is-aid' : '') + '"><input type="checkbox" class="sched-aid" data-idx="' + idx + '"' + (isAid ? ' checked' : '') + '>' + (isAid ? '\u26F3' : '') + '</label></td>';
+        }
         html += '<td><span class="sched-rm" data-rm="' + idx + '">&times;</span></td>';
         html += '</tr>';
       }
@@ -685,80 +795,127 @@
 
     /* ── 5. ABSORPTION GRAPH ────────────── */
     html += '</div>'; // end #schedSection
-    html += '<div id="graphSection">';
-    html += '<div class="sec-head"><span class="sec-tag">Absorption Graph</span><div class="sec-rule"></div></div>';
-    html += '<div class="panel">';
-    html += '<div class="panel-title">Glucose &amp; fructose absorption rate over time</div>';
-    html += '<div class="graph-wrap"><canvas id="absGraph"></canvas></div>';
-    html += '<div class="legend">';
-    html += '<div class="legend-item"><div class="legend-swatch" style="background:#2980b9"></div> Glucose (g/hr)</div>';
-    html += '<div class="legend-item"><div class="legend-swatch" style="background:#c0392b"></div> Fructose (g/hr)</div>';
-    html += '<div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> Combined (g/hr)</div>';
-    html += '<div class="legend-item"><div class="legend-swatch" style="background:#e74c3c;height:1px;border-top:1px dashed #e74c3c"></div> Max limits</div>';
-    html += '<div class="legend-item"><div class="legend-swatch" style="background:var(--red);width:6px;height:6px;border-radius:50%"></div> Aid station</div>';
-    html += '</div>';
-    html += '</div>';
-    html += '</div>'; // end #graphSection
+    if (state.showGraph) {
+      html += '<div id="graphSection">';
+      html += '<div class="sec-head"><span class="sec-tag">Absorption Graph</span><div class="sec-rule"></div></div>';
+      html += '<div class="panel">';
+      html += '<div class="panel-title">Glucose &amp; fructose absorption rate over time (capped at transport limits)</div>';
+      html += '<div class="graph-wrap"><canvas id="absGraph"></canvas></div>';
+      html += '<div class="legend">';
+      html += '<div class="legend-item"><div class="legend-swatch" style="background:#2980b9"></div> Glucose (g/hr)</div>';
+      html += '<div class="legend-item"><div class="legend-swatch" style="background:#c0392b"></div> Fructose (g/hr)</div>';
+      html += '<div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> Combined (g/hr)</div>';
+      html += '<div class="legend-item"><div class="legend-swatch" style="background:#e74c3c;height:1px;border-top:1px dashed #e74c3c"></div> Max limits</div>';
+      if (state.showAid) html += '<div class="legend-item"><div class="legend-swatch" style="background:var(--red);width:6px;height:6px;border-radius:50%"></div> Aid station</div>';
+      html += '</div>';
+      html += '</div></div>';
+    }
 
     /* ── 6. PRINTABLE RACE CARDS ────────── */
     html += '<div id="printSection">';
     html += '<div class="sec-head"><span class="sec-tag">Race Day Cards</span><div class="sec-rule"></div></div>';
     html += '<div class="panel">';
-    html += '<div class="panel-title">Per-leg fuelling summary &mdash; print or screenshot for race day</div>';
+    html += '<div class="panel-title">Per-leg fuelling summary \u2014 print or screenshot for race day</div>';
 
-    // Build per-leg data
     var legColors = { 'Pre-Race': '#7f8c8d', 'Swim': '#2980b9', 'T1': '#7f8c8d', 'Bike': '#27ae60', 'T2': '#7f8c8d', 'Run': '#e67e22' };
     var legs = [];
 
-    // Pre-race leg (items with negative time)
+    // Pre-race leg
     var preItems = [];
     var sortedAll = state.schedule.slice().sort(function(a, b) { return a.timeMin - b.timeMin; });
     for (var pr2 = 0; pr2 < sortedAll.length; pr2++) {
       if (sortedAll[pr2].timeMin < 0) preItems.push(sortedAll[pr2]);
     }
     if (preItems.length > 0) {
-      legs.push({ name: 'Pre-Race', dur: 30, start: -30, items: preItems, color: '#7f8c8d' });
+      legs.push({ name: 'Pre-Race', dur: 30, start: -30, items: preItems, color: '#7f8c8d', dist: 0 });
     }
 
-    // Race legs
     for (var lg = 0; lg < race.segs.length; lg++) {
-      var seg = race.segs[lg];
+      var seg2 = race.segs[lg];
       var legItems = [];
       for (var li = 0; li < sortedAll.length; li++) {
-        var t = sortedAll[li].timeMin;
-        if (t >= 0 && t >= seg.start && t < seg.start + seg.dur) {
+        var t2 = sortedAll[li].timeMin;
+        if (t2 >= 0 && t2 >= seg2.start && t2 < seg2.start + seg2.dur) {
           legItems.push(sortedAll[li]);
         }
       }
-      legs.push({ name: seg.name, dur: seg.dur, start: seg.start, dist: seg.dist, items: legItems, color: seg.color });
+      legs.push({ name: seg2.name, dur: seg2.dur, start: seg2.start, dist: seg2.dist, items: legItems, color: seg2.color });
     }
 
     html += '<div class="race-cards">';
     for (var lc = 0; lc < legs.length; lc++) {
       var leg = legs[lc];
-      var legCarbs = 0, legGlu = 0, legFru = 0, legMl = 0;
+      var isBike = leg.name === 'Bike';
+
+      // Calculate leg totals
+      var legCarbs = 0, legGlu = 0, legFru = 0, legMl = 0, legNa = 0;
       for (var lci = 0; lci < leg.items.length; lci++) {
         var lf = getFoodById(leg.items[lci].foodId);
         var lp = leg.items[lci].portion || 1;
-        if (lf) { legCarbs += Math.round(lf.carbs * lp); legGlu += Math.round(lf.glucose * lp); legFru += Math.round(lf.fructose * lp); legMl += Math.round((lf.ml || 0) * lp); }
+        if (lf) {
+          legCarbs += Math.round(lf.carbs * lp);
+          legGlu += Math.round(lf.glucose * lp);
+          legFru += Math.round(lf.fructose * lp);
+          legMl += Math.round((lf.ml || 0) * lp);
+          legNa += Math.round((lf.na || 0) * lp);
+        }
       }
       var legHrs = leg.dur / 60;
       var legCarbHr = legHrs > 0 ? Math.round(legCarbs / legHrs) : 0;
-      var legMlHr = legHrs > 0 ? Math.round(legMl / legHrs) : 0;
 
+      // ── TOP TUBE CARD (bike only) ──
+      if (isBike && state.showTopTube && leg.items.length > 0) {
+        html += '<div class="race-card-toptube">';
+        html += '<div class="race-card-head">';
+        html += '<div class="race-card-dot" style="background:var(--bike)"></div>';
+        html += '<div class="race-card-title">Bike \u2014 Top Tube Card</div>';
+        html += '<div class="race-card-meta">' + fmtHM(leg.dur) + ' \u00B7 ' + (leg.dist || 0) + ' km \u00B7 ' + legCarbs + 'g carbs \u00B7 ' + legCarbHr + ' g/hr</div>';
+        html += '</div>';
+        html += '<ul class="tt-items">';
+        for (var tti = 0; tti < leg.items.length; tti++) {
+          var ttItem = leg.items[tti];
+          var ttFood = getFoodById(ttItem.foodId);
+          if (!ttFood) continue;
+          var ttPor = ttItem.portion || 1;
+          var relT = ttItem.timeMin - leg.start;
+          var distInfo = getDistAtTime(race.segs, ttItem.timeMin);
+          var ttCarbs = Math.round(ttFood.carbs * ttPor);
+          var porLabel = ttPor === 1 ? '' : ttPor === 0.5 ? '\u00BD' : ttPor < 0.3 ? '\u00BC' : '\u2153';
+          html += '<li>';
+          html += '<span class="tt-time">' + fmtHM(relT) + '</span>';
+          if (distInfo.dist > 0) html += '<span class="tt-dist">' + distInfo.dist + 'km</span>';
+          html += '<span>' + ttFood.icon + (porLabel ? '<span style="font-size:8px">' + porLabel + '</span>' : '') + '</span>';
+          html += '<span class="tt-carbs">' + ttCarbs + 'g</span>';
+          if (ttItem.fromAid) html += '<span class="tt-aid">\u26F3</span>';
+          html += '</li>';
+        }
+        html += '</ul></div>';
+      }
+
+      // ── STANDARD RACE CARD ──
       html += '<div class="race-card">';
       html += '<div class="race-card-head">';
       html += '<div class="race-card-dot" style="background:' + (legColors[leg.name] || leg.color) + '"></div>';
       html += '<div class="race-card-title">' + leg.name + '</div>';
       html += '<div class="race-card-meta">' + fmtHM(leg.dur);
-      if (leg.dist) html += ' &middot; ' + leg.dist + ' km';
+      if (leg.dist) html += ' \u00B7 ' + leg.dist + ' km';
       html += '</div></div>';
 
-      html += '<div class="race-card-stats" style="grid-template-columns:1fr 1fr 1fr 1fr">';
+      // Stats row
+      var statCols = 4;
+      if (state.showFluid) statCols++;
+      if (state.showSodium) statCols++;
+      html += '<div class="race-card-stats" style="grid-template-columns:repeat(' + statCols + ',1fr)">';
       html += '<div class="race-card-stat"><div class="race-card-stat-val">' + legCarbs + 'g</div><div class="race-card-stat-label">Carbs</div></div>';
       html += '<div class="race-card-stat"><div class="race-card-stat-val">' + legCarbHr + '</div><div class="race-card-stat-label">g/hr</div></div>';
-      html += '<div class="race-card-stat"><div class="race-card-stat-val" style="color:var(--blue)">' + legMl + '</div><div class="race-card-stat-label">Fluid (ml)</div></div>';
       html += '<div class="race-card-stat"><div class="race-card-stat-val" style="font-size:11px;color:var(--blue)">' + legGlu + '<span style="color:var(--muted);font-size:9px"> / </span><span style="color:#c0392b">' + legFru + '</span></div><div class="race-card-stat-label">G / F</div></div>';
+      html += '<div class="race-card-stat"><div class="race-card-stat-val" style="font-size:11px">' + leg.items.length + '</div><div class="race-card-stat-label">Items</div></div>';
+      if (state.showFluid) {
+        html += '<div class="race-card-stat"><div class="race-card-stat-val" style="color:var(--blue)">' + legMl + '</div><div class="race-card-stat-label">ml</div></div>';
+      }
+      if (state.showSodium) {
+        html += '<div class="race-card-stat"><div class="race-card-stat-val" style="color:#e8a838">' + legNa + '</div><div class="race-card-stat-label">Na mg</div></div>';
+      }
       html += '</div>';
 
       if (leg.items.length === 0) {
@@ -772,13 +929,24 @@
           var rPor = rItem.portion || 1;
           var relTime = rItem.timeMin - leg.start;
           var timeLabel = leg.name === 'Pre-Race' ? (Math.round(rItem.timeMin) + ' min') : fmtHM(relTime) + ' in';
-          var porLabel = rPor === 1 ? '' : rPor === 0.5 ? ' (\u00BD)' : rPor < 0.3 ? ' (\u00BC)' : ' (\u2153)';
+          var porLabel2 = rPor === 1 ? '' : rPor === 0.5 ? ' (\u00BD)' : rPor < 0.3 ? ' (\u00BC)' : ' (\u2153)';
           var rCarbs = Math.round(rFood.carbs * rPor);
           var rMl = Math.round((rFood.ml || 0) * rPor);
+          var rNa = Math.round((rFood.na || 0) * rPor);
+
+          // Distance marker
+          var distInfo2 = getDistAtTime(race.segs, rItem.timeMin);
+          var distLabel = distInfo2.dist > 0 ? distInfo2.dist + 'km' : '';
+
           html += '<li>';
           html += '<span class="item-time">' + timeLabel + '</span>';
-          html += '<span class="item-name">' + rFood.icon + ' ' + rFood.name + porLabel + '</span>';
-          html += '<span class="item-carbs">' + rCarbs + 'g' + (rMl > 0 ? ' <span style="color:var(--blue);font-size:9px">' + rMl + 'ml</span>' : '') + '</span>';
+          if (distLabel) html += '<span class="item-dist">' + distLabel + '</span>';
+          html += '<span class="item-name">' + rFood.icon + ' ' + rFood.name + porLabel2 + '</span>';
+          if (rItem.fromAid) html += '<span class="item-aid">\u26F3 aid</span>';
+          html += '<span class="item-carbs">' + rCarbs + 'g';
+          if (state.showFluid && rMl > 0) html += ' <span style="color:var(--blue);font-size:9px">' + rMl + 'ml</span>';
+          if (state.showSodium && rNa > 0) html += ' <span style="color:#e8a838;font-size:9px">' + rNa + 'mg</span>';
+          html += '</span>';
           html += '</li>';
         }
         html += '</ul>';
@@ -787,14 +955,82 @@
     }
     html += '</div>'; // end race-cards
 
+    /* ── 7. PACKING LIST ──────────────── */
+    if (state.showPacking && state.schedule.length > 0) {
+      html += '<div style="margin-top:16px">';
+      // Per-leg packing (exclude aid station items)
+      for (var pk = 0; pk < legs.length; pk++) {
+        var pLeg = legs[pk];
+        var packMap = {}; // foodId -> { name, icon, qty, portions }
+        for (var pki = 0; pki < pLeg.items.length; pki++) {
+          var pEntry = pLeg.items[pki];
+          if (pEntry.fromAid) continue; // skip aid station pickups
+          var pFood = getFoodById(pEntry.foodId);
+          if (!pFood) continue;
+          var pPor = pEntry.portion || 1;
+          var key = pEntry.foodId + '_' + pPor;
+          if (!packMap[key]) {
+            var porL = pPor === 1 ? '' : pPor === 0.5 ? ' (\u00BD)' : pPor < 0.3 ? ' (\u00BC)' : ' (\u2153)';
+            packMap[key] = { name: pFood.name + porL, icon: pFood.icon, qty: 0 };
+          }
+          packMap[key].qty++;
+        }
+        var packKeys = Object.keys(packMap);
+        if (packKeys.length === 0) continue;
+
+        html += '<div class="pack-card" style="margin-bottom:8px">';
+        html += '<div class="pack-card-head">\uD83C\uDF92 Pack for ' + pLeg.name + '</div>';
+        html += '<div class="pack-items">';
+        for (var pj = 0; pj < packKeys.length; pj++) {
+          var pk2 = packMap[packKeys[pj]];
+          html += '<div class="pack-item"><span class="pack-qty">' + pk2.qty + '\u00D7</span><span>' + pk2.icon + '</span><span class="pack-name">' + pk2.name + '</span></div>';
+        }
+        html += '</div></div>';
+      }
+
+      // Aid station pickups summary
+      var aidPickups = {};
+      for (var api = 0; api < state.schedule.length; api++) {
+        var ae = state.schedule[api];
+        if (!ae.fromAid) continue;
+        var af = getFoodById(ae.foodId);
+        if (!af) continue;
+        var apor = ae.portion || 1;
+        var akey = ae.foodId + '_' + apor;
+        if (!aidPickups[akey]) {
+          var aPorL = apor === 1 ? '' : apor === 0.5 ? ' (\u00BD)' : apor < 0.3 ? ' (\u00BC)' : ' (\u2153)';
+          aidPickups[akey] = { name: af.name + aPorL, icon: af.icon, qty: 0 };
+        }
+        aidPickups[akey].qty++;
+      }
+      var aidKeys = Object.keys(aidPickups);
+      if (aidKeys.length > 0) {
+        html += '<div class="pack-card" style="margin-bottom:8px;border-color:var(--red);background:#fdf6f4">';
+        html += '<div class="pack-card-head">\u26F3 Picking up from aid stations</div>';
+        html += '<div class="pack-items">';
+        for (var ak = 0; ak < aidKeys.length; ak++) {
+          var ap = aidPickups[aidKeys[ak]];
+          html += '<div class="pack-item"><span class="pack-qty" style="color:var(--red)">' + ap.qty + '\u00D7</span><span>' + ap.icon + '</span><span class="pack-name">' + ap.name + '</span></div>';
+        }
+        html += '</div></div>';
+      }
+      html += '</div>';
+    }
+
     // Total summary row
     html += '<div style="margin-top:12px;padding:14px 16px;background:var(--ink);border-radius:6px;color:white;display:flex;flex-wrap:wrap;gap:20px;align-items:center;font-family:\'DM Mono\',monospace;font-size:12px;position:relative;overflow:hidden">';
     html += '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 20% 0%,rgba(29,104,64,0.12),transparent 60%);pointer-events:none"></div>';
     html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Total Carbs</span><br><span style="color:#a8e8c0;font-size:18px;font-weight:500">' + totalCarbs + 'g</span></div>';
     html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Carbs/hr</span><br><span style="color:#a8e8c0;font-weight:500">' + Math.round(carbsPerHr) + '</span></div>';
-    html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Total Fluid</span><br><span style="color:#5dade2;font-size:18px;font-weight:500">' + totalMl + 'ml</span></div>';
-    html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Fluid/hr</span><br><span style="color:#5dade2;font-weight:500">' + Math.round(mlPerHr) + 'ml</span></div>';
-    html += '<div style="position:relative;margin-left:auto"><button class="print-btn" id="printBtn">\u{1F5A8} Print race cards</button></div>';
+    if (state.showFluid) {
+      html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Total Fluid</span><br><span style="color:#5dade2;font-size:18px;font-weight:500">' + totalMl + 'ml</span></div>';
+      html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Fluid/hr</span><br><span style="color:#5dade2;font-weight:500">' + Math.round(mlPerHr) + 'ml</span></div>';
+    }
+    if (state.showSodium) {
+      html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Total Na</span><br><span style="color:#e8a838;font-size:18px;font-weight:500">' + totalNa + 'mg</span></div>';
+      html += '<div style="position:relative"><span style="color:rgba(255,255,255,0.4);font-size:9px;text-transform:uppercase;letter-spacing:0.1em">Na/hr</span><br><span style="color:#e8a838;font-weight:500">' + Math.round(naPerHr) + 'mg</span></div>';
+    }
+    html += '<div style="position:relative;margin-left:auto"><button class="print-btn" id="printBtn">\uD83D\uDDA8 Print race cards</button></div>';
     html += '</div>';
 
     html += '</div>'; // end panel
@@ -802,7 +1038,9 @@
 
     document.getElementById('app').innerHTML = html;
     bindEvents();
-    drawGraph(race, absorption, aids);
+    if (state.showGraph) {
+      drawGraph(race, absorption, aids);
+    }
   }
 
   /* ══════════════════════════════════════════════
@@ -825,19 +1063,18 @@
     var gW = W - padL - padR;
     var gH = H - padT - padB;
 
-    var preRaceMin = 30; // show 30 min before race start
+    var preRaceMin = 30;
     var hasPreRace = false;
     for (var pm = 0; pm < state.schedule.length; pm++) {
       if (state.schedule[pm].timeMin < 0) { hasPreRace = true; break; }
     }
     var timeOffset = hasPreRace ? preRaceMin : 0;
     var totalMin = Math.max(race.total + timeOffset, 60);
-    var maxRate = 150; // g/hr max on Y axis — capped
+    var maxRate = 150;
 
     function xAt(min) { return padL + ((min + timeOffset) / totalMin) * gW; }
     function yAt(val) { return padT + gH - (val / maxRate) * gH; }
 
-    // Background
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, W, H);
 
@@ -850,7 +1087,6 @@
                       seg.name === 'Bike' ? 'rgba(39,174,96,0.04)' :
                       seg.name === 'Run' ? 'rgba(230,126,34,0.04)' : 'rgba(127,140,141,0.04)';
       ctx.fillRect(x1, padT, x2 - x1, gH);
-      // Label at top
       if (seg.dur / totalMin > 0.05) {
         ctx.fillStyle = seg.name === 'Swim' ? 'rgba(41,128,185,0.5)' :
                         seg.name === 'Bike' ? 'rgba(39,174,96,0.5)' :
@@ -890,17 +1126,15 @@
     ctx.fillStyle = '#9a9080';
     ctx.font = '10px "DM Mono", monospace';
     ctx.textAlign = 'center';
-    var xStart = hasPreRace ? -timeOffset : 0;
-    for (var t = 0; t <= race.total; t += stepMin) {
-      var xp = xAt(t);
-      ctx.fillText(fmtHM(t), xp, H - padB + 16);
+    for (var t3 = 0; t3 <= race.total; t3 += stepMin) {
+      var xp = xAt(t3);
+      ctx.fillText(fmtHM(t3), xp, H - padB + 16);
       ctx.strokeStyle = '#eee9df';
       ctx.beginPath();
       ctx.moveTo(xp, padT);
       ctx.lineTo(xp, padT + gH);
       ctx.stroke();
     }
-    // Pre-race time labels
     if (hasPreRace) {
       ctx.fillStyle = '#9a9080';
       ctx.fillText('-30m', xAt(-30), H - padB + 16);
@@ -910,19 +1144,18 @@
     // Max absorption limit lines
     ctx.setLineDash([4, 4]);
     ctx.lineWidth = 1;
-    // Glucose max
     ctx.strokeStyle = 'rgba(41,128,185,0.5)';
     ctx.beginPath(); ctx.moveTo(padL, yAt(60)); ctx.lineTo(W - padR, yAt(60)); ctx.stroke();
     ctx.fillStyle = 'rgba(41,128,185,0.5)';
     ctx.font = '8px "DM Mono", monospace';
     ctx.textAlign = 'left';
     ctx.fillText('Glucose max 60 g/hr', padL + 4, yAt(60) - 3);
-    // Fructose max
+
     ctx.strokeStyle = 'rgba(192,57,43,0.5)';
     ctx.beginPath(); ctx.moveTo(padL, yAt(30)); ctx.lineTo(W - padR, yAt(30)); ctx.stroke();
     ctx.fillStyle = 'rgba(192,57,43,0.5)';
     ctx.fillText('Fructose max 30 g/hr', padL + 4, yAt(30) - 3);
-    // Combined max
+
     ctx.strokeStyle = 'rgba(29,104,64,0.5)';
     ctx.beginPath(); ctx.moveTo(padL, yAt(90)); ctx.lineTo(W - padR, yAt(90)); ctx.stroke();
     ctx.fillStyle = 'rgba(29,104,64,0.5)';
@@ -930,18 +1163,20 @@
     ctx.setLineDash([]);
 
     // Aid station markers
-    for (var ai = 0; ai < aids.length; ai++) {
-      var ax = xAt(aids[ai].timeMin);
-      ctx.strokeStyle = 'rgba(181,58,30,0.4)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([2, 2]);
-      ctx.beginPath(); ctx.moveTo(ax, padT); ctx.lineTo(ax, padT + gH); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = '#b53a1e';
-      ctx.beginPath(); ctx.arc(ax, padT + gH + 6, 3, 0, Math.PI * 2); ctx.fill();
-      ctx.font = '8px "DM Mono", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(aids[ai].label, ax, padT + gH + 16);
+    if (state.showAid) {
+      for (var ai = 0; ai < aids.length; ai++) {
+        var ax = xAt(aids[ai].timeMin);
+        ctx.strokeStyle = 'rgba(181,58,30,0.4)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath(); ctx.moveTo(ax, padT); ctx.lineTo(ax, padT + gH); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#b53a1e';
+        ctx.beginPath(); ctx.arc(ax, padT + gH + 6, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.font = '8px "DM Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(aids[ai].label, ax, padT + gH + 16);
+      }
     }
 
     // Pre-race shading
@@ -952,7 +1187,6 @@
       ctx.font = '500 9px "DM Mono", monospace';
       ctx.textAlign = 'center';
       ctx.fillText('Pre-Race', (xAt(-timeOffset) + xAt(0)) / 2, padT + 12);
-      // Race start line
       ctx.strokeStyle = 'rgba(24,22,15,0.3)';
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
@@ -1029,6 +1263,24 @@
      ══════════════════════════════════════════════ */
 
   function bindEvents() {
+    // Complexity toggles
+    var toggles = [
+      ['togSodium', 'showSodium'], ['togFluid', 'showFluid'],
+      ['togAid', 'showAid'], ['togGraph', 'showGraph'],
+      ['togPacking', 'showPacking'], ['togTopTube', 'showTopTube']
+    ];
+    for (var tg = 0; tg < toggles.length; tg++) {
+      var togEl = document.getElementById(toggles[tg][0]);
+      if (togEl) {
+        (function(key) {
+          togEl.addEventListener('change', function() {
+            state[key] = this.checked;
+            render();
+          });
+        })(toggles[tg][1]);
+      }
+    }
+
     // Presets
     var presetBtns = document.querySelectorAll('.preset-btn');
     for (var p = 0; p < presetBtns.length; p++) {
@@ -1113,7 +1365,6 @@
     for (var fc = 0; fc < foodCards.length; fc++) {
       foodCards[fc].addEventListener('click', function() {
         var foodId = this.getAttribute('data-food');
-        // Default time: after the last scheduled item, or at a sensible start
         var lastTime = 0;
         for (var i = 0; i < state.schedule.length; i++) {
           if (state.schedule[i].timeMin > lastTime) lastTime = state.schedule[i].timeMin;
@@ -1121,7 +1372,7 @@
         var newTime = state.schedule.length === 0 ? 15 : lastTime + 15;
         var race = calcRace();
         if (newTime > race.total) newTime = Math.max(0, race.total - 5);
-        state.schedule.push({ foodId: foodId, timeMin: Math.round(newTime), portion: 1 });
+        state.schedule.push({ foodId: foodId, timeMin: Math.round(newTime), portion: 1, fromAid: false });
         render();
       });
     }
@@ -1132,6 +1383,16 @@
       portionSels[ps].addEventListener('change', function() {
         var idx = +this.getAttribute('data-idx');
         state.schedule[idx].portion = +this.value || 1;
+        render();
+      });
+    }
+
+    // Aid station pickup toggle
+    var aidToggles = document.querySelectorAll('.sched-aid');
+    for (var at2 = 0; at2 < aidToggles.length; at2++) {
+      aidToggles[at2].addEventListener('change', function() {
+        var idx = +this.getAttribute('data-idx');
+        state.schedule[idx].fromAid = this.checked;
         render();
       });
     }
@@ -1164,6 +1425,7 @@
         var glu = +document.getElementById('cfGlu').value || 0;
         var fru = +document.getElementById('cfFru').value || 0;
         var cfml = +document.getElementById('cfMl').value || 0;
+        var cfna = +document.getElementById('cfNa').value || 0;
         var form = document.getElementById('cfForm').value;
         if (!name) return;
         state.customFoods.push({
@@ -1173,6 +1435,7 @@
           glucose: glu,
           fructose: fru,
           ml: cfml,
+          na: cfna,
           form: form,
           icon: '\uD83C\uDF7D'
         });
@@ -1195,15 +1458,16 @@
 
   render();
 
-  // Redraw graph on resize
   var resizeTimer;
   window.addEventListener('resize', function() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function() {
-      var race = calcRace();
-      var absorption = calcAbsorption(race.total);
-      var aids = aidStationTimes(race);
-      drawGraph(race, absorption, aids);
+      if (state.showGraph) {
+        var race = calcRace();
+        var absorption = calcAbsorption(race.total);
+        var aids = aidStationTimes(race);
+        drawGraph(race, absorption, aids);
+      }
     }, 150);
   });
 
