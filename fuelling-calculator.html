@@ -799,31 +799,57 @@
 
       /* ── TOP TUBE CARD (Caleb Ewan style vertical table) ── */
       if (isBike && state.showTopTube && leg.items.length > 0) {
+        // Collect bike aid stations
+        var bikeAids = [];
+        for (var bai = 0; bai < aids.length; bai++) {
+          if (aids[bai].discipline === 'bike') bikeAids.push(aids[bai]);
+        }
+
         html += '<div class="tt-card">';
         html += '<div class="tt-header">Bike \u2014 ' + (leg.dist||0) + ' km \u2014 ' + fmtHM(leg.dur) + '</div>';
-        html += '<table class="tt-table"><thead><tr><th>Time</th><th>Nutrition</th></tr></thead><tbody>';
+        html += '<table class="tt-table"><thead><tr><th>Time</th><th>Dist</th><th>Nutrition</th></tr></thead><tbody>';
 
         // Build time slots at 20-min intervals
         var bikeEnd = leg.dur;
         var slotInterval = bikeEnd > 180 ? 20 : 15;
         if (bikeEnd > 300) slotInterval = 30;
+        var bikeDist = leg.dist || 0;
+        var bikeSpeed = state.bikeSpeed;
 
         for (var slot = 0; slot <= bikeEnd; slot += slotInterval) {
           var slotStart = slot;
           var slotEnd = Math.min(slot + slotInterval, bikeEnd);
+
+          // Check if any aid stations fall in this slot
+          var slotAids = [];
+          for (var sai = 0; sai < bikeAids.length; sai++) {
+            var aidRelT = bikeAids[sai].timeMin - leg.start;
+            if (aidRelT >= slotStart && aidRelT < slotEnd) slotAids.push(bikeAids[sai]);
+          }
+
+          // Collect food items in this slot
           var slotItems = [];
           for (var sli = 0; sli < leg.items.length; sli++) {
             var relT = leg.items[sli].timeMin - leg.start;
             if (relT >= slotStart && relT < slotEnd) slotItems.push(leg.items[sli]);
           }
-          var isFinish = (slot + slotInterval >= bikeEnd && slot > 0);
+
+          // Distance at slot start
+          var slotDist = Math.round(bikeSpeed * (slotStart / 60) * 10) / 10;
 
           html += '<tr>';
-          // Time label like the Caleb Ewan card
-          var slotMinutes = slotStart;
-          var slotLabel = slotMinutes === 0 ? "0'" : fmtHM(slotMinutes);
+          var slotLabel = slotStart === 0 ? "0'" : fmtHM(slotStart);
           html += '<td class="tt-time-col">' + slotLabel + '</td>';
+          html += '<td class="tt-time-col" style="color:var(--muted);font-weight:400;font-size:9px">' + Math.round(slotDist) + 'km</td>';
           html += '<td>';
+
+          // Aid station markers first
+          if (slotAids.length > 0) {
+            for (var saij = 0; saij < slotAids.length; saij++) {
+              html += '<div style="font-size:8px;color:var(--red);font-family:\'DM Mono\',monospace;margin-bottom:2px">\u26F3 Aid ' + slotAids[saij].km + 'km</div>';
+            }
+          }
+
           if (slotItems.length > 0) {
             html += '<div class="tt-nutr-col">';
             for (var sti = 0; sti < slotItems.length; sti++) {
@@ -833,10 +859,14 @@
               var stC = Math.round(stFood.carbs * stPor);
               var porL = stPor === 1 ? '' : stPor === 0.5 ? '\u00BD' : stPor < 0.3 ? '\u00BC' : '\u2153';
               var chipCls = slotItems[sti].fromAid ? ' tt-aid-chip' : '';
+              // Distance for this specific item
+              var itemRelT = slotItems[sti].timeMin - leg.start;
+              var itemDist = Math.round(bikeSpeed * (itemRelT / 60));
               html += '<span class="tt-food-chip' + chipCls + '">';
               html += '<span style="font-size:16px">' + stFood.icon + '</span>';
               if (porL) html += '<span style="font-size:8px;color:var(--muted)">' + porL + '</span>';
               if (stC > 0) html += '<span class="tt-chip-carbs">' + stC + 'g</span>';
+              html += '<span style="font-size:7px;color:var(--muted)">' + itemDist + 'km</span>';
               if (slotItems[sti].fromAid) html += '<span style="font-size:7px;color:var(--red)">\u26F3</span>';
               html += '</span>';
             }
@@ -846,7 +876,7 @@
         }
 
         // Finish row
-        html += '<tr><td class="tt-finish" colspan="2">FINISH (' + fmtHM(bikeEnd) + ')</td></tr>';
+        html += '<tr><td class="tt-finish" colspan="3">FINISH (' + fmtHM(bikeEnd) + ') \u2014 ' + bikeDist + 'km</td></tr>';
         html += '</tbody></table></div>';
       }
 
