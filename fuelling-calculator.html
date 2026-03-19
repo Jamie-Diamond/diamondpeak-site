@@ -325,10 +325,11 @@
     Combined 2:1 glucose:fructose products can deliver up to <code>~90 g/hr</code> of total carbohydrate.
     With training and gut conditioning, rates up to <code>~120 g/hr</code> are achievable.
     Above <code>120 g/hr</code> you risk GI distress.<br><br>
-    The graph shows colour-coded zones:
+    The graph uses a <strong>rolling 60-minute window</strong> &mdash; at any point, the rate shown is
+    total grams consumed in the previous 60 minutes. Colour-coded zones:
     <span style="color:var(--green)">green &le; 90</span>,
-    <span style="color:var(--amber)">amber 90&ndash;120</span>,
-    <span style="color:var(--red)">red &gt; 120 g/hr</span>.<br><br>
+    <span style="color:var(--amber)">amber 90&ndash;120</span> (achievable with gut training),
+    <span style="color:var(--red)">red &gt; 120 g/hr</span> (GI distress risk).<br><br>
     Individual absorption rates vary with training, gut conditioning, and race intensity.
     Always practise your fuelling strategy in training before race day.
   </div>
@@ -380,7 +381,6 @@
     { label: '\u00BC', value: 0.25 }
   ];
 
-  var FORM_WINDOW = { liquid: 15, gel: 20, solid: 35 };
 
   var state = {
     preset: 'Olympic Tri',
@@ -463,60 +463,49 @@
 
   var PRE_RACE_OFFSET = 30;
 
+  // Rolling 60-minute window: at each minute, sum carbs consumed in [t-60, t]
   function calcAbsorption(totalMin) {
     var n = Math.ceil(totalMin + PRE_RACE_OFFSET) + 1;
     var glu = new Float32Array(n), fru = new Float32Array(n);
-    for (var s = 0; s < state.schedule.length; s++) {
-      var entry = state.schedule[s], food = getFoodById(entry.foodId);
-      if (!food || food.carbs === 0) continue;
-      var por = entry.portion || 1;
-      var w = FORM_WINDOW[food.form] || 20, halfW = w / 2;
-      var peak = entry.timeMin + halfW + PRE_RACE_OFFSET;
-      var sigma = halfW / 2.5;
-      var sqrt2pi = 2.5066283;
-      var gluAmp = (food.glucose * por) / (sigma * sqrt2pi);
-      var fruAmp = (food.fructose * por) / (sigma * sqrt2pi);
-      var startM = Math.max(0, Math.floor(entry.timeMin + PRE_RACE_OFFSET));
-      var endM = Math.min(n, Math.ceil(entry.timeMin + PRE_RACE_OFFSET + w + sigma * 3));
-      for (var m = startM; m < endM; m++) {
-        var x = m - peak;
-        var g = Math.exp(-0.5 * (x / sigma) * (x / sigma));
-        glu[m] += gluAmp * g * 60;
-        fru[m] += fruAmp * g * 60;
+
+    for (var m = 0; m < n; m++) {
+      var raceMin = m - PRE_RACE_OFFSET; // actual race time
+      var gSum = 0, fSum = 0;
+      for (var s = 0; s < state.schedule.length; s++) {
+        var entry = state.schedule[s], food = getFoodById(entry.foodId);
+        if (!food || food.carbs === 0) continue;
+        var por = entry.portion || 1;
+        // Was this item consumed within the last 60 minutes?
+        if (entry.timeMin <= raceMin && entry.timeMin > raceMin - 60) {
+          gSum += food.glucose * por;
+          fSum += food.fructose * por;
+        }
       }
+      glu[m] = gSum; // already in g per 60 min = g/hr
+      fru[m] = fSum;
     }
-    // NO cap — show actual absorption rates so danger zones are visible
     return { glucose: glu, fructose: fru, minutes: n };
   }
 
-  // Calculate fluid and sodium timelines (cumulative, in hourly rate windows)
+  // Rolling 60-minute window for fluid and sodium
   function calcFluidTimeline(totalMin) {
     var n = Math.ceil(totalMin + PRE_RACE_OFFSET) + 1;
     var ml = new Float32Array(n), na = new Float32Array(n);
-    // Use a spreading model similar to absorption but for fluid/sodium
-    for (var s = 0; s < state.schedule.length; s++) {
-      var entry = state.schedule[s], food = getFoodById(entry.foodId);
-      if (!food) continue;
-      var por = entry.portion || 1;
-      var entryMl = (food.ml || 0) * por;
-      var entryNa = (food.na || 0) * por;
-      if (entryMl === 0 && entryNa === 0) continue;
-      // Spread consumption over a window (drinking/absorbing)
-      var w = food.form === 'liquid' ? 10 : 5; // minutes
-      var halfW = w / 2;
-      var peak = entry.timeMin + halfW + PRE_RACE_OFFSET;
-      var sigma = halfW / 2;
-      var sqrt2pi = 2.5066283;
-      var mlAmp = entryMl / (sigma * sqrt2pi);
-      var naAmp = entryNa / (sigma * sqrt2pi);
-      var startM = Math.max(0, Math.floor(entry.timeMin + PRE_RACE_OFFSET));
-      var endM = Math.min(n, Math.ceil(entry.timeMin + PRE_RACE_OFFSET + w + sigma * 3));
-      for (var m = startM; m < endM; m++) {
-        var x = m - peak;
-        var g = Math.exp(-0.5 * (x / sigma) * (x / sigma));
-        ml[m] += mlAmp * g * 60; // ml/hr
-        na[m] += naAmp * g * 60; // mg/hr
+
+    for (var m = 0; m < n; m++) {
+      var raceMin = m - PRE_RACE_OFFSET;
+      var mSum = 0, nSum = 0;
+      for (var s = 0; s < state.schedule.length; s++) {
+        var entry = state.schedule[s], food = getFoodById(entry.foodId);
+        if (!food) continue;
+        var por = entry.portion || 1;
+        if (entry.timeMin <= raceMin && entry.timeMin > raceMin - 60) {
+          mSum += (food.ml || 0) * por;
+          nSum += (food.na || 0) * por;
+        }
       }
+      ml[m] = mSum; // ml consumed in last 60 min = ml/hr
+      na[m] = nSum; // mg consumed in last 60 min = mg/hr
     }
     return { ml: ml, na: na, minutes: n };
   }
@@ -753,7 +742,7 @@
     html += '</div>';
     if (state.showGraph) {
       html += '<div id="graphSection"><div class="sec-head"><span class="sec-tag">Absorption Graph</span><div class="sec-rule"></div></div>';
-      html += '<div class="panel"><div class="panel-title">Glucose &amp; fructose absorption rate \u2014 zone coloured</div>';
+      html += '<div class="panel"><div class="panel-title">Rolling 60-min intake rate \u2014 glucose &amp; fructose (g/hr)</div>';
       html += '<div class="graph-wrap"><canvas id="absGraph"></canvas></div>';
       html += '<div class="legend">';
       html += '<div class="legend-item"><div class="legend-swatch" style="background:#2980b9"></div> Glucose</div>';
