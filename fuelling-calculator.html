@@ -270,7 +270,8 @@
   var state = {
     preset: 'Olympic Tri',
     swimDist: 1.5, bikeDist: 40, runDist: 10,
-    swimSpeed: 2.0,  // km/h
+    swimPaceMin: 1,   // swim pace minutes per 100m
+    swimPaceSec: 50,   // swim pace seconds per 100m
     bikeSpeed: 30,   // km/h
     runPace: 5.5,    // min/km
     t1: 3,           // minutes
@@ -286,7 +287,8 @@
      ══════════════════════════════════════════════ */
 
   function calcRace() {
-    var swimMin = state.swimDist > 0 ? (state.swimDist / state.swimSpeed) * 60 : 0;
+    var swimPaceSec100 = state.swimPaceMin * 60 + state.swimPaceSec; // seconds per 100m
+    var swimMin = state.swimDist > 0 ? (state.swimDist * 1000 / 100) * swimPaceSec100 / 60 : 0;
     var bikeMin = state.bikeDist > 0 ? (state.bikeDist / state.bikeSpeed) * 60 : 0;
     var runMin = state.runDist > 0 ? state.runDist * state.runPace : 0;
     var t1 = state.swimDist > 0 && state.bikeDist > 0 ? state.t1 : 0;
@@ -431,7 +433,7 @@
     if (state.raceType === 'tri' || state.raceType === 'custom') {
       html += '<div class="field-row">';
       html += '<div class="field"><label>Swim (km)</label><input type="number" id="swimDist" min="0" max="20" step="0.1" value="' + state.swimDist + '"></div>';
-      html += '<div class="field"><label>Swim speed (km/h)</label><input type="number" id="swimSpeed" min="0.5" max="5" step="0.1" value="' + state.swimSpeed + '"></div>';
+      html += '<div class="field"><label>Swim pace (/100m)</label><div style="display:flex;align-items:center;gap:2px"><input type="number" id="swimPaceMin" min="0" max="5" step="1" value="' + state.swimPaceMin + '" style="width:48px;text-align:center"><span style="font-family:\'DM Mono\',monospace;font-size:13px;color:var(--muted)">:</span><input type="number" id="swimPaceSec" min="0" max="59" step="1" value="' + String(state.swimPaceSec).padStart(2,'0') + '" style="width:48px;text-align:center"></div></div>';
       html += '</div>';
     }
 
@@ -827,7 +829,7 @@
 
     // Number inputs
     var fields = [
-      ['swimDist', 'swimDist'], ['swimSpeed', 'swimSpeed'],
+      ['swimDist', 'swimDist'],
       ['bikeDist', 'bikeDist'], ['bikeSpeed', 'bikeSpeed'],
       ['runDist', 'runDist'], ['runPace', 'runPace'],
       ['t1', 't1'], ['t2', 't2']
@@ -843,6 +845,24 @@
           });
         })(fields[f][1]);
       }
+    }
+
+    // Swim pace inputs
+    var swimPaceMinEl = document.getElementById('swimPaceMin');
+    var swimPaceSecEl = document.getElementById('swimPaceSec');
+    if (swimPaceMinEl) {
+      swimPaceMinEl.addEventListener('input', function() {
+        state.swimPaceMin = +this.value || 0;
+        state.preset = 'Custom';
+        render();
+      });
+    }
+    if (swimPaceSecEl) {
+      swimPaceSecEl.addEventListener('input', function() {
+        state.swimPaceSec = +this.value || 0;
+        state.preset = 'Custom';
+        render();
+      });
     }
 
     // Add aid station
