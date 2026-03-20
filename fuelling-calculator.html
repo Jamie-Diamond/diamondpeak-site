@@ -587,19 +587,17 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       return true;
     }
 
-    // ── PHASE 1: Carbs (small portions, frequent, flat curve) ──
-    // Rule: only one solid open at a time — finish it before starting the next.
-    // Liquids and gels can interleave with anything.
-    // KEY: space items so the rolling 60-min window never exceeds target g/hr.
+    // ── PHASE 1: Carbs — repeating-block rotation ──
+    // Cycle through all selected carb foods in a predictable, repeating rhythm.
+    // Drinks drop out of the rotation once their bottle capacity is exhausted.
 
     if(carbFoods.length>0&&strat.target>0){
       var totalCarbs=strat.target*legHrs;
 
       function calcPortion(fd){
         if(fd.form==='solid'){
-          var solidP=[1,0.5,1/3],bestP=1,bestDiff=9999;
-          for(var pi=0;pi<solidP.length;pi++){var diff=Math.abs(fd.carbs*solidP[pi]-15);if(diff<bestDiff){bestDiff=diff;bestP=solidP[pi];}}
-          return bestP;
+          // Whole or half portions only — easy to manage on race day
+          return fd.carbs*0.5>=8?0.5:1;
         } else if(fd.form==='gel'&&state.gelMode==='bottle'){
           var minP=fd.ml>0?Math.max(0.1,25/fd.ml):0.25;
           var gelBP=[1,0.5,1/3,0.25],bestP2=1,bestDiff2=9999;
@@ -616,86 +614,44 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         return 1;
       }
 
-      // Split foods: solids, gels, carb drinks
-      var solidFoods=[],gelFoods=[],carbDrinks=[];
-      for(var c=0;c<carbFoods.length;c++){
-        var cf2=carbFoods[c];
-        if(cf2.form==='solid') solidFoods.push(cf2);
-        else if(cf2.form==='liquid') carbDrinks.push(cf2);
-        else gelFoods.push(cf2); // gels
-      }
-
-      // Dynamic carb drink cap: calculated from what the user configured in bike cages.
-      // Count carbs available from the actual bottles on the bike.
-      var drinkCarbsCap=0;
+      // Build the rotation: one dose of each carb food (solids, then gels, then drinks)
+      var rotation=[];
+      var drinkMlUsed={}; // cumulative ml consumed per drink foodId
+      // Calculate drink bottle capacity from bike cages
+      var drinkMlCap={};
       for(var dcc=0;dcc<state.bikeCages.length;dcc++){
         var cageF=getFoodById(state.bikeCages[dcc].foodId);
         if(cageF&&cageF.carbs>0){
-          // Carbs in this bottle = (cage ml / drink serving ml) * carbs per serving
-          var servings=cageF.ml>0?state.bikeCages[dcc].ml/cageF.ml:0;
-          drinkCarbsCap+=cageF.carbs*servings;
+          drinkMlCap[cageF.id]=(drinkMlCap[cageF.id]||0)+state.bikeCages[dcc].ml;
         }
       }
-      var drinkShare=carbDrinks.length>0?Math.min(drinkCarbsCap,totalCarbs):0;
-      var solidGelShare=totalCarbs-drinkShare;
-
-      var allDoses=[]; // [{food, portion, carbsPerDose, isSolid}]
-
-      // Solids: sequential — all of food A, then food B
-      var solidGelFoods=solidFoods.concat(gelFoods);
-      if(solidGelFoods.length>0){
-        var perSG=solidGelShare/solidGelFoods.length;
-        // Solids first (sequential)
-        for(var si=0;si<solidFoods.length;si++){
-          var sf=solidFoods[si],sp=calcPortion(sf),cpd=sf.carbs*sp;
-          var nd=cpd>0?Math.round(perSG/cpd):1;if(nd<1)nd=1;
-          for(var sd=0;sd<nd;sd++) allDoses.push({food:sf,portion:sp,carbsPerDose:cpd,isSolid:true});
-        }
-        // Gels (round-robin interleaved)
-        if(gelFoods.length>0){
-          var gelDoses=[];
-          for(var gi3=0;gi3<gelFoods.length;gi3++){
-            var gf=gelFoods[gi3],gp=calcPortion(gf),gcpd=gf.carbs*gp;
-            var gnd=gcpd>0?Math.round(perSG/gcpd):1;if(gnd<1)gnd=1;
-            gelDoses.push({food:gf,portion:gp,carbsPerDose:gcpd,count:gnd});
-          }
-          var maxGel=0;for(var mg=0;mg<gelDoses.length;mg++)if(gelDoses[mg].count>maxGel)maxGel=gelDoses[mg].count;
-          for(var rr2=0;rr2<maxGel;rr2++){
-            for(var ri2=0;ri2<gelDoses.length;ri2++){
-              if(rr2<gelDoses[ri2].count) allDoses.push({food:gelDoses[ri2].food,portion:gelDoses[ri2].portion,carbsPerDose:gelDoses[ri2].carbsPerDose,isSolid:false});
-            }
-          }
-        }
+      for(var ri=0;ri<carbFoods.length;ri++){
+        var rf=carbFoods[ri],rp=calcPortion(rf);
+        rotation.push({food:rf,portion:rp,carbsPerDose:rf.carbs*rp});
+        if(rf.form==='liquid') drinkMlUsed[rf.id]=0;
       }
 
-      // Carb drinks: limited servings, round-robin interleaved with solids/gels
-      if(carbDrinks.length>0&&drinkShare>0){
-        var perDrink=drinkShare/carbDrinks.length;
-        var drinkDoses=[];
-        for(var di2=0;di2<carbDrinks.length;di2++){
-          var df=carbDrinks[di2],dp=calcPortion(df),dcpd=df.carbs*dp;
-          var dnd=dcpd>0?Math.round(perDrink/dcpd):1;if(dnd<1)dnd=1;
-          drinkDoses.push({food:df,portion:dp,carbsPerDose:dcpd,count:dnd});
-        }
-        // Interleave drink doses evenly into the allDoses array
-        var totalDrinkDoses=0;for(var td=0;td<drinkDoses.length;td++)totalDrinkDoses+=drinkDoses[td].count;
-        var drinkQueue=[];
-        var maxDD=0;for(var md=0;md<drinkDoses.length;md++)if(drinkDoses[md].count>maxDD)maxDD=drinkDoses[md].count;
-        for(var rr3=0;rr3<maxDD;rr3++){
-          for(var ri3=0;ri3<drinkDoses.length;ri3++){
-            if(rr3<drinkDoses[ri3].count) drinkQueue.push({food:drinkDoses[ri3].food,portion:drinkDoses[ri3].portion,carbsPerDose:drinkDoses[ri3].carbsPerDose,isSolid:false});
+      // Repeat the rotation, skipping exhausted drinks, until carbs target is met
+      var allDoses=[];
+      var carbsAccum=0;
+      var rotIdx=0,skips=0;
+      while(carbsAccum<totalCarbs&&allDoses.length<200){
+        var slot=rotation[rotIdx%rotation.length];
+        // Check if this drink has been exhausted
+        if(slot.food.form==='liquid'){
+          var mlPerDose=(slot.food.ml||0)*slot.portion;
+          var cap=drinkMlCap[slot.food.id];
+          if(typeof cap!=='undefined'&&(drinkMlUsed[slot.food.id]||0)+mlPerDose>cap){
+            // Drink exhausted — skip it
+            rotIdx++;skips++;
+            if(skips>=rotation.length)break; // all items exhausted
+            continue;
           }
+          drinkMlUsed[slot.food.id]=(drinkMlUsed[slot.food.id]||0)+mlPerDose;
         }
-        // Space drink doses evenly through the existing allDoses
-        if(drinkQueue.length>0&&allDoses.length>0){
-          var spacing=Math.max(1,Math.floor(allDoses.length/drinkQueue.length));
-          for(var dq=drinkQueue.length-1;dq>=0;dq--){
-            var insertAt=Math.min(allDoses.length,spacing*(dq+1));
-            allDoses.splice(insertAt,0,drinkQueue[dq]);
-          }
-        } else {
-          for(var dq2=0;dq2<drinkQueue.length;dq2++) allDoses.push(drinkQueue[dq2]);
-        }
+        allDoses.push(slot);
+        carbsAccum+=slot.carbsPerDose;
+        rotIdx++;skips=0;
       }
 
       // Space all doses evenly across the leg, respecting MIN_GAP
