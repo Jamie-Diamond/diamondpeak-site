@@ -387,26 +387,65 @@
     }
 
     var placed=[];
-    function addItem(foodId,time){
-      var item={foodId:foodId,timeMin:Math.round(time),portion:1,fromAid:false};
+    function addItem(foodId,time,portion){
+      var p=portion||1;
+      var item={foodId:foodId,timeMin:Math.round(time),portion:p,fromAid:false};
       state.schedule.push(item);
       placed.push(item);
     }
 
-    // ── PHASE 1: Carbs ──
+    // ── PHASE 1: Carbs (small portions, frequent, flat curve) ──
+    var AVAIL_PORTIONS=[1,0.5,1/3,0.25];
+    var TARGET_STEP=12; // ideal carbs per dose for a flat graph
+
     if(carbFoods.length>0&&strat.target>0){
       var totalCarbs=strat.target*legHrs;
-      var avgCarbs=0;
-      for(var c=0;c<carbFoods.length;c++) avgCarbs+=carbFoods[c].carbs;
-      avgCarbs/=carbFoods.length;
-      var numItems=Math.max(1,Math.round(totalCarbs/avgCarbs));
-      var interval=Math.max(10,(endT-startT)/(numItems));
-      var ci=0,carbsPlaced=0;
-      for(var t=startT;t<=endT&&carbsPlaced<totalCarbs*1.05;t+=interval){
-        var food=carbFoods[ci%carbFoods.length];
-        addItem(food.id,t);
-        carbsPlaced+=food.carbs;
-        ci++;
+      var span=endT-startT;
+
+      // Build a plan: for each carb food, find the best portion to keep
+      // individual doses near TARGET_STEP, then calculate how many per hour
+      // to hit a fair share of the target rate
+      var sharePerFood=strat.target/carbFoods.length; // g/hr each food contributes
+      var slots=[]; // {food, portion, interval, carbsPerDose}
+      for(var c=0;c<carbFoods.length;c++){
+        var fd=carbFoods[c];
+        // Find the portion that gives closest to TARGET_STEP carbs
+        var bestP=1,bestDiff=9999;
+        for(var pi=0;pi<AVAIL_PORTIONS.length;pi++){
+          var dose=fd.carbs*AVAIL_PORTIONS[pi];
+          var diff=Math.abs(dose-TARGET_STEP);
+          if(diff<bestDiff){bestDiff=diff;bestP=AVAIL_PORTIONS[pi];}
+        }
+        var carbsPerDose=fd.carbs*bestP;
+        // How many per hour to hit this food's share?
+        var dosesPerHr=carbsPerDose>0?sharePerFood/carbsPerDose:0;
+        var interval=dosesPerHr>0?60/dosesPerHr:9999;
+        if(interval<8)interval=8; // minimum 8 min gap
+        slots.push({food:fd,portion:bestP,interval:interval,carbsPerDose:carbsPerDose});
+      }
+
+      // Merge all slots into a single timeline: interleave foods
+      // Each food gets its own "next time" cursor
+      var cursors=[];
+      for(var s=0;s<slots.length;s++){
+        // Offset each food's start to spread them out
+        var offset=(slots[s].interval/slots.length)*s;
+        cursors.push({slot:slots[s],nextT:startT+offset});
+      }
+
+      var carbsPlaced=0;
+      var safety=500; // max iterations
+      while(carbsPlaced<totalCarbs*1.02&&safety-->0){
+        // Pick cursor with earliest nextT
+        var best=-1,bestTime=Infinity;
+        for(var ci=0;ci<cursors.length;ci++){
+          if(cursors[ci].nextT<=endT&&cursors[ci].nextT<bestTime){bestTime=cursors[ci].nextT;best=ci;}
+        }
+        if(best<0)break;
+        var cur=cursors[best];
+        addItem(cur.slot.food.id,cur.nextT,cur.slot.portion);
+        carbsPlaced+=cur.slot.carbsPerDose;
+        cur.nextT+=cur.slot.interval;
       }
     }
 
