@@ -156,6 +156,11 @@
   .strat-food-btn{padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card);font-family:'DM Mono',monospace;font-size:10px;color:var(--ink2);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:4px}
   .strat-food-btn:hover{border-color:var(--green)}
   .strat-food-btn.sel{background:var(--green-bg);border-color:var(--green);color:var(--green);font-weight:500}
+  .gel-mode-row{display:flex;align-items:center;gap:8px;margin:0 0 14px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px}
+  .gel-mode-label{font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.04em}
+  .gel-mode-btn{padding:4px 12px;font-size:11px;font-weight:600;font-family:inherit;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--muted);cursor:pointer;transition:all .15s}
+  .gel-mode-btn.active{background:var(--green);color:#fff;border-color:var(--green)}
+  .gel-mode-hint{font-size:10px;color:var(--muted);font-style:italic}
   .strat-targets{margin:6px 0 4px}
   .strat-target-row{display:flex;align-items:center;gap:8px;margin:4px 0}
   .strat-label{font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;color:var(--muted);min-width:52px;letter-spacing:.03em}
@@ -248,7 +253,7 @@
     preset:'Olympic Tri', swimDist:1.5, bikeDist:40, runDist:10,
     swimPaceMin:1, swimPaceSec:50, bikeSpeed:30, runPace:5.5,
     t1:3, t2:2, aidStations:[], schedule:[], customFoods:[], raceType:'tri',
-    shortlist:[], bodyWeight: 70,
+    shortlist:[], bodyWeight: 70, gelMode:'packet',
     showSodium:false, showFluid:true, showAid:true, showGraph:true,
     showPacking:true, showTopTube:true, showCaffeine:false,
     showFluidGraph:false, showSodiumGraph:false, showCaffeineGraph:false,
@@ -410,11 +415,12 @@
       var slots=[];
       for(var c=0;c<carbFoods.length;c++){
         var fd=carbFoods[c];
-        var isSolid=fd.form==='solid';
+        // Can this food be split into small portions?
+        // Solids: always yes. Liquids: always yes. Gels: only if in bottle mode.
+        var canSplit=fd.form==='solid'||fd.form==='liquid'||(fd.form==='gel'&&state.gelMode==='bottle');
         var bestP=1;
 
-        if(isSolid){
-          // Solids: find portion closest to TARGET_STEP
+        if(canSplit){
           var bestDiff=9999;
           for(var pi=0;pi<SOLID_PORTIONS.length;pi++){
             var dose=fd.carbs*SOLID_PORTIONS[pi];
@@ -422,7 +428,7 @@
             if(diff<bestDiff){bestDiff=diff;bestP=SOLID_PORTIONS[pi];}
           }
         }
-        // Gels/liquids stay at portion=1 (can't save half a gel)
+        // Packet gels stay at portion=1 (must finish before next item)
 
         var carbsPerDose=fd.carbs*bestP;
         var dosesPerHr=carbsPerDose>0?sharePerFood/carbsPerDose:0;
@@ -607,7 +613,8 @@
     /* 3b. STRATEGY BUILDER */
     html+='</div>';
     html+='<div id="stratSection"><div class="sec-head"><span class="sec-tag">Strategy Builder</span><div class="sec-rule"></div></div>';
-    html+='<div class="panel"><div class="panel-title">Select foods per leg and auto-generate an optimal plan in 10-min chunks</div>';
+    html+='<div class="panel"><div class="panel-title">Select foods per leg and auto-generate an optimal plan</div>';
+    html+='<div class="gel-mode-row"><span class="gel-mode-label">Gels carried as</span><button class="gel-mode-btn'+(state.gelMode==='packet'?' active':'')+'" data-mode="packet">Packets</button><button class="gel-mode-btn'+(state.gelMode==='bottle'?' active':'')+'" data-mode="bottle">In bottle</button><span class="gel-mode-hint">'+(state.gelMode==='packet'?'Must finish each gel before next item':'Gels mixed in bottle — any amount, any time')+'</span></div>';
     for(var sl=0;sl<stratLegs.length;sl++){
       var sLeg=stratLegs[sl];
       if(!state.strategies[sLeg.name]) state.strategies[sLeg.name]={foods:[],target:sLeg.name==='Pre-Race'?30:70,fluidTarget:sLeg.name==='Pre-Race'?200:500,sodiumTarget:sLeg.name==='Pre-Race'?200:500,cafTarget:sLeg.name==='Pre-Race'?0:100};
@@ -866,6 +873,10 @@
 
     var acBtn=document.getElementById('addCustom');
     if(acBtn)acBtn.addEventListener('click',function(){var nm=document.getElementById('cfName').value.trim();if(!nm)return;var glu=+document.getElementById('cfGlu').value||0,fru=+document.getElementById('cfFru').value||0;state.customFoods.push({id:'custom-'+Date.now(),name:nm,carbs:glu+fru,glucose:glu,fructose:fru,ml:+document.getElementById('cfMl').value||0,na:+document.getElementById('cfNa').value||0,caf:+document.getElementById('cfCaf').value||0,form:document.getElementById('cfForm').value,icon:'\uD83C\uDF7D'});render();});
+
+    // Gel mode toggle
+    var gmBtns=document.querySelectorAll('.gel-mode-btn');
+    for(var gm=0;gm<gmBtns.length;gm++)gmBtns[gm].addEventListener('click',function(){state.gelMode=this.getAttribute('data-mode');render();});
 
     // Strategy sliders + number inputs (both update state)
     var sSliders=document.querySelectorAll('.strat-slider');
