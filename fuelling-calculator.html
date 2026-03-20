@@ -530,7 +530,15 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     if(legDur<=0)return;
 
     var foods=[];
-    for(var i=0;i<strat.foods.length;i++){var f=getFoodById(strat.foods[i]);if(f)foods.push(f);}
+    // Auto-include bike cage drinks for the Bike leg
+    var stratFoodIds=strat.foods.slice();
+    if(legName==='Bike'){
+      for(var ci=0;ci<state.bikeCages.length;ci++){
+        var cid=state.bikeCages[ci].foodId;
+        if(cid&&stratFoodIds.indexOf(cid)<0) stratFoodIds.push(cid);
+      }
+    }
+    for(var i=0;i<stratFoodIds.length;i++){var f=getFoodById(stratFoodIds[i]);if(f)foods.push(f);}
     if(foods.length===0)return;
 
     var legHrs=legDur/60;
@@ -1065,53 +1073,92 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
           // Process aid stations before this item
           while(nextAid<bikeAidsB.length&&bikeAidsB[nextAid].timeMin<=bE.timeMin){
             var aidT=bikeAidsB[nextAid];
-            var emptySlot=-1;
-            for(var es=0;es<bottles.length;es++){if(bottles[es].ml<=0){emptySlot=es;break;}}
-            if(emptySlot>=0){
-              var pickupLabel=aidT.type==='water'?'Water':'Water/PH1500';
-              var pickupMl=bottles[emptySlot].maxMl;
-              bottles[emptySlot]={label:pickupLabel,ml:pickupMl,maxMl:pickupMl,isCarb:false,foodId:null};
+            // Calculate fluid needed until next aid (or end of bike)
+            var nextAidTime=nextAid+1<bikeAidsB.length?bikeAidsB[nextAid+1].timeMin:bikeSeg.start+bikeSeg.dur;
+            var fluidNeeded=0;
+            for(var fn=bi;fn<bItems.length;fn++){
+              if(bItems[fn].timeMin>nextAidTime)break;
+              var fnF=getFoodById(bItems[fn].foodId);
+              if(!fnF||!fnF.ml)continue;
+              // Only count items that would drain from cages (matching foodId exists)
+              var hasCage=false;for(var fc=0;fc<bottles.length;fc++){if(bottles[fc].foodId===fnF.id&&bottles[fc].ml>0){hasCage=true;break;}}
+              if(hasCage) fluidNeeded+=(fnF.ml||0)*(bItems[fn].portion||1);
+            }
+            var totalFluid=0;for(var tf=0;tf<bottles.length;tf++)totalFluid+=bottles[tf].ml;
+            var willRunOut=fluidNeeded>totalFluid;
+            // Find lowest non-carb bottle (or empty bottle)
+            var refillSlot=-1,lowestMl=999999;
+            for(var es=0;es<bottles.length;es++){
+              if(bottles[es].ml<=0){refillSlot=es;lowestMl=0;break;}
+              if(!bottles[es].isCarb&&bottles[es].ml<lowestMl){lowestMl=bottles[es].ml;refillSlot=es;}
+            }
+            if(willRunOut&&refillSlot>=0){
+              var pickupLabel=aidT.type==='water'?'Water':'PH1500';
+              var pickupId=aidT.type==='water'?'water':'precision-h';
+              var pickupMl=bottles[refillSlot].maxMl;
+              bottles[refillSlot]={label:pickupLabel,ml:pickupMl,maxMl:pickupMl,isCarb:false,foodId:pickupId};
               bottleEvents.push({time:aidT.timeMin,type:'pickup',label:'\u26F3 '+aidT.label+' \u2014 pick up '+pickupLabel+' ('+pickupMl+'ml)'});
             } else {
-              bottleEvents.push({time:aidT.timeMin,type:'skip',label:'\u26F3 '+aidT.label+' \u2014 all bottles have fluid, skip'});
+              bottleEvents.push({time:aidT.timeMin,type:'skip',label:'\u26F3 '+aidT.label+' \u2014 enough fluid, skip'});
             }
             snapBottles(aidT.timeMin);
             nextAid++;
           }
 
-          // Consume from bottles
+          // Consume from bottles — only drain from bottles that carry this drink
           if(bMl>0){
             mlUsed+=bMl;
-            var mlToDrain=bMl;
-            // First try to drain from the specific bottle carrying this drink
+            // Find bottles carrying this specific drink
             var drainOrder=[];
             for(var d1=0;d1<bottles.length;d1++){if(bottles[d1].foodId===bF.id&&bottles[d1].ml>0)drainOrder.push(d1);}
-            // Then same-type bottles (carb from carb, water from water)
-            var isItemCarb=bF.carbs>0;
-            for(var d2=0;d2<bottles.length;d2++){if(drainOrder.indexOf(d2)<0&&bottles[d2].isCarb===isItemCarb&&bottles[d2].ml>0)drainOrder.push(d2);}
-            // Then any bottle with fluid
-            for(var d3=0;d3<bottles.length;d3++){if(drainOrder.indexOf(d3)<0&&bottles[d3].ml>0)drainOrder.push(d3);}
-            for(var dr=0;dr<drainOrder.length&&mlToDrain>0;dr++){
-              var take=Math.min(bottles[drainOrder[dr]].ml,mlToDrain);
-              bottles[drainOrder[dr]].ml-=take;
-              mlToDrain-=take;
+            if(drainOrder.length>0){
+              // Drain from matching bottles
+              var mlToDrain=bMl;
+              for(var dr=0;dr<drainOrder.length&&mlToDrain>0;dr++){
+                var take=Math.min(bottles[drainOrder[dr]].ml,mlToDrain);
+                bottles[drainOrder[dr]].ml-=take;
+                mlToDrain-=take;
+              }
+              if(mlToDrain>0){
+                bottleEvents.push({time:bE.timeMin,type:'empty',label:fmtHM(bE.timeMin-bikeSeg.start)+' \u2014 OUT OF '+bF.name+'! '+Math.round(mlToDrain)+'ml short'});
+              } else {
+                bottleEvents.push({time:bE.timeMin,type:'drink',label:fmtHM(bE.timeMin-bikeSeg.start)+' \u2014 drink '+Math.round(bMl)+'ml '+bF.name+' (from cage)'});
+              }
+              snapBottles(bE.timeMin);
+            } else {
+              // No matching cage bottle — assumed from aid station cup (water, electrolyte etc.)
+              bottleEvents.push({time:bE.timeMin,type:'cup',label:fmtHM(bE.timeMin-bikeSeg.start)+' \u2014 '+Math.round(bMl)+'ml '+bF.name+' (aid station cup)'});
             }
-            if(mlToDrain>0){
-              bottleEvents.push({time:bE.timeMin,type:'empty',label:fmtHM(bE.timeMin-bikeSeg.start)+' \u2014 OUT OF FLUID! '+Math.round(mlToDrain)+'ml short'});
-            }
-            snapBottles(bE.timeMin);
           }
         }
-        // Remaining aid stations
+        // Remaining aid stations — only stop if fluid needed until end
         while(nextAid<bikeAidsB.length){
           var aidT2=bikeAidsB[nextAid];
-          var emptySlot2=-1;
-          for(var es2=0;es2<bottles.length;es2++){if(bottles[es2].ml<=0){emptySlot2=es2;break;}}
-          if(emptySlot2>=0){
-            var pickupLabel2=aidT2.type==='water'?'Water':'Water/PH1500';
-            var pickupMl2=bottles[emptySlot2].maxMl;
-            bottles[emptySlot2]={label:pickupLabel2,ml:pickupMl2,maxMl:pickupMl2,isCarb:false,foodId:null};
+          var nextAidTime2=nextAid+1<bikeAidsB.length?bikeAidsB[nextAid+1].timeMin:bikeSeg.start+bikeSeg.dur;
+          var fluidNeeded2=0;
+          for(var fn2=0;fn2<bItems.length;fn2++){
+            if(bItems[fn2].timeMin<=aidT2.timeMin)continue;
+            if(bItems[fn2].timeMin>nextAidTime2)break;
+            var fnF2=getFoodById(bItems[fn2].foodId);
+            if(!fnF2||!fnF2.ml)continue;
+            var hasCage2=false;for(var fc2=0;fc2<bottles.length;fc2++){if(bottles[fc2].foodId===fnF2.id&&bottles[fc2].ml>0){hasCage2=true;break;}}
+            if(hasCage2) fluidNeeded2+=(fnF2.ml||0)*(bItems[fn2].portion||1);
+          }
+          var totalFluid2=0;for(var tf2=0;tf2<bottles.length;tf2++)totalFluid2+=bottles[tf2].ml;
+          var willRunOut2=fluidNeeded2>totalFluid2;
+          var refillSlot2=-1,lowestMl2=999999;
+          for(var es2=0;es2<bottles.length;es2++){
+            if(bottles[es2].ml<=0){refillSlot2=es2;lowestMl2=0;break;}
+            if(!bottles[es2].isCarb&&bottles[es2].ml<lowestMl2){lowestMl2=bottles[es2].ml;refillSlot2=es2;}
+          }
+          if(willRunOut2&&refillSlot2>=0){
+            var pickupLabel2=aidT2.type==='water'?'Water':'PH1500';
+            var pickupId2=aidT2.type==='water'?'water':'precision-h';
+            var pickupMl2=bottles[refillSlot2].maxMl;
+            bottles[refillSlot2]={label:pickupLabel2,ml:pickupMl2,maxMl:pickupMl2,isCarb:false,foodId:pickupId2};
             bottleEvents.push({time:aidT2.timeMin,type:'pickup',label:'\u26F3 '+aidT2.label+' \u2014 pick up '+pickupLabel2});
+          } else {
+            bottleEvents.push({time:aidT2.timeMin,type:'skip',label:'\u26F3 '+aidT2.label+' \u2014 enough fluid, skip'});
           }
           snapBottles(aidT2.timeMin);
           nextAid++;
@@ -1176,8 +1223,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         html+='<ul class="race-card-items" style="margin-top:8px">';
         for(var be=0;be<bottleEvents.length;be++){
           var ev=bottleEvents[be];
-          var evCol=ev.type==='empty'?'var(--red)':ev.type==='pickup'?'var(--bike)':ev.type==='skip'?'var(--muted)':'var(--ink2)';
-          var evIcon=ev.type==='pickup'?'\uD83D\uDCA7':ev.type==='empty'?'\u26A0':ev.type==='skip'?'\u23ED':'\uD83C\uDFC1';
+          var evCol=ev.type==='empty'?'var(--red)':ev.type==='pickup'?'var(--bike)':ev.type==='skip'?'var(--muted)':ev.type==='drink'?'#27ae60':ev.type==='cup'?'#2980b9':'var(--ink2)';
+          var evIcon=ev.type==='pickup'?'\uD83D\uDCA7':ev.type==='empty'?'\u26A0':ev.type==='skip'?'\u23ED':ev.type==='drink'?'\uD83C\uDF7A':ev.type==='cup'?'\uD83E\uDD64':'\uD83C\uDFC1';
           var dist=Math.round(state.bikeSpeed*((ev.time-bikeSeg.start)/60));
           html+='<li style="color:'+evCol+'"><span style="font-family:\'DM Mono\',monospace;font-size:10px;min-width:38px">'+fmtHM(ev.time-bikeSeg.start)+'</span><span style="font-size:10px;color:var(--muted);min-width:32px">'+dist+'km</span><span>'+evIcon+' '+ev.label+'</span></li>';
         }
