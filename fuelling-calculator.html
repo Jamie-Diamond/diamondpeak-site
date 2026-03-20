@@ -67,8 +67,10 @@
   .btn-gen{padding:6px 16px;border:2px solid var(--green);border-radius:6px;background:var(--green);color:#fff;font-family:'DM Mono',monospace;font-size:11px;font-weight:500;cursor:pointer;transition:all .15s}
   .btn-gen:hover{background:#165c38}
   .food-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:10px}
-  .food-card{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:all .15s}
+  .food-card{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:all .15s;position:relative}
   .food-card:hover{border-color:var(--green);background:var(--green-bg)}
+  .food-card.in-shortlist{border-color:var(--green);background:var(--green-bg)}
+  .food-card.in-shortlist::after{content:'\2713';position:absolute;top:6px;right:8px;font-size:11px;font-weight:700;color:var(--green)}
   .food-icon{font-size:20px;flex-shrink:0;width:32px;text-align:center}
   .food-info{flex:1;min-width:0}
   .food-name{font-size:11px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -246,7 +248,7 @@
     preset:'Olympic Tri', swimDist:1.5, bikeDist:40, runDist:10,
     swimPaceMin:1, swimPaceSec:50, bikeSpeed:30, runPace:5.5,
     t1:3, t2:2, aidStations:[], schedule:[], customFoods:[], raceType:'tri',
-    bodyWeight: 70,
+    shortlist:[], bodyWeight: 70,
     showSodium:false, showFluid:true, showAid:true, showGraph:true,
     showPacking:true, showTopTube:true, showCaffeine:false,
     showFluidGraph:false, showSodiumGraph:false, showCaffeineGraph:false,
@@ -395,48 +397,50 @@
     }
 
     // ── PHASE 1: Carbs (small portions, frequent, flat curve) ──
-    var AVAIL_PORTIONS=[1,0.5,1/3,0.25];
+    // Gels/liquids: once opened you must finish them back-to-back,
+    // so keep them at full portions and space them out.
+    // Solids: can be broken into portions and interleaved freely.
+    var SOLID_PORTIONS=[1,0.5,1/3,0.25];
     var TARGET_STEP=12; // ideal carbs per dose for a flat graph
 
     if(carbFoods.length>0&&strat.target>0){
       var totalCarbs=strat.target*legHrs;
-      var span=endT-startT;
 
-      // Build a plan: for each carb food, find the best portion to keep
-      // individual doses near TARGET_STEP, then calculate how many per hour
-      // to hit a fair share of the target rate
-      var sharePerFood=strat.target/carbFoods.length; // g/hr each food contributes
-      var slots=[]; // {food, portion, interval, carbsPerDose}
+      var sharePerFood=strat.target/carbFoods.length;
+      var slots=[];
       for(var c=0;c<carbFoods.length;c++){
         var fd=carbFoods[c];
-        // Find the portion that gives closest to TARGET_STEP carbs
-        var bestP=1,bestDiff=9999;
-        for(var pi=0;pi<AVAIL_PORTIONS.length;pi++){
-          var dose=fd.carbs*AVAIL_PORTIONS[pi];
-          var diff=Math.abs(dose-TARGET_STEP);
-          if(diff<bestDiff){bestDiff=diff;bestP=AVAIL_PORTIONS[pi];}
+        var isSolid=fd.form==='solid';
+        var bestP=1;
+
+        if(isSolid){
+          // Solids: find portion closest to TARGET_STEP
+          var bestDiff=9999;
+          for(var pi=0;pi<SOLID_PORTIONS.length;pi++){
+            var dose=fd.carbs*SOLID_PORTIONS[pi];
+            var diff=Math.abs(dose-TARGET_STEP);
+            if(diff<bestDiff){bestDiff=diff;bestP=SOLID_PORTIONS[pi];}
+          }
         }
+        // Gels/liquids stay at portion=1 (can't save half a gel)
+
         var carbsPerDose=fd.carbs*bestP;
-        // How many per hour to hit this food's share?
         var dosesPerHr=carbsPerDose>0?sharePerFood/carbsPerDose:0;
         var interval=dosesPerHr>0?60/dosesPerHr:9999;
-        if(interval<8)interval=8; // minimum 8 min gap
+        if(interval<8)interval=8;
         slots.push({food:fd,portion:bestP,interval:interval,carbsPerDose:carbsPerDose});
       }
 
-      // Merge all slots into a single timeline: interleave foods
-      // Each food gets its own "next time" cursor
+      // Interleave all foods on a shared timeline
       var cursors=[];
       for(var s=0;s<slots.length;s++){
-        // Offset each food's start to spread them out
         var offset=(slots[s].interval/slots.length)*s;
         cursors.push({slot:slots[s],nextT:startT+offset});
       }
 
       var carbsPlaced=0;
-      var safety=500; // max iterations
+      var safety=500;
       while(carbsPlaced<totalCarbs*1.02&&safety-->0){
-        // Pick cursor with earliest nextT
         var best=-1,bestTime=Infinity;
         for(var ci=0;ci<cursors.length;ci++){
           if(cursors[ci].nextT<=endT&&cursors[ci].nextT<bestTime){bestTime=cursors[ci].nextT;best=ci;}
@@ -585,8 +589,8 @@
     }
 
     /* 3. FOOD LIBRARY */
-    html+='<div id="foodLibrary"><div class="sec-head"><span class="sec-tag">Food Library</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Click a food to add it to your plan</div><div class="food-grid">';
-    for(var f=0;f<allFoods.length;f++){var fd=allFoods[f];var ms=fd.carbs+'g <span class="glu">G:'+fd.glucose+'</span> <span class="fru">F:'+fd.fructose+'</span>';if(state.showFluid&&fd.ml>0)ms+=' '+fd.ml+'ml';if(state.showSodium&&fd.na>0)ms+=' Na:'+fd.na+'mg';if(state.showCaffeine&&fd.caf>0)ms+=' <span style="color:var(--caf)">Caf:'+fd.caf+'mg</span>';html+='<div class="food-card" data-food="'+fd.id+'"><div class="food-icon">'+fd.icon+'</div><div class="food-info"><div class="food-name">'+fd.name+'</div><div class="food-macros">'+ms+'</div></div></div>';}
+    html+='<div id="foodLibrary"><div class="sec-head"><span class="sec-tag">Food Library</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Toggle foods into your shortlist, then assign them to legs in the Strategy Builder below</div><div class="food-grid">';
+    for(var f=0;f<allFoods.length;f++){var fd=allFoods[f];var inSL=state.shortlist.indexOf(fd.id)>=0;var ms=fd.carbs+'g <span class="glu">G:'+fd.glucose+'</span> <span class="fru">F:'+fd.fructose+'</span>';if(state.showFluid&&fd.ml>0)ms+=' '+fd.ml+'ml';if(state.showSodium&&fd.na>0)ms+=' Na:'+fd.na+'mg';if(state.showCaffeine&&fd.caf>0)ms+=' <span style="color:var(--caf)">Caf:'+fd.caf+'mg</span>';html+='<div class="food-card'+(inSL?' in-shortlist':'')+'" data-food="'+fd.id+'"><div class="food-icon">'+fd.icon+'</div><div class="food-info"><div class="food-name">'+fd.name+'</div><div class="food-macros">'+ms+'</div></div></div>';}
     html+='</div>';
     // Custom food
     html+='<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;font-weight:500;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;font-family:\'DM Mono\',monospace">Add custom food</div><div class="custom-form">';
@@ -616,10 +620,13 @@
       if(state.showSodium) html+='<div class="strat-target-row"><span class="strat-label" style="color:#e8a838">Sodium</span><input type="range" class="strat-slider" data-leg="'+sLeg.name+'" data-field="sodiumTarget" min="0" max="1500" step="50" value="'+strat.sodiumTarget+'"><input type="number" class="strat-num" data-leg="'+sLeg.name+'" data-field="sodiumTarget" min="0" max="1500" step="50" value="'+strat.sodiumTarget+'"><span class="strat-unit">mg/hr</span></div>';
       if(state.showCaffeine) html+='<div class="strat-target-row"><span class="strat-label" style="color:var(--caf)">Caffeine</span><input type="range" class="strat-slider" data-leg="'+sLeg.name+'" data-field="cafTarget" min="0" max="400" step="25" value="'+strat.cafTarget+'"><input type="number" class="strat-num" data-leg="'+sLeg.name+'" data-field="cafTarget" min="0" max="400" step="25" value="'+strat.cafTarget+'"><span class="strat-unit">mg total</span></div>';
       html+='</div>';
-      html+='<div style="font-size:9px;color:var(--muted);font-family:\'DM Mono\',monospace;margin:8px 0 4px">SELECT FOODS</div>';
+      // Only show shortlisted foods in strategy builder
+      var slFoods=[];for(var sli=0;sli<state.shortlist.length;sli++){var slF=getFoodById(state.shortlist[sli]);if(slF)slFoods.push(slF);}
+      html+='<div style="font-size:9px;color:var(--muted);font-family:\'DM Mono\',monospace;margin:8px 0 4px">ASSIGN FROM SHORTLIST</div>';
       html+='<div class="strat-foods">';
-      for(var sf=0;sf<allFoods.length;sf++){
-        var sfd=allFoods[sf];
+      if(slFoods.length===0){html+='<div style="font-size:11px;color:var(--muted);padding:6px 0">No foods shortlisted — select items in the Food Library above</div>';}
+      for(var sf=0;sf<slFoods.length;sf++){
+        var sfd=slFoods[sf];
         var isSel=strat.foods.indexOf(sfd.id)>=0;
         html+='<button class="strat-food-btn'+(isSel?' sel':'')+'" data-leg="'+sLeg.name+'" data-food="'+sfd.id+'">'+sfd.icon+' '+sfd.name+'</button>';
       }
@@ -850,7 +857,7 @@
     if(aBtn)aBtn.addEventListener('click',function(){var km=+document.getElementById('aidKm').value,d=document.getElementById('aidDisc').value;if(km>0){state.aidStations.push({km:km,discipline:d});state.aidStations.sort(function(a,b){return a.km-b.km;});render();}});
     var aRms=document.querySelectorAll('.aid-rm');for(var ar=0;ar<aRms.length;ar++)aRms[ar].addEventListener('click',function(){state.aidStations.splice(+this.getAttribute('data-aid'),1);render();});
 
-    var fCs=document.querySelectorAll('.food-card');for(var fc=0;fc<fCs.length;fc++)fCs[fc].addEventListener('click',function(){var fid=this.getAttribute('data-food'),lt=0;for(var i=0;i<state.schedule.length;i++)if(state.schedule[i].timeMin>lt)lt=state.schedule[i].timeMin;var nt=state.schedule.length===0?15:lt+15;var r=calcRace();if(nt>r.total)nt=Math.max(0,r.total-5);state.schedule.push({foodId:fid,timeMin:Math.round(nt),portion:1,fromAid:false});render();});
+    var fCs=document.querySelectorAll('.food-card');for(var fc=0;fc<fCs.length;fc++)fCs[fc].addEventListener('click',function(){var fid=this.getAttribute('data-food'),idx=state.shortlist.indexOf(fid);if(idx>=0){state.shortlist.splice(idx,1);for(var k in state.strategies){var arr=state.strategies[k].foods,fi=arr.indexOf(fid);if(fi>=0)arr.splice(fi,1);}}else{state.shortlist.push(fid);}render();});
 
     var pSels=document.querySelectorAll('.sched-portion');for(var ps=0;ps<pSels.length;ps++)pSels[ps].addEventListener('change',function(){state.schedule[+this.getAttribute('data-idx')].portion=+this.value||1;render();});
     var aTs=document.querySelectorAll('.sched-aid');for(var at2=0;at2<aTs.length;at2++)aTs[at2].addEventListener('change',function(){state.schedule[+this.getAttribute('data-idx')].fromAid=this.checked;render();});
