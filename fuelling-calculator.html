@@ -235,7 +235,14 @@
     Colour zones: <span style="color:var(--green)">green &le;90</span>, <span style="color:var(--amber)">amber 90&ndash;120</span> (trained), <span style="color:var(--red)">red &gt;120 g/hr</span> (GI risk).<br><br>
     <strong>Caffeine model</strong> &mdash; Plasma caffeine is modelled using first-order pharmacokinetics:
     <code>ka = ln2/20 min</code> (absorption), <code>ke = ln2/480 min</code> (8 hr half-life).
-    Peak plasma at ~45 min post-ingestion. Recommended race dose: <code>3&ndash;6 mg/kg</code>.
+    Peak plasma at ~45 min post-ingestion. Recommended race dose: <code>3&ndash;6 mg/kg</code>.<br><br>
+    <strong>Plan generation</strong> &mdash; The auto-strategy builds a <strong>repeating block</strong> that cycles through your selected foods in a predictable rhythm.
+    Solid foods are <strong>sequential</strong> &mdash; each bar or chew is finished before the next one starts, so you never have multiple items open at once.
+    Gels and drinks <strong>rotate</strong> between solid doses, keeping variety while maintaining the rhythm.
+    When a drink&rsquo;s bottle capacity runs out, it <strong>drops from the rotation</strong> and the remaining foods continue.
+    After carbs are placed, separate passes top up <strong>fluid</strong>, <strong>sodium</strong>, and <strong>caffeine</strong> to hit their targets, crediting what the carb foods already contributed.<br><br>
+    <strong>Bottle management</strong> &mdash; Aid station pickups are based on whether you have enough fluid to reach the <strong>end of the ride</strong>, not just the next aid.
+    If you do need to stop, only the <strong>minimum bottles</strong> are refilled to cover the deficit &mdash; no unnecessary water weight.
   </div>
   <div class="footer-bar">&copy; 2026 Diamond Peak Consulting</div>
 </div>
