@@ -609,13 +609,15 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
 
       var carbsPlaced=0;
       var safety=500;
-      while(carbsPlaced<totalCarbs*1.02&&safety-->0){
+      while(safety-->0){
         var best=-1,bestTime=Infinity;
         for(var ci=0;ci<cursors.length;ci++){
           if(cursors[ci].nextT<=endT&&cursors[ci].nextT<bestTime){bestTime=cursors[ci].nextT;best=ci;}
         }
         if(best<0)break;
         var cur=cursors[best];
+        // Stop if adding this dose would overshoot target by more than half a dose
+        if(carbsPlaced+cur.slot.carbsPerDose>totalCarbs+cur.slot.carbsPerDose*0.5&&carbsPlaced>=totalCarbs*0.9)break;
         addItem(cur.slot.food.id,cur.nextT,cur.slot.portion);
         carbsPlaced+=cur.slot.carbsPerDose;
         cur.nextT+=cur.slot.interval;
