@@ -185,6 +185,11 @@
   .method code{font-family:'DM Mono',monospace;font-size:10px;background:#faf8f4;padding:1px 5px;border-radius:3px;border:1px solid var(--border)}
   .method strong{color:var(--ink2);font-weight:500}
   #topoCanvas{position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:0}
+  .graph-tip{position:absolute;pointer-events:none;z-index:10;background:var(--ink);color:#fff;font-family:'DM Mono',monospace;font-size:10px;padding:6px 10px;border-radius:5px;white-space:nowrap;opacity:0;transition:opacity .12s;line-height:1.5;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  .graph-tip.show{opacity:1}
+  .graph-tip-row{display:flex;gap:8px;align-items:center}
+  .graph-tip-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .graph-crosshair{position:absolute;top:0;width:1px;background:rgba(24,22,15,.2);pointer-events:none;z-index:5}
   .page{position:relative;z-index:1}
   .dpc-header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
   .dpc-logo{width:36px;height:36px;object-fit:contain;filter:none;opacity:.85}
@@ -907,6 +912,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     if(state.showSodiumGraph)drawLineGraph('sodiumGraph',race,fl.na,fl.minutes,'#e8a838','mg/hr');
     if(state.showCaffeineGraph)drawLineGraph('cafGraph',race,caf.plasma,caf.minutes,'#8b5cf6','mg');
     if(state.showEnergyGraph)drawEnergyGraph(race,energy);
+    // Set up tooltips on all graphs
+    setupTooltips(race,abs,fl,caf,energy);
   }
 
   /* ── GRAPH: Absorption with zones ── */
@@ -1030,6 +1037,71 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       ctx.fillStyle='#1d6840';ctx.fillText(Math.round(en.consumed[eI-1])+' kcal',ex,yAt(en.consumed[eI-1])+3);
       var finalDef=en.burned[eI-1]-en.consumed[eI-1];
       if(finalDef>0){ctx.fillStyle='#c0392b';ctx.fillText('-'+Math.round(finalDef),ex,yAt(finalDef)+3);}
+    }
+  }
+
+  /* ── GRAPH TOOLTIPS ── */
+  function setupTooltips(race,abs,fl,caf,energy){
+    var OFF=PRE_RACE_OFFSET;
+    var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
+    var tOff=hasPre?30:0,totMin=Math.max(race.total+tOff,60);
+
+    // Graph configs: canvasId → data reader
+    var graphs=[];
+    if(state.showGraph) graphs.push({id:'absGraph',pL:40,pR:10,pT:16,pB:36,rows:function(m){
+      var i=m+OFF,g=abs.glucose[i]||0,f=abs.fructose[i]||0;
+      return[{color:'#2980b9',label:'Glucose',val:Math.round(g)+' g/hr'},{color:'#c0392b',label:'Fructose',val:Math.round(f)+' g/hr'},{color:'#1d6840',label:'Combined',val:Math.round(g+f)+' g/hr'}];
+    }});
+    if(state.showFluidGraph) graphs.push({id:'fluidGraph',pL:46,pR:10,pT:12,pB:30,rows:function(m){
+      var i=m+OFF;return[{color:'#2980b9',label:'Fluid',val:Math.round(fl.ml[i]||0)+' ml/hr'}];
+    }});
+    if(state.showSodiumGraph) graphs.push({id:'sodiumGraph',pL:46,pR:10,pT:12,pB:30,rows:function(m){
+      var i=m+OFF;return[{color:'#e8a838',label:'Sodium',val:Math.round(fl.na[i]||0)+' mg/hr'}];
+    }});
+    if(state.showCaffeineGraph) graphs.push({id:'cafGraph',pL:46,pR:10,pT:12,pB:30,rows:function(m){
+      var i=m+OFF;return[{color:'#8b5cf6',label:'Caffeine',val:Math.round(caf.plasma[i]||0)+' mg'}];
+    }});
+    if(state.showEnergyGraph) graphs.push({id:'energyGraph',pL:50,pR:10,pT:16,pB:36,rows:function(m){
+      var i=m+OFF,b=energy.burned[i]||0,c=energy.consumed[i]||0;
+      return[{color:'#e67e22',label:'Burned',val:Math.round(b)+' kcal'},{color:'#1d6840',label:'Consumed',val:Math.round(c)+' kcal'},{color:'#c0392b',label:'Deficit',val:Math.round(b-c)+' kcal'}];
+    }});
+
+    for(var gi=0;gi<graphs.length;gi++){
+      (function(g){
+        var canvas=document.getElementById(g.id);if(!canvas)return;
+        var wrap=canvas.parentElement;
+        // Create tooltip + crosshair if not already there
+        var tip=wrap.querySelector('.graph-tip');
+        if(!tip){tip=document.createElement('div');tip.className='graph-tip';wrap.appendChild(tip);}
+        var cross=wrap.querySelector('.graph-crosshair');
+        if(!cross){cross=document.createElement('div');cross.className='graph-crosshair';wrap.appendChild(cross);}
+
+        canvas.addEventListener('mousemove',function(e){
+          var rect=canvas.getBoundingClientRect();
+          var x=e.clientX-rect.left,W=rect.width;
+          var gW=W-g.pL-g.pR;
+          var frac=(x-g.pL)/gW;
+          var raceMin=frac*totMin-tOff;
+          raceMin=Math.round(Math.max(-30,Math.min(race.total,raceMin)));
+          var disc=getDisciplineAtTime(race.segs,raceMin);
+          var rows=g.rows(raceMin);
+          var h='<div style="font-weight:500;margin-bottom:2px">'+fmtHM(raceMin)+' <span style="color:rgba(255,255,255,.5);font-weight:400">'+disc+'</span></div>';
+          for(var r=0;r<rows.length;r++) h+='<div class="graph-tip-row"><div class="graph-tip-dot" style="background:'+rows[r].color+'"></div>'+rows[r].label+': <strong>'+rows[r].val+'</strong></div>';
+          tip.innerHTML=h;
+          tip.classList.add('show');
+          // Position
+          var tipW=tip.offsetWidth,tipH=tip.offsetHeight;
+          var tx=x+12,ty=e.clientY-rect.top-tipH-10;
+          if(tx+tipW>W)tx=x-tipW-12;
+          if(ty<0)ty=e.clientY-rect.top+16;
+          tip.style.left=tx+'px';tip.style.top=ty+'px';
+          // Crosshair
+          cross.style.left=x+'px';cross.style.height=(rect.height-g.pB)+'px';cross.style.top=g.pT+'px';cross.style.display='block';
+        });
+        canvas.addEventListener('mouseleave',function(){
+          tip.classList.remove('show');cross.style.display='none';
+        });
+      })(graphs[gi]);
     }
   }
 
