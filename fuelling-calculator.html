@@ -929,62 +929,99 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     // Packing list
     if(state.showPacking&&state.schedule.length>0){html+='<div style="margin-top:16px">';for(var pk=0;pk<legs.length;pk++){var pL3=legs[pk],pM={};for(var pki=0;pki<pL3.items.length;pki++){var pE=pL3.items[pki];if(pE.fromAid)continue;var pFd=getFoodById(pE.foodId);if(!pFd)continue;var pPo=pE.portion||1,ky=pE.foodId+'_'+pPo;if(!pM[ky]){var pPl=pPo===1?'':pPo===.5?' (\u00BD)':pPo<.3?' (\u00BC)':' (\u2153)';pM[ky]={name:pFd.name+pPl,icon:pFd.icon,qty:0};}pM[ky].qty++;}var pKs=Object.keys(pM);if(pKs.length===0)continue;html+='<div class="pack-card" style="margin-bottom:8px"><div class="pack-card-head">\uD83C\uDF92 Pack for '+pL3.name+'</div><div class="pack-items">';for(var pj=0;pj<pKs.length;pj++){var pk2=pM[pKs[pj]];html+='<div class="pack-item"><span class="pack-qty">'+pk2.qty+'\u00D7</span><span>'+pk2.icon+'</span><span class="pack-name">'+pk2.name+'</span></div>';}html+='</div></div>';}html+='</div>';}
 
-    // Bottle management (bike leg)
+    // Bottle management (bike leg) — track individual bottles
     if(state.showFluid&&state.schedule.length>0){
       var bikeSeg=null;for(var bs=0;bs<race.segs.length;bs++)if(race.segs[bs].name==='Bike'){bikeSeg=race.segs[bs];break;}
       if(bikeSeg){
-        var bCap=state.bikeBottles*state.bottleSize; // total ml on bike at start
+        var bSlots=state.bikeBottles,bSize=state.bottleSize;
+        var bCap=bSlots*bSize;
         var bItems=state.schedule.filter(function(e){return e.timeMin>=bikeSeg.start&&e.timeMin<bikeSeg.start+bikeSeg.dur;}).sort(function(a,b){return a.timeMin-b.timeMin;});
-        // Sim: track ml consumed from bottles, when to refill
         var bikeAidsB=[];for(var bai=0;bai<aids.length;bai++){if(aids[bai].discipline==='bike')bikeAidsB.push(aids[bai]);}
-        var bottleEvents=[],mlOnBike=bCap,mlUsed=0;
-        bottleEvents.push({time:bikeSeg.start,type:'start',ml:mlOnBike,label:'Start bike with '+state.bikeBottles+'\u00D7'+state.bottleSize+'ml = '+bCap+'ml'});
+
+        // Track individual bottles: [{label, ml, isCarb}]
+        // Start bottles are filled from scheduled liquid items (carb drinks)
+        var bottles=[];
+        // Find bike liquid items to determine starting bottle contents
+        var bikeLiquids=[];
+        for(var bli=0;bli<bItems.length;bli++){var blF=getFoodById(bItems[bli].foodId);if(blF&&blF.form==='liquid'&&blF.ml>0)bikeLiquids.push({entry:bItems[bli],food:blF});}
+        // Group scheduled liquids into bottles — each bottle can hold bSize ml
+        // Carb drinks get pre-loaded; remaining slots start as water
+        var carbMlNeeded=0;
+        for(var cm=0;cm<bikeLiquids.length;cm++){var cPo=bikeLiquids[cm].entry.portion||1;carbMlNeeded+=(bikeLiquids[cm].food.ml||0)*cPo;}
+        var carbBottles=Math.ceil(carbMlNeeded/bSize);
+        for(var cb=0;cb<Math.min(carbBottles,bSlots);cb++) bottles.push({label:'Carb drink',ml:bSize,isCarb:true});
+        for(var wb=bottles.length;wb<bSlots;wb++) bottles.push({label:'Water',ml:bSize,isCarb:false});
+
+        var bottleEvents=[],mlUsed=0;
+        var startLabels=[];for(var sl2=0;sl2<bottles.length;sl2++) startLabels.push(bottles[sl2].label+' ('+bottles[sl2].ml+'ml)');
+        bottleEvents.push({time:bikeSeg.start,type:'start',label:'Start: '+startLabels.join(' + ')});
+
         var nextAid=0;
         for(var bi=0;bi<bItems.length;bi++){
           var bE=bItems[bi],bF=getFoodById(bE.foodId);if(!bF)continue;
           var bPo=bE.portion||1,bMl=(bF.ml||0)*bPo;
-          // Check if aid station before this item
+
+          // Process aid stations that occur before this item
           while(nextAid<bikeAidsB.length&&bikeAidsB[nextAid].timeMin<=bE.timeMin){
             var aidT=bikeAidsB[nextAid];
-            var canFill=bCap-mlOnBike;
-            if(canFill>=state.bottleSize*0.5){
-              var fillAmt=Math.min(canFill,state.bottleSize);
-              bottleEvents.push({time:aidT.timeMin,type:'pickup',ml:fillAmt,label:'\u26F3 '+aidT.label+' — pick up '+fillAmt+'ml (drop empty)',onBike:mlOnBike+fillAmt});
-              mlOnBike+=fillAmt;
+            // Only pick up if we have an empty bottle slot (a bottle at 0ml)
+            var emptySlot=-1;
+            for(var es=0;es<bottles.length;es++){if(bottles[es].ml<=0){emptySlot=es;break;}}
+            if(emptySlot>=0){
+              bottles[emptySlot]={label:'Water (aid)',ml:bSize,isCarb:false};
+              var totalMl=0;for(var tm=0;tm<bottles.length;tm++)totalMl+=bottles[tm].ml;
+              bottleEvents.push({time:aidT.timeMin,type:'pickup',label:'\u26F3 '+aidT.label+' \u2014 drop empty, pick up water/PH1500 ('+bSize+'ml). On bike: '+Math.round(totalMl)+'ml'});
             } else {
-              bottleEvents.push({time:aidT.timeMin,type:'skip',ml:0,label:'\u26F3 '+aidT.label+' — bottles still '+Math.round(mlOnBike/bCap*100)+'% full, skip pickup',onBike:mlOnBike});
+              var totalMl2=0;for(var tm2=0;tm2<bottles.length;tm2++)totalMl2+=bottles[tm2].ml;
+              bottleEvents.push({time:aidT.timeMin,type:'skip',label:'\u26F3 '+aidT.label+' \u2014 no empty bottles, skip pickup ('+Math.round(totalMl2)+'ml on bike)'});
             }
             nextAid++;
           }
+
+          // Consume from bottles — drink from carb bottles first if item is a carb drink, else water
           if(bMl>0){
-            mlOnBike-=bMl;mlUsed+=bMl;
-            if(mlOnBike<0){
-              bottleEvents.push({time:bE.timeMin,type:'empty',ml:mlOnBike,label:fmtHM(bE.timeMin-bikeSeg.start)+' — OUT OF FLUID! '+Math.round(-mlOnBike)+'ml short',onBike:0});
-              mlOnBike=0;
+            mlUsed+=bMl;
+            var mlToDrain=bMl;
+            // Prefer draining matching type: carb items from carb bottles, water from water bottles
+            var isItemCarb=bF.carbs>0;
+            var drainOrder=[];
+            for(var d1=0;d1<bottles.length;d1++){if(bottles[d1].isCarb===isItemCarb&&bottles[d1].ml>0)drainOrder.push(d1);}
+            for(var d2=0;d2<bottles.length;d2++){if(bottles[d2].isCarb!==isItemCarb&&bottles[d2].ml>0)drainOrder.push(d2);}
+            for(var dr=0;dr<drainOrder.length&&mlToDrain>0;dr++){
+              var take=Math.min(bottles[drainOrder[dr]].ml,mlToDrain);
+              bottles[drainOrder[dr]].ml-=take;
+              mlToDrain-=take;
+            }
+            if(mlToDrain>0){
+              bottleEvents.push({time:bE.timeMin,type:'empty',label:fmtHM(bE.timeMin-bikeSeg.start)+' \u2014 OUT OF FLUID! '+Math.round(mlToDrain)+'ml short'});
             }
           }
         }
-        // Process remaining aids
+        // Remaining aid stations after last item
         while(nextAid<bikeAidsB.length){
           var aidT2=bikeAidsB[nextAid];
-          var canFill2=bCap-mlOnBike;
-          if(canFill2>=state.bottleSize*0.5){
-            bottleEvents.push({time:aidT2.timeMin,type:'pickup',ml:Math.min(canFill2,state.bottleSize),label:'\u26F3 '+aidT2.label+' — pick up bottle',onBike:mlOnBike+Math.min(canFill2,state.bottleSize)});
-            mlOnBike+=Math.min(canFill2,state.bottleSize);
+          var emptySlot2=-1;
+          for(var es2=0;es2<bottles.length;es2++){if(bottles[es2].ml<=0){emptySlot2=es2;break;}}
+          if(emptySlot2>=0){
+            bottles[emptySlot2]={label:'Water (aid)',ml:bSize,isCarb:false};
+            bottleEvents.push({time:aidT2.timeMin,type:'pickup',label:'\u26F3 '+aidT2.label+' \u2014 pick up water/PH1500'});
           }
           nextAid++;
         }
-        bottleEvents.push({time:bikeSeg.start+bikeSeg.dur,type:'end',ml:mlOnBike,label:'Finish bike with '+Math.round(mlOnBike)+'ml remaining'});
+        var finalMl=0;for(var fm=0;fm<bottles.length;fm++)finalMl+=bottles[fm].ml;
+        bottleEvents.push({time:bikeSeg.start+bikeSeg.dur,type:'end',label:'Finish bike with '+Math.round(finalMl)+'ml remaining'});
         var hasWarning=false;for(var bw=0;bw<bottleEvents.length;bw++)if(bottleEvents[bw].type==='empty')hasWarning=true;
+        var carbBCount=0,waterBCount=0;for(var bc=0;bc<bottles.length;bc++){if(bottles[bc].isCarb)carbBCount++;else waterBCount++;}
 
-        html+='<div style="margin-top:12px"><div class="race-card" style="border-left:3px solid '+(hasWarning?'var(--red)':'var(--bike)')+'"><div class="race-card-head"><div class="race-card-dot" style="background:var(--bike)"></div><div class="race-card-title">Bike Bottle Plan</div><div class="race-card-meta">'+state.bikeBottles+' bottles \u00D7 '+state.bottleSize+'ml = '+bCap+'ml</div></div>';
-        html+='<div style="font-size:11px;color:var(--ink2);margin-bottom:8px">Total bike fluid needed: <strong>'+mlUsed+'ml</strong> | Capacity: <strong>'+bCap+'ml</strong> | Bike aids: <strong>'+bikeAidsB.length+'</strong></div>';
-        if(hasWarning)html+='<div style="background:var(--red-bg);color:var(--red);font-size:11px;font-weight:500;padding:6px 10px;border-radius:4px;margin-bottom:8px">\u26A0 You run out of fluid! Add aid stations or increase bottle capacity.</div>';
+        html+='<div style="margin-top:12px"><div class="race-card" style="border-left:3px solid '+(hasWarning?'var(--red)':'var(--bike)')+'"><div class="race-card-head"><div class="race-card-dot" style="background:var(--bike)"></div><div class="race-card-title">Bike Bottle Plan</div><div class="race-card-meta">'+bSlots+' cages \u00D7 '+bSize+'ml</div></div>';
+        html+='<div style="font-size:11px;color:var(--ink2);margin-bottom:8px">Start: <strong>'+carbBCount+' carb</strong> + <strong>'+waterBCount+' water</strong> bottles | Fluid needed: <strong>'+mlUsed+'ml</strong> | Bike aids: <strong>'+bikeAidsB.length+'</strong></div>';
+        if(hasWarning)html+='<div style="background:var(--red-bg);color:var(--red);font-size:11px;font-weight:500;padding:6px 10px;border-radius:4px;margin-bottom:8px">\u26A0 You run out of fluid! Add more aid stations or bottle capacity.</div>';
+        html+='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;font-style:italic">Only picks up water/PH1500 at aid stations when a bottle is empty — never drops a bottle with carb drink in it.</div>';
         html+='<ul class="race-card-items">';
         for(var be=0;be<bottleEvents.length;be++){
           var ev=bottleEvents[be];
           var evCol=ev.type==='empty'?'var(--red)':ev.type==='pickup'?'var(--bike)':ev.type==='skip'?'var(--muted)':'var(--ink2)';
-          var evIcon=ev.type==='pickup'?'\uD83D\uDCA7':ev.type==='empty'?'\u26A0':ev.type==='skip'?'\u23ED':'\uD83C\uDFC1';
+          var evIcon=ev.type==='pickup'?'\uD83D\uDCA7':ev.type==='empty'?'\u26A0':ev.type==='skip'?'\u23ED':ev.type==='start'?'\uD83C\uDFC1':'\uD83C\uDFC1';
           var dist=Math.round(state.bikeSpeed*((ev.time-bikeSeg.start)/60));
           html+='<li style="color:'+evCol+'"><span style="font-family:\'DM Mono\',monospace;font-size:10px;min-width:38px">'+fmtHM(ev.time-bikeSeg.start)+'</span><span style="font-size:10px;color:var(--muted);min-width:32px">'+dist+'km</span><span>'+evIcon+' '+ev.label+'</span></li>';
         }
