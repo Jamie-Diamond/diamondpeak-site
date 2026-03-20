@@ -349,7 +349,13 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       {km:125,discipline:'bike',type:'full'},
       {km:157,discipline:'bike',type:'full'}
     ], schedule:[], customFoods:[], raceType:'tri',
-    shortlist:['pf30-chew','pf60-chew','sis-beta-chew','sis-ban-bar','maurten-d320','sis-beta-d','precision-h','water','hi5-caf-hit','salt-cap'], bodyWeight: 80, gelMode:'packet', sweatRate: 1000, bikeBottles:3, bottleSize:750,
+    shortlist:['pf30-chew','pf60-chew','sis-beta-chew','sis-ban-bar','maurten-d320','sis-beta-d','precision-h','water','hi5-caf-hit','salt-cap'], bodyWeight: 80, gelMode:'packet', sweatRate: 1000,
+    bikeCages:[
+      {foodId:'maurten-d320',ml:500},
+      {foodId:'hi5-caf-hit',ml:500},
+      {foodId:'precision-h',ml:600},
+      {foodId:'maurten-d320',ml:500}
+    ],
     showSodium:false, showFluid:true, showAid:true, showGraph:true,
     showPacking:true, showTopTube:true, showCaffeine:false,
     showEnergyGraph:true,
@@ -605,26 +611,18 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         else gelFoods.push(cf2); // gels
       }
 
-      // Dynamic carb drink cap based on what we can physically carry.
-      // Reserve at least 1 cage for water; remaining cages available for carb drinks.
-      // On short races (Olympic) this may allow 100% from drinks.
-      // On Ironman the bottle limit naturally caps drink contribution.
-      var maxCarbBottles=Math.max(0,state.bikeBottles-1); // reserve 1 for water
-      var maxDrinkMl=maxCarbBottles*state.bottleSize;
-      // Account for aid station refills: each aid can refill 1 empty bottle with water,
-      // freeing carb bottles to be consumed earlier. But carb bottles must be carried from start.
+      // Dynamic carb drink cap: calculated from what the user configured in bike cages.
+      // Count carbs available from the actual bottles on the bike.
       var drinkCarbsCap=0;
-      if(carbDrinks.length>0){
-        var avgCarbsPerMl=0;
-        for(var dci=0;dci<carbDrinks.length;dci++) avgCarbsPerMl+=carbDrinks[dci].carbs/(carbDrinks[dci].ml||500);
-        avgCarbsPerMl/=carbDrinks.length;
-        drinkCarbsCap=maxDrinkMl*avgCarbsPerMl;
+      for(var dcc=0;dcc<state.bikeCages.length;dcc++){
+        var cageF=getFoodById(state.bikeCages[dcc].foodId);
+        if(cageF&&cageF.carbs>0){
+          // Carbs in this bottle = (cage ml / drink serving ml) * carbs per serving
+          var servings=cageF.ml>0?state.bikeCages[dcc].ml/cageF.ml:0;
+          drinkCarbsCap+=cageF.carbs*servings;
+        }
       }
-      // If only drinks are selected (no solids/gels), allow 100% from drinks
-      var hasSolidsOrGels=solidFoods.length>0||gelFoods.length>0;
       var drinkShare=carbDrinks.length>0?Math.min(drinkCarbsCap,totalCarbs):0;
-      // If we also have solids/gels, limit drinks to their bottle capacity
-      if(hasSolidsOrGels&&drinkShare>drinkCarbsCap) drinkShare=drinkCarbsCap;
       var solidGelShare=totalCarbs-drinkShare;
 
       var allDoses=[]; // [{food, portion, carbsPerDose, isSolid}]
@@ -809,7 +807,27 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>Body weight (kg)</label><input type="number" id="bodyWt" min="30" max="150" step="1" value="'+state.bodyWeight+'"></div><div class="field"><label>Sweat rate (ml/hr)</label><input type="number" id="sweatRate" min="200" max="3000" step="50" value="'+state.sweatRate+'"></div>';
     if(state.showCaffeine) html+='<div class="field"><label>&nbsp;</label><div style="font-size:10px;color:var(--caf);font-family:\'DM Mono\',monospace">Caffeine: '+Math.round(state.bodyWeight*3)+'\u2013'+Math.round(state.bodyWeight*6)+' mg</div></div>';
     html+='</div>';
-    html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>Bike bottles</label><input type="number" id="bikeBottles" min="1" max="5" step="1" value="'+state.bikeBottles+'"></div><div class="field"><label>Bottle size (ml)</label><input type="number" id="bottleSize" min="250" max="1000" step="50" value="'+state.bottleSize+'"></div><div class="field"><label>&nbsp;</label><div style="font-size:10px;color:var(--bike);font-family:\'DM Mono\',monospace">Capacity: '+state.bikeBottles*state.bottleSize+'ml on bike</div></div></div>';
+    // Bike cage configurator
+    var totalBikeMl=0;for(var tbm=0;tbm<state.bikeCages.length;tbm++)totalBikeMl+=state.bikeCages[tbm].ml;
+    html+='<div style="margin-top:10px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px">';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-family:\'DM Mono\',monospace">\uD83D\uDEB4 Bike Cages ('+state.bikeCages.length+' bottles \u00B7 '+totalBikeMl+'ml)</div><button class="btn-sm" id="addCage">+ Cage</button></div>';
+    // Build drink options (all liquids from allFoods)
+    var drinkOpts='';for(var do2=0;do2<allFoods.length;do2++){if(allFoods[do2].form==='liquid')drinkOpts+='<option value="'+allFoods[do2].id+'">'+allFoods[do2].name+'</option>';}
+    for(var cg=0;cg<state.bikeCages.length;cg++){
+      var cage=state.bikeCages[cg],cgFood=getFoodById(cage.foodId);
+      var cgIsCarb=cgFood&&cgFood.carbs>0;
+      html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px" class="cage-row">';
+      html+='<span style="font-size:10px;font-family:\'DM Mono\',monospace;color:var(--muted);min-width:18px">'+(cg+1)+'</span>';
+      html+='<select class="cage-drink" data-cage="'+cg+'" style="flex:1;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--ink)">';
+      for(var do3=0;do3<allFoods.length;do3++){if(allFoods[do3].form==='liquid')html+='<option value="'+allFoods[do3].id+'"'+(cage.foodId===allFoods[do3].id?' selected':'')+'>'+allFoods[do3].name+'</option>';}
+      html+='</select>';
+      html+='<input type="number" class="cage-ml" data-cage="'+cg+'" min="250" max="1000" step="50" value="'+cage.ml+'" style="width:70px;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--ink);font-family:\'DM Mono\',monospace">';
+      html+='<span style="font-size:9px;color:var(--muted)">ml</span>';
+      if(cgFood)html+='<span style="font-size:9px;font-family:\'DM Mono\',monospace;color:'+(cgIsCarb?'var(--green)':'var(--blue)')+'">'+cgFood.carbs+'g '+(cgIsCarb?'\u26A1':'\uD83D\uDCA7')+'</span>';
+      html+='<button class="cage-rm btn-sm" data-cage="'+cg+'" style="padding:2px 6px;font-size:11px">\u00D7</button>';
+      html+='</div>';
+    }
+    html+='</div>';
     html+='</div>';
 
     // Summary
@@ -1016,55 +1034,20 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     if(state.showFluid&&state.schedule.length>0){
       var bikeSeg=null;for(var bs=0;bs<race.segs.length;bs++)if(race.segs[bs].name==='Bike'){bikeSeg=race.segs[bs];break;}
       if(bikeSeg){
-        var bSlots=state.bikeBottles,bSize=state.bottleSize;
-        var bCap=bSlots*bSize;
+        var bSlots=state.bikeCages.length;
         var bItems=state.schedule.filter(function(e){return e.timeMin>=bikeSeg.start&&e.timeMin<bikeSeg.start+bikeSeg.dur;}).sort(function(a,b){return a.timeMin-b.timeMin;});
         var bikeAidsB=[];for(var bai=0;bai<aids.length;bai++){if(aids[bai].discipline==='bike')bikeAidsB.push(aids[bai]);}
 
-        // ── Build bottles from the actual scheduled drinks ──
-        // Each scheduled liquid on the bike needs to come from a bottle you carry.
-        // Carb drinks (Maurten 320, Beta Fuel etc.) must be carried from the start.
-        // Water/plain electrolyte can be picked up at aid stations.
-        var bottles=[]; // [{label, ml, isCarb, foodId, items:[{timeMin,mlNeeded}]}]
-
-        // Collect all bike liquid items, grouped by foodId
-        var drinkPlan={}; // foodId -> [{timeMin, ml}]
-        for(var bli=0;bli<bItems.length;bli++){
-          var blF=getFoodById(bItems[bli].foodId);
-          if(!blF||blF.form!=='liquid'||!blF.ml)continue;
-          var blPo=bItems[bli].portion||1,blMl=(blF.ml||0)*blPo;
-          if(!drinkPlan[blF.id])drinkPlan[blF.id]=[];
-          drinkPlan[blF.id].push({timeMin:bItems[bli].timeMin,ml:blMl});
+        // ── Build bottles directly from user-configured cages ──
+        var bottles=[]; // [{label, ml, maxMl, isCarb, foodId}]
+        var totalCageMl=0;
+        for(var bc0=0;bc0<state.bikeCages.length;bc0++){
+          var cage=state.bikeCages[bc0],cageFood=getFoodById(cage.foodId);
+          var lbl=cageFood?cageFood.name:'Water';
+          var isCrb=cageFood&&cageFood.carbs>0;
+          bottles.push({label:lbl,ml:cage.ml,maxMl:cage.ml,isCarb:isCrb,foodId:cage.foodId});
+          totalCageMl+=cage.ml;
         }
-
-        // Assign carb drinks to bottles — pack into bSize bottles, earliest first
-        var carbDrinkIds=Object.keys(drinkPlan).filter(function(id){var f=getFoodById(id);return f&&f.carbs>0;});
-        var waterDrinkIds=Object.keys(drinkPlan).filter(function(id){var f=getFoodById(id);return f&&f.carbs===0;});
-
-        // For each carb drink type, pack servings into bottles
-        var bottleAssignments=[]; // [{foodId, label, totalMl, items:[{timeMin,ml}]}]
-        for(var cdi=0;cdi<carbDrinkIds.length;cdi++){
-          var cdId=carbDrinkIds[cdi],cdF=getFoodById(cdId),cdItems=drinkPlan[cdId];
-          var mlInBottle=0;
-          for(var ci2=0;ci2<cdItems.length;ci2++){
-            if(mlInBottle+cdItems[ci2].ml>bSize||mlInBottle===0){
-              if(mlInBottle>0||ci2===0) bottleAssignments.push({foodId:cdId,label:cdF.name,totalMl:0,items:[],isCarb:true});
-              mlInBottle=ci2===0&&mlInBottle===0?0:0;
-            }
-            var ba=bottleAssignments[bottleAssignments.length-1];
-            ba.items.push(cdItems[ci2]);
-            ba.totalMl+=cdItems[ci2].ml;
-            mlInBottle+=cdItems[ci2].ml;
-          }
-        }
-
-        // Create actual bottle objects — carb bottles first, then water to fill remaining cages
-        var tooManyBottles=bottleAssignments.length>bSlots;
-        for(var ba2=0;ba2<Math.min(bottleAssignments.length,bSlots);ba2++){
-          var assign=bottleAssignments[ba2];
-          bottles.push({label:assign.label,ml:bSize,isCarb:true,foodId:assign.foodId,plan:assign.items});
-        }
-        for(var wb=bottles.length;wb<bSlots;wb++) bottles.push({label:'Water',ml:bSize,isCarb:false,foodId:null,plan:[]});
 
         // Track bottle state over time for Gantt chart
         var bSnaps=[];
@@ -1086,8 +1069,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
             for(var es=0;es<bottles.length;es++){if(bottles[es].ml<=0){emptySlot=es;break;}}
             if(emptySlot>=0){
               var pickupLabel=aidT.type==='water'?'Water':'Water/PH1500';
-              bottles[emptySlot]={label:pickupLabel,ml:bSize,isCarb:false,foodId:null,plan:[]};
-              bottleEvents.push({time:aidT.timeMin,type:'pickup',label:'\u26F3 '+aidT.label+' \u2014 pick up '+pickupLabel+' ('+bSize+'ml)'});
+              var pickupMl=bottles[emptySlot].maxMl;
+              bottles[emptySlot]={label:pickupLabel,ml:pickupMl,maxMl:pickupMl,isCarb:false,foodId:null};
+              bottleEvents.push({time:aidT.timeMin,type:'pickup',label:'\u26F3 '+aidT.label+' \u2014 pick up '+pickupLabel+' ('+pickupMl+'ml)'});
             } else {
               bottleEvents.push({time:aidT.timeMin,type:'skip',label:'\u26F3 '+aidT.label+' \u2014 all bottles have fluid, skip'});
             }
@@ -1125,7 +1109,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
           for(var es2=0;es2<bottles.length;es2++){if(bottles[es2].ml<=0){emptySlot2=es2;break;}}
           if(emptySlot2>=0){
             var pickupLabel2=aidT2.type==='water'?'Water':'Water/PH1500';
-            bottles[emptySlot2]={label:pickupLabel2,ml:bSize,isCarb:false,foodId:null,plan:[]};
+            var pickupMl2=bottles[emptySlot2].maxMl;
+            bottles[emptySlot2]={label:pickupLabel2,ml:pickupMl2,maxMl:pickupMl2,isCarb:false,foodId:null};
             bottleEvents.push({time:aidT2.timeMin,type:'pickup',label:'\u26F3 '+aidT2.label+' \u2014 pick up '+pickupLabel2});
           }
           snapBottles(aidT2.timeMin);
@@ -1137,13 +1122,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var hasWarning=false;for(var bw=0;bw<bottleEvents.length;bw++)if(bottleEvents[bw].type==='empty')hasWarning=true;
         var carbBCount=0,waterBCount=0;for(var bc=0;bc<bottles.length;bc++){if(bottles[bc].isCarb)carbBCount++;else waterBCount++;}
 
-        // Warning if more carb drink bottles needed than cage slots
-        if(tooManyBottles) hasWarning=true;
-
-        html+='<div style="margin-top:12px"><div class="race-card" style="border-left:3px solid '+(hasWarning?'var(--red)':'var(--bike)')+'"><div class="race-card-head"><div class="race-card-dot" style="background:var(--bike)"></div><div class="race-card-title">Bike Bottle Plan</div><div class="race-card-meta">'+bSlots+' cages \u00D7 '+bSize+'ml</div></div>';
+        var cageDesc=state.bikeCages.map(function(c){var cf=getFoodById(c.foodId);return (cf?cf.name:'Water')+' '+c.ml+'ml';}).join(' + ');
+        html+='<div style="margin-top:12px"><div class="race-card" style="border-left:3px solid '+(hasWarning?'var(--red)':'var(--bike)')+'"><div class="race-card-head"><div class="race-card-dot" style="background:var(--bike)"></div><div class="race-card-title">Bike Bottle Plan</div><div class="race-card-meta">'+bSlots+' cages | '+totalCageMl+'ml</div></div>';
         html+='<div style="font-size:11px;color:var(--ink2);margin-bottom:8px">Start: <strong>'+carbBCount+' carb</strong> + <strong>'+waterBCount+' water</strong> bottles | Fluid needed: <strong>'+mlUsed+'ml</strong> | Bike aids: <strong>'+bikeAidsB.length+'</strong></div>';
-        if(tooManyBottles)html+='<div style="background:var(--red-bg);color:var(--red);font-size:11px;font-weight:500;padding:6px 10px;border-radius:4px;margin-bottom:8px">\u26A0 Need '+bottleAssignments.length+' carb bottles but only '+bSlots+' cages! Reduce carb drinks or add cages.</div>';
-        if(hasWarning&&!tooManyBottles)html+='<div style="background:var(--red-bg);color:var(--red);font-size:11px;font-weight:500;padding:6px 10px;border-radius:4px;margin-bottom:8px">\u26A0 You run out of fluid! Add more aid stations or bottle capacity.</div>';
+        html+='<div style="font-size:10px;color:var(--muted);margin-bottom:8px">'+cageDesc+'</div>';
+        if(hasWarning)html+='<div style="background:var(--red-bg);color:var(--red);font-size:11px;font-weight:500;padding:6px 10px;border-radius:4px;margin-bottom:8px">\u26A0 You run out of fluid! Add more aid stations or bottle capacity.</div>';
 
         // ── Bottle Gantt chart ──
         var bikeDist=state.bikeDist,bikeDur=bikeSeg.dur;
@@ -1159,7 +1142,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
             var s1=bSnaps[sn2],s2=bSnaps[sn2+1];
             var pctStart=((s1.time-bikeSeg.start)/bikeDur)*100;
             var pctEnd=((s2.time-bikeSeg.start)/bikeDur)*100;
-            var fill=s1.levels[gi2]/bSize;
+            var cageMax=gi2<state.bikeCages.length?state.bikeCages[gi2].ml:500;
+            var fill=s1.levels[gi2]/cageMax;
             var isC=s1.labels[gi2]&&s1.labels[gi2].indexOf('\u26A1')>=0;
             var segCol=isC?'rgba(39,174,96,'+Math.max(0.15,fill)+')':'rgba(41,128,185,'+Math.max(0.15,fill)+')';
             if(fill<=0) segCol='rgba(181,58,30,0.1)';
@@ -1512,10 +1496,15 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     if(bwEl)bwEl.addEventListener('input',function(){state.bodyWeight=+this.value||80;render();});
     var srEl=document.getElementById('sweatRate');
     if(srEl)srEl.addEventListener('input',function(){state.sweatRate=+this.value||1000;render();});
-    var bbEl=document.getElementById('bikeBottles');
-    if(bbEl)bbEl.addEventListener('input',function(){state.bikeBottles=+this.value||3;render();});
-    var bsEl=document.getElementById('bottleSize');
-    if(bsEl)bsEl.addEventListener('input',function(){state.bottleSize=+this.value||750;render();});
+    // Bike cage events
+    var cageDrinks=document.querySelectorAll('.cage-drink');
+    for(var cd=0;cd<cageDrinks.length;cd++)cageDrinks[cd].addEventListener('change',function(){state.bikeCages[+this.getAttribute('data-cage')].foodId=this.value;render();});
+    var cageMls=document.querySelectorAll('.cage-ml');
+    for(var cm2=0;cm2<cageMls.length;cm2++)cageMls[cm2].addEventListener('change',function(){state.bikeCages[+this.getAttribute('data-cage')].ml=+this.value||500;render();});
+    var cageRms=document.querySelectorAll('.cage-rm');
+    for(var cr=0;cr<cageRms.length;cr++)cageRms[cr].addEventListener('click',function(){state.bikeCages.splice(+this.getAttribute('data-cage'),1);render();});
+    var addCageBtn=document.getElementById('addCage');
+    if(addCageBtn)addCageBtn.addEventListener('click',function(){state.bikeCages.push({foodId:'water',ml:500});render();});
 
     var aBtn=document.getElementById('addAid');
     if(aBtn)aBtn.addEventListener('click',function(){var km=+document.getElementById('aidKm').value,d=document.getElementById('aidDisc').value,t=document.getElementById('aidType').value;if(km>0){state.aidStations.push({km:km,discipline:d,type:t});state.aidStations.sort(function(a,b){return a.km-b.km;});render();}});
