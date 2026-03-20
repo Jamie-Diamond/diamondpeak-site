@@ -88,6 +88,7 @@
   .disc-bike{background:rgba(39,174,96,.12);color:var(--bike)}
   .disc-run{background:rgba(230,126,34,.12);color:var(--run)}
   .disc-t1,.disc-t2,.disc-pre-race{background:rgba(127,140,141,.12);color:var(--t-col)}
+  .disc-breakfast{background:rgba(184,134,11,.12);color:#b8860b}
   .time-input-sm{width:56px;height:28px;border:1px solid var(--border);border-radius:3px;padding:0 4px;font-family:'DM Mono',monospace;font-size:11px;text-align:center;outline:none;background:#fff}
   .time-input-sm:focus{border-color:var(--ink)}
   .graph-wrap{position:relative;width:100%;height:280px;margin-top:10px;background:#fff;border:1px solid var(--border);border-radius:6px;overflow:hidden}
@@ -382,6 +383,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   }
 
   function getDisciplineAtTime(segs,t){
+    if(t<-60)return 'Breakfast';
     if(t<0)return 'Pre-Race';
     for(var i=0;i<segs.length;i++) if(t>=segs[i].start&&t<segs[i].start+segs[i].dur) return segs[i].name;
     return segs.length>0?segs[segs.length-1].name:'';
@@ -396,7 +398,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   function fmtTime(m){if(m<0)m=0;var h=Math.floor(m/60),mi=Math.floor(m%60),s=Math.round((m-Math.floor(m))*60);return h>0?h+':'+String(mi).padStart(2,'0')+':'+String(s).padStart(2,'0'):mi+':'+String(s).padStart(2,'0');}
   function fmtHM(m){var h=Math.floor(m/60),mi=Math.round(m%60);if(h>0&&mi>0)return h+'h'+String(mi).padStart(2,'0');if(h>0)return h+'h';return mi+"'";}
 
-  var PRE_RACE_OFFSET=30;
+  var PRE_RACE_OFFSET=120; // supports breakfast at -2hrs
 
   // Rolling 60-min window for carbs
   function calcAbsorption(totalMin){
@@ -515,7 +517,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   function generateStrategy(legName,legStart,legDur,strat){
     // Remove existing items for this leg
     state.schedule = state.schedule.filter(function(e){
-      if(legName==='Pre-Race') return e.timeMin >= 0;
+      if(legName==='Pre-Race') return !(e.timeMin >= -60 && e.timeMin < 0);
+      if(legName==='Breakfast') return !(e.timeMin >= -120 && e.timeMin < -60);
       return !(e.timeMin >= legStart && e.timeMin < legStart + legDur);
     });
     if(legDur<=0)return;
@@ -525,8 +528,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     if(foods.length===0)return;
 
     var legHrs=legDur/60;
-    var startT=legName==='Pre-Race'?-25:legStart+5;
-    var endT=legName==='Pre-Race'?-2:legStart+legDur-2;
+    var startT=legStart+3;
+    var endT=legStart+legDur-2;
 
     // Separate foods by role
     var carbFoods=[],fluidFoods=[],sodiumFoods=[],cafFoods=[];
@@ -707,7 +710,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   // Get available legs for strategy builder
   function getStratLegs(race){
     var legs=[];
-    legs.push({name:'Pre-Race',start:-30,dur:30,color:'#7f8c8d'});
+    legs.push({name:'Breakfast',start:-120,dur:60,color:'#b8860b'});
+    legs.push({name:'Pre-Race',start:-60,dur:60,color:'#7f8c8d'});
     for(var i=0;i<race.segs.length;i++){
       var s=race.segs[i];
       if(s.name==='Swim')continue; // exclude swim
@@ -805,10 +809,10 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     for(var sl=0;sl<stratLegs.length;sl++){
       var sLeg=stratLegs[sl];
       if(!state.strategies[sLeg.name]){
-        var defCarb=sLeg.name==='Pre-Race'?30:sLeg.name==='Bike'?95:sLeg.name==='Run'?60:sLeg.name==='T1'||sLeg.name==='T2'?0:70;
-        var defFluid=sLeg.name==='Pre-Race'?200:state.sweatRate;
-        var defNa=sLeg.name==='Pre-Race'?200:1500;
-        var defCaf=sLeg.name==='Pre-Race'?0:sLeg.name==='Bike'?Math.round(state.bodyWeight*6*0.6):sLeg.name==='Run'?Math.round(state.bodyWeight*6*0.4):0;
+        var defCarb=sLeg.name==='Breakfast'?80:sLeg.name==='Pre-Race'?30:sLeg.name==='Bike'?95:sLeg.name==='Run'?60:sLeg.name==='T1'||sLeg.name==='T2'?0:70;
+        var defFluid=sLeg.name==='Breakfast'?500:sLeg.name==='Pre-Race'?200:state.sweatRate;
+        var defNa=sLeg.name==='Breakfast'?300:sLeg.name==='Pre-Race'?200:1500;
+        var defCaf=sLeg.name==='Breakfast'?0:sLeg.name==='Pre-Race'?0:sLeg.name==='Bike'?Math.round(state.bodyWeight*6*0.6):sLeg.name==='Run'?Math.round(state.bodyWeight*6*0.4):0;
         state.strategies[sLeg.name]={foods:[],target:defCarb,fluidTarget:defFluid,sodiumTarget:defNa,cafTarget:defCaf};
       }
       var strat=state.strategies[sLeg.name];
@@ -892,10 +896,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
 
     /* 6. RACE DAY CARDS */
     html+='<div id="printSection"><div class="sec-head"><span class="sec-tag">Race Day Cards</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Per-leg fuelling \u2014 print for race day</div>';
-    var legColors={'Pre-Race':'#7f8c8d','Swim':'#2980b9','T1':'#7f8c8d','Bike':'#27ae60','T2':'#7f8c8d','Run':'#e67e22'};
+    var legColors={'Breakfast':'#b8860b','Pre-Race':'#7f8c8d','Swim':'#2980b9','T1':'#7f8c8d','Bike':'#27ae60','T2':'#7f8c8d','Run':'#e67e22'};
     var legs=[],sortedAll=state.schedule.slice().sort(function(a,b){return a.timeMin-b.timeMin;});
-    var preItems=[];for(var pr2=0;pr2<sortedAll.length;pr2++)if(sortedAll[pr2].timeMin<0)preItems.push(sortedAll[pr2]);
-    if(preItems.length>0)legs.push({name:'Pre-Race',dur:30,start:-30,items:preItems,color:'#7f8c8d',dist:0});
+    var bfItems=[],preItems=[];for(var pr2=0;pr2<sortedAll.length;pr2++){if(sortedAll[pr2].timeMin<-60)bfItems.push(sortedAll[pr2]);else if(sortedAll[pr2].timeMin<0)preItems.push(sortedAll[pr2]);}
+    if(bfItems.length>0)legs.push({name:'Breakfast',dur:60,start:-120,items:bfItems,color:'#b8860b',dist:0});
+    if(preItems.length>0)legs.push({name:'Pre-Race',dur:60,start:-60,items:preItems,color:'#7f8c8d',dist:0});
     for(var lg=0;lg<race.segs.length;lg++){var s2=race.segs[lg],li2=[];for(var li=0;li<sortedAll.length;li++){var t2=sortedAll[li].timeMin;if(t2>=0&&t2>=s2.start&&t2<s2.start+s2.dur)li2.push(sortedAll[li]);}legs.push({name:s2.name,dur:s2.dur,start:s2.start,dist:s2.dist,items:li2,color:s2.color});}
 
     html+='<div class="race-cards">';
@@ -939,7 +944,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       html+='</div>';
 
       if(leg.items.length===0)html+='<div class="race-card-empty">No fuelling scheduled</div>';
-      else{html+='<ul class="race-card-items">';for(var ri=0;ri<leg.items.length;ri++){var rI=leg.items[ri],rF=getFoodById(rI.foodId);if(!rF)continue;var rP=rI.portion||1,relTm=rI.timeMin-leg.start;var tL=leg.name==='Pre-Race'?(Math.round(rI.timeMin)+"'"):fmtHM(relTm)+' in';var pL2=rP===1?'':rP===.5?' (\u00BD)':rP<.3?' (\u00BC)':' (\u2153)';var rC2=Math.round(rF.carbs*rP),rMl=Math.round((rF.ml||0)*rP),rNa2=Math.round((rF.na||0)*rP),rCaf=Math.round((rF.caf||0)*rP);var dI=getDistAtTime(race.segs,rI.timeMin);html+='<li><span class="item-time">'+tL+'</span>';if(dI.dist>0)html+='<span class="item-dist">'+dI.dist+'km</span>';html+='<span class="item-name">'+rF.icon+' '+rF.name+pL2+'</span>';if(rI.fromAid)html+='<span class="item-aid">\u26F3</span>';html+='<span class="item-carbs">'+rC2+'g';if(state.showFluid&&rMl>0)html+=' <span style="color:var(--blue);font-size:9px">'+rMl+'ml</span>';if(state.showSodium&&rNa2>0)html+=' <span style="color:#e8a838;font-size:9px">'+rNa2+'mg</span>';if(state.showCaffeine&&rCaf>0)html+=' <span style="color:var(--caf);font-size:9px">'+rCaf+'mg\u2615</span>';html+='</span></li>';}html+='</ul>';}
+      else{html+='<ul class="race-card-items">';for(var ri=0;ri<leg.items.length;ri++){var rI=leg.items[ri],rF=getFoodById(rI.foodId);if(!rF)continue;var rP=rI.portion||1,relTm=rI.timeMin-leg.start;var tL=(leg.name==='Pre-Race'||leg.name==='Breakfast')?(Math.round(rI.timeMin)+"'"):fmtHM(relTm)+' in';var pL2=rP===1?'':rP===.5?' (\u00BD)':rP<.3?' (\u00BC)':' (\u2153)';var rC2=Math.round(rF.carbs*rP),rMl=Math.round((rF.ml||0)*rP),rNa2=Math.round((rF.na||0)*rP),rCaf=Math.round((rF.caf||0)*rP);var dI=getDistAtTime(race.segs,rI.timeMin);html+='<li><span class="item-time">'+tL+'</span>';if(dI.dist>0)html+='<span class="item-dist">'+dI.dist+'km</span>';html+='<span class="item-name">'+rF.icon+' '+rF.name+pL2+'</span>';if(rI.fromAid)html+='<span class="item-aid">\u26F3</span>';html+='<span class="item-carbs">'+rC2+'g';if(state.showFluid&&rMl>0)html+=' <span style="color:var(--blue);font-size:9px">'+rMl+'ml</span>';if(state.showSodium&&rNa2>0)html+=' <span style="color:#e8a838;font-size:9px">'+rNa2+'mg</span>';if(state.showCaffeine&&rCaf>0)html+=' <span style="color:var(--caf);font-size:9px">'+rCaf+'mg\u2615</span>';html+='</span></li>';}html+='</ul>';}
       html+='</div>';
     }
     html+='</div>';
@@ -1151,7 +1156,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var ctx=c.getContext('2d');ctx.scale(dpr,dpr);var W=w.clientWidth,H=w.clientHeight;
     var pL=40,pR=10,pT=16,pB=36,gW=W-pL-pR,gH=H-pT-pB;
     var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
-    var tOff=hasPre?30:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
+    var tOff=hasPre?120:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
     var sI=hasPre?0:OFF,eI=Math.min(abs.minutes,Math.ceil(race.total)+OFF+1);
     var mx=100;for(var mv=sI;mv<eI;mv++){var cv=abs.glucose[mv]+abs.fructose[mv];if(cv>mx)mx=cv;}
     mx=Math.ceil(mx/20)*20+20;if(mx<100)mx=100;
@@ -1178,7 +1183,12 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var step=race.total>360?60:race.total>120?30:15;
     ctx.fillStyle='#9a9080';ctx.font='10px "DM Mono",monospace';ctx.textAlign='center';
     for(var t3=0;t3<=race.total;t3+=step){ctx.fillText(fmtHM(t3),xAt(t3),H-pB+16);ctx.strokeStyle='#eee9df';ctx.beginPath();ctx.moveTo(xAt(t3),pT);ctx.lineTo(xAt(t3),pT+gH);ctx.stroke();}
-    if(hasPre){ctx.fillStyle='#9a9080';ctx.fillText("-30'",xAt(-30),H-pB+16);ctx.fillText("-15'",xAt(-15),H-pB+16);ctx.fillStyle='rgba(127,140,141,.06)';ctx.fillRect(xAt(-tOff),pT,xAt(0)-xAt(-tOff),gH);ctx.fillStyle='rgba(127,140,141,.4)';ctx.font='500 9px "DM Mono",monospace';ctx.textAlign='center';ctx.fillText('Pre-Race',(xAt(-tOff)+xAt(0))/2,pT+12);ctx.strokeStyle='rgba(24,22,15,.3)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(xAt(0),pT);ctx.lineTo(xAt(0),pT+gH);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(24,22,15,.5)';ctx.font='8px "DM Mono",monospace';ctx.fillText('START',xAt(0),pT+gH+24);}
+    if(hasPre){ctx.fillStyle='#9a9080';ctx.fillText("-2h",xAt(-120),H-pB+16);ctx.fillText("-1h",xAt(-60),H-pB+16);ctx.fillText("-30'",xAt(-30),H-pB+16);
+      ctx.fillStyle='rgba(184,134,11,.05)';ctx.fillRect(xAt(-120),pT,xAt(-60)-xAt(-120),gH);ctx.fillStyle='rgba(127,140,141,.06)';ctx.fillRect(xAt(-60),pT,xAt(0)-xAt(-60),gH);
+      ctx.fillStyle='rgba(184,134,11,.4)';ctx.font='500 9px "DM Mono",monospace';ctx.textAlign='center';ctx.fillText('Breakfast',(xAt(-120)+xAt(-60))/2,pT+12);
+      ctx.fillStyle='rgba(127,140,141,.4)';ctx.fillText('Pre-Race',(xAt(-60)+xAt(0))/2,pT+12);
+      ctx.strokeStyle='rgba(24,22,15,.15)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(xAt(-60),pT);ctx.lineTo(xAt(-60),pT+gH);ctx.stroke();
+      ctx.strokeStyle='rgba(24,22,15,.3)';ctx.beginPath();ctx.moveTo(xAt(0),pT);ctx.lineTo(xAt(0),pT+gH);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(24,22,15,.5)';ctx.font='8px "DM Mono",monospace';ctx.fillText('START',xAt(0),pT+gH+24);}
     if(state.showAid){for(var ai=0;ai<aids.length;ai++){var ax=xAt(aids[ai].timeMin);ctx.strokeStyle='rgba(181,58,30,.4)';ctx.lineWidth=1;ctx.setLineDash([2,2]);ctx.beginPath();ctx.moveTo(ax,pT);ctx.lineTo(ax,pT+gH);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#b53a1e';ctx.beginPath();ctx.arc(ax,pT+gH+6,3,0,Math.PI*2);ctx.fill();ctx.font='8px "DM Mono",monospace';ctx.textAlign='center';ctx.fillText(aids[ai].label,ax,pT+gH+16);}}
     // Curves
     if(abs.minutes>1&&state.schedule.length>0){
@@ -1196,7 +1206,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var ctx=c.getContext('2d');ctx.scale(dpr,dpr);var W=w.clientWidth,H=w.clientHeight;
     var pL=46,pR=10,pT=12,pB=30,gW=W-pL-pR,gH=H-pT-pB;
     var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
-    var tOff=hasPre?30:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
+    var tOff=hasPre?120:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
     var sI=hasPre?0:OFF,eI=Math.min(len,Math.ceil(race.total)+OFF+1);
     var mx=10;for(var mv=sI;mv<eI;mv++)if(data[mv]>mx)mx=data[mv];
     mx=Math.ceil(mx/50)*50+50;if(mx<100)mx=100;
@@ -1222,7 +1232,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var ctx=c.getContext('2d');ctx.scale(dpr,dpr);var W=w.clientWidth,H=w.clientHeight;
     var pL=50,pR=10,pT=16,pB=36,gW=W-pL-pR,gH=H-pT-pB;
     var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
-    var tOff=hasPre?30:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
+    var tOff=hasPre?120:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
     var sI=hasPre?0:OFF,eI=Math.min(en.minutes,Math.ceil(race.total)+OFF+1);
     // Find max value
     var mx=100;for(var mv=sI;mv<eI;mv++){if(en.burned[mv]>mx)mx=en.burned[mv];if(en.consumed[mv]>mx)mx=en.consumed[mv];}
@@ -1237,7 +1247,10 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     ctx.save();ctx.translate(12,pT+gH/2);ctx.rotate(-Math.PI/2);ctx.fillStyle='#9a9080';ctx.font='9px "DM Mono",monospace';ctx.textAlign='center';ctx.fillText('kcal',0,0);ctx.restore();
     var stp=race.total>360?60:race.total>120?30:15;ctx.fillStyle='#9a9080';ctx.font='10px "DM Mono",monospace';ctx.textAlign='center';
     for(var t3=0;t3<=race.total;t3+=stp){ctx.fillText(fmtHM(t3),xAt(t3),H-pB+16);ctx.strokeStyle='#eee9df';ctx.beginPath();ctx.moveTo(xAt(t3),pT);ctx.lineTo(xAt(t3),pT+gH);ctx.stroke();}
-    if(hasPre){ctx.fillStyle='#9a9080';ctx.fillText("-30'",xAt(-30),H-pB+16);ctx.fillText("-15'",xAt(-15),H-pB+16);ctx.fillStyle='rgba(127,140,141,.06)';ctx.fillRect(xAt(-tOff),pT,xAt(0)-xAt(-tOff),gH);ctx.strokeStyle='rgba(24,22,15,.3)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(xAt(0),pT);ctx.lineTo(xAt(0),pT+gH);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(24,22,15,.5)';ctx.font='8px "DM Mono",monospace';ctx.fillText('START',xAt(0),pT+gH+24);}
+    if(hasPre){ctx.fillStyle='#9a9080';ctx.fillText("-2h",xAt(-120),H-pB+16);ctx.fillText("-1h",xAt(-60),H-pB+16);ctx.fillText("-30'",xAt(-30),H-pB+16);
+      ctx.fillStyle='rgba(184,134,11,.05)';ctx.fillRect(xAt(-120),pT,xAt(-60)-xAt(-120),gH);ctx.fillStyle='rgba(127,140,141,.06)';ctx.fillRect(xAt(-60),pT,xAt(0)-xAt(-60),gH);
+      ctx.strokeStyle='rgba(24,22,15,.15)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(xAt(-60),pT);ctx.lineTo(xAt(-60),pT+gH);ctx.stroke();
+      ctx.strokeStyle='rgba(24,22,15,.3)';ctx.beginPath();ctx.moveTo(xAt(0),pT);ctx.lineTo(xAt(0),pT+gH);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(24,22,15,.5)';ctx.font='8px "DM Mono",monospace';ctx.fillText('START',xAt(0),pT+gH+24);}
     // Deficit fill (area between burned and consumed)
     ctx.fillStyle='rgba(192,57,43,.08)';
     ctx.beginPath();
@@ -1272,7 +1285,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   function setupTooltips(race,abs,fl,caf,energy){
     var OFF=PRE_RACE_OFFSET;
     var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
-    var tOff=hasPre?30:0,totMin=Math.max(race.total+tOff,60);
+    var tOff=hasPre?120:0,totMin=Math.max(race.total+tOff,60);
 
     // Graph configs: canvasId → data reader
     var graphs=[];
@@ -1310,7 +1323,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
           var gW=W-g.pL-g.pR;
           var frac=(x-g.pL)/gW;
           var raceMin=frac*totMin-tOff;
-          raceMin=Math.round(Math.max(-30,Math.min(race.total,raceMin)));
+          raceMin=Math.round(Math.max(-PRE_RACE_OFFSET,Math.min(race.total,raceMin)));
           var disc=getDisciplineAtTime(race.segs,raceMin);
           var rows=g.rows(raceMin);
           var h='<div style="font-weight:500;margin-bottom:2px">'+fmtHM(raceMin)+' <span style="color:rgba(255,255,255,.5);font-weight:400">'+disc+'</span></div>';
@@ -1376,9 +1389,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
 
     // Strategy sliders + number inputs (both update state)
     var sSliders=document.querySelectorAll('.strat-slider');
-    for(var ss=0;ss<sSliders.length;ss++)sSliders[ss].addEventListener('input',function(){var leg=this.getAttribute('data-leg'),field=this.getAttribute('data-field');state.strategies[leg][field]=+this.value;render();});
+    for(var ss=0;ss<sSliders.length;ss++)sSliders[ss].addEventListener('input',function(){var leg=this.getAttribute('data-leg'),field=this.getAttribute('data-field');if(!state.strategies[leg])return;state.strategies[leg][field]=+this.value;render();});
     var sNums=document.querySelectorAll('.strat-num');
-    for(var sn=0;sn<sNums.length;sn++)sNums[sn].addEventListener('change',function(){var leg=this.getAttribute('data-leg'),field=this.getAttribute('data-field');state.strategies[leg][field]=+this.value||0;render();});
+    for(var sn=0;sn<sNums.length;sn++)sNums[sn].addEventListener('change',function(){var leg=this.getAttribute('data-leg'),field=this.getAttribute('data-field');if(!state.strategies[leg])return;state.strategies[leg][field]=+this.value||0;render();});
 
     // Strategy food toggles
     var sFBtns=document.querySelectorAll('.strat-food-btn');
