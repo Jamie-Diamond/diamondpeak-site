@@ -614,10 +614,10 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         return 1;
       }
 
-      // Build the rotation: one dose of each carb food (solids, then gels, then drinks)
-      var rotation=[];
+      // Split carb foods: solids are sequential (finish one before starting next),
+      // gels and drinks rotate freely between solid doses.
+      var solidQ=[],nonSolidRot=[];
       var drinkMlUsed={}; // cumulative ml consumed per drink foodId
-      // Calculate drink bottle capacity from bike cages
       var drinkMlCap={};
       for(var dcc=0;dcc<state.bikeCages.length;dcc++){
         var cageF=getFoodById(state.bikeCages[dcc].foodId);
@@ -627,31 +627,60 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       }
       for(var ri=0;ri<carbFoods.length;ri++){
         var rf=carbFoods[ri],rp=calcPortion(rf);
-        rotation.push({food:rf,portion:rp,carbsPerDose:rf.carbs*rp});
+        var dose={food:rf,portion:rp,carbsPerDose:rf.carbs*rp};
+        if(rf.form==='solid') solidQ.push(dose);
+        else nonSolidRot.push(dose);
         if(rf.form==='liquid') drinkMlUsed[rf.id]=0;
       }
 
-      // Repeat the rotation, skipping exhausted drinks, until carbs target is met
+      // Build dose list: solids are sequential, gels/drinks rotate between them.
+      // Pattern: solid, gel/drink, solid, gel/drink, ... until each solid's share is done.
       var allDoses=[];
       var carbsAccum=0;
-      var rotIdx=0,skips=0;
+      var solidIdx=0,nsIdx=0;
+      var solidDosesLeft=0; // how many doses remain for current solid
+      var hasSolids=solidQ.length>0,hasNS=nonSolidRot.length>0;
+      // Each solid gets an equal share of the solid/gel carb budget
+      var solidShare=hasSolids?(totalCarbs*(solidQ.length/(solidQ.length+nonSolidRot.length)))/solidQ.length:0;
+
       while(carbsAccum<totalCarbs&&allDoses.length<200){
-        var slot=rotation[rotIdx%rotation.length];
-        // Check if this drink has been exhausted
-        if(slot.food.form==='liquid'){
-          var mlPerDose=(slot.food.ml||0)*slot.portion;
-          var cap=drinkMlCap[slot.food.id];
-          if(typeof cap!=='undefined'&&(drinkMlUsed[slot.food.id]||0)+mlPerDose>cap){
-            // Drink exhausted — skip it
-            rotIdx++;skips++;
-            if(skips>=rotation.length)break; // all items exhausted
-            continue;
+        var placed=false;
+        // Place a solid dose if one is active
+        if(hasSolids&&solidIdx<solidQ.length){
+          if(solidDosesLeft<=0){
+            // Start next solid: calculate how many doses to fill its share
+            var sd=solidQ[solidIdx];
+            solidDosesLeft=sd.carbsPerDose>0?Math.max(1,Math.round(solidShare/sd.carbsPerDose)):1;
           }
-          drinkMlUsed[slot.food.id]=(drinkMlUsed[slot.food.id]||0)+mlPerDose;
+          allDoses.push(solidQ[solidIdx]);
+          carbsAccum+=solidQ[solidIdx].carbsPerDose;
+          solidDosesLeft--;
+          if(solidDosesLeft<=0) solidIdx++;
+          placed=true;
         }
-        allDoses.push(slot);
-        carbsAccum+=slot.carbsPerDose;
-        rotIdx++;skips=0;
+        if(carbsAccum>=totalCarbs)break;
+        // Place a gel/drink dose (rotate), skipping exhausted drinks
+        if(hasNS){
+          var nsSkips=0;
+          while(nsSkips<nonSolidRot.length){
+            var ns=nonSolidRot[nsIdx%nonSolidRot.length];
+            if(ns.food.form==='liquid'){
+              var mlPerDose=(ns.food.ml||0)*ns.portion;
+              var cap=drinkMlCap[ns.food.id];
+              if(typeof cap!=='undefined'&&(drinkMlUsed[ns.food.id]||0)+mlPerDose>cap){
+                nsIdx++;nsSkips++;continue; // exhausted
+              }
+              drinkMlUsed[ns.food.id]=(drinkMlUsed[ns.food.id]||0)+mlPerDose;
+            }
+            allDoses.push(ns);
+            carbsAccum+=ns.carbsPerDose;
+            nsIdx++;
+            placed=true;
+            break;
+          }
+          if(nsSkips>=nonSolidRot.length) hasNS=false; // all drinks exhausted
+        }
+        if(!placed)break;
       }
 
       // Space all doses evenly across the leg, respecting MIN_GAP
@@ -1043,26 +1072,25 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
           // Process aid stations before this item
           while(nextAid<bikeAidsB.length&&bikeAidsB[nextAid].timeMin<=bE.timeMin){
             var aidT=bikeAidsB[nextAid];
-            // Calculate ALL fluid needed until next aid (or end of bike)
-            var nextAidTime=nextAid+1<bikeAidsB.length?bikeAidsB[nextAid+1].timeMin:bikeSeg.start+bikeSeg.dur;
+            // Calculate ALL fluid needed until END of bike (not just next aid)
             var fluidNeeded=0;
             for(var fn=bi;fn<bItems.length;fn++){
-              if(bItems[fn].timeMin>nextAidTime)break;
               var fnF=getFoodById(bItems[fn].foodId);
               if(fnF&&fnF.ml) fluidNeeded+=(fnF.ml||0)*(bItems[fn].portion||1);
             }
             var totalFluid=0;for(var tf=0;tf<bottles.length;tf++)totalFluid+=bottles[tf].ml;
-            var willRunOut=fluidNeeded>totalFluid;
-            if(willRunOut){
-              // Refill ALL empty or low (<25%) non-carb bottles at this stop
-              var refilled=[];
-              for(var es=0;es<bottles.length;es++){
-                var lowThresh=bottles[es].maxMl*0.25;
-                if(bottles[es].ml<=lowThresh){
+            var deficit=fluidNeeded-totalFluid;
+            if(deficit>0){
+              // Only refill enough non-carb bottles to cover the deficit
+              var refilled=[],mlAdded=0;
+              for(var es=0;es<bottles.length&&mlAdded<deficit;es++){
+                if(bottles[es].isCarb)continue; // never swap out carb bottles
+                var canAdd=bottles[es].maxMl-bottles[es].ml;
+                if(canAdd>0){
                   var pickupLabel=aidT.type==='water'?'Water':'PH1500';
                   var pickupId=aidT.type==='water'?'water':'precision-h';
-                  var pickupMl=bottles[es].maxMl;
-                  bottles[es]={label:pickupLabel,ml:pickupMl,maxMl:pickupMl,isCarb:false,foodId:pickupId};
+                  bottles[es]={label:pickupLabel,ml:bottles[es].maxMl,maxMl:bottles[es].maxMl,isCarb:false,foodId:pickupId};
+                  mlAdded+=canAdd;
                   refilled.push('cage '+(es+1));
                 }
               }
@@ -1106,28 +1134,29 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
             snapBottles(bE.timeMin);
           }
         }
-        // Remaining aid stations — only stop if fluid needed until end
+        // Remaining aid stations — only stop if fluid needed until end of ride
         while(nextAid<bikeAidsB.length){
           var aidT2=bikeAidsB[nextAid];
-          var nextAidTime2=nextAid+1<bikeAidsB.length?bikeAidsB[nextAid+1].timeMin:bikeSeg.start+bikeSeg.dur;
+          // Fluid needed from here to END of bike
           var fluidNeeded2=0;
           for(var fn2=0;fn2<bItems.length;fn2++){
             if(bItems[fn2].timeMin<=aidT2.timeMin)continue;
-            if(bItems[fn2].timeMin>nextAidTime2)break;
             var fnF2=getFoodById(bItems[fn2].foodId);
             if(fnF2&&fnF2.ml) fluidNeeded2+=(fnF2.ml||0)*(bItems[fn2].portion||1);
           }
           var totalFluid2=0;for(var tf2=0;tf2<bottles.length;tf2++)totalFluid2+=bottles[tf2].ml;
-          var willRunOut2=fluidNeeded2>totalFluid2;
-          if(willRunOut2){
-            var refilled2=[];
-            for(var es3=0;es3<bottles.length;es3++){
-              var lowThresh2=bottles[es3].maxMl*0.25;
-              if(bottles[es3].ml<=lowThresh2){
+          var deficit2=fluidNeeded2-totalFluid2;
+          if(deficit2>0){
+            // Only refill enough non-carb bottles to cover the deficit
+            var refilled2=[],mlAdded2=0;
+            for(var es3=0;es3<bottles.length&&mlAdded2<deficit2;es3++){
+              if(bottles[es3].isCarb)continue;
+              var canAdd2=bottles[es3].maxMl-bottles[es3].ml;
+              if(canAdd2>0){
                 var pickupLabel2=aidT2.type==='water'?'Water':'PH1500';
                 var pickupId2=aidT2.type==='water'?'water':'precision-h';
-                var pickupMl2=bottles[es3].maxMl;
-                bottles[es3]={label:pickupLabel2,ml:pickupMl2,maxMl:pickupMl2,isCarb:false,foodId:pickupId2};
+                bottles[es3]={label:pickupLabel2,ml:bottles[es3].maxMl,maxMl:bottles[es3].maxMl,isCarb:false,foodId:pickupId2};
+                mlAdded2+=canAdd2;
                 refilled2.push('cage '+(es3+1));
               }
             }
