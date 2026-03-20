@@ -394,6 +394,12 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     for(var i=0;i<segs.length;i++) if(t>=segs[i].start&&t<segs[i].start+segs[i].dur) return segs[i].name;
     return segs.length>0?segs[segs.length-1].name:'';
   }
+  function getLegStart(segs,t){
+    if(t<-60)return -120;
+    if(t<0)return -60;
+    for(var i=0;i<segs.length;i++) if(t>=segs[i].start&&t<segs[i].start+segs[i].dur) return segs[i].start;
+    return segs.length>0?segs[segs.length-1].start:0;
+  }
   function getDistAtTime(segs,t){
     if(t<0)return{dist:0};
     for(var i=0;i<segs.length;i++){var s=segs[i];if(t>=s.start&&t<s.start+s.dur&&s.dist>0){return{dist:Math.round((t-s.start)/s.dur*s.dist*10)/10,seg:s};}}
@@ -952,7 +958,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var p2=entry.portion||1,disc=getDisciplineAtTime(race.segs,entry.timeMin),dCls=disc.toLowerCase().replace(/[ -]/g,'');
         var eC=Math.round(food.carbs*p2),eG=Math.round(food.glucose*p2),eF=Math.round(food.fructose*p2),eMl=Math.round((food.ml||0)*p2),eNa=Math.round((food.na||0)*p2),eCaf=Math.round((food.caf||0)*p2);
         var isAid=entry.fromAid?true:false;
-        html+='<tr><td><input type="number" class="time-input-sm sched-time" data-idx="'+idx+'" value="'+Math.round(entry.timeMin)+'" min="-30" max="'+Math.round(race.total)+'"> min</td>';
+        var legSt=getLegStart(race.segs,entry.timeMin),legT=Math.round(entry.timeMin-legSt);
+        html+='<tr><td><input type="number" class="time-input-sm sched-time" data-idx="'+idx+'" data-legstart="'+legSt+'" value="'+legT+'" min="0" max="999"> min</td>';
         html+='<td><span class="sched-disc disc-'+dCls+'">'+disc+'</span></td>';
         html+='<td>'+food.icon+' '+food.name+'</td>';
         html+='<td><select class="sched-portion" data-idx="'+idx+'" style="width:52px;height:26px;border:1px solid var(--border);border-radius:3px;font-family:\'DM Mono\',monospace;font-size:11px;text-align:center;outline:none;background:#fff">';
@@ -1564,7 +1571,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var pSels=document.querySelectorAll('.sched-portion');for(var ps=0;ps<pSels.length;ps++)pSels[ps].addEventListener('change',function(){state.schedule[+this.getAttribute('data-idx')].portion=+this.value||1;render();});
     var aTs=document.querySelectorAll('.sched-aid');for(var at2=0;at2<aTs.length;at2++)aTs[at2].addEventListener('change',function(){state.schedule[+this.getAttribute('data-idx')].fromAid=this.checked;render();});
     var sRms=document.querySelectorAll('.sched-rm');for(var sr=0;sr<sRms.length;sr++)sRms[sr].addEventListener('click',function(){state.schedule.splice(+this.getAttribute('data-rm'),1);render();});
-    var sTms=document.querySelectorAll('.sched-time');for(var st=0;st<sTms.length;st++)sTms[st].addEventListener('change',function(){state.schedule[+this.getAttribute('data-idx')].timeMin=+this.value||0;render();});
+    var sTms=document.querySelectorAll('.sched-time');for(var st=0;st<sTms.length;st++)sTms[st].addEventListener('change',function(){var legSt=+(this.getAttribute('data-legstart')||0);state.schedule[+this.getAttribute('data-idx')].timeMin=legSt+(+this.value||0);render();});
 
     var acBtn=document.getElementById('addCustom');
     if(acBtn)acBtn.addEventListener('click',function(){var nm=document.getElementById('cfName').value.trim();if(!nm)return;var glu=+document.getElementById('cfGlu').value||0,fru=+document.getElementById('cfFru').value||0;state.customFoods.push({id:'custom-'+Date.now(),name:nm,carbs:glu+fru,glucose:glu,fructose:fru,ml:+document.getElementById('cfMl').value||0,na:+document.getElementById('cfNa').value||0,caf:+document.getElementById('cfCaf').value||0,form:document.getElementById('cfForm').value,icon:'\uD83C\uDF7D'});render();});
