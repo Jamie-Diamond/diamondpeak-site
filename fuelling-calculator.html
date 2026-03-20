@@ -300,35 +300,39 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
 
   // caf = caffeine in mg
   var FOODS = [
-    {id:'sis-iso',    name:'SiS GO Isotonic Gel',     carbs:22,glucose:14,fructose:8, ml:60, na:10, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
-    {id:'sis-iso-caf',name:'SiS GO + Caffeine Gel',   carbs:22,glucose:14,fructose:8, ml:60, na:10, caf:75, form:'gel',   icon:'\u2615'},
-    {id:'sis-beta',   name:'SiS Beta Fuel Gel',       carbs:40,glucose:24,fructose:16,ml:60, na:30, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
-    {id:'maurten100', name:'Maurten Gel 100',          carbs:25,glucose:17,fructose:8, ml:40, na:20, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
-    {id:'maurten-caf',name:'Maurten Gel 100 CAF 100',  carbs:25,glucose:17,fructose:8, ml:40, na:20, caf:100,form:'gel',   icon:'\u2615'},
-    {id:'maurten160', name:'Maurten Gel 160',          carbs:40,glucose:24,fructose:16,ml:60, na:30, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
-    {id:'torq-gel',   name:'Torq Energy Gel',          carbs:28,glucose:18,fructose:10,ml:45, na:20, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
-    {id:'clif-blok',  name:'Clif Bloks (3 pieces)',    carbs:24,glucose:16,fructose:8, ml:0,  na:70, caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
-    {id:'clif-bar',   name:'Clif Bar',                 carbs:42,glucose:28,fructose:14,ml:0,  na:150,caf:0,  form:'solid', icon:'\uD83C\uDF6B'},
-    {id:'banana',     name:'Banana',                   carbs:25,glucose:12,fructose:6, ml:0,  na:1,  caf:0,  form:'solid', icon:'\uD83C\uDF4C'},
-    {id:'rice-cake',  name:'Rice cake (homemade)',     carbs:30,glucose:22,fructose:3, ml:0,  na:80, caf:0,  form:'solid', icon:'\uD83C\uDF59'},
-    {id:'haribo',     name:'Haribo (handful)',         carbs:20,glucose:10,fructose:10,ml:0,  na:10, caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
-    {id:'maurten-d160',name:'Maurten Drink 160',       carbs:40,glucose:24,fructose:16,ml:500,na:140,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
-    {id:'maurten-d320',name:'Maurten Drink 320',       carbs:80,glucose:48,fructose:32,ml:500,na:230,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
-    {id:'sis-beta-d', name:'SiS Beta Fuel Drink',      carbs:80,glucose:48,fructose:32,ml:500,na:250,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
-    {id:'sis-go-elec',name:'SiS GO Electrolyte',       carbs:36,glucose:22,fructose:14,ml:500,na:350,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
-    {id:'precision-h',name:'Precision Fuel 1500',       carbs:0, glucose:0, fructose:0, ml:500,na:1500,caf:0, form:'liquid',icon:'\uD83E\uDD64'},
-    {id:'precision-l',name:'Precision Fuel 500',        carbs:0, glucose:0, fructose:0, ml:500,na:500,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
-    {id:'salt-cap',   name:'Salt capsule',              carbs:0, glucose:0, fructose:0, ml:0,  na:250,caf:0,  form:'solid', icon:'\uD83D\uDC8A'},
-    {id:'caf-tab',    name:'Caffeine tablet (200mg)',   carbs:0, glucose:0, fructose:0, ml:0,  na:0,  caf:200,form:'solid', icon:'\uD83D\uDC8A'},
-    {id:'cola250',    name:'Cola (250 ml)',             carbs:27,glucose:13,fructose:14,ml:250,na:5,  caf:25, form:'liquid',icon:'\uD83E\uDD64'},
-    {id:'water',      name:'Water (500 ml)',            carbs:0, glucose:0, fructose:0, ml:500,na:0,  caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
-    {id:'water250',   name:'Water (250 ml)',            carbs:0, glucose:0, fructose:0, ml:250,na:0,  caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
-    {id:'electrolyte',name:'Electrolyte tab (500ml)',   carbs:4, glucose:4, fructose:0, ml:500,na:360,caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
-    {id:'pf30-chew',  name:'Precision Fuel PF 30 Chew', carbs:30,glucose:18,fructose:12,ml:0,  na:0,  caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
-    {id:'pf60-chew',  name:'Precision Fuel PF 60 Chew', carbs:60,glucose:36,fructose:24,ml:0,  na:0,  caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
+    // ── Solids ──
+    {id:'pf30-chew',    name:'PF 30 Chew',              carbs:30,glucose:18,fructose:12,ml:0,  na:0,  caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
+    {id:'pf60-chew',    name:'PF 60 Chew',              carbs:60,glucose:36,fructose:24,ml:0,  na:0,  caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
     {id:'sis-beta-chew',name:'SiS Beta Fuel Chew (45g)',carbs:45,glucose:27,fructose:18,ml:0,  na:30, caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
-    {id:'hi5-caf-hit',name:'HIGH5 Caffeine Hit',         carbs:26,glucose:16,fructose:10,ml:500,na:30, caf:200,form:'liquid',icon:'\u2615'},
-    {id:'sis-ban-bar',name:'SiS GO Energy Bar Banana Fudge',carbs:30,glucose:20,fructose:10,ml:0,na:80,caf:0,  form:'solid', icon:'\uD83C\uDF6B'}
+    {id:'sis-ban-bar',  name:'SiS GO Bar Banana Fudge', carbs:30,glucose:20,fructose:10,ml:0,  na:80, caf:0,  form:'solid', icon:'\uD83C\uDF6B'},
+    {id:'clif-blok',    name:'Clif Bloks (3 pieces)',   carbs:24,glucose:16,fructose:8, ml:0,  na:70, caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
+    {id:'clif-bar',     name:'Clif Bar',                carbs:42,glucose:28,fructose:14,ml:0,  na:150,caf:0,  form:'solid', icon:'\uD83C\uDF6B'},
+    {id:'banana',       name:'Banana',                  carbs:25,glucose:12,fructose:6, ml:0,  na:1,  caf:0,  form:'solid', icon:'\uD83C\uDF4C'},
+    {id:'rice-cake',    name:'Rice cake (homemade)',    carbs:30,glucose:22,fructose:3, ml:0,  na:80, caf:0,  form:'solid', icon:'\uD83C\uDF59'},
+    {id:'haribo',       name:'Haribo (handful)',        carbs:20,glucose:10,fructose:10,ml:0,  na:10, caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
+    // ── Gels ──
+    {id:'sis-beta',     name:'SiS Beta Fuel Gel',      carbs:40,glucose:24,fructose:16,ml:60, na:30, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
+    {id:'maurten160',   name:'Maurten Gel 160',         carbs:40,glucose:24,fructose:16,ml:60, na:30, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
+    {id:'maurten100',   name:'Maurten Gel 100',         carbs:25,glucose:17,fructose:8, ml:40, na:20, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
+    {id:'maurten-caf',  name:'Maurten Gel 100 CAF 100', carbs:25,glucose:17,fructose:8, ml:40, na:20, caf:100,form:'gel',   icon:'\u2615'},
+    {id:'sis-iso',      name:'SiS GO Isotonic Gel',    carbs:22,glucose:14,fructose:8, ml:60, na:10, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
+    {id:'sis-iso-caf',  name:'SiS GO + Caffeine Gel',  carbs:22,glucose:14,fructose:8, ml:60, na:10, caf:75, form:'gel',   icon:'\u2615'},
+    {id:'torq-gel',     name:'Torq Energy Gel',         carbs:28,glucose:18,fructose:10,ml:45, na:20, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
+    // ── Drinks ──
+    {id:'maurten-d320', name:'Maurten Drink 320',      carbs:80,glucose:48,fructose:32,ml:500,na:230,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
+    {id:'sis-beta-d',   name:'SiS Beta Fuel Drink',    carbs:80,glucose:48,fructose:32,ml:500,na:250,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
+    {id:'maurten-d160', name:'Maurten Drink 160',      carbs:40,glucose:24,fructose:16,ml:500,na:140,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
+    {id:'sis-go-elec',  name:'SiS GO Electrolyte',     carbs:36,glucose:22,fructose:14,ml:500,na:350,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
+    {id:'hi5-caf-hit',  name:'HIGH5 Caffeine Hit',     carbs:26,glucose:16,fructose:10,ml:500,na:30, caf:200,form:'liquid',icon:'\u2615'},
+    {id:'cola250',      name:'Cola (250 ml)',           carbs:27,glucose:13,fructose:14,ml:250,na:5,  caf:25, form:'liquid',icon:'\uD83E\uDD64'},
+    {id:'precision-h',  name:'Precision Fuel 1500',     carbs:0, glucose:0, fructose:0, ml:500,na:1500,caf:0, form:'liquid',icon:'\uD83E\uDD64'},
+    {id:'precision-l',  name:'Precision Fuel 500',      carbs:0, glucose:0, fructose:0, ml:500,na:500,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
+    {id:'water',        name:'Water (500 ml)',          carbs:0, glucose:0, fructose:0, ml:500,na:0,  caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
+    {id:'water250',     name:'Water (250 ml)',          carbs:0, glucose:0, fructose:0, ml:250,na:0,  caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
+    {id:'electrolyte',  name:'Electrolyte tab (500ml)', carbs:4, glucose:4, fructose:0, ml:500,na:360,caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
+    // ── Other (caffeine / salt) ──
+    {id:'caf-tab',      name:'Caffeine tablet (200mg)', carbs:0, glucose:0, fructose:0, ml:0,  na:0,  caf:200,form:'solid', icon:'\uD83D\uDC8A'},
+    {id:'salt-cap',     name:'Salt capsule',            carbs:0, glucose:0, fructose:0, ml:0,  na:250,caf:0,  form:'solid', icon:'\uD83D\uDC8A'}
   ];
 
   var PORTIONS = [{label:'1',value:1},{label:'\u00BD',value:.5},{label:'\u2153',value:1/3},{label:'\u00BC',value:.25}];
@@ -344,7 +348,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       {km:125,discipline:'bike',type:'full'},
       {km:157,discipline:'bike',type:'full'}
     ], schedule:[], customFoods:[], raceType:'tri',
-    shortlist:[], bodyWeight: 80, gelMode:'packet', sweatRate: 1000, bikeBottles:3, bottleSize:750,
+    shortlist:['pf30-chew','pf60-chew','sis-beta-chew','sis-ban-bar','maurten-d320','sis-beta-d','precision-h','water','hi5-caf-hit','salt-cap'], bodyWeight: 80, gelMode:'packet', sweatRate: 1000, bikeBottles:3, bottleSize:750,
     showSodium:false, showFluid:true, showAid:true, showGraph:true,
     showPacking:true, showTopTube:true, showCaffeine:false,
     showEnergyGraph:true,
@@ -768,9 +772,19 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     }
 
     /* 3. FOOD LIBRARY */
-    html+='<div id="foodLibrary"><div class="sec-head"><span class="sec-tag">Food Library</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Toggle foods into your shortlist, then assign them to legs in the Strategy Builder below</div><div class="food-grid">';
-    for(var f=0;f<allFoods.length;f++){var fd=allFoods[f];var inSL=state.shortlist.indexOf(fd.id)>=0;var ms=fd.carbs+'g <span class="glu">G:'+fd.glucose+'</span> <span class="fru">F:'+fd.fructose+'</span>';if(state.showFluid&&fd.ml>0)ms+=' '+fd.ml+'ml';if(state.showSodium&&fd.na>0)ms+=' Na:'+fd.na+'mg';if(state.showCaffeine&&fd.caf>0)ms+=' <span style="color:var(--caf)">Caf:'+fd.caf+'mg</span>';html+='<div class="food-card'+(inSL?' in-shortlist':'')+'" data-food="'+fd.id+'"><div class="food-icon">'+fd.icon+'</div><div class="food-info"><div class="food-name">'+fd.name+'</div><div class="food-macros">'+ms+'</div></div></div>';}
-    html+='</div>';
+    html+='<div id="foodLibrary"><div class="sec-head"><span class="sec-tag">Food Library</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Toggle foods into your shortlist, then assign them to legs in the Strategy Builder below</div>';
+    // Group foods by category
+    function foodCategory(fd){if(fd.carbs===0&&(fd.caf>0||fd.na>0))return'other';return fd.form==='solid'?'solid':fd.form==='gel'?'gel':'drink';}
+    var foodGroups=[{key:'solid',label:'\uD83C\uDF6B Solids'},{key:'gel',label:'\uD83C\uDF6F Gels'},{key:'drink',label:'\uD83E\uDD64 Drinks'},{key:'other',label:'\uD83D\uDC8A Other (caffeine / salt)'}];
+    for(var fg=0;fg<foodGroups.length;fg++){
+      var grp=foodGroups[fg],grpFoods=[];
+      for(var gf=0;gf<allFoods.length;gf++){if(foodCategory(allFoods[gf])===grp.key)grpFoods.push(allFoods[gf]);}
+      if(grpFoods.length===0)continue;
+      html+='<div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-family:\'DM Mono\',monospace;margin:'+(fg>0?'16px':'8px')+' 0 6px;padding-top:'+(fg>0?'12px':'0')+';border-top:'+(fg>0?'1px solid var(--border)':'none')+'">'+grp.label+'</div>';
+      html+='<div class="food-grid">';
+      for(var gi=0;gi<grpFoods.length;gi++){var fd=grpFoods[gi];var inSL=state.shortlist.indexOf(fd.id)>=0;var ms=fd.carbs+'g <span class="glu">G:'+fd.glucose+'</span> <span class="fru">F:'+fd.fructose+'</span>';if(state.showFluid&&fd.ml>0)ms+=' '+fd.ml+'ml';if(state.showSodium&&fd.na>0)ms+=' Na:'+fd.na+'mg';if(state.showCaffeine&&fd.caf>0)ms+=' <span style="color:var(--caf)">Caf:'+fd.caf+'mg</span>';html+='<div class="food-card'+(inSL?' in-shortlist':'')+'" data-food="'+fd.id+'"><div class="food-icon">'+fd.icon+'</div><div class="food-info"><div class="food-name">'+fd.name+'</div><div class="food-macros">'+ms+'</div></div></div>';}
+      html+='</div>';
+    }
     // Custom food
     html+='<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)"><div style="font-size:10px;font-weight:500;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;font-family:\'DM Mono\',monospace">Add custom food</div><div class="custom-form">';
     html+='<div><label>Name</label><input id="cfName" type="text" placeholder="My gel" style="width:100%"></div>';
