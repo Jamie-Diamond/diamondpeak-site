@@ -1080,31 +1080,28 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
           // Process aid stations before this item
           while(nextAid<bikeAidsB.length&&bikeAidsB[nextAid].timeMin<=bE.timeMin){
             var aidT=bikeAidsB[nextAid];
-            // Calculate fluid needed until next aid (or end of bike)
+            // Calculate ALL fluid needed until next aid (or end of bike)
             var nextAidTime=nextAid+1<bikeAidsB.length?bikeAidsB[nextAid+1].timeMin:bikeSeg.start+bikeSeg.dur;
             var fluidNeeded=0;
             for(var fn=bi;fn<bItems.length;fn++){
               if(bItems[fn].timeMin>nextAidTime)break;
               var fnF=getFoodById(bItems[fn].foodId);
-              if(!fnF||!fnF.ml)continue;
-              // Only count items that would drain from cages (matching foodId exists)
-              var hasCage=false;for(var fc=0;fc<bottles.length;fc++){if(bottles[fc].foodId===fnF.id&&bottles[fc].ml>0){hasCage=true;break;}}
-              if(hasCage) fluidNeeded+=(fnF.ml||0)*(bItems[fn].portion||1);
+              if(fnF&&fnF.ml) fluidNeeded+=(fnF.ml||0)*(bItems[fn].portion||1);
             }
             var totalFluid=0;for(var tf=0;tf<bottles.length;tf++)totalFluid+=bottles[tf].ml;
             var willRunOut=fluidNeeded>totalFluid;
-            // Find lowest non-carb bottle (or empty bottle)
+            // Find the best bottle to swap: prefer empty, then lowest non-carb
             var refillSlot=-1,lowestMl=999999;
             for(var es=0;es<bottles.length;es++){
               if(bottles[es].ml<=0){refillSlot=es;lowestMl=0;break;}
-              if(!bottles[es].isCarb&&bottles[es].ml<lowestMl){lowestMl=bottles[es].ml;refillSlot=es;}
             }
+            if(refillSlot<0){for(var es2=0;es2<bottles.length;es2++){if(!bottles[es2].isCarb&&bottles[es2].ml<lowestMl){lowestMl=bottles[es2].ml;refillSlot=es2;}}}
             if(willRunOut&&refillSlot>=0){
               var pickupLabel=aidT.type==='water'?'Water':'PH1500';
               var pickupId=aidT.type==='water'?'water':'precision-h';
               var pickupMl=bottles[refillSlot].maxMl;
               bottles[refillSlot]={label:pickupLabel,ml:pickupMl,maxMl:pickupMl,isCarb:false,foodId:pickupId};
-              bottleEvents.push({time:aidT.timeMin,type:'pickup',label:'\u26F3 '+aidT.label+' \u2014 pick up '+pickupLabel+' ('+pickupMl+'ml)'});
+              bottleEvents.push({time:aidT.timeMin,type:'pickup',label:'\u26F3 '+aidT.label+' \u2014 swap cage '+(refillSlot+1)+' for '+pickupLabel+' ('+pickupMl+'ml)'});
             } else {
               bottleEvents.push({time:aidT.timeMin,type:'skip',label:'\u26F3 '+aidT.label+' \u2014 enough fluid, skip'});
             }
@@ -1149,23 +1146,21 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
             if(bItems[fn2].timeMin<=aidT2.timeMin)continue;
             if(bItems[fn2].timeMin>nextAidTime2)break;
             var fnF2=getFoodById(bItems[fn2].foodId);
-            if(!fnF2||!fnF2.ml)continue;
-            var hasCage2=false;for(var fc2=0;fc2<bottles.length;fc2++){if(bottles[fc2].foodId===fnF2.id&&bottles[fc2].ml>0){hasCage2=true;break;}}
-            if(hasCage2) fluidNeeded2+=(fnF2.ml||0)*(bItems[fn2].portion||1);
+            if(fnF2&&fnF2.ml) fluidNeeded2+=(fnF2.ml||0)*(bItems[fn2].portion||1);
           }
           var totalFluid2=0;for(var tf2=0;tf2<bottles.length;tf2++)totalFluid2+=bottles[tf2].ml;
           var willRunOut2=fluidNeeded2>totalFluid2;
           var refillSlot2=-1,lowestMl2=999999;
-          for(var es2=0;es2<bottles.length;es2++){
-            if(bottles[es2].ml<=0){refillSlot2=es2;lowestMl2=0;break;}
-            if(!bottles[es2].isCarb&&bottles[es2].ml<lowestMl2){lowestMl2=bottles[es2].ml;refillSlot2=es2;}
+          for(var es3=0;es3<bottles.length;es3++){
+            if(bottles[es3].ml<=0){refillSlot2=es3;lowestMl2=0;break;}
           }
+          if(refillSlot2<0){for(var es4=0;es4<bottles.length;es4++){if(!bottles[es4].isCarb&&bottles[es4].ml<lowestMl2){lowestMl2=bottles[es4].ml;refillSlot2=es4;}}}
           if(willRunOut2&&refillSlot2>=0){
             var pickupLabel2=aidT2.type==='water'?'Water':'PH1500';
             var pickupId2=aidT2.type==='water'?'water':'precision-h';
             var pickupMl2=bottles[refillSlot2].maxMl;
             bottles[refillSlot2]={label:pickupLabel2,ml:pickupMl2,maxMl:pickupMl2,isCarb:false,foodId:pickupId2};
-            bottleEvents.push({time:aidT2.timeMin,type:'pickup',label:'\u26F3 '+aidT2.label+' \u2014 pick up '+pickupLabel2});
+            bottleEvents.push({time:aidT2.timeMin,type:'pickup',label:'\u26F3 '+aidT2.label+' \u2014 swap cage '+(refillSlot2+1)+' for '+pickupLabel2});
           } else {
             bottleEvents.push({time:aidT2.timeMin,type:'skip',label:'\u26F3 '+aidT2.label+' \u2014 enough fluid, skip'});
           }
