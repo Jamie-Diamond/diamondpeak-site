@@ -605,20 +605,26 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         else gelFoods.push(cf2); // gels
       }
 
-      // Cap carb drinks to what we can carry: max 2 carb bottles (keep 1+ for water)
-      // Each bottle holds bSize ml. Calculate max carbs from drinks.
+      // Dynamic carb drink cap based on what we can physically carry.
+      // Reserve at least 1 cage for water; remaining cages available for carb drinks.
+      // On short races (Olympic) this may allow 100% from drinks.
+      // On Ironman the bottle limit naturally caps drink contribution.
       var maxCarbBottles=Math.max(0,state.bikeBottles-1); // reserve 1 for water
-      if(maxCarbBottles>2) maxCarbBottles=2; // practical max: 2 carb bottles
       var maxDrinkMl=maxCarbBottles*state.bottleSize;
+      // Account for aid station refills: each aid can refill 1 empty bottle with water,
+      // freeing carb bottles to be consumed earlier. But carb bottles must be carried from start.
       var drinkCarbsCap=0;
       if(carbDrinks.length>0){
-        // Calculate max carbs we can get from drinks within bottle limit
         var avgCarbsPerMl=0;
         for(var dci=0;dci<carbDrinks.length;dci++) avgCarbsPerMl+=carbDrinks[dci].carbs/(carbDrinks[dci].ml||500);
         avgCarbsPerMl/=carbDrinks.length;
         drinkCarbsCap=maxDrinkMl*avgCarbsPerMl;
       }
-      var drinkShare=carbDrinks.length>0?Math.min(drinkCarbsCap,totalCarbs*0.4):0; // max 40% from drinks
+      // If only drinks are selected (no solids/gels), allow 100% from drinks
+      var hasSolidsOrGels=solidFoods.length>0||gelFoods.length>0;
+      var drinkShare=carbDrinks.length>0?Math.min(drinkCarbsCap,totalCarbs):0;
+      // If we also have solids/gels, limit drinks to their bottle capacity
+      if(hasSolidsOrGels&&drinkShare>drinkCarbsCap) drinkShare=drinkCarbsCap;
       var solidGelShare=totalCarbs-drinkShare;
 
       var allDoses=[]; // [{food, portion, carbsPerDose, isSolid}]
