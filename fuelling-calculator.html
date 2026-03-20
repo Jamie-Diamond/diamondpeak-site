@@ -340,7 +340,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     shortlist:[], bodyWeight: 80, gelMode:'packet', sweatRate: 1000, bikeBottles:3, bottleSize:750,
     showSodium:false, showFluid:true, showAid:true, showGraph:true,
     showPacking:true, showTopTube:true, showCaffeine:false,
-    showFluidGraph:false, showSodiumGraph:false, showCaffeineGraph:false, showEnergyGraph:true,
+    showEnergyGraph:true,
     // Per-leg strategy: { legName: { foods: [foodId,...], target: g/hr } }
     strategies: {},
     trainingSessions: [
@@ -718,8 +718,6 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     html+='<div class="toggles-bar">';
     var tgs=[['togSodium','showSodium','Sodium'],['togFluid','showFluid','Fluid'],['togCaffeine','showCaffeine','Caffeine'],
       ['togAid','showAid','Aid stations'],['togGraph','showGraph','Absorption graph'],['togEnergy','showEnergyGraph','Energy balance'],
-      ['togFluidGraph','showFluidGraph','Fluid graph'],['togSodiumGraph','showSodiumGraph','Sodium graph'],
-      ['togCafGraph','showCaffeineGraph','Caffeine graph'],
       ['togPacking','showPacking','Packing list'],['togTopTube','showTopTube','Top tube card'],['togTraining','showTraining','Training plans']];
     for(var ti=0;ti<tgs.length;ti++) html+='<label class="toggle-item"><input type="checkbox" id="'+tgs[ti][0]+'"'+(state[tgs[ti][1]]?' checked':'')+'><span class="toggle-track"></span>'+tgs[ti][2]+'</label>';
     html+='</div>';
@@ -865,9 +863,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
 
     /* 5. GRAPHS */
     if(state.showGraph){html+='<div id="graphSection"><div class="sec-head"><span class="sec-tag">Absorption Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Rolling 60-min intake rate (g/hr)</div><div class="graph-wrap"><canvas id="absGraph"></canvas></div><div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:#2980b9"></div> Glucose</div><div class="legend-item"><div class="legend-swatch" style="background:#c0392b"></div> Fructose</div><div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> Combined</div><div class="legend-item"><div style="width:28px;height:10px;border-radius:2px;background:linear-gradient(to right,#e6f4ec,#fdf3e0,#fdeee9)"></div> \u226490 / 90\u2013120 / >120</div></div></div></div>';}
-    if(state.showFluidGraph){html+='<div><div class="sec-head"><span class="sec-tag">Fluid Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Fluid intake rate (ml/hr)</div><div class="graph-wrap graph-wrap-sm"><canvas id="fluidGraph"></canvas></div></div></div>';}
-    if(state.showSodiumGraph){html+='<div><div class="sec-head"><span class="sec-tag">Sodium Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Sodium intake rate (mg/hr)</div><div class="graph-wrap graph-wrap-sm"><canvas id="sodiumGraph"></canvas></div></div></div>';}
-    if(state.showCaffeineGraph){html+='<div><div class="sec-head"><span class="sec-tag">Caffeine Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Plasma caffeine (mg) \u2014 8hr half-life pharmacokinetic model</div><div class="graph-wrap graph-wrap-sm"><canvas id="cafGraph"></canvas></div><div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:var(--caf)"></div> Plasma caffeine (mg)</div><div class="legend-item" style="color:var(--muted)">Peak at ~45 min post-ingestion, t\u00BD = 8 hrs</div></div></div></div>';}
+    if(state.showFluid){html+='<div><div class="sec-head"><span class="sec-tag">Fluid Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Fluid intake rate (ml/hr)</div><div class="graph-wrap graph-wrap-sm"><canvas id="fluidGraph"></canvas></div></div></div>';}
+    if(state.showSodium){html+='<div><div class="sec-head"><span class="sec-tag">Sodium Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Sodium intake rate (mg/hr)</div><div class="graph-wrap graph-wrap-sm"><canvas id="sodiumGraph"></canvas></div></div></div>';}
+    if(state.showCaffeine){html+='<div><div class="sec-head"><span class="sec-tag">Caffeine Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Plasma caffeine (mg) \u2014 8hr half-life pharmacokinetic model</div><div class="graph-wrap graph-wrap-sm"><canvas id="cafGraph"></canvas></div><div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:var(--caf)"></div> Plasma caffeine (mg)</div><div class="legend-item" style="color:var(--muted)">Peak at ~45 min post-ingestion, t\u00BD = 8 hrs</div></div></div></div>';}
 
     if(state.showEnergyGraph){html+='<div><div class="sec-head"><span class="sec-tag">Energy Balance</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Cumulative kcal burned vs consumed</div><div class="graph-wrap"><canvas id="energyGraph"></canvas></div><div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:#e67e22"></div> Burned (MET estimate)</div><div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> Consumed (4 kcal/g carb)</div><div class="legend-item"><div class="legend-swatch" style="background:rgba(192,57,43,.3)"></div> Deficit</div></div></div></div>';}
 
@@ -1115,9 +1113,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     document.getElementById('app').innerHTML=html;
     bindEvents();
     if(state.showGraph)drawAbsGraph(race,abs,aids);
-    if(state.showFluidGraph)drawLineGraph('fluidGraph',race,fl.ml,fl.minutes,'#2980b9','ml/hr');
-    if(state.showSodiumGraph)drawLineGraph('sodiumGraph',race,fl.na,fl.minutes,'#e8a838','mg/hr');
-    if(state.showCaffeineGraph)drawLineGraph('cafGraph',race,caf.plasma,caf.minutes,'#8b5cf6','mg');
+    if(state.showFluid)drawLineGraph('fluidGraph',race,fl.ml,fl.minutes,'#2980b9','ml/hr');
+    if(state.showSodium)drawLineGraph('sodiumGraph',race,fl.na,fl.minutes,'#e8a838','mg/hr');
+    if(state.showCaffeine)drawLineGraph('cafGraph',race,caf.plasma,caf.minutes,'#8b5cf6','mg');
     if(state.showEnergyGraph)drawEnergyGraph(race,energy);
     // Set up tooltips on all graphs
     setupTooltips(race,abs,fl,caf,energy);
@@ -1259,13 +1257,13 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       var i=m+OFF,g=abs.glucose[i]||0,f=abs.fructose[i]||0;
       return[{color:'#2980b9',label:'Glucose',val:Math.round(g)+' g/hr'},{color:'#c0392b',label:'Fructose',val:Math.round(f)+' g/hr'},{color:'#1d6840',label:'Combined',val:Math.round(g+f)+' g/hr'}];
     }});
-    if(state.showFluidGraph) graphs.push({id:'fluidGraph',pL:46,pR:10,pT:12,pB:30,rows:function(m){
+    if(state.showFluid) graphs.push({id:'fluidGraph',pL:46,pR:10,pT:12,pB:30,rows:function(m){
       var i=m+OFF;return[{color:'#2980b9',label:'Fluid',val:Math.round(fl.ml[i]||0)+' ml/hr'}];
     }});
-    if(state.showSodiumGraph) graphs.push({id:'sodiumGraph',pL:46,pR:10,pT:12,pB:30,rows:function(m){
+    if(state.showSodium) graphs.push({id:'sodiumGraph',pL:46,pR:10,pT:12,pB:30,rows:function(m){
       var i=m+OFF;return[{color:'#e8a838',label:'Sodium',val:Math.round(fl.na[i]||0)+' mg/hr'}];
     }});
-    if(state.showCaffeineGraph) graphs.push({id:'cafGraph',pL:46,pR:10,pT:12,pB:30,rows:function(m){
+    if(state.showCaffeine) graphs.push({id:'cafGraph',pL:46,pR:10,pT:12,pB:30,rows:function(m){
       var i=m+OFF;return[{color:'#8b5cf6',label:'Caffeine',val:Math.round(caf.plasma[i]||0)+' mg'}];
     }});
     if(state.showEnergyGraph) graphs.push({id:'energyGraph',pL:50,pR:10,pT:16,pB:36,rows:function(m){
@@ -1314,7 +1312,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
 
   /* ── EVENTS ── */
   function bindEvents(){
-    var tgs=[['togSodium','showSodium'],['togFluid','showFluid'],['togCaffeine','showCaffeine'],['togAid','showAid'],['togGraph','showGraph'],['togEnergy','showEnergyGraph'],['togFluidGraph','showFluidGraph'],['togSodiumGraph','showSodiumGraph'],['togCafGraph','showCaffeineGraph'],['togPacking','showPacking'],['togTopTube','showTopTube'],['togTraining','showTraining']];
+    var tgs=[['togSodium','showSodium'],['togFluid','showFluid'],['togCaffeine','showCaffeine'],['togAid','showAid'],['togGraph','showGraph'],['togEnergy','showEnergyGraph'],['togPacking','showPacking'],['togTopTube','showTopTube'],['togTraining','showTraining']];
     for(var tg=0;tg<tgs.length;tg++){var te=document.getElementById(tgs[tg][0]);if(te)(function(k){te.addEventListener('change',function(){state[k]=this.checked;render();});})(tgs[tg][1]);}
 
     var pBs=document.querySelectorAll('.preset-btn');for(var p=0;p<pBs.length;p++)pBs[p].addEventListener('click',function(){var pr=PRESETS[+this.getAttribute('data-preset')];state.preset=pr.name;state.raceType=pr.type;if(pr.name!=='Custom'){state.swimDist=pr.swim;state.bikeDist=pr.bike;state.runDist=pr.run;}render();});
@@ -1387,7 +1385,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   }
 
   render();
-  var rT;window.addEventListener('resize',function(){clearTimeout(rT);rT=setTimeout(function(){var r=calcRace(),a=calcAbsorption(r.total),f=calcFluidTimeline(r.total),cf=calcCaffeine(r.total),en=calcEnergyBalance(r),ai=aidStationTimes(r);if(state.showGraph)drawAbsGraph(r,a,ai);if(state.showFluidGraph)drawLineGraph('fluidGraph',r,f.ml,f.minutes,'#2980b9','ml/hr');if(state.showSodiumGraph)drawLineGraph('sodiumGraph',r,f.na,f.minutes,'#e8a838','mg/hr');if(state.showCaffeineGraph)drawLineGraph('cafGraph',r,cf.plasma,cf.minutes,'#8b5cf6','mg');if(state.showEnergyGraph)drawEnergyGraph(r,en);},150);});
+  var rT;window.addEventListener('resize',function(){clearTimeout(rT);rT=setTimeout(function(){var r=calcRace(),a=calcAbsorption(r.total),f=calcFluidTimeline(r.total),cf=calcCaffeine(r.total),en=calcEnergyBalance(r),ai=aidStationTimes(r);if(state.showGraph)drawAbsGraph(r,a,ai);if(state.showFluid)drawLineGraph('fluidGraph',r,f.ml,f.minutes,'#2980b9','ml/hr');if(state.showSodium)drawLineGraph('sodiumGraph',r,f.na,f.minutes,'#e8a838','mg/hr');if(state.showCaffeine)drawLineGraph('cafGraph',r,cf.plasma,cf.minutes,'#8b5cf6','mg');if(state.showEnergyGraph)drawEnergyGraph(r,en);},150);});
 })();
 </script>
 </body>
