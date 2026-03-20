@@ -596,43 +596,87 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         return 1;
       }
 
-      // Build a flat queue: solids sequential per food, non-solids round-robin
-      var solidFoods=[],nonSolidFoods=[];
+      // Split foods: solids, gels, carb drinks
+      var solidFoods=[],gelFoods=[],carbDrinks=[];
       for(var c=0;c<carbFoods.length;c++){
-        if(carbFoods[c].form==='solid') solidFoods.push(carbFoods[c]);
-        else nonSolidFoods.push(carbFoods[c]);
+        var cf2=carbFoods[c];
+        if(cf2.form==='solid') solidFoods.push(cf2);
+        else if(cf2.form==='liquid') carbDrinks.push(cf2);
+        else gelFoods.push(cf2); // gels
       }
 
-      // Calculate how many doses of each food we need
+      // Cap carb drinks to what we can carry: max 2 carb bottles (keep 1+ for water)
+      // Each bottle holds bSize ml. Calculate max carbs from drinks.
+      var maxCarbBottles=Math.max(0,state.bikeBottles-1); // reserve 1 for water
+      if(maxCarbBottles>2) maxCarbBottles=2; // practical max: 2 carb bottles
+      var maxDrinkMl=maxCarbBottles*state.bottleSize;
+      var drinkCarbsCap=0;
+      if(carbDrinks.length>0){
+        // Calculate max carbs we can get from drinks within bottle limit
+        var avgCarbsPerMl=0;
+        for(var dci=0;dci<carbDrinks.length;dci++) avgCarbsPerMl+=carbDrinks[dci].carbs/(carbDrinks[dci].ml||500);
+        avgCarbsPerMl/=carbDrinks.length;
+        drinkCarbsCap=maxDrinkMl*avgCarbsPerMl;
+      }
+      var drinkShare=carbDrinks.length>0?Math.min(drinkCarbsCap,totalCarbs*0.4):0; // max 40% from drinks
+      var solidGelShare=totalCarbs-drinkShare;
+
       var allDoses=[]; // [{food, portion, carbsPerDose, isSolid}]
 
       // Solids: sequential — all of food A, then food B
-      if(solidFoods.length>0){
-        var solidShare=totalCarbs*(solidFoods.length/carbFoods.length);
-        var perSolid=solidShare/solidFoods.length;
+      var solidGelFoods=solidFoods.concat(gelFoods);
+      if(solidGelFoods.length>0){
+        var perSG=solidGelShare/solidGelFoods.length;
+        // Solids first (sequential)
         for(var si=0;si<solidFoods.length;si++){
           var sf=solidFoods[si],sp=calcPortion(sf),cpd=sf.carbs*sp;
-          var nd=cpd>0?Math.round(perSolid/cpd):1;if(nd<1)nd=1;
+          var nd=cpd>0?Math.round(perSG/cpd):1;if(nd<1)nd=1;
           for(var sd=0;sd<nd;sd++) allDoses.push({food:sf,portion:sp,carbsPerDose:cpd,isSolid:true});
+        }
+        // Gels (round-robin interleaved)
+        if(gelFoods.length>0){
+          var gelDoses=[];
+          for(var gi3=0;gi3<gelFoods.length;gi3++){
+            var gf=gelFoods[gi3],gp=calcPortion(gf),gcpd=gf.carbs*gp;
+            var gnd=gcpd>0?Math.round(perSG/gcpd):1;if(gnd<1)gnd=1;
+            gelDoses.push({food:gf,portion:gp,carbsPerDose:gcpd,count:gnd});
+          }
+          var maxGel=0;for(var mg=0;mg<gelDoses.length;mg++)if(gelDoses[mg].count>maxGel)maxGel=gelDoses[mg].count;
+          for(var rr2=0;rr2<maxGel;rr2++){
+            for(var ri2=0;ri2<gelDoses.length;ri2++){
+              if(rr2<gelDoses[ri2].count) allDoses.push({food:gelDoses[ri2].food,portion:gelDoses[ri2].portion,carbsPerDose:gelDoses[ri2].carbsPerDose,isSolid:false});
+            }
+          }
         }
       }
 
-      // Non-solids: interleave round-robin
-      if(nonSolidFoods.length>0){
-        var nsShare=totalCarbs*(nonSolidFoods.length/carbFoods.length);
-        var perNS=nsShare/nonSolidFoods.length;
-        var nsDoses=[];
-        for(var ni=0;ni<nonSolidFoods.length;ni++){
-          var nf=nonSolidFoods[ni],np=calcPortion(nf),ncpd=nf.carbs*np;
-          var nnd=ncpd>0?Math.round(perNS/ncpd):1;if(nnd<1)nnd=1;
-          nsDoses.push({food:nf,portion:np,carbsPerDose:ncpd,count:nnd});
+      // Carb drinks: limited servings, round-robin interleaved with solids/gels
+      if(carbDrinks.length>0&&drinkShare>0){
+        var perDrink=drinkShare/carbDrinks.length;
+        var drinkDoses=[];
+        for(var di2=0;di2<carbDrinks.length;di2++){
+          var df=carbDrinks[di2],dp=calcPortion(df),dcpd=df.carbs*dp;
+          var dnd=dcpd>0?Math.round(perDrink/dcpd):1;if(dnd<1)dnd=1;
+          drinkDoses.push({food:df,portion:dp,carbsPerDose:dcpd,count:dnd});
         }
-        // Round-robin interleave non-solids
-        var maxNS=0;for(var mi=0;mi<nsDoses.length;mi++)if(nsDoses[mi].count>maxNS)maxNS=nsDoses[mi].count;
-        for(var rr=0;rr<maxNS;rr++){
-          for(var ri=0;ri<nsDoses.length;ri++){
-            if(rr<nsDoses[ri].count) allDoses.push({food:nsDoses[ri].food,portion:nsDoses[ri].portion,carbsPerDose:nsDoses[ri].carbsPerDose,isSolid:false});
+        // Interleave drink doses evenly into the allDoses array
+        var totalDrinkDoses=0;for(var td=0;td<drinkDoses.length;td++)totalDrinkDoses+=drinkDoses[td].count;
+        var drinkQueue=[];
+        var maxDD=0;for(var md=0;md<drinkDoses.length;md++)if(drinkDoses[md].count>maxDD)maxDD=drinkDoses[md].count;
+        for(var rr3=0;rr3<maxDD;rr3++){
+          for(var ri3=0;ri3<drinkDoses.length;ri3++){
+            if(rr3<drinkDoses[ri3].count) drinkQueue.push({food:drinkDoses[ri3].food,portion:drinkDoses[ri3].portion,carbsPerDose:drinkDoses[ri3].carbsPerDose,isSolid:false});
           }
+        }
+        // Space drink doses evenly through the existing allDoses
+        if(drinkQueue.length>0&&allDoses.length>0){
+          var spacing=Math.max(1,Math.floor(allDoses.length/drinkQueue.length));
+          for(var dq=drinkQueue.length-1;dq>=0;dq--){
+            var insertAt=Math.min(allDoses.length,spacing*(dq+1));
+            allDoses.splice(insertAt,0,drinkQueue[dq]);
+          }
+        } else {
+          for(var dq2=0;dq2<drinkQueue.length;dq2++) allDoses.push(drinkQueue[dq2]);
         }
       }
 
