@@ -402,11 +402,10 @@
     }
 
     // ── PHASE 1: Carbs (small portions, frequent, flat curve) ──
-    // Gels/liquids: once opened you must finish them back-to-back,
-    // so keep them at full portions and space them out.
-    // Solids: can be broken into portions and interleaved freely.
-    var SOLID_PORTIONS=[1,0.5,1/3,0.25];
-    var TARGET_STEP=12; // ideal carbs per dose for a flat graph
+    // Practical minimums while racing:
+    //   Solids: no less than 1/3   Gels (packet): no less than 1/2
+    //   Gels (bottle) / Liquids: no less than 100ml worth
+    var TARGET_STEP=12;
 
     if(carbFoods.length>0&&strat.target>0){
       var totalCarbs=strat.target*legHrs;
@@ -415,20 +414,40 @@
       var slots=[];
       for(var c=0;c<carbFoods.length;c++){
         var fd=carbFoods[c];
-        // Can this food be split into small portions?
-        // Solids: always yes. Liquids: always yes. Gels: only if in bottle mode.
-        var canSplit=fd.form==='solid'||fd.form==='liquid'||(fd.form==='gel'&&state.gelMode==='bottle');
         var bestP=1;
 
-        if(canSplit){
+        if(fd.form==='solid'){
+          // Solids: min 1/3
+          var solidP=[1,0.5,1/3];
           var bestDiff=9999;
-          for(var pi=0;pi<SOLID_PORTIONS.length;pi++){
-            var dose=fd.carbs*SOLID_PORTIONS[pi];
-            var diff=Math.abs(dose-TARGET_STEP);
-            if(diff<bestDiff){bestDiff=diff;bestP=SOLID_PORTIONS[pi];}
+          for(var pi=0;pi<solidP.length;pi++){
+            var diff=Math.abs(fd.carbs*solidP[pi]-TARGET_STEP);
+            if(diff<bestDiff){bestDiff=diff;bestP=solidP[pi];}
+          }
+        } else if(fd.form==='gel'&&state.gelMode==='bottle'){
+          // Gel in bottle: min portion = 100ml / gel ml (or 1/3 if no ml)
+          var minP=fd.ml>0?Math.max(1/3,100/fd.ml):1/3;
+          var gelBP=[1,0.5,1/3];
+          var bestDiff2=9999;
+          for(var pi2=0;pi2<gelBP.length;pi2++){
+            if(gelBP[pi2]<minP-0.01)continue;
+            var diff2=Math.abs(fd.carbs*gelBP[pi2]-TARGET_STEP);
+            if(diff2<bestDiff2){bestDiff2=diff2;bestP=gelBP[pi2];}
+          }
+        } else if(fd.form==='gel'){
+          // Gel in packet: min 1/2
+          bestP=fd.carbs*0.5>=6?0.5:1; // only halve if the half is still meaningful
+        } else if(fd.form==='liquid'){
+          // Liquids: min portion = 100ml / drink ml (or 1/4 if no ml)
+          var minLP=fd.ml>0?Math.max(0.25,100/fd.ml):0.25;
+          var liqP=[1,0.5,1/3,0.25];
+          var bestDiff3=9999;
+          for(var pi3=0;pi3<liqP.length;pi3++){
+            if(liqP[pi3]<minLP-0.01)continue;
+            var diff3=Math.abs(fd.carbs*liqP[pi3]-TARGET_STEP);
+            if(diff3<bestDiff3){bestDiff3=diff3;bestP=liqP[pi3];}
           }
         }
-        // Packet gels stay at portion=1 (must finish before next item)
 
         var carbsPerDose=fd.carbs*bestP;
         var dosesPerHr=carbsPerDose>0?sharePerFood/carbsPerDose:0;
