@@ -1122,28 +1122,28 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
             nextAid++;
           }
 
-          // Consume from bottles — only drain from bottles that carry this drink
+          // Consume from bottles — strict matching, never cross-contaminate
           if(bMl>0){
             mlUsed+=bMl;
-            // Find bottles carrying this specific drink
+            var isItemCarb=bF.carbs>0;
             var drainOrder=[];
+            // 1. Exact foodId match
             for(var d1=0;d1<bottles.length;d1++){if(bottles[d1].foodId===bF.id&&bottles[d1].ml>0)drainOrder.push(d1);}
-            // If no exact match, try any non-carb bottle (water from water bottles)
-            if(drainOrder.length===0){
+            // 2. For non-carb items only: any non-carb bottle (water from PH1500 etc)
+            if(drainOrder.length===0&&!isItemCarb){
               for(var d2=0;d2<bottles.length;d2++){if(!bottles[d2].isCarb&&bottles[d2].ml>0)drainOrder.push(d2);}
             }
-            // Last resort: any bottle with fluid
-            if(drainOrder.length===0){
-              for(var d3=0;d3<bottles.length;d3++){if(bottles[d3].ml>0)drainOrder.push(d3);}
-            }
+            // NEVER let non-carb items drain carb bottles
             var mlToDrain=bMl;
             for(var dr=0;dr<drainOrder.length&&mlToDrain>0;dr++){
               var take=Math.min(bottles[drainOrder[dr]].ml,mlToDrain);
               bottles[drainOrder[dr]].ml-=take;
               mlToDrain-=take;
             }
-            if(mlToDrain>0){
-              bottleEvents.push({time:bE.timeMin,type:'empty',label:fmtHM(bE.timeMin-bikeSeg.start)+' \u2014 OUT OF FLUID! '+Math.round(mlToDrain)+'ml short'});
+            if(mlToDrain>0&&drainOrder.length===0){
+              // No bottle available for this drink — not drained from cages
+            } else if(mlToDrain>0){
+              bottleEvents.push({time:bE.timeMin,type:'empty',label:fmtHM(bE.timeMin-bikeSeg.start)+' \u2014 OUT OF '+bF.name+'! '+Math.round(mlToDrain)+'ml short'});
             } else {
               bottleEvents.push({time:bE.timeMin,type:'drink',label:fmtHM(bE.timeMin-bikeSeg.start)+' \u2014 drink '+Math.round(bMl)+'ml '+bF.name});
             }
