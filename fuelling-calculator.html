@@ -946,12 +946,12 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         // Get race carb rate for this discipline
         var raceStrat=state.strategies[sess.disc==='bike'?'Bike':sess.disc==='run'?'Run':'Swim'];
         var raceGHr=raceStrat?raceStrat.target:70;
-        // Scale: training uses ~80% of race rate for sessions >90min, full rate for race-pace sessions
-        var trainGHr=durMin>90?Math.round(raceGHr*0.8):Math.round(raceGHr*0.6);
+        // Training = stress-testing the gut. Long sessions at or above race rate.
+        var trainGHr=durMin>90?Math.round(raceGHr*1.1):raceGHr; // long sessions: 110% to push tolerance
         var totalCarbs=Math.round(trainGHr*durHrs);
         var raceNaHr=raceStrat?raceStrat.sodiumTarget:500;
-        var totalNa=Math.round(raceNaHr*0.7*durHrs);
-        var totalFluid=Math.round(state.sweatRate*0.8*durHrs);
+        var totalNa=Math.round(raceNaHr*durHrs);
+        var totalFluid=Math.round(state.sweatRate*durHrs);
 
         // Build item list from shortlisted carb foods for this discipline
         var discFoods=[];
@@ -994,7 +994,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         } else {
           html+='<div style="font-size:11px;color:var(--muted);text-align:center;padding:12px 0">Assign foods to '+sess.disc.charAt(0).toUpperCase()+sess.disc.slice(1)+' in the Strategy Builder</div>';
         }
-        var gutNote=durMin>90?'Long session — practise race-level intake ('+raceGHr+'g/hr) every 3rd week':'Moderate session — focus on timing and tolerance';
+        var gutNote=durMin>90?'Gut stress test — '+trainGHr+'g/hr is 110% of race target ('+raceGHr+'g/hr). If tolerated, race day will feel easy.':'Match race rate — practise timing, products, and tolerance at race intensity.';
         html+='<div class="train-note">'+gutNote+'</div>';
         html+='</div>';
       }
