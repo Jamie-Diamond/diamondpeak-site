@@ -184,10 +184,18 @@
   .method{font-size:11px;color:var(--muted);line-height:1.7;margin-top:28px;padding-top:16px;border-top:1px solid var(--border)}
   .method code{font-family:'DM Mono',monospace;font-size:10px;background:#faf8f4;padding:1px 5px;border-radius:3px;border:1px solid var(--border)}
   .method strong{color:var(--ink2);font-weight:500}
+  #topoCanvas{position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:0}
+  .page{position:relative;z-index:1}
+  .dpc-header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .dpc-logo{width:36px;height:36px;object-fit:contain;filter:none;opacity:.85}
+  .dpc-wordmark{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
+  .footer-bar{text-align:center;padding:32px 0 16px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--muted);border-top:1px solid var(--border);margin-top:40px}
 </style>
 </head>
 <body>
+<canvas id="topoCanvas"></canvas>
 <div class="page">
+  <div class="dpc-header"><img src="logo-mark.png" alt="Diamond Peak" class="dpc-logo"><span class="dpc-wordmark">Diamond Peak</span></div>
   <a href="index.html" class="back">&larr; Back to tools</a>
   <div class="kicker">NUTRITION &amp; PHYSIOLOGY</div>
   <h1>Race Fuelling Planner</h1>
@@ -203,7 +211,53 @@
     <code>ka = ln2/20 min</code> (absorption), <code>ke = ln2/480 min</code> (8 hr half-life).
     Peak plasma at ~45 min post-ingestion. Recommended race dose: <code>3&ndash;6 mg/kg</code>.
   </div>
+  <div class="footer-bar">&copy; 2026 Diamond Peak Consulting</div>
 </div>
+
+<script>
+/* ── Contour background (adapted from homepage) ── */
+function _hash(x,y){var h=x*374761393+y*668265263;h=(h^(h>>13))*1274126177;return((h^(h>>16))&0x7fffffff)/0x7fffffff;}
+function _smooth(x,y){var ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy;fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);var a=_hash(ix,iy),b=_hash(ix+1,iy),c=_hash(ix,iy+1),d=_hash(ix+1,iy+1);return a+(b-a)*fx+(c-a)*fy+(a-b-c+d)*fx*fy;}
+function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smooth(x*4.07,y*4.07)*.15+_smooth(x*8.1,y*8.1)*.1;}
+(function(){
+  var c=document.getElementById('topoCanvas'),ctx=c.getContext('2d'),dpr=devicePixelRatio||1,W,H,time=0;
+  function resize(){W=innerWidth*dpr;H=innerHeight*dpr;c.width=W;c.height=H;}
+  function draw(){
+    time+=0.0008;ctx.clearRect(0,0,W,H);
+    var scrollPx=scrollY*dpr,totalH=document.documentElement.scrollHeight*dpr;
+    var gridRes=4*dpr,gCols=Math.ceil(W/gridRes)+1,gRows=Math.ceil(H/gridRes)+1,numLevels=25;
+    var heights=new Float32Array(gCols*gRows),hMin=1,hMax=0;
+    for(var gy=0;gy<gRows;gy++)for(var gx=0;gx<gCols;gx++){
+      var globalY=(gy*gridRes+scrollPx)/totalH;
+      var h=topoNoise(gx/gCols*6+time*.3,globalY*8+time*.12);
+      heights[gy*gCols+gx]=h;if(h<hMin)hMin=h;if(h>hMax)hMax=h;
+    }
+    for(var lvl=0;lvl<numLevels;lvl++){
+      var threshold=hMin+(hMax-hMin)*(lvl+1)/(numLevels+1);
+      var isIdx=lvl%5===0,t=lvl/numLevels;
+      var segs=[];
+      for(var cy=0;cy<gRows-1;cy++)for(var cx=0;cx<gCols-1;cx++){
+        var i00=cy*gCols+cx,v00=heights[i00],v10=heights[i00+1],v01=heights[i00+gCols],v11=heights[i00+gCols+1];
+        var code=0;if(v00>=threshold)code|=1;if(v10>=threshold)code|=2;if(v11>=threshold)code|=4;if(v01>=threshold)code|=8;
+        if(code===0||code===15)continue;
+        var x0=cx*gridRes,y0=cy*gridRes,x1=x0+gridRes,y1=y0+gridRes;
+        function lerp(a,b,va,vb){var tt=(threshold-va)/(vb-va);return a+tt*(b-a);}
+        var top=[lerp(x0,x1,v00,v10),y0],bottom=[lerp(x0,x1,v01,v11),y1],left=[x0,lerp(y0,y1,v00,v01)],right=[x1,lerp(y0,y1,v10,v11)];
+        switch(code){case 1:case 14:segs.push(top,left);break;case 2:case 13:segs.push(top,right);break;case 3:case 12:segs.push(left,right);break;case 4:case 11:segs.push(right,bottom);break;case 6:case 9:segs.push(top,bottom);break;case 7:case 8:segs.push(left,bottom);break;case 5:segs.push(top,right,left,bottom);break;case 10:segs.push(top,left,right,bottom);break;}
+      }
+      if(segs.length>0){
+        var hue,sat,lum;if(t<.33){hue=145;sat=28;lum=50;}else if(t<.66){hue=38;sat=32;lum=55;}else{hue=175;sat=22;lum=48;}
+        ctx.strokeStyle='hsla('+hue+','+sat+'%,'+lum+'%,'+(isIdx?.12:.05)+')';
+        ctx.lineWidth=(isIdx?1.4:.7)*dpr;ctx.beginPath();
+        for(var i=0;i<segs.length;i+=2){ctx.moveTo(segs[i][0],segs[i][1]);ctx.lineTo(segs[i+1][0],segs[i+1][1]);}
+        ctx.stroke();
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  resize();addEventListener('resize',resize);requestAnimationFrame(draw);
+})();
+</script>
 
 <script>
 (function(){
@@ -253,10 +307,10 @@
     preset:'Ironman', swimDist:3.8, bikeDist:180, runDist:42.2,
     swimPaceMin:1, swimPaceSec:44, bikeSpeed:34, runPace:5,
     t1:3, t2:2, aidStations:[], schedule:[], customFoods:[], raceType:'tri',
-    shortlist:[], bodyWeight: 70, gelMode:'packet',
+    shortlist:[], bodyWeight: 80, gelMode:'packet', sweatRate: 1000,
     showSodium:false, showFluid:true, showAid:true, showGraph:true,
     showPacking:true, showTopTube:true, showCaffeine:false,
-    showFluidGraph:false, showSodiumGraph:false, showCaffeineGraph:false,
+    showFluidGraph:false, showSodiumGraph:false, showCaffeineGraph:false, showEnergyGraph:true,
     // Per-leg strategy: { legName: { foods: [foodId,...], target: g/hr } }
     strategies: {}
   };
@@ -340,6 +394,58 @@
       plasma[m]=total;
     }
     return{plasma:plasma,minutes:n};
+  }
+
+  // Energy balance: cumulative kcal burned vs consumed
+  function calcEnergyBalance(race){
+    var n=Math.ceil(race.total+PRE_RACE_OFFSET)+1;
+    var burned=new Float32Array(n),consumed=new Float32Array(n),deficit=new Float32Array(n);
+    var wt=state.bodyWeight;
+
+    // kcal/min burn rates by discipline (MET-based)
+    // Swim: ~8.0 MET, Bike: speed-dependent, Run: pace-dependent
+    // MET formula: kcal/min = MET * 3.5 * wt(kg) / 200
+    function metRate(met){return met*3.5*wt/200;}
+
+    // Bike MET estimate: ~4 at 16km/h, ~8 at 25, ~10 at 30, ~12 at 35, ~14 at 40+
+    var bikeSpd=state.bikeSpeed;
+    var bikeMET=bikeSpd<20?6:bikeSpd<25?8:bikeSpd<30?10:bikeSpd<35?12:bikeSpd<40?14:16;
+
+    // Run MET: roughly 1 kcal/kg/km, or MET ~10-14 depending on pace
+    var runPace=state.runPace; // min/km
+    var runMET=runPace>6?9:runPace>5.5?10:runPace>5?11:runPace>4.5?12.5:runPace>4?14:16;
+
+    var swimMET=8; // moderate-hard swim
+    var t1MET=3; var t2MET=3; // transitions — brisk walking
+
+    function getMET(disc){
+      if(disc==='Swim')return swimMET;
+      if(disc==='Bike')return bikeMET;
+      if(disc==='Run')return runMET;
+      if(disc==='T1'||disc==='T2')return t1MET;
+      return 1.5; // pre-race resting
+    }
+
+    // Cumulative intake: 4 kcal per gram of carb
+    var cumBurned=0,cumConsumed=0;
+    for(var m=0;m<n;m++){
+      var rt=m-PRE_RACE_OFFSET;
+      var disc=getDisciplineAtTime(race.segs,rt);
+      cumBurned+=metRate(getMET(disc));
+
+      // Check if any food consumed at this minute
+      for(var s=0;s<state.schedule.length;s++){
+        var e=state.schedule[s];
+        if(Math.round(e.timeMin)===Math.round(rt)){
+          var f=getFoodById(e.foodId);
+          if(f) cumConsumed+=f.carbs*(e.portion||1)*4; // 4 kcal/g carb
+        }
+      }
+      burned[m]=cumBurned;
+      consumed[m]=cumConsumed;
+      deficit[m]=cumConsumed-cumBurned;
+    }
+    return{burned:burned,consumed:consumed,deficit:deficit,minutes:n,totalBurned:cumBurned,totalConsumed:cumConsumed};
   }
 
   function aidStationTimes(race){
@@ -564,14 +670,14 @@
      ══════════════════════════════════════ */
 
   function render(){
-    var race=calcRace(),abs=calcAbsorption(race.total),fl=calcFluidTimeline(race.total),caf=calcCaffeine(race.total);
+    var race=calcRace(),abs=calcAbsorption(race.total),fl=calcFluidTimeline(race.total),caf=calcCaffeine(race.total),energy=calcEnergyBalance(race);
     var aids=aidStationTimes(race),allFoods=getAllFoods(),stratLegs=getStratLegs(race);
     var html='';
 
     /* TOGGLES */
     html+='<div class="toggles-bar">';
     var tgs=[['togSodium','showSodium','Sodium'],['togFluid','showFluid','Fluid'],['togCaffeine','showCaffeine','Caffeine'],
-      ['togAid','showAid','Aid stations'],['togGraph','showGraph','Absorption graph'],
+      ['togAid','showAid','Aid stations'],['togGraph','showGraph','Absorption graph'],['togEnergy','showEnergyGraph','Energy balance'],
       ['togFluidGraph','showFluidGraph','Fluid graph'],['togSodiumGraph','showSodiumGraph','Sodium graph'],
       ['togCafGraph','showCaffeineGraph','Caffeine graph'],
       ['togPacking','showPacking','Packing list'],['togTopTube','showTopTube','Top tube card']];
@@ -590,7 +696,9 @@
     if(state.raceType!=='run') html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>Bike (km)</label><input type="number" id="bikeDist" min="0" max="300" step="1" value="'+state.bikeDist+'"></div><div class="field"><label>Bike speed (km/h)</label><input type="number" id="bikeSpeed" min="10" max="50" step="0.5" value="'+state.bikeSpeed+'"></div></div>';
     if(state.raceType!=='bike') html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>Run (km)</label><input type="number" id="runDist" min="0" max="100" step="0.1" value="'+state.runDist+'"></div><div class="field"><label>Run pace (min/km)</label><input type="number" id="runPace" min="2.5" max="10" step="0.1" value="'+state.runPace+'"></div></div>';
     if(state.raceType==='tri'||state.raceType==='custom') html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>T1 (min)</label><input type="number" id="t1" min="0" max="15" step="0.5" value="'+state.t1+'"></div><div class="field"><label>T2 (min)</label><input type="number" id="t2" min="0" max="15" step="0.5" value="'+state.t2+'"></div></div>';
-    if(state.showCaffeine) html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>Body weight (kg)</label><input type="number" id="bodyWt" min="30" max="150" step="1" value="'+state.bodyWeight+'"></div><div class="field"><label>&nbsp;</label><div style="font-size:10px;color:var(--caf);font-family:\'DM Mono\',monospace">Target caffeine: '+Math.round(state.bodyWeight*3)+'\u2013'+Math.round(state.bodyWeight*6)+' mg</div></div></div>';
+    html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>Body weight (kg)</label><input type="number" id="bodyWt" min="30" max="150" step="1" value="'+state.bodyWeight+'"></div><div class="field"><label>Sweat rate (ml/hr)</label><input type="number" id="sweatRate" min="200" max="3000" step="50" value="'+state.sweatRate+'"></div>';
+    if(state.showCaffeine) html+='<div class="field"><label>&nbsp;</label><div style="font-size:10px;color:var(--caf);font-family:\'DM Mono\',monospace">Caffeine: '+Math.round(state.bodyWeight*3)+'\u2013'+Math.round(state.bodyWeight*6)+' mg</div></div>';
+    html+='</div>';
     html+='</div>';
 
     // Summary
@@ -636,7 +744,13 @@
     html+='<div class="gel-mode-row"><span class="gel-mode-label">Gels carried as</span><button class="gel-mode-btn'+(state.gelMode==='packet'?' active':'')+'" data-mode="packet">Packets</button><button class="gel-mode-btn'+(state.gelMode==='bottle'?' active':'')+'" data-mode="bottle">In bottle</button><span class="gel-mode-hint">'+(state.gelMode==='packet'?'Must finish each gel before next item':'Gels mixed in bottle — any amount, any time')+'</span></div>';
     for(var sl=0;sl<stratLegs.length;sl++){
       var sLeg=stratLegs[sl];
-      if(!state.strategies[sLeg.name]) state.strategies[sLeg.name]={foods:[],target:sLeg.name==='Pre-Race'?30:70,fluidTarget:sLeg.name==='Pre-Race'?200:500,sodiumTarget:sLeg.name==='Pre-Race'?200:500,cafTarget:sLeg.name==='Pre-Race'?0:100};
+      if(!state.strategies[sLeg.name]){
+        var defCarb=sLeg.name==='Pre-Race'?30:sLeg.name==='Bike'?95:sLeg.name==='Run'?60:sLeg.name==='T1'||sLeg.name==='T2'?0:70;
+        var defFluid=sLeg.name==='Pre-Race'?200:state.sweatRate;
+        var defNa=sLeg.name==='Pre-Race'?200:1500;
+        var defCaf=sLeg.name==='Pre-Race'?0:sLeg.name==='Bike'?Math.round(state.bodyWeight*6*0.6):sLeg.name==='Run'?Math.round(state.bodyWeight*6*0.4):0;
+        state.strategies[sLeg.name]={foods:[],target:defCarb,fluidTarget:defFluid,sodiumTarget:defNa,cafTarget:defCaf};
+      }
       var strat=state.strategies[sLeg.name];
       html+='<div class="strat-leg">';
       html+='<div class="strat-leg-head"><div class="strat-leg-dot" style="background:'+sLeg.color+'"></div>'+sLeg.name+' <span style="font-weight:400;color:var(--muted);font-size:9px">'+fmtHM(sLeg.dur)+'</span></div>';
@@ -668,14 +782,15 @@
     for(var ts=0;ts<state.schedule.length;ts++){var tf=getFoodById(state.schedule[ts].foodId),po=state.schedule[ts].portion||1;if(tf){tG+=Math.round(tf.glucose*po);tF+=Math.round(tf.fructose*po);tC+=Math.round(tf.carbs*po);tMl+=Math.round((tf.ml||0)*po);tNa+=Math.round((tf.na||0)*po);tCaf+=Math.round((tf.caf||0)*po);}}
     var rH=race.total/60,cHr=rH>0?tC/rH:0;
 
-    var hc=3;if(state.showFluid)hc++;if(state.showSodium)hc++;if(state.showCaffeine)hc++;
-    html+='<div class="headline" style="padding:16px 20px"><div class="hl-grid" style="grid-template-columns:repeat('+Math.min(hc,6)+',1fr)">';
+    var hc=3;if(state.showFluid)hc++;if(state.showSodium)hc++;if(state.showCaffeine)hc++;if(state.showEnergyGraph)hc+=2;
+    html+='<div class="headline" style="padding:16px 20px"><div class="hl-grid" style="grid-template-columns:repeat('+Math.min(hc,8)+',1fr)">';
     html+='<div class="hl-metric"><div class="hl-metric-val">'+Math.round(cHr)+'</div><div class="hl-metric-label">carbs g/hr</div></div>';
     html+='<div class="hl-metric"><div class="hl-metric-val">'+tC+'g</div><div class="hl-metric-label">total carbs</div></div>';
     html+='<div class="hl-metric"><div class="hl-metric-val" style="font-size:14px;color:#5dade2">'+tG+'<span style="font-size:10px;color:rgba(255,255,255,.3)"> / </span><span style="color:#e74c3c">'+tF+'</span></div><div class="hl-metric-label">G / F</div></div>';
     if(state.showFluid)html+='<div class="hl-metric"><div class="hl-metric-val" style="color:#5dade2">'+Math.round(tMl/Math.max(rH,.01))+'</div><div class="hl-metric-label">fluid ml/hr</div></div>';
     if(state.showSodium)html+='<div class="hl-metric"><div class="hl-metric-val" style="color:#e8a838">'+Math.round(tNa/Math.max(rH,.01))+'</div><div class="hl-metric-label">Na mg/hr</div></div>';
     if(state.showCaffeine)html+='<div class="hl-metric"><div class="hl-metric-val" style="color:var(--caf)">'+tCaf+'mg</div><div class="hl-metric-label">caffeine total</div></div>';
+    if(state.showEnergyGraph){var defPct=energy.totalBurned>0?Math.round((1-energy.totalConsumed/energy.totalBurned)*100):0;html+='<div class="hl-metric"><div class="hl-metric-val" style="color:#e67e22">'+Math.round(energy.totalBurned)+'</div><div class="hl-metric-label">kcal burned</div></div>';html+='<div class="hl-metric"><div class="hl-metric-val" style="color:'+(defPct>70?'#c0392b':defPct>50?'#e67e22':'var(--green)')+'">-'+defPct+'%</div><div class="hl-metric-label">energy deficit</div></div>';}
     html+='</div></div>';
 
     html+='<div class="panel"><div class="panel-title">Scheduled items</div>';
@@ -712,6 +827,8 @@
     if(state.showFluidGraph){html+='<div><div class="sec-head"><span class="sec-tag">Fluid Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Fluid intake rate (ml/hr)</div><div class="graph-wrap graph-wrap-sm"><canvas id="fluidGraph"></canvas></div></div></div>';}
     if(state.showSodiumGraph){html+='<div><div class="sec-head"><span class="sec-tag">Sodium Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Sodium intake rate (mg/hr)</div><div class="graph-wrap graph-wrap-sm"><canvas id="sodiumGraph"></canvas></div></div></div>';}
     if(state.showCaffeineGraph){html+='<div><div class="sec-head"><span class="sec-tag">Caffeine Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Plasma caffeine (mg) \u2014 8hr half-life pharmacokinetic model</div><div class="graph-wrap graph-wrap-sm"><canvas id="cafGraph"></canvas></div><div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:var(--caf)"></div> Plasma caffeine (mg)</div><div class="legend-item" style="color:var(--muted)">Peak at ~45 min post-ingestion, t\u00BD = 8 hrs</div></div></div></div>';}
+
+    if(state.showEnergyGraph){html+='<div><div class="sec-head"><span class="sec-tag">Energy Balance</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Cumulative kcal burned vs consumed</div><div class="graph-wrap"><canvas id="energyGraph"></canvas></div><div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:#e67e22"></div> Burned (MET estimate)</div><div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> Consumed (4 kcal/g carb)</div><div class="legend-item"><div class="legend-swatch" style="background:rgba(192,57,43,.3)"></div> Deficit</div></div></div></div>';}
 
     /* 6. RACE DAY CARDS */
     html+='<div id="printSection"><div class="sec-head"><span class="sec-tag">Race Day Cards</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Per-leg fuelling \u2014 print for race day</div>';
@@ -789,6 +906,7 @@
     if(state.showFluidGraph)drawLineGraph('fluidGraph',race,fl.ml,fl.minutes,'#2980b9','ml/hr');
     if(state.showSodiumGraph)drawLineGraph('sodiumGraph',race,fl.na,fl.minutes,'#e8a838','mg/hr');
     if(state.showCaffeineGraph)drawLineGraph('cafGraph',race,caf.plasma,caf.minutes,'#8b5cf6','mg');
+    if(state.showEnergyGraph)drawEnergyGraph(race,energy);
   }
 
   /* ── GRAPH: Absorption with zones ── */
@@ -862,9 +980,62 @@
     for(var sd=0;sd<state.schedule.length;sd++){var sx=xAt(state.schedule[sd].timeMin);ctx.fillStyle=color;ctx.beginPath();ctx.arc(sx,pT+gH,3,0,Math.PI*2);ctx.fill();}
   }
 
+  /* ── GRAPH: Energy balance ── */
+  function drawEnergyGraph(race,en){
+    var c=document.getElementById('energyGraph');if(!c)return;
+    var w=c.parentElement,dpr=devicePixelRatio||1;c.width=w.clientWidth*dpr;c.height=w.clientHeight*dpr;
+    var ctx=c.getContext('2d');ctx.scale(dpr,dpr);var W=w.clientWidth,H=w.clientHeight;
+    var pL=50,pR=10,pT=16,pB=36,gW=W-pL-pR,gH=H-pT-pB;
+    var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
+    var tOff=hasPre?30:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
+    var sI=hasPre?0:OFF,eI=Math.min(en.minutes,Math.ceil(race.total)+OFF+1);
+    // Find max value
+    var mx=100;for(var mv=sI;mv<eI;mv++){if(en.burned[mv]>mx)mx=en.burned[mv];if(en.consumed[mv]>mx)mx=en.consumed[mv];}
+    mx=Math.ceil(mx/500)*500+500;
+    function xAt(m){return pL+((m+tOff)/totMin)*gW;}function yAt(v){return pT+gH-(v/mx)*gH;}
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+    // Segments
+    for(var s=0;s<race.segs.length;s++){var sg=race.segs[s],x1=xAt(sg.start),x2=xAt(sg.start+sg.dur);ctx.fillStyle=sg.name==='Swim'?'rgba(41,128,185,.04)':sg.name==='Bike'?'rgba(39,174,96,.04)':sg.name==='Run'?'rgba(230,126,34,.04)':'rgba(127,140,141,.04)';ctx.fillRect(x1,pT,x2-x1,gH);if(sg.dur/totMin>.05){ctx.fillStyle=sg.name==='Swim'?'rgba(41,128,185,.5)':sg.name==='Bike'?'rgba(39,174,96,.5)':sg.name==='Run'?'rgba(230,126,34,.5)':'rgba(127,140,141,.5)';ctx.font='500 9px "DM Mono",monospace';ctx.textAlign='center';ctx.fillText(sg.name,(x1+x2)/2,pT+10);}}
+    // Grid
+    ctx.strokeStyle='#eee9df';ctx.lineWidth=1;var step=mx>4000?1000:mx>2000?500:250;
+    for(var y=0;y<=mx;y+=step){ctx.beginPath();ctx.moveTo(pL,yAt(y));ctx.lineTo(W-pR,yAt(y));ctx.stroke();ctx.fillStyle='#9a9080';ctx.font='10px "DM Mono",monospace';ctx.textAlign='right';ctx.fillText(y,pL-4,yAt(y)+3);}
+    ctx.save();ctx.translate(12,pT+gH/2);ctx.rotate(-Math.PI/2);ctx.fillStyle='#9a9080';ctx.font='9px "DM Mono",monospace';ctx.textAlign='center';ctx.fillText('kcal',0,0);ctx.restore();
+    var stp=race.total>360?60:race.total>120?30:15;ctx.fillStyle='#9a9080';ctx.font='10px "DM Mono",monospace';ctx.textAlign='center';
+    for(var t3=0;t3<=race.total;t3+=stp){ctx.fillText(fmtHM(t3),xAt(t3),H-pB+16);ctx.strokeStyle='#eee9df';ctx.beginPath();ctx.moveTo(xAt(t3),pT);ctx.lineTo(xAt(t3),pT+gH);ctx.stroke();}
+    if(hasPre){ctx.fillStyle='#9a9080';ctx.fillText("-30'",xAt(-30),H-pB+16);ctx.fillText("-15'",xAt(-15),H-pB+16);ctx.fillStyle='rgba(127,140,141,.06)';ctx.fillRect(xAt(-tOff),pT,xAt(0)-xAt(-tOff),gH);ctx.strokeStyle='rgba(24,22,15,.3)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(xAt(0),pT);ctx.lineTo(xAt(0),pT+gH);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(24,22,15,.5)';ctx.font='8px "DM Mono",monospace';ctx.fillText('START',xAt(0),pT+gH+24);}
+    // Deficit fill (area between burned and consumed)
+    ctx.fillStyle='rgba(192,57,43,.08)';
+    ctx.beginPath();
+    ctx.moveTo(xAt(sI-OFF),yAt(en.burned[sI]));
+    for(var m1=sI;m1<eI;m1++) ctx.lineTo(xAt(m1-OFF),yAt(en.burned[m1]));
+    for(var m2=eI-1;m2>=sI;m2--) ctx.lineTo(xAt(m2-OFF),yAt(en.consumed[m2]));
+    ctx.closePath();ctx.fill();
+    // Burned line
+    ctx.strokeStyle='#e67e22';ctx.lineWidth=2;ctx.beginPath();
+    for(var m3=sI;m3<eI;m3++){if(m3===sI)ctx.moveTo(xAt(m3-OFF),yAt(en.burned[m3]));else ctx.lineTo(xAt(m3-OFF),yAt(en.burned[m3]));}
+    ctx.stroke();
+    // Consumed line
+    ctx.strokeStyle='#1d6840';ctx.lineWidth=2;ctx.beginPath();
+    for(var m4=sI;m4<eI;m4++){if(m4===sI)ctx.moveTo(xAt(m4-OFF),yAt(en.consumed[m4]));else ctx.lineTo(xAt(m4-OFF),yAt(en.consumed[m4]));}
+    ctx.stroke();
+    // Deficit line
+    ctx.strokeStyle='rgba(192,57,43,.5)';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);ctx.beginPath();
+    for(var m5=sI;m5<eI;m5++){var def=en.burned[m5]-en.consumed[m5];if(m5===sI)ctx.moveTo(xAt(m5-OFF),yAt(def>0?def:0));else ctx.lineTo(xAt(m5-OFF),yAt(def>0?def:0));}
+    ctx.stroke();ctx.setLineDash([]);
+    // Labels at end
+    if(eI>sI+10){
+      var ex=xAt(eI-1-OFF)+4;
+      ctx.font='500 9px "DM Mono",monospace';ctx.textAlign='left';
+      ctx.fillStyle='#e67e22';ctx.fillText(Math.round(en.burned[eI-1])+' kcal',ex,yAt(en.burned[eI-1])+3);
+      ctx.fillStyle='#1d6840';ctx.fillText(Math.round(en.consumed[eI-1])+' kcal',ex,yAt(en.consumed[eI-1])+3);
+      var finalDef=en.burned[eI-1]-en.consumed[eI-1];
+      if(finalDef>0){ctx.fillStyle='#c0392b';ctx.fillText('-'+Math.round(finalDef),ex,yAt(finalDef)+3);}
+    }
+  }
+
   /* ── EVENTS ── */
   function bindEvents(){
-    var tgs=[['togSodium','showSodium'],['togFluid','showFluid'],['togCaffeine','showCaffeine'],['togAid','showAid'],['togGraph','showGraph'],['togFluidGraph','showFluidGraph'],['togSodiumGraph','showSodiumGraph'],['togCafGraph','showCaffeineGraph'],['togPacking','showPacking'],['togTopTube','showTopTube']];
+    var tgs=[['togSodium','showSodium'],['togFluid','showFluid'],['togCaffeine','showCaffeine'],['togAid','showAid'],['togGraph','showGraph'],['togEnergy','showEnergyGraph'],['togFluidGraph','showFluidGraph'],['togSodiumGraph','showSodiumGraph'],['togCafGraph','showCaffeineGraph'],['togPacking','showPacking'],['togTopTube','showTopTube']];
     for(var tg=0;tg<tgs.length;tg++){var te=document.getElementById(tgs[tg][0]);if(te)(function(k){te.addEventListener('change',function(){state[k]=this.checked;render();});})(tgs[tg][1]);}
 
     var pBs=document.querySelectorAll('.preset-btn');for(var p=0;p<pBs.length;p++)pBs[p].addEventListener('click',function(){var pr=PRESETS[+this.getAttribute('data-preset')];state.preset=pr.name;state.raceType=pr.type;if(pr.name!=='Custom'){state.swimDist=pr.swim;state.bikeDist=pr.bike;state.runDist=pr.run;}render();});
@@ -877,7 +1048,9 @@
     if(spS)spS.addEventListener('input',function(){state.swimPaceSec=+this.value||0;state.preset='Custom';render();});
 
     var bwEl=document.getElementById('bodyWt');
-    if(bwEl)bwEl.addEventListener('input',function(){state.bodyWeight=+this.value||70;render();});
+    if(bwEl)bwEl.addEventListener('input',function(){state.bodyWeight=+this.value||80;render();});
+    var srEl=document.getElementById('sweatRate');
+    if(srEl)srEl.addEventListener('input',function(){state.sweatRate=+this.value||1000;render();});
 
     var aBtn=document.getElementById('addAid');
     if(aBtn)aBtn.addEventListener('click',function(){var km=+document.getElementById('aidKm').value,d=document.getElementById('aidDisc').value;if(km>0){state.aidStations.push({km:km,discipline:d});state.aidStations.sort(function(a,b){return a.km-b.km;});render();}});
@@ -925,7 +1098,7 @@
   }
 
   render();
-  var rT;window.addEventListener('resize',function(){clearTimeout(rT);rT=setTimeout(function(){var r=calcRace(),a=calcAbsorption(r.total),f=calcFluidTimeline(r.total),cf=calcCaffeine(r.total),ai=aidStationTimes(r);if(state.showGraph)drawAbsGraph(r,a,ai);if(state.showFluidGraph)drawLineGraph('fluidGraph',r,f.ml,f.minutes,'#2980b9','ml/hr');if(state.showSodiumGraph)drawLineGraph('sodiumGraph',r,f.na,f.minutes,'#e8a838','mg/hr');if(state.showCaffeineGraph)drawLineGraph('cafGraph',r,cf.plasma,cf.minutes,'#8b5cf6','mg');},150);});
+  var rT;window.addEventListener('resize',function(){clearTimeout(rT);rT=setTimeout(function(){var r=calcRace(),a=calcAbsorption(r.total),f=calcFluidTimeline(r.total),cf=calcCaffeine(r.total),en=calcEnergyBalance(r),ai=aidStationTimes(r);if(state.showGraph)drawAbsGraph(r,a,ai);if(state.showFluidGraph)drawLineGraph('fluidGraph',r,f.ml,f.minutes,'#2980b9','ml/hr');if(state.showSodiumGraph)drawLineGraph('sodiumGraph',r,f.na,f.minutes,'#e8a838','mg/hr');if(state.showCaffeineGraph)drawLineGraph('cafGraph',r,cf.plasma,cf.minutes,'#8b5cf6','mg');if(state.showEnergyGraph)drawEnergyGraph(r,en);},150);});
 })();
 </script>
 </body>
