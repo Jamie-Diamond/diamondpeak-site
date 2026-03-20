@@ -570,102 +570,81 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     // ── PHASE 1: Carbs (small portions, frequent, flat curve) ──
     // Rule: only one solid open at a time — finish it before starting the next.
     // Liquids and gels can interleave with anything.
-    var TARGET_STEP=12;
+    // KEY: space items so the rolling 60-min window never exceeds target g/hr.
 
     if(carbFoods.length>0&&strat.target>0){
       var totalCarbs=strat.target*legHrs;
 
-      // Calculate portion sizes per food
       function calcPortion(fd){
         if(fd.form==='solid'){
           var solidP=[1,0.5,1/3],bestP=1,bestDiff=9999;
-          for(var pi=0;pi<solidP.length;pi++){var diff=Math.abs(fd.carbs*solidP[pi]-TARGET_STEP);if(diff<bestDiff){bestDiff=diff;bestP=solidP[pi];}}
+          for(var pi=0;pi<solidP.length;pi++){var diff=Math.abs(fd.carbs*solidP[pi]-15);if(diff<bestDiff){bestDiff=diff;bestP=solidP[pi];}}
           return bestP;
         } else if(fd.form==='gel'&&state.gelMode==='bottle'){
           var minP=fd.ml>0?Math.max(0.1,25/fd.ml):0.25;
           var gelBP=[1,0.5,1/3,0.25],bestP2=1,bestDiff2=9999;
-          for(var pi2=0;pi2<gelBP.length;pi2++){if(gelBP[pi2]<minP-0.01)continue;var diff2=Math.abs(fd.carbs*gelBP[pi2]-TARGET_STEP);if(diff2<bestDiff2){bestDiff2=diff2;bestP2=gelBP[pi2];}}
+          for(var pi2=0;pi2<gelBP.length;pi2++){if(gelBP[pi2]<minP-0.01)continue;var diff2=Math.abs(fd.carbs*gelBP[pi2]-15);if(diff2<bestDiff2){bestDiff2=diff2;bestP2=gelBP[pi2];}}
           return bestP2;
         } else if(fd.form==='gel'){
           return fd.carbs*0.5>=6?0.5:1;
         } else if(fd.form==='liquid'){
           var minLP=fd.ml>0?Math.max(0.25,100/fd.ml):0.25;
           var liqP=[1,0.5,1/3,0.25],bestP3=1,bestDiff3=9999;
-          for(var pi3=0;pi3<liqP.length;pi3++){if(liqP[pi3]<minLP-0.01)continue;var diff3=Math.abs(fd.carbs*liqP[pi3]-TARGET_STEP);if(diff3<bestDiff3){bestDiff3=diff3;bestP3=liqP[pi3];}}
+          for(var pi3=0;pi3<liqP.length;pi3++){if(liqP[pi3]<minLP-0.01)continue;var diff3=Math.abs(fd.carbs*liqP[pi3]-15);if(diff3<bestDiff3){bestDiff3=diff3;bestP3=liqP[pi3];}}
           return bestP3;
         }
         return 1;
       }
 
-      // Split into solids and non-solids
+      // Build a flat queue: solids sequential per food, non-solids round-robin
       var solidFoods=[],nonSolidFoods=[];
       for(var c=0;c<carbFoods.length;c++){
         if(carbFoods[c].form==='solid') solidFoods.push(carbFoods[c]);
         else nonSolidFoods.push(carbFoods[c]);
       }
 
-      // Build a sequential queue for solids: all portions of food A, then food B, etc.
-      // Each solid gets its fair share of total carbs
-      var solidQueue=[]; // [{food, portion}]
+      // Calculate how many doses of each food we need
+      var allDoses=[]; // [{food, portion, carbsPerDose, isSolid}]
+
+      // Solids: sequential — all of food A, then food B
       if(solidFoods.length>0){
         var solidShare=totalCarbs*(solidFoods.length/carbFoods.length);
-        var sharePerSolid=solidShare/solidFoods.length;
+        var perSolid=solidShare/solidFoods.length;
         for(var si=0;si<solidFoods.length;si++){
-          var sf=solidFoods[si],sp=calcPortion(sf);
-          var carbsPerDose=sf.carbs*sp;
-          var numDoses=carbsPerDose>0?Math.round(sharePerSolid/carbsPerDose):0;
-          if(numDoses<1)numDoses=1;
-          for(var sd=0;sd<numDoses;sd++) solidQueue.push({food:sf,portion:sp,carbsPerDose:carbsPerDose});
+          var sf=solidFoods[si],sp=calcPortion(sf),cpd=sf.carbs*sp;
+          var nd=cpd>0?Math.round(perSolid/cpd):1;if(nd<1)nd=1;
+          for(var sd=0;sd<nd;sd++) allDoses.push({food:sf,portion:sp,carbsPerDose:cpd,isSolid:true});
         }
       }
 
-      // Build interleaving cursors for non-solids (gels/liquids)
-      var nonSolidShare=totalCarbs*(nonSolidFoods.length/carbFoods.length);
-      var sharePerNS=nonSolidFoods.length>0?strat.target*(nonSolidFoods.length/carbFoods.length)/nonSolidFoods.length:0;
-      var nsCursors=[];
-      for(var ns=0;ns<nonSolidFoods.length;ns++){
-        var nf=nonSolidFoods[ns],np=calcPortion(nf);
-        var nCpd=nf.carbs*np;
-        var nDph=nCpd>0?sharePerNS/nCpd:0;
-        var nInt=nDph>0?60/nDph:9999;
-        if(nInt<MIN_GAP)nInt=MIN_GAP;
-        nsCursors.push({food:nf,portion:np,carbsPerDose:nCpd,interval:nInt,nextT:startT+MIN_GAP*ns});
+      // Non-solids: interleave round-robin
+      if(nonSolidFoods.length>0){
+        var nsShare=totalCarbs*(nonSolidFoods.length/carbFoods.length);
+        var perNS=nsShare/nonSolidFoods.length;
+        var nsDoses=[];
+        for(var ni=0;ni<nonSolidFoods.length;ni++){
+          var nf=nonSolidFoods[ni],np=calcPortion(nf),ncpd=nf.carbs*np;
+          var nnd=ncpd>0?Math.round(perNS/ncpd):1;if(nnd<1)nnd=1;
+          nsDoses.push({food:nf,portion:np,carbsPerDose:ncpd,count:nnd});
+        }
+        // Round-robin interleave non-solids
+        var maxNS=0;for(var mi=0;mi<nsDoses.length;mi++)if(nsDoses[mi].count>maxNS)maxNS=nsDoses[mi].count;
+        for(var rr=0;rr<maxNS;rr++){
+          for(var ri=0;ri<nsDoses.length;ri++){
+            if(rr<nsDoses[ri].count) allDoses.push({food:nsDoses[ri].food,portion:nsDoses[ri].portion,carbsPerDose:nsDoses[ri].carbsPerDose,isSolid:false});
+          }
+        }
       }
 
-      // Place items on a shared timeline: solids from queue, non-solids from cursors
-      // Solids get placed at regular intervals, non-solids interleave between them
-      var carbsPlaced=0,solidIdx=0;
-      var solidInterval=solidQueue.length>0?Math.max(MIN_GAP,(endT-startT)/(solidQueue.length+nsCursors.length)):9999;
-      var nextSolidT=startT;
-      var safety=500;
-
-      while(carbsPlaced<totalCarbs&&safety-->0){
-        // Find earliest candidate: next solid from queue, or earliest non-solid cursor
-        var bestType='',bestTime=Infinity;
-
-        if(solidIdx<solidQueue.length&&nextSolidT<=endT&&nextSolidT<bestTime){
-          bestTime=nextSolidT;bestType='solid';
-        }
-        for(var ci=0;ci<nsCursors.length;ci++){
-          if(nsCursors[ci].nextT<=endT&&nsCursors[ci].nextT<bestTime){bestTime=nsCursors[ci].nextT;bestType='ns_'+ci;}
-        }
-        if(!bestType)break;
-
-        if(bestType==='solid'){
-          var sq=solidQueue[solidIdx];
-          if(!addItem(sq.food.id,nextSolidT,sq.portion))break;
-          carbsPlaced+=sq.carbsPerDose;
-          solidIdx++;
-          nextSolidT=lastPlacedTime+MIN_GAP;
-        } else {
-          var nsIdx=+bestType.split('_')[1];
-          var cur=nsCursors[nsIdx];
-          if(!addItem(cur.food.id,cur.nextT,cur.portion))break;
-          carbsPlaced+=cur.carbsPerDose;
-          cur.nextT=lastPlacedTime+cur.interval;
-        }
-        // After placing anything, push next solid time forward to respect gap
-        if(nextSolidT<lastPlacedTime+MIN_GAP) nextSolidT=lastPlacedTime+MIN_GAP;
+      // Space all doses evenly across the leg, respecting MIN_GAP
+      var interval=allDoses.length>0?Math.max(MIN_GAP,(endT-startT)/allDoses.length):MIN_GAP;
+      var carbsPlaced=0;
+      for(var di=0;di<allDoses.length;di++){
+        if(carbsPlaced>=totalCarbs)break;
+        var dose=allDoses[di];
+        var t=startT+interval*di;
+        if(!addItem(dose.food.id,t,dose.portion))break;
+        carbsPlaced+=dose.carbsPerDose;
       }
     }
 
@@ -680,20 +659,19 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       return{ml:ml,na:na,caf:caf};
     }
 
-    // ── PHASE 2: Fluid top-up ──
+    // ── PHASE 2: Fluid top-up (place at specific times, not appending) ──
     if(fluidFoods.length>0&&strat.fluidTarget>0){
       var tally=tallyPlaced();
       var fluidNeeded=strat.fluidTarget*legHrs - tally.ml;
       if(fluidNeeded>50){
-        // Pick best fluid source
         var bestFluid=fluidFoods[0];
         for(var ff=1;ff<fluidFoods.length;ff++) if(fluidFoods[ff].ml>bestFluid.ml) bestFluid=fluidFoods[ff];
         var numDrinks=Math.ceil(fluidNeeded/(bestFluid.ml||250));
-        // Space evenly, offset from carb items by half-interval
-        var fInterval=Math.max(15,(endT-startT)/(numDrinks+1));
+        var fInterval=Math.max(MIN_GAP,(endT-startT)/(numDrinks+1));
+        // Reset lastPlacedTime so fluid items can slot into the timeline
+        lastPlacedTime=-9999;
         for(var fi=0;fi<numDrinks;fi++){
           var ft=startT+fInterval*(fi+0.5);
-          if(ft>endT)ft=endT;
           addItem(bestFluid.id,ft);
         }
       }
@@ -704,15 +682,14 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       var tally2=tallyPlaced();
       var naNeeded=strat.sodiumTarget*legHrs - tally2.na;
       if(naNeeded>30){
-        // Pick best sodium source (prefer capsules/tabs over drinks already placed)
         var bestNa=sodiumFoods[0];
-        for(var ns=1;ns<sodiumFoods.length;ns++) if((sodiumFoods[ns].na||0)>(bestNa.na||0)) bestNa=sodiumFoods[ns];
+        for(var ns2=1;ns2<sodiumFoods.length;ns2++) if((sodiumFoods[ns2].na||0)>(bestNa.na||0)) bestNa=sodiumFoods[ns2];
         var naPer=bestNa.na||250;
         var numNa=Math.ceil(naNeeded/naPer);
-        var nInterval=Math.max(20,(endT-startT)/(numNa+1));
-        for(var ni=0;ni<numNa;ni++){
-          var nt=startT+nInterval*(ni+1);
-          if(nt>endT)nt=endT;
+        var nInterval=Math.max(MIN_GAP,(endT-startT)/(numNa+1));
+        lastPlacedTime=-9999;
+        for(var nai=0;nai<numNa;nai++){
+          var nt=startT+nInterval*(nai+1);
           addItem(bestNa.id,nt);
         }
       }
@@ -721,17 +698,16 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     // ── PHASE 4: Caffeine top-up ──
     if(cafFoods.length>0&&strat.cafTarget>0){
       var tally3=tallyPlaced();
-      var cafNeeded=strat.cafTarget - tally3.caf; // cafTarget is total mg for leg
+      var cafNeeded=strat.cafTarget - tally3.caf;
       if(cafNeeded>10){
         var bestCaf=cafFoods[0];
         for(var cf=1;cf<cafFoods.length;cf++) if((cafFoods[cf].caf||0)>(bestCaf.caf||0)) bestCaf=cafFoods[cf];
         var cafPer=bestCaf.caf||100;
         var numCaf=Math.ceil(cafNeeded/cafPer);
-        // Space caffeine early in the leg (takes 45min to peak)
         var cInterval=Math.max(30,(endT-startT)/(numCaf+1));
+        lastPlacedTime=-9999;
         for(var cci=0;cci<numCaf;cci++){
           var ct=startT+cInterval*cci;
-          if(ct>endT)ct=endT;
           addItem(bestCaf.id,ct);
         }
       }
