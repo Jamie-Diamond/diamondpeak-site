@@ -336,7 +336,14 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   var state = {
     preset:'Ironman', swimDist:3.8, bikeDist:180, runDist:42.2,
     swimPaceMin:1, swimPaceSec:44, bikeSpeed:34, runPace:5,
-    t1:3, t2:2, aidStations:[], schedule:[], customFoods:[], raceType:'tri',
+    t1:3, t2:2, aidStations:[
+      {km:30,discipline:'bike',type:'water'},
+      {km:60,discipline:'bike',type:'electrolyte'},
+      {km:87,discipline:'bike',type:'full'},
+      {km:97,discipline:'bike',type:'water'},
+      {km:125,discipline:'bike',type:'full'},
+      {km:157,discipline:'bike',type:'full'}
+    ], schedule:[], customFoods:[], raceType:'tri',
     shortlist:[], bodyWeight: 80, gelMode:'packet', sweatRate: 1000, bikeBottles:3, bottleSize:750,
     showSodium:false, showFluid:true, showAid:true, showGraph:true,
     showPacking:true, showTopTube:true, showCaffeine:false,
@@ -490,7 +497,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var t=[];
     for(var i=0;i<state.aidStations.length;i++){var a=state.aidStations[i],km=a.km,d=a.discipline||'bike',tm=0;
       for(var s=0;s<race.segs.length;s++){var sg=race.segs[s];if(sg.name.toLowerCase()===d){var sp=d==='bike'?state.bikeSpeed:(60/state.runPace);tm=sg.start+(Math.min(km,sg.dist)/sp)*60;break;}}
-      t.push({km:km,discipline:d,timeMin:tm,label:km+'km'});}
+      t.push({km:km,discipline:d,timeMin:tm,label:km+'km',type:a.type||'full'});}
     return t.sort(function(a,b){return a.timeMin-b.timeMin;});
   }
 
@@ -755,8 +762,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       html+='<div class="add-row"><select id="aidDisc">';
       if(state.bikeDist>0)html+='<option value="bike">Bike</option>';
       if(state.runDist>0)html+='<option value="run">Run</option>';
-      html+='</select><input type="number" id="aidKm" placeholder="km" min="0" step="1"><button class="btn-sm" id="addAid">+ Add</button></div>';
-      if(state.aidStations.length>0){html+='<div class="aid-list">';for(var a=0;a<state.aidStations.length;a++){var aid=state.aidStations[a],aT=0;for(var at=0;at<aids.length;at++)if(aids[at].km===aid.km&&aids[at].discipline===aid.discipline){aT=aids[at].timeMin;break;}html+='<div class="aid-chip"><span>'+aid.discipline+' '+aid.km+' km</span><span class="aid-time">@ '+fmtTime(aT)+'</span><span class="aid-rm" data-aid="'+a+'">&times;</span></div>';}html+='</div>';}
+      html+='</select><input type="number" id="aidKm" placeholder="km" min="0" step="1"><select id="aidType"><option value="water">Water only</option><option value="electrolyte">Water + electrolyte</option><option value="full">Full (food + drink)</option></select><button class="btn-sm" id="addAid">+ Add</button></div>';
+      if(state.aidStations.length>0){html+='<div class="aid-list">';for(var a=0;a<state.aidStations.length;a++){var aid=state.aidStations[a],aT=0;for(var at=0;at<aids.length;at++)if(aids[at].km===aid.km&&aids[at].discipline===aid.discipline){aT=aids[at].timeMin;break;}var aidTypeLabel=aid.type==='full'?'\uD83C\uDF7D Full':aid.type==='electrolyte'?'\u26A1 Elec':'\uD83D\uDCA7 Water';html+='<div class="aid-chip"><span>'+aid.discipline+' '+aid.km+'km</span><span style="font-size:9px;color:var(--muted)">'+aidTypeLabel+'</span><span class="aid-time">@ '+fmtTime(aT)+'</span><span class="aid-rm" data-aid="'+a+'">&times;</span></div>';}html+='</div>';}
       html+='</div></div>';
     }
 
@@ -968,9 +975,10 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
             var emptySlot=-1;
             for(var es=0;es<bottles.length;es++){if(bottles[es].ml<=0){emptySlot=es;break;}}
             if(emptySlot>=0){
-              bottles[emptySlot]={label:'Water (aid)',ml:bSize,isCarb:false};
+              var pickupLabel=aidT.type==='water'?'Water':aidT.type==='electrolyte'?'Water/PH1500':'Water/PH1500';
+              bottles[emptySlot]={label:pickupLabel+' (aid)',ml:bSize,isCarb:false};
               var totalMl=0;for(var tm=0;tm<bottles.length;tm++)totalMl+=bottles[tm].ml;
-              bottleEvents.push({time:aidT.timeMin,type:'pickup',label:'\u26F3 '+aidT.label+' \u2014 drop empty, pick up water/PH1500 ('+bSize+'ml). On bike: '+Math.round(totalMl)+'ml'});
+              bottleEvents.push({time:aidT.timeMin,type:'pickup',label:'\u26F3 '+aidT.label+' ('+({water:'\uD83D\uDCA7 water',electrolyte:'\u26A1 elec',full:'\uD83C\uDF7D full'}[aidT.type]||'full')+') \u2014 pick up '+pickupLabel+' ('+bSize+'ml). On bike: '+Math.round(totalMl)+'ml'});
             } else {
               var totalMl2=0;for(var tm2=0;tm2<bottles.length;tm2++)totalMl2+=bottles[tm2].ml;
               bottleEvents.push({time:aidT.timeMin,type:'skip',label:'\u26F3 '+aidT.label+' \u2014 no empty bottles, skip pickup ('+Math.round(totalMl2)+'ml on bike)'});
@@ -1003,8 +1011,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
           var emptySlot2=-1;
           for(var es2=0;es2<bottles.length;es2++){if(bottles[es2].ml<=0){emptySlot2=es2;break;}}
           if(emptySlot2>=0){
-            bottles[emptySlot2]={label:'Water (aid)',ml:bSize,isCarb:false};
-            bottleEvents.push({time:aidT2.timeMin,type:'pickup',label:'\u26F3 '+aidT2.label+' \u2014 pick up water/PH1500'});
+            var pickupLabel2=aidT2.type==='water'?'Water':aidT2.type==='electrolyte'?'Water/PH1500':'Water/PH1500';
+            bottles[emptySlot2]={label:pickupLabel2+' (aid)',ml:bSize,isCarb:false};
+            bottleEvents.push({time:aidT2.timeMin,type:'pickup',label:'\u26F3 '+aidT2.label+' ('+({water:'\uD83D\uDCA7 water',electrolyte:'\u26A1 elec',full:'\uD83C\uDF7D full'}[aidT2.type]||'full')+') \u2014 pick up '+pickupLabel2});
           }
           nextAid++;
         }
@@ -1334,7 +1343,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     if(bsEl)bsEl.addEventListener('input',function(){state.bottleSize=+this.value||750;render();});
 
     var aBtn=document.getElementById('addAid');
-    if(aBtn)aBtn.addEventListener('click',function(){var km=+document.getElementById('aidKm').value,d=document.getElementById('aidDisc').value;if(km>0){state.aidStations.push({km:km,discipline:d});state.aidStations.sort(function(a,b){return a.km-b.km;});render();}});
+    if(aBtn)aBtn.addEventListener('click',function(){var km=+document.getElementById('aidKm').value,d=document.getElementById('aidDisc').value,t=document.getElementById('aidType').value;if(km>0){state.aidStations.push({km:km,discipline:d,type:t});state.aidStations.sort(function(a,b){return a.km-b.km;});render();}});
     var aRms=document.querySelectorAll('.aid-rm');for(var ar=0;ar<aRms.length;ar++)aRms[ar].addEventListener('click',function(){state.aidStations.splice(+this.getAttribute('data-aid'),1);render();});
 
     var fCs=document.querySelectorAll('.food-card');for(var fc=0;fc<fCs.length;fc++)fCs[fc].addEventListener('click',function(){var fid=this.getAttribute('data-food'),idx=state.shortlist.indexOf(fid);if(idx>=0){state.shortlist.splice(idx,1);for(var k in state.strategies){var arr=state.strategies[k].foods,fi=arr.indexOf(fid);if(fi>=0)arr.splice(fi,1);}}else{state.shortlist.push(fid);}render();});
