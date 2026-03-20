@@ -323,7 +323,12 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     {id:'cola250',    name:'Cola (250 ml)',             carbs:27,glucose:13,fructose:14,ml:250,na:5,  caf:25, form:'liquid',icon:'\uD83E\uDD64'},
     {id:'water',      name:'Water (500 ml)',            carbs:0, glucose:0, fructose:0, ml:500,na:0,  caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
     {id:'water250',   name:'Water (250 ml)',            carbs:0, glucose:0, fructose:0, ml:250,na:0,  caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
-    {id:'electrolyte',name:'Electrolyte tab (500ml)',   carbs:4, glucose:4, fructose:0, ml:500,na:360,caf:0,  form:'liquid',icon:'\uD83D\uDCA7'}
+    {id:'electrolyte',name:'Electrolyte tab (500ml)',   carbs:4, glucose:4, fructose:0, ml:500,na:360,caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
+    {id:'pf30-chew',  name:'Precision Fuel PF 30 Chew', carbs:30,glucose:18,fructose:12,ml:0,  na:0,  caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
+    {id:'pf60-chew',  name:'Precision Fuel PF 60 Chew', carbs:60,glucose:36,fructose:24,ml:0,  na:0,  caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
+    {id:'sis-beta-chew',name:'SiS Beta Fuel Chew (45g)',carbs:45,glucose:27,fructose:18,ml:0,  na:30, caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
+    {id:'hi5-caf-hit',name:'HIGH5 Caffeine Hit',         carbs:26,glucose:16,fructose:10,ml:500,na:30, caf:200,form:'liquid',icon:'\u2615'},
+    {id:'sis-ban-bar',name:'SiS GO Energy Bar Banana Fudge',carbs:30,glucose:20,fructose:10,ml:0,na:80,caf:0,  form:'solid', icon:'\uD83C\uDF6B'}
   ];
 
   var PORTIONS = [{label:'1',value:1},{label:'\u00BD',value:.5},{label:'\u2153',value:1/3},{label:'\u00BC',value:.25}];
@@ -332,7 +337,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     preset:'Ironman', swimDist:3.8, bikeDist:180, runDist:42.2,
     swimPaceMin:1, swimPaceSec:44, bikeSpeed:34, runPace:5,
     t1:3, t2:2, aidStations:[], schedule:[], customFoods:[], raceType:'tri',
-    shortlist:[], bodyWeight: 80, gelMode:'packet', sweatRate: 1000,
+    shortlist:[], bodyWeight: 80, gelMode:'packet', sweatRate: 1000, bikeBottles:3, bottleSize:750,
     showSodium:false, showFluid:true, showAid:true, showGraph:true,
     showPacking:true, showTopTube:true, showCaffeine:false,
     showFluidGraph:false, showSodiumGraph:false, showCaffeineGraph:false, showEnergyGraph:true,
@@ -732,6 +737,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>Body weight (kg)</label><input type="number" id="bodyWt" min="30" max="150" step="1" value="'+state.bodyWeight+'"></div><div class="field"><label>Sweat rate (ml/hr)</label><input type="number" id="sweatRate" min="200" max="3000" step="50" value="'+state.sweatRate+'"></div>';
     if(state.showCaffeine) html+='<div class="field"><label>&nbsp;</label><div style="font-size:10px;color:var(--caf);font-family:\'DM Mono\',monospace">Caffeine: '+Math.round(state.bodyWeight*3)+'\u2013'+Math.round(state.bodyWeight*6)+' mg</div></div>';
     html+='</div>';
+    html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>Bike bottles</label><input type="number" id="bikeBottles" min="1" max="5" step="1" value="'+state.bikeBottles+'"></div><div class="field"><label>Bottle size (ml)</label><input type="number" id="bottleSize" min="250" max="1000" step="50" value="'+state.bottleSize+'"></div><div class="field"><label>&nbsp;</label><div style="font-size:10px;color:var(--bike);font-family:\'DM Mono\',monospace">Capacity: '+state.bikeBottles*state.bottleSize+'ml on bike</div></div></div>';
     html+='</div>';
 
     // Summary
@@ -922,6 +928,69 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
 
     // Packing list
     if(state.showPacking&&state.schedule.length>0){html+='<div style="margin-top:16px">';for(var pk=0;pk<legs.length;pk++){var pL3=legs[pk],pM={};for(var pki=0;pki<pL3.items.length;pki++){var pE=pL3.items[pki];if(pE.fromAid)continue;var pFd=getFoodById(pE.foodId);if(!pFd)continue;var pPo=pE.portion||1,ky=pE.foodId+'_'+pPo;if(!pM[ky]){var pPl=pPo===1?'':pPo===.5?' (\u00BD)':pPo<.3?' (\u00BC)':' (\u2153)';pM[ky]={name:pFd.name+pPl,icon:pFd.icon,qty:0};}pM[ky].qty++;}var pKs=Object.keys(pM);if(pKs.length===0)continue;html+='<div class="pack-card" style="margin-bottom:8px"><div class="pack-card-head">\uD83C\uDF92 Pack for '+pL3.name+'</div><div class="pack-items">';for(var pj=0;pj<pKs.length;pj++){var pk2=pM[pKs[pj]];html+='<div class="pack-item"><span class="pack-qty">'+pk2.qty+'\u00D7</span><span>'+pk2.icon+'</span><span class="pack-name">'+pk2.name+'</span></div>';}html+='</div></div>';}html+='</div>';}
+
+    // Bottle management (bike leg)
+    if(state.showFluid&&state.schedule.length>0){
+      var bikeSeg=null;for(var bs=0;bs<race.segs.length;bs++)if(race.segs[bs].name==='Bike'){bikeSeg=race.segs[bs];break;}
+      if(bikeSeg){
+        var bCap=state.bikeBottles*state.bottleSize; // total ml on bike at start
+        var bItems=state.schedule.filter(function(e){return e.timeMin>=bikeSeg.start&&e.timeMin<bikeSeg.start+bikeSeg.dur;}).sort(function(a,b){return a.timeMin-b.timeMin;});
+        // Sim: track ml consumed from bottles, when to refill
+        var bikeAidsB=[];for(var bai=0;bai<aids.length;bai++){if(aids[bai].discipline==='bike')bikeAidsB.push(aids[bai]);}
+        var bottleEvents=[],mlOnBike=bCap,mlUsed=0;
+        bottleEvents.push({time:bikeSeg.start,type:'start',ml:mlOnBike,label:'Start bike with '+state.bikeBottles+'\u00D7'+state.bottleSize+'ml = '+bCap+'ml'});
+        var nextAid=0;
+        for(var bi=0;bi<bItems.length;bi++){
+          var bE=bItems[bi],bF=getFoodById(bE.foodId);if(!bF)continue;
+          var bPo=bE.portion||1,bMl=(bF.ml||0)*bPo;
+          // Check if aid station before this item
+          while(nextAid<bikeAidsB.length&&bikeAidsB[nextAid].timeMin<=bE.timeMin){
+            var aidT=bikeAidsB[nextAid];
+            var canFill=bCap-mlOnBike;
+            if(canFill>=state.bottleSize*0.5){
+              var fillAmt=Math.min(canFill,state.bottleSize);
+              bottleEvents.push({time:aidT.timeMin,type:'pickup',ml:fillAmt,label:'\u26F3 '+aidT.label+' — pick up '+fillAmt+'ml (drop empty)',onBike:mlOnBike+fillAmt});
+              mlOnBike+=fillAmt;
+            } else {
+              bottleEvents.push({time:aidT.timeMin,type:'skip',ml:0,label:'\u26F3 '+aidT.label+' — bottles still '+Math.round(mlOnBike/bCap*100)+'% full, skip pickup',onBike:mlOnBike});
+            }
+            nextAid++;
+          }
+          if(bMl>0){
+            mlOnBike-=bMl;mlUsed+=bMl;
+            if(mlOnBike<0){
+              bottleEvents.push({time:bE.timeMin,type:'empty',ml:mlOnBike,label:fmtHM(bE.timeMin-bikeSeg.start)+' — OUT OF FLUID! '+Math.round(-mlOnBike)+'ml short',onBike:0});
+              mlOnBike=0;
+            }
+          }
+        }
+        // Process remaining aids
+        while(nextAid<bikeAidsB.length){
+          var aidT2=bikeAidsB[nextAid];
+          var canFill2=bCap-mlOnBike;
+          if(canFill2>=state.bottleSize*0.5){
+            bottleEvents.push({time:aidT2.timeMin,type:'pickup',ml:Math.min(canFill2,state.bottleSize),label:'\u26F3 '+aidT2.label+' — pick up bottle',onBike:mlOnBike+Math.min(canFill2,state.bottleSize)});
+            mlOnBike+=Math.min(canFill2,state.bottleSize);
+          }
+          nextAid++;
+        }
+        bottleEvents.push({time:bikeSeg.start+bikeSeg.dur,type:'end',ml:mlOnBike,label:'Finish bike with '+Math.round(mlOnBike)+'ml remaining'});
+        var hasWarning=false;for(var bw=0;bw<bottleEvents.length;bw++)if(bottleEvents[bw].type==='empty')hasWarning=true;
+
+        html+='<div style="margin-top:12px"><div class="race-card" style="border-left:3px solid '+(hasWarning?'var(--red)':'var(--bike)')+'"><div class="race-card-head"><div class="race-card-dot" style="background:var(--bike)"></div><div class="race-card-title">Bike Bottle Plan</div><div class="race-card-meta">'+state.bikeBottles+' bottles \u00D7 '+state.bottleSize+'ml = '+bCap+'ml</div></div>';
+        html+='<div style="font-size:11px;color:var(--ink2);margin-bottom:8px">Total bike fluid needed: <strong>'+mlUsed+'ml</strong> | Capacity: <strong>'+bCap+'ml</strong> | Bike aids: <strong>'+bikeAidsB.length+'</strong></div>';
+        if(hasWarning)html+='<div style="background:var(--red-bg);color:var(--red);font-size:11px;font-weight:500;padding:6px 10px;border-radius:4px;margin-bottom:8px">\u26A0 You run out of fluid! Add aid stations or increase bottle capacity.</div>';
+        html+='<ul class="race-card-items">';
+        for(var be=0;be<bottleEvents.length;be++){
+          var ev=bottleEvents[be];
+          var evCol=ev.type==='empty'?'var(--red)':ev.type==='pickup'?'var(--bike)':ev.type==='skip'?'var(--muted)':'var(--ink2)';
+          var evIcon=ev.type==='pickup'?'\uD83D\uDCA7':ev.type==='empty'?'\u26A0':ev.type==='skip'?'\u23ED':'\uD83C\uDFC1';
+          var dist=Math.round(state.bikeSpeed*((ev.time-bikeSeg.start)/60));
+          html+='<li style="color:'+evCol+'"><span style="font-family:\'DM Mono\',monospace;font-size:10px;min-width:38px">'+fmtHM(ev.time-bikeSeg.start)+'</span><span style="font-size:10px;color:var(--muted);min-width:32px">'+dist+'km</span><span>'+evIcon+' '+ev.label+'</span></li>';
+        }
+        html+='</ul></div></div>';
+      }
+    }
 
     // Total summary
     html+='<div style="margin-top:12px;padding:14px 16px;background:var(--ink);border-radius:6px;color:#fff;display:flex;flex-wrap:wrap;gap:20px;align-items:center;font-family:\'DM Mono\',monospace;font-size:12px;position:relative;overflow:hidden">';
@@ -1222,6 +1291,10 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     if(bwEl)bwEl.addEventListener('input',function(){state.bodyWeight=+this.value||80;render();});
     var srEl=document.getElementById('sweatRate');
     if(srEl)srEl.addEventListener('input',function(){state.sweatRate=+this.value||1000;render();});
+    var bbEl=document.getElementById('bikeBottles');
+    if(bbEl)bbEl.addEventListener('input',function(){state.bikeBottles=+this.value||3;render();});
+    var bsEl=document.getElementById('bottleSize');
+    if(bsEl)bsEl.addEventListener('input',function(){state.bottleSize=+this.value||750;render();});
 
     var aBtn=document.getElementById('addAid');
     if(aBtn)aBtn.addEventListener('click',function(){var km=+document.getElementById('aidKm').value,d=document.getElementById('aidDisc').value;if(km>0){state.aidStations.push({km:km,discipline:d});state.aidStations.sort(function(a,b){return a.km-b.km;});render();}});
