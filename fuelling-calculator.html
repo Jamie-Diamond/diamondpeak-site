@@ -174,7 +174,7 @@
   @media print{
     body{background:#fff}
     .page{padding:0;max-width:100%}
-    .back,.kicker,h1,.intro,.sec-head,.presets,.method,.toggles-bar,.food-grid,.custom-form,.add-row,.add-food-row,.sched-rm,.time-input-sm,.btn-sm,.btn-gen,.print-btn,.aid-toggle,.train-add,#raceSetup,#aidSection,#foodLibrary,#schedSection,#graphSection,#stratSection,#trainingSection{display:none!important}
+    .back,.kicker,h1,.intro,.sec-head,.presets,.method,.toggles-bar,.food-grid,.custom-form,.add-row,.add-food-row,.sched-rm,.time-input-sm,.btn-sm,.btn-gen,.btn-opt-all,.print-btn,.aid-toggle,.train-add,#raceSetup,#aidSection,#foodLibrary,#schedSection,#graphSection,#stratSection,#trainingSection{display:none!important}
     #printSection{display:block!important}
     .race-cards{grid-template-columns:1fr 1fr;gap:10px}
     .tt-card{grid-column:1/-1}
@@ -216,6 +216,14 @@
   .train-add select,.train-add input{height:30px;border:1px solid var(--border);border-radius:4px;font-family:'DM Mono',monospace;font-size:11px;padding:0 6px;outline:none}
   .train-add input{width:70px}
   .footer-bar{text-align:center;padding:32px 0 16px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--muted);border-top:1px solid var(--border);margin-top:40px}
+  .opt-overlay{position:fixed;inset:0;background:rgba(24,22,15,.7);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+  .opt-box{background:var(--card);border-radius:12px;padding:32px 40px;text-align:center;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.25)}
+  .opt-box h3{font-family:'Libre Baskerville',serif;font-size:18px;margin-bottom:12px;color:var(--ink)}
+  .opt-step{font-family:'DM Mono',monospace;font-size:11px;color:var(--green);margin-top:12px;min-height:16px;letter-spacing:.03em}
+  .opt-bar{width:100%;height:6px;background:var(--border);border-radius:3px;margin-top:10px;overflow:hidden}
+  .opt-bar-fill{height:100%;background:var(--green);border-radius:3px;transition:width .3s ease}
+  .btn-opt-all{padding:10px 28px;border:2px solid var(--green);border-radius:8px;background:var(--green);color:#fff;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;letter-spacing:.04em;display:block;margin:16px auto 0}
+  .btn-opt-all:hover{background:#165c38}
 </style>
 </head>
 <body>
@@ -581,13 +589,13 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var MIN_GAP=10; // minimum 10 minutes between any two items
     var placed=[];
     var lastPlacedTime=-9999;
-    function addItem(foodId,time,portion){
+    function addItem(foodId,time,portion,reason){
       var p=portion||1;
       var t=Math.round(time);
       // Enforce minimum gap — nudge forward if too close to last item
       if(t-lastPlacedTime<MIN_GAP) t=lastPlacedTime+MIN_GAP;
       if(t>endT) return false;
-      var item={foodId:foodId,timeMin:t,portion:p,fromAid:false};
+      var item={foodId:foodId,timeMin:t,portion:p,fromAid:false,reason:reason||''};
       state.schedule.push(item);
       placed.push(item);
       lastPlacedTime=t;
@@ -697,7 +705,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         if(carbsPlaced>=totalCarbs)break;
         var dose=allDoses[di];
         var t=startT+interval*di;
-        if(!addItem(dose.food.id,t,dose.portion))break;
+        var cReason='Carb rotation \u2014 targeting '+strat.target+'g/hr ('+Math.round(totalCarbs)+'g total)';
+        if(dose.food.form==='solid') cReason='Solid in sequence \u2014 '+strat.target+'g/hr target';
+        else if(dose.food.form==='gel') cReason='Gel rotation \u2014 '+strat.target+'g/hr target';
+        else if(dose.food.form==='liquid') cReason='Drink sip \u2014 '+strat.target+'g/hr target, '+Math.round(dose.food.carbs*dose.portion)+'g per dose';
+        if(!addItem(dose.food.id,t,dose.portion,cReason))break;
         carbsPlaced+=dose.carbsPerDose;
       }
     }
@@ -725,10 +737,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var sipPortion=sipMl/(bestFluid.ml||250);
         var numDrinks=Math.ceil(fluidNeeded/sipMl);
         var fInterval=Math.max(MIN_GAP,(endT-startT)/(numDrinks+1));
+        var fluidWhyMl=Math.round(fluidNeeded);
         lastPlacedTime=-9999;
         for(var fi=0;fi<numDrinks;fi++){
           var ft=startT+fInterval*(fi+0.5);
-          addItem(bestFluid.id,ft,sipPortion);
+          addItem(bestFluid.id,ft,sipPortion,'Fluid top-up \u2014 '+fluidWhyMl+'ml deficit after carb foods (target '+strat.fluidTarget+'ml/hr)');
         }
       }
     }
@@ -746,10 +759,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var naPer=(bestNa.na||250)*naPortion;
         var numNa=Math.ceil(naNeeded/naPer);
         var nInterval=Math.max(MIN_GAP,(endT-startT)/(numNa+1));
+        var naWhyMg=Math.round(naNeeded);
         lastPlacedTime=-9999;
         for(var nai=0;nai<numNa;nai++){
           var nt=startT+nInterval*(nai+1);
-          addItem(bestNa.id,nt,naPortion);
+          addItem(bestNa.id,nt,naPortion,'Sodium top-up \u2014 '+naWhyMg+'mg deficit after carb foods (target '+strat.sodiumTarget+'mg/hr)');
         }
       }
     }
@@ -764,10 +778,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var cafPer=bestCaf.caf||100;
         var numCaf=Math.ceil(cafNeeded/cafPer);
         var cInterval=Math.max(30,(endT-startT)/(numCaf+1));
+        var cafWhyMg=Math.round(cafNeeded);
         lastPlacedTime=-9999;
         for(var cci=0;cci<numCaf;cci++){
           var ct=startT+cInterval*cci;
-          addItem(bestCaf.id,ct);
+          addItem(bestCaf.id,ct,undefined,'Caffeine dose \u2014 '+cafWhyMg+'mg remaining to hit '+strat.cafTarget+'mg target');
         }
       }
     }
@@ -780,7 +795,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     legs.push({name:'Pre-Race',start:-60,dur:60,color:'#7f8c8d'});
     for(var i=0;i<race.segs.length;i++){
       var s=race.segs[i];
-      if(s.name==='Swim')continue; // exclude swim
+      if(s.name==='Swim'||s.name==='T1'||s.name==='T2')continue; // exclude swim, T1, T2
       legs.push({name:s.name,start:s.start,dur:s.dur,color:s.color});
     }
     return legs;
@@ -921,9 +936,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         html+='<button class="strat-food-btn'+(isSel?' sel':'')+'" data-leg="'+sLeg.name+'" data-food="'+sfd.id+'">'+sfd.icon+' '+sfd.name+'</button>';
       }
       html+='</div>';
-      html+='<button class="btn-gen strat-gen" data-leg="'+sLeg.name+'" data-start="'+sLeg.start+'" data-dur="'+sLeg.dur+'">Generate '+sLeg.name+' plan</button>';
       html+='</div>';
     }
+    html+='<button class="btn-opt-all" id="optimizeAll">Optimise all legs</button>';
     html+='</div>';
 
     /* 4. FUELLING PLAN */
@@ -932,9 +947,19 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     for(var ts=0;ts<state.schedule.length;ts++){var tf=getFoodById(state.schedule[ts].foodId),po=state.schedule[ts].portion||1;if(tf){tG+=Math.round(tf.glucose*po);tF+=Math.round(tf.fructose*po);tC+=Math.round(tf.carbs*po);tMl+=Math.round((tf.ml||0)*po);tNa+=Math.round((tf.na||0)*po);tCaf+=Math.round((tf.caf||0)*po);}}
     var rH=race.total/60,cHr=rH>0?tC/rH:0;
 
-    var hc=3;if(state.showFluid)hc++;if(state.showSodium)hc++;if(state.showCaffeine)hc++;if(state.showEnergyGraph)hc+=2;
+    // Compute weighted target g/hr from strategy targets (race legs only, not breakfast/pre-race)
+    var targetCarbHr=0,targetHrs=0;
+    for(var tsl=0;tsl<stratLegs.length;tsl++){var tsLeg=stratLegs[tsl];if(tsLeg.name==='Breakfast'||tsLeg.name==='Pre-Race'||tsLeg.name==='T1'||tsLeg.name==='T2')continue;var tsS=state.strategies[tsLeg.name];if(tsS){targetCarbHr+=tsS.target*(tsLeg.dur/60);targetHrs+=tsLeg.dur/60;}}
+    var avgTarget=targetHrs>0?Math.round(targetCarbHr/targetHrs):0;
+    var carbGap=Math.round(cHr)-avgTarget;
+    var carbGapAbs=Math.abs(carbGap);
+    var carbGapColor=carbGap>=0?'var(--green)':'#e74c3c';
+    var carbGapLabel=carbGap>=0?(carbGap===0?'on target':'+'+carbGapAbs+' g/hr over'):'-'+carbGapAbs+' g/hr short';
+
+    var hc=4;if(state.showFluid)hc++;if(state.showSodium)hc++;if(state.showCaffeine)hc++;if(state.showEnergyGraph)hc+=2;
     html+='<div class="headline" style="padding:16px 20px"><div class="hl-grid" style="grid-template-columns:repeat('+Math.min(hc,8)+',1fr)">';
-    html+='<div class="hl-metric"><div class="hl-metric-val">'+Math.round(cHr)+'</div><div class="hl-metric-label">carbs g/hr</div></div>';
+    html+='<div class="hl-metric"><div class="hl-metric-val">'+Math.round(cHr)+'<span style="font-size:12px;color:rgba(255,255,255,.3)"> / '+avgTarget+'</span></div><div class="hl-metric-label">actual / target g/hr</div></div>';
+    html+='<div class="hl-metric"><div class="hl-metric-val" style="color:'+carbGapColor+';font-size:18px">'+carbGapLabel+'</div><div class="hl-metric-label">carb gap</div></div>';
     html+='<div class="hl-metric"><div class="hl-metric-val">'+tC+'g</div><div class="hl-metric-label">total carbs</div></div>';
     html+='<div class="hl-metric"><div class="hl-metric-val" style="font-size:14px;color:#5dade2">'+tG+'<span style="font-size:10px;color:rgba(255,255,255,.3)"> / </span><span style="color:#e74c3c">'+tF+'</span></div><div class="hl-metric-label">G / F</div></div>';
     if(state.showFluid)html+='<div class="hl-metric"><div class="hl-metric-val" style="color:#5dade2">'+Math.round(tMl/Math.max(rH,.01))+'</div><div class="hl-metric-label">fluid ml/hr</div></div>';
@@ -958,7 +983,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var legSt=getLegStart(race.segs,entry.timeMin),legT=Math.round(entry.timeMin-legSt);
         html+='<tr><td><input type="number" class="time-input-sm sched-time" data-idx="'+idx+'" data-legstart="'+legSt+'" value="'+legT+'" min="0" max="999"> min</td>';
         html+='<td><span class="sched-disc disc-'+dCls+'">'+disc+'</span></td>';
-        html+='<td>'+food.icon+' '+food.name+'</td>';
+        html+='<td>'+food.icon+' '+food.name+(entry.reason?'<div style="font-size:8px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-top:1px;font-style:italic">'+entry.reason+'</div>':'')+'</td>';
         html+='<td><select class="sched-portion" data-idx="'+idx+'" style="width:52px;height:26px;border:1px solid var(--border);border-radius:3px;font-family:\'DM Mono\',monospace;font-size:11px;text-align:center;outline:none;background:#fff">';
         for(var pi=0;pi<PORTIONS.length;pi++)html+='<option value="'+PORTIONS[pi].value+'"'+(Math.abs(p2-PORTIONS[pi].value)<.01?' selected':'')+'>'+PORTIONS[pi].label+'</option>';
         html+='</select></td>';
@@ -1599,13 +1624,49 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       render();
     });
 
-    // Strategy generate buttons
-    var sGens=document.querySelectorAll('.strat-gen');
-    for(var sg=0;sg<sGens.length;sg++)sGens[sg].addEventListener('click',function(){
-      var leg=this.getAttribute('data-leg'),start=+this.getAttribute('data-start'),dur=+this.getAttribute('data-dur');
-      var strat=state.strategies[leg];
-      generateStrategy(leg,start,dur,strat);
-      render();
+    // Single optimise-all button with loading overlay
+    var optBtn=document.getElementById('optimizeAll');
+    if(optBtn)optBtn.addEventListener('click',function(){
+      var race=calcRace(),sLegs=getStratLegs(race);
+      // Filter to legs that have foods assigned
+      var genLegs=[];
+      for(var gl=0;gl<sLegs.length;gl++){
+        var sn=sLegs[gl].name,st=state.strategies[sn];
+        if(st&&st.foods.length>0) genLegs.push(sLegs[gl]);
+      }
+      if(genLegs.length===0){render();return;}
+      // Show loading overlay
+      var ov=document.createElement('div');ov.className='opt-overlay';
+      ov.innerHTML='<div class="opt-box"><h3>Building your plan</h3><div class="opt-step" id="optStep">Preparing\u2026</div><div class="opt-bar"><div class="opt-bar-fill" id="optBar" style="width:0%"></div></div></div>';
+      document.body.appendChild(ov);
+      var stepEl=document.getElementById('optStep'),barEl=document.getElementById('optBar');
+      var steps=[
+        'Placing carb foods in rotation\u2026',
+        'Topping up fluid targets\u2026',
+        'Balancing sodium intake\u2026',
+        'Timing caffeine doses\u2026',
+        'Finalising plan\u2026'
+      ];
+      var idx=0;
+      function runNext(){
+        if(idx>=genLegs.length){
+          stepEl.textContent='Done \u2014 plan ready!';
+          barEl.style.width='100%';
+          setTimeout(function(){ov.remove();render();},400);
+          return;
+        }
+        var leg=genLegs[idx];
+        var pct=Math.round(((idx+0.5)/genLegs.length)*100);
+        var stepMsg=steps[Math.min(idx,steps.length-1)];
+        stepEl.textContent=leg.name+' \u2014 '+stepMsg;
+        barEl.style.width=pct+'%';
+        setTimeout(function(){
+          generateStrategy(leg.name,leg.start,leg.dur,state.strategies[leg.name]);
+          idx++;
+          runNext();
+        },300);
+      }
+      setTimeout(runNext,200);
     });
 
     var prBtn=document.getElementById('printBtn');if(prBtn)prBtn.addEventListener('click',function(){window.print();});
