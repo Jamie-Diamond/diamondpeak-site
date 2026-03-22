@@ -589,13 +589,13 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var MIN_GAP=10; // minimum 10 minutes between any two items
     var placed=[];
     var lastPlacedTime=-9999;
-    function addItem(foodId,time,portion){
+    function addItem(foodId,time,portion,reason){
       var p=portion||1;
       var t=Math.round(time);
       // Enforce minimum gap — nudge forward if too close to last item
       if(t-lastPlacedTime<MIN_GAP) t=lastPlacedTime+MIN_GAP;
       if(t>endT) return false;
-      var item={foodId:foodId,timeMin:t,portion:p,fromAid:false};
+      var item={foodId:foodId,timeMin:t,portion:p,fromAid:false,reason:reason||''};
       state.schedule.push(item);
       placed.push(item);
       lastPlacedTime=t;
@@ -705,7 +705,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         if(carbsPlaced>=totalCarbs)break;
         var dose=allDoses[di];
         var t=startT+interval*di;
-        if(!addItem(dose.food.id,t,dose.portion))break;
+        var cReason='Carb rotation \u2014 targeting '+strat.target+'g/hr ('+Math.round(totalCarbs)+'g total)';
+        if(dose.food.form==='solid') cReason='Solid in sequence \u2014 '+strat.target+'g/hr target';
+        else if(dose.food.form==='gel') cReason='Gel rotation \u2014 '+strat.target+'g/hr target';
+        else if(dose.food.form==='liquid') cReason='Drink sip \u2014 '+strat.target+'g/hr target, '+Math.round(dose.food.carbs*dose.portion)+'g per dose';
+        if(!addItem(dose.food.id,t,dose.portion,cReason))break;
         carbsPlaced+=dose.carbsPerDose;
       }
     }
@@ -733,10 +737,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var sipPortion=sipMl/(bestFluid.ml||250);
         var numDrinks=Math.ceil(fluidNeeded/sipMl);
         var fInterval=Math.max(MIN_GAP,(endT-startT)/(numDrinks+1));
+        var fluidWhyMl=Math.round(fluidNeeded);
         lastPlacedTime=-9999;
         for(var fi=0;fi<numDrinks;fi++){
           var ft=startT+fInterval*(fi+0.5);
-          addItem(bestFluid.id,ft,sipPortion);
+          addItem(bestFluid.id,ft,sipPortion,'Fluid top-up \u2014 '+fluidWhyMl+'ml deficit after carb foods (target '+strat.fluidTarget+'ml/hr)');
         }
       }
     }
@@ -754,10 +759,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var naPer=(bestNa.na||250)*naPortion;
         var numNa=Math.ceil(naNeeded/naPer);
         var nInterval=Math.max(MIN_GAP,(endT-startT)/(numNa+1));
+        var naWhyMg=Math.round(naNeeded);
         lastPlacedTime=-9999;
         for(var nai=0;nai<numNa;nai++){
           var nt=startT+nInterval*(nai+1);
-          addItem(bestNa.id,nt,naPortion);
+          addItem(bestNa.id,nt,naPortion,'Sodium top-up \u2014 '+naWhyMg+'mg deficit after carb foods (target '+strat.sodiumTarget+'mg/hr)');
         }
       }
     }
@@ -772,10 +778,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var cafPer=bestCaf.caf||100;
         var numCaf=Math.ceil(cafNeeded/cafPer);
         var cInterval=Math.max(30,(endT-startT)/(numCaf+1));
+        var cafWhyMg=Math.round(cafNeeded);
         lastPlacedTime=-9999;
         for(var cci=0;cci<numCaf;cci++){
           var ct=startT+cInterval*cci;
-          addItem(bestCaf.id,ct);
+          addItem(bestCaf.id,ct,undefined,'Caffeine dose \u2014 '+cafWhyMg+'mg remaining to hit '+strat.cafTarget+'mg target');
         }
       }
     }
@@ -976,7 +983,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var legSt=getLegStart(race.segs,entry.timeMin),legT=Math.round(entry.timeMin-legSt);
         html+='<tr><td><input type="number" class="time-input-sm sched-time" data-idx="'+idx+'" data-legstart="'+legSt+'" value="'+legT+'" min="0" max="999"> min</td>';
         html+='<td><span class="sched-disc disc-'+dCls+'">'+disc+'</span></td>';
-        html+='<td>'+food.icon+' '+food.name+'</td>';
+        html+='<td>'+food.icon+' '+food.name+(entry.reason?'<div style="font-size:8px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-top:1px;font-style:italic">'+entry.reason+'</div>':'')+'</td>';
         html+='<td><select class="sched-portion" data-idx="'+idx+'" style="width:52px;height:26px;border:1px solid var(--border);border-radius:3px;font-family:\'DM Mono\',monospace;font-size:11px;text-align:center;outline:none;background:#fff">';
         for(var pi=0;pi<PORTIONS.length;pi++)html+='<option value="'+PORTIONS[pi].value+'"'+(Math.abs(p2-PORTIONS[pi].value)<.01?' selected':'')+'>'+PORTIONS[pi].label+'</option>';
         html+='</select></td>';
