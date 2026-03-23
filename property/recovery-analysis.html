@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UK Property Shocks — Crashes, Near-Misses & 2026 Outlook — Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root{--bg:#f8f5ef;--bg2:#f0ede5;--bg3:#ddd8cc;--card:#fff;--text:#18160f;--text2:#4a4535;--text3:#9a9080;--border:#ddd8cc;--green:#1d6840;--green-l:#ECFDF5;--red:#9B2C2C;--red-l:#FDF2F2;--warn:#92600A;--warn-l:#FEFCEC;--coral:#C0533A;--coral-l:#FEF3F0;--blue:#1E5080;--blue-l:#EFF6FF;--purple:#5B4BA0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;padding:32px 20px 60px;max-width:880px;margin:0 auto}
+header{margin-bottom:40px;padding-bottom:20px;border-bottom:2px solid var(--border)}
+h1{font-family:'Libre Baskerville',serif;font-size:28px;font-weight:400;letter-spacing:-.5px;margin-bottom:6px}
+.header-sub{font-size:14px;color:var(--text2)}.header-sub .tag{display:inline-block;background:var(--red-l);color:var(--red);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:.3px;margin-left:6px;vertical-align:middle}
+h2{font-family:'Libre Baskerville',serif;font-size:21px;font-weight:400;margin:40px 0 16px;padding-top:32px;border-top:1px solid var(--border)}
+h2:first-of-type{border-top:none;padding-top:0;margin-top:0}
+.note-box{font-size:12px;color:var(--text2);line-height:1.6;padding:10px 14px;border-radius:8px;margin-bottom:16px}
+.note-nom{background:var(--blue-l);border-left:3px solid var(--blue)}
+.note-real{background:var(--coral-l);border-left:3px solid var(--coral)}
+/* Event grid */
+.ev-grid{display:grid;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px}
+.ev-row{background:var(--card);padding:14px 16px;display:grid;grid-template-columns:140px 1fr;gap:12px}
+@media(max-width:620px){.ev-row{grid-template-columns:1fr}.ev-meta{border-bottom:1px solid var(--bg3);padding-bottom:8px}}
+.ev-row.crashed{border-left:3px solid var(--red)}
+.ev-row.survived{border-left:3px solid var(--green)}
+.ev-row.current{background:var(--warn-l);border-left:3px solid var(--warn)}
+.ev-row.head{background:var(--bg2);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);border-left:none}
+.ev-name{font-weight:700;font-size:13px;margin-bottom:1px}
+.ev-cause{font-size:11px;color:var(--text3);line-height:1.4}
+.ev-outcome{display:inline-block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:3px;margin-bottom:4px}
+.oc-crash{background:var(--red-l);color:var(--red)}
+.oc-surv{background:var(--green-l);color:var(--green)}
+.oc-mild{background:var(--warn-l);color:var(--warn)}
+.oc-tbd{background:var(--bg3);color:var(--text3)}
+.ev-stats{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;margin-top:6px}
+.ev-stat{color:var(--text2)}.ev-stat strong{font-weight:700}
+.sr{color:var(--red)}.sg{color:var(--green)}.sa{color:var(--warn)}.sb{color:var(--blue)}
+.ev-note{font-size:11px;color:var(--text3);line-height:1.4;margin-top:6px}
+.bar-g{display:flex;align-items:center;gap:6px;font-size:11px;height:20px;margin:3px 0}
+.bar-l{min-width:60px;color:var(--text3);font-weight:500;text-align:right;font-size:10px}
+.bar-t{flex:1;height:16px;background:var(--bg2);border-radius:3px;overflow:hidden;position:relative}
+.bar-f{height:100%;border-radius:3px;display:flex;align-items:center;padding-left:5px;font-size:9px;font-weight:700;color:#fff;min-width:28px}
+.bf-d{background:var(--coral)}.bf-s{background:var(--warn)}.bf-r{background:var(--green)}.bf-u{background:repeating-linear-gradient(90deg,var(--text3) 0 4px,transparent 4px 8px);opacity:.25}
+/* Scenario */
+.sc-tabs{display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px}
+.sc-tab{flex:1;padding:12px;border:none;background:var(--card);cursor:pointer;text-align:center;font-family:inherit;transition:all .2s;font-size:13px}
+.sc-tab:not(:last-child){border-right:1px solid var(--border)}
+.sc-tab.af{background:var(--green-l)}.sc-tab.ag{background:var(--warn-l)}.sc-tab.as{background:var(--coral-l)}.sc-tab.ab{background:var(--blue-l)}
+.sc-tag{display:inline-block;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 5px;border-radius:3px;margin-bottom:4px;color:#fff}
+.sc-tag.tf{background:var(--green)}.sc-tag.tg{background:var(--warn)}.sc-tag.ts{background:var(--coral)}.sc-tag.tb{background:var(--blue)}
+.sc-name{font-weight:700;font-size:13px;margin-bottom:2px}
+.sc-sub{font-size:10px;color:var(--text3);line-height:1.3}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px}
+.ct{font-weight:600;font-size:14px;margin-bottom:2px}.cs{font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.5}
+.cw{position:relative;height:320px}
+.kn-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+@media(max-width:560px){.kn-grid{grid-template-columns:1fr 1fr}}
+.kn{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.kn-v{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;margin-bottom:1px}
+.kn-l{font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px}
+.kn-s{font-size:9px;color:var(--text3);margin-top:1px}
+/* Comparison */
+.comp{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px}
+.comp-t{font-weight:600;font-size:14px;margin-bottom:12px}
+.cr{display:grid;gap:6px;padding:5px 0;font-size:11px;align-items:center}
+.cr4{grid-template-columns:120px 1fr 1fr 1fr}
+.cr5{grid-template-columns:100px repeat(4,1fr)}
+@media(max-width:560px){.cr4{grid-template-columns:100px 1fr 1fr 1fr;font-size:10px}.cr5{grid-template-columns:80px repeat(4,1fr);font-size:9px}}
+.cr.hd{font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:2px}
+.cd{color:var(--text3);font-weight:500}
+.cf{color:var(--green);font-weight:600}.cw2{color:var(--warn);font-weight:600}.cc{color:var(--coral);font-weight:600}
+.iran-box{background:var(--red-l);border-left:3px solid var(--red);border-radius:0 8px 8px 0;padding:14px 16px;margin:20px 0;font-size:13px;line-height:1.6}
+.iran-box strong{font-weight:700}
+.callout{border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;font-size:12px;line-height:1.6}
+.callout-w{background:var(--warn-l);border-left:3px solid var(--warn)}
+.toggle-wrap{display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;flex-shrink:0}
+.toggle-opt{padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;background:var(--card);color:var(--text3);border:none;font-family:inherit;transition:all .15s;white-space:nowrap}
+.toggle-opt:not(:last-child){border-right:1px solid var(--border)}
+.toggle-opt.active-nom{background:var(--blue);color:#fff}
+.toggle-opt.active-real{background:var(--coral);color:#fff}
+.footnote{font-size:10px;color:var(--text3);border-top:1px solid var(--border);padding-top:16px;margin-top:40px;line-height:1.6}
+</style>
+</head>
+<body>
+<div style="max-width:880px;margin:0 auto;padding:16px 20px 0">
+  <a href="../index.html" style="color:var(--muted);text-decoration:none;font-family:DM Mono,monospace;font-size:11px;letter-spacing:0.05em">&larr; Diamond Peak</a>
+</div>
+<div style="max-width:880px;margin:12px auto 0;padding:0 20px">
+  <div style="padding:10px 14px;background:var(--green-bg,#e6f4ec);border:1px solid #c6e9d4;border-radius:6px;font-family:DM Sans,sans-serif;font-size:11px;color:#1d6840;line-height:1.5">
+    This page was created by <strong>maji</strong>, majaco&rsquo;s AI operational excellence tool. maji is in active development, so occasional inaccuracies may appear as the system continues to learn.
+  </div>
+</div>
+<header>
+<h1>UK property shocks — crashes, near-misses & 2026</h1>
+<p class="header-sub">When do economic shocks crash the housing market — and when don't they? <span class="tag">Iran conflict: 28 Feb 2026</span></p>
+</header>
+
+<div class="note-box note-nom"><strong>Nominal vs real throughout this document:</strong> "Nominal" = cash values (not adjusted for inflation). "Real" = adjusted for inflation (what the money is actually worth in purchasing power). Both matter: nominal tells you when you'd break even selling; real tells you when your wealth actually recovers. All figures are labeled.</div>
+
+<h2>Every major UK economic shock since 1973</h2>
+
+<p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.6">Not every shock crashes the property market. Understanding <em>which</em> ones did and didn't — and why — is the key to assessing Iran 2026.</p>
+
+<div class="ev-grid">
+<div class="ev-row head"><div>Event</div><div>Outcome, timeline & key figures</div></div>
+
+<div class="ev-row crashed">
+<div class="ev-meta"><span class="ev-name">1973 Oil Crisis</span><span class="ev-cause">OPEC embargo. Oil triples. Stagflation. Rates spike.</span></div>
+<div>
+<span class="ev-outcome oc-crash">Crashed</span>
+<div class="bar-g"><span class="bar-l">0 → 4y</span><div class="bar-t"><div class="bar-f bf-d" style="width:32%">Decline</div></div></div>
+<div class="bar-g"><span class="bar-l">4 → 8y</span><div class="bar-t"><div class="bar-f bf-r" style="width:32%">Recovery</div></div></div>
+<div class="ev-stats">
+<span class="ev-stat"><strong class="sr">−25%</strong> nominal peak→trough</span>
+<span class="ev-stat"><strong class="sa">~4y</strong> nominal recovery</span>
+<span class="ev-stat"><strong class="sr">~12y</strong> real recovery</span>
+</div>
+<div class="ev-note">High inflation (15–25%) meant nominal prices bounced back by ~1978. But in real purchasing-power terms, recovery took until the mid-1980s. The gap between nominal and real recovery is the widest of any crash — because inflation was the highest.</div>
+</div>
+</div>
+
+<div class="ev-row crashed">
+<div class="ev-meta"><span class="ev-name">1989 Rate Shock</span><span class="ev-cause">Rates hit 15%. ERM exit. Negative equity crisis.</span></div>
+<div>
+<span class="ev-outcome oc-crash">Crashed</span>
+<div class="bar-g"><span class="bar-l">0 → 4y</span><div class="bar-t"><div class="bar-f bf-d" style="width:28%">Decline</div></div></div>
+<div class="bar-g"><span class="bar-l">4 → 6y</span><div class="bar-t"><div class="bar-f bf-s" style="width:14%">Stagnation</div></div></div>
+<div class="bar-g"><span class="bar-l">6 → 10y</span><div class="bar-t"><div class="bar-f bf-r" style="width:28%">Recovery</div></div></div>
+<div class="ev-stats">
+<span class="ev-stat"><strong class="sr">−20%</strong> UK / <strong class="sr">−28%</strong> London (nominal)</span>
+<span class="ev-stat"><strong class="sa">~10y</strong> nominal recovery</span>
+<span class="ev-stat"><strong class="sr">~13y</strong> real recovery</span>
+</div>
+<div class="ev-note">London fell harder (−28%) but bottomed in 1993, ~2.5y ahead of UK. Nominal recovery late 1990s. Inflation at 5–8% through early 90s eroded real values further — real recovery not until ~2001–02.</div>
+</div>
+</div>
+
+<div class="ev-row survived">
+<div class="ev-meta"><span class="ev-name">1990 Gulf War</span><span class="ev-cause">Iraq invades Kuwait. Oil spikes. UK recession fears.</span></div>
+<div>
+<span class="ev-outcome oc-surv">No additional crash</span>
+<div class="ev-stats">
+<span class="ev-stat"><strong class="sg">Prices already falling</strong> from 1989 peak</span>
+<span class="ev-stat">Oil shock was temporary</span>
+<span class="ev-stat">War resolved in ~7 months</span>
+</div>
+<div class="ev-note">The Gulf War didn't cause a separate crash because prices were already deep in the 1989 decline. The oil spike was brief and resolved quickly. The UK recession was caused by domestic rate policy, not the war.</div>
+</div>
+</div>
+
+<div class="ev-row survived">
+<div class="ev-meta"><span class="ev-name">1992 Black Wednesday</span><span class="ev-cause">£ forced from ERM. Rates briefly hit 15%.</span></div>
+<div>
+<span class="ev-outcome oc-surv">No additional crash</span>
+<div class="ev-stats">
+<span class="ev-stat"><strong class="sg">Minimal further impact</strong> on prices</span>
+<span class="ev-stat">Rates <em>fell</em> after ERM exit</span>
+<span class="ev-stat">Market was already bottoming out</span>
+</div>
+<div class="ev-note">Counterintuitively, Black Wednesday <em>helped</em> the housing market. Leaving the ERM meant rates could fall, which they did sharply. Prices were already near trough. The shock resolved quickly and was followed by a strong boom.</div>
+</div>
+</div>
+
+<div class="ev-row crashed">
+<div class="ev-meta"><span class="ev-name">2008 Credit Crunch</span><span class="ev-cause">Lehman collapse. Banks stop lending. Global recession.</span></div>
+<div>
+<span class="ev-outcome oc-crash">Crashed</span>
+<div class="bar-g"><span class="bar-l">0 → 1.5y</span><div class="bar-t"><div class="bar-f bf-d" style="width:11%">Decline</div></div></div>
+<div class="bar-g"><span class="bar-l">1.5 → 5y</span><div class="bar-t"><div class="bar-f bf-s" style="width:25%">Stagnation</div></div></div>
+<div class="bar-g"><span class="bar-l">5 → 7y</span><div class="bar-t"><div class="bar-f bf-r" style="width:14%">Recovery</div></div></div>
+<div class="ev-stats">
+<span class="ev-stat"><strong class="sr">−16%</strong> UK / <strong class="sr">−20%</strong> London (nominal)</span>
+<span class="ev-stat"><strong class="sa">~7y</strong> nominal recovery (Aug 2014)</span>
+<span class="ev-stat"><strong class="sr">~15y</strong> real recovery (~2022)</span>
+</div>
+<div class="ev-note">Crash was fast but the stagnation phase (2010–2013) was the killer — prices barely moved for years. QE, low rates, and Help to Buy (2013) fuelled eventual nominal recovery. But in real terms, Savills data shows prices didn't recover to 2007 levels until around 2022 — 15 years.</div>
+</div>
+</div>
+
+<div class="ev-row survived">
+<div class="ev-meta"><span class="ev-name">2016 Brexit</span><span class="ev-cause">EU referendum. £ crashes 10%. Treasury warns −18%.</span></div>
+<div>
+<span class="ev-outcome oc-surv">Did not crash</span>
+<div class="ev-stats">
+<span class="ev-stat"><strong class="sg">Prices rose</strong> in most regions</span>
+<span class="ev-stat">London slowed but didn't fall</span>
+<span class="ev-stat">Transactions rose 14% in 6y post-vote</span>
+</div>
+<div class="ev-note">The predicted crash never materialised. Weak £ attracted foreign investors. Low rates kept mortgages affordable. Fundamental demand (supply shortage, population growth) dominated sentiment effects. London prime market softened but didn't crash.</div>
+</div>
+</div>
+
+<div class="ev-row survived">
+<div class="ev-meta"><span class="ev-name">2020 COVID</span><span class="ev-cause">Global pandemic. Economy locked down. GDP −10%.</span></div>
+<div>
+<span class="ev-outcome oc-surv">Did not crash — prices surged</span>
+<div class="ev-stats">
+<span class="ev-stat"><strong class="sg">+20%</strong> by end of 2022 (nominal)</span>
+<span class="ev-stat">Stamp duty holiday fuelled boom</span>
+<span class="ev-stat">WFH shifted demand to houses</span>
+</div>
+<div class="ev-note">The most dramatic non-crash in history. Despite GDP falling 10%, government intervention (stamp duty holiday, furlough, ultra-low rates) created a property <em>boom</em>. Key lesson: fiscal intervention can completely override economic fundamentals — in the short term.</div>
+</div>
+</div>
+
+<div class="ev-row survived">
+<div class="ev-meta"><span class="ev-name">2022 Mini-Budget</span><span class="ev-cause">Truss unfunded tax cuts. Gilt yields spike. Mortgage chaos.</span></div>
+<div>
+<span class="ev-outcome oc-mild">Mild correction</span>
+<div class="bar-g"><span class="bar-l">0 → 6m</span><div class="bar-t"><div class="bar-f bf-d" style="width:10%">−3.7%</div></div></div>
+<div class="bar-g"><span class="bar-l">6m → 2y</span><div class="bar-t"><div class="bar-f bf-r" style="width:14%">Recovery</div></div></div>
+<div class="ev-stats">
+<span class="ev-stat"><strong class="sa">−3.7%</strong> nominal peak→trough</span>
+<span class="ev-stat"><strong class="sg">~2y</strong> nominal recovery (Aug 2024)</span>
+<span class="ev-stat">Policy quickly reversed</span>
+</div>
+<div class="ev-note">Mortgage rates spiked to 6.5%, ~1000 products withdrawn in one day. But the crisis was self-inflicted and quickly reversed. Prices fell just 3.7% from Aug 2022 peak and recovered to near-peak by Aug 2024. Key: the shock was <em>brief</em> and <em>policy-reversible</em>.</div>
+</div>
+</div>
+
+<div class="ev-row current">
+<div class="ev-meta"><span class="ev-name">2023–26 London Flats + Iran</span><span class="ev-cause">Structural flat decline since 2023 peak. Iran energy shock from Feb 2026.</span></div>
+<div>
+<span class="ev-outcome oc-tbd">Outcome TBD</span>
+<div class="bar-g"><span class="bar-l">2023 → now</span><div class="bar-t"><div class="bar-f bf-d" style="width:22%">−7% nominal</div></div></div>
+<div class="bar-g"><span class="bar-l">now → ?</span><div class="bar-t"><div class="bar-f bf-u" style="width:55%"></div></div></div>
+<div class="ev-stats">
+<span class="ev-stat"><strong class="sr">−7%</strong> London flats nominal since early 2023 peak</span>
+<span class="ev-stat"><strong class="sr">−10%</strong> estimated real (with ~3% cumulative inflation)</span>
+<span class="ev-stat"><strong class="sr">38%</strong> new build flats sold at loss</span>
+<span class="ev-stat"><strong class="sa">3 years</strong> into decline already</span>
+</div>
+<div class="ev-note">All projections below measured from the <strong>early 2023 London flat peak (£575k)</strong>. Current market value ~£525k. Iran conflict began 28 Feb 2026 — just 3.5 weeks ago. UK growth forecast already halved.</div>
+</div>
+</div>
+</div>
+
+<div class="callout callout-w"><strong>Pattern: what makes a shock crash the market?</strong><br><br>
+<strong>Base rate: 4 out of 7 major shocks since 1973 did NOT crash the market.</strong> The historical odds actually favour absorption over crash.<br><br>
+<strong>Crashes happened</strong> when: rates rose sharply (1989, 2008), credit tightened (2008), affordability broke (all three), forced selling occurred (1989, 2008), and crucially — the shock was <em>prolonged</em> (years, not months).<br><br>
+<strong>Shocks were absorbed</strong> when: they were brief and resolved quickly (Gulf War — 7 months, mini-budget — weeks), fiscal intervention was swift and large (COVID — stamp duty holiday, furlough), fundamental demand stayed strong (Brexit — supply shortage dominated), or rates stayed low or fell (post-Black Wednesday, COVID).<br><br>
+<strong>Iran 2026 — which pattern?</strong> Depends on two variables: <em>duration</em> and <em>rate direction</em>. If Iran resolves quickly like the Gulf War, or government intervenes aggressively like COVID → Scenario A (absorbed). If it drags on but fiscal tools limit the damage → Scenario C (long grind). If prolonged with rate rises → Scenario D (crash). London flats are uniquely vulnerable because they're already 3 years into a structural decline, but the base rate still favours absorption.</div>
+
+<h2>London flat projection — three scenarios</h2>
+
+<div class="note-box note-nom" style="margin-bottom:12px"><strong>Charts default to nominal (cash values).</strong> Use the Nominal / Real toggle on each chart to see inflation-adjusted figures. Each scenario assumes a different inflation rate — worse scenarios assume higher inflation because Iran-driven energy costs push CPI up. In the real view, even the 2023 peak line declines over time, showing how inflation erodes the value you're trying to recover to.</div>
+
+<div class="sc-tabs">
+<button class="sc-tab ab" id="ba" onclick="go('absorbed')"><span class="sc-tag tb">A</span><div class="sc-name">Shock absorbed</div><div class="sc-sub">Iran resolves quickly or fiscal intervention prevents crash. No further decline. Sideways, then modest growth.</div></button>
+<button class="sc-tab" id="bf" onclick="go('fast')"><span class="sc-tag tf">B</span><div class="sc-name">Fast recovery</div><div class="sc-sub">Brief recession. −13% total nominal from 2023 peak. Recovery by ~2031.</div></button>
+<button class="sc-tab" id="bg" onclick="go('grind')"><span class="sc-tag tg">C</span><div class="sc-name">Long grind</div><div class="sc-sub">Shallow decline (fiscal floor) but years of stagnation. −16% total. Recovery ~2034.</div></button>
+<button class="sc-tab" id="bs" onclick="go('slow')"><span class="sc-tag ts">D</span><div class="sc-name">Deep crash</div><div class="sc-sub">Full recession. −25% total (nominal). 2008-style stagnation. Recovery ~2037.</div></button>
+</div>
+
+<div class="kn-grid" id="kn"></div>
+
+<div class="chart-card">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+<div><div class="ct" id="ct"></div><div class="cs" id="csub"></div></div>
+<div class="toggle-wrap" id="tw1"></div>
+</div>
+<div class="cw"><canvas id="c1"></canvas></div>
+</div>
+
+<h2>Side-by-side: four scenarios</h2>
+<div class="comp" id="comp"></div>
+
+<div class="chart-card">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+<div><div class="ct" id="ct2">All four scenarios overlaid (nominal)</div>
+<div class="cs" id="csub2">Blue = absorbed. Green = fast recovery. Amber = long grind. Coral = deep crash. Dashed = 2023 peak and today's value.</div></div>
+<div class="toggle-wrap" id="tw2"></div>
+</div>
+<div class="cw"><canvas id="c2"></canvas></div>
+</div>
+
+<div class="note-box note-real" style="margin-top:20px;margin-bottom:0"><strong>Toggle the charts above to "Real (inflation-adj)" to see the difference.</strong> Each scenario assumes a different inflation rate: 2.5% (absorbed), 3% (fast), 3.5% (grind), 4% (deep crash). In the real view, both the projected values AND the reference lines (peak, today) are deflated — so you can see how inflation erodes the value of the 2023 peak itself over time. The gap between nominal and real is where your purchasing power quietly disappears.</div>
+
+<h2>Pattern matching: Iran vs all historical shocks</h2>
+
+<div class="note-box note-nom" style="margin-bottom:16px"><strong>Where rates are today:</strong> BoE base rate is <strong>3.75%</strong>, held unanimously on 19 March 2026. The rate was being <em>cut</em> — from a peak of 5.25% (Aug 2023) down to 3.75% by Dec 2025, a total of 150bps of easing. Pre-Iran, markets expected a further cut to 3.5%. Post-Iran, those expectations have reversed — markets now price in holds for all of 2026, with some pricing in a possible <em>rise</em> if inflation spikes. Average mortgage fixes have already jumped from 3.55% → 4.14% (2yr) and 3.77% → 4.24% (5yr) in just 3 weeks. The rate rows below (highlighted in blue) are the single most important variable for which scenario plays out.</div>
+
+<div class="comp">
+<div class="comp-t">Iran 2026 compared to shocks that crashed the market</div>
+<div class="cr cr5 hd"><div></div><div style="color:var(--red)">1973 Oil</div><div style="color:var(--red)">1989 Rates</div><div style="color:var(--red)">2008 GFC</div><div style="color:var(--warn)">Iran 2026</div></div>
+<div class="cr cr5"><div class="cd">Trigger type</div><div>Energy shock</div><div>Rate shock</div><div>Credit freeze</div><div>Energy shock</div></div>
+<div class="cr cr5"><div class="cd">Oil spike</div><div>~3× increase</div><div>n/a</div><div>Mild ($147)</div><div>~35% so far</div></div>
+<div class="cr cr5"><div class="cd">Pre-existing weakness</div><div>No</div><div>Overheated</div><div>Overheated</div><div class="cc">Yes (−7% flats)</div></div>
+<div class="cr cr5"><div class="cd">Inflation at trigger</div><div>~9% → 25%</div><div>~8% → 10%</div><div>~2% → 5%</div><div>3% → risk of 5%+</div></div>
+<div class="cr cr5" style="background:var(--blue-l)"><div class="cd" style="font-weight:700">BoE rate at trigger</div><div><strong>~9%</strong></div><div><strong>~13%</strong></div><div><strong>5%</strong></div><div><strong>3.75%</strong></div></div>
+<div class="cr cr5" style="background:var(--blue-l)"><div class="cd" style="font-weight:700">Rate moved to</div><div><strong>13%</strong> (raised)</div><div><strong>15%</strong> (raised)</div><div><strong>0.5%</strong> (cut)</div><div><strong>3.75%</strong> (held, 19 Mar). Cut to 3.5% expected pre-Iran, now uncertain — markets pricing in possible rise</div></div>
+<div class="cr cr5" style="background:var(--blue-l)"><div class="cd" style="font-weight:700">Rate direction</div><div class="cc">Rising sharply</div><div class="cc">Rising to 15%</div><div class="cf">Cut aggressively</div><div><strong class="sa">On hold. Was cutting (5.25%→3.75% since Aug 2024). Now frozen.</strong></div></div>
+<div class="cr cr5"><div class="cd">Credit availability</div><div>Tightened</div><div>Very tight</div><div>Frozen</div><div>Tightening</div></div>
+<div class="cr cr5"><div class="cd">Fiscal response</div><div>Minimal</div><div>Minimal</div><div>QE, Help to Buy</div><div>Expected (precedent set)</div></div>
+<div class="cr cr5"><div class="cd">Nominal decline</div><div>−25%</div><div>−20% UK / −28% Ldn</div><div>−16% UK / −20% Ldn</div><div>−7% so far + ?</div></div>
+<div class="cr cr5"><div class="cd">Nominal recovery</div><div>~4 years</div><div>~10 years</div><div>~7 years</div><div>TBD</div></div>
+<div class="cr cr5"><div class="cd">Real recovery</div><div>~12 years</div><div>~13 years</div><div>~15 years</div><div>TBD</div></div>
+<div class="cr cr5"><div class="cd">Duration of shock</div><div>~2 years</div><div>~3 years</div><div>~2 years</div><div class="cc">Unknown (3.5 weeks in)</div></div>
+</div>
+
+<div class="comp">
+<div class="comp-t">Iran 2026 vs shocks that <em>didn't</em> crash the market</div>
+<div class="cr cr5 hd"><div></div><div style="color:var(--green)">Gulf War 90</div><div style="color:var(--green)">Brexit 16</div><div style="color:var(--green)">COVID 20</div><div style="color:var(--warn)">Iran 2026</div></div>
+<div class="cr cr5"><div class="cd">Trigger type</div><div>Energy + war</div><div>Political shock</div><div>Pandemic</div><div>Energy + war</div></div>
+<div class="cr cr5"><div class="cd">Duration</div><div>~7 months</div><div>Ongoing but absorbed</div><div>~2 years</div><div class="cc">Unknown</div></div>
+<div class="cr cr5" style="background:var(--blue-l)"><div class="cd" style="font-weight:700">BoE rate at trigger</div><div><strong>~14%</strong></div><div><strong>0.5%</strong></div><div><strong>0.75%</strong></div><div><strong>3.75%</strong></div></div>
+<div class="cr cr5" style="background:var(--blue-l)"><div class="cd" style="font-weight:700">Rate moved to</div><div><strong>~10%</strong> (already falling from 1989 peak)</div><div><strong>0.25%</strong> (cut Aug 2016)</div><div><strong>0.1%</strong> (cut to record low)</div><div><strong>3.75%</strong> (held). Pre-Iran: expected cut to 3.5%. Now: hold or possible rise</div></div>
+<div class="cr cr5" style="background:var(--blue-l)"><div class="cd" style="font-weight:700">Rate direction</div><div class="cf">Falling (from 15% peak)</div><div class="cf">Cut</div><div class="cf">Cut to record low</div><div><strong class="sa">Frozen. Was cutting (5.25%→3.75%). Now on hold indefinitely.</strong></div></div>
+<div class="cr cr5"><div class="cd">Fiscal response</div><div>Minimal</div><div>BoE rate cut</div><div>Massive (SDLT holiday, furlough)</div><div>Expected</div></div>
+<div class="cr cr5"><div class="cd">Why it didn't crash</div><div>Brief. Rates already falling.</div><div>Demand strong. Rate cut.</div><div>Massive intervention. Rate at floor.</div><div class="cc">Key: will rates rise? How long?</div></div>
+<div class="cr cr5"><div class="cd">Property outcome</div><div class="cf">No extra decline</div><div class="cf">Prices rose</div><div class="cf">Prices surged +20%</div><div>TBD</div></div>
+</div>
+
+<div class="callout callout-w"><strong>The two questions that determine everything:</strong><br><br>
+<strong>1. How long does the Iran conflict last?</strong> Short (Gulf War pattern) = Scenario A (absorbed). Prolonged (1973 pattern) = Scenario C or D. The Strait of Hormuz closure is the key variable — every month it stays closed compounds the energy shock.<br><br>
+<strong>2. Do rates rise?</strong> Every crash involved rates staying high or rising. Every non-crash either saw rates fall or stay low. If BoE is forced to raise rates to fight Iran-driven inflation, Scenarios C/D become much more likely. If they hold or cut (accepting higher inflation), Scenario A or B.<br><br>
+<strong>The historical base rate favours Scenario A.</strong> But London flats have structural headwinds (SDLT, cladding, WFH) that make them more vulnerable than the broader market. Even in an "absorbed" scenario, the recovery to 2023 peak levels will take years — just not a decade.</div>
+
+<div class="footnote">
+<strong>Sources:</strong> Nationwide historical index, UK House Price Index (Land Registry), Savills 70-year real price data, LandTech housing booms analysis, HomeOwners Alliance (London flats data), Wikipedia (Economic impact of 2026 Iran war), Chatham House, Bloomberg, OBR March 2026. Recovery timelines explicitly labeled as nominal or real (inflation-adjusted). London flat peak from early 2023 per HomeOwners Alliance/Hamptons. All projections are illustrative scenarios, not forecasts. Created 23 March 2026.
+</div>
+
+<script>
+let sc='absorbed',c1i=null,c2i=null,mode1='nom',mode2='nom';
+const fmt=v=>(v<0?'-£':'£')+Math.abs(Math.round(v)).toLocaleString();
+const P=575000,C=525000,Y=[2026,2027,2028,2029,2030,2031,2032,2033,2034,2035,2036];
+
+// Assumed annual inflation rates per scenario (used to deflate nominal to real 2026 money)
+const INF={absorbed:.025,fast:.03,grind:.035,slow:.04};
+
+// Deflate a nominal value array to real (2026 purchasing power)
+function toReal(vals, infRate){
+  return vals.map((v,i)=>Math.round(v/Math.pow(1+infRate,i)));
+}
+
+const A={l:'Shock absorbed',c:'#1E5080',cl:'rgba(30,80,128,.1)',inf:.025,
+v:[525000,520000,520000,530000,546000,562000,579000,597000,615000,633000,652000],
+a:'Iran resolves in weeks/months (Gulf War pattern) or fiscal intervention absorbs the shock (COVID pattern). The −7% nominal decline from 2023 peak already experienced IS the correction. Prices stabilise near current levels, drift sideways 1–2 years, then resume ~3% pa nominal growth.',
+ty:2027,tv:520000,ry:2029,stag:'~1–2 years sideways',rr:'~3% pa',par:'Gulf War 1990 / Brexit 2016 / COVID 2020 / mini-budget 2022',fiscal:'Swift intervention or shock too brief to transmit'};
+const F={l:'Fast recovery',c:'#276838',cl:'rgba(39,104,56,.1)',inf:.03,
+v:[525000,499000,499000,519000,540000,561000,583000,606000,630000,655000,681000],
+a:'Iran causes a brief recession but resolves within 6 months. Oil normalises. BoE cuts late 2026. Flats drop another 5% (nominal) on momentum, stabilise 2028, then ~4% pa nominal growth. Total −13% nominal from 2023 peak.',
+ty:2027,tv:499000,ry:2031,stag:'~1 year',rr:'~4% pa',par:'2022 mini-budget (brief shock, quickly resolved)',fiscal:'Not needed — shock resolves'};
+const G={l:'Long grind',c:'#92600A',cl:'rgba(146,96,10,.1)',inf:.035,
+v:[525000,499000,483000,483000,483000,486000,493000,503000,513000,524000,535000],
+a:'Fiscal measures (stamp duty holidays, mortgage guarantees) limit nominal decline to −16% from 2023 peak. But structural headwinds prevent recovery for years. 4-year stagnation at trough, then just 2% pa nominal growth.',
+ty:2028,tv:483000,ry:2034,stag:'~4 years',rr:'~2% pa',par:'2008 with stronger fiscal response (limits depth, not duration)',fiscal:'Stamp duty holiday, mortgage guarantees put floor under prices'};
+const S={l:'Deep crash',c:'#C0533A',cl:'rgba(192,83,58,.1)',inf:.04,
+v:[525000,478000,446000,431000,431000,434000,443000,456000,470000,484000,499000],
+a:'Full recession. Prolonged Hormuz closure. Oil $100–130. BoE holds or raises rates. Total −25% nominal from 2023 peak (between 2008 London −20% and 1989 London −28%). 3-year stagnation, then 3% pa nominal recovery.',
+ty:2029,tv:431000,ry:2037,stag:'~3 years',rr:'~3% pa',par:'Between 2008 (−20%) and 1989 (−28%) London',fiscal:'Insufficient against scale of shock'};
+
+const ALL=[A,F,G,S];
+const KEYS=['absorbed','fast','grind','slow'];
+function gs(s){return s==='absorbed'?A:s==='fast'?F:s==='grind'?G:S}
+
+function toggleHtml(id, current){
+  return `<button class="toggle-opt ${current==='nom'?'active-nom':''}" onclick="setMode('${id}','nom')">Nominal</button><button class="toggle-opt ${current==='real'?'active-real':''}" onclick="setMode('${id}','real')">Real (inflation-adj)</button>`;
+}
+
+function setMode(id, m){
+  if(id==='tw1'){mode1=m}else{mode2=m}
+  render();
+}
+
+function go(s){
+sc=s;
+document.getElementById('ba').className='sc-tab'+(s==='absorbed'?' ab':'');
+document.getElementById('bf').className='sc-tab'+(s==='fast'?' af':'');
+document.getElementById('bg').className='sc-tab'+(s==='grind'?' ag':'');
+document.getElementById('bs').className='sc-tab'+(s==='slow'?' as':'');
+render();
+}
+
+function render(){
+const o=gs(sc);
+const isReal1=mode1==='real', isReal2=mode2==='real';
+const isAbsorbed=sc==='absorbed';
+const label1=isReal1?'real (2026 money)':'nominal';
+const label2=isReal2?'real (2026 money)':'nominal';
+
+// Toggles
+document.getElementById('tw1').innerHTML=toggleHtml('tw1',mode1);
+document.getElementById('tw2').innerHTML=toggleHtml('tw2',mode2);
+
+// Values for chart 1
+const v1=isReal1?toReal(o.v,o.inf):o.v;
+const peak1=isReal1?toReal(Y.map(()=>P),o.inf):Y.map(()=>P);
+const today1=isReal1?toReal(Y.map(()=>C),o.inf):Y.map(()=>C);
+
+// Key numbers — always show both
+const d=((o.tv-C)/C*100);
+const td=((o.tv-P)/P*100);
+const ytp=o.ry-2026;
+const realTv=Math.round(o.tv/Math.pow(1+o.inf,o.ty-2026));
+const realTd=((realTv-P)/P*100);
+
+document.getElementById('kn').innerHTML=`
+<div class="kn"><div class="kn-v" style="color:${isAbsorbed?'var(--green)':'var(--red)'}">${isAbsorbed?'~0%':d.toFixed(0)+'%'}</div><div class="kn-l">Further decline</div><div class="kn-s">nominal, from today</div></div>
+<div class="kn"><div class="kn-v" style="color:${isAbsorbed?'var(--warn)':'var(--red)'}">−${Math.abs(td).toFixed(0)}%</div><div class="kn-l">Total from peak</div><div class="kn-s">nominal / <span style="color:var(--coral)">−${Math.abs(realTd).toFixed(0)}% real</span></div></div>
+<div class="kn"><div class="kn-v" style="color:var(--warn)">${isAbsorbed?'Already passed':o.ty}</div><div class="kn-l">Trough</div><div class="kn-s">${isAbsorbed?'at/near trough':'nominal: '+fmt(o.tv)+' / real: '+fmt(realTv)}</div></div>
+<div class="kn"><div class="kn-v" style="color:var(--green)">${ytp}y</div><div class="kn-l">Nominal recovery</div><div class="kn-s">to peak / <span style="color:var(--coral)">~${ytp+Math.round(o.inf*100)}y real</span></div></div>`;
+
+document.getElementById('ct').textContent=`Projected London flat value — ${o.l.toLowerCase()} (${label1})`;
+document.getElementById('csub').textContent=isReal1?'All values deflated to 2026 purchasing power at '+Math.round(o.inf*100)+'% annual inflation. '+o.a:o.a;
+
+// Chart 1 — single scenario
+if(c1i)c1i.destroy();
+const yMin1=isReal1?340000:380000;
+c1i=new Chart(document.getElementById('c1').getContext('2d'),{type:'line',data:{labels:Y,datasets:[
+{label:o.l+' ('+label1+')',data:v1,borderColor:o.c,backgroundColor:o.cl,fill:true,tension:.35,borderWidth:2.5,pointRadius:4,pointBackgroundColor:o.c},
+{label:'2023 peak ('+label1+')',data:peak1,borderColor:'#8A8983',borderDash:[6,4],borderWidth:1,pointRadius:0,fill:false},
+{label:'Today\'s value ('+label1+')',data:today1,borderColor:'#5B4BA0',borderDash:[3,3],borderWidth:1,pointRadius:0,fill:false}
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'DM Sans',size:11},boxWidth:12,padding:14,usePointStyle:true}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.raw)}}},scales:{y:{min:yMin1,max:720000,ticks:{callback:v=>'£'+(v/1000)+'k',font:{family:'DM Sans',size:11},color:'#8A8983'},grid:{color:'#E6E4DF'}},x:{ticks:{font:{family:'DM Sans',size:11},color:'#8A8983'},grid:{display:false}}}}});
+
+// Comparison table
+const scArr=[A,F,G,S];
+const labels=['A: Absorbed','B: Fast','C: Long grind','D: Deep crash'];
+const colors=['var(--blue)','var(--green)','var(--warn)','var(--coral)'];
+const furtherPcts=scArr.map(s=>((s.tv-C)/C*100).toFixed(0));
+const totalPcts=scArr.map(s=>((s.tv-P)/P*100).toFixed(0));
+const realTotalPcts=scArr.map((s,i)=>{const rv=Math.round(s.tv/Math.pow(1+s.inf,s.ty-2026));return((rv-P)/P*100).toFixed(0)});
+
+document.getElementById('comp').innerHTML=`
+<div class="comp-t">Four scenarios compared</div>
+<div class="cr cr5 hd"><div></div>${labels.map((l,i)=>`<div style="color:${colors[i]}">${l}</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Further from today (nom.)</div>${scArr.map((s,i)=>`<div style="color:${colors[i].replace('var(','').replace(')','')};font-weight:600">${i===0?'~0%':furtherPcts[i]+'%'}</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Total from peak (nom.)</div>${totalPcts.map((p,i)=>`<div style="font-weight:600">${p}%</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Total from peak (real)</div>${realTotalPcts.map((p,i)=>`<div style="font-weight:600;color:var(--coral)">${p}%</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Assumed inflation</div>${scArr.map(s=>`<div>${Math.round(s.inf*100*10)/10}% pa</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Trough value (nom.)</div>${scArr.map(s=>`<div>${fmt(s.tv)}</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Trough year</div>${scArr.map((s,i)=>`<div>${i===0?'Now/2027':s.ty}</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Stagnation</div>${scArr.map(s=>`<div>${s.stag}</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Nominal recovery rate</div>${scArr.map(s=>`<div>${s.rr}</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Nom. recovery to peak</div>${scArr.map(s=>`<div>~${s.ry} (${s.ry-2026}y)</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Est. real recovery</div>${scArr.map((s,i)=>{const extra=[1,2,3,4][i];return`<div style="color:var(--coral)">~${s.ry+extra} (${s.ry+extra-2026}y)</div>`}).join('')}</div>
+<div class="cr cr5"><div class="cd">Value in 2036 (nom.)</div>${scArr.map(s=>`<div>${fmt(s.v[10])}</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Value in 2036 (real)</div>${scArr.map(s=>`<div style="color:var(--coral)">${fmt(toReal(s.v,s.inf)[10])}</div>`).join('')}</div>
+<div class="cr cr5"><div class="cd">Historical base rate</div><div style="font-weight:600">4/7 absorbed</div><div>—</div><div>—</div><div style="font-weight:600">3/7 crashed</div></div>
+<div class="cr cr5"><div class="cd">Key condition</div><div>Iran brief OR rates don't rise</div><div>Iran short, brief recession</div><div>Fiscal limits depth; headwinds persist</div><div>Rates rise, prolonged shock</div></div>
+<div class="cr cr5"><div class="cd">Historical parallel</div>${scArr.map(s=>`<div>${s.par}</div>`).join('')}</div>`;
+
+// Chart 2 — overlay
+const yMin2=isReal2?320000:380000;
+document.getElementById('ct2').textContent='All four scenarios overlaid ('+(isReal2?'real — 2026 purchasing power':'nominal')+')';
+document.getElementById('csub2').textContent=isReal2?'All values deflated by each scenario\'s assumed inflation rate. Shows what the money is actually worth in 2026 terms. Reveals the true cost of waiting.':'Blue = absorbed. Green = fast recovery. Amber = long grind. Coral = deep crash. Dashed = 2023 peak and today\'s value.';
+
+const ds2=scArr.map((s,i)=>{
+  const v=isReal2?toReal(s.v,s.inf):s.v;
+  return{label:labels[i]+' ('+(isReal2?'real':'nom.')+')',data:v,borderColor:s.c,backgroundColor:s.cl.replace('.1','.04'),fill:true,tension:.35,borderWidth:2.5,pointRadius:3,pointBackgroundColor:s.c};
+});
+const peakLine2=isReal2?toReal(Y.map(()=>P),(INF.fast+INF.grind)/2):Y.map(()=>P);
+const todayLine2=isReal2?toReal(Y.map(()=>C),(INF.fast+INF.grind)/2):Y.map(()=>C);
+ds2.push({label:'2023 peak ('+(isReal2?'real':'nom.')+')',data:peakLine2,borderColor:'#8A8983',borderDash:[6,4],borderWidth:1,pointRadius:0,fill:false});
+ds2.push({label:'Today ('+(isReal2?'real':'nom.')+')',data:todayLine2,borderColor:'#5B4BA0',borderDash:[3,3],borderWidth:1,pointRadius:0,fill:false});
+
+if(c2i)c2i.destroy();
+c2i=new Chart(document.getElementById('c2').getContext('2d'),{type:'line',data:{labels:Y,datasets:ds2},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'DM Sans',size:11},boxWidth:12,padding:14,usePointStyle:true}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.raw)}}},scales:{y:{min:yMin2,max:720000,ticks:{callback:v=>'£'+(v/1000)+'k',font:{family:'DM Sans',size:11},color:'#8A8983'},grid:{color:'#E6E4DF'}},x:{ticks:{font:{family:'DM Sans',size:11},color:'#8A8983'},grid:{display:false}}}}});
+}
+render();
+</script>
+</body>
+</html>

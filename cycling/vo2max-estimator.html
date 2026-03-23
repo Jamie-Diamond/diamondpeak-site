@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VO2 Max Estimator — Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8f5ef;
+    --card: #fff;
+    --ink: #18160f;
+    --ink2: #4a4535;
+    --muted: #9a9080;
+    --border: #ddd8cc;
+    --green: #1d6840;
+    --green-bg: #e6f4ec;
+    --red: #b53a1e;
+    --red-bg: #fdeee9;
+    --blue: #1a5276;
+    --amber: #b87c20;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+
+  .page { max-width: 820px; margin: 0 auto; padding: 36px 16px 72px; }
+  @media(min-width:600px) { .page { padding: 56px 24px 80px; } }
+
+  .back { color: var(--muted); text-decoration: none; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; }
+  .back:hover { color: var(--ink); }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    margin-top: 20px;
+  }
+  h1 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(26px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 10px;
+  }
+  .intro {
+    font-size: 14px;
+    color: var(--ink2);
+    line-height: 1.7;
+    margin-bottom: 36px;
+  }
+
+  /* Panels */
+  .v-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  @media(min-width:520px) { .v-panel { padding: 24px; } }
+  .v-panel-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Distance preset buttons */
+  .v-dist-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .v-dist-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink2);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .v-dist-btn:hover { border-color: var(--ink); color: var(--ink); }
+  .v-dist-btn.active {
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+  }
+
+  /* Fields */
+  .v-field { margin-bottom: 14px; }
+  .v-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink2);
+    margin-bottom: 5px;
+    line-height: 1.3;
+  }
+  .v-field .v-hint {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 3px;
+    line-height: 1.5;
+  }
+
+  /* Time inputs row */
+  .v-time-row { display: flex; gap: 8px; align-items: center; }
+  .v-time-group { display: flex; flex-direction: column; align-items: center; }
+  .v-time-group input {
+    width: 60px;
+    height: 40px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 16px;
+    padding: 0;
+    text-align: center;
+    outline: none;
+    border-radius: 4px;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+  }
+  .v-time-group input:focus { border-color: var(--ink); }
+  .v-time-group input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .v-time-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    margin-top: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .v-time-sep {
+    font-family: 'DM Mono', monospace;
+    font-size: 20px;
+    color: var(--muted);
+    padding-bottom: 16px;
+  }
+
+  /* Slider */
+  .v-slider-row { display: flex; align-items: center; gap: 10px; }
+  .v-slider-row input[type="range"] {
+    flex: 1; height: 5px;
+    -webkit-appearance: none; appearance: none;
+    background: linear-gradient(to right, var(--green) 0%, var(--green) var(--fill,25%), var(--border) var(--fill,25%), var(--border) 100%);
+    border-radius: 999px; outline: none;
+  }
+  .v-slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--green); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+  .v-slider-row input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--green); cursor: pointer; border: none;
+  }
+  .v-slider-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px; font-weight: 500;
+    color: var(--green); min-width: 50px; text-align: right;
+  }
+
+  /* Sex toggle */
+  .v-sex-toggle { display: flex; gap: 0; }
+  .v-sex-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 8px 20px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--ink2);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .v-sex-btn:first-child { border-radius: 6px 0 0 6px; }
+  .v-sex-btn:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+  .v-sex-btn.active {
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+  }
+
+  /* Headline output (dark card) */
+  .v-headline {
+    background: var(--ink);
+    color: white;
+    border-radius: 8px;
+    padding: 28px 24px;
+    text-align: center;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .v-headline::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 0%, rgba(29,104,64,0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .v-hl-context {
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 6px;
+    position: relative;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .v-hl-number {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(36px, 8vw, 56px);
+    font-weight: 500;
+    line-height: 1;
+    display: block;
+    margin-bottom: 4px;
+    position: relative;
+    color: #a8e8c0;
+  }
+  .v-hl-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    position: relative;
+  }
+  .v-hl-row {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-top: 16px;
+    position: relative;
+  }
+  .v-hl-stat { text-align: center; }
+  .v-hl-stat-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 4px;
+  }
+  .v-hl-stat-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+    color: #a8e8c0;
+  }
+
+  /* Classification table */
+  .v-class-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-top: 8px;
+  }
+  .v-class-table th {
+    background: var(--ink);
+    color: white;
+    padding: 6px 10px;
+    text-align: left;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+  .v-class-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #eee9df;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--ink2);
+  }
+  .v-class-table tr:nth-child(even) td { background: #faf8f4; }
+  .v-class-table tr.v-highlight td {
+    background: var(--green-bg);
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  /* Equivalent race times */
+  .v-race-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 9px 0;
+    font-size: 12px;
+    color: var(--ink2);
+    border-bottom: 1px solid #eee9df;
+  }
+  .v-race-row:last-child { border-bottom: none; }
+  .v-race-val {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--green);
+  }
+  .v-race-row.v-race-active {
+    background: var(--green-bg);
+    margin: 0 -20px;
+    padding: 9px 20px;
+    border-radius: 4px;
+  }
+
+  /* Methodology */
+  .v-method {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .v-method code {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    background: #faf8f4;
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <a href="../index.html" class="back">&larr; Back to tools</a>
+
+  <div class="kicker">NUTRITION &amp; PHYSIOLOGY</div>
+  <h1>VO&#x2082; Max Estimator</h1>
+  <p class="intro">
+    Estimate your VO&#x2082; max from a recent race result using the Jack Daniels VDOT formula.
+    Select a distance, enter your finishing time, and see your estimated aerobic capacity,
+    fitness classification, and equivalent race times across all standard distances.
+  </p>
+
+  <div id="v-root">
+    <p style="text-align:center;padding:2rem;color:var(--muted);font-size:12px;">Loading estimator&hellip;</p>
+  </div>
+
+  <div class="v-method">
+    <strong style="color:var(--ink2);font-weight:500;">Methodology &mdash; Jack Daniels VDOT</strong><br><br>
+    The VDOT model estimates aerobic capacity from race performance:<br><br>
+    <code>velocity</code> = distance (m) / time (s)<br>
+    <code>%VO&#x2082;max</code> = 0.8 + 0.1894393 &times; e<sup>-0.012778 &times; t</sup> + 0.2989558 &times; e<sup>-0.1932605 &times; t</sup> &nbsp;(t in minutes)<br>
+    <code>VO&#x2082;</code> = -4.60 + 0.182258 &times; v + 0.000104 &times; v&sup2; &nbsp;(v in m/min)<br>
+    <code>VDOT</code> = VO&#x2082; / %VO&#x2082;max<br><br>
+    Fitness categories and percentiles are age- and sex-adjusted based on published normative data.
+    Equivalent race times are predicted by finding the time that yields the same VDOT for each distance using bisection search.
+  </div>
+
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ── Distances ─────────────────────────── */
+  var DISTANCES = [
+    { name: '1 Mile',         meters: 1609.34 },
+    { name: '5K',             meters: 5000 },
+    { name: '10K',            meters: 10000 },
+    { name: 'Half Marathon',  meters: 21097.5 },
+    { name: 'Marathon',       meters: 42195 }
+  ];
+
+  /* ── VDOT math ─────────────────────────── */
+  function pctVO2max(timeMin) {
+    return 0.8 + 0.1894393 * Math.exp(-0.012778 * timeMin) + 0.2989558 * Math.exp(-0.1932605 * timeMin);
+  }
+
+  function vo2FromVelocity(vMperMin) {
+    return -4.60 + 0.182258 * vMperMin + 0.000104 * vMperMin * vMperMin;
+  }
+
+  function calcVDOT(distMeters, timeSec) {
+    if (timeSec <= 0) return 0;
+    var timeMin = timeSec / 60;
+    var vMperMin = distMeters / timeMin;
+    var vo2 = vo2FromVelocity(vMperMin);
+    var pct = pctVO2max(timeMin);
+    if (pct <= 0) return 0;
+    return vo2 / pct;
+  }
+
+  /* Bisection: find time (sec) for a given VDOT and distance */
+  function timeFromVDOT(vdot, distMeters) {
+    if (vdot <= 0) return 0;
+    var lo = 60;          // 1 min
+    var hi = 60 * 60 * 8; // 8 hours
+    for (var i = 0; i < 100; i++) {
+      var mid = (lo + hi) / 2;
+      var v = calcVDOT(distMeters, mid);
+      if (v > vdot) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
+  function formatTime(sec) {
+    if (sec <= 0 || !isFinite(sec)) return '--:--:--';
+    var h = Math.floor(sec / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    var s = Math.round(sec % 60);
+    if (s === 60) { m++; s = 0; }
+    if (m === 60) { h++; m = 0; }
+    if (h > 0) return h + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    return m + ':' + String(s).padStart(2,'0');
+  }
+
+  /* ── Classification tables (age-adjusted) ── */
+  /*
+    Categories: Superior, Excellent, Good, Fair, Poor
+    Base thresholds (age 20-29), ml/kg/min:
+    Male:   Superior >=56, Excellent 52-55.9, Good 44-51.9, Fair 38-43.9, Poor <38
+    Female: Superior >=50, Excellent 45-49.9, Good 38-44.9, Fair 32-37.9, Poor <32
+
+    Age adjustment: subtract per-decade decline from age 30+
+    Decline: ~1.0 ml/kg/min per year after 25 (approx 5 per decade)
+  */
+  var MALE_BASE =   [56, 52, 44, 38]; // thresholds: Superior>=, Excellent>=, Good>=, Fair>=
+  var FEMALE_BASE = [50, 45, 38, 32];
+  var CATEGORIES = ['Superior', 'Excellent', 'Good', 'Fair', 'Poor'];
+
+  function ageAdjust(baseThresholds, age) {
+    var decline = Math.max(0, (age - 25) * 0.5);
+    return baseThresholds.map(function(t) { return t - decline; });
+  }
+
+  function getCategory(vdot, age, sex) {
+    var base = sex === 'male' ? MALE_BASE : FEMALE_BASE;
+    var thresholds = ageAdjust(base, age);
+    for (var i = 0; i < thresholds.length; i++) {
+      if (vdot >= thresholds[i]) return { category: CATEGORIES[i], index: i };
+    }
+    return { category: CATEGORIES[4], index: 4 };
+  }
+
+  function getThresholds(age, sex) {
+    var base = sex === 'male' ? MALE_BASE : FEMALE_BASE;
+    return ageAdjust(base, age);
+  }
+
+  /* ── Percentile estimation (simplified normal model) ── */
+  /*
+    Approximate population mean and SD of VO2max by age/sex:
+    Male 20-29: mean ~44, SD ~7
+    Female 20-29: mean ~38, SD ~6
+    Both decline ~0.5/yr after 25
+  */
+  function getPercentile(vdot, age, sex) {
+    var meanBase = sex === 'male' ? 44 : 38;
+    var sd = sex === 'male' ? 7 : 6;
+    var decline = Math.max(0, (age - 25) * 0.5);
+    var mean = meanBase - decline;
+    var z = (vdot - mean) / sd;
+    // Approximate normal CDF
+    var a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
+    var sign = z < 0 ? -1 : 1;
+    var t = 1 / (1 + p * Math.abs(z));
+    var y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-z*z/2);
+    var pct = 0.5 * (1 + sign * y) * 100;
+    return Math.min(99.9, Math.max(0.1, pct));
+  }
+
+  /* ── DOM helpers ───────────────────────── */
+  function el(tag, attrs, children) {
+    var e = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function(k) {
+        if (k === 'className') e.className = attrs[k];
+        else if (k === 'style' && typeof attrs[k] === 'object') {
+          Object.keys(attrs[k]).forEach(function(s) { e.style[s] = attrs[k][s]; });
+        }
+        else if (k.indexOf('on') === 0) e.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+        else if (k === 'htmlFor') e.setAttribute('for', attrs[k]);
+        else e.setAttribute(k, attrs[k]);
+      });
+    }
+    if (children !== undefined && children !== null) {
+      if (Array.isArray(children)) {
+        children.forEach(function(c) {
+          if (c != null) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+        });
+      } else if (typeof children === 'string') {
+        e.innerHTML = children;
+      } else {
+        e.appendChild(children);
+      }
+    }
+    return e;
+  }
+
+  /* ── State ─────────────────────────────── */
+  var state = {
+    distIndex: 1, // 5K
+    hours: 0,
+    minutes: 22,
+    seconds: 0,
+    age: 35,
+    sex: 'male'
+  };
+
+  var root = document.getElementById('v-root');
+
+  function render() {
+    var dist = DISTANCES[state.distIndex];
+    var totalSec = state.hours * 3600 + state.minutes * 60 + state.seconds;
+    var vdot = calcVDOT(dist.meters, totalSec);
+    var cat = getCategory(vdot, state.age, state.sex);
+    var pctile = getPercentile(vdot, state.age, state.sex);
+    var thresholds = getThresholds(state.age, state.sex);
+
+    root.innerHTML = '';
+
+    /* ── Input panel ─────────────────────── */
+    var panel = el('div', { className: 'v-panel' });
+    panel.appendChild(el('div', { className: 'v-panel-title' }, 'Race Input'));
+
+    // Distance buttons
+    var distLabel = el('div', { className: 'v-field' });
+    distLabel.appendChild(el('label', null, 'Distance'));
+    var btnRow = el('div', { className: 'v-dist-btns' });
+    DISTANCES.forEach(function(d, i) {
+      var btn = el('button', {
+        className: 'v-dist-btn' + (i === state.distIndex ? ' active' : ''),
+        onClick: function() { state.distIndex = i; render(); }
+      }, d.name);
+      btnRow.appendChild(btn);
+    });
+    distLabel.appendChild(btnRow);
+    panel.appendChild(distLabel);
+
+    // Time inputs
+    var timeField = el('div', { className: 'v-field' });
+    timeField.appendChild(el('label', null, 'Race Time'));
+    var timeRow = el('div', { className: 'v-time-row' });
+
+    function makeTimeInput(val, key, label, max) {
+      var group = el('div', { className: 'v-time-group' });
+      var inp = el('input', {
+        type: 'number', value: String(val), min: '0', max: String(max),
+        onInput: function(e) {
+          var v = parseInt(e.target.value) || 0;
+          if (v < 0) v = 0;
+          if (v > max) v = max;
+          state[key] = v;
+          render();
+        }
+      });
+      group.appendChild(inp);
+      group.appendChild(el('span', { className: 'v-time-label' }, label));
+      return group;
+    }
+
+    timeRow.appendChild(makeTimeInput(state.hours, 'hours', 'hrs', 12));
+    timeRow.appendChild(el('span', { className: 'v-time-sep' }, ':'));
+    timeRow.appendChild(makeTimeInput(state.minutes, 'minutes', 'min', 59));
+    timeRow.appendChild(el('span', { className: 'v-time-sep' }, ':'));
+    timeRow.appendChild(makeTimeInput(state.seconds, 'seconds', 'sec', 59));
+    timeField.appendChild(timeRow);
+    panel.appendChild(timeField);
+
+    // Age slider
+    var ageField = el('div', { className: 'v-field' });
+    ageField.appendChild(el('label', null, 'Age &mdash; ' + state.age));
+    var ageSliderRow = el('div', { className: 'v-slider-row' });
+    var ageFill = ((state.age - 20) / (80 - 20) * 100);
+    var ageSlider = el('input', {
+      type: 'range', min: '20', max: '80', value: String(state.age),
+      style: { '--fill': ageFill + '%' },
+      onInput: function(e) { state.age = parseInt(e.target.value); render(); }
+    });
+    ageSliderRow.appendChild(ageSlider);
+    ageSliderRow.appendChild(el('span', { className: 'v-slider-val' }, state.age + ' yrs'));
+    ageField.appendChild(ageSliderRow);
+    panel.appendChild(ageField);
+
+    // Sex toggle
+    var sexField = el('div', { className: 'v-field' });
+    sexField.appendChild(el('label', null, 'Sex'));
+    var sexRow = el('div', { className: 'v-sex-toggle' });
+    ['male', 'female'].forEach(function(s) {
+      var btn = el('button', {
+        className: 'v-sex-btn' + (state.sex === s ? ' active' : ''),
+        onClick: function() { state.sex = s; render(); }
+      }, s.charAt(0).toUpperCase() + s.slice(1));
+      sexRow.appendChild(btn);
+    });
+    sexField.appendChild(sexRow);
+    panel.appendChild(sexField);
+
+    root.appendChild(panel);
+
+    /* ── Results: dark headline card ─────── */
+    if (totalSec > 0 && vdot > 0 && isFinite(vdot)) {
+      var headline = el('div', { className: 'v-headline' });
+      headline.appendChild(el('div', { className: 'v-hl-context' }, 'Estimated VDOT / VO&#x2082; Max'));
+      headline.appendChild(el('span', { className: 'v-hl-number' }, vdot.toFixed(1)));
+      headline.appendChild(el('div', { className: 'v-hl-sub' }, 'ml/kg/min'));
+
+      var statRow = el('div', { className: 'v-hl-row' });
+
+      var catStat = el('div', { className: 'v-hl-stat' });
+      catStat.appendChild(el('div', { className: 'v-hl-stat-label' }, 'Category'));
+      catStat.appendChild(el('div', { className: 'v-hl-stat-val' }, cat.category));
+      statRow.appendChild(catStat);
+
+      var pctStat = el('div', { className: 'v-hl-stat' });
+      pctStat.appendChild(el('div', { className: 'v-hl-stat-label' }, 'Percentile'));
+      pctStat.appendChild(el('div', { className: 'v-hl-stat-val' }, pctile.toFixed(1) + '%'));
+      statRow.appendChild(pctStat);
+
+      headline.appendChild(statRow);
+      root.appendChild(headline);
+
+      /* ── Classification table ───────────── */
+      var classPanel = el('div', { className: 'v-panel' });
+      classPanel.appendChild(el('div', { className: 'v-panel-title' }, 'Fitness Classification (' + (state.sex === 'male' ? 'Male' : 'Female') + ', age ' + state.age + ')'));
+
+      var table = el('table', { className: 'v-class-table' });
+      var thead = el('thead');
+      var headRow = el('tr');
+      headRow.appendChild(el('th', null, 'Category'));
+      headRow.appendChild(el('th', null, 'VO&#x2082; Max Range'));
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      var tbody = el('tbody');
+      var catLabels = ['Superior', 'Excellent', 'Good', 'Fair', 'Poor'];
+      for (var ci = 0; ci < 5; ci++) {
+        var tr = el('tr', ci === cat.index ? { className: 'v-highlight' } : null);
+        var labelTd = el('td');
+        labelTd.textContent = catLabels[ci];
+        tr.appendChild(labelTd);
+
+        var rangeTd = el('td');
+        if (ci === 0) {
+          rangeTd.innerHTML = '&ge; ' + thresholds[0].toFixed(1);
+        } else if (ci < 4) {
+          rangeTd.innerHTML = thresholds[ci].toFixed(1) + ' &ndash; ' + (thresholds[ci-1] - 0.1).toFixed(1);
+        } else {
+          rangeTd.innerHTML = '&lt; ' + thresholds[3].toFixed(1);
+        }
+        tr.appendChild(rangeTd);
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      classPanel.appendChild(table);
+      root.appendChild(classPanel);
+
+      /* ── Equivalent race times ──────────── */
+      var racePanel = el('div', { className: 'v-panel' });
+      racePanel.appendChild(el('div', { className: 'v-panel-title' }, 'Equivalent Race Times'));
+
+      DISTANCES.forEach(function(d, di) {
+        var eqTime = timeFromVDOT(vdot, d.meters);
+        var row = el('div', { className: 'v-race-row' + (di === state.distIndex ? ' v-race-active' : '') });
+        var nameSpan = el('span');
+        nameSpan.textContent = d.name;
+        row.appendChild(nameSpan);
+        row.appendChild(el('span', { className: 'v-race-val' }, formatTime(eqTime)));
+        racePanel.appendChild(row);
+      });
+
+      root.appendChild(racePanel);
+    } else {
+      var empty = el('div', {
+        className: 'v-panel',
+        style: { textAlign: 'center', color: 'var(--muted)', fontSize: '13px', padding: '40px 20px' }
+      }, 'Enter a valid race time to see results.');
+      root.appendChild(empty);
+    }
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

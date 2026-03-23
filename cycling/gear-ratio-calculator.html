@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gear Ratio Calculator — Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8f5ef;
+    --card: #fff;
+    --ink: #18160f;
+    --ink2: #4a4535;
+    --muted: #9a9080;
+    --border: #ddd8cc;
+    --green: #1d6840;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+
+  .page { max-width: 820px; margin: 0 auto; padding: 36px 16px 72px; }
+  @media(min-width:600px) { .page { padding: 56px 24px 80px; } }
+
+  .back { color: var(--muted); text-decoration: none; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; }
+  .back:hover { color: var(--ink); }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    margin-top: 20px;
+  }
+  h1 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(26px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 10px;
+  }
+  .intro {
+    font-size: 14px;
+    color: var(--ink2);
+    line-height: 1.7;
+    margin-bottom: 36px;
+  }
+
+  /* Grid layout */
+  .gr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media(max-width:640px) { .gr-grid { grid-template-columns: 1fr; } }
+
+  /* Panels */
+  .gr-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  @media(min-width:520px) { .gr-panel { padding: 24px; } }
+  .gr-panel-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Fields */
+  .gr-field { margin-bottom: 14px; }
+  .gr-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink2);
+    margin-bottom: 5px;
+    line-height: 1.3;
+  }
+  .gr-field .gr-hint {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 3px;
+    line-height: 1.5;
+  }
+  .gr-input-row { display: flex; }
+  .gr-affix {
+    background: #ede9e1;
+    border: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .gr-affix-pre { border-right: none; border-radius: 4px 0 0 4px; }
+  .gr-affix-post { border-left: none; border-radius: 0 4px 4px 0; }
+  .gr-panel input[type="number"], .gr-panel select {
+    width: 100%;
+    height: 40px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    padding: 0 10px;
+    outline: none;
+    border-radius: 4px;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+  }
+  .gr-panel input[type="number"]:focus, .gr-panel select:focus { border-color: var(--ink); }
+  .gr-panel input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .gr-has-affix input { border-radius: 0 4px 4px 0; }
+
+  /* Slider */
+  .gr-slider-row { display: flex; align-items: center; gap: 10px; }
+  .gr-slider-row input[type="range"] {
+    flex: 1; height: 5px;
+    -webkit-appearance: none; appearance: none;
+    background: linear-gradient(to right, var(--green) 0%, var(--green) var(--fill,50%), var(--border) var(--fill,50%), var(--border) 100%);
+    border-radius: 999px; outline: none;
+  }
+  .gr-slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--green); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+  .gr-slider-row input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--green); cursor: pointer; border: none;
+  }
+  .gr-slider-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px; font-weight: 500;
+    color: var(--green); min-width: 50px; text-align: right;
+  }
+
+  /* Headline output (dark card) */
+  .gr-headline {
+    background: var(--ink);
+    color: white;
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .gr-headline::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 0%, rgba(29,104,64,0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .gr-hl-context {
+    font-size: 11px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 6px;
+    position: relative;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .gr-hl-number {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(32px, 7vw, 52px);
+    font-weight: 500;
+    line-height: 1;
+    display: block;
+    margin-bottom: 4px;
+    position: relative;
+    color: #a8e8c0;
+  }
+  .gr-hl-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    position: relative;
+  }
+
+  /* Output rows */
+  .gr-out-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 9px 0;
+    font-size: 12px;
+    color: var(--ink2);
+    border-bottom: 1px solid #eee9df;
+  }
+  .gr-out-row:last-child { border-bottom: none; }
+  .gr-out-val {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--green);
+  }
+
+  /* Speed table */
+  .gr-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+  }
+  .gr-table th {
+    background: var(--ink);
+    color: white;
+    padding: 6px 10px;
+    text-align: left;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+  .gr-table th:first-child { border-radius: 4px 0 0 0; }
+  .gr-table th:last-child { border-radius: 0 4px 0 0; }
+  .gr-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #eee9df;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--ink2);
+  }
+  .gr-table tr:nth-child(even) td { background: #faf8f4; }
+  .gr-table tr.gr-active td {
+    background: #e6f4ec;
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  /* Methodology */
+  .gr-method {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .gr-method code {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    background: #faf8f4;
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <a href="../index.html" class="back">&larr; Back to tools</a>
+
+  <div class="kicker">POWER & PERFORMANCE</div>
+  <h1>Gear Ratio<br>Calculator</h1>
+  <p class="intro">
+    Calculate your gear ratio, speed and development from chainring, sprocket, wheel size and cadence.
+    Adjust the inputs to compare setups in real time.
+  </p>
+
+  <div class="gr-grid">
+    <!-- INPUTS -->
+    <div class="gr-panel">
+      <div class="gr-panel-title">Inputs</div>
+
+      <div class="gr-field">
+        <label>Chainring teeth</label>
+        <div class="gr-slider-row">
+          <input type="range" id="chainring" min="30" max="60" step="1" value="50">
+          <span class="gr-slider-val" id="chainringVal">50T</span>
+        </div>
+      </div>
+
+      <div class="gr-field">
+        <label>Cassette sprocket teeth</label>
+        <div class="gr-slider-row">
+          <input type="range" id="sprocket" min="10" max="34" step="1" value="17">
+          <span class="gr-slider-val" id="sprocketVal">17T</span>
+        </div>
+      </div>
+
+      <div class="gr-field">
+        <label>Wheel circumference</label>
+        <div class="gr-input-row gr-has-affix">
+          <span class="gr-affix gr-affix-pre">mm</span>
+          <input type="number" id="circumference" min="1800" max="2200" step="1" value="2105">
+        </div>
+        <div class="gr-hint">
+          Presets:
+          <a href="#" class="gr-preset" data-val="2096">700&times;23c</a> &middot;
+          <a href="#" class="gr-preset" data-val="2105">700&times;25c</a> &middot;
+          <a href="#" class="gr-preset" data-val="2136">700&times;28c</a>
+        </div>
+      </div>
+
+      <div class="gr-field">
+        <label>Cadence</label>
+        <div class="gr-slider-row">
+          <input type="range" id="cadence" min="60" max="120" step="1" value="90">
+          <span class="gr-slider-val" id="cadenceVal">90 rpm</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- OUTPUTS -->
+    <div class="gr-panel">
+      <div class="gr-panel-title">Results</div>
+
+      <div class="gr-headline">
+        <div class="gr-hl-context">Gear Ratio</div>
+        <span class="gr-hl-number" id="ratioOut">2.94</span>
+        <div class="gr-hl-sub" id="ratioDesc">50T / 17T</div>
+      </div>
+
+      <div class="gr-out-row">
+        <span>Speed</span>
+        <span class="gr-out-val" id="speedOut">33.3 km/h</span>
+      </div>
+      <div class="gr-out-row">
+        <span>Speed (mph)</span>
+        <span class="gr-out-val" id="speedMphOut">20.7 mph</span>
+      </div>
+      <div class="gr-out-row">
+        <span>Development</span>
+        <span class="gr-out-val" id="devOut">6.19 m/rev</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SPEED TABLE -->
+  <div class="gr-panel">
+    <div class="gr-panel-title">Speed Table</div>
+    <table class="gr-table">
+      <thead>
+        <tr>
+          <th>Cadence (rpm)</th>
+          <th>Speed (km/h)</th>
+          <th>Speed (mph)</th>
+        </tr>
+      </thead>
+      <tbody id="speedTableBody">
+      </tbody>
+    </table>
+  </div>
+
+  <div class="gr-method">
+    <strong style="color:var(--ink2);font-weight:500;">Formulae</strong><br><br>
+    <code>Gear Ratio</code> = Chainring teeth &divide; Sprocket teeth<br>
+    <code>Development</code> = Gear Ratio &times; Wheel Circumference / 1000 &nbsp;(metres per pedal revolution)<br>
+    <code>Speed (km/h)</code> = Gear Ratio &times; Circumference (mm) &times; Cadence (rpm) &times; 60 &divide; 1,000,000<br>
+    <code>Speed (mph)</code> = Speed (km/h) &divide; 1.60934
+  </div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var chainringEl   = document.getElementById('chainring');
+  var sprocketEl    = document.getElementById('sprocket');
+  var circumEl      = document.getElementById('circumference');
+  var cadenceEl     = document.getElementById('cadence');
+
+  var chainringValEl = document.getElementById('chainringVal');
+  var sprocketValEl  = document.getElementById('sprocketVal');
+  var cadenceValEl   = document.getElementById('cadenceVal');
+
+  var ratioOutEl    = document.getElementById('ratioOut');
+  var ratioDescEl   = document.getElementById('ratioDesc');
+  var speedOutEl    = document.getElementById('speedOut');
+  var speedMphOutEl = document.getElementById('speedMphOut');
+  var devOutEl      = document.getElementById('devOut');
+  var tableBodyEl   = document.getElementById('speedTableBody');
+
+  function calcSpeed(chainring, sprocket, circ, cadence) {
+    return (chainring / sprocket) * circ * cadence * 60 / 1000000;
+  }
+
+  function updateSliderFill(el) {
+    var min = parseFloat(el.min);
+    var max = parseFloat(el.max);
+    var val = parseFloat(el.value);
+    var pct = ((val - min) / (max - min)) * 100;
+    el.style.setProperty('--fill', pct + '%');
+  }
+
+  function calculate() {
+    var chainring = parseInt(chainringEl.value, 10);
+    var sprocket  = parseInt(sprocketEl.value, 10);
+    var circ      = parseFloat(circumEl.value);
+    var cadence   = parseInt(cadenceEl.value, 10);
+
+    // Slider labels
+    chainringValEl.textContent = chainring + 'T';
+    sprocketValEl.textContent  = sprocket + 'T';
+    cadenceValEl.textContent   = cadence + ' rpm';
+
+    // Slider fills
+    updateSliderFill(chainringEl);
+    updateSliderFill(sprocketEl);
+    updateSliderFill(cadenceEl);
+
+    // Core calculations
+    var ratio = chainring / sprocket;
+    var speedKmh = calcSpeed(chainring, sprocket, circ, cadence);
+    var speedMph = speedKmh / 1.60934;
+    var development = ratio * circ / 1000;
+
+    // Update outputs
+    ratioOutEl.textContent  = ratio.toFixed(2);
+    ratioDescEl.textContent = chainring + 'T / ' + sprocket + 'T';
+    speedOutEl.textContent  = speedKmh.toFixed(1) + ' km/h';
+    speedMphOutEl.textContent = speedMph.toFixed(1) + ' mph';
+    devOutEl.textContent    = development.toFixed(2) + ' m/rev';
+
+    // Speed table: cadences 60-120 in steps of 10
+    var rows = '';
+    for (var c = 60; c <= 120; c += 10) {
+      var s = calcSpeed(chainring, sprocket, circ, c);
+      var sm = s / 1.60934;
+      var isActive = (c === cadence);
+      rows += '<tr' + (isActive ? ' class="gr-active"' : '') + '>';
+      rows += '<td>' + c + ' rpm</td>';
+      rows += '<td>' + s.toFixed(1) + ' km/h</td>';
+      rows += '<td>' + sm.toFixed(1) + ' mph</td>';
+      rows += '</tr>';
+    }
+    tableBodyEl.innerHTML = rows;
+  }
+
+  // Bind events
+  chainringEl.addEventListener('input', calculate);
+  sprocketEl.addEventListener('input', calculate);
+  circumEl.addEventListener('input', calculate);
+  cadenceEl.addEventListener('input', calculate);
+
+  // Preset links
+  var presets = document.querySelectorAll('.gr-preset');
+  for (var i = 0; i < presets.length; i++) {
+    presets[i].addEventListener('click', function(e) {
+      e.preventDefault();
+      circumEl.value = this.getAttribute('data-val');
+      calculate();
+    });
+  }
+
+  // Style preset links
+  var style = document.createElement('style');
+  style.textContent = '.gr-preset { color: var(--green); font-family: "DM Mono", monospace; font-size: 10px; text-decoration: underline; cursor: pointer; }';
+  document.head.appendChild(style);
+
+  // Initial calculation
+  calculate();
+})();
+</script>
+</body>
+</html>
