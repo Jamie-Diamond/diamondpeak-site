@@ -5,30 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Race Fuelling Planner — Diamond Peak</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
 <style>
-  :root{--bg:#f8f5ef;--card:#fff;--ink:#18160f;--ink2:#4a4535;--muted:#9a9080;--border:#ddd8cc;--green:#1d6840;--green-bg:#e6f4ec;--amber:#b87c20;--amber-bg:#fdf3e0;--red:#b53a1e;--red-bg:#fdeee9;--blue:#1a5276;--swim:#2980b9;--bike:#27ae60;--run:#e67e22;--t-col:#7f8c8d;--caf:#8b5cf6}
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--ink);font-family:'DM Sans',sans-serif;font-weight:300}
-  .page{max-width:1080px;margin:0 auto;padding:36px 16px 72px}
-  @media(min-width:600px){.page{padding:56px 24px 80px}}
-  .back{color:var(--muted);text-decoration:none;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.05em}
-  .back:hover{color:var(--ink)}
-  .kicker{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;margin-top:20px}
-  h1{font-family:'Libre Baskerville',serif;font-size:clamp(26px,5vw,38px);font-weight:700;line-height:1.15;margin-bottom:10px}
-  .intro{font-size:14px;color:var(--ink2);line-height:1.7;margin-bottom:28px}
-  .sec-head{display:flex;align-items:center;gap:12px;margin:32px 0 16px}
-  .sec-tag{font-family:'DM Mono',monospace;font-size:9px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
-  .sec-rule{flex:1;height:1px;background:var(--border)}
-  .panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px}
-  @media(min-width:520px){.panel{padding:24px}}
-  .panel-title{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  @media(max-width:700px){.grid-2{grid-template-columns:1fr}}
+  /* Page-specific overrides */
+  :root{--amber-bg:#fdf3e0;--swim:#2980b9;--bike:#27ae60;--run:#e67e22;--t-col:#7f8c8d;--caf:#8b5cf6}
+  .page{max-width:1080px}
+  .intro{margin-bottom:28px}
+
+  /* Overrides for shared styles */
+  .panel-title{margin-bottom:14px}
   .field{margin-bottom:12px}
-  .field label{display:block;font-size:11px;font-weight:500;color:var(--ink2);margin-bottom:4px}
+  .field label{margin-bottom:4px}
   .field input[type="number"],.field select{width:100%;height:36px;border:1px solid var(--border);background:#fff;color:var(--ink);font-family:'DM Mono',monospace;font-size:13px;padding:0 8px;outline:none;border-radius:4px;transition:border-color .15s;-webkit-appearance:none;-moz-appearance:textfield}
   .field input:focus,.field select:focus{border-color:var(--ink)}
   .field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+
+  /* Page-specific styles */
+  .sec-head{display:flex;align-items:center;gap:12px;margin:32px 0 16px}
+  .sec-tag{font-family:'DM Mono',monospace;font-size:9px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .sec-rule{flex:1;height:1px;background:var(--border)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:700px){.grid-2{grid-template-columns:1fr}}
   .field-row{display:flex;gap:8px;align-items:flex-end}
   .field-row .field{flex:1;margin-bottom:0}
   .presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
@@ -191,8 +188,7 @@
   .graph-tip-row{display:flex;gap:8px;align-items:center}
   .graph-tip-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
   .graph-crosshair{position:absolute;top:0;width:1px;background:rgba(24,22,15,.2);pointer-events:none;z-index:5}
-  .page{position:relative;z-index:1}
-  .dpc-header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.dpc-header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
   .dpc-logo{width:36px;height:36px;object-fit:contain;filter:none;opacity:.85}
   .dpc-wordmark{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
   .train-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}

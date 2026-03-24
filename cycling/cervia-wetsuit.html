@@ -6,37 +6,29 @@
 <title>Cervia Ironman Wetsuit Predictor — Diamond Peak</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@400;500;600&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../style.css">
 <style>
+  /* Extra variables not in shared stylesheet */
   :root {
-    --bg: #f8f5ef; --ink: #18160f; --ink2: #3a3730; --green: #1d6840;
-    --blue: #1a5276; --red: #b53a1e; --muted: #9a9080; --border: #e0ddd4;
-    --card: #fff; --card-alt: #faf8f4; --warm: #f3efe6;
+    --ink2: #3a3730; --border: #e0ddd4;
+    --card-alt: #faf8f4; --warm: #f3efe6;
   }
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-size: 14px; line-height: 1.6; }
 
-  .page { max-width: 860px; margin: 0 auto; padding: 40px 24px 60px; }
-  .back { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); text-decoration: none; letter-spacing: 0.05em; }
-  .back:hover { color: var(--ink); }
-  .kicker { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--green); margin: 32px 0 8px; }
-  h1 { font-family: 'Libre Baskerville', serif; font-size: 32px; font-weight: 700; line-height: 1.2; color: var(--ink); margin-bottom: 12px; }
-  .intro { font-size: 13px; color: var(--ink2); line-height: 1.7; margin-bottom: 28px; max-width: 640px; }
+  /* Overrides for shared base styles */
+  body { font-size: 14px; line-height: 1.6; }
+  .page { max-width: 860px; padding: 40px 24px 60px; }
+  .kicker { letter-spacing: 0.15em; color: var(--green); margin: 32px 0 8px; }
+  h1 { font-size: 32px; line-height: 1.2; color: var(--ink); margin-bottom: 12px; }
+  .intro { font-size: 13px; margin-bottom: 28px; max-width: 640px; }
 
-  /* Panels */
-  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  /* Panel overrides */
   .panel-alt { background: var(--card-alt); }
-  .panel-title { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+  .panel-title { margin-bottom: 12px; padding-bottom: 0; border-bottom: none; }
   .panel h3 { font-family: 'Libre Baskerville', serif; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
   .panel p, .panel .desc { font-size: 12px; color: var(--ink2); line-height: 1.6; }
 
-  /* Inputs */
-  .field { margin-bottom: 14px; }
-  .field label { display: block; font-size: 11px; font-weight: 500; color: var(--ink2); margin-bottom: 4px; }
-  .field input, .field select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px; font-family: 'DM Mono', monospace; font-size: 12px; background: #fff; color: var(--ink); }
-  .field input:focus, .field select:focus { outline: none; border-color: var(--green); }
-  .hint { font-size: 10px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
-  .input-row { display: flex; gap: 12px; }
-  .input-row > .field { flex: 1; }
+  /* Field overrides */
+  .field label { margin-bottom: 4px; }
 
   /* Method cards */
   .method { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 14px; position: relative; overflow: hidden; }
@@ -81,10 +73,7 @@
   .rule-box { padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 11px; }
   .rule-box .rule-label { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
   .rule-box .rule-temp { font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 500; }
-
-  .footer { text-align: center; padding: 24px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.05em; }
-
-  /* Probability boxes */
+/* Probability boxes */
   .prob-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
   .prob-box { text-align: center; padding: 16px; border-radius: 8px; border: 1px solid var(--border); }
   .prob-box .prob-label { font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
