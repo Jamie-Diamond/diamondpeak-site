@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Headwind Paradox — Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+<style>
+.page { max-width: 920px; }
+
+/* ── CANVAS ANIMATION ─────────────── */
+.hw-canvas-wrap {
+  position: relative;
+  background: var(--ink);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  aspect-ratio: 16 / 7;
+}
+.hw-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── CONTROLS ─────────────────────── */
+.hw-controls {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 28px;
+}
+@media(max-width:600px) { .hw-controls { grid-template-columns: 1fr; } }
+
+.hw-slider-group label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink2);
+  margin-bottom: 6px;
+}
+.hw-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hw-slider-row input[type="range"] {
+  flex: 1; height: 5px;
+  -webkit-appearance: none; appearance: none;
+  background: linear-gradient(to right, var(--green) 0%, var(--green) var(--fill,50%), var(--border) var(--fill,50%), var(--border) 100%);
+  border-radius: 999px; outline: none;
+}
+.hw-slider-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--green); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,.15);
+}
+.hw-slider-row input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--green); cursor: pointer; border: none;
+}
+.hw-slider-val {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px; font-weight: 500;
+  color: var(--green); min-width: 60px; text-align: right;
+}
+
+/* ── HEADLINE RESULT ──────────────── */
+.hw-headline {
+  background: var(--ink);
+  color: #fff;
+  border-radius: 10px;
+  padding: 28px 24px;
+  text-align: center;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.hw-headline::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 30% 0%, rgba(29,104,64,.12), transparent 60%);
+  pointer-events: none;
+}
+.hw-headline-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.45);
+  margin-bottom: 4px;
+  position: relative;
+}
+.hw-headline-value {
+  font-family: 'Libre Baskerville', serif;
+  font-size: clamp(32px, 6vw, 52px);
+  font-weight: 700;
+  position: relative;
+}
+.hw-headline-value .penalty { color: #e04848; }
+.hw-headline-sub {
+  font-size: 13px;
+  color: rgba(255,255,255,.5);
+  margin-top: 6px;
+  position: relative;
+}
+
+/* ── BREAKDOWN GRID ───────────────── */
+.hw-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media(max-width:600px) { .hw-breakdown { grid-template-columns: 1fr; } }
+
+.hw-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 16px;
+  text-align: center;
+}
+.hw-card-icon {
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+.hw-card-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.hw-card-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.hw-card-detail {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.hw-card--head .hw-card-value { color: #b53a1e; }
+.hw-card--tail .hw-card-value { color: var(--green); }
+
+/* ── TIME BAR VIS ─────────────────── */
+.hw-time-bar-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.hw-time-bar-wrap .panel-title { margin-bottom: 14px; }
+
+.hw-bar-row {
+  margin-bottom: 14px;
+}
+.hw-bar-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink2);
+  margin-bottom: 5px;
+  display: flex;
+  justify-content: space-between;
+}
+.hw-bar-label span { font-family: 'DM Mono', monospace; font-size: 11px; }
+.hw-bar-track {
+  height: 28px;
+  background: #eee9de;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+}
+.hw-bar-seg {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  color: #fff;
+  transition: width .5s ease;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.hw-bar-seg--head { background: #b53a1e; }
+.hw-bar-seg--tail { background: var(--green); }
+.hw-bar-seg--calm { background: var(--blue); }
+
+/* ── EXPLANATION PANEL ────────────── */
+.hw-explain {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.hw-explain h3 {
+  font-family: 'Libre Baskerville', serif;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.hw-explain p {
+  font-size: 13px;
+  color: var(--ink2);
+  line-height: 1.7;
+  margin-bottom: 10px;
+}
+.hw-explain p:last-child { margin-bottom: 0; }
+
+.hw-drag-chart-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  justify-content: center;
+  margin: 18px 0 8px;
+  height: 120px;
+}
+.hw-drag-bar {
+  width: 80px;
+  border-radius: 6px 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 6px;
+  transition: height .5s ease;
+  position: relative;
+}
+.hw-drag-bar-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+}
+.hw-drag-bar-val {
+  position: absolute;
+  top: -18px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ink2);
+}
+.hw-drag-bar-cap {
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── WIND TABLE ───────────────────── */
+.hw-table-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+.hw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.hw-table th {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+.hw-table th:first-child { text-align: left; }
+.hw-table td {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  padding: 7px 10px;
+  text-align: right;
+  color: var(--ink2);
+  border-bottom: 1px solid rgba(0,0,0,.04);
+}
+.hw-table td:first-child { text-align: left; color: var(--ink); font-weight: 500; }
+.hw-table tr.hw-table-active { background: var(--green-bg); }
+.hw-table tr.hw-table-active td { color: var(--green); font-weight: 500; }
+.hw-table .hw-pen { color: #b53a1e; }
+</style>
+</head>
+<body>
+<div class="page">
+  <a href="../index.html" class="back">&larr; Back to tools</a>
+  <div class="kicker">Performance</div>
+  <h1>The Headwind Paradox</h1>
+  <p class="intro">Every cyclist knows headwinds are brutal — but why doesn't the tailwind on the way home cancel it out? This interactive tool shows exactly why an out-and-back ride in wind is <em>always</em> slower than the same ride in calm conditions, using real physics and realistic power numbers.</p>
+
+  <!-- ANIMATION -->
+  <div class="hw-canvas-wrap">
+    <canvas id="hwCanvas"></canvas>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="hw-controls">
+    <div class="hw-slider-group">
+      <label>Wind speed</label>
+      <div class="hw-slider-row">
+        <input type="range" id="windSlider" min="0" max="40" value="20" step="1">
+        <span class="hw-slider-val" id="windVal">20 km/h</span>
+      </div>
+    </div>
+    <div class="hw-slider-group">
+      <label>Rider power</label>
+      <div class="hw-slider-row">
+        <input type="range" id="powerSlider" min="100" max="350" value="200" step="5">
+        <span class="hw-slider-val" id="powerVal">200 W</span>
+      </div>
+    </div>
+    <div class="hw-slider-group">
+      <label>Route distance (out &amp; back total)</label>
+      <div class="hw-slider-row">
+        <input type="range" id="distSlider" min="10" max="100" value="40" step="5">
+        <span class="hw-slider-val" id="distVal">40 km</span>
+      </div>
+    </div>
+    <div class="hw-slider-group">
+      <label>CdA (drag area)</label>
+      <div class="hw-slider-row">
+        <input type="range" id="cdaSlider" min="0.20" max="0.50" value="0.35" step="0.01">
+        <span class="hw-slider-val" id="cdaVal">0.35 m²</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEADLINE -->
+  <div class="hw-headline">
+    <div class="hw-headline-label">Time penalty from wind</div>
+    <div class="hw-headline-value" id="headlineVal">+7.8 min</div>
+    <div class="hw-headline-sub" id="headlineSub">Windy: 80.7 min vs Calm: 72.9 min over 40 km</div>
+  </div>
+
+  <!-- 3-CARD BREAKDOWN -->
+  <div class="hw-breakdown">
+    <div class="hw-card hw-card--head">
+      <div class="hw-card-icon">&#x1F32C;</div>
+      <div class="hw-card-label">Into headwind</div>
+      <div class="hw-card-value" id="headSpeed">21.9 km/h</div>
+      <div class="hw-card-detail" id="headDetail">20 km in 54.9 min</div>
+    </div>
+    <div class="hw-card">
+      <div class="hw-card-icon">&#x2600;</div>
+      <div class="hw-card-label">No wind</div>
+      <div class="hw-card-value" id="calmSpeed">32.9 km/h</div>
+      <div class="hw-card-detail" id="calmDetail">40 km in 72.9 min</div>
+    </div>
+    <div class="hw-card hw-card--tail">
+      <div class="hw-card-icon">&#x1F4A8;</div>
+      <div class="hw-card-label">With tailwind</div>
+      <div class="hw-card-value" id="tailSpeed">46.5 km/h</div>
+      <div class="hw-card-detail" id="tailDetail">20 km in 25.8 min</div>
+    </div>
+  </div>
+
+  <!-- TIME BAR -->
+  <div class="hw-time-bar-wrap">
+    <div class="panel-title">Where your time goes</div>
+    <div class="hw-bar-row">
+      <div class="hw-bar-label">No wind <span id="calmBarTime">72.9 min</span></div>
+      <div class="hw-bar-track">
+        <div class="hw-bar-seg hw-bar-seg--calm" id="calmBarOut" style="width:50%;">Out 36.5 min</div>
+        <div class="hw-bar-seg hw-bar-seg--calm" id="calmBarBack" style="width:50%; opacity:.7;">Back 36.5 min</div>
+      </div>
+    </div>
+    <div class="hw-bar-row">
+      <div class="hw-bar-label">With wind <span id="windyBarTime">80.7 min</span></div>
+      <div class="hw-bar-track">
+        <div class="hw-bar-seg hw-bar-seg--head" id="windyBarHead" style="width:68%;">Headwind 54.9 min</div>
+        <div class="hw-bar-seg hw-bar-seg--tail" id="windyBarTail" style="width:32%;">Tailwind 25.8 min</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DRAG FORCE CHART -->
+  <div class="hw-explain">
+    <h3>Why doesn't it cancel out?</h3>
+    <p>Aerodynamic drag scales with the <strong>square</strong> of your speed through the air. A headwind increases your air speed far more than a tailwind decreases it — so the extra drag into wind massively outweighs the drag reduction going home.</p>
+    <p>Worse still, because you're slower into the headwind, you spend <strong>far more time</strong> in the hard section. On a 40 km ride with 20 km/h wind, you spend 68% of your time fighting the headwind and only 32% enjoying the tailwind.</p>
+    <div class="hw-drag-chart-wrap" id="dragChart"></div>
+    <div style="display:flex;justify-content:center;gap:20px;">
+      <div class="hw-drag-bar-cap" id="dragCapHead">Headwind</div>
+      <div class="hw-drag-bar-cap" id="dragCapCalm">No wind</div>
+      <div class="hw-drag-bar-cap" id="dragCapTail">Tailwind</div>
+    </div>
+    <p style="margin-top:14px;">The headwind leg produces <strong id="dragMultiple">1.6×</strong> the drag force of calm conditions, while the tailwind only drops it to <strong id="dragTailFraction">0.65×</strong>. The maths never balances — this is <em>Jensen's inequality</em> in action.</p>
+  </div>
+
+  <!-- WIND SPEED TABLE -->
+  <div class="hw-table-wrap">
+    <div class="panel-title">Impact across wind speeds (at <span id="tablePower">200</span> W)</div>
+    <table class="hw-table">
+      <thead>
+        <tr>
+          <th>Wind</th>
+          <th>Headwind speed</th>
+          <th>Tailwind speed</th>
+          <th>Avg speed</th>
+          <th>Time penalty</th>
+        </tr>
+      </thead>
+      <tbody id="windTableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="footer">&copy; 2025 Diamond Peak Consulting</div>
+</div>
+
+<script>
+(function() {
+'use strict';
+
+/* ═══════════════════════════════════════
+   PHYSICS ENGINE
+   ═══════════════════════════════════════ */
+const RHO = 1.225;     // air density kg/m³
+const CRR = 0.005;     // rolling resistance
+const MASS = 80;       // rider+bike kg
+const G = 9.81;
+
+// Solve for ground speed given power, wind, CdA
+// Power = (0.5 * CdA * rho * (v + w)² + Crr * m * g) * v
+// Iterative Newton's method
+function solveSpeed(power, windKmh, cda) {
+  const w = windKmh / 3.6; // m/s
+  let v = 8; // initial guess m/s
+  for (let i = 0; i < 50; i++) {
+    const vAir = v + w;
+    const fDrag = 0.5 * cda * RHO * vAir * vAir;
+    const fRoll = CRR * MASS * G;
+    const fTotal = fDrag + fRoll;
+    const pCalc = fTotal * v;
+    const dpdv = fTotal + v * (cda * RHO * vAir); // derivative
+    const err = pCalc - power;
+    v = v - err / dpdv;
+    if (v < 0.5) v = 0.5;
+    if (Math.abs(err) < 0.001) break;
+  }
+  return v; // m/s
+}
+
+function calcAll(windKmh, power, distKm, cda) {
+  const halfDist = distKm / 2;
+
+  const vCalm = solveSpeed(power, 0, cda);
+  const vHead = solveSpeed(power, windKmh, cda);
+  const vTail = solveSpeed(power, -windKmh, cda);
+
+  const calmSpeedKmh = vCalm * 3.6;
+  const headSpeedKmh = vHead * 3.6;
+  const tailSpeedKmh = vTail * 3.6;
+
+  const calmTime = distKm / calmSpeedKmh * 60;       // minutes
+  const headTime = halfDist / headSpeedKmh * 60;
+  const tailTime = halfDist / tailSpeedKmh * 60;
+  const windyTime = headTime + tailTime;
+  const windyAvg = distKm / (windyTime / 60);
+
+  // Drag forces
+  const dragCalm = 0.5 * cda * RHO * vCalm * vCalm;
+  const dragHead = 0.5 * cda * RHO * (vHead + windKmh/3.6) * (vHead + windKmh/3.6);
+  const dragTail = 0.5 * cda * RHO * Math.max(0, vTail - windKmh/3.6) * Math.max(0, vTail - windKmh/3.6);
+
+  return {
+    calmSpeedKmh, headSpeedKmh, tailSpeedKmh, windyAvg,
+    calmTime, headTime, tailTime, windyTime,
+    penalty: windyTime - calmTime,
+    dragCalm, dragHead, dragTail,
+    halfDist, distKm
+  };
+}
+
+/* ═══════════════════════════════════════
+   UI REFS
+   ═══════════════════════════════════════ */
+const windSlider = document.getElementById('windSlider');
+const powerSlider = document.getElementById('powerSlider');
+const distSlider = document.getElementById('distSlider');
+const cdaSlider = document.getElementById('cdaSlider');
+
+function updateSliderFill(slider) {
+  const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
+  slider.style.setProperty('--fill', pct + '%');
+}
+
+function fmt(n, d) { return n.toFixed(d === undefined ? 1 : d); }
+
+function update() {
+  const wind = +windSlider.value;
+  const power = +powerSlider.value;
+  const dist = +distSlider.value;
+  const cda = +cdaSlider.value;
+
+  // Update slider labels
+  document.getElementById('windVal').textContent = wind + ' km/h';
+  document.getElementById('powerVal').textContent = power + ' W';
+  document.getElementById('distVal').textContent = dist + ' km';
+  document.getElementById('cdaVal').textContent = cda.toFixed(2) + ' m²';
+  [windSlider, powerSlider, distSlider, cdaSlider].forEach(updateSliderFill);
+
+  const r = calcAll(wind, power, dist, cda);
+
+  // Headline
+  if (wind === 0) {
+    document.getElementById('headlineVal').innerHTML = 'No penalty';
+    document.getElementById('headlineSub').textContent = fmt(r.calmTime) + ' min over ' + dist + ' km at ' + fmt(r.calmSpeedKmh) + ' km/h';
+  } else {
+    document.getElementById('headlineVal').innerHTML = '<span class="penalty">+' + fmt(r.penalty) + ' min</span>';
+    document.getElementById('headlineSub').textContent =
+      'Windy: ' + fmt(r.windyTime) + ' min vs Calm: ' + fmt(r.calmTime) + ' min over ' + dist + ' km';
+  }
+
+  // Cards
+  document.getElementById('headSpeed').textContent = fmt(r.headSpeedKmh) + ' km/h';
+  document.getElementById('headDetail').textContent = fmt(r.halfDist) + ' km in ' + fmt(r.headTime) + ' min';
+  document.getElementById('calmSpeed').textContent = fmt(r.calmSpeedKmh) + ' km/h';
+  document.getElementById('calmDetail').textContent = fmt(r.distKm) + ' km in ' + fmt(r.calmTime) + ' min';
+  document.getElementById('tailSpeed').textContent = fmt(r.tailSpeedKmh) + ' km/h';
+  document.getElementById('tailDetail').textContent = fmt(r.halfDist) + ' km in ' + fmt(r.tailTime) + ' min';
+
+  // Time bars
+  const maxT = Math.max(r.calmTime, r.windyTime);
+  const calmHalf = r.calmTime / 2;
+  document.getElementById('calmBarTime').textContent = fmt(r.calmTime) + ' min';
+  document.getElementById('calmBarOut').style.width = (calmHalf / maxT * 100) + '%';
+  document.getElementById('calmBarOut').textContent = 'Out ' + fmt(calmHalf) + ' min';
+  document.getElementById('calmBarBack').style.width = (calmHalf / maxT * 100) + '%';
+  document.getElementById('calmBarBack').textContent = 'Back ' + fmt(calmHalf) + ' min';
+
+  document.getElementById('windyBarTime').textContent = fmt(r.windyTime) + ' min';
+  document.getElementById('windyBarHead').style.width = (r.headTime / maxT * 100) + '%';
+  document.getElementById('windyBarHead').textContent = 'Headwind ' + fmt(r.headTime) + ' min';
+  document.getElementById('windyBarTail').style.width = (r.tailTime / maxT * 100) + '%';
+  document.getElementById('windyBarTail').textContent = 'Tailwind ' + fmt(r.tailTime) + ' min';
+
+  // Drag chart
+  renderDragChart(r);
+
+  // Drag text
+  if (r.dragCalm > 0) {
+    document.getElementById('dragMultiple').textContent = fmt(r.dragHead / r.dragCalm, 1) + '×';
+    document.getElementById('dragTailFraction').textContent = fmt(r.dragTail / r.dragCalm, 2) + '×';
+  }
+
+  // Table
+  document.getElementById('tablePower').textContent = power;
+  renderTable(power, dist, cda, wind);
+
+  // Restart animation
+  startAnimation(r);
+}
+
+/* ═══════════════════════════════════════
+   DRAG FORCE BAR CHART
+   ═══════════════════════════════════════ */
+function renderDragChart(r) {
+  const chart = document.getElementById('dragChart');
+  const maxDrag = Math.max(r.dragHead, r.dragCalm, r.dragTail);
+  const scale = 110 / (maxDrag || 1);
+
+  chart.innerHTML =
+    '<div class="hw-drag-bar" style="height:' + Math.max(8, r.dragHead * scale) + 'px;background:#b53a1e;"><span class="hw-drag-bar-val">' + fmt(r.dragHead,1) + ' N</span><span class="hw-drag-bar-label">Headwind</span></div>' +
+    '<div class="hw-drag-bar" style="height:' + Math.max(8, r.dragCalm * scale) + 'px;background:var(--blue);"><span class="hw-drag-bar-val">' + fmt(r.dragCalm,1) + ' N</span><span class="hw-drag-bar-label">No wind</span></div>' +
+    '<div class="hw-drag-bar" style="height:' + Math.max(8, r.dragTail * scale) + 'px;background:var(--green);"><span class="hw-drag-bar-val">' + fmt(r.dragTail,1) + ' N</span><span class="hw-drag-bar-label">Tailwind</span></div>';
+}
+
+/* ═══════════════════════════════════════
+   WIND SPEED TABLE
+   ═══════════════════════════════════════ */
+function renderTable(power, dist, cda, activeWind) {
+  const tbody = document.getElementById('windTableBody');
+  let html = '';
+  [0, 5, 10, 15, 20, 25, 30, 35, 40].forEach(w => {
+    const r = calcAll(w, power, dist, cda);
+    const isActive = w === activeWind;
+    html += '<tr' + (isActive ? ' class="hw-table-active"' : '') + '>';
+    html += '<td>' + w + ' km/h</td>';
+    html += '<td>' + fmt(r.headSpeedKmh) + ' km/h</td>';
+    html += '<td>' + fmt(r.tailSpeedKmh) + ' km/h</td>';
+    html += '<td>' + (w === 0 ? fmt(r.calmSpeedKmh) : fmt(r.windyAvg)) + ' km/h</td>';
+    html += '<td class="hw-pen">' + (w === 0 ? '—' : '+' + fmt(r.penalty) + ' min') + '</td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+/* ═══════════════════════════════════════
+   CANVAS ANIMATION — TWO RIDERS ON A LOOP
+   ═══════════════════════════════════════ */
+const canvas = document.getElementById('hwCanvas');
+const ctx = canvas.getContext('2d');
+let animFrame = null;
+let animState = null;
+
+function startAnimation(r) {
+  if (animFrame) cancelAnimationFrame(animFrame);
+
+  // Normalise: total ride time in seconds for animation
+  // We'll map the ride to a ~12s animation loop
+  const ANIM_DURATION = 12000; // ms
+  const calmTotal = r.calmTime * 60; // seconds real
+  const windyTotal = r.windyTime * 60;
+  const maxRealTime = Math.max(calmTotal, windyTotal);
+
+  animState = {
+    r: r,
+    startTime: performance.now(),
+    duration: ANIM_DURATION,
+    calmTotal: calmTotal,
+    windyTotal: windyTotal,
+    headRealTime: r.headTime * 60,
+    tailRealTime: r.tailTime * 60,
+    maxRealTime: maxRealTime
+  };
+
+  animate();
+}
+
+function animate() {
+  const s = animState;
+  if (!s) return;
+  const now = performance.now();
+  const elapsed = (now - s.startTime) % (s.duration + 2000); // +2s pause
+  const t = Math.min(elapsed / s.duration, 1); // 0→1
+
+  drawFrame(t, s);
+  animFrame = requestAnimationFrame(animate);
+}
+
+function drawFrame(t, s) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const W = rect.width;
+  const H = rect.height;
+  const r = s.r;
+
+  // Background
+  ctx.fillStyle = '#18160f';
+  ctx.fillRect(0, 0, W, H);
+
+  // Road
+  const roadY = H * 0.55;
+  const roadH = 3;
+  const margin = 50;
+  const roadL = margin;
+  const roadR = W - margin;
+  const roadW = roadR - roadL;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(roadL, roadY - 1, roadW, roadH);
+
+  // Turn point marker
+  const turnX = (roadL + roadR) / 2;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(turnX - 0.5, roadY - 12, 1, 24);
+  ctx.font = '9px "DM Mono", monospace';
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.textAlign = 'center';
+  ctx.fillText('TURN', turnX, roadY - 16);
+
+  // Start/finish marker
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(roadL, roadY - 12, 1, 24);
+  ctx.fillText('START', roadL, roadY - 16);
+  ctx.fillRect(roadR, roadY - 12, 1, 24);
+  ctx.fillText('FINISH', roadR, roadY - 16);
+
+  // Wind arrows
+  const wind = +windSlider.value;
+  if (wind > 0) {
+    const arrowY = H * 0.18;
+    const arrowCount = Math.min(8, Math.ceil(wind / 5));
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1.5;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    const spacing = roadW / (arrowCount + 1);
+    for (let i = 1; i <= arrowCount; i++) {
+      const ax = roadL + i * spacing;
+      // Arrow pointing left (headwind going out)
+      const aLen = 12 + wind * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(ax + aLen, arrowY);
+      ctx.lineTo(ax - aLen, arrowY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(ax - aLen, arrowY);
+      ctx.lineTo(ax - aLen + 6, arrowY - 4);
+      ctx.lineTo(ax - aLen + 6, arrowY + 4);
+      ctx.fill();
+    }
+    ctx.font = '10px "DM Mono", monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.textAlign = 'center';
+    ctx.fillText('WIND ' + wind + ' km/h', W / 2, arrowY - 14);
+  }
+
+  // Calculate rider positions
+  // Calm rider: constant speed, so position is linear with real time
+  // Windy rider: headwind half, then tailwind half — position is piecewise
+
+  // Both riders ride out (left→right to midpoint) then back (midpoint→right to finish)
+  // Actually: start at left, ride right to midpoint (turn), ride right to finish
+  // Wait — an out-and-back: start→turn→start. Let me rethink.
+  // Start at LEFT, go RIGHT to turn (midpoint of road), come BACK to LEFT (finish = start)
+
+  // Calm rider position (0 = start, 0.5 = turn, 1 = back at start)
+  const calmFrac = Math.min(t * s.maxRealTime / s.calmTotal, 1);
+  let calmPos;
+  if (calmFrac <= 0.5) {
+    calmPos = calmFrac * 2; // 0→1 going out
+  } else {
+    calmPos = 1 - (calmFrac - 0.5) * 2; // 1→0 coming back
+  }
+
+  // Windy rider position
+  const windyFrac = Math.min(t * s.maxRealTime / s.windyTotal, 1);
+  const headFrac = s.headRealTime / s.windyTotal; // fraction of windy time spent on headwind leg
+  let windyPos;
+  if (windyFrac <= headFrac) {
+    // Outbound (headwind) — going from 0 to 1
+    windyPos = (windyFrac / headFrac);
+  } else {
+    // Return (tailwind) — going from 1 to 0
+    windyPos = 1 - ((windyFrac - headFrac) / (1 - headFrac));
+  }
+
+  const calmX = roadL + calmPos * (turnX - roadL);
+  const windyX = roadL + windyPos * (turnX - roadL);
+
+  // Draw calm rider (top lane)
+  const calmY = roadY - 14;
+  const windyY = roadY + 14;
+
+  // Rider bikes
+  drawBike(ctx, calmX, calmY, '#1a5276', calmFrac <= 0.5 ? 1 : -1);
+  drawBike(ctx, windyX, windyY, wind > 0 ? '#b53a1e' : '#1a5276',
+    windyFrac <= (s.headRealTime / s.windyTotal) ? 1 : -1);
+
+  // Labels
+  ctx.font = '10px "DM Mono", monospace';
+  ctx.textAlign = 'left';
+
+  // Calm rider label
+  ctx.fillStyle = 'rgba(26,82,118,0.8)';
+  ctx.fillText('No wind', roadL, calmY - 14);
+  if (calmFrac < 1) {
+    const calmElapsed = calmFrac * r.calmTime;
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillText(fmt(calmElapsed) + ' min', roadL + 55, calmY - 14);
+  } else {
+    ctx.fillStyle = 'rgba(26,82,118,0.6)';
+    ctx.fillText(fmt(r.calmTime) + ' min ✓', roadL + 55, calmY - 14);
+  }
+
+  // Windy rider label
+  if (wind > 0) {
+    const isHead = windyFrac <= headFrac;
+    ctx.fillStyle = isHead ? 'rgba(181,58,30,0.8)' : 'rgba(29,104,64,0.8)';
+    ctx.fillText(isHead ? 'Headwind' : 'Tailwind', roadL, windyY + 22);
+    if (windyFrac < 1) {
+      const windyElapsed = windyFrac * r.windyTime;
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText(fmt(windyElapsed) + ' min', roadL + 65, windyY + 22);
+    } else {
+      ctx.fillStyle = 'rgba(181,58,30,0.6)';
+      ctx.fillText(fmt(r.windyTime) + ' min ✓', roadL + 65, windyY + 22);
+    }
+  }
+
+  // Finish state overlay
+  if (t >= 1) {
+    ctx.fillStyle = 'rgba(24,22,15,0.5)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.font = 'bold 16px "DM Sans", sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    if (wind > 0) {
+      ctx.fillText('Wind costs +' + fmt(r.penalty) + ' min over ' + r.distKm + ' km', W/2, H/2 - 6);
+      ctx.font = '11px "DM Sans", sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillText('The tailwind home never makes up for the headwind out', W/2, H/2 + 14);
+    } else {
+      ctx.fillText('No wind — no penalty', W/2, H/2);
+    }
+  }
+}
+
+function drawBike(ctx, x, y, color, dir) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(dir, 1);
+
+  // Wheels
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(-7, 3, 5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(7, 3, 5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Frame
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-7, 3);
+  ctx.lineTo(0, -5);
+  ctx.lineTo(7, 3);
+  ctx.moveTo(-2, -3);
+  ctx.lineTo(7, 3);
+  ctx.moveTo(0, -5);
+  ctx.lineTo(3, -9);
+  ctx.stroke();
+
+  // Rider body
+  ctx.beginPath();
+  ctx.arc(1, -12, 3, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* ═══════════════════════════════════════
+   EVENT LISTENERS
+   ═══════════════════════════════════════ */
+[windSlider, powerSlider, distSlider, cdaSlider].forEach(s => {
+  s.addEventListener('input', update);
+});
+
+// Handle resize
+window.addEventListener('resize', () => {
+  if (animState) startAnimation(animState.r);
+});
+
+// Initial
+update();
+
+})();
+</script>
+</body>
+</html>
