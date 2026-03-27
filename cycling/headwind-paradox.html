@@ -555,13 +555,21 @@ function update() {
   document.getElementById('modBackLabel').textContent = 'Back: ' + pBack + ' W';
   const modPct = (modSlider.value - modSlider.min) / (modSlider.max - modSlider.min) * 100;
   modSlider.style.setProperty('--fill', modPct + '%');
+
+  const r = calcAll(wind, power, dist, cda, effectiveMod);
+
+  // Calculate true time-weighted average power and energy
   if (effectiveMod === 0) {
     document.getElementById('modHint').textContent = 'No modifier — constant power both ways';
   } else {
-    document.getElementById('modHint').textContent = '+' + effectiveMod + ' W outbound, −' + effectiveMod + ' W return — average still ' + power + ' W';
+    const timeWeightedAvg = (pOut * r.headTime + pBack * r.tailTime) / r.windyTime;
+    const modKj = (pOut * r.headTime * 60 + pBack * r.tailTime * 60) / 1000;
+    const constR = calcAll(wind, power, dist, cda, 0);
+    const constKj = (power * constR.windyTime * 60) / 1000;
+    document.getElementById('modHint').textContent =
+      'True avg: ' + fmt(timeWeightedAvg, 0) + ' W (you spend longer at ' + pOut + ' W) · ' +
+      fmt(modKj, 0) + ' kJ vs ' + fmt(constKj, 0) + ' kJ at constant power';
   }
-
-  const r = calcAll(wind, power, dist, cda, effectiveMod);
 
   // Headline
   if (wind === 0) {
