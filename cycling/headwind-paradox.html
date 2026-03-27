@@ -343,6 +343,15 @@
         <span class="hw-slider-val" id="cdaVal">0.35 m²</span>
       </div>
     </div>
+    <div class="hw-slider-group" style="grid-column:1/-1;">
+      <label>Power modifier — push harder outbound, recover on the way back (average stays the same)</label>
+      <div class="hw-slider-row">
+        <span class="hw-mod-label" id="modOutLabel" style="font-family:'DM Mono',monospace;font-size:10px;color:#b53a1e;min-width:70px;">Out: 200 W</span>
+        <input type="range" id="modSlider" min="0" max="50" value="0" step="5">
+        <span class="hw-mod-label" id="modBackLabel" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--green);min-width:70px;text-align:right;">Back: 200 W</span>
+      </div>
+      <div class="hint" id="modHint" style="margin-top:4px;">No modifier — constant power both ways</div>
+    </div>
   </div>
 
   <!-- HEADLINE -->
@@ -460,12 +469,16 @@ function solveSpeed(power, windKmh, cda) {
   return v; // m/s
 }
 
-function calcAll(windKmh, power, distKm, cda) {
+function calcAll(windKmh, power, distKm, cda, powerMod) {
+  // powerMod: watts added to outbound, subtracted from return (default 0)
+  const mod = powerMod || 0;
+  const powerOut = power + mod;
+  const powerBack = power - mod;
   const halfDist = distKm / 2;
 
   const vCalm = solveSpeed(power, 0, cda);
-  const vHead = solveSpeed(power, windKmh, cda);
-  const vTail = solveSpeed(power, -windKmh, cda);
+  const vHead = solveSpeed(powerOut, windKmh, cda);
+  const vTail = solveSpeed(powerBack, -windKmh, cda);
 
   const calmSpeedKmh = vCalm * 3.6;
   const headSpeedKmh = vHead * 3.6;
@@ -488,6 +501,7 @@ function calcAll(windKmh, power, distKm, cda) {
     penalty: windyTime - calmTime,
     dragCalm, dragHead, dragTail,
     halfDist, distKm,
+    powerOut, powerBack,
     // m/s speeds and wind for animation HUD
     vCalmMs: vCalm,
     vHeadMs: vHead,
@@ -508,6 +522,7 @@ const windSlider = document.getElementById('windSlider');
 const powerSlider = document.getElementById('powerSlider');
 const distSlider = document.getElementById('distSlider');
 const cdaSlider = document.getElementById('cdaSlider');
+const modSlider = document.getElementById('modSlider');
 
 function updateSliderFill(slider) {
   const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
@@ -521,6 +536,10 @@ function update() {
   const power = +powerSlider.value;
   const dist = +distSlider.value;
   const cda = +cdaSlider.value;
+  const mod = +modSlider.value;
+
+  // Clamp modifier so return power doesn't go below 50W
+  const effectiveMod = Math.min(mod, power - 50);
 
   // Update slider labels
   document.getElementById('windVal').textContent = wind + ' km/h';
@@ -529,7 +548,20 @@ function update() {
   document.getElementById('cdaVal').textContent = cda.toFixed(2) + ' m²';
   [windSlider, powerSlider, distSlider, cdaSlider].forEach(updateSliderFill);
 
-  const r = calcAll(wind, power, dist, cda);
+  // Power modifier labels
+  const pOut = power + effectiveMod;
+  const pBack = power - effectiveMod;
+  document.getElementById('modOutLabel').textContent = 'Out: ' + pOut + ' W';
+  document.getElementById('modBackLabel').textContent = 'Back: ' + pBack + ' W';
+  const modPct = (modSlider.value - modSlider.min) / (modSlider.max - modSlider.min) * 100;
+  modSlider.style.setProperty('--fill', modPct + '%');
+  if (effectiveMod === 0) {
+    document.getElementById('modHint').textContent = 'No modifier — constant power both ways';
+  } else {
+    document.getElementById('modHint').textContent = '+' + effectiveMod + ' W outbound, −' + effectiveMod + ' W return — average still ' + power + ' W';
+  }
+
+  const r = calcAll(wind, power, dist, cda, effectiveMod);
 
   // Headline
   if (wind === 0) {
@@ -543,11 +575,11 @@ function update() {
 
   // Cards
   document.getElementById('headSpeed').textContent = fmt(r.headSpeedKmh) + ' km/h';
-  document.getElementById('headDetail').textContent = fmt(r.halfDist) + ' km in ' + fmt(r.headTime) + ' min';
+  document.getElementById('headDetail').textContent = fmt(r.halfDist) + ' km in ' + fmt(r.headTime) + ' min' + (effectiveMod > 0 ? ' @ ' + r.powerOut + ' W' : '');
   document.getElementById('calmSpeed').textContent = fmt(r.calmSpeedKmh) + ' km/h';
   document.getElementById('calmDetail').textContent = fmt(r.distKm) + ' km in ' + fmt(r.calmTime) + ' min';
   document.getElementById('tailSpeed').textContent = fmt(r.tailSpeedKmh) + ' km/h';
-  document.getElementById('tailDetail').textContent = fmt(r.halfDist) + ' km in ' + fmt(r.tailTime) + ' min';
+  document.getElementById('tailDetail').textContent = fmt(r.halfDist) + ' km in ' + fmt(r.tailTime) + ' min' + (effectiveMod > 0 ? ' @ ' + r.powerBack + ' W' : '');
 
   // Time bars
   const maxT = Math.max(r.calmTime, r.windyTime);
@@ -779,30 +811,32 @@ function drawFrame(t, s) {
   const calmFinished = calmFrac >= 1;
   const windyFinished = windyFrac >= 1;
 
-  // Calm rider HUD — ground speed, apparent wind, drag
-  const calmGroundKmh = r.calmSpeedKmh;
-  const calmAirKmh = r.airSpeedCalm;
-  const calmDragN = r.dragCalm;
+  // Calm rider HUD — ground speed, apparent wind, drag, power
+  const calmPower = +powerSlider.value;
 
   drawHUD(ctx, calmX, calmY, -32, '#1a5276', calmFinished,
-    calmGroundKmh, calmAirKmh, calmDragN, 'No wind', calmFinished ? r.calmTime : calmFrac * r.calmTime);
+    r.calmSpeedKmh, r.airSpeedCalm, r.dragCalm, calmPower, 'No wind',
+    calmFinished ? r.calmTime : calmFrac * r.calmTime);
 
   // Windy rider HUD — values change between headwind and tailwind legs
   if (wind > 0) {
-    let wGroundKmh, wAirKmh, wDragN, wLabel;
+    let wGroundKmh, wAirKmh, wDragN, wPower, wLabel;
     if (isHead) {
       wGroundKmh = r.headSpeedKmh;
       wAirKmh = r.airSpeedHead;
       wDragN = r.dragHead;
+      wPower = r.powerOut;
       wLabel = 'Headwind';
     } else {
       wGroundKmh = r.tailSpeedKmh;
       wAirKmh = r.airSpeedTail;
       wDragN = r.dragTail;
+      wPower = r.powerBack;
       wLabel = 'Tailwind';
     }
     drawHUD(ctx, windyX, windyY, 18, windyColor, windyFinished,
-      wGroundKmh, wAirKmh, wDragN, wLabel, windyFinished ? r.windyTime : windyFrac * r.windyTime);
+      wGroundKmh, wAirKmh, wDragN, wPower, wLabel,
+      windyFinished ? r.windyTime : windyFrac * r.windyTime);
   }
 
   // Finish state overlay
@@ -823,7 +857,7 @@ function drawFrame(t, s) {
   }
 }
 
-function drawHUD(ctx, bikeX, bikeY, yOffset, color, finished, groundKmh, airKmh, dragN, label, elapsedMin) {
+function drawHUD(ctx, bikeX, bikeY, yOffset, color, finished, groundKmh, airKmh, dragN, powerW, label, elapsedMin) {
   const x = bikeX + 20;
   const y = bikeY + yOffset;
 
@@ -839,17 +873,21 @@ function drawHUD(ctx, bikeX, bikeY, yOffset, color, finished, groundKmh, airKmh,
   ctx.fillText(finished ? fmt(elapsedMin) + ' min ✓' : fmt(elapsedMin) + ' min', x + ctx.measureText(label).width + 6, y);
 
   if (!finished) {
-    // Ground speed
     ctx.font = '9px "DM Mono", monospace';
+
+    // Power
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.fillText(fmt(groundKmh, 1) + ' km/h', x, y + 12);
+    ctx.fillText(Math.round(powerW) + ' W', x, y + 12);
+
+    // Ground speed
+    ctx.fillText(fmt(groundKmh, 1) + ' km/h', x + 40, y + 12);
 
     // Apparent wind
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.fillText('air: ' + fmt(airKmh, 1) + ' km/h', x + 70, y + 12);
+    ctx.fillText('air: ' + fmt(airKmh, 1) + ' km/h', x + 105, y + 12);
 
     // Drag force
-    ctx.fillText('drag: ' + fmt(dragN, 1) + ' N', x + 155, y + 12);
+    ctx.fillText('drag: ' + fmt(dragN, 1) + ' N', x + 190, y + 12);
   }
 }
 
@@ -893,7 +931,7 @@ function drawBike(ctx, x, y, color, dir) {
 /* ═══════════════════════════════════════
    EVENT LISTENERS
    ═══════════════════════════════════════ */
-[windSlider, powerSlider, distSlider, cdaSlider].forEach(s => {
+[windSlider, powerSlider, distSlider, cdaSlider, modSlider].forEach(s => {
   s.addEventListener('input', update);
 });
 
