@@ -16,7 +16,7 @@
   border-radius: 10px;
   overflow: hidden;
   margin-bottom: 16px;
-  aspect-ratio: 16 / 7;
+  aspect-ratio: 16 / 8;
 }
 .hw-canvas-wrap canvas {
   display: block;
@@ -487,7 +487,17 @@ function calcAll(windKmh, power, distKm, cda) {
     calmTime, headTime, tailTime, windyTime,
     penalty: windyTime - calmTime,
     dragCalm, dragHead, dragTail,
-    halfDist, distKm
+    halfDist, distKm,
+    // m/s speeds and wind for animation HUD
+    vCalmMs: vCalm,
+    vHeadMs: vHead,
+    vTailMs: vTail,
+    windMs: windKmh / 3.6,
+    cda: cda,
+    // Apparent wind speeds (air speed) in km/h
+    airSpeedCalm: vCalm * 3.6,
+    airSpeedHead: (vHead + windKmh / 3.6) * 3.6,
+    airSpeedTail: Math.max(0, vTail - windKmh / 3.6) * 3.6
   };
 }
 
@@ -753,48 +763,51 @@ function drawFrame(t, s) {
   const windyX = roadL + windyPos * (turnX - roadL);
 
   // Draw calm rider (top lane)
-  const calmY = roadY - 14;
-  const windyY = roadY + 14;
+  const calmY = roadY - 16;
+  const windyY = roadY + 16;
+
+  const calmDir = calmFrac <= 0.5 ? 1 : -1;
+  const isHead = windyFrac <= headFrac;
+  const windyDir = isHead ? 1 : -1;
+  const windyColor = (wind > 0) ? (isHead ? '#b53a1e' : '#1d6840') : '#1a5276';
 
   // Rider bikes
-  drawBike(ctx, calmX, calmY, '#1a5276', calmFrac <= 0.5 ? 1 : -1);
-  drawBike(ctx, windyX, windyY, wind > 0 ? '#b53a1e' : '#1a5276',
-    windyFrac <= (s.headRealTime / s.windyTotal) ? 1 : -1);
+  drawBike(ctx, calmX, calmY, '#1a5276', calmDir);
+  drawBike(ctx, windyX, windyY, windyColor, windyDir);
 
-  // Labels
-  ctx.font = '10px "DM Mono", monospace';
-  ctx.textAlign = 'left';
+  // ── HUD readouts next to each rider ──
+  const calmFinished = calmFrac >= 1;
+  const windyFinished = windyFrac >= 1;
 
-  // Calm rider label
-  ctx.fillStyle = 'rgba(26,82,118,0.8)';
-  ctx.fillText('No wind', roadL, calmY - 14);
-  if (calmFrac < 1) {
-    const calmElapsed = calmFrac * r.calmTime;
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fillText(fmt(calmElapsed) + ' min', roadL + 55, calmY - 14);
-  } else {
-    ctx.fillStyle = 'rgba(26,82,118,0.6)';
-    ctx.fillText(fmt(r.calmTime) + ' min ✓', roadL + 55, calmY - 14);
-  }
+  // Calm rider HUD — ground speed, apparent wind, drag
+  const calmGroundKmh = r.calmSpeedKmh;
+  const calmAirKmh = r.airSpeedCalm;
+  const calmDragN = r.dragCalm;
 
-  // Windy rider label
+  drawHUD(ctx, calmX, calmY, -32, '#1a5276', calmFinished,
+    calmGroundKmh, calmAirKmh, calmDragN, 'No wind', calmFinished ? r.calmTime : calmFrac * r.calmTime);
+
+  // Windy rider HUD — values change between headwind and tailwind legs
   if (wind > 0) {
-    const isHead = windyFrac <= headFrac;
-    ctx.fillStyle = isHead ? 'rgba(181,58,30,0.8)' : 'rgba(29,104,64,0.8)';
-    ctx.fillText(isHead ? 'Headwind' : 'Tailwind', roadL, windyY + 22);
-    if (windyFrac < 1) {
-      const windyElapsed = windyFrac * r.windyTime;
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.fillText(fmt(windyElapsed) + ' min', roadL + 65, windyY + 22);
+    let wGroundKmh, wAirKmh, wDragN, wLabel;
+    if (isHead) {
+      wGroundKmh = r.headSpeedKmh;
+      wAirKmh = r.airSpeedHead;
+      wDragN = r.dragHead;
+      wLabel = 'Headwind';
     } else {
-      ctx.fillStyle = 'rgba(181,58,30,0.6)';
-      ctx.fillText(fmt(r.windyTime) + ' min ✓', roadL + 65, windyY + 22);
+      wGroundKmh = r.tailSpeedKmh;
+      wAirKmh = r.airSpeedTail;
+      wDragN = r.dragTail;
+      wLabel = 'Tailwind';
     }
+    drawHUD(ctx, windyX, windyY, 18, windyColor, windyFinished,
+      wGroundKmh, wAirKmh, wDragN, wLabel, windyFinished ? r.windyTime : windyFrac * r.windyTime);
   }
 
   // Finish state overlay
   if (t >= 1) {
-    ctx.fillStyle = 'rgba(24,22,15,0.5)';
+    ctx.fillStyle = 'rgba(24,22,15,0.55)';
     ctx.fillRect(0, 0, W, H);
     ctx.font = 'bold 16px "DM Sans", sans-serif';
     ctx.fillStyle = '#fff';
@@ -807,6 +820,36 @@ function drawFrame(t, s) {
     } else {
       ctx.fillText('No wind — no penalty', W/2, H/2);
     }
+  }
+}
+
+function drawHUD(ctx, bikeX, bikeY, yOffset, color, finished, groundKmh, airKmh, dragN, label, elapsedMin) {
+  const x = bikeX + 20;
+  const y = bikeY + yOffset;
+
+  ctx.textAlign = 'left';
+
+  // Label + elapsed time
+  ctx.font = 'bold 10px "DM Mono", monospace';
+  ctx.fillStyle = color;
+  ctx.fillText(label, x, y);
+
+  ctx.font = '9px "DM Mono", monospace';
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fillText(finished ? fmt(elapsedMin) + ' min ✓' : fmt(elapsedMin) + ' min', x + ctx.measureText(label).width + 6, y);
+
+  if (!finished) {
+    // Ground speed
+    ctx.font = '9px "DM Mono", monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillText(fmt(groundKmh, 1) + ' km/h', x, y + 12);
+
+    // Apparent wind
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillText('air: ' + fmt(airKmh, 1) + ' km/h', x + 70, y + 12);
+
+    // Drag force
+    ctx.fillText('drag: ' + fmt(dragN, 1) + ' N', x + 155, y + 12);
   }
 }
 
