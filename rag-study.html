@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>RAG Study — Diamond Peak</title>
+<title>RAG Study v1.0 — Diamond Peak</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -879,7 +879,7 @@
   <a href="index.html" class="back">&larr; Back to tools</a>
 
   <div class="kicker">FMCG Consulting</div>
-  <h1>RAG Study Tool</h1>
+  <h1>RAG Study Tool <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.0</span></h1>
   <div class="study-date" id="studyDate"></div>
   <p class="intro">
     Red Amber Green production line study &mdash; track uptime, log stops by type and asset, log speed changes, and export data.
@@ -1039,6 +1039,11 @@
     <button class="btn-export" onclick="exportCSV()">Export CSV</button>
     <button class="btn-export" onclick="copyToClipboard()">Copy to Clipboard</button>
     <button class="btn-reset" onclick="resetStudy()">Reset Study</button>
+  </div>
+
+  <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px;">
+    <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong>
+    <strong>v1.0</strong> &mdash; Initial release. Production line RAG study tool with live uptime tracking, stop logging, speed changes, Pareto analysis, and data export.
   </div>
 
 </div>

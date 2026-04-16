@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VO2 Max Estimator — Diamond Peak</title>
+<title>VO2 Max Estimator v1.0 — Diamond Peak</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../style.css">
 <style>
@@ -288,7 +288,7 @@
   <a href="../index.html" class="back">&larr; Back to tools</a>
 
   <div class="kicker">NUTRITION &amp; PHYSIOLOGY</div>
-  <h1>VO&#x2082; Max Estimator</h1>
+  <h1>VO&#x2082; Max Estimator <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.0</span></h1>
   <p class="intro">
     Estimate your VO&#x2082; max from a recent race result using the Jack Daniels VDOT formula.
     Select a distance, enter your finishing time, and see your estimated aerobic capacity,
@@ -308,6 +308,11 @@
     <code>VDOT</code> = VO&#x2082; / %VO&#x2082;max<br><br>
     Fitness categories and percentiles are age- and sex-adjusted based on published normative data.
     Equivalent race times are predicted by finding the time that yields the same VDOT for each distance using bisection search.
+  </div>
+
+  <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px;">
+    <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong>
+    <strong>v1.0</strong> &mdash; Initial release. VO2max estimation from race times using the Jack Daniels VDOT method with equivalent performance predictions.
   </div>
 
 </div>
