@@ -235,7 +235,7 @@
 
   <div class="assumptions">
     <strong style="color:var(--ink2);font-weight:500;">Note:</strong> Rates for England &amp; Northern Ireland from April 2025.
-    First-time buyer relief applies to properties up to &pound;625,000.
+    First-time buyer relief applies to properties up to &pound;500,000.
     Additional property surcharge is 5%. Scotland and Wales have separate systems.
   </div>
 
@@ -268,10 +268,10 @@ function calculate() {
 
   let bands, surcharge = 0;
 
-  if (buyerType === 'first-time' && price <= 625000) {
+  if (buyerType === 'first-time' && price <= 500000) {
     bands = [
       { limit: 300000, rate: 0 },
-      { limit: 625000, rate: 0.05 },
+      { limit: 500000, rate: 0.05 },
     ];
   } else if (buyerType === 'additional') {
     bands = [
@@ -293,7 +293,7 @@ function calculate() {
   }
 
   // First-time buyer over threshold falls back to standard
-  if (buyerType === 'first-time' && price > 625000) {
+  if (buyerType === 'first-time' && price > 500000) {
     bands = [
       { limit: 125000, rate: 0 },
       { limit: 250000, rate: 0.02 },

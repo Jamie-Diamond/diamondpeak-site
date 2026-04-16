@@ -106,13 +106,15 @@ h1 {
 .field input,
 .field select {
   width: 100%;
-  padding: 8px 10px;
+  height: 48px;
+  padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 4px;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: 16px;
   background: #fff;
   color: var(--ink);
+  -webkit-appearance: none;
 }
 .field input:focus,
 .field select:focus {

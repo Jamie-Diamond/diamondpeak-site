@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>House Purchase Scenarios — Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8f5ef;
+    --card: #fff;
+    --ink: #18160f;
+    --ink2: #4a4535;
+    --muted: #9a9080;
+    --border: #ddd8cc;
+    --green: #1d6840;
+    --green-bg: #e6f4ec;
+    --red: #b53a1e;
+    --red-bg: #fdeee9;
+    --blue: #1a5276;
+    --amber: #b87c20;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+
+  .page { max-width: 720px; margin: 0 auto; padding: 36px 16px 72px; }
+  @media(min-width:600px) { .page { padding: 56px 24px 80px; } }
+
+  .back { color: var(--muted); text-decoration: none; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.05em; }
+  .back:hover { color: var(--ink); }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    margin-top: 20px;
+  }
+  h1 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: clamp(26px, 5vw, 38px);
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 10px;
+  }
+  .intro {
+    font-size: 14px;
+    color: var(--ink2);
+    line-height: 1.7;
+    margin-bottom: 36px;
+  }
+
+  /* Buyer type selector */
+  .buyer-selector {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .buyer-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--card);
+    color: var(--muted);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .buyer-btn:hover { border-color: var(--ink2); color: var(--ink2); }
+  .buyer-btn.active {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: white;
+  }
+
+  /* Inputs */
+  .inputs {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 28px;
+  }
+  @media(min-width:520px) { .inputs { padding: 24px; } }
+
+  .input-group-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink2);
+    margin-bottom: 14px;
+  }
+  .input-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  @media(min-width:520px) { .input-grid { grid-template-columns: 1fr 1fr; } }
+
+  .field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink2);
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+  .input-wrap { display: flex; }
+  .affix {
+    background: #ede9e1;
+    border: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 0 9px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .affix-pre { border-right: none; border-radius: 4px 0 0 4px; }
+  .affix-suf { border-left: none; border-radius: 0 4px 4px 0; }
+  input[type="number"] {
+    width: 100%;
+    height: 48px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    font-size: 16px;
+    padding: 0 12px;
+    outline: none;
+    border-radius: 0 4px 4px 0;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+  }
+  input[type="number"]:focus { border-color: var(--ink); }
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .no-prefix { border-radius: 4px 0 0 4px; }
+
+  .buyer-field { margin-top: 16px; }
+
+  /* Scenario toggles */
+  .scenario-toggles {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .scenario-toggle {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--card);
+    color: var(--muted);
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .scenario-toggle:hover { border-color: var(--ink2); color: var(--ink2); }
+  .scenario-toggle.active-a { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .scenario-toggle.active-b { background: #e8f0f8; border-color: var(--blue); color: var(--blue); }
+  .scenario-toggle.active-c { background: #fdf5e6; border-color: var(--amber); color: var(--amber); }
+
+  /* Scenario cards */
+  .scenario-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    display: none;
+    position: relative;
+  }
+  @media(min-width:520px) { .scenario-card { padding: 24px; } }
+  .scenario-card.show { display: block; animation: cardIn 0.25s ease-out; }
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .scenario-card.accent-a { border-left: 4px solid var(--green); }
+  .scenario-card.accent-b { border-left: 4px solid var(--blue); }
+  .scenario-card.accent-c { border-left: 4px solid var(--amber); }
+
+  .scenario-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .scenario-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .scenario-title.color-a { color: var(--green); }
+  .scenario-title.color-b { color: var(--blue); }
+  .scenario-title.color-c { color: var(--amber); }
+
+  .scenario-close {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--card);
+    color: var(--muted);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    line-height: 1;
+  }
+  .scenario-close:hover { border-color: var(--red); color: var(--red); }
+
+  .scenario-card input::placeholder {
+    color: var(--muted);
+    opacity: 0.7;
+    font-style: italic;
+  }
+
+  /* Cash allocation summary */
+  .cash-summary {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--ink2);
+  }
+  .cash-summary .cs-label {
+    font-weight: 500;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+  .cash-summary .cs-item {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .cash-summary .cs-sep {
+    color: var(--muted);
+    font-size: 10px;
+  }
+  .cash-summary .cs-deposit { color: var(--green); }
+  .cash-summary .cs-shortfall { color: var(--red); }
+
+  /* Table section headers */
+  .comp-table tr.section-header td {
+    background: #faf8f4;
+    border-bottom: 1px solid var(--border);
+    padding: 8px 14px 5px;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  /* Headline verdict */
+  .headline {
+    background: var(--ink);
+    color: white;
+    border-radius: 8px;
+    padding: 28px 24px 24px;
+    margin-bottom: 20px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .headline::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 0%, rgba(56,189,248,0.08), transparent 60%);
+    pointer-events: none;
+  }
+  .hl-context {
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 8px;
+    position: relative;
+  }
+  .hl-number {
+    font-family: 'DM Mono', monospace;
+    font-size: clamp(36px, 8vw, 60px);
+    font-weight: 500;
+    line-height: 1;
+    display: block;
+    margin-bottom: 6px;
+    position: relative;
+    color: #a8e8c0;
+  }
+  .hl-label {
+    font-size: 14px;
+    color: rgba(255,255,255,0.55);
+    position: relative;
+  }
+
+  /* Comparison table */
+  .comparison {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .comp-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .comp-table {
+    width: 100%;
+    min-width: 480px;
+    border-collapse: collapse;
+  }
+  .comp-table th,
+  .comp-table td {
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--ink2);
+    border-bottom: 1px solid #eee9df;
+    border-right: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+  .comp-table th:last-child,
+  .comp-table td:last-child { border-right: none; }
+  .comp-table tr:last-child td { border-bottom: none; }
+
+  .comp-table thead th {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 14px 8px;
+    background: #faf8f4;
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+  }
+  .comp-table .row-label {
+    font-weight: 400;
+    white-space: nowrap;
+    color: var(--ink2);
+  }
+  .comp-val {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+    display: block;
+  }
+  .comp-val.bold {
+    font-size: 15px;
+    color: var(--ink);
+  }
+  .comp-table tr.key-row td { background: #faf8f4; }
+  .comp-table tr.total-row td {
+    background: #faf8f4;
+    border-top: 1px solid var(--border);
+    font-weight: 500;
+    color: var(--ink);
+    padding: 14px;
+  }
+  .comp-table tr.total-row .comp-val { font-size: 15px; }
+
+  /* Delta badge */
+  .delta {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-top: 3px;
+  }
+  .delta.better { background: var(--green-bg); color: var(--green); }
+  .delta.worse { background: var(--red-bg); color: var(--red); }
+
+  /* Column header accent dots */
+  .col-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .col-dot.dot-base { background: var(--ink); }
+  .col-dot.dot-a { background: var(--green); }
+  .col-dot.dot-b { background: var(--blue); }
+  .col-dot.dot-c { background: var(--amber); }
+
+  /* SDLT collapsible */
+  .sdlt-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink2);
+    cursor: pointer;
+    width: 100%;
+    margin-bottom: 12px;
+    transition: all 0.15s;
+  }
+  .sdlt-toggle:hover { border-color: var(--ink2); }
+  .sdlt-toggle .chevron {
+    transition: transform 0.2s;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .sdlt-toggle.open .chevron { transform: rotate(90deg); }
+
+  .sdlt-detail {
+    display: none;
+    margin-bottom: 20px;
+  }
+  .sdlt-detail.show { display: block; }
+
+  .sdlt-scenario {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .sdlt-scenario-header {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 18px 8px;
+    background: #faf8f4;
+    border-bottom: 1px solid var(--border);
+  }
+  .bd-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 18px;
+    font-size: 13px;
+    color: var(--ink2);
+    border-bottom: 1px solid #eee9df;
+  }
+  .bd-row:last-child { border-bottom: none; }
+  .bd-row .val {
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+  }
+  .bd-row.total {
+    background: #faf8f4;
+    border-top: 1px solid var(--border);
+    font-weight: 500;
+    color: var(--ink);
+    padding: 14px 18px;
+  }
+  .bd-row.total .val { font-size: 16px; color: var(--green); }
+
+  .assumptions {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <a href="../index.html" class="back">&larr; Back to tools</a>
+
+  <div class="kicker">Property</div>
+  <h1>House Purchase<br>Scenarios</h1>
+  <p class="intro">
+    Compare up to four house purchase scenarios side-by-side. Enter your available cash
+    and the calculator shows how it splits between deposit, stamp duty, and renovation.
+    Add comparison scenarios to see how changing price, rate, or renovation budget shifts
+    the numbers.
+  </p>
+
+  <!-- Base scenario inputs -->
+  <div class="inputs">
+    <div class="input-group-label">Base scenario</div>
+    <div class="input-grid">
+      <div class="field">
+        <label>Property price</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="base_price" value="450000" step="5000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Available cash</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="base_cash" value="100000" step="5000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Renovation budget</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="base_reno" value="0" step="1000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Mortgage rate</label>
+        <div class="input-wrap">
+          <input type="number" id="base_rate" value="4.50" step="0.05" min="0" class="no-prefix">
+          <span class="affix affix-suf">%</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Mortgage term</label>
+        <div class="input-wrap">
+          <input type="number" id="base_term" value="25" step="1" min="5" max="40" class="no-prefix">
+          <span class="affix affix-suf">yrs</span>
+        </div>
+      </div>
+    </div>
+    <div class="buyer-field">
+      <label style="font-size:11px;font-weight:500;color:var(--ink2);margin-bottom:8px;display:block;">Buyer type</label>
+      <div class="buyer-selector" id="base_buyer_selector">
+        <button class="buyer-btn" data-type="first-time">First-time buyer</button>
+        <button class="buyer-btn active" data-type="standard">Standard</button>
+        <button class="buyer-btn" data-type="additional">Additional property</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario toggles -->
+  <div class="scenario-toggles">
+    <button class="scenario-toggle" id="toggle_a" onclick="toggleScenario('a')">+ Add scenario</button>
+    <button class="scenario-toggle" id="toggle_b" onclick="toggleScenario('b')" style="display:none;">+ Add scenario</button>
+    <button class="scenario-toggle" id="toggle_c" onclick="toggleScenario('c')" style="display:none;">+ Add scenario</button>
+  </div>
+
+  <!-- Scenario A -->
+  <div class="scenario-card accent-a" id="card_a">
+    <div class="scenario-header">
+      <span class="scenario-title color-a">Scenario A</span>
+      <button class="scenario-close" onclick="removeScenario('a')">&times;</button>
+    </div>
+    <div class="input-grid">
+      <div class="field">
+        <label>Property price</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="a_price" step="5000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Available cash</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="a_cash" step="5000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Renovation budget</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="a_reno" step="1000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Mortgage rate</label>
+        <div class="input-wrap">
+          <input type="number" id="a_rate" step="0.05" min="0" class="no-prefix">
+          <span class="affix affix-suf">%</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Mortgage term</label>
+        <div class="input-wrap">
+          <input type="number" id="a_term" step="1" min="5" max="40" class="no-prefix">
+          <span class="affix affix-suf">yrs</span>
+        </div>
+      </div>
+    </div>
+    <div class="buyer-field">
+      <label style="font-size:11px;font-weight:500;color:var(--ink2);margin-bottom:8px;display:block;">Buyer type (leave unchanged to inherit base)</label>
+      <div class="buyer-selector" data-scenario="a">
+        <button class="buyer-btn active" data-type="inherit">Same as base</button>
+        <button class="buyer-btn" data-type="first-time">First-time</button>
+        <button class="buyer-btn" data-type="standard">Standard</button>
+        <button class="buyer-btn" data-type="additional">Additional</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario B -->
+  <div class="scenario-card accent-b" id="card_b">
+    <div class="scenario-header">
+      <span class="scenario-title color-b">Scenario B</span>
+      <button class="scenario-close" onclick="removeScenario('b')">&times;</button>
+    </div>
+    <div class="input-grid">
+      <div class="field">
+        <label>Property price</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="b_price" step="5000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Available cash</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="b_cash" step="5000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Renovation budget</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="b_reno" step="1000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Mortgage rate</label>
+        <div class="input-wrap">
+          <input type="number" id="b_rate" step="0.05" min="0" class="no-prefix">
+          <span class="affix affix-suf">%</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Mortgage term</label>
+        <div class="input-wrap">
+          <input type="number" id="b_term" step="1" min="5" max="40" class="no-prefix">
+          <span class="affix affix-suf">yrs</span>
+        </div>
+      </div>
+    </div>
+    <div class="buyer-field">
+      <label style="font-size:11px;font-weight:500;color:var(--ink2);margin-bottom:8px;display:block;">Buyer type (leave unchanged to inherit base)</label>
+      <div class="buyer-selector" data-scenario="b">
+        <button class="buyer-btn active" data-type="inherit">Same as base</button>
+        <button class="buyer-btn" data-type="first-time">First-time</button>
+        <button class="buyer-btn" data-type="standard">Standard</button>
+        <button class="buyer-btn" data-type="additional">Additional</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario C -->
+  <div class="scenario-card accent-c" id="card_c">
+    <div class="scenario-header">
+      <span class="scenario-title color-c">Scenario C</span>
+      <button class="scenario-close" onclick="removeScenario('c')">&times;</button>
+    </div>
+    <div class="input-grid">
+      <div class="field">
+        <label>Property price</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="c_price" step="5000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Available cash</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="c_cash" step="5000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Renovation budget</label>
+        <div class="input-wrap">
+          <span class="affix affix-pre">&pound;</span>
+          <input type="number" id="c_reno" step="1000" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Mortgage rate</label>
+        <div class="input-wrap">
+          <input type="number" id="c_rate" step="0.05" min="0" class="no-prefix">
+          <span class="affix affix-suf">%</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Mortgage term</label>
+        <div class="input-wrap">
+          <input type="number" id="c_term" step="1" min="5" max="40" class="no-prefix">
+          <span class="affix affix-suf">yrs</span>
+        </div>
+      </div>
+    </div>
+    <div class="buyer-field">
+      <label style="font-size:11px;font-weight:500;color:var(--ink2);margin-bottom:8px;display:block;">Buyer type (leave unchanged to inherit base)</label>
+      <div class="buyer-selector" data-scenario="c">
+        <button class="buyer-btn active" data-type="inherit">Same as base</button>
+        <button class="buyer-btn" data-type="first-time">First-time</button>
+        <button class="buyer-btn" data-type="standard">Standard</button>
+        <button class="buyer-btn" data-type="additional">Additional</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cash allocation summary -->
+  <div class="cash-summary" id="cash_summary"></div>
+
+  <!-- Headline -->
+  <div class="headline" id="headline">
+    <div class="hl-context" id="hl_context">--</div>
+    <span class="hl-number" id="hl_number">--</span>
+    <div class="hl-label" id="hl_label">--</div>
+  </div>
+
+  <!-- Comparison table -->
+  <div class="comparison" id="comparison">
+    <div class="comp-scroll">
+      <table class="comp-table" id="comp_table"></table>
+    </div>
+  </div>
+
+  <!-- SDLT breakdown (collapsible) -->
+  <button class="sdlt-toggle" id="sdlt_toggle" onclick="toggleSdlt()">
+    <span class="chevron">&#9654;</span> Show SDLT breakdown
+  </button>
+  <div class="sdlt-detail" id="sdlt_detail"></div>
+
+  <div class="assumptions">
+    <strong style="color:var(--ink2);font-weight:500;">Note:</strong> SDLT rates for England &amp; Northern Ireland from April 2025. First-time buyer relief
+    applies up to &pound;500k — above that, standard rates apply in full. Additional property surcharge is 5%. Monthly payments assume
+    repayment mortgage with fixed rate for full term. Does not include solicitor fees,
+    survey costs, or other purchase costs.
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (n, dec=0) => (n < 0 ? '\u2212£' : '£') + Math.abs(n).toLocaleString('en-GB', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+const fmtPct = (n, dec=2) => n.toFixed(dec) + '%';
+
+// ── State ──
+let baseBuyer = 'standard';
+const scenarioBuyer = { a: 'inherit', b: 'inherit', c: 'inherit' };
+const activeScenarios = { a: false, b: false, c: false };
+const scenarioOrder = ['a', 'b', 'c'];
+
+// ── Buyer type selectors ──
+document.querySelectorAll('#base_buyer_selector .buyer-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#base_buyer_selector .buyer-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    baseBuyer = btn.dataset.type;
+    updatePlaceholders();
+    calculate();
+  });
+});
+
+scenarioOrder.forEach(s => {
+  document.querySelectorAll(`.buyer-selector[data-scenario="${s}"] .buyer-btn`).forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll(`.buyer-selector[data-scenario="${s}"] .buyer-btn`).forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      scenarioBuyer[s] = btn.dataset.type;
+      calculate();
+    });
+  });
+});
+
+// ── Scenario toggle management ──
+function updateToggleVisibility() {
+  const activeKeys = scenarioOrder.filter(s => activeScenarios[s]);
+  const inactiveKeys = scenarioOrder.filter(s => !activeScenarios[s]);
+
+  scenarioOrder.forEach(s => {
+    $('toggle_' + s).style.display = 'none';
+  });
+
+  if (inactiveKeys.length > 0) {
+    const next = inactiveKeys[0];
+    const btn = $('toggle_' + next);
+    btn.textContent = '+ Add scenario';
+    btn.style.display = '';
+    btn.className = 'scenario-toggle';
+  }
+
+  activeKeys.forEach(s => {
+    const btn = $('toggle_' + s);
+    btn.textContent = 'Scenario ' + s.toUpperCase();
+    btn.style.display = '';
+    btn.className = 'scenario-toggle active-' + s;
+  });
+}
+
+function toggleScenario(s) {
+  if (activeScenarios[s]) return;
+  activeScenarios[s] = true;
+  $('card_' + s).classList.add('show');
+  updateToggleVisibility();
+  updatePlaceholders();
+  calculate();
+}
+
+function removeScenario(s) {
+  activeScenarios[s] = false;
+  $('card_' + s).classList.remove('show');
+  [s + '_price', s + '_cash', s + '_reno', s + '_rate', s + '_term'].forEach(id => $(id).value = '');
+  scenarioBuyer[s] = 'inherit';
+  document.querySelectorAll(`.buyer-selector[data-scenario="${s}"] .buyer-btn`).forEach(b => {
+    b.classList.toggle('active', b.dataset.type === 'inherit');
+  });
+  updateToggleVisibility();
+  calculate();
+}
+
+// ── Placeholders ──
+function updatePlaceholders() {
+  const bp = $('base_price').value || '450000';
+  const bc = $('base_cash').value || '100000';
+  const brn = $('base_reno').value || '0';
+  const br = $('base_rate').value || '4.50';
+  const bt = $('base_term').value || '25';
+  scenarioOrder.forEach(s => {
+    $(s + '_price').placeholder = bp;
+    $(s + '_cash').placeholder = bc;
+    $(s + '_reno').placeholder = brn;
+    $(s + '_rate').placeholder = br;
+    $(s + '_term').placeholder = bt;
+  });
+}
+
+// ── SDLT calculation ──
+function calcSdlt(price, buyerType) {
+  let bands, surcharge = 0;
+
+  if (buyerType === 'first-time' && price <= 500000) {
+    bands = [
+      { limit: 300000, rate: 0 },
+      { limit: 500000, rate: 0.05 },
+    ];
+  } else if (buyerType === 'additional') {
+    bands = [
+      { limit: 125000, rate: 0 },
+      { limit: 250000, rate: 0.02 },
+      { limit: 925000, rate: 0.05 },
+      { limit: 1500000, rate: 0.10 },
+      { limit: Infinity, rate: 0.12 },
+    ];
+    surcharge = 0.05;
+  } else {
+    bands = [
+      { limit: 125000, rate: 0 },
+      { limit: 250000, rate: 0.02 },
+      { limit: 925000, rate: 0.05 },
+      { limit: 1500000, rate: 0.10 },
+      { limit: Infinity, rate: 0.12 },
+    ];
+  }
+
+  let tax = 0, prev = 0, breakdown = [];
+  for (const band of bands) {
+    if (price <= prev) break;
+    const taxable = Math.min(price, band.limit) - prev;
+    const effectiveRate = band.rate + surcharge;
+    const bandTax = taxable * effectiveRate;
+    if (taxable > 0) {
+      breakdown.push({ from: prev, to: Math.min(price, band.limit), rate: effectiveRate, tax: bandTax });
+    }
+    tax += bandTax;
+    prev = band.limit;
+  }
+
+  return { total: tax, breakdown };
+}
+
+// ── Monthly payment ──
+function monthly(loan, ratePct, termYrs) {
+  if (loan <= 0) return 0;
+  if (ratePct === 0) return loan / (termYrs * 12);
+  const r = ratePct / 100 / 12;
+  const n = termYrs * 12;
+  return loan * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
+}
+
+// ── Build scenario data ──
+// Cash allocation: Available cash → SDLT + Renovation + Deposit (remainder)
+// Deposit = Cash - SDLT - Renovation
+// Mortgage = Price - Deposit
+function getScenarioData(id) {
+  let price, cash, reno, rate, term, buyer;
+
+  if (id === 'base') {
+    price = parseFloat($('base_price').value) || 0;
+    cash = parseFloat($('base_cash').value) || 0;
+    reno = parseFloat($('base_reno').value) || 0;
+    rate = parseFloat($('base_rate').value) || 0;
+    term = parseInt($('base_term').value) || 25;
+    buyer = baseBuyer;
+  } else {
+    const bp = parseFloat($('base_price').value) || 0;
+    const bc = parseFloat($('base_cash').value) || 0;
+    const brn = parseFloat($('base_reno').value) || 0;
+    const br = parseFloat($('base_rate').value) || 0;
+    const bt = parseInt($('base_term').value) || 25;
+
+    const pv = $(id + '_price').value;
+    const cv = $(id + '_cash').value;
+    const rnv = $(id + '_reno').value;
+    const rv = $(id + '_rate').value;
+    const tv = $(id + '_term').value;
+
+    price = pv !== '' ? parseFloat(pv) : bp;
+    cash = cv !== '' ? parseFloat(cv) : bc;
+    reno = rnv !== '' ? parseFloat(rnv) : brn;
+    rate = rv !== '' ? parseFloat(rv) : br;
+    term = tv !== '' ? parseInt(tv) : bt;
+    buyer = scenarioBuyer[id] === 'inherit' ? baseBuyer : scenarioBuyer[id];
+  }
+
+  const sdlt = calcSdlt(price, buyer);
+  const deposit = cash - sdlt.total - reno;
+  const mortgage = Math.max(0, price - deposit);
+  const ltv = price > 0 ? (mortgage / price) * 100 : 0;
+  const mp = monthly(mortgage, rate, term);
+  const totalInterest = Math.max(0, (mp * term * 12) - mortgage);
+  const totalCost = price + sdlt.total + totalInterest + reno;
+
+  const buyerLabel = buyer === 'first-time' ? 'First-time buyer' : buyer === 'additional' ? 'Additional property' : 'Standard purchase';
+
+  return { price, cash, reno, deposit, mortgage, ltv, rate, term, buyer, buyerLabel, sdlt, mp, totalInterest, totalCost };
+}
+
+// ── Delta badge HTML ──
+function deltaHtml(baseVal, val, format, lowerIsBetter) {
+  const diff = val - baseVal;
+  if (Math.abs(diff) < 0.005) return '';
+  const isBetter = lowerIsBetter ? diff < 0 : diff > 0;
+  const cls = isBetter ? 'better' : 'worse';
+  let label;
+  if (format === '£') {
+    label = (diff > 0 ? '+' : '\u2212') + '£' + Math.abs(diff).toLocaleString('en-GB', {minimumFractionDigits:0, maximumFractionDigits:0});
+  } else if (format === '%') {
+    label = (diff > 0 ? '+' : '\u2212') + Math.abs(diff).toFixed(2) + '%';
+  } else {
+    label = (diff > 0 ? '+' : '\u2212') + '£' + Math.abs(diff).toLocaleString('en-GB', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  return `<span class="delta ${cls}">${label}</span>`;
+}
+
+// ── SDLT toggle ──
+let sdltOpen = false;
+function toggleSdlt() {
+  sdltOpen = !sdltOpen;
+  $('sdlt_toggle').classList.toggle('open', sdltOpen);
+  $('sdlt_toggle').innerHTML = `<span class="chevron">&#9654;</span> ${sdltOpen ? 'Hide' : 'Show'} SDLT breakdown`;
+  $('sdlt_detail').classList.toggle('show', sdltOpen);
+}
+
+// ── Main calculate ──
+function calculate() {
+  const base = getScenarioData('base');
+  const scenarios = [{ id: 'base', label: 'Base', data: base }];
+
+  scenarioOrder.forEach(s => {
+    if (activeScenarios[s]) {
+      scenarios.push({ id: s, label: 'Scenario ' + s.toUpperCase(), data: getScenarioData(s) });
+    }
+  });
+
+  // Cash allocation summary
+  const depCls = base.deposit >= 0 ? 'cs-deposit' : 'cs-shortfall';
+  const depLabel = base.deposit >= 0 ? 'deposit' : 'shortfall';
+  let csHtml = `<span class="cs-label">Cash split</span>`;
+  csHtml += `<span class="cs-item">${fmt(base.cash)}</span>`;
+  csHtml += `<span class="cs-sep">=</span>`;
+  csHtml += `<span class="cs-item">${fmt(base.sdlt.total)} SDLT</span>`;
+  if (base.reno > 0) {
+    csHtml += `<span class="cs-sep">+</span>`;
+    csHtml += `<span class="cs-item">${fmt(base.reno)} reno</span>`;
+  }
+  csHtml += `<span class="cs-sep">+</span>`;
+  csHtml += `<span class="cs-item ${depCls}">${fmt(base.deposit)} ${depLabel}</span>`;
+  $('cash_summary').innerHTML = csHtml;
+
+  // Headline
+  $('hl_context').textContent = base.buyerLabel;
+  $('hl_number').textContent = fmt(base.mp, 2);
+  const mortK = (base.mortgage / 1000).toFixed(0);
+  $('hl_label').textContent = `per month on a £${mortK}k mortgage at ${base.rate.toFixed(2)}%`;
+
+  // Hide renovation row if all scenarios have £0
+  const anyReno = scenarios.some(sc => sc.data.reno > 0);
+
+  // Comparison table
+  const colDot = { base: 'dot-base', a: 'dot-a', b: 'dot-b', c: 'dot-c' };
+  const colCount = scenarios.length + 1;
+  const rows = [
+    { section: 'Cash allocation', cols: colCount },
+    { label: 'Available cash', key: 'cash', fmt: '£', lower: false },
+    { label: 'Stamp duty (SDLT)', key: 'sdltTotal', fmt: '£', lower: true },
+    { label: 'Renovation', key: 'reno', fmt: '£', lower: true, hideIf: () => !anyReno },
+    { label: 'Deposit (remainder)', key: 'deposit', fmt: '£', lower: false },
+    { section: 'Mortgage', cols: colCount },
+    { label: 'Property price', key: 'price', fmt: '£', lower: true },
+    { label: 'Mortgage amount', key: 'mortgage', fmt: '£', lower: true },
+    { label: 'LTV', key: 'ltv', fmt: '%', lower: true },
+    { label: 'Mortgage rate', key: 'rate', fmt: '%', lower: true },
+    { label: 'Monthly payment', key: 'mp', fmt: 'mp', lower: true, bold: true, keyRow: true },
+    { label: 'Total interest over term', key: 'totalInterest', fmt: '£', lower: true },
+    { label: 'Total cost', key: 'totalCost', fmt: '£', lower: true, total: true },
+  ];
+
+  let html = '<thead><tr><th></th>';
+  scenarios.forEach(sc => {
+    html += `<th><span class="col-dot ${colDot[sc.id]}"></span>${sc.label}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  rows.forEach(row => {
+    // Section header row
+    if (row.section) {
+      html += `<tr class="section-header"><td colspan="${row.cols}">${row.section}</td></tr>`;
+      return;
+    }
+    // Conditionally hidden rows
+    if (row.hideIf && row.hideIf()) return;
+
+    const cls = row.total ? ' class="total-row"' : row.keyRow ? ' class="key-row"' : '';
+    html += `<tr${cls}><td class="row-label">${row.label}</td>`;
+    scenarios.forEach((sc, i) => {
+      let val;
+      if (row.key === 'sdltTotal') val = sc.data.sdlt.total;
+      else val = sc.data[row.key];
+
+      let display;
+      if (row.fmt === '£') display = fmt(val);
+      else if (row.fmt === '%') display = fmtPct(val);
+      else if (row.fmt === 'mp') display = fmt(val, 2);
+
+      const boldCls = row.bold ? ' bold' : '';
+      let delta = '';
+      if (i > 0) {
+        let baseVal = row.key === 'sdltTotal' ? base.sdlt.total : base[row.key];
+        delta = deltaHtml(baseVal, val, row.fmt === 'mp' ? '£' : row.fmt, row.lower);
+      }
+
+      // Warn if deposit goes negative
+      let warn = '';
+      if (row.key === 'deposit' && val < 0) {
+        warn = '<span class="delta worse">shortfall</span>';
+        delta = '';
+      }
+
+      html += `<td><span class="comp-val${boldCls}">${display}</span>${delta}${warn}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  $('comp_table').innerHTML = html;
+
+  // SDLT breakdown
+  let sdltHtml = '';
+  scenarios.forEach(sc => {
+    const d = sc.data;
+    sdltHtml += `<div class="sdlt-scenario">`;
+    sdltHtml += `<div class="sdlt-scenario-header">${sc.label} — ${d.buyerLabel} — ${fmt(d.price)}</div>`;
+    d.sdlt.breakdown.forEach(b => {
+      const toLabel = b.to >= 1e15 ? d.price : b.to;
+      sdltHtml += `<div class="bd-row">
+        <span>${fmt(b.from)} — ${fmt(toLabel)} @ ${(b.rate * 100).toFixed(0)}%</span>
+        <span class="val">${fmt(b.tax)}</span>
+      </div>`;
+    });
+    sdltHtml += `<div class="bd-row total">
+      <span>Total stamp duty</span>
+      <span class="val">${fmt(d.sdlt.total)}</span>
+    </div>`;
+    sdltHtml += '</div>';
+  });
+  $('sdlt_detail').innerHTML = sdltHtml;
+}
+
+// ── Event listeners ──
+['base_price', 'base_cash', 'base_reno', 'base_rate', 'base_term'].forEach(id => {
+  $(id).addEventListener('input', () => { updatePlaceholders(); calculate(); });
+});
+scenarioOrder.forEach(s => {
+  [s + '_price', s + '_cash', s + '_reno', s + '_rate', s + '_term'].forEach(id => {
+    $(id).addEventListener('input', calculate);
+  });
+});
+
+// ── Init ──
+updateToggleVisibility();
+updatePlaceholders();
+calculate();
+</script>
+</body>
+</html>
