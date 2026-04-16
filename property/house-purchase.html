@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>House Purchase Scenarios — Diamond Peak</title>
+<title>House Purchase Scenarios v1.2 — Diamond Peak</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -501,7 +501,7 @@
   <a href="../index.html" class="back">&larr; Back to tools</a>
 
   <div class="kicker">Property</div>
-  <h1>House Purchase<br>Scenarios</h1>
+  <h1>House Purchase<br>Scenarios <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.2</span></h1>
   <p class="intro">
     Compare up to four house purchase scenarios side-by-side. Enter your available cash
     and the calculator shows how it splits between deposit, stamp duty, and renovation.
@@ -756,6 +756,13 @@
     applies up to &pound;500k — above that, standard rates apply in full. Additional property surcharge is 5%. Monthly payments assume
     repayment mortgage with fixed rate for full term. Does not include solicitor fees,
     survey costs, or other purchase costs.
+  </div>
+
+  <div class="assumptions" style="margin-top:12px; border-top:none; padding-top:0;">
+    <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong><br>
+    <strong>v1.2</strong> &mdash; Fixed &ldquo;Total mortgage repayments&rdquo; to show principal + interest paid to lender (was previously price + SDLT + interest, which understated savings when increasing deposit).<br>
+    <strong>v1.1</strong> &mdash; Fixed first-time buyer SDLT threshold from &pound;625k to &pound;500k (April 2025 rates). Going &pound;1 over &pound;500k loses all FTB relief.<br>
+    <strong>v1.0</strong> &mdash; Initial release. Cash allocation model (available cash &rarr; SDLT + renovation + deposit), up to 4 scenario comparison, SDLT band breakdown.
   </div>
 
 </div>
