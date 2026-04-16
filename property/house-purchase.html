@@ -949,11 +949,11 @@ function getScenarioData(id) {
   const ltv = price > 0 ? (mortgage / price) * 100 : 0;
   const mp = monthly(mortgage, rate, term);
   const totalInterest = Math.max(0, (mp * term * 12) - mortgage);
-  const totalCost = price + sdlt.total + totalInterest + reno;
+  const totalRepayments = mp * term * 12;
 
   const buyerLabel = buyer === 'first-time' ? 'First-time buyer' : buyer === 'additional' ? 'Additional property' : 'Standard purchase';
 
-  return { price, cash, reno, deposit, mortgage, ltv, rate, term, buyer, buyerLabel, sdlt, mp, totalInterest, totalCost };
+  return { price, cash, reno, deposit, mortgage, ltv, rate, term, buyer, buyerLabel, sdlt, mp, totalInterest, totalRepayments };
 }
 
 // ── Delta badge HTML ──
@@ -1033,7 +1033,7 @@ function calculate() {
     { label: 'Mortgage rate', key: 'rate', fmt: '%', lower: true },
     { label: 'Monthly payment', key: 'mp', fmt: 'mp', lower: true, bold: true, keyRow: true },
     { label: 'Total interest over term', key: 'totalInterest', fmt: '£', lower: true },
-    { label: 'Total cost', key: 'totalCost', fmt: '£', lower: true, total: true },
+    { label: 'Total mortgage repayments', key: 'totalRepayments', fmt: '£', lower: true, total: true },
   ];
 
   let html = '<thead><tr><th></th>';
