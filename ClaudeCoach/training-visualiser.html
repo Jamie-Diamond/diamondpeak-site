@@ -100,6 +100,48 @@
   .phase-bar div{display:flex;align-items:center;justify-content:center;color:#fff;position:relative}
   .phase-bar .marker{position:absolute;top:-6px;width:2px;height:44px;background:var(--ink);z-index:2}
   .phase-bar .marker::after{content:"TODAY";position:absolute;top:-14px;left:-18px;font-size:9px;color:var(--ink);background:var(--bg);padding:1px 4px;border:1px solid var(--line);border-radius:3px;white-space:nowrap;font-family:'DM Mono',monospace;letter-spacing:0.1em}
+
+  /* ── WEEK CALENDAR ───────────────────────── */
+  .week-cal{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:18px}
+  .week-cal-header{background:rgba(248,245,239,0.8);padding:12px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:baseline}
+  .week-cal-label{font-family:'Libre Baskerville',serif;font-size:14px;font-weight:700;color:var(--ink)}
+  .week-cal-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.06em;margin-top:3px}
+  .week-cal-meta{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:0.04em;text-align:right}
+  .week-grid{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--line)}
+  .day-col{border-right:1px solid var(--line);min-height:160px;display:flex;flex-direction:column}
+  .day-col:last-child{border-right:none}
+  .day-head{padding:7px 6px 5px;border-bottom:1px solid var(--line);text-align:center;background:rgba(248,245,239,0.4)}
+  .day-name{display:block;font-family:'DM Mono',monospace;font-size:8px;font-weight:500;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted)}
+  .day-date{display:block;font-family:'Libre Baskerville',serif;font-size:18px;font-weight:700;color:var(--ink);line-height:1.1;margin-top:1px}
+  .day-col.is-today .day-head{background:rgba(29,104,64,0.07)}
+  .day-col.is-today .day-date{color:var(--green)}
+  .day-col.is-past .day-date{color:var(--muted)}
+  .session-block{flex:1;padding:7px 7px 8px;display:flex;flex-direction:column;gap:3px;position:relative}
+  .session-block.done-block{background:rgba(29,104,64,0.04)}
+  .sport-stripes{display:flex;gap:2px;margin-bottom:5px}
+  .sport-stripe{height:3px;border-radius:1.5px;flex:1}
+  .sport-stripe.ride{background:var(--ride)}
+  .sport-stripe.run{background:var(--run)}
+  .sport-stripe.swim{background:var(--swim)}
+  .sport-stripe.strength{background:var(--taper)}
+  .sport-stripe.heat{background:#c87020}
+  .sport-stripe.other{background:var(--line)}
+  .session-sport-tag{font-family:'DM Mono',monospace;font-size:8px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)}
+  .session-title{font-size:11px;color:var(--ink);line-height:1.3;margin:2px 0}
+  .session-title.key-title{font-weight:600}
+  .session-detail{font-size:10px;color:var(--muted);line-height:1.4;margin-top:1px}
+  .session-tss{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;color:var(--ink2);margin-top:auto;padding-top:5px}
+  .done-tick{position:absolute;top:6px;right:6px;width:15px;height:15px;background:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;font-weight:700}
+  .rest-block{flex:1;display:flex;align-items:center;justify-content:center}
+  .rest-label{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.16em;color:var(--line);text-transform:uppercase}
+  .cond-badge{font-family:'DM Mono',monospace;font-size:8px;background:#fffae8;border:1px solid #e0c060;color:#8a6000;padding:1px 5px;border-radius:3px;display:inline-block;margin-top:2px;letter-spacing:0.06em}
+  .week-totals-row{display:grid;grid-template-columns:repeat(7,1fr);background:rgba(248,245,239,0.5)}
+  .week-total-cell{padding:5px 6px;text-align:center;border-right:1px solid var(--line);font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)}
+  .week-total-cell:last-child{border-right:none}
+  .week-total-cell.has-tss{color:var(--ink2);font-weight:500}
+  .week-total-cell.done-tss{color:var(--green)}
+  @media(max-width:760px){.session-detail{display:none}.day-date{font-size:14px}}
+  @media(max-width:520px){.week-grid,.week-totals-row{grid-template-columns:repeat(7,minmax(0,1fr))}.session-title{font-size:9px}.session-tss{font-size:9px}}
 </style>
 </head>
 <body>
@@ -526,7 +568,7 @@ const planned = [
     projCTL: 78, projATL: 93, projTSB: -15,
     days: [
       {date:"2026-05-04", day:"Mon", sport:"Ride",      title:"DONE — 130 km long ride",              detail:"4h6m, AP 189 / NP 214, HR 133 (Z2), TSS 188. Long ride moved from Sat. Strong NP discipline.", tss:188, done:true},
-      {date:"2026-05-05", day:"Tue", sport:"Swim+Run",  title:"Swim aerobic + Easy run 5 km",         detail:"Swim 40 min: 400 wu / 6×150 aerobic / 200 cd. Run 5 km easy — conditional: pain ≤2/10 during, 0/10 next morning.", tss:65},
+      {date:"2026-05-05", day:"Tue", sport:"Rest",       title:"Rest",                                 detail:"—", tss:0},
       {date:"2026-05-06", day:"Wed", sport:"Swim+Run",  title:"Swim 2.5 km + Easy run 5 km",          detail:"Swim 2.5 km aerobic. Run 5 km easy @ ankle-led pace — conditional on Tue morning pain 0/10. Strength (Session A) deferred to W3 Wed — R7 still open.", tss:90},
       {date:"2026-05-07", day:"Thu", sport:"Run",       title:"Easy run 6 km",                        detail:"Easy run 6 km @ ankle-led pace — conditional on Wed morning pain 0/10. CSS test deferred to W3 Thu.", tss:42},
       {date:"2026-05-08", day:"Fri", sport:"Ride",      title:"Long Z2 — 3 hr nutrition rehearsal",   detail:"NP 205–215 W. First 90 min IF ≤0.68. CHO 90 g/hr, fluid 800 ml/hr — first 90 g/hr nutrition rehearsal. Friday is preferred long-ride day.", tss:145, key:true},
@@ -715,52 +757,82 @@ function rollupSport(s){
   });
 })();
 
-// Upcoming — render planned sessions from .md
+// Upcoming — calendar view (Intervals.icu style)
 (function(){
   const el = document.querySelector("#upcoming-content");
-  function pillForPlanned(s){
-    if (s === "Rest")        return "pill pill-other";
-    if (/Heat/.test(s))      return "pill pill-peak";
-    if (/Ride/.test(s))      return "pill pill-ride";
-    if (/Run/.test(s))       return "pill pill-run";
-    if (/Swim/.test(s))      return "pill pill-swim";
-    return "pill pill-other";
-  }
   const today = "2026-05-05";
+
+  function stripeClass(s) {
+    if (/Heat/.test(s))     return "heat";
+    if (/Ride/.test(s))     return "ride";
+    if (/Run/.test(s))      return "run";
+    if (/Swim/.test(s))     return "swim";
+    if (/Strength/.test(s)) return "strength";
+    return "other";
+  }
+
   let html = "";
   planned.forEach(wk => {
-    html += `
-      <div style="margin-bottom:18px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
-        <div style="background:#fafaf8;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:baseline">
-          <div>
-            <b>${wk.label}</b> <span class="small">· ${wk.sub}</span>
-          </div>
-          <div class="small">
-            Target ${wk.target} TSS · Plan <b>${wk.tss}</b> · Projected end-of-week
-            <b>CTL ${wk.projCTL}</b> / ATL ${wk.projATL} / TSB ${wk.projTSB}
-          </div>
+    html += `<div class="week-cal">
+      <div class="week-cal-header">
+        <div>
+          <div class="week-cal-label">${wk.label}</div>
+          <div class="week-cal-sub">${wk.sub}</div>
         </div>
-        <table style="margin:0">
-          <thead><tr><th style="width:64px">Day</th><th style="width:90px">Date</th><th style="width:130px">Sport</th><th>Session</th><th class="num" style="width:60px">TSS</th></tr></thead>
-          <tbody>
-            ${wk.days.map(d => {
-              let bg = "";
-              if (d.done) bg = "background:#eaf6ec";
-              else if (d.key) bg = "background:#fff9e6";
-              const op = (!d.done && d.date < today) ? "opacity:0.55;" : "";
-              return `
-              <tr style="${op}${bg}">
-                <td><b>${d.day}</b></td>
-                <td>${d.date.slice(5)}</td>
-                <td><span class="${pillForPlanned(d.sport)}">${d.sport}</span></td>
-                <td><b>${d.title}</b><div class="small">${d.detail}</div></td>
-                <td class="num"><b>${d.tss}</b></td>
-              </tr>`;
-            }).join("")}
-          </tbody>
-        </table>
-      </div>`;
+        <div class="week-cal-meta">
+          Target ${wk.target} TSS &middot; Plan <b>${wk.tss}</b><br>
+          Projected CTL <b>${wk.projCTL}</b> / ATL ${wk.projATL} / TSB ${wk.projTSB > 0 ? "+" : ""}${wk.projTSB}
+        </div>
+      </div>
+      <div class="week-grid">`;
+
+    wk.days.forEach(d => {
+      const isToday  = d.date === today;
+      const isPast   = d.date < today && !d.done;
+      const isRest   = d.sport === "Rest";
+      const isConditional = /conditional/i.test(d.detail);
+      const dayNum   = parseInt(d.date.slice(8), 10);
+
+      let colCls = "day-col";
+      if (isToday)        colCls += " is-today";
+      else if (isPast || d.done) colCls += " is-past";
+
+      html += `<div class="${colCls}">
+        <div class="day-head">
+          <span class="day-name">${d.day}</span>
+          <span class="day-date">${dayNum}</span>
+        </div>`;
+
+      if (isRest) {
+        html += `<div class="rest-block"><span class="rest-label">Rest</span></div>`;
+      } else {
+        const sports  = d.sport.split("+").map(s => s.trim());
+        const stripes = sports.map(s => `<div class="sport-stripe ${stripeClass(s)}"></div>`).join("");
+        html += `<div class="session-block ${d.done ? "done-block" : ""}">
+          <div class="sport-stripes">${stripes}</div>
+          <div class="session-sport-tag">${d.sport.replace(/\+/g, " · ")}</div>
+          <div class="session-title ${d.key ? "key-title" : ""}">${d.title}</div>
+          <div class="session-detail">${d.detail}</div>
+          ${isConditional ? '<div class="cond-badge">pain-conditional</div>' : ""}
+          ${d.tss > 0 ? `<div class="session-tss">${d.tss} TSS</div>` : ""}
+          ${d.done ? '<div class="done-tick">✓</div>' : ""}
+        </div>`;
+      }
+
+      html += `</div>`;
+    });
+
+    html += `</div><div class="week-totals-row">`;
+    wk.days.forEach(d => {
+      if (d.tss > 0) {
+        html += `<div class="week-total-cell has-tss ${d.done ? "done-tss" : ""}">${d.tss}</div>`;
+      } else {
+        html += `<div class="week-total-cell"></div>`;
+      }
+    });
+    html += `</div></div>`;
   });
+
   el.innerHTML = html;
 })();
 
