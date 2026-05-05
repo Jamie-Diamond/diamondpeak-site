@@ -1,0 +1,9 @@
+exclude:
+  - ClaudeCoach/ironman-analysis/
+  - ClaudeCoach/reference/
+  - ClaudeCoach/templates/
+  - ClaudeCoach/README.md
+  - ClaudeCoach/training-plan-2026-04-27_to_2026-05-17.md
+  - CLAUDE.md
+  - DESIGN.md
+  - DESIGN_SETUP.md
