@@ -1032,6 +1032,21 @@ function topoNoise(x, y) {
   loop();
 })();
 
+/* ── Logo triple-click easter egg ──────── */
+(function() {
+  var clicks = 0, timer;
+  document.querySelector('.diamond-logo').addEventListener('click', function() {
+    clicks++;
+    clearTimeout(timer);
+    if (clicks >= 3) {
+      clicks = 0;
+      window.location.href = 'ClaudeCoach/training-visualiser.html';
+    } else {
+      timer = setTimeout(function() { clicks = 0; }, 600);
+    }
+  });
+})();
+
 /* ── Scroll reveal ──────────────────────── */
 (function() {
   var els = document.querySelectorAll('.reveal');
