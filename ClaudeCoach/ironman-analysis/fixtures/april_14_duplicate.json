@@ -1,0 +1,75 @@
+{
+  "_comment": "14 April 2026: real data captured 25 April 2026. Two VirtualRide entries with distinct ids but identical date/duration/NP/TSS — the canonical Garmin-side dedup case. Plus other same-day activities to verify dedup doesn't over-merge.",
+  "activities": [
+    {
+      "id": "i139909103",
+      "date": "2026-04-14T23:36:47",
+      "name": "Cycling",
+      "type": "VirtualRide",
+      "duration_minutes": 30,
+      "distance_km": "16.03",
+      "average_power": 212,
+      "normalized_power": 244,
+      "tss": 30
+    },
+    {
+      "id": "i139908846",
+      "date": "2026-04-14T23:36:47",
+      "name": "Night Virtual Ride",
+      "type": "VirtualRide",
+      "duration_minutes": 30,
+      "distance_km": "16.03",
+      "average_power": 212,
+      "normalized_power": 244,
+      "tss": 30
+    },
+    {
+      "id": "i139650805",
+      "date": "2026-04-14T14:37:53",
+      "name": "Mt. Tibberoowuccum",
+      "type": "Hike",
+      "duration_minutes": 36,
+      "distance_km": "2.41",
+      "average_power": null,
+      "normalized_power": null,
+      "tss": 11
+    },
+    {
+      "id": "i139605889",
+      "date": "2026-04-14T11:03:03",
+      "name": "House browsing",
+      "type": "Kayaking",
+      "duration_minutes": 92,
+      "distance_km": "7.77",
+      "average_power": null,
+      "normalized_power": null,
+      "tss": 14
+    },
+    {
+      "id": "i139588142",
+      "date": "2026-04-14T08:25:44",
+      "name": "Swimming along the edge of the break",
+      "type": "OpenWaterSwim",
+      "duration_minutes": 16,
+      "distance_km": "0.82",
+      "average_power": null,
+      "normalized_power": null,
+      "tss": 14
+    },
+    {
+      "id": "i139586215",
+      "date": "2026-04-14T07:52:13",
+      "name": "4 run 30 walk - so many wild Turks",
+      "type": "Run",
+      "duration_minutes": 22,
+      "distance_km": "4.37",
+      "average_power": null,
+      "normalized_power": null,
+      "tss": 24
+    }
+  ],
+  "expected_daily_tss_raw": 123,
+  "expected_daily_tss_deduped": 93,
+  "expected_unique_activity_count": 5,
+  "expected_dropped_id": "i139908846"
+}

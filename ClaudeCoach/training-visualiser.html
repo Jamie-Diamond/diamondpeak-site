@@ -1,0 +1,988 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IM Italy 2026 — Training Visualiser</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #6a6a6a;
+    --line: #e4e4e1;
+    --accent: #c0392b;
+    --good: #2e7d32;
+    --warn: #c9871f;
+    --bad: #b3261e;
+    --base: #4a90c2;
+    --build: #6aaa56;
+    --specific: #d4a01f;
+    --peak: #c0392b;
+    --taper: #7b6cb3;
+    --ride: #4a90c2;
+    --run: #c0392b;
+    --swim: #2e9c8e;
+    --other: #999;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:-0.01em}
+  h2{font-size:15px;margin:0 0 12px;letter-spacing:-0.005em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  h3{font-size:13px;margin:0 0 6px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em}
+  .wrap{max-width:1320px;margin:0 auto}
+  .top{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+  .sub{color:var(--muted);font-size:13px}
+  .grid{display:grid;gap:14px}
+  .grid-2{grid-template-columns:1fr 1fr}
+  .grid-3{grid-template-columns:repeat(3,1fr)}
+  .grid-4{grid-template-columns:repeat(4,1fr)}
+  .grid-6{grid-template-columns:repeat(6,1fr)}
+  @media (max-width:980px){.grid-2,.grid-3,.grid-4,.grid-6{grid-template-columns:1fr 1fr}}
+  @media (max-width:620px){.grid-2,.grid-3,.grid-4,.grid-6{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .stat{display:flex;flex-direction:column;gap:2px}
+  .stat .v{font-size:24px;font-weight:600;letter-spacing:-0.01em}
+  .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em}
+  .stat .d{font-size:12px;color:var(--muted)}
+  .stat.warn .v{color:var(--warn)}
+  .stat.bad .v{color:var(--bad)}
+  .stat.good .v{color:var(--good)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.02em}
+  .pill-base{background:#e6effa;color:#2c5d8a}
+  .pill-build{background:#e7f3e1;color:#3b6f29}
+  .pill-specific{background:#faf1d7;color:#856212}
+  .pill-peak{background:#f9d8d3;color:#7d2218}
+  .pill-taper{background:#ede9f5;color:#4a3e7a}
+  .pill-ride{background:#e6effa;color:#2c5d8a}
+  .pill-run{background:#f9d8d3;color:#7d2218}
+  .pill-swim{background:#daf2ee;color:#1d6e62}
+  .pill-other{background:#ececec;color:#555}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);background:#fafaf8;position:sticky;top:0}
+  td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:hover td{background:#fcfbf6}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .small{font-size:11px;color:var(--muted)}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .barwrap{display:flex;align-items:center;gap:8px}
+  .bar{flex:1;height:8px;background:#ececec;border-radius:4px;overflow:hidden;position:relative;min-width:80px}
+  .bar > span{display:block;height:100%}
+  .bar-this{background:linear-gradient(90deg,var(--accent),#e85a4a)}
+  .bar-last{background:#bdbdbd}
+  .delta-up{color:var(--good);font-weight:600}
+  .delta-down{color:var(--bad);font-weight:600}
+  .delta-flat{color:var(--muted)}
+  .chart-wrap{position:relative;height:340px}
+  .chart-wrap.short{height:240px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin-top:8px}
+  .swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+  ul.heat{list-style:none;padding:0;margin:0;font-size:13px;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
+  ul.heat li{padding:6px 8px;background:#fafaf8;border:1px solid var(--line);border-radius:6px}
+  ul.heat input{margin-right:6px}
+  .callout{background:#fff7e6;border-left:4px solid var(--warn);padding:10px 14px;border-radius:6px;font-size:13px;margin-top:10px}
+  .callout.bad{background:#fdecea;border-left-color:var(--bad)}
+  .callout.good{background:#eaf6ec;border-left-color:var(--good)}
+  .footer{font-size:11px;color:var(--muted);margin-top:24px;text-align:center}
+  details{margin-top:8px}
+  summary{cursor:pointer;font-size:12px;color:var(--muted)}
+  .phase-bar{display:flex;height:32px;border-radius:6px;overflow:hidden;border:1px solid var(--line);font-size:11px;font-weight:600}
+  .phase-bar div{display:flex;align-items:center;justify-content:center;color:#fff;position:relative}
+  .phase-bar .marker{position:absolute;top:-6px;width:2px;height:44px;background:#1a1a1a;z-index:2}
+  .phase-bar .marker::after{content:"TODAY";position:absolute;top:-14px;left:-18px;font-size:9px;color:#1a1a1a;background:#fff;padding:1px 4px;border:1px solid #1a1a1a;border-radius:3px;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <h1>Ironman Italy Emilia-Romagna 2026 — Training Visualiser</h1>
+      <div class="sub">Cervia, 19 September 2026 · Athlete: Jamie Diamond · FTP 316 W (retest due end May) · Threshold pace 4:02/km · Weight 82.94 kg → 79 kg target · CSS 1:39/100m · 52T × 10–33</div>
+    </div>
+    <div class="sub">Snapshot: 5 May 2026 (Tue, Week 2 day 2) · Source: Intervals.icu + race-day 2025 power/pace files</div>
+  </div>
+
+  <!-- TOP BAR: COUNTDOWN + KEY STATS -->
+  <div class="panel" style="margin-bottom:14px">
+    <div class="grid grid-6">
+      <div class="stat"><div class="l">Days to race</div><div class="v" id="kpi-days">137</div><div class="d">Sat 19 Sep 2026</div></div>
+      <div class="stat"><div class="l">Phase</div><div class="v"><span class="pill pill-base">Base</span></div><div class="d">Week 2 of 21</div></div>
+      <div class="stat good"><div class="l">CTL (fitness)</div><div class="v">76.7</div><div class="d">+3.3 in 10d · target 85 by end-May</div></div>
+      <div class="stat warn"><div class="l">TSB (form)</div><div class="v">−10.5</div><div class="d">Yesterday's 130k ride digesting</div></div>
+      <div class="stat good"><div class="l">7d ramp</div><div class="v">+2.7</div><div class="d">Within +4 cap (ankle)</div></div>
+      <div class="stat"><div class="l">HRV / RHR</div><div class="v">39 / 56</div><div class="d">HRV stable; RHR slight uptick</div></div>
+    </div>
+    <div style="margin-top:14px">
+      <h3>21-week build · today is the start of Week 1</h3>
+      <div class="phase-bar">
+        <div style="background:var(--base);flex:6">Base · W1–6</div>
+        <div style="background:var(--build);flex:4">Build · W7–10</div>
+        <div style="background:var(--specific);flex:4">Specific · W11–14</div>
+        <div style="background:var(--peak);flex:4">Peak · W15–18</div>
+        <div style="background:var(--taper);flex:3">Taper · W19–21</div>
+        <div class="marker" style="left:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9:30 GOAL DECOMPOSITION — where the 36 minutes hide -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>9:30 goal decomposition — where the 36 minutes hide</h2>
+    <div class="small" style="margin-bottom:10px">From <code>reference/race-day-2025.md</code>. 2025 actual: 10:06. Discipline gains alone deliver the 9:30 floor; planned fitness gains stack on top to push toward the median 9:15–9:25.</div>
+    <div class="grid grid-2">
+      <div>
+        <h3>Discipline path — 2025 race execution fixes</h3>
+        <table>
+          <thead><tr><th>Lever</th><th class="num">Saving (min)</th><th>Visual</th></tr></thead>
+          <tbody>
+            <tr><td>Bike pacing (lift IF 0.64 → 0.71)</td><td class="num">−8 to −10</td><td><div class="bar"><span class="bar-this" style="width:90%"></span></div></td></tr>
+            <tr><td>Run aid-station discipline (≤30 sec/stop)</td><td class="num">−8 to −10</td><td><div class="bar"><span class="bar-this" style="width:90%"></span></div></td></tr>
+            <tr><td>Run heat tolerance (HR-suppression fix)</td><td class="num">−5 to −8</td><td><div class="bar"><span class="bar-this" style="width:70%"></span></div></td></tr>
+            <tr><td>Bike aerobic durability (decoupling 14% → &lt;5%)</td><td class="num">−2 to −3</td><td><div class="bar"><span class="bar-this" style="width:30%"></span></div></td></tr>
+            <tr><td>Run fuelling discipline</td><td class="num">−2 to −3</td><td><div class="bar"><span class="bar-this" style="width:30%"></span></div></td></tr>
+            <tr><td>T1 + T2 transitions</td><td class="num">−2</td><td><div class="bar"><span class="bar-this" style="width:20%"></span></div></td></tr>
+            <tr><td>Swim technique</td><td class="num">−2</td><td><div class="bar"><span class="bar-this" style="width:20%"></span></div></td></tr>
+            <tr style="background:#fafaf8"><td><b>Discipline subtotal</b></td><td class="num"><b>−29 to −38</b></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3>Fitness ceiling — planned 2026 gains stack on top</h3>
+        <table>
+          <thead><tr><th>Lever</th><th class="num">Saving (min)</th><th>Visual</th></tr></thead>
+          <tbody>
+            <tr><td>FTP rises 316 → 326 (NP target lifts 225 → 232 W)</td><td class="num">−2 to −3</td><td><div class="bar"><span class="bar-this" style="width:30%"></span></div></td></tr>
+            <tr><td>Run economy (form work, drills, strength)</td><td class="num">−2 to −4</td><td><div class="bar"><span class="bar-this" style="width:40%"></span></div></td></tr>
+            <tr><td>Swim form (catch, sighting, bilateral)</td><td class="num">−1 to −2</td><td><div class="bar"><span class="bar-this" style="width:20%"></span></div></td></tr>
+            <tr style="background:#fafaf8"><td><b>Fitness subtotal</b></td><td class="num"><b>−5 to −9</b></td><td></td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:14px">
+          <h3>Realistic banded outcome</h3>
+          <table>
+            <thead><tr><th>Scenario</th><th class="num">Time</th></tr></thead>
+            <tbody>
+              <tr><td>Conservative (one thing breaks)</td><td class="num">9:45 (B-goal)</td></tr>
+              <tr style="background:#eaf6ec"><td><b>Floor — discipline holds, fitness flat</b></td><td class="num"><b>9:30</b></td></tr>
+              <tr style="background:#eaf6ec"><td><b>Median — discipline + planned fitness</b></td><td class="num"><b>9:15–9:25</b></td></tr>
+              <tr style="background:#eaf6ec"><td><b>Ceiling — everything works, no heat surprise</b></td><td class="num"><b>9:00–9:15</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <b>Priority hierarchy:</b> heat acclimation &gt; cooling protocol &gt; run aid-station discipline &gt; bike pacing/aero &gt; swim work. Plan-level decisions optimise for the <i>median</i> path (sub-9:25), not just defend the 9:30 floor.
+    </div>
+  </div>
+
+  <!-- FITNESS TRAJECTORY -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Fitness trajectory vs IM target curve</h2>
+    <div class="chart-wrap"><canvas id="chartFitness"></canvas></div>
+    <div class="legend">
+      <span><span class="swatch" style="background:#1a1a1a"></span>CTL — actual (this season)</span>
+      <span><span class="swatch" style="background:#999"></span>CTL — last season (same date axis)</span>
+      <span><span class="swatch" style="background:#c0392b;opacity:.6"></span>Target CTL milestones</span>
+      <span><span class="swatch" style="background:#2e7d32"></span>Planned CTL (3-week block)</span>
+    </div>
+    <div class="callout good">
+      <b>Build is delivering.</b> CTL has lifted from 73.4 (25 Apr) → 76.7 (5 May) = <b>+3.3 in 10 days</b>, ramp ~+2.3 CTL/wk — well within the +4 ankle-rehab cap. ATL spiked to 104 on 26 Apr after a heavy gravel + commute + main-ride day, and peaked again at 100 on 4 May after the 130 km long ride — both digesting normally without a stuck ATL−CTL gap.<br><br>
+      <b>End-base target ~85 by 31 May</b>: needs +8.3 in the next 26 days, ~+2.2/wk — exactly the rate the last 10 days have delivered. <b>On track.</b> Continue protecting bike volume; run jumped 6 → 10.6 km on 29 Apr (+68% on a single session) — flag if pain creeps in.
+    </div>
+  </div>
+
+  <!-- YEAR ON YEAR + RECENT WORKOUTS ROW -->
+  <div class="grid grid-2" style="margin-bottom:14px">
+
+    <div class="panel">
+      <h2>Year-on-year — last 14 days vs same period 2025</h2>
+      <table id="yoy-table">
+        <thead><tr><th>Sport</th><th class="num">2026 TSS</th><th class="num">2025 TSS</th><th>Visual</th><th class="num">Δ</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="callout">
+        <b>Bike +51% YoY</b> (1,027 vs 680 TSS) — strong base build. <b>Run still −58%</b> (144 vs 340) but climbing — 10.6 km on 29 Apr is the biggest run since pre-injury. <b>Swim +183%</b> (170 vs 60) — CSS test banked at 1:39/100m. <b>Strength 0 vs 24</b> — R7 still active.
+      </div>
+      <details>
+        <summary>Show full season comparison (2025 build, 26 Apr → 21 Sep)</summary>
+        <div style="margin-top:8px">
+          <div class="small">Last year's full IM build totals (25 weeks): 192 sessions, 5,411 km, 268.9 hr, 12,693 TSS, avg weekly TSS 577.</div>
+        </div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <h2>Sport volume + constraints</h2>
+      <table id="volume-table">
+        <thead><tr><th>Sport</th><th class="num">Sessions</th><th class="num">Distance</th><th class="num">Time</th><th class="num">TSS</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="small" style="margin-top:6px"><i>Ride</i> rolls up Road · Gravel · Virtual. <i>Swim</i> rolls up Pool · Open Water.</div>
+      <div class="callout bad">
+        <b>Run +68% in one jump</b> (6.3 → 10.6 km, 24 → 29 Apr). That's not weekly +10%, that's a single-session leap. Flag if any pain >2/10 during or 0/10 next-morning rule breached.<br>
+        <b>Strength: zero in 14 days.</b> Project plan says 2×/wk minimum. R7 active — schedule next session before Saturday's long ride.<br>
+        <b>Tests:</b> CSS done at 1:39/100m. FTP retest due end-May. Precision Hydration sweat test still to book.
+      </div>
+    </div>
+  </div>
+
+  <!-- RECENT WORKOUTS -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Recent workouts — last 14 days (22 Apr → 5 May)</h2>
+    <div style="overflow:auto;max-height:420px">
+      <table id="recent-table">
+        <thead><tr><th>Date</th><th>Sport</th><th>Name</th><th class="num">Time</th><th class="num">Dist</th><th class="num">Pace/Speed</th><th class="num">Avg HR</th><th class="num">Avg/NP W</th><th class="num">TSS</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- WEEK 1 REVIEW + UPCOMING -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Week 1 review (27 Apr → 3 May) + planned 4 May → 17 May</h2>
+    <div class="small" style="margin-bottom:10px">Source: <code>training-plan-2026-04-27_to_2026-05-17.md</code> · Phase: Base · We're now Week 2 day 2 (Tue 5 May).</div>
+
+    <div style="background:#fafaf8;border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px">
+      <h3 style="margin-bottom:8px">Week 1 — done · 479 TSS actual vs 445 plan (+8%)</h3>
+      <table style="margin-bottom:10px">
+        <thead><tr><th>Day</th><th>Plan</th><th>Actual</th><th class="num">TSS</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><b>Mon 27 Apr</b></td><td>Rest + mobility</td><td>Rest</td><td class="num good">0</td><td>✓ + CSS test 1:39/100m banked separately</td></tr>
+          <tr><td><b>Tue 28 Apr</b></td><td>Swim + Run-walk</td><td>Swim aerobic 39 min</td><td class="num">46</td><td>Run skipped Tue, moved to Wed</td></tr>
+          <tr><td><b>Wed 29 Apr</b></td><td>Run-walk 30 min + strength</td><td>10.6 km run @ 5:02/km</td><td class="num warn">58</td><td>⚠ Run +68% in one jump (6.3 → 10.6 km). Strength skipped.</td></tr>
+          <tr><td><b>Thu 30 Apr</b></td><td>Swim CSS test</td><td>Swim 3×500 (CSS already done 27 Apr)</td><td class="num">61</td><td>Quality swim set</td></tr>
+          <tr><td><b>Fri 1 May</b></td><td>Mid ride 60 min sweet-spot</td><td>2 hr Z2/race-pace, NP 242 W</td><td class="num good">117</td><td>Bigger than planned — IF 0.77 sustained 2 hr is excellent build work</td></tr>
+          <tr><td><b>Sat 2 May</b></td><td>Long ride 3 hr Z2 (~145 TSS)</td><td>2 hr 10 min mid-ride sweet-spot, NP 215 W</td><td class="num warn">100</td><td>Long ride was deferred</td></tr>
+          <tr><td><b>Sun 3 May</b></td><td>Run + recovery spin</td><td>104 min ride Fareham, NP 237</td><td class="num">97</td><td>Ride instead of run — third high-NP ride in three days</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <b>Plan vs actual:</b> bike volume hit, structure rearranged. <b>Three things to flag:</b>
+        <ol style="margin:6px 0 0 0;padding-left:20px">
+          <li><b>Strength still 0.</b> Two weeks of zero strength now. R7 risk active. Calendar-block one session before Saturday.</li>
+          <li><b>Run jumped 6 → 10.6 km on 29 Apr.</b> Single-session leap, not +10%/wk progression. Need ankle pain status before next quality run.</li>
+          <li><b>Long ride moved to Mon 4 May (130 km, 4h6m, NP 214 W).</b> Heavy load early in W2 — TSB hit −22 yesterday, recovered to −10 today. Watch for stuck ATL−CTL gap if it doesn't continue dropping.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div id="upcoming-content"></div>
+    <div class="callout good" style="margin-top:14px">
+      <b>Build is delivering.</b> CTL +3.3 in 10 days, ramp +2.3/wk — exactly the rate needed to hit ~85 by end-May. <b>What to optimise from here:</b> protect the bike volume (Mon 130k was strong), get strength on the calendar, hold the run flat at ~10 km/session for 2 weeks before next bump (4 pain-free weeks rule), book the Precision Hydration sweat test so sodium protocol is data-grounded by June.
+    </div>
+  </div>
+
+  <!-- RACE-DAY 2025 DEEP DIVE -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Race-day 2025 deep dive — bike + run from the actual files</h2>
+    <div class="small" style="margin-bottom:10px">Bike <code>i98218040</code> · Run <code>i98203524</code> · 20 Sep 2025 · See <code>reference/race-day-2025.md</code>.</div>
+    <div class="grid grid-2">
+      <div>
+        <h3>Bike — Lap 1 paced, Lap 2 faded</h3>
+        <table>
+          <thead><tr><th>Segment</th><th class="num">AP</th><th class="num">NP</th><th class="num">HR</th><th class="num">Decoup.</th></tr></thead>
+          <tbody>
+            <tr><td>Lap 1 (0–63 km, 97 min)</td><td class="num">202 W</td><td class="num">212 W</td><td class="num">142</td><td class="num good">2.3%</td></tr>
+            <tr><td>Mid (63–131 km, 109 min)</td><td class="num">167 W</td><td class="num">186 W</td><td class="num">141</td><td class="num">−1.8%</td></tr>
+            <tr><td>Lap 2 return (131–178 km, 77 min)</td><td class="num bad">157 W</td><td class="num">177 W</td><td class="num">137</td><td class="num warn">4.9%</td></tr>
+            <tr style="background:#fafaf8"><td><b>Whole ride</b></td><td class="num"><b>177 W</b></td><td class="num"><b>201 W</b></td><td class="num"><b>142</b></td><td class="num bad"><b>14.5%</b></td></tr>
+          </tbody>
+        </table>
+        <h3 style="margin-top:14px">Bertinoro climbs — gearing-floored</h3>
+        <table>
+          <thead><tr><th>Climb</th><th class="num">Power</th><th class="num">Cadence</th><th class="num">% FTP</th></tr></thead>
+          <tbody>
+            <tr><td>Lap 1 climb 1 (98 sec)</td><td class="num">306 W</td><td class="num">68</td><td class="num">97%</td></tr>
+            <tr><td>Lap 1 climb 2 (180 sec)</td><td class="num">284 W</td><td class="num">82</td><td class="num">90%</td></tr>
+            <tr><td>Lap 1 climb 3 (195 sec)</td><td class="num bad">305 W</td><td class="num bad">56</td><td class="num">97%</td></tr>
+            <tr><td>Lap 2 climb (203 sec)</td><td class="num">240 W</td><td class="num">71</td><td class="num">76%</td></tr>
+          </tbody>
+        </table>
+        <div class="callout bad">
+          <b>Climb 3 at 56 rpm × 305 W = gearing-forced.</b> 52T × 33 lowest gear can't spin at 80 rpm on ≥6% gradients. Either swap chainring (46T/48T sub-compact) or accept above-cap power and budget the matches elsewhere. Decision needed by <b>mid-May</b> — see <code>decision-points.md</code> B7b.
+        </div>
+      </div>
+      <div>
+        <h3>Run — aid-station overrun, not blow-up</h3>
+        <table>
+          <thead><tr><th>Phase</th><th class="num">Pace</th><th class="num">HR</th><th>What happened</th></tr></thead>
+          <tbody>
+            <tr><td>0–13 km</td><td class="num">~4:50/km</td><td class="num">142–148</td><td>Engine on, no walks</td></tr>
+            <tr><td>13–22 km</td><td class="num">5:00/km</td><td class="num">142–148</td><td>Aid stops every ~5 km</td></tr>
+            <tr><td>22–30 km</td><td class="num warn">5:20/km</td><td class="num">140–148</td><td>Walks every 3–4 km, fade</td></tr>
+            <tr><td>30–40 km</td><td class="num bad">5:50/km</td><td class="num">130–144</td><td>Walks every 2 km, lengthening</td></tr>
+            <tr><td>Final 270 m</td><td class="num good">4:07/km</td><td class="num">163</td><td>Engine still there!</td></tr>
+            <tr style="background:#fafaf8"><td><b>Whole run</b></td><td class="num"><b>5:37/km</b></td><td class="num"><b>139</b></td><td><b>3:52 total</b></td></tr>
+          </tbody>
+        </table>
+        <h3 style="margin-top:14px">Walk-break overrun — the 15 minutes</h3>
+        <div class="grid grid-3">
+          <div class="stat"><div class="l">Splits >5:30/km</div><div class="v">15</div><div class="d">vs. baseline aid-stop</div></div>
+          <div class="stat bad"><div class="l">Cumulative overrun</div><div class="v">~15 min</div><div class="d">beyond ≤30 sec stops</div></div>
+          <div class="stat good"><div class="l">If disciplined</div><div class="v">3:42</div><div class="d">at same effort</div></div>
+        </div>
+        <div class="callout bad">
+          <b>Not a blow-up at km 25.</b> Aid-station walk-breaks started at km 13 and lengthened. HR was <i>suppressed</i> in the second half (drifted from 148 to 138 at constant effort) — heat-tolerance signature, not bonk. Final 270 m at 4:07/km / HR 163 confirms engine was preserved. <b>Aid-station discipline drill in every long run from June.</b>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RISKS + DECISION POINTS -->
+  <div class="grid grid-2" style="margin-bottom:14px">
+    <div class="panel">
+      <h2>Top risks (H + M probability) — from <code>risk-register.md</code></h2>
+      <table>
+        <thead><tr><th>Risk</th><th>P</th><th>Indicator</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td><b>R1 Ankle re-injury</b></td><td><span class="pill pill-peak">M</span></td><td>Pain &gt;2/10 during run</td><td>Pain-led ramp; SL calf raise + balance + Copenhagen; 4 pain-free weeks before quality</td></tr>
+          <tr><td><b>R2 Heat protocol slip</b></td><td><span class="pill pill-peak">M</span></td><td>No bath log by mid-May</td><td>Calendar-block 4× weekly hot baths from 15 May; pair with B1 long ride</td></tr>
+          <tr><td><b>R3 Bike Lap-2 fade recurrence</b></td><td><span class="pill pill-peak">M</span></td><td>Decoupling &gt;5% on rides &gt;3 hr</td><td>Long Z2 volume (B1); cap Bertinoro IF 0.78; brick race-rehearsal mid-Aug</td></tr>
+          <tr><td><b>R4 Aid-station overrun recurrence</b></td><td><span class="pill pill-peak">M</span></td><td>Long-run stops &gt;30 sec avg</td><td>Drill from June: stopwatch every stop, ≤30 sec target</td></tr>
+          <tr><td><b>R5 Sleep debt</b></td><td><span class="pill pill-peak">H</span></td><td>7-day rolling &lt;7.5 hr</td><td>Bedtime gate; caffeine cutoff 8 hr pre-bed; track in <code>current-state.md</code></td></tr>
+          <tr><td><b>R6 Weight not dropping</b></td><td><span class="pill pill-peak">H</span></td><td>Flat for 3+ weeks</td><td>300–500 kcal/day deficit on non-quality days; protein floor 1.6–1.8 g/kg</td></tr>
+          <tr><td><b>R7 Strength under-execution</b></td><td><span class="pill pill-peak">H</span></td><td>&lt;2 sessions in any 2-wk period</td><td>Calendar-block 2×/wk minimum; push to IcuSync as session not optional</td></tr>
+          <tr><td><b>R14 Bike gearing too tall</b></td><td><span class="pill pill-peak">H</span></td><td>Cadence &lt;70 on 6% climbs</td><td>Swap to 46T/48T sub-compact OR larger cassette OR re-budget pacing</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>Decision points — pre-wired branches (next 12 weeks)</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Decision</th><th>Branch driven</th></tr></thead>
+        <tbody>
+          <tr style="background:#eaf6ec"><td>27 Apr <span class="pill pill-swim">DONE</span></td><td>CSS swim test #1</td><td><b>1:39/100m</b> — derive Z2/Z3/Z4 swim bands; retest mid-July</td></tr>
+          <tr><td>By mid-May</td><td>Bike gearing decision</td><td>Swap chainring 46T/48T · OR cassette 11-36/40 · OR accept and re-budget (NP cap 220 W)</td></tr>
+          <tr><td>~15 May</td><td>Heat protocol start</td><td>Trigger 4–6/wk cadence; target 14–20 banked sessions</td></tr>
+          <tr><td>End May</td><td>FTP retest</td><td>If 320–325: lift NP target 228–230 W · If 326+: lift to 232+ W · If &lt;310: investigate, hold targets</td></tr>
+          <tr><td>May/Jun</td><td>Precision Hydration sweat test</td><td>Sets sodium dose (PH1000 / PH1500 / PH1500+ extra)</td></tr>
+          <tr><td>~15 June</td><td>Ankle clearance review</td><td>4 pain-free weeks → quality run unlock (R3, R4 sessions)</td></tr>
+          <tr><td>~15 July</td><td>FTP + CSS retest #2</td><td>Last credible re-targeting before peak — what we measure now is what we race on</td></tr>
+          <tr><td>~15 Aug</td><td>Long brick race-rehearsal</td><td>Decoupling &lt;5% + run holds 4:58–5:05/km → 9:30 fitness in place; else B-goal 9:45</td></tr>
+          <tr><td>Race week</td><td>Wetsuit ruling</td><td>Sea ~24°C edge case — equal training balance</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <b>Use pattern:</b> when a result lands, consult <code>decision-points.md</code> first, apply the branch, then update <code>current-state.md</code> and <code>session-library.md</code>. <b>No ad-hoc decisions on retest day.</b>
+      </div>
+    </div>
+  </div>
+
+  <!-- POWER + PRs -->
+  <div class="grid grid-2" style="margin-bottom:14px">
+    <div class="panel">
+      <h2>Power curve — Ride, last 90 days</h2>
+      <div class="chart-wrap short"><canvas id="chartPower"></canvas></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:#4a90c2"></span>This season 90d</span>
+        <span><span class="swatch" style="background:#888"></span>Last year same 90d</span>
+        <span><span class="swatch" style="background:#c0392b;opacity:.7"></span>FTP 316 W</span>
+        <span><span class="swatch" style="background:#2e7d32;opacity:.6"></span>IM bike target NP ~225 W</span>
+      </div>
+      <div class="small" style="margin-top:6px">
+        <b>YoY shifts:</b> short power up sharply (10s +16%, 30s +22%, 1m +23%) — winter/early-spring intensity work paid off. Sustained 5–60 min essentially flat (5m +2.5%, 20m +5%, 60m +0.4%) — no recent threshold-sustained efforts in either window. Long-aerobic (90m +13%, 2h +20%) up — reflects bigger Z2 ride volume.<br>
+        <b>CP (MS_2P)</b> 266 W now vs 264 W same window 2025 — flat. <b>60-min best 253 W</b> remains well below claimed FTP 316; the end-May retest will reset pacing.
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Best efforts — last 12 months</h2>
+      <h3 style="margin-top:4px">Run</h3>
+      <table id="run-pr"><thead><tr><th>Distance</th><th class="num">Time</th><th class="num">Pace</th></tr></thead><tbody></tbody></table>
+      <h3 style="margin-top:14px">Swim</h3>
+      <table id="swim-pr"><thead><tr><th>Distance</th><th class="num">Time</th><th class="num">Pace /100m</th></tr></thead><tbody></tbody></table>
+      <h3 style="margin-top:14px">Ride — Mean Max Power</h3>
+      <table id="ride-pr"><thead><tr><th>Duration</th><th class="num">Watts</th><th class="num">W/kg</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <!-- HEAT + CONSTRAINTS -->
+  <div class="grid grid-2" style="margin-bottom:14px">
+    <div class="panel">
+      <h2>Heat acclimation tracker</h2>
+      <div class="small" style="margin-bottom:10px">Target: <b>14–20 sessions</b> across 1 Jun → 18 Sep. Method 1 (primary): 40 °C bath, neck-deep, 30–40 min, post-long-ride. Boxes persist locally to your browser.</div>
+      <ul class="heat" id="heat-list"></ul>
+      <div class="callout" id="heat-summary">Loading…</div>
+    </div>
+
+    <div class="panel">
+      <h2>Constraints &amp; reminders</h2>
+      <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7">
+        <li><b>Ankle:</b> 22 days back into running. Last run 10.6 km @ 5:02/km on 29 Apr — biggest single run since pre-injury, +68% jump. <b>Need pain status before next run</b>; pain-led, ≤10%/wk volume from now on, no quality until 4 consecutive pain-free weeks.</li>
+        <li><b>Ramp rate:</b> currently +2.3 CTL/wk over 10d (within +4 cap). ATL spiked 100+ on 26 Apr and 4 May; both digesting fine. ATL−CTL gap currently 10.5, well within tolerance.</li>
+        <li><b>Strength:</b> <span style="color:var(--bad);font-weight:600">zero sessions in 14 days.</span> R7 risk active. Next session: priority for Wed 6 May before Saturday's long ride.</li>
+        <li><b>Weight:</b> drifted 82.05 → 82.94 kg over 10 days. Target 79 by race day = need ~3.9 kg drop in 19 weeks (~0.2 kg/wk). Currently going wrong direction. R6 active.</li>
+        <li><b>Sleep:</b> avg 7.4 hr last 10 days vs 8 hr target. R5 monitoring.</li>
+        <li><b>HRV / RHR:</b> HRV 36–43 (stable, mean 40). RHR drifted 51 → 56 in last 2 days — mild post-130k-ride uptick, not concerning unless persistent.</li>
+        <li><b>Tests:</b>
+          <ul>
+            <li>CSS swim test #1 — <b>done 27 Apr at 1:39/100m</b>; retest mid-Jul</li>
+            <li>FTP retest — end of May (retest mid-Jul) — see <code>decision-points.md</code> B2</li>
+            <li>Precision Hydration sweat-rate + sodium — May/Jun</li>
+          </ul>
+        </li>
+        <li><b>New reference docs (read first):</b>
+          <ul>
+            <li><code>reference/race-day-2025.md</code> — interval-level analysis of last year's 10:06; foundational for the 9:30 case</li>
+            <li><code>reference/01-hard-rules.md</code> — anchor values (FTP 316, threshold pace 4:02/km, gearing constraint), NEVER/ALWAYS, KPIs</li>
+            <li><code>reference/cervia-course.md</code> — course intelligence (1,082 m elevation, Bertinoro pacing, weather scenarios)</li>
+            <li><code>reference/decision-points.md</code> — pre-wired branches at every test/fork date</li>
+            <li><code>reference/risk-register.md</code> — 14 risks with leading indicators</li>
+          </ul>
+        </li>
+        <li><b>Plan source:</b> 3 weeks loaded from <code>training-plan-2026-04-27_to_2026-05-17.md</code>. Beyond 17 May is unplanned — Week 4+ needs scheduling (after FTP retest + ankle update).</li>
+        <li><b>Heat protocol</b> first session: <b>Sat 16 May</b> post-ride (40 °C, 30 min). Tracker below.</li>
+        <li><b>Block standing rules:</b> ankle veto = pain &gt;2/10 → drop run, replace with Z1 spin or aqua jog. TSB floor −25 for 3+ days → cut Sat ride to 2 hr or move long run to Tue. Sat ride first 90 min IF ≤0.68. Bertinoro climbs IF cap 0.78 (gearing-constrained on ≥6% — see R14). Aid-station drill ≤30 sec/stop in long runs from June. Run is fuelling rehearsal — 30 g CHO at 30 min, <b>no gels</b>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer">Data provided by Garmin® · Generated 5 May 2026 · Static snapshot — re-run to refresh · Week 1 review + actuals through 4 May added in this refresh</div>
+</div>
+
+<script>
+// ---------- DATA (embedded from Intervals.icu, snapshot 25 Apr 2026) ----------
+
+// CTL series — this season (1 Jan → today only; future is "stop-training" decay so we trim it)
+const fitnessThis = [
+  ["2026-01-01",79.4],["2026-01-02",77.5],["2026-01-03",77.2],["2026-01-04",77.5],["2026-01-05",79.8],
+  ["2026-01-06",80.1],["2026-01-07",78.2],["2026-01-08",77.8],["2026-01-09",78.0],["2026-01-10",76.9],
+  ["2026-01-11",78.6],["2026-01-12",76.7],["2026-01-13",76.6],["2026-01-14",76.9],["2026-01-15",78.8],
+  ["2026-01-16",77.8],["2026-01-17",76.9],["2026-01-18",76.7],["2026-01-19",80.9],["2026-01-20",83.7],
+  ["2026-01-21",82.8],["2026-01-22",82.6],["2026-01-23",82.6],["2026-01-24",82.9],["2026-01-25",80.9],
+  ["2026-01-26",82.8],["2026-01-27",80.8],["2026-01-28",82.2],["2026-01-29",84.6],["2026-01-30",84.6],
+  ["2026-01-31",84.4],["2026-02-01",83.2],["2026-02-02",83.7],["2026-02-03",85.4],["2026-02-04",85.2],
+  ["2026-02-05",83.7],["2026-02-06",82.2],["2026-02-07",80.8],["2026-02-08",79.6],["2026-02-09",77.7],
+  ["2026-02-10",78.9],["2026-02-11",80.1],["2026-02-12",80.2],["2026-02-13",80.6],["2026-02-14",81.5],
+  ["2026-02-15",80.8],["2026-02-16",78.9],["2026-02-17",80.4],["2026-02-18",80.8],["2026-02-19",80.6],
+  ["2026-02-20",78.7],["2026-02-21",78.4],["2026-02-22",77.2],["2026-02-23",75.4],["2026-02-24",76.0],
+  ["2026-02-25",77.4],["2026-02-26",77.4],["2026-02-27",78.3],["2026-02-28",79.6],
+  ["2026-03-01",77.7],["2026-03-02",75.9],["2026-03-03",75.3],["2026-03-04",74.6],["2026-03-05",73.5],
+  ["2026-03-06",71.8],["2026-03-07",71.0],["2026-03-08",70.9],["2026-03-09",69.2],["2026-03-10",69.0],
+  ["2026-03-11",68.3],["2026-03-12",67.7],["2026-03-13",67.5],["2026-03-14",69.5],["2026-03-15",69.3],
+  ["2026-03-16",69.4],["2026-03-17",70.0],["2026-03-18",69.5],["2026-03-19",67.9],["2026-03-20",70.1],
+  ["2026-03-21",72.0],["2026-03-22",74.0],["2026-03-23",72.2],["2026-03-24",72.0],["2026-03-25",71.1],
+  ["2026-03-26",70.8],["2026-03-27",73.4],["2026-03-28",75.8],["2026-03-29",77.4],["2026-03-30",75.5],
+  ["2026-03-31",76.0],["2026-04-01",74.2],["2026-04-02",72.4],["2026-04-03",72.9],["2026-04-04",73.1],
+  ["2026-04-05",72.6],["2026-04-06",73.8],["2026-04-07",73.5],["2026-04-08",72.4],["2026-04-09",71.3],
+  ["2026-04-10",71.3],["2026-04-11",70.1],["2026-04-12",69.7],["2026-04-13",69.2],["2026-04-14",70.5],
+  ["2026-04-15",69.9],["2026-04-16",68.9],["2026-04-17",68.4],["2026-04-18",69.0],["2026-04-19",71.0],
+  ["2026-04-20",70.1],["2026-04-21",70.2],["2026-04-22",69.8],["2026-04-23",69.6],["2026-04-24",70.9],
+  ["2026-04-25",74.0],["2026-04-26",77.0],["2026-04-27",75.2],["2026-04-28",74.5],["2026-04-29",74.1],
+  ["2026-04-30",73.8],["2026-05-01",74.8],["2026-05-02",75.4],["2026-05-03",75.9],["2026-05-04",78.5],
+  ["2026-05-05",76.7]
+];
+
+// CTL series — last season (1 Apr 25 → 21 Sep 25), shifted by 1 year so it overlays this season's date axis
+const fitnessLastRaw = [
+  ["2025-04-01",53.5],["2025-04-15",57.9],["2025-04-25",59.5],["2025-05-01",62.4],["2025-05-15",65.5],
+  ["2025-05-29",68.7],["2025-06-15",75.7],["2025-06-30",79.5],["2025-07-15",77.8],["2025-07-31",78.5],
+  ["2025-08-15",84.5],["2025-08-31",93.4],["2025-09-07",93.7],["2025-09-15",84.2],["2025-09-19",79.0],
+  ["2025-09-20",88.2]
+];
+// shift forward 1 year for overlay
+const fitnessLast = fitnessLastRaw.map(([d,v]) => {
+  const dt = new Date(d); dt.setFullYear(dt.getFullYear()+1);
+  return [dt.toISOString().slice(0,10), v];
+});
+
+// Target CTL milestones (per project brief)
+const targetMilestones = [
+  ["2026-05-05",76.7,"Today"],
+  ["2026-05-31",85,"End base"],
+  ["2026-06-28",95,"End build"],
+  ["2026-07-26",105,"End specific"],
+  ["2026-08-23",112,"Peak"],
+  ["2026-08-30",110,"Pre-taper"],
+  ["2026-09-19",97,"Race day"]
+];
+
+// Planned CTL — projected from today (5 May, end of W1)
+const plannedCTL = [
+  ["2026-05-03",75.9,"End W1 actual"],
+  ["2026-05-10",77,"End W2"],
+  ["2026-05-17",78,"End W3"]
+];
+
+// Planned sessions — Week 2 (in progress) and Week 3 (upcoming)
+const planned = [
+  {
+    label: "Week 2 — 4 → 10 May (in progress)",
+    sub: "Build, lock pacing — heat protocol unlock at week's end",
+    target: "495–520",
+    tss: 497,
+    projCTL: 77, projATL: 90, projTSB: -13,
+    days: [
+      {date:"2026-05-04", day:"Mon", sport:"Ride",      title:"DONE — 130 km long ride",            detail:"4h6m, AP 189 / NP 214, HR 133 (Z2), TSS 188. Long ride moved from Sat. Strong NP discipline.", tss:188, done:true},
+      {date:"2026-05-05", day:"Tue", sport:"Swim+Run",  title:"Swim aerobic + Run run-walk",        detail:"Swim 40 min: 400 wu / 6×150 aerobic / 200 cd. Run 30 min: 4:1 × 6 OR ankle-led easy 5–8 km if pain ≤2/10 yesterday.", tss:65},
+      {date:"2026-05-06", day:"Wed", sport:"Run+Strength",title:"Run run-walk + STRENGTH (priority)",detail:"30 min run-walk + Session A: SL calf raises, RDL, step-ups, hip thrust, SL deadlift. R7 has been open 2 weeks — get this on the calendar.", tss:50, key:true},
+      {date:"2026-05-07", day:"Thu", sport:"Swim",      title:"Swim CSS set (using new 1:39 pace)", detail:"50–60 min. 400 wu / drills / 8×100 @ CSS 1:39, 15s rest / 4×50 fast / 200 cd.", tss:70, key:true},
+      {date:"2026-05-08", day:"Fri", sport:"Ride",      title:"Mid ride — threshold",               detail:"75 min. 15 wu / 2×15 min @ 95% FTP (~300 W) w/ 6 min easy / 10 cd.", tss:80, key:true},
+      {date:"2026-05-09", day:"Sat", sport:"Ride",      title:"Long ride — 3.5 hr Z2",              detail:"NP 205–215 W. First 90 min IF ≤0.68. CHO 90 g/hr, fluid 800 ml/hr. First 90 g/hr test. Add Session B strength if not done Wed.", tss:162, key:true},
+      {date:"2026-05-10", day:"Sun", sport:"Run+Ride",  title:"Easy run + Recovery spin",           detail:"Run 60 min @ ankle-led easy pace. Spin 60 min Z1.", tss:85}
+    ]
+  },
+  {
+    label: "Week 3 — 11 → 17 May",
+    sub: "Volume nudge · heat protocol live (Sat)",
+    target: "530–560",
+    tss: 533,
+    projCTL: 79, projATL: 95, projTSB: -16,
+    days: [
+      {date:"2026-05-11", day:"Mon", sport:"Rest",      title:"Rest",                              detail:"—", tss:0},
+      {date:"2026-05-12", day:"Tue", sport:"Swim+Run",  title:"Swim aerobic + Run run-walk",       detail:"Swim 45 min: 400 wu / 4×200 aerobic / 200 cd. Run 30 min: 4:1 × 6.", tss:70},
+      {date:"2026-05-13", day:"Wed", sport:"Run+Strength",title:"Run run-walk + Strength Session A",detail:"Same as W2 Wed.", tss:50},
+      {date:"2026-05-14", day:"Thu", sport:"Swim",      title:"Swim CSS set",                      detail:"55–65 min. 400 wu / 3×400 @ CSS, 30s rest / 4×50 fast / 200 cd.", tss:75, key:true},
+      {date:"2026-05-15", day:"Fri", sport:"Ride",      title:"Mid ride — long threshold",         detail:"90 min. 20 wu / 3×12 min @ 92–95% FTP w/ 5 min easy / 15 cd.", tss:90, key:true},
+      {date:"2026-05-16", day:"Sat", sport:"Ride+Heat", title:"Long ride 3.5–4 hr Z2 + Heat bath #1", detail:"NP 210–220 W. 40°C bath, neck-deep, 30 min, immediately post-ride. Track HR + RPE in bath; if HR >155 shorten to 25 min.", tss:173, key:true},
+      {date:"2026-05-17", day:"Sun", sport:"Run+Ride",  title:"Long run + Recovery spin",          detail:"Run 60 min run-walk. Spin 60–75 min Z1.", tss:90}
+    ]
+  }
+];
+
+// Year-on-year sport TSS (last 14d this year vs comparable 2025 window)
+const yoyData = [
+  {sport:"Ride",    color:"--ride",  thisTSS:1027,  lastTSS:680},   // 8 rides incl. gravel
+  {sport:"Run",     color:"--run",   thisTSS:144,   lastTSS:340},
+  {sport:"Swim",    color:"--swim",  thisTSS:170,   lastTSS:60},
+  {sport:"Strength",color:"--other", thisTSS:0,     lastTSS:24},
+  {sport:"Other",   color:"--other", thisTSS:0,     lastTSS:0}
+];
+
+// Volume table — last 14d (22 Apr → 5 May 2026)
+const volumeData = [
+  {sport:"Ride",          sessions:8, dist:564.5, hours:17.3, tss:1027, color:"pill-ride",
+    breakdown:"Road 7 · Gravel 1 · NP 214–247 W across rides"},
+  {sport:"Run",           sessions:3, dist:26.3,  hours:2.2,  tss:144, color:"pill-run",
+    breakdown:"6.3 / 9.4 / 10.6 km — last run +68% on a single jump"},
+  {sport:"Swim",          sessions:3, dist:7.55,  hours:2.2,  tss:170, color:"pill-swim",
+    breakdown:"All pool · CSS 1:39/100m confirmed 27 Apr"},
+  {sport:"WeightTraining",sessions:0, dist:0,     hours:0,    tss:0,   color:"pill-other",
+    breakdown:"⚠ Zero this fortnight — see R7 in risk register"}
+];
+
+// Recent activities last 14 days (5 May 2026 back to 22 Apr)
+const recent = [
+  {date:"2026-05-04",sport:"Ride",       name:"Wandsworth Road Cycling (130 km)",dur:246,dist:129.98,pace:"31.7 kph",hr:133,powAvg:189,powNp:214,tss:188},
+  {date:"2026-05-03",sport:"Ride",       name:"Fareham Road Cycling",           dur:104,dist:52.72, pace:"30.4 kph",hr:141,powAvg:201,powNp:237,tss:97},
+  {date:"2026-05-02",sport:"Ride",       name:"Mid ride — 2 hr Z2 + sweet spot",dur:130,dist:58.45, pace:"27.0 kph",hr:127,powAvg:152,powNp:215,tss:100},
+  {date:"2026-05-01",sport:"Ride",       name:"Long ride — 2 hr Z2",            dur:120,dist:66.98, pace:"33.5 kph",hr:147,powAvg:211,powNp:242,tss:117},
+  {date:"2026-04-30",sport:"Swim",       name:"3×500",                          dur:44, dist:2.50,  pace:"1:46/100m",hr:124,powAvg:null,powNp:null,tss:61},
+  {date:"2026-04-29",sport:"Run",        name:"Coventry — 10k run-walk",        dur:53, dist:10.59, pace:"5:02/km", hr:143,powAvg:null,powNp:null,tss:58},
+  {date:"2026-04-28",sport:"Swim",       name:"Aerobic + technique (55 min)",   dur:39, dist:2.20,  pace:"1:46/100m",hr:123,powAvg:null,powNp:null,tss:46},
+  {date:"2026-04-26",sport:"Ride",       name:"Wandsworth Road Cycling",        dur:90, dist:41.91, pace:"27.9 kph",hr:134,powAvg:205,powNp:247,tss:91},
+  {date:"2026-04-25",sport:"Ride",       name:"T-147 (130 km Z2)",              dur:237,dist:129.94,pace:"32.9 kph",hr:136,powAvg:202,powNp:227,tss:204},
+  {date:"2026-04-24",sport:"GravelRide", name:"Wandsworth Gravel",              dur:98, dist:43.31, pace:"26.5 kph",hr:144,powAvg:206,powNp:236,tss:91},
+  {date:"2026-04-24",sport:"Run",        name:"Wandsworth Running",             dur:31, dist:6.30,  pace:"4:54/km", hr:142,powAvg:null,powNp:null,tss:34},
+  {date:"2026-04-23",sport:"Swim",       name:"2×1k 2×100m",                    dur:49, dist:2.85,  pace:"1:44/100m",hr:125,powAvg:null,powNp:null,tss:63},
+  {date:"2026-04-22",sport:"Run",        name:"Coventry Running",               dur:47, dist:9.41,  pace:"5:00/km", hr:143,powAvg:null,powNp:null,tss:52}
+];
+
+// Power curve (90d Ride) — this season vs same 90-day window in 2025
+const powerCurve = [
+  {t:5,    label:"5s",   w:922, wPrev:889},
+  {t:10,   label:"10s",  w:828, wPrev:714},
+  {t:30,   label:"30s",  w:645, wPrev:530},
+  {t:60,   label:"1m",   w:550, wPrev:446},
+  {t:120,  label:"2m",   w:384, wPrev:388},
+  {t:300,  label:"5m",   w:363, wPrev:354},
+  {t:600,  label:"10m",  w:300, wPrev:291},
+  {t:1200, label:"20m",  w:283, wPrev:270},
+  {t:1800, label:"30m",  w:270, wPrev:259},
+  {t:3600, label:"60m",  w:253, wPrev:252},
+  {t:5400, label:"90m",  w:222, wPrev:197},
+  {t:7200, label:"2h",   w:221, wPrev:184}
+];
+
+// PRs
+const runPR = [
+  {d:"400 m",       t:"1:13",   p:"3:03/km"},
+  {d:"1 km",        t:"3:38",   p:"3:38/km"},
+  {d:"1 mile",      t:"5:55",   p:"3:41/km"},
+  {d:"5 km",        t:"18:40",  p:"3:44/km"},
+  {d:"10 km",       t:"41:04",  p:"4:06/km"},
+  {d:"Half marathon",t:"1:37:55",p:"4:38/km"},
+  {d:"Marathon",    t:"3:51:43",p:"5:29/km"}
+];
+const swimPR = [
+  {d:"50 m",  t:"0:30",  p:"1:00/100m"},
+  {d:"100 m", t:"1:09",  p:"1:09/100m"},
+  {d:"200 m", t:"2:31",  p:"1:16/100m"},
+  {d:"400 m", t:"5:52",  p:"1:28/100m"},
+  {d:"800 m", t:"12:55", p:"1:37/100m"},
+  {d:"1500 m",t:"25:02", p:"1:40/100m"}
+];
+const ridePR = [
+  {d:"5 sec",   w:922, wkg:11.24},
+  {d:"30 sec",  w:721, wkg:8.79},
+  {d:"1 min",   w:613, wkg:7.47},
+  {d:"5 min",   w:387, wkg:4.72},
+  {d:"20 min",  w:302, wkg:3.68},
+  {d:"1 hour",  w:270, wkg:3.29}
+];
+
+// ---------- RENDER ----------
+
+function pillForSport(s){
+  if (/Run/.test(s)) return "pill pill-run";
+  if (/Ride/.test(s)) return "pill pill-ride";
+  if (/Swim/.test(s)) return "pill pill-swim";
+  return "pill pill-other";
+}
+// Roll up sub-types so Gravel/Virtual show as Ride, Open Water shows as Swim
+function rollupSport(s){
+  if (s === "GravelRide")    return {label:"Ride", variant:"Gravel"};
+  if (s === "VirtualRide")   return {label:"Ride", variant:"Virtual"};
+  if (s === "OpenWaterSwim") return {label:"Swim", variant:"Open water"};
+  if (s === "Ride")          return {label:"Ride", variant:"Road"};
+  if (s === "Swim")          return {label:"Swim", variant:"Pool"};
+  return {label:s, variant:""};
+}
+
+// Year-on-year table
+(function(){
+  const tb = document.querySelector("#yoy-table tbody");
+  const max = Math.max(...yoyData.flatMap(r=>[r.thisTSS,r.lastTSS]));
+  yoyData.forEach(r => {
+    const delta = r.thisTSS - r.lastTSS;
+    const pct = r.lastTSS > 0 ? ((delta/r.lastTSS)*100).toFixed(0) : "—";
+    const dCls = delta > 0 ? "delta-up" : (delta < 0 ? "delta-down" : "delta-flat");
+    const dArrow = delta > 0 ? "▲" : (delta < 0 ? "▼" : "•");
+    tb.insertAdjacentHTML("beforeend",
+      `<tr>
+        <td><span class="${pillForSport(r.sport)}">${r.sport}</span></td>
+        <td class="num">${r.thisTSS}</td>
+        <td class="num">${r.lastTSS}</td>
+        <td>
+          <div class="barwrap"><div class="bar"><span class="bar-this" style="width:${(r.thisTSS/max*100).toFixed(0)}%"></span></div></div>
+          <div class="barwrap" style="margin-top:2px"><div class="bar"><span class="bar-last" style="width:${(r.lastTSS/max*100).toFixed(0)}%"></span></div></div>
+        </td>
+        <td class="num ${dCls}">${dArrow} ${pct === "—" ? "—" : pct + "%"}</td>
+      </tr>`);
+  });
+})();
+
+// Volume table
+(function(){
+  const tb = document.querySelector("#volume-table tbody");
+  volumeData.forEach(v => {
+    const breakdown = v.breakdown ? `<div class="small">${v.breakdown}</div>` : "";
+    tb.insertAdjacentHTML("beforeend",
+      `<tr>
+        <td><span class="pill ${v.color}">${v.sport}</span>${breakdown}</td>
+        <td class="num">${v.sessions}</td>
+        <td class="num">${v.dist > 0 ? v.dist.toFixed(1)+" km" : "—"}</td>
+        <td class="num">${v.hours.toFixed(1)} h</td>
+        <td class="num">${v.tss}</td>
+      </tr>`);
+  });
+})();
+
+// Recent table
+(function(){
+  const tb = document.querySelector("#recent-table tbody");
+  recent.forEach(a => {
+    const hours = Math.floor(a.dur/60), mins = a.dur%60;
+    const time = hours > 0 ? `${hours}:${String(mins).padStart(2,"0")}` : `${mins}m`;
+    const dist = a.dist != null ? a.dist.toFixed(1) + " km" : "—";
+    const pow = a.powNp != null ? `${a.powAvg}/${a.powNp}` : "—";
+    const r = rollupSport(a.sport);
+    const variant = r.variant ? `<div class="small">${r.variant}</div>` : "";
+    tb.insertAdjacentHTML("beforeend",
+      `<tr>
+        <td>${a.date.slice(5)}</td>
+        <td><span class="${pillForSport(a.sport)}">${r.label}</span>${variant}</td>
+        <td>${a.name}</td>
+        <td class="num">${time}</td>
+        <td class="num">${dist}</td>
+        <td class="num">${a.pace}</td>
+        <td class="num">${a.hr}</td>
+        <td class="num">${pow}</td>
+        <td class="num"><b>${a.tss}</b></td>
+      </tr>`);
+  });
+})();
+
+// Upcoming — render planned sessions from .md
+(function(){
+  const el = document.querySelector("#upcoming-content");
+  function pillForPlanned(s){
+    if (s === "Rest")        return "pill pill-other";
+    if (/Heat/.test(s))      return "pill pill-peak";
+    if (/Ride/.test(s))      return "pill pill-ride";
+    if (/Run/.test(s))       return "pill pill-run";
+    if (/Swim/.test(s))      return "pill pill-swim";
+    return "pill pill-other";
+  }
+  const today = "2026-05-05";
+  let html = "";
+  planned.forEach(wk => {
+    html += `
+      <div style="margin-bottom:18px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+        <div style="background:#fafaf8;padding:10px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:baseline">
+          <div>
+            <b>${wk.label}</b> <span class="small">· ${wk.sub}</span>
+          </div>
+          <div class="small">
+            Target ${wk.target} TSS · Plan <b>${wk.tss}</b> · Projected end-of-week
+            <b>CTL ${wk.projCTL}</b> / ATL ${wk.projATL} / TSB ${wk.projTSB}
+          </div>
+        </div>
+        <table style="margin:0">
+          <thead><tr><th style="width:64px">Day</th><th style="width:90px">Date</th><th style="width:130px">Sport</th><th>Session</th><th class="num" style="width:60px">TSS</th></tr></thead>
+          <tbody>
+            ${wk.days.map(d => {
+              let bg = "";
+              if (d.done) bg = "background:#eaf6ec";
+              else if (d.key) bg = "background:#fff9e6";
+              const op = (!d.done && d.date < today) ? "opacity:0.55;" : "";
+              return `
+              <tr style="${op}${bg}">
+                <td><b>${d.day}</b></td>
+                <td>${d.date.slice(5)}</td>
+                <td><span class="${pillForPlanned(d.sport)}">${d.sport}</span></td>
+                <td><b>${d.title}</b><div class="small">${d.detail}</div></td>
+                <td class="num"><b>${d.tss}</b></td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>`;
+  });
+  el.innerHTML = html;
+})();
+
+// Run / Swim / Ride PR tables
+(function(){
+  const fill = (id, rows, cells) => {
+    const tb = document.querySelector(`#${id} tbody`);
+    rows.forEach(r => tb.insertAdjacentHTML("beforeend", `<tr>${cells.map(c=>`<td class="${c.cls||''}">${c.f(r)}</td>`).join("")}</tr>`));
+  };
+  fill("run-pr",  runPR,  [{f:r=>r.d},{cls:"num",f:r=>r.t},{cls:"num",f:r=>r.p}]);
+  fill("swim-pr", swimPR, [{f:r=>r.d},{cls:"num",f:r=>r.t},{cls:"num",f:r=>r.p}]);
+  fill("ride-pr", ridePR, [{f:r=>r.d},{cls:"num",f:r=>r.w+" W"},{cls:"num",f:r=>r.wkg.toFixed(2)}]);
+})();
+
+// Heat acclimation tracker (localStorage-backed checkboxes)
+(function(){
+  const list = document.querySelector("#heat-list");
+  const summary = document.querySelector("#heat-summary");
+  const N = 20;
+  const stored = JSON.parse(localStorage.getItem("imHeatLog") || "[]");
+  for (let i = 0; i < N; i++) {
+    const checked = !!stored[i]?.done;
+    const note = stored[i]?.note || "";
+    list.insertAdjacentHTML("beforeend",
+      `<li><label><input type="checkbox" data-i="${i}" ${checked?"checked":""}> Session ${i+1}</label>
+        <input type="date" data-note="${i}" value="${note}" style="margin-top:4px;width:100%;font-size:11px;border:1px solid var(--line);padding:2px 4px;border-radius:3px"></li>`);
+  }
+  function updateSummary(){
+    const arr = JSON.parse(localStorage.getItem("imHeatLog") || "[]");
+    const done = arr.filter(x=>x?.done).length;
+    const cls = done >= 14 ? "good" : (done >= 8 ? "" : "bad");
+    const remaining = Math.max(0, 14 - done);
+    summary.className = "callout " + cls;
+    summary.innerHTML = `<b>${done}/${N}</b> sessions logged · ${remaining > 0 ? `<b>${remaining}</b> minimum still required to hit 14-session floor` : "above 14-session minimum — keep banking through race week"}.`;
+  }
+  function persist(){
+    const arr = [];
+    for (let i = 0; i < N; i++){
+      const cb = list.querySelector(`input[data-i="${i}"]`);
+      const dt = list.querySelector(`input[data-note="${i}"]`);
+      arr[i] = {done:cb.checked, note:dt.value};
+    }
+    localStorage.setItem("imHeatLog", JSON.stringify(arr));
+    updateSummary();
+  }
+  list.addEventListener("change", persist);
+  updateSummary();
+})();
+
+// ---------- CHARTS ----------
+
+// Fitness chart
+(function(){
+  const ctx = document.getElementById("chartFitness").getContext("2d");
+  new Chart(ctx, {
+    type: "line",
+    data: {
+      datasets: [
+        {
+          label: "CTL — last season (overlay)",
+          data: fitnessLast.map(([d,v]) => ({x:d,y:v})),
+          borderColor: "#999",
+          borderDash: [3,3],
+          backgroundColor: "transparent",
+          pointRadius: 0,
+          tension: 0.25,
+          borderWidth: 1.5
+        },
+        {
+          label: "CTL — this season",
+          data: fitnessThis.map(([d,v]) => ({x:d,y:v})),
+          borderColor: "#1a1a1a",
+          backgroundColor: "transparent",
+          pointRadius: 0,
+          tension: 0.2,
+          borderWidth: 2.2
+        },
+        {
+          label: "Target CTL",
+          data: targetMilestones.map(([d,v]) => ({x:d,y:v})),
+          borderColor: "rgba(192,57,43,0.7)",
+          backgroundColor: "rgba(192,57,43,0.1)",
+          borderWidth: 2,
+          borderDash: [6,4],
+          pointRadius: 4,
+          pointBackgroundColor: "rgba(192,57,43,0.9)",
+          tension: 0.3,
+          fill: false
+        },
+        {
+          label: "Planned CTL (3-week block)",
+          data: plannedCTL.map(([d,v]) => ({x:d,y:v})),
+          borderColor: "rgba(46,125,50,0.85)",
+          backgroundColor: "transparent",
+          borderWidth: 2.2,
+          pointRadius: 4,
+          pointBackgroundColor: "rgba(46,125,50,0.95)",
+          tension: 0.2,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {mode:"nearest", intersect:false},
+      plugins: {
+        legend: {display:false},
+        tooltip: {
+          callbacks: {
+            afterBody: (items) => {
+              const pt = targetMilestones.find(t => t[0] === items[0].parsed.x.toString().slice(0,10));
+              return pt ? "  " + pt[2] : "";
+            }
+          }
+        },
+        annotation: {}
+      },
+      scales: {
+        x: {
+          type: "time",
+          time: {unit:"month", displayFormats:{month:"MMM"}},
+          min: "2026-01-01",
+          max: "2026-09-25",
+          grid: {color:"#f0f0ed"}
+        },
+        y: {
+          title: {display:true, text:"CTL"},
+          min: 30, max: 130,
+          grid: {color:"#f0f0ed"}
+        }
+      }
+    }
+  });
+})();
+
+// Power curve chart
+(function(){
+  const ctx = document.getElementById("chartPower").getContext("2d");
+  new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: powerCurve.map(p => p.label),
+      datasets: [
+        {
+          label: "This season — 90d (26 Jan → 25 Apr 2026)",
+          data: powerCurve.map(p => p.w),
+          borderColor: "#4a90c2",
+          backgroundColor: "rgba(74,144,194,0.12)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointBackgroundColor: "#4a90c2",
+          order: 1
+        },
+        {
+          label: "Last year — same 90d (26 Jan → 26 Apr 2025)",
+          data: powerCurve.map(p => p.wPrev),
+          borderColor: "#888",
+          backgroundColor: "transparent",
+          borderDash: [4,3],
+          fill: false,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: "#888",
+          borderWidth: 1.5,
+          order: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {display:false},
+        tooltip: {
+          callbacks: {
+            afterBody: (items) => {
+              const i = items[0].dataIndex;
+              const cur = powerCurve[i].w;
+              const prev = powerCurve[i].wPrev;
+              const d = cur - prev;
+              const pct = prev > 0 ? ((d / prev) * 100).toFixed(1) : "—";
+              const sign = d > 0 ? "+" : "";
+              return `Δ ${sign}${d} W (${sign}${pct}%)`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          title: {display:true, text:"Watts"},
+          grid: {color:"#f0f0ed"}
+        },
+        x: {
+          grid: {display:false}
+        }
+      }
+    }
+  });
+  // FTP + IM bike target lines drawn via plugin-less approach: overlay via afterDraw
+  Chart.register({
+    id: "ftpLines",
+    afterDraw(chart) {
+      if (chart.canvas.id !== "chartPower") return;
+      const {ctx, chartArea, scales} = chart;
+      const lines = [
+        {y:316, color:"rgba(192,57,43,0.7)", label:"FTP 316 W"},
+        {y:225, color:"rgba(46,125,50,0.6)", label:"IM target NP ~225 W"}
+      ];
+      lines.forEach(l => {
+        const y = scales.y.getPixelForValue(l.y);
+        if (y < chartArea.top || y > chartArea.bottom) return;
+        ctx.save();
+        ctx.strokeStyle = l.color;
+        ctx.setLineDash([4,4]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, y);
+        ctx.lineTo(chartArea.right, y);
+        ctx.stroke();
+        ctx.fillStyle = l.color;
+        ctx.font = "11px -apple-system,sans-serif";
+        ctx.fillText(l.label, chartArea.right - 130, y - 4);
+        ctx.restore();
+      });
+    }
+  });
+})();
+</script>
+</body>
+</html>
