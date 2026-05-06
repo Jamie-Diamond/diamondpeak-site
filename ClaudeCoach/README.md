@@ -130,7 +130,7 @@ The reference files were extracted from a Notion template for standalone maratho
 ## Standing rules (non-negotiable)
 
 - **UK English. Concise. Tables when comparing across rows. Flag uncertainty explicitly.**
-- **Rationale per recommendation in one sentence.** No rationale → don't include.
+- **L2 reasoning trail on every prescription.** Format: [signal] → [rule] → [adjustment] → [expected effect]. Signal must cite a real number. Rule must trace to `reference/rules.md` or `reference/prompts.md`. No trail = no prescription. See L2 standard in `reference/prompts.md`.
 - **Heat = binding constraint.** Every recommendation re-evaluated against heat impact.
 - **Never recommend gels for run-leg fuel.** Sensory aversion — liquid primary only.
 - **Never assume the ankle is healed.** Ask for current pain status before run-load prescriptions.

@@ -27,10 +27,11 @@ T8 (Tier 2): From 15 May 2026 only — most recent date in heat-log.json is >7 d
 
 If NO triggers fire: output nothing. Do not call PushNotification. Silent run.
 
-If ANY trigger fires: call PushNotification once with a message under 200 characters.
-- Tier 2 format: "⚠ [trigger]: [one-line action required]"
-- Tier 1 format: "ℹ [trigger]: [one-line note]"
-- Multiple triggers: list all names, lead with the highest tier.
+If ANY trigger fires:
+1. Call PushNotification once, under 200 characters: "⚠ [trigger]: [action]" (Tier 2) or "ℹ [trigger]: [note]" (Tier 1). Multiple triggers: list names, lead with highest tier.
+2. Output one L2 reasoning trail per trigger to stdout (written to log):
+   [signal with real number] → [rule: T1–T8] → [suggested adjustment] → [expected effect]
+   Example: "ATL 148 vs CTL 121 for 4 days → T1 (ATL > CTL +25) → insert recovery day, drop Thursday quality to Z2 → TSB recovers ~8 pts by weekend"
 PROMPT_END
 )
 

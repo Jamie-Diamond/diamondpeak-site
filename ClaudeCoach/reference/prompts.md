@@ -2,6 +2,30 @@
 
 **TL;DR:** Standing prompt patterns for recurring workflows. Fill bracketed fields and paste into Claude. All prompts assume IcuSync MCP is wired up — Claude pulls Intervals.icu data directly and pushes planned sessions back. If IcuSync is down, Claude should say so before working from stale data.
 
+---
+
+## L2 — Reasoning trail format (standing standard)
+
+Every prescription, modification, and watchdog alert this tool emits **must** follow this shape:
+
+> **[signal/trigger]** → **[rule invoked]** → **[adjustment]** → **[expected effect]**
+
+Examples:
+- "HRV –8% over 7d → soft-modulation rule (multi-signal corroboration) → drop interval count 4→3, target 95% FTP not 100% → maintain quality stimulus, reduce cumulative strain ~15%"
+- "ATL > CTL +27 for 4 days → ramp cap rule → insert recovery day Thursday, swap Friday threshold to Z2 → TSB recovers to –10 by weekend, ramp drops to +3.2/wk"
+- "Missed 2 planned sessions in 7 days → watchdog T5 → flag, no auto-adjustment → Jamie decides whether to redistribute or accept the load gap"
+
+**Rules:**
+- The signal must cite a real data point (a number, a trend, a specific date). Not "fatigue looks high."
+- The rule must be traceable to `reference/rules.md` or this file. Not "coaching instinct."
+- If no rule covers the situation, say so explicitly rather than inventing one.
+- The expected effect is a prediction, not a guarantee — quantify it where possible, hedge where not.
+- One trail per adjustment. Multiple adjustments = multiple trails, listed in order of priority.
+
+This is non-negotiable. Any prescription without a reasoning trail should be rejected by Jamie and re-requested with one.
+
+---
+
 ## Index
 
 | Prompt | Use when |
@@ -84,9 +108,10 @@ This morning's signals:
 - Yesterday's session RPE: [N]
 
 Tell me:
-1. Go / modify / skip — with the rationale in one sentence.
-2. If modify: what specifically changes (intensity, duration, swap). Push the modification to my Intervals.icu calendar via IcuSync.
-3. If go: any execution caveats (warm-up extended, hydration emphasis, cap RPE).
+1. Go / modify / skip — decision on one line.
+2. Reasoning trail (L2 format): [signal] → [rule] → [adjustment] → [expected effect]. One trail per adjustment.
+3. If modify: push the modification to my Intervals.icu calendar via IcuSync.
+4. If go: any execution caveats (warm-up extended, hydration emphasis, cap RPE).
 ```
 
 ## Session deep-dive
@@ -286,10 +311,13 @@ Evaluate triggers in order. Assign Tier 1 (FYI) or Tier 2 (act today):
 
 **If no triggers fire:** silent. Do nothing.
 
-**If any trigger fires:** call PushNotification. Format:
-- Tier 2: "⚠ [trigger]: [one-line action required]"
-- Tier 1: "ℹ [trigger]: [one-line note]"
-- Multiple triggers: list all names, lead with highest tier. Under 200 characters total.
+**If any trigger fires:** call PushNotification with a brief alert (under 200 characters). Then output a full L2 reasoning trail to the chat log for each trigger that fired:
+- PushNotification: "⚠ [trigger name]: [action]" (Tier 2) or "ℹ [trigger name]: [note]" (Tier 1)
+- Chat output: [signal with real number] → [rule: T1–T8] → [suggested adjustment] → [expected effect if acted on]
+
+Example: "ATL 148 vs CTL 121 for 4 days → watchdog T1 (ATL > CTL +25) → insert recovery day today, drop Thursday quality to Z2 → TSB recovers ~8 pts by weekend"
+
+Multiple triggers: one PushNotification listing all names, then one L2 trail per trigger in chat.
 
 **Heat trajectory for T7:** target 14–20 sessions across 15 May – 6 September (114 days = ~16 weeks). Linear trajectory ≈ 1 session/week minimum. Flag if 14-day dose sum < 3.0 (below one session/week pace).
 
