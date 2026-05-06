@@ -18,8 +18,21 @@ from primitives.load import (
     flag_conditions,
     separate_actual_projection,
 )
+from primitives.env_pacing import (
+    EnvAdjustment,
+    heat_correction_fraction,
+    humidity_correction_fraction,
+    headwind_component,
+    wind_time_tax_min,
+    adjust_bike_if,
+    adjust_run_pace,
+    race_day_targets,
+    format_pace,
+    format_if,
+)
 
 __all__ = [
+    # load
     "LoadPoint",
     "Flag",
     "BUILD_TABLE",
@@ -31,4 +44,15 @@ __all__ = [
     "trajectory_check",
     "flag_conditions",
     "separate_actual_projection",
+    # env_pacing
+    "EnvAdjustment",
+    "heat_correction_fraction",
+    "humidity_correction_fraction",
+    "headwind_component",
+    "wind_time_tax_min",
+    "adjust_bike_if",
+    "adjust_run_pace",
+    "race_day_targets",
+    "format_pace",
+    "format_if",
 ]

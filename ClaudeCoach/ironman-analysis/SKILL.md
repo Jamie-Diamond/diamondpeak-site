@@ -23,6 +23,13 @@ Primitives are pure: dicts/lists in, dicts/lists out. No MCP coupling.
 | `trajectory_check` | `list[LoadPoint]`, `dict[date, float]` build targets | Per-target days-ahead/behind in CTL terms |
 | `flag_conditions` | `list[LoadPoint]`, ankle_in_rehab=True | `list[Flag]` per project rules |
 | `separate_actual_projection` | fitness rows, today | `(actual, projection)` tuple |
+| `adjust_bike_if` | `target_if`, `temp_c`, `dew_point_c`, `segment`, `wind_speed_ms`, `wind_from_deg` | `EnvAdjustment` — adjusted IF, component corrections, wind time tax, L2 reasoning trail |
+| `adjust_run_pace` | `target_pace_sec_per_km`, `temp_c`, `dew_point_c`, `segment`, wind args | `EnvAdjustment` — adjusted pace (sec/km), corrections, L2 trail |
+| `race_day_targets` | `bike_target_if`, `run_target_pace_sec_per_km`, forecast args | All-segment dict + summary (conservative IF, adjusted pace, correction %) |
+| `heat_correction_fraction` | `temp_c` | Fraction (e.g. -0.02 at 28°C) |
+| `humidity_correction_fraction` | `dew_point_c` | Fraction (e.g. -0.006 at 18°C DP) |
+| `headwind_component` | `wind_speed_ms`, `wind_from_deg`, `course_heading_deg` | Signed m/s — positive = headwind |
+| `format_pace` | `sec_per_km` | String e.g. "5:06/km" |
 
 ## Required MCP calls (when running live)
 
