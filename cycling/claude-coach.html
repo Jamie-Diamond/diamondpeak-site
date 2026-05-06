@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudeCoach — Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+<style>
+  .page { max-width: 920px; }
+
+  /* ── Section labels ── */
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 3rem 0 1rem;
+  }
+
+  /* ── Automation timeline ── */
+  .timeline {
+    background: #06080a;
+    border-radius: 8px;
+    padding: 2rem;
+    margin: 1rem 0;
+  }
+  .timeline-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
+  .timeline-item {
+    border-left: 2px solid #1d6840;
+    padding-left: 1rem;
+  }
+  .timeline-time {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.88rem;
+    color: #4ade80;
+    margin-bottom: 0.2rem;
+  }
+  .timeline-cadence {
+    font-size: 0.68rem;
+    color: #4b5563;
+    margin-bottom: 0.5rem;
+    font-family: 'DM Mono', monospace;
+  }
+  .timeline-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #e8e4dc;
+    margin-bottom: 0.4rem;
+  }
+  .timeline-desc {
+    font-size: 0.75rem;
+    color: #6b7280;
+    line-height: 1.55;
+  }
+
+  /* ── Weekly rhythm ── */
+  .week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.4rem;
+    margin: 1rem 0 0.5rem;
+  }
+  .week-day-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-align: center;
+    margin-bottom: 0.4rem;
+  }
+  .week-event {
+    border-radius: 3px;
+    padding: 0.35rem 0.2rem;
+    font-size: 0.6rem;
+    line-height: 1.3;
+    text-align: center;
+    margin-bottom: 0.3rem;
+  }
+  .ev-auto   { background: #dcfce7; color: #166534; }
+  .ev-manual { background: #dbeafe; color: #1e3a8a; }
+  .ev-weekly { background: #fef3c7; color: #92400e; }
+
+  .week-legend {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.72rem;
+    color: var(--secondary);
+    margin-top: 0.25rem;
+  }
+  .legend-dot {
+    display: inline-block;
+    width: 9px; height: 9px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+
+  /* ── Session day flow ── */
+  .flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 1rem 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .flow-step {
+    flex: 1;
+    padding: 1.1rem 1rem;
+    background: white;
+    border-right: 1px solid var(--border);
+  }
+  .flow-step:last-child { border-right: none; }
+  .flow-step-time {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    margin-bottom: 0.25rem;
+  }
+  .flow-step-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 0.35rem;
+    color: var(--ink);
+  }
+  .flow-step-desc {
+    font-size: 0.75rem;
+    color: var(--secondary);
+    line-height: 1.5;
+  }
+  .flow-step-auto {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.58rem;
+    background: #dcfce7;
+    color: #166534;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    margin-top: 0.5rem;
+  }
+  .flow-step-trigger {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.58rem;
+    background: #dbeafe;
+    color: #1e3a8a;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    margin-top: 0.5rem;
+  }
+
+  /* ── Intelligence cards ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin: 1rem 0;
+  }
+  .intel-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.1rem;
+    background: white;
+  }
+  .intel-card-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    margin-bottom: 0.45rem;
+  }
+  .intel-card-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    color: var(--ink);
+  }
+  .intel-card-desc {
+    font-size: 0.77rem;
+    color: var(--secondary);
+    line-height: 1.55;
+  }
+
+  /* ── Modulation rules table ── */
+  .rules-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.81rem;
+    margin: 1rem 0;
+  }
+  .rules-table th {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 400;
+    color: var(--muted);
+    text-align: left;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .rules-table td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    color: var(--ink);
+    line-height: 1.45;
+  }
+  .rule-id {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.65rem;
+    font-family: 'DM Mono', monospace;
+    white-space: nowrap;
+  }
+  .badge-red    { background: #fee2e2; color: #991b1b; }
+  .badge-orange { background: #ffedd5; color: #9a3412; }
+  .badge-blue   { background: #dbeafe; color: #1e40af; }
+
+  /* ── TSS compliance grid ── */
+  .compliance-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.5rem;
+    margin: 1rem 0;
+  }
+  .compliance-cell {
+    border-radius: 6px;
+    padding: 0.85rem 0.6rem;
+    text-align: center;
+  }
+  .compliance-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.58rem;
+    margin-bottom: 0.4rem;
+    opacity: 0.8;
+  }
+  .compliance-title {
+    font-size: 0.76rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    line-height: 1.3;
+  }
+  .compliance-fix {
+    font-size: 0.67rem;
+    line-height: 1.4;
+    opacity: 0.75;
+  }
+  .c-ok       { background: #dcfce7; color: #14532d; }
+  .c-skip     { background: #fee2e2; color: #7f1d1d; }
+  .c-duration { background: #ffedd5; color: #7c2d12; }
+  .c-fatigued { background: #fef3c7; color: #78350f; }
+  .c-soft     { background: #dbeafe; color: #1e3a8a; }
+
+  /* ── L2 reasoning trails ── */
+  .l2-block {
+    background: #f0fdf4;
+    border-left: 3px solid #1d6840;
+    padding: 0.8rem 1rem;
+    border-radius: 0 5px 5px 0;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    line-height: 1.7;
+    color: #1a3a2a;
+    margin: 0.6rem 0;
+  }
+  .l2-block .arrow { color: #1d6840; margin: 0 0.3rem; }
+
+  /* ── Data flow diagram ── */
+  .data-flow {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 1rem 0;
+    padding: 1.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .df-box {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    background: white;
+    text-align: center;
+  }
+  .df-box-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+  }
+  .df-box-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+  }
+  .df-box-items {
+    font-size: 0.7rem;
+    color: var(--secondary);
+    line-height: 1.6;
+  }
+  .df-arrow {
+    text-align: center;
+    font-size: 1.25rem;
+    color: var(--muted);
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    .timeline-grid  { grid-template-columns: 1fr 1fr; }
+    .card-grid      { grid-template-columns: 1fr; }
+    .compliance-grid { grid-template-columns: 1fr 1fr; }
+    .week-grid      { gap: 0.2rem; }
+    .week-event     { font-size: 0.52rem; padding: 0.25rem 0.1rem; }
+    .flow           { flex-direction: column; }
+    .flow-step      { border-right: none; border-bottom: 1px solid var(--border); }
+    .data-flow      { grid-template-columns: 1fr; }
+    .df-arrow       { transform: rotate(90deg); justify-self: center; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <a href="../index.html" class="back">&larr; Back to tools</a>
+  <div class="kicker">Performance · IM Cervia 2026</div>
+  <h1>ClaudeCoach</h1>
+  <p class="intro">An AI coaching system built on Claude + Intervals.icu for a 21-week Ironman build. Four automated jobs run daily and weekly — checking readiness, modulating sessions, monitoring load, and summarising the week. Every decision includes a traceable reasoning trail linking a real data point to a rule to an outcome.</p>
+
+  <!-- ═══════════════════════════════ AUTOMATION ═══════════════════════════════ -->
+  <p class="section-label">Automation — runs without any user action</p>
+  <div class="timeline">
+    <div class="timeline-grid">
+      <div class="timeline-item">
+        <div class="timeline-time">06:33</div>
+        <div class="timeline-cadence">Daily</div>
+        <div class="timeline-title">Session prescription</div>
+        <div class="timeline-desc">Pulls live readiness signals from Intervals.icu, runs the modulation engine, pushes the adjusted session back to the calendar. Sends a notification only if the session changed.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-time">07:03</div>
+        <div class="timeline-cadence">Daily</div>
+        <div class="timeline-title">Watchdog check</div>
+        <div class="timeline-desc">Evaluates 8 load and recovery triggers. If nothing fires, it produces no output at all — zero noise on good training days.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-time">18:07</div>
+        <div class="timeline-cadence">Daily</div>
+        <div class="timeline-title">Capture reminder</div>
+        <div class="timeline-desc">Checks Intervals.icu for any key session (TSS &gt;40 or duration &gt;45 min) logged today that hasn't been captured yet. Notifies if one is missing.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-time">18:00</div>
+        <div class="timeline-cadence">Sunday only</div>
+        <div class="timeline-title">Weekly summary</div>
+        <div class="timeline-desc">Generates a week card with TSS vs planned, compliance rate, CTL change, flags, and Monday focus. Pushes a single headline notification.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ WEEKLY RHYTHM ═══════════════════════════════ -->
+  <p class="section-label">Weekly rhythm</p>
+  <div class="week-grid">
+    <div>
+      <div class="week-day-label">Mon</div>
+      <div class="week-event ev-manual">Check-in</div>
+      <div class="week-event ev-auto">06:33</div>
+      <div class="week-event ev-auto">07:03</div>
+    </div>
+    <div>
+      <div class="week-day-label">Tue</div>
+      <div class="week-event ev-auto">06:33</div>
+      <div class="week-event ev-auto">07:03</div>
+      <div class="week-event ev-auto">18:07</div>
+    </div>
+    <div>
+      <div class="week-day-label">Wed</div>
+      <div class="week-event ev-auto">06:33</div>
+      <div class="week-event ev-auto">07:03</div>
+      <div class="week-event ev-auto">18:07</div>
+    </div>
+    <div>
+      <div class="week-day-label">Thu</div>
+      <div class="week-event ev-auto">06:33</div>
+      <div class="week-event ev-auto">07:03</div>
+      <div class="week-event ev-auto">18:07</div>
+    </div>
+    <div>
+      <div class="week-day-label">Fri</div>
+      <div class="week-event ev-auto">06:33</div>
+      <div class="week-event ev-auto">07:03</div>
+      <div class="week-event ev-auto">18:07</div>
+    </div>
+    <div>
+      <div class="week-day-label">Sat</div>
+      <div class="week-event ev-auto">06:33</div>
+      <div class="week-event ev-auto">07:03</div>
+      <div class="week-event ev-auto">18:07</div>
+    </div>
+    <div>
+      <div class="week-day-label">Sun</div>
+      <div class="week-event ev-auto">06:33</div>
+      <div class="week-event ev-auto">07:03</div>
+      <div class="week-event ev-weekly">18:00 summary</div>
+    </div>
+  </div>
+  <div class="week-legend">
+    <span><span class="legend-dot" style="background:#dcfce7"></span>Automatic</span>
+    <span><span class="legend-dot" style="background:#dbeafe"></span>User-triggered</span>
+    <span><span class="legend-dot" style="background:#fef3c7"></span>Weekly</span>
+  </div>
+
+  <!-- ═══════════════════════════════ SESSION DAY FLOW ═══════════════════════════════ -->
+  <p class="section-label">Session day sequence</p>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-step-time">06:33 daily</div>
+      <div class="flow-step-title">Prescription</div>
+      <div class="flow-step-desc">Readiness assessed, modulation engine runs, adjusted session pushed to Intervals.icu calendar.</div>
+      <div class="flow-step-auto">automatic</div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-step-time">morning</div>
+      <div class="flow-step-title">Train</div>
+      <div class="flow-step-desc">Garmin records the session. Activity syncs to Intervals.icu via IcuSync after completion.</div>
+      <div class="flow-step-trigger">you do this</div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-step-time">after session</div>
+      <div class="flow-step-title">Capture</div>
+      <div class="flow-step-desc">Log RPE, gut comfort, heat tolerance, fuelling adherence. Triggered by you or the 18:07 reminder.</div>
+      <div class="flow-step-trigger">you trigger</div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-step-time">after capture</div>
+      <div class="flow-step-title">Debrief</div>
+      <div class="flow-step-desc">Lap drift, aerobic decoupling, power zone distribution, form metrics. One coaching note written to the session log.</div>
+      <div class="flow-step-auto">automatic</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ DATA FLOW ═══════════════════════════════ -->
+  <p class="section-label">Data flow</p>
+  <div class="data-flow">
+    <div class="df-box">
+      <div class="df-box-label">Inputs</div>
+      <div class="df-box-title">Live signals</div>
+      <div class="df-box-items">
+        CTL / ATL / TSB<br>
+        HRV trend (7d)<br>
+        Sleep last night<br>
+        Yesterday RPE<br>
+        Ankle pain score<br>
+        Temp + dew point
+      </div>
+    </div>
+    <div class="df-arrow">→</div>
+    <div class="df-box">
+      <div class="df-box-label">Analytics engine</div>
+      <div class="df-box-title">Pure Python primitives</div>
+      <div class="df-box-items">
+        Modulation rules R1–R7<br>
+        Env pacing (L1)<br>
+        Banister CTL/ATL model<br>
+        TSS compliance analysis<br>
+        Ramp headroom check<br>
+        Lap debrief metrics
+      </div>
+    </div>
+    <div class="df-arrow">→</div>
+    <div class="df-box">
+      <div class="df-box-label">Outputs</div>
+      <div class="df-box-title">Actions + reasoning</div>
+      <div class="df-box-items">
+        Adjusted session on calendar<br>
+        L2 reasoning trail<br>
+        Push notification<br>
+        Session debrief note<br>
+        Weekly summary card<br>
+        Watchdog alert (if triggered)
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ INTELLIGENCE STACK ═══════════════════════════════ -->
+  <p class="section-label">Intelligence layers</p>
+  <div class="card-grid">
+    <div class="intel-card">
+      <div class="intel-card-tag">W2 · Daily prescription</div>
+      <div class="intel-card-title">Session modulation</div>
+      <div class="intel-card-desc">Seven rules applied in priority order at 06:33. Adjusts intensity, interval count, or replaces the session entirely based on fatigue, HRV, sleep, RPE, and heat.</div>
+    </div>
+    <div class="intel-card">
+      <div class="intel-card-tag">L1 · Environmental</div>
+      <div class="intel-card-title">Environmental pacing</div>
+      <div class="intel-card-desc">Heat and humidity corrections to bike IF and run pace for the Cervia course. Segment-level wind time tax using actual course headings (280° / 100° / 0°).</div>
+    </div>
+    <div class="intel-card">
+      <div class="intel-card-tag">W4 · Watchdog</div>
+      <div class="intel-card-title">Load monitoring</div>
+      <div class="intel-card-desc">Eight triggers evaluated daily: ATL spike, weekly ramp, HRV trend, sleep deficit, missed sessions, aerobic decoupling, heat dose trajectory, heat recency.</div>
+    </div>
+    <div class="intel-card">
+      <div class="intel-card-tag">W1 · Re-optimiser</div>
+      <div class="intel-card-title">Week re-optimiser</div>
+      <div class="intel-card-desc">After missed sessions: assesses TSS debt and ramp headroom using the Banister model, then proposes a redistribution that respects quality-session spacing and the ramp cap.</div>
+    </div>
+    <div class="intel-card">
+      <div class="intel-card-tag">Compliance</div>
+      <div class="intel-card-title">TSS compliance</div>
+      <div class="intel-card-desc">28-day rolling analysis of planned vs actual TSS. Classifies why the gap exists — skipped, duration short, fatigued, or not pushed — then prescribes the right fix for each.</div>
+    </div>
+    <div class="intel-card">
+      <div class="intel-card-tag">W6 · Post-session</div>
+      <div class="intel-card-title">Session debrief</div>
+      <div class="intel-card-desc">Lap drift (first→last), aerobic decoupling (HR:power ratio across halves), Coggan zone distribution, Stryd form metrics for run. One coaching note per session.</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ MODULATION RULES ═══════════════════════════════ -->
+  <p class="section-label">Session modulation rules</p>
+  <table class="rules-table">
+    <thead>
+      <tr>
+        <th>Rule</th>
+        <th>Signal</th>
+        <th>What happens</th>
+        <th>Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="rule-id">R1</span></td>
+        <td>Ankle pain ≥ 3/10, or quality movement not yet cleared</td>
+        <td>Session blocked — no run or brick today</td>
+        <td><span class="badge badge-red">Hard stop</span></td>
+      </tr>
+      <tr>
+        <td><span class="rule-id">R2</span></td>
+        <td>ATL − CTL &gt; 25 (acute fatigue spike)</td>
+        <td>Quality session swapped to Z2 or easy run; duration preserved</td>
+        <td><span class="badge badge-orange">Swap</span></td>
+      </tr>
+      <tr>
+        <td><span class="rule-id">R3</span></td>
+        <td>HRV trend &lt; −7% over 7 days</td>
+        <td>Intensity −5%, interval count −1</td>
+        <td><span class="badge badge-blue">Soft</span></td>
+      </tr>
+      <tr>
+        <td><span class="rule-id">R4</span></td>
+        <td>ATL − CTL between 15 and 25</td>
+        <td>Intensity capped at 95% FTP</td>
+        <td><span class="badge badge-blue">Soft</span></td>
+      </tr>
+      <tr>
+        <td><span class="rule-id">R5</span></td>
+        <td>Yesterday's RPE ≥ 8</td>
+        <td>Intensity −5%</td>
+        <td><span class="badge badge-blue">Soft</span></td>
+      </tr>
+      <tr>
+        <td><span class="rule-id">R6</span></td>
+        <td>Sleep &lt; 6h + HRV depressed (two signals)</td>
+        <td>Swap to Z2. Single poor night alone: interval count −1 only</td>
+        <td><span class="badge badge-orange">Swap / Soft</span></td>
+      </tr>
+      <tr>
+        <td><span class="rule-id">R7</span></td>
+        <td>Ambient temp or dew point above threshold</td>
+        <td>Intensity reduced by combined heat + humidity correction</td>
+        <td><span class="badge badge-blue">Soft</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="font-size:0.73rem; color:var(--muted); margin-top:0.25rem;">Rules apply in priority order. R1 exits immediately — no other rules run. R2 exits after the swap — soft rules do not stack on top. Intensity floor: 65% FTP regardless of how many soft rules stack.</p>
+
+  <!-- ═══════════════════════════════ TSS COMPLIANCE ═══════════════════════════════ -->
+  <p class="section-label">TSS compliance — why is there a gap?</p>
+  <p style="font-size:0.82rem; color:var(--secondary); margin-bottom:0.75rem; line-height:1.6;">When planned TSS consistently exceeds actual TSS, the system classifies <em>why</em> before deciding what to do. Scaling targets up is only correct in one of the five cases.</p>
+  <div class="compliance-grid">
+    <div class="compliance-cell c-ok">
+      <div class="compliance-tag">completed</div>
+      <div class="compliance-title">Within 12% of target</div>
+      <div class="compliance-fix">No action needed</div>
+    </div>
+    <div class="compliance-cell c-skip">
+      <div class="compliance-tag">skipped</div>
+      <div class="compliance-title">No activity logged</div>
+      <div class="compliance-fix">Adherence issue — protect calendar time, not a load problem</div>
+    </div>
+    <div class="compliance-cell c-duration">
+      <div class="compliance-tag">duration short</div>
+      <div class="compliance-title">Session cut to &lt;80% duration</div>
+      <div class="compliance-fix">Scheduling / time pressure — fix the slot, not the target</div>
+    </div>
+    <div class="compliance-cell c-fatigued">
+      <div class="compliance-tag">intensity · fatigued</div>
+      <div class="compliance-title">Full duration, high RPE, low TSS</div>
+      <div class="compliance-fix">Load too ambitious — reduce targets or add recovery</div>
+    </div>
+    <div class="compliance-cell c-soft">
+      <div class="compliance-tag">intensity · soft</div>
+      <div class="compliance-title">Full duration, low RPE, low TSS</div>
+      <div class="compliance-fix">Execution gap — scale targets ×(1/rate), capped at ×1.20</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ L2 REASONING TRAILS ═══════════════════════════════ -->
+  <p class="section-label">Reasoning trail format — every decision is explained</p>
+  <p style="font-size:0.82rem; color:var(--secondary); margin-bottom:0.75rem; line-height:1.6;">The L2 format enforces accountability: a real data point, a named rule, a concrete adjustment, and a predicted effect. "Fatigue looks high" is not permitted.</p>
+
+  <div class="l2-block">
+    <strong>Modulation:</strong><br>
+    HRV −8.5% over 7d <span class="arrow">→</span> R3 (HRV below −7% threshold) <span class="arrow">→</span> drop interval count 4→3, target 95% FTP not 100% <span class="arrow">→</span> maintain quality stimulus, reduce cumulative strain ~15%
+  </div>
+  <div class="l2-block">
+    <strong>Watchdog:</strong><br>
+    ATL 148 vs CTL 121 for 4 days <span class="arrow">→</span> T1 (ATL &gt; CTL +25) <span class="arrow">→</span> insert recovery day today, swap Thursday threshold to Z2 <span class="arrow">→</span> TSB recovers ~8 pts by weekend, ramp drops to +3.2/wk
+  </div>
+  <div class="l2-block">
+    <strong>Debrief:</strong><br>
+    Power fell 14% first→last lap <span class="arrow">→</span> paced the opening set 8–10W above target <span class="arrow">→</span> start 5W lower on next threshold session <span class="arrow">→</span> power holds consistent through the full set
+  </div>
+  <div class="l2-block">
+    <strong>Compliance:</strong><br>
+    87% compliance over 28d, dominant gap: intensity_short_soft <span class="arrow">→</span> full duration, low RPE, below target power — execution gap not fatigue <span class="arrow">→</span> apply ×1.15 correction to quality session TSS targets <span class="arrow">→</span> actual TSS lands on goal load within 2–3 weeks
+  </div>
+
+  <div class="footer">&copy; 2025 Diamond Peak Consulting</div>
+</div>
+</body>
+</html>
