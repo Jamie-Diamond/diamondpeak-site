@@ -49,6 +49,16 @@ from primitives.reoptimise import (
     apply_compliance_correction,
     quality_session_spacing_ok,
 )
+from primitives.debrief import (
+    LapMetrics,
+    DebriefResult,
+    POWER_ZONES,
+    lap_drift,
+    hr_power_decoupling,
+    power_zone_distribution,
+    session_quality_label,
+    build_debrief,
+)
 
 __all__ = [
     # load
@@ -90,4 +100,13 @@ __all__ = [
     "ramp_headroom",
     "apply_compliance_correction",
     "quality_session_spacing_ok",
+    # debrief
+    "LapMetrics",
+    "DebriefResult",
+    "POWER_ZONES",
+    "lap_drift",
+    "hr_power_decoupling",
+    "power_zone_distribution",
+    "session_quality_label",
+    "build_debrief",
 ]

@@ -48,6 +48,8 @@ This is non-negotiable. Any prescription without a reasoning trail should be rej
 | [Log heat session](#log-heat-session) | After any heat session not on Garmin (bath, sauna) — appends to heat-log.json. |
 | [Week re-optimiser](#week-re-optimiser-w1) | Mid-week after missed or shortened sessions — redistribute remaining load safely. |
 | [Compliance review](#compliance-review) | Any time — analyse planned vs actual TSS pattern, diagnose why the gap exists, prescribe the fix. |
+| [Session debrief](#session-debrief-w6) | After any key session — structured coaching debrief with drift, decoupling, zone distribution. |
+| [Weekly summary](#weekly-summary-w8) | Auto-generated Sunday 18:00 — week card, compliance, flags, PushNotification. |
 
 > **Cross-validation rule (apply across all prompts):** before recommending a hard session or load increase, cross-check against multi-signal state (HRV trend, RHR, sleep, body weight vs 7-day avg, niggle pain score). Calendar-says-hard is overridden by tanked HRV + poor sleep + elevated yesterday RPE. See `current-state.md` for subjective layer.
 
@@ -551,3 +553,87 @@ Multiple triggers: one PushNotification listing all names, then one L2 trail per
 7. If dominant gap is `skipped`:
    - Do not adjust targets.
    - Raise the scheduling question: "Which sessions are being skipped and why?"
+
+---
+
+## Session debrief (W6)
+
+**Trigger:** runs automatically at the end of session capture (W3), or manually: "debrief my session" / "how did that go". Applies to any session with TSS ≥ 40 or duration ≥ 45 min.
+
+**Claude instructions:**
+
+1. Identify the session to debrief:
+   - If session capture just completed, use that session.
+   - Otherwise, pull `get_training_history` (last 24h) to find the most recent key session.
+2. Pull the full activity detail via `get_activity_detail(activity_id)` — needs laps.
+3. Get `planned_tss` from today's `get_events` if available.
+4. Call the debrief primitive:
+   ```bash
+   python3 -c "
+   import json, sys
+   sys.path.insert(0, '/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/ironman-analysis')
+   from primitives.debrief import build_debrief
+   from dataclasses import asdict
+   activity = <activity dict>
+   laps = <laps list from activity>
+   result = build_debrief(activity, laps, ftp=<ftp>, planned_tss=<planned_tss or None>)
+   print(json.dumps(asdict(result), indent=2))
+   "
+   ```
+5. Output the debrief card:
+
+---
+**Debrief: [session name] — [EXECUTED WELL / ADEQUATE / UNDERCOOKED / OVERDONE]**
+
+| Metric | Value | Note |
+|---|---|---|
+| TSS | X (planned Y) | X% of target |
+| Power drift | +/-X% | first→last lap |
+| HR drift | +/-X% | first→last lap |
+| Decoupling | X% | >5% = flag |
+| Top zone | Z[N] (Xmin) | by time |
+
+**Flags:** [list flags, or "none"]
+
+**Coaching note:** [one sentence — what this means for next time. Use L2 format:]
+[signal] → [pattern it indicates] → [one concrete change] → [expected effect]
+
+Example: "Power fell 14% first→last lap → went out 8–10W above target → start 5W lower on next threshold session → power stays consistent through full set"
+
+---
+
+6. Write the coaching note to `session-log.json` as a `debrief` field on the matching entry (find by date + sport). If no entry exists yet, create a minimal one.
+
+Updated session-log.json schema (add `debrief` field):
+```json
+{
+  "date": "YYYY-MM-DD",
+  "activity_id": "iXXXXXXXXX",
+  "sport": "Ride | Run | Swim | Brick",
+  "session_name": "...",
+  "rpe": N,
+  "gut": N_or_null,
+  "heat_tolerance": N_or_null,
+  "fuelling_pct": N_or_null,
+  "note": "text or null",
+  "debrief": "coaching note text or null"
+}
+```
+
+**Degradation:** if `get_activity_detail` returns no laps, skip the drift/decoupling/zone metrics and output a TSS-only debrief with quality label based on execution_pct alone.
+
+---
+
+## Weekly summary (W8)
+
+**Trigger:** runs automatically via launchd at 18:00 every Sunday. Can also be run manually: "weekly summary" or "how was my week".
+
+**Claude instructions:** see `ClaudeCoach/scripts/weekly-summary.sh` for the full prompt. Summary of what it produces:
+
+- **Week card**: TSS vs planned, compliance rate, CTL change, ATL, sleep avg, heat sessions, disciplines completed, sessions missed.
+- **Week label**: STRONG (≥95% compliance, no flags) / SOLID (80–95%, no flags) / LIGHT (<80%) / MIXED (compliance ok, flags present).
+- **Key finding**: one L2 trail for the most significant observation.
+- **Monday focus**: one sentence — the single most important thing for next week's first session.
+- **PushNotification**: "Week [N/21]: [TSS / compliance%] | CTL [+/-] | [headline or 'all clear']"
+
+The summary is written to `~/Library/Logs/ClaudeCoach/weekly-summary.log`. On Monday, "show me last week's summary" reads from that log rather than re-pulling all the data.

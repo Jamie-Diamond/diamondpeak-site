@@ -42,6 +42,32 @@ Primitives are pure: dicts/lists in, dicts/lists out. No MCP coupling.
 | `ramp_headroom` | `current_ctl`, `weekly_planned_tss`, `ankle_in_rehab` | Max additional TSS available this week without breaching ramp cap |
 | `apply_compliance_correction` | `sessions`, `correction_factor` | Sessions list with quality TSS targets scaled (Z2/swim/strength unchanged) |
 | `quality_session_spacing_ok` | `new_session_date`, `existing_sessions` | Bool — False if placing a quality session here creates back-to-back quality days |
+| `build_debrief` | `activity`, `raw_laps`, `ftp`, `planned_tss` | `DebriefResult` — drift, decoupling, zone distribution, quality label, flags |
+| `lap_drift` | `laps`, `attr` | % change first→last lap for avg_watts / avg_hr / avg_pace_s_per_km |
+| `hr_power_decoupling` | `laps` | % change in HR:power ratio first→second half (>5% = aerobic stress flag) |
+| `power_zone_distribution` | `laps`, `ftp` | Dict of Coggan zone → seconds (lap-average approximation) |
+| `session_quality_label` | `execution_pct`, `decoupling_pct` | "executed_well" \| "adequate" \| "undercooked" \| "overdone" |
+
+### `DebriefResult` fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `session_name` | str | From activity name or workout_name |
+| `sport` | str | bike \| run \| swim |
+| `actual_tss` | float | |
+| `planned_tss` | float or None | From get_events; None if not set |
+| `execution_pct` | float or None | actual/planned; None if no planned_tss |
+| `hr_drift_pct` | float or None | % change first→last lap HR |
+| `power_drift_pct` | float or None | % change first→last lap power |
+| `pace_drift_pct` | float or None | % change first→last lap pace (+ = slower) |
+| `decoupling_pct` | float or None | HR:power ratio drift >5% = flag |
+| `power_zone_distribution` | dict[str, float] | Zone → seconds; empty for non-bike |
+| `quality_label` | str | executed_well \| adequate \| undercooked \| overdone |
+| `flags` | list[str] | Auto-generated concern strings (decoupling, power drop, execution gap) |
+
+Power zones (Coggan): Z1 <55% FTP, Z2 55–75%, Z3 75–87%, Z4 87–95%, Z5 95–105%, Z6 >105%.
+
+Lap data comes from `get_activity_detail` → `laps` key. Pace field `avg_pace` in Intervals.icu is seconds/metre → `build_debrief` converts to s/km automatically.
 
 ### Gap classifications (`classify_gap` output)
 
