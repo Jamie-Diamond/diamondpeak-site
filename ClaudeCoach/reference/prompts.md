@@ -257,6 +257,44 @@ For every training, pacing, fuelling, or recovery recommendation in this convers
 
 ---
 
+## Watchdog check (W4)
+
+**Trigger:** runs automatically via cron at 07:03 daily. Can also be run manually by saying "watchdog".
+
+**Claude instructions:**
+
+Read:
+- `ClaudeCoach/current-state.md`
+- `ClaudeCoach/reference/rules.md`
+- `ClaudeCoach/session-log.json`
+- `ClaudeCoach/heat-log.json`
+
+Pull from IcuSync: `get_fitness` (14 days), `get_training_history` (14 days), `get_wellness` (14 days).
+
+Evaluate triggers in order. Assign Tier 1 (FYI) or Tier 2 (act today):
+
+| # | Trigger | Tier |
+|---|---|---|
+| T1 | ATL > CTL + 25 for 3+ consecutive days | 2 |
+| T2 | CTL ramp >4/wk while ankle still in rehab | 2 |
+| T3 | HRV trend down >7% over last 7 days | 1 |
+| T4 | Sleep <7h for 3+ days in last 7 (if data available) | 1 |
+| T5 | Missed planned sessions ≥2 in last rolling 7 days | 1 |
+| T6 | Aerobic decoupling >5% on any Z2 ride in last 7 days | 1 |
+| T7 | (from 15 May) 14-day heat dose total below target trajectory | 1 |
+| T8 | (from 15 May) Days since last heat session >7 during acclimation block | 2 |
+
+**If no triggers fire:** silent. Do nothing.
+
+**If any trigger fires:** call PushNotification. Format:
+- Tier 2: "⚠ [trigger]: [one-line action required]"
+- Tier 1: "ℹ [trigger]: [one-line note]"
+- Multiple triggers: list all names, lead with highest tier. Under 200 characters total.
+
+**Heat trajectory for T7:** target 14–20 sessions across 15 May – 6 September (114 days = ~16 weeks). Linear trajectory ≈ 1 session/week minimum. Flag if 14-day dose sum < 3.0 (below one session/week pace).
+
+---
+
 ## Session capture
 
 **Trigger:** run after any key session (long ride, brick, quality run, or session in heat). Claude drives — no user template to fill in. Also triggered by the evening cron if a session synced to Intervals.icu without a capture entry.
