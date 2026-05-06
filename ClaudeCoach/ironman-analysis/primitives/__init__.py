@@ -18,6 +18,10 @@ from primitives.load import (
     flag_conditions,
     separate_actual_projection,
 )
+from primitives.modulation import (
+    SessionPrescription,
+    modulate_session,
+)
 from primitives.env_pacing import (
     EnvAdjustment,
     heat_correction_fraction,
@@ -44,6 +48,9 @@ __all__ = [
     "trajectory_check",
     "flag_conditions",
     "separate_actual_projection",
+    # modulation
+    "SessionPrescription",
+    "modulate_session",
     # env_pacing
     "EnvAdjustment",
     "heat_correction_fraction",

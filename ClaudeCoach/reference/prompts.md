@@ -282,6 +282,64 @@ For every training, pacing, fuelling, or recovery recommendation in this convers
 
 ---
 
+## Daily prescription (W2)
+
+**Trigger:** runs automatically via launchd at 06:33 daily. Can also be run manually: "what's today's session?" or "daily prescription".
+
+**Claude instructions:**
+
+1. Pull from IcuSync: `get_athlete_profile` (today's date), `get_fitness` (7 days), `get_training_history` (7 days), `get_wellness` (14 days), `get_events` (today).
+2. Read: `current-state.md`, `session-log.json` (last entry = yesterday's RPE).
+3. Assemble the `readiness` dict:
+   ```
+   atl, ctl from get_fitness (most recent)
+   hrv_trend_pct: (today's HRV − 7d avg) / 7d avg × 100
+   sleep_h_last_night: from get_wellness
+   last_session_rpe: most recent entry in session-log.json
+   ankle_pain_score: from current-state.md
+   ankle_quality_cleared: from current-state.md (4 consecutive pain-free weeks)
+   temp_c, dew_point_c: today's forecast (ask Jamie if not available; use 18°C/10°C as fallback)
+   ```
+4. Identify today's planned session from `get_events`. Map to session type:
+   - Threshold/FTP intervals → `bike_threshold`
+   - Z2 / long ride → `bike_z2`
+   - VO2max → `bike_vo2`
+   - Race-pace bike → `bike_race_pace`
+   - Run intervals / tempo → `run_quality`
+   - Easy run / walk-run → `run_easy`
+   - Long run → `run_long`
+   - Brick → `brick`
+   - Swim → `swim`
+   - Gym → `strength`
+5. Call the modulation script:
+   ```bash
+   python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/ironman-analysis/scripts/modulate.py '<json>'
+   ```
+6. If `modified` or `swapped_to_z2`: push the adjusted session to Intervals.icu via IcuSync `push_workout` (replace today's planned session). If `go == false`: push a recovery note instead.
+7. Output the prescription card in this format:
+
+---
+**Today: [session name] — [GO / MODIFIED / SWAPPED / BLOCKED]**
+
+| Field | Planned | Prescribed |
+|---|---|---|
+| Intensity | X% FTP | Y% FTP |
+| Intervals | N × M min | N' × M min |
+| Recovery | X min | X min |
+| Duration | X min | X min |
+
+**Reasoning trail(s):**
+- [L2 trail for each fired rule]
+
+*[summary sentence]*
+
+---
+
+8. If no rules fired: output "Today: [session name] — execute as planned." and the planned targets only.
+9. Call PushNotification if session was modified or blocked: "[session name]: [summary]"
+
+---
+
 ## Watchdog check (W4)
 
 **Trigger:** runs automatically via cron at 07:03 daily. Can also be run manually by saying "watchdog".
