@@ -34,6 +34,21 @@ from primitives.env_pacing import (
     format_pace,
     format_if,
 )
+from primitives.compliance import (
+    ComplianceRecord,
+    classify_gap,
+    tss_gap_series,
+    rolling_compliance,
+    forward_correction_factor,
+    compliance_recommendations,
+)
+from primitives.reoptimise import (
+    WeekDebt,
+    assess_week_debt,
+    ramp_headroom,
+    apply_compliance_correction,
+    quality_session_spacing_ok,
+)
 
 __all__ = [
     # load
@@ -62,4 +77,17 @@ __all__ = [
     "race_day_targets",
     "format_pace",
     "format_if",
+    # compliance
+    "ComplianceRecord",
+    "classify_gap",
+    "tss_gap_series",
+    "rolling_compliance",
+    "forward_correction_factor",
+    "compliance_recommendations",
+    # reoptimise
+    "WeekDebt",
+    "assess_week_debt",
+    "ramp_headroom",
+    "apply_compliance_correction",
+    "quality_session_spacing_ok",
 ]

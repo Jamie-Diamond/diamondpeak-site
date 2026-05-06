@@ -33,6 +33,43 @@ Primitives are pure: dicts/lists in, dicts/lists out. No MCP coupling.
 | `format_pace` | `sec_per_km` | String e.g. "5:06/km" |
 | `format_if` | `intensity_factor` | String e.g. "0.692" |
 | `modulate_session` | `planned: dict`, `readiness: dict` | `SessionPrescription` — adjusted session + fired rules + L2 trails + summary |
+| `classify_gap` | `planned_tss`, `actual_tss`, `planned_duration_min`, `actual_duration_min`, `rpe` | Gap classification string (see below) |
+| `tss_gap_series` | `planned_events`, `actual_activities`, `session_log` | `list[ComplianceRecord]` — matched planned vs actual with classifications |
+| `rolling_compliance` | `list[ComplianceRecord]` | `dict` — compliance_rate, completion_rate, dominant_gap_type, classification_counts |
+| `forward_correction_factor` | `compliance_rate: float` | Multiplier for quality TSS targets (1.0 if no correction needed; only valid when dominant gap = intensity_short_soft) |
+| `compliance_recommendations` | compliance metrics dict | `list[str]` — actionable fix per dominant gap type |
+| `assess_week_debt` | `planned_sessions`, `actual_sessions`, `today` | `WeekDebt` — debt TSS, redistributable flag, reason |
+| `ramp_headroom` | `current_ctl`, `weekly_planned_tss`, `ankle_in_rehab` | Max additional TSS available this week without breaching ramp cap |
+| `apply_compliance_correction` | `sessions`, `correction_factor` | Sessions list with quality TSS targets scaled (Z2/swim/strength unchanged) |
+| `quality_session_spacing_ok` | `new_session_date`, `existing_sessions` | Bool — False if placing a quality session here creates back-to-back quality days |
+
+### Gap classifications (`classify_gap` output)
+
+| Classification | Meaning | Fix |
+|---|---|---|
+| `completed` | Within 12% of planned TSS | None |
+| `skipped` | No activity logged | Adherence — protect calendar time |
+| `duration_short` | < 80% planned duration | Scheduling / time pressure |
+| `intensity_short_fatigued` | Full duration, TSS gap, RPE ≥ 7 | Load too ambitious — reduce targets or add recovery |
+| `intensity_short_soft` | Full duration, TSS gap, RPE < 7 | Execution gap — add session cues; apply correction factor |
+| `intensity_short_unknown` | Full duration, TSS gap, no RPE | Log RPE to enable root-cause analysis |
+
+### `WeekDebt` fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `week_start` | str | YYYY-MM-DD Monday |
+| `planned_tss` | float | Total planned TSS for the week |
+| `actual_tss_to_date` | float | Accumulated so far |
+| `debt_tss` | float | Planned-to-date minus actual (positive = missed) |
+| `debt_pct` | float | debt_tss / planned_tss |
+| `days_elapsed` | int | Days since Monday (0=Mon) |
+| `days_remaining` | int | Days left including today |
+| `days_missed` | int | Days where TSS was planned but zero logged |
+| `redistributable` | bool | Whether debt can be safely spread into remaining days |
+| `reason` | str | Empty when redistributable=True; explains constraint otherwise |
+
+Redistribution is blocked when: it's the last day of the week, >3 days were missed, or >40% of planned weekly TSS was not completed.
 
 ### `modulate_session` — planned dict keys
 

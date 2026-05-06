@@ -46,6 +46,8 @@ This is non-negotiable. Any prescription without a reasoning trail should be rej
 | [Rationale-required wrapper](#rationale-required-wrapper) | Standing prefix for any deep-coaching prompt. |
 | [Session capture](#session-capture) | After any key session — log RPE, gut, heat tolerance, fuelling adherence. |
 | [Log heat session](#log-heat-session) | After any heat session not on Garmin (bath, sauna) — appends to heat-log.json. |
+| [Week re-optimiser](#week-re-optimiser-w1) | Mid-week after missed or shortened sessions — redistribute remaining load safely. |
+| [Compliance review](#compliance-review) | Any time — analyse planned vs actual TSS pattern, diagnose why the gap exists, prescribe the fix. |
 
 > **Cross-validation rule (apply across all prompts):** before recommending a hard session or load increase, cross-check against multi-signal state (HRV trend, RHR, sleep, body weight vs 7-day avg, niggle pain score). Calendar-says-hard is overridden by tanked HRV + poor sleep + elevated yesterday RPE. See `current-state.md` for subjective layer.
 
@@ -87,8 +89,17 @@ Please:
 1. Review the week vs the plan, by discipline.
 2. Analyse key session data — power, pace, HR, RPE, drift.
 3. Flag anything in metrics or load trajectory (CTL ramp vs cap, ATL > CTL gap, TSB).
-4. Write next week's sessions and push them to my Intervals.icu calendar via IcuSync on the correct dates.
-5. Confirm the push succeeded and end with a one-line week summary.
+4. **Compliance check** — for any session where planned TSS is set in Intervals.icu:
+   a. Call `python3 ironman-analysis/scripts/reoptimise.py '<json>'` with the last 28 days of
+      planned vs actual sessions and compliance records from session-log.json.
+   b. Report: rolling compliance rate (%), dominant gap type, and the recommendation from
+      `compliance_recommendations`. Use L2 format if a fix is suggested:
+      "[X% compliance over 28d, dominant: Y] → [gap classification] → [fix] → [expected effect]"
+   c. If correction_factor_applies is true: note that next week's quality session TSS targets
+      have been adjusted upward by ×[factor] to account for the execution gap.
+5. Write next week's sessions — apply correction factor to quality session TSS if applicable —
+   and push them to my Intervals.icu calendar via IcuSync on the correct dates.
+6. Confirm the push succeeded and end with a one-line week summary.
 ```
 
 ## Daily readiness
@@ -454,3 +465,89 @@ Multiple triggers: one PushNotification listing all names, then one L2 trail per
    - **14-day rolling dose total** (sum of `dose` for entries within last 14 days).
    - **Days since last heat session** (any type).
    - Status vs target: target trajectory is 14–20 sessions across late May → early September. Current pace: [on track / behind / ahead].
+
+---
+
+## Week re-optimiser (W1)
+
+**Trigger:** use mid-week after missing or significantly shortening sessions. Prompt: "reoptimise my week" or "I missed [session] — what now?"
+
+**Claude instructions:**
+
+1. Pull from IcuSync: `get_athlete_profile` (today's date), `get_events` (current week Mon–Sun), `get_training_history` (current week), `get_fitness` (most recent CTL/ATL).
+2. Read: `current-state.md` (ankle status), `session-log.json`.
+3. Call the re-optimiser script:
+   ```bash
+   python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/ironman-analysis/scripts/reoptimise.py '<json>'
+   ```
+   JSON: `planned_sessions` (from get_events, with planned_tss), `actual_sessions` (from get_training_history, with tss), `today`, `current_ctl`, `ankle_in_rehab`, and optionally `compliance_records` (last 28 days from session-log.json cross-referenced with get_events).
+
+4. Interpret the output:
+   - If `redistributable: false` → tell Jamie the reason, confirm the week continues as-is from today. No reshuffling.
+   - If `redistributable: true`:
+     a. State the debt: "You're [X TSS] short of plan ([Y%]), with [Z days] remaining."
+     b. State the ramp headroom: "Ramp cap allows [H TSS] additional this week."
+     c. Propose a redistribution across remaining days — respecting:
+        - `quality_session_spacing_ok()` — no back-to-back quality days
+        - The ramp headroom ceiling
+        - No adding sessions on rest days unless explicitly approved
+        - Compliance correction factor if applicable (intensity_short_soft dominant)
+     d. Show the revised remaining-week schedule as a simple table.
+     e. Ask: "Happy with this? I'll push it to Intervals.icu."
+     f. On confirmation: push via IcuSync `push_workout` / `edit_workout`.
+
+5. L2 trail for each redistribution decision:
+   "[debt signal] → [constraint checked] → [adjustment] → [expected effect on weekly TSS and CTL]"
+
+**Hard limits — never redistribute:**
+- Into a day immediately after a quality session (spacing rule)
+- More than ramp headroom allows in total
+- If debt is > 40% of planned weekly TSS or > 3 days missed
+
+---
+
+## Compliance review
+
+**Trigger:** use any time Jamie wants to understand why he's consistently hitting less than planned TSS. Prompt: "compliance review", "why am I missing TSS", "am I executing sessions properly".
+
+**Claude instructions:**
+
+1. Pull from IcuSync: `get_athlete_profile`, `get_events` (last 28 days), `get_training_history` (last 28 days).
+2. Read `session-log.json` for RPE data.
+3. Call the re-optimiser script with the last 28 days of data:
+   ```bash
+   python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/ironman-analysis/scripts/reoptimise.py '<json>'
+   ```
+   Include `compliance_records` built from session-log.json matched to planned events.
+
+4. Report the compliance summary:
+
+---
+**Compliance — last 28 days**
+
+| Metric | Value |
+|---|---|
+| Overall compliance rate | X% |
+| Session completion rate | X% |
+| Dominant gap type | [type] |
+
+**Breakdown by classification:**
+[table of classification_counts]
+
+**Root-cause diagnosis:**
+[compliance_recommendations output, formatted as L2 trails where applicable]
+
+---
+
+5. If `correction_factor_applies`:
+   - Explain what it means: "Your quality sessions are consistently executed at [X%] of planned TSS with low RPE, suggesting a target execution gap rather than fatigue."
+   - Propose using the ×[factor] correction in next week's plan.
+   - Ask for confirmation before applying.
+
+6. If dominant gap is `intensity_short_fatigued`:
+   - Do not apply correction factor.
+   - Surface the flag to Jamie: "High RPE but below target intensity suggests planned load is currently too ambitious for your fitness. Recommend reviewing the next 2-week plan targets."
+
+7. If dominant gap is `skipped`:
+   - Do not adjust targets.
+   - Raise the scheduling question: "Which sessions are being skipped and why?"
