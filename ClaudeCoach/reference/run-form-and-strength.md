@@ -2,7 +2,7 @@
 
 **TL;DR:** Diagnose form via Ochy (slow-motion video → form score, style class, weak points). Stryd quantifies the cost in running economy if available. Drill prescription is by *fault* (overstride / low cadence / vertical bounce / arm crossing). Gym programme is two sessions a week (lower-body power + stability), reduced in build/specific phases. Ankle-rehab priorities flagged inline.
 
-> Closes the –20 min on the IM run leg via running economy gain + injury resilience. Pair with `run-execution.md` for race-day discipline and `methodology.md` for session-design context.
+> Closes the –20 min on the IM run leg via running economy gain + injury resilience. Pair with `run-execution.md` for race-day discipline and `templates/session-library.md` for session-design context.
 
 ## Diagnostic — Ochy + (optional) Stryd
 
@@ -22,7 +22,7 @@ Cadence: every 6–8 weeks during a build to measure improvement.
 
 ### Ochy + Stryd cross-reference
 
-Pair value: Ochy says *what* the issue is, Stryd says *how much it costs you*. Stryd not currently in kit — see `methodology.md` Stryd section.
+Pair value: Ochy says *what* the issue is, Stryd says *how much it costs you*. Stryd not currently in kit — see `templates/session-library.md` Stryd section.
 
 | Form issue | Ochy flags | Stryd confirms | The fix |
 |---|---|---|---|

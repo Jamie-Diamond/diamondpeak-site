@@ -39,7 +39,7 @@ The 2025 second-half failure was **suppressed HR at constant race-pace effort** 
 
 ## IM-run fuelling + aid-station discipline — the 2025 fix
 
-> **NEVER prescribe gels for this athlete.** See `02-conflicts.md` §1.
+> **NEVER prescribe gels for this athlete.** See `README.md` caveats section.
 >
 > **2025 cost-of-failure benchmark:** ~15 min of walk-break overrun beyond a disciplined ≤30 sec/stop allowance. **This is the largest single addressable time loss in the workspace.** Train it like a session, not a logistics afterthought.
 

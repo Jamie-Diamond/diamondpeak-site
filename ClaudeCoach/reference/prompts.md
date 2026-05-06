@@ -21,7 +21,7 @@
 | [Ad-hoc data pull](#ad-hoc-data-pull-and-analysis) | One-off questions about training data. |
 | [Rationale-required wrapper](#rationale-required-wrapper) | Standing prefix for any deep-coaching prompt. |
 
-> **Cross-validation rule (apply across all prompts):** before recommending a hard session or load increase, cross-check against multi-signal state (HRV trend, RHR, sleep, body weight vs 7-day avg, niggle pain score). Calendar-says-hard is overridden by tanked HRV + poor sleep + elevated yesterday RPE. See `templates/current-state.md` for subjective layer.
+> **Cross-validation rule (apply across all prompts):** before recommending a hard session or load increase, cross-check against multi-signal state (HRV trend, RHR, sleep, body weight vs 7-day avg, niggle pain score). Calendar-says-hard is overridden by tanked HRV + poor sleep + elevated yesterday RPE. See `current-state.md` for subjective layer.
 
 ---
 
@@ -29,7 +29,7 @@
 
 ```
 Use IcuSync to pull my athlete profile, recent training history, and current fitness (CTL/ATL/TSB) from Intervals.icu.
-Read my project instructions, the files in /reference/, and /templates/current-state.md.
+Read my project instructions, the files in /reference/, and /current-state.md.
 
 Race: [NAME] | Distance: [DIST] | Date: [DATE] | Weeks out: [N]
 Goal: [TIME] | Method preference: [CHOICE or "you decide"]
@@ -47,7 +47,7 @@ Please:
 
 ```
 Use IcuSync to pull my last 7 days of training data from Intervals.icu — all activities, planned vs completed, CTL/ATL/TSB trajectory.
-Read my project instructions and /templates/current-state.md.
+Read my project instructions and /current-state.md.
 
 Subjective inputs (only those listed in current-state.md scope):
 - Sleep avg: [hr]

@@ -33,7 +33,7 @@
 | CSS faster than expected (<1:35/100m) | Lift weekly volume target. CSS-paced sets at new pace. Keep technique focus. |
 | CSS as expected (1:35–1:42/100m) | Continue current swim plan. Build OWS volume from May. |
 | CSS slower than expected (>1:42/100m) | Add a third weekly swim if schedule allows. Investigate technique blockers (Ochy-equivalent for swim — video). |
-| **All cases:** | Update `templates/current-state.md` with the result. Compute Z2/Z3/Z4 swim bands from CSS. Re-test mid-July. |
+| **All cases:** | Update `current-state.md` with the result. Compute Z2/Z3/Z4 swim bands from CSS. Re-test mid-July. |
 
 ### B1b. Bike LTHR test — W1 or W2
 
@@ -48,7 +48,7 @@
 | Bike LTHR ≥ 168 | Keep current zones (LTHR 170 is close enough). |
 | Bike LTHR 160–167 (most likely) | Update Intervals.icu → Settings → Ride → LTHR. New HR Z2 ceiling ~140 (vs 146). Re-baseline TiZ reads on prior rides. |
 | Bike LTHR < 160 | Sanity-check the test (was it a true max effort?). Re-run before locking in. |
-| **All cases:** | Update anchor values in `01-hard-rules.md`. Re-tag the bike HR zones line as calibrated. |
+| **All cases:** | Update anchor values in `rules.md`. Re-tag the bike HR zones line as calibrated. |
 
 ### B2. FTP retest — end May
 
@@ -60,7 +60,7 @@
 | FTP rises 320–325 W | Lift bike race target NP to ~228–230 W. Recompute every bike target in `templates/session-library.md`. |
 | FTP rises 326+ W (Oct 2025 ramp-test was 326) | Lift NP target to 232+ W. Bike time gain extends to -3 to -4 min beyond pacing fix. |
 | FTP drops below 310 W | Investigate cause (sleep deficit? CTL ramp? overreach?). Don't re-test for 4 weeks. Hold current bike targets. |
-| **All cases:** | Update `templates/current-state.md`. Recompute IF bands in `templates/session-library.md`. Push next-week sessions with revised targets via IcuSync. |
+| **All cases:** | Update `current-state.md`. Recompute IF bands in `templates/session-library.md`. Push next-week sessions with revised targets via IcuSync. |
 
 ### B3. Precision Hydration sweat test — May/June
 
@@ -94,7 +94,7 @@
 | Cleared (4 pain-free weeks logged) | **Quality run unlocked.** Add R3 (race-pace intervals) and R4 (tempo) to the schedule. Long-run progression to 28–32 km. Race-pace bricks resume. |
 | Almost cleared (2–3 pain-free weeks) | Hold quality. Continue R1 + R5 (easy + long Z1–Z2 only). Re-evaluate weekly. |
 | Not cleared (recurring pain) | **Quality off the table for 2026 build.** Reassess goal — 9:30 floor becomes 9:45 (B-goal). Bike + swim absorb the run-fitness shortfall. Physio escalation. |
-| **All cases:** | Update `templates/current-state.md`. If cleared, push the new run sessions via IcuSync. |
+| **All cases:** | Update `current-state.md`. If cleared, push the new run sessions via IcuSync. |
 
 ### B6. FTP retest #2 + CSS test #2 — mid July
 
@@ -127,7 +127,7 @@
 | Swap to 46T or 48T sub-compact (recommended) | New chainring + fitting before 1 June. Verify on a hilly ride: cadence on 6–7% climbs at IF 0.78 should sit 75–85 rpm. Race target NP stays 225 W; climb cap stays 246 W. |
 | Swap cassette to 11-36 or 11-40 | Confirm rear derailleur cage compatibility first (long cage often required). New cassette + fitting before 1 June. |
 | Accept and re-budget | NP target drops to **220 W** (vs 225 W) to preserve matches. Climb cap remains 246 W *target* but plan to break it briefly on steepest pitches; soften first 90 min to IF 0.65. **Bike time gain reduces from -11 min to ~-7 min** vs 2025. Goal floor shifts toward 9:35–9:40. |
-| **All cases:** | Update `01-hard-rules.md` gearing line. Update `cervia-course.md` Bertinoro pacing. Verify on a hilly training ride before locking in. |
+| **All cases:** | Update `rules.md` gearing line. Update `course.md` Bertinoro pacing. Verify on a hilly training ride before locking in. |
 
 ### B8. Wetsuit decision — race week
 
@@ -155,4 +155,4 @@
 
 ## Use pattern
 
-When a result lands (FTP test, sweat test, ankle review etc.), Claude consults this file *first*, applies the branch, then updates `templates/current-state.md` and `templates/session-library.md`. **No ad-hoc decisions on retest day** — the rule is pre-wired.
+When a result lands (FTP test, sweat test, ankle review etc.), Claude consults this file *first*, applies the branch, then updates `current-state.md` and `templates/session-library.md`. **No ad-hoc decisions on retest day** — the rule is pre-wired.

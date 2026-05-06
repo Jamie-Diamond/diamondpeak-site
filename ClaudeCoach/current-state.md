@@ -24,7 +24,7 @@
 - Quality sessions resumed: [yes / no]
 - Physio engagement status: [active / on pause / pending booking]
 
-> Hard rule: increase load only if pain ≤2/10 during and 0/10 next morning. Cap weekly run-km increase at 10% while in rehab. Cap CTL ramp at +4/wk while ankle in rehab. (See `reference/01-hard-rules.md`.)
+> Hard rule: increase load only if pain ≤2/10 during and 0/10 next morning. Cap weekly run-km increase at 10% while in rehab. Cap CTL ramp at +4/wk while ankle in rehab. (See `reference/rules.md`.)
 
 ## Other niggles
 

@@ -13,7 +13,7 @@ Source: project custom instructions + reconciled extract from this folder. Last 
 - **Bike power zones (% FTP):** Z1<55%, Z2 55–75%, Z3 75–90%, Z4 90–105%, Z5 105–120%, Z6 120–150%, Z7 150%+.
 - **Run pace zones (% threshold pace):** Z1<77.5%, Z2 77.5–87.7%, Z3 87.7–94.3%, Z4 94.3–100%, Z5 100–103.4%, Z6 103.4–111.5%, Z7 >111.5%.
 - **Race-day weight target: 79 kg** (current ~82, drift down ~0.15 kg/wk required, max 0.5 kg/wk to protect performance).
-- **Bike gearing (current): Speedmax 52T × 10–33.** Lowest gear at 80 rpm = 15.9 km/h. **At gradients ≥6%, the IF 0.78 climb cap and 80 rpm cadence are mutually incompatible** — physics forces either low-cadence grind or above-cap power. 2025 race climb 3 at 56 rpm × 305 W is the data signature. **Resolve via chainring change (recommended: 46T or 48T sub-compact) or accept above-cap power on steep pitches and budget for it elsewhere.** See `cervia-course.md` Bertinoro section + `risk-register.md` R14.
+- **Bike gearing (current): Speedmax 52T × 10–33.** Lowest gear at 80 rpm = 15.9 km/h. **At gradients ≥6%, the IF 0.78 climb cap and 80 rpm cadence are mutually incompatible** — physics forces either low-cadence grind or above-cap power. 2025 race climb 3 at 56 rpm × 305 W is the data signature. **Resolve via chainring change (recommended: 46T or 48T sub-compact) or accept above-cap power on steep pitches and budget for it elsewhere.** See `course.md` Bertinoro section + `risk-register.md` R14.
 
 ## NEVER
 
@@ -31,7 +31,7 @@ Source: project custom instructions + reconciled extract from this folder. Last 
 - Never use system date for daily-TSS bucketing. Use athlete-local date (Europe/London) parsed from the activity's ISO datetime.
 - Never trust a single date source when scheduling. Cross-check the application env date, the IcuSync `current_date_local`, and the day-of-week the user has implied or stated. If any two disagree, ask before pushing a workout. (The API's `current_date_local` lagged by ~24 hr on 27 Apr 2026 and led to a workout being pushed to the wrong day.)
 - Always state the day-of-week alongside any date in scheduling, fitness reads, or fuelling commentary (e.g. "Mon 27 Apr", not "27 Apr"). Day-of-week is the unambiguous sanity check humans verify instantly.
-- Never assume the source material in this folder applies verbatim. Check `02-conflicts.md` for athlete-specific overrides.
+- Never assume the source material in this folder applies verbatim. Check `README.md` caveats section for athlete-specific overrides.
 - Never frame the 2025 run failure as "blow-up at km 25". Actual pattern: aid-station walk-break overrun starting km 13, ~15 min cumulative cost. See `race-day-2025.md`.
 - Never frame the 2025 bike failure as "heat collapse on Bertinoro lap 2". Actual pattern: Lap 1 paced near plan, Lap 2 aerobic durability fade (decoupling 14.5%, AP 202→157 W). See `race-day-2025.md`.
 
@@ -46,7 +46,7 @@ Source: project custom instructions + reconciled extract from this folder. Last 
 - Always flag speculation explicitly. Search the web before stating race-day facts (course details, partner products, qualifying conditions).
 - Always reference caffeine doses to current body weight (target race-day 79 kg). Total race-day cap ~3 mg/kg given low habituation.
 - Always flag that a Precision Hydration sweat test would replace assumption with data when discussing sodium.
-- Always read `templates/current-state.md` before a weekly check-in or daily-readiness prompt.
+- Always read `current-state.md` before a weekly check-in or daily-readiness prompt.
 - Always push planned workouts back to Intervals.icu via IcuSync in the same turn — single source of truth.
 - Always include "Data provided by Garmin®" attribution at the foot of any output that includes activity-detail data sourced from Garmin.
 

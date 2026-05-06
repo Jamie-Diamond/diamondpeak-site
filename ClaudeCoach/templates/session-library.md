@@ -2,7 +2,31 @@
 
 **TL;DR:** Concrete session shapes Claude can lift wholesale into the IcuSync push or adapt by phase. All targets derive from the anchor table below.
 
-> Phase mapping is in `reference/methodology.md`. Hard rules in `reference/01-hard-rules.md` — ankle-rehab cap of +4 CTL/wk applies until cleared. Race-grounded KPIs in `reference/race-day-2025.md`.
+> Hard rules in `reference/rules.md` — ankle-rehab cap of +4 CTL/wk applies until cleared. Race-grounded KPIs in `reference/race-day-2025.md`.
+
+## Phase-method mapping (this build)
+
+| Phase | Dates | Method dominant | Why |
+|---|---|---|---|
+| Base | now → end May | 80/20 (high easy bike volume; ankle-led run) | Ankle return-to-run; aerobic capacity before quality |
+| Build | June | Daniels VDOT zones (bike threshold + over-FTP) | Clean zone-based stimulus while ramping CTL |
+| Specific | July | Canova — race-pace progressions | Race-specific pacing under fatigue, paired with race-pace bricks |
+| Peak | mid-Aug | Pfitzinger-style (medium-long mid-week run) | Consolidates run endurance during longest week |
+| Taper | Sept (3 wk) | All methods agree — cut volume, preserve intensity | |
+
+> From July: Canova alternating-pace and race-pace progressions, paired with brick race-pace runs off the bike. **Numbers don't transfer from a marathon Canova prescription** — derate for fatigued legs and heat.
+
+### Stryd quick reference (if added to kit)
+
+| Zone | % of CP | Purpose |
+|---|---|---|
+| Z1 Recovery | <76% | Post-race, very easy |
+| Z2 Endurance | 76–86% | Daily runs, long runs |
+| Z3 Marathon | 86–96% | Race zone (standalone marathon) |
+| Z4 Threshold | 96–106% | Hard reps |
+| Z5 VO2max | 106–120% | Peak efforts |
+
+**IM run-leg target:** 80–88% CP (below standalone marathon — fatigued legs after ~5 hrs cycling). Adjust by RPE/HR in heat.
 
 ## Anchor table — derive everything from these
 

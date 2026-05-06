@@ -49,7 +49,7 @@ Lap 2 climb attempt:
 | Lap 2 (post-90 min) | NP target ~225 W (IF 0.71). **VI target <1.05.** |
 | Decoupling check | If decoupling >5% by km 120, drop NP by 5% for remainder. |
 
-> **Gearing constraint (current 52T × 10–33):** the IF-0.78 cap is unworkable at gradients ≥6% with current gearing. At 80 rpm in lowest gear, 6% gradient demands ~280 W (88% FTP); 7% demands ~325 W (>100% FTP). **2025 race confirmed:** climb 3 was 56 rpm × 305 W — the gearing-floor signature. Either swap to a sub-compact chainring (46T or 48T) before June, OR accept above-cap power on steep pitches and budget the matches elsewhere (e.g. softer first 90 min, NP cap 220 W not 225 W on the rest of the ride). See `01-hard-rules.md` and `risk-register.md` R14.
+> **Gearing constraint (current 52T × 10–33):** the IF-0.78 cap is unworkable at gradients ≥6% with current gearing. At 80 rpm in lowest gear, 6% gradient demands ~280 W (88% FTP); 7% demands ~325 W (>100% FTP). **2025 race confirmed:** climb 3 was 56 rpm × 305 W — the gearing-floor signature. Either swap to a sub-compact chainring (46T or 48T) before June, OR accept above-cap power on steep pitches and budget the matches elsewhere (e.g. softer first 90 min, NP cap 220 W not 225 W on the rest of the ride). See `rules.md` and `risk-register.md` R14.
 
 ### Conditions to plan for
 
