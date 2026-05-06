@@ -25,7 +25,9 @@
 2. `reference/rules.md` — every athlete-specific DO and DON'T in one place. Re-check before any prescription.
 3. `reference/race-day-2025.md` — interval-level analysis of last year's IM Cervia (10:06). Foundational for the 9:30 case. Read on first session; re-read when discussing the goal gap.
 4. `current-state.md` — subjective layer (sleep, niggles, weight, what got cut). Always before weekly check-in or daily-readiness.
-5. Whatever else the question needs — see file map below.
+5. `session-log.json` — per-session RPE/gut/heat/fuelling capture. Read before weekly check-in, W2 modulation, or session debrief.
+6. `heat-log.json` — heat acclimation dose log. Read from 15 May onwards before any heat-related recommendation or weekly check-in.
+7. Whatever else the question needs — see file map below.
 
 ---
 
@@ -35,6 +37,8 @@
 ClaudeCoach/
 ├── README.md                       # this file
 ├── current-state.md                # subjective state — Jamie updates weekly
+├── session-log.json                # per-session capture (RPE, gut, heat, fuelling) — Claude reads + writes
+├── heat-log.json                   # heat acclimation dose log (bath, sauna) — Claude reads + writes
 │
 ├── reference/                      # static knowledge (read by Claude)
 │   ├── rules.md                    # all athlete-specific rules in one place
@@ -66,6 +70,8 @@ ClaudeCoach/
 | `reference/run-execution.md` | When discussing IM-run pacing, fuelling cadence, blow-up risks, or post-race debrief structure. |
 | `reference/run-form-and-strength.md` | When the question is form, gait, drills, gym prescription, or injury prevention. |
 | `reference/prompts.md` | When the user opens a recurring workflow (weekly check-in, niggle triage, session deep-dive, etc.). |
+| `session-log.json` | Before any weekly check-in, W2 modulation, or session debrief. Contains RPE/gut/heat/fuelling capture for all key sessions. |
+| `heat-log.json` | From 15 May onwards. Running log of heat acclimation dose — bath, sauna, indoor heat sessions. Feed W4 decay alerts and W8 weekly review. |
 | `templates/session-library.md` | When prescribing sessions. Derives all targets from anchors. Includes phase-method mapping. |
 | `templates/weekly-checkin.md` | Claude fills this in for the weekly review. |
 | `templates/race-week-countdown.md` | D-7 to D-0 operations manual. Switch to this in race week. |
@@ -103,6 +109,11 @@ The reference files were extracted from a Notion template for standalone maratho
 2. Pull today's planned session + 7-day load + last night's HRV/RHR/sleep.
 3. Apply cross-validation rule (multi-signal corroboration).
 4. Go / modify / skip with one-sentence rationale. Push any modification via IcuSync.
+
+**Session capture (after any key session):**
+1. Say "log session" or let the evening cron trigger it automatically.
+2. Claude pulls the activity from IcuSync and asks RPE, gut, heat tolerance (if relevant), fuelling adherence (if relevant), note.
+3. Entry written to `session-log.json`.
 
 **Session deep-dive (after key bike or run):**
 1. Pull full activity stream via IcuSync.

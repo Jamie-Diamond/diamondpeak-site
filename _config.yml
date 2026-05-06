@@ -4,6 +4,8 @@ exclude:
   - ClaudeCoach/templates/
   - ClaudeCoach/README.md
   - ClaudeCoach/training-plan-2026-04-27_to_2026-05-17.md
+  - ClaudeCoach/session-log.json
+  - ClaudeCoach/heat-log.json
   - CLAUDE.md
   - DESIGN.md
   - DESIGN_SETUP.md

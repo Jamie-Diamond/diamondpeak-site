@@ -20,6 +20,8 @@
 | [Push next week's sessions](#push-next-weeks-sessions-via-icusync) | Standalone IcuSync push (if it didn't happen in the weekly check-in). |
 | [Ad-hoc data pull](#ad-hoc-data-pull-and-analysis) | One-off questions about training data. |
 | [Rationale-required wrapper](#rationale-required-wrapper) | Standing prefix for any deep-coaching prompt. |
+| [Session capture](#session-capture) | After any key session — log RPE, gut, heat tolerance, fuelling adherence. |
+| [Log heat session](#log-heat-session) | After any heat session not on Garmin (bath, sauna) — appends to heat-log.json. |
 
 > **Cross-validation rule (apply across all prompts):** before recommending a hard session or load increase, cross-check against multi-signal state (HRV trend, RHR, sleep, body weight vs 7-day avg, niggle pain score). Calendar-says-hard is overridden by tanked HRV + poor sleep + elevated yesterday RPE. See `current-state.md` for subjective layer.
 
@@ -252,3 +254,79 @@ Paste at the top of any deep-coaching prompt, or rely on the standing rule alrea
 ```
 For every training, pacing, fuelling, or recovery recommendation in this conversation, state the rationale in one sentence — what physiological adaptation it's targeting, what risk it's mitigating, or what data point it's responding to. If you can't justify it in one sentence, don't include it.
 ```
+
+---
+
+## Session capture
+
+**Trigger:** run after any key session (long ride, brick, quality run, or session in heat). Claude drives — no user template to fill in. Also triggered by the evening cron if a session synced to Intervals.icu without a capture entry.
+
+**Claude instructions:**
+1. Pull today's and yesterday's completed activities via IcuSync (`get_training_history`, last 2 days).
+2. Read `session-log.json`. Match entries by `activity_id`. Identify any unlogged session.
+3. Skip recovery sessions <45 min with TSS <40 — these don't need capture.
+4. For each unlogged session, ask conversationally (one question at a time):
+   - **RPE** (1–10, whole session)
+   - **Gut comfort** (1–5) — ask only if session was ≥45 min or involved fuelling. Skip for short rides/swims.
+   - **Heat tolerance** (1–5) — ask only if: ambient temp in description >22°C, session was indoors with no fan, or session type is overdressed run. Skip otherwise.
+   - **Fuelling adherence** (% of plan delivered) — ask only if a fuelling plan existed (long ride, brick, long run). Skip for swims and short sessions.
+   - **Note** (optional, 1 sentence) — "anything worth flagging?"
+5. Write the entry to `session-log.json`:
+
+```json
+{
+  "date": "YYYY-MM-DD",
+  "activity_id": "iXXXXXXXXX",
+  "sport": "Ride | Run | Swim | Brick",
+  "session_name": "name from Intervals.icu",
+  "rpe": N,
+  "gut": N_or_null,
+  "heat_tolerance": N_or_null,
+  "fuelling_pct": N_or_null,
+  "note": "text or null"
+}
+```
+
+6. Confirm the entry is saved and show the one-line summary.
+
+**Degradation:** if IcuSync is unavailable, ask Jamie to name the session and proceed with manual entry (no activity_id — set to null).
+
+---
+
+## Log heat session
+
+**Trigger:** run immediately after any heat session that isn't a Garmin activity — hot bath, sauna. For indoor trainer sessions in heat or overdressed runs, use Session capture instead (those sync to Garmin).
+
+**Only active from 15 May 2026.** Before that date, remind Jamie the heat block hasn't started and skip logging.
+
+**Claude instructions:**
+1. Jamie says something like "log bath 40 min" or "log sauna 20 min".
+2. Look up the dose from this table:
+
+| Type | Duration | Dose |
+|---|---|---|
+| bath | 30 min | 1.0 |
+| bath | 40 min | 1.3 |
+| sauna | 20 min | 0.6 |
+| indoor_z2 | 60 min | 0.7 |
+| overdressed_run | 45 min | 0.5 |
+
+   Intermediate durations: scale linearly (e.g. bath 35 min = 1.15).
+
+3. Write to `heat-log.json`:
+
+```json
+{
+  "date": "YYYY-MM-DD",
+  "type": "bath | sauna | indoor_z2 | overdressed_run",
+  "duration_min": N,
+  "dose": N,
+  "note": "optional"
+}
+```
+
+4. After writing, report:
+   - Entry saved.
+   - **14-day rolling dose total** (sum of `dose` for entries within last 14 days).
+   - **Days since last heat session** (any type).
+   - Status vs target: target trajectory is 14–20 sessions across late May → early September. Current pace: [on track / behind / ahead].
