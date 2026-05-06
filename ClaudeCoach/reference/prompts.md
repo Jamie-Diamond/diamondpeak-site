@@ -26,14 +26,48 @@ This is non-negotiable. Any prescription without a reasoning trail should be rej
 
 ---
 
+## How a week runs
+
+### Automatic — no action needed
+
+| Time | Job | What it does |
+|---|---|---|
+| 06:33 daily | Daily prescription (W2) | Pulls readiness data, runs modulation engine, pushes adjusted session to Intervals.icu, notifies if anything changed |
+| 07:03 daily | Watchdog (W4) | Checks 8 load/recovery triggers; completely silent unless one fires |
+| 18:07 daily | Capture reminder (W3) | Checks if a key session (TSS >40 / duration >45 min) was logged; notifies if not |
+| 18:00 Sunday | Weekly summary (W8) | Generates week card with TSS/compliance/CTL/flags; sends PushNotification headline |
+
+### You trigger these
+
+| When | Say / do | Prompt used |
+|---|---|---|
+| Monday morning | "weekly check-in" | [Weekly check-in](#weekly-check-in) — reviews W8 summary, runs compliance, plans and pushes next week |
+| After any key session | "capture" or reply to the 18:07 notification | [Session capture](#session-capture) → [Session debrief](#session-debrief-w6) runs automatically after |
+| After a bath or sauna | "log bath 40 min" | [Log heat session](#log-heat-session) |
+| Mid-week, missed a session | "reoptimise my week" | [Week re-optimiser](#week-re-optimiser-w1) |
+| Seeing a TSS pattern | "compliance review" | [Compliance review](#compliance-review) |
+| Starting a new block | "map a full block" | [Map a full block](#map-a-full-block) |
+| 06:33 job didn't fire | "daily prescription" | [Daily prescription (W2)](#daily-prescription-w2) — manual fallback |
+
+### Everything else (use when needed)
+[Compare last N sessions](#compare-last-n-sessions) · [Missed training](#missed-training) · [Niggle triage](#niggle-triage) · [Race blow-up analysis](#race-or-session-blow-up-analysis) · [Form + strength prescription](#form--strength-prescription) · [Build a fuelling plan](#build-a-fuelling-plan) · [Pre-race week countdown](#pre-race-week-countdown) · [Ad-hoc data pull](#ad-hoc-data-pull-and-analysis)
+
+---
+
 ## Index
 
 | Prompt | Use when |
 |---|---|
 | [Map a full block](#map-a-full-block) | Starting a new build phase or after a major schedule change. |
-| [Weekly check-in](#weekly-check-in) | Every Sunday/Monday — review last week, plan next. |
-| [Daily readiness](#daily-readiness) | Morning gate before any quality session. |
-| [Session deep-dive](#session-deep-dive) | After a key bike or run session — power/HR/decoupling/drift. |
+| [Weekly check-in](#weekly-check-in) | Monday — reviews last week, runs compliance, plans and pushes next week. |
+| [Daily prescription (W2)](#daily-prescription-w2) | **Auto at 06:33.** Manual fallback: "daily prescription". |
+| [Session capture](#session-capture) | After any key session — log RPE, gut, heat tolerance, fuelling adherence. |
+| [Session debrief (W6)](#session-debrief-w6) | **Auto after capture.** Manual: "debrief my session". Drift, decoupling, zone distribution, form metrics. |
+| [Log heat session](#log-heat-session) | After bath or sauna — "log bath 40 min". |
+| [Week re-optimiser (W1)](#week-re-optimiser-w1) | Mid-week after missed sessions — "reoptimise my week". |
+| [Compliance review](#compliance-review) | Seeing a TSS gap pattern — "compliance review" or "why am I missing TSS". |
+| [Weekly summary (W8)](#weekly-summary-w8) | **Auto Sunday 18:00.** Manual: "weekly summary". |
+| [Watchdog (W4)](#watchdog-check-w4) | **Auto at 07:03.** Manual: "watchdog". |
 | [Compare last N sessions](#compare-last-n-sessions) | Tracking adaptation across recurring sessions. |
 | [Missed training](#missed-training) | After illness, injury, life event — reassess goal honestly. |
 | [Niggle triage](#niggle-triage) | Pain or new injury — diagnose / modify / refer. |
@@ -43,13 +77,6 @@ This is non-negotiable. Any prescription without a reasoning trail should be rej
 | [Pre-race week countdown](#pre-race-week-countdown) | 7 days out from race — day-by-day checklist. |
 | [Push next week's sessions](#push-next-weeks-sessions-via-icusync) | Standalone IcuSync push (if it didn't happen in the weekly check-in). |
 | [Ad-hoc data pull](#ad-hoc-data-pull-and-analysis) | One-off questions about training data. |
-| [Rationale-required wrapper](#rationale-required-wrapper) | Standing prefix for any deep-coaching prompt. |
-| [Session capture](#session-capture) | After any key session — log RPE, gut, heat tolerance, fuelling adherence. |
-| [Log heat session](#log-heat-session) | After any heat session not on Garmin (bath, sauna) — appends to heat-log.json. |
-| [Week re-optimiser](#week-re-optimiser-w1) | Mid-week after missed or shortened sessions — redistribute remaining load safely. |
-| [Compliance review](#compliance-review) | Any time — analyse planned vs actual TSS pattern, diagnose why the gap exists, prescribe the fix. |
-| [Session debrief](#session-debrief-w6) | After any key session — structured coaching debrief with drift, decoupling, zone distribution. |
-| [Weekly summary](#weekly-summary-w8) | Auto-generated Sunday 18:00 — week card, compliance, flags, PushNotification. |
 
 > **Cross-validation rule (apply across all prompts):** before recommending a hard session or load increase, cross-check against multi-signal state (HRV trend, RHR, sleep, body weight vs 7-day avg, niggle pain score). Calendar-says-hard is overridden by tanked HRV + poor sleep + elevated yesterday RPE. See `current-state.md` for subjective layer.
 
@@ -104,42 +131,37 @@ Please:
 6. Confirm the push succeeded and end with a one-line week summary.
 ```
 
-## Daily readiness
+## Daily readiness — fallback only
 
-Morning gate before any quality session.
+> **Normally not needed.** The daily prescription (W2) runs at 06:33 automatically and does everything below. Use this prompt only if the 06:33 job didn't fire, or if you want to check readiness mid-morning before the automated run has happened.
 
 ```
 Use IcuSync to pull today's planned session from my Intervals.icu calendar, plus my last 7 days of completed activities and CTL/ATL/TSB.
 
-This morning's signals:
-- HRV (lnRMSSD or app score): [N]
-- Resting HR: [bpm]
-- Sleep last night: [hr / quality if logged]
-- Body weight: [kg vs 7-day avg]
+This morning's signals (paste if known; Claude will pull HRV/sleep from IcuSync wellness if not provided):
+- HRV (lnRMSSD or app score): [N or "pull from IcuSync"]
+- Sleep last night: [hr or "pull from IcuSync"]
 - Ankle pain 1–10: [N]
-- Other niggle: [none / location / pain 1–10]
-- Yesterday's session RPE: [N]
+- Yesterday's session RPE: [N or "check session-log.json"]
 
 Tell me:
 1. Go / modify / skip — decision on one line.
-2. Reasoning trail (L2 format): [signal] → [rule] → [adjustment] → [expected effect]. One trail per adjustment.
+2. Reasoning trail (L2 format): [signal] → [rule] → [adjustment] → [expected effect].
 3. If modify: push the modification to my Intervals.icu calendar via IcuSync.
 4. If go: any execution caveats (warm-up extended, hydration emphasis, cap RPE).
 ```
 
 ## Session deep-dive
 
+> **Replaced by Session debrief (W6).** The debrief prompt covers everything below using the structured debrief primitive (drift, decoupling, zone distribution, form metrics) and stores the coaching note in session-log.json. Use "debrief my session" or "debrief [session name]" instead.
+>
+> The only case to use a freeform deep-dive is for an unusual session the debrief primitive doesn't cover (e.g. a race, a swim time-trial, a multi-sport event). In that case:
+
 ```
-Use IcuSync to pull yesterday's [bike / run / swim] activity from Intervals.icu — full activity stream including power, HR, pace, cadence, and any Stryd metrics.
+Use IcuSync to pull [activity name / date] from Intervals.icu — full activity detail including laps, power, HR, pace, cadence.
 Planned target: [power / pace / HR zones, duration, structure].
 
-Please:
-1. Power / pace / HR zone distribution vs prescribed.
-2. Drift across the session — 1st third vs last third on power, HR, cadence, GCT.
-3. Decoupling (HR vs power or pace).
-4. Form-power %, vertical oscillation, ground contact time — any red flags.
-5. Was the prescribed adaptation achieved — yes / partially / no, with rationale.
-6. One thing to change in the next session of this type.
+Analyse: zone distribution vs prescribed, drift first→last third, decoupling, form metrics (if run: cadence, GCT, VO, form-power %), whether the adaptation was achieved, and one change for next time.
 ```
 
 ## Compare last N sessions
@@ -591,20 +613,32 @@ Multiple triggers: one PushNotification listing all names, then one L2 trail per
 | Power drift | +/-X% | first→last lap |
 | HR drift | +/-X% | first→last lap |
 | Decoupling | X% | >5% = flag |
-| Top zone | Z[N] (Xmin) | by time |
+| Top zone | Z[N] (Xmin) | by time in zone |
 
-**Flags:** [list flags, or "none"]
+**For run sessions — form metrics** (include if Stryd data available via `get_extended_metrics`):
 
-**Coaching note:** [one sentence — what this means for next time. Use L2 format:]
+| Metric | Value | Benchmark |
+|---|---|---|
+| Cadence | X spm | 180–185 spm target |
+| Ground contact time | X ms | <250ms flag |
+| Vertical oscillation | X cm | <8cm flag |
+| Form-power % | X% | >10% = wasted energy |
+
+**Flags:** [list all flags from the primitive + any Stryd red flags, or "none"]
+
+**Coaching note:** [one sentence — what this means for next time. L2 format:]
 [signal] → [pattern it indicates] → [one concrete change] → [expected effect]
 
-Example: "Power fell 14% first→last lap → went out 8–10W above target → start 5W lower on next threshold session → power stays consistent through full set"
+Examples:
+- "Power fell 14% first→last lap → went out 8–10W above target → start 5W lower next threshold session → power holds through full set"
+- "Decoupling 7.2% on Z2 ride → aerobic system stressed despite easy effort, likely heat → add 10min to warm-up and drop IF 0.02 on next hot Z2 → decoupling stays below 5%"
+- "GCT 268ms on run intervals → overstriding at fatigue → add 5 strides warm-up next quality session → GCT drops below 255ms mid-set"
 
 ---
 
 6. Write the coaching note to `session-log.json` as a `debrief` field on the matching entry (find by date + sport). If no entry exists yet, create a minimal one.
 
-Updated session-log.json schema (add `debrief` field):
+Session-log.json schema (full, including `debrief` field):
 ```json
 {
   "date": "YYYY-MM-DD",
@@ -620,7 +654,7 @@ Updated session-log.json schema (add `debrief` field):
 }
 ```
 
-**Degradation:** if `get_activity_detail` returns no laps, skip the drift/decoupling/zone metrics and output a TSS-only debrief with quality label based on execution_pct alone.
+**Degradation:** if `get_activity_detail` returns no laps, skip drift/decoupling/zone metrics and output a TSS-only debrief with quality label based on execution_pct alone. If Stryd data unavailable, omit form metrics row.
 
 ---
 
