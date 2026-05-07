@@ -235,10 +235,10 @@
     <h2>Fitness trajectory vs IM target curve</h2>
     <div class="chart-wrap"><canvas id="chartFitness"></canvas></div>
     <div class="legend">
-      <span><span class="swatch" style="background:#1a1a1a"></span>CTL — actual (this season)</span>
-      <span><span class="swatch" style="background:#999"></span>CTL — last season (same date axis)</span>
+      <span><span class="swatch" style="background:#1a1a1a"></span>CTL — actual (solid)</span>
+      <span><span class="swatch" style="background:#2e7d32;opacity:.85"></span>CTL — planned, if sessions completed (dashed)</span>
       <span><span class="swatch" style="background:#c0392b;opacity:.6"></span>Target CTL milestones</span>
-      <span><span class="swatch" style="background:#2e7d32"></span>Planned CTL (3-week block)</span>
+      <span><span class="swatch" style="background:#999"></span>CTL — last season overlay</span>
     </div>
     <div class="callout good">
       <b>Build is delivering.</b> CTL has lifted from 73.4 (25 Apr) → 76.7 (5 May) = <b>+3.3 in 10 days</b>, ramp ~+2.3 CTL/wk — well within the +4 ankle-rehab cap. ATL spiked to 104 on 26 Apr after a heavy gravel + commute + main-ride day, and peaked again at 100 on 4 May after the 130 km long ride — both digesting normally without a stuck ATL−CTL gap.<br><br>
@@ -524,7 +524,7 @@ const fitnessThis = [
   ["2026-04-20",70.1],["2026-04-21",70.2],["2026-04-22",69.8],["2026-04-23",69.6],["2026-04-24",70.9],
   ["2026-04-25",74.0],["2026-04-26",77.0],["2026-04-27",75.2],["2026-04-28",74.5],["2026-04-29",74.1],
   ["2026-04-30",73.8],["2026-05-01",74.8],["2026-05-02",75.4],["2026-05-03",75.9],["2026-05-04",78.5],
-  ["2026-05-05",76.7]
+  ["2026-05-05",76.7],["2026-05-06",76.6],["2026-05-07",76.4]
 ];
 
 // CTL series — last season (1 Apr 25 → 21 Sep 25), shifted by 1 year so it overlays this season's date axis
@@ -551,11 +551,18 @@ const targetMilestones = [
   ["2026-09-19",97,"Race day"]
 ];
 
-// Planned CTL — projected from today (5 May, end of W1)
+// Planned CTL — actual joins projection at today, then follows planned sessions (IcuSync Banister model)
 const plannedCTL = [
-  ["2026-05-03",75.9,"End W1 actual"],
-  ["2026-05-10",77,"End W2"],
-  ["2026-05-17",78,"End W3"]
+  ["2026-05-07",76.4,"Today (actual)"],
+  ["2026-05-08",79.8,"Fri — 130 km ride"],
+  ["2026-05-09",81.6,"Sat — threshold"],
+  ["2026-05-10",82.8,"End W2"],
+  ["2026-05-17",84.0,"End W3 (est.)"],
+  ["2026-05-31",88.0,"End base (est.)"],
+  ["2026-06-28",98.0,"End build (est.)"],
+  ["2026-07-26",108.0,"End specific (est.)"],
+  ["2026-08-23",114.0,"Peak (est.)"],
+  ["2026-09-19",100.0,"Race day (est.)"]
 ];
 
 // Planned sessions — Week 2 (in progress) and Week 3 (upcoming)
@@ -923,12 +930,13 @@ function rollupSport(s){
           fill: false
         },
         {
-          label: "Planned CTL (3-week block)",
+          label: "Planned CTL (if sessions completed)",
           data: plannedCTL.map(([d,v]) => ({x:d,y:v})),
           borderColor: "rgba(46,125,50,0.85)",
+          borderDash: [6,4],
           backgroundColor: "transparent",
-          borderWidth: 2.2,
-          pointRadius: 4,
+          borderWidth: 2,
+          pointRadius: 3,
           pointBackgroundColor: "rgba(46,125,50,0.95)",
           tension: 0.2,
           fill: false
