@@ -20,6 +20,20 @@ try:
 except Exception:
     _charts = None
 
+_whisper_model = None
+
+
+def get_whisper():
+    global _whisper_model
+    if _whisper_model is None:
+        try:
+            from faster_whisper import WhisperModel
+            _whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
+            log("Whisper model ready")
+        except Exception as e:
+            log(f"Whisper not available: {e}")
+    return _whisper_model
+
 CONFIG_FILE = BASE / "config.json"
 HISTORY_FILE = BASE / "history.json"
 SYSTEM_PROMPT_FILE = BASE / "system_prompt.txt"
@@ -115,6 +129,42 @@ def typing(token, chat_id):
 
 def answer_callback(token, callback_query_id):
     tg_post(token, "answerCallbackQuery", {"callback_query_id": callback_query_id})
+
+
+def download_tg_file(token, file_id):
+    info = tg_post(token, "getFile", {"file_id": file_id})
+    file_path = info.get("result", {}).get("file_path")
+    if not file_path:
+        return None
+    url = f"https://api.telegram.org/file/bot{token}/{file_path}"
+    req = urllib.request.Request(url)
+    try:
+        with urllib.request.urlopen(req, timeout=30, context=SSL_CONTEXT) as r:
+            return r.read()
+    except Exception as e:
+        log(f"File download error: {e}")
+        return None
+
+
+def transcribe_voice(audio_bytes):
+    import os, tempfile
+    model = get_whisper()
+    if not model:
+        return None
+    with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as f:
+        f.write(audio_bytes)
+        tmp = f.name
+    try:
+        segments, _ = model.transcribe(tmp, language="en")
+        return " ".join(s.text.strip() for s in segments).strip()
+    except Exception as e:
+        log(f"Transcription error: {e}")
+        return None
+    finally:
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
 
 
 def send_photo(token, chat_id, photo_bytes):
@@ -213,6 +263,7 @@ def main():
     token = config["bot_token"]
     allowed_chat_id = str(config["chat_id"])
 
+    get_whisper()  # pre-load model so first voice note isn't slow
     log(f"ClaudeCoach bot started. Listening for messages from chat {allowed_chat_id}.")
     send(token, allowed_chat_id, "ClaudeCoach online. What do you need?")
 
@@ -231,6 +282,16 @@ def main():
                 msg = update.get("message", {})
                 chat_id = str(msg.get("chat", {}).get("id", ""))
                 text = (msg.get("text") or "").strip()
+
+                if not text:
+                    voice = msg.get("voice") or msg.get("audio")
+                    if voice and chat_id == allowed_chat_id:
+                        typing(token, chat_id)
+                        raw = download_tg_file(token, voice["file_id"])
+                        if raw:
+                            text = transcribe_voice(raw) or ""
+                            if text:
+                                send(token, chat_id, f"_Heard: {text}_")
 
             if chat_id != allowed_chat_id or not text:
                 continue
