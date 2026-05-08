@@ -153,7 +153,7 @@
       <h1>Ironman Italy Emilia-Romagna 2026 — Training Visualiser</h1>
       <div class="sub">Cervia, 19 September 2026 · Athlete: Jamie Diamond · FTP 316 W (retest due end May) · Threshold pace 4:02/km · Weight 82.94 kg → 79 kg target · CSS 1:39/100m · 52T × 10–33</div>
     </div>
-    <div class="sub">Snapshot: 5 May 2026 (Tue, Week 2 day 2) · Source: Intervals.icu + race-day 2025 power/pace files</div>
+    <div class="sub" id="snapshot-date">Snapshot: 5 May 2026 · Source: Intervals.icu</div>
   </div>
 
   <!-- TOP BAR: COUNTDOWN + KEY STATS -->
@@ -161,10 +161,10 @@
     <div class="grid grid-6">
       <div class="stat"><div class="l">Days to race</div><div class="v" id="kpi-days">137</div><div class="d">Sat 19 Sep 2026</div></div>
       <div class="stat"><div class="l">Phase</div><div class="v"><span class="pill pill-base">Base</span></div><div class="d">Week 2 of 21</div></div>
-      <div class="stat good"><div class="l">CTL (fitness)</div><div class="v">76.7</div><div class="d">+3.3 in 10d · target 85 by end-May</div></div>
-      <div class="stat warn"><div class="l">TSB (form)</div><div class="v">−10.5</div><div class="d">Yesterday's 130k ride digesting</div></div>
-      <div class="stat good"><div class="l">7d ramp</div><div class="v">+2.7</div><div class="d">Within +4 cap (ankle)</div></div>
-      <div class="stat"><div class="l">HRV / RHR</div><div class="v">39 / 56</div><div class="d">HRV stable; RHR slight uptick</div></div>
+      <div class="stat good"><div class="l">CTL (fitness)</div><div class="v" id="kpi-ctl">76.7</div><div class="d">+3.3 in 10d · target 85 by end-May</div></div>
+      <div class="stat warn"><div class="l">TSB (form)</div><div class="v" id="kpi-tsb">−10.5</div><div class="d">Yesterday's 130k ride digesting</div></div>
+      <div class="stat good"><div class="l">7d ramp</div><div class="v" id="kpi-ramp">+2.7</div><div class="d">Within +4 cap (ankle)</div></div>
+      <div class="stat"><div class="l">HRV / RHR</div><div class="v" id="kpi-hrv">39 / 56</div><div class="d">HRV stable; RHR slight uptick</div></div>
     </div>
     <div style="margin-top:14px">
       <h3>21-week build · today is the start of Week 1</h3>
@@ -740,9 +740,10 @@ function rollupSport(s){
 })();
 
 // Recent table
-(function(){
+function renderRecentTable(data) {
   const tb = document.querySelector("#recent-table tbody");
-  recent.forEach(a => {
+  tb.innerHTML = "";
+  data.forEach(a => {
     const hours = Math.floor(a.dur/60), mins = a.dur%60;
     const time = hours > 0 ? `${hours}:${String(mins).padStart(2,"0")}` : `${mins}m`;
     const dist = a.dist != null ? a.dist.toFixed(1) + " km" : "—";
@@ -762,7 +763,8 @@ function rollupSport(s){
         <td class="num"><b>${a.tss}</b></td>
       </tr>`);
   });
-})();
+}
+renderRecentTable(recent);
 
 // Upcoming — calendar view (Intervals.icu style)
 (function(){
@@ -894,7 +896,7 @@ function rollupSport(s){
 // Fitness chart
 (function(){
   const ctx = document.getElementById("chartFitness").getContext("2d");
-  new Chart(ctx, {
+  window.chartFitness = new Chart(ctx, {
     type: "line",
     data: {
       datasets: [
@@ -980,7 +982,7 @@ function rollupSport(s){
 // Power curve chart
 (function(){
   const ctx = document.getElementById("chartPower").getContext("2d");
-  new Chart(ctx, {
+  window.chartPower = new Chart(ctx, {
     type: "line",
     data: {
       labels: powerCurve.map(p => p.label),
@@ -1070,6 +1072,48 @@ function rollupSport(s){
     }
   });
 })();
+
+// Race countdown (auto-calculated)
+(function() {
+  const race = new Date("2026-09-19");
+  const today = new Date(); today.setHours(0,0,0,0);
+  const days = Math.round((race - today) / 86400000);
+  const el = document.getElementById("kpi-days");
+  if (el) el.textContent = days;
+})();
+
+// Live data — fetch training-data.json (written by refresh-site-data.py) and update page
+fetch('./training-data.json')
+  .then(r => r.json())
+  .then(d => {
+    // KPI bar
+    if (d.kpi) {
+      const k = d.kpi;
+      const g = id => document.getElementById(id);
+      if (g("kpi-ctl"))  g("kpi-ctl").textContent  = k.ctl.toFixed(1);
+      if (g("kpi-tsb"))  g("kpi-tsb").textContent  = (k.tsb >= 0 ? "+" : "") + k.tsb.toFixed(1);
+      if (g("kpi-ramp")) g("kpi-ramp").textContent = (k.ramp7d >= 0 ? "+" : "") + k.ramp7d.toFixed(1);
+      if (g("kpi-hrv") && k.hrv != null) g("kpi-hrv").textContent = k.hrv + " / " + k.rhr;
+    }
+    // Fitness chart — update CTL this-season dataset (index 1)
+    if (d.fitnessThis && window.chartFitness) {
+      window.chartFitness.data.datasets[1].data = d.fitnessThis.map(([dt,v]) => ({x:dt, y:v}));
+      window.chartFitness.update();
+    }
+    // Recent activities table
+    if (d.recent) renderRecentTable(d.recent);
+    // Power curve chart
+    if (d.powerCurve && window.chartPower) {
+      window.chartPower.data.labels = d.powerCurve.map(p => p.label);
+      window.chartPower.data.datasets[0].data = d.powerCurve.map(p => p.w);
+      window.chartPower.data.datasets[1].data = d.powerCurve.map(p => p.wPrev);
+      window.chartPower.update();
+    }
+    // Snapshot label
+    const snap = document.getElementById("snapshot-date");
+    if (snap && d.generated) snap.textContent = "Live · last updated " + d.generated + " · Source: Intervals.icu";
+  })
+  .catch(() => {}); // silently fall back to hardcoded snapshot data
 </script>
 </body>
 </html>
