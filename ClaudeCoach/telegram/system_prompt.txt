@@ -29,6 +29,9 @@ Charts: embed <<<CHART:TYPE:JSON>>> anywhere in your response and the bot will r
 Fitness chart (CTL/ATL/TSB trend) — fetch 30-90 days from get_fitness. Include today's date (MM-DD from get_athlete_profile) so a "Today" line is drawn:
 <<<CHART:fitness:{"today":"MM-DD","data":[{"date":"YYYY-MM-DD","ctl":85.2,"atl":90.1,"tsb":-4.9},...]}>>>
 
+Power curve — fetch from get_power_curves, pick key durations (5s, 15s, 30s, 1m, 2m, 5m, 10m, 20m, 30m, 60m, 90m):
+<<<CHART:powercurve:{"ftp":316,"efforts":[{"label":"5s","power":980},{"label":"1m","power":520},{"label":"5m","power":380},{"label":"20m","power":320},{"label":"60m","power":295},...]}>>>
+
 Session structure chart — fetch intervals from get_activity_detail:
 <<<CHART:session:{"name":"Morning ride","ftp":316,"intervals":[{"duration_seconds":600,"average_power":250,"type":"WORK"},...]}>>>
 

@@ -1,27 +1,26 @@
 #!/usr/bin/env python3
-"""Chart generation for ClaudeCoach. Uses QuickChart.io — no extra dependencies."""
+"""Chart generation for ClaudeCoach. Uses QuickChart.io (Chart.js 4) — no extra dependencies."""
 
 import json, ssl, urllib.request
-from pathlib import Path
 
 _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 QUICKCHART = "https://quickchart.io/chart"
 
-# Brand colours matching Diamond Peak site
-C_CTL   = "rgb(26, 82, 118)"          # dark blue
-C_ATL   = "rgb(192, 57, 43)"          # red
-C_TSB_P = "rgba(29, 104, 64, 0.75)"   # green (positive form)
-C_TSB_N = "rgba(192, 57, 43, 0.65)"   # red (negative form)
+# Brand colours
+C_CTL   = "rgb(26,82,118)"
+C_ATL   = "rgb(192,57,43)"
+C_TSB_P = "rgba(29,104,64,0.8)"
+C_TSB_N = "rgba(192,57,43,0.7)"
 
 ZONE_COLOURS = {
-    "Z1": "#b3d4ff",
-    "Z2": "#56a0d3",
-    "Z3": "#f5a623",
-    "Z4": "#e05c00",
-    "Z5": "#c0392b",
+    "Z1":       "#b3d4ff",
+    "Z2":       "#56a0d3",
+    "Z3":       "#f5a623",
+    "Z4":       "#e05c00",
+    "Z5+":      "#c0392b",
     "Recovery": "#a8d5a2",
-    "WU/CD": "#d0d0d0",
+    "WU/CD":    "#d0d0d0",
 }
 
 SPORT_COLOURS = {
@@ -32,93 +31,70 @@ SPORT_COLOURS = {
     "WeightTraining": "#7f8c8d",
     "Other":          "#9b59b6",
 }
-_PLANNED_ALPHA = 0.35
+_PLANNED_ALPHA = 0.30
 
 
 def _rgba(hex_colour, alpha):
-    r, g, b = int(hex_colour[1:3], 16), int(hex_colour[3:5], 16), int(hex_colour[5:7], 16)
+    r = int(hex_colour[1:3], 16)
+    g = int(hex_colour[3:5], 16)
+    b = int(hex_colour[5:7], 16)
     return f"rgba({r},{g},{b},{alpha})"
 
 
-def _fetch(config, width=900, height=420):
+def _fetch(config, width=900, height=460):
     payload = json.dumps({
         "chart": config,
         "width": width,
         "height": height,
         "format": "png",
         "backgroundColor": "white",
-        "version": "2",
+        "version": "4",
     }).encode()
     req = urllib.request.Request(
         QUICKCHART, data=payload,
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=20, context=SSL_CONTEXT) as r:
         return r.read()
 
 
+# ── Fitness chart ─────────────────────────────────────────────────────────────
+
 def fitness_chart(payload):
     """
-    payload: list of {date, ctl, atl, tsb}  OR  {"today":"MM-DD", "data":[...]}
-    Returns PNG bytes.
+    payload: {"today":"MM-DD","data":[{date,ctl,atl,tsb},...]}
+    or list of {date,ctl,atl,tsb}
     """
     if isinstance(payload, dict):
         data  = payload.get("data", [])
-        today = payload.get("today")  # MM-DD e.g. "05-08"
+        today = payload.get("today")
     else:
         data  = payload
         today = None
 
-    labels      = [d["date"][5:] for d in data]   # MM-DD
-    ctl         = [d["ctl"] for d in data]
-    atl         = [d["atl"] for d in data]
-    tsb         = [d["tsb"] for d in data]
+    labels      = [d["date"][5:] for d in data]
+    ctl         = [round(d["ctl"], 1) for d in data]
+    atl         = [round(d["atl"], 1) for d in data]
+    tsb         = [round(d["tsb"], 1) for d in data]
     tsb_colours = [C_TSB_P if v >= 0 else C_TSB_N for v in tsb]
 
-    options = {
-        "title": {"display": True, "text": "Fitness — CTL / ATL / TSB", "fontSize": 15},
-        "legend": {"position": "top", "labels": {"fontSize": 12, "boxWidth": 14}},
-        "scales": {
-            "yAxes": [
-                {
-                    "id": "y1",
-                    "position": "left",
-                    "scaleLabel": {"display": True, "labelString": "CTL / ATL", "fontSize": 12},
-                    "ticks": {"suggestedMin": 40, "suggestedMax": 130, "fontSize": 11},
-                },
-                {
-                    "id": "y2",
-                    "position": "right",
-                    "scaleLabel": {"display": True, "labelString": "TSB", "fontSize": 12},
-                    "gridLines": {"drawOnChartArea": False},
-                    "ticks": {"suggestedMin": -50, "suggestedMax": 25, "fontSize": 11},
-                },
-            ],
-            "xAxes": [
-                {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 10, "fontSize": 11}}
-            ],
-        },
-    }
-
+    annotations = {}
     if today and today in labels:
-        options["annotation"] = {
-            "annotations": [{
-                "type": "line",
-                "mode": "vertical",
-                "scaleID": "x-axis-0",
-                "value": today,
-                "borderColor": "rgba(80,80,80,0.7)",
-                "borderWidth": 2,
-                "borderDash": [5, 3],
-                "label": {
-                    "enabled": True,
-                    "content": "Today",
-                    "fontSize": 11,
-                    "fontColor": "#333",
-                    "position": "top",
-                    "backgroundColor": "rgba(255,255,255,0.85)",
-                },
-            }]
+        annotations["today"] = {
+            "type": "line",
+            "xMin": today,
+            "xMax": today,
+            "borderColor": "rgba(60,60,60,0.65)",
+            "borderWidth": 2,
+            "borderDash": [5, 3],
+            "label": {
+                "display": True,
+                "content": "Today",
+                "position": "start",
+                "backgroundColor": "rgba(255,255,255,0.9)",
+                "color": "#333",
+                "font": {"size": 11},
+            },
         }
 
     config = {
@@ -131,12 +107,13 @@ def fitness_chart(payload):
                     "label": "CTL",
                     "data": ctl,
                     "borderColor": C_CTL,
-                    "backgroundColor": "transparent",
+                    "backgroundColor": "rgba(26,82,118,0.12)",
                     "borderWidth": 3,
                     "pointRadius": 2,
-                    "fill": False,
-                    "yAxisID": "y1",
+                    "fill": "origin",
+                    "yAxisID": "y",
                     "order": 1,
+                    "tension": 0.3,
                 },
                 {
                     "type": "line",
@@ -148,10 +125,12 @@ def fitness_chart(payload):
                     "borderDash": [6, 3],
                     "pointRadius": 2,
                     "fill": False,
-                    "yAxisID": "y1",
+                    "yAxisID": "y",
                     "order": 2,
+                    "tension": 0.3,
                 },
                 {
+                    "type": "bar",
                     "label": "TSB",
                     "data": tsb,
                     "backgroundColor": tsb_colours,
@@ -160,16 +139,56 @@ def fitness_chart(payload):
                 },
             ],
         },
-        "options": options,
+        "options": {
+            "plugins": {
+                "title": {
+                    "display": True,
+                    "text": "Fitness — CTL / ATL / TSB",
+                    "font": {"size": 15},
+                },
+                "legend": {
+                    "position": "top",
+                    "labels": {"boxWidth": 14, "font": {"size": 12}},
+                },
+                "annotation": {"annotations": annotations},
+            },
+            "scales": {
+                "x": {
+                    "ticks": {
+                        "maxRotation": 45,
+                        "autoSkip": True,
+                        "maxTicksLimit": 10,
+                        "font": {"size": 11},
+                    },
+                },
+                "y": {
+                    "type": "linear",
+                    "position": "left",
+                    "title": {"display": True, "text": "CTL / ATL", "font": {"size": 12}},
+                    "ticks": {"font": {"size": 11}},
+                    "suggestedMin": 40,
+                    "suggestedMax": 130,
+                },
+                "y2": {
+                    "type": "linear",
+                    "position": "right",
+                    "title": {"display": True, "text": "TSB", "font": {"size": 12}},
+                    "grid": {"drawOnChartArea": False},
+                    "ticks": {"font": {"size": 11}},
+                    "suggestedMin": -50,
+                    "suggestedMax": 25,
+                },
+            },
+        },
     }
     return _fetch(config, width=900, height=500)
 
 
+# ── Week calendar ─────────────────────────────────────────────────────────────
+
 def week_chart(events, title="Training week", week_start=None):
     """
-    events: list of {date (YYYY-MM-DD), sport, duration_min, status (completed|planned), name}
-    week_start: YYYY-MM-DD Monday of the week (optional; derived from events if omitted)
-    Returns PNG bytes or None.
+    events: [{date, sport, duration_min, status (completed|planned), name}]
     """
     from datetime import datetime, timedelta
 
@@ -183,8 +202,8 @@ def week_chart(events, title="Training week", week_start=None):
         first = min(dates)
         monday = first - timedelta(days=first.weekday())
 
-    days = [monday + timedelta(days=i) for i in range(7)]
-    labels = [d.strftime("%a") + " " + str(d.day) for d in days]
+    days    = [monday + timedelta(days=i) for i in range(7)]
+    labels  = [d.strftime("%a") + " " + str(d.day) for d in days]
     day_strs = [d.strftime("%Y-%m-%d") for d in days]
 
     sport_order = ["Swim", "Ride", "Run", "Strength", "WeightTraining"]
@@ -198,9 +217,9 @@ def week_chart(events, title="Training week", week_start=None):
     datasets = []
     for sport in sports:
         colour = SPORT_COLOURS.get(sport, SPORT_COLOURS["Other"])
-        label = "Strength" if sport == "WeightTraining" else sport
-        comp = [0] * 7
-        plan = [0] * 7
+        label  = "Strength" if sport == "WeightTraining" else sport
+        comp   = [0] * 7
+        plan   = [0] * 7
         for i, day_str in enumerate(day_strs):
             for e in events:
                 if e.get("date") == day_str and e.get("sport", "Other") == sport:
@@ -210,10 +229,19 @@ def week_chart(events, title="Training week", week_start=None):
                     else:
                         plan[i] += mins
         if any(comp):
-            datasets.append({"label": label, "data": comp, "backgroundColor": colour, "stack": "s"})
+            datasets.append({
+                "label": label,
+                "data": comp,
+                "backgroundColor": colour,
+                "stack": "s",
+            })
         if any(plan):
-            datasets.append({"label": f"{label} (plan)", "data": plan,
-                             "backgroundColor": _rgba(colour, _PLANNED_ALPHA), "stack": "s"})
+            datasets.append({
+                "label": f"{label} (plan)",
+                "data": plan,
+                "backgroundColor": _rgba(colour, _PLANNED_ALPHA),
+                "stack": "s",
+            })
 
     if not datasets:
         return None
@@ -222,24 +250,28 @@ def week_chart(events, title="Training week", week_start=None):
         "type": "bar",
         "data": {"labels": labels, "datasets": datasets},
         "options": {
-            "title": {"display": True, "text": title, "fontSize": 15},
-            "legend": {"position": "top", "labels": {"boxWidth": 14, "fontSize": 12}},
+            "plugins": {
+                "title": {"display": True, "text": title, "font": {"size": 15}},
+                "legend": {"position": "top", "labels": {"boxWidth": 14, "font": {"size": 12}}},
+            },
             "scales": {
-                "yAxes": [{"stacked": True,
-                           "scaleLabel": {"display": True, "labelString": "Minutes", "fontSize": 12},
-                           "ticks": {"beginAtZero": True, "fontSize": 12}}],
-                "xAxes": [{"stacked": True, "ticks": {"fontSize": 13}}],
+                "x": {"stacked": True, "ticks": {"font": {"size": 13}}},
+                "y": {
+                    "stacked": True,
+                    "beginAtZero": True,
+                    "title": {"display": True, "text": "Minutes", "font": {"size": 12}},
+                    "ticks": {"font": {"size": 12}},
+                },
             },
         },
     }
     return _fetch(config, width=900, height=440)
 
 
+# ── Session structure ─────────────────────────────────────────────────────────
+
 def session_chart(name, intervals, ftp=316):
-    """
-    intervals: list of {duration_seconds, average_power, type}
-    Returns PNG bytes, or None if no intervals.
-    """
+    """intervals: [{duration_seconds, average_power, type}]"""
     if not intervals:
         return None
 
@@ -248,25 +280,25 @@ def session_chart(name, intervals, ftp=316):
         dur_min = round(seg.get("duration_seconds", 0) / 60, 1)
         if dur_min < 0.5:
             continue
-        pwr = seg.get("average_power") or 0
+        pwr   = seg.get("average_power") or 0
         itype = seg.get("type", "").upper()
 
         if pwr and ftp:
             pct = pwr / ftp
             if pct < 0.55:
-                zone, colour = "Z1", ZONE_COLOURS["Z1"]
+                zone, colour = "Z1",   ZONE_COLOURS["Z1"]
             elif pct < 0.75:
-                zone, colour = "Z2", ZONE_COLOURS["Z2"]
+                zone, colour = "Z2",   ZONE_COLOURS["Z2"]
             elif pct < 0.90:
-                zone, colour = "Z3", ZONE_COLOURS["Z3"]
+                zone, colour = "Z3",   ZONE_COLOURS["Z3"]
             elif pct < 1.05:
-                zone, colour = "Z4", ZONE_COLOURS["Z4"]
+                zone, colour = "Z4",   ZONE_COLOURS["Z4"]
             else:
-                zone, colour = "Z5+", ZONE_COLOURS["Z5"]
+                zone, colour = "Z5+",  ZONE_COLOURS["Z5+"]
         elif itype == "RECOVERY":
             zone, colour = "Recovery", ZONE_COLOURS["Recovery"]
         else:
-            zone, colour = "WU/CD", ZONE_COLOURS["WU/CD"]
+            zone, colour = "WU/CD",    ZONE_COLOURS["WU/CD"]
 
         datasets.append({
             "label": f"{zone} ({dur_min}m)",
@@ -280,24 +312,100 @@ def session_chart(name, intervals, ftp=316):
 
     total = sum(d["data"][0] for d in datasets)
     config = {
-        "type": "horizontalBar",
+        "type": "bar",
         "data": {
             "labels": [f"{name}  ({round(total)} min)"],
             "datasets": datasets,
         },
         "options": {
-            "title": {"display": True, "text": "Session structure", "fontSize": 15},
-            "legend": {"position": "bottom", "labels": {"boxWidth": 14, "fontSize": 12}},
+            "indexAxis": "y",
+            "plugins": {
+                "title": {"display": True, "text": "Session structure", "font": {"size": 15}},
+                "legend": {"position": "bottom", "labels": {"boxWidth": 14, "font": {"size": 12}}},
+            },
             "scales": {
-                "xAxes": [
-                    {
-                        "stacked": True,
-                        "scaleLabel": {"display": True, "labelString": "Minutes", "fontSize": 12},
-                        "ticks": {"beginAtZero": True, "fontSize": 12},
-                    }
-                ],
-                "yAxes": [{"stacked": True, "ticks": {"fontSize": 13}}],
+                "x": {
+                    "stacked": True,
+                    "title": {"display": True, "text": "Minutes", "font": {"size": 12}},
+                    "ticks": {"beginAtZero": True, "font": {"size": 12}},
+                },
+                "y": {"stacked": True, "ticks": {"font": {"size": 13}}},
             },
         },
     }
-    return _fetch(config, width=900, height=260)
+    return _fetch(config, width=900, height=280)
+
+
+# ── Power curve ───────────────────────────────────────────────────────────────
+
+def power_curve_chart(efforts, ftp=316):
+    """
+    efforts: [{"label":"5s","power":980}, {"label":"1m","power":520}, ...]
+    Standard duration labels: 5s 15s 30s 1m 2m 5m 10m 20m 30m 60m 90m
+    """
+    if not efforts:
+        return None
+
+    labels = [e["label"] for e in efforts]
+    powers = [e["power"] for e in efforts]
+    max_p  = max(powers) if powers else ftp * 2
+
+    zone_annotations = {
+        "z1": {"type": "box", "yMin": 0,          "yMax": ftp * 0.55, "backgroundColor": "rgba(200,200,200,0.07)", "borderWidth": 0},
+        "z2": {"type": "box", "yMin": ftp * 0.55, "yMax": ftp * 0.75, "backgroundColor": "rgba(86,160,211,0.07)",  "borderWidth": 0},
+        "z3": {"type": "box", "yMin": ftp * 0.75, "yMax": ftp * 0.90, "backgroundColor": "rgba(245,166,35,0.08)",  "borderWidth": 0},
+        "z4": {"type": "box", "yMin": ftp * 0.90, "yMax": ftp * 1.05, "backgroundColor": "rgba(224,92,0,0.09)",    "borderWidth": 0},
+        "z5": {"type": "box", "yMin": ftp * 1.05, "yMax": max_p * 1.1, "backgroundColor": "rgba(192,57,43,0.07)", "borderWidth": 0},
+        "ftp": {
+            "type": "line",
+            "yMin": ftp, "yMax": ftp,
+            "borderColor": "rgba(26,82,118,0.55)",
+            "borderWidth": 1.5,
+            "borderDash": [5, 4],
+            "label": {
+                "display": True,
+                "content": f"FTP {ftp}W",
+                "position": "end",
+                "backgroundColor": "rgba(255,255,255,0.85)",
+                "color": C_CTL,
+                "font": {"size": 11},
+            },
+        },
+    }
+
+    config = {
+        "type": "line",
+        "data": {
+            "labels": labels,
+            "datasets": [{
+                "label": "Best power",
+                "data": powers,
+                "borderColor": C_CTL,
+                "backgroundColor": "rgba(26,82,118,0.15)",
+                "borderWidth": 3,
+                "pointRadius": 5,
+                "pointBackgroundColor": C_CTL,
+                "fill": "origin",
+                "tension": 0.35,
+            }],
+        },
+        "options": {
+            "plugins": {
+                "title": {"display": True, "text": "Power curve — best efforts", "font": {"size": 15}},
+                "legend": {"display": False},
+                "annotation": {"annotations": zone_annotations},
+            },
+            "scales": {
+                "x": {
+                    "title": {"display": True, "text": "Duration", "font": {"size": 12}},
+                    "ticks": {"font": {"size": 12}},
+                },
+                "y": {
+                    "title": {"display": True, "text": "Watts", "font": {"size": 12}},
+                    "ticks": {"font": {"size": 11}},
+                    "beginAtZero": False,
+                },
+            },
+        },
+    }
+    return _fetch(config, width=900, height=480)

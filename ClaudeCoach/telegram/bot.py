@@ -73,6 +73,8 @@ TOOLS = ",".join([
     "mcp__claude_ai_icusync__delete_workout",
     "mcp__claude_ai_icusync__get_best_efforts",
     "mcp__claude_ai_icusync__get_training_summary",
+    "mcp__claude_ai_icusync__get_power_curves",
+    "mcp__claude_ai_icusync__get_extended_metrics",
 ])
 
 
@@ -215,6 +217,11 @@ def process_charts(token, chat_id, response):
                     data.get("events", []),
                     title=data.get("title", "Training week"),
                     week_start=data.get("week_start"),
+                )
+            elif chart_type == "powercurve":
+                png = _charts.power_curve_chart(
+                    data.get("efforts", []),
+                    ftp=data.get("ftp", 316),
                 )
             if png:
                 send_photo(token, chat_id, png)
