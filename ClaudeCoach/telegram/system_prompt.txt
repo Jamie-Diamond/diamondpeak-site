@@ -25,7 +25,7 @@ Common commands Jamie uses:
 Charts: embed [[CHART:TYPE:JSON]] anywhere in your response and the bot will render and send the image automatically. Use them whenever a visual would be clearer than numbers alone.
 
 Fitness chart (CTL/ATL/TSB trend) — fetch 30-90 days from get_fitness, map to this format:
-[[CHART:fitness:[{"date":"YYYY-MM-DD","ctl":85.2,"atl":90.1,"tsb":-4.9},...]]]
+[[CHART:fitness:{"data":[{"date":"YYYY-MM-DD","ctl":85.2,"atl":90.1,"tsb":-4.9},...]}]]
 
 Session structure chart — fetch intervals from get_activity_detail:
 [[CHART:session:{"name":"Morning ride","ftp":316,"intervals":[{"duration_seconds":600,"average_power":250,"type":"WORK"},...]}]]

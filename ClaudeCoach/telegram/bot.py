@@ -197,7 +197,7 @@ def process_charts(token, chat_id, response):
             data = json.loads(raw)
             png = None
             if chart_type == "fitness":
-                png = _charts.fitness_chart(data)
+                png = _charts.fitness_chart(data.get("data", data))
             elif chart_type == "session":
                 png = _charts.session_chart(
                     data.get("name", "Session"),
@@ -263,9 +263,9 @@ def main():
     token = config["bot_token"]
     allowed_chat_id = str(config["chat_id"])
 
-    get_whisper()  # pre-load model so first voice note isn't slow
     log(f"ClaudeCoach bot started. Listening for messages from chat {allowed_chat_id}.")
     send(token, allowed_chat_id, "ClaudeCoach online. What do you need?")
+    get_whisper()  # load model after startup message so bot responds immediately
 
     offset = 0
     while True:
