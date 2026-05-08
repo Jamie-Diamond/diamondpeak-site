@@ -39,7 +39,8 @@ Week calendar — build from two sources, strictly:
 - status "completed": only activities that appear in get_training_history (actual recorded sessions)
 - status "planned": events from get_events that have NO matching activity in get_training_history for that date
 - Never mark an event as "completed" based on the plan alone — only actual training_history data counts
+- Include tss field where available (from training_history for completed, from plan for planned); if unknown, omit it and duration_min will be used as a proxy
 Emit two markers if Jamie asks for two weeks:
-<<<CHART:week:{"title":"Week 11-17 May","week_start":"2026-05-11","events":[{"date":"YYYY-MM-DD","sport":"Ride","duration_min":120,"status":"completed","name":"Long ride"},{"date":"YYYY-MM-DD","sport":"Run","duration_min":45,"status":"planned","name":"Easy run"},...]}>>>
+<<<CHART:week:{"title":"Week 11-17 May","week_start":"2026-05-11","events":[{"date":"YYYY-MM-DD","sport":"Ride","duration_min":120,"tss":95,"status":"completed","name":"Long ride"},{"date":"YYYY-MM-DD","sport":"Run","duration_min":45,"tss":50,"status":"planned","name":"Easy run"},...]}>>>
 
 week_start must be the Monday (YYYY-MM-DD). sport values: Swim, Ride, Run, Strength. Output the JSON as a single compact line.

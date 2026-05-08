@@ -41,7 +41,7 @@ def _rgba(hex_colour, alpha):
     return f"rgba({r},{g},{b},{alpha})"
 
 
-def _fetch(config, width=900, height=460):
+def _fetch(config, width=720, height=460):
     payload = json.dumps({
         "chart": config,
         "width": width,
@@ -181,14 +181,15 @@ def fitness_chart(payload):
             },
         },
     }
-    return _fetch(config, width=900, height=500)
+    return _fetch(config, height=500)
 
 
 # ── Week calendar ─────────────────────────────────────────────────────────────
 
 def week_chart(events, title="Training week", week_start=None):
     """
-    events: [{date, sport, duration_min, status (completed|planned), name}]
+    events: [{date, sport, duration_min, tss (optional), status, name}]
+    Planned TSS shown as a dashed line; actual TSS as stacked bars by sport.
     """
     from datetime import datetime, timedelta
 
@@ -202,8 +203,8 @@ def week_chart(events, title="Training week", week_start=None):
         first = min(dates)
         monday = first - timedelta(days=first.weekday())
 
-    days    = [monday + timedelta(days=i) for i in range(7)]
-    labels  = [d.strftime("%a") + " " + str(d.day) for d in days]
+    days     = [monday + timedelta(days=i) for i in range(7)]
+    labels   = [d.strftime("%a") + " " + str(d.day) for d in days]
     day_strs = [d.strftime("%Y-%m-%d") for d in days]
 
     sport_order = ["Swim", "Ride", "Run", "Strength", "WeightTraining"]
@@ -214,37 +215,74 @@ def week_chart(events, title="Training week", week_start=None):
             seen.append(s)
     sports = [s for s in sport_order if s in seen] + [s for s in seen if s not in sport_order]
 
+    planned_tss = [0.0] * 7
+    actual      = {s: [0.0] * 7 for s in sports}
+
+    for e in events:
+        day_str = e.get("date")
+        if day_str not in day_strs:
+            continue
+        i      = day_strs.index(day_str)
+        sport  = e.get("sport", "Other")
+        tss    = e.get("tss") or round(e.get("duration_min", 0) * 0.65, 1)
+        if e.get("status") == "completed":
+            if sport in actual:
+                actual[sport][i] += tss
+        else:
+            planned_tss[i] += tss
+
     datasets = []
+
+    if any(planned_tss):
+        datasets.append({
+            "type": "line",
+            "label": "Planned TSS",
+            "data": [v or None for v in planned_tss],
+            "borderColor": "rgba(100,100,100,0.65)",
+            "backgroundColor": "transparent",
+            "borderWidth": 2,
+            "borderDash": [5, 4],
+            "pointRadius": 6,
+            "pointBackgroundColor": "rgba(100,100,100,0.45)",
+            "fill": False,
+            "spanGaps": False,
+            "order": 0,
+        })
+
     for sport in sports:
+        data = [round(v, 1) for v in actual.get(sport, [0]*7)]
+        if not any(data):
+            continue
         colour = SPORT_COLOURS.get(sport, SPORT_COLOURS["Other"])
         label  = "Strength" if sport == "WeightTraining" else sport
-        comp   = [0] * 7
-        plan   = [0] * 7
-        for i, day_str in enumerate(day_strs):
-            for e in events:
-                if e.get("date") == day_str and e.get("sport", "Other") == sport:
-                    mins = e.get("duration_min", 0)
-                    if e.get("status") == "completed":
-                        comp[i] += mins
-                    else:
-                        plan[i] += mins
-        if any(comp):
-            datasets.append({
-                "label": label,
-                "data": comp,
-                "backgroundColor": colour,
-                "stack": "s",
-            })
-        if any(plan):
-            datasets.append({
-                "label": f"{label} (plan)",
-                "data": plan,
-                "backgroundColor": _rgba(colour, _PLANNED_ALPHA),
-                "stack": "s",
-            })
+        datasets.append({
+            "type": "bar",
+            "label": label,
+            "data": data,
+            "backgroundColor": colour,
+            "stack": "actual",
+            "order": 1,
+        })
 
     if not datasets:
         return None
+
+    annotations = {
+        "sat": {
+            "type": "box",
+            "xMin": labels[5], "xMax": labels[5],
+            "backgroundColor": "rgba(0,0,0,0.04)",
+            "borderWidth": 0,
+            "drawTime": "beforeDatasetsDraw",
+        },
+        "sun": {
+            "type": "box",
+            "xMin": labels[6], "xMax": labels[6],
+            "backgroundColor": "rgba(0,0,0,0.04)",
+            "borderWidth": 0,
+            "drawTime": "beforeDatasetsDraw",
+        },
+    }
 
     config = {
         "type": "bar",
@@ -253,19 +291,20 @@ def week_chart(events, title="Training week", week_start=None):
             "plugins": {
                 "title": {"display": True, "text": title, "font": {"size": 15}},
                 "legend": {"position": "top", "labels": {"boxWidth": 14, "font": {"size": 12}}},
+                "annotation": {"annotations": annotations},
             },
             "scales": {
-                "x": {"stacked": True, "ticks": {"font": {"size": 13}}},
+                "x": {"ticks": {"font": {"size": 13}}},
                 "y": {
-                    "stacked": True,
                     "beginAtZero": True,
-                    "title": {"display": True, "text": "Minutes", "font": {"size": 12}},
+                    "title": {"display": True, "text": "TSS", "font": {"size": 13}},
                     "ticks": {"font": {"size": 12}},
+                    "stacked": True,
                 },
             },
         },
     }
-    return _fetch(config, width=900, height=440)
+    return _fetch(config, height=460)
 
 
 # ── Session structure ─────────────────────────────────────────────────────────
@@ -333,7 +372,7 @@ def session_chart(name, intervals, ftp=316):
             },
         },
     }
-    return _fetch(config, width=900, height=280)
+    return _fetch(config, height=300)
 
 
 # ── Power curve ───────────────────────────────────────────────────────────────
@@ -408,4 +447,4 @@ def power_curve_chart(efforts, ftp=316):
             },
         },
     }
-    return _fetch(config, width=900, height=480)
+    return _fetch(config, height=480)
