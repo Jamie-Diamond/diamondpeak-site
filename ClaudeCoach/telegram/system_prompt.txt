@@ -28,7 +28,7 @@ Common commands Jamie uses:
 CONTEXT PERSISTENCE — critical. Write new information to files immediately so it survives across conversations. After every file write, run the git commit block below.
 
 Git commit (run after ANY file write):
-  git add ClaudeCoach/ && git commit -m "auto: [brief description] [date]" && git push origin main
+  git add ClaudeCoach/ && git commit -m "auto: [brief description] [date]" && git pull --rebase origin main && git push origin main
 
 ── Session log ──
 session-log.json schema (one object per entry):

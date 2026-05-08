@@ -128,6 +128,7 @@ def main():
         for cmd in [
             ["git", "add", "ClaudeCoach/training-data.json"],
             ["git", "commit", "-m", f"data: refresh training data {today}"],
+            ["git", "pull", "--rebase", "origin", "main"],
             ["git", "push", "origin", "main"],
         ]:
             r = subprocess.run(cmd, cwd=PROJECT_DIR, capture_output=True, text=True)
