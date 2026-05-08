@@ -80,12 +80,14 @@ Step 7 — Output the prescription card in exactly this format:
 
 If no rules fired: output "Today: [session name] — execute as planned." and the planned targets only (no reasoning trails section).
 
-Step 8 — Call PushNotification if session was modified, swapped, or blocked. Message under 200 characters:
+Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired. Also update ankle section if today's prescription was affected by ankle status. Run: git add ClaudeCoach/current-state.md && git pull --rebase origin main && git commit -m "prescription: [date] [status]" && git push origin main
+
+Step 9 — Call PushNotification if session was modified, swapped, or blocked. Message under 200 characters:
   "[session name]: [one-line summary of change]"
   Do not call PushNotification if session is unchanged.
 PROMPT_END
 
-TOOLS="Read,Bash,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_wellness,mcp__claude_ai_icusync__get_events,mcp__claude_ai_icusync__push_workout,PushNotification"
+TOOLS="Read,Write,Edit,Bash,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_wellness,mcp__claude_ai_icusync__get_events,mcp__claude_ai_icusync__push_workout,PushNotification"
 
 OUTPUT=$(/Users/diamondpeakconsulting/.local/bin/claude -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$HOME/Library/Logs/ClaudeCoach/prescription.log")
 echo "$OUTPUT"

@@ -13,32 +13,66 @@ NOTIFY      = BASE / "telegram/notify.py"
 PROJECT_DIR = str(BASE.parent)
 CLAUDE      = "/usr/bin/claude"
 
+SESSION_LOG = BASE / "session-log.json"
+
 TOOLS = ",".join([
+    "Read", "Write", "Bash",
     "mcp__claude_ai_icusync__get_athlete_profile",
     "mcp__claude_ai_icusync__get_training_history",
     "mcp__claude_ai_icusync__get_activity_detail",
 ])
 
-PROMPT = """Get the most recent activity from get_training_history (check today and yesterday).
-Then call get_activity_detail to get full metrics for that activity.
+PROMPT = """Check for new activities and stub them into the session log.
+
+Step 1 — get_athlete_profile (today's date), then get_training_history (last 2 days).
+
+Step 2 — Read ClaudeCoach/session-log.json and note all existing activity_id values.
+
+Step 3 — For the most recent activity that is NOT already in session-log.json:
+  - If sport is Swim or Strength: skip to Step 4 (no stub needed).
+  - Otherwise call get_activity_detail for that activity to get full metrics.
+  - Add a stub entry to session-log.json (prepend to the array, most recent first):
+    {
+      "activity_id": "<id>",
+      "date": "<YYYY-MM-DD>",
+      "name": "<name>",
+      "sport": "<sport>",
+      "tss": <tss>,
+      "duration_min": <duration>,
+      "distance_km": <distance or null>,
+      "avg_power": <avg_power or null>,
+      "norm_power": <norm_power or null>,
+      "avg_hr": <avg_hr or null>,
+      "rpe": null,
+      "feel": null,
+      "ankle_pain_during": null,
+      "ankle_pain_next_morning": null,
+      "nutrition_g_carb": null,
+      "hydration_ml": null,
+      "notes": null,
+      "logged_at": "<today>",
+      "stub": true
+    }
+  - Write the updated array back to ClaudeCoach/session-log.json.
+  - Run: git add ClaudeCoach/session-log.json && git commit -m "stub: <name> <date>" && git push origin main
+
+Step 4 — Respond in EXACTLY this format (no other text):
+ACTIVITY_ID: <id or none>
+ANALYSIS: <coaching message — see rules below>
 
 Jamie: male, 30, FTP 316 W, run threshold 4:02/km, swim CSS 1:39/100m. Ankle in rehab — 9:1 walk-run only.
 
-Respond in EXACTLY this format — no other text, no markdown:
-ACTIVITY_ID: <numeric id>
-ANALYSIS: <coaching message — see rules below>
+Rules for ANALYSIS (3-5 lines, max 400 chars):
+- Line 1: One punchy headline. Lead with what went well or the key number.
+  Ride: "Solid Z2 — NP 211 W (IF 0.67), right on plan."
+  Run: "Good 9:1, 12.5 km — ankle at 2/10, manageable."
+- Line 2 (ride >90 min): cardiac decoupling if available; else IF discipline vs target.
+  Line 2 (run): pace vs threshold context or HR cap adherence.
+  Line 2 (swim): pace vs CSS 1:39/100m target.
+- Line 3: one question. Ride >90 min → "How was nutrition — g carbs/hr and bottles?"
+  Run → "Ankle score during and this morning?"  Short session → "RPE and how did it feel?"
 
-Rules for the ANALYSIS (3-5 lines max):
-- Line 1: One punchy sentence on the headline result. Lead with what went well or the key number. Examples: "Solid Z2 ride — NP 214 W (IF 0.68), right on target." / "Good 9:1 run, 12.5 km — ankle behaved."
-- Line 2 (rides only): Cardiac decoupling if available (HR drift vs power drift as a %). If not available, comment on IF discipline or NP vs target.
-- Line 2 (runs): Pace vs threshold context, or HR cap adherence.
-- Line 2 (swims): Pace vs CSS target.
-- Line 3: One question — nutrition and hydration for sessions >90 min, or ankle pain score for runs, or how it felt (RPE) for shorter sessions.
-- Keep it conversational, not a data dump. Max 400 characters total.
-
-If there are no activities at all, respond:
-ACTIVITY_ID: none
-ANALYSIS: none"""
+If no activities at all: ACTIVITY_ID: none  ANALYSIS: none"""
 
 
 def load_state():

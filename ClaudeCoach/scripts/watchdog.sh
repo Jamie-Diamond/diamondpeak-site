@@ -32,12 +32,14 @@ If NO triggers fire: output nothing. Do not call PushNotification. Silent run.
 
 If ANY trigger fires:
 1. Call PushNotification once, under 200 characters: "warning [trigger]: [action]" (Tier 2) or "info [trigger]: [note]" (Tier 1). Multiple triggers: list names, lead with highest tier.
-2. Output one L2 reasoning trail per trigger to stdout (written to log):
+2. Update current-state.md — append to the relevant section (ankle, niggles, off-plan, or add a "## Watchdog flags" section if needed) with today's date and the trigger name + signal value. Do not rewrite sections that don't need updating.
+3. Run: git add ClaudeCoach/current-state.md && git pull --rebase origin main && git commit -m "watchdog: [trigger list] [date]" && git push origin main
+4. Output one L2 reasoning trail per trigger to stdout (written to log):
    [signal with real number] -> [rule: T1-T8] -> [suggested adjustment] -> [expected effect]
    Example: "ATL 148 vs CTL 121 for 4 days -> T1 (ATL > CTL +25) -> insert recovery day, drop Thursday quality to Z2 -> TSB recovers ~8 pts by weekend"
 PROMPT_END
 
-TOOLS="Read,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_wellness,mcp__claude_ai_icusync__get_activity_detail,PushNotification"
+TOOLS="Read,Write,Edit,Bash,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_wellness,mcp__claude_ai_icusync__get_activity_detail,PushNotification"
 
 OUTPUT=$(/Users/diamondpeakconsulting/.local/bin/claude -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$HOME/Library/Logs/ClaudeCoach/watchdog.log")
 echo "$OUTPUT"

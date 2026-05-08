@@ -61,7 +61,7 @@ QUICK_KEYBOARD = {
 }
 
 TOOLS = ",".join([
-    "Read", "Write", "Edit",
+    "Read", "Write", "Edit", "Bash",
     "mcp__claude_ai_icusync__get_athlete_profile",
     "mcp__claude_ai_icusync__get_fitness",
     "mcp__claude_ai_icusync__get_training_history",
