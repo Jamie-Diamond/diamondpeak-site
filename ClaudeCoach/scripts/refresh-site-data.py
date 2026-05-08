@@ -18,6 +18,7 @@ TOOLS = ",".join([
     "mcp__claude_ai_icusync__get_athlete_profile",
     "mcp__claude_ai_icusync__get_fitness",
     "mcp__claude_ai_icusync__get_training_history",
+    "mcp__claude_ai_icusync__get_events",
     "mcp__claude_ai_icusync__get_power_curves",
     "mcp__claude_ai_icusync__get_wellness",
 ])
@@ -66,8 +67,35 @@ Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY thi
   "powerCurve": [
     {"t": <seconds>, "label": "<e.g. 5s>", "w": <best watts integer>, "wPrev": <last year same window or null>},
     ... include durations: 5s(5), 10s(10), 30s(30), 1m(60), 2m(120), 5m(300), 10m(600), 20m(1200), 30m(1800), 60m(3600), 90m(5400), 2h(7200)
+  ],
+  "weekCalendar": [
+    ... flat array of weekCalendar entries (see step 6) ordered by date ascending
   ]
 }
+
+6. get_events(start_date=<today>, end_date=<today+14 days>) → upcoming planned events
+
+Build "weekCalendar": a flat array covering the last 7 days (from training_history) plus the next 14 days (from get_events). Each entry:
+{
+  "date": "YYYY-MM-DD",
+  "sport": "Ride|Run|Swim|Strength|Other",
+  "name": "<activity or event name>",
+  "tss": <integer or null>,
+  "duration_min": <integer or null>,
+  "status": "completed" or "planned",
+  "key": <true if the event is marked key/priority, else false>,
+  "detail": "<brief metric string>"
+}
+
+Rules for weekCalendar:
+- Activity in get_training_history → status "completed"
+- Event in get_events with NO matching training_history entry for that date+sport → status "planned"
+- Never mark a planned event "completed" based on the plan alone — only actual recorded activities count
+- Normalise sport to: Ride (also for VirtualRide/GravelRide), Run, Swim, Strength
+- detail for completed Ride: "NP <powNp>W · HR <hr> · <dist>km" (omit null fields)
+- detail for completed Run: "<pace> · <dist>km"
+- detail for completed Swim: "<pace> · <dist>m"
+- detail for planned: event description or empty string
 
 After writing the file, output one line: "Done: CTL <value>, <N> activities"
 """
@@ -117,7 +145,7 @@ def main():
         # Validate JSON before committing
         try:
             data = json.loads(OUT_FILE.read_text())
-            assert "kpi" in data and "fitnessThis" in data and "recent" in data
+            assert "kpi" in data and "fitnessThis" in data and "recent" in data and "weekCalendar" in data
             log(f"JSON valid: CTL {data['kpi']['ctl']}, {len(data['recent'])} activities")
         except Exception as e:
             log(f"JSON validation failed: {e} — aborting push")

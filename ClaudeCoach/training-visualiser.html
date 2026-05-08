@@ -766,7 +766,133 @@ function renderRecentTable(data) {
 }
 renderRecentTable(recent);
 
-// Upcoming — calendar view (Intervals.icu style)
+// Live calendar — replaces the hardcoded view when training-data.json is loaded
+function renderLiveCalendar(events) {
+  const el = document.querySelector("#upcoming-content");
+  if (!el || !events || !events.length) return;
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  function getMonday(dateStr) {
+    const d = new Date(dateStr + "T00:00:00");
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function addDays(dateStr, n) {
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function fmtWeekRange(monStr) {
+    const mon = new Date(monStr + "T00:00:00");
+    const sun = new Date(monStr + "T00:00:00");
+    sun.setDate(sun.getDate() + 6);
+    const monMonth = mon.toLocaleDateString("en-GB", {month:"short"});
+    const sunMonth = sun.toLocaleDateString("en-GB", {month:"short"});
+    return monMonth === sunMonth
+      ? `${mon.getDate()}–${sun.getDate()} ${monMonth}`
+      : `${mon.getDate()} ${monMonth}–${sun.getDate()} ${sunMonth}`;
+  }
+
+  function stripeClass(s) {
+    if (/Heat/i.test(s))                         return "heat";
+    if (/Ride|Cycling|Gravel|Virtual/i.test(s))  return "ride";
+    if (/Run/i.test(s))                           return "run";
+    if (/Swim/i.test(s))                          return "swim";
+    if (/Strength/i.test(s))                      return "strength";
+    return "other";
+  }
+
+  const planStart = new Date("2026-04-27T00:00:00");
+  const DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+  // Group by week (Monday key)
+  const weeks = new Map();
+  events.forEach(ev => {
+    const mon = getMonday(ev.date);
+    if (!weeks.has(mon)) weeks.set(mon, []);
+    weeks.get(mon).push(ev);
+  });
+
+  let html = "";
+  [...weeks.keys()].sort().forEach(mon => {
+    const wkEvs      = weeks.get(mon);
+    const actualTSS  = wkEvs.filter(e => e.status === "completed").reduce((s, e) => s + (e.tss || 0), 0);
+    const plannedTSS = wkEvs.reduce((s, e) => s + (e.tss || 0), 0);
+    const weekNum    = Math.min(21, Math.max(1, Math.round((new Date(mon + "T00:00:00") - planStart) / 604800000) + 1));
+
+    const byDay = new Map();
+    wkEvs.forEach(ev => {
+      if (!byDay.has(ev.date)) byDay.set(ev.date, []);
+      byDay.get(ev.date).push(ev);
+    });
+
+    html += `<div class="week-cal">
+      <div class="week-cal-header">
+        <div>
+          <div class="week-cal-label">Week ${weekNum} — ${fmtWeekRange(mon)}</div>
+          <div class="week-cal-sub">Actual ${actualTSS} TSS / Planned ${plannedTSS} TSS</div>
+        </div>
+      </div>
+      <div class="week-grid">`;
+
+    for (let i = 0; i < 7; i++) {
+      const dateStr = addDays(mon, i);
+      const dayEvs  = byDay.get(dateStr) || [];
+      const isToday = dateStr === todayStr;
+      const isPast  = dateStr < todayStr;
+      const dayNum  = parseInt(dateStr.slice(8), 10);
+
+      let colCls = "day-col";
+      if (isToday)      colCls += " is-today";
+      else if (isPast)  colCls += " is-past";
+
+      html += `<div class="${colCls}">
+        <div class="day-head">
+          <span class="day-name">${DAY_NAMES[i]}</span>
+          <span class="day-date">${dayNum}</span>
+        </div>`;
+
+      if (!dayEvs.length) {
+        html += `<div class="rest-block"><span class="rest-label">Rest</span></div>`;
+      } else {
+        dayEvs.forEach(ev => {
+          const isDone = ev.status === "completed";
+          const sport  = ev.sport || "Other";
+          html += `<div class="session-block ${isDone ? "done-block" : ""}">
+            <div class="sport-stripes"><div class="sport-stripe ${stripeClass(sport)}"></div></div>
+            <div class="session-sport-tag">${sport}</div>
+            <div class="session-title ${ev.key ? "key-title" : ""}">${ev.name || "Session"}</div>
+            ${ev.detail ? `<div class="session-detail">${ev.detail}</div>` : ""}
+            ${ev.tss    ? `<div class="session-tss">${ev.tss} TSS</div>` : ""}
+            ${isDone    ? '<div class="done-tick">✓</div>' : ""}
+          </div>`;
+        });
+      }
+      html += `</div>`;
+    }
+
+    html += `</div><div class="week-totals-row">`;
+    for (let i = 0; i < 7; i++) {
+      const dateStr = addDays(mon, i);
+      const dayEvs  = byDay.get(dateStr) || [];
+      const dayTSS  = dayEvs.reduce((s, e) => s + (e.tss || 0), 0);
+      const done    = dayEvs.length > 0 && dayEvs.every(e => e.status === "completed");
+      html += dayTSS > 0
+        ? `<div class="week-total-cell has-tss ${done ? "done-tss" : ""}">${dayTSS}</div>`
+        : `<div class="week-total-cell"></div>`;
+    }
+    html += `</div></div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+// Upcoming — calendar view (Intervals.icu style) — initial hardcoded render
 (function(){
   const el = document.querySelector("#upcoming-content");
   const today = "2026-05-05";
@@ -1125,6 +1251,8 @@ fetch('./training-data.json')
       window.chartPower.data.datasets[1].data = d.powerCurve.map(p => p.wPrev);
       window.chartPower.update();
     }
+    // Live week calendar
+    if (d.weekCalendar && d.weekCalendar.length) renderLiveCalendar(d.weekCalendar);
     // Snapshot label
     const snap = document.getElementById("snapshot-date");
     if (snap && d.generated) snap.textContent = "Live · last updated " + d.generated + " · Source: Intervals.icu";
