@@ -4,7 +4,8 @@
 import json, ssl, urllib.request
 from pathlib import Path
 
-SSL_CONTEXT = ssl.create_default_context(cafile="/etc/ssl/cert.pem")
+_cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
+SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 QUICKCHART = "https://quickchart.io/chart"
 
 # Brand colours matching Diamond Peak site
