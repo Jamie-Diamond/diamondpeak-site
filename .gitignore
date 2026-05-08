@@ -2,3 +2,6 @@
 ClaudeCoach/telegram/config.json
 ClaudeCoach/telegram/history.json
 ClaudeCoach/telegram/bot.log
+__pycache__/
+*.pyc
+ClaudeCoach/.*.lock
