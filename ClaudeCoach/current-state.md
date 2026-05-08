@@ -12,17 +12,17 @@
 
 ---
 
-## Last updated: [YYYY-MM-DD]
+## Last updated: 2026-05-08
 
 ## Ankle (high ankle sprain, onset ~1 March 2026)
 
-- Current pain 1–10 (during run): [N]
-- Current pain 1–10 (next morning): [N]
-- This week's run km: [N]
-- Last week's run km: [N]
-- 4 consecutive pain-free weeks reached: [yes / no — if no, weeks done so far]
-- Quality sessions resumed: [yes / no]
-- Physio engagement status: [active / on pause / pending booking]
+- Current pain 1–10 (during run): 2 (Thu 7 May — 13 km 9:1 run)
+- Current pain 1–10 (next morning): 0 (Fri 8 May)
+- This week's run km: 12.52 (Thu 7 May — 9:1 walk-run, 64 min)
+- Last week's run km: 10.59 (Wed 29 Apr — ankle-managed)
+- 4 consecutive pain-free weeks reached: no — 2/10 during Thu run, still in rehab protocol
+- Quality sessions resumed: no — still 9:1 walk-run, no threshold or tempo run yet
+- Physio engagement status: on pause
 
 > Hard rule: increase load only if pain ≤2/10 during and 0/10 next morning. Cap weekly run-km increase at 10% while in rehab. Cap CTL ramp at +4/wk while ankle in rehab. (See `reference/rules.md`.)
 
@@ -32,23 +32,23 @@
 
 ## Off-plan in last 7 days
 
-- Missed sessions: [list — date, planned, reason]
-- Cut sessions: [list — date, planned, what was done instead, why]
-- Illness / life events: [details]
-- Sleep deficit days (>1 hr below 8 hr target): [count]
+- Missed sessions: Wed 6 May easy run 5 km — moved and extended to Thu 7 May (13 km compensatory, completed)
+- Cut sessions: none
+- Illness / life events: none
+- Sleep deficit days (>1 hr below 8 hr target): 2 (1 May: 6.7 h, 6 May: 6.9 h)
 
 ## Body weight
 
-- Current 7-day avg: [kg]
-- Trend toward 79 kg race-day target: [on track / drifting up / drifting down]
+- Current 7-day avg: ~83.1 kg (3 readings: 82.7, 83.8, 82.9)
+- Trend toward 79 kg race-day target: drifting — 4 kg above target, pace needs to increase
 - Race-day target: 79 kg by 19 Sep 2026
 
 ## Heat acclimation log
 
-- Sessions completed this week: [N]
-- Sessions completed cumulative (target 14–20 across late May → early Sept): [N]
-- Days since last hot-bath session: [N] (decay window: 7–10 days)
-- Method mix: [hot bath ×N / indoor trainer in heat ×N / overdressed easy run ×N]
+- Sessions completed this week: 0 (T7/T8 triggers activate 15 May)
+- Sessions completed cumulative (target 14–20 across late May → early Sept): 0
+- Days since last hot-bath session: N/A — not started yet
+- Method mix: not started
 
 ## Open actions
 
