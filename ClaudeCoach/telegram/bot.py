@@ -5,7 +5,7 @@ Polls Telegram for messages, passes them to claude CLI, sends responses back.
 Run: python3 bot.py
 """
 
-import json, subprocess, sys, time, ssl
+import json, re, subprocess, sys, time, ssl
 import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
 from datetime import datetime
@@ -14,6 +14,12 @@ _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 
 BASE = Path(__file__).parent
+sys.path.insert(0, str(BASE))
+try:
+    import charts as _charts
+except Exception:
+    _charts = None
+
 CONFIG_FILE = BASE / "config.json"
 HISTORY_FILE = BASE / "history.json"
 SYSTEM_PROMPT_FILE = BASE / "system_prompt.txt"
@@ -90,6 +96,56 @@ def typing(token, chat_id):
     tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "typing"})
 
 
+def send_photo(token, chat_id, photo_bytes):
+    boundary = "CCbound"
+    body = (
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{chat_id}\r\n"
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"chart.png\"\r\nContent-Type: image/png\r\n\r\n"
+    ).encode() + photo_bytes + f"\r\n--{boundary}--\r\n".encode()
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    req = urllib.request.Request(url, data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30, context=SSL_CONTEXT) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        log(f"send_photo error: {e}")
+        return {}
+
+
+CHART_RE = re.compile(r'\[\[CHART:(\w+):(.*?)\]\]', re.DOTALL)
+
+
+def process_charts(token, chat_id, response):
+    """Send any [[CHART:TYPE:JSON]] images, return response with markers stripped."""
+    if _charts is None:
+        return CHART_RE.sub('', response).strip()
+    for m in CHART_RE.finditer(response):
+        chart_type, raw = m.group(1), m.group(2)
+        try:
+            data = json.loads(raw)
+            png = None
+            if chart_type == "fitness":
+                png = _charts.fitness_chart(data)
+            elif chart_type == "session":
+                png = _charts.session_chart(
+                    data.get("name", "Session"),
+                    data.get("intervals", []),
+                    data.get("ftp", 316),
+                )
+            elif chart_type == "week":
+                png = _charts.week_chart(
+                    data.get("events", []),
+                    title=data.get("title", "Training week"),
+                    week_start=data.get("week_start"),
+                )
+            if png:
+                send_photo(token, chat_id, png)
+        except Exception as e:
+            log(f"Chart error ({chart_type}): {e}")
+    return CHART_RE.sub('', response).strip()
+
+
 def call_claude(user_message, config, history):
     system_prompt = SYSTEM_PROMPT_FILE.read_text().strip()
 
@@ -164,14 +220,17 @@ def main():
 
             log(f"In: {text[:80]}")
             typing(token, chat_id)
+            send(token, chat_id, "_On it..._")
 
             history = load_history()
             response = call_claude(text, config, history)
 
-            send(token, chat_id, response)
-            log(f"Out: {response[:80]}")
+            clean = process_charts(token, chat_id, response)
+            if clean:
+                send(token, chat_id, clean)
+            log(f"Out: {clean[:80]}")
 
-            history.append({"user": text, "assistant": response})
+            history.append({"user": text, "assistant": clean})
             save_history(history)
 
         time.sleep(1)

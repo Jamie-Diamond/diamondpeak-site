@@ -24,6 +24,21 @@ ZONE_COLOURS = {
     "WU/CD": "#d0d0d0",
 }
 
+SPORT_COLOURS = {
+    "Swim":           "#1a5276",
+    "Ride":           "#1d6840",
+    "Run":            "#c0392b",
+    "Strength":       "#7f8c8d",
+    "WeightTraining": "#7f8c8d",
+    "Other":          "#9b59b6",
+}
+_PLANNED_ALPHA = 0.35
+
+
+def _rgba(hex_colour, alpha):
+    r, g, b = int(hex_colour[1:3], 16), int(hex_colour[3:5], 16), int(hex_colour[5:7], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
 
 def _fetch(config, width=900, height=420):
     payload = json.dumps({
@@ -118,6 +133,76 @@ def fitness_chart(data):
         },
     }
     return _fetch(config)
+
+
+def week_chart(events, title="Training week", week_start=None):
+    """
+    events: list of {date (YYYY-MM-DD), sport, duration_min, status (completed|planned), name}
+    week_start: YYYY-MM-DD Monday of the week (optional; derived from events if omitted)
+    Returns PNG bytes or None.
+    """
+    from datetime import datetime, timedelta
+
+    if not events and not week_start:
+        return None
+
+    if week_start:
+        monday = datetime.strptime(week_start, "%Y-%m-%d")
+    else:
+        dates = [datetime.strptime(e["date"], "%Y-%m-%d") for e in events]
+        first = min(dates)
+        monday = first - timedelta(days=first.weekday())
+
+    days = [monday + timedelta(days=i) for i in range(7)]
+    labels = [d.strftime("%a") + " " + str(d.day) for d in days]
+    day_strs = [d.strftime("%Y-%m-%d") for d in days]
+
+    sport_order = ["Swim", "Ride", "Run", "Strength", "WeightTraining"]
+    seen = []
+    for e in events:
+        s = e.get("sport", "Other")
+        if s not in seen:
+            seen.append(s)
+    sports = [s for s in sport_order if s in seen] + [s for s in seen if s not in sport_order]
+
+    datasets = []
+    for sport in sports:
+        colour = SPORT_COLOURS.get(sport, SPORT_COLOURS["Other"])
+        label = "Strength" if sport == "WeightTraining" else sport
+        comp = [0] * 7
+        plan = [0] * 7
+        for i, day_str in enumerate(day_strs):
+            for e in events:
+                if e.get("date") == day_str and e.get("sport", "Other") == sport:
+                    mins = e.get("duration_min", 0)
+                    if e.get("status") == "completed":
+                        comp[i] += mins
+                    else:
+                        plan[i] += mins
+        if any(comp):
+            datasets.append({"label": label, "data": comp, "backgroundColor": colour, "stack": "s"})
+        if any(plan):
+            datasets.append({"label": f"{label} (plan)", "data": plan,
+                             "backgroundColor": _rgba(colour, _PLANNED_ALPHA), "stack": "s"})
+
+    if not datasets:
+        return None
+
+    config = {
+        "type": "bar",
+        "data": {"labels": labels, "datasets": datasets},
+        "options": {
+            "title": {"display": True, "text": title, "fontSize": 14},
+            "legend": {"position": "top", "labels": {"boxWidth": 12}},
+            "scales": {
+                "yAxes": [{"stacked": True,
+                           "scaleLabel": {"display": True, "labelString": "Minutes"},
+                           "ticks": {"beginAtZero": True}}],
+                "xAxes": [{"stacked": True}],
+            },
+        },
+    }
+    return _fetch(config, width=900, height=380)
 
 
 def session_chart(name, intervals, ftp=316):
