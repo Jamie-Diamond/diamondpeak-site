@@ -184,7 +184,7 @@ def send_photo(token, chat_id, photo_bytes):
         return {}
 
 
-CHART_RE = re.compile(r'\[\[CHART:(\w+):(.*?)\]\]', re.DOTALL)
+CHART_RE = re.compile(r'<<<CHART:(\w+):(.*?)>>>', re.DOTALL)
 
 
 def process_charts(token, chat_id, response):
