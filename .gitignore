@@ -5,3 +5,4 @@ ClaudeCoach/telegram/bot.log
 __pycache__/
 *.pyc
 ClaudeCoach/.*.lock
+ClaudeCoach/last_activity_state.json
