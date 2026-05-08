@@ -8,7 +8,7 @@ Run: python3 bot.py
 import json, re, subprocess, sys, time, ssl
 import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date
 
 _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
@@ -40,6 +40,12 @@ SYSTEM_PROMPT_FILE = BASE / "system_prompt.txt"
 LOG_FILE = BASE / "bot.log"
 
 MAX_HISTORY_PAIRS = 6  # keep last 6 exchanges for context
+
+RACE_DAY = date(2026, 9, 19)
+
+
+def days_to_race():
+    return (RACE_DAY - date.today()).days
 
 QUICK_KEYBOARD = {
     "inline_keyboard": [
@@ -316,6 +322,7 @@ def main():
 
             clean = process_charts(token, chat_id, response)
             if clean:
+                clean += f"\n\n— {days_to_race()} days to Cervia"
                 send(token, chat_id, clean, reply_markup=QUICK_KEYBOARD)
             log(f"Out: {clean[:80]}")
 
