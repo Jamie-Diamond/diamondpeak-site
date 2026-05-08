@@ -57,16 +57,69 @@ def _fetch(config, width=900, height=420):
         return r.read()
 
 
-def fitness_chart(data):
+def fitness_chart(payload):
     """
-    data: list of dicts {date, ctl, atl, tsb}
+    payload: list of {date, ctl, atl, tsb}  OR  {"today":"MM-DD", "data":[...]}
     Returns PNG bytes.
     """
-    labels = [d["date"][5:] for d in data]   # MM-DD
-    ctl    = [d["ctl"] for d in data]
-    atl    = [d["atl"] for d in data]
-    tsb    = [d["tsb"] for d in data]
+    if isinstance(payload, dict):
+        data  = payload.get("data", [])
+        today = payload.get("today")  # MM-DD e.g. "05-08"
+    else:
+        data  = payload
+        today = None
+
+    labels      = [d["date"][5:] for d in data]   # MM-DD
+    ctl         = [d["ctl"] for d in data]
+    atl         = [d["atl"] for d in data]
+    tsb         = [d["tsb"] for d in data]
     tsb_colours = [C_TSB_P if v >= 0 else C_TSB_N for v in tsb]
+
+    options = {
+        "title": {"display": True, "text": "Fitness — CTL / ATL / TSB", "fontSize": 15},
+        "legend": {"position": "top", "labels": {"fontSize": 12, "boxWidth": 14}},
+        "scales": {
+            "yAxes": [
+                {
+                    "id": "y1",
+                    "position": "left",
+                    "scaleLabel": {"display": True, "labelString": "CTL / ATL", "fontSize": 12},
+                    "ticks": {"suggestedMin": 40, "suggestedMax": 130, "fontSize": 11},
+                },
+                {
+                    "id": "y2",
+                    "position": "right",
+                    "scaleLabel": {"display": True, "labelString": "TSB", "fontSize": 12},
+                    "gridLines": {"drawOnChartArea": False},
+                    "ticks": {"suggestedMin": -50, "suggestedMax": 25, "fontSize": 11},
+                },
+            ],
+            "xAxes": [
+                {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 10, "fontSize": 11}}
+            ],
+        },
+    }
+
+    if today and today in labels:
+        options["annotation"] = {
+            "annotations": [{
+                "type": "line",
+                "mode": "vertical",
+                "scaleID": "x-axis-0",
+                "value": today,
+                "borderColor": "rgba(80,80,80,0.7)",
+                "borderWidth": 2,
+                "borderDash": [5, 3],
+                "label": {
+                    "enabled": True,
+                    "content": "Today",
+                    "fontSize": 11,
+                    "fontColor": "#333",
+                    "position": "top",
+                    "backgroundColor": "rgba(255,255,255,0.85)",
+                },
+            }]
+        }
 
     config = {
         "type": "bar",
@@ -75,11 +128,11 @@ def fitness_chart(data):
             "datasets": [
                 {
                     "type": "line",
-                    "label": "CTL (fitness)",
+                    "label": "CTL",
                     "data": ctl,
                     "borderColor": C_CTL,
                     "backgroundColor": "transparent",
-                    "borderWidth": 2.5,
+                    "borderWidth": 3,
                     "pointRadius": 2,
                     "fill": False,
                     "yAxisID": "y1",
@@ -87,7 +140,7 @@ def fitness_chart(data):
                 },
                 {
                     "type": "line",
-                    "label": "ATL (fatigue)",
+                    "label": "ATL",
                     "data": atl,
                     "borderColor": C_ATL,
                     "backgroundColor": "transparent",
@@ -99,7 +152,7 @@ def fitness_chart(data):
                     "order": 2,
                 },
                 {
-                    "label": "TSB (form)",
+                    "label": "TSB",
                     "data": tsb,
                     "backgroundColor": tsb_colours,
                     "yAxisID": "y2",
@@ -107,32 +160,9 @@ def fitness_chart(data):
                 },
             ],
         },
-        "options": {
-            "title": {"display": True, "text": "Fitness — CTL / ATL / TSB", "fontSize": 14},
-            "legend": {"position": "top"},
-            "scales": {
-                "yAxes": [
-                    {
-                        "id": "y1",
-                        "position": "left",
-                        "scaleLabel": {"display": True, "labelString": "CTL / ATL"},
-                        "ticks": {"suggestedMin": 40, "suggestedMax": 130},
-                    },
-                    {
-                        "id": "y2",
-                        "position": "right",
-                        "scaleLabel": {"display": True, "labelString": "TSB"},
-                        "gridLines": {"drawOnChartArea": False},
-                        "ticks": {"suggestedMin": -50, "suggestedMax": 25},
-                    },
-                ],
-                "xAxes": [
-                    {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 15}}
-                ],
-            },
-        },
+        "options": options,
     }
-    return _fetch(config)
+    return _fetch(config, width=900, height=500)
 
 
 def week_chart(events, title="Training week", week_start=None):
@@ -192,17 +222,17 @@ def week_chart(events, title="Training week", week_start=None):
         "type": "bar",
         "data": {"labels": labels, "datasets": datasets},
         "options": {
-            "title": {"display": True, "text": title, "fontSize": 14},
-            "legend": {"position": "top", "labels": {"boxWidth": 12}},
+            "title": {"display": True, "text": title, "fontSize": 15},
+            "legend": {"position": "top", "labels": {"boxWidth": 14, "fontSize": 12}},
             "scales": {
                 "yAxes": [{"stacked": True,
-                           "scaleLabel": {"display": True, "labelString": "Minutes"},
-                           "ticks": {"beginAtZero": True}}],
-                "xAxes": [{"stacked": True}],
+                           "scaleLabel": {"display": True, "labelString": "Minutes", "fontSize": 12},
+                           "ticks": {"beginAtZero": True, "fontSize": 12}}],
+                "xAxes": [{"stacked": True, "ticks": {"fontSize": 13}}],
             },
         },
     }
-    return _fetch(config, width=900, height=380)
+    return _fetch(config, width=900, height=440)
 
 
 def session_chart(name, intervals, ftp=316):
@@ -256,17 +286,17 @@ def session_chart(name, intervals, ftp=316):
             "datasets": datasets,
         },
         "options": {
-            "title": {"display": True, "text": "Session structure", "fontSize": 13},
-            "legend": {"position": "bottom", "labels": {"boxWidth": 12}},
+            "title": {"display": True, "text": "Session structure", "fontSize": 15},
+            "legend": {"position": "bottom", "labels": {"boxWidth": 14, "fontSize": 12}},
             "scales": {
                 "xAxes": [
                     {
                         "stacked": True,
-                        "scaleLabel": {"display": True, "labelString": "Minutes"},
-                        "ticks": {"beginAtZero": True},
+                        "scaleLabel": {"display": True, "labelString": "Minutes", "fontSize": 12},
+                        "ticks": {"beginAtZero": True, "fontSize": 12},
                     }
                 ],
-                "yAxes": [{"stacked": True}],
+                "yAxes": [{"stacked": True, "ticks": {"fontSize": 13}}],
             },
         },
     }
