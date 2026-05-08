@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i146104507",
+    "date": "2026-05-07",
+    "name": "9:1",
+    "sport": "Run",
+    "tss": 67,
+    "duration_min": 64,
+    "distance_km": 12.52,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 143,
+    "rpe": null,
+    "feel": null,
+    "ankle_pain_during": null,
+    "ankle_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-08",
+    "stub": true
+  },
+  {
     "date": "2026-05-08",
     "session": "88k fuelling-rehearsal ride",
     "tss": 126,
