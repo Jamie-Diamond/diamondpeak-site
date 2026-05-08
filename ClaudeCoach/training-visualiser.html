@@ -167,14 +167,14 @@
       <div class="stat"><div class="l">HRV / RHR</div><div class="v" id="kpi-hrv">39 / 56</div><div class="d">HRV stable; RHR slight uptick</div></div>
     </div>
     <div style="margin-top:14px">
-      <h3>21-week build · today is the start of Week 1</h3>
-      <div class="phase-bar">
+      <h3 id="phase-label">21-week build</h3>
+      <div class="phase-bar" id="phase-bar">
         <div style="background:var(--base);flex:6">Base · W1–6</div>
         <div style="background:var(--build);flex:4">Build · W7–10</div>
         <div style="background:var(--specific);flex:4">Specific · W11–14</div>
         <div style="background:var(--peak);flex:4">Peak · W15–18</div>
         <div style="background:var(--taper);flex:3">Taper · W19–21</div>
-        <div class="marker" style="left:0%"></div>
+        <div class="marker" id="phase-marker" style="left:0%"></div>
       </div>
     </div>
   </div>
@@ -1073,13 +1073,29 @@ renderRecentTable(recent);
   });
 })();
 
-// Race countdown (auto-calculated)
+// Race countdown + phase bar marker
 (function() {
-  const race = new Date("2026-09-19");
-  const today = new Date(); today.setHours(0,0,0,0);
-  const days = Math.round((race - today) / 86400000);
+  const planStart = new Date("2026-04-27"); // Week 1 Monday
+  const race      = new Date("2026-09-19");
+  const today     = new Date(); today.setHours(0,0,0,0);
+
+  // Countdown
+  const daysToRace = Math.round((race - today) / 86400000);
   const el = document.getElementById("kpi-days");
-  if (el) el.textContent = days;
+  if (el) el.textContent = Math.max(0, daysToRace);
+
+  // Phase bar marker position
+  const totalDays = Math.round((race - planStart) / 86400000);
+  const elapsed   = Math.round((today - planStart) / 86400000);
+  const pct       = Math.min(100, Math.max(0, (elapsed / totalDays) * 100));
+  const marker = document.getElementById("phase-marker");
+  if (marker) marker.style.left = pct.toFixed(1) + "%";
+
+  // Week number and phase label
+  const week = Math.min(21, Math.max(1, Math.ceil(elapsed / 7)));
+  const phase = week <= 6 ? "Base" : week <= 10 ? "Build" : week <= 14 ? "Specific" : week <= 18 ? "Peak" : "Taper";
+  const label = document.getElementById("phase-label");
+  if (label) label.textContent = `21-week build · Week ${week} · ${phase}`;
 })();
 
 // Live data — fetch training-data.json (written by refresh-site-data.py) and update page

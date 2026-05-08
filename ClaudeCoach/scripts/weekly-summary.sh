@@ -62,7 +62,13 @@ Step 5 — Output the summary card:
 
 ---
 
-Step 6 — Send PushNotification with this exact format (under 200 chars):
+Step 6 — Update current-state.md:
+  - Update "Off-plan in last 7 days" with the week's missed sessions (or "none")
+  - Update "Heat acclimation log" section with this week's heat session count
+  - Update "Body weight" if any weight readings came from get_wellness
+  - Run: git add ClaudeCoach/current-state.md && git commit -m "weekly: state update week ending [date]" && git pull --rebase origin main && git push origin main
+
+Step 7 — Send PushNotification with this exact format (under 200 chars):
 "Week [N of ~21]: [X TSS / Y%] | CTL [+/-Z] | [headline flag or 'all clear']"
 
 Example: "Week 3/21: 485 TSS / 91% | CTL +4.2 | all clear"
@@ -71,7 +77,7 @@ Example with flag: "Week 3/21: 310 TSS / 63% | CTL -1.1 | 2 sessions missed"
 Do not send more than one PushNotification.
 PROMPT_END
 
-TOOLS="Read,Bash,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_events,mcp__claude_ai_icusync__get_wellness,PushNotification"
+TOOLS="Read,Write,Edit,Bash,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_events,mcp__claude_ai_icusync__get_wellness,PushNotification"
 
 OUTPUT=$(/Users/diamondpeakconsulting/.local/bin/claude -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$HOME/Library/Logs/ClaudeCoach/weekly-summary.log")
 echo "$OUTPUT"
