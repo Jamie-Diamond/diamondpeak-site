@@ -1,44 +1,9 @@
 [
   {
-    "activity_id": "i146542118",
     "date": "2026-05-08",
-    "name": "All the traffic",
-    "sport": "Ride",
+    "session": "88k fuelling-rehearsal ride",
     "tss": 126,
-    "duration_min": 170,
-    "distance_km": 88.12,
-    "avg_power": 183,
-    "norm_power": 211,
-    "avg_hr": 133,
-    "rpe": null,
-    "feel": null,
-    "ankle_pain_during": null,
-    "ankle_pain_next_morning": null,
-    "nutrition_g_carb": null,
-    "hydration_ml": null,
-    "notes": null,
-    "logged_at": "2026-05-08",
-    "stub": true
-  },
-  {
-    "activity_id": "i146104507",
-    "date": "2026-05-07",
-    "name": "9:1 run (13 km)",
-    "sport": "Run",
-    "tss": 67,
-    "duration_min": 64,
-    "distance_km": 12.52,
-    "avg_power": null,
-    "norm_power": null,
-    "avg_hr": 143,
-    "rpe": null,
-    "feel": null,
-    "ankle_pain_during": 2,
-    "ankle_pain_next_morning": 0,
-    "nutrition_g_carb": null,
-    "hydration_ml": null,
-    "notes": "Nice to find a stride",
-    "logged_at": "2026-05-08",
-    "stub": true
+    "rpe": 4,
+    "notes": "160g carbs total over ~3hr (~53g/hr — well below race target). Lots of traffic, hard to hold consistent effort. Ankle ok. Not that hot."
   }
 ]
