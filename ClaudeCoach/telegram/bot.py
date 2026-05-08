@@ -264,8 +264,7 @@ def main():
     allowed_chat_id = str(config["chat_id"])
 
     log(f"ClaudeCoach bot started. Listening for messages from chat {allowed_chat_id}.")
-    send(token, allowed_chat_id, "ClaudeCoach online. What do you need?")
-    get_whisper()  # load model after startup message so bot responds immediately
+    get_whisper()
 
     offset = 0
     while True:
