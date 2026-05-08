@@ -27,6 +27,19 @@ LOG_FILE = BASE / "bot.log"
 
 MAX_HISTORY_PAIRS = 6  # keep last 6 exchanges for context
 
+QUICK_KEYBOARD = {
+    "inline_keyboard": [
+        [
+            {"text": "Today's plan",      "callback_data": "what's today's session?"},
+            {"text": "How am I looking?", "callback_data": "how am I looking?"},
+        ],
+        [
+            {"text": "This week",   "callback_data": "show me this week"},
+            {"text": "Log session", "callback_data": "log session"},
+        ],
+    ]
+}
+
 TOOLS = ",".join([
     "Read", "Write", "Edit",
     "mcp__claude_ai_icusync__get_athlete_profile",
@@ -87,13 +100,21 @@ def tg_get(token, method, params):
         return {"result": []}
 
 
-def send(token, chat_id, text, parse_mode="Markdown"):
-    for chunk in [text[i:i+4096] for i in range(0, len(text), 4096)]:
-        tg_post(token, "sendMessage", {"chat_id": chat_id, "text": chunk, "parse_mode": parse_mode})
+def send(token, chat_id, text, parse_mode="Markdown", reply_markup=None):
+    chunks = [text[i:i+4096] for i in range(0, len(text), 4096)]
+    for i, chunk in enumerate(chunks):
+        payload = {"chat_id": chat_id, "text": chunk, "parse_mode": parse_mode}
+        if reply_markup and i == len(chunks) - 1:
+            payload["reply_markup"] = reply_markup
+        tg_post(token, "sendMessage", payload)
 
 
 def typing(token, chat_id):
     tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "typing"})
+
+
+def answer_callback(token, callback_query_id):
+    tg_post(token, "answerCallbackQuery", {"callback_query_id": callback_query_id})
 
 
 def send_photo(token, chat_id, photo_bytes):
@@ -200,9 +221,16 @@ def main():
         data = get_updates(token, offset)
         for update in data.get("result", []):
             offset = update["update_id"] + 1
-            msg = update.get("message", {})
-            chat_id = str(msg.get("chat", {}).get("id", ""))
-            text = (msg.get("text") or "").strip()
+
+            if "callback_query" in update:
+                cq = update["callback_query"]
+                chat_id = str(cq.get("message", {}).get("chat", {}).get("id", ""))
+                text = cq.get("data", "").strip()
+                answer_callback(token, cq["id"])
+            else:
+                msg = update.get("message", {})
+                chat_id = str(msg.get("chat", {}).get("id", ""))
+                text = (msg.get("text") or "").strip()
 
             if chat_id != allowed_chat_id or not text:
                 continue
@@ -215,7 +243,8 @@ def main():
                      "- _log session_ (after a key workout)\n"
                      "- _what's today's session?_\n"
                      "- _log heat session 30 min_\n"
-                     "- _what's my CTL?_")
+                     "- _what's my CTL?_",
+                     reply_markup=QUICK_KEYBOARD)
                 continue
 
             log(f"In: {text[:80]}")
@@ -227,7 +256,7 @@ def main():
 
             clean = process_charts(token, chat_id, response)
             if clean:
-                send(token, chat_id, clean)
+                send(token, chat_id, clean, reply_markup=QUICK_KEYBOARD)
             log(f"Out: {clean[:80]}")
 
             history.append({"user": text, "assistant": clean})
