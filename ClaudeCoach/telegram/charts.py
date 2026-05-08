@@ -58,84 +58,74 @@ def _fetch(config, width=720, height=460):
         return r.read()
 
 
-# ── Fitness chart ─────────────────────────────────────────────────────────────
+# ── Shared helper ─────────────────────────────────────────────────────────────
+
+def _today_annotation(today, labels):
+    if today and today in labels:
+        return {
+            "type": "line",
+            "xMin": today, "xMax": today,
+            "borderColor": "rgba(60,60,60,0.55)",
+            "borderWidth": 1.5,
+            "borderDash": [4, 3],
+            "label": {
+                "display": True, "content": "Today",
+                "position": "start",
+                "backgroundColor": "rgba(255,255,255,0.9)",
+                "color": "#333", "font": {"size": 11},
+            },
+        }
+    return None
+
+
+def _parse_fitness_payload(payload):
+    if isinstance(payload, dict):
+        return payload.get("data", []), payload.get("today")
+    return payload, None
+
+
+# ── Fitness chart (CTL + ATL) ──────────────────────────────────────────────────
 
 def fitness_chart(payload):
     """
-    payload: {"today":"MM-DD","data":[{date,ctl,atl,tsb},...]}
-    or list of {date,ctl,atl,tsb}
+    payload: {"today":"MM-DD","data":[{date,ctl,atl,tsb},...]}  or bare list.
+    Renders CTL (teal filled) + ATL (purple dashed) — TSB is a separate form_chart.
     """
-    if isinstance(payload, dict):
-        data  = payload.get("data", [])
-        today = payload.get("today")
-    else:
-        data  = payload
-        today = None
-
-    labels      = [d["date"][5:] for d in data]
-    ctl         = [round(d["ctl"], 1) for d in data]
-    atl         = [round(d["atl"], 1) for d in data]
-    tsb         = [round(d["tsb"], 1) for d in data]
-    tsb_colours = [C_TSB_P if v >= 0 else C_TSB_N for v in tsb]
+    data, today = _parse_fitness_payload(payload)
+    labels = [d["date"][5:] for d in data]
+    ctl    = [round(d["ctl"], 1) for d in data]
+    atl    = [round(d["atl"], 1) for d in data]
 
     annotations = {}
-    if today and today in labels:
-        annotations["today"] = {
-            "type": "line",
-            "xMin": today,
-            "xMax": today,
-            "borderColor": "rgba(60,60,60,0.65)",
-            "borderWidth": 2,
-            "borderDash": [5, 3],
-            "label": {
-                "display": True,
-                "content": "Today",
-                "position": "start",
-                "backgroundColor": "rgba(255,255,255,0.9)",
-                "color": "#333",
-                "font": {"size": 11},
-            },
-        }
+    ann = _today_annotation(today, labels)
+    if ann:
+        annotations["today"] = ann
 
     config = {
-        "type": "bar",
+        "type": "line",
         "data": {
             "labels": labels,
             "datasets": [
                 {
-                    "type": "line",
-                    "label": "CTL",
+                    "label": "Fitness (CTL)",
                     "data": ctl,
-                    "borderColor": C_CTL,
-                    "backgroundColor": "rgba(26,82,118,0.12)",
-                    "borderWidth": 3,
-                    "pointRadius": 2,
+                    "borderColor": "#2e9c8e",
+                    "backgroundColor": "rgba(46,156,142,0.15)",
+                    "borderWidth": 2.5,
+                    "pointRadius": 0,
                     "fill": "origin",
-                    "yAxisID": "y",
-                    "order": 1,
                     "tension": 0.3,
                 },
                 {
-                    "type": "line",
-                    "label": "ATL",
+                    "label": "Fatigue (ATL)",
                     "data": atl,
-                    "borderColor": C_ATL,
-                    "backgroundColor": "transparent",
+                    "borderColor": "#7c4dff",
+                    "backgroundColor": "rgba(124,77,255,0.07)",
                     "borderWidth": 2,
                     "borderDash": [6, 3],
-                    "pointRadius": 2,
-                    "fill": False,
-                    "yAxisID": "y",
-                    "order": 2,
+                    "pointRadius": 0,
+                    "fill": "origin",
                     "tension": 0.3,
-                },
-                {
-                    "type": "bar",
-                    "label": "TSB",
-                    "data": tsb,
-                    "backgroundColor": tsb_colours,
-                    "yAxisID": "y2",
-                    "order": 3,
                 },
             ],
         },
@@ -143,45 +133,125 @@ def fitness_chart(payload):
             "plugins": {
                 "title": {
                     "display": True,
-                    "text": "Fitness — CTL / ATL / TSB",
-                    "font": {"size": 15},
+                    "text": "Fitness (CTL) & Fatigue (ATL)",
+                    "font": {"size": 14},
                 },
                 "legend": {
                     "position": "top",
-                    "labels": {"boxWidth": 14, "font": {"size": 12}},
+                    "labels": {"boxWidth": 12, "font": {"size": 12}},
                 },
                 "annotation": {"annotations": annotations},
             },
             "scales": {
-                "x": {
-                    "ticks": {
-                        "maxRotation": 45,
-                        "autoSkip": True,
-                        "maxTicksLimit": 10,
-                        "font": {"size": 11},
-                    },
-                },
+                "x": {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 10, "font": {"size": 11}}},
                 "y": {
-                    "type": "linear",
-                    "position": "left",
                     "title": {"display": True, "text": "CTL / ATL", "font": {"size": 12}},
                     "ticks": {"font": {"size": 11}},
                     "suggestedMin": 40,
                     "suggestedMax": 130,
-                },
-                "y2": {
-                    "type": "linear",
-                    "position": "right",
-                    "title": {"display": True, "text": "TSB", "font": {"size": 12}},
-                    "grid": {"drawOnChartArea": False},
-                    "ticks": {"font": {"size": 11}},
-                    "suggestedMin": -50,
-                    "suggestedMax": 25,
+                    "grid": {"color": "rgba(0,0,0,0.06)"},
                 },
             },
         },
     }
-    return _fetch(config, height=500)
+    return _fetch(config, height=420)
+
+
+# ── Form chart (TSB with coloured zones) ──────────────────────────────────────
+
+def form_chart(payload):
+    """
+    Same payload as fitness_chart. Renders TSB as a line with coloured background zones:
+      > +5 : teal   — fresh / race-ready
+      0 to +5 : light green — optimal
+     -20 to 0 : amber  — normal training load
+      < -20   : red   — heavy / overreaching risk
+    """
+    data, today = _parse_fitness_payload(payload)
+    labels = [d["date"][5:] for d in data]
+    tsb    = [round(d["tsb"], 1) for d in data]
+
+    annotations = {
+        "zone_fresh": {
+            "type": "box", "yMin": 5, "yMax": 60,
+            "backgroundColor": "rgba(46,156,142,0.10)",
+            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
+        },
+        "zone_ok": {
+            "type": "box", "yMin": 0, "yMax": 5,
+            "backgroundColor": "rgba(120,200,140,0.10)",
+            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
+        },
+        "zone_load": {
+            "type": "box", "yMin": -20, "yMax": 0,
+            "backgroundColor": "rgba(200,160,60,0.08)",
+            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
+        },
+        "zone_heavy": {
+            "type": "box", "yMin": -60, "yMax": -20,
+            "backgroundColor": "rgba(192,57,43,0.09)",
+            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
+        },
+        "ref_5": {
+            "type": "line", "yMin": 5, "yMax": 5,
+            "borderColor": "rgba(46,156,142,0.45)", "borderWidth": 1, "borderDash": [4, 3],
+            "label": {"display": True, "content": "+5 fresh", "position": "end",
+                      "backgroundColor": "transparent", "color": "#2e9c8e", "font": {"size": 9}},
+        },
+        "ref_0": {
+            "type": "line", "yMin": 0, "yMax": 0,
+            "borderColor": "rgba(100,100,100,0.30)", "borderWidth": 1,
+        },
+        "ref_m20": {
+            "type": "line", "yMin": -20, "yMax": -20,
+            "borderColor": "rgba(192,57,43,0.40)", "borderWidth": 1, "borderDash": [4, 3],
+            "label": {"display": True, "content": "−20 heavy", "position": "end",
+                      "backgroundColor": "transparent", "color": "#c0392b", "font": {"size": 9}},
+        },
+    }
+
+    ann = _today_annotation(today, labels)
+    if ann:
+        annotations["today"] = ann
+
+    config = {
+        "type": "line",
+        "data": {
+            "labels": labels,
+            "datasets": [{
+                "label": "Form (TSB)",
+                "data": tsb,
+                "borderColor": "rgba(60,60,60,0.75)",
+                "backgroundColor": "rgba(60,60,60,0.06)",
+                "borderWidth": 2,
+                "pointRadius": 0,
+                "fill": "origin",
+                "tension": 0.3,
+            }],
+        },
+        "options": {
+            "plugins": {
+                "title": {
+                    "display": True,
+                    "text": "Form (TSB)",
+                    "font": {"size": 14},
+                },
+                "legend": {"display": False},
+                "annotation": {"annotations": annotations},
+            },
+            "scales": {
+                "x": {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 10, "font": {"size": 11}}},
+                "y": {
+                    "title": {"display": True, "text": "TSB", "font": {"size": 12}},
+                    "ticks": {"font": {"size": 11}},
+                    "suggestedMin": -40,
+                    "suggestedMax": 20,
+                    "grid": {"color": "rgba(0,0,0,0.06)"},
+                },
+            },
+        },
+    }
+    return _fetch(config, height=320)
 
 
 # ── Week calendar ─────────────────────────────────────────────────────────────

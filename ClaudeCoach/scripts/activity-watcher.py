@@ -20,10 +20,21 @@ TOOLS = ",".join([
 ])
 
 PROMPT = """Get the most recent activity from get_training_history (check today and yesterday).
+Then call get_activity_detail to get full metrics for that activity.
 
-Respond in EXACTLY this format — no other text:
+Jamie: male, 30, FTP 316 W, run threshold 4:02/km, swim CSS 1:39/100m. Ankle in rehab — 9:1 walk-run only.
+
+Respond in EXACTLY this format — no other text, no markdown:
 ACTIVITY_ID: <numeric id>
-ANALYSIS: <3-5 lines: activity name, duration, key metrics (TSS/NP/pace/HR), one sentence on how it fits the plan>
+ANALYSIS: <coaching message — see rules below>
+
+Rules for the ANALYSIS (3-5 lines max):
+- Line 1: One punchy sentence on the headline result. Lead with what went well or the key number. Examples: "Solid Z2 ride — NP 214 W (IF 0.68), right on target." / "Good 9:1 run, 12.5 km — ankle behaved."
+- Line 2 (rides only): Cardiac decoupling if available (HR drift vs power drift as a %). If not available, comment on IF discipline or NP vs target.
+- Line 2 (runs): Pace vs threshold context, or HR cap adherence.
+- Line 2 (swims): Pace vs CSS target.
+- Line 3: One question — nutrition and hydration for sessions >90 min, or ankle pain score for runs, or how it felt (RPE) for shorter sessions.
+- Keep it conversational, not a data dump. Max 400 characters total.
 
 If there are no activities at all, respond:
 ACTIVITY_ID: none

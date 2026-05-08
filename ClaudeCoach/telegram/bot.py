@@ -204,12 +204,15 @@ def process_charts(token, chat_id, response):
         try:
             data = json.loads(raw)
             png = None
-            if chart_type == "fitness":
+            if chart_type in ("fitness", "form"):
                 if isinstance(data, list):
                     data = {"data": data}
                 if "today" not in data:
                     data["today"] = date.today().strftime("%m-%d")
-                png = _charts.fitness_chart(data)
+                if chart_type == "fitness":
+                    png = _charts.fitness_chart(data)
+                else:
+                    png = _charts.form_chart(data)
             elif chart_type == "session":
                 png = _charts.session_chart(
                     data.get("name", "Session"),
