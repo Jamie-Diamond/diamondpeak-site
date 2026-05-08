@@ -11,7 +11,7 @@ BASE        = Path(__file__).parent.parent          # ClaudeCoach/
 OUT_FILE    = BASE / "training-data.json"
 PROJECT_DIR = str(BASE.parent)                       # diamondpeak-site/
 LOCK_FILE   = BASE / ".refresh_site_data.lock"
-CLAUDE      = "claude"
+CLAUDE      = "/usr/bin/claude"
 
 TOOLS = ",".join([
     "Write",
