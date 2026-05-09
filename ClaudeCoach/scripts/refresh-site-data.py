@@ -14,11 +14,12 @@ PROJECT_DIR = str(BASE.parent)                       # diamondpeak-site/
 LOCK_FILE   = BASE / ".refresh_site_data.lock"
 CLAUDE      = "/usr/bin/claude"
 
-HEAT_LOG       = BASE / "heat-log.json"
-DECOUPLING_LOG = BASE / "decoupling-log.json"
-STATE_JSON     = BASE / "current-state.json"
-SESSION_LOG    = BASE / "session-log.json"
-SWIM_LOG       = BASE / "swim-log.json"
+HEAT_LOG          = BASE / "heat-log.json"
+DECOUPLING_LOG    = BASE / "decoupling-log.json"
+STATE_JSON        = BASE / "current-state.json"
+SESSION_LOG       = BASE / "session-log.json"
+SWIM_LOG          = BASE / "swim-log.json"
+FITNESS_PREV_CACHE = BASE / "fitness-prev-cache.json"
 
 RACE_DATE = date(2026, 9, 19)
 PLAN_START = date(2026, 4, 27)  # Week 1 Monday
@@ -38,10 +39,9 @@ PROMPT = """Fetch live training data from Intervals.icu and write ClaudeCoach/tr
 Steps:
 1. get_athlete_profile → note current_date_local (today) and FTP
 2. get_fitness(start_date="2026-01-01", end_date=today) → daily CTL/ATL/TSB series (this season)
-3. get_fitness(start_date="2025-01-01", end_date="2025-09-19") → last season CTL series for year-on-year overlay
-4. get_training_history(start_date=<14 days ago>, end_date=today) → recent activities
-5. get_power_curves → best power efforts for standard durations
-6. get_wellness(start_date=<30 days ago>, end_date=today) → HRV, RHR, body_weight per day
+3. get_training_history(start_date=<14 days ago>, end_date=today) → recent activities
+4. get_power_curves → best power efforts for standard durations
+5. get_wellness(start_date=<30 days ago>, end_date=today) → HRV, RHR, body_weight per day
 
 Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY this schema
 (no trailing text after the Write call):
@@ -59,10 +59,6 @@ Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY thi
   "fitnessThis": [
     ["YYYY-MM-DD", <ctl float>],
     ... one entry per day from 2026-01-01 to today inclusive
-  ],
-  "fitnessPrev": [
-    ["YYYY-MM-DD", <ctl float>],
-    ... one entry per day from 2025-01-01 to 2025-09-19 inclusive (raw 2025 dates — HTML will shift +1 year for overlay)
   ],
   "recent": [
     {
@@ -95,7 +91,7 @@ Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY thi
   ]
 }
 
-7. get_events(start_date=<today>, end_date=<today+14 days>) → upcoming planned events
+6. get_events(start_date=<today>, end_date=<today+14 days>) → upcoming planned events
 
 Build "weekCalendar": a flat array covering the last 7 days (from training_history) plus the next 14 days (from get_events). Each entry:
 {
@@ -119,7 +115,7 @@ Rules for weekCalendar:
 - detail for completed Swim: "<pace> · <dist>m"
 - detail for planned: event description or empty string
 
-8. Build "loadChart": 15 day entries covering (today minus 7 days) through (today plus 7 days) inclusive, ordered date ascending.
+7. Build "loadChart": 15 day entries covering (today minus 7 days) through (today plus 7 days) inclusive, ordered date ascending.
    Each entry:
    {
      "date": "YYYY-MM-DD",
@@ -137,6 +133,40 @@ Rules for weekCalendar:
 
 After writing the file, output one line: "Done: CTL <value>, <N> activities"
 """
+
+PROMPT_FITNESS_PREV = """Fetch last season's CTL data from Intervals.icu and write it to a cache file.
+
+Call get_fitness(start_date="2025-01-01", end_date="2025-09-19").
+
+Then use the Write tool to write ClaudeCoach/fitness-prev-cache.json as a JSON array:
+[
+  ["YYYY-MM-DD", <ctl float>],
+  ... one entry per day from 2025-01-01 to 2025-09-19 inclusive
+]
+
+Output one line: "Done: <N> days"
+"""
+
+TOOLS_FITNESS_PREV = ",".join([
+    "Write",
+    "mcp__claude_ai_icusync__get_fitness",
+])
+
+
+def fetch_fitness_prev():
+    """Fetch 2025 CTL series once and cache it. Skips if cache already exists."""
+    if FITNESS_PREV_CACHE.exists():
+        return
+    log("Fetching last-season fitness (one-time cache)...")
+    result = subprocess.run(
+        [CLAUDE, "-p", PROMPT_FITNESS_PREV, "--allowedTools", TOOLS_FITNESS_PREV],
+        capture_output=True, text=True,
+        cwd=PROJECT_DIR, timeout=120,
+    )
+    if result.returncode != 0 or not FITNESS_PREV_CACHE.exists():
+        log(f"fitnessPrev fetch failed (non-fatal): {result.stderr[:120]}")
+        return
+    log(f"fitnessPrev cached: {result.stdout.strip()[:80]}")
 
 
 def log(msg):
@@ -182,6 +212,13 @@ def post_process(data):
         "target_min": 14,
         "target_max": 20,
     }
+
+    # Last-season CTL overlay (cached once — 2025 data never changes)
+    if FITNESS_PREV_CACHE.exists():
+        try:
+            data["fitnessPrev"] = json.loads(FITNESS_PREV_CACHE.read_text())
+        except Exception:
+            pass
 
     # Decoupling trend
     dcoup = json.loads(DECOUPLING_LOG.read_text()) if DECOUPLING_LOG.exists() else []
@@ -292,6 +329,8 @@ def main():
         sys.exit(0)
 
     try:
+        fetch_fitness_prev()  # one-time cache of 2025 CTL — skips if already exists
+
         log("Fetching live data via Claude + IcuSync...")
         result = subprocess.run(
             [CLAUDE, "-p", PROMPT, "--allowedTools", TOOLS],
