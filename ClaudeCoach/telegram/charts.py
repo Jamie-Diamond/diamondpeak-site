@@ -315,14 +315,19 @@ def load_chart(payload):
             "stack": "tss", "order": 2, "yAxisID": "y",
         })
 
+    def _tsb_dot(v):
+        if v > 5:   return "rgba(46,156,142,0.90)"   # teal — fresh
+        if v >= -20: return "rgba(201,135,31,0.90)"  # amber — load
+        return "rgba(192,57,43,0.90)"                # red — heavy
+
     tsb_vals = [round(d.get("tsb") or 0, 1) for d in days]
     datasets.append({
         "type": "line", "label": "TSB (form)",
         "data": tsb_vals,
         "borderColor": "rgba(70,70,70,0.80)",
         "backgroundColor": "transparent",
-        "borderWidth": 2.5, "pointRadius": 2,
-        "pointBackgroundColor": "rgba(70,70,70,0.6)",
+        "borderWidth": 2.5, "pointRadius": 4,
+        "pointBackgroundColor": [_tsb_dot(v) for v in tsb_vals],
         "fill": False, "tension": 0.3, "order": 1, "yAxisID": "y1",
     })
 

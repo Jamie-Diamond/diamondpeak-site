@@ -87,9 +87,6 @@
   .chart-wrap.short{height:240px}
   .legend{display:flex;flex-wrap:wrap;gap:14px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:10px;letter-spacing:0.04em}
   .swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
-  ul.heat{list-style:none;padding:0;margin:0;font-size:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
-  ul.heat li{padding:6px 8px;background:rgba(248,245,239,0.7);border:1px solid var(--line);border-radius:6px}
-  ul.heat input{margin-right:6px}
   .callout{background:#fffbf0;border-left:3px solid var(--warn);padding:10px 14px;border-radius:0 6px 6px 0;font-size:12px;margin-top:10px;line-height:1.6}
   .callout.bad{background:#fdf0ee;border-left-color:var(--bad)}
   .callout.good{background:#edf5f0;border-left-color:var(--good)}
@@ -465,16 +462,8 @@
     </div>
   </div>
 
-  <!-- HEAT + CONSTRAINTS -->
-  <div class="grid grid-2" style="margin-bottom:14px">
-    <div class="panel">
-      <h2>Heat acclimation tracker</h2>
-      <div class="small" style="margin-bottom:10px">Target: <b>14–20 sessions</b> across 1 Jun → 18 Sep. Method 1 (primary): 40 °C bath, neck-deep, 30–40 min, post-long-ride. Boxes persist locally to your browser.</div>
-      <ul class="heat" id="heat-list"></ul>
-      <div class="callout" id="heat-summary">Loading…</div>
-    </div>
-
-    <div class="panel">
+  <!-- CONSTRAINTS -->
+  <div class="panel" style="margin-bottom:14px">
       <h2>Constraints &amp; reminders</h2>
       <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7">
         <li><b>Ankle:</b> 22 days back into running. Last run 10.6 km @ 5:02/km on 29 Apr — biggest single run since pre-injury, +68% jump. <b>Need pain status before next run</b>; pain-led, ≤10%/wk volume from now on, no quality until 4 consecutive pain-free weeks.</li>
@@ -503,7 +492,6 @@
         <li><b>Heat protocol</b> first session: <b>Fri 15 May</b> post-long-ride (40 °C, 30 min). Moved to Friday to follow preferred long-ride day. Tracker below.</li>
         <li><b>Block standing rules:</b> ankle veto = pain &gt;2/10 → drop run, replace with Z1 spin or aqua jog. TSB floor −25 for 3+ days → cut Sat ride to 2 hr or move long run to Tue. Sat ride first 90 min IF ≤0.68. Bertinoro climbs IF cap 0.78 (gearing-constrained on ≥6% — see R14). Aid-station drill ≤30 sec/stop in long runs from June. Run is fuelling rehearsal — 30 g CHO at 30 min, <b>no gels</b>.</li>
       </ul>
-    </div>
   </div>
 
   <div class="footer">Data provided by Garmin® · Generated 5 May 2026 · Static snapshot — re-run to refresh · Week 1 review + actuals through 4 May added in this refresh</div>
@@ -786,20 +774,26 @@ function renderLiveCalendar(events) {
   const el = document.querySelector("#upcoming-content");
   if (!el || !events || !events.length) return;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  function toLocalStr(d) {
+    return d.getFullYear() + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
+  }
+  const _now = new Date();
+  const todayStr = toLocalStr(_now);
 
   function getMonday(dateStr) {
     const d = new Date(dateStr + "T00:00:00");
     const day = d.getDay();
     const diff = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + diff);
-    return d.toISOString().slice(0, 10);
+    return toLocalStr(d);
   }
 
   function addDays(dateStr, n) {
     const d = new Date(dateStr + "T00:00:00");
     d.setDate(d.getDate() + n);
-    return d.toISOString().slice(0, 10);
+    return toLocalStr(d);
   }
 
   function fmtWeekRange(monStr) {
@@ -995,41 +989,6 @@ function renderLiveCalendar(events) {
   fill("run-pr",  runPR,  [{f:r=>r.d},{cls:"num",f:r=>r.t},{cls:"num",f:r=>r.p}]);
   fill("swim-pr", swimPR, [{f:r=>r.d},{cls:"num",f:r=>r.t},{cls:"num",f:r=>r.p}]);
   fill("ride-pr", ridePR, [{f:r=>r.d},{cls:"num",f:r=>r.w+" W"},{cls:"num",f:r=>r.wkg.toFixed(2)}]);
-})();
-
-// Heat acclimation tracker (localStorage-backed checkboxes)
-(function(){
-  const list = document.querySelector("#heat-list");
-  const summary = document.querySelector("#heat-summary");
-  const N = 20;
-  const stored = JSON.parse(localStorage.getItem("imHeatLog") || "[]");
-  for (let i = 0; i < N; i++) {
-    const checked = !!stored[i]?.done;
-    const note = stored[i]?.note || "";
-    list.insertAdjacentHTML("beforeend",
-      `<li><label><input type="checkbox" data-i="${i}" ${checked?"checked":""}> Session ${i+1}</label>
-        <input type="date" data-note="${i}" value="${note}" style="margin-top:4px;width:100%;font-size:11px;border:1px solid var(--line);padding:2px 4px;border-radius:3px"></li>`);
-  }
-  function updateSummary(){
-    const arr = JSON.parse(localStorage.getItem("imHeatLog") || "[]");
-    const done = arr.filter(x=>x?.done).length;
-    const cls = done >= 14 ? "good" : (done >= 8 ? "" : "bad");
-    const remaining = Math.max(0, 14 - done);
-    summary.className = "callout " + cls;
-    summary.innerHTML = `<b>${done}/${N}</b> sessions logged · ${remaining > 0 ? `<b>${remaining}</b> minimum still required to hit 14-session floor` : "above 14-session minimum — keep banking through race week"}.`;
-  }
-  function persist(){
-    const arr = [];
-    for (let i = 0; i < N; i++){
-      const cb = list.querySelector(`input[data-i="${i}"]`);
-      const dt = list.querySelector(`input[data-note="${i}"]`);
-      arr[i] = {done:cb.checked, note:dt.value};
-    }
-    localStorage.setItem("imHeatLog", JSON.stringify(arr));
-    updateSummary();
-  }
-  list.addEventListener("change", persist);
-  updateSummary();
 })();
 
 // ---------- CHARTS ----------
@@ -1278,10 +1237,17 @@ function renderLoadChart(days) {
   });
 
   const tsbVals = days.map(d => d.tsb != null ? Math.round(d.tsb * 10) / 10 : null);
+  const tsbDotColors = tsbVals.map(v => {
+    if (v == null)  return "transparent";
+    if (v > 5)      return "rgba(46,156,142,0.90)";
+    if (v >= -20)   return "rgba(201,135,31,0.90)";
+    return "rgba(192,57,43,0.90)";
+  });
   datasets.push({
     type:"line", label:"TSB", data:tsbVals,
     borderColor:"rgba(60,60,60,0.75)", backgroundColor:"transparent",
-    borderWidth:2, pointRadius:2, fill:false, tension:0.3,
+    borderWidth:2, pointRadius:4, pointBackgroundColor:tsbDotColors,
+    fill:false, tension:0.3,
     yAxisID:"y1", order:1, spanGaps:true,
   });
 

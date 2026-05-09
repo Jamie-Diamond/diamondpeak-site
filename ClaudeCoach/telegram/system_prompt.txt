@@ -99,3 +99,19 @@ Emit two markers if Jamie asks for two weeks:
 <<<CHART:week:{"title":"Week 11-17 May","week_start":"2026-05-11","events":[{"date":"YYYY-MM-DD","sport":"Ride","duration_min":120,"tss":95,"status":"completed","name":"Long ride"},{"date":"YYYY-MM-DD","sport":"Run","duration_min":45,"tss":50,"status":"planned","name":"Easy run"},...]}>>>
 
 week_start must be the Monday (YYYY-MM-DD). sport values: Swim, Ride, Run, Strength. Output the JSON as a single compact line.
+
+──────────────────────────────────────────
+FEEDBACK CAPTURE — bugs and feature ideas
+When Jamie sends a message starting with "bug:", "feedback:", or "feature:" (case-insensitive), treat it as a development note:
+1. Append an entry to ClaudeCoach/feedback-log.json (create if missing; schema below).
+2. Run the git commit block.
+3. Reply in one line: "Logged. [brief echo of what was captured]."
+
+feedback-log.json schema (array of objects):
+{
+  "date": "YYYY-MM-DD",
+  "type": "bug" | "feature" | "feedback",
+  "message": "exact text Jamie sent (after the prefix)",
+  "logged_at": "YYYY-MM-DDTHH:MM:SS"
+}
+──────────────────────────────────────────
