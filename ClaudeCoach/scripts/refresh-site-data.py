@@ -218,9 +218,11 @@ def post_process(data):
     known_window_end = today + timedelta(days=14)
 
     def planned_sessions_tss(d):
+        # Within known window: use actual planned session TSS (0 = rest day)
+        # Beyond known window: 0 (nothing booked yet — CTL decays honestly)
         if d <= known_window_end:
-            return planned_tss_by_date.get(d.isoformat(), 0)  # 0 = rest day if no event
-        return _phase_daily_tss(d)
+            return planned_tss_by_date.get(d.isoformat(), 0)
+        return 0
 
     sick_week_num = 10
     def sick_week_tss(d):
@@ -229,6 +231,7 @@ def post_process(data):
 
     data["ctlProjection"] = {
         "current_trend":    _ctl_project(current_ctl, current_trend_tss, days_to_race),
+        "planned_build":    _ctl_project(current_ctl, _phase_daily_tss, days_to_race),
         "planned_sessions": _ctl_project(current_ctl, planned_sessions_tss, days_to_race),
         "sick_week":        _ctl_project(current_ctl, sick_week_tss, days_to_race),
         "race_date": RACE_DATE.isoformat(),
