@@ -161,11 +161,13 @@ def _ctl_project(start_ctl, daily_tss_fn, days):
 
 
 def _phase_daily_tss(d):
-    """Return planned daily TSS based on phase (week number from PLAN_START)."""
+    """Return planned daily TSS based on phase (week number from PLAN_START).
+    Values reflect upper range of each phase at current fitness (~80 CTL):
+    base holds CTL steady; build/specific/peak drive progressive gains."""
     week = max(1, math.ceil((d - PLAN_START).days / 7))
-    if week <= 6:    return 57    # Base: ~400/wk
-    if week <= 10:   return 79    # Build: ~550/wk
-    if week <= 14:   return 97    # Specific: ~680/wk
+    if week <= 6:    return 80    # Base: ~560/wk — holds CTL near current level
+    if week <= 10:   return 90    # Build: ~630/wk
+    if week <= 14:   return 100   # Specific: ~700/wk
     if week <= 17:   return 114   # Peak: ~800/wk
     return 29                     # Taper: ~200/wk
 

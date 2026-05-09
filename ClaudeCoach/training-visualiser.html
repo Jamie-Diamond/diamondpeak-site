@@ -230,7 +230,14 @@
 
   <!-- FITNESS TRAJECTORY -->
   <div class="panel" style="margin-bottom:14px">
-    <h2>Fitness trajectory vs IM target curve</h2>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+      <h2 style="margin:0">Fitness trajectory vs IM target curve</h2>
+      <div id="fitness-zoom-btns" style="display:flex;gap:6px">
+        <button onclick="zoomFitness(30)"  style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">30d</button>
+        <button onclick="zoomFitness(90)"  style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">3m</button>
+        <button onclick="zoomFitness(0)"   style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">Season</button>
+      </div>
+    </div>
     <div class="chart-wrap"><canvas id="chartFitness"></canvas></div>
     <div class="legend">
       <span><span class="swatch" style="background:#1a1a1a"></span>CTL — actual (solid)</span>
@@ -1610,6 +1617,22 @@ function renderLiveConstraints(cs) {
   });
   ahtml += "</div>";
   ac.innerHTML = ahtml;
+}
+
+function zoomFitness(days) {
+  if (!window.chartFitness) return;
+  const sc = window.chartFitness.options.scales.x;
+  if (days === 0) {
+    sc.min = "2026-01-01";
+    sc.max = "2026-09-21";
+  } else {
+    const now = new Date();
+    const from = new Date(now); from.setDate(from.getDate() - days);
+    const to   = new Date(now); to.setDate(to.getDate() + Math.round(days * 0.5));
+    sc.min = from.toISOString().slice(0,10);
+    sc.max = to.toISOString().slice(0,10);
+  }
+  window.chartFitness.update();
 }
 
 // Live data — fetch training-data.json (written by refresh-site-data.py) and update page
