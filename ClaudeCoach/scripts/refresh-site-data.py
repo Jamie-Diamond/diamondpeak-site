@@ -37,10 +37,11 @@ PROMPT = """Fetch live training data from Intervals.icu and write ClaudeCoach/tr
 
 Steps:
 1. get_athlete_profile → note current_date_local (today) and FTP
-2. get_fitness(start_date="2026-01-01", end_date=today) → daily CTL/ATL/TSB series
-3. get_training_history(start_date=<14 days ago>, end_date=today) → recent activities
-4. get_power_curves → best power efforts for standard durations
-5. get_wellness(start_date=<30 days ago>, end_date=today) → HRV, RHR, body_weight per day
+2. get_fitness(start_date="2026-01-01", end_date=today) → daily CTL/ATL/TSB series (this season)
+3. get_fitness(start_date="2025-01-01", end_date="2025-09-19") → last season CTL series for year-on-year overlay
+4. get_training_history(start_date=<14 days ago>, end_date=today) → recent activities
+5. get_power_curves → best power efforts for standard durations
+6. get_wellness(start_date=<30 days ago>, end_date=today) → HRV, RHR, body_weight per day
 
 Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY this schema
 (no trailing text after the Write call):
@@ -58,6 +59,10 @@ Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY thi
   "fitnessThis": [
     ["YYYY-MM-DD", <ctl float>],
     ... one entry per day from 2026-01-01 to today inclusive
+  ],
+  "fitnessPrev": [
+    ["YYYY-MM-DD", <ctl float>],
+    ... one entry per day from 2025-01-01 to 2025-09-19 inclusive (raw 2025 dates — HTML will shift +1 year for overlay)
   ],
   "recent": [
     {
@@ -90,7 +95,7 @@ Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY thi
   ]
 }
 
-6. get_events(start_date=<today>, end_date=<today+14 days>) → upcoming planned events
+7. get_events(start_date=<today>, end_date=<today+14 days>) → upcoming planned events
 
 Build "weekCalendar": a flat array covering the last 7 days (from training_history) plus the next 14 days (from get_events). Each entry:
 {
@@ -114,7 +119,7 @@ Rules for weekCalendar:
 - detail for completed Swim: "<pace> · <dist>m"
 - detail for planned: event description or empty string
 
-7. Build "loadChart": 15 day entries covering (today minus 7 days) through (today plus 7 days) inclusive, ordered date ascending.
+8. Build "loadChart": 15 day entries covering (today minus 7 days) through (today plus 7 days) inclusive, ordered date ascending.
    Each entry:
    {
      "date": "YYYY-MM-DD",
