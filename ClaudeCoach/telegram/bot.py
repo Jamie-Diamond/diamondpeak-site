@@ -5,7 +5,7 @@ Polls Telegram for messages, passes them to claude CLI, sends responses back.
 Run: python3 bot.py
 """
 
-import json, re, subprocess, sys, time, ssl
+import json, re, subprocess, sys, time, ssl, os
 import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
 from datetime import datetime, date
@@ -47,18 +47,53 @@ RACE_DAY = date(2026, 9, 19)
 def days_to_race():
     return (RACE_DAY - date.today()).days
 
-QUICK_KEYBOARD = {
-    "inline_keyboard": [
-        [
-            {"text": "Today's plan",      "callback_data": "what's today's session?"},
-            {"text": "How am I looking?", "callback_data": "how am I looking?"},
-        ],
-        [
-            {"text": "This week",   "callback_data": "show me this week"},
-            {"text": "Log session", "callback_data": "log session"},
-        ],
-    ]
-}
+def build_keyboard():
+    now  = datetime.now()
+    hour = now.hour
+    wday = now.weekday()  # 0=Mon … 6=Sun
+
+    # Post-session: within 3 hours of last notified activity
+    last_act_file = BASE.parent / "last_activity_state.json"
+    post_session = False
+    if last_act_file.exists():
+        try:
+            st = json.loads(last_act_file.read_text())
+            ts = st.get("notified_at")
+            if ts:
+                notified = datetime.fromisoformat(ts)
+                post_session = (now - notified).total_seconds() < 10800
+        except Exception:
+            pass
+
+    if post_session:
+        rows = [
+            [{"text": "Log RPE + feel", "callback_data": "log session"},
+             {"text": "Ankle score?",   "callback_data": "ankle score for last run?"}],
+            [{"text": "How am I looking?", "callback_data": "how am I looking?"},
+             {"text": "This week",         "callback_data": "show me this week"}],
+        ]
+    elif wday == 6 and hour >= 18:  # Sunday evening
+        rows = [
+            [{"text": "Week review",    "callback_data": "show me this week"},
+             {"text": "Next week plan", "callback_data": "what's the plan for next week?"}],
+            [{"text": "How am I looking?", "callback_data": "how am I looking?"},
+             {"text": "Log session",       "callback_data": "log session"}],
+        ]
+    elif 5 <= hour < 10:  # morning
+        rows = [
+            [{"text": "Today's session", "callback_data": "what's today's session?"},
+             {"text": "Log weight",      "callback_data": "log weight"}],
+            [{"text": "How am I looking?", "callback_data": "how am I looking?"},
+             {"text": "This week",         "callback_data": "show me this week"}],
+        ]
+    else:
+        rows = [
+            [{"text": "Today's plan",      "callback_data": "what's today's session?"},
+             {"text": "How am I looking?", "callback_data": "how am I looking?"}],
+            [{"text": "This week",   "callback_data": "show me this week"},
+             {"text": "Log session", "callback_data": "log session"}],
+        ]
+    return {"inline_keyboard": rows}
 
 TOOLS = ",".join([
     "Read", "Write", "Edit", "Bash",
@@ -239,6 +274,96 @@ def process_charts(token, chat_id, response):
     return CHART_RE.sub('', response).strip()
 
 
+PROJECT_DIR = BASE.parent.parent  # diamondpeak-site/
+STATE_JSON  = BASE.parent / "current-state.json"
+HEAT_LOG    = BASE.parent / "heat-log.json"
+
+_ANKLE_RE    = re.compile(r'^(ankle|pain|niggle)\s+(\w+[\s\w]*?)\s+(\d+(?:\.\d+)?)\s*$', re.I)
+_WEIGHT_RE   = re.compile(r'^(?:weight|kg|weigh(?:ed)?)\s+([\d.]+)\s*(?:kg)?\s*$', re.I)
+_HEAT_RE     = re.compile(r'^(?:heat|bath)\s+([\d.]+)\s*(?:min|m)?\s*$', re.I)
+
+def _git_commit(msg):
+    try:
+        subprocess.run(
+            ["git", "add", "ClaudeCoach/"],
+            cwd=str(PROJECT_DIR), capture_output=True
+        )
+        subprocess.run(
+            ["git", "commit", "-m", msg],
+            cwd=str(PROJECT_DIR), capture_output=True
+        )
+        subprocess.run(
+            ["git", "push", "origin", "main"],
+            cwd=str(PROJECT_DIR), capture_output=True
+        )
+    except Exception as e:
+        log(f"git commit error: {e}")
+
+def _load_state_json():
+    if STATE_JSON.exists():
+        return json.loads(STATE_JSON.read_text())
+    return {}
+
+def _save_state_json(state):
+    STATE_JSON.write_text(json.dumps(state, indent=2))
+
+def fast_path(text):
+    """
+    Returns a reply string if the message can be handled without calling Claude,
+    or None if Claude should handle it.
+    """
+    today = date.today().isoformat()
+
+    m = _ANKLE_RE.match(text.strip())
+    if m:
+        location = m.group(2).strip() if m.group(1).lower() != "ankle" else "ankle"
+        score = float(m.group(3))
+        state = _load_state_json()
+        prev = state.get("ankle", {}).get("pain_during")
+        state.setdefault("ankle", {})["pain_during"] = int(score)
+        state["last_updated"] = today
+        _save_state_json(state)
+        _git_commit(f"auto: ankle pain {score} {today}")
+        trend = ""
+        if prev is not None:
+            if score > prev:
+                trend = f" (up from {prev} — monitor)"
+            elif score < prev:
+                trend = f" (down from {prev} — improving)"
+        return f"Logged {location} pain {int(score)}/10{trend}."
+
+    m = _WEIGHT_RE.match(text.strip())
+    if m:
+        kg = float(m.group(1))
+        state = _load_state_json()
+        state.setdefault("weight_readings", []).append({"date": today, "kg": kg})
+        state["last_updated"] = today
+        _save_state_json(state)
+        _git_commit(f"auto: weight {kg} kg {today}")
+        target = 79.0
+        diff = round(kg - target, 1)
+        return f"Logged {kg} kg. {diff:+.1f} kg to race-day target (79 kg)."
+
+    m = _HEAT_RE.match(text.strip())
+    if m:
+        mins = int(float(m.group(1)))
+        entries = json.loads(HEAT_LOG.read_text()) if HEAT_LOG.exists() else []
+        entries.append({"date": today, "duration_min": mins, "temp_c": 40, "hr_peak": None, "notes": ""})
+        HEAT_LOG.write_text(json.dumps(entries, indent=2))
+        state = _load_state_json()
+        state.setdefault("heat", {})
+        state["heat"]["sessions_cumulative"] = state["heat"].get("sessions_cumulative", 0) + 1
+        state["heat"]["last_session_date"] = today
+        state["last_updated"] = today
+        _save_state_json(state)
+        _git_commit(f"auto: heat session {mins}min {today}")
+        total = state["heat"]["sessions_cumulative"]
+        remaining = max(0, 14 - total)
+        return f"Logged heat session {mins} min. {total} done" + (f" — {remaining} still needed to hit 14-session floor." if remaining else " — above minimum, keep banking.")
+
+    return None
+
+
 def call_claude(user_message, config, history):
     system_prompt = SYSTEM_PROMPT_FILE.read_text().strip()
 
@@ -326,10 +451,18 @@ def main():
                      "- _what's today's session?_\n"
                      "- _log heat session 30 min_\n"
                      "- _what's my CTL?_",
-                     reply_markup=QUICK_KEYBOARD)
+                     reply_markup=build_keyboard())
                 continue
 
             log(f"In: {text[:80]}")
+
+            fast = fast_path(text)
+            if fast:
+                reply = fast + f"\n\n— {days_to_race()} days to Cervia"
+                send(token, chat_id, reply, reply_markup=build_keyboard())
+                log(f"Out (fast): {fast[:80]}")
+                continue
+
             typing(token, chat_id)
             send(token, chat_id, "_On it..._")
 
@@ -339,7 +472,7 @@ def main():
             clean = process_charts(token, chat_id, response)
             if clean:
                 clean += f"\n\n— {days_to_race()} days to Cervia"
-                send(token, chat_id, clean, reply_markup=QUICK_KEYBOARD)
+                send(token, chat_id, clean, reply_markup=build_keyboard())
             log(f"Out: {clean[:80]}")
 
             history.append({"user": text, "assistant": clean})

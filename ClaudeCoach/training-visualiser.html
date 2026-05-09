@@ -148,7 +148,7 @@
   <div class="top">
     <div>
       <h1>Ironman Italy Emilia-Romagna 2026 — Training Visualiser</h1>
-      <div class="sub">Cervia, 19 September 2026 · Athlete: Jamie Diamond · FTP 316 W (retest due end May) · Threshold pace 4:02/km · Weight 82.94 kg → 79 kg target · CSS 1:39/100m · 52T × 10–33</div>
+      <div class="sub">Cervia, 19 September 2026 · Athlete: Jamie Diamond · FTP 316 W (retest due end May) · Threshold pace 4:02/km · Weight <span id="kpi-weight">82.94 kg</span> → 79 kg target · CSS 1:39/100m · 52T × 10–33</div>
     </div>
     <div class="sub" id="snapshot-date">Snapshot: 5 May 2026 · Source: Intervals.icu</div>
   </div>
@@ -240,6 +240,20 @@
     <div class="callout good">
       <b>Build is delivering.</b> CTL has lifted from 73.4 (25 Apr) → 76.7 (5 May) = <b>+3.3 in 10 days</b>, ramp ~+2.3 CTL/wk — well within the +4 ankle-rehab cap. ATL spiked to 104 on 26 Apr after a heavy gravel + commute + main-ride day, and peaked again at 100 on 4 May after the 130 km long ride — both digesting normally without a stuck ATL−CTL gap.<br><br>
       <b>End-base target ~85 by 31 May</b>: needs +8.3 in the next 26 days, ~+2.2/wk — exactly the rate the last 10 days have delivered. <b>On track.</b> Continue protecting bike volume; run jumped 6 → 10.6 km on 29 Apr (+68% on a single session) — flag if pain creeps in.
+    </div>
+  </div>
+
+  <!-- DECOUPLING TREND + HEAT PROTOCOL -->
+  <div class="grid grid-2" style="margin-bottom:14px">
+    <div class="panel">
+      <h2>Aerobic decoupling — long rides (Pa:HR)</h2>
+      <div class="small" style="margin-bottom:8px">Target: trend from 14% → &lt;5% by August. Each dot = one ride &gt;3 hr. Logged automatically after each long ride.</div>
+      <div class="chart-wrap short" style="height:200px"><canvas id="chartDecoupling"></canvas></div>
+    </div>
+    <div class="panel" id="heat-panel">
+      <h2>Heat protocol</h2>
+      <div class="small" style="margin-bottom:8px">Target: 14–20 sessions · 40°C bath · 30–40 min · post long-ride · starts 15 May</div>
+      <div id="heat-content"><span style="color:var(--muted);font-size:12px">Loading…</span></div>
     </div>
   </div>
 
@@ -1301,6 +1315,123 @@ function renderLoadChart(days) {
   if (label) label.textContent = `21-week build · Week ${week} · ${phase}`;
 })();
 
+// Decoupling trend chart
+(function(){
+  const canvas = document.getElementById("chartDecoupling");
+  if (!canvas) return;
+  window.chartDecoupling = new Chart(canvas.getContext("2d"), {
+    type: "line",
+    data: { labels: [], datasets: [
+      { label: "Pa:HR decoupling %", data: [], borderColor: "#1a5276", backgroundColor: "rgba(26,82,118,0.12)",
+        borderWidth: 2, pointRadius: 5, pointBackgroundColor: "#1a5276", fill: true, tension: 0.2 },
+      { label: "5% target", data: [], borderColor: "rgba(192,57,43,0.5)", backgroundColor: "transparent",
+        borderWidth: 1.5, borderDash: [5,4], pointRadius: 0, fill: false },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position:"top", labels:{boxWidth:12,font:{size:11}} } },
+      scales: {
+        x: { ticks: { font:{size:10}, maxRotation:45, autoSkip:true, maxTicksLimit:8 } },
+        y: { beginAtZero: true, suggestedMax: 20,
+             title: { display: true, text: "Decoupling %", font:{size:11} },
+             ticks: { font:{size:10} }, grid: { color:"rgba(0,0,0,0.06)" } },
+      },
+    },
+  });
+})();
+
+function renderDecouplingChart(entries) {
+  if (!window.chartDecoupling || !entries) return;
+  const sorted = [...entries].sort((a,b) => a.date.localeCompare(b.date));
+  const labels = sorted.map(e => e.date.slice(5));
+  const vals   = sorted.map(e => e.decoupling_pct);
+  window.chartDecoupling.data.labels = labels;
+  window.chartDecoupling.data.datasets[0].data = vals;
+  window.chartDecoupling.data.datasets[1].data = labels.map(() => 5);
+  window.chartDecoupling.update();
+}
+
+function renderHeatPanel(h) {
+  const el = document.getElementById("heat-content");
+  if (!el || !h) return;
+  const done      = h.sessions_cumulative || 0;
+  const tgt       = h.target_min || 14;
+  const pct       = Math.min(100, Math.round((done / tgt) * 100));
+  const started   = new Date() >= new Date(h.protocol_start_date + "T00:00:00");
+  const lastDate  = h.last_session_date;
+  const daysSince = lastDate
+    ? Math.floor((new Date() - new Date(lastDate + "T00:00:00")) / 86400000)
+    : null;
+  const warn = started && daysSince !== null && daysSince > 3;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="font-size:28px;font-weight:700;font-family:'DM Mono',monospace">${done}</div>
+      <div style="font-size:12px;color:var(--muted)">of ${tgt}–${h.target_max||20} sessions<br>${started?"active":"starts "+h.protocol_start_date}</div>
+    </div>
+    <div style="background:var(--line);border-radius:4px;height:8px;margin-bottom:10px;overflow:hidden">
+      <div style="background:${done>=tgt?"var(--good)":"var(--warn)"};height:100%;width:${pct}%;border-radius:4px;transition:width .4s"></div>
+    </div>
+    <div style="font-size:12px;color:${warn?"var(--bad)":"var(--muted)"}">
+      ${!started ? "Protocol not yet started" :
+        lastDate ? `Last session: ${lastDate}${warn?" ⚠️ "+daysSince+" days ago":""}`
+                 : "No sessions logged yet"}
+    </div>
+    ${h.sessions_this_week ? `<div style="font-size:12px;color:var(--ink2);margin-top:6px">This week: <b>${h.sessions_this_week}</b> session${h.sessions_this_week>1?"s":""}</div>` : ""}
+  `;
+}
+
+function renderWeightTrend(entries) {
+  if (!entries || !entries.length) return;
+  const latest = entries[entries.length - 1];
+  const el = document.getElementById("kpi-weight");
+  if (el) el.textContent = latest.kg.toFixed(1) + " kg";
+}
+
+function renderCtlProjection(proj) {
+  if (!window.chartFitness || !proj) return;
+  const raceDate = proj.race_date;
+  const scenarios = [
+    { key: "current_trend", label: "Trend (current ramp)", color: "rgba(120,120,120,0.7)", dash: [4,3] },
+    { key: "planned_build",  label: "Planned build",        color: "rgba(29,104,64,0.75)",  dash: [6,3] },
+    { key: "sick_week",      label: "Sick week scenario",   color: "rgba(201,135,31,0.65)", dash: [3,4] },
+  ];
+  // Remove any previously added projection datasets
+  window.chartFitness.data.datasets = window.chartFitness.data.datasets.filter(
+    ds => !ds._projection
+  );
+  scenarios.forEach(sc => {
+    const data = (proj[sc.key] || []).map(p => ({ x: p.date, y: p.ctl }));
+    window.chartFitness.data.datasets.push({
+      _projection: true,
+      label: sc.label,
+      data,
+      borderColor: sc.color,
+      backgroundColor: "transparent",
+      borderWidth: 1.5,
+      borderDash: sc.dash,
+      pointRadius: 0,
+      fill: false,
+      tension: 0.2,
+    });
+  });
+  // Target band annotation — add race-day line if annotations plugin available
+  if (window.chartFitness.options.plugins.annotation) {
+    const anns = window.chartFitness.options.plugins.annotation.annotations || {};
+    anns.raceDay = {
+      type: "line", xMin: raceDate, xMax: raceDate,
+      borderColor: "rgba(192,57,43,0.55)", borderWidth: 1.5, borderDash: [4,3],
+      label: { display: true, content: "Race day", position: "start",
+               backgroundColor: "rgba(255,255,255,0.9)", color: "#c0392b", font: { size: 10 } },
+    };
+    anns.targetBand = {
+      type: "box", yMin: proj.target_ctl_min || 100, yMax: proj.target_ctl_max || 115,
+      backgroundColor: "rgba(29,104,64,0.06)", borderWidth: 0, drawTime: "beforeDatasetsDraw",
+    };
+    window.chartFitness.options.plugins.annotation.annotations = anns;
+  }
+  window.chartFitness.update();
+}
+
 // Live data — fetch training-data.json (written by refresh-site-data.py) and update page
 fetch('./training-data.json')
   .then(r => r.json())
@@ -1332,6 +1463,14 @@ fetch('./training-data.json')
     if (d.loadChart && d.loadChart.length) renderLoadChart(d.loadChart);
     // Live week calendar
     if (d.weekCalendar && d.weekCalendar.length) renderLiveCalendar(d.weekCalendar);
+    // Weight
+    if (d.weightTrend && d.weightTrend.length) renderWeightTrend(d.weightTrend);
+    // CTL projection
+    if (d.ctlProjection) renderCtlProjection(d.ctlProjection);
+    // Decoupling trend
+    if (d.decouplingTrend) renderDecouplingChart(d.decouplingTrend);
+    // Heat protocol
+    if (d.heatProtocol) renderHeatPanel(d.heatProtocol);
     // Snapshot label
     const snap = document.getElementById("snapshot-date");
     if (snap && d.generated) snap.textContent = "Live · last updated " + d.generated + " · Source: Intervals.icu";

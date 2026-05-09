@@ -40,7 +40,8 @@ Step 4 — Compute week summary:
   - Sessions missed (if any) with names
   - Heat sessions this week (from heat-log.json)
   - Average sleep this week (from get_wellness)
-  - Any watchdog triggers that would have fired (T1-T8, evaluate quickly)
+  - Any watchdog triggers that would have fired (T1-T9, evaluate quickly)
+  - Nutrition compliance: from session-log.json for this week's entries, count sessions with nutrition_g_carb logged vs total sessions. For sessions > 90 min: compute avg g/hr = (nutrition_g_carb / duration_min * 60). Flag if avg < 50 g/hr on long sessions.
 
 Step 5 — Output the summary card:
 
@@ -56,11 +57,13 @@ Step 5 — Output the summary card:
 | ATL | X | — |
 | Sleep avg | Xh | >=7h |
 | Heat sessions | N | — |
+| Fuelling logged | N/M sessions | — |
+| Avg g/hr (>90 min) | Xg/hr | >=50g/hr |
 
 **Completed:** [discipline summaries — e.g. "3 rides, 2 runs, 1 swim"]
 **Missed:** [session names, or "none"]
 
-**Key finding:** [one sentence — most important thing from this week, with L2 trail if a flag fired]
+**Key finding:** [one sentence — most important thing from this week, with L2 trail if a flag fired; if avg g/hr < 50 on long sessions, flag it here]
 
 **Monday focus:** [one sentence — the single most important thing for next week's first session]
 

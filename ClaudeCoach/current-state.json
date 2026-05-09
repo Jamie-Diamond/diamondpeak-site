@@ -1,0 +1,38 @@
+{
+  "last_updated": "2026-05-09",
+  "ankle": {
+    "pain_during": 2,
+    "pain_next_morning": 0,
+    "last_run_date": "2026-05-07",
+    "last_run_km": 12.52,
+    "four_pain_free_weeks_reached": false,
+    "quality_sessions_resumed": false,
+    "weekly_run_km_this_week": 12.52,
+    "weekly_run_km_last_week": 10.59
+  },
+  "weight_readings": [
+    {"date": "2026-05-05", "kg": 82.7},
+    {"date": "2026-05-06", "kg": 83.8},
+    {"date": "2026-05-07", "kg": 82.9}
+  ],
+  "heat": {
+    "sessions_cumulative": 0,
+    "sessions_this_week": 0,
+    "last_session_date": null,
+    "protocol_start_date": "2026-05-15"
+  },
+  "niggles": [],
+  "open_actions": [
+    {"action": "Book Precision Hydration sweat-sodium test", "due": "2026-05-31", "status": "pending"},
+    {"action": "FTP retest (end-May)", "due": "2026-05-31", "status": "pending"},
+    {"action": "FTP retest (mid-July)", "due": "2026-07-15", "status": "pending"},
+    {"action": "CSS swim test #2", "due": "2026-07-15", "status": "pending"},
+    {"action": "TT bike fit appointment", "due": "2026-05-31", "status": "pending"},
+    {"action": "ISM saddle order", "due": "2026-05-09", "status": "pending"},
+    {"action": "Aero helmet", "due": "2026-06-30", "status": "pending"},
+    {"action": "5+ hr ice retention test", "due": "2026-09-01", "status": "pending"},
+    {"action": "OWS race or full-distance simulation", "due": "2026-07-31", "status": "pending"},
+    {"action": "Tested run-fuelling protocol in heat", "due": "2026-09-01", "status": "pending"}
+  ],
+  "watchdog_flags": []
+}

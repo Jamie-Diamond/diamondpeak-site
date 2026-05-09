@@ -3,15 +3,22 @@
 Pull live data from Intervals.icu and update training-data.json, then push to GitHub.
 Run daily (e.g. 06:00 via launchd/cron). Requires git push credentials (SSH key or keychain).
 """
-import json, subprocess, sys, time
+import json, subprocess, sys, time, math
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 
 BASE        = Path(__file__).parent.parent          # ClaudeCoach/
 OUT_FILE    = BASE / "training-data.json"
 PROJECT_DIR = str(BASE.parent)                       # diamondpeak-site/
 LOCK_FILE   = BASE / ".refresh_site_data.lock"
 CLAUDE      = "/usr/bin/claude"
+
+HEAT_LOG       = BASE / "heat-log.json"
+DECOUPLING_LOG = BASE / "decoupling-log.json"
+STATE_JSON     = BASE / "current-state.json"
+
+RACE_DATE = date(2026, 9, 19)
+PLAN_START = date(2026, 4, 27)  # Week 1 Monday
 
 TOOLS = ",".join([
     "Write",
@@ -30,7 +37,7 @@ Steps:
 2. get_fitness(start_date="2026-01-01", end_date=today) → daily CTL/ATL/TSB series
 3. get_training_history(start_date=<14 days ago>, end_date=today) → recent activities
 4. get_power_curves → best power efforts for standard durations
-5. get_wellness → latest entry for HRV and RHR (use most recent available)
+5. get_wellness(start_date=<30 days ago>, end_date=today) → HRV, RHR, body_weight per day
 
 Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY this schema
 (no trailing text after the Write call):
@@ -73,6 +80,10 @@ Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY thi
   ],
   "loadChart": [
     ... 15 entries covering today-7 to today+7 (see step 7) ordered by date ascending
+  ],
+  "weightTrend": [
+    {"date": "YYYY-MM-DD", "kg": <float>},
+    ... all days from get_wellness where body_weight is not null, last 30 days, date ascending
   ]
 }
 
@@ -124,6 +135,74 @@ def log(msg):
     print(f"{datetime.now().strftime('%H:%M:%S')} {msg}")
 
 
+def _ctl_project(start_ctl, daily_tss_fn, days):
+    """Project CTL forward using exponential decay: CTL_new = CTL + (TSS - CTL) / 42."""
+    ctl = start_ctl
+    series = []
+    today = date.today()
+    for i in range(days):
+        d = today + timedelta(days=i)
+        tss = daily_tss_fn(d)
+        ctl = ctl + (tss - ctl) / 42.0
+        series.append({"date": d.isoformat(), "ctl": round(ctl, 1)})
+    return series
+
+
+def _phase_daily_tss(d):
+    """Return planned daily TSS based on phase (week number from PLAN_START)."""
+    week = max(1, math.ceil((d - PLAN_START).days / 7))
+    if week <= 6:    return 57    # Base: ~400/wk
+    if week <= 10:   return 79    # Build: ~550/wk
+    if week <= 14:   return 97    # Specific: ~680/wk
+    if week <= 17:   return 114   # Peak: ~800/wk
+    return 29                     # Taper: ~200/wk
+
+
+def post_process(data):
+    """Add heat, decoupling, and CTL projection fields to the training-data dict."""
+    # Heat protocol
+    heat_entries = json.loads(HEAT_LOG.read_text()) if HEAT_LOG.exists() else []
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    this_week = [e for e in heat_entries if e.get("date", "") >= week_start.isoformat()]
+    last_date = max((e["date"] for e in heat_entries), default=None)
+    data["heatProtocol"] = {
+        "sessions_cumulative": len(heat_entries),
+        "sessions_this_week": len(this_week),
+        "last_session_date": last_date,
+        "protocol_start_date": "2026-05-15",
+        "target_min": 14,
+        "target_max": 20,
+    }
+
+    # Decoupling trend
+    dcoup = json.loads(DECOUPLING_LOG.read_text()) if DECOUPLING_LOG.exists() else []
+    data["decouplingTrend"] = sorted(dcoup, key=lambda e: e.get("date", ""))
+
+    # CTL projection
+    current_ctl = data["kpi"]["ctl"]
+    ramp7d = data["kpi"]["ramp7d"]
+    days_to_race = (RACE_DATE - today).days + 1
+
+    def current_trend_tss(d):
+        return max(0, current_ctl + ramp7d / 7)  # extend current ramp
+
+    sick_week_num = 10
+    def sick_week_tss(d):
+        week = max(1, math.ceil((d - PLAN_START).days / 7))
+        return 0 if week == sick_week_num else _phase_daily_tss(d)
+
+    data["ctlProjection"] = {
+        "current_trend": _ctl_project(current_ctl, current_trend_tss, days_to_race),
+        "planned_build":  _ctl_project(current_ctl, _phase_daily_tss, days_to_race),
+        "sick_week":      _ctl_project(current_ctl, sick_week_tss, days_to_race),
+        "race_date": RACE_DATE.isoformat(),
+        "target_ctl_min": 100,
+        "target_ctl_max": 115,
+    }
+    return data
+
+
 def acquire_lock():
     if LOCK_FILE.exists() and time.time() - LOCK_FILE.stat().st_mtime < 600:
         return False
@@ -169,6 +248,14 @@ def main():
         except Exception as e:
             log(f"JSON validation failed: {e} — aborting push")
             sys.exit(1)
+
+        # Add locally-computed fields (heat, decoupling, CTL projection)
+        try:
+            data = post_process(data)
+            OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
+            log("Post-processing: heat, decoupling, CTL projection added")
+        except Exception as e:
+            log(f"Post-processing warning: {e} — continuing without extra fields")
 
         # Commit and push
         today = datetime.now().strftime("%Y-%m-%d")

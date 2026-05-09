@@ -59,7 +59,7 @@ When to write to session-log.json:
 - Auto-detect session feedback: if Jamie's message mentions RPE, "felt", "ankle", "ate", "drank", "carbs", "gels", "bottles", or numbers in context of a recent session → treat as feedback for the most recent stub entry; fill fields without asking for confirmation; reply with one-line confirmation
 
 ── Current state ──
-When to write to current-state.md:
+When to write to current-state.md AND current-state.json:
 - Any new ankle pain score (already handled by quick pain log above)
 - Any new niggle or injury mention
 - Any missed session Jamie mentions
@@ -67,7 +67,8 @@ When to write to current-state.md:
 - Any weight reading Jamie shares
 - Any significant plan change agreed in conversation
 - After a heat session is logged
-Update only the relevant section. Do not rewrite the whole file.
+Update only the relevant section of current-state.md. Do not rewrite the whole file.
+Always mirror the change to current-state.json — update the matching field(s) only (ankle.pain_during, weight_readings[], heat.sessions_cumulative, open_actions[].status, etc). The JSON is the machine-readable twin; keep it in sync.
 
 ── Auto-logging rule ──
 Never ask "would you like me to log that?" — just log it and say "Logged." in one line.
