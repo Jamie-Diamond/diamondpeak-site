@@ -25,7 +25,6 @@ RACE_DATE = date(2026, 9, 19)
 PLAN_START = date(2026, 4, 27)  # Week 1 Monday
 
 TOOLS = ",".join([
-    "Write",
     "mcp__claude_ai_icusync__get_athlete_profile",
     "mcp__claude_ai_icusync__get_fitness",
     "mcp__claude_ai_icusync__get_training_history",
@@ -34,7 +33,8 @@ TOOLS = ",".join([
     "mcp__claude_ai_icusync__get_wellness",
 ])
 
-PROMPT = """Fetch live training data from Intervals.icu and write ClaudeCoach/training-data.json.
+PROMPT = """Fetch live training data from Intervals.icu and output it as JSON to stdout.
+Do NOT use any Write tool — output the JSON directly as your response.
 
 Steps:
 1. get_athlete_profile → note current_date_local (today) and FTP
@@ -42,9 +42,9 @@ Steps:
 3. get_training_history(start_date=<14 days ago>, end_date=today) → recent activities
 4. get_power_curves → best power efforts for standard durations
 5. get_wellness(start_date=<30 days ago>, end_date=today) → HRV, RHR, body_weight per day
+6. get_events(start_date=<today>, end_date=<today+14 days>) → upcoming planned events
 
-Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY this schema
-(no trailing text after the Write call):
+Then output ONLY a single JSON object — no other text before or after:
 
 {
   "generated": "<today YYYY-MM-DD>",
@@ -80,10 +80,10 @@ Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY thi
     ... include durations: 5s(5), 10s(10), 30s(30), 1m(60), 2m(120), 5m(300), 10m(600), 20m(1200), 30m(1800), 60m(3600), 90m(5400), 2h(7200)
   ],
   "weekCalendar": [
-    ... flat array of weekCalendar entries (see step 6) ordered by date ascending
+    ... flat array of weekCalendar entries (see below) ordered by date ascending
   ],
   "loadChart": [
-    ... 15 entries covering today-7 to today+7 (see step 7) ordered by date ascending
+    ... 15 entries covering today-7 to today+7 (see below) ordered by date ascending
   ],
   "weightTrend": [
     {"date": "YYYY-MM-DD", "kg": <float>},
@@ -91,47 +91,21 @@ Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY thi
   ]
 }
 
-6. get_events(start_date=<today>, end_date=<today+14 days>) → upcoming planned events
+weekCalendar: covers last 7 days (from training_history) + next 14 days (from get_events). Each entry:
+{"date":"YYYY-MM-DD","sport":"Ride|Run|Swim|Strength|Other","name":"<name>","tss":<int or null>,"duration_min":<int or null>,"status":"completed"|"planned","key":<bool>,"detail":"<metric string>"}
+Rules:
+- training_history activities → status "completed"
+- get_events with NO matching completed activity for that date+sport → status "planned"
+- Normalise sport: Ride (VirtualRide/GravelRide), Run, Swim, Strength
+- detail completed Ride: "NP <powNp>W · HR <hr> · <dist>km" (omit nulls)
+- detail completed Run: "<pace> · <dist>km"
+- detail completed Swim: "<pace> · <dist>m"
+- detail planned: event description or ""
 
-Build "weekCalendar": a flat array covering the last 7 days (from training_history) plus the next 14 days (from get_events). Each entry:
-{
-  "date": "YYYY-MM-DD",
-  "sport": "Ride|Run|Swim|Strength|Other",
-  "name": "<activity or event name>",
-  "tss": <integer or null>,
-  "duration_min": <integer or null>,
-  "status": "completed" or "planned",
-  "key": <true if the event is marked key/priority, else false>,
-  "detail": "<brief metric string>"
-}
-
-Rules for weekCalendar:
-- Activity in get_training_history → status "completed"
-- Event in get_events with NO matching training_history entry for that date+sport → status "planned"
-- Never mark a planned event "completed" based on the plan alone — only actual recorded activities count
-- Normalise sport to: Ride (also for VirtualRide/GravelRide), Run, Swim, Strength
-- detail for completed Ride: "NP <powNp>W · HR <hr> · <dist>km" (omit null fields)
-- detail for completed Run: "<pace> · <dist>km"
-- detail for completed Swim: "<pace> · <dist>m"
-- detail for planned: event description or empty string
-
-7. Build "loadChart": 15 day entries covering (today minus 7 days) through (today plus 7 days) inclusive, ordered date ascending.
-   Each entry:
-   {
-     "date": "YYYY-MM-DD",
-     "tsb": <TSB float from get_fitness for that date, or null if not in fitness data>,
-     "activities": [
-       {"sport": "Ride|Run|Swim|Strength|Other", "tss": <integer or null>, "dur": <minutes or null>, "status": "completed"|"planned"}
-     ]
-   }
-   Rules:
-   - TSB: use get_fitness rows (available for past dates and possibly a few future projection rows)
-   - Completed: from get_training_history filtered to dates in the window
-   - Planned: from get_events filtered to dates in the window that have NO matching completed activity
-   - Normalise sport: Ride (also VirtualRide/GravelRide), Run, Swim, Strength
-   - Include every day in the window even if activities is empty
-
-After writing the file, output one line: "Done: CTL <value>, <N> activities"
+loadChart: 15 days from today-7 to today+7 inclusive, each:
+{"date":"YYYY-MM-DD","tsb":<float or null>,"activities":[{"sport":"...","tss":<int or null>,"dur":<min or null>,"status":"completed"|"planned"}]}
+- TSB from get_fitness rows; completed from training_history; planned from get_events (no matching completed)
+- Include every day even if activities is empty
 """
 
 PROMPT_FITNESS_PREV = """Fetch last season's CTL data from Intervals.icu and write it to a cache file.
@@ -342,19 +316,19 @@ def main():
             log(f"Claude error: {result.stderr[:200]}")
             sys.exit(1)
 
-        log(f"Claude: {result.stdout.strip()[:120]}")
-
-        if not OUT_FILE.exists():
-            log("training-data.json was not written — aborting push")
+        # Parse JSON from stdout (Claude outputs data directly — no Write tool)
+        import re as _re
+        m = _re.search(r'\{.*\}', result.stdout, _re.DOTALL)
+        if not m:
+            log(f"No JSON object in Claude output: {result.stdout[:200]}")
             sys.exit(1)
 
-        # Validate JSON before committing
         try:
-            data = json.loads(OUT_FILE.read_text())
+            data = json.loads(m.group(0))
             assert "kpi" in data and "fitnessThis" in data and "recent" in data and "weekCalendar" in data and "loadChart" in data
             log(f"JSON valid: CTL {data['kpi']['ctl']}, {len(data['recent'])} activities")
         except Exception as e:
-            log(f"JSON validation failed: {e} — aborting push")
+            log(f"JSON parse/validation failed: {e} — aborting push")
             sys.exit(1)
 
         # Add locally-computed fields (heat, decoupling, CTL projection)
