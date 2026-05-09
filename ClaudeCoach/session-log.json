@@ -21,6 +21,27 @@
     "stub": false
   },
   {
+    "activity_id": "i146380367",
+    "date": "2026-05-08",
+    "name": "Trying to keep up with KH",
+    "sport": "Swim",
+    "tss": 45,
+    "duration_min": 29,
+    "distance_km": 1.72,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 125,
+    "rpe": null,
+    "feel": null,
+    "ankle_pain_during": null,
+    "ankle_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-09",
+    "stub": true
+  },
+  {
     "activity_id": "i146542118",
     "date": "2026-05-08",
     "name": "All the traffic",
