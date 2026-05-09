@@ -246,6 +246,21 @@
     </div>
   </div>
 
+  <!-- TRAINING LOAD -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Training load — today ±7 days</h2>
+    <div class="small" style="margin-bottom:10px">TSS stacked by sport · faded bars = planned · TSB form line (right axis) · updated daily at 06:00</div>
+    <div class="chart-wrap"><canvas id="chartLoad"></canvas></div>
+    <div class="legend" style="margin-top:10px">
+      <span><span class="swatch" style="background:#1d6840;opacity:.87"></span>Ride</span>
+      <span><span class="swatch" style="background:#c0392b;opacity:.87"></span>Run</span>
+      <span><span class="swatch" style="background:#1a5276;opacity:.87"></span>Swim</span>
+      <span><span class="swatch" style="background:#7f8c8d;opacity:.87"></span>Strength</span>
+      <span><span class="swatch" style="background:#555"></span>TSB (right axis)</span>
+      <span style="color:var(--muted);font-size:11px">faded = planned</span>
+    </div>
+  </div>
+
   <!-- YEAR ON YEAR + RECENT WORKOUTS ROW -->
   <div class="grid grid-2" style="margin-bottom:14px">
 
@@ -1199,6 +1214,102 @@ function renderLiveCalendar(events) {
   });
 })();
 
+// Training load chart — TSS by sport + TSB overlay
+(function(){
+  const ctx = document.getElementById("chartLoad").getContext("2d");
+  window.chartLoad = new Chart(ctx, {
+    type: "bar",
+    data: { labels: [], datasets: [] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { stacked: true, grid: { color: "#e8e3da" } },
+        y: { stacked: true, beginAtZero: true, position: "left",
+             title: { display: true, text: "TSS" }, grid: { color: "#e8e3da" } },
+        y1: { position: "right",
+              title: { display: true, text: "TSB" },
+              suggestedMin: -40, suggestedMax: 20,
+              grid: { drawOnChartArea: false } },
+      },
+    },
+  });
+})();
+
+function renderLoadChart(days) {
+  if (!window.chartLoad || !days || !days.length) return;
+
+  const SPORTS = ["Ride", "Run", "Swim", "Strength"];
+  const BASE   = { Ride:[29,104,64], Run:[192,57,43], Swim:[26,82,118], Strength:[127,140,141] };
+
+  function normSport(s) {
+    if (!s) return "Other";
+    if (/Ride|Cycling|Gravel|Virtual/i.test(s)) return "Ride";
+    if (/Run/i.test(s))                          return "Run";
+    if (/Swim/i.test(s))                         return "Swim";
+    if (/Strength|Weight|Gym/i.test(s))          return "Strength";
+    return "Other";
+  }
+
+  const labels   = days.map(d => d.date.slice(5));
+  const todayStr = new Date().toISOString().slice(5, 10);
+  const datasets = [];
+
+  SPORTS.forEach(sport => {
+    const [r, g, b] = BASE[sport];
+    const tssVals = [], bgVals = [];
+    let hasData = false;
+    days.forEach(d => {
+      let sportTSS = 0, isPlanned = false;
+      (d.activities || []).forEach(a => {
+        if (normSport(a.sport) === sport) {
+          sportTSS += (a.tss || 0);
+          if (a.status === "planned") isPlanned = true;
+        }
+      });
+      tssVals.push(Math.round(sportTSS));
+      if (sportTSS > 0) hasData = true;
+      const alpha = sportTSS > 0 ? (isPlanned ? 0.25 : 0.87) : 0;
+      bgVals.push(`rgba(${r},${g},${b},${alpha})`);
+    });
+    if (!hasData) return;
+    datasets.push({ type:"bar", label:sport, data:tssVals, backgroundColor:bgVals,
+                    stack:"tss", yAxisID:"y", order:2 });
+  });
+
+  const tsbVals = days.map(d => d.tsb != null ? Math.round(d.tsb * 10) / 10 : null);
+  datasets.push({
+    type:"line", label:"TSB", data:tsbVals,
+    borderColor:"rgba(60,60,60,0.75)", backgroundColor:"transparent",
+    borderWidth:2, pointRadius:2, fill:false, tension:0.3,
+    yAxisID:"y1", order:1, spanGaps:true,
+  });
+
+  // TSB zero reference line
+  datasets.push({
+    type:"line", label:"_zero", data:days.map(()=>0),
+    borderColor:"rgba(100,100,100,0.25)", backgroundColor:"transparent",
+    borderWidth:1, borderDash:[4,3], pointRadius:0,
+    fill:false, yAxisID:"y1", order:3,
+  });
+
+  // Today marker — highlight today's x tick
+  const todayIdx = labels.indexOf(todayStr);
+
+  window.chartLoad.data.labels   = labels;
+  window.chartLoad.data.datasets = datasets;
+  window.chartLoad.options.plugins.legend = {
+    display: true, position: "top",
+    labels: { boxWidth:12, font:{size:11},
+               filter: item => !item.text.startsWith("_") },
+  };
+  window.chartLoad.options.scales.x.ticks = {
+    font: { size: 10 },
+    color: ctx => ctx.index === todayIdx ? "#1d6840" : "#666",
+  };
+  window.chartLoad.update();
+}
+
 // Race countdown + phase bar marker
 (function() {
   const planStart = new Date("2026-04-27"); // Week 1 Monday
@@ -1251,6 +1362,8 @@ fetch('./training-data.json')
       window.chartPower.data.datasets[1].data = d.powerCurve.map(p => p.wPrev);
       window.chartPower.update();
     }
+    // Training load chart
+    if (d.loadChart && d.loadChart.length) renderLoadChart(d.loadChart);
     // Live week calendar
     if (d.weekCalendar && d.weekCalendar.length) renderLiveCalendar(d.weekCalendar);
     // Snapshot label

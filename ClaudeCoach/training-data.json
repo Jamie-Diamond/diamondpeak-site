@@ -345,5 +345,7 @@
     {"t": 3600, "label": "60m", "w": 242, "wPrev": null},
     {"t": 5400, "label": "90m", "w": 222, "wPrev": null},
     {"t": 7200, "label": "2h", "w": 221, "wPrev": null}
-  ]
+  ],
+  "weekCalendar": [],
+  "loadChart": []
 }

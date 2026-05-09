@@ -31,7 +31,22 @@ SPORT_COLOURS = {
     "WeightTraining": "#7f8c8d",
     "Other":          "#9b59b6",
 }
-_PLANNED_ALPHA = 0.30
+_PLANNED_ALPHA = 0.28
+
+
+def _norm_sport(s):
+    if not s:
+        return "Other"
+    s = str(s)
+    if any(x in s for x in ("Ride", "Cycling", "Gravel", "Virtual")):
+        return "Ride"
+    if "Run" in s:
+        return "Run"
+    if "Swim" in s:
+        return "Swim"
+    if any(x in s for x in ("Strength", "Weight", "Gym")):
+        return "Strength"
+    return "Other"
 
 
 def _rgba(hex_colour, alpha):
@@ -252,6 +267,116 @@ def form_chart(payload):
         },
     }
     return _fetch(config, height=320)
+
+
+# ── Training load chart (TSS stacked by sport + TSB overlay) ─────────────────
+
+def load_chart(payload):
+    """
+    payload: {"today":"MM-DD","days":[{"date":"YYYY-MM-DD","tsb":-8.7,
+              "activities":[{"sport":"Ride","tss":117,"dur":120,"status":"completed"},...]},...]}
+    Stacked TSS bars by sport (actual=solid, planned=28% alpha) + TSB line on right axis.
+    """
+    if isinstance(payload, dict):
+        days  = payload.get("days", [])
+        today = payload.get("today")
+    else:
+        return None
+    if not days:
+        return None
+
+    SPORTS = ["Ride", "Run", "Swim", "Strength"]
+    BASE   = {"Ride": "#1d6840", "Run": "#c0392b", "Swim": "#1a5276", "Strength": "#7f8c8d"}
+
+    labels   = [d["date"][5:] for d in days]
+    datasets = []
+
+    for sport in SPORTS:
+        tss_vals, bg_vals, has_data = [], [], False
+        for d in days:
+            sport_tss, is_planned = 0, False
+            for a in d.get("activities", []):
+                if _norm_sport(a.get("sport", "")) == sport:
+                    sport_tss  += a.get("tss") or 0
+                    if a.get("status") == "planned":
+                        is_planned = True
+            tss_vals.append(round(sport_tss, 1))
+            if sport_tss > 0:
+                has_data = True
+            alpha = (_PLANNED_ALPHA if is_planned else 0.87) if sport_tss > 0 else 0
+            bg_vals.append(_rgba(BASE.get(sport, "#9b59b6"), alpha))
+
+        if not has_data:
+            continue
+
+        datasets.append({
+            "type": "bar", "label": sport,
+            "data": tss_vals, "backgroundColor": bg_vals,
+            "stack": "tss", "order": 2, "yAxisID": "y",
+        })
+
+    tsb_vals = [round(d.get("tsb") or 0, 1) for d in days]
+    datasets.append({
+        "type": "line", "label": "TSB (form)",
+        "data": tsb_vals,
+        "borderColor": "rgba(70,70,70,0.80)",
+        "backgroundColor": "transparent",
+        "borderWidth": 2.5, "pointRadius": 2,
+        "pointBackgroundColor": "rgba(70,70,70,0.6)",
+        "fill": False, "tension": 0.3, "order": 1, "yAxisID": "y1",
+    })
+
+    annotations = {
+        "tsb_zero": {
+            "type": "line", "scaleID": "y1",
+            "value": 0,
+            "borderColor": "rgba(100,100,100,0.28)",
+            "borderWidth": 1, "borderDash": [4, 3],
+        },
+    }
+    ann = _today_annotation(today, labels)
+    if ann:
+        annotations["today"] = ann
+
+    config = {
+        "type": "bar",
+        "data": {"labels": labels, "datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": {
+                    "display": True,
+                    "text": "Training load — TSS by sport  ·  TSB form (right axis)",
+                    "font": {"size": 14},
+                },
+                "legend": {
+                    "position": "top",
+                    "labels": {"boxWidth": 12, "font": {"size": 11}},
+                },
+                "annotation": {"annotations": annotations},
+            },
+            "scales": {
+                "x": {
+                    "stacked": True,
+                    "ticks": {"maxRotation": 45, "autoSkip": True,
+                              "maxTicksLimit": 15, "font": {"size": 10}},
+                },
+                "y": {
+                    "stacked": True, "beginAtZero": True, "position": "left",
+                    "title": {"display": True, "text": "TSS", "font": {"size": 12}},
+                    "ticks": {"font": {"size": 11}},
+                    "grid": {"color": "rgba(0,0,0,0.06)"},
+                },
+                "y1": {
+                    "position": "right",
+                    "title": {"display": True, "text": "TSB", "font": {"size": 12}},
+                    "ticks": {"font": {"size": 11}},
+                    "suggestedMin": -40, "suggestedMax": 20,
+                    "grid": {"drawOnChartArea": False},
+                },
+            },
+        },
+    }
+    return _fetch(config, width=760, height=460)
 
 
 # ── Week calendar ─────────────────────────────────────────────────────────────

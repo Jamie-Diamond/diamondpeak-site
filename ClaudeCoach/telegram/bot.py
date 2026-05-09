@@ -225,6 +225,8 @@ def process_charts(token, chat_id, response):
                     title=data.get("title", "Training week"),
                     week_start=data.get("week_start"),
                 )
+            elif chart_type == "load":
+                png = _charts.load_chart(data)
             elif chart_type == "powercurve":
                 png = _charts.power_curve_chart(
                     data.get("efforts", []),

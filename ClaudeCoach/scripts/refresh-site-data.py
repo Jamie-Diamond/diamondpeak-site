@@ -70,6 +70,9 @@ Then use the Write tool to write ClaudeCoach/training-data.json with EXACTLY thi
   ],
   "weekCalendar": [
     ... flat array of weekCalendar entries (see step 6) ordered by date ascending
+  ],
+  "loadChart": [
+    ... 15 entries covering today-7 to today+7 (see step 7) ordered by date ascending
   ]
 }
 
@@ -96,6 +99,22 @@ Rules for weekCalendar:
 - detail for completed Run: "<pace> · <dist>km"
 - detail for completed Swim: "<pace> · <dist>m"
 - detail for planned: event description or empty string
+
+7. Build "loadChart": 15 day entries covering (today minus 7 days) through (today plus 7 days) inclusive, ordered date ascending.
+   Each entry:
+   {
+     "date": "YYYY-MM-DD",
+     "tsb": <TSB float from get_fitness for that date, or null if not in fitness data>,
+     "activities": [
+       {"sport": "Ride|Run|Swim|Strength|Other", "tss": <integer or null>, "dur": <minutes or null>, "status": "completed"|"planned"}
+     ]
+   }
+   Rules:
+   - TSB: use get_fitness rows (available for past dates and possibly a few future projection rows)
+   - Completed: from get_training_history filtered to dates in the window
+   - Planned: from get_events filtered to dates in the window that have NO matching completed activity
+   - Normalise sport: Ride (also VirtualRide/GravelRide), Run, Swim, Strength
+   - Include every day in the window even if activities is empty
 
 After writing the file, output one line: "Done: CTL <value>, <N> activities"
 """
@@ -145,7 +164,7 @@ def main():
         # Validate JSON before committing
         try:
             data = json.loads(OUT_FILE.read_text())
-            assert "kpi" in data and "fitnessThis" in data and "recent" in data and "weekCalendar" in data
+            assert "kpi" in data and "fitnessThis" in data and "recent" in data and "weekCalendar" in data and "loadChart" in data
             log(f"JSON valid: CTL {data['kpi']['ctl']}, {len(data['recent'])} activities")
         except Exception as e:
             log(f"JSON validation failed: {e} — aborting push")
