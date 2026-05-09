@@ -1,6 +1,10 @@
 #!/bin/bash
-# Daily session prescription — W2. Runs via launchd at 05:00 daily.
+# Daily session prescription — runs via VM crontab at 05:00 daily.
 # Safe to run manually: bash daily-prescription.sh
+
+CLAUDE=$(command -v claude || echo "/usr/bin/claude")
+LOG_DIR="$HOME/Library/Logs/ClaudeCoach"
+mkdir -p "$LOG_DIR"
 
 cd /Users/diamondpeakconsulting/diamondpeak-site
 
@@ -89,7 +93,7 @@ PROMPT_END
 
 TOOLS="Read,Write,Edit,Bash,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_wellness,mcp__claude_ai_icusync__get_events,mcp__claude_ai_icusync__push_workout,PushNotification"
 
-OUTPUT=$(/Users/diamondpeakconsulting/.local/bin/claude -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$HOME/Library/Logs/ClaudeCoach/prescription.log")
+OUTPUT=$($CLAUDE -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$LOG_DIR/prescription.log")
 echo "$OUTPUT"
 if [ -n "$OUTPUT" ]; then
     echo "$OUTPUT" | python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/notify.py

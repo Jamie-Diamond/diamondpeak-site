@@ -1,6 +1,10 @@
 #!/bin/bash
-# Daily watchdog - W4. Fires PushNotification only if a trigger trips.
-# Runs via launchd at 05:30 daily. Safe to run manually: bash watchdog.sh
+# Daily watchdog — fires PushNotification only if a trigger trips.
+# Runs via VM crontab at 05:30 daily. Safe to run manually: bash watchdog.sh
+
+CLAUDE=$(command -v claude || echo "/usr/bin/claude")
+LOG_DIR="$HOME/Library/Logs/ClaudeCoach"
+mkdir -p "$LOG_DIR"
 
 cd /Users/diamondpeakconsulting/diamondpeak-site
 
@@ -41,7 +45,7 @@ PROMPT_END
 
 TOOLS="Read,Write,Edit,Bash,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_wellness,mcp__claude_ai_icusync__get_activity_detail,PushNotification"
 
-OUTPUT=$(/Users/diamondpeakconsulting/.local/bin/claude -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$HOME/Library/Logs/ClaudeCoach/watchdog.log")
+OUTPUT=$($CLAUDE -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$LOG_DIR/watchdog.log")
 echo "$OUTPUT"
 if [ -n "$OUTPUT" ]; then
     echo "$OUTPUT" | python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/notify.py
