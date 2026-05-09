@@ -66,6 +66,7 @@
   .pill-taper{background:#ede9f5;color:#4a3e7a}
   .pill-ride{background:#dde9f5;color:#1a5276}
   .pill-run{background:#f5dbd6;color:#7d2218}
+  .pill-strength{background:#eae8f5;color:#4a3580}
   .pill-swim{background:#d6eeea;color:#1d6e62}
   .pill-other{background:#eae8e2;color:#4a4535}
   table{width:100%;border-collapse:collapse;font-size:13px}
@@ -272,6 +273,13 @@
     </div>
   </div>
 
+  <!-- PLAN VS ACTUAL TSS — 6 weeks -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Plan vs actual TSS — last 6 weeks</h2>
+    <div class="small" style="margin-bottom:10px">Planned = phase target band · Actual = from session log · Updated daily</div>
+    <div class="chart-wrap short" style="height:200px"><canvas id="chartPlanActual"></canvas></div>
+  </div>
+
   <!-- YEAR ON YEAR + RECENT WORKOUTS ROW -->
   <div class="grid grid-2" style="margin-bottom:14px">
 
@@ -314,6 +322,18 @@
       <table id="recent-table">
         <thead><tr><th>Date</th><th>Sport</th><th>Name</th><th class="num">Time</th><th class="num">Dist</th><th class="num">Pace/Speed</th><th class="num">Avg HR</th><th class="num">Avg/NP W</th><th class="num">TSS</th></tr></thead>
         <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SESSION LOG VIEWER -->
+  <div class="panel" style="margin-bottom:14px" id="session-log-panel">
+    <h2>Session log — last 10 confirmed sessions</h2>
+    <div class="small" style="margin-bottom:10px">RPE, ankle score, and nutrition logged after each session · stub=false entries only</div>
+    <div style="overflow:auto">
+      <table id="session-log-table">
+        <thead><tr><th>Date</th><th>Sport</th><th>Name</th><th class="num">TSS</th><th class="num">RPE</th><th class="num">Ankle</th><th class="num">g/hr</th><th>Feel</th></tr></thead>
+        <tbody><tr><td colspan="8" style="color:var(--muted);font-size:12px;text-align:center">Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -476,6 +496,13 @@
     </div>
   </div>
 
+  <!-- SWIM PROGRESSION -->
+  <div class="panel" style="margin-bottom:14px" id="swim-prog-panel">
+    <h2>Swim progression — pace vs CSS target</h2>
+    <div class="small" style="margin-bottom:8px">CSS target: 1:39/100m · logged after each swim · pace in seconds/100m</div>
+    <div class="chart-wrap short" style="height:180px"><canvas id="chartSwimProg"></canvas></div>
+  </div>
+
   <!-- CONSTRAINTS -->
   <div class="panel" style="margin-bottom:14px">
       <h2>Constraints &amp; reminders</h2>
@@ -508,7 +535,22 @@
       </ul>
   </div>
 
-  <div class="footer">Data provided by Garmin® · Generated 5 May 2026 · Static snapshot — re-run to refresh · Week 1 review + actuals through 4 May added in this refresh</div>
+  <!-- LIVE CONSTRAINTS + OPEN ACTIONS -->
+  <div class="panel" style="margin-bottom:14px" id="live-constraints-panel">
+    <h2>Live status — constraints &amp; open actions</h2>
+    <div class="grid grid-2" style="gap:14px">
+      <div>
+        <h3 style="margin-bottom:8px">Current constraints</h3>
+        <div id="live-constraints-content"><span style="color:var(--muted);font-size:12px">Loading…</span></div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:8px">Open actions</h3>
+        <div id="open-actions-content"><span style="color:var(--muted);font-size:12px">Loading…</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">Data provided by Garmin® · <span id="footer-generated">Generated 5 May 2026 · Static snapshot</span></div>
 </div>
 
 <script>
@@ -1432,6 +1474,152 @@ function renderCtlProjection(proj) {
   window.chartFitness.update();
 }
 
+function renderPlanActual(weeks) {
+  const ctx = document.getElementById("chartPlanActual");
+  if (!ctx || !weeks || !weeks.length) return;
+  const labels = weeks.map(w => {
+    const dt = new Date(w.week_start + "T00:00:00");
+    return "W" + w.week_num + " " + dt.toLocaleDateString("en-GB", {day:"numeric",month:"short"});
+  });
+  new Chart(ctx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        { label: "Actual TSS", data: weeks.map(w => w.actual_tss),
+          backgroundColor: "rgba(29,104,64,0.8)", borderRadius: 3 },
+        { label: "Phase target", data: weeks.map(w => w.planned_tss),
+          backgroundColor: "rgba(180,180,180,0.35)", borderColor: "rgba(120,120,120,0.6)",
+          borderWidth: 1, borderRadius: 3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "top", labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { font: { size: 10 } } },
+        y: { beginAtZero: true, ticks: { font: { size: 10 } }, grid: { color: "rgba(0,0,0,0.05)" } },
+      }
+    }
+  });
+}
+
+function renderSessionLog(entries) {
+  const tb = document.querySelector("#session-log-table tbody");
+  if (!tb || !entries || !entries.length) {
+    if (tb) tb.innerHTML = '<tr><td colspan="8" style="color:var(--muted);font-size:12px;text-align:center">No confirmed sessions yet</td></tr>';
+    return;
+  }
+  tb.innerHTML = "";
+  const sorted = [...entries].sort((a,b) => b.date.localeCompare(a.date));
+  sorted.forEach(e => {
+    const dur = e.duration_min;
+    const ghr = (e.nutrition_g_carb && dur) ? Math.round(e.nutrition_g_carb / dur * 60) : null;
+    const ankle = e.ankle_pain_during != null ? e.ankle_pain_during + "/10" : "—";
+    const sportCls = {Ride:"pill-ride",Run:"pill-run",Swim:"pill-swim",Strength:"pill-strength"}[e.sport] || "";
+    const dt = new Date(e.date + "T00:00:00");
+    const label = dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+    tb.insertAdjacentHTML("beforeend",
+      `<tr>
+        <td>${label}</td>
+        <td><span class="pill ${sportCls}">${e.sport}</span></td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.name||"—"}</td>
+        <td class="num">${e.tss||"—"}</td>
+        <td class="num">${e.rpe != null ? e.rpe + "/10" : "—"}</td>
+        <td class="num">${e.sport==="Run" ? ankle : "—"}</td>
+        <td class="num">${ghr != null ? ghr + " g/hr" : "—"}</td>
+        <td style="font-size:11px;color:var(--secondary)">${(e.feel||"").slice(0,40)||"—"}</td>
+      </tr>`
+    );
+  });
+}
+
+function renderSwimProgression(entries) {
+  const ctx = document.getElementById("chartSwimProg");
+  if (!ctx || !entries || !entries.length) return;
+  const sorted = [...entries].sort((a,b) => a.date.localeCompare(b.date));
+  const labels = sorted.map(e => {
+    const dt = new Date(e.date + "T00:00:00");
+    return dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+  });
+  const CSS_PACE = 99; // 1:39/100m in seconds
+  new Chart(ctx.getContext("2d"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label: "Pace (s/100m)", data: sorted.map(e => e.pace_per_100m),
+          borderColor: "#1a5276", backgroundColor: "rgba(26,82,118,0.1)",
+          pointRadius: 4, pointBackgroundColor: "#1a5276", tension: 0.3, fill: true },
+        { label: "CSS target 1:39", data: labels.map(() => CSS_PACE),
+          borderColor: "rgba(192,57,43,0.6)", borderDash: [5,3],
+          pointRadius: 0, borderWidth: 1.5 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "top", labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        y: {
+          reverse: true, // lower pace = faster
+          ticks: {
+            font: { size: 10 },
+            callback: v => { const m=Math.floor(v/60); return m+":"+(v%60).toString().padStart(2,"0"); }
+          },
+          grid: { color: "rgba(0,0,0,0.05)" }
+        },
+        x: { ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function renderLiveConstraints(cs) {
+  const cc = document.getElementById("live-constraints-content");
+  const ac = document.getElementById("open-actions-content");
+  if (!cs) return;
+
+  // Constraints section
+  let html = '<div style="font-size:13px;line-height:1.8">';
+  const ankle = cs.ankle_pain_during;
+  if (ankle != null) {
+    const cls = ankle === 0 ? "good" : ankle <= 2 ? "" : "bad";
+    html += `<div><b>Ankle:</b> <span class="${cls}">${ankle}/10 during · ${cs.ankle_pain_next_morning != null ? cs.ankle_pain_next_morning+"/10 next morning" : "—"}</span></div>`;
+  }
+  if (cs.bike_ftp) {
+    html += `<div><b>Bike FTP:</b> ${cs.bike_ftp} W</div>`;
+  }
+  const flags = cs.watchdog_flags || [];
+  if (flags.length) {
+    html += `<div style="margin-top:6px"><b>Active flags:</b></div>`;
+    flags.forEach(f => html += `<div style="color:var(--bad)">⚠ ${typeof f === "string" ? f : f.trigger || JSON.stringify(f)}</div>`);
+  } else {
+    html += `<div style="color:var(--good)">No active watchdog flags</div>`;
+  }
+  html += "</div>";
+  if (cc) cc.innerHTML = html;
+
+  // Open actions
+  const actions = cs.open_actions || [];
+  if (!ac) return;
+  if (!actions.length) { ac.innerHTML = '<span style="color:var(--muted);font-size:12px">No open actions</span>'; return; }
+  let ahtml = '<div style="font-size:12px">';
+  actions.forEach(a => {
+    const done = (a.status || "").toLowerCase() === "done";
+    const due = a.due || "";
+    const overdue = !done && due && due < new Date().toISOString().slice(0,10);
+    const pill = done ? 'style="background:#d6eeda;color:#1d6840;padding:1px 7px;border-radius:10px;font-size:11px"'
+                     : overdue ? 'style="background:#fde8e6;color:#c0392b;padding:1px 7px;border-radius:10px;font-size:11px"'
+                     : 'style="background:#f0efe8;color:#4a4535;padding:1px 7px;border-radius:10px;font-size:11px"';
+    ahtml += `<div style="margin-bottom:6px;display:flex;gap:6px;align-items:flex-start">
+      <span ${pill}>${done ? "done" : overdue ? "overdue" : "open"}</span>
+      <span>${a.action || a.id || "—"}${due ? ' <span style="color:var(--muted)">· due '+due+'</span>' : ""}</span>
+    </div>`;
+  });
+  ahtml += "</div>";
+  ac.innerHTML = ahtml;
+}
+
 // Live data — fetch training-data.json (written by refresh-site-data.py) and update page
 fetch('./training-data.json')
   .then(r => r.json())
@@ -1471,9 +1659,21 @@ fetch('./training-data.json')
     if (d.decouplingTrend) renderDecouplingChart(d.decouplingTrend);
     // Heat protocol
     if (d.heatProtocol) renderHeatPanel(d.heatProtocol);
+    // Plan vs actual TSS
+    if (d.planVsActual) renderPlanActual(d.planVsActual);
+    // Session log viewer
+    if (d.sessionLog) renderSessionLog(d.sessionLog);
+    // Swim progression
+    if (d.swimLog) renderSwimProgression(d.swimLog);
+    // Live constraints + open actions
+    if (d.currentState) renderLiveConstraints(d.currentState);
     // Snapshot label
     const snap = document.getElementById("snapshot-date");
-    if (snap && d.generated) snap.textContent = "Live · last updated " + d.generated + " · Source: Intervals.icu";
+    const footerGen = document.getElementById("footer-generated");
+    if (d.generated) {
+      if (snap) snap.textContent = "Live · last updated " + d.generated + " · Source: Intervals.icu";
+      if (footerGen) footerGen.textContent = "Last updated " + d.generated + " · Source: Intervals.icu";
+    }
   })
   .catch(() => {}); // silently fall back to hardcoded snapshot data
 </script>

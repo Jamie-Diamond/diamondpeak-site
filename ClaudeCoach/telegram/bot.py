@@ -368,10 +368,73 @@ def fast_path(text):
     if _PLAN_RE.match(text.strip()):
         return "__GENERATE_PLAN__"
 
-    if _FTP_RE.match(text.strip()):
-        return "__FTP_RETEST__"
+    m = _FTP_RE.match(text.strip())
+    if m:
+        return f"__FTP_RETEST__:{m.group(1)}"
 
     return None
+
+
+def _update_ftp(new_ftp: int) -> str:
+    """Update FTP across local files and current-state.json. Returns reply string."""
+    today = date.today().isoformat()
+    updated = []
+    errors = []
+
+    # system_prompt.txt — "FTP 316 W" style
+    try:
+        sp = SYSTEM_PROMPT_FILE.read_text()
+        sp_new = re.sub(r'FTP \d+ W', f'FTP {new_ftp} W', sp)
+        if sp_new != sp:
+            SYSTEM_PROMPT_FILE.write_text(sp_new)
+            updated.append("system_prompt.txt")
+    except Exception as e:
+        errors.append(f"system_prompt: {e}")
+
+    # reference/rules.md — "Bike FTP: 316 W" style
+    rules_path = BASE.parent / "reference/rules.md"
+    try:
+        rules = rules_path.read_text()
+        rules_new = re.sub(r'Bike FTP: \d+ W', f'Bike FTP: {new_ftp} W', rules)
+        if rules_new != rules:
+            rules_path.write_text(rules_new)
+            updated.append("rules.md")
+    except Exception as e:
+        errors.append(f"rules.md: {e}")
+
+    # current-state.json
+    try:
+        state = _load_state_json()
+        prev_ftp = state.get("bike_ftp")
+        state["bike_ftp"] = new_ftp
+        state["last_updated"] = today
+        action = {"id": "ftp-retest", "action": f"FTP updated {prev_ftp}→{new_ftp} W", "due": today, "status": "done"}
+        acts = state.setdefault("open_actions", [])
+        existing = next((a for a in acts if a.get("id") == "ftp-retest"), None)
+        if existing:
+            existing.update(action)
+        else:
+            acts.append(action)
+        _save_state_json(state)
+        updated.append("current-state.json")
+    except Exception as e:
+        errors.append(f"current-state.json: {e}")
+
+    _git_commit(f"ftp: updated to {new_ftp} W {today}")
+
+    if errors:
+        return f"FTP updated to *{new_ftp} W* in {', '.join(updated)}.\n⚠️ Errors: {'; '.join(errors)}\n\nZones recalculated. Update in Intervals.icu if not already done."
+
+    zones_note = (
+        f"Z2 bike: {round(new_ftp*0.55)}–{round(new_ftp*0.75)} W · "
+        f"Threshold: {round(new_ftp*0.90)}–{round(new_ftp*1.05)} W"
+    )
+    return (
+        f"FTP updated to *{new_ftp} W* in {', '.join(updated)}.\n\n"
+        f"{zones_note}\n\n"
+        f"Remember to update in Intervals.icu too — Settings → Athlete → FTP. "
+        f"Say _generate plan_ to push updated sessions."
+    )
 
 
 def call_claude(user_message, config, history):
@@ -481,17 +544,12 @@ def main():
                     send(token, chat_id, f"Plan generation failed: {e}", reply_markup=build_keyboard())
                 log("Out (fast): plan generated")
                 continue
-            elif fast == "__FTP_RETEST__":
-                typing(token, chat_id)
-                history = load_history()
-                response = call_claude(text, config, history)
-                clean = process_charts(token, chat_id, response)
-                if clean:
-                    clean += f"\n\n— {days_to_race()} days to Cervia"
-                    send(token, chat_id, clean, reply_markup=build_keyboard())
-                log(f"Out (FTP): {clean[:80] if clean else ''}")
-                history.append({"user": text, "assistant": clean})
-                save_history(history)
+            elif fast and fast.startswith("__FTP_RETEST__:"):
+                new_ftp = int(float(fast.split(":", 1)[1]))
+                reply = _update_ftp(new_ftp)
+                reply += f"\n\n— {days_to_race()} days to Cervia"
+                send(token, chat_id, reply, reply_markup=build_keyboard())
+                log(f"Out (FTP update): {new_ftp} W")
                 continue
             elif fast:
                 reply = fast + f"\n\n— {days_to_race()} days to Cervia"

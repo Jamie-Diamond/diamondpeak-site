@@ -6,6 +6,7 @@ Run daily (e.g. 06:00 via launchd/cron). Requires git push credentials (SSH key 
 import json, subprocess, sys, time, math
 from pathlib import Path
 from datetime import datetime, date, timedelta
+from collections import defaultdict
 
 BASE        = Path(__file__).parent.parent          # ClaudeCoach/
 OUT_FILE    = BASE / "training-data.json"
@@ -16,6 +17,8 @@ CLAUDE      = "/usr/bin/claude"
 HEAT_LOG       = BASE / "heat-log.json"
 DECOUPLING_LOG = BASE / "decoupling-log.json"
 STATE_JSON     = BASE / "current-state.json"
+SESSION_LOG    = BASE / "session-log.json"
+SWIM_LOG       = BASE / "swim-log.json"
 
 RACE_DATE = date(2026, 9, 19)
 PLAN_START = date(2026, 4, 27)  # Week 1 Monday
@@ -200,6 +203,67 @@ def post_process(data):
         "target_ctl_min": 100,
         "target_ctl_max": 115,
     }
+
+    # Current state snapshot (ankle, watchdog flags, open actions)
+    if STATE_JSON.exists():
+        try:
+            cs = json.loads(STATE_JSON.read_text())
+            data["currentState"] = {
+                "ankle_pain_during": cs.get("ankle", {}).get("pain_during"),
+                "ankle_pain_next_morning": cs.get("ankle", {}).get("pain_next_morning"),
+                "bike_ftp": cs.get("bike_ftp"),
+                "watchdog_flags": cs.get("watchdog_flags", []),
+                "open_actions": cs.get("open_actions", []),
+                "weight_readings": cs.get("weight_readings", [])[-5:],
+            }
+        except Exception:
+            pass
+
+    # Session log — last 10 confirmed (non-stub) entries
+    if SESSION_LOG.exists():
+        try:
+            all_entries = json.loads(SESSION_LOG.read_text())
+            confirmed = [e for e in all_entries if not e.get("stub", True)]
+            data["sessionLog"] = confirmed[-10:]
+        except Exception:
+            pass
+
+    # Swim log — full history for progression chart
+    if SWIM_LOG.exists():
+        try:
+            data["swimLog"] = json.loads(SWIM_LOG.read_text())
+        except Exception:
+            pass
+
+    # Plan vs actual — last 6 weeks, grouped by week
+    # Actual TSS from session-log.json; planned from phase daily TSS * 7
+    if SESSION_LOG.exists():
+        try:
+            all_entries = json.loads(SESSION_LOG.read_text())
+            weekly_actual = defaultdict(float)
+            for e in all_entries:
+                d_str = e.get("date", "")
+                if not d_str:
+                    continue
+                dt = date.fromisoformat(d_str)
+                wk_start = dt - timedelta(days=dt.weekday())
+                weekly_actual[wk_start.isoformat()] += e.get("tss") or 0
+
+            plan_actual = []
+            for i in range(5, -1, -1):
+                wk_start = today - timedelta(days=today.weekday()) - timedelta(weeks=i)
+                wk_num = max(1, math.ceil((wk_start - PLAN_START).days / 7))
+                planned_tss = _phase_daily_tss(wk_start) * 7
+                plan_actual.append({
+                    "week_start": wk_start.isoformat(),
+                    "week_num": wk_num,
+                    "actual_tss": round(weekly_actual.get(wk_start.isoformat(), 0)),
+                    "planned_tss": round(planned_tss),
+                })
+            data["planVsActual"] = plan_actual
+        except Exception:
+            pass
+
     return data
 
 

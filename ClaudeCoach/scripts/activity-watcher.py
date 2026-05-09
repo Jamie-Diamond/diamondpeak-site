@@ -231,8 +231,57 @@ def main():
                 cwd=PROJECT_DIR,
             )
 
+        # Follow-up nudge check — any stub with rpe=null, 2–24 hr old, not yet nudged
+        _send_followup_nudge(state)
+
     finally:
         release_lock()
+
+
+def _send_followup_nudge(state):
+    """If any stub is >2h old with rpe=null and hasn't been nudged, send one re-ping."""
+    if not SESSION_LOG.exists():
+        return
+    try:
+        log_entries = json.loads(SESSION_LOG.read_text())
+    except Exception:
+        return
+
+    now = datetime.now()
+    nudged_ids = set(state.get("nudged_ids") or [])
+
+    for e in log_entries:
+        if not e.get("stub", False):
+            continue
+        if e.get("rpe") is not None:
+            continue
+        aid = str(e.get("activity_id", ""))
+        if aid in nudged_ids:
+            continue
+        logged_at = e.get("logged_at")
+        if not logged_at:
+            continue
+        try:
+            logged_dt = datetime.fromisoformat(logged_at + "T00:00:00" if "T" not in logged_at else logged_at)
+        except Exception:
+            continue
+        age_hours = (now - logged_dt).total_seconds() / 3600
+        if 2 <= age_hours <= 24:
+            sport = e.get("sport", "session")
+            name = e.get("name", "")
+            if sport == "Run":
+                msg = f"Quick one — ankle score for the {name or 'run'}: during and this morning?"
+            elif sport == "Swim":
+                msg = f"RPE for the {name or 'swim'}? And how did it feel overall?"
+            elif sport == "Ride" and (e.get("duration_min") or 0) >= 90:
+                msg = f"Fuelling check for the {name or 'ride'} — roughly g carbs/hr?"
+            else:
+                msg = f"RPE for {name or 'last session'}? (1–10)"
+            subprocess.run(["python3", str(NOTIFY), msg], cwd=PROJECT_DIR)
+            nudged_ids.add(aid)
+            state["nudged_ids"] = list(nudged_ids)
+            save_state(state)
+            break  # one nudge per run
 
 
 if __name__ == "__main__":
