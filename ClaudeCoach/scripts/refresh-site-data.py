@@ -208,15 +208,29 @@ def post_process(data):
     def current_trend_tss(d):
         return max(0, current_ctl + ramp7d / 7)  # extend current ramp
 
+    # planned_sessions: use actual planned event TSS from weekCalendar for the
+    # next 14 days, then fall back to phase averages beyond the known window
+    planned_tss_by_date = {}
+    for e in data.get("weekCalendar", []):
+        if e.get("status") == "planned":
+            d_str = e.get("date", "")
+            planned_tss_by_date[d_str] = planned_tss_by_date.get(d_str, 0) + (e.get("tss") or 0)
+    known_window_end = today + timedelta(days=14)
+
+    def planned_sessions_tss(d):
+        if d <= known_window_end:
+            return planned_tss_by_date.get(d.isoformat(), 0)  # 0 = rest day if no event
+        return _phase_daily_tss(d)
+
     sick_week_num = 10
     def sick_week_tss(d):
         week = max(1, math.ceil((d - PLAN_START).days / 7))
         return 0 if week == sick_week_num else _phase_daily_tss(d)
 
     data["ctlProjection"] = {
-        "current_trend": _ctl_project(current_ctl, current_trend_tss, days_to_race),
-        "planned_build":  _ctl_project(current_ctl, _phase_daily_tss, days_to_race),
-        "sick_week":      _ctl_project(current_ctl, sick_week_tss, days_to_race),
+        "current_trend":    _ctl_project(current_ctl, current_trend_tss, days_to_race),
+        "planned_sessions": _ctl_project(current_ctl, planned_sessions_tss, days_to_race),
+        "sick_week":        _ctl_project(current_ctl, sick_week_tss, days_to_race),
         "race_date": RACE_DATE.isoformat(),
         "target_ctl_min": 100,
         "target_ctl_max": 115,
