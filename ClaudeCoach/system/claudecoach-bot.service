@@ -1,0 +1,16 @@
+[Unit]
+Description=ClaudeCoach Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/Users/diamondpeakconsulting/diamondpeak-site
+ExecStart=/usr/bin/python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/bot.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/root/Library/Logs/ClaudeCoach/bot.log
+StandardError=append:/root/Library/Logs/ClaudeCoach/bot.log
+
+[Install]
+WantedBy=multi-user.target

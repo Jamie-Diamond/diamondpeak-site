@@ -31,48 +31,53 @@ Step 1 — get_athlete_profile (today's date), then get_training_history (last 2
 Step 2 — Read ClaudeCoach/session-log.json and note all existing activity_id values.
 
 Step 3 — For the most recent activity that is NOT already in session-log.json:
-  - If sport is Swim or Strength: skip to Step 4 (no stub needed).
-  - Otherwise call get_activity_detail for that activity to get full metrics.
-  - Add a stub entry to session-log.json (prepend to the array, most recent first):
+  - Call get_activity_detail for that activity to get full metrics (all sports).
+  - Add a stub entry to session-log.json (prepend to the array, most recent first).
+
+  For Ride or Run:
     {
-      "activity_id": "<id>",
-      "date": "<YYYY-MM-DD>",
-      "name": "<name>",
-      "sport": "<sport>",
-      "tss": <tss>,
-      "duration_min": <duration>,
-      "distance_km": <distance or null>,
-      "avg_power": <avg_power or null>,
-      "norm_power": <norm_power or null>,
-      "avg_hr": <avg_hr or null>,
-      "rpe": null,
-      "feel": null,
-      "ankle_pain_during": null,
-      "ankle_pain_next_morning": null,
-      "nutrition_g_carb": null,
-      "hydration_ml": null,
-      "notes": null,
-      "logged_at": "<today>",
-      "stub": true
+      "activity_id": "<id>", "date": "<YYYY-MM-DD>", "name": "<name>", "sport": "<sport>",
+      "tss": <tss>, "duration_min": <duration>, "distance_km": <distance or null>,
+      "avg_power": <avg_power or null>, "norm_power": <norm_power or null>, "avg_hr": <avg_hr or null>,
+      "rpe": null, "feel": null,
+      "ankle_pain_during": null, "ankle_pain_next_morning": null,
+      "nutrition_g_carb": null, "hydration_ml": null, "notes": null,
+      "logged_at": "<today>", "stub": true
     }
+
+  For Swim:
+    {
+      "activity_id": "<id>", "date": "<YYYY-MM-DD>", "name": "<name>", "sport": "Swim",
+      "tss": <tss>, "duration_min": <duration>, "distance_km": <distance_m / 1000>,
+      "pace_per_100m": <avg pace in seconds per 100m — distance_m / (duration_s / 100)>,
+      "avg_hr": <avg_hr or null>,
+      "rpe": null, "feel": null, "notes": null, "logged_at": "<today>", "stub": true
+    }
+    Also append to ClaudeCoach/swim-log.json:
+    {"date":"<YYYY-MM-DD>","activity_id":"<id>","name":"<name>","distance_m":<int>,"pace_per_100m":<seconds float>,"duration_min":<int>,"tss":<int or null>}
+    git add ClaudeCoach/swim-log.json in the commit below.
+
+  For WeightTraining / Strength:
+    {
+      "activity_id": "<id>", "date": "<YYYY-MM-DD>", "name": "<name>", "sport": "Strength",
+      "tss": <tss or null>, "duration_min": <duration>,
+      "rpe": null, "feel": null, "notes": null, "logged_at": "<today>", "stub": true
+    }
+
   - Write the updated array back to ClaudeCoach/session-log.json.
-  - Run: git add ClaudeCoach/session-log.json && git commit -m "stub: <name> <date>" && git push origin main
+  - Run: git add ClaudeCoach/session-log.json ClaudeCoach/swim-log.json && git commit -m "stub: <name> <date>" && git push origin main
 
 Step 4 — Respond in EXACTLY this format (no other text):
 ACTIVITY_ID: <id or none>
 ANALYSIS: <coaching message — see rules below>
 
-Jamie: male, 30, FTP 316 W, run threshold 4:02/km, swim CSS 1:39/100m. Ankle in rehab — 9:1 walk-run only.
+Jamie: male, 30, FTP 316 W, run threshold 4:02/km, swim CSS 1:39/100m. Ankle in rehab — 5:30 walk-run only.
 
-Rules for ANALYSIS (3-5 lines, max 400 chars):
-- Line 1: One punchy headline. Lead with what went well or the key number.
-  Ride: "Solid Z2 — NP 211 W (IF 0.67), right on plan."
-  Run: "Good 9:1, 12.5 km — ankle at 2/10, manageable."
-- Line 2 (ride >90 min): aerobic decoupling (Pa:HR ratio — state the %) and IF discipline.
-  Line 2 (run): pace vs threshold context or HR cap adherence.
-  Line 2 (swim): pace vs CSS 1:39/100m target.
-- Line 3: one question. Ride >90 min → "How was nutrition — g carbs/hr and bottles?"
-  Run → "Ankle score during and this morning?"  Short session → "RPE and how did it feel?"
+Rules for ANALYSIS (2-3 lines, max 400 chars):
+- Ride: Line 1 = NP + IF. Line 2 (>90 min) = aerobic decoupling %. Line 3 = "Nutrition — g carbs/hr and bottles?"
+- Run: Line 1 = distance + avg pace. Line 2 = HR cap adherence (cap 150 bpm). Line 3 = "Ankle score during and this morning?"
+- Swim: Line 1 = distance + pace vs CSS 1:39 target (state +/- seconds). Line 2 = "RPE and how did it feel?"
+- Strength: Line 1 = duration. Line 2 = "RPE and what was the main focus?"
 
 For rides > 3 hours: also output a DECOUPLING line (Pa:HR decoupling % from activity detail):
 DECOUPLING: <activity_id>|<date>|<name>|<duration_min>|<intensity_factor>|<decoupling_pct>|<tss>

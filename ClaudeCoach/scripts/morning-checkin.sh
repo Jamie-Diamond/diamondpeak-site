@@ -51,6 +51,9 @@ PROMPT_END
 TOOLS="Read,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_wellness,mcp__claude_ai_icusync__get_events,mcp__claude_ai_icusync__get_fitness"
 
 OUTPUT=$($CLAUDE -p "$PROMPT" --allowedTools "$TOOLS" 2>>"$LOG_DIR/morning-checkin.log")
+trim_log() { local f=$1; tail -n 5000 "$f" > "$f.tmp" 2>/dev/null && mv "$f.tmp" "$f"; }
+trim_log "$LOG_DIR/morning-checkin.log"
+
 if [ -n "$OUTPUT" ]; then
     echo "$OUTPUT" | python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/notify.py
 fi

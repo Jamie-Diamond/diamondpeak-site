@@ -281,6 +281,10 @@ HEAT_LOG    = BASE.parent / "heat-log.json"
 _ANKLE_RE    = re.compile(r'^(ankle|pain|niggle)\s+(\w+[\s\w]*?)\s+(\d+(?:\.\d+)?)\s*$', re.I)
 _WEIGHT_RE   = re.compile(r'^(?:weight|kg|weigh(?:ed)?)\s+([\d.]+)\s*(?:kg)?\s*$', re.I)
 _HEAT_RE     = re.compile(r'^(?:heat|bath)\s+([\d.]+)\s*(?:min|m)?\s*$', re.I)
+_PLAN_RE     = re.compile(r'^(?:generate\s+plan|plan\s+(?:next\s+)?(?:2\s+)?weeks?|plan\s+ahead)\s*$', re.I)
+_FTP_RE      = re.compile(r'^(?:ftp\s+(?:retest|result|update|new)|new\s+ftp)\s+([\d.]+)\s*(?:w(?:atts?)?)?\s*$', re.I)
+
+GENERATE_PLAN_SCRIPT = BASE.parent.parent / "ClaudeCoach/scripts/generate-plan.sh"
 
 def _git_commit(msg):
     try:
@@ -360,6 +364,12 @@ def fast_path(text):
         total = state["heat"]["sessions_cumulative"]
         remaining = max(0, 14 - total)
         return f"Logged heat session {mins} min. {total} done" + (f" — {remaining} still needed to hit 14-session floor." if remaining else " — above minimum, keep banking.")
+
+    if _PLAN_RE.match(text.strip()):
+        return "__GENERATE_PLAN__"
+
+    if _FTP_RE.match(text.strip()):
+        return "__FTP_RETEST__"
 
     return None
 
@@ -457,7 +467,33 @@ def main():
             log(f"In: {text[:80]}")
 
             fast = fast_path(text)
-            if fast:
+            if fast == "__GENERATE_PLAN__":
+                send(token, chat_id, "_Generating plan — this takes a few minutes…_")
+                try:
+                    result = subprocess.run(
+                        ["bash", str(GENERATE_PLAN_SCRIPT)],
+                        capture_output=True, text=True,
+                        cwd=str(PROJECT_DIR), timeout=600,
+                    )
+                    out = (result.stdout or result.stderr or "Done.").strip()
+                    send(token, chat_id, out[:4096], reply_markup=build_keyboard())
+                except Exception as e:
+                    send(token, chat_id, f"Plan generation failed: {e}", reply_markup=build_keyboard())
+                log("Out (fast): plan generated")
+                continue
+            elif fast == "__FTP_RETEST__":
+                typing(token, chat_id)
+                history = load_history()
+                response = call_claude(text, config, history)
+                clean = process_charts(token, chat_id, response)
+                if clean:
+                    clean += f"\n\n— {days_to_race()} days to Cervia"
+                    send(token, chat_id, clean, reply_markup=build_keyboard())
+                log(f"Out (FTP): {clean[:80] if clean else ''}")
+                history.append({"user": text, "assistant": clean})
+                save_history(history)
+                continue
+            elif fast:
                 reply = fast + f"\n\n— {days_to_race()} days to Cervia"
                 send(token, chat_id, reply, reply_markup=build_keyboard())
                 log(f"Out (fast): {fast[:80]}")

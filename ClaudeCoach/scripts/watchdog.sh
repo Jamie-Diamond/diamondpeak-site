@@ -37,6 +37,12 @@ T9 (Tier 2): Decision-point action due within 7 days and not marked done in curr
   - Read /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/reference/decision-points.md for dated items
   - Cross-check against open_actions in current-state.json; fire for any item whose due date <= today+7 and status != "done"
   - Example fire: "FTP retest due 2026-05-31 — not yet done"
+T10 (Tier 2): Run weekly km increase >10% week-on-week
+  - Sum run distance (km) from get_training_history for Mon–today (current week)
+  - Sum run distance for the 7 days prior (last week)
+  - Also cross-check current-state.json ankle.weekly_run_km_this_week vs ankle.weekly_run_km_last_week
+  - Fire if this_week_km > last_week_km * 1.10 AND last_week_km > 0
+  - Fire message: "warning T10: run km +X% week-on-week ([this]km vs [last]km) — 10% cap applies while ankle in rehab"
 
 If NO triggers fire: output nothing. Do not call PushNotification. Silent run.
 
@@ -52,6 +58,8 @@ PROMPT_END
 TOOLS="Read,Write,Edit,Bash,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_wellness,mcp__claude_ai_icusync__get_activity_detail,PushNotification"
 
 OUTPUT=$($CLAUDE -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$LOG_DIR/watchdog.log")
+trim_log() { local f=$1; tail -n 5000 "$f" > "$f.tmp" 2>/dev/null && mv "$f.tmp" "$f"; }
+trim_log "$LOG_DIR/watchdog.log"
 echo "$OUTPUT"
 if [ -n "$OUTPUT" ]; then
     echo "$OUTPUT" | python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/notify.py
