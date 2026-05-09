@@ -2,7 +2,7 @@
 # Morning briefing — runs via VM crontab at 06:00 daily.
 # Pulls live data, sends a personalised card. Never asks for subjective 1-10 inputs.
 
-CLAUDE=$(command -v claude || echo "/usr/bin/claude")
+CLAUDE=$(command -v claude 2>/dev/null); [ -x "$CLAUDE" ] || CLAUDE="/usr/bin/claude"
 LOG_DIR="$HOME/Library/Logs/ClaudeCoach"
 mkdir -p "$LOG_DIR"
 

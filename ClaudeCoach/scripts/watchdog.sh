@@ -2,7 +2,7 @@
 # Daily watchdog — fires PushNotification only if a trigger trips.
 # Runs via VM crontab at 05:30 daily. Safe to run manually: bash watchdog.sh
 
-CLAUDE=$(command -v claude || echo "/usr/bin/claude")
+CLAUDE=$(command -v claude 2>/dev/null); [ -x "$CLAUDE" ] || CLAUDE="/usr/bin/claude"
 LOG_DIR="$HOME/Library/Logs/ClaudeCoach"
 mkdir -p "$LOG_DIR"
 

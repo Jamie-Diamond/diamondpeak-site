@@ -3,7 +3,7 @@
 # Pre-prepares the week summary card before Monday's check-in.
 # Safe to run manually: bash weekly-summary.sh
 
-CLAUDE=$(command -v claude || echo "/usr/bin/claude")
+CLAUDE=$(command -v claude 2>/dev/null); [ -x "$CLAUDE" ] || CLAUDE="/usr/bin/claude"
 LOG_DIR="$HOME/Library/Logs/ClaudeCoach"
 mkdir -p "$LOG_DIR"
 

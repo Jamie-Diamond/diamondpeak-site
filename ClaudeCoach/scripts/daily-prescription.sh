@@ -2,7 +2,7 @@
 # Daily session prescription — runs via VM crontab at 05:00 daily.
 # Safe to run manually: bash daily-prescription.sh
 
-CLAUDE=$(command -v claude || echo "/usr/bin/claude")
+CLAUDE=$(command -v claude 2>/dev/null); [ -x "$CLAUDE" ] || CLAUDE="/usr/bin/claude"
 LOG_DIR="$HOME/Library/Logs/ClaudeCoach"
 mkdir -p "$LOG_DIR"
 
