@@ -267,8 +267,14 @@
 
   <!-- TRAINING LOAD -->
   <div class="panel" style="margin-bottom:14px">
-    <h2>Training load — today ±7 days</h2>
-    <div class="small" style="margin-bottom:10px">TSS stacked by sport · faded bars = planned · TSB form line (right axis) · updated daily at 06:00</div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+      <h2 style="margin:0">Training load — today ±7 days</h2>
+      <div style="display:flex;gap:6px">
+        <button id="load-btn-tss" onclick="setLoadMode('tss')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#1d6840;color:#fff;cursor:pointer">TSS</button>
+        <button id="load-btn-dur" onclick="setLoadMode('dur')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Duration</button>
+      </div>
+    </div>
+    <div class="small" id="load-chart-sub" style="margin-bottom:10px">TSS stacked by sport · faded bars = planned · TSB form line (right axis) · updated daily at 06:00</div>
     <div class="chart-wrap"><canvas id="chartLoad"></canvas></div>
     <div class="legend" style="margin-top:10px">
       <span><span class="swatch" style="background:#1d6840;opacity:.87"></span>Ride</span>
@@ -1249,8 +1255,25 @@ function renderLiveCalendar(events) {
   });
 })();
 
+let _loadChartDays = [];
+let _loadMode = "tss";
+
+function setLoadMode(mode) {
+  _loadMode = mode;
+  document.getElementById("load-btn-tss").style.background = mode === "tss" ? "#1d6840" : "#f8f5ef";
+  document.getElementById("load-btn-tss").style.color      = mode === "tss" ? "#fff"    : "#4a4535";
+  document.getElementById("load-btn-dur").style.background = mode === "dur" ? "#1d6840" : "#f8f5ef";
+  document.getElementById("load-btn-dur").style.color      = mode === "dur" ? "#fff"    : "#4a4535";
+  const sub = document.getElementById("load-chart-sub");
+  if (sub) sub.textContent = mode === "tss"
+    ? "TSS stacked by sport · faded bars = planned · TSB form line (right axis) · updated daily at 06:00"
+    : "Duration (min) stacked by sport · faded bars = planned · TSB form line (right axis)";
+  renderLoadChart(_loadChartDays);
+}
+
 function renderLoadChart(days) {
   if (!window.chartLoad || !days || !days.length) return;
+  _loadChartDays = days;
 
   const SPORTS = ["Ride", "Run", "Swim", "Strength"];
   const BASE   = { Ride:[29,104,64], Run:[192,57,43], Swim:[26,82,118], Strength:[127,140,141] };
@@ -1264,30 +1287,31 @@ function renderLoadChart(days) {
     return "Other";
   }
 
+  const useDur   = _loadMode === "dur";
   const labels   = days.map(d => d.date.slice(5));
   const todayStr = new Date().toISOString().slice(5, 10);
   const datasets = [];
 
   SPORTS.forEach(sport => {
     const [r, g, b] = BASE[sport];
-    const tssVals = [], bgVals = [];
+    const vals = [], bgVals = [];
     let hasData = false;
     days.forEach(d => {
-      let sportTSS = 0, isPlanned = false;
+      let val = 0, isPlanned = false;
       (d.activities || []).forEach(a => {
         if (normSport(a.sport) === sport) {
-          sportTSS += (a.tss || 0);
+          val += useDur ? (a.dur || 0) : (a.tss || 0);
           if (a.status === "planned") isPlanned = true;
         }
       });
-      tssVals.push(Math.round(sportTSS));
-      if (sportTSS > 0) hasData = true;
-      const alpha = sportTSS > 0 ? (isPlanned ? 0.25 : 0.87) : 0;
+      vals.push(Math.round(val));
+      if (val > 0) hasData = true;
+      const alpha = val > 0 ? (isPlanned ? 0.25 : 0.87) : 0;
       bgVals.push(`rgba(${r},${g},${b},${alpha})`);
     });
     if (!hasData) return;
-    datasets.push({ type:"bar", label:sport, data:tssVals, backgroundColor:bgVals,
-                    stack:"tss", yAxisID:"y", order:2 });
+    datasets.push({ type:"bar", label:sport, data:vals, backgroundColor:bgVals,
+                    stack:"load", yAxisID:"y", order:2 });
   });
 
   const tsbVals = days.map(d => d.tsb != null ? Math.round(d.tsb * 10) / 10 : null);
@@ -1304,8 +1328,6 @@ function renderLoadChart(days) {
     fill:false, tension:0.3,
     yAxisID:"y1", order:1, spanGaps:true,
   });
-
-  // TSB zero reference line
   datasets.push({
     type:"line", label:"_zero", data:days.map(()=>0),
     borderColor:"rgba(100,100,100,0.25)", backgroundColor:"transparent",
@@ -1313,9 +1335,8 @@ function renderLoadChart(days) {
     fill:false, yAxisID:"y1", order:3,
   });
 
-  // Today marker — highlight today's x tick
   const todayIdx = labels.indexOf(todayStr);
-
+  window.chartLoad.options.scales.y.title = { display:true, text: useDur ? "Minutes" : "TSS", font:{size:10}, color:"#666" };
   window.chartLoad.data.labels   = labels;
   window.chartLoad.data.datasets = datasets;
   window.chartLoad.options.plugins.legend = {
