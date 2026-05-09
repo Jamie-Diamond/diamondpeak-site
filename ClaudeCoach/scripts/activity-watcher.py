@@ -42,7 +42,7 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
       "rpe": null, "feel": null,
       "ankle_pain_during": null, "ankle_pain_next_morning": null,
       "nutrition_g_carb": null, "hydration_ml": null, "notes": null,
-      "logged_at": "<today>", "stub": true
+      "logged_at": "<current datetime as YYYY-MM-DDTHH:MM:SS>", "stub": true
     }
 
   For Swim:
@@ -51,7 +51,7 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
       "tss": <tss>, "duration_min": <duration>, "distance_km": <distance_m / 1000>,
       "pace_per_100m": <avg pace in seconds per 100m — distance_m / (duration_s / 100)>,
       "avg_hr": <avg_hr or null>,
-      "rpe": null, "feel": null, "notes": null, "logged_at": "<today>", "stub": true
+      "rpe": null, "feel": null, "notes": null, "logged_at": "<current datetime as YYYY-MM-DDTHH:MM:SS>", "stub": true
     }
     Also append to ClaudeCoach/swim-log.json:
     {"date":"<YYYY-MM-DD>","activity_id":"<id>","name":"<name>","distance_m":<int>,"pace_per_100m":<seconds float>,"duration_min":<int>,"tss":<int or null>}
@@ -61,7 +61,7 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
     {
       "activity_id": "<id>", "date": "<YYYY-MM-DD>", "name": "<name>", "sport": "Strength",
       "tss": <tss or null>, "duration_min": <duration>,
-      "rpe": null, "feel": null, "notes": null, "logged_at": "<today>", "stub": true
+      "rpe": null, "feel": null, "notes": null, "logged_at": "<current datetime as YYYY-MM-DDTHH:MM:SS>", "stub": true
     }
 
   - Write the updated array back to ClaudeCoach/session-log.json.

@@ -1607,7 +1607,8 @@ function renderLiveConstraints(cs) {
   actions.forEach(a => {
     const done = (a.status || "").toLowerCase() === "done";
     const due = a.due || "";
-    const overdue = !done && due && due < new Date().toISOString().slice(0,10);
+    const _todayLocal=(()=>{const d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1).toString().padStart(2,"0")+"-"+d.getDate().toString().padStart(2,"0");})();
+    const overdue = !done && due && due < _todayLocal;
     const pill = done ? 'style="background:#d6eeda;color:#1d6840;padding:1px 7px;border-radius:10px;font-size:11px"'
                      : overdue ? 'style="background:#fde8e6;color:#c0392b;padding:1px 7px;border-radius:10px;font-size:11px"'
                      : 'style="background:#f0efe8;color:#4a4535;padding:1px 7px;border-radius:10px;font-size:11px"';
