@@ -12,12 +12,12 @@
 
 ---
 
-## Last updated: 2026-05-08
+## Last updated: 2026-05-09
 
 ## Ankle (high ankle sprain, onset ~1 March 2026)
 
 - Current pain 1–10 (during run): 2 (Thu 7 May — 13 km 9:1 run)
-- Current pain 1–10 (next morning): 0 (Fri 8 May)
+- Current pain 1–10 (next morning): 0 (Fri 8 May); 0 (Sat 9 May)
 - This week's run km: 12.52 (Thu 7 May — 9:1 walk-run, 64 min)
 - Last week's run km: 10.59 (Wed 29 Apr — ankle-managed)
 - 4 consecutive pain-free weeks reached: no — 2/10 during Thu run, still in rehab protocol
