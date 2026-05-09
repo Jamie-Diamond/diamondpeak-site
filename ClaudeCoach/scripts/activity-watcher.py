@@ -137,6 +137,19 @@ def main():
         if activity_id == str(state.get("last_id")):
             return  # already processed
 
+        # Belt-and-braces dedupe: ignore the LLM's claim and re-check session-log.json
+        # directly. If the activity_id is already present, pin state to it and bail
+        # without notifying — covers cases where the previous run committed the stub
+        # but crashed/timed out before save_state().
+        if SESSION_LOG.exists():
+            try:
+                log = json.loads(SESSION_LOG.read_text())
+                if any(str(e.get("activity_id")) == activity_id for e in log):
+                    save_state({"last_id": activity_id})
+                    return
+            except (json.JSONDecodeError, OSError):
+                pass
+
         save_state({"last_id": activity_id})
 
         analysis = "\n".join(analysis_lines).strip()
