@@ -1,12 +1,12 @@
 {
-  "generated": "2026-05-08",
+  "generated": "2026-05-09",
   "kpi": {
-    "ctl": 78.6,
-    "atl": 94.7,
-    "tsb": -16.1,
-    "ramp7d": 3.8,
-    "hrv": 43,
-    "rhr": 50
+    "ctl": 80.4,
+    "atl": 102.5,
+    "tsb": -22.1,
+    "ramp7d": 5.0,
+    "hrv": 40,
+    "rhr": 54
   },
   "fitnessThis": [
     ["2026-01-01", 88.4],
@@ -136,16 +136,29 @@
     ["2026-05-05", 76.7],
     ["2026-05-06", 76.6],
     ["2026-05-07", 76.4],
-    ["2026-05-08", 78.6]
+    ["2026-05-08", 78.6],
+    ["2026-05-09", 80.4]
   ],
   "recent": [
+    {
+      "date": "2026-05-09",
+      "sport": "Ride",
+      "name": "Social ride 85k + 3 hill reps",
+      "dur": 195,
+      "dist": 88.57,
+      "pace": "27.3 kph",
+      "hr": 128,
+      "powAvg": 163,
+      "powNp": 217,
+      "tss": 153
+    },
     {
       "date": "2026-05-08",
       "sport": "Ride",
       "name": "All the traffic",
       "dur": 170,
       "dist": 88.12,
-      "pace": "31.3 kph",
+      "pace": "31.1 kph",
       "hr": 133,
       "powAvg": 183,
       "powNp": 211,
@@ -157,7 +170,7 @@
       "name": "Trying to keep up with KH",
       "dur": 29,
       "dist": 1.72,
-      "pace": "1:42/100m",
+      "pace": "1:41/100m",
       "hr": 125,
       "powAvg": null,
       "powNp": null,
@@ -169,7 +182,7 @@
       "name": "9:1",
       "dur": 64,
       "dist": 12.52,
-      "pace": "5:06/km",
+      "pace": "5:07/km",
       "hr": 143,
       "powAvg": null,
       "powNp": null,
@@ -193,7 +206,7 @@
       "name": "Wandsworth Road Cycling",
       "dur": 246,
       "dist": 129.98,
-      "pace": "31.6 kph",
+      "pace": "31.7 kph",
       "hr": 133,
       "powAvg": 189,
       "powNp": 214,
@@ -205,7 +218,7 @@
       "name": "Fareham Road Cycling",
       "dur": 104,
       "dist": 52.72,
-      "pace": "30.5 kph",
+      "pace": "30.4 kph",
       "hr": 141,
       "powAvg": 201,
       "powNp": 237,
@@ -217,7 +230,7 @@
       "name": "Mid ride — 2 hr Z2 + sweet spot block",
       "dur": 130,
       "dist": 58.45,
-      "pace": "27.1 kph",
+      "pace": "27.0 kph",
       "hr": 127,
       "powAvg": 152,
       "powNp": 215,
@@ -229,7 +242,7 @@
       "name": "Long ride — 3 hr Z2",
       "dur": 120,
       "dist": 66.98,
-      "pace": "33.6 kph",
+      "pace": "33.5 kph",
       "hr": 147,
       "powAvg": 211,
       "powNp": 242,
@@ -253,7 +266,7 @@
       "name": "Coventry - 10k run-walk (ankle-managed)",
       "dur": 53,
       "dist": 10.59,
-      "pace": "5:02/km",
+      "pace": "5:00/km",
       "hr": 143,
       "powAvg": null,
       "powNp": null,
@@ -265,7 +278,7 @@
       "name": "Swim — aerobic + technique (55 min)",
       "dur": 39,
       "dist": 2.20,
-      "pace": "1:47/100m",
+      "pace": "1:46/100m",
       "hr": 123,
       "powAvg": null,
       "powNp": null,
@@ -277,7 +290,7 @@
       "name": "Wandsworth Cycling",
       "dur": 8,
       "dist": 3.27,
-      "pace": "16.4 kph",
+      "pace": "24.5 kph",
       "hr": 125,
       "powAvg": 133,
       "powNp": 245,
@@ -289,7 +302,7 @@
       "name": "Wandsworth Road Cycling",
       "dur": 90,
       "dist": 41.91,
-      "pace": "28.1 kph",
+      "pace": "27.9 kph",
       "hr": 134,
       "powAvg": 205,
       "powNp": 247,
@@ -301,35 +314,11 @@
       "name": "T-147",
       "dur": 237,
       "dist": 129.94,
-      "pace": "33.0 kph",
+      "pace": "32.9 kph",
       "hr": 136,
       "powAvg": 202,
       "powNp": 227,
       "tss": 204
-    },
-    {
-      "date": "2026-04-24",
-      "sport": "GravelRide",
-      "name": "Wandsworth Gravel/Unpaved Cycling",
-      "dur": 98,
-      "dist": 43.31,
-      "pace": "26.5 kph",
-      "hr": 144,
-      "powAvg": 206,
-      "powNp": 236,
-      "tss": 91
-    },
-    {
-      "date": "2026-04-24",
-      "sport": "Run",
-      "name": "Wandsworth Running",
-      "dur": 31,
-      "dist": 6.30,
-      "pace": "4:54/km",
-      "hr": 142,
-      "powAvg": null,
-      "powNp": null,
-      "tss": 34
     }
   ],
   "powerCurve": [
@@ -339,13 +328,287 @@
     {"t": 60, "label": "1m", "w": 550, "wPrev": null},
     {"t": 120, "label": "2m", "w": 445, "wPrev": null},
     {"t": 300, "label": "5m", "w": 363, "wPrev": null},
-    {"t": 600, "label": "10m", "w": 296, "wPrev": null},
+    {"t": 600, "label": "10m", "w": 300, "wPrev": null},
     {"t": 1200, "label": "20m", "w": 283, "wPrev": null},
     {"t": 1800, "label": "30m", "w": 270, "wPrev": null},
     {"t": 3600, "label": "60m", "w": 242, "wPrev": null},
     {"t": 5400, "label": "90m", "w": 222, "wPrev": null},
     {"t": 7200, "label": "2h", "w": 221, "wPrev": null}
   ],
-  "weekCalendar": [],
-  "loadChart": []
+  "weekCalendar": [
+    {
+      "date": "2026-05-03",
+      "sport": "Ride",
+      "name": "Fareham Road Cycling",
+      "tss": 97,
+      "duration_min": 104,
+      "status": "completed",
+      "key": false,
+      "detail": "NP 237W · HR 141 · 52.72km"
+    },
+    {
+      "date": "2026-05-04",
+      "sport": "Ride",
+      "name": "Wandsworth Road Cycling",
+      "tss": 188,
+      "duration_min": 246,
+      "status": "completed",
+      "key": false,
+      "detail": "NP 214W · HR 133 · 129.98km"
+    },
+    {
+      "date": "2026-05-06",
+      "sport": "Swim",
+      "name": "Pool Swim",
+      "tss": 74,
+      "duration_min": 49,
+      "status": "completed",
+      "key": false,
+      "detail": "1:43/100m · 2850m"
+    },
+    {
+      "date": "2026-05-07",
+      "sport": "Run",
+      "name": "9:1",
+      "tss": 67,
+      "duration_min": 64,
+      "status": "completed",
+      "key": false,
+      "detail": "5:07/km · 12.52km"
+    },
+    {
+      "date": "2026-05-08",
+      "sport": "Swim",
+      "name": "Trying to keep up with KH",
+      "tss": 45,
+      "duration_min": 29,
+      "status": "completed",
+      "key": false,
+      "detail": "1:41/100m · 1720m"
+    },
+    {
+      "date": "2026-05-08",
+      "sport": "Ride",
+      "name": "All the traffic",
+      "tss": 126,
+      "duration_min": 170,
+      "status": "completed",
+      "key": false,
+      "detail": "NP 211W · HR 133 · 88.12km"
+    },
+    {
+      "date": "2026-05-09",
+      "sport": "Ride",
+      "name": "Social ride 85k + 3 hill reps",
+      "tss": 153,
+      "duration_min": 195,
+      "status": "completed",
+      "key": false,
+      "detail": "NP 217W · HR 128 · 88.57km"
+    },
+    {
+      "date": "2026-05-10",
+      "sport": "Ride",
+      "name": "Z2 ride — 2 hr (pre-brick)",
+      "tss": 77,
+      "duration_min": 120,
+      "status": "planned",
+      "key": false,
+      "detail": ""
+    },
+    {
+      "date": "2026-05-10",
+      "sport": "Run",
+      "name": "Brick run — 8-10 km off bike (9/1)",
+      "tss": 56,
+      "duration_min": 70,
+      "status": "planned",
+      "key": false,
+      "detail": ""
+    },
+    {
+      "date": "2026-05-11",
+      "sport": "Other",
+      "name": "Rest day",
+      "tss": null,
+      "duration_min": null,
+      "status": "planned",
+      "key": false,
+      "detail": "Full rest. Mobility / stretch only. Front-loaded week — wedding Sat means Mon-Fri carries the load."
+    },
+    {
+      "date": "2026-05-12",
+      "sport": "Swim",
+      "name": "Swim — CSS sets (<60 min)",
+      "tss": 45,
+      "duration_min": 51,
+      "status": "planned",
+      "key": false,
+      "detail": ""
+    },
+    {
+      "date": "2026-05-12",
+      "sport": "Run",
+      "name": "Easy run 5k — 9/1",
+      "tss": 40,
+      "duration_min": 50,
+      "status": "planned",
+      "key": false,
+      "detail": ""
+    },
+    {
+      "date": "2026-05-13",
+      "sport": "Run",
+      "name": "Long easy run 10-12k — 9/1",
+      "tss": 56,
+      "duration_min": 70,
+      "status": "planned",
+      "key": false,
+      "detail": ""
+    },
+    {
+      "date": "2026-05-14",
+      "sport": "Swim",
+      "name": "Swim — technique/aerobic (<60 min)",
+      "tss": 38,
+      "duration_min": 50,
+      "status": "planned",
+      "key": false,
+      "detail": ""
+    },
+    {
+      "date": "2026-05-15",
+      "sport": "Ride",
+      "name": "Long ride 4 hr / 130k — outdoor (heat acc day 1)",
+      "tss": 163,
+      "duration_min": 240,
+      "status": "planned",
+      "key": false,
+      "detail": ""
+    },
+    {
+      "date": "2026-05-16",
+      "sport": "Other",
+      "name": "Wedding — TBC",
+      "tss": null,
+      "duration_min": null,
+      "status": "planned",
+      "key": false,
+      "detail": "Wedding day. Default: full rest or 30-40 min easy jog only if mornings allow. Confirm Friday."
+    },
+    {
+      "date": "2026-05-17",
+      "sport": "Other",
+      "name": "TBC — review Fri",
+      "tss": null,
+      "duration_min": null,
+      "status": "planned",
+      "key": false,
+      "detail": "Shape decided after Fri long ride + Sat wedding state. Likely options: easy 60-90 min spin OR rest. Won't add load to a front-loaded week."
+    }
+  ],
+  "loadChart": [
+    {
+      "date": "2026-05-02",
+      "tsb": -10.3,
+      "activities": [
+        {"sport": "Ride", "tss": 100, "dur": 130, "status": "completed"}
+      ]
+    },
+    {
+      "date": "2026-05-03",
+      "tsb": -11.3,
+      "activities": [
+        {"sport": "Ride", "tss": 97, "dur": 104, "status": "completed"}
+      ]
+    },
+    {
+      "date": "2026-05-04",
+      "tsb": -22.1,
+      "activities": [
+        {"sport": "Ride", "tss": 188, "dur": 246, "status": "completed"}
+      ]
+    },
+    {
+      "date": "2026-05-05",
+      "tsb": -10.5,
+      "activities": []
+    },
+    {
+      "date": "2026-05-06",
+      "tsb": -8.8,
+      "activities": [
+        {"sport": "Swim", "tss": 74, "dur": 49, "status": "completed"}
+      ]
+    },
+    {
+      "date": "2026-05-07",
+      "tsb": -6.6,
+      "activities": [
+        {"sport": "Run", "tss": 67, "dur": 64, "status": "completed"}
+      ]
+    },
+    {
+      "date": "2026-05-08",
+      "tsb": -16.1,
+      "activities": [
+        {"sport": "Swim", "tss": 45, "dur": 29, "status": "completed"},
+        {"sport": "Ride", "tss": 126, "dur": 170, "status": "completed"}
+      ]
+    },
+    {
+      "date": "2026-05-09",
+      "tsb": -22.1,
+      "activities": [
+        {"sport": "Ride", "tss": 153, "dur": 195, "status": "completed"}
+      ]
+    },
+    {
+      "date": "2026-05-10",
+      "tsb": -24.9,
+      "activities": [
+        {"sport": "Ride", "tss": 77, "dur": 120, "status": "planned"},
+        {"sport": "Run", "tss": 56, "dur": 70, "status": "planned"}
+      ]
+    },
+    {
+      "date": "2026-05-11",
+      "tsb": -12.7,
+      "activities": []
+    },
+    {
+      "date": "2026-05-12",
+      "tsb": -11.6,
+      "activities": [
+        {"sport": "Swim", "tss": 45, "dur": 51, "status": "planned"},
+        {"sport": "Run", "tss": 40, "dur": 50, "status": "planned"}
+      ]
+    },
+    {
+      "date": "2026-05-13",
+      "tsb": -7.4,
+      "activities": [
+        {"sport": "Run", "tss": 56, "dur": 70, "status": "planned"}
+      ]
+    },
+    {
+      "date": "2026-05-14",
+      "tsb": -1.9,
+      "activities": [
+        {"sport": "Swim", "tss": 38, "dur": 50, "status": "planned"}
+      ]
+    },
+    {
+      "date": "2026-05-15",
+      "tsb": -10.9,
+      "activities": [
+        {"sport": "Ride", "tss": 163, "dur": 240, "status": "planned"}
+      ]
+    },
+    {
+      "date": "2026-05-16",
+      "tsb": -0.7,
+      "activities": []
+    }
+  ]
 }
