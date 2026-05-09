@@ -1645,13 +1645,25 @@ function zoomFitness(days) {
   const sc = window.chartFitness.options.scales.x;
   if (days === 0) {
     sc.min = "2026-01-01";
-    sc.max = "2026-09-21";
+    sc.max = "2026-09-25";
+    sc.time.unit = "month";
+    sc.time.displayFormats = { month: "MMM" };
+  } else if (days <= 30) {
+    const now = new Date();
+    const from = new Date(now); from.setDate(from.getDate() - days);
+    const to   = new Date(now); to.setDate(to.getDate() + 14);
+    sc.min = from.toISOString().slice(0,10);
+    sc.max = to.toISOString().slice(0,10);
+    sc.time.unit = "day";
+    sc.time.displayFormats = { day: "d MMM" };
   } else {
     const now = new Date();
     const from = new Date(now); from.setDate(from.getDate() - days);
-    const to   = new Date(now); to.setDate(to.getDate() + Math.round(days * 0.5));
+    const to   = new Date(now); to.setDate(to.getDate() + 30);
     sc.min = from.toISOString().slice(0,10);
     sc.max = to.toISOString().slice(0,10);
+    sc.time.unit = "week";
+    sc.time.displayFormats = { week: "d MMM" };
   }
   window.chartFitness.update();
 }
