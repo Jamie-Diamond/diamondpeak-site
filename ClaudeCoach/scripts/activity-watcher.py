@@ -141,6 +141,7 @@ def main():
             except (json.JSONDecodeError, OSError):
                 pass
 
+        t_start = time.time()
         try:
             result = subprocess.run(
                 [CLAUDE, "-p", PROMPT, "--allowedTools", TOOLS],
@@ -148,19 +149,35 @@ def main():
                 cwd=PROJECT_DIR, timeout=120,
             )
         except subprocess.TimeoutExpired:
-            _notify_plain("Activity watcher timed out (>2 min). Claude didn't respond. Check VM logs or run activity-watcher.py manually.")
+            _notify_plain(
+                f"Activity watcher timed out after 120s. "
+                f"Possible causes: IcuSync slow, Intervals.icu API down, or Claude API issue. "
+                f"Last known activity: {state.get('last_id', 'unknown')}. "
+                f"Run manually: python3 ClaudeCoach/scripts/activity-watcher.py"
+            )
             return
         except Exception as exc:
-            _notify_plain(f"Activity watcher error: {exc}. Claude subprocess failed to start.")
+            _notify_plain(
+                f"Activity watcher failed to launch Claude: {exc}. "
+                f"Check that /usr/bin/claude exists and is executable on the VM."
+            )
             return
 
+        elapsed = int(time.time() - t_start)
         if result.returncode != 0:
-            stderr_snippet = (result.stderr or "")[:200].strip()
-            _notify_plain(f"Activity watcher: Claude exited with error {result.returncode}. {stderr_snippet}")
+            stderr_snippet = (result.stderr or "").strip()[:300]
+            _notify_plain(
+                f"Activity watcher: Claude exited with code {result.returncode} after {elapsed}s. "
+                f"Stderr: {stderr_snippet or '(empty)'}"
+            )
             return
 
         output = result.stdout.strip()
         if not output:
+            _notify_plain(
+                f"Activity watcher: Claude ran for {elapsed}s but returned no output. "
+                f"May be an auth issue or IcuSync connection problem. Last ID: {state.get('last_id', 'unknown')}."
+            )
             return
 
         activity_id = None
