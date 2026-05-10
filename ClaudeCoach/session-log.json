@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i146900219",
+    "date": "2026-05-10",
+    "name": "Z2 ride — 2 hr (pre-brick)",
+    "sport": "Ride",
+    "tss": 86,
+    "duration_min": 106,
+    "distance_km": 55.02,
+    "avg_power": 200,
+    "norm_power": 220,
+    "avg_hr": 132,
+    "rpe": null,
+    "feel": null,
+    "ankle_pain_during": null,
+    "ankle_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-10",
+    "stub": true
+  },
+  {
     "activity_id": "i146380367",
     "date": "2026-05-08",
     "name": "Trying to keep up with KH",
