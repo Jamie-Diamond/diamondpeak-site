@@ -4,11 +4,12 @@ Poll Telegram for feedback replies and update session-log.json stubs.
 Runs every 1 min via cron.
 
 Flow:
-  1. getUpdates — fetch new messages since last seen update_id
-  2. Immediately send a Python-only ack ("Got it — parsing...")
-  3. Claude parses the reply into structured fields (90s timeout)
-  4. On success: Python writes to session-log.json, commits, sends confirmation
-  5. On Claude failure/timeout: Python sends a diagnostic error — no Claude in error path
+  1. getUpdates -- fetch new messages since last seen update_id
+  2. Immediately send a Python-only ack ("On it...")
+  3. If no stub waiting: send friendly "nothing to log" message
+  4. Claude parses the reply into structured fields (90s timeout)
+  5. On success: Python writes to session-log.json, commits, sends confirmation
+  6. On Claude failure/timeout: Python sends a diagnostic error -- no Claude in error path
 """
 import json, re, ssl, subprocess, sys, time, urllib.request, urllib.parse
 from datetime import datetime
@@ -20,7 +21,7 @@ STATE_FILE      = BASE / "telegram-feedback-state.json"
 NOTIFY          = BASE / "telegram/notify.py"
 PROJECT_DIR     = str(BASE.parent)
 CLAUDE          = "/usr/bin/claude"
-CLAUDE_TIMEOUT  = 90   # seconds — must respond before Python sends the error fallback
+CLAUDE_TIMEOUT  = 90   # seconds -- must respond before Python sends the error fallback
 
 _cfg    = json.loads((BASE / "telegram/config.json").read_text())
 TOKEN   = _cfg["bot_token"]
@@ -36,7 +37,7 @@ Session name: {name}
 
 Reply text: {reply!r}
 
-Extract ONLY what is clearly stated — do not infer or default anything not mentioned.
+Extract ONLY what is clearly stated -- do not infer or default anything not mentioned.
 Output a JSON object with these fields (omit a field entirely if not mentioned):
   "rpe": integer 1-10
   "feel": string (qualitative description in athlete's own words)
@@ -49,7 +50,7 @@ Output a JSON object with these fields (omit a field entirely if not mentioned):
 Output ONLY the JSON object. No other text."""
 
 
-# ── Telegram API ──────────────────────────────────────────────────────────────
+# Telegram API
 
 def _api(method, **params):
     url  = f"https://api.telegram.org/bot{TOKEN}/{method}"
@@ -60,14 +61,14 @@ def _api(method, **params):
 
 
 def _send(msg: str):
-    """Send a plain-text Telegram message — pure Python, no Claude."""
+    """Send a plain-text Telegram message -- pure Python, no Claude."""
     try:
         _api("sendMessage", chat_id=CHAT_ID, text=msg, parse_mode="Markdown")
-    except Exception as exc:
+    except Exception:
         pass  # if Telegram itself is down there's nothing to do
 
 
-# ── State ─────────────────────────────────────────────────────────────────────
+# State
 
 def load_state() -> dict:
     if STATE_FILE.exists():
@@ -82,7 +83,7 @@ def save_state(state: dict):
     STATE_FILE.write_text(json.dumps(state))
 
 
-# ── Telegram polling ──────────────────────────────────────────────────────────
+# Telegram polling
 
 def get_updates(offset: int) -> list:
     try:
@@ -92,7 +93,7 @@ def get_updates(offset: int) -> list:
         return []
 
 
-# ── Session log ───────────────────────────────────────────────────────────────
+# Session log
 
 def find_unfilled_stub():
     """Return (index, entry) for the most recent stub with rpe=null, or (None, None)."""
@@ -108,7 +109,7 @@ def find_unfilled_stub():
     return None, None
 
 
-# ── Claude parse (with timeout) ───────────────────────────────────────────────
+# Claude parse (with timeout)
 
 def parse_feedback(reply_text: str, stub: dict) -> tuple[dict, str | None]:
     """
@@ -131,11 +132,11 @@ def parse_feedback(reply_text: str, stub: dict) -> tuple[dict, str | None]:
     except subprocess.TimeoutExpired:
         elapsed = int(time.time() - t_start)
         return {}, (
-            f"Parsing timed out after {elapsed}s — Claude may be overloaded or the API is down. "
+            f"Parsing timed out after {elapsed}s -- Claude may be overloaded or the API is down. "
             f"Your message has been saved as a note. Try again in a minute."
         )
     except FileNotFoundError:
-        return {}, "Claude not found at /usr/bin/claude — check VM setup."
+        return {}, "Claude not found at /usr/bin/claude -- check VM setup."
     except Exception as exc:
         return {}, f"Unexpected error launching Claude: {exc}"
 
@@ -160,7 +161,7 @@ def parse_feedback(reply_text: str, stub: dict) -> tuple[dict, str | None]:
         return {}, f"JSON parse error: {exc}. Raw reply saved as a note."
 
 
-# ── Apply and commit ──────────────────────────────────────────────────────────
+# Apply and commit
 
 def apply_feedback(entries: list, idx: int, parsed: dict, raw_text: str) -> dict:
     stub = entries[idx]
@@ -205,10 +206,10 @@ def confirmation_msg(stub: dict, parsed: dict) -> str:
         lines.append(f"Nutrition: {parsed['nutrition_g_carb']}g carbs")
     if parsed.get("notes"):
         lines.append("Notes saved")
-    return " — ".join(lines)
+    return " -- ".join(lines)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# Main
 
 def main():
     state  = load_state()
@@ -234,25 +235,26 @@ def main():
         if not text or text.startswith("/"):
             continue
 
+        # Step 1: immediate Python-only ack for ANY message
+        _send("On it...")
+
         idx, stub = find_unfilled_stub()
         if stub is None:
-            continue  # no stub waiting — ignore message
+            _send("No session waiting for feedback right now. I'll ask after your next activity.")
+            continue
 
-        # ── Step 1: immediate Python-only ack (fires within the poll window) ──
+        # Step 2: Claude parse (90s timeout)
         sport = stub.get("sport", "session")
         name  = stub.get("name", "")
-        _send(f"Got it — logging your {sport.lower()} feedback for _{name}_...")
-
-        # ── Step 2: Claude parse (90s timeout) ───────────────────────────────
         parsed, error = parse_feedback(text, stub)
 
-        # ── Step 3a: Claude failed — Python-only diagnostic reply ─────────────
+        # Step 3a: Claude failed -- Python-only diagnostic reply
         if error:
             _send(f"Couldn't auto-parse: {error}")
             # Fall back: store raw text as note so nothing is lost
             parsed = {"notes": text.strip()}
 
-        # ── Step 3b: Write, commit, confirm ──────────────────────────────────
+        # Step 3b: Write, commit, confirm
         try:
             entries = json.loads(SESSION_LOG.read_text())
             updated = apply_feedback(entries, idx, parsed, text)
