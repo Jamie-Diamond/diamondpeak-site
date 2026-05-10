@@ -40,15 +40,15 @@
     {"action": "Tested run-fuelling protocol in heat", "due": "2026-09-01", "status": "pending"},
     {"action": "Confirm Dorney Olympic tri entry (C- race 6 Jun)", "due": "2026-05-25", "status": "TBC"},
     {"action": "Replan 18-22 May as run+swim only (travel)", "due": "2026-05-17", "status": "pending"},
-    {"action": "Build Marseille camp plan (24-30 May)", "due": "2026-05-22", "status": "pending"}
+    {"action": "Marseille 24-30 May: ad-hoc only, nothing long — play by ear", "due": "rolling", "status": "noted"}
   ],
   "travel_blocks": [
     {"start": "2026-05-18", "end": "2026-05-22", "location": "UK travel (work)", "training": "run+swim only", "notes": "no bike for 5 days"},
     {"start": "2026-05-23", "end": "2026-05-23", "location": "travel to Marseille", "training": "rest", "notes": "flight day"},
-    {"start": "2026-05-24", "end": "2026-05-30", "location": "Marseille", "training": "bike+run+swim+heat", "notes": "training camp #1 — first big build window"},
+    {"start": "2026-05-24", "end": "2026-05-30", "location": "Marseille (work/personal, not a camp)", "training": "ad-hoc bike+run+swim, nothing long", "notes": "play by ear, sessions squeezed around other variables"},
     {"start": "2026-05-31", "end": "2026-05-31", "location": "travel home", "training": "rest", "notes": "flight day"},
-    {"start": "2026-06-24", "end": "2026-06-29", "location": "France", "training": "full+heat", "notes": "training camp #2 — late-June 900+ TSS spike target"},
-    {"start": "2026-07-10", "end": "2026-07-17", "location": "France", "training": "full+heat", "notes": "training camp #3 — peak build window"}
+    {"start": "2026-06-24", "end": "2026-06-29", "location": "France (holiday)", "training": "full+heat", "notes": "training camp #1 — late-June 900+ TSS spike target, full time available"},
+    {"start": "2026-07-10", "end": "2026-07-17", "location": "France (holiday)", "training": "full+heat", "notes": "training camp #2 — peak build window, full time available"}
   ],
   "races": [
     {"date": "2026-06-06", "name": "Dorney Lake Olympic tri", "tier": "C-", "status": "TBC", "notes": "1500m / 40km / 10km — 10k run is the flag vs ankle"},

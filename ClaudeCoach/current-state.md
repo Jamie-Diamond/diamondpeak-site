@@ -20,12 +20,12 @@
 |---|---|---|---|
 | 18–22 May | Travel (UK, work) | Run + swim only | No bike for 5 days |
 | 23 May | Travel day → Marseille | Rest | Flight Sat |
-| 24–30 May | Marseille | Bike (+ trainers) + run + swim, heat | **Training camp #1** — first big build window |
+| 24–30 May | Marseille (not a camp — work/personal) | Bike (trainers) + run + swim, ad-hoc | **Nothing long** — sessions squeezed around other variables, play by ear |
 | 31 May | Travel day → home | Rest | |
 | 1 Jun | Home | Normal | |
 | 6 Jun | Dorney Lake | **C- race: Olympic tri (TBC entry)** | 1500/40k/10k — flag 10k run vs ankle |
-| 24–29 Jun | France | Full swim/bike/run + heat | **Training camp #2** — late-June 900+ TSS spike target |
-| 10–17 Jul | France | Full swim/bike/run + heat | **Training camp #3** — peak build window |
+| 24–29 Jun | France (holiday) | Full swim/bike/run + heat | **Training camp #1** — late-June 900+ TSS spike target, full time available |
+| 10–17 Jul | France (holiday) | Full swim/bike/run + heat | **Training camp #2** — peak build window, full time available |
 
 
 ## Ankle (high ankle sprain, onset ~1 March 2026)
@@ -83,7 +83,7 @@
 | Plan generated through 2026-05-24 (W4 Base) | Claude | 2026-05-10 | done — 10 sessions, ~452 TSS, W3 already populated |
 | Confirm Dorney Olympic tri entry (C- race 6 Jun) | Jamie | 2026-05-25 | TBC |
 | Replan 18–22 May as run+swim only (travel) | Claude | 2026-05-17 | pending |
-| Build Marseille camp plan (24–30 May) — first big bike block | Claude | 2026-05-22 | pending |
+| Marseille 24–30 May: ad-hoc sessions only, nothing long — play by ear | Claude | rolling | noted |
 
 ## Race-day-relevant tested data
 
