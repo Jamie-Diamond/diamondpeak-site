@@ -218,6 +218,9 @@ def post_process(data):
     known_window_end = today + timedelta(days=14)
 
     def planned_sessions_tss(d):
+        # today's CTL already reflects completed training — don't double-count
+        if d <= today:
+            return 0
         # Within known window: use actual planned session TSS (0 = rest day)
         # Beyond known window: 0 (nothing booked yet — CTL decays honestly)
         if d <= known_window_end:
@@ -276,7 +279,13 @@ def post_process(data):
         try:
             all_entries = json.loads(SESSION_LOG.read_text())
             weekly_actual = defaultdict(float)
+            seen_ids: set = set()
             for e in all_entries:
+                aid = e.get("activity_id")
+                if aid:
+                    if aid in seen_ids:
+                        continue
+                    seen_ids.add(aid)
                 d_str = e.get("date", "")
                 if not d_str:
                     continue

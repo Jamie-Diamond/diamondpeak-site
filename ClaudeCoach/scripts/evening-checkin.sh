@@ -3,7 +3,7 @@
 # Compares today's completed activities to the plan; asks a specific question if needed.
 # Silent if everything is already logged.
 
-CLAUDE=$(command -v claude 2>/dev/null); [ -x "$CLAUDE" ] || CLAUDE="/usr/bin/claude"
+CLAUDE=/usr/bin/claude
 LOG_DIR="$HOME/Library/Logs/ClaudeCoach"
 mkdir -p "$LOG_DIR"
 

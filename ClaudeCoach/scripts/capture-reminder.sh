@@ -28,7 +28,7 @@ PROMPT_END
 
 TOOLS="Read,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_training_history,PushNotification"
 
-OUTPUT=$(/Users/diamondpeakconsulting/.local/bin/claude -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$HOME/Library/Logs/ClaudeCoach/capture-reminder.log")
+OUTPUT=$(/usr/bin/claude -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$HOME/Library/Logs/ClaudeCoach/capture-reminder.log")
 echo "$OUTPUT"
 if [ -n "$OUTPUT" ]; then
     echo "$OUTPUT" | python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/notify.py
