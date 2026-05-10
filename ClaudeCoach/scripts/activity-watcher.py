@@ -273,6 +273,14 @@ def main():
         # Follow-up nudge check — any stub with rpe=null, 2–24 hr old, not yet nudged
         _send_followup_nudge(state)
 
+        # Trigger site data refresh in background — non-blocking
+        subprocess.Popen(
+            ["python3", str(BASE / "scripts/refresh-site-data.py")],
+            cwd=PROJECT_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
     finally:
         release_lock()
 

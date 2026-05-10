@@ -100,3 +100,6 @@ echo "$OUTPUT"
 if [ -n "$OUTPUT" ]; then
     echo "$OUTPUT" | python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/notify.py
 fi
+
+# Refresh site data whenever plan changes — background, non-blocking
+python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/refresh-site-data.py &>>"$LOG_DIR/refresh.log" &
