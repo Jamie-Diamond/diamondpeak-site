@@ -1285,9 +1285,9 @@
     "ankle_pain_next_morning": null,
     "nutrition_g_carb": null,
     "hydration_ml": null,
-    "notes": null,
-    "logged_at": "2026-05-08",
-    "stub": true
+    "notes": "If you log another note your fired.",
+    "logged_at": "2026-05-10T21:16:07",
+    "stub": false
   },
   {
     "date": "2026-05-08",
