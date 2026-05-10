@@ -42,6 +42,27 @@
     "stub": false
   },
   {
+    "activity_id": "i146689554",
+    "date": "2026-05-09",
+    "name": "Social ride 85k + 3 hill reps",
+    "sport": "Ride",
+    "tss": 153,
+    "duration_min": 195,
+    "distance_km": 88.57,
+    "avg_power": 163,
+    "norm_power": 217,
+    "avg_hr": 128,
+    "rpe": null,
+    "feel": null,
+    "ankle_pain_during": null,
+    "ankle_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-10T11:00:00",
+    "stub": true
+  },
+  {
     "activity_id": "i146380367",
     "date": "2026-05-08",
     "name": "Trying to keep up with KH",
