@@ -39,7 +39,7 @@
 
 ## Body weight
 
-- Current 7-day avg: ~83.1 kg (3 readings: 82.7, 83.8, 82.9)
+- Current 7-day avg: ~83.2 kg (5 readings: 83.8, 82.9, 82.9, 83.0, 83.2 — week ending 2026-05-10)
 - Trend toward 79 kg race-day target: drifting — 4 kg above target, pace needs to increase
 - Race-day target: 79 kg by 19 Sep 2026
 
