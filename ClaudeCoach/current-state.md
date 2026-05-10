@@ -32,7 +32,7 @@
 
 ## Off-plan in last 7 days
 
-- Missed sessions: Wed 6 May easy run 5 km — moved and extended to Thu 7 May (13 km compensatory, completed)
+- Missed sessions: Wed 6 May easy run 5 km — moved and extended to Thu 7 May (13 km compensatory, completed); Sun 10 May brick run skipped (busy day, chose to wind down)
 - Cut sessions: none
 - Illness / life events: none
 - Sleep deficit days (>1 hr below 8 hr target): 2 (1 May: 6.7 h, 6 May: 6.9 h)

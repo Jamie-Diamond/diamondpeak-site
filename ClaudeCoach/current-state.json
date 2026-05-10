@@ -24,6 +24,9 @@
     "protocol_start_date": "2026-05-15"
   },
   "niggles": [],
+  "missed_sessions": [
+    {"date": "2026-05-10", "session": "brick run", "reason": "busy day, chose to wind down"}
+  ],
   "open_actions": [
     {"action": "Book Precision Hydration sweat-sodium test", "due": "2026-05-31", "status": "pending"},
     {"action": "FTP retest (end-May)", "due": "2026-05-31", "status": "pending"},
