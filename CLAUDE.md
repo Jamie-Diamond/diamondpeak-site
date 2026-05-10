@@ -126,6 +126,10 @@ Each tool is a `.tool-card` link card with an icon, title, description, and arro
 - **Google Fonts via CDN** — every page includes the same Google Fonts `<link>` tag
 - **Charts** — some pages use Chart.js via CDN (`recovery-analysis.html`)
 
+## ClaudeCoach Automation — NEVER use CronCreate
+
+All ClaudeCoach scheduled tasks (watchdog, activity-watcher, refresh-site-data, checkins) run via **crontab on the VM only**. The scripts live in `ClaudeCoach/scripts/`. Do NOT use `CronCreate` for any of these — it injects prompts into the user's interactive session and survives context compaction. If asked to schedule something, add it to the VM crontab instead.
+
 ## Git Workflow
 
 - Push directly to `main` — GitHub Pages deploys automatically

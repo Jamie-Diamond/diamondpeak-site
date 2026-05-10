@@ -124,6 +124,15 @@ def main():
     try:
         state = load_state()
 
+        # Snapshot existing IDs before Claude runs so the dedupe check below
+        # uses the pre-run state, not the post-stub state.
+        existing_ids: set = set()
+        if SESSION_LOG.exists():
+            try:
+                existing_ids = {str(e.get("activity_id", "")) for e in json.loads(SESSION_LOG.read_text())}
+            except (json.JSONDecodeError, OSError):
+                pass
+
         result = subprocess.run(
             [CLAUDE, "-p", PROMPT, "--allowedTools", TOOLS],
             capture_output=True, text=True,
@@ -163,18 +172,11 @@ def main():
         if activity_id == str(state.get("last_id")):
             return  # already processed
 
-        # Belt-and-braces dedupe: ignore the LLM's claim and re-check session-log.json
-        # directly. If the activity_id is already present, pin state to it and bail
-        # without notifying — covers cases where the previous run committed the stub
-        # but crashed/timed out before save_state().
-        if SESSION_LOG.exists():
-            try:
-                log = json.loads(SESSION_LOG.read_text())
-                if any(str(e.get("activity_id")) == activity_id for e in log):
-                    save_state({"last_id": activity_id})
-                    return
-            except (json.JSONDecodeError, OSError):
-                pass
+        # Belt-and-braces dedupe: check against the pre-run snapshot so we don't
+        # suppress notifications for stubs Claude just wrote in this run.
+        if activity_id in existing_ids:
+            save_state({"last_id": activity_id})
+            return
 
         save_state({"last_id": activity_id, "notified_at": datetime.now().isoformat()})
 
