@@ -92,6 +92,14 @@ If session is unstructured (Z2, easy run, swim, etc.): SESSION_CHART: none
 If no activities at all: ACTIVITY_ID: none  ANALYSIS: none"""
 
 
+def _notify_plain(msg: str):
+    """Send a plain Telegram message without involving Claude — used for error reporting."""
+    try:
+        subprocess.run(["python3", str(NOTIFY), msg], cwd=PROJECT_DIR, timeout=15)
+    except Exception:
+        pass
+
+
 def load_state():
     if STATE_FILE.exists():
         return json.loads(STATE_FILE.read_text())
@@ -133,11 +141,23 @@ def main():
             except (json.JSONDecodeError, OSError):
                 pass
 
-        result = subprocess.run(
-            [CLAUDE, "-p", PROMPT, "--allowedTools", TOOLS],
-            capture_output=True, text=True,
-            cwd=PROJECT_DIR, timeout=120,
-        )
+        try:
+            result = subprocess.run(
+                [CLAUDE, "-p", PROMPT, "--allowedTools", TOOLS],
+                capture_output=True, text=True,
+                cwd=PROJECT_DIR, timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            _notify_plain("Activity watcher timed out (>2 min). Claude didn't respond. Check VM logs or run activity-watcher.py manually.")
+            return
+        except Exception as exc:
+            _notify_plain(f"Activity watcher error: {exc}. Claude subprocess failed to start.")
+            return
+
+        if result.returncode != 0:
+            stderr_snippet = (result.stderr or "")[:200].strip()
+            _notify_plain(f"Activity watcher: Claude exited with error {result.returncode}. {stderr_snippet}")
+            return
 
         output = result.stdout.strip()
         if not output:
