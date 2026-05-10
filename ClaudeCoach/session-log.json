@@ -74,9 +74,9 @@
     "ankle_pain_next_morning": null,
     "nutrition_g_carb": null,
     "hydration_ml": null,
-    "notes": null,
-    "logged_at": "2026-05-10T05:00:42",
-    "stub": true
+    "notes": "Athlete pushed back on constant note updates - has not requested them.",
+    "logged_at": "2026-05-10T21:15:07",
+    "stub": false
   },
   {
     "activity_id": "i145832606",
