@@ -1,5 +1,21 @@
 [
   {
+    "activity_id": "i146380367",
+    "date": "2026-05-08",
+    "name": "Trying to keep up with KH",
+    "sport": "Swim",
+    "tss": 45,
+    "duration_min": 29,
+    "distance_km": 1.72,
+    "pace_per_100m": 101.16,
+    "avg_hr": 125,
+    "rpe": null,
+    "feel": null,
+    "notes": null,
+    "logged_at": "2026-05-10T08:45:40",
+    "stub": true
+  },
+  {
     "activity_id": "i146542118",
     "date": "2026-05-08",
     "name": "All the traffic",
