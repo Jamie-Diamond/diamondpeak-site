@@ -45,10 +45,11 @@
 
 ## Heat acclimation log
 
-- Sessions completed this week: 0 (T7/T8 triggers activate 15 May)
-- Sessions completed cumulative (target 14–20 across late May → early Sept): 0
-- Days since last hot-bath session: N/A — not started yet
-- Method mix: not started
+- Sessions completed this week: 1 (Sun 10 May — 25 min hot bath @ 45°C, post-ride)
+- Sessions completed cumulative (target 14–20 across late May → early Sept): 1
+- Days since last hot-bath session: 0 (today)
+- Method mix: hot bath ×1
+- Note: started 5 days before formal protocol kick-off (15 May)
 
 ## Open actions
 

@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "date": "2026-05-10",
+    "time": "11:00",
+    "method": "hot bath",
+    "duration_min": 25,
+    "temperature_c": 45,
+    "context": "post-ride (after 55 km Z2 bike), ~1 hr after returning",
+    "notes": "First heat session — started 5 days before formal protocol kick-off (2026-05-15)",
+    "logged_at": "2026-05-10"
+  }
+]
