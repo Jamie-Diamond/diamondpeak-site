@@ -1,8 +1,10 @@
 {
-  "last_updated": "2026-05-09",
+  "last_updated": "2026-05-10",
   "ankle": {
     "pain_during": 2,
     "pain_next_morning": 0,
+    "pain_today_resting": 0,
+    "pain_today_resting_date": "2026-05-10",
     "last_run_date": "2026-05-07",
     "last_run_km": 12.52,
     "four_pain_free_weeks_reached": false,
