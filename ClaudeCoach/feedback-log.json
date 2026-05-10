@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "date": "2026-05-10",
+    "type": "bug",
+    "message": "Countdown to Cervia (\"— N days to Cervia\") is appearing twice at the end of replies. Likely the model is appending it manually while the bot harness also appends one after sending. Stop adding it manually so it only shows once.",
+    "logged_at": "2026-05-10T00:00:00"
+  }
+]
