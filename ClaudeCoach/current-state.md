@@ -66,6 +66,7 @@
 | 5+ hr ice retention test in hot car (T1/T2 cooler) | Jamie | pre-race | [pending / done — N hours retained] |
 | OWS race or full-distance simulation | Jamie | build phase | [pending / scheduled / done] |
 | Tested run-fuelling protocol on a long run in heat | Jamie | recurring | [last done: date / outcome] |
+| Plan generated through 2026-05-24 (W4 Base) | Claude | 2026-05-10 | done — 10 sessions, ~452 TSS, W3 already populated |
 
 ## Race-day-relevant tested data
 
