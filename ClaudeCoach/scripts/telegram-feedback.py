@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
 Poll Telegram for feedback replies and update session-log.json stubs.
-Runs every 5 min via cron.
+Runs every 1 min via cron.
 
 Flow:
   1. getUpdates — fetch new messages since last seen update_id
-  2. For each user message, find the most recent unfilled stub
-  3. Claude parses the reply into structured fields
-  4. Python writes to session-log.json and commits
-  5. Send a short confirmation back to Telegram
+  2. Immediately send a Python-only ack ("Got it — parsing...")
+  3. Claude parses the reply into structured fields (90s timeout)
+  4. On success: Python writes to session-log.json, commits, sends confirmation
+  5. On Claude failure/timeout: Python sends a diagnostic error — no Claude in error path
 """
-import json, re, ssl, subprocess, sys, urllib.request, urllib.parse
+import json, re, ssl, subprocess, sys, time, urllib.request, urllib.parse
 from datetime import datetime
 from pathlib import Path
 
@@ -20,6 +20,7 @@ STATE_FILE      = BASE / "telegram-feedback-state.json"
 NOTIFY          = BASE / "telegram/notify.py"
 PROJECT_DIR     = str(BASE.parent)
 CLAUDE          = "/usr/bin/claude"
+CLAUDE_TIMEOUT  = 90   # seconds — must respond before Python sends the error fallback
 
 _cfg    = json.loads((BASE / "telegram/config.json").read_text())
 TOKEN   = _cfg["bot_token"]
@@ -48,22 +49,27 @@ Output a JSON object with these fields (omit a field entirely if not mentioned):
 Output ONLY the JSON object. No other text."""
 
 
+# ── Telegram API ──────────────────────────────────────────────────────────────
+
 def _api(method, **params):
-    url = f"https://api.telegram.org/bot{TOKEN}/{method}"
+    url  = f"https://api.telegram.org/bot{TOKEN}/{method}"
     data = json.dumps(params).encode()
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    req  = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=10, context=SSL) as r:
         return json.loads(r.read())
 
 
-def _notify(msg):
+def _send(msg: str):
+    """Send a plain-text Telegram message — pure Python, no Claude."""
     try:
-        subprocess.run(["python3", str(NOTIFY), msg], cwd=PROJECT_DIR, timeout=15)
-    except Exception:
-        pass
+        _api("sendMessage", chat_id=CHAT_ID, text=msg, parse_mode="Markdown")
+    except Exception as exc:
+        pass  # if Telegram itself is down there's nothing to do
 
 
-def load_state():
+# ── State ─────────────────────────────────────────────────────────────────────
+
+def load_state() -> dict:
     if STATE_FILE.exists():
         try:
             return json.loads(STATE_FILE.read_text())
@@ -72,20 +78,24 @@ def load_state():
     return {"offset": 0}
 
 
-def save_state(state):
+def save_state(state: dict):
     STATE_FILE.write_text(json.dumps(state))
 
 
-def get_updates(offset):
+# ── Telegram polling ──────────────────────────────────────────────────────────
+
+def get_updates(offset: int) -> list:
     try:
         result = _api("getUpdates", offset=offset, timeout=0, limit=20)
         return result.get("result", [])
-    except Exception as exc:
+    except Exception:
         return []
 
 
+# ── Session log ───────────────────────────────────────────────────────────────
+
 def find_unfilled_stub():
-    """Most recent stub where rpe is null."""
+    """Return (index, entry) for the most recent stub with rpe=null, or (None, None)."""
     if not SESSION_LOG.exists():
         return None, None
     try:
@@ -98,38 +108,70 @@ def find_unfilled_stub():
     return None, None
 
 
-def parse_feedback(reply_text, stub):
-    """Ask Claude to parse natural-language reply into structured fields."""
+# ── Claude parse (with timeout) ───────────────────────────────────────────────
+
+def parse_feedback(reply_text: str, stub: dict) -> tuple[dict, str | None]:
+    """
+    Returns (parsed_fields, error_message).
+    error_message is None on success, a Python-generated string on failure.
+    Claude is only involved in success path.
+    """
     prompt = PARSE_PROMPT.format(
         sport=stub.get("sport", "Unknown"),
         name=stub.get("name", ""),
         reply=reply_text,
     )
+    t_start = time.time()
     try:
         result = subprocess.run(
             [CLAUDE, "-p", prompt, "--allowedTools", ""],
             capture_output=True, text=True,
-            cwd=PROJECT_DIR, timeout=30,
+            cwd=PROJECT_DIR, timeout=CLAUDE_TIMEOUT,
         )
-        m = re.search(r'\{.*?\}', result.stdout, re.DOTALL)
-        if m:
-            return json.loads(m.group(0))
-    except Exception:
-        pass
-    return {}
+    except subprocess.TimeoutExpired:
+        elapsed = int(time.time() - t_start)
+        return {}, (
+            f"Parsing timed out after {elapsed}s — Claude may be overloaded or the API is down. "
+            f"Your message has been saved as a note. Try again in a minute."
+        )
+    except FileNotFoundError:
+        return {}, "Claude not found at /usr/bin/claude — check VM setup."
+    except Exception as exc:
+        return {}, f"Unexpected error launching Claude: {exc}"
+
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()[:200]
+        return {}, (
+            f"Claude exited with error {result.returncode}. "
+            f"{'Stderr: ' + stderr if stderr else 'No error detail available.'} "
+            f"Your message was saved as a note."
+        )
+
+    m = re.search(r'\{.*?\}', result.stdout, re.DOTALL)
+    if not m:
+        return {}, (
+            f"Claude responded but returned no parseable fields. "
+            f"Raw reply saved as a note. You can manually update the log."
+        )
+
+    try:
+        return json.loads(m.group(0)), None
+    except json.JSONDecodeError as exc:
+        return {}, f"JSON parse error: {exc}. Raw reply saved as a note."
 
 
-def apply_feedback(entries, idx, parsed, reply_text):
-    """Merge parsed fields into the stub entry."""
+# ── Apply and commit ──────────────────────────────────────────────────────────
+
+def apply_feedback(entries: list, idx: int, parsed: dict, raw_text: str) -> dict:
     stub = entries[idx]
     allowed = {"rpe", "feel", "ankle_pain_during", "ankle_pain_next_morning",
                "nutrition_g_carb", "hydration_ml", "notes"}
     for k, v in parsed.items():
         if k in allowed and v is not None:
             stub[k] = v
-    # If Claude returned nothing useful, store raw reply in notes
+    # If Claude found nothing useful, at least store the raw text
     if not any(parsed.get(k) for k in ("rpe", "feel", "notes")):
-        stub["notes"] = reply_text.strip()
+        stub["notes"] = (stub.get("notes") or "") + f" [raw: {raw_text.strip()}]"
     stub["stub"] = False
     stub["logged_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     entries[idx] = stub
@@ -149,29 +191,27 @@ def commit_and_push():
             break
 
 
-def confirmation_msg(stub, parsed):
-    sport  = stub.get("sport", "session")
-    name   = stub.get("name", "")
-    rpe    = parsed.get("rpe")
-    feel   = parsed.get("feel", "")
-    ankle  = (parsed.get("ankle_pain_during"), parsed.get("ankle_pain_next_morning"))
-
+def confirmation_msg(stub: dict, parsed: dict) -> str:
+    sport = stub.get("sport", "session")
+    name  = stub.get("name", "")
     lines = [f"Logged for *{name}*"]
-    if rpe:
-        lines.append(f"RPE {rpe}/10")
-    if feel:
-        lines.append(f"Feel: {feel}")
-    if sport == "Run" and ankle[0] is not None:
-        lines.append(f"Ankle during: {ankle[0]}/10, next morning: {ankle[1]}/10")
+    if parsed.get("rpe"):
+        lines.append(f"RPE {parsed['rpe']}/10")
+    if parsed.get("feel"):
+        lines.append(f"Feel: {parsed['feel']}")
+    if sport == "Run" and parsed.get("ankle_pain_during") is not None:
+        lines.append(f"Ankle during: {parsed['ankle_pain_during']}/10, next morning: {parsed.get('ankle_pain_next_morning', '?')}/10")
     if parsed.get("nutrition_g_carb"):
         lines.append(f"Nutrition: {parsed['nutrition_g_carb']}g carbs")
     if parsed.get("notes"):
-        lines.append(f"Notes saved")
+        lines.append("Notes saved")
     return " — ".join(lines)
 
 
+# ── Main ──────────────────────────────────────────────────────────────────────
+
 def main():
-    state = load_state()
+    state  = load_state()
     offset = state.get("offset", 0)
 
     updates = get_updates(offset)
@@ -185,41 +225,45 @@ def main():
         msg = update.get("message") or update.get("edited_message")
         if not msg:
             continue
-
-        # Only process messages from the configured chat
         if str(msg.get("chat", {}).get("id")) != CHAT_ID:
             continue
-
-        # Skip bot's own messages
         if msg.get("from", {}).get("is_bot"):
             continue
 
         text = (msg.get("text") or "").strip()
-        if not text:
-            continue
-
-        # Skip slash commands — those are for other bots/scripts
-        if text.startswith("/"):
+        if not text or text.startswith("/"):
             continue
 
         idx, stub = find_unfilled_stub()
         if stub is None:
-            # No unfilled stubs — ignore or send a gentle note
-            continue
+            continue  # no stub waiting — ignore message
 
-        parsed = parse_feedback(text, stub)
+        # ── Step 1: immediate Python-only ack (fires within the poll window) ──
+        sport = stub.get("sport", "session")
+        name  = stub.get("name", "")
+        _send(f"Got it — logging your {sport.lower()} feedback for _{name}_...")
 
-        # Only write if we got something meaningful
-        if not parsed:
-            _notify(f"Got your message but couldn't parse it — could you reply with just the RPE (1–10)?")
-            continue
+        # ── Step 2: Claude parse (90s timeout) ───────────────────────────────
+        parsed, error = parse_feedback(text, stub)
 
-        entries = json.loads(SESSION_LOG.read_text())
-        updated_stub = apply_feedback(entries, idx, parsed, text)
-        SESSION_LOG.write_text(json.dumps(entries, indent=2))
+        # ── Step 3a: Claude failed — Python-only diagnostic reply ─────────────
+        if error:
+            _send(f"Couldn't auto-parse: {error}")
+            # Fall back: store raw text as note so nothing is lost
+            parsed = {"notes": text.strip()}
 
-        commit_and_push()
-        _notify(confirmation_msg(updated_stub, parsed))
+        # ── Step 3b: Write, commit, confirm ──────────────────────────────────
+        try:
+            entries = json.loads(SESSION_LOG.read_text())
+            updated = apply_feedback(entries, idx, parsed, text)
+            SESSION_LOG.write_text(json.dumps(entries, indent=2))
+            commit_and_push()
+            if not error:
+                _send(confirmation_msg(updated, parsed))
+            else:
+                _send(f"Raw reply saved as a note for _{name}_. You can tidy it up later.")
+        except Exception as exc:
+            _send(f"Saved to session log failed: {exc}. Message was: \"{text[:80]}\"")
 
     if new_offset != offset:
         state["offset"] = new_offset
