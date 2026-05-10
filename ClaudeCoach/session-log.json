@@ -10,15 +10,15 @@
     "avg_power": 200,
     "norm_power": 220,
     "avg_hr": 132,
-    "rpe": null,
-    "feel": null,
-    "ankle_pain_during": null,
+    "rpe": 4,
+    "feel": "legs felt good",
+    "ankle_pain_during": 0,
     "ankle_pain_next_morning": null,
-    "nutrition_g_carb": null,
-    "hydration_ml": null,
-    "notes": null,
+    "nutrition_g_carb": 140,
+    "hydration_ml": 1100,
+    "notes": "Carbs 80g + 60g = 140g total (~79g/hr avg). 90% consumed in first 70 min — heavily front-loaded (~108g/hr early, trickle thereafter). Drank 1.1 L (~622 ml/hr). Noticed drinking a bit quick at 75 min but no GI issues. Ankle clean.",
     "logged_at": "2026-05-10",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i146380367",
