@@ -16,9 +16,9 @@
     "ankle_pain_next_morning": null,
     "nutrition_g_carb": null,
     "hydration_ml": null,
-    "notes": "Skipping this evening's run \u2014 had a busy day and would rather wind down.",
+    "notes": null,
     "logged_at": "2026-05-10T18:44:07",
-    "stub": false
+    "stub": true
   },
   {
     "activity_id": "i146900219",
@@ -53,9 +53,9 @@
     "avg_hr": 125,
     "rpe": null,
     "feel": null,
-    "notes": "Why did you add notes to social ride? I didn't talk about that recently?",
+    "notes": null,
     "logged_at": "2026-05-10T21:14:07",
-    "stub": false
+    "stub": true
   },
   {
     "activity_id": "i146542118",
@@ -74,9 +74,9 @@
     "ankle_pain_next_morning": null,
     "nutrition_g_carb": null,
     "hydration_ml": null,
-    "notes": "Athlete pushed back on constant note updates - has not requested them.",
+    "notes": null,
     "logged_at": "2026-05-10T21:15:07",
-    "stub": false
+    "stub": true
   },
   {
     "activity_id": "i145832606",
