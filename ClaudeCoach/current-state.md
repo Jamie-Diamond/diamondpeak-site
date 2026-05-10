@@ -61,7 +61,7 @@
 | CSS swim test #1 | Jamie | next 2 weeks | done 2026-04-27 — **CSS 1:39/100m** |
 | CSS swim test #2 | Jamie | mid Jul | [pending / done — pace] |
 | TT bike fit appointment | Jamie | before June | [pending / booked / done] |
-| ISM saddle order | Jamie | now (need 6–8 wks fit time) | [pending / ordered / fitted] |
+| ISM saddle order | Jamie | 2026-06-06 (pushed back 4 wks) | [pending / ordered / fitted] |
 | Aero helmet (vented — POC Procen Air / Giro Aerohead / Spec TT5) | Jamie | June | [pending / ordered / fitted] |
 | 5+ hr ice retention test in hot car (T1/T2 cooler) | Jamie | pre-race | [pending / done — N hours retained] |
 | OWS race or full-distance simulation | Jamie | build phase | [pending / scheduled / done] |
@@ -81,7 +81,6 @@
 
 - **2026-05-10 — T2 (Tier 2):** CTL ramp +5.7/wk (75.9 on 05-03 → 81.6 on 05-10) while ankle quality_sessions_resumed = false. Cap is +4/wk in rehab.
 - **2026-05-10 — T6 (Tier 1):** Aerobic decoupling 15.8% on Sat 09 May Z2 ride (NP 217 W, IF 0.687). Whole-ride; per-rep clean (5–8%). Session note attributes to traffic stop-start, not durability fade.
-- **2026-05-10 — T9 (Tier 2):** ISM saddle order overdue — due 2026-05-09, status still pending. 6–8 wk fit window before TT bike fit is at risk.
 - **2026-05-10 — T10 (Tier 2):** Run km +18.2% w/w (this wk 12.52 km vs last 10.59 km). 10% cap applies while ankle in rehab.
 
 ## Notes for Claude

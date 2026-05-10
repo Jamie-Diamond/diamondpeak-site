@@ -33,7 +33,7 @@
     {"action": "FTP retest (mid-July)", "due": "2026-07-15", "status": "pending"},
     {"action": "CSS swim test #2", "due": "2026-07-15", "status": "pending"},
     {"action": "TT bike fit appointment", "due": "2026-05-31", "status": "pending"},
-    {"action": "ISM saddle order", "due": "2026-05-09", "status": "pending"},
+    {"action": "ISM saddle order", "due": "2026-06-06", "status": "pending"},
     {"action": "Aero helmet", "due": "2026-06-30", "status": "pending"},
     {"action": "5+ hr ice retention test", "due": "2026-09-01", "status": "pending"},
     {"action": "OWS race or full-distance simulation", "due": "2026-07-31", "status": "pending"},
