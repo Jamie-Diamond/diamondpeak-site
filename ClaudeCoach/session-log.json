@@ -58,9 +58,9 @@
     "ankle_pain_next_morning": null,
     "nutrition_g_carb": null,
     "hydration_ml": null,
-    "notes": null,
-    "logged_at": "2026-05-10T11:00:00",
-    "stub": true
+    "notes": "Change the ISM order date back 4 weeks.",
+    "logged_at": "2026-05-10T21:12:11",
+    "stub": false
   },
   {
     "activity_id": "i146380367",
