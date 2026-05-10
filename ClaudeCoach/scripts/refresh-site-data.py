@@ -211,20 +211,25 @@ def post_process(data):
     # planned_sessions: use actual planned event TSS from weekCalendar for the
     # next 14 days, then fall back to phase averages beyond the known window
     planned_tss_by_date = {}
+    completed_dates = set()
     for e in data.get("weekCalendar", []):
-        if e.get("status") == "planned":
-            d_str = e.get("date", "")
+        d_str = e.get("date", "")
+        if e.get("status") == "completed":
+            completed_dates.add(d_str)
+        elif e.get("status") == "planned":
             planned_tss_by_date[d_str] = planned_tss_by_date.get(d_str, 0) + (e.get("tss") or 0)
     known_window_end = today + timedelta(days=14)
 
     def planned_sessions_tss(d):
-        # today's CTL already reflects completed training — don't double-count
-        if d <= today:
+        d_str = d.isoformat()
+        # If there's already a completed activity on this date, current_ctl
+        # already reflects it — don't add planned TSS on top.
+        if d_str in completed_dates:
             return 0
         # Within known window: use actual planned session TSS (0 = rest day)
         # Beyond known window: 0 (nothing booked yet — CTL decays honestly)
         if d <= known_window_end:
-            return planned_tss_by_date.get(d.isoformat(), 0)
+            return planned_tss_by_date.get(d_str, 0)
         return 0
 
     sick_week_num = 10
