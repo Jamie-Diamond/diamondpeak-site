@@ -41,12 +41,6 @@ LOG_FILE = BASE / "bot.log"
 
 MAX_HISTORY_PAIRS = 6  # keep last 6 exchanges for context
 
-RACE_DAY = date(2026, 9, 19)
-
-
-def days_to_race():
-    return (RACE_DAY - date.today()).days
-
 def build_keyboard():
     now  = datetime.now()
     hour = now.hour
@@ -547,13 +541,11 @@ def main():
             elif fast and fast.startswith("__FTP_RETEST__:"):
                 new_ftp = int(float(fast.split(":", 1)[1]))
                 reply = _update_ftp(new_ftp)
-                reply += f"\n\n— {days_to_race()} days to Cervia"
                 send(token, chat_id, reply, reply_markup=build_keyboard())
                 log(f"Out (FTP update): {new_ftp} W")
                 continue
             elif fast:
-                reply = fast + f"\n\n— {days_to_race()} days to Cervia"
-                send(token, chat_id, reply, reply_markup=build_keyboard())
+                send(token, chat_id, fast, reply_markup=build_keyboard())
                 log(f"Out (fast): {fast[:80]}")
                 continue
 
@@ -565,7 +557,6 @@ def main():
 
             clean = process_charts(token, chat_id, response)
             if clean:
-                clean += f"\n\n— {days_to_race()} days to Cervia"
                 send(token, chat_id, clean, reply_markup=build_keyboard())
             log(f"Out: {clean[:80]}")
 
