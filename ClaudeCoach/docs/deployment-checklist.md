@@ -28,6 +28,8 @@ ssh root@178.105.95.208
 - [ ] **Crontab intact** — `crontab -l | grep -c "ClaudeCoach"` should be ≥ 7
 - [ ] **Log directory exists** — `ls /root/Library/Logs/ClaudeCoach/`
 - [ ] **athletes.json present** — `cat /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/config/athletes.json` (gitignored — must be written manually on fresh VM). If missing: create `ClaudeCoach/config/` and write the file with credentials from 1Password.
+- [ ] **admin_chat_id set in config.json** — `grep admin_chat_id /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/config.json`. Add `"admin_chat_id": "6090343263"` (Jamie's chat ID) if missing. Required for `/invite` and `/approve` commands and onboarding notifications.
+- [ ] **pending.json present** — `ls /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/config/pending.json` (gitignored, created automatically on first `/invite`). If missing, run: `echo '[]' > /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/config/pending.json`
 
 ---
 
@@ -46,6 +48,13 @@ ssh root@178.105.95.208
 - [ ] Send any message → should get "_On it..._" within 3 seconds (bot.py fast-ack)
 - [ ] Send `ankle 3` → should get "Logged ankle pain 3/10" with no "days to Cervia" appended
 - [ ] Send `82.5 kg` → should get "Logged 82.5 kg. +3.5 kg to race-day target (79 kg)."
+
+### Onboarding
+- [ ] From admin chat: send `/invite <test_chat_id>` → should get "Added ... to pending list"
+- [ ] From test chat: send any message → should get the first onboarding question (full name)
+- [ ] Walk through questionnaire → on completion, admin should get notification with `/approve <slug>`
+- [ ] Send `/approve <slug>` from admin → athlete chat should get "Welcome aboard" message
+- [ ] Verify `ClaudeCoach/athletes/<slug>/` folder created with profile.json and system_prompt.txt
 
 ### Telegram feedback (cron, runs every 1 min)
 - [ ] With a stub in session-log.json: send a message containing RPE → within 2 min should get confirmation with fields parsed
@@ -73,6 +82,9 @@ ssh root@178.105.95.208
 | Prescription card silent | `tail -50 /root/Library/Logs/ClaudeCoach/prescription.log` |
 | Morning checkin silent | `tail -50 /root/Library/Logs/ClaudeCoach/morning-checkin.log` |
 | bot.py not running after reboot | `systemctl status claudecoach-bot` — if failed, check `journalctl -u claudecoach-bot -n 50` |
+| New athlete gets "not registered" | Check `pending.json` — is their chat_id listed? Send `/invite <chat_id>` from admin to add them |
+| Onboarding stuck on ICU key | Check `onboarding_state.json` for their chat_id step; their API key failed validation; they must resend it |
+| `/approve` or `/invite` not working | Check `admin_chat_id` is set in config.json and matches your Telegram chat ID exactly |
 | Git push rejected on VM | `git -C /Users/diamondpeakconsulting/diamondpeak-site pull --rebase origin main` first |
 | SSH key rejected | Re-add via Hetzner console: `echo "<pubkey>" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys` |
 

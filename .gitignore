@@ -7,3 +7,5 @@ __pycache__/
 ClaudeCoach/.*.lock
 ClaudeCoach/athletes/jamie/last_activity_state.json
 ClaudeCoach/config/athletes.json
+ClaudeCoach/config/pending.json
+ClaudeCoach/config/onboarding_state.json

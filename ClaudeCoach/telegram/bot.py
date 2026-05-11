@@ -316,18 +316,16 @@ GENERATE_PLAN_SCRIPT = BASE.parent.parent / "ClaudeCoach/scripts/generate-plan.s
 
 def _git_commit(msg):
     try:
-        subprocess.run(
-            ["git", "add", "ClaudeCoach/"],
-            cwd=str(PROJECT_DIR), capture_output=True
-        )
-        subprocess.run(
-            ["git", "commit", "-m", msg],
-            cwd=str(PROJECT_DIR), capture_output=True
-        )
-        subprocess.run(
-            ["git", "push", "origin", "main"],
-            cwd=str(PROJECT_DIR), capture_output=True
-        )
+        subprocess.run(["git", "add", "ClaudeCoach/"],
+                       cwd=str(PROJECT_DIR), capture_output=True)
+        r = subprocess.run(["git", "commit", "-m", msg],
+                           cwd=str(PROJECT_DIR), capture_output=True)
+        if r.returncode != 0:
+            return  # nothing to commit — skip push
+        subprocess.run(["git", "pull", "--rebase", "origin", "main"],
+                       cwd=str(PROJECT_DIR), capture_output=True)
+        subprocess.run(["git", "push", "origin", "main"],
+                       cwd=str(PROJECT_DIR), capture_output=True)
     except Exception as e:
         log(f"git commit error: {e}")
 
@@ -548,6 +546,409 @@ def prefetch_context(slug: str) -> str:
         return ""
 
 
+# --- ONBOARDING --------------------------------------------------------------
+
+PENDING_FILE    = BASE.parent / "config/pending.json"
+ONBOARDING_FILE = BASE.parent / "config/onboarding_state.json"  # gitignored
+
+# Phase 1: always asked, in order
+_OB_PHASE1 = [
+    ("name",    "Hi! I'm ClaudeCoach. Just a few questions to get you set up.\n\nWhat's your *full name*?"),
+    ("race",    "What's your *target race* -- name and date? (e.g. _IM Frankfurt, 2027-06-29_)"),
+    ("icu_id",  "Your *Intervals.icu athlete ID* -- looks like _i196362_. Find it at intervals.icu -> Profile."),
+    ("icu_key", "Your *Intervals.icu API key* -- intervals.icu -> Settings -> API."),
+]
+
+# Always asked after ICU fetch, regardless of what ICU returned
+_OB_QUALITATIVE = [
+    ("a_goal",     "What's your *A goal* for {race_name}?"),
+    ("experience", "How many full-distance triathlons have you raced? What do you most want to work on?"),
+    ("injuries",   "Any current injuries or health constraints? (or _none_)"),
+    ("max_hours",  "What's the *maximum hours per week* you can realistically train?"),
+    ("slug",       "Last one: choose a short *account handle* for your profile. Lowercase letters and numbers only (e.g. _sarah_). Can't be changed later."),
+]
+
+# (icu_data_key, answer_key, question) -- only asked if ICU returned nothing for icu_data_key
+_OB_GAPS = [
+    ("ftp_watts",                 "ftp",          "I couldn't find your *FTP* in Intervals.icu. What is it in watts?"),
+    ("run_threshold_pace_per_km", "run_threshold", "No run threshold pace found. What's yours per km? (e.g. _4:15_)"),
+    ("swim_css_per_100m",         "swim_css",      "No swim CSS found. What's yours per 100m? (e.g. _1:45_)"),
+    ("weight_kg",                 "weight",        "No weight recorded in Intervals.icu. Current weight in kg?"),
+]
+
+
+def load_pending():
+    if PENDING_FILE.exists():
+        data = json.loads(PENDING_FILE.read_text())
+        return [str(x) for x in data]
+    return []
+
+
+def save_pending(pending):
+    PENDING_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PENDING_FILE.write_text(json.dumps(pending, indent=2))
+
+
+def load_onboarding_state():
+    if ONBOARDING_FILE.exists():
+        return json.loads(ONBOARDING_FILE.read_text())
+    return {}
+
+
+def save_onboarding_state(ob_state):
+    ONBOARDING_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ONBOARDING_FILE.write_text(json.dumps(ob_state, indent=2))
+
+
+def _validate_ob_answer(key, answer):
+    """Return error string if invalid, else None."""
+    if not answer:
+        return "Please send a text reply."
+    if key == "icu_id":
+        if not re.match(r'^i\d+$', answer.strip()):
+            return "That doesn't look right -- the athlete ID starts with 'i' followed by numbers (e.g. _i196362_). Check intervals.icu -> Profile."
+    if key == "slug":
+        if not re.match(r'^[a-z][a-z0-9_]{1,19}$', answer.strip()):
+            return "Handle must be 2-20 lowercase letters, numbers, or underscores -- e.g. _sarah_ or _tom2_. Try again."
+        existing = json.loads(ATHLETES_CONFIG.read_text()) if ATHLETES_CONFIG.exists() else {}
+        if answer.strip() in existing:
+            return f"The handle _{answer.strip()}_ is already taken. Please choose a different one."
+    if key == "max_hours":
+        if not re.search(r'\d', answer):
+            return "Please enter a number -- e.g. _12_ for 12 hours/week."
+    if key == "ftp":
+        if not re.search(r'\d', answer):
+            return "Please enter your FTP as a number in watts -- e.g. _280_."
+    if key == "weight":
+        if not re.search(r'\d', answer):
+            return "Please enter your weight as a number in kg -- e.g. _82_."
+    return None
+
+
+def _fetch_icu_data(icu_id, icu_key):
+    """Fetch athlete profile + sport settings in parallel. Returns (icu_data dict, summary str)."""
+    import sys as _sys
+    _sys.path.insert(0, str(BASE.parent / "lib"))
+    from icu_api import IcuClient
+
+    client = IcuClient(icu_id.strip(), icu_key.strip())
+    profile, ride, run_s, swim, wellness = client.fetch_all(
+        "get_athlete_profile",
+        ("get_sport_settings", "Ride"),
+        ("get_sport_settings", "Run"),
+        ("get_sport_settings", "Swim"),
+        ("get_wellness", 7),
+    )
+
+    weight = None
+    if isinstance(profile, dict):
+        weight = profile.get("weight")
+    if not weight and isinstance(wellness, list) and wellness:
+        weight = wellness[-1].get("weight")
+
+    last_w = wellness[-1] if isinstance(wellness, list) and wellness else {}
+
+    icu_data = {
+        "ftp_watts":                 (ride or {}).get("ftp"),
+        "indoor_ftp_watts":          (ride or {}).get("indoor_ftp"),
+        "lthr":                      (ride or {}).get("lthr"),
+        "run_threshold_pace_per_km": (run_s or {}).get("threshold_pace"),
+        "swim_css_per_100m":         (swim or {}).get("css"),
+        "weight_kg":                 weight,
+        "icu_name":                  (profile or {}).get("name"),
+        "ctl":                       last_w.get("ctl"),
+        "tsb":                       (last_w.get("ctl", 0) or 0) - (last_w.get("atl", 0) or 0),
+    }
+
+    # Summary message
+    lines = ["*Found in Intervals.icu:*"]
+    if icu_data["icu_name"]:
+        lines.append(f"Name: {icu_data['icu_name']}")
+    metrics = []
+    if icu_data["ftp_watts"]:        metrics.append(f"Bike FTP {icu_data['ftp_watts']}W")
+    if icu_data["run_threshold_pace_per_km"]: metrics.append(f"Run {icu_data['run_threshold_pace_per_km']}/km")
+    if icu_data["swim_css_per_100m"]: metrics.append(f"Swim CSS {icu_data['swim_css_per_100m']}/100m")
+    if icu_data["weight_kg"]:        metrics.append(f"Weight {icu_data['weight_kg']}kg")
+    if icu_data["ctl"]:              metrics.append(f"CTL {round(icu_data['ctl'])}")
+    if metrics:
+        lines.append("  ".join(metrics))
+
+    missing = []
+    for icu_field, _, label in [
+        ("ftp_watts", None, "FTP"),
+        ("run_threshold_pace_per_km", None, "run threshold"),
+        ("swim_css_per_100m", None, "swim CSS"),
+        ("weight_kg", None, "weight"),
+    ]:
+        if not icu_data.get(icu_field):
+            missing.append(label)
+    if missing:
+        lines.append(f"_Not found: {', '.join(missing)} -- I'll ask about those in a moment._")
+
+    return icu_data, "\n".join(lines)
+
+
+def _build_remaining_queue(answers, icu_data):
+    """Build qualitative + gap questions after ICU fetch."""
+    race_str  = answers.get("race", "your race")
+    race_name = race_str
+    dm = re.search(r'(\d{4}-\d{2}-\d{2})', race_str)
+    if dm:
+        race_name = race_str[:dm.start()].strip().rstrip(", ")
+
+    qual = [(key, q.format(race_name=race_name)) for key, q in _OB_QUALITATIVE]
+    gaps = [
+        (answer_key, question)
+        for icu_field, answer_key, question in _OB_GAPS
+        if not icu_data.get(icu_field)
+    ]
+    return qual + gaps
+
+
+def _scaffold_athlete(chat_id, answers, icu_data):
+    """Create athletes/{slug}/ folder, write seed files, update athletes.json. Returns slug."""
+    from string import Template
+
+    slug       = answers["slug"].strip()
+    name       = answers["name"].strip()
+    first_name = name.split()[0]
+
+    def _int(s):
+        try: return int(float(re.sub(r'[^\d.]', '', str(s))))
+        except Exception: return None
+
+    def _float(s):
+        try: return float(re.sub(r'[^\d.]', '', str(s)))
+        except Exception: return None
+
+    ftp      = icu_data.get("ftp_watts")      or _int(answers.get("ftp", ""))
+    run_thr  = icu_data.get("run_threshold_pace_per_km") or answers.get("run_threshold") or None
+    swim_css = icu_data.get("swim_css_per_100m")         or answers.get("swim_css")      or None
+    weight   = icu_data.get("weight_kg")      or _float(answers.get("weight", ""))
+    lthr     = icu_data.get("lthr")
+    max_hours = _int(answers.get("max_hours", ""))
+
+    race_str  = answers.get("race", "").strip()
+    race_date, race_name = None, race_str
+    dm = re.search(r'(\d{4}-\d{2}-\d{2})', race_str)
+    if dm:
+        race_date = dm.group(1)
+        race_name = race_str[:dm.start()].strip().rstrip(", ")
+
+    injuries_str = answers.get("injuries", "none").strip()
+    injuries = [] if injuries_str.lower() == "none" else [
+        {"location": "", "description": injuries_str, "protocol": ""}
+    ]
+
+    profile = {
+        "slug": slug, "name": name,
+        "weight_kg": weight, "race_weight_kg": None,
+        "race_name": race_name, "race_date": race_date, "race_distance": "Full Ironman",
+        "a_goal": answers.get("a_goal", ""), "b_goal": None, "c_goal": "Finish",
+        "ftp_watts": ftp, "indoor_ftp_watts": icu_data.get("indoor_ftp_watts"),
+        "swim_css_per_100m": swim_css, "run_threshold_pace_per_km": run_thr, "lthr": lthr,
+        "training_days": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+        "max_hours_per_week": max_hours,
+        "icu_athlete_id": answers.get("icu_id", "").strip(),
+        "experience": answers.get("experience", ""),
+        "injuries": injuries,
+    }
+
+    adir = BASE.parent / "athletes" / slug
+    adir.mkdir(parents=True, exist_ok=True)
+    (adir / "telegram").mkdir(exist_ok=True)
+    (adir / "reference").mkdir(exist_ok=True)
+
+    (adir / "profile.json").write_text(json.dumps(profile, indent=2))
+
+    today_str = date.today().isoformat()
+    for fname, content in [
+        ("session-log.json",    "[]"),
+        ("heat-log.json",       "[]"),
+        ("swim-log.json",       "[]"),
+        ("feedback-log.json",   "[]"),
+        ("decoupling-log.json", "[]"),
+        ("current-state.json",  json.dumps({"last_updated": today_str}, indent=2)),
+    ]:
+        if not (adir / fname).exists():
+            (adir / fname).write_text(content)
+
+    (adir / "current-state.md").write_text(
+        f"# {name} -- Current State\n\nLast updated: {today_str}\n\n"
+        f"## Injuries / Niggles\n{injuries_str}\n\n## Open Actions\n- [ ] Set up initial training plan\n"
+    )
+
+    template_file = BASE.parent / "onboarding/templates/system_prompt.txt"
+    if template_file.exists():
+        sp = Template(template_file.read_text()).safe_substitute(
+            name=name, first_name=first_name, slug=slug,
+            race_name=race_name, race_date=race_date or "TBD",
+            a_goal=profile["a_goal"],
+            experience=answers.get("experience", ""),
+            injuries=injuries_str,
+            max_hours=max_hours or "?",
+        )
+        (adir / "system_prompt.txt").write_text(sp)
+
+    # Riskiest write last
+    athletes_data = json.loads(ATHLETES_CONFIG.read_text()) if ATHLETES_CONFIG.exists() else {}
+    athletes_data[slug] = {
+        "name": name, "chat_id": str(chat_id),
+        "icu_athlete_id": answers.get("icu_id", "").strip(),
+        "icu_api_key":    answers.get("icu_key", "").strip(),
+        "active": False,
+        "race_date": race_date or "", "race_name": race_name,
+    }
+    ATHLETES_CONFIG.write_text(json.dumps(athletes_data, indent=2))
+
+    return slug
+
+
+def handle_onboarding(token, chat_id, text):
+    """Returns True if chat_id is pending and the message was handled."""
+    pending = load_pending()
+    if chat_id not in pending:
+        return False
+
+    ob_state = load_onboarding_state()
+
+    # First contact -- send Q0, initialise queue with remainder of phase 1
+    if chat_id not in ob_state:
+        ob_state[chat_id] = {
+            "current_key": _OB_PHASE1[0][0],
+            "queue": [[k, q] for k, q in _OB_PHASE1[1:]],
+            "answers": {}, "icu_data": {},
+            "started_at": datetime.now().isoformat(),
+        }
+        save_onboarding_state(ob_state)
+        send(token, chat_id, _OB_PHASE1[0][1])
+        return True
+
+    session = ob_state[chat_id]
+    key     = session["current_key"]
+    answer  = text.strip()
+
+    err = _validate_ob_answer(key, answer)
+    if err:
+        send(token, chat_id, err)
+        return True
+
+    session["answers"][key] = answer
+
+    # After ICU key: verify, fetch everything, build rest of queue
+    if key == "icu_key":
+        save_onboarding_state(ob_state)
+        send(token, chat_id, "_Connecting to Intervals.icu..._")
+        try:
+            icu_data, summary = _fetch_icu_data(session["answers"]["icu_id"], answer)
+        except Exception as e:
+            log(f"Onboarding ICU fetch failed for {chat_id}: {e}")
+            send(token, chat_id,
+                 f"Couldn't connect to Intervals.icu -- please check your API key and try again.\n"
+                 f"_(Error: {e})_\n\n" + _OB_PHASE1[-1][1])
+            session["answers"].pop("icu_key", None)
+            save_onboarding_state(ob_state)
+            return True
+
+        session["icu_data"] = icu_data
+        remaining = _build_remaining_queue(session["answers"], icu_data)
+        session["queue"] = [[k, q] for k, q in remaining]
+        next_key, next_q = session["queue"].pop(0)
+        session["current_key"] = next_key
+        save_onboarding_state(ob_state)
+        send(token, chat_id, summary + "\n\n" + next_q)
+        return True
+
+    # Advance to next question
+    if session["queue"]:
+        next_key, next_q = session["queue"].pop(0)
+        session["current_key"] = next_key
+        save_onboarding_state(ob_state)
+        send(token, chat_id, next_q)
+        return True
+
+    # Queue exhausted -- scaffold
+    save_onboarding_state(ob_state)
+    send(token, chat_id, "_Setting up your profile..._")
+    try:
+        slug = _scaffold_athlete(chat_id, session["answers"], session["icu_data"])
+    except Exception as e:
+        log(f"Onboarding scaffold failed for {chat_id}: {e}")
+        send(token, chat_id, f"Something went wrong setting up your profile -- please contact your coach. (Error: {e})")
+        return True
+
+    log(f"Onboarding complete: {session['answers'].get('name', '?')} ({slug})")
+    _git_commit(f"onboarding: add athlete {slug}")
+
+    pending_list = load_pending()
+    if chat_id in pending_list:
+        pending_list.remove(chat_id)
+    save_pending(pending_list)
+    del ob_state[chat_id]
+    save_onboarding_state(ob_state)
+
+    first_name = session["answers"]["name"].split()[0]
+    send(token, chat_id,
+         f"You're all set, *{first_name}*! Your profile has been created.\n\n"
+         f"Your account isn't live yet -- your coach will activate it shortly "
+         f"and you'll get a message here when you're good to go.")
+
+    config_data = load_config()
+    admin_id = str(config_data.get("admin_chat_id", ""))
+    if admin_id:
+        send(token, admin_id,
+             f"*New athlete ready to activate:*\n"
+             f"Name: {session['answers']['name']}\n"
+             f"Handle: `{slug}`\n"
+             f"Race: {session['answers'].get('race', '?')}\n"
+             f"Goal: {session['answers'].get('a_goal', '?')}\n\n"
+             f"Send `/approve {slug}` to activate.")
+    return True
+
+
+def handle_admin_command(token, chat_id, text, config):
+    """Handle /invite and /approve commands from the admin chat_id. Returns True if handled."""
+    admin_id = str(config.get("admin_chat_id", ""))
+    if not admin_id or chat_id != admin_id:
+        return False
+
+    lower = text.lower().strip()
+
+    if lower.startswith("/invite "):
+        raw = text.split(None, 1)[1].strip()
+        pending = load_pending()
+        if raw not in pending:
+            pending.append(raw)
+            save_pending(pending)
+            send(token, chat_id, f"Added `{raw}` to pending list. They can now start onboarding.")
+        else:
+            send(token, chat_id, f"`{raw}` is already in the pending list.")
+        return True
+
+    if lower.startswith("/approve "):
+        slug_to_approve = text.split(None, 1)[1].strip()
+        athletes_data = json.loads(ATHLETES_CONFIG.read_text()) if ATHLETES_CONFIG.exists() else {}
+        if slug_to_approve not in athletes_data:
+            send(token, chat_id, f"No athlete found with handle `{slug_to_approve}`.")
+            return True
+        athletes_data[slug_to_approve]["active"] = True
+        ATHLETES_CONFIG.write_text(json.dumps(athletes_data, indent=2))
+        approved_cid = str(athletes_data[slug_to_approve].get("chat_id", ""))
+        approved_name = athletes_data[slug_to_approve]["name"].split()[0]
+        if approved_cid:
+            send(token, approved_cid,
+                 f"Welcome aboard, *{approved_name}*! ClaudeCoach is now active for you.\n\n"
+                 f"Try: _how am I looking?_ or _what's today's session?_")
+        send(token, chat_id, f"Athlete `{slug_to_approve}` is now active.")
+        log(f"Admin approved athlete: {slug_to_approve}")
+        return True
+
+    return False
+
+
+# --- END ONBOARDING ----------------------------------------------------------
+
+
 def call_claude(user_message, config, history, model=MODEL_SONNET,
                 system_prompt_file=None, athlete_name="Jamie", context=""):
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
@@ -634,8 +1035,14 @@ def main():
             if not text:
                 continue
 
+            # Admin commands (/invite, /approve) — handled before athlete routing
+            if handle_admin_command(token, chat_id, text, config):
+                continue
+
             athlete = athletes.get(chat_id)
             if not athlete:
+                if handle_onboarding(token, chat_id, text):
+                    continue
                 send(token, chat_id, "This account isn't registered with ClaudeCoach yet.")
                 continue
 
