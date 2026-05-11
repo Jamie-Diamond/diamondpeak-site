@@ -22,5 +22,11 @@
     "type": "feedback",
     "message": "Review which Claude model is best for ClaudeCoach. Opus is very slow in use — consider alternatives that would offer better guardrails, faster responses, and more efficient token use. Possibly Sonnet 4.6 or Haiku 4.5 for routine replies, with Opus reserved for heavier planning/analysis tasks.",
     "logged_at": "2026-05-11T00:00:00"
+  },
+  {
+    "date": "2026-05-11",
+    "type": "feedback",
+    "message": "Improve and make the tone of voice more consistent across replies. Also develop a proper athlete onboarding process (initial setup, baseline data capture, goals, constraints, preferences) so new athletes get a structured intake rather than ad-hoc context building.",
+    "logged_at": "2026-05-11T00:00:00"
   }
 ]
