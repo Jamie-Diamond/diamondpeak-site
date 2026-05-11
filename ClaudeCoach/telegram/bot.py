@@ -725,8 +725,8 @@ ONBOARDING_FILE = BASE.parent / "config/onboarding_state.json"  # gitignored
 _OB_PHASE1 = [
     ("name",    "Hi! I'm ClaudeCoach. Just a few questions to get you set up.\n\nWhat's your *full name*?"),
     ("race",    "What's your *target race* -- name and date? (e.g. _IM Frankfurt, 2027-06-29_)"),
-    ("icu_id",  "Your *Intervals.icu athlete ID* -- looks like _i196362_. Find it at intervals.icu -> Profile."),
-    ("icu_key", "Your *Intervals.icu API key* -- intervals.icu -> Settings -> API."),
+    ("icu_id",  "Your *Intervals.icu athlete ID* -- it looks like _i196362_.\n\nFind it at: intervals.icu → top-right menu → *Settings* → scroll to the bottom → *Developer settings*. Your athlete ID is shown there."),
+    ("icu_key", "Now your *Intervals.icu API key*.\n\nSame place: intervals.icu → *Settings* → scroll to the bottom → *Developer settings* → click *Show API key*. Copy and paste the full key here."),
 ]
 
 # Always asked after ICU fetch, regardless of what ICU returned
