@@ -33,7 +33,7 @@
 - Current pain 1–10 (during run): 2 (Thu 7 May — 13 km 9:1 run)
 - Current pain 1–10 (next morning): 0 (Fri 8 May); 0 (Sat 9 May); 0 (Sun 10 May, resting); 0 (Mon 11 May AM, resting — "ankle is good")
 - Today's run (Mon 11 May): rescheduled to evening — 3×(9:1) walk-run, ~30 min / ~5k
-- Week plan decisions (logged 2026-05-11): Sat 16 = Richmond laps ride (wedding day — AM only, ride takes priority over jog); Sun 17 = easy 5k run (Jamie confirmed)
+- Week plan decisions (logged 2026-05-11): Sat 16 = Richmond laps ride (wedding day — AM only, ride takes priority over jog); Sun 17 = easy 5k run (Jamie confirmed). Wed run held at 10–12 km (Jamie confirmed — accepts week +60–76% run km vs cap). Duplicate "TBC" notes on Sat 16 + Sun 17 deleted from intervals.icu.
 - This week's run km: 12.52 (Thu 7 May — 9:1 walk-run, 64 min)
 - Last week's run km: 10.59 (Wed 29 Apr — ankle-managed)
 - 4 consecutive pain-free weeks reached: no — 2/10 during Thu run, still in rehab protocol
@@ -102,6 +102,7 @@
 - **2026-05-10 — T6 (Tier 1):** Aerobic decoupling 15.8% on Sat 09 May Z2 ride (NP 217 W, IF 0.687). Whole-ride; per-rep clean (5–8%). Session note attributes to traffic stop-start, not durability fade.
 - **2026-05-10 — T10 (Tier 2):** Run km +18.2% w/w (this wk 12.52 km vs last 10.59 km). 10% cap applies while ankle in rehab.
 - **2026-05-11 — T9 (Tier 2):** Open action 'Replan 18-22 May as run+swim only (travel)' due 2026-05-17 (6 days), status pending. Populate W4 sessions for travel block before due date.
+- **2026-05-11 — T10 (Tier 2, pre-flagged):** Planned run km 11–17 May = ~22.5 km (5 Mon + 12 Wed + 5 Sun) vs 12.52 last wk = +80%. Jamie chose to keep Wed at 10–12 km despite 10% rehab cap. Monitor ankle Wed during/next-morning — if >2/10 during or >0/10 AM, cut Sun 5k.
 
 ## Notes for Claude
 
