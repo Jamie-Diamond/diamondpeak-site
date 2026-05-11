@@ -99,6 +99,7 @@
 - **2026-05-10 — T2 (Tier 2):** CTL ramp +5.7/wk (75.9 on 05-03 → 81.6 on 05-10) while ankle quality_sessions_resumed = false. Cap is +4/wk in rehab.
 - **2026-05-10 — T6 (Tier 1):** Aerobic decoupling 15.8% on Sat 09 May Z2 ride (NP 217 W, IF 0.687). Whole-ride; per-rep clean (5–8%). Session note attributes to traffic stop-start, not durability fade.
 - **2026-05-10 — T10 (Tier 2):** Run km +18.2% w/w (this wk 12.52 km vs last 10.59 km). 10% cap applies while ankle in rehab.
+- **2026-05-11 — T9 (Tier 2):** Open action 'Replan 18-22 May as run+swim only (travel)' due 2026-05-17 (6 days), status pending. Populate W4 sessions for travel block before due date.
 
 ## Notes for Claude
 
