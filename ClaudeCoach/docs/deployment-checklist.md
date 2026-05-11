@@ -9,9 +9,9 @@ Each item maps to a real bug we hit in production.
 
 - [ ] **Python syntax** — `python3 -m py_compile ClaudeCoach/scripts/activity-watcher.py ClaudeCoach/scripts/telegram-feedback.py ClaudeCoach/scripts/refresh-site-data.py ClaudeCoach/telegram/bot.py`
 - [ ] **No Unicode box-drawing characters in Python files** — `grep -Pn '[^\x00-\x7F]' ClaudeCoach/scripts/*.py ClaudeCoach/telegram/bot.py` should return nothing (they break the Edit tool and some terminals)
-- [ ] **session-log.json is valid JSON** — `python3 -c "import json; json.load(open('ClaudeCoach/session-log.json'))"`
-- [ ] **No duplicate activity_ids** — `python3 -c "import json; from collections import Counter; e=json.load(open('ClaudeCoach/session-log.json')); ids=[x.get('activity_id') for x in e if x.get('activity_id')]; dupes=[k for k,v in Counter(ids).items() if v>1]; print('Dupes:', dupes or 'none')"`
-- [ ] **current-state.json is valid JSON** — `python3 -c "import json; json.load(open('ClaudeCoach/current-state.json'))"`
+- [ ] **session-log.json is valid JSON** — `python3 -c "import json; json.load(open('ClaudeCoach/athletes/jamie/session-log.json'))"`
+- [ ] **No duplicate activity_ids** — `python3 -c "import json; from collections import Counter; e=json.load(open('ClaudeCoach/athletes/jamie/session-log.json')); ids=[x.get('activity_id') for x in e if x.get('activity_id')]; dupes=[k for k,v in Counter(ids).items() if v>1]; print('Dupes:', dupes or 'none')"`
+- [ ] **current-state.json is valid JSON** — `python3 -c "import json; json.load(open('ClaudeCoach/athletes/jamie/current-state.json'))"`
 
 ---
 
@@ -27,6 +27,7 @@ ssh root@178.105.95.208
 - [ ] **No uncommitted local changes that will block pull** — `git -C /Users/diamondpeakconsulting/diamondpeak-site status --short`
 - [ ] **Crontab intact** — `crontab -l | grep -c "ClaudeCoach"` should be ≥ 7
 - [ ] **Log directory exists** — `ls /root/Library/Logs/ClaudeCoach/`
+- [ ] **athletes.json present** — `cat /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/config/athletes.json` (gitignored — must be written manually on fresh VM). If missing: create `ClaudeCoach/config/` and write the file with credentials from 1Password.
 
 ---
 
