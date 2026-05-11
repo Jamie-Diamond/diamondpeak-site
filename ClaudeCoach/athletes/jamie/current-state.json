@@ -5,12 +5,12 @@
     "pain_next_morning": 0,
     "pain_today_resting": 0,
     "pain_today_resting_date": "2026-05-11",
-    "last_run_date": "2026-05-07",
-    "last_run_km": 12.52,
+    "last_run_date": "2026-05-11",
+    "last_run_km": 7.4,
     "four_pain_free_weeks_reached": false,
     "quality_sessions_resumed": false,
-    "weekly_run_km_this_week": 12.52,
-    "weekly_run_km_last_week": 10.59
+    "weekly_run_km_this_week": 7.4,
+    "weekly_run_km_last_week": 12.52
   },
   "weight_readings": [
     {"date": "2026-05-05", "kg": 82.7},

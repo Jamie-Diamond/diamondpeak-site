@@ -1,0 +1,26 @@
+[
+  {
+    "user": "Would it be feasible for you to reply with voice notes?",
+    "assistant": "Yes, feasible. Telegram bots can send voice messages, and we'd pipe replies through a TTS service (ElevenLabs or OpenAI TTS) before sending. Trade-offs: adds latency on top of Opus, costs per character, and charts/numbers don't carry well in audio \u2014 so likely best as an optional mode or for short replies only.\n\n\u2014 131 days to Cervia"
+  },
+  {
+    "user": "what's today's session?",
+    "assistant": "Today (Mon 11 May):\n\n- *Rest day* note \u2014 but you've got an *easy run 5k* scheduled at 18:00, 9/1 walk-run, *~30 min, 24 TSS*.\n\nLooks like the rest day was overridden when we front-loaded the week for Sat's wedding. Run goes ahead unless ankle says otherwise.\n\n\u2014 131 days to Cervia"
+  },
+  {
+    "user": "Testing",
+    "assistant": "Receiving you loud and clear."
+  },
+  {
+    "user": "Ankle is 0/10 this morning",
+    "assistant": "Already logged \u2014 current-state already shows 0/10 this morning (same as Fri/Sat/Sun). No change, no flag. Evening run is clear to go."
+  },
+  {
+    "user": "What's my tsb?",
+    "assistant": "*TSB is \u221211.2* \u2014 you're in an amber load zone (not heavily fatigued, but carrying training stress). CTL's holding at *79.2*, ATL at *90.5*, so you've got capacity for a steady week coming up."
+  },
+  {
+    "user": "how am I looking?",
+    "assistant": "*Fitness*: CTL **79.2** (solid ramp), ATL **90.5** (elevated from wedding week), TSB **\u221211.2** (amber). You're building well \u2014 the spike mid-April is when you pushed hard before the wedding. TSB is recovering steadily, and ankle staying at 0/10 is the green light to build gently this week."
+  }
+]

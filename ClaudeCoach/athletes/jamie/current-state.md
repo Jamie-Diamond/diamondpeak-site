@@ -30,9 +30,9 @@
 
 ## Ankle (high ankle sprain, onset ~1 March 2026)
 
-- Current pain 1–10 (during run): 2 (Thu 7 May — 13 km 9:1 run)
-- Current pain 1–10 (next morning): 0 (Fri 8 May); 0 (Sat 9 May); 0 (Sun 10 May, resting); 0 (Mon 11 May AM, resting — "ankle is good")
-- Today's run (Mon 11 May): rescheduled to evening — 3×(9:1) walk-run, ~30 min / ~5k
+- Current pain 1–10 (during run): 2 (Mon 11 May — 7.4 km 9:1 run; same as Thu 7 May). Pain location: right Achilles on warmup/uphills, front of ankle on flat.
+- Current pain 1–10 (next morning): 0 (Fri 8 May); 0 (Sat 9 May); 0 (Sun 10 May, resting); 0 (Mon 11 May AM, resting — "ankle is good"); Mon 11 May evening run next-morning: TBC
+- Today's run (Mon 11 May): completed — 7.4 km / 37 min (actual run was longer than planned 5k)
 - Week plan decisions (logged 2026-05-11): Sat 16 = Richmond laps ride (wedding day — AM only, ride takes priority over jog); Sun 17 = easy 5k run (Jamie confirmed). Wed run held at 10–12 km (Jamie confirmed — accepts week +60–76% run km vs cap). Duplicate "TBC" notes on Sat 16 + Sun 17 deleted from intervals.icu.
 - This week's run km: 12.52 (Thu 7 May — 9:1 walk-run, 64 min)
 - Last week's run km: 10.59 (Wed 29 Apr — ankle-managed)

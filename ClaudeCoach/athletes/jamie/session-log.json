@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": null,
+    "date": "2026-05-11",
+    "name": "Easy run — 9/1",
+    "sport": "Run",
+    "tss": 41,
+    "duration_min": 37,
+    "distance_km": 7.4,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": null,
+    "rpe": null,
+    "feel": null,
+    "ankle_pain_during": 2,
+    "ankle_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": "Pain 2/10 — same as Thu 7 May. Location varied by terrain: right Achilles on warmup and uphills, front of ankle on flat.",
+    "logged_at": "2026-05-11",
+    "stub": true
+  },
+  {
     "activity_id": "i146909545",
     "date": "2026-05-10",
     "name": "Wandsworth Road Cycling",
