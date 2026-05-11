@@ -8,12 +8,13 @@ from pathlib import Path
 from datetime import datetime, date, timedelta
 from collections import defaultdict
 
-BASE        = Path(__file__).parent.parent          # ClaudeCoach/
-OUT_FILE    = BASE / "athletes/jamie/training-data.json"   # full private copy (gitignored)
-PUB_FILE    = BASE / "training-data.json"                  # public subset (committed to GitHub Pages)
-PROJECT_DIR = str(BASE.parent)                       # diamondpeak-site/
-LOCK_FILE   = BASE / ".refresh_site_data.lock"
-CLAUDE      = "/usr/bin/claude"
+BASE             = Path(__file__).parent.parent          # ClaudeCoach/
+OUT_FILE         = BASE / "athletes/jamie/training-data.json"  # full private copy (gitignored)
+PUB_FILE         = BASE / "training-data.json"                 # public subset (committed to GitHub Pages)
+PROJECT_DIR      = str(BASE.parent)                        # diamondpeak-site/
+LOCK_FILE        = BASE / ".refresh_site_data.lock"
+CLAUDE           = "/usr/bin/claude"
+ATHLETES_CONFIG  = BASE / "config/athletes.json"
 
 HEAT_LOG          = BASE / "athletes/jamie/heat-log.json"
 DECOUPLING_LOG    = BASE / "athletes/jamie/decoupling-log.json"
@@ -331,6 +332,210 @@ def post_process(data):
     return data
 
 
+def _sport_normalise(raw):
+    return {"VirtualRide": "Ride", "GravelRide": "Ride", "VirtualRun": "Run", "TrailRun": "Run"}.get(raw, raw)
+
+
+def _format_pace(sport, dist_m, duration_s):
+    if sport == "Ride" and dist_m and duration_s:
+        return f"{dist_m / 1000 / (duration_s / 3600):.1f} kph"
+    if sport == "Run" and dist_m and duration_s:
+        spm = duration_s / (dist_m / 1000)
+        return f"{int(spm)//60}:{int(spm)%60:02d}/km"
+    if sport == "Swim" and dist_m and duration_s:
+        spc = duration_s / (dist_m / 100)
+        return f"{int(spc)//60}:{int(spc)%60:02d}/100m"
+    return None
+
+
+def _build_athlete_training_data(slug, athlete_cfg):
+    """Build training-data-{slug}.json using IcuClient (Python only — no Claude call)."""
+    sys.path.insert(0, str(BASE / "lib"))
+    from icu_api import IcuClient
+
+    today = date.today()
+    client = IcuClient(athlete_cfg["icu_athlete_id"], athlete_cfg["icu_api_key"])
+
+    seven_ago  = (today - timedelta(days=7)).isoformat()
+    fourteen_ago = (today - timedelta(days=14)).isoformat()
+    seven_fwd  = (today + timedelta(days=7)).isoformat()
+    twentyone_fwd = (today + timedelta(days=21)).isoformat()
+    year_start = f"{today.year}-01-01"
+
+    # Parallel fetch
+    wellness_60, history_21, events_21, fitness_ytd = client.fetch_all(
+        ("get_wellness", 60),
+        ("get_training_history", 21),
+        ("get_events", today.isoformat(), twentyone_fwd),
+        ("get_fitness", (today - date(today.year, 1, 1)).days + 1),
+    )
+
+    # ── kpi ──────────────────────────────────────────────────────────────────
+    kpi = {}
+    if wellness_60:
+        w = wellness_60[-1]
+        ctl = round(w.get("ctl") or 0, 1)
+        atl = round(w.get("atl") or 0, 1)
+        ramp7d = round(ctl - round(wellness_60[-8].get("ctl") or 0, 1), 1) if len(wellness_60) >= 8 else 0
+        kpi = {"ctl": ctl, "atl": atl, "tsb": round(ctl - atl, 1), "ramp7d": ramp7d,
+               "hrv": w.get("hrv"), "rhr": w.get("restingHR")}
+
+    # ── fitnessThis ───────────────────────────────────────────────────────────
+    fitness_this = [[w["id"][:10], round(w.get("ctl") or 0, 1)] for w in fitness_ytd if w.get("ctl")]
+
+    # ── recent (last 14 days) ─────────────────────────────────────────────────
+    recent = []
+    for a in sorted([x for x in history_21 if x.get("start_date_local", "")[:10] >= fourteen_ago],
+                    key=lambda x: x.get("start_date_local", ""), reverse=True):
+        sport = _sport_normalise(a.get("type", "Other"))
+        dist_m = a.get("distance") or 0
+        dur_s  = a.get("moving_time") or 0
+        dur    = round(dur_s / 60)
+        avg_p  = a.get("average_watts")
+        norm_p = a.get("icu_weighted_avg_watts")
+        recent.append({
+            "date":   a.get("start_date_local", "")[:10],
+            "sport":  sport,
+            "name":   a.get("name", ""),
+            "dur":    dur,
+            "dist":   round(dist_m / 1000, 2) if dist_m else None,
+            "pace":   _format_pace(sport, dist_m, dur_s),
+            "hr":     int(a["average_heartrate"]) if a.get("average_heartrate") else None,
+            "powAvg": int(avg_p) if avg_p else None,
+            "powNp":  int(norm_p) if norm_p else None,
+            "tss":    int(a.get("icu_training_load") or 0),
+        })
+
+    # ── weekCalendar (last 7 days + next 14 days) ─────────────────────────────
+    completed_by_date: dict[str, list] = defaultdict(list)
+    for a in history_21:
+        d = a.get("start_date_local", "")[:10]
+        if d >= seven_ago:
+            completed_by_date[d].append(a)
+
+    week_calendar = []
+    for a in sorted(history_21, key=lambda x: x.get("start_date_local", "")):
+        d = a.get("start_date_local", "")[:10]
+        if d < seven_ago:
+            continue
+        sport = _sport_normalise(a.get("type", "Other"))
+        dist_m = a.get("distance") or 0
+        dur_s  = a.get("moving_time") or 0
+        tss    = int(a.get("icu_training_load") or 0)
+        avg_p  = a.get("average_watts")
+        norm_p = a.get("icu_weighted_avg_watts")
+        if sport == "Ride":
+            detail = " · ".join(filter(None, [
+                f"NP {int(norm_p)}W" if norm_p else None,
+                f"HR {int(a['average_heartrate'])}" if a.get("average_heartrate") else None,
+                f"{dist_m/1000:.1f}km" if dist_m else None,
+            ]))
+        elif sport in ("Run", "Swim"):
+            detail = " · ".join(filter(None, [
+                _format_pace(sport, dist_m, dur_s),
+                f"{dist_m/1000:.1f}km" if dist_m else None,
+            ]))
+        else:
+            detail = ""
+        week_calendar.append({
+            "date": d, "sport": sport, "name": a.get("name", ""),
+            "tss": tss, "duration_min": round(dur_s / 60),
+            "status": "completed", "key": tss >= 60, "detail": detail,
+        })
+
+    completed_dates = set(completed_by_date.keys())
+    for ev in events_21:
+        ev_date = (ev.get("start_date_local") or "")[:10]
+        if not ev_date or ev_date < today.isoformat():
+            continue
+        ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
+        # Skip if there's already a completed activity of same sport on that date
+        if any(_sport_normalise(a.get("type", "")) == ev_sport
+               for a in completed_by_date.get(ev_date, [])):
+            continue
+        ev_tss = ev.get("icu_training_load") or ev.get("load")
+        ev_dur = ev.get("moving_time") or ev.get("duration")
+        week_calendar.append({
+            "date": ev_date, "sport": ev_sport, "name": ev.get("name", ""),
+            "tss": int(ev_tss) if ev_tss else None,
+            "duration_min": round(int(ev_dur) / 60) if ev_dur else None,
+            "status": "planned", "key": bool(ev_tss and int(ev_tss) >= 60), "detail": "",
+        })
+    week_calendar.sort(key=lambda x: x["date"])
+
+    # ── loadChart (today−7 to today+7, 15 days) ───────────────────────────────
+    tsb_by_date = {}
+    for w in wellness_60:
+        d = w.get("id", "")[:10]
+        ctl = w.get("ctl") or 0
+        atl = w.get("atl") or 0
+        if d:
+            tsb_by_date[d] = round(ctl - atl, 1)
+
+    load_chart = []
+    for i in range(-7, 8):
+        d = (today + timedelta(days=i)).isoformat()
+        acts = []
+        for a in history_21:
+            if a.get("start_date_local", "")[:10] == d:
+                acts.append({
+                    "sport": _sport_normalise(a.get("type", "Other")),
+                    "tss":   int(a.get("icu_training_load") or 0),
+                    "dur":   round((a.get("moving_time") or 0) / 60),
+                    "status": "completed",
+                })
+        if i > 0:
+            for ev in events_21:
+                ev_d = (ev.get("start_date_local") or "")[:10]
+                if ev_d != d:
+                    continue
+                ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
+                if any(a["sport"] == ev_sport for a in acts):
+                    continue
+                ev_tss = ev.get("icu_training_load") or ev.get("load")
+                ev_dur = ev.get("moving_time") or ev.get("duration")
+                acts.append({
+                    "sport": ev_sport,
+                    "tss":   int(ev_tss) if ev_tss else None,
+                    "dur":   round(int(ev_dur) / 60) if ev_dur else None,
+                    "status": "planned",
+                })
+        load_chart.append({"date": d, "tsb": tsb_by_date.get(d), "activities": acts})
+
+    # ── session log + swim log from local files ───────────────────────────────
+    session_log = []
+    sl_file = BASE / f"athletes/{slug}/session-log.json"
+    if sl_file.exists():
+        try:
+            all_e = json.loads(sl_file.read_text())
+            session_log = [e for e in all_e if not e.get("stub", True)][-10:]
+        except Exception:
+            pass
+
+    swim_log = []
+    sw_file = BASE / f"athletes/{slug}/swim-log.json"
+    if sw_file.exists():
+        try:
+            swim_log = json.loads(sw_file.read_text())
+        except Exception:
+            pass
+
+    data = {
+        "generated":    today.isoformat(),
+        "kpi":          kpi,
+        "fitnessThis":  fitness_this,
+        "recent":       recent,
+        "weekCalendar": week_calendar,
+        "loadChart":    load_chart,
+        "sessionLog":   session_log,
+        "swimLog":      swim_log,
+    }
+
+    out = BASE / f"training-data-{slug}.json"
+    out.write_text(json.dumps(data, separators=(",", ":")))
+    log(f"[{slug}] training-data-{slug}.json: CTL {kpi.get('ctl')}, {len(recent)} activities")
+
+
 def acquire_lock():
     if LOCK_FILE.exists() and time.time() - LOCK_FILE.stat().st_mtime < 600:
         return False
@@ -394,11 +599,31 @@ def main():
         except Exception as e:
             log(f"Public file write warning: {e}")
 
-        # Commit and push
-        today = datetime.now().strftime("%Y-%m-%d")
+        # Refresh per-athlete training data for other athletes (using IcuClient directly)
+        if ATHLETES_CONFIG.exists():
+            try:
+                athletes_map = json.loads(ATHLETES_CONFIG.read_text())
+                for slug, acfg in athletes_map.items():
+                    if slug == "jamie" or not acfg.get("active", True):
+                        continue
+                    try:
+                        _build_athlete_training_data(slug, acfg)
+                    except Exception as e:
+                        log(f"[{slug}] training-data refresh failed (non-fatal): {e}")
+            except Exception as e:
+                log(f"athletes.json load error: {e}")
+
+        # Commit and push — include all training-data*.json files
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        pub_files = ["ClaudeCoach/training-data.json"] + [
+            f"ClaudeCoach/training-data-{s}.json"
+            for s, v in (json.loads(ATHLETES_CONFIG.read_text()).items() if ATHLETES_CONFIG.exists() else [])
+            if s != "jamie" and v.get("active", True)
+            and (BASE / f"training-data-{s}.json").exists()
+        ]
         for cmd in [
-            ["git", "add", "ClaudeCoach/training-data.json"],
-            ["git", "commit", "-m", f"data: refresh training data {today}"],
+            ["git", "add"] + pub_files,
+            ["git", "commit", "-m", f"data: refresh training data {today_str}"],
             ["git", "fetch", "origin"],
             ["git", "rebase", "--autostash", "origin/main"],
             ["git", "push", "origin", "main"],
