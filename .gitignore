@@ -9,3 +9,7 @@ ClaudeCoach/athletes/jamie/last_activity_state.json
 ClaudeCoach/config/athletes.json
 ClaudeCoach/config/pending.json
 ClaudeCoach/config/onboarding_state.json
+
+# Athlete personal data — never commit to public repo
+ClaudeCoach/athletes/
+ClaudeCoach/ironman-analysis/fixtures/
