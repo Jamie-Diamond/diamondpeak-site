@@ -1213,6 +1213,7 @@ def main():
             if not athlete:
                 if handle_onboarding(token, chat_id, text):
                     continue
+                log(f"Unregistered message from chat_id {chat_id}: {text[:60]}")
                 send(token, chat_id, "This account isn't registered with ClaudeCoach yet.")
                 continue
 
