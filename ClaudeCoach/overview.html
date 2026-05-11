@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>System Overview — ClaudeCoach</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f8f5ef;--panel:#ffffff;--ink:#18160f;--ink2:#4a4535;
+    --muted:#9a9080;--line:#ddd8cc;--green:#1d6840;--blue:#1a5276;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px 24px 64px;font-family:'DM Sans',sans-serif;font-weight:300;background:var(--bg);color:var(--ink);line-height:1.6}
+  a{color:var(--green);text-decoration:none}
+  .wrap{max-width:820px;margin:0 auto}
+
+  a.back{display:inline-flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:28px;transition:color .25s}
+  a.back:hover{color:var(--green)}
+
+  .kicker{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  h1{font-family:'Libre Baskerville',serif;font-size:28px;font-weight:700;letter-spacing:-0.02em;margin:0 0 6px}
+  .intro{color:var(--ink2);margin:0 0 36px;font-size:14px}
+
+  h2{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:8px;margin:32px 0 16px}
+
+  .panel{background:rgba(255,255,255,0.85);border:1px solid var(--line);border-radius:10px;padding:20px 24px;margin-bottom:14px}
+
+  /* Stack grid */
+  .stack-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  @media(max-width:620px){.stack-grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:400px){.stack-grid{grid-template-columns:1fr}}
+
+  .stack-item{background:rgba(255,255,255,0.85);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+  .stack-item .label{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .stack-item .name{font-family:'DM Sans',sans-serif;font-weight:500;font-size:13px;color:var(--ink);margin-bottom:2px}
+  .stack-item .desc{font-size:11px;color:var(--ink2)}
+
+  /* Flow diagram */
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:0;margin:4px 0 8px}
+  .flow-node{background:rgba(255,255,255,0.9);border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--ink2);white-space:nowrap}
+  .flow-node.hi{border-color:var(--green);color:var(--green);font-weight:500}
+  .flow-arrow{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);padding:0 6px}
+
+  /* Cron table */
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--line)}
+  td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .mono{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink2)}
+
+  .footer{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;border-top:1px solid var(--line);padding-top:20px;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="index.html" class="back">&larr; ClaudeCoach</a>
+  <div class="kicker">ClaudeCoach</div>
+  <h1>System Overview</h1>
+  <p class="intro">How the coaching system works — data sources, AI pipeline, automation schedule, and infrastructure.</p>
+
+  <h2>Data flow</h2>
+  <div class="panel">
+    <div class="flow">
+      <div class="flow-node">Garmin / Wahoo</div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-node">Intervals.icu</div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-node hi">icu_fetch.py CLI</div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-node hi">Claude AI</div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-node">Telegram</div>
+    </div>
+    <div class="flow" style="margin-top:10px">
+      <div class="flow-node">Athlete reply</div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-node">bot.py</div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-node hi">Claude AI</div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-node">session-log.json</div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-node">GitHub Pages</div>
+    </div>
+  </div>
+
+  <h2>Tech stack</h2>
+  <div class="stack-grid">
+    <div class="stack-item">
+      <div class="label">AI model</div>
+      <div class="name">Claude Sonnet 4</div>
+      <div class="desc">Coaching analysis, session debriefs, plan adjustments via Claude CLI</div>
+    </div>
+    <div class="stack-item">
+      <div class="label">Training data</div>
+      <div class="name">Intervals.icu</div>
+      <div class="desc">CTL/ATL/TSB, activity history, planned events, power curves, wellness</div>
+    </div>
+    <div class="stack-item">
+      <div class="label">Interface</div>
+      <div class="name">Telegram bot</div>
+      <div class="desc">python-telegram-bot; fast-ack pattern; per-athlete session routing</div>
+    </div>
+    <div class="stack-item">
+      <div class="label">Infrastructure</div>
+      <div class="name">Hetzner VPS</div>
+      <div class="desc">Ubuntu VM, systemd service, crontab automation, SSH access</div>
+    </div>
+    <div class="stack-item">
+      <div class="label">Source control</div>
+      <div class="name">GitHub</div>
+      <div class="desc">Public repo for site + scripts; athlete data gitignored and VM-only</div>
+    </div>
+    <div class="stack-item">
+      <div class="label">Public site</div>
+      <div class="name">GitHub Pages</div>
+      <div class="desc">Static HTML/JS, no build step; charts via Chart.js CDN</div>
+    </div>
+  </div>
+
+  <h2>Automation schedule</h2>
+  <div class="panel" style="padding:0;overflow:hidden">
+    <table>
+      <thead>
+        <tr><th>Frequency</th><th>Script</th><th>What it does</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">Every 15 min</td>
+          <td class="mono">activity-watcher.py</td>
+          <td>Detects new activities synced to Intervals.icu; triggers Claude coaching analysis; stubs session-log.json; sends Telegram summary</td>
+        </tr>
+        <tr>
+          <td class="mono">Every 1 min</td>
+          <td class="mono">telegram-feedback.py</td>
+          <td>Processes athlete Telegram replies; fills session log stubs with RPE, nutrition, pain scores; runs outside bot.py to avoid polling conflict</td>
+        </tr>
+        <tr>
+          <td class="mono">Daily 06:30</td>
+          <td class="mono">morning-checkin.py</td>
+          <td>Fetches HRV, sleep, and wellness; sends personalised daily readiness note and session preview</td>
+        </tr>
+        <tr>
+          <td class="mono">Daily 07:00</td>
+          <td class="mono">prescription.py</td>
+          <td>Generates today's session prescription card based on load, fatigue, and planned event</td>
+        </tr>
+        <tr>
+          <td class="mono">Hourly</td>
+          <td class="mono">refresh-site-data.py</td>
+          <td>Fetches live training metrics from Intervals.icu; writes training-data.json used by the Training Visualiser</td>
+        </tr>
+        <tr>
+          <td class="mono">Hourly</td>
+          <td class="mono">refresh-public-data.py</td>
+          <td>Extracts public-safe fields (CTL trend, race countdown) from training-data.json; writes site-data.json and pushes to GitHub Pages</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Athlete data &amp; privacy</h2>
+  <div class="panel">
+    <p style="margin:0 0 10px;font-size:13px">All personal athlete data (session logs, injury notes, health metrics, training analysis) is stored exclusively on the VM. The <code style="font-family:'DM Mono',monospace;font-size:11px">ClaudeCoach/athletes/</code> directory is gitignored — nothing personal is ever pushed to the public GitHub repository.</p>
+    <p style="margin:0;font-size:13px">The public site receives only a minimal, anonymised summary (race countdown, CTL fitness trend) via <code style="font-family:'DM Mono',monospace;font-size:11px">site-data.json</code>, which contains no health data, weight, injury details, or identifying performance metrics.</p>
+  </div>
+
+  <h2>Onboarding</h2>
+  <div class="panel">
+    <p style="margin:0;font-size:13px">New athletes are invited by the admin via <code style="font-family:'DM Mono',monospace;font-size:11px">/invite &lt;chat_id&gt;</code>. The bot walks them through a multi-step Telegram questionnaire: name, target race, Intervals.icu credentials — then immediately fetches FTP, thresholds, and fitness history from ICU and asks only for the gaps. The admin approves with <code style="font-family:'DM Mono',monospace;font-size:11px">/approve &lt;slug&gt;</code>, which scaffolds the athlete folder, generates a personalised system prompt, and activates coaching.</p>
+  </div>
+
+  <div class="footer">&copy; 2026 Diamond Peak Consulting &mdash; private</div>
+</div>
+</body>
+</html>

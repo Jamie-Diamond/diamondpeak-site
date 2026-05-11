@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ClaudeCoach — Diamond Peak</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f8f5ef;--panel:#ffffff;--ink:#18160f;--ink2:#4a4535;
+    --muted:#9a9080;--line:#ddd8cc;--green:#1d6840;--blue:#1a5276;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px 24px 64px;font-family:'DM Sans',sans-serif;font-weight:300;background:var(--bg);color:var(--ink);line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:960px;margin:0 auto}
+
+  .hero{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+  .logo-mark{width:36px;height:36px;opacity:0.85}
+  .hero h1{font-family:'Libre Baskerville',serif;font-size:30px;font-weight:700;letter-spacing:-0.02em;margin:0}
+  .sub{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin:0 0 40px}
+
+  .section-label{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:8px;margin:0 0 16px}
+
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:40px}
+  @media(max-width:600px){.grid{grid-template-columns:1fr}}
+
+  .card{background:rgba(255,255,255,0.85);border:1px solid var(--line);border-radius:10px;padding:22px 22px 18px;display:flex;flex-direction:column;gap:8px;transition:box-shadow .2s,transform .2s;cursor:pointer}
+  .card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.07);transform:translateY(-2px)}
+  .card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+  .card-icon svg{width:18px;height:18px}
+  .card-icon.blue{background:#dde9f5;color:#1a5276}
+  .card-icon.green{background:#ddeee3;color:#1d6840}
+  .card-icon.amber{background:#faf1d7;color:#856212}
+  .card-icon.purple{background:#ede9f5;color:#4a3e7a}
+  .card h2{font-family:'Libre Baskerville',serif;font-size:18px;font-weight:700;letter-spacing:-0.01em;margin:0}
+  .card p{font-size:13px;color:var(--ink2);margin:0;line-height:1.5}
+  .card .arrow{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-top:auto;padding-top:10px;transition:color .2s}
+  .card:hover .arrow{color:var(--green)}
+
+  .footer{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;border-top:1px solid var(--line);padding-top:20px;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <img class="logo-mark" src="../logo-mark.png" alt="Diamond Peak">
+    <h1>ClaudeCoach</h1>
+  </div>
+  <p class="sub">AI-powered Ironman coaching — Diamond Peak</p>
+
+  <div class="section-label">Athletes</div>
+  <div class="grid">
+    <a href="athlete-jamie.html" class="card">
+      <div class="card-icon blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      </div>
+      <h2>Jamie</h2>
+      <p>IM Cervia 2026 — Build phase. Fitness dashboard, training load, and race countdown.</p>
+      <span class="arrow">View dashboard &rarr;</span>
+    </a>
+    <a href="athlete-b.html" class="card">
+      <div class="card-icon green">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><line x1="12" y1="1" x2="12" y2="6"/></svg>
+      </div>
+      <h2>Athlete B</h2>
+      <p>Next athlete — onboarding in progress.</p>
+      <span class="arrow">View &rarr;</span>
+    </a>
+  </div>
+
+  <div class="section-label">Tools &amp; System</div>
+  <div class="grid">
+    <a href="training-visualiser.html" class="card">
+      <div class="card-icon amber">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <h2>Training Visualiser</h2>
+      <p>Season-level load chart, power curve, week calendar, and session breakdown for IM Cervia 2026.</p>
+      <span class="arrow">Open visualiser &rarr;</span>
+    </a>
+    <a href="overview.html" class="card">
+      <div class="card-icon purple">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      </div>
+      <h2>System Overview</h2>
+      <p>Tech stack, data flow, and workflow — how ClaudeCoach works end to end.</p>
+      <span class="arrow">Read overview &rarr;</span>
+    </a>
+  </div>
+
+  <div class="footer">&copy; 2026 Diamond Peak Consulting &mdash; private</div>
+</div>
+</body>
+</html>

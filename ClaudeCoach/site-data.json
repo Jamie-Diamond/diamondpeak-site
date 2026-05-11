@@ -1,0 +1,14 @@
+{
+  "updated": "2026-05-11",
+  "athletes": {
+    "jamie": {
+      "first_name": "Jamie",
+      "race_name": "Ironman Cervia",
+      "race_date": "2026-09-19",
+      "ctl": null,
+      "atl": null,
+      "tsb": null,
+      "ctl_history": []
+    }
+  }
+}
