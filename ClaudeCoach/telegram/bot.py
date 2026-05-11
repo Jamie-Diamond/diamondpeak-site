@@ -44,6 +44,19 @@ MAX_HISTORY_PAIRS = 6  # keep last 6 exchanges for context
 MODEL_SONNET = "claude-sonnet-4-6"
 MODEL_HAIKU  = "claude-haiku-4-5-20251001"
 
+RACE_DAY = date(2026, 9, 19)
+
+_MODEL_LABEL = {
+    MODEL_HAIKU:  "H",
+    MODEL_SONNET: "S",
+    "claude-opus-4-7": "O4.7",
+}
+
+def response_footer(model: str) -> str:
+    days = (RACE_DAY - date.today()).days
+    label = _MODEL_LABEL.get(model, model.split("-")[1][0].upper())
+    return f"\n_{days} days to go · {label}_"
+
 # Messages that only need a simple lookup — Haiku handles these
 _SIMPLE_QUERY_RE = re.compile(
     r"^(what'?s?\s+)?(today'?s?\s+)?(session|plan|workout|schedule)\b"
@@ -564,11 +577,12 @@ def main():
             send(token, chat_id, "_On it..._")
 
             history = load_history()
-            response = call_claude(text, config, history, model=select_model(text))
+            model = select_model(text)
+            response = call_claude(text, config, history, model=model)
 
             clean = process_charts(token, chat_id, response)
             if clean:
-                send(token, chat_id, clean, reply_markup=build_keyboard())
+                send(token, chat_id, clean + response_footer(model), reply_markup=build_keyboard())
             log(f"Out: {clean[:80]}")
 
             history.append({"user": text, "assistant": clean})
