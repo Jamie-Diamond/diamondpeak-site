@@ -8,7 +8,7 @@ Run: python3 bot.py
 import json, re, subprocess, sys, time, ssl, os
 import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
@@ -319,16 +319,135 @@ def process_charts(token, chat_id, response):
 
 
 PROJECT_DIR = BASE.parent.parent  # diamondpeak-site/
-STATE_JSON  = BASE.parent / "athletes/jamie/current-state.json"
-HEAT_LOG    = BASE.parent / "athletes/jamie/heat-log.json"
+STATE_JSON    = BASE.parent / "athletes/jamie/current-state.json"
+HEAT_LOG      = BASE.parent / "athletes/jamie/heat-log.json"
+SESSION_LOG_F = BASE.parent / "athletes/jamie/session-log.json"
+TRAINING_DATA = BASE.parent / "athletes/jamie/training-data.json"
+SITE_DATA     = BASE.parent / "site-data.json"
 
 _ANKLE_RE    = re.compile(r'^(ankle|pain|niggle)\s+(\w+[\s\w]*?)\s+(\d+(?:\.\d+)?)\s*$', re.I)
 _WEIGHT_RE   = re.compile(r'^(?:weight|kg|weigh(?:ed)?)\s+([\d.]+)\s*(?:kg)?\s*$', re.I)
 _HEAT_RE     = re.compile(r'^(?:heat|bath)\s+([\d.]+)\s*(?:min|m)?\s*$', re.I)
 _PLAN_RE     = re.compile(r'^(?:generate\s+plan|plan\s+(?:next\s+)?(?:2\s+)?weeks?|plan\s+ahead)\s*$', re.I)
 _FTP_RE      = re.compile(r'^(?:ftp\s+(?:retest|result|update|new)|new\s+ftp)\s+([\d.]+)\s*(?:w(?:atts?)?)?\s*$', re.I)
+_WEEK_CMD_RE = re.compile(r'^/week\s*$', re.I)
+_FORM_CMD_RE = re.compile(r'^/form\s*$', re.I)
 
 GENERATE_PLAN_SCRIPT = BASE.parent.parent / "ClaudeCoach/scripts/generate-plan.sh"
+
+CTL_RACE_TARGET = 90.0
+
+
+def _week_stats() -> str:
+    """Python-only weekly training summary from session-log.json."""
+    if not SESSION_LOG_F.exists():
+        return "No session log found yet."
+    try:
+        entries = json.loads(SESSION_LOG_F.read_text())
+    except Exception:
+        return "Session log unreadable."
+
+    today      = date.today()
+    week_start = today - timedelta(days=today.weekday())
+
+    by_sport   = {}
+    total_tss  = 0
+    total_min  = 0
+    n_sessions = 0
+    n_logged   = 0
+
+    for e in entries:
+        try:
+            d = date.fromisoformat(e.get("date", ""))
+        except Exception:
+            continue
+        if d < week_start or d > today:
+            continue
+        sport = e.get("sport", "Other")
+        tss   = e.get("tss") or 0
+        dur   = e.get("duration_min") or 0
+        total_tss += tss
+        total_min += dur
+        n_sessions += 1
+        if not e.get("stub", True):
+            n_logged += 1
+        s = by_sport.setdefault(sport, {"n": 0, "tss": 0, "min": 0})
+        s["n"] += 1
+        s["tss"] += tss
+        s["min"] += dur
+
+    if not by_sport:
+        return f"No sessions this week ({week_start.strftime('%-d %b')} – today)."
+
+    days_to_race = (RACE_DAY - today).days
+    h, m   = divmod(int(total_min), 60)
+    lines  = [f"*Week {week_start.strftime('%-d %b')} – {today.strftime('%-d %b')}*"]
+    lines.append(f"*{int(total_tss)} TSS* · {h}h {m:02d}m total\n")
+    for sport, v in sorted(by_sport.items(), key=lambda x: -x[1]["tss"]):
+        sh, sm = divmod(int(v["min"]), 60)
+        lines.append(
+            f"  {sport}: {v['n']} session{'s' if v['n'] > 1 else ''}"
+            f" · {int(v['tss'])} TSS · {sh}h{sm:02d}m"
+        )
+    if n_sessions and n_sessions > n_logged:
+        diff = n_sessions - n_logged
+        lines.append(f"\n_{diff} session{'s' if diff > 1 else ''} still awaiting feedback_")
+    lines.append(f"\n_{days_to_race} days to Cervia_")
+    return "\n".join(lines)
+
+
+def _form_stats() -> str:
+    """Python-only CTL/ATL/TSB + projected CTL to race day."""
+    kpi     = {}
+    history = []
+
+    if TRAINING_DATA.exists():
+        try:
+            td      = json.loads(TRAINING_DATA.read_text())
+            kpi     = td.get("kpi", {})
+            history = td.get("fitnessThis", [])
+        except Exception:
+            pass
+
+    if not kpi.get("ctl") and SITE_DATA.exists():
+        try:
+            sd      = json.loads(SITE_DATA.read_text())
+            jamie   = sd.get("athletes", {}).get("jamie", {})
+            kpi     = {"ctl": jamie.get("ctl"), "atl": jamie.get("atl"), "tsb": jamie.get("tsb")}
+            history = jamie.get("ctl_history", [])
+        except Exception:
+            pass
+
+    ctl = kpi.get("ctl")
+    if ctl is None:
+        return "No fitness data yet — refresh pending."
+
+    atl          = kpi.get("atl") or 0
+    tsb          = ctl - atl
+    today        = date.today()
+    days_to_race = (RACE_DAY - today).days
+    tsb_zone     = "Fresh" if tsb > 5 else ("Load" if tsb > -20 else "Heavy")
+
+    lines = [f"*CTL {ctl:.1f}* · ATL {atl:.1f} · TSB {tsb:+.1f} ({tsb_zone})"]
+
+    if len(history) >= 28:
+        old     = history[-28]
+        old_ctl = old[1] if isinstance(old, list) else old.get("ctl", 0)
+        weekly_ramp   = (ctl - old_ctl) / 4
+        projected_ctl = ctl + weekly_ramp * (days_to_race / 7)
+        needed_ramp   = (CTL_RACE_TARGET - ctl) / (days_to_race / 7) if days_to_race > 0 else 0
+        lines.append(f"4-wk ramp: *{weekly_ramp:+.1f}/wk*")
+        if projected_ctl >= CTL_RACE_TARGET * 0.95:
+            lines.append(f"On track: CTL *{projected_ctl:.0f}* by race day ✓")
+        else:
+            lines.append(
+                f"Projected: CTL *{projected_ctl:.0f}* — "
+                f"need *{needed_ramp:+.1f}/wk* to hit {int(CTL_RACE_TARGET)}"
+            )
+
+    lines.append(f"_{days_to_race} days to Cervia_")
+    return "\n".join(lines)
+
 
 def _git_commit(msg):
     try:
@@ -359,24 +478,59 @@ def fast_path(text):
     or None if Claude should handle it.
     """
     today = date.today().isoformat()
+    txt   = text.strip()
 
-    m = _ANKLE_RE.match(text.strip())
+    if _WEEK_CMD_RE.match(txt):
+        return _week_stats()
+
+    if _FORM_CMD_RE.match(txt):
+        return _form_stats()
+
+    m = _ANKLE_RE.match(txt)
     if m:
         location = m.group(2).strip() if m.group(1).lower() != "ankle" else "ankle"
         score = float(m.group(3))
         state = _load_state_json()
-        prev = state.get("ankle", {}).get("pain_during")
+        prev  = state.get("ankle", {}).get("pain_during")
         state.setdefault("ankle", {})["pain_during"] = int(score)
+
+        # Rolling pain history — keep last 20 readings
+        hist = state["ankle"].setdefault("history", [])
+        hist.append({"date": today, "score": int(score)})
+        state["ankle"]["history"] = hist[-20:]
+
         state["last_updated"] = today
         _save_state_json(state)
         _git_commit(f"auto: ankle pain {score} {today}")
+
         trend = ""
         if prev is not None:
             if score > prev:
                 trend = f" (up from {prev} — monitor)"
             elif score < prev:
                 trend = f" (down from {prev} — improving)"
-        return f"Logged {location} pain {int(score)}/10{trend}."
+
+        reply = f"Logged {location} pain {int(score)}/10{trend}."
+
+        # Trend and rebalancing alerts
+        recent_scores = [h["score"] for h in state["ankle"]["history"][-3:]]
+        if len(recent_scores) >= 3 and recent_scores[-1] > recent_scores[-2] > recent_scores[-3]:
+            reply += (
+                "\n\n⚠️ *Three readings rising in a row.* "
+                "Drop run volume and flag to your physio."
+            )
+        elif len(recent_scores) >= 2 and recent_scores[-1] > recent_scores[-2] and score >= 4:
+            reply += (
+                "\n\n⚠️ *Rising and at 4+ — consider swapping today's run for easy bike.* "
+                "Say _rebalance plan_ for adjustments."
+            )
+        elif score >= 4:
+            reply += (
+                "\n\n⚠️ *Score 4+* — if a run is on the plan today, "
+                "say _rebalance plan_ before heading out."
+            )
+
+        return reply
 
     m = _WEIGHT_RE.match(text.strip())
     if m:
@@ -1068,13 +1222,19 @@ def main():
 
             if text.lower() in ("/start", "/help"):
                 send(token, chat_id,
-                     "*ClaudeCoach* - IM Cervia 2026\n\n"
-                     "Ask me anything about training. Examples:\n"
-                     "- _how am I looking this week?_\n"
-                     "- _log session_ (after a key workout)\n"
-                     "- _what's today's session?_\n"
-                     "- _log heat session 30 min_\n"
-                     "- _what's my CTL?_",
+                     "*ClaudeCoach* — IM Cervia 2026\n\n"
+                     "*Quick commands (instant):*\n"
+                     "  /week — this week's sessions + TSS\n"
+                     "  /form — CTL/ATL/TSB + race projection\n"
+                     "  ankle 3 — log pain score\n"
+                     "  82.5 kg — log weight\n"
+                     "  heat 30 — log heat session\n\n"
+                     "*Ask anything:*\n"
+                     "  _how am I looking?_\n"
+                     "  _what's today's session?_\n"
+                     "  _log session_ (after a workout)\n"
+                     "  _rebalance plan_ (ankle flare)\n"
+                     "  _generate plan_",
                      reply_markup=build_keyboard())
                 continue
 
