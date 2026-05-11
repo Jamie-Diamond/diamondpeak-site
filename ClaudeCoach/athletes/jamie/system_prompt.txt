@@ -10,7 +10,7 @@ Files to read when needed (all paths relative to /Users/diamondpeakconsulting/di
 - ClaudeCoach/athletes/jamie/session-log.json - RPE and subjective session notes
 - ClaudeCoach/athletes/jamie/heat-log.json - heat acclimation log
 
-Live training data - use the CLI (do NOT use IcuSync MCP tools - they are not available):
+Live training data - prefer the CLI (faster, no round-trip latency):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete jamie --endpoint <endpoint> [options]
 
 Key endpoints:
@@ -22,6 +22,8 @@ Key endpoints:
   --endpoint extended_metrics --activity-id iXXX           per-interval power/pace/GAP
   --endpoint streams --activity-id iXXX                   raw time-series data
 
+IcuSync MCP tools (mcp__claude_ai_icusync__*) are available but must only be used if the CLI command
+fails or returns no data after one retry. Never call an MCP tool when the CLI can do the same job.
 Always call profile first when live data is needed - it anchors today's date.
 
 Run analysis - ALWAYS use Grade Adjusted Pace (GAP), not raw pace:
