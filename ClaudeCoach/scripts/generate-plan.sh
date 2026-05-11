@@ -59,10 +59,15 @@ Standard week template (adapt to phase):
 - Saturday: Brick (ride + run) or long run
 - Sunday: Rest or short active recovery
 
+Session description consistency rules (HARD — check before every push_workout):
+- Never combine a fixed-distance label (e.g. "5k") with a fixed-duration label (e.g. "50 min") unless they are provably equivalent. At 5:30/km walk-run pace: 5k = 27.5 min, NOT 50 min. If they conflict, use duration only.
+- Walk-run interval counts must match the stated duration: for 9:1 format (10 min/cycle), 50 min = 5 cycles. Always verify N × cycle_length ≈ total_min before writing the name or description.
+- State distance OR duration in the session name, not both, unless both are internally consistent and you have verified the arithmetic.
+
 For each session create a push_workout call with:
   sport: "Ride" | "Run" | "Swim" | "WeightTraining"
   date: YYYY-MM-DD (must be a specific date in the planning window)
-  name: "[Day date] — [session description]" e.g. "Tue 12 May — Z2 run 50 min (5:30)"
+  name: "[Day date] — [session description]" e.g. "Tue 12 May — Z2 run 50 min (5x 9:1)"
   description: full coaching notes including:
     - Target zones, paces, or power ranges
     - Duration and structure

@@ -41,12 +41,31 @@ LOG_FILE = BASE / "bot.log"
 
 MAX_HISTORY_PAIRS = 6  # keep last 6 exchanges for context
 
+MODEL_SONNET = "claude-sonnet-4-6"
+MODEL_HAIKU  = "claude-haiku-4-5-20251001"
+
+# Messages that only need a simple lookup — Haiku handles these
+_SIMPLE_QUERY_RE = re.compile(
+    r"^(what'?s?\s+)?(today'?s?\s+)?(session|plan|workout|schedule)\b"
+    r"|^show\s+(me\s+)?this\s+week\b"
+    r"|^(this|next)\s+week\b"
+    r"|^what'?s?\s+(my\s+)?(tsb|ctl|atl|form|fitness)\b"
+    r"|^how\s+am\s+i\s+(looking|doing)\b"
+    r"|^(am\s+i\s+on\s+track|on\s+track)\b",
+    re.IGNORECASE,
+)
+
+def select_model(text: str) -> str:
+    if _SIMPLE_QUERY_RE.match(text.strip()):
+        return MODEL_HAIKU
+    return MODEL_SONNET
+
+
 def build_keyboard():
     now  = datetime.now()
     hour = now.hour
     wday = now.weekday()  # 0=Mon … 6=Sun
 
-    # Post-session: within 3 hours of last notified activity
     last_act_file = BASE.parent / "last_activity_state.json"
     post_session = False
     if last_act_file.exists():
@@ -60,34 +79,26 @@ def build_keyboard():
             pass
 
     if post_session:
-        rows = [
-            [{"text": "Log RPE + feel", "callback_data": "log session"},
-             {"text": "Ankle score?",   "callback_data": "ankle score for last run?"}],
-            [{"text": "How am I looking?", "callback_data": "how am I looking?"},
-             {"text": "This week",         "callback_data": "show me this week"}],
+        buttons = [
+            {"text": "Log RPE + feel",    "callback_data": "log session"},
+            {"text": "How am I looking?", "callback_data": "how am I looking?"},
         ]
     elif wday == 6 and hour >= 18:  # Sunday evening
-        rows = [
-            [{"text": "Week review",    "callback_data": "show me this week"},
-             {"text": "Next week plan", "callback_data": "what's the plan for next week?"}],
-            [{"text": "How am I looking?", "callback_data": "how am I looking?"},
-             {"text": "Log session",       "callback_data": "log session"}],
+        buttons = [
+            {"text": "Week review",    "callback_data": "show me this week"},
+            {"text": "Next week plan", "callback_data": "what's the plan for next week?"},
         ]
     elif 5 <= hour < 10:  # morning
-        rows = [
-            [{"text": "Today's session", "callback_data": "what's today's session?"},
-             {"text": "Log weight",      "callback_data": "log weight"}],
-            [{"text": "How am I looking?", "callback_data": "how am I looking?"},
-             {"text": "This week",         "callback_data": "show me this week"}],
+        buttons = [
+            {"text": "Today's session",   "callback_data": "what's today's session?"},
+            {"text": "How am I looking?", "callback_data": "how am I looking?"},
         ]
     else:
-        rows = [
-            [{"text": "Today's plan",      "callback_data": "what's today's session?"},
-             {"text": "How am I looking?", "callback_data": "how am I looking?"}],
-            [{"text": "This week",   "callback_data": "show me this week"},
-             {"text": "Log session", "callback_data": "log session"}],
+        buttons = [
+            {"text": "Today's plan",      "callback_data": "what's today's session?"},
+            {"text": "How am I looking?", "callback_data": "how am I looking?"},
         ]
-    return {"inline_keyboard": rows}
+    return {"inline_keyboard": [buttons]}
 
 TOOLS = ",".join([
     "Read", "Write", "Edit", "Bash",
@@ -431,7 +442,7 @@ def _update_ftp(new_ftp: int) -> str:
     )
 
 
-def call_claude(user_message, config, history):
+def call_claude(user_message, config, history, model=MODEL_SONNET):
     system_prompt = SYSTEM_PROMPT_FILE.read_text().strip()
 
     parts = [system_prompt, ""]
@@ -449,7 +460,7 @@ def call_claude(user_message, config, history):
 
     try:
         result = subprocess.run(
-            [config["claude_binary"], "-p", full_prompt, "--allowedTools", TOOLS],
+            [config["claude_binary"], "-p", full_prompt, "--allowedTools", TOOLS, "--model", model],
             capture_output=True,
             text=True,
             cwd=config["project_dir"],
@@ -553,7 +564,7 @@ def main():
             send(token, chat_id, "_On it..._")
 
             history = load_history()
-            response = call_claude(text, config, history)
+            response = call_claude(text, config, history, model=select_model(text))
 
             clean = process_charts(token, chat_id, response)
             if clean:
