@@ -1,0 +1,14 @@
+[
+  {
+    "date": "2026-05-11",
+    "type": "bug",
+    "message": "IcuSync tool permissions dropped mid-session — bot asked for permission grant even though tools had been approved in a previous session. Should not require re-approval.",
+    "logged_at": "2026-05-11T00:00:00"
+  },
+  {
+    "date": "2026-05-11",
+    "type": "feedback",
+    "message": "All run analysis should use GAP (Grade-Adjusted Pace), not flat pace.",
+    "logged_at": "2026-05-11T00:00:00"
+  }
+]
