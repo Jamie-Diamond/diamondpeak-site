@@ -3,9 +3,10 @@
 Send a message or photo to the ClaudeCoach Telegram chat.
 
 Usage:
-  notify.py <message>          # send text
-  notify.py --photo <path>     # send photo file (PNG/JPG)
-  echo "text" | notify.py      # pipe text
+  notify.py <message>                      # send text (defaults to config chat_id)
+  notify.py --chat-id <id> <message>       # send to specific athlete
+  notify.py --photo <path> [caption]       # send photo
+  echo "text" | notify.py                  # pipe text
 """
 import json, sys, ssl, urllib.request
 from pathlib import Path
@@ -15,7 +16,18 @@ SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 
 config  = json.loads((Path(__file__).parent / "config.json").read_text())
 token   = config["bot_token"]
-chat_id = config["chat_id"]
+
+# Parse --chat-id before any other arg processing
+_args = list(sys.argv[1:])
+if "--chat-id" in _args:
+    _idx = _args.index("--chat-id")
+    if _idx + 1 < len(_args):
+        chat_id = _args[_idx + 1]
+        _args = _args[:_idx] + _args[_idx + 2:]
+    else:
+        chat_id = config["chat_id"]
+else:
+    chat_id = config["chat_id"]
 
 
 def send_text(text):
@@ -58,7 +70,7 @@ def send_photo(photo_bytes, caption=""):
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
+    args = _args  # already stripped of --chat-id
     if args and args[0] == "--photo":
         if len(args) < 2:
             print("Usage: notify.py --photo <path> [caption]", file=sys.stderr)

@@ -16,7 +16,6 @@ from datetime import datetime
 from pathlib import Path
 
 BASE            = Path(__file__).parent.parent  # ClaudeCoach/
-SESSION_LOG     = BASE / "athletes/jamie/session-log.json"
 STATE_FILE      = BASE / "telegram-feedback-state.json"
 NOTIFY          = BASE / "telegram/notify.py"
 PROJECT_DIR     = str(BASE.parent)
@@ -25,7 +24,24 @@ CLAUDE_TIMEOUT  = 90   # seconds -- must respond before Python sends the error f
 
 _cfg    = json.loads((BASE / "telegram/config.json").read_text())
 TOKEN   = _cfg["bot_token"]
-CHAT_ID = str(_cfg["chat_id"])
+
+# Build chat_id → slug map from athletes.json
+_ATHLETES_CONFIG = BASE / "config/athletes.json"
+_athletes = json.loads(_ATHLETES_CONFIG.read_text()) if _ATHLETES_CONFIG.exists() else {}
+# Map: chat_id string → {slug, session_log, ...}
+ATHLETE_BY_CHAT: dict[str, dict] = {
+    str(v["chat_id"]): {"slug": k, "name": v.get("name", k), "session_log": BASE / f"athletes/{k}/session-log.json"}
+    for k, v in _athletes.items()
+    if v.get("chat_id") and v.get("active", True)
+}
+# Fallback for the config.json chat_id (legacy single-athlete setup)
+_FALLBACK_CHAT_ID = str(_cfg.get("chat_id", ""))
+if _FALLBACK_CHAT_ID and _FALLBACK_CHAT_ID not in ATHLETE_BY_CHAT:
+    ATHLETE_BY_CHAT[_FALLBACK_CHAT_ID] = {
+        "slug": "jamie",
+        "name": "Jamie",
+        "session_log": BASE / "athletes/jamie/session-log.json",
+    }
 
 _cafile = "/etc/ssl/cert.pem" if Path("/etc/ssl/cert.pem").exists() else None
 SSL     = ssl.create_default_context(cafile=_cafile)
@@ -41,8 +57,8 @@ Extract ONLY what is clearly stated -- do not infer or default anything not ment
 Output a JSON object with these fields (omit a field entirely if not mentioned):
   "rpe": integer 1-10
   "feel": string (qualitative description in athlete's own words)
-  "ankle_pain_during": integer 1-10  (runs only)
-  "ankle_pain_next_morning": integer 1-10  (runs only)
+  "injury_pain_during": integer 1-10  (runs only, if injury is tracked)
+  "injury_pain_next_morning": integer 1-10  (runs only, if injury is tracked)
   "nutrition_g_carb": integer grams  (rides only)
   "hydration_ml": integer ml  (rides only)
   "notes": string (anything else worth keeping)
@@ -60,10 +76,10 @@ def _api(method, **params):
         return json.loads(r.read())
 
 
-def _send(msg: str):
+def _send(msg: str, chat_id: str = _FALLBACK_CHAT_ID):
     """Send a plain-text Telegram message -- pure Python, no Claude."""
     try:
-        _api("sendMessage", chat_id=CHAT_ID, text=msg, parse_mode="Markdown")
+        _api("sendMessage", chat_id=chat_id, text=msg, parse_mode="Markdown")
     except Exception:
         pass  # if Telegram itself is down there's nothing to do
 
@@ -95,12 +111,12 @@ def get_updates(offset: int) -> list:
 
 # Session log
 
-def find_unfilled_stub():
+def find_unfilled_stub(session_log: Path):
     """Return (index, entry) for the most recent stub with rpe=null, or (None, None)."""
-    if not SESSION_LOG.exists():
+    if not session_log.exists():
         return None, None
     try:
-        entries = json.loads(SESSION_LOG.read_text())
+        entries = json.loads(session_log.read_text())
     except Exception:
         return None, None
     for i, e in enumerate(entries):
@@ -165,7 +181,7 @@ def parse_feedback(reply_text: str, stub: dict) -> tuple[dict, str | None]:
 
 def apply_feedback(entries: list, idx: int, parsed: dict, raw_text: str) -> dict:
     stub = entries[idx]
-    allowed = {"rpe", "feel", "ankle_pain_during", "ankle_pain_next_morning",
+    allowed = {"rpe", "feel", "injury_pain_during", "injury_pain_next_morning",
                "nutrition_g_carb", "hydration_ml", "notes"}
     for k, v in parsed.items():
         if k in allowed and v is not None:
@@ -179,9 +195,10 @@ def apply_feedback(entries: list, idx: int, parsed: dict, raw_text: str) -> dict
     return stub
 
 
-def commit_and_push():
+def commit_and_push(session_log: Path):
+    rel_path = str(session_log.relative_to(Path(PROJECT_DIR)))
     for cmd in [
-        ["git", "add", "ClaudeCoach/athletes/jamie/session-log.json"],
+        ["git", "add", rel_path],
         ["git", "commit", "-m", f"feedback: Telegram reply {datetime.now().strftime('%Y-%m-%d')}"],
         ["git", "fetch", "origin"],
         ["git", "rebase", "--autostash", "origin/main"],
@@ -200,8 +217,8 @@ def confirmation_msg(stub: dict, parsed: dict) -> str:
         lines.append(f"RPE {parsed['rpe']}/10")
     if parsed.get("feel"):
         lines.append(f"Feel: {parsed['feel']}")
-    if sport == "Run" and parsed.get("ankle_pain_during") is not None:
-        lines.append(f"Ankle during: {parsed['ankle_pain_during']}/10, next morning: {parsed.get('ankle_pain_next_morning', '?')}/10")
+    if sport == "Run" and parsed.get("injury_pain_during") is not None:
+        lines.append(f"Injury during: {parsed['injury_pain_during']}/10, next morning: {parsed.get('injury_pain_next_morning', '?')}/10")
     if parsed.get("nutrition_g_carb"):
         lines.append(f"Nutrition: {parsed['nutrition_g_carb']}g carbs")
     if parsed.get("notes"):
@@ -226,8 +243,11 @@ def main():
         msg = update.get("message") or update.get("edited_message")
         if not msg:
             continue
-        if str(msg.get("chat", {}).get("id")) != CHAT_ID:
-            continue
+
+        incoming_chat_id = str(msg.get("chat", {}).get("id", ""))
+        athlete_info = ATHLETE_BY_CHAT.get(incoming_chat_id)
+        if not athlete_info:
+            continue  # message from unknown chat — ignore
         if msg.get("from", {}).get("is_bot"):
             continue
 
@@ -235,12 +255,14 @@ def main():
         if not text or text.startswith("/"):
             continue
 
-        # Step 1: immediate Python-only ack for ANY message
-        _send("On it...")
+        session_log = athlete_info["session_log"]
 
-        idx, stub = find_unfilled_stub()
+        # Step 1: immediate Python-only ack for ANY message
+        _send("On it...", incoming_chat_id)
+
+        idx, stub = find_unfilled_stub(session_log)
         if stub is None:
-            _send("No session waiting for feedback right now. I'll ask after your next activity.")
+            _send("No session waiting for feedback right now. I'll ask after your next activity.", incoming_chat_id)
             continue
 
         # Step 2: Claude parse (90s timeout)
@@ -250,22 +272,21 @@ def main():
 
         # Step 3a: Claude failed -- Python-only diagnostic reply
         if error:
-            _send(f"Couldn't auto-parse: {error}")
-            # Fall back: store raw text as note so nothing is lost
+            _send(f"Couldn't auto-parse: {error}", incoming_chat_id)
             parsed = {"notes": text.strip()}
 
         # Step 3b: Write, commit, confirm
         try:
-            entries = json.loads(SESSION_LOG.read_text())
+            entries = json.loads(session_log.read_text())
             updated = apply_feedback(entries, idx, parsed, text)
-            SESSION_LOG.write_text(json.dumps(entries, indent=2))
-            commit_and_push()
+            session_log.write_text(json.dumps(entries, indent=2))
+            commit_and_push(session_log)
             if not error:
-                _send(confirmation_msg(updated, parsed))
+                _send(confirmation_msg(updated, parsed), incoming_chat_id)
             else:
-                _send(f"Raw reply saved as a note for _{name}_. You can tidy it up later.")
+                _send(f"Raw reply saved as a note for _{name}_. You can tidy it up later.", incoming_chat_id)
         except Exception as exc:
-            _send(f"Saved to session log failed: {exc}. Message was: \"{text[:80]}\"")
+            _send(f"Saved to session log failed: {exc}. Message was: \"{text[:80]}\"", incoming_chat_id)
 
     if new_offset != offset:
         state["offset"] = new_offset

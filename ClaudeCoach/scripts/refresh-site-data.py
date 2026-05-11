@@ -9,7 +9,8 @@ from datetime import datetime, date, timedelta
 from collections import defaultdict
 
 BASE        = Path(__file__).parent.parent          # ClaudeCoach/
-OUT_FILE    = BASE / "athletes/jamie/training-data.json"
+OUT_FILE    = BASE / "athletes/jamie/training-data.json"   # full private copy (gitignored)
+PUB_FILE    = BASE / "training-data.json"                  # public subset (committed to GitHub Pages)
 PROJECT_DIR = str(BASE.parent)                       # diamondpeak-site/
 LOCK_FILE   = BASE / ".refresh_site_data.lock"
 CLAUDE      = "/usr/bin/claude"
@@ -141,6 +142,20 @@ def fetch_fitness_prev():
         log(f"fitnessPrev fetch failed (non-fatal): {result.stderr[:120]}")
         return
     log(f"fitnessPrev cached: {result.stdout.strip()[:80]}")
+
+
+def _strip_private(data):
+    """Remove personal health data before writing to the public file."""
+    pub = {k: v for k, v in data.items()}
+    pub.pop("sessionLog", None)
+    pub.pop("weightTrend", None)
+    if "currentState" in pub:
+        cs = {k: v for k, v in pub["currentState"].items()}
+        cs.pop("ankle_pain_during", None)
+        cs.pop("ankle_pain_next_morning", None)
+        cs.pop("weight_readings", None)
+        pub["currentState"] = cs
+    return pub
 
 
 def log(msg):
@@ -372,10 +387,17 @@ def main():
         except Exception as e:
             log(f"Post-processing warning: {e} — continuing without extra fields")
 
+        # Write public version (strips personal health data) to ClaudeCoach/ for GitHub Pages
+        try:
+            PUB_FILE.write_text(json.dumps(_strip_private(data), separators=(",", ":")))
+            log(f"Wrote public training-data.json (sessionLog + health fields stripped)")
+        except Exception as e:
+            log(f"Public file write warning: {e}")
+
         # Commit and push
         today = datetime.now().strftime("%Y-%m-%d")
         for cmd in [
-            ["git", "add", "ClaudeCoach/athletes/jamie/training-data.json"],
+            ["git", "add", "ClaudeCoach/training-data.json"],
             ["git", "commit", "-m", f"data: refresh training data {today}"],
             ["git", "fetch", "origin"],
             ["git", "rebase", "--autostash", "origin/main"],

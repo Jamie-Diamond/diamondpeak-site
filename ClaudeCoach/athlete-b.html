@@ -6,52 +6,103 @@
 <title>Athlete B — ClaudeCoach</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <style>
-  :root{
-    --bg:#f8f5ef;--panel:#ffffff;--ink:#18160f;--ink2:#4a4535;
-    --muted:#9a9080;--line:#ddd8cc;--green:#1d6840;--blue:#1a5276;
-    --warn:#c9871f;--bad:#b3261e;
+  :root {
+    color-scheme: light;
+    --bg: #f8f5ef; --panel: #ffffff; --ink: #18160f; --ink2: #4a4535;
+    --muted: #9a9080; --line: #ddd8cc; --green: #1d6840; --blue: #1a5276;
+    --accent: #c0392b; --good: #1d6840; --warn: #c9871f; --bad: #b3261e;
+    --base: #1a5276; --build: #1d6840; --specific: #d4a01f; --peak: #c0392b; --taper: #7b6cb3;
+    --ride: #1a5276; --run: #c0392b; --swim: #2e9c8e; --other: #9a9080;
   }
   *{box-sizing:border-box}
-  body{margin:0;padding:32px 24px 64px;font-family:'DM Sans',sans-serif;font-weight:300;background:var(--bg);color:var(--ink);line-height:1.55}
-  a{color:inherit;text-decoration:none}
-  .wrap{max-width:1000px;margin:0 auto}
-
-  a.back{display:inline-flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:28px;transition:color .25s}
+  body{margin:0;padding:32px 24px;font-family:'DM Sans',sans-serif;font-weight:300;background:var(--bg);color:var(--ink);line-height:1.55}
+  a.back{display:inline-flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);text-decoration:none;margin-bottom:28px;transition:color .25s}
   a.back:hover{color:var(--green)}
-
-  .top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:6px}
-  h1{font-family:'Libre Baskerville',serif;font-size:28px;font-weight:700;letter-spacing:-0.02em;margin:0}
-  .race-tag{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)}
-  .updated{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:20px}
-
+  h1{font-family:'Libre Baskerville',serif;font-size:26px;font-weight:700;margin:0 0 6px;letter-spacing:-0.02em;line-height:1.2}
+  h2{font-family:'DM Mono',monospace;font-size:9px;margin:0 0 14px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);font-weight:500;border-bottom:1px solid var(--line);padding-bottom:8px}
+  h3{font-family:'DM Mono',monospace;font-size:9px;margin:0 0 8px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.12em}
+  .wrap{max-width:1360px;margin:0 auto}
+  .top{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;justify-content:space-between;margin-bottom:20px}
+  .sub{color:var(--muted);font-size:12px;font-family:'DM Mono',monospace}
   .grid{display:grid;gap:14px}
+  .grid-2{grid-template-columns:1fr 1fr}
   .grid-4{grid-template-columns:repeat(4,1fr)}
-  @media(max-width:800px){.grid-4{grid-template-columns:repeat(2,1fr)}}
-  @media(max-width:520px){.grid-4{grid-template-columns:1fr}}
-
-  .panel{background:rgba(255,255,255,0.85);border:1px solid var(--line);border-radius:10px;padding:20px}
-  .panel-title{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:8px;margin:0 0 14px}
-
-  .stat{display:flex;flex-direction:column;gap:3px}
-  .stat .v{font-family:'Libre Baskerville',serif;font-size:28px;font-weight:700;letter-spacing:-0.02em;line-height:1}
+  .grid-6{grid-template-columns:repeat(6,1fr)}
+  @media(max-width:980px){.grid-2,.grid-4,.grid-6{grid-template-columns:1fr 1fr}}
+  @media(max-width:620px){.grid-2,.grid-4,.grid-6{grid-template-columns:1fr}}
+  .panel{background:rgba(255,255,255,0.85);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid var(--line);border-radius:10px;padding:20px}
+  .stat{display:flex;flex-direction:column;gap:2px}
+  .stat .v{font-family:'Libre Baskerville',serif;font-size:26px;font-weight:700;letter-spacing:-0.02em;line-height:1.1}
   .stat .l{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em}
-  .stat .d{font-size:11px;color:var(--muted);margin-top:2px}
-  .stat.good .v{color:var(--green)}
+  .stat .d{font-size:11px;color:var(--muted)}
   .stat.warn .v{color:var(--warn)}
-  .stat.bad  .v{color:var(--bad)}
-
-  .pill{display:inline-block;padding:2px 9px;border-radius:4px;font-family:'DM Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase}
-  .pill-base{background:#dde9f5;color:#1a5276}
+  .stat.bad .v{color:var(--bad)}
+  .stat.good .v{color:var(--good)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:4px;font-family:'DM Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase}
   .pill-build{background:#ddeee3;color:#1d6840}
   .pill-specific{background:#faf1d7;color:#856212}
   .pill-peak{background:#f5dbd6;color:#7d2218}
   .pill-taper{background:#ede9f5;color:#4a3e7a}
-
-  .chart-wrap{position:relative;height:180px}
-  .null-state{font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;text-align:center;padding:30px 0}
-
-  .footer{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;border-top:1px solid var(--line);padding-top:20px;margin-top:20px}
+  .pill-ride{background:#dde9f5;color:#1a5276}
+  .pill-run{background:#f5dbd6;color:#7d2218}
+  .pill-strength{background:#eae8f5;color:#4a3580}
+  .pill-swim{background:#d6eeea;color:#1d6e62}
+  .pill-other{background:#eae8e2;color:#4a4535}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-family:'DM Mono',monospace;font-weight:500;font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);background:rgba(248,245,239,0.7);position:sticky;top:0}
+  td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:hover td{background:rgba(248,245,239,0.6)}
+  .num{text-align:right;font-variant-numeric:tabular-nums;font-family:'DM Mono',monospace;font-size:12px}
+  .small{font-size:11px;color:var(--muted)}
+  .chart-wrap{position:relative;height:340px}
+  .chart-wrap.short{height:220px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:10px;letter-spacing:0.04em}
+  .swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  .callout{background:#fffbf0;border-left:3px solid var(--warn);padding:10px 14px;border-radius:0 6px 6px 0;font-size:12px;margin-top:10px;line-height:1.6}
+  .callout.good{background:#edf5f0;border-left-color:var(--good)}
+  .callout.muted{background:#f5f3ef;border-left-color:var(--line);color:var(--muted)}
+  .footer{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:32px;text-align:center;letter-spacing:0.06em;border-top:1px solid var(--line);padding-top:24px}
+  .phase-bar{display:flex;height:32px;border-radius:6px;overflow:hidden;border:1px solid var(--line);font-family:'DM Mono',monospace;font-size:10px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase}
+  .phase-bar div{display:flex;align-items:center;justify-content:center;color:#fff;position:relative;min-width:30px}
+  .phase-bar .marker{position:absolute;top:-6px;width:2px;height:44px;background:var(--ink);z-index:2}
+  .phase-bar .marker::after{content:"TODAY";position:absolute;top:-14px;left:-18px;font-size:9px;color:var(--ink);background:var(--bg);padding:1px 4px;border:1px solid var(--line);border-radius:3px;white-space:nowrap;font-family:'DM Mono',monospace;letter-spacing:0.1em}
+  .week-cal{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:18px}
+  .week-cal-header{background:rgba(248,245,239,0.8);padding:12px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:baseline}
+  .week-cal-label{font-family:'Libre Baskerville',serif;font-size:14px;font-weight:700;color:var(--ink)}
+  .week-cal-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.06em;margin-top:3px}
+  .week-cal-meta{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:0.04em;text-align:right}
+  .week-grid{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--line)}
+  .day-col{border-right:1px solid var(--line);min-height:140px;display:flex;flex-direction:column}
+  .day-col:last-child{border-right:none}
+  .day-head{padding:7px 6px 5px;border-bottom:1px solid var(--line);text-align:center;background:rgba(248,245,239,0.4)}
+  .day-name{display:block;font-family:'DM Mono',monospace;font-size:8px;font-weight:500;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted)}
+  .day-date{display:block;font-family:'Libre Baskerville',serif;font-size:18px;font-weight:700;color:var(--ink);line-height:1.1;margin-top:1px}
+  .day-col.is-today .day-head{background:rgba(29,104,64,0.07)}
+  .day-col.is-today .day-date{color:var(--green)}
+  .day-col.is-past .day-date{color:var(--muted)}
+  .session-block{flex:1;padding:7px 7px 8px;display:flex;flex-direction:column;gap:3px;position:relative}
+  .session-block.done-block{background:rgba(29,104,64,0.04)}
+  .sport-stripes{display:flex;gap:2px;margin-bottom:5px}
+  .sport-stripe{height:3px;border-radius:1.5px;flex:1}
+  .sport-stripe.ride{background:var(--ride)}.sport-stripe.run{background:var(--run)}
+  .sport-stripe.swim{background:var(--swim)}.sport-stripe.strength{background:var(--taper)}.sport-stripe.other{background:var(--line)}
+  .session-sport-tag{font-family:'DM Mono',monospace;font-size:8px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)}
+  .session-title{font-size:11px;color:var(--ink);line-height:1.3;margin:2px 0}
+  .session-title.key-title{font-weight:600}
+  .session-detail{font-size:10px;color:var(--muted);line-height:1.4;margin-top:1px}
+  .session-tss{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;color:var(--ink2);margin-top:auto;padding-top:5px}
+  .done-tick{position:absolute;top:6px;right:6px;width:15px;height:15px;background:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;font-weight:700}
+  .rest-block{flex:1;display:flex;align-items:center;justify-content:center}
+  .rest-label{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.16em;color:var(--line);text-transform:uppercase}
+  .week-totals-row{display:grid;grid-template-columns:repeat(7,1fr);background:rgba(248,245,239,0.5)}
+  .week-total-cell{padding:5px 6px;text-align:center;border-right:1px solid var(--line);font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)}
+  .week-total-cell:last-child{border-right:none}
+  .week-total-cell.has-tss{color:var(--ink2);font-weight:500}
+  .week-total-cell.done-tss{color:var(--green)}
+  @media(max-width:760px){.session-detail{display:none}.day-date{font-size:14px}}
 </style>
 </head>
 <body>
@@ -61,132 +112,786 @@
   <div class="top">
     <div>
       <h1>Athlete B</h1>
-      <div class="race-tag" id="race-tag">Loading...</div>
+      <div class="sub" id="page-sub">70.3 Emilia Romagna &middot; 20 Sep 2026</div>
     </div>
-    <div style="text-align:right">
-      <div id="phase-pill"></div>
-      <div class="updated" id="updated-label"></div>
-    </div>
+    <div class="sub" id="snapshot-date"></div>
   </div>
 
-  <div class="grid grid-4" style="margin-bottom:14px">
-    <div class="panel">
-      <div class="stat">
-        <span class="v" id="v-countdown">—</span>
-        <span class="l">Days to race</span>
-        <span class="d" id="d-race-date"></span>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="stat" id="stat-ctl">
-        <span class="v" id="v-ctl">—</span>
-        <span class="l">CTL (fitness)</span>
-        <span class="d">chronic training load</span>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="stat" id="stat-atl">
-        <span class="v" id="v-atl">—</span>
-        <span class="l">ATL (fatigue)</span>
-        <span class="d">acute training load</span>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="stat" id="stat-tsb">
-        <span class="v" id="v-tsb">—</span>
-        <span class="l">TSB (form)</span>
-        <span class="d">positive = fresh</span>
-      </div>
-    </div>
-  </div>
-
+  <!-- TOP BAR: COUNTDOWN + KEY STATS -->
   <div class="panel" style="margin-bottom:14px">
-    <div class="panel-title">Fitness trend (CTL)</div>
-    <div class="chart-wrap">
-      <div class="null-state" id="ctl-null">Fitness history will appear once training data syncs</div>
-      <canvas id="ctl-chart" style="display:none"></canvas>
+    <div class="grid grid-4">
+      <div class="stat">
+        <div class="l">Days to race</div>
+        <div class="v" id="kpi-days">—</div>
+        <div class="d" id="kpi-race-date">Sun 20 Sep 2026</div>
+      </div>
+      <div class="stat">
+        <div class="l">Phase</div>
+        <div class="v" id="kpi-phase"><span class="pill pill-build">Build</span></div>
+        <div class="d" id="kpi-phase-sub"></div>
+      </div>
+      <div class="stat" id="stat-ctl">
+        <div class="l">CTL (fitness)</div>
+        <div class="v" id="kpi-ctl">—</div>
+        <div class="d">chronic training load</div>
+      </div>
+      <div class="stat" id="stat-tsb">
+        <div class="l">TSB (form)</div>
+        <div class="v" id="kpi-tsb">—</div>
+        <div class="d">positive = fresh</div>
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <h3 id="phase-label">Build toward race day</h3>
+      <div class="phase-bar" id="phase-bar">
+        <div class="marker" id="phase-marker" style="left:0%"></div>
+      </div>
     </div>
   </div>
 
-  <div class="footer">&copy; 2026 Diamond Peak Consulting &mdash; private</div>
+  <!-- FITNESS TRAJECTORY -->
+  <div class="panel" style="margin-bottom:14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+      <h2 style="margin:0">Fitness trajectory (CTL)</h2>
+      <div style="display:flex;gap:6px">
+        <button onclick="zoomFitness(30)"  style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">30d</button>
+        <button onclick="zoomFitness(90)"  style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">3m</button>
+        <button onclick="zoomFitness(0)"   style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">Season</button>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="chartFitness"></canvas></div>
+    <div class="legend">
+      <span><span class="swatch" style="background:#1a1a1a"></span>CTL — actual</span>
+      <span><span class="swatch" style="background:#c0392b;opacity:.6"></span>Target CTL milestones</span>
+    </div>
+    <div class="callout muted" id="fitness-null" style="margin-top:10px">
+      CTL history will appear once training data syncs from Intervals.icu. Check back after the next daily refresh.
+    </div>
+  </div>
+
+  <!-- TRAINING LOAD -->
+  <div class="panel" style="margin-bottom:14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+      <h2 style="margin:0">Training load — today ±7 days</h2>
+      <div style="display:flex;gap:6px">
+        <button id="load-btn-tss" onclick="setLoadMode('tss')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#1d6840;color:#fff;cursor:pointer">TSS</button>
+        <button id="load-btn-dur" onclick="setLoadMode('dur')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Duration</button>
+      </div>
+    </div>
+    <div class="small" id="load-chart-sub" style="margin-bottom:10px">TSS stacked by sport · faded bars = planned · TSB form line (right axis)</div>
+    <div class="chart-wrap"><canvas id="chartLoad"></canvas></div>
+    <div class="legend" style="margin-top:10px">
+      <span><span class="swatch" style="background:#1d6840;opacity:.87"></span>Ride</span>
+      <span><span class="swatch" style="background:#c0392b;opacity:.87"></span>Run</span>
+      <span><span class="swatch" style="background:#1a5276;opacity:.87"></span>Swim</span>
+      <span><span class="swatch" style="background:#7f8c8d;opacity:.87"></span>Strength</span>
+      <span style="color:var(--muted);font-size:11px">faded = planned</span>
+    </div>
+  </div>
+
+  <!-- PLAN VS ACTUAL TSS -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Plan vs actual TSS — last 6 weeks</h2>
+    <div class="small" style="margin-bottom:10px">Planned = phase target · Actual = from session log · Updated after each sync</div>
+    <div class="chart-wrap short"><canvas id="chartPlanActual"></canvas></div>
+  </div>
+
+  <!-- WEEK CALENDAR -->
+  <div style="margin-bottom:14px">
+    <div id="upcoming-content"></div>
+    <div id="calendar-null" class="callout muted" style="margin-bottom:14px">
+      Week calendar will appear once your training plan is loaded into Intervals.icu.
+    </div>
+  </div>
+
+  <!-- RECENT WORKOUTS -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Recent workouts</h2>
+    <div style="overflow:auto;max-height:380px">
+      <table id="recent-table">
+        <thead><tr><th>Date</th><th>Sport</th><th>Name</th><th class="num">Time</th><th class="num">Dist</th><th class="num">Pace</th><th class="num">Avg HR</th><th class="num">TSS</th></tr></thead>
+        <tbody><tr><td colspan="8" style="color:var(--muted);font-size:12px;text-align:center;padding:20px">Activities will appear after first sync.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SESSION LOG -->
+  <div class="panel" style="margin-bottom:14px" id="session-log-panel">
+    <h2>Session log — last 10 confirmed sessions</h2>
+    <div class="small" style="margin-bottom:10px">RPE and session notes logged via Telegram after each session</div>
+    <div style="overflow:auto">
+      <table id="session-log-table">
+        <thead><tr><th>Date</th><th>Sport</th><th>Name</th><th class="num">TSS</th><th class="num">RPE</th><th>Feel</th></tr></thead>
+        <tbody><tr><td colspan="6" style="color:var(--muted);font-size:12px;text-align:center;padding:16px">Session feedback will appear here after logging begins.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SWIM PROGRESSION -->
+  <div class="panel" style="margin-bottom:14px" id="swim-panel">
+    <h2>Swim progression — pace vs CSS target</h2>
+    <div class="small" style="margin-bottom:8px">Each point = one swim session · dashed line = CSS target</div>
+    <div class="chart-wrap short"><canvas id="chartSwimProg"></canvas></div>
+  </div>
+
+  <!-- LIVE CONSTRAINTS + OPEN ACTIONS -->
+  <div class="panel" style="margin-bottom:14px" id="live-constraints-panel">
+    <h2>Live status — constraints &amp; open actions</h2>
+    <div class="grid grid-2" style="gap:14px">
+      <div>
+        <h3 style="margin-bottom:8px">Current constraints</h3>
+        <div id="live-constraints-content"><span style="color:var(--muted);font-size:12px">Loading…</span></div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:8px">Open actions</h3>
+        <div id="open-actions-content"><span style="color:var(--muted);font-size:12px">Loading…</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">Data provided by Intervals.icu · <span id="footer-generated">Syncing…</span></div>
 </div>
+
 <script>
+// ── UTILITIES ──────────────────────────────────────────────────────────────
+
+function pillForSport(s) {
+  if (/Run/.test(s))      return "pill pill-run";
+  if (/Ride|Cycling|Virtual|Gravel/.test(s)) return "pill pill-ride";
+  if (/Swim/.test(s))     return "pill pill-swim";
+  if (/Strength|Weight/.test(s)) return "pill pill-strength";
+  return "pill pill-other";
+}
+function rollupSport(s) {
+  if (s === "GravelRide")    return {label:"Ride",   variant:"Gravel"};
+  if (s === "VirtualRide")   return {label:"Ride",   variant:"Virtual"};
+  if (s === "OpenWaterSwim") return {label:"Swim",   variant:"Open water"};
+  if (s === "Ride")          return {label:"Ride",   variant:"Road"};
+  if (s === "Swim")          return {label:"Swim",   variant:"Pool"};
+  return {label:s, variant:""};
+}
+function toLocalStr(d) {
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
+// ── PHASE BAR ──────────────────────────────────────────────────────────────
+
 (function() {
-  fetch('site-data.json?v=' + Date.now())
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      var a = d.athletes && d.athletes.kathryn;
-      if (!a) return;
+  const RACE_DATE_STR  = "2026-09-20";
+  const race   = new Date(RACE_DATE_STR + "T00:00:00");
+  const today  = new Date(); today.setHours(0,0,0,0);
 
-      var raceDate = new Date(a.race_date);
-      var today    = new Date(); today.setHours(0,0,0,0);
-      var days     = Math.max(0, Math.round((raceDate - today) / 86400000));
+  // Countdown
+  const days = Math.max(0, Math.round((race - today) / 86400000));
+  const el = document.getElementById("kpi-days");
+  if (el) el.textContent = days;
 
-      document.getElementById('v-countdown').textContent = days;
-      document.getElementById('d-race-date').textContent =
-        raceDate.toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'});
-      document.getElementById('race-tag').textContent =
-        (a.race_name || '') + (a.race_date ? ' — ' + a.race_date : '');
-      if (d.updated) document.getElementById('updated-label').textContent = 'Updated ' + d.updated;
+  // Phase
+  function phaseFromDays(d) {
+    if (d > 84) return {name:"Build",    cls:"pill-build"};
+    if (d > 56) return {name:"Specific", cls:"pill-specific"};
+    if (d > 28) return {name:"Peak",     cls:"pill-peak"};
+    return            {name:"Taper",    cls:"pill-taper"};
+  }
+  const ph = phaseFromDays(days);
+  const phEl = document.getElementById("kpi-phase");
+  if (phEl) phEl.innerHTML = `<span class="pill ${ph.cls}">${ph.name}</span>`;
 
-      // Phase
-      function phase(dOut) {
-        if (dOut > 84)  return ['Build',    'pill-build'];
-        if (dOut > 56)  return ['Specific', 'pill-specific'];
-        if (dOut > 28)  return ['Peak',     'pill-peak'];
-        return               ['Taper',    'pill-taper'];
-      }
-      var ph = phase(days);
-      document.getElementById('phase-pill').innerHTML =
-        '<span class="pill ' + ph[1] + '">' + ph[0] + '</span>';
+  // Phase bar — assume plan started 20 weeks before race
+  const planStart = new Date(race);
+  planStart.setDate(planStart.getDate() - 140);
+  const totalMs = race - planStart;
 
-      function fill(id, val, dec) {
-        if (val === null || val === undefined) return;
-        document.getElementById(id).textContent =
-          typeof val === 'number' ? val.toFixed(dec || 0) : val;
-      }
-      fill('v-ctl', a.ctl, 1);
-      fill('v-atl', a.atl, 1);
+  const taperStart    = new Date(race); taperStart.setDate(race.getDate() - 28);
+  const peakStart     = new Date(race); peakStart.setDate(race.getDate() - 56);
+  const specificStart = new Date(race); specificStart.setDate(race.getDate() - 84);
 
-      var tsb    = a.tsb;
-      var tsbEl  = document.getElementById('v-tsb');
-      var statEl = document.getElementById('stat-tsb');
-      if (tsb !== null && tsb !== undefined) {
-        tsbEl.textContent = (tsb > 0 ? '+' : '') + tsb.toFixed(1);
-        statEl.className  = 'stat ' + (tsb > 5 ? 'good' : tsb < -20 ? 'bad' : 'warn');
-      }
+  const pct = d => Math.max(0, Math.min(100, ((d - planStart) / totalMs) * 100));
+  const todayPct      = pct(today);
+  const specificPct   = pct(specificStart);
+  const peakPct       = pct(peakStart);
+  const taperPct      = pct(taperStart);
 
-      var hist = a.ctl_history || [];
-      if (hist.length > 0) {
-        document.getElementById('ctl-null').style.display = 'none';
-        var canvas = document.getElementById('ctl-chart');
-        canvas.style.display = 'block';
-        new Chart(canvas, {
-          type: 'line',
-          data: {
-            labels: hist.map(function(p){ return p[0]; }),
-            datasets: [{
-              data: hist.map(function(p){ return p[1]; }),
-              borderColor: '#1a5276',
-              backgroundColor: 'rgba(26,82,118,0.08)',
-              fill: true, tension: 0.35, pointRadius: 0, borderWidth: 2
-            }]
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false }, tooltip: {
-              callbacks: { label: function(ctx){ return 'CTL ' + ctx.parsed.y.toFixed(1); }}
-            }},
-            scales: {
-              x: { type: 'category', ticks: { font: { family: 'DM Mono', size: 9 }, color: '#9a9080', maxTicksLimit: 6 }, grid: { display: false }},
-              y: { ticks: { font: { family: 'DM Mono', size: 9 }, color: '#9a9080' }, grid: { color: 'rgba(0,0,0,0.05)' }}
+  const bar = document.getElementById("phase-bar");
+  if (bar) {
+    bar.innerHTML = `
+      <div style="background:var(--build);flex:${specificPct}">Build</div>
+      <div style="background:var(--specific);flex:${peakPct - specificPct}">Specific</div>
+      <div style="background:var(--peak);flex:${taperPct - peakPct}">Peak</div>
+      <div style="background:var(--taper);flex:${100 - taperPct}">Taper</div>
+      <div class="marker" style="left:${todayPct.toFixed(1)}%"></div>
+    `;
+  }
+
+  // Phase label
+  const phLabel = document.getElementById("phase-label");
+  if (phLabel) {
+    const taperDateStr = toLocalStr(taperStart);
+    const peakDateStr  = toLocalStr(peakStart);
+    const specDateStr  = toLocalStr(specificStart);
+    phLabel.textContent = `20-week build · ${ph.name} · Specific from ${specDateStr} · Peak from ${peakDateStr} · Taper from ${taperDateStr}`;
+  }
+})();
+
+// ── FITNESS CHART ──────────────────────────────────────────────────────────
+
+const targetMilestones = [
+  ["2026-06-28", 60, "End Build (est.)"],
+  ["2026-07-25", 68, "End Specific (est.)"],
+  ["2026-08-23", 75, "Peak (est.)"],
+  ["2026-09-20", 70, "Race day (est.)"],
+];
+
+window.chartFitness = null;
+(function(){
+  const ctx = document.getElementById("chartFitness").getContext("2d");
+  window.chartFitness = new Chart(ctx, {
+    type: "line",
+    data: {
+      datasets: [
+        {
+          label: "CTL — this season",
+          data: [],
+          borderColor: "#1a1a1a",
+          backgroundColor: "transparent",
+          pointRadius: 0,
+          tension: 0.2,
+          borderWidth: 2.2
+        },
+        {
+          label: "Target CTL",
+          data: targetMilestones.map(([d,v]) => ({x:d, y:v})),
+          borderColor: "rgba(192,57,43,0.7)",
+          backgroundColor: "rgba(192,57,43,0.08)",
+          borderWidth: 2,
+          borderDash: [6,4],
+          pointRadius: 4,
+          pointBackgroundColor: "rgba(192,57,43,0.9)",
+          tension: 0.3,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {mode:"nearest", intersect:false},
+      plugins: {
+        legend: {display:false},
+        tooltip: {
+          callbacks: {
+            afterBody: (items) => {
+              const pt = targetMilestones.find(t => t[0] === items[0].raw?.x);
+              return pt ? "  " + pt[2] : "";
             }
           }
+        },
+        annotation: {}
+      },
+      scales: {
+        x: {
+          type: "time",
+          time: {unit:"month", displayFormats:{month:"MMM"}},
+          min: "2026-01-01",
+          max: "2026-09-25",
+          grid: {color:"#e8e3da"}
+        },
+        y: {
+          title: {display:true, text:"CTL"},
+          min: 20, max: 90,
+          grid: {color:"#e8e3da"}
+        }
+      }
+    }
+  });
+})();
+
+function zoomFitness(days) {
+  if (!window.chartFitness) return;
+  const sc = window.chartFitness.options.scales.x;
+  if (days === 0) {
+    sc.min = "2026-01-01"; sc.max = "2026-09-25";
+    sc.time.unit = "month"; sc.time.displayFormats = {month:"MMM"};
+  } else if (days <= 30) {
+    const now = new Date();
+    const from = new Date(now); from.setDate(from.getDate() - days);
+    const to   = new Date(now); to.setDate(to.getDate() + 14);
+    sc.min = from.toISOString().slice(0,10); sc.max = to.toISOString().slice(0,10);
+    sc.time.unit = "day"; sc.time.displayFormats = {day:"d MMM"};
+  } else {
+    const now = new Date();
+    const from = new Date(now); from.setDate(from.getDate() - days);
+    const to   = new Date(now); to.setDate(to.getDate() + 30);
+    sc.min = from.toISOString().slice(0,10); sc.max = to.toISOString().slice(0,10);
+    sc.time.unit = "week"; sc.time.displayFormats = {week:"d MMM"};
+  }
+  window.chartFitness.update();
+}
+
+// ── LOAD CHART ─────────────────────────────────────────────────────────────
+
+let _loadChartDays = [];
+let _loadMode = "tss";
+
+(function(){
+  const ctx = document.getElementById("chartLoad").getContext("2d");
+  window.chartLoad = new Chart(ctx, {
+    type: "bar",
+    data: {labels:[], datasets:[]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {legend:{display:false}},
+      scales: {
+        x: {stacked:true, grid:{color:"#e8e3da"}},
+        y: {stacked:true, beginAtZero:true, position:"left",
+            title:{display:true, text:"TSS"}, grid:{color:"#e8e3da"}},
+        y1: {position:"right", title:{display:true, text:"TSB"},
+             suggestedMin:-40, suggestedMax:20, grid:{drawOnChartArea:false}},
+      }
+    }
+  });
+})();
+
+function setLoadMode(mode) {
+  _loadMode = mode;
+  document.getElementById("load-btn-tss").style.background = mode==="tss" ? "#1d6840" : "#f8f5ef";
+  document.getElementById("load-btn-tss").style.color      = mode==="tss" ? "#fff"    : "#4a4535";
+  document.getElementById("load-btn-dur").style.background = mode==="dur" ? "#1d6840" : "#f8f5ef";
+  document.getElementById("load-btn-dur").style.color      = mode==="dur" ? "#fff"    : "#4a4535";
+  const sub = document.getElementById("load-chart-sub");
+  if (sub) sub.textContent = mode==="tss"
+    ? "TSS stacked by sport · faded bars = planned · TSB form line (right axis)"
+    : "Duration (min) stacked by sport · faded bars = planned · TSB form line (right axis)";
+  renderLoadChart(_loadChartDays);
+}
+
+function renderLoadChart(days) {
+  if (!window.chartLoad || !days || !days.length) return;
+  _loadChartDays = days;
+  const SPORTS = ["Ride","Run","Swim","Strength"];
+  const BASES  = {Ride:[29,104,64], Run:[192,57,43], Swim:[26,82,118], Strength:[127,140,141]};
+  function normSport(s) {
+    if (!s) return "Other";
+    if (/Ride|Cycling|Gravel|Virtual/i.test(s)) return "Ride";
+    if (/Run/i.test(s))                          return "Run";
+    if (/Swim/i.test(s))                         return "Swim";
+    if (/Strength|Weight|Gym/i.test(s))          return "Strength";
+    return "Other";
+  }
+  const useDur   = _loadMode === "dur";
+  const labels   = days.map(d => d.date.slice(5));
+  const todayStr = new Date().toISOString().slice(5,10);
+  const datasets = [];
+  SPORTS.forEach(sport => {
+    const [r,g,b] = BASES[sport];
+    const vals = [], bgVals = [];
+    let hasData = false;
+    days.forEach(d => {
+      let val = 0, isPlanned = false;
+      (d.activities || []).forEach(a => {
+        if (normSport(a.sport) === sport) {
+          val += useDur ? (a.dur || 0) : (a.tss || 0);
+          if (a.status === "planned") isPlanned = true;
+        }
+      });
+      vals.push(Math.round(val));
+      if (val > 0) hasData = true;
+      const alpha = val > 0 ? (isPlanned ? 0.25 : 0.87) : 0;
+      bgVals.push(`rgba(${r},${g},${b},${alpha})`);
+    });
+    if (!hasData) return;
+    datasets.push({type:"bar", label:sport, data:vals, backgroundColor:bgVals, stack:"load", yAxisID:"y", order:2});
+  });
+  const tsbVals = days.map(d => d.tsb != null ? Math.round(d.tsb * 10) / 10 : null);
+  const tsbDotColors = tsbVals.map(v => {
+    if (v == null)  return "transparent";
+    if (v > 5)      return "rgba(46,156,142,0.90)";
+    if (v >= -20)   return "rgba(201,135,31,0.90)";
+    return "rgba(192,57,43,0.90)";
+  });
+  datasets.push({type:"line", label:"TSB", data:tsbVals,
+    borderColor:"rgba(60,60,60,0.75)", backgroundColor:"transparent",
+    borderWidth:2, pointRadius:4, pointBackgroundColor:tsbDotColors,
+    fill:false, tension:0.3, yAxisID:"y1", order:1, spanGaps:true});
+  datasets.push({type:"line", label:"_zero", data:days.map(()=>0),
+    borderColor:"rgba(100,100,100,0.25)", backgroundColor:"transparent",
+    borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false, yAxisID:"y1", order:3});
+  const todayIdx = labels.indexOf(todayStr);
+  window.chartLoad.options.scales.y.title = {display:true, text:useDur?"Minutes":"TSS", font:{size:10}, color:"#666"};
+  window.chartLoad.data.labels   = labels;
+  window.chartLoad.data.datasets = datasets;
+  window.chartLoad.options.plugins.legend = {
+    display:true, position:"top",
+    labels:{boxWidth:12, font:{size:11}, filter: item => !item.text.startsWith("_")}
+  };
+  window.chartLoad.options.scales.x.ticks = {
+    font:{size:10},
+    color: ctx => ctx.index === todayIdx ? "#1d6840" : "#666"
+  };
+  window.chartLoad.update();
+}
+
+// ── RENDER FUNCTIONS ───────────────────────────────────────────────────────
+
+function renderRecentTable(data) {
+  const tb = document.querySelector("#recent-table tbody");
+  if (!tb || !data || !data.length) return;
+  tb.innerHTML = "";
+  data.forEach(a => {
+    const hours = Math.floor(a.dur/60), mins = a.dur%60;
+    const time  = hours > 0 ? `${hours}:${String(mins).padStart(2,"0")}` : `${mins}m`;
+    const dist  = a.dist != null ? a.dist.toFixed(1) + " km" : "—";
+    const r     = rollupSport(a.sport);
+    const variant = r.variant ? `<div class="small">${r.variant}</div>` : "";
+    tb.insertAdjacentHTML("beforeend",
+      `<tr>
+        <td>${a.date.slice(5)}</td>
+        <td><span class="${pillForSport(a.sport)}">${r.label}</span>${variant}</td>
+        <td>${a.name}</td>
+        <td class="num">${time}</td>
+        <td class="num">${dist}</td>
+        <td class="num">${a.pace || "—"}</td>
+        <td class="num">${a.hr || "—"}</td>
+        <td class="num"><b>${a.tss}</b></td>
+      </tr>`);
+  });
+}
+
+function renderLiveCalendar(events) {
+  const el = document.getElementById("upcoming-content");
+  const nullEl = document.getElementById("calendar-null");
+  if (!el || !events || !events.length) return;
+  if (nullEl) nullEl.style.display = "none";
+
+  const _now = new Date();
+  const todayStr = toLocalStr(_now);
+  function getMonday(dateStr) {
+    const d = new Date(dateStr + "T00:00:00");
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return toLocalStr(d);
+  }
+  function addDays(dateStr, n) {
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + n);
+    return toLocalStr(d);
+  }
+  function fmtWeekRange(monStr) {
+    const mon = new Date(monStr + "T00:00:00");
+    const sun = new Date(monStr + "T00:00:00"); sun.setDate(sun.getDate() + 6);
+    const mM = mon.toLocaleDateString("en-GB",{month:"short"});
+    const sM = sun.toLocaleDateString("en-GB",{month:"short"});
+    return mM === sM ? `${mon.getDate()}–${sun.getDate()} ${mM}` : `${mon.getDate()} ${mM}–${sun.getDate()} ${sM}`;
+  }
+  function stripeClass(s) {
+    if (/Ride|Cycling|Gravel|Virtual/i.test(s)) return "ride";
+    if (/Run/i.test(s))     return "run";
+    if (/Swim/i.test(s))    return "swim";
+    if (/Strength|Weight/i.test(s)) return "strength";
+    return "other";
+  }
+  const DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const weeks = new Map();
+  events.forEach(ev => {
+    const mon = getMonday(ev.date);
+    if (!weeks.has(mon)) weeks.set(mon, []);
+    weeks.get(mon).push(ev);
+  });
+  let html = "";
+  [...weeks.keys()].sort().forEach(mon => {
+    const wkEvs     = weeks.get(mon);
+    const actualTSS = wkEvs.filter(e => e.status==="completed").reduce((s,e) => s+(e.tss||0),0);
+    const byDay = new Map();
+    wkEvs.forEach(ev => {
+      if (!byDay.has(ev.date)) byDay.set(ev.date, []);
+      byDay.get(ev.date).push(ev);
+    });
+    html += `<div class="week-cal"><div class="week-cal-header"><div>
+      <div class="week-cal-label">${fmtWeekRange(mon)}</div>
+      <div class="week-cal-sub">Completed ${actualTSS} TSS</div>
+      </div></div><div class="week-grid">`;
+    for (let i = 0; i < 7; i++) {
+      const dateStr = addDays(mon, i);
+      const dayEvs  = byDay.get(dateStr) || [];
+      const isToday = dateStr === todayStr;
+      const isPast  = dateStr < todayStr;
+      const dayNum  = parseInt(dateStr.slice(8), 10);
+      let colCls = "day-col";
+      if (isToday) colCls += " is-today";
+      else if (isPast) colCls += " is-past";
+      html += `<div class="${colCls}"><div class="day-head">
+        <span class="day-name">${DAY_NAMES[i]}</span>
+        <span class="day-date">${dayNum}</span></div>`;
+      if (!dayEvs.length) {
+        html += `<div class="rest-block"><span class="rest-label">Rest</span></div>`;
+      } else {
+        dayEvs.forEach(ev => {
+          const isDone = ev.status === "completed";
+          const sport  = ev.sport || "Other";
+          html += `<div class="session-block ${isDone?"done-block":""}">
+            <div class="sport-stripes"><div class="sport-stripe ${stripeClass(sport)}"></div></div>
+            <div class="session-sport-tag">${sport}</div>
+            <div class="session-title ${ev.key?"key-title":""}">${ev.name||"Session"}</div>
+            ${ev.detail ? `<div class="session-detail">${ev.detail}</div>` : ""}
+            ${ev.tss    ? `<div class="session-tss">${ev.tss} TSS</div>` : ""}
+            ${isDone    ? '<div class="done-tick">&#10003;</div>' : ""}
+          </div>`;
         });
       }
-    })
-    .catch(function(e){ console.warn('site-data.json unavailable', e); });
-})();
+      html += `</div>`;
+    }
+    html += `</div><div class="week-totals-row">`;
+    for (let i = 0; i < 7; i++) {
+      const dateStr = addDays(mon, i);
+      const dayEvs  = byDay.get(dateStr) || [];
+      const dayTSS  = dayEvs.reduce((s,e) => s+(e.tss||0), 0);
+      const done    = dayEvs.length > 0 && dayEvs.every(e => e.status==="completed");
+      html += dayTSS > 0
+        ? `<div class="week-total-cell has-tss ${done?"done-tss":""}">${dayTSS}</div>`
+        : `<div class="week-total-cell"></div>`;
+    }
+    html += `</div></div>`;
+  });
+  el.innerHTML = html;
+}
+
+function renderPlanActual(weeks) {
+  const ctx = document.getElementById("chartPlanActual");
+  if (!ctx || !weeks || !weeks.length) return;
+  const labels = weeks.map(w => {
+    const dt = new Date(w.week_start + "T00:00:00");
+    return "W" + w.week_num + " " + dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+  });
+  new Chart(ctx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {label:"Actual TSS",   data:weeks.map(w=>w.actual_tss),
+         backgroundColor:"rgba(29,104,64,0.8)", borderRadius:3},
+        {label:"Phase target", data:weeks.map(w=>w.planned_tss),
+         backgroundColor:"rgba(180,180,180,0.35)", borderColor:"rgba(120,120,120,0.6)",
+         borderWidth:1, borderRadius:3},
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:11}}}},
+      scales:{x:{ticks:{font:{size:10}}}, y:{beginAtZero:true,ticks:{font:{size:10}},grid:{color:"rgba(0,0,0,0.05)"}}}
+    }
+  });
+}
+
+function renderSessionLog(entries) {
+  const tb = document.querySelector("#session-log-table tbody");
+  if (!tb || !entries || !entries.length) return;
+  tb.innerHTML = "";
+  const sorted = [...entries].sort((a,b) => b.date.localeCompare(a.date));
+  sorted.forEach(e => {
+    const sportCls = {Ride:"pill-ride",Run:"pill-run",Swim:"pill-swim",Strength:"pill-strength"}[e.sport] || "";
+    const dt = new Date(e.date + "T00:00:00");
+    const label = dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+    tb.insertAdjacentHTML("beforeend",
+      `<tr>
+        <td>${label}</td>
+        <td><span class="pill ${sportCls}">${e.sport}</span></td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.name||"—"}</td>
+        <td class="num">${e.tss||"—"}</td>
+        <td class="num">${e.rpe != null ? e.rpe+"/10" : "—"}</td>
+        <td style="font-size:11px;color:var(--ink2)">${(e.feel||"").slice(0,50)||"—"}</td>
+      </tr>`);
+  });
+}
+
+function renderSwimProgression(entries, cssPace) {
+  const ctx = document.getElementById("chartSwimProg");
+  if (!ctx || !entries || !entries.length) return;
+  const sorted = [...entries].sort((a,b) => a.date.localeCompare(b.date));
+  const labels = sorted.map(e => {
+    const dt = new Date(e.date + "T00:00:00");
+    return dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+  });
+  const targetPace = cssPace || 105; // seconds per 100m (default 1:45)
+  new Chart(ctx.getContext("2d"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {label:"Pace (s/100m)", data:sorted.map(e=>e.pace_per_100m),
+         borderColor:"#1a5276", backgroundColor:"rgba(26,82,118,0.1)",
+         pointRadius:4, pointBackgroundColor:"#1a5276", tension:0.3, fill:true},
+        {label:`CSS target`, data:labels.map(()=>targetPace),
+         borderColor:"rgba(192,57,43,0.6)", borderDash:[5,3], pointRadius:0, borderWidth:1.5},
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:11}}}},
+      scales:{
+        y:{reverse:true, ticks:{font:{size:10}, callback:v=>{const m=Math.floor(v/60); return m+":"+(v%60).toString().padStart(2,"0");}}, grid:{color:"rgba(0,0,0,0.05)"}},
+        x:{ticks:{font:{size:10}}}
+      }
+    }
+  });
+}
+
+function renderLiveConstraints(cs) {
+  const cc = document.getElementById("live-constraints-content");
+  const ac = document.getElementById("open-actions-content");
+  if (!cs) return;
+
+  let html = '<div style="font-size:13px;line-height:1.8">';
+  if (cs.bike_ftp) html += `<div><b>Bike FTP:</b> ${cs.bike_ftp} W</div>`;
+  const flags = cs.watchdog_flags || [];
+  if (flags.length) {
+    html += `<div style="margin-top:6px"><b>Active flags:</b></div>`;
+    flags.forEach(f => html += `<div style="color:var(--bad)">&#9888; ${typeof f==="string"?f:f.trigger||JSON.stringify(f)}</div>`);
+  } else {
+    html += `<div style="color:var(--good)">No active watchdog flags</div>`;
+  }
+  if (cs.injuries && cs.injuries.length) {
+    html += `<div style="margin-top:6px"><b>Current injuries:</b></div>`;
+    cs.injuries.forEach(inj => html += `<div style="color:var(--warn)">&#9650; ${inj.description || JSON.stringify(inj)}</div>`);
+  }
+  html += "</div>";
+  if (cc) cc.innerHTML = html;
+
+  const actions = cs.open_actions || [];
+  if (!ac) return;
+  if (!actions.length) { ac.innerHTML = '<span style="color:var(--muted);font-size:12px">No open actions</span>'; return; }
+  const _today = toLocalStr(new Date());
+  let ahtml = '<div style="font-size:12px">';
+  actions.forEach(a => {
+    const done = (a.status||"").toLowerCase()==="done";
+    const due  = a.due || "";
+    const overdue = !done && due && due < _today;
+    const pill = done ? 'style="background:#d6eeda;color:#1d6840;padding:1px 7px;border-radius:10px;font-size:11px"'
+                     : overdue ? 'style="background:#fde8e6;color:#c0392b;padding:1px 7px;border-radius:10px;font-size:11px"'
+                     : 'style="background:#f0efe8;color:#4a4535;padding:1px 7px;border-radius:10px;font-size:11px"';
+    ahtml += `<div style="margin-bottom:6px;display:flex;gap:6px;align-items:flex-start">
+      <span ${pill}>${done?"done":overdue?"overdue":"open"}</span>
+      <span>${a.action||a.id||"—"}${due?` <span style="color:var(--muted)">· due ${due}</span>`:""}</span>
+    </div>`;
+  });
+  ahtml += "</div>";
+  ac.innerHTML = ahtml;
+}
+
+function renderCtlProjection(proj) {
+  if (!window.chartFitness || !proj) return;
+  window.chartFitness.data.datasets = window.chartFitness.data.datasets.filter(ds => !ds._projection);
+  const scenarios = [
+    {key:"planned_sessions", label:"Your booked sessions", color:"rgba(29,104,64,0.85)", dash:[6,3]},
+    {key:"planned_build",    label:"Phase target (avg)",   color:"rgba(120,120,120,0.6)", dash:[4,3]},
+  ];
+  scenarios.forEach(sc => {
+    const data = (proj[sc.key] || []).map(p => ({x:p.date, y:p.ctl}));
+    if (data.length) window.chartFitness.data.datasets.push({
+      _projection: true, label:sc.label, data,
+      borderColor:sc.color, backgroundColor:"transparent",
+      borderWidth:1.5, borderDash:sc.dash, pointRadius:0, fill:false, tension:0.2
+    });
+  });
+  if (proj.race_date && window.chartFitness.options.plugins.annotation) {
+    const anns = window.chartFitness.options.plugins.annotation.annotations || {};
+    anns.raceDay = {
+      type:"line", xMin:proj.race_date, xMax:proj.race_date,
+      borderColor:"rgba(192,57,43,0.55)", borderWidth:1.5, borderDash:[4,3],
+      label:{display:true, content:"Race day", position:"start",
+             backgroundColor:"rgba(255,255,255,0.9)", color:"#c0392b", font:{size:10}},
+    };
+    window.chartFitness.options.plugins.annotation.annotations = anns;
+  }
+  window.chartFitness.update();
+}
+
+// ── DATA LOADING ───────────────────────────────────────────────────────────
+
+// Step 1: load basics from site-data.json (always available)
+fetch('site-data.json?v=' + Date.now())
+  .then(r => r.json())
+  .then(d => {
+    const a = d.athletes && d.athletes.kathryn;
+    if (!a) return;
+
+    // CTL
+    if (a.ctl != null) {
+      document.getElementById("kpi-ctl").textContent = a.ctl.toFixed(1);
+    }
+    // TSB
+    if (a.tsb != null) {
+      const tsb   = a.tsb;
+      const tsbEl = document.getElementById("kpi-tsb");
+      const statEl = document.getElementById("stat-tsb");
+      tsbEl.textContent = (tsb > 0 ? "+" : "") + tsb.toFixed(1);
+      statEl.classList.remove("good","warn","bad");
+      if (tsb > 5)        statEl.classList.add("good");
+      else if (tsb < -20) statEl.classList.add("bad");
+      else                statEl.classList.add("warn");
+    }
+    // CTL history
+    const hist = a.ctl_history || [];
+    if (hist.length > 0 && window.chartFitness) {
+      window.chartFitness.data.datasets[0].data = hist.map(([dt,v]) => ({x:dt, y:v}));
+      window.chartFitness.update();
+      const nullEl = document.getElementById("fitness-null");
+      if (nullEl) nullEl.style.display = "none";
+    }
+    // Updated label
+    if (d.updated) {
+      document.getElementById("snapshot-date").textContent = "Updated " + d.updated;
+      document.getElementById("footer-generated").textContent = "Last updated " + d.updated + " · Source: Intervals.icu";
+    }
+  })
+  .catch(() => {});
+
+// Step 2: load full training data when available
+fetch('training-data-kathryn.json?v=' + Date.now())
+  .then(r => r.json())
+  .then(d => {
+    // Fitness chart
+    if (d.fitnessThis && window.chartFitness) {
+      window.chartFitness.data.datasets[0].data = d.fitnessThis.map(([dt,v]) => ({x:dt, y:v}));
+      window.chartFitness.update();
+      const nullEl = document.getElementById("fitness-null");
+      if (nullEl) nullEl.style.display = "none";
+    }
+    // KPI bar live update
+    if (d.kpi) {
+      const k = d.kpi;
+      const g = id => document.getElementById(id);
+      if (k.ctl != null && g("kpi-ctl"))  g("kpi-ctl").textContent  = k.ctl.toFixed(1);
+      if (k.tsb != null && g("kpi-tsb")) {
+        g("kpi-tsb").textContent = (k.tsb >= 0 ? "+" : "") + k.tsb.toFixed(1);
+        const statEl = g("stat-tsb");
+        if (statEl) {
+          statEl.classList.remove("good","warn","bad");
+          if (k.tsb > 5)        statEl.classList.add("good");
+          else if (k.tsb < -20) statEl.classList.add("bad");
+          else                  statEl.classList.add("warn");
+        }
+      }
+    }
+    // Charts
+    if (d.loadChart && d.loadChart.length)     renderLoadChart(d.loadChart);
+    if (d.weekCalendar && d.weekCalendar.length) renderLiveCalendar(d.weekCalendar);
+    if (d.recent)                               renderRecentTable(d.recent);
+    if (d.planVsActual)                         renderPlanActual(d.planVsActual);
+    if (d.sessionLog)                           renderSessionLog(d.sessionLog);
+    if (d.ctlProjection)                        renderCtlProjection(d.ctlProjection);
+    // Swim — get CSS target from profile if available
+    const cssPace = d.profile && d.profile.swim_css_per_100m_seconds;
+    if (d.swimLog)                              renderSwimProgression(d.swimLog, cssPace);
+    // Live constraints (no ankle field assumed — uses generic injuries)
+    if (d.currentState)                         renderLiveConstraints(d.currentState);
+    // Updated
+    if (d.generated) {
+      document.getElementById("snapshot-date").textContent = "Live · updated " + d.generated;
+      document.getElementById("footer-generated").textContent = "Last updated " + d.generated + " · Source: Intervals.icu";
+    }
+  })
+  .catch(() => {}); // graceful fallback — site-data.json provides the basics
 </script>
 </body>
 </html>
