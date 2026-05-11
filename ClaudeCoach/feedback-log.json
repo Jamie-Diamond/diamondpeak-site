@@ -16,5 +16,11 @@
     "type": "feature",
     "message": "Quick-reply buttons at the bottom of the message should be context-aware (update based on the current conversation state) and there should be fewer of them. Currently they feel static and cluttered.",
     "logged_at": "2026-05-11T00:00:00"
+  },
+  {
+    "date": "2026-05-11",
+    "type": "feedback",
+    "message": "Review which Claude model is best for ClaudeCoach. Opus is very slow in use — consider alternatives that would offer better guardrails, faster responses, and more efficient token use. Possibly Sonnet 4.6 or Haiku 4.5 for routine replies, with Opus reserved for heavier planning/analysis tasks.",
+    "logged_at": "2026-05-11T00:00:00"
   }
 ]
