@@ -1,0 +1,23 @@
+[
+  {
+    "activity_id": "i147315601",
+    "date": "2026-05-11",
+    "name": "More of that lovely 9/1 rehab",
+    "sport": "Run",
+    "tss": 41,
+    "duration_min": 37,
+    "distance_km": 7.39,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 141,
+    "rpe": null,
+    "feel": null,
+    "ankle_pain_during": null,
+    "ankle_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-11T20:15:55",
+    "stub": true
+  }
+]
