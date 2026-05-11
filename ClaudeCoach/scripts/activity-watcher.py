@@ -212,10 +212,13 @@ def main():
         # Belt-and-braces dedupe: check against the pre-run snapshot so we don't
         # suppress notifications for stubs Claude just wrote in this run.
         if activity_id in existing_ids:
-            save_state({"last_id": activity_id})
+            state["last_id"] = activity_id
+            save_state(state)
             return
 
-        save_state({"last_id": activity_id, "notified_at": datetime.now().isoformat()})
+        state["last_id"] = activity_id
+        state["notified_at"] = datetime.now().isoformat()
+        save_state(state)
 
         # Log decoupling for long rides
         if decoupling_raw and decoupling_raw != "none":
