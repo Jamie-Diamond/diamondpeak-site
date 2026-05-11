@@ -116,22 +116,7 @@ def build_keyboard():
         ]
     return {"inline_keyboard": [buttons]}
 
-TOOLS = ",".join([
-    "Read", "Write", "Edit", "Bash",
-    "mcp__claude_ai_icusync__get_athlete_profile",
-    "mcp__claude_ai_icusync__get_fitness",
-    "mcp__claude_ai_icusync__get_training_history",
-    "mcp__claude_ai_icusync__get_wellness",
-    "mcp__claude_ai_icusync__get_activity_detail",
-    "mcp__claude_ai_icusync__get_events",
-    "mcp__claude_ai_icusync__push_workout",
-    "mcp__claude_ai_icusync__edit_workout",
-    "mcp__claude_ai_icusync__delete_workout",
-    "mcp__claude_ai_icusync__get_best_efforts",
-    "mcp__claude_ai_icusync__get_training_summary",
-    "mcp__claude_ai_icusync__get_power_curves",
-    "mcp__claude_ai_icusync__get_extended_metrics",
-])
+TOOLS = "Read,Write,Edit,Bash"
 
 
 def log(msg):
@@ -480,12 +465,99 @@ def _update_ftp(new_ftp: int) -> str:
     )
 
 
+def prefetch_context(slug: str) -> str:
+    """Fetch standard training context in parallel and return as a formatted block.
+    Falls back silently to empty string on any error so the bot keeps working."""
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(BASE.parent / "lib"))
+        from icu_api import IcuClient
+        from datetime import date, timedelta
+
+        athletes = json.loads(ATHLETES_CONFIG.read_text())
+        a = athletes[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+
+        today = date.today()
+        end_date = (today + timedelta(days=21)).isoformat()
+
+        wellness, events, sport, history_acts = client.fetch_all(
+            ("get_wellness", 14),
+            ("get_events", today.isoformat(), end_date),
+            ("get_sport_settings", "Ride"),
+            ("get_training_history", 7),
+        )
+
+        lines = [f"=== LIVE TRAINING DATA ({today.isoformat()}) ==="]
+
+        # Fitness snapshot
+        if wellness:
+            w = wellness[-1]
+            ctl = round(w.get("ctl") or 0, 1)
+            atl = round(w.get("atl") or 0, 1)
+            tsb = round((w.get("ctl") or 0) - (w.get("atl") or 0), 1)
+            ftp = sport.get("ftp") if isinstance(sport, dict) else None
+            lines.append(
+                f"Fitness: CTL {ctl}  ATL {atl}  TSB {tsb}"
+                + (f"  FTP {ftp}W" if ftp else "")
+            )
+            fields = []
+            if w.get("weight"):    fields.append(f"Weight {w['weight']:.1f}kg")
+            if w.get("hrv"):       fields.append(f"HRV {w['hrv']}")
+            if w.get("sleepScore"):fields.append(f"Sleep {w['sleepScore']}%")
+            if w.get("restingHR"): fields.append(f"RHR {w['restingHR']}")
+            if fields:
+                lines.append("Wellness: " + "  ".join(fields))
+
+        # Wellness trend (last 7 days, compact)
+        if len(wellness) > 1:
+            lines.append("Recent CTL/TSB: " + "  ".join(
+                f"{w['id'][5:]}:{round(w.get('ctl') or 0, 0):.0f}/{round((w.get('ctl') or 0)-(w.get('atl') or 0), 0):.0f}"
+                for w in wellness[-7:]
+            ))
+
+        # Recent activities
+        if history_acts:
+            lines.append("Recent activities:")
+            for a in sorted(history_acts, key=lambda x: x.get("start_date_local",""), reverse=True)[:5]:
+                date_str = (a.get("start_date_local") or "")[:10]
+                sport_type = a.get("type", "?")
+                dur = round((a.get("moving_time") or 0) / 60)
+                tss = a.get("icu_training_load") or 0
+                dist = a.get("distance") or 0
+                dist_str = f"  {dist/1000:.1f}km" if dist else ""
+                lines.append(f"  {date_str}  {sport_type:<12} {dur}min{dist_str}  TSS={tss}")
+
+        # Upcoming planned events
+        if events:
+            lines.append("Upcoming events:")
+            for ev in events[:8]:
+                ev_date = (ev.get("start_date_local") or "")[:10]
+                ev_name = ev.get("name") or ""
+                ev_type = ev.get("type") or ev.get("category") or ""
+                lines.append(f"  {ev_date}  {ev_type:<12} {ev_name}")
+
+        lines.append(
+            f"\nFor more detail call: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint <endpoint> [options]"
+        )
+        lines.append("Write endpoints: push_workout (--payload JSON), edit_workout (--event-id ID --payload JSON), delete_workout (--event-id ID)")
+        return "\n".join(lines)
+
+    except Exception as e:
+        log(f"prefetch_context error (non-fatal): {e}")
+        return ""
+
+
 def call_claude(user_message, config, history, model=MODEL_SONNET,
-                system_prompt_file=None, athlete_name="Jamie"):
+                system_prompt_file=None, athlete_name="Jamie", context=""):
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
     system_prompt = sp_file.read_text().strip()
 
     parts = [system_prompt, ""]
+
+    if context:
+        parts.append(context)
+        parts.append("")
 
     if history:
         parts.append("Recent conversation:")
@@ -615,10 +687,11 @@ def main():
             send(token, chat_id, "_On it..._")
 
             history = load_history(files["history"])
+            context = prefetch_context(slug)
             model = select_model(text)
             response = call_claude(text, config, history, model=model,
                                    system_prompt_file=files["system_prompt"],
-                                   athlete_name=athlete_name)
+                                   athlete_name=athlete_name, context=context)
 
             clean = process_charts(token, chat_id, response)
             if clean:

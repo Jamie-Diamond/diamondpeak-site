@@ -41,7 +41,8 @@ def main():
     p.add_argument("--endpoint", required=True,
                    choices=["profile", "sport_settings", "fitness", "wellness",
                             "history", "events", "activity_detail", "extended_metrics",
-                            "streams", "best_efforts", "power_curves", "training_summary"])
+                            "streams", "best_efforts", "power_curves", "training_summary",
+                            "push_workout", "edit_workout", "delete_workout"])
     p.add_argument("--days",        type=int, default=14)
     p.add_argument("--start",       default=None, help="oldest date YYYY-MM-DD")
     p.add_argument("--end",         default=None, help="newest date YYYY-MM-DD")
@@ -49,7 +50,10 @@ def main():
     p.add_argument("--period",      default="1y",  help="for best_efforts: 4w 6w 3m 6m 1y 2y all")
     p.add_argument("--curves",      default="90d", help="for power_curves: 90d 1y s0 s1 all")
     p.add_argument("--activity-id", default=None, dest="activity_id")
+    p.add_argument("--event-id",    default=None, dest="event_id")
     p.add_argument("--newest",      default=None, help="future end date for fitness projection")
+    p.add_argument("--payload",     default=None,
+                   help="JSON string for push_workout / edit_workout fields")
     args = p.parse_args()
 
     client = load_client(args.athlete)
@@ -94,6 +98,24 @@ def main():
             print("ERROR: --start and --end required for training_summary", file=sys.stderr)
             sys.exit(1)
         result = client.get_training_summary(args.start, args.end, sport=args.sport)
+    elif ep == "push_workout":
+        if not args.payload:
+            print("ERROR: --payload JSON required for push_workout", file=sys.stderr)
+            sys.exit(1)
+        fields = json.loads(args.payload)
+        result = client.push_workout(**fields)
+    elif ep == "edit_workout":
+        if not args.event_id or not args.payload:
+            print("ERROR: --event-id and --payload required for edit_workout", file=sys.stderr)
+            sys.exit(1)
+        fields = json.loads(args.payload)
+        result = client.edit_workout(args.event_id, **fields)
+    elif ep == "delete_workout":
+        if not args.event_id:
+            print("ERROR: --event-id required for delete_workout", file=sys.stderr)
+            sys.exit(1)
+        client.delete_workout(args.event_id)
+        result = {"deleted": args.event_id}
 
     print(json.dumps(result, indent=2))
 
