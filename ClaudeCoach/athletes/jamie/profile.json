@@ -1,0 +1,28 @@
+{
+  "slug": "jamie",
+  "name": "Jamie Diamond",
+  "age": null,
+  "weight_kg": 83.3,
+  "race_weight_kg": 79.0,
+  "race_name": "IM Italy Emilia-Romagna",
+  "race_date": "2026-09-19",
+  "race_distance": "Full Ironman",
+  "a_goal": "Sub 10:30",
+  "b_goal": "Sub 11:00",
+  "c_goal": "Finish",
+  "ftp_watts": 316,
+  "indoor_ftp_watts": null,
+  "swim_css_per_100m": null,
+  "run_threshold_pace_per_km": null,
+  "lthr": null,
+  "training_days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+  "max_hours_per_week": 15,
+  "icu_athlete_id": "i196362",
+  "injuries": [
+    {
+      "location": "right ankle",
+      "description": "lateral sprain",
+      "protocol": "5:30 run-walk, HR cap 150, weekly km increase ≤10%"
+    }
+  ]
+}

@@ -17,7 +17,7 @@ Step 1 — Pull data:
 - get_training_history (today only — completed activities)
 - get_events (today only — planned sessions)
 
-Step 2 — Read ClaudeCoach/session-log.json (check which activity_ids are already stubbed).
+Step 2 — Read ClaudeCoach/athletes/jamie/session-log.json (check which activity_ids are already stubbed).
 
 Step 3 — Decide whether to send a message:
 

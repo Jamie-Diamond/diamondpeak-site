@@ -23,10 +23,10 @@ Step 1 — Pull live data:
 - get_events (start_date=today, end_date=<today+21 days>) — what's already planned
 
 Step 2 — Read:
-- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/current-state.md (ankle, niggles, open actions)
-- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/current-state.json (ankle pain scores, weight)
-- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/reference/rules.md (HARD CONSTRAINTS — read fully)
-- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/reference/decision-points.md (upcoming forks)
+- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/current-state.md (ankle, niggles, open actions)
+- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/current-state.json (ankle pain scores, weight)
+- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/reference/rules.md (HARD CONSTRAINTS — read fully)
+- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/reference/decision-points.md (upcoming forks)
 
 Step 3 — Determine the planning window:
 - Target: the 2 weeks starting NEXT Monday (not today).
@@ -88,7 +88,7 @@ Step 9 — Notify via Telegram:
 Run: python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/notify.py "Plan generated [date range]: W[N] [X TSS] + W[N+1] [Y TSS]. [Any key constraint note]"
 
 Step 10 — Update current-state.md "Open actions" section: mark "Plan generated through [date]" with today's date.
-Run: git add ClaudeCoach/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "plan: generated W[N]-W[N+1] [date]" && git push origin main
+Run: git add ClaudeCoach/athletes/jamie/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "plan: generated W[N]-W[N+1] [date]" && git push origin main
 PROMPT_END
 
 TOOLS="Read,Write,Edit,Bash,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_wellness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_events,mcp__claude_ai_icusync__push_workout,mcp__claude_ai_icusync__edit_workout"

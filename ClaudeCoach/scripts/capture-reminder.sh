@@ -12,7 +12,7 @@ You are running the evening session capture reminder for Jamie Diamond's IM Cerv
 
 Pull from IcuSync: get_athlete_profile (for today's date), then get_training_history (last 2 days).
 
-Read: /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/session-log.json
+Read: /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/session-log.json
 
 Check for completed activities in the last 36 hours that meet ALL of:
 1. TSS > 40 OR duration > 45 minutes

@@ -22,8 +22,8 @@ Step 1 — Pull live data from IcuSync:
 - get_events (today only — for today's planned session)
 
 Step 2 — Read these files:
-- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/current-state.md
-- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/session-log.json (most recent entry = last RPE)
+- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/current-state.md
+- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/session-log.json (most recent entry = last RPE)
 
 Step 3 — Assemble the readiness dict:
   atl: from get_fitness most recent row
@@ -84,7 +84,7 @@ Step 7 — Output the prescription card in exactly this format:
 
 If no rules fired: output "Today: [session name] — execute as planned." and the planned targets only (no reasoning trails section).
 
-Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired. Also update ankle section if today's prescription was affected by ankle status. Run: git add ClaudeCoach/current-state.md && git pull --rebase origin main && git commit -m "prescription: [date] [status]" && git push origin main
+Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired. Also update ankle section if today's prescription was affected by ankle status. Run: git add ClaudeCoach/athletes/jamie/current-state.md && git pull --rebase origin main && git commit -m "prescription: [date] [status]" && git push origin main
 
 Step 9 — Call PushNotification if session was modified, swapped, or blocked. Message under 200 characters:
   "[session name]: [one-line summary of change]"

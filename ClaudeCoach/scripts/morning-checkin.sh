@@ -18,8 +18,8 @@ Step 1 — Pull data:
 - get_fitness (3 days — for current CTL/ATL/TSB)
 
 Step 2 — Read:
-- ClaudeCoach/current-state.md (ankle status, watchdog flags, open actions)
-- ClaudeCoach/current-state.json (weight_readings — check if any in last 3 days)
+- ClaudeCoach/athletes/jamie/current-state.md (ankle status, watchdog flags, open actions)
+- ClaudeCoach/athletes/jamie/current-state.json (weight_readings — check if any in last 3 days)
 
 Step 3 — Determine the single question to ask (one only, or none):
 - If a run is planned today AND ankle.pain_during in current-state.json was >0 last time: ask "Ankle score before heading out?"

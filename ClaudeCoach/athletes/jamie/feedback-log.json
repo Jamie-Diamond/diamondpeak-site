@@ -1,0 +1,32 @@
+[
+  {
+    "date": "2026-05-10",
+    "type": "bug",
+    "message": "Countdown to Cervia (\"— N days to Cervia\") is appearing twice at the end of replies. Likely the model is appending it manually while the bot harness also appends one after sending. Stop adding it manually so it only shows once.",
+    "logged_at": "2026-05-10T00:00:00"
+  },
+  {
+    "date": "2026-05-11",
+    "type": "feedback",
+    "message": "Plan/description mismatch on today's run: session was labelled both '5k' and '50 min (5x 9:1 walk-run)' — those are not the same distance (~5km vs ~8.5km). When generating sessions, ensure distance and duration descriptors are internally consistent, and that the walk-run cycle count matches the stated total. Jamie had to point out the inconsistency twice before it was corrected.",
+    "logged_at": "2026-05-11T00:00:00"
+  },
+  {
+    "date": "2026-05-11",
+    "type": "feature",
+    "message": "Quick-reply buttons at the bottom of the message should be context-aware (update based on the current conversation state) and there should be fewer of them. Currently they feel static and cluttered.",
+    "logged_at": "2026-05-11T00:00:00"
+  },
+  {
+    "date": "2026-05-11",
+    "type": "feedback",
+    "message": "Review which Claude model is best for ClaudeCoach. Opus is very slow in use — consider alternatives that would offer better guardrails, faster responses, and more efficient token use. Possibly Sonnet 4.6 or Haiku 4.5 for routine replies, with Opus reserved for heavier planning/analysis tasks.",
+    "logged_at": "2026-05-11T00:00:00"
+  },
+  {
+    "date": "2026-05-11",
+    "type": "feedback",
+    "message": "Improve and make the tone of voice more consistent across replies. Also develop a proper athlete onboarding process (initial setup, baseline data capture, goals, constraints, preferences) so new athletes get a structured intake rather than ad-hoc context building.",
+    "logged_at": "2026-05-11T00:00:00"
+  }
+]

@@ -23,9 +23,9 @@ Step 1 — Pull from IcuSync:
 - get_wellness (7 days — HRV/sleep)
 
 Step 2 — Read:
-- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/current-state.md
-- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/session-log.json (this week's RPE entries)
-- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/heat-log.json (this week's heat sessions)
+- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/current-state.md
+- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/session-log.json (this week's RPE entries)
+- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/heat-log.json (this week's heat sessions)
 
 Step 3 — Run the compliance + re-optimiser analysis:
   python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/ironman-analysis/scripts/reoptimise.py '<json>'
@@ -73,7 +73,7 @@ Step 6 — Update current-state.md:
   - Update "Off-plan in last 7 days" with the week's missed sessions (or "none")
   - Update "Heat acclimation log" section with this week's heat session count
   - Update "Body weight" if any weight readings came from get_wellness
-  - Run: git add ClaudeCoach/current-state.md && git commit -m "weekly: state update week ending [date]" && git pull --rebase origin main && git push origin main
+  - Run: git add ClaudeCoach/athletes/jamie/current-state.md && git commit -m "weekly: state update week ending [date]" && git pull --rebase origin main && git push origin main
 
 Step 7 — Send PushNotification with this exact format (under 200 chars):
 "Week [N of ~21]: [X TSS / Y%] | CTL [+/-Z] | [headline flag or 'all clear']"

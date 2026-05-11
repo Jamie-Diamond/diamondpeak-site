@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 BASE            = Path(__file__).parent.parent  # ClaudeCoach/
-SESSION_LOG     = BASE / "session-log.json"
+SESSION_LOG     = BASE / "athletes/jamie/session-log.json"
 STATE_FILE      = BASE / "telegram-feedback-state.json"
 NOTIFY          = BASE / "telegram/notify.py"
 PROJECT_DIR     = str(BASE.parent)
@@ -181,7 +181,7 @@ def apply_feedback(entries: list, idx: int, parsed: dict, raw_text: str) -> dict
 
 def commit_and_push():
     for cmd in [
-        ["git", "add", "ClaudeCoach/session-log.json"],
+        ["git", "add", "ClaudeCoach/athletes/jamie/session-log.json"],
         ["git", "commit", "-m", f"feedback: Telegram reply {datetime.now().strftime('%Y-%m-%d')}"],
         ["git", "fetch", "origin"],
         ["git", "rebase", "--autostash", "origin/main"],

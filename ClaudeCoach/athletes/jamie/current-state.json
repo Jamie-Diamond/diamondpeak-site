@@ -1,0 +1,58 @@
+{
+  "last_updated": "2026-05-11",
+  "ankle": {
+    "pain_during": 2,
+    "pain_next_morning": 0,
+    "pain_today_resting": 0,
+    "pain_today_resting_date": "2026-05-11",
+    "last_run_date": "2026-05-07",
+    "last_run_km": 12.52,
+    "four_pain_free_weeks_reached": false,
+    "quality_sessions_resumed": false,
+    "weekly_run_km_this_week": 12.52,
+    "weekly_run_km_last_week": 10.59
+  },
+  "weight_readings": [
+    {"date": "2026-05-05", "kg": 82.7},
+    {"date": "2026-05-06", "kg": 83.8},
+    {"date": "2026-05-07", "kg": 82.9}
+  ],
+  "heat": {
+    "sessions_cumulative": 1,
+    "sessions_this_week": 1,
+    "last_session_date": "2026-05-10",
+    "protocol_start_date": "2026-05-15"
+  },
+  "niggles": [],
+  "missed_sessions": [
+    {"date": "2026-05-10", "session": "brick run", "reason": "busy day, chose to wind down"}
+  ],
+  "open_actions": [
+    {"action": "Book Precision Hydration sweat-sodium test", "due": "2026-05-31", "status": "pending"},
+    {"action": "FTP retest (end-May)", "due": "2026-05-31", "status": "pending"},
+    {"action": "FTP retest (mid-July)", "due": "2026-07-15", "status": "pending"},
+    {"action": "CSS swim test #2", "due": "2026-07-15", "status": "pending"},
+    {"action": "TT bike fit appointment", "due": "2026-05-31", "status": "pending"},
+    {"action": "ISM saddle order", "due": "2026-06-06", "status": "pending"},
+    {"action": "Aero helmet", "due": "2026-06-30", "status": "pending"},
+    {"action": "5+ hr ice retention test", "due": "2026-09-01", "status": "pending"},
+    {"action": "OWS race or full-distance simulation", "due": "2026-07-31", "status": "pending"},
+    {"action": "Tested run-fuelling protocol in heat", "due": "2026-09-01", "status": "pending"},
+    {"action": "Confirm Dorney Olympic tri entry (C- race 6 Jun)", "due": "2026-05-25", "status": "TBC"},
+    {"action": "Replan 18-22 May as run+swim only (travel)", "due": "2026-05-17", "status": "pending"},
+    {"action": "Marseille 24-30 May: ad-hoc only, nothing long — play by ear", "due": "rolling", "status": "noted"}
+  ],
+  "travel_blocks": [
+    {"start": "2026-05-18", "end": "2026-05-22", "location": "UK travel (work)", "training": "run+swim only", "notes": "no bike for 5 days"},
+    {"start": "2026-05-23", "end": "2026-05-23", "location": "travel to Marseille", "training": "rest", "notes": "flight day"},
+    {"start": "2026-05-24", "end": "2026-05-30", "location": "Marseille (work/personal, not a camp)", "training": "ad-hoc bike+run+swim, nothing long", "notes": "play by ear, sessions squeezed around other variables"},
+    {"start": "2026-05-31", "end": "2026-05-31", "location": "travel home", "training": "rest", "notes": "flight day"},
+    {"start": "2026-06-24", "end": "2026-06-29", "location": "France (holiday)", "training": "full+heat", "notes": "training camp #1 — late-June 900+ TSS spike target, full time available"},
+    {"start": "2026-07-10", "end": "2026-07-17", "location": "France (holiday)", "training": "full+heat", "notes": "training camp #2 — peak build window, full time available"}
+  ],
+  "races": [
+    {"date": "2026-06-06", "name": "Dorney Lake Olympic tri", "tier": "C-", "status": "TBC", "notes": "1500m / 40km / 10km — 10k run is the flag vs ankle"},
+    {"date": "2026-09-19", "name": "Ironman Cervia", "tier": "A", "status": "confirmed", "notes": "race day target weight 79 kg"}
+  ],
+  "watchdog_flags": []
+}

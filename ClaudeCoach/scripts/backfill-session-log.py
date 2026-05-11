@@ -160,7 +160,7 @@ def main():
 
     # Commit and push
     for cmd in [
-        ["git", "add", "ClaudeCoach/session-log.json"],
+        ["git", "add", "ClaudeCoach/athletes/jamie/session-log.json"],
         ["git", "commit", "-m", f"backfill: session log {start_date.isoformat()} to {today.isoformat()}"],
         ["git", "fetch", "origin"],
         ["git", "rebase", "--autostash", "origin/main"],

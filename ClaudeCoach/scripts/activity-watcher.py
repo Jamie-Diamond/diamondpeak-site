@@ -8,14 +8,14 @@ from datetime import datetime
 from pathlib import Path
 
 BASE            = Path(__file__).parent.parent  # ClaudeCoach/
-STATE_FILE      = BASE / "last_activity_state.json"
+STATE_FILE      = BASE / "athletes/jamie/last_activity_state.json"
 LOCK_FILE       = BASE / ".activity_watcher.lock"
 NOTIFY          = BASE / "telegram/notify.py"
 PROJECT_DIR     = str(BASE.parent)
 CLAUDE          = "/usr/bin/claude"
 
-SESSION_LOG     = BASE / "session-log.json"
-DECOUPLING_LOG  = BASE / "decoupling-log.json"
+SESSION_LOG     = BASE / "athletes/jamie/session-log.json"
+DECOUPLING_LOG  = BASE / "athletes/jamie/decoupling-log.json"
 
 TOOLS = ",".join([
     "Read", "Write", "Bash",
@@ -28,7 +28,7 @@ PROMPT = """Check for new activities and stub them into the session log.
 
 Step 1 — get_athlete_profile (today's date), then get_training_history (last 2 days).
 
-Step 2 — Read ClaudeCoach/session-log.json and note all existing activity_id values.
+Step 2 — Read ClaudeCoach/athletes/jamie/session-log.json and note all existing activity_id values.
 
 Step 3 — For the most recent activity that is NOT already in session-log.json:
   - Call get_activity_detail for that activity to get full metrics (all sports).
@@ -53,9 +53,9 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
       "avg_hr": <avg_hr or null>,
       "rpe": null, "feel": null, "notes": null, "logged_at": "<current datetime as YYYY-MM-DDTHH:MM:SS>", "stub": true
     }
-    Also append to ClaudeCoach/swim-log.json:
+    Also append to ClaudeCoach/athletes/jamie/swim-log.json:
     {"date":"<YYYY-MM-DD>","activity_id":"<id>","name":"<name>","distance_m":<int>,"pace_per_100m":<seconds float>,"duration_min":<int>,"tss":<int or null>}
-    git add ClaudeCoach/swim-log.json in the commit below.
+    git add ClaudeCoach/athletes/jamie/swim-log.json in the commit below.
 
   For WeightTraining / Strength:
     {
@@ -64,8 +64,8 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
       "rpe": null, "feel": null, "notes": null, "logged_at": "<current datetime as YYYY-MM-DDTHH:MM:SS>", "stub": true
     }
 
-  - Write the updated array back to ClaudeCoach/session-log.json.
-  - Run: git add ClaudeCoach/session-log.json ClaudeCoach/swim-log.json && git commit -m "stub: <name> <date>" && git push origin main
+  - Write the updated array back to ClaudeCoach/athletes/jamie/session-log.json.
+  - Run: git add ClaudeCoach/athletes/jamie/session-log.json ClaudeCoach/athletes/jamie/swim-log.json && git commit -m "stub: <name> <date>" && git push origin main
 
 Step 4 — Respond in EXACTLY this format (no other text):
 ACTIVITY_ID: <id or none>

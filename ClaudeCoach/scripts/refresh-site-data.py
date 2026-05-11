@@ -9,17 +9,17 @@ from datetime import datetime, date, timedelta
 from collections import defaultdict
 
 BASE        = Path(__file__).parent.parent          # ClaudeCoach/
-OUT_FILE    = BASE / "training-data.json"
+OUT_FILE    = BASE / "athletes/jamie/training-data.json"
 PROJECT_DIR = str(BASE.parent)                       # diamondpeak-site/
 LOCK_FILE   = BASE / ".refresh_site_data.lock"
 CLAUDE      = "/usr/bin/claude"
 
-HEAT_LOG          = BASE / "heat-log.json"
-DECOUPLING_LOG    = BASE / "decoupling-log.json"
-STATE_JSON        = BASE / "current-state.json"
-SESSION_LOG       = BASE / "session-log.json"
-SWIM_LOG          = BASE / "swim-log.json"
-FITNESS_PREV_CACHE = BASE / "fitness-prev-cache.json"
+HEAT_LOG          = BASE / "athletes/jamie/heat-log.json"
+DECOUPLING_LOG    = BASE / "athletes/jamie/decoupling-log.json"
+STATE_JSON        = BASE / "athletes/jamie/current-state.json"
+SESSION_LOG       = BASE / "athletes/jamie/session-log.json"
+SWIM_LOG          = BASE / "athletes/jamie/swim-log.json"
+FITNESS_PREV_CACHE = BASE / "athletes/jamie/fitness-prev-cache.json"
 
 RACE_DATE = date(2026, 9, 19)
 PLAN_START = date(2026, 4, 27)  # Week 1 Monday
@@ -112,7 +112,7 @@ PROMPT_FITNESS_PREV = """Fetch last season's CTL data from Intervals.icu and wri
 
 Call get_fitness(start_date="2025-01-01", end_date="2025-09-19").
 
-Then use the Write tool to write ClaudeCoach/fitness-prev-cache.json as a JSON array:
+Then use the Write tool to write ClaudeCoach/athletes/jamie/fitness-prev-cache.json as a JSON array:
 [
   ["YYYY-MM-DD", <ctl float>],
   ... one entry per day from 2025-01-01 to 2025-09-19 inclusive
@@ -375,7 +375,7 @@ def main():
         # Commit and push
         today = datetime.now().strftime("%Y-%m-%d")
         for cmd in [
-            ["git", "add", "ClaudeCoach/training-data.json"],
+            ["git", "add", "ClaudeCoach/athletes/jamie/training-data.json"],
             ["git", "commit", "-m", f"data: refresh training data {today}"],
             ["git", "fetch", "origin"],
             ["git", "rebase", "--autostash", "origin/main"],

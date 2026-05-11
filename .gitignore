@@ -1,8 +1,9 @@
 .claude/
 ClaudeCoach/telegram/config.json
-ClaudeCoach/telegram/history.json
 ClaudeCoach/telegram/bot.log
+ClaudeCoach/athletes/*/telegram/history.json
 __pycache__/
 *.pyc
 ClaudeCoach/.*.lock
-ClaudeCoach/last_activity_state.json
+ClaudeCoach/athletes/jamie/last_activity_state.json
+ClaudeCoach/config/athletes.json

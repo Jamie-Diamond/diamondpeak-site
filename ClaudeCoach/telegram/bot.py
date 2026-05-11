@@ -35,9 +35,12 @@ def get_whisper():
     return _whisper_model
 
 CONFIG_FILE = BASE / "config.json"
-HISTORY_FILE = BASE / "history.json"
-SYSTEM_PROMPT_FILE = BASE / "system_prompt.txt"
+ATHLETES_CONFIG = BASE.parent / "config/athletes.json"
 LOG_FILE = BASE / "bot.log"
+
+# Fallback paths (used by fast_path / _update_ftp for single-athlete globals)
+HISTORY_FILE = BASE.parent / "athletes/jamie/telegram/history.json"
+SYSTEM_PROMPT_FILE = BASE.parent / "athletes/jamie/system_prompt.txt"
 
 MAX_HISTORY_PAIRS = 6  # keep last 6 exchanges for context
 
@@ -142,14 +145,36 @@ def load_config():
     return json.loads(CONFIG_FILE.read_text())
 
 
-def load_history():
-    if HISTORY_FILE.exists():
-        return json.loads(HISTORY_FILE.read_text())
+def load_athletes():
+    """Returns {chat_id: athlete_record} from athletes.json."""
+    if not ATHLETES_CONFIG.exists():
+        return {}
+    athletes = json.loads(ATHLETES_CONFIG.read_text())
+    return {
+        str(a["chat_id"]): {**a, "slug": slug}
+        for slug, a in athletes.items()
+        if a.get("active") and a.get("chat_id")
+    }
+
+def athlete_files(slug):
+    """Return per-athlete Path objects for history and system prompt."""
+    adir = BASE.parent / "athletes" / slug
+    return {
+        "history":       adir / "telegram/history.json",
+        "system_prompt": adir / "system_prompt.txt",
+    }
+
+def load_history(history_file=None):
+    f = Path(history_file) if history_file else HISTORY_FILE
+    if f.exists():
+        return json.loads(f.read_text())
     return []
 
 
-def save_history(history):
-    HISTORY_FILE.write_text(json.dumps(history[-MAX_HISTORY_PAIRS:], indent=2))
+def save_history(history, history_file=None):
+    f = Path(history_file) if history_file else HISTORY_FILE
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(history[-MAX_HISTORY_PAIRS:], indent=2))
 
 
 def tg_post(token, method, payload):
@@ -293,8 +318,8 @@ def process_charts(token, chat_id, response):
 
 
 PROJECT_DIR = BASE.parent.parent  # diamondpeak-site/
-STATE_JSON  = BASE.parent / "current-state.json"
-HEAT_LOG    = BASE.parent / "heat-log.json"
+STATE_JSON  = BASE.parent / "athletes/jamie/current-state.json"
+HEAT_LOG    = BASE.parent / "athletes/jamie/heat-log.json"
 
 _ANKLE_RE    = re.compile(r'^(ankle|pain|niggle)\s+(\w+[\s\w]*?)\s+(\d+(?:\.\d+)?)\s*$', re.I)
 _WEIGHT_RE   = re.compile(r'^(?:weight|kg|weigh(?:ed)?)\s+([\d.]+)\s*(?:kg)?\s*$', re.I)
@@ -410,7 +435,7 @@ def _update_ftp(new_ftp: int) -> str:
         errors.append(f"system_prompt: {e}")
 
     # reference/rules.md — "Bike FTP: 316 W" style
-    rules_path = BASE.parent / "reference/rules.md"
+    rules_path = BASE.parent / "athletes/jamie/reference/rules.md"
     try:
         rules = rules_path.read_text()
         rules_new = re.sub(r'Bike FTP: \d+ W', f'Bike FTP: {new_ftp} W', rules)
@@ -455,19 +480,21 @@ def _update_ftp(new_ftp: int) -> str:
     )
 
 
-def call_claude(user_message, config, history, model=MODEL_SONNET):
-    system_prompt = SYSTEM_PROMPT_FILE.read_text().strip()
+def call_claude(user_message, config, history, model=MODEL_SONNET,
+                system_prompt_file=None, athlete_name="Jamie"):
+    sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
+    system_prompt = sp_file.read_text().strip()
 
     parts = [system_prompt, ""]
 
     if history:
         parts.append("Recent conversation:")
         for h in history:
-            parts.append(f"Jamie: {h['user']}")
+            parts.append(f"{athlete_name}: {h['user']}")
             parts.append(f"ClaudeCoach: {h['assistant']}")
         parts.append("")
 
-    parts.append(f"Jamie: {user_message}")
+    parts.append(f"{athlete_name}: {user_message}")
 
     full_prompt = "\n".join(parts)
 
@@ -499,13 +526,15 @@ def main():
         sys.exit(1)
 
     token = config["bot_token"]
-    allowed_chat_id = str(config["chat_id"])
-
-    log(f"ClaudeCoach bot started. Listening for messages from chat {allowed_chat_id}.")
+    athletes = load_athletes()
+    log(f"ClaudeCoach bot started. Registered athletes: {[a['name'] for a in athletes.values()]}")
     get_whisper()
 
     offset = 0
     while True:
+        # Reload athlete registry on each poll cycle so new athletes are picked up without restart
+        athletes = load_athletes()
+
         data = get_updates(token, offset)
         for update in data.get("result", []):
             offset = update["update_id"] + 1
@@ -522,7 +551,7 @@ def main():
 
                 if not text:
                     voice = msg.get("voice") or msg.get("audio")
-                    if voice and chat_id == allowed_chat_id:
+                    if voice and chat_id in athletes:
                         typing(token, chat_id)
                         raw = download_tg_file(token, voice["file_id"])
                         if raw:
@@ -530,8 +559,17 @@ def main():
                             if text:
                                 send(token, chat_id, f"_Heard: {text}_")
 
-            if chat_id != allowed_chat_id or not text:
+            if not text:
                 continue
+
+            athlete = athletes.get(chat_id)
+            if not athlete:
+                send(token, chat_id, "This account isn't registered with ClaudeCoach yet.")
+                continue
+
+            slug = athlete["slug"]
+            files = athlete_files(slug)
+            athlete_name = athlete.get("name", slug).split()[0]  # first name only
 
             if text.lower() in ("/start", "/help"):
                 send(token, chat_id,
@@ -576,9 +614,11 @@ def main():
             typing(token, chat_id)
             send(token, chat_id, "_On it..._")
 
-            history = load_history()
+            history = load_history(files["history"])
             model = select_model(text)
-            response = call_claude(text, config, history, model=model)
+            response = call_claude(text, config, history, model=model,
+                                   system_prompt_file=files["system_prompt"],
+                                   athlete_name=athlete_name)
 
             clean = process_charts(token, chat_id, response)
             if clean:
@@ -586,7 +626,7 @@ def main():
             log(f"Out: {clean[:80]}")
 
             history.append({"user": text, "assistant": clean})
-            save_history(history)
+            save_history(history, files["history"])
 
         time.sleep(1)
 
