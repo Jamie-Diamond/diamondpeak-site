@@ -10,5 +10,11 @@
     "type": "feedback",
     "message": "Plan/description mismatch on today's run: session was labelled both '5k' and '50 min (5x 9:1 walk-run)' — those are not the same distance (~5km vs ~8.5km). When generating sessions, ensure distance and duration descriptors are internally consistent, and that the walk-run cycle count matches the stated total. Jamie had to point out the inconsistency twice before it was corrected.",
     "logged_at": "2026-05-11T00:00:00"
+  },
+  {
+    "date": "2026-05-11",
+    "type": "feature",
+    "message": "Quick-reply buttons at the bottom of the message should be context-aware (update based on the current conversation state) and there should be fewer of them. Currently they feel static and cluttered.",
+    "logged_at": "2026-05-11T00:00:00"
   }
 ]
