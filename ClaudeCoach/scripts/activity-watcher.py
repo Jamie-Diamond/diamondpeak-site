@@ -140,8 +140,8 @@ def release_lock():
     LOCK_FILE.unlink(missing_ok=True)
 
 
-def _send_followup_nudge(state, session_log_f, chat_id):
-    """If any stub is >2h old with rpe=null and hasn't been nudged, send one re-ping."""
+def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_file=None):
+    """If any stub from today is >2h old with rpe=null and hasn't been nudged, send one re-ping."""
     if not session_log_f.exists():
         return
     try:
@@ -150,12 +150,17 @@ def _send_followup_nudge(state, session_log_f, chat_id):
         return
 
     now = datetime.now()
+    today_str = now.date().isoformat()
     nudged_ids = set(state.get("nudged_ids") or [])
+    has_injury = bool(injuries)
 
     for e in log_entries:
         if not e.get("stub", False):
             continue
         if e.get("rpe") is not None:
+            continue
+        # Only nudge for today's activities — don't nag about old stubs
+        if e.get("date", "") != today_str:
             continue
         aid = str(e.get("activity_id", ""))
         if aid in nudged_ids:
@@ -171,8 +176,10 @@ def _send_followup_nudge(state, session_log_f, chat_id):
         if 2 <= age_hours <= 24:
             sport = e.get("sport", "session")
             name = e.get("name", "")
-            if sport == "Run":
+            if sport == "Run" and has_injury:
                 msg = f"Quick one — injury score for the {name or 'run'}: during and this morning? (0-10)"
+            elif sport == "Run":
+                msg = f"RPE for the {name or 'run'}? (1–10)"
             elif sport == "Swim":
                 msg = f"RPE for the {name or 'swim'}? And how did it feel overall?"
             elif sport == "Ride" and (e.get("duration_min") or 0) >= 90:
@@ -182,7 +189,10 @@ def _send_followup_nudge(state, session_log_f, chat_id):
             _notify(msg, chat_id)
             nudged_ids.add(aid)
             state["nudged_ids"] = list(nudged_ids)
-            break  # one nudge per run
+            # Persist nudged_ids so the same stub is never nudged again
+            if state_file:
+                save_state(state, state_file)
+            break  # one nudge per cycle
 
 
 def check_athlete(slug, athlete_cfg):
@@ -269,16 +279,16 @@ def check_athlete(slug, athlete_cfg):
             analysis_lines.append(line)
 
     if not activity_id or activity_id == "none":
-        _send_followup_nudge(state, session_log_f, chat_id)
+        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
         return
 
     # Dedup check
     if activity_id in existing_ids:
-        _send_followup_nudge(state, session_log_f, chat_id)
+        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
         return
 
     if activity_id == state.get("last_id"):
-        _send_followup_nudge(state, session_log_f, chat_id)
+        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
         return
 
     state["last_id"] = activity_id
@@ -335,7 +345,7 @@ def check_athlete(slug, athlete_cfg):
     if analysis and analysis != "none":
         _notify(f"*New activity*\n\n{analysis}", chat_id)
 
-    _send_followup_nudge(state, session_log_f, chat_id)
+    _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
 
     # Trigger site data refresh in background
     subprocess.Popen(
