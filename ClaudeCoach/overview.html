@@ -117,6 +117,16 @@
       <div class="name">GitHub Pages</div>
       <div class="desc">Static HTML/JS, no build step; charts via Chart.js CDN</div>
     </div>
+    <div class="stack-item">
+      <div class="label">Race planning</div>
+      <div class="name">generate-race-plan.py</div>
+      <div class="desc">Deterministic pace/power targets from FTP, CSS, LTHR, forecast CTL; works across all tri distances</div>
+    </div>
+    <div class="stack-item">
+      <div class="label">Data capture</div>
+      <div class="name">Inline keyboards</div>
+      <div class="desc">Post-session RPE, nutrition, pain scores captured via Telegram inline buttons — no manual text entry</div>
+    </div>
   </div>
 
   <h2>Automation schedule</h2>
@@ -129,32 +139,47 @@
         <tr>
           <td class="mono">Every 15 min</td>
           <td class="mono">activity-watcher.py</td>
-          <td>Detects new activities synced to Intervals.icu; triggers Claude coaching analysis; stubs session-log.json; sends Telegram summary</td>
+          <td>Detects new activities; triggers Claude analysis; stubs session-log.json; sends Telegram coaching note with inline keyboard for RPE, nutrition, and pain capture</td>
         </tr>
         <tr>
-          <td class="mono">Every 1 min</td>
-          <td class="mono">telegram-feedback.py</td>
-          <td>Processes athlete Telegram replies; fills session log stubs with RPE, nutrition, pain scores; runs outside bot.py to avoid polling conflict</td>
+          <td class="mono">Continuous</td>
+          <td class="mono">bot.py</td>
+          <td>Two-way Telegram bot; routes messages to Claude or fast-path handlers; processes inline keyboard callbacks (RPE, nutrition, pain scores, FTP/CSS/LTHR updates)</td>
         </tr>
         <tr>
-          <td class="mono">Daily 06:30</td>
+          <td class="mono">Daily 06:20</td>
           <td class="mono">morning-checkin.py</td>
-          <td>Fetches HRV, sleep, and wellness; sends personalised daily readiness note and session preview</td>
+          <td>Fetches HRV, sleep, and wellness from Intervals.icu; sends personalised daily readiness note and today's session preview</td>
         </tr>
         <tr>
-          <td class="mono">Daily 07:00</td>
-          <td class="mono">prescription.py</td>
-          <td>Generates today's session prescription card based on load, fatigue, and planned event</td>
+          <td class="mono">Daily 20:00</td>
+          <td class="mono">evening-checkin.py</td>
+          <td>End-of-day check-in; prompts for post-session notes if any activities occurred; reminds of tomorrow's session</td>
+        </tr>
+        <tr>
+          <td class="mono">Sunday 20:00</td>
+          <td class="mono">weekly-summary.py</td>
+          <td>Fetches week's training data directly from Intervals.icu; generates compliance card with TSS, CTL change, sleep, fuelling; evaluates 8 decision triggers (recovery, overreach, phase transitions, injury, nutrition, HRV); sends to Telegram</td>
         </tr>
         <tr>
           <td class="mono">Hourly</td>
           <td class="mono">refresh-site-data.py</td>
-          <td>Fetches live training metrics from Intervals.icu; writes training-data.json used by the Training Visualiser</td>
+          <td>Fetches live training metrics from Intervals.icu; writes training-data.json powering the athlete dashboard</td>
         </tr>
         <tr>
           <td class="mono">Hourly</td>
           <td class="mono">refresh-public-data.py</td>
           <td>Extracts public-safe fields (CTL trend, race countdown) from training-data.json; writes site-data.json and pushes to GitHub Pages</td>
+        </tr>
+        <tr>
+          <td class="mono">On demand</td>
+          <td class="mono">generate-blueprint.py</td>
+          <td>Generates the season training blueprint — phase structure, TSS ceilings, test schedule — and pushes test events to Intervals.icu calendar</td>
+        </tr>
+        <tr>
+          <td class="mono">On demand</td>
+          <td class="mono">generate-race-plan.py</td>
+          <td>Generates race-day targets from current FTP, CSS, LTHR, and forecast CTL; supports all triathlon distances; triggered via Telegram or manually</td>
         </tr>
       </tbody>
     </table>
@@ -171,7 +196,7 @@
     <p style="margin:0;font-size:13px">New athletes are invited by the admin via <code style="font-family:'DM Mono',monospace;font-size:11px">/invite &lt;chat_id&gt;</code>. The bot walks them through a multi-step Telegram questionnaire: name, target race, Intervals.icu credentials — then immediately fetches FTP, thresholds, and fitness history from ICU and asks only for the gaps. The admin approves with <code style="font-family:'DM Mono',monospace;font-size:11px">/approve &lt;slug&gt;</code>, which scaffolds the athlete folder, generates a personalised system prompt, and activates coaching.</p>
   </div>
 
-  <div class="footer">&copy; 2026 Diamond Peak Consulting &mdash; private</div>
+  <div class="footer">&copy; 2026 Diamond Peak Consulting &mdash; <a href="athlete-jamie.html">Jamie</a> &middot; <a href="athlete-b.html">Athlete B</a> &middot; private</div>
 </div>
 </body>
 </html>

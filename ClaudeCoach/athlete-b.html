@@ -30,9 +30,10 @@
   .grid{display:grid;gap:14px}
   .grid-2{grid-template-columns:1fr 1fr}
   .grid-4{grid-template-columns:repeat(4,1fr)}
+  .grid-5{grid-template-columns:repeat(5,1fr)}
   .grid-6{grid-template-columns:repeat(6,1fr)}
-  @media(max-width:980px){.grid-2,.grid-4,.grid-6{grid-template-columns:1fr 1fr}}
-  @media(max-width:620px){.grid-2,.grid-4,.grid-6{grid-template-columns:1fr}}
+  @media(max-width:980px){.grid-2,.grid-4,.grid-5,.grid-6{grid-template-columns:1fr 1fr}}
+  @media(max-width:620px){.grid-2,.grid-4,.grid-5,.grid-6{grid-template-columns:1fr}}
   .panel{background:rgba(255,255,255,0.85);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid var(--line);border-radius:10px;padding:20px}
   .stat{display:flex;flex-direction:column;gap:2px}
   .stat .v{font-family:'Libre Baskerville',serif;font-size:26px;font-weight:700;letter-spacing:-0.02em;line-height:1.1}
@@ -119,7 +120,7 @@
 
   <!-- TOP BAR: COUNTDOWN + KEY STATS -->
   <div class="panel" style="margin-bottom:14px">
-    <div class="grid grid-4">
+    <div class="grid grid-5">
       <div class="stat">
         <div class="l">Days to race</div>
         <div class="v" id="kpi-days">—</div>
@@ -139,6 +140,11 @@
         <div class="l">TSB (form)</div>
         <div class="v" id="kpi-tsb">—</div>
         <div class="d">positive = fresh</div>
+      </div>
+      <div class="stat">
+        <div class="l">7d ramp</div>
+        <div class="v" id="kpi-ramp">—</div>
+        <div class="d">CTL change / week</div>
       </div>
     </div>
     <div style="margin-top:14px">
@@ -167,6 +173,20 @@
     <div class="callout muted" id="fitness-null" style="margin-top:10px">
       CTL history will appear once training data syncs from Intervals.icu. Check back after the next daily refresh.
     </div>
+  </div>
+
+  <!-- RACE PLAN TARGETS -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Race plan — 70.3 Emilia-Romagna 2026</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+      <div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;display:flex;justify-content:space-between"><span style="color:var(--ink2);font-size:12px">Swim 1.9 km</span><span style="font-family:'DM Mono',monospace;font-weight:500" id="rp-swim">—</span></div>
+      <div style="padding:8px 0 8px 20px;border-bottom:1px solid var(--line);font-size:13px;display:flex;justify-content:space-between"><span style="color:var(--ink2);font-size:12px">T1 + T2</span><span style="font-family:'DM Mono',monospace;font-weight:500">≤3:30 combined</span></div>
+      <div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;display:flex;justify-content:space-between"><span style="color:var(--ink2);font-size:12px">Bike 90 km</span><span style="font-family:'DM Mono',monospace;font-weight:500" id="rp-bike">—</span></div>
+      <div style="padding:8px 0 8px 20px;border-bottom:1px solid var(--line);font-size:13px;display:flex;justify-content:space-between"><span style="color:var(--ink2);font-size:12px">Run 21.1 km</span><span style="font-family:'DM Mono',monospace;font-weight:500" id="rp-run">—</span></div>
+      <div style="padding:8px 0;font-size:13px;display:flex;justify-content:space-between"><span style="color:var(--ink2);font-size:12px">Bike FTP</span><span style="font-family:'DM Mono',monospace;font-weight:500" id="rp-ftp">—</span></div>
+      <div style="padding:8px 0 0 20px;font-size:13px;display:flex;justify-content:space-between"><span style="color:var(--ink2);font-size:12px">Current CTL</span><span style="font-family:'DM Mono',monospace;font-weight:500" id="rp-ctl">—</span></div>
+    </div>
+    <div class="callout muted" style="margin-top:12px;font-size:11px">Race targets update once CSS, FTP and threshold pace are confirmed via Telegram.</div>
   </div>
 
   <!-- TRAINING LOAD -->
@@ -861,7 +881,7 @@ fetch('training-data-kathryn.json?v=' + Date.now())
     if (d.kpi) {
       const k = d.kpi;
       const g = id => document.getElementById(id);
-      if (k.ctl != null && g("kpi-ctl"))  g("kpi-ctl").textContent  = k.ctl.toFixed(1);
+      if (k.ctl != null && g("kpi-ctl"))  { g("kpi-ctl").textContent = k.ctl.toFixed(1); const rp=g("rp-ctl"); if(rp) rp.textContent=k.ctl.toFixed(1); }
       if (k.tsb != null && g("kpi-tsb")) {
         g("kpi-tsb").textContent = (k.tsb >= 0 ? "+" : "") + k.tsb.toFixed(1);
         const statEl = g("stat-tsb");
@@ -872,14 +892,16 @@ fetch('training-data-kathryn.json?v=' + Date.now())
           else                  statEl.classList.add("warn");
         }
       }
+      if (k.ramp7d != null && g("kpi-ramp")) g("kpi-ramp").textContent = (k.ramp7d>=0?"+":"")+k.ramp7d.toFixed(1);
+      if (k.ftp    != null) { const rp=g("rp-ftp"); if(rp) rp.textContent=k.ftp+" W"; }
     }
     // Charts
-    if (d.loadChart && d.loadChart.length)     renderLoadChart(d.loadChart);
-    if (d.weekCalendar && d.weekCalendar.length) renderLiveCalendar(d.weekCalendar);
-    if (d.recent)                               renderRecentTable(d.recent);
-    if (d.planVsActual)                         renderPlanActual(d.planVsActual);
-    if (d.sessionLog)                           renderSessionLog(d.sessionLog);
-    if (d.ctlProjection)                        renderCtlProjection(d.ctlProjection);
+    if (d.loadChart && d.loadChart.length)       renderLoadChart(d.loadChart);
+    if (d.weekCalendar && d.weekCalendar.length)  renderLiveCalendar(d.weekCalendar);
+    if (d.recent)                                 renderRecentTable(d.recent);
+    if (d.planVsActual && d.planVsActual.length)  renderPlanActual(d.planVsActual);
+    if (d.sessionLog)                             renderSessionLog(d.sessionLog);
+    if (d.ctlProjection)                          renderCtlProjection(d.ctlProjection);
     // Swim — get CSS target from profile if available
     const cssPace = d.profile && d.profile.swim_css_per_100m_seconds;
     if (d.swimLog)                              renderSwimProgression(d.swimLog, cssPace);
