@@ -334,8 +334,13 @@ _WEIGHT_RE   = re.compile(r'^(?:weight|kg|weigh(?:ed)?)\s+([\d.]+)\s*(?:kg)?\s*$
 _HEAT_RE     = re.compile(r'^(?:heat|bath)\s+([\d.]+)\s*(?:min|m)?\s*$', re.I)
 _PLAN_RE     = re.compile(r'^(?:generate\s+plan|plan\s+(?:next\s+)?(?:2\s+)?weeks?|plan\s+ahead)\s*$', re.I)
 _FTP_RE      = re.compile(r'^(?:ftp\s+(?:retest|result|update|new)|new\s+ftp)\s+([\d.]+)\s*(?:w(?:atts?)?)?\s*$', re.I)
-_WEEK_CMD_RE = re.compile(r'^/week\s*$', re.I)
-_FORM_CMD_RE = re.compile(r'^/form\s*$', re.I)
+_WEEK_CMD_RE     = re.compile(r'^/week\s*$', re.I)
+_FORM_CMD_RE     = re.compile(r'^/form\s*$', re.I)
+_STRENGTH_RE     = re.compile(
+    r'^(?:strength(?:\s+session)?|gym(?:\s+session)?|lift(?:ing)?|'
+    r'what(?:\'s|\s+is)\s+(?:today\'?s?\s+)?(?:strength|gym)(?:\s+session)?)\s*$',
+    re.I,
+)
 
 GENERATE_PLAN_SCRIPT = BASE.parent.parent / "ClaudeCoach/scripts/generate-plan.sh"
 
@@ -476,6 +481,47 @@ def _load_state_json():
 def _save_state_json(state):
     STATE_JSON.write_text(json.dumps(state, indent=2))
 
+def _strength_session() -> str:
+    """Return today's prescribed strength session based on day of week."""
+    dow = date.today().weekday()  # Mon=0, Sun=6
+
+    # Session A: Tue/Sat | Session B: Thu/Sun | Off: Mon/Wed/Fri
+    if dow in (1, 5):  # Tuesday or Saturday
+        session = "A"
+        exercises = (
+            "1. Bulgarian split squat — 3 × 8 each\n"
+            "2. Romanian deadlift — 3 × 8\n"
+            "3. Step-ups (high box) — 3 × 10 each\n"
+            "4. *Single-leg calf raise — 3 × 15 each* ⬅ ankle priority\n"
+            "5. Hip thrust — 3 × 12"
+        )
+        focus = "Lower-body power"
+    elif dow in (3, 6):  # Thursday or Sunday
+        session = "B"
+        exercises = (
+            "1. Single-leg deadlift — 3 × 8 each\n"
+            "2. Nordic hamstring curl — 3 × 6\n"
+            "3. Lateral band walk — 3 × 20 steps\n"
+            "4. Dead bug — 3 × 10 each\n"
+            "5. *Copenhagen plank — 3 × 20 sec each* ⬅ ankle priority"
+        )
+        focus = "Stability + injury prevention"
+    else:
+        return "No strength session scheduled today. Next: Session A (Tue) or Session B (Thu)."
+
+    state = _load_state_json()
+    pain = state.get("ankle", {}).get("pain_during", 0) or 0
+    ankle_note = ""
+    if pain and pain > 0:
+        ankle_note = f"\n\n⚠️ Ankle pain {pain}/10 logged — reduce calf raise load if needed. Pain-led, not plan-led."
+
+    return (
+        f"*Session {session} — {focus}*\n\n"
+        f"{exercises}\n\n"
+        f"Finish with 10 min mobility: hip flexor + calf + Achilles stretch.{ankle_note}"
+    )
+
+
 def fast_path(text):
     """
     Returns a reply string if the message can be handled without calling Claude,
@@ -582,6 +628,9 @@ def fast_path(text):
 
     if _WEEKLY_SUMMARY_RE.match(text.strip()):
         return "__WEEKLY_SUMMARY__"
+
+    if _STRENGTH_RE.match(text.strip()):
+        return _strength_session()
 
     return None
 
@@ -1470,6 +1519,7 @@ def main():
                      "*Quick commands (instant):*\n"
                      "  /week — this week's sessions + TSS\n"
                      "  /form — CTL/ATL/TSB + race projection\n"
+                     "  strength — today's gym session\n"
                      "  ankle 3 — log pain score\n"
                      "  82.5 kg — log weight\n"
                      "  heat 30 — log heat session\n\n"
