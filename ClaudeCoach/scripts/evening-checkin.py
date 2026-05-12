@@ -81,9 +81,8 @@ def run_athlete(slug, athlete_cfg):
     with open(log_file, "a") as lf:
         result = subprocess.run(
             [CLAUDE, "-p", prompt, "--allowedTools", TOOLS],
-            capture_output=True, text=True,
+            stdout=subprocess.PIPE, stderr=lf, text=True,
             cwd=PROJECT_DIR, timeout=180,
-            stderr=lf,
         )
 
     output = (result.stdout or "").strip()
