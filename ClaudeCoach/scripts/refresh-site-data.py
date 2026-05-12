@@ -278,6 +278,16 @@ def post_process(data):
         except Exception:
             pass
 
+    # Weekly discipline breakdown (from athlete-summary.json if available)
+    athlete_summary_f = BASE / "athletes/jamie/athlete-summary.json"
+    if athlete_summary_f.exists():
+        try:
+            summary = json.loads(athlete_summary_f.read_text())
+            data["weeklyBreakdown"] = summary.get("weeks", [])
+            data["swimProgression"] = summary.get("swim_progression", [])
+        except Exception:
+            pass
+
     # Session log — last 10 confirmed (non-stub) entries
     if SESSION_LOG.exists():
         try:

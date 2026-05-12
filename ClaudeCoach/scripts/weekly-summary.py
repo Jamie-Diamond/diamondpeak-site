@@ -297,6 +297,19 @@ Output ONLY the Telegram message (Steps 2 + 3 combined). No preamble, no sign-of
     if output:
         _tg_send(chat_id, output)
 
+    # Regenerate trend aggregates in the background (feeds dashboard chart)
+    try:
+        trend_script = BASE / "scripts/weekly-trend.py"
+        if trend_script.exists():
+            subprocess.Popen(
+                [sys.executable, str(trend_script), "--athlete", slug],
+                cwd=PROJECT_DIR,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+    except Exception:
+        pass
+
     return output
 
 

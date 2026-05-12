@@ -243,6 +243,19 @@
     <div class="chart-wrap short"><canvas id="chartPlanActual"></canvas></div>
   </div>
 
+  <!-- DISCIPLINE BREAKDOWN (12 weeks) -->
+  <div class="panel" id="breakdown-panel" style="margin-bottom:14px;display:none">
+    <h2>Discipline breakdown — last 12 weeks</h2>
+    <div class="small" style="margin-bottom:10px">TSS by sport per week · updated each Sunday</div>
+    <div class="chart-wrap short"><canvas id="chartBreakdown"></canvas></div>
+    <div class="legend" style="margin-top:10px">
+      <span><span class="swatch" style="background:#1a5276"></span>Bike</span>
+      <span><span class="swatch" style="background:#c0392b"></span>Run</span>
+      <span><span class="swatch" style="background:#2e9c8e"></span>Swim</span>
+      <span><span class="swatch" style="background:#7f8c8d"></span>Other</span>
+    </div>
+  </div>
+
   <!-- WEEK CALENDAR -->
   <div style="margin-bottom:14px">
     <div id="upcoming-content"></div>
@@ -556,6 +569,39 @@ function renderPlanActual(weeks) {
   });
 }
 
+// ── DISCIPLINE BREAKDOWN ─────────────────────────────────────────────────────
+function renderBreakdown(weeks) {
+  const panel = document.getElementById("breakdown-panel");
+  const ctx   = document.getElementById("chartBreakdown");
+  if (!ctx || !weeks || !weeks.length) return;
+  panel.style.display = "";
+  const labels = weeks.map(w => {
+    const dt = new Date(w.week_start+"T00:00:00");
+    return dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+  });
+  new Chart(ctx.getContext("2d"), {
+    type:"bar",
+    data:{
+      labels,
+      datasets:[
+        {label:"Bike",    data:weeks.map(w=>w.tss_bike||0),     backgroundColor:"rgba(26,82,118,0.85)",  borderRadius:2,stack:"s"},
+        {label:"Run",     data:weeks.map(w=>w.tss_run||0),      backgroundColor:"rgba(192,57,43,0.85)",  borderRadius:2,stack:"s"},
+        {label:"Swim",    data:weeks.map(w=>w.tss_swim||0),     backgroundColor:"rgba(46,156,142,0.85)", borderRadius:2,stack:"s"},
+        {label:"Other",   data:weeks.map(w=>(w.tss_strength||0)+(w.tss_other||0)), backgroundColor:"rgba(127,140,141,0.7)", borderRadius:2,stack:"s"},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{stacked:true,ticks:{font:{size:10}},grid:{display:false}},
+        y:{stacked:true,beginAtZero:true,ticks:{font:{size:10}},grid:{color:"rgba(0,0,0,0.05)"},
+           title:{display:true,text:"TSS",font:{size:10},color:"#666"}}
+      }
+    }
+  });
+}
+
 // ── WEEK CALENDAR ────────────────────────────────────────────────────────────
 function renderLiveCalendar(events) {
   const el = document.getElementById("upcoming-content");
@@ -777,6 +823,7 @@ fetch('training-data.json?v='+Date.now())
     if (d.weekCalendar && d.weekCalendar.length) renderLiveCalendar(d.weekCalendar);
     if (d.recent)                                renderRecentTable(d.recent);
     if (d.planVsActual)                          renderPlanActual(d.planVsActual);
+    if (d.weeklyBreakdown && d.weeklyBreakdown.length) renderBreakdown(d.weeklyBreakdown);
     if (d.ctlProjection)                         renderCtlProjection(d.ctlProjection);
     if (d.currentState)                          renderActions(d.currentState);
     if (d.kpi && d.kpi.ctl_outdoor)             document.getElementById("rp-ftp").textContent = d.kpi.ctl_outdoor+" W";
