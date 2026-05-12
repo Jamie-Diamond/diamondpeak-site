@@ -42,7 +42,7 @@ LOG_FILE = BASE / "bot.log"
 HISTORY_FILE = BASE.parent / "athletes/jamie/telegram/history.json"
 SYSTEM_PROMPT_FILE = BASE.parent / "athletes/jamie/system_prompt.txt"
 
-MAX_HISTORY_PAIRS = 6  # keep last 6 exchanges for context
+MAX_HISTORY_PAIRS = 12  # keep last 12 exchanges for context
 
 MODEL_SONNET = "claude-sonnet-4-6"
 MODEL_HAIKU  = "claude-haiku-4-5-20251001"
@@ -709,6 +709,39 @@ def prefetch_context(slug: str) -> str:
             f"\nFor more detail call: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint <endpoint> [options]"
         )
         lines.append("Write endpoints: push_workout (--payload JSON), edit_workout (--event-id ID --payload JSON), delete_workout (--event-id ID)")
+
+        # Inject today's already-answered values from current-state.json so Claude
+        # doesn't re-ask questions the athlete has already answered this session.
+        state_path = BASE.parent / "athletes" / slug / "current-state.json"
+        if state_path.exists():
+            try:
+                state = json.loads(state_path.read_text())
+                today_str = today.isoformat()
+                state_lines = []
+
+                ankle = state.get("ankle", {})
+                ankle_hist = ankle.get("history", [])
+                if ankle_hist:
+                    today_entry = next((h for h in reversed(ankle_hist) if h.get("date") == today_str), None)
+                    if today_entry is not None:
+                        state_lines.append(f"Ankle score logged today: {today_entry['score']}/10 — do not ask again")
+                    else:
+                        last = ankle_hist[-1]
+                        state_lines.append(f"Last ankle score: {last['score']}/10 on {last['date']}")
+
+                weights = state.get("weight_readings", [])
+                if weights:
+                    last_w = weights[-1]
+                    if last_w.get("date") == today_str:
+                        state_lines.append(f"Weight logged today: {last_w['kg']}kg — do not ask again")
+                    else:
+                        state_lines.append(f"Last weight: {last_w['kg']}kg ({last_w['date']})")
+
+                if state_lines:
+                    lines.append("Already answered today: " + "  |  ".join(state_lines))
+            except Exception:
+                pass
+
         return "\n".join(lines)
 
     except Exception as e:
