@@ -205,6 +205,16 @@ def answer_callback(token, callback_query_id):
     tg_post(token, "answerCallbackQuery", {"callback_query_id": callback_query_id})
 
 
+def edit_keyboard_confirm(token, chat_id, message_id, text):
+    """Edit a keyboard message to show confirmation text with buttons removed."""
+    tg_post(token, "editMessageText", {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "reply_markup": {"inline_keyboard": []},
+    })
+
+
 def download_tg_file(token, file_id):
     info = tg_post(token, "getFile", {"file_id": file_id})
     file_path = info.get("result", {}).get("file_path")
@@ -312,7 +322,14 @@ SESSION_LOG_F = BASE.parent / "athletes/jamie/session-log.json"
 TRAINING_DATA = BASE.parent / "athletes/jamie/training-data.json"
 SITE_DATA     = BASE.parent / "site-data.json"
 
-_ANKLE_RE    = re.compile(r'^(ankle|pain|niggle)\s+(\w+[\s\w]*?)\s+(\d+(?:\.\d+)?)\s*$', re.I)
+_ANKLE_RE         = re.compile(r'^(ankle|pain|niggle)\s+(\w+[\s\w]*?)\s+(\d+(?:\.\d+)?)\s*$', re.I)
+_RACE_PLAN_RE     = re.compile(r'^(?:regenerate|update|refresh|regen)\s+race\s+plan\s*$', re.I)
+_CSS_RE           = re.compile(r'^css\s+([\d:]+)\s*(?:/100m)?\s*$', re.I)
+_LTHR_RE          = re.compile(r'^lthr\s+(\d{2,3})\s*(?:bpm)?\s*$', re.I)
+_WEEKLY_SUMMARY_RE = re.compile(
+    r'^(?:weekly\s+summary|full\s+week\s+review|week\s+(?:summary|review)|run\s+weekly\s+summary)\s*$',
+    re.I,
+)
 _WEIGHT_RE   = re.compile(r'^(?:weight|kg|weigh(?:ed)?)\s+([\d.]+)\s*(?:kg)?\s*$', re.I)
 _HEAT_RE     = re.compile(r'^(?:heat|bath)\s+([\d.]+)\s*(?:min|m)?\s*$', re.I)
 _PLAN_RE     = re.compile(r'^(?:generate\s+plan|plan\s+(?:next\s+)?(?:2\s+)?weeks?|plan\s+ahead)\s*$', re.I)
@@ -555,6 +572,17 @@ def fast_path(text):
     if m:
         return f"__FTP_RETEST__:{m.group(1)}"
 
+    m = _CSS_RE.match(text.strip())
+    if m:
+        return f"__CSS__:{m.group(1)}"
+
+    m = _LTHR_RE.match(text.strip())
+    if m:
+        return f"__LTHR__:{m.group(1)}"
+
+    if _WEEKLY_SUMMARY_RE.match(text.strip()):
+        return "__WEEKLY_SUMMARY__"
+
     return None
 
 
@@ -618,6 +646,155 @@ def _update_ftp(new_ftp: int) -> str:
         f"Remember to update in Intervals.icu too — Settings → Athlete → FTP. "
         f"Say _generate plan_ to push updated sessions."
     )
+
+
+def _mark_test_completed(slug: str, test_type: str):
+    """Mark the earliest uncompleted test of the given type as done in test-schedule.json."""
+    test_f = BASE.parent / "athletes" / slug / "test-schedule.json"
+    if not test_f.exists():
+        return
+    try:
+        tests = json.loads(test_f.read_text())
+        for t in tests:
+            if t.get("type") == test_type and not t.get("completed"):
+                t["completed"] = True
+                t["completed_date"] = date.today().isoformat()
+                break
+        test_f.write_text(json.dumps(tests, indent=2))
+    except Exception as e:
+        log(f"_mark_test_completed error: {e}")
+
+
+def _update_css(slug: str, css_str: str) -> str:
+    """Update swim CSS in profile.json, mark test completed, regenerate race plan."""
+    today = date.today().isoformat()
+    profile_path = BASE.parent / "athletes" / slug / "profile.json"
+    try:
+        profile = json.loads(profile_path.read_text())
+        prev = profile.get("swim_css_per_100m")
+        profile["swim_css_per_100m"] = css_str.strip()
+        profile_path.write_text(json.dumps(profile, indent=2))
+    except Exception as e:
+        return f"Failed to update CSS: {e}"
+
+    _mark_test_completed(slug, "css")
+
+    try:
+        subprocess.run(
+            ["python3", str(BASE.parent / "scripts/generate-race-plan.py"), "--athlete", slug],
+            capture_output=True, text=True, cwd=str(PROJECT_DIR), timeout=60,
+        )
+    except Exception:
+        pass
+
+    _git_commit(f"css: {slug} updated to {css_str} {today}")
+    prev_str = f" (was {prev}/100m)" if prev else ""
+    return (
+        f"CSS updated to *{css_str}/100m*{prev_str}. "
+        f"Race plan swim targets recalculated."
+    )
+
+
+def _update_lthr(slug: str, lthr_bpm: int) -> str:
+    """Update LTHR in profile.json, mark test completed, regenerate race plan."""
+    today = date.today().isoformat()
+    profile_path = BASE.parent / "athletes" / slug / "profile.json"
+    try:
+        profile = json.loads(profile_path.read_text())
+        prev = profile.get("lthr")
+        profile["lthr"] = lthr_bpm
+        profile_path.write_text(json.dumps(profile, indent=2))
+    except Exception as e:
+        return f"Failed to update LTHR: {e}"
+
+    _mark_test_completed(slug, "lthr")
+
+    try:
+        subprocess.run(
+            ["python3", str(BASE.parent / "scripts/generate-race-plan.py"), "--athlete", slug],
+            capture_output=True, text=True, cwd=str(PROJECT_DIR), timeout=60,
+        )
+    except Exception:
+        pass
+
+    _git_commit(f"lthr: {slug} updated to {lthr_bpm} bpm {today}")
+    prev_str = f" (was {prev} bpm)" if prev else ""
+    return (
+        f"LTHR updated to *{lthr_bpm} bpm*{prev_str}. "
+        f"HR bands in race plan updated."
+    )
+
+
+def _handle_quick_log(token, chat_id, data, message_id, athletes):
+    """Handle quick-log callback from post-session inline keyboard. Returns True if handled."""
+    parts = data.split(":", 3)
+    if len(parts) != 4 or parts[0] not in ("r", "p", "c"):
+        return False
+
+    field_code, activity_id, slug, value_str = parts
+
+    athlete = athletes.get(chat_id)
+    if not athlete or athlete["slug"] != slug:
+        return False
+
+    field_map = {"r": "rpe", "p": "injury_pain_during", "c": "nutrition_g_carb"}
+    field = field_map[field_code]
+
+    try:
+        value = int(value_str)
+    except ValueError:
+        return False
+
+    session_log_f = BASE.parent / "athletes" / slug / "session-log.json"
+    if not session_log_f.exists():
+        return False
+
+    try:
+        entries = json.loads(session_log_f.read_text())
+    except Exception:
+        return False
+
+    updated = False
+    needs_carb_followup = False
+    entry_sport = ""
+    entry_duration = 0
+
+    for e in entries:
+        if str(e.get("activity_id", "")) != activity_id:
+            continue
+        e[field] = value
+        if field == "rpe":
+            e["stub"] = False
+            entry_sport = e.get("sport", "")
+            entry_duration = e.get("duration_min", 0) or 0
+            if entry_sport == "Ride" and entry_duration >= 90 and e.get("nutrition_g_carb") is None:
+                needs_carb_followup = True
+        updated = True
+        break
+
+    if not updated:
+        return False
+
+    try:
+        session_log_f.write_text(json.dumps(entries, indent=2))
+    except Exception:
+        return False
+
+    label_map = {"r": f"RPE {value}", "p": f"Pain {value}/10", "c": f"{value}g/hr carbs"}
+    conf = f"✓ {label_map[field_code]} logged"
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id, conf)
+    else:
+        send(token, chat_id, conf)
+
+    if needs_carb_followup:
+        carb_kb = {"inline_keyboard": [[
+            {"text": f"{g}g/hr", "callback_data": f"c:{activity_id}:{slug}:{g}"}
+            for g in (40, 50, 60, 70, 80, 90)
+        ]]}
+        send(token, chat_id, "Carbs per hour?", reply_markup=carb_kb)
+
+    return True
 
 
 def prefetch_context(slug: str) -> str:
@@ -1207,6 +1384,8 @@ def main():
                 chat_id = str(cq.get("message", {}).get("chat", {}).get("id", ""))
                 text = cq.get("data", "").strip()
                 answer_callback(token, cq["id"])
+                if _handle_quick_log(token, chat_id, text, cq.get("message", {}).get("message_id"), athletes):
+                    continue
             else:
                 msg = update.get("message", {})
                 chat_id = str(msg.get("chat", {}).get("id", ""))
@@ -1279,12 +1458,57 @@ def main():
             elif fast and fast.startswith("__FTP_RETEST__:"):
                 new_ftp = int(float(fast.split(":", 1)[1]))
                 reply = _update_ftp(new_ftp)
+                _mark_test_completed(slug, "ftp")
                 send(token, chat_id, reply, reply_markup=build_keyboard())
                 log(f"Out (FTP update): {new_ftp} W")
+                continue
+            elif fast and fast.startswith("__CSS__:"):
+                reply = _update_css(slug, fast.split(":", 1)[1])
+                send(token, chat_id, reply, reply_markup=build_keyboard())
+                log(f"Out (CSS update): {fast.split(':', 1)[1]}")
+                continue
+            elif fast and fast.startswith("__LTHR__:"):
+                reply = _update_lthr(slug, int(fast.split(":", 1)[1]))
+                send(token, chat_id, reply, reply_markup=build_keyboard())
+                log(f"Out (LTHR update): {fast.split(':', 1)[1]}")
+                continue
+            elif fast == "__WEEKLY_SUMMARY__":
+                send(token, chat_id,
+                     "_Weekly summary running — Telegram message incoming in ~3 minutes._")
+                subprocess.Popen(
+                    ["python3",
+                     str(BASE.parent / "scripts/weekly-summary.py"),
+                     "--athlete", slug],
+                    cwd=str(PROJECT_DIR),
+                )
+                log("Out (fast): weekly summary triggered")
                 continue
             elif fast:
                 send(token, chat_id, fast, reply_markup=build_keyboard())
                 log(f"Out (fast): {fast[:80]}")
+                continue
+
+            if _RACE_PLAN_RE.match(text.strip()):
+                send(token, chat_id, "_Updating race plan..._")
+                try:
+                    r = subprocess.run(
+                        ["python3", str(BASE.parent / "scripts/generate-race-plan.py"),
+                         "--athlete", slug],
+                        capture_output=True, text=True,
+                        cwd=str(PROJECT_DIR), timeout=60,
+                    )
+                    if r.returncode == 0:
+                        out = r.stdout.strip() or "Race plan updated."
+                        send(token, chat_id,
+                             f"{out}\n\nAsk me to _summarise my race plan_ for the targets.",
+                             reply_markup=build_keyboard())
+                    else:
+                        send(token, chat_id,
+                             f"Race plan generation failed:\n{r.stderr.strip()[:300]}",
+                             reply_markup=build_keyboard())
+                except Exception as e:
+                    send(token, chat_id, f"Error generating race plan: {e}", reply_markup=build_keyboard())
+                log("Out (fast): race plan generated")
                 continue
 
             typing(token, chat_id)

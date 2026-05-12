@@ -3,8 +3,8 @@
 Check for new activities and send a brief analysis to Telegram.
 Run every 15 min via cron. Loops over all active athletes. Skips if already running.
 """
-import json, subprocess, sys, time
-from datetime import datetime
+import json, ssl, subprocess, sys, time, urllib.request
+from datetime import datetime, date
 from pathlib import Path
 
 BASE            = Path(__file__).parent.parent  # ClaudeCoach/
@@ -13,12 +13,60 @@ NOTIFY          = BASE / "telegram/notify.py"
 PROJECT_DIR     = str(BASE.parent)
 CLAUDE          = "/usr/bin/claude"
 ATHLETES_CONFIG = BASE / "config/athletes.json"
+TG_CONFIG       = BASE / "telegram/config.json"
 
 TOOLS = "Read,Write,Bash"
 
 
+def _tg_send_keyboard(chat_id, text, keyboard):
+    """Send a Telegram message with inline keyboard. Returns message_id or None."""
+    try:
+        cfg = json.loads(TG_CONFIG.read_text())
+        token = cfg.get("bot_token", "")
+        if not token:
+            return None
+        cafile = "/etc/ssl/cert.pem" if Path("/etc/ssl/cert.pem").exists() else None
+        ctx = ssl.create_default_context(cafile=cafile)
+        payload = json.dumps({
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "Markdown",
+            "reply_markup": keyboard,
+        }).encode()
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
+            return json.loads(r.read()).get("result", {}).get("message_id")
+    except Exception:
+        return None
+
+
+def _quick_log_keyboard(activity_id, slug, sport, has_injury, duration_min):
+    """Return an inline_keyboard dict for post-session quick data capture."""
+    aid = str(activity_id)
+
+    def cb(field, val):
+        return f"{field}:{aid}:{slug}:{val}"
+
+    rows = []
+    if sport == "Run" and has_injury:
+        rows.append([{"text": str(i), "callback_data": cb("p", i)} for i in range(0, 6)])
+        rows.append([{"text": str(i), "callback_data": cb("p", i)} for i in range(6, 11)])
+    else:
+        rows.append([{"text": f"RPE {i}", "callback_data": cb("r", i)} for i in range(5, 11)])
+
+    if sport == "Ride" and (duration_min or 0) >= 90:
+        rows.append([{"text": f"{g}g/hr", "callback_data": cb("c", g)} for g in (40, 50, 60, 70, 80, 90)])
+
+    return {"inline_keyboard": rows}
+
+
 def _build_prompt(slug, first_name, ftp, injuries):
     """Build the per-athlete activity analysis prompt."""
+    today = date.today().isoformat()
     # Injury context for the athlete line and run analysis
     injury_line = ""
     if injuries:
@@ -43,6 +91,7 @@ Check for new activities for {first_name} and stub them into the session log.
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint history --days 3
+  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
 Step 2 — Read ClaudeCoach/athletes/{slug}/session-log.json and note all existing activity_id values.
 
@@ -104,6 +153,11 @@ For structured sessions with >3 intervals:
 SESSION_CHART: {{"name":"<activity name>","ftp":{ftp},"intervals":[{{"duration_seconds":600,"average_power":250,"type":"WORK"}},...}}]}}
 Fetch interval data from activity_detail endpoint. type values: WORK, RECOVERY, WARMUP, COOLDOWN.
 If unstructured: SESSION_CHART: none
+
+If a planned session exists in today's events matching this sport, output:
+PLAN_DELTA: <planned_session_name>|<planned_tss>|<actual_tss>|<delta_pct>
+(delta_pct = round((actual_tss - planned_tss) / planned_tss * 100, 1))
+If no planned session found for today or TSS unavailable: PLAN_DELTA: none
 
 If no activities at all: ACTIVITY_ID: none  ANALYSIS: none"""
 
@@ -195,6 +249,47 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
             break  # one nudge per cycle
 
 
+def _check_test_reminders(adir: Path, chat_id: str, state: dict, state_file: Path | None):
+    """Nudge athlete if a performance test is due within 3 days and not yet notified."""
+    test_f = adir / "test-schedule.json"
+    if not test_f.exists():
+        return
+    try:
+        tests = json.loads(test_f.read_text())
+    except Exception:
+        return
+
+    today = date.today()
+    notified_tests: set = set(state.get("notified_tests") or [])
+    changed = False
+
+    for t in tests:
+        if t.get("completed"):
+            continue
+        test_date_str = t.get("date", "")
+        label = t.get("label", "Performance test")
+        key = f"{t.get('type')}:{test_date_str}"
+        if key in notified_tests:
+            continue
+        try:
+            test_dt = date.fromisoformat(test_date_str)
+        except Exception:
+            continue
+        days_until = (test_dt - today).days
+        if 0 <= days_until <= 3:
+            when = "today" if days_until == 0 else ("tomorrow" if days_until == 1
+                   else f"in {days_until} days ({test_dt.strftime('%A')})")
+            protocol = t.get("protocol", "")
+            _notify(f"⏱ Test due {when}: *{label}*\n_{protocol}_", chat_id)
+            notified_tests.add(key)
+            state["notified_tests"] = list(notified_tests)
+            changed = True
+            break  # one reminder per cycle
+
+    if changed and state_file:
+        save_state(state, state_file)
+
+
 def check_athlete(slug, athlete_cfg):
     """Run activity check for one athlete."""
     adir = BASE / f"athletes/{slug}"
@@ -216,6 +311,9 @@ def check_athlete(slug, athlete_cfg):
     injuries = profile.get("injuries", [])
 
     state = load_state(state_file)
+
+    # Test reminders run every cycle regardless of new activity
+    _check_test_reminders(adir, chat_id, state, state_file)
 
     # Snapshot existing IDs before Claude runs
     existing_ids: set = set()
@@ -257,6 +355,7 @@ def check_athlete(slug, athlete_cfg):
 
     activity_id = None
     decoupling_raw = None
+    plan_delta_raw = None
     session_chart_raw = None
     analysis_lines = []
     in_analysis = False
@@ -270,12 +369,15 @@ def check_athlete(slug, athlete_cfg):
         elif line.startswith("SESSION_CHART:"):
             session_chart_raw = line.split(":", 1)[1].strip()
             in_analysis = False
+        elif line.startswith("PLAN_DELTA:"):
+            plan_delta_raw = line.split(":", 1)[1].strip()
+            in_analysis = False
         elif line.startswith("ANALYSIS:"):
             in_analysis = True
             first = line.split(":", 1)[1].strip()
             if first:
                 analysis_lines.append(first)
-        elif in_analysis and not line.startswith(("ACTIVITY_ID:", "DECOUPLING:", "SESSION_CHART:")):
+        elif in_analysis and not line.startswith(("ACTIVITY_ID:", "DECOUPLING:", "SESSION_CHART:", "PLAN_DELTA:")):
             analysis_lines.append(line)
 
     if not activity_id or activity_id == "none":
@@ -341,9 +443,42 @@ def check_athlete(slug, athlete_cfg):
         except Exception:
             pass
 
+    plan_delta_note = ""
+    if plan_delta_raw and plan_delta_raw != "none":
+        try:
+            pd_parts = plan_delta_raw.split("|")
+            if len(pd_parts) == 4:
+                plan_name = pd_parts[0].strip()
+                planned_tss = float(pd_parts[1].strip())
+                actual_tss = float(pd_parts[2].strip())
+                delta_pct = float(pd_parts[3].strip())
+                sign = "+" if delta_pct >= 0 else ""
+                plan_delta_note = f"vs plan ({plan_name}): {int(planned_tss)}→{int(actual_tss)} TSS ({sign}{delta_pct:.0f}%)"
+        except Exception:
+            pass
+
     analysis = "\n".join(analysis_lines).strip()
+    if plan_delta_note:
+        analysis = f"{analysis}\n_{plan_delta_note}_" if analysis else plan_delta_note
     if analysis and analysis != "none":
         _notify(f"*New activity*\n\n{analysis}", chat_id)
+
+    # Send quick-log keyboard for immediate data capture
+    new_entry = None
+    if session_log_f.exists():
+        try:
+            for e in json.loads(session_log_f.read_text()):
+                if str(e.get("activity_id", "")) == activity_id:
+                    new_entry = e
+                    break
+        except Exception:
+            pass
+    if new_entry:
+        sport = new_entry.get("sport", "")
+        dur = new_entry.get("duration_min", 0) or 0
+        kb = _quick_log_keyboard(activity_id, slug, sport, bool(injuries), dur)
+        hdr = "Injury pain during (0–10):" if (sport == "Run" and injuries) else "Quick log:"
+        _tg_send_keyboard(chat_id, hdr, kb)
 
     _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
 
