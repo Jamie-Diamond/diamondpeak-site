@@ -100,7 +100,7 @@ DECOUPLING: <activity_id>|<date>|<name>|<duration_min>|<intensity_factor>|<decou
 If ride < 3 hours or Pa:HR data unavailable: DECOUPLING: none
 
 For structured sessions with >3 intervals:
-SESSION_CHART: {{"name":"<activity name>","ftp":{ftp},"intervals":[{{"duration_seconds":600,"average_power":250,"type":"WORK"}},...}]}}
+SESSION_CHART: {{"name":"<activity name>","ftp":{ftp},"intervals":[{{"duration_seconds":600,"average_power":250,"type":"WORK"}},...}}]}}
 Fetch interval data from activity_detail endpoint. type values: WORK, RECOVERY, WARMUP, COOLDOWN.
 If unstructured: SESSION_CHART: none
 
