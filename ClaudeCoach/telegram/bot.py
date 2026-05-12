@@ -116,23 +116,10 @@ def build_keyboard():
         ]
     return {"inline_keyboard": [buttons]}
 
-TOOLS = ",".join([
-    "Read", "Write", "Edit", "Bash",
-    # IcuSync MCP — available as fallback; prefer icu_fetch.py for speed
-    "mcp__claude_ai_icusync__get_athlete_profile",
-    "mcp__claude_ai_icusync__get_fitness",
-    "mcp__claude_ai_icusync__get_wellness",
-    "mcp__claude_ai_icusync__get_training_history",
-    "mcp__claude_ai_icusync__get_events",
-    "mcp__claude_ai_icusync__get_activity_detail",
-    "mcp__claude_ai_icusync__get_extended_metrics",
-    "mcp__claude_ai_icusync__get_best_efforts",
-    "mcp__claude_ai_icusync__get_power_curves",
-    "mcp__claude_ai_icusync__get_training_summary",
-    "mcp__claude_ai_icusync__push_workout",
-    "mcp__claude_ai_icusync__edit_workout",
-    "mcp__claude_ai_icusync__delete_workout",
-])
+TOOLS = "Read,Write,Edit,Bash"
+# IcuSync MCP tools are intentionally excluded — the MCP connector is bound to a single
+# athlete's account. All Intervals.icu access must go through icu_fetch.py (Bash) which
+# uses per-athlete API keys from athletes.json and cannot cross-contaminate accounts.
 
 
 def log(msg):
