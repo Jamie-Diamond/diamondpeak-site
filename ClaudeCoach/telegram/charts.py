@@ -312,6 +312,7 @@ def load_chart(payload):
         datasets.append({
             "type": "bar", "label": sport,
             "data": tss_vals, "backgroundColor": bg_vals,
+            "solidColor": BASE.get(sport, "#9b59b6"),
             "stack": "tss", "order": 2, "yAxisID": "y",
         })
 
@@ -326,8 +327,10 @@ def load_chart(payload):
         "data": tsb_vals,
         "borderColor": "rgba(70,70,70,0.80)",
         "backgroundColor": "transparent",
-        "borderWidth": 2.5, "pointRadius": 4,
+        "borderWidth": 2.5, "pointRadius": 7, "pointHoverRadius": 9,
         "pointBackgroundColor": [_tsb_dot(v) for v in tsb_vals],
+        "pointBorderColor": "rgba(255,255,255,0.85)",
+        "pointBorderWidth": 1.5,
         "fill": False, "tension": 0.3, "order": 1, "yAxisID": "y1",
     })
 
@@ -355,7 +358,11 @@ def load_chart(payload):
                 },
                 "legend": {
                     "position": "top",
-                    "labels": {"boxWidth": 12, "font": {"size": 11}},
+                    "labels": {
+                        "boxWidth": 12, "font": {"size": 11},
+                        "usePointStyle": False,
+                        "generateLabels": "function(chart){return chart.data.datasets.map(function(ds,i){var meta=chart.getDatasetMeta(i);var fill=ds.solidColor||(Array.isArray(ds.backgroundColor)?ds.backgroundColor[0]:ds.backgroundColor);var stroke=ds.type==='line'?ds.borderColor:fill;return{text:ds.label,fillStyle:ds.type==='line'?'transparent':fill,strokeStyle:stroke,lineDash:ds.borderDash||[],lineWidth:ds.type==='line'?2:0,hidden:!chart.getDataVisibility(i),datasetIndex:i,pointStyle:ds.type==='line'?'line':'rect',rotation:0};})}",
+                    },
                 },
                 "annotation": {"annotations": annotations},
             },
