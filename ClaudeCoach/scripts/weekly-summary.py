@@ -13,6 +13,7 @@ BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE / "lib"))
 
 from icu_api import IcuClient
+import recovery_score as rs
 
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 TG_CONFIG       = BASE / "telegram/config.json"
@@ -106,10 +107,49 @@ def run_summary(slug: str = "jamie") -> str:
     first_name   = profile.get("name", slug).split()[0]
     ftp          = profile.get("ftp_watts", "unknown")
 
+    # ── Pre-compute recovery score ────────────────────────────────────────────
+    recovery = None
+    try:
+        hrv_t, hrv_b, tsb_v, sleep_v = rs._parse_wellness(wellness_14d)
+        pain = 0
+        state_json = adir / "current-state.json"
+        if state_json.exists():
+            pain = json.loads(state_json.read_text()).get("ankle", {}).get("pain_during", 0) or 0
+        recovery = rs.compute(hrv_t, hrv_b, tsb_v, sleep_v, pain)
+    except Exception:
+        pass
+
+    recovery_block = ""
+    if recovery:
+        score  = recovery.get("score", "?")
+        label  = recovery.get("label", "?")
+        rec    = recovery.get("recommendation", "")
+        sigs   = recovery.get("signals", {})
+        hrv_r  = sigs.get("hrv",   {}).get("ratio")
+        hrv_t_v = sigs.get("hrv",  {}).get("value")
+        hrv_b_v = sigs.get("hrv",  {}).get("baseline")
+        tsb_sv = sigs.get("tsb",   {}).get("value")
+        slp_sv = sigs.get("sleep", {}).get("value")
+        pain_v = sigs.get("pain",  {}).get("value")
+        avail  = recovery.get("available_signals", [])
+        missing = recovery.get("missing_signals", [])
+        parts = []
+        if hrv_r  is not None: parts.append(f"HRV ratio {hrv_r:.2f} (today {hrv_t_v}, baseline {hrv_b_v})")
+        if tsb_sv is not None: parts.append(f"TSB {tsb_sv:+.1f}")
+        if slp_sv is not None: parts.append(f"sleep {slp_sv:.1f}h")
+        if pain_v is not None and pain_v > 0: parts.append(f"pain {pain_v}/10")
+        recovery_block = (
+            f"\n## Pre-computed recovery score (end of week)\n"
+            f"Score: {score}/100 — {label}. {rec}\n"
+            f"Signals: {', '.join(parts) if parts else 'no data'}. "
+            f"Available: {avail}. Missing: {missing}.\n"
+            f"Use this for T1/T8 evaluation — it is already derived from the wellness data below.\n"
+        )
+
     # ── Build prompt ──────────────────────────────────────────────────────────
     prompt = f"""You are generating the weekly training summary for {first_name}'s {race_name} coaching system.
 All IcuSync data has been fetched and is embedded below. Do NOT call any fetch commands — work only from the data provided. Use Write and Bash only for the state-file update and git commit at the end.
-
+{recovery_block}
 ---
 
 ## Context
@@ -219,8 +259,8 @@ Options: A) Drop all runs this week | B) Reduce run volume 50% | C) Continue pro
 ⚡ *T7 NUTRITION*: Avg fuelling [X]g/hr on long sessions — below 50g/hr target.
 Fix: Start eating at 20 min, target [blueprint phase rate]g/hr every 30 min.
 
-**T8 HRV** — fires if 3+ consecutive days with HRV below the 7-day rolling average:
-⚡ *T8 HRV*: HRV below 7-day baseline for [N] consecutive days — accumulated fatigue signal.
+**T8 HRV** — fires if the pre-computed recovery score HRV ratio < 0.90 OR 3+ consecutive days with HRV below the 7-day rolling average in the wellness data:
+⚡ *T8 HRV*: HRV ratio [X] vs baseline — accumulated fatigue signal (recovery score: [score]/100 [label]).
 Options: A) Flip tomorrow to easy | B) Prioritise sleep tonight | C) Continue (trust TSB)
 
 If no triggers fire:

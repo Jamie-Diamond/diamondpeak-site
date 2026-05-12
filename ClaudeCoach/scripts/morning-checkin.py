@@ -11,11 +11,12 @@ NOTIFY          = BASE / "telegram/notify.py"
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+sys.path.insert(0, str(BASE / "lib"))
 
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -36,13 +37,35 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         if injuries else "None"
     )
 
+    recovery_block = ""
+    if recovery:
+        score  = recovery.get("score", "?")
+        label  = recovery.get("label", "?")
+        rec    = recovery.get("recommendation", "")
+        sigs   = recovery.get("signals", {})
+        hrv_r  = sigs.get("hrv",   {}).get("ratio")
+        tsb_v  = sigs.get("tsb",   {}).get("value")
+        slp_v  = sigs.get("sleep", {}).get("value")
+        pain_v = sigs.get("pain",  {}).get("value")
+        parts  = []
+        if hrv_r  is not None: parts.append(f"HRV ratio {hrv_r:.2f}")
+        if tsb_v  is not None: parts.append(f"TSB {tsb_v:+.1f}")
+        if slp_v  is not None: parts.append(f"sleep {slp_v:.1f}h")
+        if pain_v is not None and pain_v > 0: parts.append(f"pain {pain_v}/10")
+        recovery_block = (
+            f"\n## Recovery score (pre-computed)\n"
+            f"Score: {score}/100 — {label}. {rec}\n"
+            f"Signals: {', '.join(parts) if parts else 'no data'}.\n"
+            f"Use this to modulate session prescription: GREEN = train as planned; "
+            f"AMBER = note and monitor; ORANGE = reduce intensity or volume; RED = flag for easy day.\n"
+        )
+
     return f"""\
 You are generating the morning briefing for {first_name}'s training day.
-
+{recovery_block}
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint wellness --days 2
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint wellness --days 3
 
 Step 2 — Read:
 - ClaudeCoach/athletes/{slug}/current-state.md (open actions, watchdog flags)
@@ -57,9 +80,10 @@ Step 4 — Output the morning card in Telegram Markdown (no preamble, no sign-of
 *Good morning — [Day date, e.g. Sat 9 May]*
 
 *Today:* [session name] · [planned TSS if available] TSS · [duration] min
-*TSB:* [value] ([Fresh / Load / Heavy])
-*Sleep:* [hours]h · *HRV:* [value] · *RHR:* [value]
+*Readiness:* [score]/100 — [label] · *TSB:* [value]
+*Sleep:* [hours]h · *HRV:* [ratio vs baseline, e.g. 0.93×] · *RHR:* [value]
 
+[If recovery ORANGE or RED: ⚠️ [one-line recommendation from recovery score]]
 [If watchdog flag active: ⚠️ [flag]: [one-line note]]
 [If decision-point due within 7 days: 📌 [action] due [date]]
 
@@ -106,7 +130,25 @@ def run_athlete(slug, athlete_cfg):
     except Exception:
         days_to_race = "?"
 
-    prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries)
+    # Pre-compute recovery score
+    recovery = None
+    try:
+        from icu_api import IcuClient
+        import recovery_score as rs
+        athletes_cfg = json.loads(ATHLETES_CONFIG.read_text())
+        a = athletes_cfg[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+        wellness_rows = client.get_wellness(8)
+        hrv_t, hrv_b, tsb, sleep = rs._parse_wellness(wellness_rows)
+        pain = 0
+        state_f = adir / "current-state.json"
+        if state_f.exists():
+            pain = json.loads(state_f.read_text()).get("ankle", {}).get("pain_during", 0) or 0
+        recovery = rs.compute(hrv_t, hrv_b, tsb, sleep, pain)
+    except Exception:
+        pass  # score is optional — morning card still sends without it
+
+    prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
