@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coach Overview — ClaudeCoach</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
+<style>
+  :root{
+    --bg:#f8f5ef;--panel:#ffffff;--ink:#18160f;--ink2:#4a4535;
+    --muted:#9a9080;--line:#ddd8cc;--green:#1d6840;--blue:#1a5276;
+    --amber:#b7791f;--red:#b91c1c;--orange:#c2410c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:28px 20px 64px;font-family:'DM Sans',sans-serif;font-weight:300;background:var(--bg);color:var(--ink);line-height:1.55}
+  a{color:var(--green);text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto}
+
+  .header{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px}
+  .header h1{font-family:'Libre Baskerville',serif;font-size:26px;font-weight:700;letter-spacing:-0.02em;margin:0}
+  .kicker{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .ts{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)}
+
+  /* Section labels */
+  h2{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:8px;margin:28px 0 14px}
+
+  /* Athlete cards */
+  .athletes{display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:16px;margin-bottom:28px}
+  @media(max-width:640px){.athletes{grid-template-columns:1fr}}
+
+  .athlete-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px 22px}
+  .athlete-card .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .athlete-card .name{font-family:'Libre Baskerville',serif;font-size:18px;font-weight:700;letter-spacing:-0.01em;margin:0}
+  .athlete-card .race-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:2px}
+  .athlete-card a.dash-link{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;padding:5px 10px;border:1px solid var(--line);border-radius:6px;color:var(--green)}
+  .athlete-card a.dash-link:hover{background:var(--green);color:#fff}
+
+  /* KPI row */
+  .kpi-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+  .kpi{flex:1;min-width:70px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .kpi .label{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+  .kpi .val{font-size:20px;font-weight:500;line-height:1}
+  .kpi .sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px}
+
+  /* Recovery badge */
+  .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.08em;text-transform:uppercase;font-weight:500}
+  .badge.green{background:#dcfce7;color:#166534}
+  .badge.amber{background:#fef3c7;color:#92400e}
+  .badge.orange{background:#ffedd5;color:#9a3412}
+  .badge.red{background:#fee2e2;color:#991b1b}
+  .badge.muted{background:#f1f0eb;color:#9a9080}
+
+  /* Flags */
+  .flags{margin-top:10px}
+  .flag{display:inline-flex;align-items:center;gap:5px;margin:3px 4px 0 0;padding:3px 8px;border-radius:6px;font-size:11px;background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+  .flag.red{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+
+  /* Actions */
+  .actions{margin-top:10px}
+  .action-item{display:flex;align-items:baseline;gap:8px;padding:4px 0;border-bottom:1px solid var(--line);font-size:12px}
+  .action-item:last-child{border-bottom:none}
+  .action-item .action-text{color:var(--ink2)}
+  .action-item .action-due{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);white-space:nowrap}
+  .action-item .action-due.overdue{color:var(--red)}
+
+  /* Recent activities */
+  .recent-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px}
+  .recent-table th{text-align:left;font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);padding:4px 8px;border-bottom:1px solid var(--line)}
+  .recent-table td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  .recent-table tr:last-child td{border-bottom:none}
+  .sport-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+
+  /* Upcoming sessions */
+  .upcoming{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+  .event-pill{padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid var(--line);background:#f8f5ef;display:flex;flex-direction:column;gap:1px}
+  .event-pill .ep-date{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)}
+  .event-pill .ep-name{font-size:11px;color:var(--ink);font-weight:400}
+  .event-pill.done{opacity:0.45}
+
+  /* No data state */
+  .no-data{color:var(--muted);font-size:12px;font-style:italic;padding:8px 0}
+
+  /* Summary row */
+  .summary-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:28px}
+  .summary-cell{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+  .summary-cell .label{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .summary-cell .metric{font-size:20px;font-weight:500}
+  .summary-cell .meta{font-size:11px;color:var(--muted);margin-top:2px}
+
+  .footer{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;border-top:1px solid var(--line);padding-top:20px;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">ClaudeCoach</div>
+  <div class="header">
+    <h1>Coach Overview</h1>
+    <span class="ts" id="last-updated">Loading…</span>
+  </div>
+
+  <h2>Athletes</h2>
+  <div class="athletes" id="athletes-container">
+    <p class="no-data">Loading athlete data…</p>
+  </div>
+
+  <div class="footer">&copy; 2026 Diamond Peak Consulting — <a href="index.html">ClaudeCoach</a> · private</div>
+</div>
+
+<script>
+// ── Athlete definitions ──────────────────────────────────────────────────────
+const ATHLETES = [
+  {
+    slug:     "jamie",
+    name:     "Jamie",
+    dataFile: "training-data.json",
+    dashUrl:  "athlete-jamie.html",
+    race:     "IM Cervia",
+    raceDate: "2026-09-19",
+  },
+  {
+    slug:     "kathryn",
+    name:     "Kathryn",
+    dataFile: "training-data-kathryn.json",
+    dashUrl:  "athlete-b.html",
+    race:     "70.3 Emilia Romagna",
+    raceDate: "2026-09-14",
+  },
+];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function daysUntil(dateStr) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const target = new Date(dateStr+"T00:00:00");
+  return Math.round((target - today) / 86400000);
+}
+
+function fmt(v, dp=1) {
+  if (v == null) return "—";
+  return typeof v === "number" ? v.toFixed(dp) : v;
+}
+
+function tsbColour(tsb) {
+  if (tsb == null) return "";
+  if (tsb > 5)    return "color:var(--blue)";
+  if (tsb > -20)  return "color:var(--green)";
+  if (tsb > -35)  return "color:var(--amber)";
+  return "color:var(--red)";
+}
+
+function rampColour(r) {
+  if (r == null) return "";
+  if (r > 8)   return "color:var(--red)";
+  if (r > 5)   return "color:var(--amber)";
+  return "color:var(--green)";
+}
+
+function sportColour(sport) {
+  const s = (sport||"").toLowerCase();
+  if (s.includes("ride") || s.includes("cycle")) return "#1a5276";
+  if (s.includes("run")) return "#c0392b";
+  if (s.includes("swim")) return "#2e9c8e";
+  return "#7f8c8d";
+}
+
+function recoveryBadge(tsb, ramp7d) {
+  // Infer recovery label from TSB + ramp when recovery_score not available
+  if (tsb == null) return {label:"UNKNOWN", cls:"muted"};
+  if (tsb < -30 || (ramp7d||0) > 8) return {label:"RED", cls:"red"};
+  if (tsb < -20 || (ramp7d||0) > 6) return {label:"ORANGE", cls:"orange"};
+  if (tsb < -10 || (ramp7d||0) > 4) return {label:"AMBER", cls:"amber"};
+  return {label:"GREEN", cls:"green"};
+}
+
+// ── Render athlete card ───────────────────────────────────────────────────────
+function renderCard(cfg, data) {
+  const kpi = data.kpi || {};
+  const state = data.currentState || {};
+  const recent = (data.recent || []).slice(0, 5);
+  const calendar = data.weekCalendar || [];
+  const actions = (state.open_actions || []).filter(a => a.status !== "done").slice(0, 4);
+  const flags = state.watchdog_flags || [];
+
+  const days = daysUntil(cfg.raceDate);
+  const tsb  = kpi.tsb;
+  const ramp = kpi.ramp7d;
+  const rec  = recoveryBadge(tsb, ramp);
+
+  // Upcoming events (next 7 days, planned)
+  const today = new Date(); today.setHours(0,0,0,0);
+  const in7   = new Date(today.getTime() + 7*86400000);
+  const upcoming = calendar.filter(e => {
+    if (!e.date) return false;
+    const d = new Date(e.date+"T00:00:00");
+    return d >= today && d <= in7;
+  }).slice(0,6);
+
+  // Recent activity rows
+  const actRows = recent.map(a => {
+    const dot = `<span class="sport-dot" style="background:${sportColour(a.sport)}"></span>`;
+    const pace = a.pace ? `<span style="color:var(--muted)">${a.pace}</span>` : "";
+    const tss  = a.tss ? `<span style="font-family:'DM Mono',monospace;font-size:10px">${a.tss} TSS</span>` : "";
+    return `<tr>
+      <td style="color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">${a.date ? a.date.slice(5) : ""}</td>
+      <td>${dot}${a.name || a.sport}</td>
+      <td>${pace}</td>
+      <td style="text-align:right">${tss}</td>
+    </tr>`;
+  }).join("");
+
+  const flagHtml = flags.length
+    ? flags.map(f => `<span class="flag${(f.level||"")=="error"?" red":""}">${f.message||f}</span>`).join("")
+    : "";
+
+  const actionHtml = actions.length
+    ? actions.map(a => {
+        const due = a.due || "";
+        const overdue = due && daysUntil(due) < 0 ? " overdue" : "";
+        return `<div class="action-item">
+          <span class="action-text">${a.action || a.id}</span>
+          ${due ? `<span class="action-due${overdue}">${due}</span>` : ""}
+        </div>`;
+      }).join("")
+    : "";
+
+  const upcomingHtml = upcoming.length
+    ? upcoming.map(e => {
+        const isDone = e.status === "completed";
+        const tss = e.tss ? ` · ${e.tss} TSS` : "";
+        const dt = new Date(e.date+"T00:00:00");
+        const dayStr = dt.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
+        return `<div class="event-pill${isDone?" done":""}">
+          <span class="ep-date">${dayStr}${tss}</span>
+          <span class="ep-name">${e.name||e.type||"Session"}</span>
+        </div>`;
+      }).join("")
+    : `<span class="no-data">No sessions in next 7 days</span>`;
+
+  return `
+  <div class="athlete-card">
+    <div class="card-header">
+      <div>
+        <div class="name">${cfg.name}</div>
+        <div class="race-sub">${cfg.race} · ${days > 0 ? days+" days" : "Race day!"}</div>
+      </div>
+      <a href="${cfg.dashUrl}" class="dash-link">Dashboard &rarr;</a>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="label">CTL</div>
+        <div class="val">${fmt(kpi.ctl)}</div>
+        <div class="sub">Fitness</div>
+      </div>
+      <div class="kpi">
+        <div class="label">ATL</div>
+        <div class="val">${fmt(kpi.atl)}</div>
+        <div class="sub">Fatigue</div>
+      </div>
+      <div class="kpi">
+        <div class="label">TSB</div>
+        <div class="val" style="${tsbColour(tsb)}">${tsb != null ? (tsb>=0?"+":"")+fmt(tsb) : "—"}</div>
+        <div class="sub">Form</div>
+      </div>
+      <div class="kpi">
+        <div class="label">7d ramp</div>
+        <div class="val" style="${rampColour(ramp)}">${ramp != null ? (ramp>=0?"+":"")+fmt(ramp) : "—"}</div>
+        <div class="sub">CTL change</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Recovery</div>
+        <div class="val" style="font-size:14px;padding-top:4px"><span class="badge ${rec.cls}">${rec.label}</span></div>
+        <div class="sub">TSB + ramp</div>
+      </div>
+      ${kpi.hrv != null ? `<div class="kpi">
+        <div class="label">HRV</div>
+        <div class="val">${kpi.hrv}</div>
+        <div class="sub">Latest</div>
+      </div>` : ""}
+    </div>
+
+    ${flagHtml ? `<div class="flags">${flagHtml}</div>` : ""}
+
+    ${actionHtml ? `
+    <div style="margin-top:12px">
+      <div class="kicker" style="margin-bottom:6px">Open actions</div>
+      <div class="actions">${actionHtml}</div>
+    </div>` : ""}
+
+    <div style="margin-top:12px">
+      <div class="kicker" style="margin-bottom:6px">Next 7 days</div>
+      <div class="upcoming">${upcomingHtml}</div>
+    </div>
+
+    ${actRows ? `
+    <div style="margin-top:12px">
+      <div class="kicker" style="margin-bottom:4px">Recent sessions</div>
+      <table class="recent-table">
+        <thead><tr><th>Date</th><th>Session</th><th>Pace / power</th><th style="text-align:right">TSS</th></tr></thead>
+        <tbody>${actRows}</tbody>
+      </table>
+    </div>` : ""}
+  </div>`;
+}
+
+// ── Load all athletes ─────────────────────────────────────────────────────────
+async function loadAthletes() {
+  const container = document.getElementById("athletes-container");
+  container.innerHTML = "";
+  let anyLoaded = false;
+  let latestTs  = "";
+
+  for (const cfg of ATHLETES) {
+    try {
+      const res = await fetch(`${cfg.dataFile}?v=${Date.now()}`);
+      if (!res.ok) throw new Error(`${res.status}`);
+      const data = await res.json();
+      container.insertAdjacentHTML("beforeend", renderCard(cfg, data));
+      if (!anyLoaded && data.generated) latestTs = data.generated;
+      anyLoaded = true;
+    } catch (e) {
+      container.insertAdjacentHTML("beforeend", `
+        <div class="athlete-card">
+          <div class="card-header">
+            <div>
+              <div class="name">${cfg.name}</div>
+              <div class="race-sub">${cfg.race}</div>
+            </div>
+            <a href="${cfg.dashUrl}" class="dash-link">Dashboard &rarr;</a>
+          </div>
+          <p class="no-data">Data unavailable — ${e.message}</p>
+        </div>`);
+    }
+  }
+
+  const ts = document.getElementById("last-updated");
+  if (ts) ts.textContent = latestTs ? `Data: ${latestTs}` : `Loaded ${new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}`;
+}
+
+loadAthletes();
+// Auto-refresh every 5 minutes
+setInterval(loadAthletes, 300000);
+</script>
+</body>
+</html>
