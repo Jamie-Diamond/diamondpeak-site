@@ -90,14 +90,15 @@ ANALYSIS: <coaching message — see rules below>
 {first_name}: FTP {ftp} W.{injury_line}
 
 Rules for ANALYSIS (2-3 lines, max 400 chars):
-- Ride: Line 1 = NP + IF. Line 2 (>90 min) = aerobic decoupling %. Line 3 = "Nutrition — g carbs/hr and bottles?"
+- Ride (structured, >3 intervals): Line 1 = interval set summary (e.g. "5×10 min @ 272W avg — 105% FTP"). Line 2 = completion vs target if any intervals were cut or missed. Line 3 = "Nutrition — g carbs/hr and bottles?"
+- Ride (unstructured): Line 1 = NP + IF. Line 2 (>90 min) = aerobic decoupling %. Line 3 = "Nutrition — g carbs/hr and bottles?"
 {run_injury_ask}
 - Swim: Line 1 = distance + pace vs CSS target (state +/- seconds). Line 2 = "RPE and how did it feel?"
 - Strength: Line 1 = duration. Line 2 = "RPE and what was the main focus?"
 
-For rides > 3 hours: also output a DECOUPLING line:
+For unstructured rides > 3 hours (or structured rides > 3 hours where Pa:HR data is available): also output a DECOUPLING line:
 DECOUPLING: <activity_id>|<date>|<name>|<duration_min>|<intensity_factor>|<decoupling_pct>|<tss>
-If ride < 3 hours or Pa:HR data unavailable: DECOUPLING: none
+If conditions not met or Pa:HR data unavailable: DECOUPLING: none
 
 For structured sessions with >3 intervals:
 SESSION_CHART: {{"name":"<activity name>","ftp":{ftp},"intervals":[{{"duration_seconds":600,"average_power":250,"type":"WORK"}},...}}]}}
