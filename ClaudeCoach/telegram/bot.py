@@ -797,6 +797,48 @@ def _handle_quick_log(token, chat_id, data, message_id, athletes):
     return True
 
 
+def _handle_test_confirm(token, chat_id, data, message_id, athletes):
+    """Handle test confirmation/dismiss callbacks from zone-spotting. Returns True if handled."""
+    if not data.startswith("test:"):
+        return False
+    parts = data.split(":", 3)
+    if len(parts) != 4:
+        return False
+    _, t_type, slug, value = parts
+
+    athlete = athletes.get(chat_id)
+    if not athlete or athlete["slug"] != slug:
+        return False
+
+    if t_type == "dismiss":
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "❌ Dismissed")
+        return True
+
+    if t_type == "ftp":
+        try:
+            new_ftp = int(float(value))
+        except ValueError:
+            return False
+        reply = _update_ftp(new_ftp)
+        _mark_test_completed(slug, "ftp")
+    elif t_type == "css":
+        reply = _update_css(slug, value)
+    elif t_type == "lthr":
+        try:
+            new_lthr = int(value)
+        except ValueError:
+            return False
+        reply = _update_lthr(slug, new_lthr)
+    else:
+        return False
+
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id, f"✅ Confirmed")
+    send(token, chat_id, reply)
+    return True
+
+
 def prefetch_context(slug: str) -> str:
     """Fetch standard training context in parallel and return as a formatted block.
     Falls back silently to empty string on any error so the bot keeps working."""
@@ -1385,6 +1427,8 @@ def main():
                 text = cq.get("data", "").strip()
                 answer_callback(token, cq["id"])
                 if _handle_quick_log(token, chat_id, text, cq.get("message", {}).get("message_id"), athletes):
+                    continue
+                if _handle_test_confirm(token, chat_id, text, cq.get("message", {}).get("message_id"), athletes):
                     continue
             else:
                 msg = update.get("message", {})

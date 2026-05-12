@@ -159,6 +159,14 @@ PLAN_DELTA: <planned_session_name>|<planned_tss>|<actual_tss>|<delta_pct>
 (delta_pct = round((actual_tss - planned_tss) / planned_tss * 100, 1))
 If no planned session found for today or TSS unavailable: PLAN_DELTA: none
 
+If the activity looks like a performance threshold test, output:
+TEST_RESULT: <type>|<value>|<activity_id>
+Rules:
+- ftp: activity name contains "ramp", "ftp test", "20 min", "20-min", or "threshold test" (case-insensitive), OR single sustained interval >18 min at >90% FTP. Value = ramp → peak 1-min power × 0.75; 20-min test → 20-min avg power × 0.95. Round to nearest whole watt.
+- css: swim activity where name contains "css", "critical swim speed", or "time trial", and distance ≥ 300m. Value = pace as MM:SS per 100m.
+- lthr: run activity where name contains "lthr", "lactate", "hr test", "tempo test". Value = avg HR during the sustained effort portion (bpm, integer).
+If not a recognisable threshold test: TEST_RESULT: none
+
 If no activities at all: ACTIVITY_ID: none  ANALYSIS: none"""
 
 
@@ -357,6 +365,7 @@ def check_athlete(slug, athlete_cfg):
     decoupling_raw = None
     plan_delta_raw = None
     session_chart_raw = None
+    test_result_raw = None
     analysis_lines = []
     in_analysis = False
     for line in output.split("\n"):
@@ -372,12 +381,15 @@ def check_athlete(slug, athlete_cfg):
         elif line.startswith("PLAN_DELTA:"):
             plan_delta_raw = line.split(":", 1)[1].strip()
             in_analysis = False
+        elif line.startswith("TEST_RESULT:"):
+            test_result_raw = line.split(":", 1)[1].strip()
+            in_analysis = False
         elif line.startswith("ANALYSIS:"):
             in_analysis = True
             first = line.split(":", 1)[1].strip()
             if first:
                 analysis_lines.append(first)
-        elif in_analysis and not line.startswith(("ACTIVITY_ID:", "DECOUPLING:", "SESSION_CHART:", "PLAN_DELTA:")):
+        elif in_analysis and not line.startswith(("ACTIVITY_ID:", "DECOUPLING:", "SESSION_CHART:", "PLAN_DELTA:", "TEST_RESULT:")):
             analysis_lines.append(line)
 
     if not activity_id or activity_id == "none":
@@ -481,6 +493,27 @@ def check_athlete(slug, athlete_cfg):
         _tg_send_keyboard(chat_id, hdr, kb)
 
     _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
+
+    # Zone-spotting: if Claude detected a threshold test, prompt for confirmation
+    if test_result_raw and test_result_raw != "none":
+        try:
+            parts = test_result_raw.split("|")
+            if len(parts) == 3:
+                t_type, t_value, t_aid = parts[0].strip(), parts[1].strip(), parts[2].strip()
+                units = {"ftp": "W", "css": "/100m", "lthr": "bpm"}.get(t_type, "")
+                labels = {"ftp": "FTP", "css": "CSS", "lthr": "LTHR"}.get(t_type, t_type.upper())
+                confirm_data = f"test:{t_type}:{slug}:{t_value}"
+                dismiss_data = f"test:dismiss:{slug}:{t_aid}"
+                _tg_send_keyboard(
+                    chat_id,
+                    f"⚡ That looks like a {labels} test.\nSuggested: *{t_value} {units}*\n\nConfirm to update thresholds:",
+                    {"inline_keyboard": [[
+                        {"text": f"✅ Confirm {t_value} {units}", "callback_data": confirm_data},
+                        {"text": "❌ Dismiss", "callback_data": dismiss_data},
+                    ]]},
+                )
+        except Exception:
+            pass
 
     # Trigger site data refresh in background
     subprocess.Popen(
