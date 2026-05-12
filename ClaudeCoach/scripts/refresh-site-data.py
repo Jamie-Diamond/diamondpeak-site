@@ -263,6 +263,24 @@ def post_process(data):
         "target_ctl_max": 115,
     }
 
+    # Profile fields needed by the dashboard (goals, thresholds)
+    profile_f = BASE / "athletes/jamie/profile.json"
+    if profile_f.exists():
+        try:
+            prof = json.loads(profile_f.read_text())
+            data["profile"] = {
+                "a_goal":                    prof.get("a_goal"),
+                "b_goal":                    prof.get("b_goal"),
+                "swim_css_per_100m":         prof.get("swim_css_per_100m"),
+                "run_threshold_pace_per_km": prof.get("run_threshold_pace_per_km"),
+                "lthr":                      prof.get("lthr"),
+                "ftp_watts":                 prof.get("ftp_watts"),
+                "race_date":                 prof.get("race_date"),
+                "race_name":                 prof.get("race_name"),
+            }
+        except Exception:
+            pass
+
     # Current state snapshot (ankle, watchdog flags, open actions)
     if STATE_JSON.exists():
         try:
@@ -540,6 +558,42 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "sessionLog":   session_log,
         "swimLog":      swim_log,
     }
+
+    # Previous season CTL overlay (if cache exists for this athlete)
+    prev_cache = BASE / f"athletes/{slug}/fitness-prev-cache.json"
+    if prev_cache.exists():
+        try:
+            data["fitnessPrev"] = json.loads(prev_cache.read_text())
+        except Exception:
+            pass
+
+    # Profile (goals + thresholds)
+    profile_f = BASE / f"athletes/{slug}/profile.json"
+    if profile_f.exists():
+        try:
+            prof = json.loads(profile_f.read_text())
+            data["profile"] = {
+                "a_goal":                    prof.get("a_goal"),
+                "b_goal":                    prof.get("b_goal"),
+                "swim_css_per_100m":         prof.get("swim_css_per_100m"),
+                "run_threshold_pace_per_km": prof.get("run_threshold_pace_per_km"),
+                "lthr":                      prof.get("lthr"),
+                "ftp_watts":                 prof.get("ftp_watts"),
+                "race_date":                 prof.get("race_date"),
+                "race_name":                 prof.get("race_name"),
+            }
+        except Exception:
+            pass
+
+    # Weekly discipline breakdown (from athlete-summary.json)
+    summary_f = BASE / f"athletes/{slug}/athlete-summary.json"
+    if summary_f.exists():
+        try:
+            summary = json.loads(summary_f.read_text())
+            data["weeklyBreakdown"] = summary.get("weeks", [])
+            data["swimProgression"] = summary.get("swim_progression", [])
+        except Exception:
+            pass
 
     out = BASE / f"training-data-{slug}.json"
     out.write_text(json.dumps(data, separators=(",", ":")))

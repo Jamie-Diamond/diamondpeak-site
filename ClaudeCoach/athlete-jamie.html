@@ -178,23 +178,23 @@
     </div>
 
     <div class="panel">
-      <h2>Race plan — IM Italy 2026</h2>
-      <div style="margin-bottom:14px">
+      <h2 id="rp-title">Race plan — IM Italy 2026</h2>
+      <div style="margin-bottom:8px">
         <div class="target-row">
           <span class="target-label">A goal</span>
-          <span class="target-val">Sub 10:30</span>
+          <span class="target-val" id="rp-agoal">Sub 9:30</span>
         </div>
-        <div class="target-row">
+        <div class="target-row" id="rp-bgoal-row">
           <span class="target-label">B goal</span>
-          <span class="target-val">Sub 11:00</span>
+          <span class="target-val" id="rp-bgoal">—</span>
         </div>
         <div class="target-row">
           <span class="target-label">Swim 3.8 km</span>
-          <span class="target-val">— (CSS not set)</span>
+          <span class="target-val" id="rp-swim">—</span>
         </div>
         <div class="target-row">
           <span class="target-label">Bike 180 km · IF 72%</span>
-          <span class="target-val">228 W · ~6h 15m</span>
+          <span class="target-val" id="rp-bike">228 W · ~5:20h</span>
         </div>
         <div class="target-row">
           <span class="target-label">T1 + T2</span>
@@ -202,15 +202,12 @@
         </div>
         <div class="target-row">
           <span class="target-label">Run 42.2 km</span>
-          <span class="target-val">— (threshold pace not set)</span>
+          <span class="target-val" id="rp-run">—</span>
         </div>
         <div class="target-row">
           <span class="target-label">Bike FTP</span>
           <span class="target-val" id="rp-ftp">316 W</span>
         </div>
-      </div>
-      <div class="callout muted" style="font-size:11px">
-        CSS and run threshold pace missing — swim and run targets will populate once logged via Telegram. Bike targets are live.
       </div>
     </div>
 
@@ -288,6 +285,19 @@
         <div id="open-actions-content"><span style="color:var(--muted);font-size:12px">Loading…</span></div>
       </div>
     </div>
+  </div>
+
+  <!-- SESSION LOG -->
+  <div class="panel" id="session-log-panel" style="margin-bottom:14px;display:none">
+    <h2>Session log — last 10 confirmed</h2>
+    <div id="session-log-content"></div>
+  </div>
+
+  <!-- SWIM PROGRESSION -->
+  <div class="panel" id="swim-panel" style="margin-bottom:14px;display:none">
+    <h2>Swim progression</h2>
+    <div class="small" style="margin-bottom:8px">Pace per 100m · CSS target line</div>
+    <div class="chart-wrap short"><canvas id="chartSwim"></canvas></div>
   </div>
 
   <div class="footer">Data: Intervals.icu &middot; <span id="footer-generated">Syncing…</span> &middot; <a href="overview.html" style="color:var(--muted)">System overview</a></div>
@@ -379,13 +389,24 @@ window.chartFitness = null;
     data:{
       datasets:[
         {
-          label:"CTL — actual",
+          label:"CTL — this season",
           data:[],
           borderColor:"#1a1a1a",
           backgroundColor:"transparent",
           pointRadius:0,
           tension:0.2,
           borderWidth:2.2
+        },
+        {
+          label:"CTL — last season",
+          data:[],
+          borderColor:"rgba(26,82,118,0.55)",
+          backgroundColor:"transparent",
+          pointRadius:0,
+          tension:0.2,
+          borderWidth:1.5,
+          borderDash:[4,3],
+          _prevSeason: true
         },
         {
           label:"Target CTL",
@@ -406,7 +427,8 @@ window.chartFitness = null;
       maintainAspectRatio:false,
       interaction:{mode:"nearest",intersect:false},
       plugins:{
-        legend:{display:false},
+        legend:{display:false, position:"top", labels:{boxWidth:12,font:{size:11},
+          filter: item => item.text !== "Target CTL"}},
         tooltip:{
           callbacks:{
             afterBody:(items)=>{
@@ -711,6 +733,64 @@ function renderRecentTable(data) {
   });
 }
 
+// ── SESSION LOG ──────────────────────────────────────────────────────────────
+function renderSessionLog(entries) {
+  const panel = document.getElementById("session-log-panel");
+  const el    = document.getElementById("session-log-content");
+  if (!el || !entries || !entries.length) return;
+  panel.style.display = "";
+  const sorted = [...entries].sort((a,b) => b.date.localeCompare(a.date));
+  const sportCls = {Ride:"pill-ride",Run:"pill-run",Swim:"pill-swim",Strength:"pill-strength"};
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">
+      <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:left">Date</th>
+      <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:left">Sport</th>
+      <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:left">Session</th>
+      <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:right">TSS</th>
+      <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:right">RPE</th>
+      <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:left">Notes</th>
+    </tr></thead><tbody>${sorted.map(e=>{
+      const dt = new Date(e.date+"T00:00:00");
+      const label = dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+      const cls = sportCls[e.sport]||"";
+      return `<tr>
+        <td style="padding:5px 8px;border-bottom:1px solid var(--line)">${label}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid var(--line)"><span class="pill ${cls}">${e.sport}</span></td>
+        <td style="padding:5px 8px;border-bottom:1px solid var(--line);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.name||"—"}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace">${e.tss||"—"}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:right">${e.rpe!=null?e.rpe+"/10":"—"}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid var(--line);font-size:11px;color:var(--ink2)">${(e.feel||"").slice(0,50)||"—"}</td>
+      </tr>`;
+    }).join("")}</tbody></table>`;
+}
+
+// ── SWIM PROGRESSION ─────────────────────────────────────────────────────────
+function renderSwimProgression(entries, cssPaceSecs) {
+  const panel = document.getElementById("swim-panel");
+  const ctx   = document.getElementById("chartSwim");
+  if (!ctx || !entries || !entries.length) return;
+  panel.style.display = "";
+  const sorted = [...entries].sort((a,b)=>a.date.localeCompare(b.date));
+  const labels = sorted.map(e=>new Date(e.date+"T00:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"}));
+  new Chart(ctx.getContext("2d"), {
+    type:"line",
+    data:{labels, datasets:[
+      {label:"Pace (s/100m)", data:sorted.map(e=>e.pace_per_100m),
+       borderColor:"#1a5276", backgroundColor:"rgba(26,82,118,0.1)",
+       pointRadius:4, pointBackgroundColor:"#1a5276", tension:0.3, fill:true},
+      {label:"CSS target", data:labels.map(()=>cssPaceSecs||99),
+       borderColor:"rgba(192,57,43,0.6)", borderDash:[5,3], pointRadius:0, borderWidth:1.5},
+    ]},
+    options:{responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:11}}}},
+      scales:{
+        y:{reverse:true, ticks:{font:{size:10}, callback:v=>{const m=Math.floor(v/60); return m+":"+(v%60).toString().padStart(2,"0");}}, grid:{color:"rgba(0,0,0,0.05)"}},
+        x:{ticks:{font:{size:10}}}
+      }
+    }
+  });
+}
+
 // ── OPEN ACTIONS ─────────────────────────────────────────────────────────────
 function renderActions(cs) {
   if (!cs) return;
@@ -803,6 +883,19 @@ fetch('training-data.json?v='+Date.now())
   .then(d=>{
     if (d.fitnessThis && window.chartFitness) {
       window.chartFitness.data.datasets[0].data = d.fitnessThis.map(([dt,v])=>({x:dt,y:v}));
+      // Previous season overlay — shift last year's dates so race days align
+      if (d.fitnessPrev && d.fitnessPrev.length) {
+        const thisRace = new Date("2026-09-19");
+        // Last entry in fitnessPrev is the previous race day
+        const prevRaceDateStr = d.fitnessPrev[d.fitnessPrev.length-1][0];
+        const prevRace = new Date(prevRaceDateStr+"T00:00:00");
+        const shiftMs = thisRace - prevRace;
+        window.chartFitness.data.datasets[1].data = d.fitnessPrev.map(([dt,v])=>{
+          const shifted = new Date(new Date(dt+"T00:00:00").getTime() + shiftMs);
+          return {x: shifted.toISOString().slice(0,10), y: v};
+        });
+        window.chartFitness.options.plugins.legend.display = true;
+      }
       window.chartFitness.update();
     }
     if (d.kpi) {
@@ -826,7 +919,46 @@ fetch('training-data.json?v='+Date.now())
     if (d.weeklyBreakdown && d.weeklyBreakdown.length) renderBreakdown(d.weeklyBreakdown);
     if (d.ctlProjection)                         renderCtlProjection(d.ctlProjection);
     if (d.currentState)                          renderActions(d.currentState);
-    if (d.kpi && d.kpi.ctl_outdoor)             document.getElementById("rp-ftp").textContent = d.kpi.ctl_outdoor+" W";
+    if (d.sessionLog && d.sessionLog.length)     renderSessionLog(d.sessionLog);
+    if (d.swimLog || d.swimProgression) {
+      const swLog = d.swimLog || d.swimProgression || [];
+      const cssStr = d.profile && d.profile.swim_css_per_100m;
+      let cssSecs = null;
+      if (cssStr) { const [m,s]=cssStr.split(":").map(Number); cssSecs = m*60+s; }
+      renderSwimProgression(swLog, cssSecs);
+    }
+    // Race plan targets — populate from live profile data
+    if (d.profile) {
+      const p = d.profile;
+      if (p.a_goal)                    document.getElementById("rp-agoal").textContent = p.a_goal;
+      if (p.b_goal)                    document.getElementById("rp-bgoal").textContent = p.b_goal;
+      if (p.ftp_watts) {
+        const ftp = p.ftp_watts;
+        const targetW = Math.round(ftp * 0.72);
+        document.getElementById("rp-ftp").textContent = ftp+" W";
+        document.getElementById("rp-bike").textContent = targetW+" W (IF 72%)";
+      }
+      if (p.swim_css_per_100m) {
+        const css = p.swim_css_per_100m;
+        const [cssM, cssS] = css.split(":").map(Number);
+        const racePaceS = cssM*60 + cssS + 3;  // CSS + 3s/100m for IM
+        const racePace = Math.floor(racePaceS/60)+":"+(racePaceS%60).toString().padStart(2,"0");
+        const swimTimeMin = Math.round((3800 * racePaceS) / 100 / 60);
+        document.getElementById("rp-swim").textContent =
+          `CSS ${css}/100m → race pace ~${racePace}/100m (~${Math.floor(swimTimeMin/60)}h${(swimTimeMin%60).toString().padStart(2,"0")}m)`;
+      }
+      if (p.run_threshold_pace_per_km) {
+        const tp = p.run_threshold_pace_per_km;
+        const [tpM, tpS] = tp.split(":").map(Number);
+        const imPaceS = Math.round((tpM*60 + tpS) * 1.10);  // ~110% of threshold for IM run
+        const imPace = Math.floor(imPaceS/60)+":"+(imPaceS%60).toString().padStart(2,"0");
+        const runTimeMin = Math.round((42195 * imPaceS) / 1000 / 60);
+        document.getElementById("rp-run").textContent =
+          `Threshold ${tp}/km → IM pace ~${imPace}/km (~${Math.floor(runTimeMin/60)}h${(runTimeMin%60).toString().padStart(2,"0")}m)`;
+      }
+    }
+    if (d.currentState && d.currentState.bike_ftp)
+      document.getElementById("rp-ftp").textContent = d.currentState.bike_ftp+" W";
     if (d.generated) {
       document.getElementById("snapshot-date").textContent = "Live · updated "+d.generated;
       document.getElementById("footer-generated").textContent = "Last updated "+d.generated+" · Source: Intervals.icu";

@@ -201,9 +201,9 @@
     <div class="small" id="load-chart-sub" style="margin-bottom:10px">TSS stacked by sport · faded bars = planned · TSB form line (right axis)</div>
     <div class="chart-wrap"><canvas id="chartLoad"></canvas></div>
     <div class="legend" style="margin-top:10px">
-      <span><span class="swatch" style="background:#1d6840;opacity:.87"></span>Ride</span>
+      <span><span class="swatch" style="background:#1a5276;opacity:.87"></span>Ride</span>
       <span><span class="swatch" style="background:#c0392b;opacity:.87"></span>Run</span>
-      <span><span class="swatch" style="background:#1a5276;opacity:.87"></span>Swim</span>
+      <span><span class="swatch" style="background:#2e9c8e;opacity:.87"></span>Swim</span>
       <span><span class="swatch" style="background:#7f8c8d;opacity:.87"></span>Strength</span>
       <span style="color:var(--muted);font-size:11px">faded = planned</span>
     </div>
@@ -214,6 +214,19 @@
     <h2>Plan vs actual TSS — last 6 weeks</h2>
     <div class="small" style="margin-bottom:10px">Planned = phase target · Actual = from session log · Updated after each sync</div>
     <div class="chart-wrap short"><canvas id="chartPlanActual"></canvas></div>
+  </div>
+
+  <!-- DISCIPLINE BREAKDOWN (12 weeks) -->
+  <div class="panel" id="breakdown-panel" style="margin-bottom:14px;display:none">
+    <h2>Discipline breakdown — last 12 weeks</h2>
+    <div class="small" style="margin-bottom:10px">TSS by sport per week · updated each Sunday</div>
+    <div class="chart-wrap short"><canvas id="chartBreakdown"></canvas></div>
+    <div class="legend" style="margin-top:10px">
+      <span><span class="swatch" style="background:#1a5276"></span>Bike</span>
+      <span><span class="swatch" style="background:#c0392b"></span>Run</span>
+      <span><span class="swatch" style="background:#2e9c8e"></span>Swim</span>
+      <span><span class="swatch" style="background:#7f8c8d"></span>Other</span>
+    </div>
   </div>
 
   <!-- WEEK CALENDAR -->
@@ -379,6 +392,17 @@ window.chartFitness = null;
           borderWidth: 2.2
         },
         {
+          label: "CTL — last season",
+          data: [],
+          borderColor: "rgba(26,82,118,0.55)",
+          backgroundColor: "transparent",
+          pointRadius: 0,
+          tension: 0.2,
+          borderWidth: 1.5,
+          borderDash: [4,3],
+          _prevSeason: true
+        },
+        {
           label: "Target CTL",
           data: targetMilestones.map(([d,v]) => ({x:d, y:v})),
           borderColor: "rgba(192,57,43,0.7)",
@@ -489,7 +513,7 @@ function renderLoadChart(days) {
   if (!window.chartLoad || !days || !days.length) return;
   _loadChartDays = days;
   const SPORTS = ["Ride","Run","Swim","Strength"];
-  const BASES  = {Ride:[29,104,64], Run:[192,57,43], Swim:[26,82,118], Strength:[127,140,141]};
+  const BASES  = {Ride:[26,82,118], Run:[192,57,43], Swim:[46,156,142], Strength:[127,140,141]};
   function normSport(s) {
     if (!s) return "Other";
     if (/Ride|Cycling|Gravel|Virtual/i.test(s)) return "Ride";
@@ -703,6 +727,38 @@ function renderPlanActual(weeks) {
   });
 }
 
+function renderBreakdown(weeks) {
+  const panel = document.getElementById("breakdown-panel");
+  const ctx   = document.getElementById("chartBreakdown");
+  if (!ctx || !weeks || !weeks.length) return;
+  panel.style.display = "";
+  const labels = weeks.map(w => {
+    const dt = new Date(w.week_start+"T00:00:00");
+    return dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+  });
+  new Chart(ctx.getContext("2d"), {
+    type:"bar",
+    data:{
+      labels,
+      datasets:[
+        {label:"Bike",  data:weeks.map(w=>w.tss_bike||0),     backgroundColor:"rgba(26,82,118,0.85)",  borderRadius:2,stack:"s"},
+        {label:"Run",   data:weeks.map(w=>w.tss_run||0),      backgroundColor:"rgba(192,57,43,0.85)",  borderRadius:2,stack:"s"},
+        {label:"Swim",  data:weeks.map(w=>w.tss_swim||0),     backgroundColor:"rgba(46,156,142,0.85)", borderRadius:2,stack:"s"},
+        {label:"Other", data:weeks.map(w=>(w.tss_strength||0)+(w.tss_other||0)), backgroundColor:"rgba(127,140,141,0.7)", borderRadius:2,stack:"s"},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{stacked:true,ticks:{font:{size:10}},grid:{display:false}},
+        y:{stacked:true,beginAtZero:true,ticks:{font:{size:10}},grid:{color:"rgba(0,0,0,0.05)"},
+           title:{display:true,text:"TSS",font:{size:10},color:"#666"}}
+      }
+    }
+  });
+}
+
 function renderSessionLog(entries) {
   const tb = document.querySelector("#session-log-table tbody");
   if (!tb || !entries || !entries.length) return;
@@ -873,6 +929,18 @@ fetch('training-data-kathryn.json?v=' + Date.now())
     // Fitness chart
     if (d.fitnessThis && window.chartFitness) {
       window.chartFitness.data.datasets[0].data = d.fitnessThis.map(([dt,v]) => ({x:dt, y:v}));
+      // Previous season overlay — shift last year's dates so race days align
+      if (d.fitnessPrev && d.fitnessPrev.length) {
+        const thisRace = new Date("2026-09-20");
+        const prevRaceDateStr = d.fitnessPrev[d.fitnessPrev.length-1][0];
+        const prevRace = new Date(prevRaceDateStr+"T00:00:00");
+        const shiftMs = thisRace - prevRace;
+        window.chartFitness.data.datasets[1].data = d.fitnessPrev.map(([dt,v]) => {
+          const shifted = new Date(new Date(dt+"T00:00:00").getTime() + shiftMs);
+          return {x: shifted.toISOString().slice(0,10), y: v};
+        });
+        window.chartFitness.options.plugins.legend.display = true;
+      }
       window.chartFitness.update();
       const nullEl = document.getElementById("fitness-null");
       if (nullEl) nullEl.style.display = "none";
@@ -896,17 +964,59 @@ fetch('training-data-kathryn.json?v=' + Date.now())
       if (k.ftp    != null) { const rp=g("rp-ftp"); if(rp) rp.textContent=k.ftp+" W"; }
     }
     // Charts
-    if (d.loadChart && d.loadChart.length)       renderLoadChart(d.loadChart);
+    if (d.loadChart && d.loadChart.length)        renderLoadChart(d.loadChart);
     if (d.weekCalendar && d.weekCalendar.length)  renderLiveCalendar(d.weekCalendar);
     if (d.recent)                                 renderRecentTable(d.recent);
     if (d.planVsActual && d.planVsActual.length)  renderPlanActual(d.planVsActual);
+    if (d.weeklyBreakdown && d.weeklyBreakdown.length) renderBreakdown(d.weeklyBreakdown);
     if (d.sessionLog)                             renderSessionLog(d.sessionLog);
     if (d.ctlProjection)                          renderCtlProjection(d.ctlProjection);
     // Swim — get CSS target from profile if available
-    const cssPace = d.profile && d.profile.swim_css_per_100m_seconds;
-    if (d.swimLog)                              renderSwimProgression(d.swimLog, cssPace);
-    // Live constraints (no ankle field assumed — uses generic injuries)
-    if (d.currentState)                         renderLiveConstraints(d.currentState);
+    if (d.swimLog || d.swimProgression) {
+      const swLog = d.swimLog || d.swimProgression || [];
+      let cssSecs = null;
+      if (d.profile && d.profile.swim_css_per_100m) {
+        const [m,s] = d.profile.swim_css_per_100m.split(":").map(Number);
+        cssSecs = m*60 + s;
+      } else if (d.profile && d.profile.swim_css_per_100m_seconds) {
+        cssSecs = d.profile.swim_css_per_100m_seconds;
+      }
+      renderSwimProgression(swLog, cssSecs);
+    }
+    // Live constraints
+    if (d.currentState)                           renderLiveConstraints(d.currentState);
+    // Race plan targets from profile
+    if (d.profile) {
+      const p = d.profile;
+      if (p.ftp_watts) {
+        const ftp = p.ftp_watts;
+        const targetW = Math.round(ftp * 0.85);
+        document.getElementById("rp-ftp").textContent = ftp+" W";
+        document.getElementById("rp-bike").textContent = targetW+" W (IF 85%)";
+      }
+      if (p.swim_css_per_100m) {
+        const css = p.swim_css_per_100m;
+        const [cssM, cssS] = css.split(":").map(Number);
+        const racePaceS = cssM*60 + cssS + 2;
+        const racePace = Math.floor(racePaceS/60)+":"+(racePaceS%60).toString().padStart(2,"0");
+        const swimTimeMin = Math.round((1900 * racePaceS) / 100 / 60);
+        document.getElementById("rp-swim").textContent =
+          `CSS ${css}/100m → race pace ~${racePace}/100m (~${swimTimeMin}m)`;
+      }
+      if (p.run_threshold_pace_per_km) {
+        const tp = p.run_threshold_pace_per_km;
+        const [tpM, tpS] = tp.split(":").map(Number);
+        const halfPaceS = Math.round((tpM*60 + tpS) * 1.05);
+        const halfPace = Math.floor(halfPaceS/60)+":"+(halfPaceS%60).toString().padStart(2,"0");
+        const runTimeMin = Math.round((21097.5 * halfPaceS) / 1000 / 60);
+        document.getElementById("rp-run").textContent =
+          `Threshold ${tp}/km → 70.3 pace ~${halfPace}/km (~${Math.floor(runTimeMin/60)}h${(runTimeMin%60).toString().padStart(2,"0")}m)`;
+      }
+    }
+    if (d.kpi && d.kpi.ctl) {
+      const rp = document.getElementById("rp-ctl");
+      if (rp) rp.textContent = d.kpi.ctl.toFixed(1);
+    }
     // Updated
     if (d.generated) {
       document.getElementById("snapshot-date").textContent = "Live · updated " + d.generated;
