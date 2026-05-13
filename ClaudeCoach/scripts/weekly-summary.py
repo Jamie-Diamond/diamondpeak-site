@@ -89,12 +89,24 @@ def run_summary(slug: str = "jamie") -> str:
     activities_7d   = client.get_training_history(7)
     events_this_wk  = client.get_events(week_start.isoformat(), week_end.isoformat())
     athlete_profile = client.get_athlete_profile()
+    outlook_end     = (today + timedelta(days=28)).isoformat()
+    fitness_outlook = client.get_fitness(7, newest=outlook_end)
+    events_4wk      = client.get_events((today + timedelta(days=1)).isoformat(), outlook_end)
 
     # ── Read local files ──────────────────────────────────────────────────────
     current_state = _read_file(adir / "current-state.md")
     session_log   = _read_json(adir / "session-log.json")
     heat_log      = _read_json(adir / "heat-log.json")
     blueprint     = _read_file(adir / "reference/training-blueprint.md")
+
+    # Upcoming training plan files (start date > today)
+    plan_texts = []
+    for p in sorted(adir.glob("training-plan-*.md")):
+        # filename: training-plan-YYYY-MM-DD_to_YYYY-MM-DD.md
+        parts = p.stem.replace("training-plan-", "").split("_to_")
+        if parts and parts[0] >= today.isoformat():
+            plan_texts.append(p.read_text())
+    upcoming_plans = "\n\n---\n\n".join(plan_texts) if plan_texts else "(none)"
 
     # Filter logs to this week
     week_sessions = [
@@ -104,6 +116,19 @@ def run_summary(slug: str = "jamie") -> str:
     week_heat = [
         h for h in heat_log
         if week_start.isoformat() <= h.get("date", "") <= week_end.isoformat()
+    ]
+
+    # Nutrition history: rides/bricks >90 min with carb data, last 6 weeks
+    six_weeks_ago = (today - timedelta(weeks=6)).isoformat()
+    nutrition_history = [
+        {"date": s["date"], "name": s.get("name",""), "duration_min": s.get("duration_min",0),
+         "nutrition_g_carb": s["nutrition_g_carb"],
+         "g_per_hr": round(s["nutrition_g_carb"] / s["duration_min"] * 60, 1)}
+        for s in session_log
+        if s.get("date","") >= six_weeks_ago
+        and s.get("sport","") in ("Ride","VirtualRide","GravelRide","Brick")
+        and s.get("duration_min", 0) >= 90
+        and s.get("nutrition_g_carb") is not None
     ]
 
     race_date    = date.fromisoformat(profile.get("race_date", "2026-09-19"))
@@ -186,6 +211,18 @@ Week: {week_start} → {week_end}
 ## Training Blueprint (phase structure and TSS targets)
 {blueprint}
 
+## IcuSync — Fitness projection (last 7 days + next 28 days)
+{json.dumps(fitness_outlook, indent=2)}
+
+## IcuSync — Events next 28 days ({today} → {outlook_end})
+{json.dumps(events_4wk, indent=2)}
+
+## Upcoming training plans
+{upcoming_plans}
+
+## Local — Nutrition history (rides/bricks >90 min, last 6 weeks — g/hr computed)
+{json.dumps(nutrition_history, indent=2)}
+
 ---
 
 ## Step 1 — Compute week metrics
@@ -202,7 +239,12 @@ From the data above, extract:
 - Sessions missed: planned events with no matching activity on same date and sport
 - Heat sessions this week: count from heat-log above
 - Average sleep: mean hrsSleep from wellness this week
-- Fuelling: from session-log, sessions with nutrition_g_carb set vs total; for sessions >90 min compute avg g/hr = nutrition_g_carb / duration_min × 60
+- Fuelling logged this week: sessions with nutrition_g_carb set vs total rides
+- Nutrition trend (from nutrition history above):
+  - This week avg g/hr (rides >90 min): compute from nutrition_history entries this week
+  - 4-week rolling avg g/hr: mean across all entries in nutrition_history
+  - Trend direction: compare most recent 3 sessions vs previous 3 — improving / declining / flat
+  - Gap to race target: 90 − this_week_avg (g/hr)
 - Injury pain: ankle_pain_during scores from session-log this week
 
 ## Step 2 — Output the summary card
@@ -220,8 +262,7 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 | ATL | X | — |
 | Sleep avg | Xh | ≥7h |
 | Heat sessions | N | — |
-| Fuelling logged | N/M sessions | — |
-| Avg g/hr (>90 min) | Xg/hr | ≥50g/hr |
+| Fuelling (rides >90 min) | Xg/hr this wk (4wk avg: Y) | 90g/hr race target — gap: Zg/hr |
 
 **Completed:** [discipline summaries — e.g. "3 rides, 2 runs, 1 swim"]
 **Missed:** [session names, or "none"]
@@ -229,6 +270,22 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 **Key finding:** [one sentence — most important thing from this week]
 
 **Monday focus:** [one sentence — single most important thing for next week's first session]
+
+---
+
+**4-week outlook**
+
+| Week | Constraint | Proj. CTL | Proj. TSB |
+|---|---|---|---|
+| [Mon dd Mon] | [e.g. travel / full / race] | [CTL from fitness_outlook] | [TSB] |
+| [Mon dd Mon] | … | … | … |
+| [Mon dd Mon] | … | … | … |
+| [Mon dd Mon] | … | … | … |
+
+[For each significant event or constraint in events_4wk / upcoming plans / current-state.md, one line:]
+📌 [Date]: [What — e.g. "Travel block begins (no bike)", "Dorney C-race TBC", "Heat protocol target 2×/wk"]
+
+*Race trajectory: projected CTL [X] on [date 8 weeks out] vs blueprint target [Y] — [on track / behind / ahead].*
 
 ---
 
@@ -260,9 +317,10 @@ Readiness: [one line on whether athlete is prepared to step up]
 ⚡ *T6 INJURY*: Ankle pain avg [X]/10 this week [or: trending up — scores X→Y→Z].
 Options: A) Drop all runs this week | B) Reduce run volume 50% | C) Continue protocol (accept risk)
 
-**T7 NUTRITION** — fires if avg g/hr < 50 on sessions > 90 min:
-⚡ *T7 NUTRITION*: Avg fuelling [X]g/hr on long sessions — below 50g/hr target.
-Fix: Start eating at 20 min, target [blueprint phase rate]g/hr every 30 min.
+**T7 NUTRITION** — fires if this-week avg g/hr < 75 on rides >90 min AND at least 1 such session was logged:
+⚡ *T7 NUTRITION*: Avg fuelling [X]g/hr on long rides — [Y]g/hr short of the 90g/hr race target. Trend: [improving / declining / flat] over last 6 sessions.
+Race consequence: Cervia 2025 lap 2 power dropped ~60W and aerobic decoupling hit 14.5% — underfuelling in training means the gut never adapts to high carb flux under load. Every long ride below 75g/hr is a missed adaptation.
+Fix: Eat at 15 min and every 25 min after. This week's long ride target: [blueprint phase rate, e.g. 90]g/hr. Use Maurten 320 + chews if GI allows.
 
 **T8 HRV** — fires if the pre-computed recovery score HRV ratio < 0.90 OR 3+ consecutive days with HRV below the 7-day rolling average in the wellness data:
 ⚡ *T8 HRV*: HRV ratio [X] vs baseline — accumulated fatigue signal (recovery score: [score]/100 [label]).
