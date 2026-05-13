@@ -178,14 +178,19 @@ def _ctl_project(start_ctl, daily_tss_fn, days):
 
 def _phase_daily_tss(d):
     """Return planned daily TSS based on phase (week number from PLAN_START).
-    Values reflect upper range of each phase at current fitness (~80 CTL):
-    base holds CTL steady; build/specific/peak drive progressive gains."""
+    Calibrated to project peak CTL ~112 and race-day CTL ~90 from current ~80:
+    - Base (wk 1-6): 90/day = 630/wk — slight build from ~80 CTL
+    - Build (wk 7-10): 100/day = 700/wk
+    - Specific (wk 11-14): 113/day = 790/wk
+    - Peak (wk 15-17): 125/day = 875/wk → CTL peaks ~112
+    - Taper: 65/day = 455/wk → 3-week taper lands race-day CTL ~90
+    (Previous taper of 29/day collapsed CTL to 67 — fixed.)"""
     week = max(1, math.ceil((d - PLAN_START).days / 7))
-    if week <= 6:    return 80    # Base: ~560/wk — holds CTL near current level
-    if week <= 10:   return 90    # Build: ~630/wk
-    if week <= 14:   return 100   # Specific: ~700/wk
-    if week <= 17:   return 114   # Peak: ~800/wk
-    return 29                     # Taper: ~200/wk
+    if week <= 6:    return 90    # Base: ~630/wk
+    if week <= 10:   return 100   # Build: ~700/wk
+    if week <= 14:   return 113   # Specific: ~790/wk
+    if week <= 17:   return 125   # Peak: ~875/wk
+    return 65                     # Taper: ~455/wk — 3-week IM taper
 
 
 def post_process(data):
@@ -598,6 +603,44 @@ def _build_athlete_training_data(slug, athlete_cfg):
             data["swimProgression"] = summary.get("swim_progression", [])
         except Exception:
             pass
+
+    # CTL projection (from phase_tss config in athlete_cfg)
+    try:
+        phase_cfg = athlete_cfg.get("phase_tss", {})
+        race_dt = date.fromisoformat(athlete_cfg["race_date"])
+        plan_start_str = athlete_cfg.get("plan_start")
+        if phase_cfg and plan_start_str and kpi.get("ctl"):
+            plan_start_dt = date.fromisoformat(plan_start_str)
+            base_end_wk  = phase_cfg.get("base_end_week", 6)
+            build_end_wk = phase_cfg.get("build_end_week", 10)
+            peak_end_wk  = phase_cfg.get("peak_end_week", 14)
+            t_base  = phase_cfg.get("base_daily",  65)
+            t_build = phase_cfg.get("build_daily", 78)
+            t_peak  = phase_cfg.get("peak_daily",  90)
+            t_taper = phase_cfg.get("taper_daily", 55)
+
+            def _athlete_phase_tss(d):
+                wk = max(1, math.ceil((d - plan_start_dt).days / 7))
+                if wk <= base_end_wk:  return t_base
+                if wk <= build_end_wk: return t_build
+                if wk <= peak_end_wk:  return t_peak
+                return t_taper
+
+            days_to_race = (race_dt - today).days + 1
+            current_ctl  = kpi["ctl"]
+
+            def _planned_build(d): return _athlete_phase_tss(d)
+
+            proj_build = _ctl_project(current_ctl, _planned_build, days_to_race)
+            ctl_targets = athlete_cfg.get("ctl_targets", {})
+            data["ctlProjection"] = {
+                "planned_build": proj_build,
+                "race_date": race_dt.isoformat(),
+                "target_ctl_min": ctl_targets.get("race_min", 60),
+                "target_ctl_max": ctl_targets.get("race_max", 80),
+            }
+    except Exception:
+        pass
 
     out = BASE / f"training-data-{slug}.json"
     out.write_text(json.dumps(data, separators=(",", ":")))

@@ -406,10 +406,10 @@ function rollupSport(s) {
 
 // ── FITNESS CHART ────────────────────────────────────────────────────────────
 const targetMilestones = [
-  ["2026-06-22", 85,  "End Base"],
-  ["2026-07-20", 90,  "End Build 1"],
-  ["2026-08-17", 95,  "End Build 2"],
-  ["2026-08-31", 97,  "Peak"],
+  ["2026-06-22", 90,  "End Base"],
+  ["2026-07-20", 97,  "End Build 1"],
+  ["2026-08-17", 107, "End Build 2"],
+  ["2026-08-31", 112, "Peak"],
   ["2026-09-19", 90,  "Race day target"],
 ];
 
@@ -473,7 +473,7 @@ window.chartFitness = null;
       scales:{
         x:{type:"time",time:{unit:"month",displayFormats:{month:"MMM"}},
            min:"2026-01-01",max:"2026-09-25",grid:{color:"#e8e3da"}},
-        y:{title:{display:true,text:"CTL"},min:20,max:110,grid:{color:"#e8e3da"}}
+        y:{title:{display:true,text:"CTL"},min:20,max:125,grid:{color:"#e8e3da"}}
       }
     }
   });
