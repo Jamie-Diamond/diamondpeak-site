@@ -44,11 +44,12 @@ Case A — A completed activity exists NOT yet in session-log.json:
 Case B — A planned session has NO matching completed activity AND it's after 19:00:
   Send: "Did the [session name] happen today?"
 
-Case C — All sessions accounted for and already stubbed: output nothing.
+Case C — All sessions accounted for and already stubbed: produce zero output. No text at all.
 
-Case D — No planned sessions and no activities: output nothing.
+Case D — No planned sessions and no activities: produce zero output. No text at all.
 
-Priority: Case A > Case B > silence. Only ever send ONE message."""
+Priority: Case A > Case B > silence. Only ever send ONE message.
+CRITICAL: In Cases C and D your entire response must be completely empty — not even a case label, not even "silence", not even a full stop. Empty string only."""
 
 
 def notify(msg, chat_id):
@@ -86,8 +87,14 @@ def run_athlete(slug, athlete_cfg):
         )
 
     output = (result.stdout or "").strip()
-    if output:
+    if output and not _is_meta(output):
         notify(output, chat_id)
+
+
+_META_PREFIXES = ("case a", "case b", "case c", "case d", "silence", "no output", "nothing to send")
+
+def _is_meta(text: str) -> bool:
+    return text.lower().startswith(_META_PREFIXES)
 
 
 def main():

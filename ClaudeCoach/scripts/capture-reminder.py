@@ -69,8 +69,14 @@ def run_athlete(slug, athlete_cfg):
         )
 
     output = (result.stdout or "").strip()
-    if output:
+    if output and not _is_meta(output):
         notify(output, chat_id)
+
+
+_META_PREFIXES = ("case a", "case b", "case c", "case d", "silence", "no output", "nothing to send", "no unlogged")
+
+def _is_meta(text: str) -> bool:
+    return text.lower().startswith(_META_PREFIXES)
 
 
 def main():
