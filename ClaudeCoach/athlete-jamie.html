@@ -922,7 +922,7 @@ window.chartCycling = null;
     ]},
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:"index",intersect:false},
-      plugins:{legend:{labels:{filter:i=>!i.dataset._ref}}},
+      plugins:{legend:{labels:{filter:(i,data)=>!data.datasets[i.datasetIndex]._ref}}},
       scales:{
         x:{type:"time",time:{unit:"week"},grid:{color:"#e8e3da"},
            ticks:{font:{size:10}}},
@@ -952,7 +952,7 @@ window.chartRunning = null;
     ]},
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:"index",intersect:false},
-      plugins:{legend:{labels:{filter:i=>!i.dataset._ref}}},
+      plugins:{legend:{labels:{filter:(i,data)=>!data.datasets[i.datasetIndex]._ref}}},
       scales:{
         x:{type:"time",time:{unit:"week"},grid:{color:"#e8e3da"},
            ticks:{font:{size:10}}},
@@ -981,7 +981,7 @@ window.chartFuelling = null;
     ]},
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:"index",intersect:false},
-      plugins:{legend:{labels:{filter:i=>!i.dataset._ref}}},
+      plugins:{legend:{labels:{filter:(i,data)=>!data.datasets[i.datasetIndex]._ref}}},
       scales:{
         x:{type:"time",time:{unit:"week"},grid:{color:"#e8e3da"},
            ticks:{font:{size:10}}},
