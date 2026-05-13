@@ -137,6 +137,22 @@ def run_summary(slug: str = "jamie") -> str:
     first_name   = profile.get("name", slug).split()[0]
     ftp          = profile.get("ftp_watts", "unknown")
 
+    # ── Athlete-specific nutrition consequence (for T7 trigger) ──────────────
+    prev_race = profile.get("prev_race", {})
+    prev_race_notes = prev_race.get("notes", "")
+    prev_race_name  = prev_race.get("name", "")
+    if prev_race_notes:
+        nutrition_consequence = (
+            f"{prev_race_name} post-race note: \"{prev_race_notes}\" — "
+            f"underfuelling in training means the gut never adapts to high carb flux under load. "
+            f"Every long ride below 75g/hr is a missed adaptation."
+        )
+    else:
+        nutrition_consequence = (
+            "Underfuelling in training means the gut never adapts to high carb flux under load. "
+            "Race-day bonk risk rises sharply when training rides average below 75g/hr."
+        )
+
     # ── Pre-compute recovery score ────────────────────────────────────────────
     recovery = None
     try:
@@ -319,7 +335,7 @@ Options: A) Drop all runs this week | B) Reduce run volume 50% | C) Continue pro
 
 **T7 NUTRITION** — fires if this-week avg g/hr < 75 on rides >90 min AND at least 1 such session was logged:
 ⚡ *T7 NUTRITION*: Avg fuelling [X]g/hr on long rides — [Y]g/hr short of the 90g/hr race target. Trend: [improving / declining / flat] over last 6 sessions.
-Race consequence: Cervia 2025 lap 2 power dropped ~60W and aerobic decoupling hit 14.5% — underfuelling in training means the gut never adapts to high carb flux under load. Every long ride below 75g/hr is a missed adaptation.
+Race consequence: {nutrition_consequence}
 Fix: Eat at 15 min and every 25 min after. This week's long ride target: [blueprint phase rate, e.g. 90]g/hr. Use Maurten 320 + chews if GI allows.
 
 **T8 HRV** — fires if the pre-computed recovery score HRV ratio < 0.90 OR 3+ consecutive days with HRV below the 7-day rolling average in the wellness data:
