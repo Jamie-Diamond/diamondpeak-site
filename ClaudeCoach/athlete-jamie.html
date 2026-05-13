@@ -443,13 +443,13 @@ window.chartFitness = null;
         {
           label:"Target CTL",
           data:targetMilestones.map(([d,v])=>({x:d,y:v})),
-          borderColor:"rgba(192,57,43,0.7)",
-          backgroundColor:"rgba(192,57,43,0.07)",
-          borderWidth:2,
-          borderDash:[6,4],
-          pointRadius:4,
+          borderColor:"rgba(192,57,43,0)",
+          backgroundColor:"rgba(192,57,43,0)",
+          borderWidth:0,
+          showLine:false,
+          pointRadius:6,
           pointBackgroundColor:"rgba(192,57,43,0.9)",
-          tension:0.3,
+          tension:0,
           fill:false
         }
       ]
