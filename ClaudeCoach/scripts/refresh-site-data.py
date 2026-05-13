@@ -329,6 +329,54 @@ def post_process(data):
         except Exception:
             pass
 
+    # Progress charts — cycling NP/VI, run pace/EF, fuelling g/hr
+    if SESSION_LOG.exists():
+        try:
+            all_s = json.loads(SESSION_LOG.read_text())
+            long_rides = sorted(
+                [s for s in all_s if s.get("sport") == "Ride"
+                 and s.get("norm_power") and s.get("avg_power")
+                 and int(s.get("duration_min") or 0) >= 60],
+                key=lambda x: x["date"]
+            )
+            hr_runs = sorted(
+                [s for s in all_s if s.get("sport") == "Run"
+                 and s.get("avg_hr") and s.get("distance_km") and s.get("duration_min")],
+                key=lambda x: x["date"]
+            )
+            carb_s = sorted(
+                [s for s in all_s if s.get("nutrition_g_carb") and s.get("duration_min")],
+                key=lambda x: x["date"]
+            )
+            ftp = (data.get("profile") or {}).get("ftp_watts") or 316
+            data["progressData"] = {
+                "ftp": ftp,
+                "rides": [
+                    {"date": s["date"], "np": s["norm_power"],
+                     "vi": round(s["norm_power"] / s["avg_power"], 3),
+                     "hr": s.get("avg_hr"), "dur": s.get("duration_min"),
+                     "name": (s.get("name") or "")[:40]}
+                    for s in long_rides
+                ],
+                "runs": [
+                    {"date": s["date"],
+                     "pace": round(float(s["duration_min"]) / float(s["distance_km"]), 3),
+                     "ef": round(float(s["distance_km"]) * 1000 / float(s["duration_min"]) / float(s["avg_hr"]), 4),
+                     "hr": s.get("avg_hr"), "dist": round(float(s["distance_km"]), 1),
+                     "name": (s.get("name") or "")[:40]}
+                    for s in hr_runs
+                ],
+                "carb": [
+                    {"date": s["date"],
+                     "g_per_hr": round(float(s["nutrition_g_carb"]) / float(s["duration_min"]) * 60, 1),
+                     "sport": s.get("sport"), "dur": s.get("duration_min"),
+                     "name": (s.get("name") or "")[:40]}
+                    for s in carb_s
+                ],
+            }
+        except Exception:
+            pass
+
     # Plan vs actual — last 6 weeks, grouped by week
     # Actual TSS from session-log.json; planned from phase daily TSS * 7
     if SESSION_LOG.exists():

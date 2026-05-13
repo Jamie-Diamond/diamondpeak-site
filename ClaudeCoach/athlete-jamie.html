@@ -332,6 +332,27 @@
     <div class="chart-wrap short"><canvas id="chartSwim"></canvas></div>
   </div>
 
+  <!-- CYCLING PROGRESS -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Cycling progress</h2>
+    <div class="small" style="margin-bottom:8px">NP per long ride (≥60 min) &middot; VI = NP/AP — target &lt;1.05 (green), &lt;1.10 (amber), &gt;1.10 (red)</div>
+    <div class="chart-wrap short"><canvas id="chartCycling"></canvas></div>
+  </div>
+
+  <!-- RUNNING PROGRESS -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Running progress</h2>
+    <div class="small" style="margin-bottom:8px">Pace min/km (lower axis = faster) &middot; Efficiency Factor = m·min⁻¹·bpm⁻¹ (higher = better aerobic economy)</div>
+    <div class="chart-wrap short"><canvas id="chartRunning"></canvas></div>
+  </div>
+
+  <!-- FUELLING PROGRESS -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Fuelling progress</h2>
+    <div class="small" style="margin-bottom:8px">Carb intake g/hr per session &middot; race target 90 g/hr</div>
+    <div class="chart-wrap short"><canvas id="chartFuelling"></canvas></div>
+  </div>
+
   <div class="footer">Data: Intervals.icu &middot; <span id="footer-generated">Syncing…</span> &middot; <a href="overview.html" style="color:var(--muted)">System overview</a></div>
 </div>
 
@@ -882,6 +903,95 @@ function renderCtlProjection(proj) {
   window.chartFitness.update();
 }
 
+// ── PROGRESS CHARTS ──────────────────────────────────────────────────────────
+
+window.chartCycling = null;
+(function(){
+  const ctx = document.getElementById("chartCycling").getContext("2d");
+  window.chartCycling = new Chart(ctx, {
+    type:"line",
+    data:{datasets:[
+      {label:"NP (W)",data:[],borderColor:"#1a5276",backgroundColor:"transparent",
+       yAxisID:"yL",pointRadius:5,tension:0.2,borderWidth:2},
+      {label:"VI",data:[],borderColor:"rgba(192,57,43,0.7)",backgroundColor:"transparent",
+       yAxisID:"yR",pointRadius:5,tension:0.2,borderWidth:1.5,borderDash:[4,3]},
+      {label:"FTP",data:[],borderColor:"rgba(26,82,118,0.35)",backgroundColor:"transparent",
+       yAxisID:"yL",pointRadius:0,borderWidth:1,borderDash:[6,4],showLine:true,_ref:true},
+      {label:"VI 1.05",data:[],borderColor:"rgba(39,174,96,0.5)",backgroundColor:"transparent",
+       yAxisID:"yR",pointRadius:0,borderWidth:1,borderDash:[4,3],showLine:true,_ref:true},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{filter:i=>!i.dataset._ref}}},
+      scales:{
+        x:{type:"time",time:{unit:"week"},grid:{color:"#e8e3da"},
+           ticks:{font:{size:10}}},
+        yL:{type:"linear",position:"left",
+            title:{display:true,text:"NP (W)",font:{size:10}},
+            grid:{color:"#e8e3da"}},
+        yR:{type:"linear",position:"right",min:1.00,max:1.20,
+            title:{display:true,text:"VI",font:{size:10}},
+            grid:{drawOnChartArea:false}},
+      }
+    }
+  });
+})();
+
+window.chartRunning = null;
+(function(){
+  const ctx = document.getElementById("chartRunning").getContext("2d");
+  window.chartRunning = new Chart(ctx, {
+    type:"line",
+    data:{datasets:[
+      {label:"Pace (min/km)",data:[],borderColor:"#1d6840",backgroundColor:"transparent",
+       yAxisID:"yL",pointRadius:5,tension:0.2,borderWidth:2},
+      {label:"EF",data:[],borderColor:"rgba(142,68,173,0.7)",backgroundColor:"transparent",
+       yAxisID:"yR",pointRadius:5,tension:0.2,borderWidth:1.5,borderDash:[4,3]},
+      {label:"Threshold 4:02",data:[],borderColor:"rgba(29,104,64,0.35)",backgroundColor:"transparent",
+       yAxisID:"yL",pointRadius:0,borderWidth:1,borderDash:[6,4],showLine:true,_ref:true},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{filter:i=>!i.dataset._ref}}},
+      scales:{
+        x:{type:"time",time:{unit:"week"},grid:{color:"#e8e3da"},
+           ticks:{font:{size:10}}},
+        yL:{type:"linear",position:"left",reverse:true,
+            title:{display:true,text:"Pace (↑ faster)",font:{size:10}},
+            grid:{color:"#e8e3da"},
+            ticks:{callback:v=>{const m=Math.floor(v),s=Math.round((v-m)*60);return m+":"+(s<10?"0":"")+s;}}},
+        yR:{type:"linear",position:"right",
+            title:{display:true,text:"EF",font:{size:10}},
+            grid:{drawOnChartArea:false}},
+      }
+    }
+  });
+})();
+
+window.chartFuelling = null;
+(function(){
+  const ctx = document.getElementById("chartFuelling").getContext("2d");
+  window.chartFuelling = new Chart(ctx, {
+    type:"bar",
+    data:{datasets:[
+      {label:"Carb (g/hr)",data:[],backgroundColor:"rgba(230,126,34,0.75)",
+       borderColor:"rgba(230,126,34,1)",borderWidth:1,barPercentage:0.5},
+      {label:"Race target",data:[],type:"line",borderColor:"#c0392b",backgroundColor:"transparent",
+       pointRadius:0,borderWidth:1.5,borderDash:[5,4],showLine:true,_ref:true},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{filter:i=>!i.dataset._ref}}},
+      scales:{
+        x:{type:"time",time:{unit:"week"},grid:{color:"#e8e3da"},
+           ticks:{font:{size:10}}},
+        y:{min:0,max:120,title:{display:true,text:"g / hr",font:{size:10}},
+           grid:{color:"#e8e3da"}},
+      }
+    }
+  });
+})();
+
 // ── DATA LOADING ─────────────────────────────────────────────────────────────
 
 // Basics from site-data.json
@@ -1003,6 +1113,37 @@ fetch('training-data.json?v='+Date.now())
     if (d.generated) {
       document.getElementById("snapshot-date").textContent = "Live · updated "+d.generated;
       document.getElementById("footer-generated").textContent = "Last updated "+d.generated+" · Source: Intervals.icu";
+    }
+    // Progress charts
+    if (d.progressData) {
+      const pd = d.progressData;
+      const ftp = pd.ftp || 316;
+      if (window.chartCycling && pd.rides && pd.rides.length) {
+        const dates = pd.rides.map(r=>r.date);
+        const d0 = dates[0], d1 = dates[dates.length-1];
+        window.chartCycling.data.datasets[0].data = pd.rides.map(r=>({x:r.date,y:r.np}));
+        window.chartCycling.data.datasets[1].data = pd.rides.map(r=>({x:r.date,y:r.vi}));
+        window.chartCycling.data.datasets[1].pointBackgroundColor =
+          pd.rides.map(r=>r.vi<1.05?"#27ae60":r.vi<1.10?"#e67e22":"#c0392b");
+        window.chartCycling.data.datasets[2].data = [{x:d0,y:ftp},{x:d1,y:ftp}];
+        window.chartCycling.data.datasets[3].data = [{x:d0,y:1.05},{x:d1,y:1.05}];
+        window.chartCycling.update();
+      }
+      if (window.chartRunning && pd.runs && pd.runs.length) {
+        const dates = pd.runs.map(r=>r.date);
+        const d0 = dates[0], d1 = dates[dates.length-1];
+        window.chartRunning.data.datasets[0].data = pd.runs.map(r=>({x:r.date,y:r.pace}));
+        window.chartRunning.data.datasets[1].data = pd.runs.map(r=>({x:r.date,y:r.ef}));
+        window.chartRunning.data.datasets[2].data = [{x:d0,y:4.033},{x:d1,y:4.033}];
+        window.chartRunning.update();
+      }
+      if (window.chartFuelling && pd.carb && pd.carb.length) {
+        const dates = pd.carb.map(c=>c.date);
+        const d0 = dates[0], d1 = dates[dates.length-1];
+        window.chartFuelling.data.datasets[0].data = pd.carb.map(c=>({x:c.date,y:c.g_per_hr}));
+        window.chartFuelling.data.datasets[1].data = [{x:d0,y:90},{x:d1,y:90}];
+        window.chartFuelling.update();
+      }
     }
   })
   .catch(()=>{});
