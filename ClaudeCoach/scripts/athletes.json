@@ -1,0 +1,33 @@
+{
+  "jamie": {
+    "name": "Jamie Diamond",
+    "chat_id": "6090343263",
+    "icu_athlete_id": "i196362",
+    "icu_api_key": "30f1smcobrcbm87lzk6j9zzsi",
+    "active": true,
+    "race_date": "2026-09-19",
+    "race_name": "IM Italy Emilia-Romagna"
+  },
+  "kathryn": {
+    "name": "Kathryn",
+    "icu_athlete_id": "i497812",
+    "icu_api_key": "1loq7iiyr8dfkmx56lup2ift2",
+    "active": true,
+    "race_date": "2026-09-20",
+    "race_name": "70.3 Emilia Romagna",
+    "plan_start": "2026-05-04",
+    "phase_tss": {
+      "base_end_week": 8,
+      "build_end_week": 14,
+      "peak_end_week": 17,
+      "base_daily": 65,
+      "build_daily": 78,
+      "peak_daily": 90,
+      "taper_daily": 55
+    },
+    "ctl_targets": {
+      "race_min": 65,
+      "race_max": 75
+    }
+  }
+}

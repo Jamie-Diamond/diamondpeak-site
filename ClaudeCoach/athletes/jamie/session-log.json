@@ -12,7 +12,7 @@
     "avg_hr": 141,
     "rpe": null,
     "feel": null,
-    "injury_pain_during": null,
+    "injury_pain_during": 2,
     "injury_pain_next_morning": null,
     "nutrition_g_carb": null,
     "hydration_ml": null,
