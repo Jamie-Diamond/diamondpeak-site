@@ -178,19 +178,19 @@ def _ctl_project(start_ctl, daily_tss_fn, days):
 
 def _phase_daily_tss(d):
     """Return planned daily TSS based on phase (week number from PLAN_START).
-    Calibrated to project peak CTL ~112 and race-day CTL ~90 from current ~80:
-    - Base (wk 1-6): 90/day = 630/wk — slight build from ~80 CTL
-    - Build (wk 7-10): 100/day = 700/wk
-    - Specific (wk 11-14): 113/day = 790/wk
-    - Peak (wk 15-17): 125/day = 875/wk → CTL peaks ~112
-    - Taper: 65/day = 455/wk → 3-week taper lands race-day CTL ~90
-    (Previous taper of 29/day collapsed CTL to 67 — fixed.)"""
+    Calibrated to 2025 actuals (spring ~110/day, peak ~133/day).
+    Projects peak CTL ~123, race-day CTL ~105 from current ~79 — exceeding 2025.
+    - Base (wk 1-6):    105/day = 735/wk
+    - Build (wk 7-10):  112/day = 784/wk
+    - Specific (wk 11-14): 122/day = 854/wk
+    - Peak (wk 15-18):  135/day = 945/wk  (4 weeks, ends ~Aug 30)
+    - Taper (wk 19+):    75/day = 525/wk  (matches 2025 actual ~76/day)"""
     week = max(1, math.ceil((d - PLAN_START).days / 7))
-    if week <= 6:    return 90    # Base: ~630/wk
-    if week <= 10:   return 100   # Build: ~700/wk
-    if week <= 14:   return 113   # Specific: ~790/wk
-    if week <= 17:   return 125   # Peak: ~875/wk
-    return 65                     # Taper: ~455/wk — 3-week IM taper
+    if week <= 6:    return 105   # Base: ~735/wk
+    if week <= 10:   return 112   # Build: ~784/wk
+    if week <= 14:   return 122   # Specific: ~854/wk
+    if week <= 18:   return 135   # Peak: ~945/wk
+    return 75                     # Taper: ~525/wk — matches 2025 actual
 
 
 def post_process(data):
@@ -264,7 +264,7 @@ def post_process(data):
         "planned_sessions": _ctl_project(current_ctl, planned_sessions_tss, days_to_race),
         "sick_week":        _ctl_project(current_ctl, sick_week_tss, days_to_race),
         "race_date": RACE_DATE.isoformat(),
-        "target_ctl_min": 100,
+        "target_ctl_min": 105,
         "target_ctl_max": 115,
     }
 
