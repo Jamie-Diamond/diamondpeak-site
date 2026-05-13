@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i147766217",
+    "date": "2026-05-13",
+    "name": "16min threshold",
+    "sport": "VirtualRun",
+    "tss": 31,
+    "duration_min": 21,
+    "distance_km": 3.71,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 182,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-13T09:00:00",
+    "stub": true
+  },
+  {
     "activity_id": "i147759910",
     "date": "2026-05-13",
     "name": "Endurance prep-6",
