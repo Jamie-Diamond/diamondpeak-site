@@ -824,21 +824,21 @@ function renderSwimProgression(entries, cssPaceSecs) {
   if (!ctx || !entries || !entries.length) return;
   panel.style.display = "";
   const sorted = [...entries].sort((a,b)=>a.date.localeCompare(b.date));
-  const labels = sorted.map(e=>new Date(e.date+"T00:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"}));
+  const d0 = "2026-01-01", d1 = sorted[sorted.length-1].date;
   new Chart(ctx.getContext("2d"), {
     type:"line",
-    data:{labels, datasets:[
-      {label:"Pace (s/100m)", data:sorted.map(e=>e.pace_per_100m),
+    data:{datasets:[
+      {label:"Pace (s/100m)", data:sorted.map(e=>({x:e.date,y:e.pace_per_100m})),
        borderColor:"#1a5276", backgroundColor:"rgba(26,82,118,0.1)",
        pointRadius:4, pointBackgroundColor:"#1a5276", tension:0.3, fill:true},
-      {label:"CSS target", data:labels.map(()=>cssPaceSecs||99),
+      {label:"CSS target", data:[{x:d0,y:cssPaceSecs||99},{x:d1,y:cssPaceSecs||99}],
        borderColor:"rgba(192,57,43,0.6)", borderDash:[5,3], pointRadius:0, borderWidth:1.5},
     ]},
     options:{responsive:true, maintainAspectRatio:false,
       plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:11}}}},
       scales:{
         y:{reverse:true, ticks:{font:{size:10}, callback:v=>{const m=Math.floor(v/60); return m+":"+(v%60).toString().padStart(2,"0");}}, grid:{color:"rgba(0,0,0,0.05)"}},
-        x:{ticks:{font:{size:10}}}
+        x:{type:"time",time:{unit:"week"},min:"2026-01-01",ticks:{font:{size:10}},grid:{color:"#e8e3da"}}
       }
     }
   });
@@ -924,7 +924,7 @@ window.chartCycling = null;
       interaction:{mode:"index",intersect:false},
       plugins:{legend:{labels:{filter:(i,data)=>!data.datasets[i.datasetIndex]._ref}}},
       scales:{
-        x:{type:"time",time:{unit:"week"},grid:{color:"#e8e3da"},
+        x:{type:"time",time:{unit:"week"},min:"2026-01-01",grid:{color:"#e8e3da"},
            ticks:{font:{size:10}}},
         yL:{type:"linear",position:"left",
             title:{display:true,text:"NP (W)",font:{size:10}},
@@ -954,7 +954,7 @@ window.chartRunning = null;
       interaction:{mode:"index",intersect:false},
       plugins:{legend:{labels:{filter:(i,data)=>!data.datasets[i.datasetIndex]._ref}}},
       scales:{
-        x:{type:"time",time:{unit:"week"},grid:{color:"#e8e3da"},
+        x:{type:"time",time:{unit:"week"},min:"2026-01-01",grid:{color:"#e8e3da"},
            ticks:{font:{size:10}}},
         yL:{type:"linear",position:"left",reverse:true,
             title:{display:true,text:"Pace (↑ faster)",font:{size:10}},
@@ -983,7 +983,7 @@ window.chartFuelling = null;
       interaction:{mode:"index",intersect:false},
       plugins:{legend:{labels:{filter:(i,data)=>!data.datasets[i.datasetIndex]._ref}}},
       scales:{
-        x:{type:"time",time:{unit:"week"},grid:{color:"#e8e3da"},
+        x:{type:"time",time:{unit:"week"},min:"2026-01-01",grid:{color:"#e8e3da"},
            ticks:{font:{size:10}}},
         y:{min:0,max:120,title:{display:true,text:"g / hr",font:{size:10}},
            grid:{color:"#e8e3da"}},
