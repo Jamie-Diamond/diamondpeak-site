@@ -72,6 +72,7 @@ Step 2 — Read:
 - ClaudeCoach/athletes/{slug}/current-state.md (open actions, watchdog flags)
 - ClaudeCoach/athletes/{slug}/current-state.json (weight_readings, injury pain scores)
 - ClaudeCoach/athletes/{slug}/heat-log.json (count entries in current ISO week to get sessions_this_week)
+- ClaudeCoach/athletes/{slug}/session-log.json — only if today's planned event is a Ride or Brick >90 min: extract the last 4 entries with sport Ride/GravelRide/Brick, duration_min ≥ 90, and nutrition_g_carb set. Compute each g_per_hr and the avg.
 
 Step 3 — Determine ONE question to ask (or none):
 {injury_question}
@@ -87,7 +88,9 @@ Step 4 — Output the morning card in Telegram Markdown (no preamble, no sign-of
 
 [If recovery ORANGE or RED: ⚠️ [one-line recommendation from recovery score]]
 [If watchdog flag active: ⚠️ [flag]: [one-line note]]
-[If decision-point due within 7 days: 📌 [action] due [date]]
+[If today's session is Ride or Brick >90 min: 🍌 Nutrition — target [min(avg+10,90)]g/hr · recent avg [avg]g/hr on last 4 long rides · eat at 15 min then every 25 min]
+[If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact e.g. "no bike for 5 days"]]
+[If open action is due within 3 days: 📌 [action] due [date]]
 [If today ≥ 2026-05-15 AND sessions_this_week < 2 AND today is Wednesday or later: 🌡️ Heat bath due — [N] this week (target 2–3×)]
 
 [Question if applicable — one line]

@@ -27,6 +27,12 @@ Step 2 — Read:
 - /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/current-state.json (ankle pain scores, weight)
 - /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/reference/rules.md (HARD CONSTRAINTS — read fully)
 - /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/reference/decision-points.md (upcoming forks)
+- /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/session-log.json — extract all Ride/GravelRide/Brick entries with duration_min ≥ 90 and nutrition_g_carb set. Compute g_per_hr = nutrition_g_carb / duration_min * 60 for each. Store as nutrition_history list (most recent first).
+
+From nutrition_history compute:
+  nutrition_avg_g_hr = mean of all g_per_hr values (null if no entries)
+  nutrition_target_g_hr = min(round(nutrition_avg_g_hr + 10, -1), 90) if avg exists, else 60
+  (This sets a progressive target 10g/hr above current avg, capped at 90g/hr race target)
 
 Step 3 — Determine the planning window:
 - Target: the 2 weeks starting NEXT Monday (not today).
@@ -48,6 +54,8 @@ Step 5 — Apply mandatory constraints (from rules.md — these are HARD overrid
 - Strength: minimum 1 session/week (target 2). Jamie is currently at 0 sessions/week — make strength a priority.
 - Never prescribe new fuel/kit/shoes in the last 4 weeks.
 - Always state day-of-week alongside date in session names.
+- Travel / access constraints: scan current-state.md "Travel & training blocks" table for any dates within the planning window where bike is unavailable. For those dates: substitute rides with swims or ankle-protocol runs of equivalent TSS. Flag in Step 8 output.
+- Upcoming constraints (next 28 days beyond the planning window): note in session descriptions if a key test, race, or travel block is approaching — e.g. "Last long ride before travel block (18 May — no bike for 5 days)".
 
 Step 6 — Build the 2-week session structure:
 Standard week template (adapt to phase):
@@ -71,7 +79,7 @@ For each session create a push_workout call with:
   description: full coaching notes including:
     - Target zones, paces, or power ranges
     - Duration and structure
-    - Nutrition instructions for sessions >90 min
+    - Nutrition instructions for ALL sessions >90 min: state the specific nutrition_target_g_hr computed above (e.g. "Target: 75g CHO/hr — up from your recent avg of 65g/hr. Eat at 15 min then every 25 min."). If nutrition_avg_g_hr is null: "Target: 60g CHO/hr — start building gut training. Eat at 20 min then every 30 min."
     - Ankle protocol reminder on all run sessions
     - One sentence rationale (physiological adaptation or risk being mitigated)
   planned_training_load: estimated TSS integer

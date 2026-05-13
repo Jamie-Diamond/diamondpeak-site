@@ -145,7 +145,8 @@ ANALYSIS: <coaching message — see rules below>
 
 Rules for ANALYSIS (2-3 lines, max 400 chars):
 - Ride (structured, >3 intervals): Line 1 = interval set summary (e.g. "5×10 min @ 272W avg — 105% FTP"). Line 2 = completion vs target if any intervals were cut or missed. Line 3 = "Nutrition — g carbs/hr and bottles?"
-- Ride (unstructured): Line 1 = NP + IF. Line 2 (>90 min) = aerobic decoupling %. Line 3 = "Nutrition — g carbs/hr and bottles?"
+- Ride (unstructured, ≤90 min): Line 1 = NP + IF. Line 2 = "Nutrition — g carbs/hr and bottles?"
+- Ride (unstructured, >90 min): Line 1 = NP + IF. Line 2 = aerobic decoupling %. Line 3 = "Nutrition — g carbs/hr and bottles? (recent avg: [compute avg g/hr from last 4 rides >90 min in session-log.json that have nutrition_g_carb set] · race target 90g/hr)"
 {run_injury_ask}
 - Swim: Line 1 = distance + pace vs CSS target (state +/- seconds). Line 2 = "RPE and how did it feel?"
 - Strength: Line 1 = duration. Line 2 = "RPE and what was the main focus?"
