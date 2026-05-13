@@ -179,35 +179,67 @@
 
     <div class="panel">
       <h2 id="rp-title">Race plan — IM Italy 2026</h2>
-      <div style="margin-bottom:8px">
-        <div class="target-row">
-          <span class="target-label">A goal</span>
-          <span class="target-val" id="rp-agoal">Sub 9:30</span>
+      <div style="display:flex;gap:20px;margin-bottom:12px;align-items:baseline">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)">A goal</div>
+          <div style="font-family:'Libre Baskerville',serif;font-size:20px;font-weight:700;line-height:1.1" id="rp-agoal">Sub 9:30</div>
         </div>
-        <div class="target-row" id="rp-bgoal-row">
-          <span class="target-label">B goal</span>
-          <span class="target-val" id="rp-bgoal">—</span>
+        <div id="rp-bgoal-wrap">
+          <div style="font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)">B goal</div>
+          <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--ink2)" id="rp-bgoal">—</div>
         </div>
-        <div class="target-row">
-          <span class="target-label">Swim 3.8 km</span>
-          <span class="target-val" id="rp-swim">—</span>
-        </div>
-        <div class="target-row">
-          <span class="target-label">Bike 180 km · IF 72%</span>
-          <span class="target-val" id="rp-bike">228 W · ~5:20h</span>
-        </div>
-        <div class="target-row">
-          <span class="target-label">T1 + T2</span>
-          <span class="target-val">≤5:30 combined</span>
-        </div>
-        <div class="target-row">
-          <span class="target-label">Run 42.2 km</span>
-          <span class="target-val" id="rp-run">—</span>
-        </div>
-        <div class="target-row">
-          <span class="target-label">Bike FTP</span>
-          <span class="target-val" id="rp-ftp">316 W</span>
-        </div>
+      </div>
+      <!-- 2025 vs 2026 comparison -->
+      <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px">
+        <thead>
+          <tr style="font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">
+            <th style="padding:4px 6px 4px 0;border-bottom:1px solid var(--line);text-align:left;font-weight:500"></th>
+            <th style="padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:500">2025</th>
+            <th style="padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:500">2026 target</th>
+            <th style="padding:4px 0 4px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:500">gain</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:5px 6px 5px 0;border-bottom:1px solid var(--line);color:var(--ink2)">Swim 3.8 km</td>
+            <td style="padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;color:var(--muted);font-family:'DM Mono',monospace" id="rp-prev-swim">1:09</td>
+            <td style="padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace;font-weight:500" id="rp-swim">~1:07</td>
+            <td style="padding:5px 0 5px 6px;border-bottom:1px solid var(--line);text-align:right;color:var(--good);font-family:'DM Mono',monospace" id="rp-gain-swim">−2 min</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 6px 5px 0;border-bottom:1px solid var(--line);color:var(--ink2)">Bike 180 km</td>
+            <td style="padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;color:var(--muted);font-family:'DM Mono',monospace" id="rp-prev-bike">4:55 · 201W NP</td>
+            <td style="padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace;font-weight:500" id="rp-bike">4:44 · 225W NP</td>
+            <td style="padding:5px 0 5px 6px;border-bottom:1px solid var(--line);text-align:right;color:var(--good);font-family:'DM Mono',monospace" id="rp-gain-bike">−11 min</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 6px 5px 0;border-bottom:1px solid var(--line);color:var(--ink2)">T1 + T2</td>
+            <td style="padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;color:var(--muted);font-family:'DM Mono',monospace">~10:00</td>
+            <td style="padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace;font-weight:500">≤5:30</td>
+            <td style="padding:5px 0 5px 6px;border-bottom:1px solid var(--line);text-align:right;color:var(--good);font-family:'DM Mono',monospace">−4½ min</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 6px 5px 0;border-bottom:1px solid var(--line);color:var(--ink2)">Run 42.2 km</td>
+            <td style="padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;color:var(--muted);font-family:'DM Mono',monospace" id="rp-prev-run">3:52 · 5:37/km</td>
+            <td style="padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace;font-weight:500" id="rp-run">3:30 · 4:58/km</td>
+            <td style="padding:5px 0 5px 6px;border-bottom:1px solid var(--line);text-align:right;color:var(--good);font-family:'DM Mono',monospace" id="rp-gain-run">−22 min</td>
+          </tr>
+          <tr style="font-weight:700">
+            <td style="padding:6px 6px 4px 0;color:var(--ink)">Total</td>
+            <td style="padding:6px 6px 4px;text-align:right;color:var(--muted);font-family:'DM Mono',monospace">10:06</td>
+            <td style="padding:6px 6px 4px;text-align:right;font-family:'DM Mono',monospace;color:var(--good)" id="rp-total">~9:26</td>
+            <td style="padding:6px 0 4px 6px;text-align:right;color:var(--good);font-family:'DM Mono',monospace">−40 min</td>
+          </tr>
+        </tbody>
+      </table>
+      <!-- How notes -->
+      <div style="font-size:10px;line-height:1.55;color:var(--ink2)">
+        <div style="margin-bottom:4px"><span style="font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Bike</span> — First 90 min ≤IF 0.68 · Bertinoro ≤IF 0.78 · VI <1.05 · long Z2 to cure 14.5% decoupling</div>
+        <div><span style="font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Run</span> — Aid-stations ≤30 sec (walk-breaks cost ~15 min in 2025) · heat accl. from 15 May · Loop 1: ease 5:10→settle 4:58</div>
+      </div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:11px">
+        <span style="color:var(--muted)">FTP</span>
+        <span style="font-family:'DM Mono',monospace;font-weight:500" id="rp-ftp">316 W</span>
       </div>
     </div>
 
@@ -927,54 +959,44 @@ fetch('training-data.json?v='+Date.now())
       if (cssStr) { const [m,s]=cssStr.split(":").map(Number); cssSecs = m*60+s; }
       renderSwimProgression(swLog, cssSecs);
     }
-    // Race plan targets — populate from live profile data
+    // Race plan — populate from profile (empirical 2025 data + 2026 targets)
     if (d.profile) {
       const p = d.profile;
+      const pr = p.prev_race || {};
+      const rt = p.race_targets || {};
       if (p.a_goal) document.getElementById("rp-agoal").textContent = p.a_goal;
       if (p.b_goal) document.getElementById("rp-bgoal").textContent = p.b_goal;
-
-      // Parse A goal time (e.g. "Sub 9:30" → 570 min) so bike is back-calculated
-      let goalMin = null;
-      const gm = (p.a_goal||"").match(/(\d+):(\d+)/);
-      if (gm) goalMin = parseInt(gm[1])*60 + parseInt(gm[2]);
-
-      let swimMin = null;
+      // 2025 actuals
+      if (pr.swim_time)  document.getElementById("rp-prev-swim").textContent = pr.swim_time;
+      if (pr.bike_time && pr.bike_np_watts)
+        document.getElementById("rp-prev-bike").textContent = `${pr.bike_time} · ${pr.bike_np_watts}W NP`;
+      if (pr.run_time && pr.run_pace)
+        document.getElementById("rp-prev-run").textContent = `${pr.run_time} · ${pr.run_pace}`;
+      // 2026 swim: CSS-derived pace + stored target time
       if (p.swim_css_per_100m) {
         const [cm, cs] = p.swim_css_per_100m.split(":").map(Number);
-        const paceS = cm*60 + cs + 3;  // CSS + 3s/100m for full IM
-        const paceStr = Math.floor(paceS/60)+":"+(paceS%60).toString().padStart(2,"0");
-        swimMin = Math.round(3800 * paceS / 100 / 60);
-        const sh = Math.floor(swimMin/60), sm = swimMin%60;
-        document.getElementById("rp-swim").textContent =
-          `${paceStr}/100m · ~${sh}h${sm.toString().padStart(2,"0")}m`;
+        const paceS = cm*60 + cs + 3;
+        const pace = Math.floor(paceS/60)+":"+(paceS%60).toString().padStart(2,"0");
+        const tStr = rt.swim_time || "~1:07";
+        document.getElementById("rp-swim").textContent = `${tStr} · ${pace}/100m`;
+      } else if (rt.swim_time) {
+        document.getElementById("rp-swim").textContent = rt.swim_time;
       }
-
-      let runMin = null;
-      if (p.run_threshold_pace_per_km) {
-        const [tm, ts] = p.run_threshold_pace_per_km.split(":").map(Number);
-        const paceS = Math.round((tm*60 + ts) * 1.10);  // 110% of threshold for IM run
-        const paceStr = Math.floor(paceS/60)+":"+(paceS%60).toString().padStart(2,"0");
-        runMin = Math.round(42195 * paceS / 1000 / 60);
-        const rh = Math.floor(runMin/60), rm = runMin%60;
-        document.getElementById("rp-run").textContent =
-          `${paceStr}/km · ~${rh}h${rm.toString().padStart(2,"0")}m`;
-      }
-
+      // 2026 bike: stored target time + live FTP-derived NP
       if (p.ftp_watts) {
-        const ftp = p.ftp_watts;
-        const targetW = Math.round(ftp * 0.72);
-        document.getElementById("rp-ftp").textContent = ftp + " W";
-        // Back-calculate bike time from A goal (swim + 5:30 transitions + run subtracted)
-        let bikeStr = `${targetW} W · IF 72%`;
-        if (goalMin && swimMin != null && runMin != null) {
-          const bikeMin = goalMin - swimMin - 5.5 - runMin;
-          if (bikeMin > 0) {
-            const bh = Math.floor(bikeMin/60), bm = Math.round(bikeMin%60);
-            bikeStr = `${targetW} W · IF 72% · ~${bh}h${bm.toString().padStart(2,"0")}m`;
-          }
-        }
-        document.getElementById("rp-bike").textContent = bikeStr;
+        const np = Math.round(p.ftp_watts * (rt.bike_np_watts_target_if || 0.71));
+        document.getElementById("rp-ftp").textContent = p.ftp_watts + " W";
+        const bTime = rt.bike_time || "4:44";
+        document.getElementById("rp-bike").textContent = `${bTime} · ${np}W NP · IF 71%`;
       }
+      // 2026 run: stored empirical target (not formula-derived)
+      if (rt.run_time && rt.run_pace)
+        document.getElementById("rp-run").textContent = `${rt.run_time} · ${rt.run_pace}`;
+      // Gains
+      if (rt.swim_gain)  document.getElementById("rp-gain-swim").textContent = rt.swim_gain;
+      if (rt.bike_gain)  document.getElementById("rp-gain-bike").textContent = rt.bike_gain;
+      if (rt.run_gain)   document.getElementById("rp-gain-run").textContent  = rt.run_gain;
+      if (rt.total_time) document.getElementById("rp-total").textContent     = rt.total_time;
     }
     if (d.currentState && d.currentState.bike_ftp)
       document.getElementById("rp-ftp").textContent = d.currentState.bike_ftp+" W";

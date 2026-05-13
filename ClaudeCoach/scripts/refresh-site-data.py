@@ -277,6 +277,8 @@ def post_process(data):
                 "ftp_watts":                 prof.get("ftp_watts"),
                 "race_date":                 prof.get("race_date"),
                 "race_name":                 prof.get("race_name"),
+                "prev_race":                 prof.get("prev_race"),
+                "race_targets":              prof.get("race_targets"),
             }
         except Exception:
             pass
@@ -581,6 +583,8 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 "ftp_watts":                 prof.get("ftp_watts"),
                 "race_date":                 prof.get("race_date"),
                 "race_name":                 prof.get("race_name"),
+                "prev_race":                 prof.get("prev_race"),
+                "race_targets":              prof.get("race_targets"),
             }
         except Exception:
             pass
