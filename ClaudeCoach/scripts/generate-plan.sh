@@ -17,10 +17,10 @@ You are generating the rolling 2-week training plan for Jamie Diamond's IM Cervi
 
 Step 1 — Pull live data:
 - get_athlete_profile (today's date, FTP, athlete timezone)
-- get_fitness (14 days — CTL, ATL, TSB)
+- get_fitness (oldest=today-14, newest=today+35) — 14 days history + 35 days forward projection
 - get_wellness (14 days — sleep, HRV)
 - get_training_history (14 days — what was actually done)
-- get_events (start_date=today, end_date=<today+21 days>) — what's already planned
+- get_events (start_date=today, end_date=<today+35 days>) — full 5-week window: existing plan + upcoming races/constraints
 
 Step 2 — Read:
 - /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/athletes/jamie/current-state.md (ankle, niggles, open actions)
@@ -39,18 +39,43 @@ Step 3 — Determine the planning window:
 - Check get_events for that window. If there are already 7+ events planned: output "Plan already populated for [date range] — skipping." and stop.
 - If <7 events: generate enough sessions to fill the week appropriately.
 
+Step 3b — Trajectory check (use get_fitness forward projection):
+- ctl_today = today's CTL value from get_fitness
+- ctl_end_wk2 = projected CTL on the last day of the 2-week planning window (from get_fitness forward data — this is the passive decay baseline assuming no new training is added)
+- Phase-end CTL blueprint milestones:
+    End of Base     (week 6):  ≥75 CTL
+    End of Build    (week 10): ≥85 CTL
+    End of Specific (week 14): ≥95 CTL
+    End of Peak     (week 17): ≥100 CTL
+- weeks_to_phase_end = phase_end_week − current_week_number (compute once week number is known in Step 4; run Step 3b logic after Step 4 week-number calc if needed)
+- required_weekly_gain = (target_ctl_phase_end − ctl_today) / max(weeks_to_phase_end, 1)
+- Set trajectory_status:
+    BEHIND   if required_weekly_gain > 3.0  → use TOP 20% of phase TSS range
+    ON_TRACK if 1.5 ≤ required_weekly_gain ≤ 3.0 → use MIDDLE of phase TSS range
+    AHEAD    if required_weekly_gain < 1.5  → use LOWER 20% of phase TSS range
+- Race / key-event check: scan get_events results for days 15–28 from next Monday (weeks 3–4 of the 5-week window). If any event has type "Race" or priority "A" or "B":
+    → set pre_event_taper = true: cap WEEK 2 TSS at BOTTOM of phase range regardless of trajectory_status
+    → store event_name and event_date for use in Step 8 output
+
 Step 4 — Determine phase and TSS target:
-- Week number = ceil((Monday date - 2026-04-27) / 7)
-- Phase and TSS targets:
+- Week number = ceil((Monday date − 2026-04-27) / 7)
+- Phase and TSS ranges:
   Week 1–6   (Base):     350–500 TSS/wk, focus Z2 bike volume + aerobic swim + easy run
   Week 7–10  (Build):    450–600 TSS/wk, add threshold bike work, extend long run
   Week 11–14 (Specific): 550–720 TSS/wk, race-pace intervals, brick sessions
   Week 15–17 (Peak):     650–800 TSS/wk, race simulation, consolidate fitness
   Week 18–21 (Taper):    200–350 TSS/wk, sharpen, no new stimuli
+- Apply trajectory_status from Step 3b to select the TSS target within the range:
+    BEHIND   → target TOP 20% of range (e.g. Base: ~480 TSS)
+    ON_TRACK → target MIDDLE of range  (e.g. Base: ~425 TSS)
+    AHEAD    → target LOWER 20% of range (e.g. Base: ~370 TSS)
+- If pre_event_taper = true: week 1 stays at trajectory_status target; week 2 is overridden to BOTTOM of range.
+- CTL ramp cap (see Step 5) is a hard ceiling: if ankle rehab active, apply whichever limit is lower — trajectory target or ramp cap.
 
 Step 5 — Apply mandatory constraints (from rules.md — these are HARD overrides):
 - Ankle: no quality run sessions (intervals/tempo/race-pace) until current-state.json ankle.four_pain_free_weeks_reached = true. Use 5:30 run-walk format only (Z2 HR cap 150). Weekly run km increase ≤10%.
 - CTL ramp: ≤+4 CTL/wk while ankle in rehab. Calculate expected weekly TSS that would produce this; cap the week total accordingly.
+- Pre-event fatigue management: if pre_event_taper = true (race or A/B event in days 15–28): in week 2 avoid all intensity sessions, prioritise swim + short Z2 rides only, no new stimulus. State "[event_name] on [event_date] — week 2 is a lead-in week" in each week-2 session description.
 - Strength: minimum 1 session/week (target 2). Jamie is currently at 0 sessions/week — make strength a priority.
 - Never prescribe new fuel/kit/shoes in the last 4 weeks.
 - Always state day-of-week alongside date in session names.
@@ -90,6 +115,8 @@ Step 8 — Output summary:
 "Plan generated: [date range]
 Week [N] ([phase]): [N sessions] · [total TSS] TSS planned
 Week [N+1] ([phase]): [N sessions] · [total TSS] TSS planned
+Trajectory: CTL today [X] → target [Y] by end of [phase] (wk [Z]) · status: [BEHIND / ON_TRACK / AHEAD] · TSS set to [position in range]
+[If pre_event_taper: 📌 Pre-event taper — [event_name] on [event_date]: week 2 capped at [TSS]]
 Key constraints applied: [list any ankle/ramp/strength rules that shaped the plan]"
 
 Step 9 — Notify via Telegram:
