@@ -930,31 +930,50 @@ fetch('training-data.json?v='+Date.now())
     // Race plan targets — populate from live profile data
     if (d.profile) {
       const p = d.profile;
-      if (p.a_goal)                    document.getElementById("rp-agoal").textContent = p.a_goal;
-      if (p.b_goal)                    document.getElementById("rp-bgoal").textContent = p.b_goal;
+      if (p.a_goal) document.getElementById("rp-agoal").textContent = p.a_goal;
+      if (p.b_goal) document.getElementById("rp-bgoal").textContent = p.b_goal;
+
+      // Parse A goal time (e.g. "Sub 9:30" → 570 min) so bike is back-calculated
+      let goalMin = null;
+      const gm = (p.a_goal||"").match(/(\d+):(\d+)/);
+      if (gm) goalMin = parseInt(gm[1])*60 + parseInt(gm[2]);
+
+      let swimMin = null;
+      if (p.swim_css_per_100m) {
+        const [cm, cs] = p.swim_css_per_100m.split(":").map(Number);
+        const paceS = cm*60 + cs + 3;  // CSS + 3s/100m for full IM
+        const paceStr = Math.floor(paceS/60)+":"+(paceS%60).toString().padStart(2,"0");
+        swimMin = Math.round(3800 * paceS / 100 / 60);
+        const sh = Math.floor(swimMin/60), sm = swimMin%60;
+        document.getElementById("rp-swim").textContent =
+          `${paceStr}/100m · ~${sh}h${sm.toString().padStart(2,"0")}m`;
+      }
+
+      let runMin = null;
+      if (p.run_threshold_pace_per_km) {
+        const [tm, ts] = p.run_threshold_pace_per_km.split(":").map(Number);
+        const paceS = Math.round((tm*60 + ts) * 1.10);  // 110% of threshold for IM run
+        const paceStr = Math.floor(paceS/60)+":"+(paceS%60).toString().padStart(2,"0");
+        runMin = Math.round(42195 * paceS / 1000 / 60);
+        const rh = Math.floor(runMin/60), rm = runMin%60;
+        document.getElementById("rp-run").textContent =
+          `${paceStr}/km · ~${rh}h${rm.toString().padStart(2,"0")}m`;
+      }
+
       if (p.ftp_watts) {
         const ftp = p.ftp_watts;
         const targetW = Math.round(ftp * 0.72);
-        document.getElementById("rp-ftp").textContent = ftp+" W";
-        document.getElementById("rp-bike").textContent = targetW+" W (IF 72%)";
-      }
-      if (p.swim_css_per_100m) {
-        const css = p.swim_css_per_100m;
-        const [cssM, cssS] = css.split(":").map(Number);
-        const racePaceS = cssM*60 + cssS + 3;  // CSS + 3s/100m for IM
-        const racePace = Math.floor(racePaceS/60)+":"+(racePaceS%60).toString().padStart(2,"0");
-        const swimTimeMin = Math.round((3800 * racePaceS) / 100 / 60);
-        document.getElementById("rp-swim").textContent =
-          `CSS ${css}/100m → race pace ~${racePace}/100m (~${Math.floor(swimTimeMin/60)}h${(swimTimeMin%60).toString().padStart(2,"0")}m)`;
-      }
-      if (p.run_threshold_pace_per_km) {
-        const tp = p.run_threshold_pace_per_km;
-        const [tpM, tpS] = tp.split(":").map(Number);
-        const imPaceS = Math.round((tpM*60 + tpS) * 1.10);  // ~110% of threshold for IM run
-        const imPace = Math.floor(imPaceS/60)+":"+(imPaceS%60).toString().padStart(2,"0");
-        const runTimeMin = Math.round((42195 * imPaceS) / 1000 / 60);
-        document.getElementById("rp-run").textContent =
-          `Threshold ${tp}/km → IM pace ~${imPace}/km (~${Math.floor(runTimeMin/60)}h${(runTimeMin%60).toString().padStart(2,"0")}m)`;
+        document.getElementById("rp-ftp").textContent = ftp + " W";
+        // Back-calculate bike time from A goal (swim + 5:30 transitions + run subtracted)
+        let bikeStr = `${targetW} W · IF 72%`;
+        if (goalMin && swimMin != null && runMin != null) {
+          const bikeMin = goalMin - swimMin - 5.5 - runMin;
+          if (bikeMin > 0) {
+            const bh = Math.floor(bikeMin/60), bm = Math.round(bikeMin%60);
+            bikeStr = `${targetW} W · IF 72% · ~${bh}h${bm.toString().padStart(2,"0")}m`;
+          }
+        }
+        document.getElementById("rp-bike").textContent = bikeStr;
       }
     }
     if (d.currentState && d.currentState.bike_ftp)
