@@ -5,7 +5,7 @@ Replaces the MCP-dependent weekly-summary.sh flow.
 Run: python3 weekly-summary.py [--athlete jamie]
 Also called from weekly-summary.sh for cron compatibility.
 """
-import json, ssl, subprocess, sys, urllib.request
+import json, ssl, subprocess, sys, urllib.request, urllib.error
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -35,18 +35,23 @@ def _tg_send(chat_id: str, text: str):
         token = cfg["bot_token"]
         cafile = "/etc/ssl/cert.pem" if Path("/etc/ssl/cert.pem").exists() else None
         ctx = ssl.create_default_context(cafile=cafile)
-        payload = json.dumps({
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "Markdown",
-        }).encode()
-        req = urllib.request.Request(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=10, context=ctx):
-            pass
+
+        def _post(body: dict):
+            req = urllib.request.Request(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                data=json.dumps(body).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            urllib.request.urlopen(req, timeout=10, context=ctx)
+
+        for chunk in [text[i:i+4096] for i in range(0, len(text), 4096)]:
+            try:
+                _post({"chat_id": chat_id, "text": chunk, "parse_mode": "Markdown"})
+            except urllib.error.HTTPError as e:
+                if e.code == 400:
+                    _post({"chat_id": chat_id, "text": chunk})
+                else:
+                    raise
     except Exception as e:
         print(f"Telegram send failed: {e}", file=sys.stderr)
 
@@ -268,7 +273,25 @@ If no triggers fire:
 
 ---
 
-## Step 4 — Update current-state.md
+## Step 4 — Open actions review
+
+From the "Open actions" table in current-state.md, list any actions where status is NOT "done" and:
+- Due date ≤ 14 days from today ({today}): flag as ⚠️ DUE SOON
+- Due date has already passed: flag as 🔴 OVERDUE
+- No due date but status is "pending" for 3+ weeks: flag as 📋 STALE
+
+Format (append after the decision triggers, before the sign-off):
+
+---
+**Open actions**
+[For each flagged item:]
+[⚠️/🔴/📋] *[Action name]* — due [date] ([N days]) — [one-line nudge if overdue]
+
+If no flagged actions: omit this section entirely.
+
+---
+
+## Step 5 — Update current-state.md
 
 Using the Write tool, update ClaudeCoach/athletes/{slug}/current-state.md:
 - Change "Last updated" line to today: {today}
@@ -281,7 +304,7 @@ Then using Bash:
 
 ## Output
 
-Output ONLY the Telegram message (Steps 2 + 3 combined). No preamble, no sign-off, no tool-use commentary.
+Output ONLY the Telegram message (Steps 2 + 3 + 4 combined). No preamble, no sign-off, no tool-use commentary.
 """
 
     result = subprocess.run(

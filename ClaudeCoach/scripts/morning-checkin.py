@@ -71,6 +71,7 @@ Step 1 — Fetch data via Bash:
 Step 2 — Read:
 - ClaudeCoach/athletes/{slug}/current-state.md (open actions, watchdog flags)
 - ClaudeCoach/athletes/{slug}/current-state.json (weight_readings, injury pain scores)
+- ClaudeCoach/athletes/{slug}/heat-log.json (count entries in current ISO week to get sessions_this_week)
 
 Step 3 — Determine ONE question to ask (or none):
 {injury_question}
@@ -87,6 +88,7 @@ Step 4 — Output the morning card in Telegram Markdown (no preamble, no sign-of
 [If recovery ORANGE or RED: ⚠️ [one-line recommendation from recovery score]]
 [If watchdog flag active: ⚠️ [flag]: [one-line note]]
 [If decision-point due within 7 days: 📌 [action] due [date]]
+[If today ≥ 2026-05-15 AND sessions_this_week < 2 AND today is Wednesday or later: 🌡️ Heat bath due — [N] this week (target 2–3×)]
 
 [Question if applicable — one line]
 
