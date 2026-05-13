@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Night-before brief — runs via VM crontab at 20:30 daily. Loops over all active athletes."""
 import json, subprocess, sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 BASE            = Path(__file__).parent.parent  # ClaudeCoach/
@@ -117,10 +117,12 @@ def run_athlete(slug, athlete_cfg):
 
 
 def main():
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{ts}] night-before-brief starting", file=sys.stderr)
     try:
         athletes = json.loads(ATHLETES_CONFIG.read_text())
     except Exception as e:
-        print(f"Failed to load athletes config: {e}", file=sys.stderr)
+        print(f"[{ts}] Failed to load athletes config: {e}", file=sys.stderr)
         sys.exit(1)
 
     for slug, cfg in athletes.items():
@@ -129,7 +131,7 @@ def main():
         try:
             run_athlete(slug, cfg)
         except Exception as exc:
-            print(f"[{slug}] night-before-brief error: {exc}", file=sys.stderr)
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] night-before-brief error: {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":

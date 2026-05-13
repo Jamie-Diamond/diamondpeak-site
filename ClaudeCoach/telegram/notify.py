@@ -8,7 +8,7 @@ Usage:
   notify.py --photo <path> [caption]       # send photo
   echo "text" | notify.py                  # pipe text
 """
-import json, sys, ssl, urllib.request
+import json, sys, ssl, urllib.request, urllib.error
 from pathlib import Path
 
 _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
@@ -40,6 +40,23 @@ def send_text(text):
         )
         try:
             urllib.request.urlopen(req, timeout=10, context=SSL_CONTEXT)
+        except urllib.error.HTTPError as e:
+            if e.code == 400:
+                # Malformed Markdown — retry as plain text
+                plain = json.dumps({"chat_id": chat_id, "text": chunk}).encode()
+                req2 = urllib.request.Request(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    data=plain,
+                    headers={"Content-Type": "application/json"},
+                )
+                try:
+                    urllib.request.urlopen(req2, timeout=10, context=SSL_CONTEXT)
+                except Exception as e2:
+                    print(f"Telegram error: {e2}", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                print(f"Telegram error: {e}", file=sys.stderr)
+                sys.exit(1)
         except Exception as e:
             print(f"Telegram error: {e}", file=sys.stderr)
             sys.exit(1)

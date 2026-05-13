@@ -353,17 +353,17 @@ def check_athlete(slug, athlete_cfg):
         )
         return
     except Exception as exc:
-        print(f"[{slug}] Failed to launch Claude: {exc}", file=sys.stderr)
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Failed to launch Claude: {exc}", file=sys.stderr)
         return
 
     if result.returncode != 0:
         stderr_snippet = (result.stderr or "").strip()[:200]
-        print(f"[{slug}] Claude exited {result.returncode}: {stderr_snippet}", file=sys.stderr)
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Claude exited {result.returncode}: {stderr_snippet}", file=sys.stderr)
         return
 
     output = result.stdout.strip()
     if not output:
-        print(f"[{slug}] Claude returned no output", file=sys.stderr)
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Claude returned no output", file=sys.stderr)
         return
 
     activity_id = None
@@ -541,7 +541,7 @@ def main():
             try:
                 check_athlete(slug, athlete_cfg)
             except Exception as exc:
-                print(f"[{slug}] Unhandled error: {exc}", file=sys.stderr)
+                print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Unhandled error: {exc}", file=sys.stderr)
     finally:
         release_lock()
 
