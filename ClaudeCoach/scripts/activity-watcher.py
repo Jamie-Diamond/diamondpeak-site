@@ -219,7 +219,12 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
     for e in log_entries:
         if not e.get("stub", False):
             continue
-        if e.get("rpe") is not None:
+        sport = e.get("sport", "session")
+        # For injury runs the ANALYSIS already asks for injury score — skip nudge if that's done
+        if sport == "Run" and has_injury:
+            if e.get("injury_pain_during") is not None:
+                continue
+        elif e.get("rpe") is not None:
             continue
         # Only nudge for today's activities — don't nag about old stubs
         if e.get("date", "") != today_str:
@@ -236,10 +241,10 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
             continue
         age_hours = (now - logged_dt).total_seconds() / 3600
         if 2 <= age_hours <= 24:
-            sport = e.get("sport", "session")
             name = e.get("name", "")
             if sport == "Run" and has_injury:
-                msg = f"Quick one — injury score for the {name or 'run'}: during and this morning? (0-10)"
+                # ANALYSIS already asked for injury score — ask for RPE here instead
+                msg = f"RPE for the {name or 'run'}? (1–10) — and how did the ankle feel this morning?"
             elif sport == "Run":
                 msg = f"RPE for the {name or 'run'}? (1–10)"
             elif sport == "Swim":
