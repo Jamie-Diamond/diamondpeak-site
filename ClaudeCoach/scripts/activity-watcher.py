@@ -61,6 +61,13 @@ def _quick_log_keyboard(activity_id, slug, sport, has_injury, duration_min):
     if sport == "Ride" and (duration_min or 0) >= 90:
         rows.append([{"text": f"{g}g/hr", "callback_data": cb("c", g)} for g in (40, 50, 60, 70, 80, 90)])
 
+    rows.append([
+        {"text": "📊 Intervals", "callback_data": f"drill:intervals:{aid}:{slug}"},
+        {"text": "🍌 Nutrition",  "callback_data": f"drill:nutrition:{aid}:{slug}"},
+        {"text": "💓 HR",         "callback_data": f"drill:hr:{aid}:{slug}"},
+        {"text": "↔️ Compare",    "callback_data": f"drill:compare:{aid}:{slug}"},
+    ])
+
     return {"inline_keyboard": rows}
 
 

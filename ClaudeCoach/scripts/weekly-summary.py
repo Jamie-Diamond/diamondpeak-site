@@ -378,8 +378,7 @@ Then using Bash:
 
 ## Output
 
-Output ONLY the Telegram message (Steps 2 + 3 + 4 combined). No preamble, no sign-off, no tool-use commentary.
-CRITICAL: Do not narrate steps, confirm file reads, or output internal reasoning. All data fetching and processing is silent.
+Wrap your entire output in <telegram> and </telegram> tags. Output nothing outside those tags — no preamble, no reasoning, no tool commentary.
 """
 
     result = subprocess.run(
@@ -391,7 +390,10 @@ CRITICAL: Do not narrate steps, confirm file reads, or output internal reasoning
         with open(log_file, "a") as f:
             f.write(result.stderr + "\n")
 
-    output = result.stdout.strip()
+    import re as _re
+    raw = result.stdout.strip()
+    m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
+    output = m.group(1).strip() if m else ""
     if output:
         _tg_send(chat_id, output)
 

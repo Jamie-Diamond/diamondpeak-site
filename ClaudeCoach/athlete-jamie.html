@@ -517,7 +517,7 @@ function zoomFitness(days) {
 }
 
 // ── LOAD CHART ───────────────────────────────────────────────────────────────
-let _loadChartDays = [], _loadMode = "tss";
+let _loadChartDays = [], _loadMode = "tss", _seedCtl = null, _seedAtl = null;
 (function(){
   const ctx = document.getElementById("chartLoad").getContext("2d");
   window.chartLoad = new Chart(ctx, {
@@ -545,8 +545,8 @@ function setLoadMode(mode) {
     : "background:#f8f5ef;color:#4a4535;font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;cursor:pointer";
   const sub = document.getElementById("load-chart-sub");
   if (sub) sub.textContent = mode==="tss"
-    ? "Load stacked by sport · faded bars = planned · Form line (right axis)"
-    : "Duration (min) stacked by sport · faded bars = planned · Form line (right axis)";
+    ? "Load stacked by sport · faded bars = planned · Form line — solid = actual, dashed = projected"
+    : "Duration (min) stacked by sport · faded bars = planned · Form line — solid = actual, dashed = projected";
   renderLoadChart(_loadChartDays);
 }
 
@@ -598,6 +598,31 @@ function renderLoadChart(days) {
     borderColor:"rgba(60,60,60,0.75)",backgroundColor:"transparent",
     borderWidth:2,pointRadius:6,pointBackgroundColor:tsbDotColors,
     fill:false,tension:0.3,yAxisID:"y1",order:1,spanGaps:true});
+  // Forward Form projection from today using planned TSS
+  const todayIdxF = labels.indexOf(todayStr);
+  if (todayIdxF >= 0 && _seedCtl != null && _seedAtl != null) {
+    const projVals = new Array(days.length).fill(null);
+    let pCtl = _seedCtl, pAtl = _seedAtl;
+    projVals[todayIdxF] = Math.round((pCtl - pAtl) * 10) / 10;
+    for (let i = todayIdxF + 1; i < days.length; i++) {
+      const dayTss = (days[i].activities || [])
+        .filter(a => a.status === "planned")
+        .reduce((s, a) => s + (a.tss || 0), 0);
+      pAtl += (dayTss - pAtl) / 7;
+      pCtl += (dayTss - pCtl) / 42;
+      projVals[i] = Math.round((pCtl - pAtl) * 10) / 10;
+    }
+    const projDotColors = projVals.map(v => {
+      if (v == null) return "transparent";
+      if (v > 5)    return "rgba(29,104,64,0.45)";
+      if (v >= -20) return "rgba(201,135,31,0.45)";
+      return "rgba(192,57,43,0.45)";
+    });
+    datasets.push({type:"line",label:"_formProj",data:projVals,
+      borderColor:"rgba(60,60,60,0.35)",backgroundColor:"transparent",
+      borderWidth:1.5,borderDash:[5,3],pointRadius:5,pointBackgroundColor:projDotColors,
+      fill:false,tension:0.3,yAxisID:"y1",order:1,spanGaps:true});
+  }
   datasets.push({type:"line",label:"_zero",data:days.map(()=>0),
     borderColor:"rgba(100,100,100,0.25)",backgroundColor:"transparent",
     borderWidth:1,borderDash:[4,3],pointRadius:0,fill:false,yAxisID:"y1",order:3});
@@ -1060,7 +1085,8 @@ fetch('training-data.json?v='+Date.now())
     }
     if (d.kpi) {
       const k=d.kpi;
-      if (k.ctl!=null) document.getElementById("kpi-ctl").textContent = k.ctl.toFixed(1);
+      if (k.ctl!=null) { _seedCtl = k.ctl; document.getElementById("kpi-ctl").textContent = k.ctl.toFixed(1); }
+      if (k.atl!=null) _seedAtl = k.atl;
       if (k.ramp7d!=null) {
         const r=document.getElementById("kpi-ramp");
         r.textContent = (k.ramp7d>=0?"+":"")+k.ramp7d.toFixed(1);

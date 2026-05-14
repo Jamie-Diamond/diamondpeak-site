@@ -71,7 +71,7 @@ Strength: • Main focus • Key movements
 {threshold_line}
 Race: {race_name}
 Keep the entire brief under 120 words. Never ask questions.
-CRITICAL: Output only the brief (or nothing if Step 3 says stop). Do not narrate steps, confirm file reads, or output any internal reasoning. All processing is silent."""
+Wrap your entire output in <telegram> and </telegram> tags. If Step 3 says output nothing, output empty tags: <telegram></telegram>. Output nothing outside those tags."""
 
 
 def notify(msg, chat_id):
@@ -112,7 +112,10 @@ def run_athlete(slug, athlete_cfg):
             cwd=PROJECT_DIR, timeout=180,
         )
 
-    output = (result.stdout or "").strip()
+    import re as _re
+    raw = (result.stdout or "").strip()
+    m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
+    output = m.group(1).strip() if m else ""
     if output:
         notify(output, chat_id)
 

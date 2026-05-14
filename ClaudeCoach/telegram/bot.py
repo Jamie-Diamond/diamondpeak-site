@@ -846,6 +846,63 @@ def _handle_quick_log(token, chat_id, data, message_id, athletes):
     return True
 
 
+def _handle_drill(token, chat_id, data, message_id, athletes, config):
+    """Handle drill-down analysis buttons (Intervals/Nutrition/HR/Compare). Returns True if handled."""
+    if not data.startswith("drill:"):
+        return False
+    parts = data.split(":", 3)
+    if len(parts) != 4:
+        return False
+    _, drill_type, activity_id, slug = parts
+
+    athlete = athletes.get(chat_id)
+    if not athlete or athlete["slug"] != slug:
+        return False
+
+    drill_prompts = {
+        "intervals": (
+            f"Analyse the interval structure of activity {activity_id}. "
+            f"Fetch extended metrics and show each interval: power or pace, vs FTP/threshold, "
+            f"whether the session was executed as prescribed. Keep it to 5 lines max."
+        ),
+        "nutrition": (
+            f"Review the nutrition for activity {activity_id}. "
+            f"Find the session-log entry and compute g/hr consumed. "
+            f"Compare to my target and my 4-ride recent average. "
+            f"Tell me if I'm on track. Keep it to 4 lines max."
+        ),
+        "hr": (
+            f"Analyse the heart rate data for activity {activity_id}. "
+            f"Use extended metrics: avg HR, max HR, time in zones, cardiac decoupling vs power or pace. "
+            f"Flag anything worth noting. Keep it to 5 lines max."
+        ),
+        "compare": (
+            f"Find the 3 most similar past sessions to activity {activity_id} in session-log.json "
+            f"— same sport, closest duration and TSS. Compare key metrics (power/pace, HR, decoupling, nutrition). "
+            f"Am I improving? Keep it to 6 lines max."
+        ),
+    }
+
+    question = drill_prompts.get(drill_type)
+    if not question:
+        return False
+
+    typing(token, chat_id)
+    files = athlete_files(slug)
+    history = load_history(files["history"])
+    context = prefetch_context(slug)
+    athlete_name = athlete.get("name", slug).split()[0]
+    response = call_claude(question, config, history, model=MODEL_SONNET,
+                           system_prompt_file=files["system_prompt"],
+                           athlete_name=athlete_name, context=context)
+    clean = process_charts(token, chat_id, response)
+    if clean:
+        send(token, chat_id, clean + response_footer(MODEL_SONNET))
+    history.append({"user": question, "assistant": clean})
+    save_history(history, files["history"])
+    return True
+
+
 def _handle_test_confirm(token, chat_id, data, message_id, athletes):
     """Handle test confirmation/dismiss callbacks from zone-spotting. Returns True if handled."""
     if not data.startswith("test:"):
@@ -1475,9 +1532,12 @@ def main():
                 chat_id = str(cq.get("message", {}).get("chat", {}).get("id", ""))
                 text = cq.get("data", "").strip()
                 answer_callback(token, cq["id"])
-                if _handle_quick_log(token, chat_id, text, cq.get("message", {}).get("message_id"), athletes):
+                msg_id = cq.get("message", {}).get("message_id")
+                if _handle_quick_log(token, chat_id, text, msg_id, athletes):
                     continue
-                if _handle_test_confirm(token, chat_id, text, cq.get("message", {}).get("message_id"), athletes):
+                if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
+                    continue
+                if _handle_drill(token, chat_id, text, msg_id, athletes, config):
                     continue
             else:
                 msg = update.get("message", {})
