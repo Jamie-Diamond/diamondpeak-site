@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i148066994",
+    "date": "2026-05-14",
+    "name": "Mixed anaerobic intervals-2",
+    "sport": "VirtualRide",
+    "tss": 64,
+    "duration_min": 47,
+    "distance_km": 21.05,
+    "avg_power": 141,
+    "norm_power": 171,
+    "avg_hr": 160,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-14T08:31:27",
+    "stub": true
+  },
+  {
     "activity_id": "i147766217",
     "date": "2026-05-13",
     "name": "16min threshold",
