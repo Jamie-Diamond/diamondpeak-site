@@ -101,7 +101,8 @@ Athlete context: {first_name} — {race_name} ({race_date}). Injuries: {injuries
 Form zones: >+5 = Fresh, 0 to −20 = In training, <−20 = Heavy load.
 If no planned session: "Rest day — recovery only". Omit unavailable fields silently.
 Never ask for subjective mood/fatigue/motivation scores.
-The countdown line (_{days_to_race} days to {race_name}_) appears exactly once, at the end. Do not add it anywhere else in the message."""
+The countdown line (_{days_to_race} days to {race_name}_) appears exactly once, at the end. Do not add it anywhere else in the message.
+CRITICAL: Output only the morning card. Do not narrate steps, confirm file reads, or output any internal reasoning. All processing is silent."""
 
 
 def notify(msg, chat_id):

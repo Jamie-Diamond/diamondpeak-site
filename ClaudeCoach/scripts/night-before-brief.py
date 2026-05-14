@@ -70,7 +70,8 @@ Strength: • Main focus • Key movements
 
 {threshold_line}
 Race: {race_name}
-Keep the entire brief under 120 words. Never ask questions."""
+Keep the entire brief under 120 words. Never ask questions.
+CRITICAL: Output only the brief (or nothing if Step 3 says stop). Do not narrate steps, confirm file reads, or output any internal reasoning. All processing is silent."""
 
 
 def notify(msg, chat_id):
