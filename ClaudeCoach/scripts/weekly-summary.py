@@ -181,7 +181,7 @@ def run_summary(slug: str = "jamie") -> str:
         missing = recovery.get("missing_signals", [])
         parts = []
         if hrv_r  is not None: parts.append(f"HRV ratio {hrv_r:.2f} (today {hrv_t_v}, baseline {hrv_b_v})")
-        if tsb_sv is not None: parts.append(f"TSB {tsb_sv:+.1f}")
+        if tsb_sv is not None: parts.append(f"Form {tsb_sv:+.1f}")
         if slp_sv is not None: parts.append(f"sleep {slp_sv:.1f}h")
         if pain_v is not None and pain_v > 0: parts.append(f"pain {pain_v}/10")
         recovery_block = (
@@ -272,10 +272,10 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 
 | Metric | This week | Target/trend |
 |---|---|---|
-| TSS | X (planned Y) | — |
+| Load | X (planned Y) | — |
 | Compliance | X% | ≥90% |
-| CTL change | +X / −X | phase ramp target |
-| ATL | X | — |
+| Fitness change | +X / −X | phase ramp target |
+| Fatigue | X | — |
 | Sleep avg | Xh | ≥7h |
 | Heat sessions | N | — |
 | Fuelling (rides >90 min) | Xg/hr this wk (4wk avg: Y) | 90g/hr race target — gap: Zg/hr |
@@ -291,9 +291,9 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 
 **4-week outlook**
 
-| Week | Constraint | Proj. CTL | Proj. TSB |
+| Week | Constraint | Proj. Fitness | Proj. Form |
 |---|---|---|---|
-| [Mon dd Mon] | [e.g. travel / full / race] | [CTL from fitness_outlook] | [TSB] |
+| [Mon dd Mon] | [e.g. travel / full / race] | [Fitness from fitness_outlook] | [Form] |
 | [Mon dd Mon] | … | … | … |
 | [Mon dd Mon] | … | … | … |
 | [Mon dd Mon] | … | … | … |
@@ -301,7 +301,7 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 [For each significant event or constraint in events_4wk / upcoming plans / current-state.md, one line:]
 📌 [Date]: [What — e.g. "Travel block begins (no bike)", "Dorney C-race TBC", "Heat protocol target 2×/wk"]
 
-*Race trajectory: projected CTL [X] on [date 8 weeks out] vs blueprint target [Y] — [on track / behind / ahead].*
+*Race trajectory: projected Fitness [X] on [date 8 weeks out] vs blueprint target [Y] — [on track / behind / ahead].*
 
 ---
 
@@ -310,19 +310,19 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 Evaluate each trigger using the computed metrics. Output only the ones that FIRE. If none fire, output the all-clear line.
 
 **T1 RECOVERY** — fires if end-of-week TSB < −30:
-⚡ *T1 RECOVERY*: TSB at [X] — accumulated fatigue is high.
+⚡ *T1 RECOVERY*: Form at [X] — accumulated fatigue is high.
 Options: A) 2-day recovery block (Mon–Tue easy only) | B) Continue as planned | C) Reduce Monday volume 40%
 
 **T2 OVERREACH** — fires if 4-week CTL ramp > 7/wk:
-⚡ *T2 OVERREACH*: 4-week ramp at [X]/wk — approaching overreach threshold.
-Options: A) Cap next week at current TSS | B) Insert recovery week now | C) Continue (accept fatigue risk)
+⚡ *T2 OVERREACH*: 4-week Fitness ramp at [X]/wk — approaching overreach threshold.
+Options: A) Cap next week at current Load | B) Insert recovery week now | C) Continue (accept fatigue risk)
 
 **T3 UNDERLOAD** — fires if week TSS < 75% of current phase TSS ceiling (from blueprint):
-⚡ *T3 UNDERLOAD*: Week TSS [X] vs phase target [Y] ([Z]% of ceiling).
+⚡ *T3 UNDERLOAD*: Week Load [X] vs phase target [Y] ([Z]% of ceiling).
 Availability issue or training fatigue? Reply to clarify and I'll adjust next week's plan.
 
 **T4 FRESH** — fires if end-of-week TSB > 10 AND days to race > 42:
-⚡ *T4 FRESH*: TSB at [X] with {days_to_race} days to race — athlete fresher than load requires.
+⚡ *T4 FRESH*: Form at [X] with {days_to_race} days to race — you're fresher than the phase requires.
 Options: A) Add an extra session | B) Increase intensity on planned sessions | C) Hold (life/fatigue reason)
 
 **T5 PHASE TRANSITION** — fires if current phase (from blueprint) ends within 7 days:
@@ -340,7 +340,7 @@ Fix: Eat at 15 min and every 25 min after. This week's long ride target: [bluepr
 
 **T8 HRV** — fires if the pre-computed recovery score HRV ratio < 0.90 OR 3+ consecutive days with HRV below the 7-day rolling average in the wellness data:
 ⚡ *T8 HRV*: HRV ratio [X] vs baseline — accumulated fatigue signal (recovery score: [score]/100 [label]).
-Options: A) Flip tomorrow to easy | B) Prioritise sleep tonight | C) Continue (trust TSB)
+Options: A) Flip tomorrow to easy | B) Prioritise sleep tonight | C) Continue (trust your Form)
 
 If no triggers fire:
 ✅ No decision triggers this week.
@@ -379,10 +379,11 @@ Then using Bash:
 ## Output
 
 Output ONLY the Telegram message (Steps 2 + 3 + 4 combined). No preamble, no sign-off, no tool-use commentary.
+CRITICAL: Do not narrate steps, confirm file reads, or output internal reasoning. All data fetching and processing is silent.
 """
 
     result = subprocess.run(
-        [CLAUDE, "-p", prompt, "--allowedTools", TOOLS],
+        [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6"],
         capture_output=True, text=True, cwd=PROJECT_DIR, timeout=600,
     )
 

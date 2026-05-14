@@ -81,7 +81,7 @@ def run_athlete(slug, athlete_cfg):
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS],
+            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-haiku-4-5-20251001"],
             stdout=subprocess.PIPE, stderr=lf, text=True,
             cwd=PROJECT_DIR, timeout=180,
         )

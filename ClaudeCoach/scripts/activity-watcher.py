@@ -173,7 +173,9 @@ Rules:
 - lthr: run activity where name contains "lthr", "lactate", "hr test", "tempo test". Value = avg HR during the sustained effort portion (bpm, integer).
 If not a recognisable threshold test: TEST_RESULT: none
 
-If no activities at all: ACTIVITY_ID: none  ANALYSIS: none"""
+If no activities at all: ACTIVITY_ID: none  ANALYSIS: none
+
+CRITICAL: Your entire response must contain only the ACTIVITY_ID and ANALYSIS lines above. Do not output reasoning steps, file read confirmations, tool call summaries, or any other text. All processing is internal and silent."""
 
 
 def _notify(msg, chat_id):
@@ -347,7 +349,7 @@ def check_athlete(slug, athlete_cfg):
     t_start = time.time()
     try:
         result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS],
+            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6"],
             capture_output=True, text=True,
             cwd=PROJECT_DIR, timeout=180,
         )
