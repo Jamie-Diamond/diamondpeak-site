@@ -52,7 +52,7 @@ Step 1 — Fetch data via Bash:
 
 Step 2 — Read ClaudeCoach/athletes/{slug}/current-state.json (last injury pain score, if any).
 
-Step 3 — If no events tomorrow, or only events with TSS < 30 AND duration < 40 min: output nothing. Stop.
+Step 3 — If no events tomorrow, or only events with planned Load < 30 AND duration < 40 min: output nothing. Stop.
 
 Step 4 — Output the night-before brief in Telegram Markdown (no preamble, no sign-off):
 
@@ -66,7 +66,7 @@ Strength: • Main focus • Key movements
 
 *Nutrition:* [g/hr carbs + ml/hr fluid — calibrated to session length and intensity. Zero if easy/recovery.]
 *Sleep:* ≥8h tonight
-*Form:* TSB [value] ([Fresh / Load / Heavy]){injury_flag}
+*Form:* [value] ([Fresh / In training / Heavy]){injury_flag}
 
 {threshold_line}
 Race: {race_name}
@@ -106,7 +106,7 @@ def run_athlete(slug, athlete_cfg):
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS],
+            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6"],
             stdout=subprocess.PIPE, stderr=lf, text=True,
             cwd=PROJECT_DIR, timeout=180,
         )

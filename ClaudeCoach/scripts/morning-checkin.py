@@ -50,7 +50,7 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         pain_v = sigs.get("pain",  {}).get("value")
         parts  = []
         if hrv_r  is not None: parts.append(f"HRV ratio {hrv_r:.2f}")
-        if tsb_v  is not None: parts.append(f"TSB {tsb_v:+.1f}")
+        if tsb_v  is not None: parts.append(f"Form {tsb_v:+.1f}")
         if slp_v  is not None: parts.append(f"sleep {slp_v:.1f}h")
         if pain_v is not None and pain_v > 0: parts.append(f"pain {pain_v}/10")
         recovery_block = (
@@ -82,8 +82,8 @@ Step 4 — Output the morning card in Telegram Markdown (no preamble, no sign-of
 
 *Good morning — [Day date, e.g. Sat 9 May]*
 
-*Today:* [session name] · [planned TSS if available] TSS · [duration] min
-*Readiness:* [score]/100 — [label] · *TSB:* [value]
+*Today:* [session name] · [planned Load if available] · [duration] min
+*Readiness:* [score]/100 — [label] · *Form:* [value]
 *Sleep:* [hours]h · *HRV:* [ratio vs baseline, e.g. 0.93×] · *RHR:* [value]
 
 [If recovery ORANGE or RED: ⚠️ [one-line recommendation from recovery score]]
@@ -98,9 +98,10 @@ Step 4 — Output the morning card in Telegram Markdown (no preamble, no sign-of
 _{days_to_race} days to {race_name}_
 
 Athlete context: {first_name} — {race_name} ({race_date}). Injuries: {injuries_note}.
-TSB zones: >+5 = Fresh, 0 to −20 = Load, <−20 = Heavy.
+Form zones: >+5 = Fresh, 0 to −20 = In training, <−20 = Heavy load.
 If no planned session: "Rest day — recovery only". Omit unavailable fields silently.
-Never ask for subjective mood/fatigue/motivation scores."""
+Never ask for subjective mood/fatigue/motivation scores.
+The countdown line (_{days_to_race} days to {race_name}_) appears exactly once, at the end. Do not add it anywhere else in the message."""
 
 
 def notify(msg, chat_id):
@@ -158,7 +159,7 @@ def run_athlete(slug, athlete_cfg):
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS],
+            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6"],
             stdout=subprocess.PIPE, stderr=lf, text=True,
             cwd=PROJECT_DIR, timeout=180,
         )

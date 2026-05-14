@@ -347,7 +347,7 @@ def check_athlete(slug, athlete_cfg):
     t_start = time.time()
     try:
         result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS],
+            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6"],
             capture_output=True, text=True,
             cwd=PROJECT_DIR, timeout=180,
         )

@@ -113,14 +113,14 @@ Step 7 — Call push_workout for each planned session. Do NOT overwrite sessions
 
 Step 8 — Output summary:
 "Plan generated: [date range]
-Week [N] ([phase]): [N sessions] · [total TSS] TSS planned
-Week [N+1] ([phase]): [N sessions] · [total TSS] TSS planned
-Trajectory: CTL today [X] → target [Y] by end of [phase] (wk [Z]) · status: [BEHIND / ON_TRACK / AHEAD] · TSS set to [position in range]
-[If pre_event_taper: 📌 Pre-event taper — [event_name] on [event_date]: week 2 capped at [TSS]]
+Week [N] ([phase]): [N sessions] · [total Load] planned
+Week [N+1] ([phase]): [N sessions] · [total Load] planned
+Fitness: [X] today → target [Y] by end of [phase] (wk [Z]) · status: [BEHIND / ON_TRACK / AHEAD] · Load target: [position in range]
+[If pre_event_taper: 📌 Pre-event taper — [event_name] on [event_date]: week 2 capped at [Load]]
 Key constraints applied: [list any ankle/ramp/strength rules that shaped the plan]"
 
 Step 9 — Notify via Telegram:
-Run: python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/notify.py "Plan generated [date range]: W[N] [X TSS] + W[N+1] [Y TSS]. [Any key constraint note]"
+Run: python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/notify.py "Plan generated [date range]: W[N] [X Load] + W[N+1] [Y Load]. [Any key constraint note]"
 
 Step 10 — Update current-state.md "Open actions" section: mark "Plan generated through [date]" with today's date.
 Run: git add ClaudeCoach/athletes/jamie/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "plan: generated W[N]-W[N+1] [date]" && git push origin main
@@ -128,7 +128,7 @@ PROMPT_END
 
 TOOLS="Read,Write,Edit,Bash,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_fitness,mcp__claude_ai_icusync__get_wellness,mcp__claude_ai_icusync__get_training_history,mcp__claude_ai_icusync__get_events,mcp__claude_ai_icusync__push_workout,mcp__claude_ai_icusync__edit_workout"
 
-OUTPUT=$($CLAUDE -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$LOG_DIR/generate-plan.log")
+OUTPUT=$($CLAUDE -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" --model claude-sonnet-4-6 2>>"$LOG_DIR/generate-plan.log")
 trim_log() { local f=$1; tail -n 5000 "$f" > "$f.tmp" 2>/dev/null && mv "$f.tmp" "$f"; }
 trim_log "$LOG_DIR/generate-plan.log"
 echo "$OUTPUT"
