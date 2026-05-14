@@ -138,19 +138,19 @@
         <div class="d" id="kpi-phase-ends"></div>
       </div>
       <div class="stat" id="stat-ctl">
-        <div class="l">CTL (fitness)</div>
+        <div class="l">Fitness</div>
         <div class="v" id="kpi-ctl">—</div>
-        <div class="d">chronic training load</div>
+        <div class="d">long-term training load</div>
       </div>
       <div class="stat" id="stat-tsb">
-        <div class="l">TSB (form)</div>
+        <div class="l">Form</div>
         <div class="v" id="kpi-tsb">—</div>
         <div class="d">positive = fresh</div>
       </div>
       <div class="stat">
         <div class="l">7d ramp</div>
         <div class="v" id="kpi-ramp">—</div>
-        <div class="d">CTL change / week</div>
+        <div class="d">Fitness change / week</div>
       </div>
     </div>
     <div style="margin-top:16px">
@@ -164,7 +164,7 @@
 
     <div class="panel">
       <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-        <h2 style="margin:0">Fitness trajectory (CTL)</h2>
+        <h2 style="margin:0">Fitness trajectory</h2>
         <div style="display:flex;gap:6px">
           <button onclick="zoomFitness(60)"  style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">60d</button>
           <button onclick="zoomFitness(0)"   style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">Season</button>
@@ -172,8 +172,8 @@
       </div>
       <div class="chart-wrap"><canvas id="chartFitness"></canvas></div>
       <div class="legend">
-        <span><span class="swatch" style="background:#1a1a1a"></span>CTL — actual</span>
-        <span><span class="swatch" style="background:#c0392b;opacity:.6"></span>Target CTL milestones</span>
+        <span><span class="swatch" style="background:#1a1a1a"></span>Fitness — actual</span>
+        <span><span class="swatch" style="background:#c0392b;opacity:.6"></span>Target milestones</span>
       </div>
     </div>
 
@@ -494,7 +494,7 @@ window.chartFitness = null;
       scales:{
         x:{type:"time",time:{unit:"month",displayFormats:{month:"MMM"}},
            min:"2026-01-01",max:"2026-09-25",grid:{color:"#e8e3da"}},
-        y:{title:{display:true,text:"CTL"},min:20,max:135,grid:{color:"#e8e3da"}}
+        y:{title:{display:true,text:"Fitness"},min:20,max:135,grid:{color:"#e8e3da"}}
       }
     }
   });
@@ -517,7 +517,7 @@ function zoomFitness(days) {
 }
 
 // ── LOAD CHART ───────────────────────────────────────────────────────────────
-let _loadChartDays = [], _loadMode = "tss";
+let _loadChartDays = [], _loadMode = "tss", _seedCtl = null, _seedAtl = null;
 (function(){
   const ctx = document.getElementById("chartLoad").getContext("2d");
   window.chartLoad = new Chart(ctx, {
@@ -528,8 +528,8 @@ let _loadChartDays = [], _loadMode = "tss";
       plugins:{legend:{display:false}},
       scales:{
         x:{stacked:true,grid:{color:"#e8e3da"}},
-        y:{stacked:true,beginAtZero:true,position:"left",title:{display:true,text:"TSS"},grid:{color:"#e8e3da"}},
-        y1:{position:"right",title:{display:true,text:"TSB"},suggestedMin:-40,suggestedMax:20,grid:{drawOnChartArea:false}},
+        y:{stacked:true,beginAtZero:true,position:"left",title:{display:true,text:"Load"},grid:{color:"#e8e3da"}},
+        y1:{position:"right",title:{display:true,text:"Form"},suggestedMin:-40,suggestedMax:20,grid:{drawOnChartArea:false}},
       }
     }
   });
@@ -545,8 +545,8 @@ function setLoadMode(mode) {
     : "background:#f8f5ef;color:#4a4535;font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;cursor:pointer";
   const sub = document.getElementById("load-chart-sub");
   if (sub) sub.textContent = mode==="tss"
-    ? "TSS stacked by sport · faded bars = planned · TSB form line (right axis)"
-    : "Duration (min) stacked by sport · faded bars = planned · TSB form line (right axis)";
+    ? "Load stacked by sport · faded bars = planned · Form line — solid = actual, dashed = projected"
+    : "Duration (min) stacked by sport · faded bars = planned · Form line — solid = actual, dashed = projected";
   renderLoadChart(_loadChartDays);
 }
 
@@ -594,19 +594,62 @@ function renderLoadChart(days) {
     if (v>=-20)  return "rgba(201,135,31,0.9)";
     return "rgba(192,57,43,0.9)";
   });
-  datasets.push({type:"line",label:"TSB",data:tsbVals,
+  datasets.push({type:"line",label:"Form",data:tsbVals,
     borderColor:"rgba(60,60,60,0.75)",backgroundColor:"transparent",
-    borderWidth:2,pointRadius:4,pointBackgroundColor:tsbDotColors,
+    borderWidth:2,pointRadius:6,pointBackgroundColor:tsbDotColors,
     fill:false,tension:0.3,yAxisID:"y1",order:1,spanGaps:true});
+  // Forward Form projection from today using planned TSS
+  const todayIdxF = labels.indexOf(todayStr);
+  if (todayIdxF >= 0 && _seedCtl != null && _seedAtl != null) {
+    const projVals = new Array(days.length).fill(null);
+    let pCtl = _seedCtl, pAtl = _seedAtl;
+    projVals[todayIdxF] = Math.round((pCtl - pAtl) * 10) / 10;
+    for (let i = todayIdxF + 1; i < days.length; i++) {
+      const dayTss = (days[i].activities || [])
+        .filter(a => a.status === "planned")
+        .reduce((s, a) => s + (a.tss || 0), 0);
+      pAtl += (dayTss - pAtl) / 7;
+      pCtl += (dayTss - pCtl) / 42;
+      projVals[i] = Math.round((pCtl - pAtl) * 10) / 10;
+    }
+    const projDotColors = projVals.map(v => {
+      if (v == null) return "transparent";
+      if (v > 5)    return "rgba(29,104,64,0.45)";
+      if (v >= -20) return "rgba(201,135,31,0.45)";
+      return "rgba(192,57,43,0.45)";
+    });
+    datasets.push({type:"line",label:"_formProj",data:projVals,
+      borderColor:"rgba(60,60,60,0.35)",backgroundColor:"transparent",
+      borderWidth:1.5,borderDash:[5,3],pointRadius:5,pointBackgroundColor:projDotColors,
+      fill:false,tension:0.3,yAxisID:"y1",order:1,spanGaps:true});
+  }
   datasets.push({type:"line",label:"_zero",data:days.map(()=>0),
     borderColor:"rgba(100,100,100,0.25)",backgroundColor:"transparent",
     borderWidth:1,borderDash:[4,3],pointRadius:0,fill:false,yAxisID:"y1",order:3});
-  window.chartLoad.options.scales.y.title = {display:true,text:useDur?"Minutes":"TSS",font:{size:10},color:"#666"};
+  window.chartLoad.options.scales.y.title = {display:true,text:useDur?"Minutes":"Load",font:{size:10},color:"#666"};
   window.chartLoad.data.labels   = labels;
   window.chartLoad.data.datasets = datasets;
   window.chartLoad.options.plugins.legend = {
     display:true,position:"top",
-    labels:{boxWidth:12,font:{size:11},filter:item=>!item.text.startsWith("_")}
+    labels:{boxWidth:12,font:{size:11},
+      generateLabels(chart) {
+        return chart.data.datasets
+          .filter(ds => !ds.label.startsWith("_"))
+          .map(ds => {
+            const solidColor = Array.isArray(ds.backgroundColor)
+              ? ds.backgroundColor.find(c => c && !c.endsWith(",0)") && c !== "transparent") || ds.borderColor
+              : (ds.backgroundColor === "transparent" ? ds.borderColor : ds.backgroundColor);
+            return {
+              text: ds.label,
+              fillStyle: solidColor,
+              strokeStyle: solidColor,
+              lineWidth: ds.type === "line" ? 2 : 0,
+              hidden: false,
+              datasetIndex: chart.data.datasets.indexOf(ds)
+            };
+          });
+      }
+    }
   };
   const todayIdx = labels.indexOf(todayStr);
   window.chartLoad.options.scales.x.ticks = {
@@ -1042,7 +1085,8 @@ fetch('training-data.json?v='+Date.now())
     }
     if (d.kpi) {
       const k=d.kpi;
-      if (k.ctl!=null) document.getElementById("kpi-ctl").textContent = k.ctl.toFixed(1);
+      if (k.ctl!=null) { _seedCtl = k.ctl; document.getElementById("kpi-ctl").textContent = k.ctl.toFixed(1); }
+      if (k.atl!=null) _seedAtl = k.atl;
       if (k.ramp7d!=null) {
         const r=document.getElementById("kpi-ramp");
         r.textContent = (k.ramp7d>=0?"+":"")+k.ramp7d.toFixed(1);

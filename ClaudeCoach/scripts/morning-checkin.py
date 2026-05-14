@@ -102,7 +102,7 @@ Form zones: >+5 = Fresh, 0 to −20 = In training, <−20 = Heavy load.
 If no planned session: "Rest day — recovery only". Omit unavailable fields silently.
 Never ask for subjective mood/fatigue/motivation scores.
 The countdown line (_{days_to_race} days to {race_name}_) appears exactly once, at the end. Do not add it anywhere else in the message.
-CRITICAL: Output only the morning card. Do not narrate steps, confirm file reads, or output any internal reasoning. All processing is silent."""
+Wrap your entire output in <telegram> and </telegram> tags. Output nothing outside those tags — no preamble, no reasoning, no tool commentary."""
 
 
 def notify(msg, chat_id):
@@ -165,7 +165,10 @@ def run_athlete(slug, athlete_cfg):
             cwd=PROJECT_DIR, timeout=180,
         )
 
-    output = (result.stdout or "").strip()
+    raw = (result.stdout or "").strip()
+    import re as _re
+    m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
+    output = m.group(1).strip() if m else ""
     if output:
         notify(output, chat_id)
 
