@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i148413401",
+    "date": "2026-05-15",
+    "name": "Wandsworth - Tempo pyramid",
+    "sport": "Run",
+    "tss": 54,
+    "duration_min": 54,
+    "distance_km": 9.04,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 163,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-15T09:20:00",
+    "stub": true
+  },
+  {
     "activity_id": "i148375584",
     "date": "2026-05-15",
     "name": "Pool Swim",
