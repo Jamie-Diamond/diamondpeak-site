@@ -10,15 +10,15 @@
     "avg_power": 194,
     "norm_power": 219,
     "avg_hr": 139,
-    "rpe": null,
+    "rpe": 5,
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
+    "nutrition_g_carb": 333,
     "hydration_ml": null,
-    "notes": null,
+    "notes": "Hr 1-2: Maurten 320 (80g) + 2 scoops Hi5 Caffeine Hit (44g) + Beta Fuel chew (45g) + SIS Banana Fudge bar (43g) = 212g. Hr 3-4: PF30 (30g) + 0.5 scoops Hi5 (11g) + Maurten 320 (80g) = 121g. Total 333g over ~4.1 hrs = ~81g/hr. Race-level fuelling.",
     "logged_at": "2026-05-15T11:30:56",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i148064457",
