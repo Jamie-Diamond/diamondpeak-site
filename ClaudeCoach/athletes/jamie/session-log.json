@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i148439070",
+    "date": "2026-05-15",
+    "name": "Fri 15 May - Long ride 4hr Z2",
+    "sport": "Ride",
+    "tss": 196,
+    "duration_min": 247,
+    "distance_km": 130.0,
+    "avg_power": 194,
+    "norm_power": 219,
+    "avg_hr": 139,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-15T11:30:56",
+    "stub": true
+  },
+  {
     "activity_id": "i148064457",
     "date": "2026-05-14",
     "name": "Alternate 200s",
