@@ -1,7 +1,8 @@
 """
 refresh-public-data.py
-Reads the gitignored training-data.json and writes a public-safe subset
-to ClaudeCoach/site-data.json, then commits and pushes to GitHub Pages.
+Reads the gitignored training-data.json for each active athlete and writes
+a public-safe subset to ClaudeCoach/site-data.json, then commits and pushes
+to GitHub Pages.
 
 Crontab (VM): 0 * * * * python3 /path/to/ClaudeCoach/scripts/refresh-public-data.py
 """
@@ -11,15 +12,9 @@ import sys
 from datetime import date
 from pathlib import Path
 
-BASE         = Path(__file__).parent.parent.parent
-TRAINING     = BASE / "ClaudeCoach/athletes/jamie/training-data.json"
-PUBLIC       = BASE / "ClaudeCoach/site-data.json"
-
-ATHLETE_META = {
-    "first_name": "Jamie",
-    "race_name":  "Ironman Cervia",
-    "race_date":  "2026-09-19",
-}
+BASE    = Path(__file__).parent.parent.parent  # diamondpeak-site/
+PUBLIC  = BASE / "ClaudeCoach/site-data.json"
+CONFIG  = BASE / "ClaudeCoach/config/athletes.json"
 
 # Rolling window for CTL history on the public chart
 CTL_HISTORY_DAYS = 120
@@ -29,35 +24,45 @@ def log(msg):
     print(msg, flush=True)
 
 
-def load_training():
-    if not TRAINING.exists():
-        log(f"training-data.json not found at {TRAINING} — skipping")
+def load_athletes() -> dict:
+    if not CONFIG.exists():
+        log(f"athletes.json not found at {CONFIG}")
+        return {}
+    return json.loads(CONFIG.read_text())
+
+
+def load_training(slug: str) -> dict | None:
+    path = BASE / "ClaudeCoach/athletes" / slug / "training-data.json"
+    if not path.exists():
+        log(f"[{slug}] training-data.json not found at {path} — skipping")
         return None
     try:
-        return json.loads(TRAINING.read_text())
+        return json.loads(path.read_text())
     except json.JSONDecodeError as e:
-        log(f"training-data.json parse error: {e}")
+        log(f"[{slug}] training-data.json parse error: {e}")
         return None
 
 
-def build_public(td):
-    kpi = td.get("kpi", {})
-    fitness_this = td.get("fitnessThis", [])
+def build_athlete_entry(slug: str, cfg: dict, td: dict) -> dict:
+    """Build the public-safe dict for one athlete."""
+    kpi     = td.get("kpi", {})
+    history = td.get("fitnessThis", [])
 
     # Keep last CTL_HISTORY_DAYS entries only
-    history = fitness_this[-CTL_HISTORY_DAYS:] if len(fitness_this) > CTL_HISTORY_DAYS else fitness_this
+    history = history[-CTL_HISTORY_DAYS:] if len(history) > CTL_HISTORY_DAYS else history
+
+    # First name from athletes.json name field
+    name_parts = cfg.get("name", slug).split()
+    first_name = name_parts[0] if name_parts else slug
 
     return {
-        "updated": str(date.today()),
-        "athletes": {
-            "jamie": {
-                **ATHLETE_META,
-                "ctl":         kpi.get("ctl"),
-                "atl":         kpi.get("atl"),
-                "tsb":         kpi.get("tsb"),
-                "ctl_history": [[row[0], round(row[1], 1)] for row in history if len(row) >= 2],
-            }
-        }
+        "first_name": first_name,
+        "race_name":  cfg.get("race_name", ""),
+        "race_date":  cfg.get("race_date", ""),
+        "ctl":         kpi.get("ctl"),
+        "atl":         kpi.get("atl"),
+        "tsb":         kpi.get("tsb"),
+        "ctl_history": [[row[0], round(row[1], 1)] for row in history if len(row) >= 2],
     }
 
 
@@ -77,13 +82,29 @@ def git_push():
 
 
 def main():
-    td = load_training()
-    if td is None:
+    athletes   = load_athletes()
+    athletes_out = {}
+
+    for slug, cfg in athletes.items():
+        if not cfg.get("active"):
+            continue
+        td = load_training(slug)
+        if td is None:
+            continue
+        entry = build_athlete_entry(slug, cfg, td)
+        athletes_out[slug] = entry
+        log(f"[{slug}] CTL {entry['ctl']}, {len(entry['ctl_history'])} history points")
+
+    if not athletes_out:
+        log("No athlete data found — skipping write")
         sys.exit(1)
 
-    pub = build_public(td)
+    pub = {
+        "updated":  str(date.today()),
+        "athletes": athletes_out,
+    }
     PUBLIC.write_text(json.dumps(pub, separators=(",", ":")))
-    log(f"Wrote {PUBLIC} — CTL {pub['athletes']['jamie']['ctl']}, {len(pub['athletes']['jamie']['ctl_history'])} history points")
+    log(f"Wrote {PUBLIC} with {len(athletes_out)} athlete(s): {list(athletes_out)}")
 
     if git_push():
         log("Pushed site-data.json to GitHub Pages")

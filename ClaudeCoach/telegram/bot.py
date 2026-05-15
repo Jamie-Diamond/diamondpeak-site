@@ -47,18 +47,23 @@ MAX_HISTORY_PAIRS = 12  # keep last 12 exchanges for context
 MODEL_SONNET = "claude-sonnet-4-6"
 MODEL_HAIKU  = "claude-haiku-4-5-20251001"
 
-RACE_DAY = date(2026, 9, 19)
-
 _MODEL_LABEL = {
     MODEL_HAIKU:  "H",
     MODEL_SONNET: "S",
     "claude-opus-4-7": "O4.7",
 }
 
-def response_footer(model: str) -> str:
-    days = (RACE_DAY - date.today()).days
+def response_footer(model: str, slug: str = "", athlete_cfg: dict | None = None) -> str:
     label = _MODEL_LABEL.get(model, model.split("-")[1][0].upper())
-    return f"\n_{days} days to go · {label}_"
+    if athlete_cfg:
+        race_date_str = athlete_cfg.get("race_date", "")
+        race_name     = athlete_cfg.get("race_name", "race")
+        try:
+            days = (date.fromisoformat(race_date_str) - date.today()).days
+            return f"\n_{days} days to {race_name} · {label}_"
+        except (ValueError, TypeError):
+            pass
+    return f"\n_{label}_"
 
 # Messages that only need a simple lookup — Haiku handles these
 _SIMPLE_QUERY_RE = re.compile(
@@ -342,17 +347,15 @@ _STRENGTH_RE     = re.compile(
     re.I,
 )
 
-GENERATE_PLAN_SCRIPT = BASE.parent.parent / "ClaudeCoach/scripts/generate-plan.sh"
+GENERATE_PLAN_SCRIPT = BASE.parent.parent / "ClaudeCoach/scripts/generate-plan.py"
 
-CTL_RACE_TARGET = 90.0
-
-
-def _week_stats() -> str:
-    """Python-only weekly training summary from session-log.json."""
-    if not SESSION_LOG_F.exists():
+def _week_stats(slug: str, athlete_cfg: dict | None = None) -> str:
+    """Python-only weekly training summary from athletes/{slug}/session-log.json."""
+    session_log_f = BASE.parent / "athletes" / slug / "session-log.json"
+    if not session_log_f.exists():
         return "No session log found yet."
     try:
-        entries = json.loads(SESSION_LOG_F.read_text())
+        entries = json.loads(session_log_f.read_text())
     except Exception:
         return "Session log unreadable."
 
@@ -388,7 +391,6 @@ def _week_stats() -> str:
     if not by_sport:
         return f"No sessions this week ({week_start.strftime('%-d %b')} – today)."
 
-    days_to_race = (RACE_DAY - today).days
     h, m   = divmod(int(total_min), 60)
     lines  = [f"*Week {week_start.strftime('%-d %b')} – {today.strftime('%-d %b')}*"]
     lines.append(f"*{int(total_tss)} TSS* · {h}h {m:02d}m total\n")
@@ -401,18 +403,29 @@ def _week_stats() -> str:
     if n_sessions and n_sessions > n_logged:
         diff = n_sessions - n_logged
         lines.append(f"\n_{diff} session{'s' if diff > 1 else ''} still awaiting feedback_")
-    lines.append(f"\n_{days_to_race} days to Cervia_")
+
+    # Days-to-race footer
+    if athlete_cfg:
+        try:
+            race_date_str = athlete_cfg.get("race_date", "")
+            race_name     = athlete_cfg.get("race_name", "race")
+            days_to_race  = (date.fromisoformat(race_date_str) - today).days
+            lines.append(f"\n_{days_to_race} days to {race_name}_")
+        except (ValueError, TypeError):
+            pass
+
     return "\n".join(lines)
 
 
-def _form_stats() -> str:
+def _form_stats(slug: str, athlete_cfg: dict | None = None) -> str:
     """Python-only CTL/ATL/TSB + projected CTL to race day."""
     kpi     = {}
     history = []
 
-    if TRAINING_DATA.exists():
+    training_data = BASE.parent / "athletes" / slug / "training-data.json"
+    if training_data.exists():
         try:
-            td      = json.loads(TRAINING_DATA.read_text())
+            td      = json.loads(training_data.read_text())
             kpi     = td.get("kpi", {})
             history = td.get("fitnessThis", [])
         except Exception:
@@ -421,9 +434,9 @@ def _form_stats() -> str:
     if not kpi.get("ctl") and SITE_DATA.exists():
         try:
             sd      = json.loads(SITE_DATA.read_text())
-            jamie   = sd.get("athletes", {}).get("jamie", {})
-            kpi     = {"ctl": jamie.get("ctl"), "atl": jamie.get("atl"), "tsb": jamie.get("tsb")}
-            history = jamie.get("ctl_history", [])
+            ad      = sd.get("athletes", {}).get(slug, {})
+            kpi     = {"ctl": ad.get("ctl"), "atl": ad.get("atl"), "tsb": ad.get("tsb")}
+            history = ad.get("ctl_history", [])
         except Exception:
             pass
 
@@ -431,30 +444,44 @@ def _form_stats() -> str:
     if ctl is None:
         return "No fitness data yet — refresh pending."
 
-    atl          = kpi.get("atl") or 0
-    tsb          = ctl - atl
-    today        = date.today()
-    days_to_race = (RACE_DAY - today).days
-    tsb_zone     = "Fresh" if tsb > 5 else ("Load" if tsb > -20 else "Heavy")
+    atl      = kpi.get("atl") or 0
+    tsb      = ctl - atl
+    today    = date.today()
+    tsb_zone = "Fresh" if tsb > 5 else ("Load" if tsb > -20 else "Heavy")
 
     lines = [f"*CTL {ctl:.1f}* · ATL {atl:.1f} · TSB {tsb:+.1f} ({tsb_zone})"]
+
+    # CTL target: prefer athletes.json ctl_targets.race_max, fallback 90
+    ctl_race_target = 90.0
+    if athlete_cfg:
+        ctl_race_target = float(
+            athlete_cfg.get("ctl_targets", {}).get("race_max", ctl_race_target)
+        )
 
     if len(history) >= 28:
         old     = history[-28]
         old_ctl = old[1] if isinstance(old, list) else old.get("ctl", 0)
         weekly_ramp   = (ctl - old_ctl) / 4
-        projected_ctl = ctl + weekly_ramp * (days_to_race / 7)
-        needed_ramp   = (CTL_RACE_TARGET - ctl) / (days_to_race / 7) if days_to_race > 0 else 0
         lines.append(f"4-wk ramp: *{weekly_ramp:+.1f}/wk*")
-        if projected_ctl >= CTL_RACE_TARGET * 0.95:
-            lines.append(f"On track: CTL *{projected_ctl:.0f}* by race day ✓")
-        else:
-            lines.append(
-                f"Projected: CTL *{projected_ctl:.0f}* — "
-                f"need *{needed_ramp:+.1f}/wk* to hit {int(CTL_RACE_TARGET)}"
-            )
 
-    lines.append(f"_{days_to_race} days to Cervia_")
+        if athlete_cfg:
+            race_date_str = athlete_cfg.get("race_date", "")
+            race_name     = athlete_cfg.get("race_name", "race")
+            try:
+                days_to_race  = (date.fromisoformat(race_date_str) - today).days
+                projected_ctl = ctl + weekly_ramp * (days_to_race / 7)
+                needed_ramp   = (ctl_race_target - ctl) / (days_to_race / 7) if days_to_race > 0 else 0
+                if projected_ctl >= ctl_race_target * 0.95:
+                    lines.append(f"On track: CTL *{projected_ctl:.0f}* by race day ✓")
+                else:
+                    lines.append(
+                        f"Projected: CTL *{projected_ctl:.0f}* — "
+                        f"need *{needed_ramp:+.1f}/wk* to hit {int(ctl_race_target)}"
+                    )
+                lines.append(f"_{days_to_race} days to {race_name}_")
+            except (ValueError, TypeError):
+                pass
+
     return "\n".join(lines)
 
 
@@ -522,7 +549,7 @@ def _strength_session() -> str:
     )
 
 
-def fast_path(text):
+def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
     """
     Returns a reply string if the message can be handled without calling Claude,
     or None if Claude should handle it.
@@ -531,10 +558,10 @@ def fast_path(text):
     txt   = text.strip()
 
     if _WEEK_CMD_RE.match(txt):
-        return _week_stats()
+        return _week_stats(slug, athlete_cfg)
 
     if _FORM_CMD_RE.match(txt):
-        return _form_stats()
+        return _form_stats(slug, athlete_cfg)
 
     m = _ANKLE_RE.match(txt)
     if m:
@@ -897,7 +924,7 @@ def _handle_drill(token, chat_id, data, message_id, athletes, config):
                            athlete_name=athlete_name, context=context)
     clean = process_charts(token, chat_id, response)
     if clean:
-        send(token, chat_id, clean + response_footer(MODEL_SONNET))
+        send(token, chat_id, clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athlete))
     history.append({"user": question, "assistant": clean})
     save_history(history, files["history"])
     return True
@@ -1574,8 +1601,9 @@ def main():
             athlete_name = athlete.get("name", slug).split()[0]  # first name only
 
             if text.lower() in ("/start", "/help"):
+                race_name  = athlete.get("race_name", "your race")
                 send(token, chat_id,
-                     "*ClaudeCoach* — IM Cervia 2026\n\n"
+                     f"*ClaudeCoach* — {race_name}\n\n"
                      "*Quick commands (instant):*\n"
                      "  /week — this week's sessions + TSS\n"
                      "  /form — CTL/ATL/TSB + race projection\n"
@@ -1587,19 +1615,19 @@ def main():
                      "  _how am I looking?_\n"
                      "  _what's today's session?_\n"
                      "  _log session_ (after a workout)\n"
-                     "  _rebalance plan_ (ankle flare)\n"
+                     "  _rebalance plan_\n"
                      "  _generate plan_",
                      reply_markup=build_keyboard())
                 continue
 
             log(f"In: {text[:80]}")
 
-            fast = fast_path(text)
+            fast = fast_path(text, slug=slug, athlete_cfg=athlete)
             if fast == "__GENERATE_PLAN__":
                 send(token, chat_id, "_Generating plan — this takes a few minutes…_")
                 try:
                     result = subprocess.run(
-                        ["bash", str(GENERATE_PLAN_SCRIPT)],
+                        ["python3", str(GENERATE_PLAN_SCRIPT), "--athlete", slug],
                         capture_output=True, text=True,
                         cwd=str(PROJECT_DIR), timeout=600,
                     )
@@ -1677,7 +1705,7 @@ def main():
 
             clean = process_charts(token, chat_id, response)
             if clean:
-                send(token, chat_id, clean + response_footer(model), reply_markup=build_keyboard())
+                send(token, chat_id, clean + response_footer(model, slug=slug, athlete_cfg=athlete), reply_markup=build_keyboard())
             log(f"Out: {clean[:80]}")
 
             history.append({"user": text, "assistant": clean})
