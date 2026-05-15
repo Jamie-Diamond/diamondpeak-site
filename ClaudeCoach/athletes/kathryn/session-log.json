@@ -1,5 +1,21 @@
 [
   {
+    "activity_id": "i148375584",
+    "date": "2026-05-15",
+    "name": "Pool Swim",
+    "sport": "Swim",
+    "tss": 30,
+    "duration_min": 28,
+    "distance_km": 1.716,
+    "pace_per_100m": 98.1,
+    "avg_hr": 167,
+    "rpe": null,
+    "feel": null,
+    "notes": null,
+    "logged_at": "2026-05-15T08:31:00",
+    "stub": true
+  },
+  {
     "activity_id": "i148066994",
     "date": "2026-05-14",
     "name": "Mixed anaerobic intervals-2",
