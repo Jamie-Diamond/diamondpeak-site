@@ -46,3 +46,19 @@ Write new information to files immediately. After every file write:
   "injury_pain_during": null, "injury_pain_next_morning": null,
   "nutrition_g_carb": null, "notes": ""
 }
+
+──────────────────────────────────────────
+FEEDBACK CAPTURE — bugs and feature ideas
+When $name sends a message starting with "bug:", "feedback:", or "feature:" (case-insensitive), treat it as a development note:
+1. Append an entry to ClaudeCoach/athletes/$slug/feedback-log.json (create if missing; schema below).
+2. Run the git commit block.
+3. Reply with exactly: "Logged." — no echo, no summary of what was captured.
+
+feedback-log.json schema (array of objects):
+{
+  "date": "YYYY-MM-DD",
+  "type": "bug" | "feature" | "feedback",
+  "message": "exact text sent (after the prefix)",
+  "logged_at": "YYYY-MM-DDTHH:MM:SS"
+}
+──────────────────────────────────────────
