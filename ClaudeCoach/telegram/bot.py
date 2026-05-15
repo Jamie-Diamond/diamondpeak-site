@@ -273,7 +273,8 @@ def send_photo(token, chat_id, photo_bytes):
         return {}
 
 
-CHART_RE = re.compile(r'<<<CHART:(\w+):(.*?)>>>', re.DOTALL)
+CHART_RE    = re.compile(r'<<<CHART:(\w+):(.*?)>>>', re.DOTALL)
+TELEGRAM_RE = re.compile(r'<telegram>(.*?)</telegram>', re.DOTALL | re.IGNORECASE)
 
 
 def process_charts(token, chat_id, response):
@@ -317,7 +318,9 @@ def process_charts(token, chat_id, response):
                 send_photo(token, chat_id, png)
         except Exception as e:
             log(f"Chart error ({chart_type}): {e}")
-    return CHART_RE.sub('', response).strip()
+    text = CHART_RE.sub('', response).strip()
+    m = TELEGRAM_RE.search(text)
+    return m.group(1).strip() if m else text
 
 
 PROJECT_DIR = BASE.parent.parent  # diamondpeak-site/
