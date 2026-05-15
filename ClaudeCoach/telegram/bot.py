@@ -319,8 +319,26 @@ def process_charts(token, chat_id, response):
         except Exception as e:
             log(f"Chart error ({chart_type}): {e}")
     text = CHART_RE.sub('', response).strip()
+    # If model used <telegram> tags, extract only tagged content (discards all reasoning)
     m = TELEGRAM_RE.search(text)
-    return m.group(1).strip() if m else text
+    if m:
+        return m.group(1).strip()
+    # No tags — strip any leading reasoning before the first substantive line.
+    # Heuristic: drop lines that look like internal narration.
+    _REASONING_RE = re.compile(
+        r'^(I\'ll |I will |Let me |Reading |Fetching |Checking |Now I |Looking |I need |I\'ve |'
+        r'First |Step \d|Based on |The athlete |This is |Note:|Here I )',
+        re.IGNORECASE
+    )
+    lines = text.splitlines()
+    clean_lines = []
+    dropping = True
+    for line in lines:
+        if dropping and _REASONING_RE.match(line.strip()):
+            continue
+        dropping = False
+        clean_lines.append(line)
+    return '\n'.join(clean_lines).strip() or text
 
 
 PROJECT_DIR = BASE.parent.parent  # diamondpeak-site/
@@ -1323,17 +1341,30 @@ def _scaffold_athlete(chat_id, answers, icu_data):
         f"## Injuries / Niggles\n{injuries_str}\n\n## Open Actions\n- [ ] Set up initial training plan\n"
     )
 
+    template_vars = dict(
+        name=name, first_name=first_name, slug=slug,
+        race_name=race_name, race_date=race_date or "TBD",
+        race_distance=profile.get("race_distance", "triathlon"),
+        a_goal=profile["a_goal"],
+        b_goal=profile.get("b_goal", "Finish"),
+        experience=answers.get("experience", ""),
+        injuries=injuries_str,
+        max_hours=max_hours or "?",
+        ftp_watts=profile.get("ftp_watts", "TBD"),
+        swim_css=profile.get("swim_css_per_100m", "TBD"),
+        run_threshold=profile.get("run_threshold_pace_per_km", "TBD"),
+        lthr=profile.get("lthr", "TBD"),
+    )
+
     template_file = BASE.parent / "onboarding/templates/system_prompt.txt"
     if template_file.exists():
-        sp = Template(template_file.read_text()).safe_substitute(
-            name=name, first_name=first_name, slug=slug,
-            race_name=race_name, race_date=race_date or "TBD",
-            a_goal=profile["a_goal"],
-            experience=answers.get("experience", ""),
-            injuries=injuries_str,
-            max_hours=max_hours or "?",
-        )
+        sp = Template(template_file.read_text()).safe_substitute(**template_vars)
         (adir / "system_prompt.txt").write_text(sp)
+
+    rules_template = BASE.parent / "onboarding/templates/rules.md"
+    if rules_template.exists():
+        rules = Template(rules_template.read_text()).safe_substitute(**template_vars)
+        (adir / "reference" / "rules.md").write_text(rules)
 
     # Riskiest write last
     athletes_data = json.loads(ATHLETES_CONFIG.read_text()) if ATHLETES_CONFIG.exists() else {}
@@ -1423,6 +1454,19 @@ def handle_onboarding(token, chat_id, text):
         return True
 
     log(f"Onboarding complete: {session['answers'].get('name', '?')} ({slug})")
+
+    # Generate training blueprint and rules.md in background
+    blueprint_script = BASE.parent / "scripts/generate-blueprint.py"
+    if blueprint_script.exists():
+        try:
+            subprocess.Popen(
+                ["python3", str(blueprint_script), "--athlete", slug],
+                cwd=str(PROJECT_DIR),
+            )
+            log(f"[{slug}] generate-blueprint.py launched in background")
+        except Exception as e:
+            log(f"[{slug}] generate-blueprint.py launch failed: {e}")
+
     _git_commit(f"onboarding: add athlete {slug}")
 
     pending_list = load_pending()
