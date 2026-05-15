@@ -17,7 +17,7 @@ TOOLS = "Read,Bash"
 
 def _build_prompt(slug, first_name):
     return f"""\
-You are running the evening session capture reminder for {first_name}. Run silently — only produce output if there is an unlogged key session.
+You are running the evening session capture reminder for {first_name}.
 
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
@@ -30,10 +30,11 @@ Check for completed activities in the last 36 hours that meet ALL of:
 2. Sport is Ride, VirtualRide, Run, VirtualRun, Brick, or Swim (skip Strength)
 3. No entry in session-log.json with a matching activity_id
 
-If an unlogged key session is found:
-- Output exactly one line: "Log [session name] — say 'log session'"
+OUTPUT RULES — follow exactly:
+- If an unlogged key session is found: output <notify>Log [session name] — say 'log session'</notify>
+- If no unlogged key sessions exist: output nothing at all. No explanation. No confirmation. Silence.
 
-If no unlogged key sessions: output nothing."""
+Do not output anything outside the <notify> tag under any circumstances."""
 
 
 def notify(msg, chat_id):
@@ -69,14 +70,10 @@ def run_athlete(slug, athlete_cfg):
         )
 
     output = (result.stdout or "").strip()
-    if output and not _is_meta(output):
-        notify(output, chat_id)
-
-
-_META_PREFIXES = ("case a", "case b", "case c", "case d", "silence", "no output", "nothing to send", "no unlogged")
-
-def _is_meta(text: str) -> bool:
-    return text.lower().startswith(_META_PREFIXES)
+    import re
+    m = re.search(r'<notify>(.*?)</notify>', output, re.DOTALL | re.IGNORECASE)
+    if m:
+        notify(m.group(1).strip(), chat_id)
 
 
 def main():
