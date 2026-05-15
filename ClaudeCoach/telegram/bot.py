@@ -319,8 +319,26 @@ def process_charts(token, chat_id, response):
         except Exception as e:
             log(f"Chart error ({chart_type}): {e}")
     text = CHART_RE.sub('', response).strip()
+    # If model used <telegram> tags, extract only tagged content (discards all reasoning)
     m = TELEGRAM_RE.search(text)
-    return m.group(1).strip() if m else text
+    if m:
+        return m.group(1).strip()
+    # No tags — strip any leading reasoning before the first substantive line.
+    # Heuristic: drop lines that look like internal narration.
+    _REASONING_RE = re.compile(
+        r'^(I\'ll |I will |Let me |Reading |Fetching |Checking |Now I |Looking |I need |I\'ve |'
+        r'First |Step \d|Based on |The athlete |This is |Note:|Here I )',
+        re.IGNORECASE
+    )
+    lines = text.splitlines()
+    clean_lines = []
+    dropping = True
+    for line in lines:
+        if dropping and _REASONING_RE.match(line.strip()):
+            continue
+        dropping = False
+        clean_lines.append(line)
+    return '\n'.join(clean_lines).strip() or text
 
 
 PROJECT_DIR = BASE.parent.parent  # diamondpeak-site/
