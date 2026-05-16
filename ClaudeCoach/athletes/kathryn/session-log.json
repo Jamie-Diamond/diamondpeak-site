@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i148704446",
+    "date": "2026-05-16",
+    "name": "Wandsworth - Sat 16 May - Easy ride Z2 60min",
+    "sport": "Ride",
+    "tss": 151,
+    "duration_min": 129,
+    "distance_km": 60.68,
+    "avg_power": 144,
+    "norm_power": 159,
+    "avg_hr": 153,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-16T09:30:00",
+    "stub": true
+  },
+  {
     "activity_id": "i148413401",
     "date": "2026-05-15",
     "name": "Wandsworth - Tempo pyramid",
