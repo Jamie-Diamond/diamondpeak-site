@@ -124,6 +124,9 @@ def run_athlete(slug, athlete_cfg):
     adir = BASE / f"athletes/{slug}"
     chat_id = athlete_cfg.get("chat_id", "")
     log_file = LOG_DIR / "morning-checkin.log"
+    if not chat_id:
+        print(f"[{slug}] SKIP: no chat_id in athletes.json", file=sys.stderr)
+        return
 
     profile = {}
     if (adir / "profile.json").exists():

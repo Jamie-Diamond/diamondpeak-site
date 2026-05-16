@@ -206,7 +206,7 @@ def save_state(state, state_file):
 
 def acquire_lock():
     if LOCK_FILE.exists():
-        if time.time() - LOCK_FILE.stat().st_mtime < 300:
+        if time.time() - LOCK_FILE.stat().st_mtime < 1200:
             return False
     LOCK_FILE.touch()
     return True
