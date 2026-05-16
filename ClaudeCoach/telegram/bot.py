@@ -5,10 +5,25 @@ Polls Telegram for messages, passes them to claude CLI, sends responses back.
 Run: python3 bot.py
 """
 
-import json, re, subprocess, sys, time, ssl, os
+import json, re, subprocess, sys, time, ssl, os, shutil
 import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
 from datetime import datetime, date, timedelta
+
+
+def _resolve_claude_bin() -> str:
+    """Find the claude CLI on PATH, fall back to common install locations."""
+    found = shutil.which("claude")
+    if found:
+        return found
+    for candidate in ("/usr/bin/claude", "/usr/local/bin/claude",
+                      os.path.expanduser("~/.local/bin/claude")):
+        if os.path.isfile(candidate):
+            return candidate
+    return "claude"  # last resort — will fail with a clear error at call time
+
+
+CLAUDE_BIN = _resolve_claude_bin()
 
 _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
@@ -1288,9 +1303,8 @@ def _lookup_race(race_name: str, race_date: str) -> dict:
         f'Use null for any field you cannot find. Return ONLY the JSON.'
     )
     try:
-        claude_bin = load_config().get("claude_binary", "/usr/bin/claude")
         result = subprocess.run(
-            [claude_bin, "-p", prompt, "--allowedTools", "WebSearch", "--model", MODEL_SONNET],
+            [CLAUDE_BIN, "-p", prompt, "--allowedTools", "WebSearch", "--model", MODEL_SONNET],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
             cwd=str(PROJECT_DIR), timeout=90,
         )
@@ -1647,7 +1661,7 @@ def call_claude(user_message, config, history, model=MODEL_SONNET,
 
     try:
         result = subprocess.run(
-            [config["claude_binary"], "-p", full_prompt, "--allowedTools", TOOLS, "--model", model],
+            [CLAUDE_BIN, "-p", full_prompt, "--allowedTools", TOOLS, "--model", model],
             capture_output=True,
             text=True,
             cwd=config["project_dir"],
@@ -1674,7 +1688,10 @@ def main():
 
     token = config["bot_token"]
     athletes = load_athletes()
-    log(f"ClaudeCoach bot started. Registered athletes: {[a['name'] for a in athletes.values()]}")
+    log(f"ClaudeCoach bot started. claude={CLAUDE_BIN}. Registered athletes: {[a['name'] for a in athletes.values()]}")
+    if not shutil.which(CLAUDE_BIN) and not os.path.isfile(CLAUDE_BIN):
+        log(f"CRITICAL: claude binary not found at '{CLAUDE_BIN}' — all AI responses will fail")
+        send(token, config.get("chat_id", ""), f"⚠️ Bot started but claude binary not found at `{CLAUDE_BIN}` — fix config.json")
 
     # Integrity check: flag any athlete directory that has no chat_id in athletes.json
     athletes_raw = json.loads(ATHLETES_CONFIG.read_text()) if ATHLETES_CONFIG.exists() else {}
