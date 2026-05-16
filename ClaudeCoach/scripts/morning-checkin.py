@@ -80,16 +80,20 @@ Step 3 — Determine ONE question to ask (or none):
 
 Step 4 — Output the morning card in Telegram Markdown (no preamble, no sign-off):
 
+Use the recovery score and signals ONLY to decide what to flag — do NOT show the score, label, HRV ratio, or any internal metric to the athlete. Write like a coach sending a morning text, not a dashboard.
+
 *Good morning — [Day date, e.g. Sat 9 May]*
 
-*Today:* [session name] · [planned Load if available] · [duration] min
-*Readiness:* [score]/100 — [label] · *Form:* [value]
-*Sleep:* [hours]h · *HRV:* [ratio vs baseline, e.g. 0.93×] · *RHR:* [value]
+*Today:* [session name] — [duration] min[, ~[TSS] TSS if available]
 
-[If recovery ORANGE or RED: ⚠️ [one-line recommendation from recovery score]]
-[If watchdog flag active: ⚠️ [flag]: [one-line note]]
-[If today's session is Ride or Brick >90 min: 🍌 Nutrition — target [min(avg+10,90)]g/hr · recent avg [avg]g/hr on last 4 long rides · eat at 15 min then every 25 min]
-[If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact e.g. "no bike for 5 days"]]
+[Form line — only include if notable:
+  · Form < −20: ⚠️ Heavy load today — keep intensity in check
+  · Form > +10: 🟢 Fresh legs — good day for quality work
+  · Form −1 to −20: omit entirely, that's normal training]
+[If recovery ORANGE or RED: ⚠️ [one plain-English sentence on what to do differently — no scores]]
+[If watchdog flag active: ⚠️ [flag in plain English — one line]]
+[If today's session is Ride or Brick >90 min: 🍌 Nutrition — target [min(avg+10,90)]g/hr · eat at 15 min then every 25 min]
+[If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact]]
 [If open action is due within 3 days: 📌 [action] due [date]]
 [If today ≥ 2026-05-15 AND sessions_this_week < 2 AND today is Wednesday or later: 🌡️ Heat bath due — [N] this week (target 2–3×)]
 
@@ -97,11 +101,12 @@ Step 4 — Output the morning card in Telegram Markdown (no preamble, no sign-of
 
 _{days_to_race} days to {race_name}_
 
-Athlete context: {first_name} — {race_name} ({race_date}). Injuries: {injuries_note}.
-Form zones: >+5 = Fresh, 0 to −20 = In training, <−20 = Heavy load.
-If no planned session: "Rest day — recovery only". Omit unavailable fields silently.
-Never ask for subjective mood/fatigue/motivation scores.
-The countdown line (_{days_to_race} days to {race_name}_) appears exactly once, at the end. Do not add it anywhere else in the message.
+Rules:
+- Sleep/HRV/RHR: only show if today's wellness record has the value (not yesterday's — check the date field). Format simply: "Sleep: 7.2h · HRV: 52 · RHR: 48 bpm". If no data yet for today, omit the line — do not show yesterday's values.
+- If no planned session: say "Rest day" and skip the Today line.
+- Omit any section that has nothing to say — do not pad with dashes or "N/A".
+- Never ask for subjective mood, fatigue, or motivation scores.
+- The countdown line appears exactly once, at the end.
 Wrap your entire output in <telegram> and </telegram> tags. Output nothing outside those tags — no preamble, no reasoning, no tool commentary."""
 
 

@@ -1268,7 +1268,41 @@ def _build_remaining_queue(answers, icu_data):
     return qual + gaps
 
 
-def _scaffold_athlete(chat_id, answers, icu_data):
+def _lookup_race(race_name: str, race_date: str) -> dict:
+    """Use Claude + web search to fetch race-specific details. Returns dict or {} on failure."""
+    prompt = (
+        f'Search the web for the race "{race_name}" on {race_date}. '
+        f'Return ONLY a valid JSON object — no preamble, no explanation:\n'
+        f'{{\n'
+        f'  "race_type": "e.g. Ironman 140.6 / 70.3 Triathlon / Cycling Gran Fondo / Running Marathon",\n'
+        f'  "swim_km": null,\n'
+        f'  "bike_km": null,\n'
+        f'  "run_km": null,\n'
+        f'  "total_km": null,\n'
+        f'  "elevation_m": null,\n'
+        f'  "expected_hours_fast": null,\n'
+        f'  "expected_hours_mid": null,\n'
+        f'  "terrain": "flat / hilly / mountainous / alpine",\n'
+        f'  "notes": "one sentence — key demands, conditions, or course character"\n'
+        f'}}\n'
+        f'Use null for any field you cannot find. Return ONLY the JSON.'
+    )
+    try:
+        result = subprocess.run(
+            [CLAUDE, "-p", prompt, "--allowedTools", "WebSearch", "--model", MODEL_SONNET],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+            cwd=PROJECT_DIR, timeout=90,
+        )
+        raw = (result.stdout or "").strip()
+        m = re.search(r'\{.*\}', raw, re.DOTALL)
+        if m:
+            return json.loads(m.group())
+    except Exception as e:
+        log(f"Race lookup failed for '{race_name}': {e}")
+    return {}
+
+
+def _scaffold_athlete(chat_id, answers, icu_data, race_data=None):
     """Create athletes/{slug}/ folder, write seed files, update athletes.json. Returns slug."""
     from string import Template
 
@@ -1303,10 +1337,25 @@ def _scaffold_athlete(chat_id, answers, icu_data):
         {"location": "", "description": injuries_str, "protocol": ""}
     ]
 
+    rd = race_data or {}
+    race_type = rd.get("race_type") or "triathlon"
+
+    dist_parts = []
+    if rd.get("swim_km"):  dist_parts.append(f"{rd['swim_km']}km swim")
+    if rd.get("bike_km"):  dist_parts.append(f"{rd['bike_km']}km bike")
+    if rd.get("run_km"):   dist_parts.append(f"{rd['run_km']}km run")
+    if not dist_parts and rd.get("total_km"): dist_parts.append(f"{rd['total_km']}km")
+    race_distance_detail = " / ".join(dist_parts) if dist_parts else race_type
+
+    exp_hrs = rd.get("expected_hours_mid") or rd.get("expected_hours_fast")
+    expected_duration = f"~{exp_hrs}h" if exp_hrs else "TBD"
+
     profile = {
         "slug": slug, "name": name,
         "weight_kg": weight, "race_weight_kg": None,
-        "race_name": race_name, "race_date": race_date, "race_distance": "Full Ironman",
+        "race_name": race_name, "race_date": race_date,
+        "race_distance": race_type,
+        "race_info": rd,
         "a_goal": answers.get("a_goal", ""), "b_goal": None, "c_goal": "Finish",
         "ftp_watts": ftp, "indoor_ftp_watts": icu_data.get("indoor_ftp_watts"),
         "swim_css_per_100m": swim_css, "run_threshold_pace_per_km": run_thr, "lthr": lthr,
@@ -1344,7 +1393,12 @@ def _scaffold_athlete(chat_id, answers, icu_data):
     template_vars = dict(
         name=name, first_name=first_name, slug=slug,
         race_name=race_name, race_date=race_date or "TBD",
-        race_distance=profile.get("race_distance", "triathlon"),
+        race_distance=race_type,
+        race_distance_detail=race_distance_detail,
+        race_elevation_m=rd.get("elevation_m") or "unknown",
+        race_terrain=rd.get("terrain") or "",
+        race_notes=rd.get("notes") or "",
+        expected_race_duration=expected_duration,
         a_goal=profile["a_goal"],
         b_goal=profile.get("b_goal", "Finish"),
         experience=answers.get("experience", ""),
@@ -1427,12 +1481,42 @@ def handle_onboarding(token, chat_id, text):
             return True
 
         session["icu_data"] = icu_data
+
+        # Look up race details in the background while we send the ICU summary
+        race_str = session["answers"].get("race", "")
+        race_date_m = re.search(r'(\d{4}-\d{2}-\d{2})', race_str)
+        race_date_str = race_date_m.group(1) if race_date_m else ""
+        send(token, chat_id, summary)
+        send(token, chat_id, "_Looking up your race..._")
+        race_data = _lookup_race(race_str, race_date_str)
+        session["race_data"] = race_data
+
+        if race_data:
+            parts = []
+            if race_data.get("total_km") or race_data.get("bike_km"):
+                dist = []
+                if race_data.get("swim_km"):  dist.append(f"{race_data['swim_km']}km swim")
+                if race_data.get("bike_km"):  dist.append(f"{race_data['bike_km']}km bike")
+                if race_data.get("run_km"):   dist.append(f"{race_data['run_km']}km run")
+                if not dist and race_data.get("total_km"): dist.append(f"{race_data['total_km']}km")
+                if dist: parts.append(" / ".join(dist))
+            if race_data.get("elevation_m"): parts.append(f"{race_data['elevation_m']}m elevation")
+            mid = race_data.get("expected_hours_mid") or race_data.get("expected_hours_fast")
+            if mid: parts.append(f"~{mid}h typical finish")
+            if race_data.get("notes"): parts.append(race_data["notes"])
+            race_summary = f"*{race_data.get('race_type', race_str)}*"
+            if parts:
+                race_summary += "\n" + " · ".join(parts)
+            send(token, chat_id, race_summary)
+        else:
+            send(token, chat_id, "_Race details not found — I'll use what you've told me._")
+
         remaining = _build_remaining_queue(session["answers"], icu_data)
         session["queue"] = [[k, q] for k, q in remaining]
         next_key, next_q = session["queue"].pop(0)
         session["current_key"] = next_key
         save_onboarding_state(ob_state)
-        send(token, chat_id, summary + "\n\n" + next_q)
+        send(token, chat_id, next_q)
         return True
 
     # Advance to next question
@@ -1447,7 +1531,7 @@ def handle_onboarding(token, chat_id, text):
     save_onboarding_state(ob_state)
     send(token, chat_id, "_Setting up your profile..._")
     try:
-        slug = _scaffold_athlete(chat_id, session["answers"], session["icu_data"])
+        slug = _scaffold_athlete(chat_id, session["answers"], session["icu_data"], session.get("race_data"))
     except Exception as e:
         log(f"Onboarding scaffold failed for {chat_id}: {e}")
         send(token, chat_id, f"Something went wrong setting up your profile -- please contact your coach. (Error: {e})")
