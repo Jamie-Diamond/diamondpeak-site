@@ -79,8 +79,9 @@ class IcuClient:
 
     def get_wellness(self, days: int = 7, newest: str = None) -> list:
         """Daily CTL/ATL/TSB plus HRV, sleep, weight, restingHR, subjective scores.
-        Pass newest='YYYY-MM-DD' for a future end date (taper/race projection)."""
-        oldest = (date.today() - timedelta(days=days)).isoformat()
+        Pass newest='YYYY-MM-DD' for a future or past end date."""
+        anchor = date.fromisoformat(newest) if newest else date.today()
+        oldest = (anchor - timedelta(days=days)).isoformat()
         params = {"oldest": oldest}
         if newest:
             params["newest"] = newest
