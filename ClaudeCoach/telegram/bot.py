@@ -1288,10 +1288,11 @@ def _lookup_race(race_name: str, race_date: str) -> dict:
         f'Use null for any field you cannot find. Return ONLY the JSON.'
     )
     try:
+        claude_bin = load_config().get("claude_binary", "/usr/bin/claude")
         result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", "WebSearch", "--model", MODEL_SONNET],
+            [claude_bin, "-p", prompt, "--allowedTools", "WebSearch", "--model", MODEL_SONNET],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-            cwd=PROJECT_DIR, timeout=90,
+            cwd=str(PROJECT_DIR), timeout=90,
         )
         raw = (result.stdout or "").strip()
         m = re.search(r'\{.*\}', raw, re.DOTALL)
