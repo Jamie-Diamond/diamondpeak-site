@@ -102,7 +102,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 _{days_to_race} days to {race_name}_
 
 Rules:
-- Sleep/HRV/RHR: NEVER show these. At 06:20 the wearable has not yet synced last night's data — any value shown would be from the previous night and would be wrong. Leave them out entirely.
+- Sleep/HRV/RHR: only show if today's wellness record has the value (not yesterday's — check the date field). Format simply: "Sleep: 7.2h · HRV: 52 · RHR: 48 bpm". If no data yet for today, omit the line — do not show yesterday's values.
 - If no planned session: say "Rest day" and skip the Today line.
 - Omit any section that has nothing to say — do not pad with dashes or "N/A".
 - Never ask for subjective mood, fatigue, or motivation scores.
