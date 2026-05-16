@@ -1674,6 +1674,18 @@ def main():
     token = config["bot_token"]
     athletes = load_athletes()
     log(f"ClaudeCoach bot started. Registered athletes: {[a['name'] for a in athletes.values()]}")
+
+    # Integrity check: flag any athlete directory that has no chat_id in athletes.json
+    athletes_raw = json.loads(ATHLETES_CONFIG.read_text()) if ATHLETES_CONFIG.exists() else {}
+    athletes_dir = BASE.parent / "athletes"
+    for slug_dir in (athletes_dir.iterdir() if athletes_dir.exists() else []):
+        if not slug_dir.is_dir():
+            continue
+        slug = slug_dir.name
+        entry = athletes_raw.get(slug, {})
+        if not entry.get("chat_id") and entry.get("active", True):
+            log(f"CONFIG WARNING: athlete '{slug}' has no chat_id in athletes.json — they cannot receive messages")
+
     get_whisper()
 
     offset = 0
@@ -1725,6 +1737,11 @@ def main():
                     continue
                 log(f"Unregistered message from chat_id {chat_id}: {text[:60]}")
                 send(token, chat_id, "This account isn't registered with ClaudeCoach yet.")
+                # Alert admin so missing chat_ids are caught immediately
+                admin_id = str(config.get("admin_chat_id") or config.get("chat_id", ""))
+                if admin_id and admin_id != chat_id:
+                    send(token, admin_id,
+                         f"⚠️ Unregistered message\nchat\\_id: `{chat_id}`\n_{text[:120]}_")
                 continue
 
             slug = athlete["slug"]
