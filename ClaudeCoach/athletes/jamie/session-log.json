@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i148702710",
+    "date": "2026-05-16",
+    "name": "Sat 16 May - Interval ride 2hr",
+    "sport": "Ride",
+    "tss": 115,
+    "duration_min": 123,
+    "distance_km": 59.8,
+    "avg_power": 186,
+    "norm_power": 237,
+    "avg_hr": 129,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-16T08:15:00",
+    "stub": true
+  },
+  {
     "activity_id": "i148439070",
     "date": "2026-05-15",
     "name": "Fri 15 May - Long ride 4hr Z2",
@@ -69,7 +90,7 @@
     "avg_hr": 129,
     "rpe": 7,
     "feel": null,
-    "notes": "Main set 5\u00d7400m @ CSS. Held 1:42\u20131:44 throughout \u2014 consistently 3\u20135s off target 1:39. Slight improvement rep 1\u21922 (1:44\u21921:42) but couldn't close the gap.",
+    "notes": "Main set 5×400m @ CSS. Held 1:42–1:44 throughout — consistently 3–5s off target 1:39. Slight improvement rep 1→2 (1:44→1:42) but couldn't close the gap.",
     "logged_at": "2026-05-12T07:30:00",
     "stub": false
   },
@@ -90,7 +111,7 @@
     "ankle_pain_next_morning": 0,
     "nutrition_g_carb": null,
     "hydration_ml": null,
-    "notes": "Pain 2/10 \u2014 same as Thu 7 May. Location varied by terrain: right Achilles on warmup and uphills, front of ankle on flat.",
+    "notes": "Pain 2/10 — same as Thu 7 May. Location varied by terrain: right Achilles on warmup and uphills, front of ankle on flat.",
     "logged_at": "2026-05-11T20:00:00",
     "stub": true
   },
@@ -118,7 +139,7 @@
   {
     "activity_id": "i146900219",
     "date": "2026-05-10",
-    "name": "Z2 ride \u2014 2 hr (pre-brick)",
+    "name": "Z2 ride — 2 hr (pre-brick)",
     "sport": "Ride",
     "tss": 86,
     "duration_min": 106,
@@ -132,7 +153,7 @@
     "ankle_pain_next_morning": null,
     "nutrition_g_carb": 140,
     "hydration_ml": 1100,
-    "notes": "Carbs 80g + 60g = 140g total (~79g/hr avg). 90% consumed in first 70 min \u2014 heavily front-loaded (~108g/hr early, trickle thereafter). Drank 1.1 L (~622 ml/hr). Noticed drinking a bit quick at 75 min but no GI issues. Ankle clean.",
+    "notes": "Carbs 80g + 60g = 140g total (~79g/hr avg). 90% consumed in first 70 min — heavily front-loaded (~108g/hr early, trickle thereafter). Drank 1.1 L (~622 ml/hr). Noticed drinking a bit quick at 75 min but no GI issues. Ankle clean.",
     "logged_at": "2026-05-10",
     "stub": false
   },
@@ -254,7 +275,7 @@
   {
     "activity_id": "i144748538",
     "date": "2026-05-02",
-    "name": "Mid ride \u2014 2 hr Z2 + sweet spot block",
+    "name": "Mid ride — 2 hr Z2 + sweet spot block",
     "sport": "Ride",
     "tss": 100,
     "duration_min": 130,
@@ -275,7 +296,7 @@
   {
     "activity_id": "i144473726",
     "date": "2026-05-01",
-    "name": "Long ride \u2014 3 hr Z2",
+    "name": "Long ride — 3 hr Z2",
     "sport": "Ride",
     "tss": 117,
     "duration_min": 120,
@@ -328,7 +349,7 @@
   {
     "activity_id": "i143589500",
     "date": "2026-04-28",
-    "name": "Swim \u2014 aerobic + technique (55 min)",
+    "name": "Swim — aerobic + technique (55 min)",
     "sport": "Swim",
     "tss": 46,
     "duration_min": 39,
@@ -580,7 +601,7 @@
   {
     "activity_id": "i140203046",
     "date": "2026-04-16",
-    "name": "Home time \ud83e\udd7a",
+    "name": "Home time 🥺",
     "sport": "Swim",
     "tss": 28,
     "duration_min": 19,
@@ -708,7 +729,7 @@
   {
     "activity_id": "i139321437",
     "date": "2026-04-13",
-    "name": "\ud83d\udc28 Spotting.",
+    "name": "🐨 Spotting.",
     "sport": "Other",
     "tss": 30,
     "duration_min": 147,
@@ -721,7 +742,7 @@
   {
     "activity_id": "i139292078",
     "date": "2026-04-13",
-    "name": "First run in 8 weeks \ud83d\udc4c",
+    "name": "First run in 8 weeks 👌",
     "sport": "Run",
     "tss": 19,
     "duration_min": 24,
@@ -793,7 +814,7 @@
   {
     "activity_id": "i138536825",
     "date": "2026-04-10",
-    "name": "\ud83d\udc4c",
+    "name": "👌",
     "sport": "Swim",
     "tss": 48,
     "duration_min": 33,
@@ -834,7 +855,7 @@
   {
     "activity_id": "i138278640",
     "date": "2026-04-09",
-    "name": "\u2600\ufe0f\ud83c\udfca\ud83d\ude0a",
+    "name": "☀️🏊😊",
     "sport": "Other",
     "tss": 24,
     "duration_min": 31,
@@ -944,7 +965,7 @@
   {
     "activity_id": "i137271861",
     "date": "2026-04-05",
-    "name": "3x Emu, 8x \ud83e\udd98.",
+    "name": "3x Emu, 8x 🦘.",
     "sport": "Ride",
     "tss": 54,
     "duration_min": 70,
@@ -1064,7 +1085,7 @@
   {
     "activity_id": "i135601741",
     "date": "2026-03-29",
-    "name": "First BST ride in 3\u00b0",
+    "name": "First BST ride in 3°",
     "sport": "Ride",
     "tss": 144,
     "duration_min": 167,
@@ -1252,7 +1273,7 @@
   {
     "activity_id": "i133440938",
     "date": "2026-03-20",
-    "name": "\ud83c\udf1e\ud83e\udd76\ud83e\udd76",
+    "name": "🌞🥶🥶",
     "sport": "Ride",
     "tss": 161,
     "duration_min": 176,
@@ -1273,7 +1294,7 @@
   {
     "activity_id": "i132919493",
     "date": "2026-03-18",
-    "name": "No lane system \ud83e\udd2c on an otherwise lovely swim",
+    "name": "No lane system 🤬 on an otherwise lovely swim",
     "sport": "Swim",
     "tss": 51,
     "duration_min": 37,
@@ -1345,7 +1366,7 @@
   {
     "activity_id": "i131934782",
     "date": "2026-03-14",
-    "name": "\ud83c\udf1e",
+    "name": "🌞",
     "sport": "Ride",
     "tss": 151,
     "duration_min": 209,
@@ -1380,7 +1401,7 @@
     "ankle_pain_next_morning": null,
     "nutrition_g_carb": 184,
     "hydration_ml": 1800,
-    "notes": "Fuel: Maurten 320 (80g), SIS Beta chew (45g), half PF30 chew (15g), 2 scoops High5 Caffeine Hit (44g). 3\u00d7600ml bottles. ~57g/hr \u2014 appropriate for IF 0.69 ride. Workout: 3\u00d75min @ FTP target on Surrey climbs. Actual reps 4:04 @ 326W, 2:57 @ 316W, 7:14 @ 317W. 95% volume / 102% power, all reps on or above 316W. Decoupling 15.8% whole-ride was traffic-driven (stop-start finish), not fatigue \u2014 per-rep decoupling clean (5-8%).",
+    "notes": "Fuel: Maurten 320 (80g), SIS Beta chew (45g), half PF30 chew (15g), 2 scoops High5 Caffeine Hit (44g). 3×600ml bottles. ~57g/hr — appropriate for IF 0.69 ride. Workout: 3×5min @ FTP target on Surrey climbs. Actual reps 4:04 @ 326W, 2:57 @ 316W, 7:14 @ 317W. 95% volume / 102% power, all reps on or above 316W. Decoupling 15.8% whole-ride was traffic-driven (stop-start finish), not fatigue — per-rep decoupling clean (5-8%).",
     "logged_at": "2026-05-09",
     "stub": false
   },
@@ -1410,6 +1431,6 @@
     "session": "88k fuelling-rehearsal ride",
     "tss": 126,
     "rpe": 4,
-    "notes": "160g carbs total over ~3hr (~53g/hr \u2014 well below race target). Lots of traffic, hard to hold consistent effort. Ankle ok. Not that hot."
+    "notes": "160g carbs total over ~3hr (~53g/hr — well below race target). Lots of traffic, hard to hold consistent effort. Ankle ok. Not that hot."
   }
 ]
