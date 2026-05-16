@@ -1,6 +1,6 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-05-15
+Last updated: 2026-05-16
 
 ## Training Availability
 Max weekly training: **5 hours/week** (cycling)
@@ -14,3 +14,7 @@ No
 
 ## Open Actions
 - [ ] Set up initial training plan
+
+## Watchdog Log
+- 2026-05-16 T7: heat dose = 0.0 AU (last 14 days) — threshold 3.0 AU not met; heat-log.json empty
+- 2026-05-16 T8: no heat sessions recorded — last entry never (>7 days)
