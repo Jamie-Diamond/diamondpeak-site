@@ -24,5 +24,9 @@ None
 
 - 2026-05-16: bike_z2 60min — GO, executed as planned (no rules fired)
 
+## Heat Acclimatisation
+
+- 2026-05-16: T7 fired — heat-log.json empty, 0.0 dose in last 14 days (threshold 3.0). Begin heat sessions immediately.
+
 ## Open Actions
 - [ ] Set up initial training plan
