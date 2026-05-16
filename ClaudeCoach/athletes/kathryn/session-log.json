@@ -14,9 +14,9 @@
     "feel": "felt better than expected",
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
+    "nutrition_g_carb": 20,
     "hydration_ml": null,
-    "notes": "Pre-ride: half banana + toast (~40g carb). Post-ride: toast + protein shake (30g protein). No in-ride nutrition reported.",
+    "notes": "Pre-ride: half banana + toast (~40g carb). In-ride: 1x Kind bar (nuts + syrup, 225 kcal, ~20g carb). Post-ride: toast + protein shake (30g protein). Total in-ride carb ~20g vs ~90-100g target for this duration/intensity.",
     "logged_at": "2026-05-16T09:30:00",
     "stub": true
   },
