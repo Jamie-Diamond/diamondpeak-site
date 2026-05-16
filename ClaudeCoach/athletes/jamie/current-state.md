@@ -108,6 +108,9 @@
 - **2026-05-15 — T7 (Tier 1):** Heat protocol formal start today. Cumulative dose in last 14 days = 1 session (Sun 10 May hot bath 25 min @ 45°C) vs target ≥3. Queue 4–5 sessions in next 7 days to clear the floor.
 - **2026-05-15 — T9 (Tier 2):** Bike gearing decision (decision-point B7b) due "by mid-May" — no chainring swap booked and no decision logged in `current-state.json` `open_actions[]`. Lock this week: 46T/48T sub-compact swap, cassette swap (11-36/11-40), or accept the re-budget plan (NP 220 W, soft first 90 min IF 0.65). Required input for Bertinoro pacing.
 - **2026-05-15 — T10 (Tier 2, re-confirmed):** Run km Mon 11–Fri 15 = 18.50 km (Mon 7.39 + Wed 13 May 11.11; no Thu/Fri run) vs 12.52 km last wk = +47.8% w/w. 10% cap stands while ankle in rehab. Hold Sat 16 + Sun 17 runs to cap week ≤18.5 km, OR accept the breach again — coach decision, athlete already signalled willingness to keep Wed long.
+- **2026-05-16 — T7 (Tier 1):** Heat dose still 1 session in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 2. Need 2+ sessions this week to begin clearing the floor.
+- **2026-05-16 — T9 (Tier 2):** current-state.json open_action "Replan 18–22 May as run+swim only (travel)" status=pending but current-state.md shows done. JSON needs syncing before due date 2026-05-17. No real-action gap — confirm and update JSON.
+- **2026-05-16 — T10 (Tier 2):** Run km Mon–Sat = 18.50 km (Mon 11 7.39 + Wed 13 11.11; Sat 16 = ride only) vs 12.52 km last wk = +47.8% w/w. 10% cap still breached. If Sun 17 easy 5k goes ahead, week ends ~23.5 km (+88%).
 
 ## Notes for Claude
 
