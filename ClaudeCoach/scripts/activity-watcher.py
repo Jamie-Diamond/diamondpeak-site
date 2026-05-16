@@ -142,7 +142,6 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
     }}
 
   - Write the updated array back to ClaudeCoach/athletes/{slug}/session-log.json.
-  - Run via Bash: git -C {PROJECT_DIR} add ClaudeCoach/athletes/{slug}/session-log.json ClaudeCoach/athletes/{slug}/swim-log.json && git -C {PROJECT_DIR} commit -m "stub: <name> <date>" && git -C {PROJECT_DIR} push origin main
 
 Step 4 — Respond in EXACTLY this format (no other text):
 ACTIVITY_ID: <id or none>
@@ -358,11 +357,11 @@ def check_athlete(slug, athlete_cfg):
         result = subprocess.run(
             [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6"],
             capture_output=True, text=True,
-            cwd=PROJECT_DIR, timeout=180,
+            cwd=PROJECT_DIR, timeout=300,
         )
     except subprocess.TimeoutExpired:
         _notify(
-            f"Activity watcher timed out for {first_name} (180s). "
+            f"Activity watcher timed out for {first_name} (300s). "
             f"Last known activity: {state.get('last_id', 'unknown')}.",
             chat_id,
         )
@@ -428,6 +427,27 @@ def check_athlete(slug, athlete_cfg):
     state["last_id"] = activity_id
     state["notified_at"] = datetime.now().isoformat()
     save_state(state, state_file)
+
+    # Commit stub entry written by Claude
+    try:
+        files_to_add = [
+            f"ClaudeCoach/athletes/{slug}/session-log.json",
+            f"ClaudeCoach/athletes/{slug}/swim-log.json",
+        ]
+        subprocess.run(
+            ["git", "add"] + files_to_add,
+            cwd=PROJECT_DIR, capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", f"stub: activity {activity_id} {slug}"],
+            cwd=PROJECT_DIR, capture_output=True, timeout=15,
+        )
+        subprocess.run(
+            ["git", "push", "origin", "main"],
+            cwd=PROJECT_DIR, capture_output=True, timeout=30,
+        )
+    except Exception:
+        pass
 
     # Log decoupling for long rides
     if decoupling_raw and decoupling_raw != "none":
