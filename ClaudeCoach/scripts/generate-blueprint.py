@@ -24,7 +24,7 @@ BASE = Path(__file__).parent.parent  # ClaudeCoach/
 PROJECT_DIR = str(BASE.parent)
 
 
-# ── Mesocycle algorithm ──────────────────────────────────────────────────────
+# -- Mesocycle algorithm ------------------------------------------------------
 
 def phase_structure(weeks: int) -> list[dict]:
     """Return ordered list of phase dicts given weeks_to_race."""
@@ -87,7 +87,7 @@ def assign_dates(phases: list[dict], start: date) -> list[dict]:
     return phases
 
 
-# ── TSS ceiling ──────────────────────────────────────────────────────────────
+# -- TSS ceiling --------------------------------------------------------------
 
 IF_TARGETS = {
     "base":  0.65,
@@ -113,7 +113,7 @@ def tss_ceiling(max_hours: float, phase_name: str) -> float | None:
     return round(max_hours * 100 * IF ** 2, 0)
 
 
-# ── CTL phase targets ─────────────────────────────────────────────────────────
+# -- CTL phase targets ---------------------------------------------------------
 
 CTL_TARGETS = {
     "Full Ironman": {
@@ -136,7 +136,7 @@ def ctl_range(event: str, phase_name: str) -> tuple[int, int] | None:
     return CTL_TARGETS.get(event, {}).get(fam)
 
 
-# ── Live CTL fetch ────────────────────────────────────────────────────────────
+# -- Live CTL fetch ------------------------------------------------------------
 
 def fetch_ctl(slug: str) -> float | None:
     try:
@@ -159,7 +159,7 @@ def fetch_ctl(slug: str) -> float | None:
     return None
 
 
-# ── Course modifier ──────────────────────────────────────────────────────────
+# -- Course modifier ----------------------------------------------------------
 
 COURSE_NOTES = {
     "flat":         "Standard distribution applies.",
@@ -172,7 +172,7 @@ def course_note(course_type: str) -> str:
     return COURSE_NOTES.get(course_type.lower(), "Standard distribution applies.")
 
 
-# ── Heat protocol ────────────────────────────────────────────────────────────
+# -- Heat protocol ------------------------------------------------------------
 
 def heat_note(race_conditions: str, race_dt: date) -> str:
     if race_conditions != "hot":
@@ -185,7 +185,7 @@ def heat_note(race_conditions: str, race_dt: date) -> str:
     )
 
 
-# ── Fuelling targets ─────────────────────────────────────────────────────────
+# -- Fuelling targets ---------------------------------------------------------
 
 FUELLING = {
     "Full Ironman": {
@@ -208,7 +208,7 @@ def fuelling_note(event: str, phase_name: str) -> str:
     return event_fuel.get(fam, "Follow phase-progressive protocol.")
 
 
-# ── Test schedule ────────────────────────────────────────────────────────────
+# -- Test schedule ------------------------------------------------------------
 
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 
@@ -305,7 +305,7 @@ def test_schedule(phases: list[dict]) -> list[str]:
     return lines
 
 
-# ── Fitness check ─────────────────────────────────────────────────────────────
+# -- Fitness check -------------------------------------------------------------
 
 def fitness_check(slug: str, event: str, current_ctl: float,
                   phases: list[dict], choice: str | None) -> str | None:
@@ -360,7 +360,7 @@ def fitness_check(slug: str, event: str, current_ctl: float,
     return None
 
 
-# ── Distribution table ────────────────────────────────────────────────────────
+# -- Distribution table --------------------------------------------------------
 
 DISTRIBUTION = {
     "Full Ironman": {
@@ -405,7 +405,7 @@ def dist_table(event: str, phases: list[dict]) -> list[str]:
     return lines
 
 
-# ── Main blueprint renderer ───────────────────────────────────────────────────
+# -- Main blueprint renderer ---------------------------------------------------
 
 def render_blueprint(slug: str, profile: dict, phases: list[dict],
                      current_ctl: float | None, fitness_note: str | None,
@@ -556,7 +556,7 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     return "\n".join(lines)
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# -- Entry point ---------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="Generate training blueprint for an athlete.")

@@ -453,7 +453,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         ("get_fitness", (today - date(today.year, 1, 1)).days + 1),
     )
 
-    # ── kpi ──────────────────────────────────────────────────────────────────
+    # -- kpi ------------------------------------------------------------------
     kpi = {}
     if wellness_60:
         w = wellness_60[-1]
@@ -463,10 +463,10 @@ def _build_athlete_training_data(slug, athlete_cfg):
         kpi = {"ctl": ctl, "atl": atl, "tsb": round(ctl - atl, 1), "ramp7d": ramp7d,
                "hrv": w.get("hrv"), "rhr": w.get("restingHR")}
 
-    # ── fitnessThis ───────────────────────────────────────────────────────────
+    # -- fitnessThis -----------------------------------------------------------
     fitness_this = [[w["id"][:10], round(w.get("ctl") or 0, 1)] for w in fitness_ytd if w.get("ctl")]
 
-    # ── recent (last 14 days) ─────────────────────────────────────────────────
+    # -- recent (last 14 days) -------------------------------------------------
     recent = []
     for a in sorted([x for x in history_21 if x.get("start_date_local", "")[:10] >= fourteen_ago],
                     key=lambda x: x.get("start_date_local", ""), reverse=True):
@@ -489,7 +489,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
             "tss":    int(a.get("icu_training_load") or 0),
         })
 
-    # ── weekCalendar (last 7 days + next 14 days) ─────────────────────────────
+    # -- weekCalendar (last 7 days + next 14 days) -----------------------------
     completed_by_date: dict[str, list] = defaultdict(list)
     for a in history_21:
         d = a.get("start_date_local", "")[:10]
@@ -546,7 +546,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         })
     week_calendar.sort(key=lambda x: x["date"])
 
-    # ── loadChart (today−7 to today+7, 15 days) ───────────────────────────────
+    # -- loadChart (today−7 to today+7, 15 days) -------------------------------
     tsb_by_date = {}
     for w in wellness_60:
         d = w.get("id", "")[:10]
@@ -585,7 +585,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 })
         load_chart.append({"date": d, "tsb": tsb_by_date.get(d), "activities": acts})
 
-    # ── session log + swim log from local files ───────────────────────────────
+    # -- session log + swim log from local files -------------------------------
     session_log = []
     sl_file = BASE / f"athletes/{slug}/session-log.json"
     if sl_file.exists():

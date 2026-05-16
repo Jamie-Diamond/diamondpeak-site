@@ -84,7 +84,7 @@ def run_summary(slug: str = "jamie") -> str:
     week_start = today - timedelta(days=today.weekday())  # Monday
     week_end   = week_start + timedelta(days=6)           # Sunday
 
-    # ── Fetch IcuSync data ────────────────────────────────────────────────────
+    # -- Fetch IcuSync data ----------------------------------------------------
     wellness_14d    = client.get_wellness(14)
     activities_7d   = client.get_training_history(7)
     events_this_wk  = client.get_events(week_start.isoformat(), week_end.isoformat())
@@ -93,7 +93,7 @@ def run_summary(slug: str = "jamie") -> str:
     fitness_outlook = client.get_fitness(7, newest=outlook_end)
     events_4wk      = client.get_events((today + timedelta(days=1)).isoformat(), outlook_end)
 
-    # ── Read local files ──────────────────────────────────────────────────────
+    # -- Read local files ------------------------------------------------------
     current_state = _read_file(adir / "current-state.md")
     session_log   = _read_json(adir / "session-log.json")
     heat_log      = _read_json(adir / "heat-log.json")
@@ -137,7 +137,7 @@ def run_summary(slug: str = "jamie") -> str:
     first_name   = profile.get("name", slug).split()[0]
     ftp          = profile.get("ftp_watts", "unknown")
 
-    # ── Athlete-specific nutrition consequence (for T7 trigger) ──────────────
+    # -- Athlete-specific nutrition consequence (for T7 trigger) --------------
     prev_race = profile.get("prev_race", {})
     prev_race_notes = prev_race.get("notes", "")
     prev_race_name  = prev_race.get("name", "")
@@ -153,7 +153,7 @@ def run_summary(slug: str = "jamie") -> str:
             "Race-day bonk risk rises sharply when training rides average below 75g/hr."
         )
 
-    # ── Pre-compute recovery score ────────────────────────────────────────────
+    # -- Pre-compute recovery score --------------------------------------------
     recovery = None
     try:
         hrv_t, hrv_b, tsb_v, sleep_v = rs._parse_wellness(wellness_14d)
@@ -192,7 +192,7 @@ def run_summary(slug: str = "jamie") -> str:
             f"Use this for T1/T8 evaluation — it is already derived from the wellness data below.\n"
         )
 
-    # ── Build prompt ──────────────────────────────────────────────────────────
+    # -- Build prompt ----------------------------------------------------------
     prompt = f"""You are generating the weekly training summary for {first_name}'s {race_name} coaching system.
 All IcuSync data has been fetched and is embedded below. Do NOT call any fetch commands — work only from the data provided. Use Write and Bash only for the state-file update and git commit at the end.
 {recovery_block}
