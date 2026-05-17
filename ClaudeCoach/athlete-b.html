@@ -372,11 +372,16 @@ function rollupSport(s) {
 })();
 
 // ── FITNESS CHART ────────────────────────────────────────────────────────────
+const RACE_DATE_STR = "2026-09-20";
+function toTX(d, raceStr) {
+  raceStr = raceStr || RACE_DATE_STR;
+  return Math.round((new Date(d+"T00:00:00") - new Date(raceStr+"T00:00:00")) / 86400000);
+}
 const targetMilestones = [
-  ["2026-06-28", 55, "End Base"],
-  ["2026-08-09", 70, "End Build"],
-  ["2026-08-30", 75, "Peak"],
-  ["2026-09-20", 70, "Race day target"],
+  [toTX("2026-06-28"), 55, "End Base"],
+  [toTX("2026-08-09"), 70, "End Build"],
+  [toTX("2026-08-30"), 75, "Peak"],
+  [toTX("2026-09-20"), 70, "Race day target"],
 ];
 
 window.chartFitness = null;
@@ -396,7 +401,7 @@ window.chartFitness = null;
           borderWidth:2.2
         },
         {
-          label:"CTL — last season",
+          label:"CTL — Athens '24",
           data:[],
           borderColor:"rgba(26,82,118,0.55)",
           backgroundColor:"transparent",
@@ -407,8 +412,19 @@ window.chartFitness = null;
           _prevSeason: true
         },
         {
+          label:"CTL — Venice '23",
+          data:[],
+          borderColor:"rgba(39,174,96,0.5)",
+          backgroundColor:"transparent",
+          pointRadius:0,
+          tension:0.2,
+          borderWidth:1.5,
+          borderDash:[2,4],
+          _prevSeason: true
+        },
+        {
           label:"Target CTL",
-          data:targetMilestones.map(([d,v])=>({x:d,y:v})),
+          data:targetMilestones.map(([tx,v])=>({x:tx,y:v})),
           borderColor:"rgba(192,57,43,0.7)",
           backgroundColor:"rgba(192,57,43,0.07)",
           borderWidth:2,
@@ -437,8 +453,9 @@ window.chartFitness = null;
         }
       },
       scales:{
-        x:{type:"time",time:{unit:"month",displayFormats:{month:"MMM"}},
-           min:"2026-01-01",max:"2026-09-25",grid:{color:"#e8e3da"}},
+        x:{type:"linear",min:-265,max:14,
+           ticks:{callback:v=>"T"+v,maxTicksLimit:10},
+           grid:{color:"#e8e3da"}},
         y:{title:{display:true,text:"CTL"},min:0,max:90,grid:{color:"#e8e3da"}}
       }
     }
@@ -449,14 +466,10 @@ function zoomFitness(days) {
   if (!window.chartFitness) return;
   const sc = window.chartFitness.options.scales.x;
   if (days === 0) {
-    sc.min = "2026-01-01"; sc.max = "2026-09-25";
-    sc.time.unit = "month"; sc.time.displayFormats = {month:"MMM"};
+    sc.min = -265; sc.max = 14;
   } else {
-    const now = new Date();
-    const from = new Date(now); from.setDate(from.getDate() - days);
-    const to   = new Date(now); to.setDate(to.getDate() + 21);
-    sc.min = from.toISOString().slice(0,10); sc.max = to.toISOString().slice(0,10);
-    sc.time.unit = "day"; sc.time.displayFormats = {day:"d MMM"};
+    const todayTX = toTX(new Date().toISOString().slice(0,10));
+    sc.min = todayTX - days; sc.max = todayTX + 21;
   }
   window.chartFitness.update();
 }
@@ -838,7 +851,7 @@ function renderCtlProjection(proj) {
     {key:"planned_build",    label:"Phase target (avg)", color:"rgba(120,120,120,0.6)", dash:[4,3]},
   ];
   scenarios.forEach(sc => {
-    const data = (proj[sc.key]||[]).map(p=>({x:p.date,y:p.ctl}));
+    const data = (proj[sc.key]||[]).map(p=>({x:toTX(p.date),y:p.ctl}));
     if (data.length) window.chartFitness.data.datasets.push({
       _projection:true, label:sc.label, data,
       borderColor:sc.color, backgroundColor:"transparent",
@@ -865,7 +878,7 @@ fetch('site-data.json?v='+Date.now())
     }
     const hist = a.ctl_history||[];
     if (hist.length && window.chartFitness) {
-      window.chartFitness.data.datasets[0].data = hist.map(([dt,v])=>({x:dt,y:v}));
+      window.chartFitness.data.datasets[0].data = hist.map(([dt,v])=>({x:toTX(dt),y:v}));
       window.chartFitness.update();
     }
     if (d.updated) {
@@ -880,17 +893,14 @@ fetch('training-data-kathryn.json?v='+Date.now())
   .then(r=>r.json())
   .then(d=>{
     if (d.fitnessThis && window.chartFitness) {
-      window.chartFitness.data.datasets[0].data = d.fitnessThis.map(([dt,v])=>({x:dt,y:v}));
-      // Previous season overlay — shift last year's dates so race days align
+      window.chartFitness.data.datasets[0].data = d.fitnessThis.map(([dt,v])=>({x:toTX(dt),y:v}));
       if (d.fitnessPrev && d.fitnessPrev.length) {
-        const thisRace = new Date("2026-09-20");
-        const prevRaceDateStr = (d.profile && d.profile.prev_race_date) || d.fitnessPrev[d.fitnessPrev.length-1][0];
-        const prevRace = new Date(prevRaceDateStr+"T00:00:00");
-        const shiftMs = thisRace - prevRace;
-        window.chartFitness.data.datasets[1].data = d.fitnessPrev.map(([dt,v])=>{
-          const shifted = new Date(new Date(dt+"T00:00:00").getTime() + shiftMs);
-          return {x: shifted.toISOString().slice(0,10), y: v};
-        });
+        const prevRaceStr = (d.profile && d.profile.prev_race_date) || d.fitnessPrev[d.fitnessPrev.length-1][0];
+        window.chartFitness.data.datasets[1].data = d.fitnessPrev.map(([dt,v])=>({x:toTX(dt,prevRaceStr),y:v}));
+        window.chartFitness.options.plugins.legend.display = true;
+      }
+      if (d.fitnessPrev2 && d.fitnessPrev2.length && d.profile && d.profile.prev2_race_date) {
+        window.chartFitness.data.datasets[2].data = d.fitnessPrev2.map(([dt,v])=>({x:toTX(dt,d.profile.prev2_race_date),y:v}));
         window.chartFitness.options.plugins.legend.display = true;
       }
       window.chartFitness.update();
