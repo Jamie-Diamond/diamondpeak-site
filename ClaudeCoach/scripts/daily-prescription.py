@@ -4,7 +4,7 @@ Daily session prescription — runs via VM crontab at 05:00 daily.
 Loops over all active athletes. Safe to run manually:
   python3 ClaudeCoach/scripts/daily-prescription.py
 """
-import json, shutil, subprocess, sys, tempfile, os
+import json, re, shutil, subprocess, sys, tempfile, os
 from datetime import date
 from pathlib import Path
 
@@ -110,11 +110,10 @@ If no rules fired: output "Today: [session name] — execute as planned." and th
 Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired. Also update ankle section if today's prescription was affected by ankle status.
 Run: git -C {PROJECT_DIR} add ClaudeCoach/athletes/{slug}/current-state.md && git -C {PROJECT_DIR} fetch origin && git -C {PROJECT_DIR} merge origin/main --no-edit && git -C {PROJECT_DIR} commit -m "prescription: {today} [status]" && git -C {PROJECT_DIR} push origin main
 
-Step 9 — Send Telegram notification if session was modified, swapped, or blocked. Message under 200 characters:
-  "[session name]: [one-line summary of change]"
-  Do not send if session is unchanged.
-  Run: python3 {NOTIFY} --chat-id CHAT_ID "message"
-  (Replace CHAT_ID with the value from athletes.json for slug={slug})
+Step 9 — If the session was modified, swapped, or blocked, append ONE line at the very end of your response wrapped in <telegram> tags:
+<telegram>[session name]: [one plain-English sentence on what changed and why]</telegram>
+If the session is unchanged (GO with no rule fires), output nothing inside <telegram> tags — omit entirely.
+The <telegram> content is the ONLY thing the athlete will see. Everything above is internal coaching context.
 """
 
 
@@ -164,12 +163,13 @@ def main():
         chat_id = str(cfg.get("chat_id", ""))
         output = run_for_athlete(slug, cfg)
         with open(LOG_FILE, "a") as lf:
-            lf.write(f"[prescription:{slug}] {'output sent' if output else 'no output'}\n")
+            lf.write(f"[prescription:{slug}]\n{output or '(no output)'}\n---\n")
         if output:
-            print(output, flush=True)
-            if chat_id:
+            m = re.search(r"<telegram>(.*?)</telegram>", output, re.DOTALL)
+            notification = m.group(1).strip() if m else None
+            if notification and chat_id:
                 subprocess.run(
-                    ["python3", str(NOTIFY), "--chat-id", chat_id, output[:4000]],
+                    ["python3", str(NOTIFY), "--chat-id", chat_id, notification],
                     cwd=PROJECT_DIR,
                 )
     trim_log(LOG_FILE)
