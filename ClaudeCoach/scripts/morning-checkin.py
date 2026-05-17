@@ -24,7 +24,8 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
     injury_question = ""
     if injuries:
         injury_question = (
-            "- If a run is planned today AND the last injury pain score in current-state.json was >0: "
+            "- If a run is planned today AND ankle.pain_next_morning in current-state.json is >0 "
+            "(do NOT use pain_during — that is a run-specific score, not a morning score): "
             "ask \"Injury pain score before heading out? (0-10)\"\n"
         )
     injury_question += "- Else if no weight reading in the last 3 days: ask \"Weight this morning?\""
@@ -166,7 +167,12 @@ def run_athlete(slug, athlete_cfg):
         pain = 0
         state_f = adir / "current-state.json"
         if state_f.exists():
-            pain = json.loads(state_f.read_text()).get("ankle", {}).get("pain_during", 0) or 0
+            ankle = json.loads(state_f.read_text()).get("ankle", {})
+            # Use today's resting pain if logged today; otherwise use next-morning pain.
+            # Never use pain_during — that's an in-run score and is not morning-relevant.
+            resting_today = ankle.get("pain_today_resting_date") == today_str
+            pain = (ankle.get("pain_today_resting", 0) if resting_today
+                    else ankle.get("pain_next_morning", 0)) or 0
         recovery = rs.compute(hrv_t, hrv_b, tsb, sleep, pain)
     except Exception:
         pass  # score is optional — morning card still sends without it

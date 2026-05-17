@@ -80,8 +80,9 @@ From nutrition_history compute:
 
 Step 3 — Determine the planning window:
 - Target: the 2 weeks starting NEXT Monday (not today).
-- Check events endpoint for that window. If there are already 7+ events planned: output "Plan already populated for [date range] — skipping." and stop.
-- If <7 events: generate enough sessions to fill the week appropriately.
+- Check events endpoint for that window.
+- If there are already 7+ events planned: set plan_already_populated = true. Do NOT push new sessions (skip Steps 6–7). Continue through Steps 3b–5 for trajectory and constraint review, then jump to Step 8 to output a week-ahead summary of the existing sessions and send Telegram.
+- If <7 events: set plan_already_populated = false. Generate enough sessions to fill the week appropriately.
 
 Step 3b — Trajectory check (use fitness endpoint forward projection):
 - ctl_today = today's CTL value from fitness endpoint
@@ -144,15 +145,25 @@ Nutrition instructions for ALL sessions >90 min: state the specific nutrition_ta
 If nutrition_avg_g_hr is null: "Target: 60g CHO/hr — start building gut training."
 
 Step 7 — Output summary:
-"Plan generated: [date range]
-Week [N] ([phase]): [N sessions] · [total Load] planned
-Week [N+1] ([phase]): [N sessions] · [total Load] planned
-Fitness: [X] today -> target [Y] by end of [phase] (wk [Z]) · status: [BEHIND / ON_TRACK / AHEAD]
-Key constraints applied: [list any ankle/ramp/strength rules that shaped the plan]"
+If plan_already_populated = true:
+  "Week ahead [date range]:
+  Week [N] ([phase]): [list each existing session — date, sport, session name, Load]
+  Week [N+1] ([phase]): [list each existing session — date, sport, session name, Load]
+  Fitness: [X] CTL today → target [Y] by end of [phase] (wk [Z]) · status: [BEHIND / ON_TRACK / AHEAD]
+  [Any travel/access constraints flagged in current-state.md for this window]
+  Active constraints: [ankle/ramp/strength rules currently in force]"
+
+If plan_already_populated = false:
+  "Plan generated: [date range]
+  Week [N] ([phase]): [N sessions] · [total Load] planned
+  Week [N+1] ([phase]): [N sessions] · [total Load] planned
+  Fitness: [X] today -> target [Y] by end of [phase] (wk [Z]) · status: [BEHIND / ON_TRACK / AHEAD]
+  Key constraints applied: [list any ankle/ramp/strength rules that shaped the plan]"
 
 Step 8 — Send Telegram notification:
-  python3 {NOTIFY} --chat-id CHAT_ID "Plan generated [date range]: W[N] [X Load] + W[N+1] [Y Load]. [Any key constraint note]"
+  python3 {NOTIFY} --chat-id CHAT_ID "[summary from Step 7]"
   (Replace CHAT_ID with the value from athletes.json for slug={slug})
+  Send this regardless of whether the plan was already populated or freshly generated.
 
 Step 9 — Update {athlete_dir}/current-state.md "Open actions" section: mark "Plan generated through [date]" with today's date.
 Run: git add ClaudeCoach/athletes/{slug}/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "plan: generated W[N]-W[N+1] {today}" && git push origin main
