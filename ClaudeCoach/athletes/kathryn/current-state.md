@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-05-16
+Last updated: 2026-05-17
 
 ## Injuries / Niggles
 None
@@ -23,6 +23,7 @@ None
 ## Off-plan in last 7 days
 
 - 2026-05-16: bike_z2 60min — GO, executed as planned (no rules fired)
+- 2026-05-17: run_easy 60min — GO, execute as planned (no rules fired)
 
 ## Heat Acclimatisation
 
