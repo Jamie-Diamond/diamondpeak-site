@@ -15,13 +15,14 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, injuries):
+def _build_prompt(slug, first_name, injuries, pain_next_morning=0):
     today = date.today().isoformat()
-    injury_case = (
-        "  - Run: \"Good [X km] run done. Injury pain during and this morning? (0-10)\""
-        if injuries else
-        "  - Run: \"Good [X km] run done. RPE and how did it feel?\""
-    )
+    # Ask the injury question only if pain_next_morning > 0 — if last morning score
+    # was 0, the ankle is fine and we don't ask every single run.
+    if injuries and pain_next_morning > 0:
+        injury_case = "  - Run: \"Good [X km] run done. Injury pain during today's run? (0-10)\""
+    else:
+        injury_case = "  - Run: \"Good [X km] run done. RPE and how did it feel?\""
 
     return f"""\
 Evening training log check for {first_name}.
@@ -83,7 +84,16 @@ def run_athlete(slug, athlete_cfg):
     first_name = profile.get("name", slug).split()[0]
     injuries = profile.get("injuries", [])
 
-    prompt = _build_prompt(slug, first_name, injuries)
+    pain_next_morning = 0
+    state_f = adir / "current-state.json"
+    if state_f.exists():
+        try:
+            ankle = json.loads(state_f.read_text()).get("ankle", {})
+            pain_next_morning = ankle.get("pain_next_morning", 0) or 0
+        except Exception:
+            pass
+
+    prompt = _build_prompt(slug, first_name, injuries, pain_next_morning)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
