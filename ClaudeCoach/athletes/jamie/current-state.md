@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-05-16
+## Last updated: 2026-05-17
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -31,7 +31,7 @@
 ## Ankle (high ankle sprain, onset ~1 March 2026)
 
 - Current pain 1–10 (during run): 2 (Mon 11 May — 7.4 km 9:1 run; same as Thu 7 May). Pain location: right Achilles on warmup/uphills, front of ankle on flat.
-- Current pain 1–10 (next morning): 0 (Fri 8 May); 0 (Sat 9 May); 0 (Sun 10 May, resting); 0 (Mon 11 May AM, resting — "ankle is good"); 0.5 (Wed 14 May AM — after Mon 11 May 7.4 km run); 0.5 (Thu 14 May AM — after Wed 13 May 11.1 km run — "ankle is good")
+- Current pain 1–10 (next morning): 0 (Fri 8 May); 0 (Sat 9 May); 0 (Sun 10 May, resting); 0 (Mon 11 May AM, resting — "ankle is good"); 0.5 (Wed 14 May AM — after Mon 11 May 7.4 km run); 0.5 (Thu 14 May AM — after Wed 13 May 11.1 km run — "ankle is good"); 0 (Sun 17 May AM — after Sat 16 May ride only, no run)
 - Today's run (Mon 11 May): completed — 7.4 km / 37 min (actual run was longer than planned 5k)
 - Week plan decisions (logged 2026-05-11): Sat 16 = Richmond laps ride (wedding day — AM only, ride takes priority over jog); Sun 17 = easy 5k run (Jamie confirmed). Wed run held at 10–12 km (Jamie confirmed — accepts week +60–76% run km vs cap). Duplicate "TBC" notes on Sat 16 + Sun 17 deleted from intervals.icu.
 - This week's run km: 12.52 (Thu 7 May — 9:1 walk-run, 64 min)
@@ -53,6 +53,7 @@
 - Illness / life events: none
 - Sleep deficit days (>1 hr below 8 hr target): 2 (1 May: 6.7 h, 6 May: 6.9 h)
 - **2026-05-16 MODIFIED** — Interval ride 2hr: intervals reduced 5→3 (R4: ATL/CTL gap +17.1 in moderate zone; R6-single: sleep 6.9h, no HRV corroboration). Intensity held at 88% FTP. Warmup/Z2 block/cooldown unchanged.
+- **2026-05-17 GO** — Easy 5k (30 min, Z2/recovery pace): no rules fired, execute as planned. If completed, week run km ends ~23.5 km (+88% vs 12.52 last wk) — existing T10 flag stands.
 
 ## Body weight
 
@@ -111,6 +112,9 @@
 - **2026-05-16 — T7 (Tier 1):** Heat dose still 1 session in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 2. Need 2+ sessions this week to begin clearing the floor.
 - **2026-05-16 — T9 (Tier 2):** current-state.json open_action "Replan 18–22 May as run+swim only (travel)" status=pending but current-state.md shows done. JSON needs syncing before due date 2026-05-17. No real-action gap — confirm and update JSON.
 - **2026-05-16 — T10 (Tier 2):** Run km Mon–Sat = 18.50 km (Mon 11 7.39 + Wed 13 11.11; Sat 16 = ride only) vs 12.52 km last wk = +47.8% w/w. 10% cap still breached. If Sun 17 easy 5k goes ahead, week ends ~23.5 km (+88%).
+- **2026-05-17 — T7 (Tier 1):** Heat dose 1 session in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 3. Gap = 7 days since last session — at decay threshold. Must complete a session today or tomorrow to prevent adaptation loss.
+- **2026-05-17 — T9 (Tier 2):** JSON open_action "Replan 18–22 May as run+swim only (travel)" still status=pending; due date = today (2026-05-17). Markdown shows done (training-plan-2026-05-18_to_2026-05-31.md). JSON sync overdue — update status to "done".
+- **2026-05-17 — T10 (Tier 2):** Run km Mon 11–Sun 17 = 18.50 km confirmed (7.39 + 11.11; today's 5k not yet logged) vs 12.52 km last wk = +47.8% w/w. If today's 5k completes, week ends ~23.5 km (+88%). Ankle still in rehab; 10% cap technically applies but athlete and coach accepted this breach. Monitor Sun 17 ankle response before setting next week's run volume.
 
 ## Notes for Claude
 

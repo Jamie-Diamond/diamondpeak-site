@@ -18,3 +18,5 @@ No
 ## Watchdog Log
 - 2026-05-16 T7: heat dose = 0.0 AU (last 14 days) — threshold 3.0 AU not met; heat-log.json empty
 - 2026-05-16 T8: no heat sessions recorded — last entry never (>7 days)
+- 2026-05-17 T7: heat dose = 0.0 AU (last 14 days) — threshold 3.0 AU not met; heat-log.json empty
+- 2026-05-17 T8: no heat sessions recorded — last entry never (>7 days)
