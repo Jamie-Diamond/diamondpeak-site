@@ -884,7 +884,7 @@ fetch('training-data-kathryn.json?v='+Date.now())
       // Previous season overlay — shift last year's dates so race days align
       if (d.fitnessPrev && d.fitnessPrev.length) {
         const thisRace = new Date("2026-09-20");
-        const prevRaceDateStr = d.fitnessPrev[d.fitnessPrev.length-1][0];
+        const prevRaceDateStr = (d.profile && d.profile.prev_race_date) || d.fitnessPrev[d.fitnessPrev.length-1][0];
         const prevRace = new Date(prevRaceDateStr+"T00:00:00");
         const shiftMs = thisRace - prevRace;
         window.chartFitness.data.datasets[1].data = d.fitnessPrev.map(([dt,v])=>{

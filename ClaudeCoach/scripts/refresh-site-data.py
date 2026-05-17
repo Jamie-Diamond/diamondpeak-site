@@ -283,6 +283,7 @@ def post_process(data):
                 "race_date":                 prof.get("race_date"),
                 "race_name":                 prof.get("race_name"),
                 "prev_race":                 prof.get("prev_race"),
+                "prev_race_date":            prof.get("prev_race_date"),
                 "race_targets":              prof.get("race_targets"),
             }
         except Exception:
@@ -637,6 +638,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 "race_date":                 prof.get("race_date"),
                 "race_name":                 prof.get("race_name"),
                 "prev_race":                 prof.get("prev_race"),
+                "prev_race_date":            prof.get("prev_race_date"),
                 "race_targets":              prof.get("race_targets"),
             }
         except Exception:
