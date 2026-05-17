@@ -23,7 +23,10 @@ None
 ## Off-plan in last 7 days
 
 - 2026-05-16: bike_z2 60min — GO, executed as planned (no rules fired)
-- 2026-05-17: run_easy 60min — GO, execute as planned (no rules fired)
+- 2026-05-17: run_easy 60min — SKIPPED (sore throat, fatigue)
+
+## Illness / Health
+- 2026-05-17: Sore throat + tiredness. Skipped evening run. Monitor Mon 18 May.
 
 ## Heat Acclimatisation
 
