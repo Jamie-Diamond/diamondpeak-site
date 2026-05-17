@@ -112,6 +112,9 @@
 - **2026-05-16 — T7 (Tier 1):** Heat dose still 1 session in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 2. Need 2+ sessions this week to begin clearing the floor.
 - **2026-05-16 — T9 (Tier 2):** current-state.json open_action "Replan 18–22 May as run+swim only (travel)" status=pending but current-state.md shows done. JSON needs syncing before due date 2026-05-17. No real-action gap — confirm and update JSON.
 - **2026-05-16 — T10 (Tier 2):** Run km Mon–Sat = 18.50 km (Mon 11 7.39 + Wed 13 11.11; Sat 16 = ride only) vs 12.52 km last wk = +47.8% w/w. 10% cap still breached. If Sun 17 easy 5k goes ahead, week ends ~23.5 km (+88%).
+- **2026-05-17 — T7 (Tier 1):** Heat dose 1 session in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 3. Gap = 7 days since last session — at decay threshold. Must complete a session today or tomorrow to prevent adaptation loss.
+- **2026-05-17 — T9 (Tier 2):** JSON open_action "Replan 18–22 May as run+swim only (travel)" still status=pending; due date = today (2026-05-17). Markdown shows done (training-plan-2026-05-18_to_2026-05-31.md). JSON sync overdue — update status to "done".
+- **2026-05-17 — T10 (Tier 2):** Run km Mon 11–Sun 17 = 18.50 km confirmed (7.39 + 11.11; today's 5k not yet logged) vs 12.52 km last wk = +47.8% w/w. If today's 5k completes, week ends ~23.5 km (+88%). Ankle still in rehab; 10% cap technically applies but athlete and coach accepted this breach. Monitor Sun 17 ankle response before setting next week's run volume.
 
 ## Notes for Claude
 
