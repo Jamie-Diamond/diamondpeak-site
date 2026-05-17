@@ -4,13 +4,13 @@ Daily session prescription — runs via VM crontab at 05:00 daily.
 Loops over all active athletes. Safe to run manually:
   python3 ClaudeCoach/scripts/daily-prescription.py
 """
-import json, subprocess, sys, tempfile, os
+import json, shutil, subprocess, sys, tempfile, os
 from datetime import date
 from pathlib import Path
 
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
 PROJECT_DIR = str(BASE.parent)               # diamondpeak-site/
-CLAUDE      = "/usr/bin/claude"
+CLAUDE      = shutil.which("claude") or "/usr/bin/claude"
 NOTIFY      = BASE / "telegram/notify.py"
 CONFIG      = BASE / "config/athletes.json"
 LOG_DIR     = Path.home() / "Library/Logs/ClaudeCoach"
@@ -51,7 +51,7 @@ Step 3 — Assemble the readiness dict:
   atl: from fitness endpoint most recent row
   ctl: from fitness endpoint most recent row
   hrv_trend_pct: (today HRV - 7d avg HRV) / 7d avg HRV x 100  [if no HRV data, use 0.0]
-  sleep_h_last_night: from wellness endpoint (most recent night)
+  sleep_h_last_night: from wellness endpoint — use ONLY if the most recent wellness record is dated {today}. If it is dated before {today}, set sleep_h_last_night to null (wearable hasn't synced yet).
   last_session_rpe: most recent rpe field in session-log.json (null if empty)
   ankle_pain_score: from current-state.md (0 if not present)
   ankle_quality_cleared: from current-state.md (True once 4 consecutive pain-free quality sessions confirmed)
@@ -108,7 +108,7 @@ Step 7 — Output the prescription card in exactly this format:
 If no rules fired: output "Today: [session name] — execute as planned." and the planned targets only (no reasoning trails section).
 
 Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired. Also update ankle section if today's prescription was affected by ankle status.
-Run: git add ClaudeCoach/athletes/{slug}/current-state.md && git pull --rebase origin main && git commit -m "prescription: {today} [status]" && git push origin main
+Run: git -C {PROJECT_DIR} add ClaudeCoach/athletes/{slug}/current-state.md && git -C {PROJECT_DIR} fetch origin && git -C {PROJECT_DIR} merge origin/main --no-edit && git -C {PROJECT_DIR} commit -m "prescription: {today} [status]" && git -C {PROJECT_DIR} push origin main
 
 Step 9 — Send Telegram notification if session was modified, swapped, or blocked. Message under 200 characters:
   "[session name]: [one-line summary of change]"
@@ -122,6 +122,9 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     name      = cfg.get("name", slug)
     race_name = cfg.get("race_name", "upcoming race")
     chat_id   = str(cfg.get("chat_id", ""))
+    if not chat_id:
+        print(f"[{slug}] SKIP: no chat_id in athletes.json", file=sys.stderr)
+        return None
 
     prompt = build_prompt(slug, name, race_name)
 

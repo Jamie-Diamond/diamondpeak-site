@@ -17,7 +17,7 @@ sys.path.insert(0, str(BASE / "lib"))
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, today_wellness_synced=False):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -102,7 +102,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 _{days_to_race} days to {race_name}_
 
 Rules:
-- Sleep/HRV/RHR: only show if today's wellness record has the value (not yesterday's — check the date field). Format simply: "Sleep: 7.2h · HRV: 52 · RHR: 48 bpm". If no data yet for today, omit the line — do not show yesterday's values.
+- Sleep/HRV/RHR: {"Include if available — format: Sleep: Xh · HRV: N · RHR: N bpm." if today_wellness_synced else "TODAY\'S WELLNESS HAS NOT SYNCED — omit sleep, HRV, and RHR entirely. Do not mention or estimate them."}
 - If no planned session: say "Rest day" and skip the Today line.
 - Omit any section that has nothing to say — do not pad with dashes or "N/A".
 - Never ask for subjective mood, fatigue, or motivation scores.
@@ -146,8 +146,9 @@ def run_athlete(slug, athlete_cfg):
     except Exception:
         days_to_race = "?"
 
-    # Pre-compute recovery score
+    # Pre-compute recovery score + check whether today's wellness has synced
     recovery = None
+    today_wellness_synced = False  # True only if Intervals.icu has today's record with real values
     try:
         from icu_api import IcuClient
         import recovery_score as rs
@@ -155,6 +156,12 @@ def run_athlete(slug, athlete_cfg):
         a = athletes_cfg[slug]
         client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
         wellness_rows = client.get_wellness(8)
+        today_str = date.today().isoformat()
+        for row in wellness_rows:
+            if (row.get("id") or "")[:10] == today_str:
+                if any(row.get(k) is not None for k in ("hrv", "hrvSdnn", "restingHR", "sleepSecs", "sleepScore")):
+                    today_wellness_synced = True
+                break
         hrv_t, hrv_b, tsb, sleep = rs._parse_wellness(wellness_rows)
         pain = 0
         state_f = adir / "current-state.json"
@@ -164,7 +171,8 @@ def run_athlete(slug, athlete_cfg):
     except Exception:
         pass  # score is optional — morning card still sends without it
 
-    prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery)
+    prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
+                           today_wellness_synced=today_wellness_synced)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
