@@ -29,11 +29,13 @@ None
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
 - 2026-05-18: No session in calendar — illness monitoring continues. HRV yesterday 49 (vs 7d avg ~67), sleep score 68, poor quality. Conserving energy today.
+- 2026-05-18 (watchdog re-check): T3 re-fired. HRV 49 (May 17) vs 7d prior avg 70 = -30% decline. Today's HRV not yet synced. Sleep all 7 days ≥ 7h (T4 clear). Illness context ongoing.
 
 ## Heat Acclimatisation
 
 - 2026-05-16: T7 fired — heat-log.json empty, 0.0 dose in last 14 days (threshold 3.0). Begin heat sessions immediately.
 - 2026-05-17: T7 + T8 fired — heat-log.json still empty, 0.0/3.0 dose (T7); no heat session ever recorded, >7 days gap (T8). Notification sent.
+- 2026-05-18: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. No heat sessions ever logged. Illness day 2 (rest maintained today); first heat session blocked until recovery confirmed.
 
 ## Open Actions
 - [x] Plan generated through 2026-05-31 (2026-05-17)
