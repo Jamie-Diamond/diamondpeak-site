@@ -30,6 +30,7 @@ None
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
 - 2026-05-18: No session in calendar — illness monitoring continues. HRV yesterday 49 (vs 7d avg ~67), sleep score 68, poor quality. Conserving energy today.
 - 2026-05-18 (watchdog re-check): T3 re-fired. HRV 49 (May 17) vs 7d prior avg 70 = -30% decline. Today's HRV not yet synced. Sleep all 7 days ≥ 7h (T4 clear). Illness context ongoing.
+- 2026-05-18 (evening): **Tonsillitis confirmed.** Complete rest required. No training until symptom-free + 48hrs minimum. Week of 18–24 May will be a recovery/illness week — ramp to reset from actual TSS delivered when training resumes.
 
 ## Heat Acclimatisation
 
