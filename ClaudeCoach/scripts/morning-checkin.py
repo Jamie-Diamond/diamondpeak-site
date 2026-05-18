@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Morning briefing — runs via VM crontab at 06:20 daily. Loops over all active athletes."""
+"""Morning briefing — polls every 15 min from 06:00–09:00 via VM crontab. Sends once per athlete per day, after Garmin sleep data syncs."""
 import json, subprocess, sys
 from datetime import datetime
 from datetime import date, timedelta
@@ -216,7 +216,9 @@ def run_athlete(slug, athlete_cfg):
     output = m.group(1).strip() if m else ""
     if output:
         notify(output, chat_id)
-        sentinel.touch()  # prevent re-sending on subsequent polls
+    # Write sentinel regardless — if Claude ran without error, don't retry even if output was empty
+    if result.returncode == 0:
+        sentinel.touch()
 
 
 def main():
