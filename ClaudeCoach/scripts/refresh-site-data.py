@@ -217,6 +217,13 @@ def post_process(data):
         except Exception:
             pass
 
+    fitness_2023_cache = BASE / "athletes/jamie/fitness-2023-cache.json"
+    if fitness_2023_cache.exists():
+        try:
+            data["fitnessPrev2"] = json.loads(fitness_2023_cache.read_text())
+        except Exception:
+            pass
+
     # Decoupling trend
     dcoup = json.loads(DECOUPLING_LOG.read_text()) if DECOUPLING_LOG.exists() else []
     data["decouplingTrend"] = sorted(dcoup, key=lambda e: e.get("date", ""))
@@ -284,6 +291,8 @@ def post_process(data):
                 "race_name":                 prof.get("race_name"),
                 "prev_race":                 prof.get("prev_race"),
                 "prev_race_date":            prof.get("prev_race_date"),
+                "prev2_race_date":           prof.get("prev2_race_date"),
+                "prev2_race_name":           prof.get("prev2_race_name"),
                 "race_targets":              prof.get("race_targets"),
             }
         except Exception:
@@ -623,6 +632,13 @@ def _build_athlete_training_data(slug, athlete_cfg):
         except Exception:
             pass
 
+    prev2_cache = BASE / f"athletes/{slug}/fitness-2023-cache.json"
+    if prev2_cache.exists():
+        try:
+            data["fitnessPrev2"] = json.loads(prev2_cache.read_text())
+        except Exception:
+            pass
+
     # Profile (goals + thresholds)
     profile_f = BASE / f"athletes/{slug}/profile.json"
     if profile_f.exists():
@@ -639,6 +655,8 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 "race_name":                 prof.get("race_name"),
                 "prev_race":                 prof.get("prev_race"),
                 "prev_race_date":            prof.get("prev_race_date"),
+                "prev2_race_date":           prof.get("prev2_race_date"),
+                "prev2_race_name":           prof.get("prev2_race_name"),
                 "race_targets":              prof.get("race_targets"),
             }
         except Exception:
