@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-05-17
+Last updated: 2026-05-18
 
 ## Injuries / Niggles
 None
@@ -24,9 +24,11 @@ None
 
 - 2026-05-16: bike_z2 60min — GO, executed as planned (no rules fired)
 - 2026-05-17: run_easy 60min — SKIPPED (sore throat, fatigue)
+- 2026-05-18: Rest day — no session in calendar (illness monitoring day)
 
 ## Illness / Health
-- 2026-05-17: Sore throat + tiredness. Skipped evening run. Monitor Mon 18 May.
+- 2026-05-17: Sore throat + tiredness. Skipped evening run.
+- 2026-05-18: No session in calendar — illness monitoring continues. HRV yesterday 49 (vs 7d avg ~67), sleep score 68, poor quality. Conserving energy today.
 
 ## Heat Acclimatisation
 
