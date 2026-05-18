@@ -508,7 +508,7 @@ window.chartFitness = null;
         }
       },
       scales:{
-        x:{type:"linear",min:-265,max:14,
+        x:{type:"linear",min:-285,max:14,
            ticks:{callback:v=>"T"+v,maxTicksLimit:10},
            grid:{color:"#e8e3da"}},
         y:{title:{display:true,text:"Fitness"},min:20,max:135,grid:{color:"#e8e3da"}}
@@ -521,7 +521,7 @@ function zoomFitness(days) {
   if (!window.chartFitness) return;
   const sc = window.chartFitness.options.scales.x;
   if (days === 0) {
-    sc.min = -265; sc.max = 14;
+    sc.min = -285; sc.max = 14;
   } else {
     const todayTX = toTX(new Date().toISOString().slice(0,10));
     sc.min = todayTX - days; sc.max = todayTX + 21;
