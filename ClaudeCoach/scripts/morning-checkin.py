@@ -134,6 +134,13 @@ def run_athlete(slug, athlete_cfg):
         print(f"[{slug}] SKIP: no chat_id in athletes.json", file=sys.stderr)
         return
 
+    today_str = date.today().isoformat()
+
+    # Sentinel: skip if card already sent today
+    sentinel = LOG_DIR / f"morning-sent-{slug}-{today_str}.flag"
+    if sentinel.exists():
+        return
+
     profile = {}
     if (adir / "profile.json").exists():
         try:
@@ -162,7 +169,6 @@ def run_athlete(slug, athlete_cfg):
         a = athletes_cfg[slug]
         client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
         wellness_rows = client.get_wellness(8)
-        today_str = date.today().isoformat()
         for row in wellness_rows:
             if (row.get("id") or "")[:10] == today_str:
                 sleep_secs = row.get("sleepSecs")
@@ -189,6 +195,11 @@ def run_athlete(slug, athlete_cfg):
     except Exception:
         pass  # score is optional — morning card still sends without it
 
+    # If sleep hasn't synced yet and it's before 09:00, wait for the next poll
+    if wellness_line is None and datetime.now().hour < 9:
+        print(f"[{slug}] wellness not yet synced — will retry", file=sys.stderr)
+        return
+
     prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
                            wellness_line=wellness_line)
 
@@ -205,6 +216,7 @@ def run_athlete(slug, athlete_cfg):
     output = m.group(1).strip() if m else ""
     if output:
         notify(output, chat_id)
+        sentinel.touch()  # prevent re-sending on subsequent polls
 
 
 def main():
