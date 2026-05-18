@@ -12,12 +12,12 @@
     "avg_hr": 142,
     "rpe": null,
     "feel": null,
-    "injury_pain_during": null,
-    "injury_pain_next_morning": null,
+    "injury_pain_during": 2,
+    "injury_pain_next_morning": 0,
     "nutrition_g_carb": null,
     "hydration_ml": null,
-    "notes": null,
-    "logged_at": "2026-05-17T17:00:00",
+    "notes": "Pain 2/10 during, dropping to 0.5 at finish. First no-walk run. 0/10 next morning.",
+    "logged_at": "2026-05-18T08:00:00",
     "stub": true
   },
   {
