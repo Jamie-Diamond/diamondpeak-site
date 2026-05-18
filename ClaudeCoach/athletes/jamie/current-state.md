@@ -117,6 +117,10 @@
 - **2026-05-17 — T7 (Tier 1):** Heat dose 1 session in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 3. Gap = 7 days since last session — at decay threshold. Must complete a session today or tomorrow to prevent adaptation loss.
 - **2026-05-17 — T9 (Tier 2):** JSON open_action "Replan 18–22 May as run+swim only (travel)" still status=pending; due date = today (2026-05-17). Markdown shows done (training-plan-2026-05-18_to_2026-05-31.md). JSON sync overdue — update status to "done".
 - **2026-05-17 — T10 (Tier 2):** Run km Mon 11–Sun 17 = 18.50 km confirmed (7.39 + 11.11; today's 5k not yet logged) vs 12.52 km last wk = +47.8% w/w. If today's 5k completes, week ends ~23.5 km (+88%). Ankle still in rehab; 10% cap technically applies but athlete and coach accepted this breach. Monitor Sun 17 ankle response before setting next week's run volume.
+- **2026-05-18 — T3 (Tier 1):** HRV trend -54% over 7 days (46 on 05-11 → 21 on 05-17). Post-wedding sleep 5.2h triggered single-day HRV crash. Days 05-12 to 05-16 averaged 41.2 — the trend is driven by one outlier, not sustained decline. Monitor HRV today; if it recovers >35, downgrade to informational only.
+- **2026-05-18 — T7 (Tier 1):** Heat dose 1 session in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 4. Travel block 18–22 May (UK, no bath access) means gap will extend to at least 14 days. First opportunity: Marseille 24 May — hotel bath or sauna access required. Flag to athlete before Marseille.
+- **2026-05-18 — T8 (Tier 2):** Last heat session 2026-05-10 — now 8 days ago, exceeds 7-day decay threshold. Heat adaptation window has closed; any sessions this week under travel constraints would rebuild from zero. Marseille 24–30 May is the first realistic window for resuming protocol.
+- **2026-05-18 — T9 (Tier 2):** Dorney Olympic tri entry (C- race 6 Jun) due 2026-05-25 (7 days), status TBC. Confirm entry or drop — decision needed before 25 May. Key constraint: 10k run vs ankle rehabilitation status.
 
 ## Notes for Claude
 
