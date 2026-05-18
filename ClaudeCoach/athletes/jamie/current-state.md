@@ -54,6 +54,7 @@
 - Sleep deficit days (>1 hr below 8 hr target): 2 (1 May: 6.7 h, 6 May: 6.9 h)
 - **2026-05-16 MODIFIED** — Interval ride 2hr: intervals reduced 5→3 (R4: ATL/CTL gap +17.1 in moderate zone; R6-single: sleep 6.9h, no HRV corroboration). Intensity held at 88% FTP. Warmup/Z2 block/cooldown unchanged.
 - **2026-05-17 GO** — Easy 5k (30 min, Z2/recovery pace): no rules fired, execute as planned. If completed, week run km ends ~23.5 km (+88% vs 12.52 last wk) — existing T10 flag stands.
+- **2026-05-18 MODIFIED** — Strength: lower body + core (30 min): downgraded to mobility-only (15 min). Plan downgrade condition met: HRV 21/10 on 2026-05-17 (<35 threshold) AND sleep 5.2h (<6h threshold) post-wedding weekend. No loaded exercises; re-introduce lower body strength Tue 19 May if HRV recovers >35.
 
 ## Body weight
 
