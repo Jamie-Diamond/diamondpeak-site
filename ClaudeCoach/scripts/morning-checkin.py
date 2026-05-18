@@ -17,7 +17,7 @@ sys.path.insert(0, str(BASE / "lib"))
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, today_wellness_synced=False):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -62,11 +62,16 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
             f"AMBER = note and monitor; ORANGE = reduce intensity or volume; RED = flag for easy day.\n"
         )
 
+    wellness_block = (
+        f"\n## Today's wellness (pre-fetched)\n{wellness_line}\n"
+        if wellness_line else
+        "\n## Today's wellness\nNot yet synced — omit Sleep, HRV, and RHR from the card entirely.\n"
+    )
+
     return f"""\
 You are generating the morning briefing for {first_name}'s training day.
-{recovery_block}
+{recovery_block}{wellness_block}
 Step 1 — Fetch data via Bash:
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint wellness --days 2
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
 Step 2 — Read:
@@ -103,7 +108,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 _{days_to_race} days to {race_name}_
 
 Rules:
-- Sleep/HRV/RHR: {"Include if available — format: Sleep: Xh · HRV: N · RHR: N bpm." if today_wellness_synced else "TODAY\'S WELLNESS HAS NOT SYNCED — omit sleep, HRV, and RHR entirely. Do not mention or estimate them."}
+- Sleep/HRV/RHR: use ONLY the pre-fetched wellness line above — never infer or estimate values yourself.
 - If no planned session: say "Rest day" and skip the Today line.
 - Omit any section that has nothing to say — do not pad with dashes or "N/A".
 - Never ask for subjective mood, fatigue, or motivation scores.
@@ -147,9 +152,9 @@ def run_athlete(slug, athlete_cfg):
     except Exception:
         days_to_race = "?"
 
-    # Pre-compute recovery score + check whether today's wellness has synced
+    # Pre-compute recovery score and extract today's wellness values directly
     recovery = None
-    today_wellness_synced = False  # True only if Intervals.icu has today's record with real values
+    wellness_line = None
     try:
         from icu_api import IcuClient
         import recovery_score as rs
@@ -160,8 +165,15 @@ def run_athlete(slug, athlete_cfg):
         today_str = date.today().isoformat()
         for row in wellness_rows:
             if (row.get("id") or "")[:10] == today_str:
-                if any(row.get(k) is not None for k in ("hrv", "hrvSdnn", "restingHR", "sleepSecs", "sleepScore")):
-                    today_wellness_synced = True
+                sleep_secs = row.get("sleepSecs")
+                hrv_val    = row.get("hrv") or row.get("hrvSdnn")
+                rhr_val    = row.get("restingHR")
+                # Only use the row if sleep has actually synced — RHR alone is not enough
+                if sleep_secs is not None:
+                    parts = [f"Sleep: {sleep_secs/3600:.1f}h"]
+                    if hrv_val  is not None: parts.append(f"HRV: {int(hrv_val)}")
+                    if rhr_val  is not None: parts.append(f"RHR: {int(rhr_val)} bpm")
+                    wellness_line = " · ".join(parts)
                 break
         hrv_t, hrv_b, tsb, sleep = rs._parse_wellness(wellness_rows)
         pain = 0
@@ -178,7 +190,7 @@ def run_athlete(slug, athlete_cfg):
         pass  # score is optional — morning card still sends without it
 
     prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
-                           today_wellness_synced=today_wellness_synced)
+                           wellness_line=wellness_line)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
