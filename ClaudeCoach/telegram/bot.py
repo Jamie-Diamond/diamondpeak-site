@@ -140,7 +140,8 @@ def build_keyboard():
             {"text": "Today's plan",      "callback_data": "what's today's session?"},
             {"text": "How am I looking?", "callback_data": "how am I looking?"},
         ]
-    return {"inline_keyboard": [buttons]}
+    load_row = [{"text": "📊 Load graph", "callback_data": "/load"}]
+    return {"inline_keyboard": [buttons, load_row]}
 
 TOOLS = "Read,Write,Edit,Bash"
 # IcuSync MCP tools are intentionally excluded — the MCP connector is bound to a single
@@ -386,6 +387,7 @@ _PLAN_RE     = re.compile(r'^(?:generate\s+plan|plan\s+(?:next\s+)?(?:2\s+)?week
 _FTP_RE      = re.compile(r'^(?:ftp\s+(?:retest|result|update|new)|new\s+ftp)\s+([\d.]+)\s*(?:w(?:atts?)?)?\s*$', re.I)
 _WEEK_CMD_RE     = re.compile(r'^/week\s*$', re.I)
 _FORM_CMD_RE     = re.compile(r'^/form\s*$', re.I)
+_LOAD_CMD_RE     = re.compile(r'^/load\s*$', re.I)
 _STRENGTH_RE     = re.compile(
     r'^(?:strength(?:\s+session)?|gym(?:\s+session)?|lift(?:ing)?|'
     r'what(?:\'s|\s+is)\s+(?:today\'?s?\s+)?(?:strength|gym)(?:\s+session)?)\s*$',
@@ -530,6 +532,115 @@ def _form_stats(slug: str, athlete_cfg: dict | None = None) -> str:
     return "\n".join(lines)
 
 
+_SPORT_MAP = {
+    "VirtualRide": "Ride", "GravelRide": "Ride", "MountainBikeRide": "Ride",
+    "EBikeRide": "Ride", "Cycling": "Ride",
+    "TrailRun": "Run", "VirtualRun": "Run",
+    "OpenWaterSwim": "Swim", "Swim": "Swim",
+    "WeightTraining": "Strength", "Workout": "Strength",
+    "Elliptical": "Strength",
+}
+
+def _bot_norm_sport(s):
+    return _SPORT_MAP.get(s, s) if s in ("Ride", "Run", "Swim", "Strength") or s in _SPORT_MAP else s
+
+
+def _load_chart_quick(token, chat_id, slug):
+    """Fetch live data and send the load chart directly — no Claude round-trip."""
+    if _charts is None:
+        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard())
+        return
+    try:
+        sys.path.insert(0, str(BASE.parent / "lib"))
+        from icu_api import IcuClient
+
+        athletes_data = json.loads(ATHLETES_CONFIG.read_text())
+        a = athletes_data[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+
+        today = date.today()
+        end_date = (today + timedelta(days=8)).isoformat()
+
+        wellness, history_acts, events = client.fetch_all(
+            ("get_wellness", 10),
+            ("get_training_history", 10),
+            ("get_events", today.isoformat(), end_date),
+        )
+
+        # Seed values from today's wellness entry
+        seed_ctl = seed_atl = None
+        if wellness:
+            w = wellness[-1]
+            seed_ctl = round(float(w.get("ctl") or 0), 1)
+            seed_atl = round(float(w.get("atl") or 0), 1)
+
+        # Historical TSB by date
+        tsb_by_date = {}
+        for w in (wellness or []):
+            d = (w.get("id") or "")[:10]
+            if d:
+                tsb_by_date[d] = round((w.get("ctl") or 0) - (w.get("atl") or 0), 1)
+
+        # Completed activities grouped by date
+        acts_by_date = {}
+        for act in (history_acts or []):
+            d = (act.get("start_date_local") or "")[:10]
+            if not d:
+                continue
+            sport = _bot_norm_sport(act.get("type", "Other"))
+            tss = round(float(act.get("icu_training_load") or 0), 1)
+            dur = round((act.get("moving_time") or 0) / 60)
+            acts_by_date.setdefault(d, []).append(
+                {"sport": sport, "tss": tss, "dur": dur, "status": "completed"}
+            )
+
+        # Planned events grouped by date (future only)
+        plans_by_date = {}
+        for ev in (events or []):
+            d = (ev.get("start_date_local") or "")[:10]
+            if not d or d <= today.isoformat():
+                continue
+            sport = _bot_norm_sport(ev.get("type") or ev.get("category") or "Other")
+            tss = round(float(ev.get("load_target") or ev.get("icu_training_load") or 0), 1)
+            dur = round((ev.get("moving_time") or 0) / 60)
+            plans_by_date.setdefault(d, []).append(
+                {"sport": sport, "tss": tss, "dur": dur, "status": "planned"}
+            )
+
+        # 16-day window: 8 past + today + 7 future
+        days = []
+        for i in range(-8, 8):
+            d = today + timedelta(days=i)
+            d_str = d.isoformat()
+            is_future = d > today
+            days.append({
+                "date": d_str,
+                "tsb": None if is_future else tsb_by_date.get(d_str),
+                "activities": plans_by_date.get(d_str, []) if is_future else acts_by_date.get(d_str, []),
+            })
+
+        payload = {
+            "today": today.strftime("%m-%d"),
+            "seed_ctl": seed_ctl,
+            "seed_atl": seed_atl,
+            "days": days,
+        }
+        log(f"load chart (quick): days={len(days)}, seed_ctl={seed_ctl}, seed_atl={seed_atl}")
+        png = _charts.load_chart(payload)
+        if png:
+            send_photo(token, chat_id, png)
+            if seed_ctl is not None:
+                tsb = round(seed_ctl - seed_atl, 1)
+                send(token, chat_id,
+                     f"CTL *{seed_ctl}* · ATL {seed_atl} · TSB *{tsb:+.1f}*",
+                     reply_markup=build_keyboard())
+        else:
+            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard())
+    except Exception as e:
+        log(f"load chart quick error: {e}")
+        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard())
+
+
 def _git_commit(msg):
     try:
         subprocess.run(["git", "add", "ClaudeCoach/"],
@@ -607,6 +718,9 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
 
     if _FORM_CMD_RE.match(txt):
         return _form_stats(slug, athlete_cfg)
+
+    if _LOAD_CMD_RE.match(txt):
+        return "__LOAD_CHART__"
 
     m = _ANKLE_RE.match(txt)
     if m:
@@ -1936,6 +2050,7 @@ def main():
                      "*Quick commands (instant):*\n"
                      "  /week — this week's sessions + TSS\n"
                      "  /form — CTL/ATL/TSB + race projection\n"
+                     "  /load — training load chart (±8 days)\n"
                      "  strength — today's gym session\n"
                      "  ankle 3 — log pain score\n"
                      "  82.5 kg — log weight\n"
@@ -1982,6 +2097,11 @@ def main():
                 reply = _update_lthr(slug, int(fast.split(":", 1)[1]))
                 send(token, chat_id, reply, reply_markup=build_keyboard())
                 log(f"Out (LTHR update): {fast.split(':', 1)[1]}")
+                continue
+            elif fast == "__LOAD_CHART__":
+                typing(token, chat_id)
+                log("Out (fast): load chart")
+                _load_chart_quick(token, chat_id, slug)
                 continue
             elif fast == "__WEEKLY_SUMMARY__":
                 send(token, chat_id,
