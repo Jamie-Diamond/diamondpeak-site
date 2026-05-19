@@ -350,10 +350,16 @@ Sport: {sport_line}
 {plan_block}
 Coaching analysis: {clean_analysis}
 
-Write exactly 3 lines, plain text, no markdown, no hashtags:
-Line 1 — "Aim: [one sentence on what the session was targeting]"
-Line 2 — [one witty, warm, light-hearted sentence on how they did vs the aim — like a good mate who also happens to be your coach. Can be cheeky if they missed targets, encouraging if they nailed it.]
+Write exactly 3 lines, plain text, no markdown, no hashtags, no exclamation marks:
+Line 1 — "Aim: [one plain sentence on what the session was targeting]"
+Line 2 — [one dry, understated observation about how it went vs the aim. Deadpan British wit — matter-of-fact, slightly wry, never gushing. If they hit the target: note it plainly with quiet satisfaction. If they missed: a raised eyebrow, not a pep talk. No cheerleading, no "nailed it", no "amazing".]
 Line 3 — "ClaudeCoach"
+
+Examples of the right tone:
+- "Held Z2 throughout. Decoupling 3.2%. The plan had a good day."
+- "Came in 8% under target TSS. The legs had opinions."
+- "Intervals completed. NP 4W above target. We'll allow it."
+- "Ran without walking. The data agrees it was Z2, mostly."
 
 Total under 300 characters. Output nothing else."""
 
