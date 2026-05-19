@@ -898,6 +898,18 @@ def _handle_quick_log(token, chat_id, data, message_id, athletes):
     except Exception:
         return False
 
+    # Regenerate Strava description with updated context (async — don't block the callback)
+    try:
+        subprocess.Popen(
+            ["python3", str(BASE.parent / "scripts/strava-update-activity.py"),
+             "--athlete", slug, "--icu-id", activity_id],
+            cwd=PROJECT_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
     label_map = {"r": f"RPE {value}", "p": f"Pain {value}/10", "c": f"{value}g/hr carbs"}
     conf = f"✓ {label_map[field_code]} logged"
     if message_id:
