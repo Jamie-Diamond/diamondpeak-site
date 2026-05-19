@@ -67,17 +67,39 @@ def build_athlete_entry(slug: str, cfg: dict, td: dict) -> dict:
 
 
 def git_push():
-    cmds = [
+    def run(cmd):
+        r = subprocess.run(cmd, cwd=str(BASE), capture_output=True, text=True)
+        return r.returncode, r.stdout + r.stderr
+
+    for cmd in [
         ["git", "add", "ClaudeCoach/site-data.json"],
         ["git", "commit", "-m", f"data: refresh public site-data {date.today()}"],
-        ["git", "pull", "--rebase", "origin", "main"],
-        ["git", "push", "origin", "main"],
-    ]
-    for cmd in cmds:
-        r = subprocess.run(cmd, cwd=str(BASE), capture_output=True, text=True)
-        if r.returncode != 0 and "nothing to commit" not in r.stdout + r.stderr:
-            log(f"git error ({' '.join(cmd[:2])}): {r.stderr.strip()}")
+        # Fetch using origin/main ref directly — avoids FETCH_HEAD race condition
+        # with cc-gitpull.sh (both start at :00) which runs git fetch origin
+        # (all branches) and overwrites FETCH_HEAD before rebase can read it.
+        ["git", "fetch", "origin", "main"],
+    ]:
+        rc, out = run(cmd)
+        if rc != 0 and "nothing to commit" not in out:
+            log(f"git error ({' '.join(cmd[:2])}): {out.strip()}")
             return False
+
+    # Stash any unstaged script edits so rebase can proceed
+    _, stash_out = run(["git", "stash"])
+    did_stash = "No local changes to save" not in stash_out
+
+    rc, out = run(["git", "rebase", "origin/main"])
+    if did_stash:
+        run(["git", "stash", "pop"])
+    if rc != 0:
+        log(f"git error (git rebase): {out.strip()}")
+        return False
+
+    rc, out = run(["git", "push", "origin", "main"])
+    if rc != 0:
+        log(f"git error (git push): {out.strip()}")
+        return False
+
     return True
 
 
