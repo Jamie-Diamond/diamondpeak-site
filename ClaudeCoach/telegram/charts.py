@@ -2,6 +2,7 @@
 """Chart generation for ClaudeCoach. Uses QuickChart.io (Chart.js 4) — no extra dependencies."""
 
 import json, math, ssl, urllib.request
+from datetime import date as _date
 
 _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
@@ -276,20 +277,18 @@ _K_ATL = 1 - math.exp(-1 / 7)
 
 
 def _project_tsb(days, seed_ctl, seed_atl):
-    """Return TSB list: provided values for past days, PMC-projected for future (tsb=None)."""
+    """Return TSB list: historical values for past/today, PMC-projected for future days."""
+    today_str = _date.today().strftime("%Y-%m-%d")
     result = []
     ctl, atl = float(seed_ctl), float(seed_atl)
-    projecting = False
     for d in days:
-        raw = d.get("tsb")
-        if raw is not None and not projecting:
-            result.append(round(raw, 1))
-        else:
-            projecting = True
+        if d.get("date", "") > today_str:
             day_tss = sum((a.get("tss") or 0) for a in d.get("activities", []))
             ctl = ctl + (day_tss - ctl) * _K_CTL
             atl = atl + (day_tss - atl) * _K_ATL
             result.append(round(ctl - atl, 1))
+        else:
+            result.append(round(d.get("tsb") or 0, 1))
     return result
 
 
