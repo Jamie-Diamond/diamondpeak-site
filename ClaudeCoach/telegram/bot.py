@@ -80,14 +80,20 @@ def response_footer(model: str, slug: str = "", athlete_cfg: dict | None = None)
             pass
     return f"\n_{label}_"
 
-# Messages that only need a simple lookup — Haiku handles these
+# Queries answered by Haiku — fast lookups and short conversational exchanges
 _SIMPLE_QUERY_RE = re.compile(
     r"^(what'?s?\s+)?(today'?s?\s+)?(session|plan|workout|schedule)\b"
     r"|^show\s+(me\s+)?this\s+week\b"
     r"|^(this|next)\s+week\b"
     r"|^what'?s?\s+(my\s+)?(tsb|ctl|atl|form|fitness)\b"
     r"|^how\s+am\s+i\s+(looking|doing)\b"
-    r"|^(am\s+i\s+on\s+track|on\s+track)\b",
+    r"|^(am\s+i\s+on\s+track|on\s+track)\b"
+    r"|^(what|when)\s+is\s+(my\s+)?(next|today'?s?)\b"
+    r"|^(good\s+)?(morning|evening)\b"
+    r"|^(thanks?|cheers|ok|okay|got\s+it|perfect|great|nice)\b"
+    r"|^(yes|no|yep|nope|yup)\b"
+    r"|^what'?s?\s+the\s+(weather|forecast|temp)\b"
+    r"|^\d+\s*(km|k|miles?|min|minutes?|hrs?|hours?)\b",
     re.IGNORECASE,
 )
 
@@ -1637,35 +1643,41 @@ def handle_admin_command(token, chat_id, text, config):
 # --- END ONBOARDING ----------------------------------------------------------
 
 
-def call_claude(user_message, config, history, model=MODEL_SONNET,
-                system_prompt_file=None, athlete_name="Jamie", context=""):
-    sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
-    system_prompt = sp_file.read_text().strip()
-
+def _build_prompt(user_message, history, system_prompt, athlete_name, context):
     parts = [system_prompt, ""]
-
     if context:
         parts.append(context)
         parts.append("")
-
     if history:
         parts.append("Recent conversation:")
         for h in history:
             parts.append(f"{athlete_name}: {h['user']}")
             parts.append(f"ClaudeCoach: {h['assistant']}")
         parts.append("")
-
     parts.append(f"{athlete_name}: {user_message}")
+    return "\n".join(parts)
 
-    full_prompt = "\n".join(parts)
 
+def _claude_cmd(prompt, model, extra_args=None):
+    cmd = [CLAUDE_BIN, "-p", prompt, "--allowedTools", TOOLS,
+           "--model", model, "--no-session-persistence"]
+    if extra_args:
+        cmd.extend(extra_args)
+    return cmd
+
+
+def call_claude(user_message, config, history, model=MODEL_SONNET,
+                system_prompt_file=None, athlete_name="Jamie", context=""):
+    sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
+    full_prompt = _build_prompt(
+        user_message, history,
+        sp_file.read_text().strip(), athlete_name, context,
+    )
     try:
         result = subprocess.run(
-            [CLAUDE_BIN, "-p", full_prompt, "--allowedTools", TOOLS, "--model", model],
-            capture_output=True,
-            text=True,
-            cwd=config["project_dir"],
-            timeout=300
+            _claude_cmd(full_prompt, model),
+            capture_output=True, text=True,
+            cwd=config["project_dir"], timeout=300,
         )
         return result.stdout.strip() or result.stderr.strip() or "(no response)"
     except subprocess.TimeoutExpired:
@@ -1673,6 +1685,69 @@ def call_claude(user_message, config, history, model=MODEL_SONNET,
     except Exception as e:
         log(f"Claude error: {e}")
         return f"Error calling claude: {e}"
+
+
+def call_claude_streaming(token, chat_id, placeholder_id,
+                          user_message, config, history, model=MODEL_SONNET,
+                          system_prompt_file=None, athlete_name="Jamie", context=""):
+    """Stream Claude's response, editing the Telegram placeholder as chunks arrive."""
+    sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
+    full_prompt = _build_prompt(
+        user_message, history,
+        sp_file.read_text().strip(), athlete_name, context,
+    )
+    accumulated = ""
+    last_edit = 0.0
+
+    try:
+        proc = subprocess.Popen(
+            _claude_cmd(full_prompt, model, ["--output-format", "stream-json"]),
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, cwd=config["project_dir"],
+        )
+        for raw_line in proc.stdout:
+            raw_line = raw_line.strip()
+            if not raw_line:
+                continue
+            try:
+                ev = json.loads(raw_line)
+            except Exception:
+                continue
+            # Extract text from stream-json events
+            chunk = ""
+            ev_type = ev.get("type", "")
+            if ev_type == "assistant":
+                for block in (ev.get("message") or {}).get("content", []):
+                    if block.get("type") == "text":
+                        chunk = block.get("text", "")
+            elif ev_type == "content_block_delta":
+                delta = ev.get("delta", {})
+                if delta.get("type") == "text_delta":
+                    chunk = delta.get("text", "")
+            elif ev_type == "result":
+                chunk = ev.get("result", "")
+
+            if chunk:
+                accumulated += chunk
+                now = time.time()
+                # Edit every 1.5 s to stay within Telegram rate limits
+                if now - last_edit >= 1.5 and accumulated.strip():
+                    tg_post(token, "editMessageText", {
+                        "chat_id": chat_id,
+                        "message_id": placeholder_id,
+                        "text": accumulated.strip() + " ▍",
+                        "parse_mode": "Markdown",
+                    })
+                    last_edit = now
+
+        proc.wait(timeout=10)
+        return accumulated.strip() or "(no response)"
+
+    except subprocess.TimeoutExpired:
+        return accumulated.strip() or "Sorry, that took too long."
+    except Exception as e:
+        log(f"Claude stream error: {e}")
+        return accumulated.strip() or f"Error: {e}"
 
 
 def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNET,
@@ -1701,8 +1776,7 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNE
 
     try:
         result = subprocess.run(
-            [CLAUDE_BIN, "-p", full_prompt, "--allowedTools", TOOLS,
-             "--model", model],
+            _claude_cmd(full_prompt, model),
             capture_output=True, text=True,
             cwd=config["project_dir"], timeout=300,
         )
@@ -1937,18 +2011,38 @@ def main():
                 continue
 
             typing(token, chat_id)
-            send(token, chat_id, "_On it..._")
-
             history = load_history(files["history"])
             context = prefetch_context(slug)
             model = select_model(text)
-            response = call_claude(text, config, history, model=model,
-                                   system_prompt_file=files["system_prompt"],
-                                   athlete_name=athlete_name, context=context)
+
+            # Send a placeholder and stream chunks into it
+            placeholder = tg_post(token, "sendMessage", {
+                "chat_id": chat_id, "text": "…", "parse_mode": "Markdown",
+            })
+            placeholder_id = (placeholder.get("result") or {}).get("message_id")
+
+            if placeholder_id:
+                response = call_claude_streaming(
+                    token, chat_id, placeholder_id,
+                    text, config, history, model=model,
+                    system_prompt_file=files["system_prompt"],
+                    athlete_name=athlete_name, context=context,
+                )
+            else:
+                response = call_claude(text, config, history, model=model,
+                                       system_prompt_file=files["system_prompt"],
+                                       athlete_name=athlete_name, context=context)
 
             clean = process_charts(token, chat_id, response)
-            if clean:
-                send(token, chat_id, clean + response_footer(model, slug=slug, athlete_cfg=athlete), reply_markup=build_keyboard())
+            final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
+            if placeholder_id:
+                tg_post(token, "editMessageText", {
+                    "chat_id": chat_id, "message_id": placeholder_id,
+                    "text": final, "parse_mode": "Markdown",
+                    "reply_markup": build_keyboard(),
+                })
+            elif clean:
+                send(token, chat_id, final, reply_markup=build_keyboard())
             log(f"Out: {clean[:80]}")
 
             history.append({"user": text, "assistant": clean})
