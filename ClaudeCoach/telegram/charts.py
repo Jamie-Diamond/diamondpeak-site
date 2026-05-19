@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Chart generation for ClaudeCoach. Uses QuickChart.io (Chart.js 4) — no extra dependencies."""
 
-import json, ssl, urllib.request
+import json, math, ssl, urllib.request
 
 _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
@@ -271,6 +271,28 @@ def form_chart(payload):
 
 # ── Training load chart (TSS stacked by sport + TSB overlay) ─────────────────
 
+_K_CTL = 1 - math.exp(-1 / 42)
+_K_ATL = 1 - math.exp(-1 / 7)
+
+
+def _project_tsb(days, seed_ctl, seed_atl):
+    """Return TSB list: provided values for past days, PMC-projected for future (tsb=None)."""
+    result = []
+    ctl, atl = float(seed_ctl), float(seed_atl)
+    projecting = False
+    for d in days:
+        raw = d.get("tsb")
+        if raw is not None and not projecting:
+            result.append(round(raw, 1))
+        else:
+            projecting = True
+            day_tss = sum((a.get("tss") or 0) for a in d.get("activities", []))
+            ctl = ctl + (day_tss - ctl) * _K_CTL
+            atl = atl + (day_tss - atl) * _K_ATL
+            result.append(round(ctl - atl, 1))
+    return result
+
+
 def load_chart(payload):
     """
     payload: {"today":"MM-DD","days":[{"date":"YYYY-MM-DD","tsb":-8.7,
@@ -278,8 +300,10 @@ def load_chart(payload):
     Stacked TSS bars by sport (actual=solid, planned=28% alpha) + TSB line on right axis.
     """
     if isinstance(payload, dict):
-        days  = payload.get("days", [])
-        today = payload.get("today")
+        days      = payload.get("days", [])
+        today     = payload.get("today")
+        seed_ctl  = payload.get("seed_ctl")
+        seed_atl  = payload.get("seed_atl")
     else:
         return None
     if not days:
@@ -321,7 +345,10 @@ def load_chart(payload):
         if v >= -20: return "rgba(201,135,31,0.90)"  # amber — load
         return "rgba(192,57,43,0.90)"                # red — heavy
 
-    tsb_vals = [round(d.get("tsb") or 0, 1) for d in days]
+    if seed_ctl is not None and seed_atl is not None:
+        tsb_vals = _project_tsb(days, seed_ctl, seed_atl)
+    else:
+        tsb_vals = [round(d.get("tsb") or 0, 1) for d in days]
     datasets.append({
         "type": "line", "label": "TSB (form)",
         "data": tsb_vals,
