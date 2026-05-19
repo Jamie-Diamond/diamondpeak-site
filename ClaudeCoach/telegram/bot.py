@@ -298,25 +298,6 @@ CHART_RE    = re.compile(r'<<<CHART:(\w+):(.*?)>>>', re.DOTALL)
 TELEGRAM_RE = re.compile(r'<telegram>(.*?)</telegram>', re.DOTALL | re.IGNORECASE)
 
 
-def _project_load_tsb(data):
-    """Fill projected TSB for future days using 42d/7d CTL-ATL decay formula."""
-    from datetime import date as _date
-    if not isinstance(data, dict):
-        return data
-    days = data.get("days", [])
-    seed_ctl = data.get("seed_ctl")
-    seed_atl = data.get("seed_atl")
-    if not days or seed_ctl is None or seed_atl is None:
-        return data
-    today_str = _date.today().strftime("%Y-%m-%d")
-    ctl, atl = float(seed_ctl), float(seed_atl)
-    for d in days:
-        if d.get("date", "") > today_str:
-            day_tss = sum(a.get("tss") or 0 for a in d.get("activities", []))
-            ctl = ctl + (day_tss - ctl) / 42
-            atl = atl + (day_tss - atl) / 7
-            d["tsb"] = round(ctl - atl, 1)
-    return data
 
 
 def process_charts(token, chat_id, response):
@@ -350,7 +331,6 @@ def process_charts(token, chat_id, response):
                     week_start=data.get("week_start"),
                 )
             elif chart_type == "load":
-                data = _project_load_tsb(data)
                 log(f"load chart: days={len(data.get('days',[]))}, seed_ctl={data.get('seed_ctl')}, seed_atl={data.get('seed_atl')}")
                 png = _charts.load_chart(data)
             elif chart_type == "powercurve":
