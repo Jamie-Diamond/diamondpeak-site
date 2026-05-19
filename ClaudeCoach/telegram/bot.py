@@ -1675,6 +1675,41 @@ def call_claude(user_message, config, history, model=MODEL_SONNET,
         return f"Error calling claude: {e}"
 
 
+def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNET,
+                           system_prompt_file=None, athlete_name="Jamie", context=""):
+    sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
+    system_prompt = sp_file.read_text().strip()
+
+    parts = [system_prompt, ""]
+    if context:
+        parts.append(context)
+        parts.append("")
+    if history:
+        parts.append("Recent conversation:")
+        for h in history:
+            parts.append(f"{athlete_name}: {h['user']}")
+            parts.append(f"ClaudeCoach: {h['assistant']}")
+        parts.append("")
+
+    user_msg = caption if caption else "I've sent you a screenshot from my training. Please analyse it."
+    parts.append(f"{athlete_name}: {user_msg}")
+    full_prompt = "\n".join(parts)
+
+    try:
+        result = subprocess.run(
+            [CLAUDE_BIN, "-p", full_prompt, "--allowedTools", TOOLS,
+             "--model", model, "--image", img_path],
+            capture_output=True, text=True,
+            cwd=config["project_dir"], timeout=300,
+        )
+        return result.stdout.strip() or result.stderr.strip() or "(no response)"
+    except subprocess.TimeoutExpired:
+        return "Sorry, that took too long. Try a simpler question or break it into steps."
+    except Exception as e:
+        log(f"Claude image error: {e}")
+        return f"Error calling claude: {e}"
+
+
 def get_updates(token, offset):
     return tg_get(token, "getUpdates", {"offset": offset, "timeout": 30})
 
@@ -1741,6 +1776,44 @@ def main():
                             text = transcribe_voice(raw) or ""
                             if text:
                                 send(token, chat_id, f"_Heard: {text}_")
+
+                if not text:
+                    photo = msg.get("photo")
+                    if photo and chat_id in athletes:
+                        import tempfile as _tempfile
+                        caption = (msg.get("caption") or "").strip()
+                        typing(token, chat_id)
+                        raw = download_tg_file(token, photo[-1]["file_id"])
+                        if raw:
+                            with _tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
+                                tf.write(raw)
+                                img_path = tf.name
+                            try:
+                                send(token, chat_id, "_On it..._")
+                                slug = athletes[chat_id]["slug"]
+                                files = athlete_files(slug)
+                                athlete_name = athletes[chat_id].get("name", slug).split()[0]
+                                history = load_history(files["history"])
+                                context = prefetch_context(slug)
+                                response = call_claude_with_image(
+                                    img_path, caption, config, history,
+                                    system_prompt_file=files["system_prompt"],
+                                    athlete_name=athlete_name, context=context,
+                                )
+                                clean = process_charts(token, chat_id, response)
+                                if clean:
+                                    send(token, chat_id,
+                                         clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athletes[chat_id]),
+                                         reply_markup=build_keyboard())
+                                log(f"Out (image): {clean[:80]}")
+                                history.append({"user": caption or "[image]", "assistant": clean})
+                                save_history(history, files["history"])
+                            finally:
+                                try:
+                                    os.unlink(img_path)
+                                except Exception:
+                                    pass
+                    continue
 
             if not text:
                 continue
