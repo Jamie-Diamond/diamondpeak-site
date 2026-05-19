@@ -178,9 +178,13 @@ def run_athlete(slug, athlete_cfg):
                 rhr_val    = row.get("restingHR")
                 # Only use the row if sleep has actually synced — RHR alone is not enough
                 if sleep_secs is not None:
+                    sleep_score = row.get("sleepScore")
+                    steps_val   = row.get("steps")
                     parts = [f"Sleep: {sleep_secs/3600:.1f}h"]
-                    if hrv_val  is not None: parts.append(f"HRV: {int(hrv_val)}")
-                    if rhr_val  is not None: parts.append(f"RHR: {int(rhr_val)} bpm")
+                    if sleep_score is not None: parts.append(f"Score: {int(sleep_score)}")
+                    if hrv_val    is not None: parts.append(f"HRV: {int(hrv_val)}")
+                    if rhr_val    is not None: parts.append(f"RHR: {int(rhr_val)} bpm")
+                    if steps_val  is not None: parts.append(f"Steps: {int(steps_val):,}")
                     wellness_line = " · ".join(parts)
                 break
         hrv_t, hrv_b, tsb, sleep = rs._parse_wellness(wellness_rows)

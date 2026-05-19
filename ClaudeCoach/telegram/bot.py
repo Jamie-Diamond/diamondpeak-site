@@ -1046,15 +1046,21 @@ def prefetch_context(slug: str) -> str:
             atl = round(w.get("atl") or 0, 1)
             tsb = round((w.get("ctl") or 0) - (w.get("atl") or 0), 1)
             ftp = sport.get("ftp") if isinstance(sport, dict) else None
+            sport_info = w.get("sportInfo") or []
+            eftp = next((si.get("eftp") for si in sport_info if si.get("type") in ("Ride", "VirtualRide", "Cycling")), None)
+            if eftp is None and sport_info:
+                eftp = sport_info[0].get("eftp")
             lines.append(
                 f"Fitness: CTL {ctl}  ATL {atl}  TSB {tsb}"
                 + (f"  FTP {ftp}W" if ftp else "")
+                + (f"  eFTP {round(eftp)}W" if eftp else "")
             )
             fields = []
             if w.get("weight"):    fields.append(f"Weight {w['weight']:.1f}kg")
             if w.get("hrv"):       fields.append(f"HRV {w['hrv']}")
-            if w.get("sleepScore"):fields.append(f"Sleep {w['sleepScore']}%")
+            if w.get("sleepScore"):fields.append(f"Sleep score {w['sleepScore']:.0f}")
             if w.get("restingHR"): fields.append(f"RHR {w['restingHR']}")
+            if w.get("steps"):     fields.append(f"Steps {int(w['steps']):,}")
             if fields:
                 lines.append("Wellness: " + "  ".join(fields))
 
