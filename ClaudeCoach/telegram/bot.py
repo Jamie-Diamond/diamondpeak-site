@@ -1639,7 +1639,10 @@ def handle_admin_command(token, chat_id, text, config):
             send(token, approved_cid,
                  f"Welcome aboard, *{approved_name}*! ClaudeCoach is now active for you.\n\n"
                  f"Try: _how am I looking?_ or _what's today's session?_")
-        send(token, chat_id, f"Athlete `{slug_to_approve}` is now active.")
+        send(token, chat_id,
+             f"Athlete `{slug_to_approve}` is now active.\n\n"
+             f"_Strava write-back: run this on the VM to enable activity descriptions:_\n"
+             f"`python3 ClaudeCoach/scripts/strava-auth.py --athlete {slug_to_approve}`")
         log(f"Admin approved athlete: {slug_to_approve}")
         return True
 
