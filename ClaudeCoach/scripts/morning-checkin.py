@@ -162,6 +162,7 @@ def run_athlete(slug, athlete_cfg):
     # Pre-compute recovery score and extract today's wellness values directly
     recovery = None
     wellness_line = None
+    has_sleep_device = False  # True if athlete has ever had sleep data
     try:
         from icu_api import IcuClient
         import recovery_score as rs
@@ -169,6 +170,7 @@ def run_athlete(slug, athlete_cfg):
         a = athletes_cfg[slug]
         client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
         wellness_rows = client.get_wellness(8)
+        has_sleep_device = any(r.get("sleepSecs") is not None for r in wellness_rows)
         for row in wellness_rows:
             if (row.get("id") or "")[:10] == today_str:
                 sleep_secs = row.get("sleepSecs")
@@ -195,8 +197,9 @@ def run_athlete(slug, athlete_cfg):
     except Exception:
         pass  # score is optional — morning card still sends without it
 
-    # If sleep hasn't synced yet and it's before 09:00, wait for the next poll
-    if wellness_line is None and datetime.now().hour < 9:
+    # Wait for Garmin sync only if the athlete has a sleep device and it hasn't synced yet.
+    # Athletes with no sleep device (sleepSecs always null) send immediately.
+    if wellness_line is None and has_sleep_device and datetime.now().hour < 9:
         print(f"[{slug}] wellness not yet synced — will retry", file=sys.stderr)
         return
 
