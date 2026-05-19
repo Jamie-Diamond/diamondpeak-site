@@ -335,6 +335,26 @@ def load_chart(payload):
     })
 
     annotations = {
+        "zone_fresh": {
+            "type": "box", "yMin": 5, "yMax": 40, "yScaleID": "y1",
+            "backgroundColor": "rgba(46,156,142,0.10)",
+            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
+        },
+        "zone_ok": {
+            "type": "box", "yMin": 0, "yMax": 5, "yScaleID": "y1",
+            "backgroundColor": "rgba(120,200,140,0.10)",
+            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
+        },
+        "zone_load": {
+            "type": "box", "yMin": -20, "yMax": 0, "yScaleID": "y1",
+            "backgroundColor": "rgba(200,160,60,0.08)",
+            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
+        },
+        "zone_heavy": {
+            "type": "box", "yMin": -60, "yMax": -20, "yScaleID": "y1",
+            "backgroundColor": "rgba(192,57,43,0.09)",
+            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
+        },
         "tsb_zero": {
             "type": "line", "scaleID": "y1",
             "value": 0,
