@@ -110,10 +110,15 @@ If no rules fired: output "Today: [session name] — execute as planned." and th
 Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired. Also update ankle section if today's prescription was affected by ankle status.
 Run: git -C {PROJECT_DIR} add ClaudeCoach/athletes/{slug}/current-state.md && git -C {PROJECT_DIR} fetch origin && git -C {PROJECT_DIR} merge origin/main --no-edit && git -C {PROJECT_DIR} commit -m "prescription: {today} [status]" && git -C {PROJECT_DIR} push origin main
 
-Step 9 — If the session was modified, swapped, or blocked, append ONE line at the very end of your response wrapped in <telegram> tags:
+Step 9 — If the session was modified, swapped, or blocked, append this at the very end of your response:
 <telegram>[session name]: [one plain-English sentence on what changed and why]</telegram>
-If the session is unchanged (GO with no rule fires), output nothing inside <telegram> tags — omit entirely.
-The <telegram> content is the ONLY thing the athlete will see. Everything above is internal coaching context.
+Example: <telegram>Morning ride: reduced to Z2 — HRV down 18% vs 7-day average.</telegram>
+Rules for the <telegram> line:
+- Exactly one sentence. No preamble, no reasoning trail, no tool commentary, no "I".
+- Must begin with the session name followed by a colon.
+- No markdown formatting inside the tags.
+If the session is unchanged (GO with no rule fires), omit the <telegram> line entirely.
+The <telegram> content is the ONLY thing sent to the athlete — keep it clean.
 """
 
 
