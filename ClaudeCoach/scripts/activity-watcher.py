@@ -317,9 +317,64 @@ def _check_test_reminders(adir: Path, chat_id: str, state: dict, state_file: Pat
         save_state(state, state_file)
 
 
-def _strava_update(slug: str, icu_activity_id: str, analysis: str):
-    """Write a coaching note to the Strava activity description. Silent on any error."""
+def _strava_description(first_name: str, sport: str, analysis: str,
+                         plan_delta_raw: str | None, session_entry: dict | None) -> str:
+    """Call Claude to write a witty 3-line Strava description."""
     import re as _re
+
+    # Strip Telegram markdown for cleaner input
+    clean_analysis = _re.sub(r"[*_]", "", analysis or "").strip()
+
+    plan_block = "No planned session found."
+    if plan_delta_raw and plan_delta_raw != "none":
+        parts = plan_delta_raw.split("|")
+        if len(parts) == 4:
+            plan_name, planned_tss, actual_tss, delta_pct = parts
+            sign = "+" if float(delta_pct) >= 0 else ""
+            plan_block = (
+                f"Planned: {plan_name.strip()} (target TSS {planned_tss.strip()})\n"
+                f"Actual TSS: {actual_tss.strip()} ({sign}{delta_pct.strip()}% vs plan)"
+            )
+
+    entry = session_entry or {}
+    sport_line = sport
+    dur = entry.get("duration_min")
+    dist = entry.get("distance_km")
+    if dur:   sport_line += f", {int(dur)} min"
+    if dist:  sport_line += f", {dist:.1f}km"
+
+    prompt = f"""\
+Write a Strava activity description for {first_name}.
+
+Sport: {sport_line}
+{plan_block}
+Coaching analysis: {clean_analysis}
+
+Write exactly 3 lines, plain text, no markdown, no hashtags:
+Line 1 — "Aim: [one sentence on what the session was targeting]"
+Line 2 — [one witty, warm, light-hearted sentence on how they did vs the aim — like a good mate who also happens to be your coach. Can be cheeky if they missed targets, encouraging if they nailed it.]
+Line 3 — "ClaudeCoach"
+
+Total under 300 characters. Output nothing else."""
+
+    try:
+        result = subprocess.run(
+            [CLAUDE, "-p", prompt, "--model", "claude-haiku-4-5-20251001"],
+            capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
+        )
+        text = (result.stdout or "").strip()
+        if text:
+            return text
+    except Exception:
+        pass
+
+    # Fallback: plain analysis + sign-off
+    return f"{clean_analysis}\n\nClaudeCoach"
+
+
+def _strava_update(slug: str, icu_activity_id: str, analysis: str,
+                   plan_delta_raw: str | None = None, session_entry: dict | None = None):
+    """Write a coaching note to the Strava activity description. Silent on any error."""
     try:
         import sys as _sys
         _sys.path.insert(0, str(BASE / "lib"))
@@ -332,17 +387,23 @@ def _strava_update(slug: str, icu_activity_id: str, analysis: str):
         detail = icu.get_activity_detail(icu_activity_id)
         strava_id = detail.get("strava_id")
         if not strava_id:
-            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] No strava_id on activity {icu_activity_id} — skipping Strava update", file=sys.stderr)
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] No strava_id on {icu_activity_id} — skipping Strava", file=sys.stderr)
             return
 
-        # Strip Telegram markdown (*bold*, _italic_) for Strava plain text
-        clean = _re.sub(r"[*_]", "", analysis or "").strip()
-        if not clean:
-            return
+        profile = {}
+        adir = BASE / f"athletes/{slug}"
+        if (adir / "profile.json").exists():
+            try:
+                profile = json.loads((adir / "profile.json").read_text())
+            except Exception:
+                pass
+        first_name = profile.get("name", slug).split()[0]
+        sport = (session_entry or {}).get("sport", "session")
 
-        note = f"[ClaudeCoach] {clean}"
+        description = _strava_description(first_name, sport, analysis, plan_delta_raw, session_entry)
+
         sc = StravaClient(slug)
-        sc.update_description(strava_id, note)
+        sc.update_description(strava_id, description)
         print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava description updated ({strava_id})", file=sys.stderr)
     except FileNotFoundError:
         pass  # no tokens yet — silently skip
@@ -589,7 +650,7 @@ def check_athlete(slug, athlete_cfg):
             pass
 
     # Write coaching note to Strava activity description
-    _strava_update(slug, activity_id, analysis)
+    _strava_update(slug, activity_id, analysis, plan_delta_raw=plan_delta_raw, session_entry=new_entry)
 
     # Trigger site data refresh in background
     subprocess.Popen(
