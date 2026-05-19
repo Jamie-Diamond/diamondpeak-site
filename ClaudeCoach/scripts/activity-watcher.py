@@ -317,6 +317,39 @@ def _check_test_reminders(adir: Path, chat_id: str, state: dict, state_file: Pat
         save_state(state, state_file)
 
 
+def _strava_update(slug: str, icu_activity_id: str, analysis: str):
+    """Write a coaching note to the Strava activity description. Silent on any error."""
+    import re as _re
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(BASE / "lib"))
+        from icu_api import IcuClient
+        from strava_client import StravaClient
+
+        athletes_cfg = json.loads(ATHLETES_CONFIG.read_text())
+        a = athletes_cfg[slug]
+        icu = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+        detail = icu.get_activity_detail(icu_activity_id)
+        strava_id = detail.get("strava_id")
+        if not strava_id:
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] No strava_id on activity {icu_activity_id} — skipping Strava update", file=sys.stderr)
+            return
+
+        # Strip Telegram markdown (*bold*, _italic_) for Strava plain text
+        clean = _re.sub(r"[*_]", "", analysis or "").strip()
+        if not clean:
+            return
+
+        note = f"[ClaudeCoach] {clean}"
+        sc = StravaClient(slug)
+        sc.update_description(strava_id, note)
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava description updated ({strava_id})", file=sys.stderr)
+    except FileNotFoundError:
+        pass  # no tokens yet — silently skip
+    except Exception as exc:
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava update failed: {exc}", file=sys.stderr)
+
+
 def check_athlete(slug, athlete_cfg):
     """Run activity check for one athlete."""
     adir = BASE / f"athletes/{slug}"
@@ -554,6 +587,9 @@ def check_athlete(slug, athlete_cfg):
                 )
         except Exception:
             pass
+
+    # Write coaching note to Strava activity description
+    _strava_update(slug, activity_id, analysis)
 
     # Trigger site data refresh in background
     subprocess.Popen(
