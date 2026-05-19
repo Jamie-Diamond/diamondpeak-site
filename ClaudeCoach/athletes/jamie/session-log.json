@@ -6,12 +6,13 @@
     "sport": "Other",
     "tss": 21,
     "duration_min": 40,
+    "distance_km": 7.8,
     "avg_hr": 126,
     "rpe": null,
-    "feel": null,
-    "notes": null,
+    "feel": "easy effort",
+    "notes": "Deliberate swap for planned Z2 run — avoided 4 consecutive running days on rehabbing ankle. Clears Wednesday for 60 min run if ankle allows.",
     "logged_at": "2026-05-19T19:30:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i149586944",
