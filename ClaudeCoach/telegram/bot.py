@@ -1691,14 +1691,18 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNE
             parts.append(f"ClaudeCoach: {h['assistant']}")
         parts.append("")
 
-    user_msg = caption if caption else "I've sent you a screenshot from my training. Please analyse it."
-    parts.append(f"{athlete_name}: {user_msg}")
+    question = caption if caption else "analyse this"
+    # Claude Code's Read tool supports images — direct Claude to read the file visually
+    user_msg = (
+        f"{athlete_name} sent an image. Read it from {img_path} then {question}."
+    )
+    parts.append(user_msg)
     full_prompt = "\n".join(parts)
 
     try:
         result = subprocess.run(
             [CLAUDE_BIN, "-p", full_prompt, "--allowedTools", TOOLS,
-             "--model", model, "--image", img_path],
+             "--model", model],
             capture_output=True, text=True,
             cwd=config["project_dir"], timeout=300,
         )
