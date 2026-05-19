@@ -29,7 +29,7 @@ def trim_log(path: Path, max_lines: int = 5000):
         pass
 
 
-def build_prompt(slug: str, name: str, race_name: str, race_date: str) -> str:
+def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: str) -> str:
     today = date.today().isoformat()
     athlete_dir = BASE / "athletes" / slug
 
@@ -75,11 +75,10 @@ If NO triggers fire: output nothing. Silent run.
 
 If ANY trigger fires:
 1. Send ONE Telegram notification (under 200 characters): "warning [trigger]: [action]" (Tier 2) or "info [trigger]: [note]" (Tier 1). Multiple triggers: list names, lead with highest tier.
-   Run: python3 {NOTIFY} --chat-id CHAT_ID "message"
-   (Replace CHAT_ID with the appropriate value from athletes.json for slug={slug})
+   Run: python3 {NOTIFY} --chat-id {chat_id} "message"
 2. Update current-state.md — append to the relevant section with today's date and trigger name + signal value. Do not rewrite sections that do not need updating.
 3. Run: git add ClaudeCoach/athletes/{slug}/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "watchdog: [trigger list] {today}" && git push origin main
-4. Output one L2 reasoning trail per trigger to stdout:
+4. Output one L2 reasoning trail per trigger to stdout (this goes to the coaching log only — NOT to athletes):
    [signal with real number] -> [rule: T1-T10] -> [suggested adjustment] -> [expected effect]
    Example: "ATL 148 vs CTL 121 for 4 days -> T1 (ATL > CTL +25) -> insert recovery day -> TSB recovers ~8 pts by weekend"
 """
@@ -91,7 +90,7 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     race_date = cfg.get("race_date", "")
     chat_id   = str(cfg.get("chat_id", ""))
 
-    prompt = build_prompt(slug, name, race_name, race_date)
+    prompt = build_prompt(slug, name, race_name, race_date, chat_id)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_watchdog_", delete=False, suffix=".txt"
@@ -131,12 +130,10 @@ def main():
         with open(LOG_FILE, "a") as lf:
             lf.write(f"[watchdog:{slug}] {'triggered' if output else 'silent'}\n")
         if output:
+            # Log the reasoning trail only — Claude sends the Telegram notification
+            # itself via the Bash tool with the injected chat_id. Sending output here
+            # would leak the reasoning trail to the athlete.
             print(output, flush=True)
-            if chat_id:
-                subprocess.run(
-                    ["python3", str(NOTIFY), "--chat-id", chat_id, output[:4000]],
-                    cwd=PROJECT_DIR,
-                )
     trim_log(LOG_FILE)
 
 
