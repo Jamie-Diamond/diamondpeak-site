@@ -140,8 +140,11 @@ def build_keyboard():
             {"text": "Today's plan",      "callback_data": "what's today's session?"},
             {"text": "How am I looking?", "callback_data": "how am I looking?"},
         ]
-    load_row = [{"text": "📊 Load graph", "callback_data": "/load"}]
-    return {"inline_keyboard": [buttons, load_row]}
+    graph_row = [
+        {"text": "📊 Load",    "callback_data": "/load"},
+        {"text": "📈 Fitness", "callback_data": "/fitness"},
+    ]
+    return {"inline_keyboard": [buttons, graph_row]}
 
 TOOLS = "Read,Write,Edit,Bash"
 # IcuSync MCP tools are intentionally excluded — the MCP connector is bound to a single
@@ -388,6 +391,7 @@ _FTP_RE      = re.compile(r'^(?:ftp\s+(?:retest|result|update|new)|new\s+ftp)\s+
 _WEEK_CMD_RE     = re.compile(r'^/week\s*$', re.I)
 _FORM_CMD_RE     = re.compile(r'^/form\s*$', re.I)
 _LOAD_CMD_RE     = re.compile(r'^/load\s*$', re.I)
+_FITNESS_CMD_RE  = re.compile(r'^/fitness\s*$', re.I)
 _STRENGTH_RE     = re.compile(
     r'^(?:strength(?:\s+session)?|gym(?:\s+session)?|lift(?:ing)?|'
     r'what(?:\'s|\s+is)\s+(?:today\'?s?\s+)?(?:strength|gym)(?:\s+session)?)\s*$',
@@ -641,6 +645,59 @@ def _load_chart_quick(token, chat_id, slug):
         send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard())
 
 
+def _fitness_charts_quick(token, chat_id, slug):
+    """Fetch 42-day wellness and send fitness (CTL/ATL) + form (TSB) charts — no Claude round-trip."""
+    if _charts is None:
+        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard())
+        return
+    try:
+        sys.path.insert(0, str(BASE.parent / "lib"))
+        from icu_api import IcuClient
+
+        athletes_data = json.loads(ATHLETES_CONFIG.read_text())
+        a = athletes_data[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+
+        today = date.today()
+        wellness = client.get_wellness(42)
+        if not wellness:
+            send(token, chat_id, "No fitness data available.", reply_markup=build_keyboard())
+            return
+
+        data = []
+        for w in wellness:
+            d = (w.get("id") or "")[:10]
+            ctl = w.get("ctl") or 0
+            atl = w.get("atl") or 0
+            if d:
+                data.append({"date": d, "ctl": round(float(ctl), 1),
+                              "atl": round(float(atl), 1),
+                              "tsb": round(float(ctl) - float(atl), 1)})
+
+        payload = {"today": today.strftime("%m-%d"), "data": data}
+        log(f"fitness charts (quick): {len(data)} days")
+
+        png_fit = _charts.fitness_chart(payload)
+        png_form = _charts.form_chart(payload)
+        if png_fit:
+            send_photo(token, chat_id, png_fit)
+        if png_form:
+            send_photo(token, chat_id, png_form)
+        if png_fit or png_form:
+            w = wellness[-1]
+            ctl = round(float(w.get("ctl") or 0), 1)
+            atl = round(float(w.get("atl") or 0), 1)
+            tsb = round(ctl - atl, 1)
+            send(token, chat_id,
+                 f"CTL *{ctl}* · ATL {atl} · TSB *{tsb:+.1f}*",
+                 reply_markup=build_keyboard())
+        else:
+            send(token, chat_id, "Could not generate charts.", reply_markup=build_keyboard())
+    except Exception as e:
+        log(f"fitness charts quick error: {e}")
+        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard())
+
+
 def _git_commit(msg):
     try:
         subprocess.run(["git", "add", "ClaudeCoach/"],
@@ -721,6 +778,9 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
 
     if _LOAD_CMD_RE.match(txt):
         return "__LOAD_CHART__"
+
+    if _FITNESS_CMD_RE.match(txt):
+        return "__FITNESS_CHARTS__"
 
     m = _ANKLE_RE.match(txt)
     if m:
@@ -2051,6 +2111,7 @@ def main():
                      "  /week — this week's sessions + TSS\n"
                      "  /form — CTL/ATL/TSB + race projection\n"
                      "  /load — training load chart (±8 days)\n"
+                     "  /fitness — fitness (CTL/ATL) + form (TSB) charts\n"
                      "  strength — today's gym session\n"
                      "  ankle 3 — log pain score\n"
                      "  82.5 kg — log weight\n"
@@ -2102,6 +2163,11 @@ def main():
                 typing(token, chat_id)
                 log("Out (fast): load chart")
                 _load_chart_quick(token, chat_id, slug)
+                continue
+            elif fast == "__FITNESS_CHARTS__":
+                typing(token, chat_id)
+                log("Out (fast): fitness charts")
+                _fitness_charts_quick(token, chat_id, slug)
                 continue
             elif fast == "__WEEKLY_SUMMARY__":
                 send(token, chat_id,

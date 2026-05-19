@@ -13,6 +13,7 @@ ATHLETES_CONFIG = BASE / "config/athletes.json"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
+sys.path.insert(0, str(BASE / "telegram"))
 
 TOOLS = "Read,Bash"
 
@@ -126,6 +127,104 @@ def notify(msg, chat_id):
         pass
 
 
+def _send_morning_load_chart(chat_id, slug, wellness_rows):
+    """Generate and send the training load chart (±8 days) as part of the morning brief."""
+    try:
+        import charts as _charts
+        from icu_api import IcuClient
+
+        athletes_cfg = json.loads(ATHLETES_CONFIG.read_text())
+        a = athletes_cfg[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+
+        today = date.today()
+        end_date = (today + timedelta(days=8)).isoformat()
+
+        history_acts, events = client.fetch_all(
+            ("get_training_history", 10),
+            ("get_events", today.isoformat(), end_date),
+        )
+
+        # Seed CTL/ATL from last wellness row
+        seed_ctl = seed_atl = None
+        if wellness_rows:
+            w = wellness_rows[-1]
+            seed_ctl = round(float(w.get("ctl") or 0), 1)
+            seed_atl = round(float(w.get("atl") or 0), 1)
+
+        # Historical TSB by date from already-fetched wellness
+        tsb_by_date = {}
+        for w in wellness_rows:
+            d = (w.get("id") or "")[:10]
+            if d:
+                tsb_by_date[d] = round((w.get("ctl") or 0) - (w.get("atl") or 0), 1)
+
+        # Completed activities by date
+        acts_by_date = {}
+        _sport_map = {
+            "VirtualRide": "Ride", "GravelRide": "Ride", "MountainBikeRide": "Ride",
+            "EBikeRide": "Ride", "Cycling": "Ride", "TrailRun": "Run",
+            "VirtualRun": "Run", "OpenWaterSwim": "Swim",
+            "WeightTraining": "Strength", "Workout": "Strength", "Elliptical": "Strength",
+        }
+        for act in (history_acts or []):
+            d = (act.get("start_date_local") or "")[:10]
+            if not d:
+                continue
+            sport = _sport_map.get(act.get("type", ""), act.get("type", "Other"))
+            tss = round(float(act.get("icu_training_load") or 0), 1)
+            dur = round((act.get("moving_time") or 0) / 60)
+            acts_by_date.setdefault(d, []).append(
+                {"sport": sport, "tss": tss, "dur": dur, "status": "completed"}
+            )
+
+        # Planned events by date (future only)
+        plans_by_date = {}
+        for ev in (events or []):
+            d = (ev.get("start_date_local") or "")[:10]
+            if not d or d <= today.isoformat():
+                continue
+            sport = _sport_map.get(ev.get("type") or ev.get("category") or "", "Other")
+            tss = round(float(ev.get("load_target") or ev.get("icu_training_load") or 0), 1)
+            dur = round((ev.get("moving_time") or 0) / 60)
+            plans_by_date.setdefault(d, []).append(
+                {"sport": sport, "tss": tss, "dur": dur, "status": "planned"}
+            )
+
+        days = []
+        for i in range(-8, 8):
+            d = today + timedelta(days=i)
+            d_str = d.isoformat()
+            is_future = d > today
+            days.append({
+                "date": d_str,
+                "tsb": None if is_future else tsb_by_date.get(d_str),
+                "activities": plans_by_date.get(d_str, []) if is_future else acts_by_date.get(d_str, []),
+            })
+
+        payload = {
+            "today": today.strftime("%m-%d"),
+            "seed_ctl": seed_ctl,
+            "seed_atl": seed_atl,
+            "days": days,
+        }
+        png = _charts.load_chart(payload)
+        if png:
+            import tempfile, os
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                tf.write(png)
+                tmp_path = tf.name
+            try:
+                subprocess.run(
+                    ["python3", str(NOTIFY), "--chat-id", str(chat_id), "--photo", tmp_path],
+                    cwd=PROJECT_DIR, timeout=30,
+                )
+            finally:
+                os.unlink(tmp_path)
+    except Exception as e:
+        print(f"[morning chart] {e}", file=sys.stderr)
+
+
 def run_athlete(slug, athlete_cfg):
     adir = BASE / f"athletes/{slug}"
     chat_id = athlete_cfg.get("chat_id", "")
@@ -162,6 +261,7 @@ def run_athlete(slug, athlete_cfg):
     # Pre-compute recovery score and extract today's wellness values directly
     recovery = None
     wellness_line = None
+    wellness_rows = []
     has_sleep_device = False  # True if athlete has ever had sleep data
     try:
         from icu_api import IcuClient
@@ -223,6 +323,7 @@ def run_athlete(slug, athlete_cfg):
     output = m.group(1).strip() if m else ""
     if output:
         notify(output, chat_id)
+        _send_morning_load_chart(chat_id, slug, wellness_rows)
     # Write sentinel regardless — if Claude ran without error, don't retry even if output was empty
     if result.returncode == 0:
         sentinel.touch()
