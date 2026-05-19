@@ -32,15 +32,21 @@ def load_athletes() -> dict:
 
 
 def load_training(slug: str) -> dict | None:
-    path = BASE / "ClaudeCoach/athletes" / slug / "training-data.json"
-    if not path.exists():
-        log(f"[{slug}] training-data.json not found at {path} — skipping")
-        return None
-    try:
-        return json.loads(path.read_text())
-    except json.JSONDecodeError as e:
-        log(f"[{slug}] training-data.json parse error: {e}")
-        return None
+    # Non-Jamie athletes write to ClaudeCoach/training-data-{slug}.json;
+    # Jamie writes to ClaudeCoach/athletes/jamie/training-data.json (private).
+    candidates = [
+        BASE / f"ClaudeCoach/training-data-{slug}.json",
+        BASE / "ClaudeCoach/athletes" / slug / "training-data.json",
+    ]
+    for path in candidates:
+        if path.exists():
+            try:
+                return json.loads(path.read_text())
+            except json.JSONDecodeError as e:
+                log(f"[{slug}] {path.name} parse error: {e}")
+                return None
+    log(f"[{slug}] training-data.json not found — skipping")
+    return None
 
 
 def build_athlete_entry(slug: str, cfg: dict, td: dict) -> dict:
