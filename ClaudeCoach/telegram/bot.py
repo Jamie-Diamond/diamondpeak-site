@@ -1713,7 +1713,7 @@ def call_claude_streaming(token, chat_id, placeholder_id,
 
     try:
         proc = subprocess.Popen(
-            _claude_cmd(full_prompt, model, ["--output-format", "stream-json"]),
+            _claude_cmd(full_prompt, model, ["--output-format", "stream-json", "--verbose"]),
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, cwd=config["project_dir"],
         )
