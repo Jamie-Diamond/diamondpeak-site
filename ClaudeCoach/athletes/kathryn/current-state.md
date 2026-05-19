@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-05-18
+Last updated: 2026-05-19
 
 ## Injuries / Niggles
 None
@@ -25,18 +25,21 @@ None
 - 2026-05-16: bike_z2 60min — GO, executed as planned (no rules fired)
 - 2026-05-17: run_easy 60min — SKIPPED (sore throat, fatigue)
 - 2026-05-18: Rest day — no session in calendar (illness monitoring day)
+- 2026-05-19: Rest day — tonsillitis, complete rest (day 3). No sessions planned.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
 - 2026-05-18: No session in calendar — illness monitoring continues. HRV yesterday 49 (vs 7d avg ~67), sleep score 68, poor quality. Conserving energy today.
 - 2026-05-18 (watchdog re-check): T3 re-fired. HRV 49 (May 17) vs 7d prior avg 70 = -30% decline. Today's HRV not yet synced. Sleep all 7 days ≥ 7h (T4 clear). Illness context ongoing.
 - 2026-05-18 (evening): **Tonsillitis confirmed.** Complete rest required. No training until symptom-free + 48hrs minimum. Week of 18–24 May will be a recovery/illness week — ramp to reset from actual TSS delivered when training resumes.
+- 2026-05-19 (watchdog): T3 re-fired. HRV 43 (May 18) vs 7d prior avg 68 = −37% decline. May 19 HRV not yet synced. Sleep all 7 days ≥ 7h (T4 clear). Tonsillitis day 3 — complete rest maintained.
 
 ## Heat Acclimatisation
 
 - 2026-05-16: T7 fired — heat-log.json empty, 0.0 dose in last 14 days (threshold 3.0). Begin heat sessions immediately.
 - 2026-05-17: T7 + T8 fired — heat-log.json still empty, 0.0/3.0 dose (T7); no heat session ever recorded, >7 days gap (T8). Notification sent.
 - 2026-05-18: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. No heat sessions ever logged. Illness day 2 (rest maintained today); first heat session blocked until recovery confirmed.
+- 2026-05-19: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness day 3 (tonsillitis). Heat sessions remain blocked until symptom-free + 48h.
 
 ## Open Actions
 - [x] Plan generated through 2026-05-31 (2026-05-17)
