@@ -417,6 +417,53 @@ def _strava_update(slug: str, icu_activity_id: str, analysis: str,
         print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava update failed: {exc}", file=sys.stderr)
 
 
+def _strava_refresh_updated(slug: str, state: dict, state_file: Path | None):
+    """Re-describe any recent activities whose user-added fields changed since last Strava write."""
+    import hashlib as _hl
+    from datetime import date, timedelta
+
+    log_path = BASE / f"athletes/{slug}/session-log.json"
+    if not log_path.exists():
+        return
+
+    try:
+        entries = json.loads(log_path.read_text())
+    except Exception:
+        return
+
+    hashes  = state.get("strava_hashes") or {}
+    cutoff  = (date.today() - timedelta(days=3)).isoformat()
+    changed = False
+
+    for e in entries:
+        if (e.get("date") or "") < cutoff:
+            continue
+        aid = str(e.get("activity_id", ""))
+        if not aid:
+            continue
+        fields = "|".join(str(e.get(f, "")) for f in ("rpe", "nutrition_g_carb", "injury_pain_during", "feel", "notes"))
+        current = _hl.md5(fields.encode()).hexdigest()[:8]
+        if hashes.get(aid) == current:
+            continue
+        # Fields updated since last write — regenerate description
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava refresh for {aid}", file=sys.stderr)
+        try:
+            subprocess.run(
+                ["python3", str(BASE / "scripts/strava-update-activity.py"),
+                 "--athlete", slug, "--icu-id", aid],
+                cwd=PROJECT_DIR, timeout=90,
+            )
+            hashes[aid] = current
+            changed = True
+        except Exception as exc:
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] strava-update-activity failed: {exc}", file=sys.stderr)
+
+    if changed:
+        state["strava_hashes"] = hashes
+        if state_file:
+            save_state(state, state_file)
+
+
 def check_athlete(slug, athlete_cfg):
     """Run activity check for one athlete."""
     adir = BASE / f"athletes/{slug}"
@@ -439,8 +486,9 @@ def check_athlete(slug, athlete_cfg):
 
     state = load_state(state_file)
 
-    # Test reminders run every cycle regardless of new activity
+    # Test reminders and Strava refresh run every cycle regardless of new activity
     _check_test_reminders(adir, chat_id, state, state_file)
+    _strava_refresh_updated(slug, state, state_file)
 
     # Snapshot existing IDs before Claude runs
     existing_ids: set = set()
@@ -655,8 +703,13 @@ def check_athlete(slug, athlete_cfg):
         except Exception:
             pass
 
-    # Write coaching note to Strava activity description
+    # Write coaching note to Strava activity description and store initial field hash
     _strava_update(slug, activity_id, analysis, plan_delta_raw=plan_delta_raw, session_entry=new_entry)
+    if new_entry:
+        import hashlib as _hl
+        fields = "|".join(str(new_entry.get(f, "")) for f in ("rpe", "nutrition_g_carb", "injury_pain_during", "feel", "notes"))
+        state.setdefault("strava_hashes", {})[activity_id] = _hl.md5(fields.encode()).hexdigest()[:8]
+        save_state(state, state_file)
 
     # Trigger site data refresh in background
     subprocess.Popen(
