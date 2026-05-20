@@ -94,8 +94,8 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None):
     threshold_pace = (profile or {}).get("run_threshold_pace_per_km", "4:02")
     run_injury_ask = (
         f"- Run: If Strava laps show alternating run/walk laps (walk laps identifiable by pace >8:00/km or duration ≤90s):"
-        f" Line 1 = workout structure (e.g. '5×9min run / 1min walk — avg run pace X:XX/km, +/-Xsec vs threshold ({threshold_pace}/km)')."
-        " Do NOT list individual lap distances or per-km splits for walk-run workouts."
+        f" Line 1 = structure + each run lap pace in order, e.g. '5×9min / 1min walk — 4:52, 4:56, 4:42, 5:01, 4:59/km (avg 4:54, +52sec vs threshold ({threshold_pace}/km))'."
+        " List only the run laps, not the walk laps."
         " Line 2 = % time HR ≤150 bpm (cap adherence) + aerobic decoupling % if run >40 min (from extended_metrics)."
         " Line 3 = \"Injury pain score during and this morning? (0-10)\""
         " Else (continuous run): Line 1 = distance + avg GAP pace vs threshold — state +/- sec/km."
@@ -103,8 +103,8 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None):
         " Line 3 = \"Injury pain score during and this morning? (0-10)\""
         if injuries else
         f"- Run: If Strava laps show alternating run/walk laps (walk laps identifiable by pace >8:00/km or duration ≤90s):"
-        f" Line 1 = workout structure (e.g. '5×9min run / 1min walk — avg run pace X:XX/km, +/-Xsec vs threshold ({threshold_pace}/km)')."
-        " Do NOT list individual lap distances or per-km splits for walk-run workouts."
+        f" Line 1 = structure + each run lap pace in order, e.g. '5×9min / 1min walk — 4:52, 4:56, 4:42, 5:01, 4:59/km (avg 4:54, +52sec vs threshold ({threshold_pace}/km))'."
+        " List only the run laps, not the walk laps."
         " Line 2 = HR zone distribution + aerobic decoupling % if run >40 min (from extended_metrics)."
         " Line 3 = \"RPE and how did it feel?\""
         " Else (continuous run): Line 1 = distance + avg GAP pace vs threshold — state +/- sec/km."
