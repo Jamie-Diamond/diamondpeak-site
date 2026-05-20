@@ -184,7 +184,8 @@ def _send_morning_load_chart(chat_id, slug, wellness_rows):
             d = (ev.get("start_date_local") or "")[:10]
             if not d or d <= today.isoformat():
                 continue
-            sport = _sport_map.get(ev.get("type") or ev.get("category") or "", "Other")
+            raw   = ev.get("type") or ev.get("category") or ""
+            sport = _sport_map.get(raw, raw) or "Other"
             tss = round(float(ev.get("load_target") or ev.get("icu_training_load") or 0), 1)
             dur = round((ev.get("moving_time") or 0) / 60)
             plans_by_date.setdefault(d, []).append(
