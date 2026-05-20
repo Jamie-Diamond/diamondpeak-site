@@ -56,6 +56,7 @@
 - **2026-05-17 GO** — Easy 5k (30 min, Z2/recovery pace): no rules fired, execute as planned. If completed, week run km ends ~23.5 km (+88% vs 12.52 last wk) — existing T10 flag stands.
 - **2026-05-18 MODIFIED** — Strength: lower body + core (30 min): downgraded to mobility-only (15 min). Plan downgrade condition met: HRV 21/10 on 2026-05-17 (<35 threshold) AND sleep 5.2h (<6h threshold) post-wedding weekend. No loaded exercises; re-introduce lower body strength Tue 19 May if HRV recovers >35.
 - **2026-05-19 GO** — Z2 walk-run 5:30×8 (44 min) + Swim CSS 4×400m (~50 min): no rules fired, both sessions execute as planned. HRV recovered to 45 on 2026-05-18 (above 35 threshold). Ankle still at 2/10 during runs; walk-run format and stop-if->2/10 protocol retained per plan. Next-morning pain from 2026-05-18 Coventry run not yet logged — monitor before tomorrow's session.
+- **2026-05-20 GO** — Z2 run 40 min (walk-run): no rules fired, execute as planned. ATL 80.9, CTL 79.7 (TSB +1.3, slight freshness). HRV not yet synced (fallback 0.0 trend); sleep not yet synced. Ankle pain 2/10 during runs — walk-run format and stop-if->2/10 protocol retained per rehab protocol.
 
 ## Body weight
 
