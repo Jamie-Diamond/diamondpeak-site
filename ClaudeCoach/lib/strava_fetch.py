@@ -39,6 +39,7 @@ def main():
             "moving_time_s": lap.get("moving_time"),
             "pace":       pace_str(spd),
             "avg_hr":     int(lap["average_heartrate"]) if lap.get("average_heartrate") else None,
+            "max_hr":     int(lap["max_heartrate"]) if lap.get("max_heartrate") else None,
             "avg_watts":  round(lap["average_watts"]) if lap.get("average_watts") else None,
         })
 
