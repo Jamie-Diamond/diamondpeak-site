@@ -85,6 +85,22 @@ class StravaClient:
             body = e.read().decode(errors="replace")[:200]
             raise RuntimeError(f"Strava GET {strava_activity_id} → {e.code}: {body}") from e
 
+    def get_activity_streams(self, strava_activity_id: int | str, keys: list) -> dict:
+        """Fetch activity streams (e.g. grade_adjusted_speed) keyed by type."""
+        token = self.access_token()
+        keys_str = ",".join(keys)
+        req = urllib.request.Request(
+            f"https://www.strava.com/api/v3/activities/{strava_activity_id}/streams"
+            f"?keys={keys_str}&key_by_type=true",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15, context=_ssl_ctx()) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            body = e.read().decode(errors="replace")[:200]
+            raise RuntimeError(f"Strava streams {strava_activity_id} → {e.code}: {body}") from e
+
     def update_description(self, strava_activity_id: int | str, text: str) -> bool:
         """Write text to a Strava activity description. Returns True on success."""
         token = self.access_token()

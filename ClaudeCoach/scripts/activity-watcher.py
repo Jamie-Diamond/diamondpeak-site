@@ -93,22 +93,20 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None):
 
     threshold_pace = (profile or {}).get("run_threshold_pace_per_km", "4:02")
     run_injury_ask = (
-        f"- Run: If Strava laps show alternating run/walk laps (walk laps identifiable by pace >8:00/km or duration ≤90s):"
-        f" Output the header line then one line per run rep:"
-        f" Header: '5×9min / 1min walk · avg X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km)'"
-        f" Rep lines: 'Rep N: X:XX/km · AVGbpm/MAXbpm'"
-        " Then: % time HR ≤150 bpm (cap adherence) + aerobic decoupling % if >40 min (from extended_metrics)."
-        " Then: \"Injury pain score during and this morning? (0-10)\""
+        f"- Run (walk-run): If Strava laps show alternating run/walk laps (walk laps: pace >8:00/km or duration ≤90s):"
+        f" Your ANALYSIS must be formatted EXACTLY as multiple output lines — each on its own line:"
+        f" Line 1 (header): NxDUR / Xmin walk · avg GAP X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km)"
+        f" Lines 2..N+1 (one per run rep, use gap_pace if present else pace): Rep N: DUR · GAP X:XX/km · AVGbpm/MAXbpm"
+        f" Final lines: % HR ≤150 bpm cap adherence · decoupling % if >40 min | Injury pain during and this morning? (0-10)"
         " Else (continuous run): Line 1 = distance + avg GAP pace vs threshold — state +/- sec/km."
         " Line 2 = % time HR ≤150 bpm + aerobic decoupling % if >40 min."
         " Line 3 = \"Injury pain score during and this morning? (0-10)\""
         if injuries else
-        f"- Run: If Strava laps show alternating run/walk laps (walk laps identifiable by pace >8:00/km or duration ≤90s):"
-        f" Output the header line then one line per run rep:"
-        f" Header: '5×9min / 1min walk · avg X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km)'"
-        f" Rep lines: 'Rep N: X:XX/km · AVGbpm/MAXbpm'"
-        " Then: HR zone distribution + aerobic decoupling % if >40 min (from extended_metrics)."
-        " Then: \"RPE and how did it feel?\""
+        f"- Run (walk-run): If Strava laps show alternating run/walk laps (walk laps: pace >8:00/km or duration ≤90s):"
+        f" Your ANALYSIS must be formatted EXACTLY as multiple output lines — each on its own line:"
+        f" Line 1 (header): NxDUR / Xmin walk · avg GAP X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km)"
+        f" Lines 2..N+1 (one per run rep, use gap_pace if present else pace): Rep N: DUR · GAP X:XX/km · AVGbpm/MAXbpm"
+        f" Final lines: HR zone split · decoupling % if >40 min | RPE and how did it feel?"
         " Else (continuous run): Line 1 = distance + avg GAP pace vs threshold — state +/- sec/km."
         " Line 2 = HR zone distribution + aerobic decoupling % if >40 min."
         " Line 3 = \"RPE and how did it feel?\""
@@ -170,15 +168,29 @@ ANALYSIS: <coaching message — see rules below>
 
 {first_name}: FTP {ftp} W.{injury_line}
 
-Interval source preference: Use ICU activity_detail intervals as the primary source. If Strava laps are available AND they give a cleaner interval breakdown (e.g. ICU fragmented one sustained effort into 3 pieces but Strava shows 1 clean lap), prefer the Strava laps for reporting effort structure. Always state the source if they disagree.
+Interval source: prefer Strava laps when they give a cleaner breakdown than ICU (e.g. ICU splits one effort into 3 pieces). Use gap_pace from Strava laps where available, else pace.
 
-Rules for ANALYSIS (2-3 lines, max 400 chars):
-- Ride (structured, >3 intervals): Line 1 = interval set summary (e.g. "5×10 min @ 272W avg — 105% FTP"). Line 2 = completion vs target if any intervals were cut or missed. Line 3 = "Nutrition — g carbs/hr and bottles?"
-- Ride (unstructured, ≤90 min): Line 1 = NP + IF. Line 2 = "Nutrition — g carbs/hr and bottles?"
-- Ride (unstructured, >90 min): Line 1 = NP + IF. Line 2 = aerobic decoupling %. Line 3 = "Nutrition — g carbs/hr and bottles? (recent avg: [compute avg g/hr from last 4 rides >90 min in session-log.json that have nutrition_g_carb set] · race target 90g/hr)"
+Rules for ANALYSIS — each logical line must be a separate output line (no semicolons to merge lines):
+
+RIDE:
+- Structured (Strava laps show alternating hard/easy, or ICU >3 intervals): header line + one line per WORK interval.
+  Header: NxDUR @ AVG W (X% FTP) · NP XXXw · IF X.XX
+  Rep lines: Rep N: DUR · XXXw (X% FTP) · AVGbpm/MAXbpm
+  Final line: completion note if intervals missed, else "Nutrition — g carbs/hr and bottles?"
+- Unstructured ≤90 min: NP + IF | "Nutrition — g carbs/hr and bottles?"
+- Unstructured >90 min: NP + IF | aerobic decoupling % | "Nutrition — g carbs/hr and bottles? (recent avg: [avg g/hr from last 4 rides >90 min in session-log.json with nutrition_g_carb set] · race target 90g/hr)"
+
+RUN:
 {run_injury_ask}
-- Swim: Line 1 = distance + pace vs CSS target (state +/- seconds). Line 2 = "RPE and how did it feel?"
-- Strength: Line 1 = duration. Line 2 = "RPE and what was the main focus?"
+
+SWIM:
+- If Strava splits_metric available (pool — splits ≤200m each): header + one line per split.
+  Header: Xm total · avg X:XX/100m · +/-Xsec vs CSS target
+  Split lines: Split N: X:XX/100m · AVGbpm (if HR available)
+  Final line: "RPE and how did it feel?"
+- Else (OWS or no splits): distance + avg pace vs CSS +/- seconds | "RPE and how did it feel?"
+
+STRENGTH: duration | "RPE and what was the main focus?"
 
 For unstructured rides > 3 hours (or structured rides > 3 hours where Pa:HR data is available): also output a DECOUPLING line:
 DECOUPLING: <activity_id>|<date>|<name>|<duration_min>|<intensity_factor>|<decoupling_pct>|<tss>

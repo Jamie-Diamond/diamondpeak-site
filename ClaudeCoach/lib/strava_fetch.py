@@ -30,17 +30,44 @@ def main():
         secs = round(1000 / speed_ms)
         return f"{secs // 60}:{secs % 60:02d}/km"
 
+    def dur_str(secs):
+        if not secs:
+            return None
+        m, s = divmod(int(secs), 60)
+        return f"{m}:{s:02d}"
+
+    # Fetch grade_adjusted_speed stream for GAP per lap
+    gap_stream = None
+    try:
+        streams = sc.get_activity_streams(args.strava_id, ["grade_adjusted_speed"])
+        gap_data = (streams.get("grade_adjusted_speed") or {}).get("data") or []
+        if gap_data:
+            gap_stream = gap_data
+    except Exception:
+        pass
+
     laps = []
     for i, lap in enumerate(detail.get("laps") or [], 1):
         spd = lap.get("average_speed") or 0
+
+        gap_pace = None
+        if gap_stream:
+            si = lap.get("start_index")
+            ei = lap.get("end_index")
+            if si is not None and ei is not None and ei > si:
+                slice_ = [v for v in gap_stream[si:ei + 1] if v]
+                if slice_:
+                    gap_pace = pace_str(sum(slice_) / len(slice_))
+
         laps.append({
-            "lap":        i,
-            "distance_km": round((lap.get("distance") or 0) / 1000, 3),
-            "moving_time_s": lap.get("moving_time"),
-            "pace":       pace_str(spd),
-            "avg_hr":     int(lap["average_heartrate"]) if lap.get("average_heartrate") else None,
-            "max_hr":     int(lap["max_heartrate"]) if lap.get("max_heartrate") else None,
-            "avg_watts":  round(lap["average_watts"]) if lap.get("average_watts") else None,
+            "lap":          i,
+            "duration":     dur_str(lap.get("moving_time")),
+            "distance_km":  round((lap.get("distance") or 0) / 1000, 3),
+            "pace":         pace_str(spd),
+            "gap_pace":     gap_pace,
+            "avg_hr":       int(lap["average_heartrate"]) if lap.get("average_heartrate") else None,
+            "max_hr":       int(lap["max_heartrate"]) if lap.get("max_heartrate") else None,
+            "avg_watts":    round(lap["average_watts"]) if lap.get("average_watts") else None,
         })
 
     splits = []
