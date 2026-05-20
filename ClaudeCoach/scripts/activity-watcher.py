@@ -18,6 +18,13 @@ TG_CONFIG       = BASE / "telegram/config.json"
 TOOLS = "Read,Write,Bash"
 
 
+def _pace_str(speed_ms: float) -> str:
+    if not speed_ms:
+        return "?"
+    secs = round(1000 / speed_ms)
+    return f"{secs // 60}:{secs % 60:02d}/km"
+
+
 def _tg_send_keyboard(chat_id, text, keyboard):
     """Send a Telegram message with inline keyboard. Returns message_id or None."""
     try:
@@ -318,11 +325,12 @@ def _check_test_reminders(adir: Path, chat_id: str, state: dict, state_file: Pat
 
 
 def _strava_description(first_name: str, sport: str, analysis: str,
-                         plan_delta_raw: str | None, session_entry: dict | None) -> str:
+                         plan_delta_raw: str | None, session_entry: dict | None,
+                         laps: list | None = None, splits: list | None = None,
+                         segment_prs: list | None = None) -> str:
     """Call Claude to write a witty 3-line Strava description."""
     import re as _re
 
-    # Strip Telegram markdown for cleaner input
     clean_analysis = _re.sub(r"[*_]", "", analysis or "").strip()
 
     plan_block = "No planned session found."
@@ -343,17 +351,46 @@ def _strava_description(first_name: str, sport: str, analysis: str,
     if dur:   sport_line += f", {int(dur)} min"
     if dist:  sport_line += f", {dist:.1f}km"
 
+    # Build laps block (cap at 20 to keep prompt lean)
+    laps_block = ""
+    if laps:
+        parts = []
+        for i, lap in enumerate(laps[:20], 1):
+            spd = lap.get("average_speed") or 0
+            hr  = lap.get("average_heartrate")
+            dist_km = (lap.get("distance") or 0) / 1000
+            pace = _pace_str(spd) if spd else "?"
+            hr_str = f", {int(hr)}bpm" if hr else ""
+            parts.append(f"Lap {i}: {pace}{hr_str}, {dist_km:.2f}km")
+        laps_block = "Device laps: " + " | ".join(parts) + "\n"
+
+    splits_block = ""
+    if splits:
+        parts = []
+        for s in splits[:20]:
+            spd  = s.get("average_speed") or 0
+            hr   = s.get("average_heartrate")
+            n    = s.get("split", "?")
+            pace = _pace_str(spd) if spd else "?"
+            hr_str = f", {int(hr)}bpm" if hr else ""
+            parts.append(f"km{n}: {pace}{hr_str}")
+        splits_block = "Per-km splits: " + " | ".join(parts) + "\n"
+
+    prs_block = ""
+    if segment_prs:
+        prs_block = f"Segment PRs set: {', '.join(segment_prs)}\n"
+
     prompt = f"""\
 Write a Strava activity description for {first_name}.
 
 Sport: {sport_line}
 {plan_block}
 Coaching analysis: {clean_analysis}
-
+{laps_block}{splits_block}{prs_block}
 Write exactly 3 lines, plain text, no markdown, no hashtags, no exclamation marks:
 Line 1 — "Aim: [one plain sentence on what the session was targeting]"
-Line 2 — [one dry, understated observation about how it went vs the aim. Deadpan British wit — matter-of-fact, slightly wry, never gushing. If they hit the target: note it plainly with quiet satisfaction. If they missed: a raised eyebrow, not a pep talk. No cheerleading, no "nailed it", no "amazing".]
-Line 3 — "ClaudeCoach"
+Line 2 — [one dry, understated observation about how it went vs the aim. Use lap/split data if it adds something specific — e.g. fastest split, notable fade, strong finish. Deadpan British wit — matter-of-fact, slightly wry, never gushing.]
+Line 3 — "ClaudeCoach" [append " 🏆" if any segment PRs were set]
 
 Examples of the right tone:
 - "Held Z2 throughout. Decoupling 3.2%. The plan had a good day."
@@ -379,7 +416,8 @@ Total under 300 characters. Output nothing else."""
 
 
 def _strava_update(slug: str, icu_activity_id: str, analysis: str,
-                   plan_delta_raw: str | None = None, session_entry: dict | None = None):
+                   plan_delta_raw: str | None = None, session_entry: dict | None = None,
+                   chat_id: str = ""):
     """Write a coaching note to the Strava activity description. Silent on any error."""
     try:
         import sys as _sys
@@ -406,9 +444,30 @@ def _strava_update(slug: str, icu_activity_id: str, analysis: str,
         first_name = profile.get("name", slug).split()[0]
         sport = (session_entry or {}).get("sport", "session")
 
-        description = _strava_description(first_name, sport, analysis, plan_delta_raw, session_entry)
-
+        # Fetch Strava detail for laps, splits, and segment PRs
         sc = StravaClient(slug)
+        laps = splits = segment_prs = None
+        try:
+            strava_detail = sc.get_activity_detail(strava_id)
+            laps = strava_detail.get("laps") or None
+            splits = strava_detail.get("splits_metric") or None
+            segment_prs = [
+                se["name"] for se in (strava_detail.get("segment_efforts") or [])
+                if se.get("pr_rank") == 1 and se.get("name")
+            ] or None
+        except Exception as exc:
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava detail fetch failed: {exc}", file=sys.stderr)
+
+        # Notify segment PRs via Telegram
+        if segment_prs and chat_id:
+            pr_lines = "\n".join(f"🏆 PR: {n}" for n in segment_prs)
+            _notify(pr_lines, chat_id)
+
+        description = _strava_description(
+            first_name, sport, analysis, plan_delta_raw, session_entry,
+            laps=laps, splits=splits, segment_prs=segment_prs,
+        )
+
         sc.update_description(strava_id, description)
         print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava description updated ({strava_id})", file=sys.stderr)
     except FileNotFoundError:
@@ -704,7 +763,7 @@ def check_athlete(slug, athlete_cfg):
             pass
 
     # Write coaching note to Strava activity description and store initial field hash
-    _strava_update(slug, activity_id, analysis, plan_delta_raw=plan_delta_raw, session_entry=new_entry)
+    _strava_update(slug, activity_id, analysis, plan_delta_raw=plan_delta_raw, session_entry=new_entry, chat_id=chat_id)
     if new_entry:
         import hashlib as _hl
         fields = "|".join(str(new_entry.get(f, "")) for f in ("rpe", "nutrition_g_carb", "injury_pain_during", "feel", "notes"))
