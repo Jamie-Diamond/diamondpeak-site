@@ -1077,8 +1077,20 @@ def _handle_quick_log(token, chat_id, data, message_id, athletes):
 
     label_map = {"r": f"RPE {value}", "p": f"Pain {value}/10", "c": f"{value}g/hr carbs"}
     conf = f"✓ {label_map[field_code]} logged"
+    # Keep drill buttons visible after logging — replace RPE/pain/carb rows but preserve drill row
+    drill_kb = {"inline_keyboard": [[
+        {"text": "📊 Intervals", "callback_data": f"drill:intervals:{activity_id}:{slug}"},
+        {"text": "🍌 Nutrition",  "callback_data": f"drill:nutrition:{activity_id}:{slug}"},
+        {"text": "💓 HR",         "callback_data": f"drill:hr:{activity_id}:{slug}"},
+        {"text": "↔️ Compare",    "callback_data": f"drill:compare:{activity_id}:{slug}"},
+    ]]}
     if message_id:
-        edit_keyboard_confirm(token, chat_id, message_id, conf)
+        tg_post(token, "editMessageText", {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": conf,
+            "reply_markup": drill_kb,
+        })
     else:
         send(token, chat_id, conf)
 

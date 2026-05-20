@@ -116,6 +116,8 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
   - Fetch full detail via Bash: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint activity_detail --activity-id <id>
   - If sport is Run or VirtualRun: also fetch extended metrics:
     python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint extended_metrics --activity-id <id>
+  - If the activity has a strava_id field: fetch Strava laps and splits:
+    python3 ClaudeCoach/lib/strava_fetch.py --athlete {slug} --strava-id <strava_id>
   - Add a stub entry to ClaudeCoach/athletes/{slug}/session-log.json (prepend to array, most recent first).
 
   For Ride or Run:
@@ -155,6 +157,8 @@ ACTIVITY_ID: <id or none>
 ANALYSIS: <coaching message — see rules below>
 
 {first_name}: FTP {ftp} W.{injury_line}
+
+Interval source preference: Use ICU activity_detail intervals as the primary source. If Strava laps are available AND they give a cleaner interval breakdown (e.g. ICU fragmented one sustained effort into 3 pieces but Strava shows 1 clean lap), prefer the Strava laps for reporting effort structure. Always state the source if they disagree.
 
 Rules for ANALYSIS (2-3 lines, max 400 chars):
 - Ride (structured, >3 intervals): Line 1 = interval set summary (e.g. "5×10 min @ 272W avg — 105% FTP"). Line 2 = completion vs target if any intervals were cut or missed. Line 3 = "Nutrition — g carbs/hr and bottles?"
