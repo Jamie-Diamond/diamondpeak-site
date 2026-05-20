@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": null,
+    "date": "2026-05-20",
+    "name": "Run — Z2 walk-run",
+    "sport": "Run",
+    "tss": 58,
+    "duration_min": 57,
+    "distance_km": 11.0,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": null,
+    "rpe": null,
+    "feel": "lungs and head didn't engage from the start",
+    "ankle_pain_during": 2,
+    "ankle_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": "Ankle 1-2/10 during run (0.5 AM pre-run). Feeling like cold/flu onset — sleep wasn't great, lungs and head never got into the session.",
+    "logged_at": "2026-05-20",
+    "stub": false
+  },
+  {
     "activity_id": "i149820588",
     "date": "2026-05-19",
     "name": "Elliptical",

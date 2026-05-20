@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-05-19
+## Last updated: 2026-05-20
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -30,7 +30,7 @@
 
 ## Ankle (high ankle sprain, onset ~1 March 2026)
 
-- Current pain 1–10 (during run): 2 (Mon 11 May — 7.4 km 9:1 run; same as Thu 7 May). Pain location: right Achilles on warmup/uphills, front of ankle on flat.
+- Current pain 1–10 (during run): 1–2 (Wed 20 May — 11 km walk-run; consistent with prior weeks). Pain location: right Achilles on warmup/uphills, front of ankle on flat.
 - Current pain 1–10 (next morning): 0 (Fri 8 May); 0 (Sat 9 May); 0 (Sun 10 May, resting); 0 (Mon 11 May AM, resting — "ankle is good"); 0.5 (Wed 14 May AM — after Mon 11 May 7.4 km run); 0.5 (Thu 14 May AM — after Wed 13 May 11.1 km run — "ankle is good"); 0 (Sun 17 May AM — after Sat 16 May ride only, no run); 0 (Mon 18 May AM — after Sun 17 May first no-walk 5k run); **0.5 (Tue 19 May AM — after Mon 18 May 4.8 km run)**; **0.5 (Wed 20 May AM — after Tue 19 May elliptical + swim)**
 - Today's run (Mon 11 May): completed — 7.4 km / 37 min (actual run was longer than planned 5k)
 - Week plan decisions (logged 2026-05-11): Sat 16 = Richmond laps ride (wedding day — AM only, ride takes priority over jog); Sun 17 = easy 5k run (Jamie confirmed). Wed run held at 10–12 km (Jamie confirmed — accepts week +60–76% run km vs cap). Duplicate "TBC" notes on Sat 16 + Sun 17 deleted from intervals.icu.
@@ -50,7 +50,7 @@
 
 - Missed sessions: Wed 6 May easy run 5 km — moved and extended to Thu 7 May (13 km compensatory, completed); Sun 10 May brick run skipped (busy day, chose to wind down)
 - Cut sessions: none
-- Illness / life events: none
+- Illness / life events: **possible cold/flu onset 2026-05-20** — poor sleep, lungs and head not responsive during morning run. Monitor overnight; if symptoms develop, treat tomorrow's swim as TBC.
 - Sleep deficit days (>1 hr below 8 hr target): 2 (1 May: 6.7 h, 6 May: 6.9 h)
 - **2026-05-16 MODIFIED** — Interval ride 2hr: intervals reduced 5→3 (R4: ATL/CTL gap +17.1 in moderate zone; R6-single: sleep 6.9h, no HRV corroboration). Intensity held at 88% FTP. Warmup/Z2 block/cooldown unchanged.
 - **2026-05-17 GO** — Easy 5k (30 min, Z2/recovery pace): no rules fired, execute as planned. If completed, week run km ends ~23.5 km (+88% vs 12.52 last wk) — existing T10 flag stands.
