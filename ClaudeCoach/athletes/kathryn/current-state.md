@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-05-20
+Last updated: 2026-05-21
 
 ## Injuries / Niggles
 None
@@ -27,6 +27,7 @@ None
 - 2026-05-18: Rest day — no session in calendar (illness monitoring day)
 - 2026-05-19: Rest day — tonsillitis, complete rest (day 3). No sessions planned.
 - 2026-05-20: bike_threshold (sweet spot) — MODIFIED (R3). 2x15min @ 88% reduced to 1x15min @ 83%. HRV -47.5% vs 7d avg (last reading: 30, 2026-05-19; wearable not synced today). Tonsillitis recovery context.
+- 2026-05-21: run_easy 56min with strides — GO, execute as planned (no rules fired). HRV not synced, sleep not synced; all other signals neutral.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
