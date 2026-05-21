@@ -29,9 +29,22 @@ def trim_log(path: Path, max_lines: int = 5000):
         pass
 
 
-def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: str) -> str:
+def load_profile(slug: str) -> dict:
+    p = BASE / "athletes" / slug / "profile.json"
+    try:
+        return json.loads(p.read_text()) if p.exists() else {}
+    except Exception:
+        return {}
+
+
+def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: str, heat_protocol: bool = True) -> str:
     today = date.today().isoformat()
     athlete_dir = BASE / "athletes" / slug
+
+    heat_log_read = f"- {athlete_dir}/heat-log.json\n" if heat_protocol else ""
+    heat_triggers = """T7 (Tier 1): From 15 May 2026 only — sum of dose in heat-log.json for last 14 days < 3.0 (skip if heat-log.json does not exist or is empty)
+T8 (Tier 2): From 15 May 2026 only — most recent date in heat-log.json is >7 days ago (skip if heat-log.json does not exist or is empty)
+""" if heat_protocol else ""
 
     return f"""You are running the daily watchdog check for {name}'s {race_name} coaching system.
 Run silently — only produce output if a trigger fires.
@@ -42,8 +55,7 @@ Read these files (skip any that do not exist):
 - {athlete_dir}/reference/rules.md
 - {athlete_dir}/reference/decision-points.md
 - {athlete_dir}/session-log.json
-- {athlete_dir}/heat-log.json
-
+{heat_log_read}
 Pull live data via Bash (use today's date {today} for all calculations):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint fitness --days 14
@@ -58,9 +70,7 @@ T4 (Tier 1): Sleep <7h for 3+ days in last 7 (skip if no sleep data available)
 T5 (Tier 1): Missed planned sessions >=2 in last rolling 7 days
 T6 (Tier 1): Aerobic decoupling >5% on any Z2 ride in last 7 days (check via activity_detail for rides with IF < 0.75):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint activity_detail --activity-id ID
-T7 (Tier 1): From 15 May 2026 only — sum of dose in heat-log.json for last 14 days < 3.0 (skip if heat-log.json does not exist)
-T8 (Tier 2): From 15 May 2026 only — most recent date in heat-log.json is >7 days ago (skip if heat-log.json does not exist)
-T9 (Tier 2): Decision-point action due within 7 days and not marked done in current-state.json open_actions[].status
+{heat_triggers}T9 (Tier 2): Decision-point action due within 7 days and not marked done in current-state.json open_actions[].status
   - Read {athlete_dir}/reference/decision-points.md for dated items (skip if file missing)
   - Cross-check against open_actions in current-state.json; fire for any item whose due date <= today+7 and status != "done"
   - Example fire: "FTP retest due 2026-05-31 — not yet done"
@@ -90,7 +100,10 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     race_date = cfg.get("race_date", "")
     chat_id   = str(cfg.get("chat_id", ""))
 
-    prompt = build_prompt(slug, name, race_name, race_date, chat_id)
+    profile = load_profile(slug)
+    heat_protocol = profile.get("heat_protocol", True)
+
+    prompt = build_prompt(slug, name, race_name, race_date, chat_id, heat_protocol=heat_protocol)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_watchdog_", delete=False, suffix=".txt"

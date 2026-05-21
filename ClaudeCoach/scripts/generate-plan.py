@@ -57,6 +57,53 @@ def build_prompt(slug: str, cfg: dict, profile: dict) -> str:
 
     ftp_note = f"\nAthlete FTP from profile: {ftp} W" if ftp else ""
 
+    is_triathlete = bool(profile.get("swim_css_per_100m") or profile.get("run_threshold_pace_per_km"))
+
+    if is_triathlete:
+        phase_milestones = """    End of Base     (week 6):  >= 75 CTL
+    End of Build    (week 10): >= 85 CTL
+    End of Specific (week 14): >= 95 CTL
+    End of Peak     (week 17): >= 100 CTL"""
+        phase_tss = """  Week 1-6   (Base):     350-500 TSS/wk, focus Z2 bike volume + aerobic swim + easy run
+  Week 7-10  (Build):    450-600 TSS/wk, add threshold bike work, extend long run
+  Week 11-14 (Specific): 550-720 TSS/wk, race-pace intervals, brick sessions
+  Week 15-17 (Peak):     650-800 TSS/wk, race simulation, consolidate fitness
+  Week 18-21 (Taper):    200-350 TSS/wk, sharpen, no new stimuli"""
+        step5_constraints = """- Ankle: no quality run sessions (intervals/tempo/race-pace) until current-state.json ankle.four_pain_free_weeks_reached = true. Use walk-run format only (Z2 HR cap 150). Weekly run km increase <= 10%.
+- CTL ramp: <= +4 CTL/wk while ankle in rehab.
+- Pre-event fatigue management: if pre_event_taper = true, week 2 avoids all intensity, prioritises swim + short Z2 rides only.
+- Travel / access constraints: scan current-state.md "Travel & training blocks" for any dates in the planning window where bike is unavailable. Substitute with swims or runs of equivalent TSS."""
+        week_template = """Standard week template (adapt to phase):
+- Monday: Rest or recovery swim
+- Tuesday: Run (Z2, walk-run if ankle protocol applies) + optional swim
+- Wednesday: Bike Z2 (60-90 min) or strength
+- Thursday: Swim (CSS-based) + optional short run
+- Friday: Long ride (Z2 NP target) — key session
+- Saturday: Brick (ride + run) or long run
+- Sunday: Rest or short active recovery"""
+    else:
+        phase_milestones = """    End of Base     (week 6):  >= 30 CTL
+    End of Build    (week 10): >= 40 CTL
+    End of Specific (week 14): >= 50 CTL
+    End of Peak     (week 17): >= 55 CTL"""
+        phase_tss = """  Week 1-6   (Base):     100-200 TSS/wk, focus Z2 bike volume, building aerobic base
+  Week 7-10  (Build):    150-280 TSS/wk, add sweetspot work, extend long ride
+  Week 11-14 (Specific): 200-350 TSS/wk, threshold and over-threshold intervals, longer rides
+  Week 15-17 (Peak):     250-400 TSS/wk, consolidate fitness, race simulation rides
+  Week 18-21 (Taper):    80-150 TSS/wk, sharpen, no new stimuli"""
+        step5_constraints = """- CTL ramp: <= +5 CTL/wk.
+- Pre-event fatigue management: if pre_event_taper = true, week 2 prioritises short Z2 rides only, no intensity.
+- Concurrent training: check current-state.md for CrossFit or other non-cycling load not captured in CTL — plan hard bike sessions on CrossFit rest days where possible.
+- Travel / access constraints: scan current-state.md "Travel & training blocks" for any dates in the planning window where bike is unavailable. Substitute with strength sessions."""
+        week_template = """Standard week template — cycling only (adapt to phase; do NOT add swim or run sessions):
+- Monday: Rest
+- Tuesday: Strength or easy Z2 ride 45–60 min
+- Wednesday: Key bike session — sweetspot or threshold intervals
+- Thursday: Rest or strength
+- Friday: Rest or easy Z2 ride 45–60 min
+- Saturday: Long ride (Z2 NP target, progressive) — key session
+- Sunday: Rest or short active recovery"""
+
     return f"""You are generating the rolling 2-week training plan for {name}'s {race_name} coaching system.
 {ftp_note}
 
@@ -88,10 +135,7 @@ Step 3b — Trajectory check (use fitness endpoint forward projection):
 - ctl_today = today's CTL value from fitness endpoint
 - ctl_end_wk2 = projected CTL on the last day of the 2-week planning window (passive decay baseline)
 - Phase-end CTL blueprint milestones:
-    End of Base     (week 6):  >= 75 CTL
-    End of Build    (week 10): >= 85 CTL
-    End of Specific (week 14): >= 95 CTL
-    End of Peak     (week 17): >= 100 CTL
+{phase_milestones}
 - required_weekly_gain = (target_ctl_phase_end - ctl_today) / max(weeks_to_phase_end, 1)
 - Set trajectory_status:
     BEHIND   if required_weekly_gain > 3.0  -> use TOP 20% of phase TSS range
@@ -103,33 +147,19 @@ Step 3b — Trajectory check (use fitness endpoint forward projection):
 Step 4 — Determine phase and TSS target:
 - Week number = ceil((Monday date - plan_start_date) / 7), where plan_start_date is from athletes.json plan_start field if present, otherwise use 2026-04-27 as default.
 - Phase and TSS ranges:
-  Week 1-6   (Base):     350-500 TSS/wk, focus Z2 bike volume + aerobic swim + easy run
-  Week 7-10  (Build):    450-600 TSS/wk, add threshold bike work, extend long run
-  Week 11-14 (Specific): 550-720 TSS/wk, race-pace intervals, brick sessions
-  Week 15-17 (Peak):     650-800 TSS/wk, race simulation, consolidate fitness
-  Week 18-21 (Taper):    200-350 TSS/wk, sharpen, no new stimuli
+{phase_tss}
 - Apply trajectory_status from Step 3b to select the TSS target within the range
 - If pre_event_taper = true: week 2 is overridden to BOTTOM of range
 - If athlete has phase_tss defined in athletes.json (check current-state.json or athletes config), use those values in preference to the defaults above
 
 Step 5 — Apply mandatory constraints (from rules.md if present — these are HARD overrides):
-- Ankle: no quality run sessions (intervals/tempo/race-pace) until current-state.json ankle.four_pain_free_weeks_reached = true. Use walk-run format only (Z2 HR cap 150). Weekly run km increase <= 10%.
-- CTL ramp: <= +4 CTL/wk while ankle in rehab.
-- Pre-event fatigue management: if pre_event_taper = true, week 2 avoids all intensity, prioritises swim + short Z2 rides only.
+{step5_constraints}
 - Strength: minimum 1 session/week (target 2).
 - Never prescribe new fuel/kit/shoes in the last 4 weeks.
 - Always state day-of-week alongside date in session names.
-- Travel / access constraints: scan current-state.md "Travel & training blocks" for any dates in the planning window where bike is unavailable. Substitute with swims or runs of equivalent TSS.
 
 Step 6 — Build the 2-week session structure:
-Standard week template (adapt to phase):
-- Monday: Rest or recovery swim
-- Tuesday: Run (Z2, walk-run if ankle protocol applies) + optional swim
-- Wednesday: Bike Z2 (60-90 min) or strength
-- Thursday: Swim (CSS-based) + optional short run
-- Friday: Long ride (Z2 NP target) — key session
-- Saturday: Brick (ride + run) or long run
-- Sunday: Rest or short active recovery
+{week_template}
 
 Session description consistency rules:
 - Never combine a fixed-distance label with a fixed-duration label unless provably equivalent

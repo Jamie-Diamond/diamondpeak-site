@@ -18,7 +18,7 @@ sys.path.insert(0, str(BASE / "telegram"))
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -78,7 +78,7 @@ Step 1 — Fetch data via Bash:
 Step 2 — Read:
 - ClaudeCoach/athletes/{slug}/current-state.md (open actions, watchdog flags)
 - ClaudeCoach/athletes/{slug}/current-state.json (weight_readings, injury pain scores)
-- ClaudeCoach/athletes/{slug}/heat-log.json (count entries in current ISO week to get sessions_this_week)
+{"- ClaudeCoach/athletes/" + slug + "/heat-log.json (count entries in current ISO week to get sessions_this_week)" if heat_protocol else ""}
 - ClaudeCoach/athletes/{slug}/session-log.json — only if today's planned event is a Ride or Brick >90 min: extract the last 4 entries with sport Ride/GravelRide/Brick, duration_min ≥ 90, and nutrition_g_carb set. Compute each g_per_hr and the avg.
 
 Step 3 — Determine ONE question to ask (or none):
@@ -102,7 +102,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 [If today's session is Ride or Brick >90 min: 🍌 Nutrition — target [min(avg+10,90)]g/hr · eat at 15 min then every 25 min]
 [If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact]]
 [If open action is due within 3 days: 📌 [action] due [date]]
-[If today ≥ 2026-05-15 AND sessions_this_week < 2 AND today is Wednesday or later: 🌡️ Heat bath due — [N] this week (target 2–3×)]
+{"[If today ≥ 2026-05-15 AND sessions_this_week < 2 AND today is Wednesday or later: 🌡️ Heat bath due — [N] this week (target 2–3×)]" if heat_protocol else ""}
 
 [Question if applicable — one line]
 
@@ -252,6 +252,7 @@ def run_athlete(slug, athlete_cfg):
     race_name = profile.get("race_name") or athlete_cfg.get("race_name", "your race")
     race_date_str = profile.get("race_date") or athlete_cfg.get("race_date", "")
     injuries = profile.get("injuries", [])
+    heat_protocol = profile.get("heat_protocol", True)
 
     try:
         rd = date.fromisoformat(race_date_str) if race_date_str else None
@@ -309,7 +310,7 @@ def run_athlete(slug, athlete_cfg):
         return
 
     prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
-                           wellness_line=wellness_line)
+                           wellness_line=wellness_line, heat_protocol=heat_protocol)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
