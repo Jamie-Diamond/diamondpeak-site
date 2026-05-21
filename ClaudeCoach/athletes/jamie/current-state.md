@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-05-20
+## Last updated: 2026-05-21
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -57,6 +57,7 @@
 - **2026-05-18 MODIFIED** — Strength: lower body + core (30 min): downgraded to mobility-only (15 min). Plan downgrade condition met: HRV 21/10 on 2026-05-17 (<35 threshold) AND sleep 5.2h (<6h threshold) post-wedding weekend. No loaded exercises; re-introduce lower body strength Tue 19 May if HRV recovers >35.
 - **2026-05-19 GO** — Z2 walk-run 5:30×8 (44 min) + Swim CSS 4×400m (~50 min): no rules fired, both sessions execute as planned. HRV recovered to 45 on 2026-05-18 (above 35 threshold). Ankle still at 2/10 during runs; walk-run format and stop-if->2/10 protocol retained per plan. Next-morning pain from 2026-05-18 Coventry run not yet logged — monitor before tomorrow's session.
 - **2026-05-20 GO** — Z2 run 40 min (walk-run): no rules fired, execute as planned. ATL 80.9, CTL 79.7 (TSB +1.3, slight freshness). HRV not yet synced (fallback 0.0 trend); sleep not yet synced. Ankle pain 2/10 during runs — walk-run format and stop-if->2/10 protocol retained per rehab protocol.
+- **2026-05-21 GO** — Swim aerobic + technique ~2.1 km (~45 min): no rules fired, execute as planned. ATL 73.9, CTL 78.2 (TSB +4.3, fresh). HRV not synced (fallback 0.0); sleep not synced. No ankle relevance (swim). (Note: possible cold/flu onset flagged 2026-05-20 — athlete discretion to shorten or skip if symptoms present.)
 
 ## Body weight
 
