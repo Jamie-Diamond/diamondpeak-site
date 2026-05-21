@@ -50,14 +50,14 @@
 
 - Missed sessions: Wed 6 May easy run 5 km — moved and extended to Thu 7 May (13 km compensatory, completed); Sun 10 May brick run skipped (busy day, chose to wind down)
 - Cut sessions: none
-- Illness / life events: **possible cold/flu onset 2026-05-20** — poor sleep, lungs and head not responsive during morning run. Monitor overnight; if symptoms develop, treat tomorrow's swim as TBC.
+- Illness / life events: **cold/flu confirmed 2026-05-21** — late night + illness; swim cut short (31 min / 1.7 km vs planned 45 min / 2.1 km); lie in taken instead of full session. Correct call given multi-signal suppression (HRV ↓, RHR 57, symptoms).
 - Sleep deficit days (>1 hr below 8 hr target): 2 (1 May: 6.7 h, 6 May: 6.9 h)
 - **2026-05-16 MODIFIED** — Interval ride 2hr: intervals reduced 5→3 (R4: ATL/CTL gap +17.1 in moderate zone; R6-single: sleep 6.9h, no HRV corroboration). Intensity held at 88% FTP. Warmup/Z2 block/cooldown unchanged.
 - **2026-05-17 GO** — Easy 5k (30 min, Z2/recovery pace): no rules fired, execute as planned. If completed, week run km ends ~23.5 km (+88% vs 12.52 last wk) — existing T10 flag stands.
 - **2026-05-18 MODIFIED** — Strength: lower body + core (30 min): downgraded to mobility-only (15 min). Plan downgrade condition met: HRV 21/10 on 2026-05-17 (<35 threshold) AND sleep 5.2h (<6h threshold) post-wedding weekend. No loaded exercises; re-introduce lower body strength Tue 19 May if HRV recovers >35.
 - **2026-05-19 GO** — Z2 walk-run 5:30×8 (44 min) + Swim CSS 4×400m (~50 min): no rules fired, both sessions execute as planned. HRV recovered to 45 on 2026-05-18 (above 35 threshold). Ankle still at 2/10 during runs; walk-run format and stop-if->2/10 protocol retained per plan. Next-morning pain from 2026-05-18 Coventry run not yet logged — monitor before tomorrow's session.
 - **2026-05-20 GO** — Z2 run 40 min (walk-run): no rules fired, execute as planned. ATL 80.9, CTL 79.7 (TSB +1.3, slight freshness). HRV not yet synced (fallback 0.0 trend); sleep not yet synced. Ankle pain 2/10 during runs — walk-run format and stop-if->2/10 protocol retained per rehab protocol.
-- **2026-05-21 GO** — Swim aerobic + technique ~2.1 km (~45 min): no rules fired, execute as planned. ATL 73.9, CTL 78.2 (TSB +4.3, fresh). HRV not synced (fallback 0.0); sleep not synced. No ankle relevance (swim). (Note: possible cold/flu onset flagged 2026-05-20 — athlete discretion to shorten or skip if symptoms present.)
+- **2026-05-21 MODIFIED** — Swim aerobic + technique ~2.1 km (~45 min): cut short to 31 min / 1.7 km. Late night + cold/flu onset; lie in taken. Correct decision given HRV ↓, RHR 57, illness symptoms.
 
 ## Body weight
 
