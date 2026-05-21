@@ -1,5 +1,21 @@
 [
   {
+    "activity_id": "i150204634",
+    "date": "2026-05-21",
+    "name": "Thu 21 May — Swim aerobic + technique ~2.1 km (~45 min)",
+    "sport": "Swim",
+    "tss": 38,
+    "duration_min": 35,
+    "distance_km": 1.7,
+    "pace_per_100m": 109.29,
+    "avg_hr": 118,
+    "rpe": null,
+    "feel": null,
+    "notes": null,
+    "logged_at": "2026-05-21T07:28:00",
+    "stub": true
+  },
+  {
     "activity_id": "i149915061",
     "date": "2026-05-20",
     "name": "Coventry Running",
