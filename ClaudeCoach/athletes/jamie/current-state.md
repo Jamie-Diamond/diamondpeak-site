@@ -130,6 +130,10 @@
 - **2026-05-20 — T7 (Tier 1):** Heat dose 1 session in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 6 but no sessions since 05-10. Travel block continues — first realistic window remains Marseille 24 May. Confirm hotel bath or sauna access before departure Sat 23 May.
 - **2026-05-20 — T8 (Tier 2):** Last heat session 2026-05-10 — now 10 days ago, exceeds 7-day decay threshold. Any adaptation from the single session has fully lapsed. Marseille 24–30 May is the rebuild window; target 4–5 sessions in 6 days to re-establish protocol.
 - **2026-05-20 — T9 (Tier 2):** Dorney Olympic tri entry (C- race 6 Jun) due 2026-05-25 (Mon, 5 days), status TBC. Decision cannot slip further. Key constraint: 10k run on ankle still at 2/10 pain; quality sessions not cleared. If entered, plan Z2 run-pace only for 10k leg.
+- **2026-05-21 — T3 (Tier 1):** HRV trend -7.3% over 7 days (41 on 05-14 → 38 on 05-20). RHR elevated to 57 today (vs 50–54 baseline). Possible cold/flu onset noted 2026-05-20. Multi-signal convergence (HRV + RHR + possible illness) — monitor; if illness confirmed, treat tomorrow's swim as TBC and hold load.
+- **2026-05-21 — T7 (Tier 1):** Heat dose 1 session in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Day 7 of travel block — no bath access until Marseille. First realistic window: Mon 24 May; target 4–5 sessions across 24–29 May to begin rebuilding protocol.
+- **2026-05-21 — T8 (Tier 2):** Last heat session 2026-05-10 — now 11 days ago. Adaptation fully lapsed. Marseille 24–30 May is the only rebuild window before the next travel gap; confirm hotel has bath or sauna before departure Sat 23 May.
+- **2026-05-21 — T9 (Tier 2):** Dorney Olympic tri entry (C- race 6 Jun) due 2026-05-25 (Mon, 4 days), status TBC. Final day to act — cannot slip past Mon 25 May. Ankle still at 2/10 during runs; quality sessions not cleared; plan Z2 pace for 10k leg if entered.
 
 ## Notes for Claude
 
