@@ -36,6 +36,7 @@ None
 - 2026-05-18 (evening): **Tonsillitis confirmed.** Complete rest required. No training until symptom-free + 48hrs minimum. Week of 18–24 May will be a recovery/illness week — ramp to reset from actual TSS delivered when training resumes.
 - 2026-05-19 (watchdog): T3 re-fired. HRV 43 (May 18) vs 7d prior avg 68 = −37% decline. May 19 HRV not yet synced. Sleep all 7 days ≥ 7h (T4 clear). Tonsillitis day 3 — complete rest maintained.
 - 2026-05-20 (watchdog): T3 re-fired. 7d HRV avg (May 14–20) = 55 vs prior 7d avg (May 7–13) = 68 = −20% decline. Last reading 30 (May 19); May 20 not yet synced. Sleep: May 19 = 5.77h (1 day only — T4 not met). Tonsillitis day 5 — modified bike session executed (R3).
+- 2026-05-21 (watchdog): T3 re-fired. 7d HRV avg (May 15–20) = 51 vs prior 7d avg (May 8–14) = 69 = −25% decline. Last reading 46 (May 20); May 21 not yet synced. Sleep all 7 days ≥ 7h except May 19 = 5.77h (1 day only — T4 not met). Run_easy 56min with strides prescribed today — GO.
 
 ## Heat Acclimatisation
 
@@ -44,6 +45,7 @@ None
 - 2026-05-18: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. No heat sessions ever logged. Illness day 2 (rest maintained today); first heat session blocked until recovery confirmed.
 - 2026-05-19: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness day 3 (tonsillitis). Heat sessions remain blocked until symptom-free + 48h.
 - 2026-05-20: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness day 5. Heat sessions remain blocked until symptom-free + 48h.
+- 2026-05-21: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 6. Heat sessions remain blocked until symptom-free + 48h. First session must be logged urgently once cleared.
 
 ## Open Actions
 - [x] Plan generated through 2026-05-31 (2026-05-17)
