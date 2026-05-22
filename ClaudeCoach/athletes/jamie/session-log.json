@@ -10,7 +10,7 @@
     "avg_power": 210,
     "norm_power": 240,
     "avg_hr": 150,
-    "rpe": null,
+    "rpe": 5,
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
@@ -18,7 +18,7 @@
     "hydration_ml": null,
     "notes": null,
     "logged_at": "2026-05-22T07:00:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i150204634",
