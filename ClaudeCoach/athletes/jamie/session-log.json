@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i150498961",
+    "date": "2026-05-22",
+    "name": "Fri 22 May — Z2 ride 90 min",
+    "sport": "Ride",
+    "tss": 76,
+    "duration_min": 79,
+    "distance_km": 41.47,
+    "avg_power": 210,
+    "norm_power": 240,
+    "avg_hr": 150,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-22T07:00:00",
+    "stub": true
+  },
+  {
     "activity_id": "i150204634",
     "date": "2026-05-21",
     "name": "Thu 21 May — Swim aerobic + technique ~2.1 km (~45 min)",
