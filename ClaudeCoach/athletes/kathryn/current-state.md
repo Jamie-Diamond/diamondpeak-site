@@ -39,6 +39,7 @@ None
 - 2026-05-20 (watchdog): T3 re-fired. 7d HRV avg (May 14–20) = 55 vs prior 7d avg (May 7–13) = 68 = −20% decline. Last reading 30 (May 19); May 20 not yet synced. Sleep: May 19 = 5.77h (1 day only — T4 not met). Tonsillitis day 5 — modified bike session executed (R3).
 - 2026-05-21 (watchdog): T3 re-fired. 7d HRV avg (May 15–20) = 51 vs prior 7d avg (May 8–14) = 69 = −25% decline. Last reading 46 (May 20); May 21 not yet synced. Sleep all 7 days ≥ 7h except May 19 = 5.77h (1 day only — T4 not met). Run_easy 56min with strides prescribed today — GO.
 - 2026-05-22 (watchdog): T3 re-fired. 7d HRV avg (May 16–21) = 48 vs prior 7d avg (May 9–15) = 69 = −30% decline. Last reading 48 (May 21); May 22 not yet synced. Sleep: May 19 = 5.77h, May 21 = 6.83h (2 days <7h — T4 not met, threshold is 3 days). Swim CSS sets prescribed today — GO.
+- 2026-05-23 (watchdog): T3 re-fired. 7d HRV avg (May 17–22) = 45 vs prior 7d avg (May 10–16) = 69 = −34% decline. Last reading 56 (May 22); May 23 not yet synced. T4 fired: May 19 = 5.77h, May 21 = 6.83h, May 22 = 6.77h — 3 days <7h in last 7 (threshold met for first time). T5 fired: ATL math confirms 0 training load since May 16; 4 planned sessions unrecorded (May 17 run, May 20 bike, May 21 run, May 22 swim) — illness recovery context. Recovery day 8.
 
 ## Heat Acclimatisation
 
@@ -49,6 +50,7 @@ None
 - 2026-05-20: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness day 5. Heat sessions remain blocked until symptom-free + 48h.
 - 2026-05-21: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 6. Heat sessions remain blocked until symptom-free + 48h. First session must be logged urgently once cleared.
 - 2026-05-22: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 7. Heat sessions continue to be blocked pending symptom-free + 48h confirmation. Urgency increasing — race 121 days away.
+- 2026-05-23: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 8. Heat sessions remain blocked until symptom-free + 48h confirmed. Urgency critical — race 120 days away; CTL now 47.3, slipping from 55.9 peak (May 16).
 
 ## Open Actions
 - [x] Plan generated through 2026-05-31 (2026-05-17)
