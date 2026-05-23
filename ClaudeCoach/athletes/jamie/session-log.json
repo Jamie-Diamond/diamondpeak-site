@@ -14,8 +14,8 @@
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
-    "hydration_ml": null,
+    "nutrition_g_carb": 44,
+    "hydration_ml": 1100,
     "notes": null,
     "logged_at": "2026-05-22T07:00:00",
     "stub": false

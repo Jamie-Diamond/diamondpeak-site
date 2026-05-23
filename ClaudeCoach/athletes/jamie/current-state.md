@@ -20,8 +20,8 @@
 |---|---|---|---|
 | 18–22 May | Travel (UK, work) | Run + swim only | No bike for 5 days |
 | 23 May | Travel day → Marseille | Rest | Flight Sat |
-| 24–30 May | Marseille (not a camp — work/personal) | Bike (trainers) + run + swim, ad-hoc | **Nothing long** — sessions squeezed around other variables, play by ear |
-| 31 May | Travel day → home | Rest | |
+| 24–30 May | Marseille (not a camp — work/personal) | Bike (trainers) + run — no swims | **Nothing long** — alternating 70–90 min cycles / 30–60 min runs, cycle/run/cycle pattern. Swims dropped for this block. Sat 30 = rest / travel home. |
+| 31 May | Home | Long ride | Plan updated 2026-05-23 — long ride moved from rest to Sun 31 (back home) |
 | 1 Jun | Home | Normal | |
 | 6 Jun | Dorney Lake | **C- race: Olympic tri (TBC entry)** | 1500/40k/10k — flag 10k run vs ankle |
 | 24–29 Jun | France (holiday) | Full swim/bike/run + heat | **Training camp #1** — late-June 900+ TSS spike target, full time available |
