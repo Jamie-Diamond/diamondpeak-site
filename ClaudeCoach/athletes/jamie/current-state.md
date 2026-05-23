@@ -59,6 +59,7 @@
 - **2026-05-20 GO** — Z2 run 40 min (walk-run): no rules fired, execute as planned. ATL 80.9, CTL 79.7 (TSB +1.3, slight freshness). HRV not yet synced (fallback 0.0 trend); sleep not yet synced. Ankle pain 2/10 during runs — walk-run format and stop-if->2/10 protocol retained per rehab protocol.
 - **2026-05-21 MODIFIED** — Swim aerobic + technique ~2.1 km (~45 min): cut short to 31 min / 1.7 km. Late night + cold/flu onset; lie in taken. Correct decision given HRV ↓, RHR 57, illness symptoms.
 - **2026-05-22 GO** — Z2 ride 90 min: no rules fired, execute as planned. ATL 80.4, CTL 79.3 (TSB −1.1, near-neutral). HRV not yet synced (fallback 0.0 trend); sleep not yet synced. Ankle protocol not relevant for bike session.
+- **2026-05-23 REST** — Travel day (flight to Marseille). No session planned. Multi-signal suppression noted (HRV 33 vs 7d avg 37.9 = −12.8%, RHR 58, sleep 4.1h, sleep score 40) — rest day is appropriate; monitor HRV/sleep on arrival before prescribing Mon 24 May session.
 
 ## Body weight
 
