@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i150756848",
+    "date": "2026-05-23",
+    "name": "Test 🤒",
+    "sport": "Ride",
+    "tss": 55,
+    "duration_min": 76,
+    "distance_km": 30.77,
+    "avg_power": 100,
+    "norm_power": 125,
+    "avg_hr": 143,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-23T09:03:51",
+    "stub": true
+  },
+  {
     "activity_id": "i148704446",
     "date": "2026-05-16",
     "name": "Wandsworth - Sat 16 May - Easy ride Z2 60min",
