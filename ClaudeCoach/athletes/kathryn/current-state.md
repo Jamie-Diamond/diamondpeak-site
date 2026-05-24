@@ -56,7 +56,10 @@ None
 - 2026-05-24: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 9. Heat sessions remain blocked until symptom-free + 48h confirmed. Race 119 days away; CTL 49.8, beginning to recover post-illness.
 
 ## Open Actions
-- [x] Plan generated through 2026-05-31 (2026-05-17)
+- [x] Plan generated through 2026-06-07 (2026-05-24)
 - [ ] Fix day-of-week label errors: "Sat 24 May" ride (is Sun) and "Sun 25 May" run (is Mon)
 - [ ] Review Mon 25 May long run (75min) vs. kettlebells constraint — daily cap (90min) exceeded; consider moving run to Sat 23 May
-- [ ] Begin heat acclimatisation sessions (urgently overdue — T7/T8 alerts firing)
+- [ ] Review Mon 1 Jun long run (80min) + KB = 125min daily cap breach; relocate run to weekend
+- [ ] Review Tue 2 Jun bike sweetspot (90min) + mobility (40min) = 130min daily cap breach; shorten or reschedule
+- [ ] Move Thu 4 Jun swim to Fri 6 Jun (Friday-only constraint); remove/rescheduled Sun 7 Jun swim
+- [ ] Begin heat acclimatisation sessions (urgently overdue — T7/T8 alerts firing 9+ days)
