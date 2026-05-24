@@ -29,7 +29,7 @@ None
 - 2026-05-21: run_easy 56min with strides — GO, execute as planned (no rules fired). HRV not synced, sleep not synced; all other signals neutral.
 - 2026-05-22: swim CSS sets 2.4km — GO, execute as planned (T3, T7, T8 fired). HRV null (not yet synced), sleep null (not yet synced); ATL 34.6, CTL 48.5; no ankle issues.
 - 2026-05-23: Rest day — no session in calendar (illness recovery day 8; events endpoint returned empty). ATL 29.8, CTL 47.3, form +17.5.
-- 2026-05-24: bike_z2 150min — GO, execute as planned (no rules fired). ATL 45.5, CTL 49.8; HRV not synced, sleep not synced.
+- 2026-05-24: bike_z2 150min — GO, execute as planned (T3, T4, T5, T7, T8 fired — all illness/heat continuations, no acute load danger). ATL 45.5, CTL 49.8; HRV not synced, sleep not synced.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
@@ -41,6 +41,7 @@ None
 - 2026-05-21 (watchdog): T3 re-fired. 7d HRV avg (May 15–20) = 51 vs prior 7d avg (May 8–14) = 69 = −25% decline. Last reading 46 (May 20); May 21 not yet synced. Sleep all 7 days ≥ 7h except May 19 = 5.77h (1 day only — T4 not met). Run_easy 56min with strides prescribed today — GO.
 - 2026-05-22 (watchdog): T3 re-fired. 7d HRV avg (May 16–21) = 48 vs prior 7d avg (May 9–15) = 69 = −30% decline. Last reading 48 (May 21); May 22 not yet synced. Sleep: May 19 = 5.77h, May 21 = 6.83h (2 days <7h — T4 not met, threshold is 3 days). Swim CSS sets prescribed today — GO.
 - 2026-05-23 (watchdog): T3 re-fired. 7d HRV avg (May 17–22) = 45 vs prior 7d avg (May 10–16) = 69 = −34% decline. Last reading 56 (May 22); May 23 not yet synced. T4 fired: May 19 = 5.77h, May 21 = 6.83h, May 22 = 6.77h — 3 days <7h in last 7 (threshold met for first time). T5 fired: ATL math confirms 0 training load since May 16; 4 planned sessions unrecorded (May 17 run, May 20 bike, May 21 run, May 22 swim) — illness recovery context. Recovery day 8.
+- 2026-05-24 (watchdog): T3 re-fired. 7d HRV avg (May 17–23) = 46.9 vs prior 7d avg (May 10–16) = 69.1 = −32% decline. Last reading 56 (May 23); May 24 not yet synced. T4 re-fired: May 19 = 5.77h, May 21 = 6.83h, May 22 = 6.78h, May 23 = 6.63h — 4 days <7h in last 7. T5 re-fired: May 17 run SKIPPED; May 21 run and May 22 swim show 0 ATL in ICU (not recorded). bike_z2 150min prescribed today — GO (all signals illness-depressed, no new acute danger). Recovery day 9.
 
 ## Heat Acclimatisation
 
@@ -52,6 +53,7 @@ None
 - 2026-05-21: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 6. Heat sessions remain blocked until symptom-free + 48h. First session must be logged urgently once cleared.
 - 2026-05-22: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 7. Heat sessions continue to be blocked pending symptom-free + 48h confirmation. Urgency increasing — race 121 days away.
 - 2026-05-23: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 8. Heat sessions remain blocked until symptom-free + 48h confirmed. Urgency critical — race 120 days away; CTL now 47.3, slipping from 55.9 peak (May 16).
+- 2026-05-24: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 9. Heat sessions remain blocked until symptom-free + 48h confirmed. Race 119 days away; CTL 49.8, beginning to recover post-illness.
 
 ## Open Actions
 - [x] Plan generated through 2026-05-31 (2026-05-17)
