@@ -145,6 +145,10 @@
 - **2026-05-23 — T4 (Tier 1):** Sleep <7h on 3 of last 7 days: 05-17 5.2h, 05-21 6.23h, 05-23 4.1h. Travel + illness recovery compounding sleep deficit. Prioritise sleep Mon night; no alarm if avoidable.
 - **2026-05-23 — T7 (Tier 1):** Heat dose 1 session in last 14 days (05-10 hot bath 25 min @ 45°C) vs target ≥3. Protocol day 9. Marseille 24–29 May is the only rebuild window; target 4–5 sessions Mon–Fri to begin re-establishing adaptation from zero.
 - **2026-05-23 — T8 (Tier 2):** Last heat session 05-10 — now 13 days ago, well beyond 7-day decay threshold. Adaptation fully lapsed. Confirm hotel bath or sauna access in Marseille before checking in; first session as early as Mon 24 May.
+- **2026-05-24 — T4 (Tier 1):** Sleep <7h on 3 of last 7 days: 05-17 5.2h, 05-21 6.2h, 05-23 4.1h. Travel + illness compounding deficit. Today's sync shows 7.8h (Marseille night 1) — improved. Continue prioritising sleep; no alarm if avoidable.
+- **2026-05-24 — T7 (Tier 1):** Heat dose 1 session in last 14 days (05-10 hot bath 25 min @ 45°C) vs target ≥3. Protocol day 10 with no sessions since 05-10. Marseille is now the active rebuild window; target 4–5 sessions this week (Mon–Fri).
+- **2026-05-24 — T8 (Tier 2):** Last heat session 05-10 — now 14 days ago. Adaptation fully lapsed. First Marseille session eligible today; confirm hotel bath or sauna access and complete a session tonight if available.
+- **2026-05-24 — T9 (Tier 2):** Three end-May actions now within 7-day horizon (all due 2026-05-31, status pending): (1) FTP retest — Marseille has no power meter; earliest window is home 1–4 Jun. (2) Book Precision Hydration sweat-sodium test — no booking made. (3) TT bike fit appointment — no booking made. All three actions are overdue to action.
 
 ## Notes for Claude
 
