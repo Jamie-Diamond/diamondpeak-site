@@ -14,9 +14,9 @@
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
+    "nutrition_g_carb": 27,
     "hydration_ml": null,
-    "notes": null,
+    "notes": "1 banana (~27g carb) on ride = ~17 g/hr vs 60 g/hr target. Still on antibiotics, recovery ride.",
     "logged_at": "2026-05-24T10:00:00",
     "stub": true
   },
