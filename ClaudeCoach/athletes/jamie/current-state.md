@@ -92,6 +92,7 @@
 | OWS race or full-distance simulation | Jamie | build phase | [pending / scheduled / done] |
 | Tested run-fuelling protocol on a long run in heat | Jamie | recurring | [last done: date / outcome] |
 | Plan generated through 2026-05-24 (W4 Base) | Claude | 2026-05-10 | done — 10 sessions, ~452 TSS, W3 already populated |
+| Plan generated through 2026-06-07 (W5–W6 Base) | Claude | 2026-05-24 | done — W5 Marseille descriptions updated (7 sessions); W6 8 sessions generated ~370 TSS; Sat 30 May travel conflict flagged |
 | Plan reviewed W4–W5 (18–31 May Base) | Claude | 2026-05-17 | done — 16 sessions populated; 3 hard travel conflicts flagged (rides 20+22 May, brick 23 May); Telegram sent |
 | Confirm Dorney Olympic tri entry (C- race 6 Jun) | Jamie | 2026-05-25 | dropped — ankle 1/10 AM 2026-05-22, 10k run not viable |
 | Replan 18–22 May as run+swim only (travel) | Claude | 2026-05-17 | done — training-plan-2026-05-18_to_2026-05-31.md |
