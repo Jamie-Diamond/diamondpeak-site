@@ -415,8 +415,10 @@ Sport: {sport_line}
 {plan_block}
 Coaching analysis: {clean_analysis}
 {laps_block}{splits_block}{prs_block}
+IMPORTANT: The "Coaching analysis" may contain auto-detected interval efforts from the device — these are NOT training targets. The Aim must always reflect what was PLANNED (see "Planned:" above), not auto-detected efforts. If no plan is listed, use the sport type and duration to infer a sensible aim (e.g. "Z2 base ride").
+
 Write exactly 3 lines, plain text, no markdown, no hashtags, no exclamation marks:
-Line 1 — "Aim: [one plain sentence on what the session was targeting]"
+Line 1 — "Aim: [one plain sentence on what the session was PLANNED to target — from the Planned block, not the analysis]"
 Line 2 — [one dry, understated observation about how it went vs the aim. Use lap/split data if it adds something specific — e.g. fastest split, notable fade, strong finish. Deadpan British wit — matter-of-fact, slightly wry, never gushing.]
 Line 3 — "ClaudeCoach" [append " 🏆" if any segment PRs were set]
 
