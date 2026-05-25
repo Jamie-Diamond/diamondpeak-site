@@ -57,7 +57,7 @@ LOG_FILE = BASE / "bot.log"
 HISTORY_FILE = BASE.parent / "athletes/jamie/telegram/history.json"
 SYSTEM_PROMPT_FILE = BASE.parent / "athletes/jamie/system_prompt.txt"
 
-MAX_HISTORY_PAIRS = 12  # keep last 12 exchanges for context
+MAX_HISTORY_PAIRS = 30  # keep last 30 exchanges for context
 
 MODEL_SONNET = "claude-sonnet-4-6"
 MODEL_HAIKU  = "claude-haiku-4-5-20251001"
@@ -1841,8 +1841,22 @@ def handle_admin_command(token, chat_id, text, config):
 # --- END ONBOARDING ----------------------------------------------------------
 
 
-def _build_prompt(user_message, history, system_prompt, athlete_name, context):
+def _load_persistent_rules(sp_file: Path) -> str:
+    """Return contents of persistent-rules.md adjacent to the system prompt, or ''."""
+    rules_file = sp_file.parent / "persistent-rules.md"
+    if rules_file.exists():
+        text = rules_file.read_text().strip()
+        return text if text else ""
+    return ""
+
+
+def _build_prompt(user_message, history, system_prompt, athlete_name, context,
+                  persistent_rules=""):
     parts = [system_prompt, ""]
+    if persistent_rules:
+        parts.append("## Standing rules — always apply (athlete-agreed, session-derived)")
+        parts.append(persistent_rules)
+        parts.append("")
     if context:
         parts.append(context)
         parts.append("")
@@ -1870,6 +1884,7 @@ def call_claude(user_message, config, history, model=MODEL_SONNET,
     full_prompt = _build_prompt(
         user_message, history,
         sp_file.read_text().strip(), athlete_name, context,
+        persistent_rules=_load_persistent_rules(sp_file),
     )
     try:
         result = subprocess.run(
@@ -1893,6 +1908,7 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     full_prompt = _build_prompt(
         user_message, history,
         sp_file.read_text().strip(), athlete_name, context,
+        persistent_rules=_load_persistent_rules(sp_file),
     )
     accumulated = ""
     last_edit = 0.0
@@ -1954,6 +1970,11 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNE
     system_prompt = sp_file.read_text().strip()
 
     parts = [system_prompt, ""]
+    persistent_rules = _load_persistent_rules(sp_file)
+    if persistent_rules:
+        parts.append("## Standing rules — always apply (athlete-agreed, session-derived)")
+        parts.append(persistent_rules)
+        parts.append("")
     if context:
         parts.append(context)
         parts.append("")
