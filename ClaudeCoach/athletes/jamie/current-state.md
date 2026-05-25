@@ -152,6 +152,12 @@
 - **2026-05-24 — T8 (Tier 2):** Last heat session 05-10 — now 14 days ago. Adaptation fully lapsed. First Marseille session eligible today; confirm hotel bath or sauna access and complete a session tonight if available.
 - **2026-05-24 — T9 (Tier 2):** Three end-May actions now within 7-day horizon (all due 2026-05-31, status pending): (1) FTP retest — Marseille has no power meter; earliest window is home 1–4 Jun. (2) Book Precision Hydration sweat-sodium test — no booking made. (3) TT bike fit appointment — no booking made. All three actions are overdue to action.
 
+- **2026-05-25 — T3 (Tier 1):** HRV trend -17.8% over 7 days (45 on 05-18 → 37 on 05-24). Multi-signal: RHR 58 today (vs 50–54 baseline), illness ongoing (day 5+). Pattern continuing from prior days — HRV not recovered to baseline range 41–46. Hold any intensity until HRV recovers >40.
+- **2026-05-25 — T5 (Tier 1):** 2 planned sessions missed in last 7 days (05-24: Run 60 min + Ride 90 min, both missed due to illness day 4). Illness-justified; no load concern — TSB now +24.4 and CTL declining to 72.8.
+- **2026-05-25 — T7 (Tier 1):** Heat dose 0 sessions in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 11 with no sessions since 05-10. Marseille is now the active rebuild window — target 4–5 sessions Mon–Fri this week.
+- **2026-05-25 — T8 (Tier 2):** Last heat session 05-10 — now 15 days ago, well beyond 7-day decay threshold. Adaptation fully lapsed. First Marseille session eligible today (Mon 25 May); confirm hotel has bath or sauna and complete a session tonight if feeling recovered enough.
+- **2026-05-25 — T9 (Tier 2):** Three end-May actions within 6-day horizon (all due 2026-05-31, status pending): (1) FTP retest — no power meter in Marseille, earliest window home 1–4 Jun. (2) Book Precision Hydration sweat-sodium test — still no booking made. (3) TT bike fit appointment — still no booking made. Decisions needed before or on return home Sat 31 May.
+
 ## Notes for Claude
 
 Lines 1–4 of this file are the in-scope/out-of-scope rule. Honour it. If a prompt asks for a wellness-1–10 type input that isn't in scope, don't request it; substitute objective signals from IcuSync.
