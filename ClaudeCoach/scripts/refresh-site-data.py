@@ -26,123 +26,174 @@ FITNESS_PREV_CACHE = BASE / "athletes/jamie/fitness-prev-cache.json"
 RACE_DATE = date(2026, 9, 19)
 PLAN_START = date(2026, 4, 27)  # Week 1 Monday
 
-TOOLS = ",".join([
-    "mcp__claude_ai_icusync__get_athlete_profile",
-    "mcp__claude_ai_icusync__get_fitness",
-    "mcp__claude_ai_icusync__get_training_history",
-    "mcp__claude_ai_icusync__get_events",
-    "mcp__claude_ai_icusync__get_power_curves",
-    "mcp__claude_ai_icusync__get_wellness",
-])
-
-PROMPT = """Fetch live training data from Intervals.icu and output it as JSON to stdout.
-Do NOT use any Write tool — output the JSON directly as your response.
-
-Steps:
-1. get_athlete_profile → note current_date_local (today) and FTP
-2. get_fitness(start_date="2026-01-01", end_date=today) → daily CTL/ATL/TSB series (this season)
-3. get_training_history(start_date=<14 days ago>, end_date=today) → recent activities
-4. get_power_curves → best power efforts for standard durations
-5. get_wellness(start_date=<30 days ago>, end_date=today) → HRV, RHR, body_weight per day
-6. get_events(start_date=<today>, end_date=<today+14 days>) → upcoming planned events
-
-Then output ONLY a single JSON object — no other text before or after:
-
-{
-  "generated": "<today YYYY-MM-DD>",
-  "kpi": {
-    "ctl": <today CTL, 1dp float>,
-    "atl": <today ATL, 1dp float>,
-    "tsb": <today TSB, 1dp float — negative means fatigued>,
-    "ramp7d": <CTL today minus CTL 7 days ago, 1dp float>,
-    "hrv": <latest HRV integer or null>,
-    "rhr": <latest RHR integer or null>
-  },
-  "fitnessThis": [
-    ["YYYY-MM-DD", <ctl float>],
-    ... one entry per day from 2026-01-01 to today inclusive
-  ],
-  "recent": [
-    {
-      "date": "YYYY-MM-DD",
-      "sport": "<Ride|Run|Swim|Strength|GravelRide|VirtualRide|Other>",
-      "name": "<activity name>",
-      "dur": <duration in whole minutes>,
-      "dist": <distance in km, 2dp float, or null>,
-      "pace": "<formatted string: '31.7 kph' for rides, '5:02/km' for runs, '1:39/100m' for swims>",
-      "hr": <average HR integer or null>,
-      "powAvg": <average power watts integer or null — cycling only>,
-      "powNp": <normalised power watts integer or null — cycling only>,
-      "tss": <TSS integer>
-    },
-    ... all activities from the last 14 days, most recent first
-  ],
-  "powerCurve": [
-    {"t": <seconds>, "label": "<e.g. 5s>", "w": <best watts integer>, "wPrev": <last year same window or null>},
-    ... include durations: 5s(5), 10s(10), 30s(30), 1m(60), 2m(120), 5m(300), 10m(600), 20m(1200), 30m(1800), 60m(3600), 90m(5400), 2h(7200)
-  ],
-  "weekCalendar": [
-    ... flat array of weekCalendar entries (see below) ordered by date ascending
-  ],
-  "loadChart": [
-    ... 15 entries covering today-7 to today+7 (see below) ordered by date ascending
-  ],
-  "weightTrend": [
-    {"date": "YYYY-MM-DD", "kg": <float>},
-    ... all days from get_wellness where body_weight is not null, last 30 days, date ascending
-  ]
-}
-
-weekCalendar: covers last 7 days (from training_history) + next 14 days (from get_events). Each entry:
-{"date":"YYYY-MM-DD","sport":"Ride|Run|Swim|Strength|Other","name":"<name>","tss":<int or null>,"duration_min":<int or null>,"status":"completed"|"planned","key":<bool>,"detail":"<metric string>"}
-Rules:
-- training_history activities → status "completed"
-- get_events with NO matching completed activity for that date+sport → status "planned"
-- Normalise sport: Ride (VirtualRide/GravelRide), Run, Swim, Strength
-- detail completed Ride: "NP <powNp>W · HR <hr> · <dist>km" (omit nulls)
-- detail completed Run: "<pace> · <dist>km"
-- detail completed Swim: "<pace> · <dist>m"
-- detail planned: event description or ""
-
-loadChart: 15 days from today-7 to today+7 inclusive, each:
-{"date":"YYYY-MM-DD","tsb":<float or null>,"activities":[{"sport":"...","tss":<int or null>,"dur":<min or null>,"status":"completed"|"planned"}]}
-- TSB from get_fitness rows; completed from training_history; planned from get_events (no matching completed)
-- Include every day even if activities is empty
-"""
-
-PROMPT_FITNESS_PREV = """Fetch last season's CTL data from Intervals.icu and write it to a cache file.
-
-Call get_fitness(start_date="2025-01-01", end_date="2025-09-19").
-
-Then use the Write tool to write ClaudeCoach/athletes/jamie/fitness-prev-cache.json as a JSON array:
-[
-  ["YYYY-MM-DD", <ctl float>],
-  ... one entry per day from 2025-01-01 to 2025-09-19 inclusive
+_POWER_DURATIONS = [
+    (5,"5s"),(10,"10s"),(30,"30s"),(60,"1m"),(120,"2m"),(300,"5m"),
+    (600,"10m"),(1200,"20m"),(1800,"30m"),(3600,"60m"),(5400,"90m"),(7200,"2h"),
 ]
 
-Output one line: "Done: <N> days"
-"""
 
-TOOLS_FITNESS_PREV = ",".join([
-    "Write",
-    "mcp__claude_ai_icusync__get_fitness",
-])
-
-
-def fetch_fitness_prev():
+def fetch_fitness_prev(client):
     """Fetch 2025 CTL series once and cache it. Skips if cache already exists."""
     if FITNESS_PREV_CACHE.exists():
         return
     log("Fetching last-season fitness (one-time cache)...")
-    result = subprocess.run(
-        [CLAUDE, "-p", PROMPT_FITNESS_PREV, "--allowedTools", TOOLS_FITNESS_PREV],
-        capture_output=True, text=True,
-        cwd=PROJECT_DIR, timeout=120,
+    try:
+        rows = client.get_fitness(start_date="2025-01-01", end_date="2025-09-19")
+        series = [[r["id"][:10], round(r.get("ctl") or 0, 1)] for r in rows if r.get("ctl")]
+        FITNESS_PREV_CACHE.write_text(json.dumps(series))
+        log(f"fitnessPrev cached: {len(series)} days")
+    except Exception as e:
+        log(f"fitnessPrev fetch failed (non-fatal): {e}")
+
+
+def _build_jamie_data(client) -> dict:
+    """Fetch Jamie's training data via IcuClient — replaces the old Claude+MCP approach."""
+    today         = date.today()
+    fourteen_ago  = (today - timedelta(days=14)).isoformat()
+    seven_ago     = (today - timedelta(days=7)).isoformat()
+    twentyone_fwd = (today + timedelta(days=21)).isoformat()
+
+    wellness_60, history_21, events_21, fitness_ytd = client.fetch_all(
+        ("get_wellness", 60),
+        ("get_training_history", 21),
+        ("get_events", today.isoformat(), twentyone_fwd),
+        ("get_fitness", (today - date(today.year, 1, 1)).days + 1),
     )
-    if result.returncode != 0 or not FITNESS_PREV_CACHE.exists():
-        log(f"fitnessPrev fetch failed (non-fatal): {result.stderr[:120]}")
-        return
-    log(f"fitnessPrev cached: {result.stdout.strip()[:80]}")
+
+    # KPI
+    kpi = {}
+    if wellness_60:
+        w      = wellness_60[-1]
+        ctl    = round(w.get("ctl") or 0, 1)
+        atl    = round(w.get("atl") or 0, 1)
+        ramp7d = round(ctl - round(wellness_60[-8].get("ctl") or 0, 1), 1) if len(wellness_60) >= 8 else 0.0
+        kpi    = {"ctl": ctl, "atl": atl, "tsb": round(ctl - atl, 1), "ramp7d": ramp7d,
+                  "hrv": w.get("hrv"), "rhr": w.get("restingHR")}
+
+    # fitnessThis
+    fitness_this = [[w["id"][:10], round(w.get("ctl") or 0, 1)] for w in fitness_ytd if w.get("ctl")]
+
+    # recent (last 14 days, newest first)
+    recent = []
+    for a in sorted([x for x in history_21 if x.get("start_date_local","")[:10] >= fourteen_ago],
+                    key=lambda x: x.get("start_date_local",""), reverse=True):
+        sport  = _sport_normalise(a.get("type","Other"))
+        dist_m = a.get("distance") or 0
+        dur_s  = a.get("moving_time") or 0
+        avg_p  = a.get("average_watts")
+        norm_p = a.get("icu_weighted_avg_watts")
+        recent.append({
+            "date":   a.get("start_date_local","")[:10],
+            "sport":  sport,
+            "name":   a.get("name",""),
+            "dur":    round(dur_s / 60),
+            "dist":   round(dist_m / 1000, 2) if dist_m else None,
+            "pace":   _format_pace(sport, dist_m, dur_s),
+            "hr":     int(a["average_heartrate"]) if a.get("average_heartrate") else None,
+            "powAvg": int(avg_p)  if avg_p  else None,
+            "powNp":  int(norm_p) if norm_p else None,
+            "tss":    int(a.get("icu_training_load") or 0),
+        })
+
+    # weekCalendar (last 7 days completed + next 21 days planned)
+    completed_by_date: dict = defaultdict(list)
+    for a in history_21:
+        d = a.get("start_date_local","")[:10]
+        if d >= seven_ago:
+            completed_by_date[d].append(a)
+
+    week_calendar = []
+    for a in sorted(history_21, key=lambda x: x.get("start_date_local","")):
+        d = a.get("start_date_local","")[:10]
+        if d < seven_ago:
+            continue
+        sport  = _sport_normalise(a.get("type","Other"))
+        dist_m = a.get("distance") or 0
+        dur_s  = a.get("moving_time") or 0
+        tss    = int(a.get("icu_training_load") or 0)
+        avg_p  = a.get("average_watts")
+        norm_p = a.get("icu_weighted_avg_watts")
+        if sport == "Ride":
+            detail = " · ".join(filter(None, [
+                f"NP {int(norm_p)}W" if norm_p else None,
+                f"HR {int(a['average_heartrate'])}" if a.get("average_heartrate") else None,
+                f"{dist_m/1000:.1f}km" if dist_m else None,
+            ]))
+        elif sport in ("Run","Swim"):
+            detail = " · ".join(filter(None,[_format_pace(sport,dist_m,dur_s),
+                                              f"{dist_m/1000:.1f}km" if dist_m else None]))
+        else:
+            detail = ""
+        week_calendar.append({"date":d,"sport":sport,"name":a.get("name",""),
+                               "tss":tss,"duration_min":round(dur_s/60),
+                               "status":"completed","key":tss>=60,"detail":detail})
+
+    completed_dates = set(completed_by_date.keys())
+    for ev in events_21:
+        ev_date = (ev.get("start_date_local") or "")[:10]
+        if not ev_date or ev_date < today.isoformat():
+            continue
+        ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
+        if any(_sport_normalise(a.get("type","")) == ev_sport
+               for a in completed_by_date.get(ev_date,[])):
+            continue
+        ev_tss = ev.get("icu_training_load") or ev.get("load")
+        ev_dur = ev.get("moving_time") or ev.get("duration")
+        week_calendar.append({"date":ev_date,"sport":ev_sport,"name":ev.get("name",""),
+                               "tss":int(ev_tss) if ev_tss else None,
+                               "duration_min":round(int(ev_dur)/60) if ev_dur else None,
+                               "status":"planned","key":bool(ev_tss and int(ev_tss)>=60),"detail":""})
+    week_calendar.sort(key=lambda x: x["date"])
+
+    # loadChart (today−7 to today+7, 15 days)
+    tsb_by_date = {w.get("id","")[:10]: round((w.get("ctl") or 0)-(w.get("atl") or 0),1)
+                   for w in wellness_60 if w.get("id")}
+    load_chart = []
+    for i in range(-7, 8):
+        d    = (today + timedelta(days=i)).isoformat()
+        acts = [{"sport":_sport_normalise(a.get("type","Other")),
+                 "tss":int(a.get("icu_training_load") or 0),
+                 "dur":round((a.get("moving_time") or 0)/60),
+                 "status":"completed"}
+                for a in history_21 if a.get("start_date_local","")[:10]==d]
+        if i > 0:
+            for ev in events_21:
+                ev_d     = (ev.get("start_date_local") or "")[:10]
+                ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
+                if ev_d != d or any(a["sport"]==ev_sport for a in acts):
+                    continue
+                ev_tss = ev.get("icu_training_load") or ev.get("load")
+                ev_dur = ev.get("moving_time") or ev.get("duration")
+                acts.append({"sport":ev_sport,"tss":int(ev_tss) if ev_tss else None,
+                              "dur":round(int(ev_dur)/60) if ev_dur else None,"status":"planned"})
+        load_chart.append({"date":d,"tsb":tsb_by_date.get(d),"activities":acts})
+
+    # weightTrend (last 30 days where weight not null)
+    weight_trend = [{"date":w.get("id","")[:10],"kg":w["weight"]}
+                    for w in wellness_60 if w.get("weight")]
+
+    # power curve (90-day best efforts at standard durations)
+    power_curve = []
+    try:
+        pc_raw = client.get_power_curves(sport="Ride", curves="90d")
+        if pc_raw.get("list"):
+            curve        = pc_raw["list"][0]
+            secs_to_w    = dict(zip(curve.get("secs",[]), curve.get("values",[])))
+            power_curve  = [{"t":t,"label":lbl,"w":secs_to_w.get(t),"wPrev":None}
+                             for t, lbl in _POWER_DURATIONS]
+    except Exception as e:
+        log(f"Power curve fetch failed (non-fatal): {e}")
+
+    return {
+        "generated":    today.isoformat(),
+        "kpi":          kpi,
+        "fitnessThis":  fitness_this,
+        "recent":       recent,
+        "weekCalendar": week_calendar,
+        "loadChart":    load_chart,
+        "weightTrend":  weight_trend,
+        "powerCurve":   power_curve,
+    }
 
 
 def _strip_private(data):
@@ -735,41 +786,29 @@ def main():
         sys.exit(0)
 
     try:
-        fetch_fitness_prev()  # one-time cache of 2025 CTL — skips if already exists
+        sys.path.insert(0, str(BASE / "lib"))
+        from icu_api import IcuClient
+        athletes_map = json.loads(ATHLETES_CONFIG.read_text())
+        jamie_cfg    = athletes_map.get("jamie", {})
+        client       = IcuClient(jamie_cfg["icu_athlete_id"], jamie_cfg["icu_api_key"])
 
-        log("Fetching live data via Claude + IcuSync...")
-        result = subprocess.run(
-            [CLAUDE, "-p", PROMPT, "--allowedTools", TOOLS],
-            capture_output=True, text=True,
-            cwd=PROJECT_DIR, timeout=300,
-        )
+        fetch_fitness_prev(client)  # one-time cache of 2025 CTL — skips if already exists
 
-        if result.returncode != 0:
-            log(f"Claude error: {result.stderr[:200]}")
-            sys.exit(1)
-
-        # Parse JSON from stdout (Claude outputs data directly — no Write tool)
-        import re as _re
-        m = _re.search(r'\{.*\}', result.stdout, _re.DOTALL)
-        if not m:
-            log(f"No JSON object in Claude output: {result.stdout[:200]}")
-            sys.exit(1)
-
+        log("Fetching live data via IcuClient...")
         try:
-            data = json.loads(m.group(0))
-            assert "kpi" in data and "fitnessThis" in data and "recent" in data and "weekCalendar" in data and "loadChart" in data
-            log(f"JSON valid: CTL {data['kpi']['ctl']}, {len(data['recent'])} activities")
+            data = _build_jamie_data(client)
+            log(f"Fetch ok: CTL {data['kpi'].get('ctl')}, {len(data['recent'])} activities")
         except Exception as e:
-            log(f"JSON parse/validation failed: {e} — aborting push")
+            log(f"IcuClient fetch failed: {e}")
             sys.exit(1)
 
-        # Add locally-computed fields (heat, decoupling, CTL projection)
+        # Add locally-computed fields (heat, decoupling, CTL projection, session log…)
         try:
             data = post_process(data)
-            OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
             log("Post-processing: heat, decoupling, CTL projection added")
         except Exception as e:
             log(f"Post-processing warning: {e} — continuing without extra fields")
+        OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
 
         # Write public version (strips personal health data) to ClaudeCoach/ for GitHub Pages
         try:
