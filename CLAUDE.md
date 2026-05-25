@@ -128,10 +128,9 @@ Each tool is a `.tool-card` link card with an icon, title, description, and arro
 
 ## ClaudeCoach Hard Rules (confirmed by Jamie — never regress)
 
-- **Interval breakdowns**: always use Strava lap splits, NEVER auto-detected Intervals.icu efforts
+- **Interval breakdowns**: use Strava lap splits (including auto 5km Garmin/Strava laps) for breakdown — NEVER Intervals.icu auto-detected efforts. For Z2/easy sessions with only auto-distance laps, show those laps (5km splits) or note there are no manual lap markers. For structured interval sessions, auto-detected efforts from Intervals.icu are fine to show alongside Strava laps.
 - **Strava Aim line**: always pull from the *planned session* description, never from auto-detected efforts
 - **Sailing activities**: rename with correct day name only — no TSS, no description, no coaching commentary
-- **No clarifying questions**: answer directly with a sensible default; never ask "full detail or summary?" before responding
 
 ## ClaudeCoach Automation — NEVER use CronCreate
 
