@@ -126,6 +126,13 @@ Each tool is a `.tool-card` link card with an icon, title, description, and arro
 - **Google Fonts via CDN** — every page includes the same Google Fonts `<link>` tag
 - **Charts** — some pages use Chart.js via CDN (`recovery-analysis.html`)
 
+## ClaudeCoach Hard Rules (confirmed by Jamie — never regress)
+
+- **Interval breakdowns**: always use Strava lap splits, NEVER auto-detected Intervals.icu efforts
+- **Strava Aim line**: always pull from the *planned session* description, never from auto-detected efforts
+- **Sailing activities**: rename with correct day name only — no TSS, no description, no coaching commentary
+- **No clarifying questions**: answer directly with a sensible default; never ask "full detail or summary?" before responding
+
 ## ClaudeCoach Automation — NEVER use CronCreate
 
 All ClaudeCoach scheduled tasks (watchdog, activity-watcher, refresh-site-data, checkins) run via **crontab on the VM only**. The scripts live in `ClaudeCoach/scripts/`. Do NOT use `CronCreate` for any of these — it injects prompts into the user's interactive session and survives context compaction. If asked to schedule something, add it to the VM crontab instead.
