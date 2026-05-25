@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-05-24
+Last updated: 2026-05-25
 
 ## Injuries / Niggles
 None
@@ -30,6 +30,7 @@ None
 - 2026-05-22: swim CSS sets 2.4km — GO, execute as planned (T3, T7, T8 fired). HRV null (not yet synced), sleep null (not yet synced); ATL 34.6, CTL 48.5; no ankle issues.
 - 2026-05-23: Rest day — no session in calendar (illness recovery day 8; events endpoint returned empty). ATL 29.8, CTL 47.3, form +17.5.
 - 2026-05-24: bike_z2 150min — GO, execute as planned (T3, T4, T5, T7, T8 fired — all illness/heat continuations, no acute load danger). ATL 45.5, CTL 49.8; HRV not synced, sleep not synced.
+- 2026-05-25: run_long 75min — GO, execute as planned (no rules fired). HRV null (not yet synced), sleep null (not yet synced); ATL 47.6, CTL 50.1. Note: today is Monday — KB (45min) + run (75min) = 120min exceeds 90min daily cap (open action flagged).
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
@@ -42,6 +43,7 @@ None
 - 2026-05-22 (watchdog): T3 re-fired. 7d HRV avg (May 16–21) = 48 vs prior 7d avg (May 9–15) = 69 = −30% decline. Last reading 48 (May 21); May 22 not yet synced. Sleep: May 19 = 5.77h, May 21 = 6.83h (2 days <7h — T4 not met, threshold is 3 days). Swim CSS sets prescribed today — GO.
 - 2026-05-23 (watchdog): T3 re-fired. 7d HRV avg (May 17–22) = 45 vs prior 7d avg (May 10–16) = 69 = −34% decline. Last reading 56 (May 22); May 23 not yet synced. T4 fired: May 19 = 5.77h, May 21 = 6.83h, May 22 = 6.77h — 3 days <7h in last 7 (threshold met for first time). T5 fired: ATL math confirms 0 training load since May 16; 4 planned sessions unrecorded (May 17 run, May 20 bike, May 21 run, May 22 swim) — illness recovery context. Recovery day 8.
 - 2026-05-24 (watchdog): T3 re-fired. 7d HRV avg (May 17–23) = 46.9 vs prior 7d avg (May 10–16) = 69.1 = −32% decline. Last reading 56 (May 23); May 24 not yet synced. T4 re-fired: May 19 = 5.77h, May 21 = 6.83h, May 22 = 6.78h, May 23 = 6.63h — 4 days <7h in last 7. T5 re-fired: May 17 run SKIPPED; May 21 run and May 22 swim show 0 ATL in ICU (not recorded). bike_z2 150min prescribed today — GO (all signals illness-depressed, no new acute danger). Recovery day 9.
+- 2026-05-25 (watchdog): T3 deferred — today's HRV null (not yet synced); 7d avg (May 18–24) = 48.3 vs prior 7d avg (May 11–17) = 66.9 = −27.8% decline (trend persists but improving from May 24 peak of 59). Last reading 59 (May 24). T4: sleep May 25 not yet synced; May 18–24 window had 4 nights <7h (May 19, 21, 22, 23). No rules fired for prescribed run_long — hrv_trend_pct and sleep_h_last_night both null (wearable not synced). ATL 47.6, CTL 50.1.
 
 ## Heat Acclimatisation
 

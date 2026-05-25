@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-05-24
+## Last updated: 2026-05-25
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -61,6 +61,7 @@
 - **2026-05-22 GO** — Z2 ride 90 min: no rules fired, execute as planned. ATL 80.4, CTL 79.3 (TSB −1.1, near-neutral). HRV not yet synced (fallback 0.0 trend); sleep not yet synced. Ankle protocol not relevant for bike session.
 - **2026-05-23 REST** — Travel day (flight to Marseille). No session planned. Multi-signal suppression noted (HRV 33 vs 7d avg 37.9 = −12.8%, RHR 58, sleep 4.1h, sleep score 40) — rest day is appropriate; monitor HRV/sleep on arrival before prescribing Mon 24 May session.
 - **2026-05-24 REST** — Run 60 min / Ride 90 min missed. Still unwell with cold (day 4 of illness). Correct call — continue monitoring HRV/RHR before committing Mon 25 May session.
+- **2026-05-25 GO** — Bike Z2 80 min: no rules fired, execute as planned. ATL 48.4, CTL 72.8 (TSB +24.4 — very fresh after 2 full rest days). HRV not yet synced; sleep not yet synced. Illness day 5 — plan includes contingency to cut to 60 min if cold symptoms persist and stop if HR drifts >150 without effort.
 
 ## Body weight
 
