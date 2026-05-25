@@ -71,11 +71,10 @@
 
 ## Heat acclimation log
 
-- Sessions completed this week: 1 (Sun 10 May — 25 min hot bath @ 45°C, post-ride)
-- Sessions completed cumulative (target 14–20 across late May → early Sept): 1
-- Days since last hot-bath session: 0 (today)
-- Method mix: hot bath ×1
-- Note: started 5 days before formal protocol kick-off (15 May)
+- Sessions completed cumulative (target 14–20 across late May → early Sept): 2
+- Last session: 2026-05-25 — outdoor ride 110 min, avg 25°C (21–29°C range), Marseille
+- Method mix: hot bath ×1, outdoor ride ×1
+- Note: protocol restarted in Marseille after 15-day gap; adaptation fully lapsed; rebuilding from zero
 
 ## Open actions
 
