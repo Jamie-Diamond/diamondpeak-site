@@ -83,7 +83,6 @@
 | Book Precision Hydration sweat-sodium test | Jamie | end May | [pending / booked / done] |
 | FTP retest (end-May target) | Jamie | end May | [pending / scheduled / done — value W] |
 | FTP retest (mid-July target) | Jamie | mid Jul | [pending / scheduled / done — value W] |
-| CSS swim test #1 | Jamie | next 2 weeks | done 2026-04-27 — **CSS 1:39/100m** |
 | CSS swim test #2 | Jamie | mid Jul | [pending / done — pace] |
 | TT bike fit appointment | Jamie | before June | [pending / booked / done] |
 | ISM saddle order | Jamie | 2026-06-06 (pushed back 4 wks) | [pending / ordered / fitted] |
@@ -91,11 +90,8 @@
 | 5+ hr ice retention test in hot car (T1/T2 cooler) | Jamie | pre-race | [pending / done — N hours retained] |
 | OWS race or full-distance simulation | Jamie | build phase | [pending / scheduled / done] |
 | Tested run-fuelling protocol on a long run in heat | Jamie | recurring | [last done: date / outcome] |
-| Plan generated through 2026-05-24 (W4 Base) | Claude | 2026-05-10 | done — 10 sessions, ~452 TSS, W3 already populated |
 | Plan generated through 2026-06-07 (W5–W6 Base) | Claude | 2026-05-24 | done — W5 Marseille descriptions updated (7 sessions); W6 8 sessions generated ~370 TSS; Sat 30 May travel conflict flagged |
-| Plan reviewed W4–W5 (18–31 May Base) | Claude | 2026-05-17 | done — 16 sessions populated; 3 hard travel conflicts flagged (rides 20+22 May, brick 23 May); Telegram sent |
 | Confirm Dorney Olympic tri entry (C- race 6 Jun) | Jamie | 2026-05-25 | dropped — ankle 1/10 AM 2026-05-22, 10k run not viable |
-| Replan 18–22 May as run+swim only (travel) | Claude | 2026-05-17 | done — training-plan-2026-05-18_to_2026-05-31.md |
 | Marseille 24–30 May: ad-hoc sessions only, nothing long — play by ear | Claude | rolling | noted |
 
 ## Race-day-relevant tested data
