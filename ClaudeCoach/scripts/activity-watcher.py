@@ -419,7 +419,7 @@ IMPORTANT: The "Coaching analysis" may contain auto-detected interval efforts fr
 
 Write exactly 3 lines, plain text, no markdown, no hashtags, no exclamation marks:
 Line 1 — "Aim: [one plain sentence on what the session was PLANNED to target — from the Planned block, not the analysis]"
-Line 2 — [one dry, understated observation about how it went vs the aim. Use lap/split data if it adds something specific — e.g. fastest split, notable fade, strong finish. Deadpan British wit — matter-of-fact, slightly wry, never gushing.]
+Line 2 — [one dry, understated observation about how it went vs the aim. For bike sessions always include NP (e.g. "NP 218W") and HR avg. Never include RPE. Use lap/split data if it adds something specific. Deadpan British wit — matter-of-fact, slightly wry, never gushing.]
 Line 3 — "ClaudeCoach" [append " 🏆" if any segment PRs were set]
 
 Examples of the right tone:
