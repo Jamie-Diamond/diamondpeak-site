@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i151300071",
+    "date": "2026-05-25",
+    "name": "Richmond upon Thames - Sun 25 May - Long run easy 75min",
+    "sport": "Run",
+    "tss": 64,
+    "duration_min": 53,
+    "distance_km": 8.2,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 173,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-25T10:30:00",
+    "stub": true
+  },
+  {
     "activity_id": "i151022224",
     "date": "2026-05-24",
     "name": "Wandsworth Cycling",
@@ -23,7 +44,7 @@
   {
     "activity_id": "i150756848",
     "date": "2026-05-23",
-    "name": "Test \ud83e\udd12",
+    "name": "Test 🤒",
     "sport": "Ride",
     "tss": 55,
     "duration_min": 76,
@@ -44,7 +65,7 @@
   {
     "activity_id": "i150756848",
     "date": "2026-05-23",
-    "name": "Test \ud83e\udd12",
+    "name": "Test 🤒",
     "sport": "Ride",
     "tss": 55,
     "duration_min": 76,
@@ -79,7 +100,7 @@
     "injury_pain_next_morning": null,
     "nutrition_g_carb": 20,
     "hydration_ml": null,
-    "notes": "Pre-ride: half banana + toast (~37g carb). In-ride: 1x Kind bar (nuts + syrup, 225 kcal, ~20g carb) \u2014 under-fuelled, needed ~90-100g. Post-ride: toast + 30g protein shake (~20g carb), smoked salmon sandwich (40g carb), overnight protein oats (36g carb). Total post-ride carb ~96g. No food until 5pm.",
+    "notes": "Pre-ride: half banana + toast (~37g carb). In-ride: 1x Kind bar (nuts + syrup, 225 kcal, ~20g carb) — under-fuelled, needed ~90-100g. Post-ride: toast + 30g protein shake (~20g carb), smoked salmon sandwich (40g carb), overnight protein oats (36g carb). Total post-ride carb ~96g. No food until 5pm.",
     "logged_at": "2026-05-16T09:30:00",
     "stub": true
   },
