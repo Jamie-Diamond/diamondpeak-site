@@ -10,15 +10,15 @@
     "avg_power": 171,
     "norm_power": 218,
     "avg_hr": 130,
-    "rpe": null,
+    "rpe": 4,
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
-    "hydration_ml": null,
+    "nutrition_g_carb": 20,
+    "hydration_ml": 600,
     "notes": null,
     "logged_at": "2026-05-25T08:30:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i151115982",
