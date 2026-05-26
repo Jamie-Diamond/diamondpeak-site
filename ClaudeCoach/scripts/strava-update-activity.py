@@ -27,6 +27,9 @@ def build_description(first_name: str, sport: str, entry: dict, detail: dict, ev
     pain    = entry.get("injury_pain_during")
     dur     = entry.get("duration_min") or round((detail.get("moving_time") or 0) / 60)
     dist    = entry.get("distance_km") or (round((detail.get("distance") or 0) / 1000, 1) or None)
+    avg_t   = detail.get("average_temp")
+    min_t   = detail.get("min_temp")
+    max_t   = detail.get("max_temp")
 
     metrics = []
     if np_w:  metrics.append(f"NP {np_w}W · IF {round(np_w/ftp, 2):.2f}")
@@ -36,6 +39,11 @@ def build_description(first_name: str, sport: str, entry: dict, detail: dict, ev
     if rpe:   metrics.append(f"RPE {rpe}")
     if carbs: metrics.append(f"{carbs}g/hr carbs")
     if pain is not None: metrics.append(f"pain {pain}/10 during")
+    if avg_t is not None:
+        t_str = f"{round(avg_t)}°C avg"
+        if min_t is not None and max_t is not None:
+            t_str += f" ({min_t}–{max_t}°C)"
+        metrics.append(t_str)
     metrics_str = " · ".join(metrics) if metrics else "no metrics"
 
     if feel:
