@@ -1,6 +1,6 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-05-24
+Last updated: 2026-05-26
 
 ## Training Availability
 Max weekly training: **5 hours/week** (cycling)
@@ -16,7 +16,7 @@ Ride fuelling: **0 g carbs/hour** (current habit)
 No
 
 ## Off-plan in last 7 days
-None (no scheduled sessions this week — plan starts 2026-05-26)
+- 2026-05-26: Z2 Aerobic Base Ride 60 min — GO, executed as planned (no rules fired)
 
 ## Open Actions
 - [x] Set up initial training plan
@@ -26,3 +26,4 @@ None (no scheduled sessions this week — plan starts 2026-05-26)
 | Date | CTL | ATL | Form | Note |
 |---|---|---|---|---|
 | 2026-05-24 | 11.2 | 14.8 | −3.6 | Pre-plan week. 1 unplanned ride (Geneva, 143 TSS, 159 min, 968m). Recovery 100/100 GREEN. Plan starts 26 May. |
+| 2026-05-26 | 10.7 | 11.1 | +0.4 | Plan day 1. Z2 Aerobic Base Ride 60 min prescribed GO as-planned. No HRV or sleep data (wearable). |
