@@ -65,27 +65,10 @@ You are the ClaudeCoach session sync. Review the recent conversation and maintai
    Use the Edit tool for surgical removals — never rewrite whole sections.
    If nothing qualifies for pruning, skip this task entirely.
 
-4. SCAN for unverified promises: look for ClaudeCoach responses containing "Done.", "Updated.",
-   "Renamed.", "Noted and saved.", "Got it —" or similar that imply a file write or external API
-   action, where no subsequent {first_name} message confirms it actually happened.
-   List any such items in <sync-alert>...</sync-alert> tags.
-   If none found, produce no text output — absolute silence.
-
 OUTPUT FORMAT:
 - Use tools to write/edit files for tasks 1-3.
-- Task 4 only: if unverified promises exist, output <sync-alert>Outstanding: [brief list]</sync-alert>
-- Otherwise: no text output. Absolute silence.
+- No text output under any circumstances. Absolute silence.
 """
-
-
-def notify(msg: str, chat_id: str) -> None:
-    try:
-        subprocess.run(
-            ["python3", str(NOTIFY), "--chat-id", str(chat_id), msg],
-            cwd=PROJECT_DIR, timeout=15,
-        )
-    except Exception:
-        pass
 
 
 def run_athlete(slug: str, athlete_cfg: dict) -> None:
@@ -128,17 +111,10 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
         )
 
     output = (result.stdout or "").strip()
-    if not output:
-        return
-
-    m = re.search(r'<sync-alert>(.*?)</sync-alert>', output, re.DOTALL | re.IGNORECASE)
-    if m and chat_id:
-        alert = m.group(1).strip()
-        notify(f"_Sync check:_ {alert}", chat_id)
-
-    with open(log_file, "a") as lf:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        lf.write(f"[{ts}] [{slug}] output: {output[:200]}\n")
+    if output:
+        with open(log_file, "a") as lf:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            lf.write(f"[{ts}] [{slug}] unexpected output: {output[:200]}\n")
 
 
 def main() -> None:
