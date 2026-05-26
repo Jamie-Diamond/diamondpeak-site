@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i151539388",
+    "date": "2026-05-26",
+    "name": "Marseille Road Cycling",
+    "sport": "Ride",
+    "tss": 90,
+    "duration_min": 113,
+    "distance_km": 43.17,
+    "avg_power": 169,
+    "norm_power": 218,
+    "avg_hr": 126,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-26T07:15:00",
+    "stub": true
+  },
+  {
     "activity_id": "i151362173",
     "date": "2026-05-25",
     "name": "Sailing",
