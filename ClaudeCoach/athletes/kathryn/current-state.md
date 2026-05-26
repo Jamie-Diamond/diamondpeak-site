@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 ## Injuries / Niggles
 None
@@ -31,6 +31,7 @@ None
 - 2026-05-23: Rest day — no session in calendar (illness recovery day 8; events endpoint returned empty). ATL 29.8, CTL 47.3, form +17.5.
 - 2026-05-24: bike_z2 150min — GO, execute as planned (T3, T4, T5, T7, T8 fired — all illness/heat continuations, no acute load danger). ATL 45.5, CTL 49.8; HRV not synced, sleep not synced.
 - 2026-05-25: run_long 75min — GO, execute as planned (no rules fired). HRV null (not yet synced), sleep null (not yet synced); ATL 47.6, CTL 50.1. Note: today is Monday — KB (45min) + run (75min) = 120min exceeds 90min daily cap (open action flagged).
+- 2026-05-26: Rest day — no session in calendar (Tuesday: standing mobility class only; events endpoint returned empty). ATL 39.6, CTL 48.5; form +8.9. HRV null (not yet synced); last reading 65 (May 25) — highest in 2+ weeks, recovery trending strongly upward.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
@@ -57,6 +58,7 @@ None
 - 2026-05-23: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 8. Heat sessions remain blocked until symptom-free + 48h confirmed. Urgency critical — race 120 days away; CTL now 47.3, slipping from 55.9 peak (May 16).
 - 2026-05-24: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 9. Heat sessions remain blocked until symptom-free + 48h confirmed. Race 119 days away; CTL 49.8, beginning to recover post-illness.
 - 2026-05-25: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 10. Race 118 days away; CTL 50.1, continuing post-illness recovery. Run_long completed today (ctlLoad 79). Heat sessions must begin immediately on confirmation of recovery — urgency critical.
+- 2026-05-26: Rest day. HRV not yet synced; last reading 65 (May 25) — highest in 2+ weeks. CTL 48.5, ATL 39.6, form +8.9. Heat acclimatisation remains urgently overdue (0.0/3.0 dose, race 117 days away).
 
 ## Open Actions
 - [x] Plan generated through 2026-06-07 (2026-05-24)

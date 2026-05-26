@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-05-25
+## Last updated: 2026-05-26
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -62,6 +62,7 @@
 - **2026-05-23 REST** — Travel day (flight to Marseille). No session planned. Multi-signal suppression noted (HRV 33 vs 7d avg 37.9 = −12.8%, RHR 58, sleep 4.1h, sleep score 40) — rest day is appropriate; monitor HRV/sleep on arrival before prescribing Mon 24 May session.
 - **2026-05-24 REST** — Run 60 min / Ride 90 min missed. Still unwell with cold (day 4 of illness). Correct call — continue monitoring HRV/RHR before committing Mon 25 May session.
 - **2026-05-25 GO** — Bike Z2 80 min: no rules fired, execute as planned. ATL 48.4, CTL 72.8 (TSB +24.4 — very fresh after 2 full rest days). HRV not yet synced; sleep not yet synced. Illness day 5 — plan includes contingency to cut to 60 min if cold symptoms persist and stop if HR drifts >150 without effort.
+- **2026-05-26 GO** — Z2 walk-run 45 min (run_easy): no rules fired, execute as planned. ATL 55.2, CTL 73.7 (TSB +18.6 — very fresh). HRV not yet synced; sleep not yet synced. First run after illness — walk-run 5:30×8 format, HR cap 150, stop-if-ankle->2/10 protocol in force.
 
 ## Body weight
 
@@ -152,6 +153,10 @@
 - **2026-05-25 — T7 (Tier 1):** Heat dose 0 sessions in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 11 with no sessions since 05-10. Marseille is now the active rebuild window — target 4–5 sessions Mon–Fri this week.
 - **2026-05-25 — T8 (Tier 2):** Last heat session 05-10 — now 15 days ago, well beyond 7-day decay threshold. Adaptation fully lapsed. First Marseille session eligible today (Mon 25 May); confirm hotel has bath or sauna and complete a session tonight if feeling recovered enough.
 - **2026-05-25 — T9 (Tier 2):** Three end-May actions within 6-day horizon (all due 2026-05-31, status pending): (1) FTP retest — no power meter in Marseille, earliest window home 1–4 Jun. (2) Book Precision Hydration sweat-sodium test — still no booking made. (3) TT bike fit appointment — still no booking made. Decisions needed before or on return home Sat 31 May.
+
+- **2026-05-26 — T7 (Tier 1):** Heat dose 0 sessions in last 14 days (last: 10 May hot bath 25 min @ 45°C) vs target ≥3. Protocol day 12 with no sessions since 05-10 (16 days ago). Marseille 24–29 May is the active rebuild window — 3 days remaining (Tue–Thu). Must complete at least 1–2 sessions this week to begin re-establishing adaptation.
+- **2026-05-26 — T8 (Tier 2):** Last heat session 05-10 — now 16 days ago, well beyond 7-day decay threshold. Any prior adaptation fully lapsed. First Marseille session eligible today or tomorrow; confirm hotel bath or sauna access and complete a session tonight after today's run.
+- **2026-05-26 — T9 (Tier 2):** Three end-May actions now within 5-day horizon (all due 2026-05-31, status pending): (1) FTP retest — no power meter in Marseille, earliest window home 1–4 Jun. (2) Book Precision Hydration sweat-sodium test — no booking made. (3) TT bike fit appointment — no booking made. Must action these on return home Sat 31 May or earlier.
 
 ## Notes for Claude
 
