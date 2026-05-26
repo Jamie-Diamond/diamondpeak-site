@@ -101,10 +101,18 @@ class StravaClient:
             body = e.read().decode(errors="replace")[:200]
             raise RuntimeError(f"Strava streams {strava_activity_id} → {e.code}: {body}") from e
 
-    def update_description(self, strava_activity_id: int | str, text: str) -> bool:
-        """Write text to a Strava activity description. Returns True on success."""
+    def update_activity(self, strava_activity_id: int | str,
+                        name: str | None = None, description: str | None = None) -> bool:
+        """Update a Strava activity's name and/or description. Returns True on success."""
         token = self.access_token()
-        payload = json.dumps({"description": text}).encode()
+        fields: dict = {}
+        if name is not None:
+            fields["name"] = name
+        if description is not None:
+            fields["description"] = description
+        if not fields:
+            return True
+        payload = json.dumps(fields).encode()
         req = urllib.request.Request(
             f"https://www.strava.com/api/v3/activities/{strava_activity_id}",
             data=payload,
@@ -118,5 +126,9 @@ class StravaClient:
             with urllib.request.urlopen(req, timeout=15, context=_ssl_ctx()) as r:
                 return r.status == 200
         except urllib.error.HTTPError as e:
-            body = e.read().decode(errors="replace")[:200]
-            raise RuntimeError(f"Strava PUT {strava_activity_id} → {e.code}: {body}") from e
+            err_body = e.read().decode(errors="replace")[:200]
+            raise RuntimeError(f"Strava PUT {strava_activity_id} → {e.code}: {err_body}") from e
+
+    def update_description(self, strava_activity_id: int | str, text: str) -> bool:
+        """Write text to a Strava activity description. Returns True on success."""
+        return self.update_activity(strava_activity_id, description=text)

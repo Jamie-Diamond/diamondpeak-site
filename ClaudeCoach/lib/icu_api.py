@@ -251,6 +251,13 @@ class IcuClient:
             payload["mark_as_done"] = True
         return self._put(f"events/{event_id}", payload)
 
+    def edit_activity(self, activity_id: str | int, **fields) -> dict:
+        """Update a completed activity (e.g. name, description)."""
+        url = f"{BASE_URL}/activity/{activity_id}"
+        r = self.session.put(url, json=fields, timeout=15)
+        r.raise_for_status()
+        return r.json()
+
     def delete_workout(self, event_id: str | int) -> None:
         self._delete(f"events/{event_id}")
 

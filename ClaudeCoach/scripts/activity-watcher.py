@@ -17,6 +17,8 @@ TG_CONFIG       = BASE / "telegram/config.json"
 
 TOOLS = "Read,Write,Bash"
 
+_WATER_SPORTS = {"sail", "watersport", "windsurf", "kitesurf", "kiteboard"}
+
 
 def _pace_str(speed_ms: float) -> str:
     if not speed_ms:
@@ -445,10 +447,73 @@ Total under 300 characters. Output nothing else."""
     return f"{clean_analysis}\n\nClaudeCoach"
 
 
+def _derive_activity_name(slug: str, activity_date: str, sport: str, icu_id: str) -> str:
+    """
+    Call Claude Haiku to derive a Strava activity name from persistent-rules.md.
+    Returns a name string, or the sentinel 'ask' if no matching rule is found.
+    """
+    rules_file = BASE / f"athletes/{slug}/persistent-rules.md"
+    rules_text = rules_file.read_text() if rules_file.exists() else "(no rules)"
+
+    prompt = f"""\
+Derive a Strava activity name for a {sport} activity on {activity_date}.
+
+Rules file:
+{rules_text}
+
+Look for any [perm] or [expires:...] rules that describe a sailing event, regatta, or training block covering {activity_date}.
+If you find a matching rule, produce a concise activity name (e.g. "J70 Cervia — Race Day 2", "J70 Club Series — Practice Race").
+If no rule covers this date, output exactly: ask
+
+Output only the name or "ask". Nothing else."""
+
+    try:
+        result = subprocess.run(
+            [CLAUDE, "-p", prompt, "--model", "claude-haiku-4-5-20251001"],
+            capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
+        )
+        name = (result.stdout or "").strip()
+        if name:
+            return name
+    except Exception:
+        pass
+    return "ask"
+
+
+def _rename_strava(slug: str, icu_id: str, new_name: str) -> bool:
+    """Rename a Strava activity. Returns True on success."""
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(BASE / "lib"))
+        from icu_api import IcuClient
+        from strava_client import StravaClient
+
+        athletes_cfg = json.loads(ATHLETES_CONFIG.read_text())
+        a = athletes_cfg[slug]
+        icu = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+        detail = icu.get_activity_detail(icu_id)
+        strava_id = detail.get("strava_id")
+        if not strava_id:
+            return False
+        sc = StravaClient(slug)
+        sc.update_activity(strava_id, name=new_name)
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava renamed {icu_id} → {new_name!r}", file=sys.stderr)
+        return True
+    except FileNotFoundError:
+        return False
+    except Exception as exc:
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava rename failed: {exc}", file=sys.stderr)
+        return False
+
+
 def _strava_update(slug: str, icu_activity_id: str, analysis: str,
                    plan_delta_raw: str | None = None, session_entry: dict | None = None,
                    chat_id: str = ""):
     """Write a coaching note to the Strava activity description. Silent on any error."""
+    # Water sports: no description — rename handled separately
+    if (session_entry or {}).get("sport", "").lower() in _WATER_SPORTS:
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Skipping description for {(session_entry or {}).get('sport')} {icu_activity_id}", file=sys.stderr)
+        return
     try:
         import sys as _sys
         _sys.path.insert(0, str(BASE / "lib"))
@@ -799,6 +864,20 @@ def check_athlete(slug, athlete_cfg):
         fields = "|".join(str(new_entry.get(f, "")) for f in ("rpe", "nutrition_g_carb", "injury_pain_during", "feel", "notes"))
         state.setdefault("strava_hashes", {})[activity_id] = _hl.md5(fields.encode()).hexdigest()[:8]
         save_state(state, state_file)
+
+    # Water-sport rename: derive name from rules or ask Jamie via Telegram
+    if new_entry and new_entry.get("sport", "").lower() in _WATER_SPORTS:
+        activity_date = new_entry.get("date", date.today().isoformat())
+        sport = new_entry.get("sport", "")
+        derived = _derive_activity_name(slug, activity_date, sport, activity_id)
+        if derived and derived.lower() != "ask":
+            _rename_strava(slug, activity_id, derived)
+        elif chat_id:
+            _notify(
+                f"Sailing session logged ({activity_date}). What should I name it on Strava? "
+                f"(ICU: {activity_id})",
+                chat_id,
+            )
 
     # Trigger site data refresh in background
     subprocess.Popen(

@@ -42,7 +42,7 @@ def main():
                    choices=["profile", "sport_settings", "fitness", "wellness",
                             "history", "events", "activity_detail", "extended_metrics",
                             "streams", "best_efforts", "power_curves", "training_summary",
-                            "push_workout", "edit_workout", "delete_workout"])
+                            "push_workout", "edit_workout", "edit_activity", "delete_workout"])
     p.add_argument("--days",        type=int, default=14)
     p.add_argument("--start",       default=None, help="oldest date YYYY-MM-DD")
     p.add_argument("--end",         default=None, help="newest date YYYY-MM-DD")
@@ -110,6 +110,12 @@ def main():
             sys.exit(1)
         fields = json.loads(args.payload)
         result = client.edit_workout(args.event_id, **fields)
+    elif ep == "edit_activity":
+        if not args.activity_id or not args.payload:
+            print("ERROR: --activity-id and --payload required for edit_activity", file=sys.stderr)
+            sys.exit(1)
+        fields = json.loads(args.payload)
+        result = client.edit_activity(args.activity_id, **fields)
     elif ep == "delete_workout":
         if not args.event_id:
             print("ERROR: --event-id required for delete_workout", file=sys.stderr)

@@ -17,5 +17,11 @@ Allow the coach to drag planned sessions on the athlete dashboard (athlete-*.htm
 
 ## Bot
 
+### Tiered coaching language (3 levels)
+Add a `coaching_level` field to `profile.json` with values `beginner`, `mid`, `pro`. The bot and all scripts should adjust vocabulary and data density accordingly:
+- **beginner**: plain English only, no metrics jargon, simple session descriptions
+- **mid** (default): current behaviour — plain-English labels (Fitness/Load/Fatigue/Form) with supporting numbers
+- **pro**: full metrics, zone breakdowns, TSS/CTL/ATL/TSB acronyms permitted, technical analysis depth
+
 ### Image recognition (done — 2026-05-19)
 Bot now handles photo messages (Garmin splits screenshots etc.) via `--image` flag to Claude CLI.
