@@ -322,12 +322,6 @@ def process_charts(token, chat_id, response):
                     png = _charts.fitness_chart(data)
                 else:
                     png = _charts.form_chart(data)
-            elif chart_type == "session":
-                png = _charts.session_chart(
-                    data.get("name", "Session"),
-                    data.get("intervals", []),
-                    data.get("ftp", 316),
-                )
             elif chart_type == "week":
                 png = _charts.week_chart(
                     data.get("events", []),
