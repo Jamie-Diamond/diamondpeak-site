@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-05-26
+## Last updated: 2026-05-27
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -63,6 +63,7 @@
 - **2026-05-24 REST** — Run 60 min / Ride 90 min missed. Still unwell with cold (day 4 of illness). Correct call — continue monitoring HRV/RHR before committing Mon 25 May session.
 - **2026-05-25 GO** — Bike Z2 80 min: no rules fired, execute as planned. ATL 48.4, CTL 72.8 (TSB +24.4 — very fresh after 2 full rest days). HRV not yet synced; sleep not yet synced. Illness day 5 — plan includes contingency to cut to 60 min if cold symptoms persist and stop if HR drifts >150 without effort.
 - **2026-05-26 GO** — Z2 walk-run 45 min (run_easy): no rules fired, execute as planned. ATL 55.2, CTL 73.7 (TSB +18.6 — very fresh). HRV not yet synced; sleep not yet synced. First run after illness — walk-run 5:30×8 format, HR cap 150, stop-if-ankle->2/10 protocol in force.
+- **2026-05-27 GO** — Bike Z2 80 min: no rules fired, execute as planned. ATL 60.0, CTL 74.4 (TSB +14.4 — fresh). HRV not yet synced; sleep not yet synced. Trainer ride Marseille — Z2 HR 133–146, cadence 85–95. Illness day 7 — monitor HR drift vs Monday; lower HR at same effort is a positive recovery signal.
 
 ## Body weight
 
