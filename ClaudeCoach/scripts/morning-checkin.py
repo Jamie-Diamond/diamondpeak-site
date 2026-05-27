@@ -221,7 +221,7 @@ def _send_morning_load_chart(chat_id, slug, wellness_rows):
             try:
                 subprocess.run(
                     ["python3", str(NOTIFY), "--chat-id", str(chat_id), "--photo", tmp_path],
-                    cwd=PROJECT_DIR, timeout=30,
+                    cwd=PROJECT_DIR, timeout=60,
                 )
             finally:
                 os.unlink(tmp_path)

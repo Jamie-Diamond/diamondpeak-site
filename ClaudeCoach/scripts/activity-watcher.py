@@ -857,7 +857,7 @@ def check_athlete(slug, athlete_cfg):
                     break
         except Exception:
             pass
-    if new_entry:
+    if new_entry and new_entry.get("sport", "").lower() not in _WATER_SPORTS:
         sport = new_entry.get("sport", "")
         dur = new_entry.get("duration_min", 0) or 0
         kb = _quick_log_keyboard(activity_id, slug, sport, bool(injuries), dur)
