@@ -48,7 +48,8 @@ Case A — A completed activity exists NOT yet in session-log.json:
   - Strength: "Strength session done. RPE and main focus?"
 
 Case B — A planned session has NO matching completed activity AND it's after 19:00:
-  Send: "Did the [session name] happen today?"
+  Before sending: read ClaudeCoach/athletes/{slug}/current-state.md — if there is any note from today indicating the session was swapped, substituted, or intentionally skipped, suppress the message entirely (treat as Case C).
+  Otherwise send: "Did the [session name] happen today?"
 
 Case C — All sessions accounted for and already stubbed: produce no output.
 

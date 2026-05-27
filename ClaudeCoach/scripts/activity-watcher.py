@@ -226,7 +226,8 @@ If not a recognisable threshold test: TEST_RESULT: none
 
 If no activities at all: ACTIVITY_ID: none  ANALYSIS: none
 
-CRITICAL: Your entire response must contain only the ACTIVITY_ID and ANALYSIS lines above. Do not output reasoning steps, file read confirmations, tool call summaries, or any other text. All processing is internal and silent."""
+CRITICAL: Your entire response must contain only the ACTIVITY_ID and ANALYSIS lines above. Do not output reasoning steps, file read confirmations, tool call summaries, or any other text. All processing is internal and silent.
+ANALYSIS scope: describe only the activity being analysed. Do NOT mention other planned sessions from today's calendar, ask whether a different planned session happened, or comment on sessions that were not completed."""
 
 
 def _notify(msg, chat_id):
