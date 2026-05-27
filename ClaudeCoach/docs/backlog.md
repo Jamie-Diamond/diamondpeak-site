@@ -11,10 +11,17 @@ Possible future angle: prompt athletes to sync before bed, or investigate Garmin
 
 ## Coach Web Interface
 
+### App transition — phased plan (docs/app-transition-plan.md)
+Full roadmap from Telegram bot + static site → installable PWA with in-app chat and Garmin integration.
+Phase 1 (FastAPI backend, ~4h) enables everything. Recommended first sprint: Phase 1 → Phase 2 → Phase 3 (~15h total).
+
 ### Drag-and-drop event rescheduling
 Allow the coach to drag planned sessions on the athlete dashboard (athlete-*.html) to reschedule them — currently requires going into Intervals.icu directly.
-- Would need write-back to Intervals.icu via the edit_workout MCP/API
-- Scope: drag within a week view; snap to day; confirm modal before write
+- Requires Phase 1 (FastAPI backend) first
+- Add `icu_event_id` to weekCalendar in refresh script (0.5h)
+- Refactor `renderLiveCalendar` to DOM nodes + drag events (3h)
+- FastAPI reschedule endpoint (covered in Phase 1)
+- Full breakdown: docs/app-transition-plan.md Phase 2
 
 ## Bot
 
