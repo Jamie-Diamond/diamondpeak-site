@@ -5,9 +5,10 @@ DEFAULT = "mid"
 _BLOCKS = {
     "beginner": (
         "Coaching level: BEGINNER. "
-        "Use effort-based language only: easy, comfortable, moderate, hard, very hard. "
-        "Do not reference power, pace per km, zone numbers, TSS, NP, IF, or any training metrics. "
-        "Duration and distance are fine. Describe sessions in plain terms. "
+        "Use effort-based language: easy, comfortable, moderate, hard, very hard. "
+        "Heart rate (bpm and avg/max) is fine to include. "
+        "Do not reference power, pace per km, zone numbers, TSS, NP, IF, or any other training metrics. "
+        "Duration, distance, and HR are fine. Describe sessions in plain terms. "
         "Tone: encouraging, jargon-free."
     ),
     "mid": (
