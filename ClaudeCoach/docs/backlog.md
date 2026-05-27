@@ -2,26 +2,27 @@
 
 ## Data & Integrations
 
-### Garmin Connect API — researched, not worth pursuing
-Direct Garmin API exists (OAuth 1.0a, `garminconnect` Python package). HRV/sleep data available,
-write-back to device possible. **Verdict: won't solve the morning sync delay.** The bottleneck
-is device-to-cloud sync timing, not the API layer — sleep data arrives after the user's morning
-sync whether we poll Garmin direct or via Intervals.icu. Stick with Intervals.icu.
-Possible future angle: prompt athletes to sync before bed, or investigate Garmin auto-sync scheduling.
+### Garmin integration — Phase 1 of app transition (docs/app-transition-plan.md)
+`python-garminconnect` (PyPI) gives HRV/sleep/body-battery directly from Garmin servers — no dependency
+on Intervals.icu sync. Runs standalone on VM; token stored as garth session JSON per athlete.
+- **Phase 1a (read path):** wire into morning-checkin.py for earlier HRV/sleep data (~6h)
+- **Phase 1b (write path):** apply to Garmin Connect Developer Programme (2–5 day approval) for structured workout push to device
+Previous verdict ("won't solve sync delay") applied only to the poll-via-API approach — reading directly before ICU sync *does* help.
 
 ## Coach Web Interface
 
 ### App transition — phased plan (docs/app-transition-plan.md)
 Full roadmap from Telegram bot + static site → installable PWA with in-app chat and Garmin integration.
-Phase 1 (FastAPI backend, ~4h) enables everything. Recommended first sprint: Phase 1 → Phase 2 → Phase 3 (~15h total).
+Phase 1 (Garmin reads, ~6h, no backend needed). Phase 2 (FastAPI backend, ~4h) enables browser features.
+Recommended first sprint: Phase 1 → Phase 2 → Phase 3 (~18h total).
 
 ### Drag-and-drop event rescheduling
 Allow the coach to drag planned sessions on the athlete dashboard (athlete-*.html) to reschedule them — currently requires going into Intervals.icu directly.
-- Requires Phase 1 (FastAPI backend) first
+- Requires Phase 2 (FastAPI backend) first
 - Add `icu_event_id` to weekCalendar in refresh script (0.5h)
 - Refactor `renderLiveCalendar` to DOM nodes + drag events (3h)
-- FastAPI reschedule endpoint (covered in Phase 1)
-- Full breakdown: docs/app-transition-plan.md Phase 2
+- FastAPI reschedule endpoint (covered in Phase 2)
+- Full breakdown: docs/app-transition-plan.md Phase 3
 
 ## Bot
 

@@ -28,7 +28,7 @@ A single product with three surfaces:
 3. **Coach view** — admin panel: drag-and-drop scheduling, athlete overview
 
 Backed by:
-- A **FastAPI server** on the existing VM (single enabling step for everything else)
+- A **FastAPI server** on the existing VM (single enabling step for all browser features)
 - **Garmin integration** for direct HRV/sleep reads and workout writes to device
 - **Intervals.icu write-back** for calendar changes
 - **Proper auth** (JWT or passkey — no passwords if possible)
@@ -37,9 +37,38 @@ Backed by:
 
 ## Phases
 
-### Phase 1 — FastAPI backend on VM (enabler for everything)
+### Phase 1 — Garmin integration
+**Effort:** ~6 hours (unofficial read path) + ~developer programme approval wait (official write path)  
+**Why first:** No backend dependency — runs directly on the VM using the existing Python environment. Immediately improves morning briefings by delivering HRV/sleep data before Intervals.icu sync completes. Apply for the official Developer Programme now to start the 2–5 day approval clock running.
+
+**Two sub-paths:**
+
+#### 1a — Reading health data (unofficial, can do now)
+Use `python-garminconnect` (PyPI, cyberjunky/python-garminconnect):
+```python
+from garminconnect import Garmin
+client = Garmin(email, password)
+client.login()
+hrv = client.get_heart_rate_variability("2026-05-27")   # returns RMSSD
+sleep = client.get_sleep_data("2026-05-27")             # stages, score, secs
+body_battery = client.get_body_battery("2026-05-27")
+```
+Store tokens after login (client exports `garth` session tokens — persist as JSON in athlete folder to avoid re-auth on every run).  
+Use this to give the morning briefing HRV/sleep data *immediately* at boot, before Garmin → ICU sync completes.  
+**Risk:** unofficial — Garmin can break it with a site update. Acceptable for 3 athletes; not for a commercial product.
+
+#### 1b — Writing workouts to Garmin device (official, apply when ready)
+Apply to Garmin Connect Developer Programme (developer.garmin.com).  
+Approval: 2–5 business days. Credentials: consumer key + consumer secret.  
+Use Training API to push a structured workout (name, steps, targets) to the athlete's Garmin device so it appears in their watch's workout list.  
+This is distinct from Intervals.icu — it pushes directly to the device, not the plan calendar.  
+**Required for production app** — unofficial path has no write capability.
+
+---
+
+### Phase 2 — FastAPI backend on VM (enabler for browser features)
 **Effort:** ~4 hours  
-**Why first:** Every subsequent phase depends on this. Without a backend the website stays static forever.
+**Why second:** Every subsequent browser-facing phase depends on this. Without a backend the website stays static forever.
 
 What to build:
 - FastAPI app on VM, port 8080, proxied through nginx (or a new subdomain)
@@ -54,21 +83,21 @@ This phase alone enables drag-and-drop and session log editing from the browser.
 
 ---
 
-### Phase 2 — Interactive calendar (drag-and-drop rescheduling)
-**Effort:** ~8–9 hours (see backlog for full breakdown)  
-**Depends on:** Phase 1
+### Phase 3 — Interactive calendar (drag-and-drop rescheduling)
+**Effort:** ~8–9 hours  
+**Depends on:** Phase 2
 
 Changes:
 - `refresh-site-data.py`: add `icu_event_id` to each planned event in `weekCalendar`
 - `renderLiveCalendar()`: refactor from `innerHTML` string-builder to DOM node construction; add `draggable` attribute and `dragstart`/`dragover`/`drop` event listeners
-- On drop: `POST /athletes/{slug}/events/{id}/reschedule` to the Phase 1 API; optimistic re-render; trigger background data refresh
+- On drop: `POST /athletes/{slug}/events/{id}/reschedule` to the Phase 2 API; optimistic re-render; trigger background data refresh
 - Past-date guard: prevent dragging events to dates in the past
 
 ---
 
-### Phase 3 — PWA shell (installable, mobile-friendly)
+### Phase 4 — PWA shell (installable, mobile-friendly)
 **Effort:** ~3 hours  
-**Depends on:** Phase 1 (for API-backed data)
+**Depends on:** Phase 2 (for API-backed data)
 
 Changes:
 - Add `manifest.json` (name, icons, theme colour, display: standalone)
@@ -80,9 +109,9 @@ At this point athletes have a "ClaudeCoach app" on their phone that shows dashbo
 
 ---
 
-### Phase 4 — In-app chat (replaces Telegram as primary surface)
+### Phase 5 — In-app chat (replaces Telegram as primary surface)
 **Effort:** ~12 hours  
-**Depends on:** Phase 1 (API backend)
+**Depends on:** Phase 2 (API backend)
 
 What to build:
 - Chat UI in the PWA: message thread, send input, markdown rendering
@@ -96,38 +125,9 @@ Keep Telegram running in parallel indefinitely — low cost and some athletes ma
 
 ---
 
-### Phase 5 — Garmin integration
-**Effort:** ~6 hours (unofficial read path) + ~developer programme approval wait (official write path)  
-**Depends on:** Phase 1 (API backend to store tokens)
-
-**Two sub-paths:**
-
-#### 5a — Reading health data (unofficial, can do now)
-Use `python-garminconnect` (PyPI, cyberjunky/python-garminconnect):
-```python
-from garminconnect import Garmin
-client = Garmin(email, password)
-client.login()
-hrv = client.get_heart_rate_variability("2026-05-27")   # returns RMSSD
-sleep = client.get_sleep_data("2026-05-27")             # stages, score, secs
-body_battery = client.get_body_battery("2026-05-27")
-```
-Store tokens after login (client exports `garth` session tokens — persist to avoid re-auth on every run).  
-Use this to give the morning briefing HRV/sleep data *immediately* at boot, before Garmin → ICU sync completes.  
-**Risk:** unofficial — Garmin can break it with a site update. Acceptable for 3 athletes; not for a commercial product.
-
-#### 5b — Writing workouts to Garmin device (official, apply when ready)
-Apply to Garmin Connect Developer Programme (developer.garmin.com).  
-Approval: 2–5 business days. Credentials: consumer key + consumer secret.  
-Use Training API to push a structured workout (name, steps, targets) to the athlete's Garmin device so it appears in their watch's workout list.  
-This is distinct from Intervals.icu — it pushes directly to the device, not the plan calendar.  
-**Required for production app** — unofficial path has no write capability.
-
----
-
 ### Phase 6 — Coach admin panel
 **Effort:** ~6 hours  
-**Depends on:** Phase 1, Phase 2
+**Depends on:** Phase 2, Phase 3
 
 A separate view (not athlete-facing) that shows all three athletes on one screen:
 - Today's sessions, completion status, RPE across all athletes
@@ -148,7 +148,7 @@ Only worth doing if:
 - Need deep Garmin SDK access (not HTTP API)
 - Want App Store distribution
 
-Technology choice when the time comes: React Native (shares JS logic with the PWA) or Flutter (better cross-platform consistency). The FastAPI backend from Phase 1 is already the right API target — nothing changes on the server.
+Technology choice when the time comes: React Native (shares JS logic with the PWA) or Flutter (better cross-platform consistency). The FastAPI backend from Phase 2 is already the right API target — nothing changes on the server.
 
 ---
 
@@ -162,13 +162,13 @@ Technology choice when the time comes: React Native (shares JS logic with the PW
 | PWA | Web standard (manifest + service worker) | Zero cost, works today |
 | Chat | SSE streaming from FastAPI | Mirrors bot.py behaviour; no new infrastructure |
 | Garmin reads | python-garminconnect (unofficial) | Works today; replace with official SDK if commercialising |
-| Garmin writes | Official Developer Programme | Apply when Phase 5b is scheduled |
+| Garmin writes | Official Developer Programme | Apply immediately — 2–5 day approval |
 | Native (future) | React Native or Flutter | Defer until PWA hits a real ceiling |
 
 ---
 
 ## What to do next
 
-Phases 1 and 2 together unlock the most value for the least effort (~12–13 hours total) and have no dependencies on external approvals. Phase 3 (PWA, ~3 hours) costs little and gives athletes an installable app immediately.
+Phase 1 (Garmin reads) has no dependencies and can start immediately — install `python-garminconnect`, wire it into morning-checkin.py, and apply for the Developer Programme in parallel to start the approval clock. Phase 2 (FastAPI, ~4h) then unlocks everything browser-facing.
 
-Suggested first sprint: **Phase 1 → Phase 2 → Phase 3** in sequence. That delivers: rescheduling from the dashboard, an installable mobile app, and session editing from the browser — without touching Telegram, without an App Store, and without any new third-party dependencies.
+Suggested first sprint: **Phase 1 → Phase 2 → Phase 3** in sequence. That delivers: earlier HRV/sleep in morning briefings, rescheduling from the dashboard, and groundwork for an installable mobile app — without touching Telegram, without an App Store, and without any new third-party dependencies beyond the Garmin SDK.
