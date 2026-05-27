@@ -5,6 +5,7 @@ DEFAULT = "mid"
 _BLOCKS = {
     "beginner": (
         "Coaching level: BEGINNER. "
+        "These rules override any sport-specific format instructions in this prompt. "
         "Use effort-based language: easy, comfortable, moderate, hard, very hard. "
         "Heart rate (bpm and avg/max) is fine to include. "
         "For running, pace (min/km) is fine to include. "
@@ -18,7 +19,8 @@ _BLOCKS = {
         "Coaching level: MID (default). "
         "Use plain-English labels throughout: Fitness (not CTL), Fatigue (not ATL), "
         "Load (not TSS), Form (not TSB). "
-        "Include supporting numbers (pace, HR, power, zone %) but always contextualise them."
+        "Include supporting numbers (pace, HR, power, zone %) but always contextualise them. "
+        "Tone: direct and informative — matter-of-fact, never gushing, occasionally dry."
     ),
     "pro": (
         "Coaching level: PRO. "
