@@ -80,7 +80,7 @@ def send_photo(photo_bytes, caption=""):
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
     try:
-        urllib.request.urlopen(req, timeout=30, context=SSL_CONTEXT)
+        urllib.request.urlopen(req, timeout=60, context=SSL_CONTEXT)
     except Exception as e:
         print(f"Telegram photo error: {e}", file=sys.stderr)
         sys.exit(1)
