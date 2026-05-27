@@ -861,7 +861,11 @@ def check_athlete(slug, athlete_cfg):
         sport = new_entry.get("sport", "")
         dur = new_entry.get("duration_min", 0) or 0
         kb = _quick_log_keyboard(activity_id, slug, sport, bool(injuries), dur)
-        hdr = "Injury pain during (0–10):" if (sport == "Run" and injuries) else "Quick log:"
+        activity_label = new_entry.get("name") or sport
+        if sport == "Run" and injuries:
+            hdr = f"Injury pain during (0–10) — {activity_label}:"
+        else:
+            hdr = f"Quick log — {activity_label}:"
         _tg_send_keyboard(chat_id, hdr, kb)
 
     _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
