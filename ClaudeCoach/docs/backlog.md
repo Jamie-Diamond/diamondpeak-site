@@ -2,11 +2,12 @@
 
 ## Data & Integrations
 
-### Garmin / Strava API investigation
-Investigate direct Garmin Connect and Strava APIs as upstream data sources.
-- **Strava write access** is the priority: post activities, update descriptions, add coaching notes directly from the bot — currently this data is lost before it reaches ClaudeCoach
-- Garmin Connect API would give richer raw data (HRV, sleep stages, body battery) earlier than the Intervals.icu sync cycle
-- Key question: does Strava write access cover activity description + segment tagging, or just creation?
+### Garmin Connect API — researched, not worth pursuing
+Direct Garmin API exists (OAuth 1.0a, `garminconnect` Python package). HRV/sleep data available,
+write-back to device possible. **Verdict: won't solve the morning sync delay.** The bottleneck
+is device-to-cloud sync timing, not the API layer — sleep data arrives after the user's morning
+sync whether we poll Garmin direct or via Intervals.icu. Stick with Intervals.icu.
+Possible future angle: prompt athletes to sync before bed, or investigate Garmin auto-sync scheduling.
 
 ## Coach Web Interface
 
@@ -17,14 +18,19 @@ Allow the coach to drag planned sessions on the athlete dashboard (athlete-*.htm
 
 ## Bot
 
-### Tiered coaching language (3 levels) — plan at docs/coaching-levels-plan.md
-Add a `coaching_level` field to `profile.json` with values `beginner`, `mid`, `pro`. The bot and all scripts should adjust vocabulary and data density accordingly:
-- **beginner** (Calum): plain English only, no metrics jargon, effort-based descriptions
-- **mid** (Kathryn, default): current behaviour — plain-English labels (Fitness/Load/Fatigue/Form) with supporting numbers
-- **pro** (Jamie): plain-English labels + acronyms in parentheses on first use ("Fitness (CTL)"), full technical depth
-
-### Coaching levels — chart label variants
-Follow-on to tiered coaching language: at `pro` level, chart axis/legend labels should show acronyms alongside plain-English labels (e.g. "Fitness (CTL)"). Requires threading `coaching_level` through to `charts.py` render calls — defer until the prompt-injection work is complete and validated.
-
 ### Image recognition (done — 2026-05-19)
 Bot now handles photo messages (Garmin splits screenshots etc.) via `--image` flag to Claude CLI.
+
+### Strava write-back (done — 2026-05-20)
+`strava_client.py` — `update_activity(name, description)` live. Activity descriptions auto-written
+after every session; sailing activities auto-renamed from persistent-rules.md.
+
+### Tiered coaching language — 3 levels (done — 2026-05-27)
+`coaching_level` in `profile.json` (beginner/mid/pro). Level block injected into all prompts:
+activity-watcher, bot, morning/evening checkins, prescription, weekly summary.
+Calum=beginner, Kathryn=mid, Jamie=pro.
+
+### Coaching levels — chart label variants (done — 2026-05-27)
+`mid`: plain-English labels ("Fitness", "Fatigue", "Form", "Load") on all chart axes and legends.
+`pro`: combined labels ("Fitness (CTL)", "Fatigue (ATL)", "Form (TSB)", "TSS").
+Threaded through charts.py, bot.py (process_charts + quick chart functions), morning-checkin.py.

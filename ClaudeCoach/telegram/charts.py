@@ -8,6 +8,33 @@ _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 QUICKCHART = "https://quickchart.io/chart"
 
+# ── Coaching-level label sets ─────────────────────────────────────────────────
+def _lbl(coaching_level: str) -> dict:
+    mid = {
+        "ctl":          "Fitness",
+        "atl":          "Fatigue",
+        "fitness_title":"Fitness & Fatigue",
+        "fitness_yaxis":"Fitness / Fatigue",
+        "tsb_line":     "Form",
+        "form_title":   "Form",
+        "form_yaxis":   "Form",
+        "load_tss":     "Load",
+        "load_tsb":     "Form",
+    }
+    pro = {
+        "ctl":          "Fitness (CTL)",
+        "atl":          "Fatigue (ATL)",
+        "fitness_title":"Fitness (CTL) & Fatigue (ATL)",
+        "fitness_yaxis":"CTL / ATL",
+        "tsb_line":     "Form (TSB)",
+        "form_title":   "Form (TSB)",
+        "form_yaxis":   "TSB",
+        "load_tss":     "TSS",
+        "load_tsb":     "Form (TSB)",
+    }
+    return pro if coaching_level == "pro" else mid
+
+
 # Brand colours
 C_CTL   = "rgb(26,82,118)"
 C_ATL   = "rgb(192,57,43)"
@@ -102,12 +129,15 @@ def _parse_fitness_payload(payload):
 
 # ── Fitness chart (CTL + ATL) ──────────────────────────────────────────────────
 
-def fitness_chart(payload):
+def fitness_chart(payload, coaching_level="mid"):
     """
     payload: {"today":"MM-DD","data":[{date,ctl,atl,tsb},...]}  or bare list.
     Renders CTL (teal filled) + ATL (purple dashed) — TSB is a separate form_chart.
     """
     data, today = _parse_fitness_payload(payload)
+    if isinstance(payload, dict) and "level" in payload:
+        coaching_level = payload["level"]
+    L = _lbl(coaching_level)
     labels = [d["date"][5:] for d in data]
     ctl    = [round(d["ctl"], 1) for d in data]
     atl    = [round(d["atl"], 1) for d in data]
@@ -123,7 +153,7 @@ def fitness_chart(payload):
             "labels": labels,
             "datasets": [
                 {
-                    "label": "Fitness (CTL)",
+                    "label": L["ctl"],
                     "data": ctl,
                     "borderColor": "#2e9c8e",
                     "backgroundColor": "rgba(46,156,142,0.15)",
@@ -133,7 +163,7 @@ def fitness_chart(payload):
                     "tension": 0.3,
                 },
                 {
-                    "label": "Fatigue (ATL)",
+                    "label": L["atl"],
                     "data": atl,
                     "borderColor": "#7c4dff",
                     "backgroundColor": "rgba(124,77,255,0.07)",
@@ -149,7 +179,7 @@ def fitness_chart(payload):
             "plugins": {
                 "title": {
                     "display": True,
-                    "text": "Fitness (CTL) & Fatigue (ATL)",
+                    "text": L["fitness_title"],
                     "font": {"size": 14},
                 },
                 "legend": {
@@ -161,7 +191,7 @@ def fitness_chart(payload):
             "scales": {
                 "x": {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 10, "font": {"size": 11}}},
                 "y": {
-                    "title": {"display": True, "text": "CTL / ATL", "font": {"size": 12}},
+                    "title": {"display": True, "text": L["fitness_yaxis"], "font": {"size": 12}},
                     "ticks": {"font": {"size": 11}},
                     "suggestedMin": 40,
                     "suggestedMax": 130,
@@ -175,7 +205,7 @@ def fitness_chart(payload):
 
 # ── Form chart (TSB with coloured zones) ──────────────────────────────────────
 
-def form_chart(payload):
+def form_chart(payload, coaching_level="mid"):
     """
     Same payload as fitness_chart. Renders TSB as a line with coloured background zones:
       > +5 : teal   — fresh / race-ready
@@ -184,6 +214,9 @@ def form_chart(payload):
       < -20   : red   — heavy / overreaching risk
     """
     data, today = _parse_fitness_payload(payload)
+    if isinstance(payload, dict) and "level" in payload:
+        coaching_level = payload["level"]
+    L = _lbl(coaching_level)
     labels = [d["date"][5:] for d in data]
     tsb    = [round(d["tsb"], 1) for d in data]
 
@@ -235,7 +268,7 @@ def form_chart(payload):
         "data": {
             "labels": labels,
             "datasets": [{
-                "label": "Form (TSB)",
+                "label": L["tsb_line"],
                 "data": tsb,
                 "borderColor": "rgba(60,60,60,0.75)",
                 "backgroundColor": "rgba(60,60,60,0.06)",
@@ -249,7 +282,7 @@ def form_chart(payload):
             "plugins": {
                 "title": {
                     "display": True,
-                    "text": "Form (TSB)",
+                    "text": L["form_title"],
                     "font": {"size": 14},
                 },
                 "legend": {"display": False},
@@ -258,7 +291,7 @@ def form_chart(payload):
             "scales": {
                 "x": {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 10, "font": {"size": 11}}},
                 "y": {
-                    "title": {"display": True, "text": "TSB", "font": {"size": 12}},
+                    "title": {"display": True, "text": L["form_yaxis"], "font": {"size": 12}},
                     "ticks": {"font": {"size": 11}},
                     "suggestedMin": -40,
                     "suggestedMax": 20,
@@ -292,7 +325,7 @@ def _project_tsb(days, seed_ctl, seed_atl):
     return result
 
 
-def load_chart(payload):
+def load_chart(payload, coaching_level="mid"):
     """
     payload: {"today":"MM-DD","days":[{"date":"YYYY-MM-DD","tsb":-8.7,
               "activities":[{"sport":"Ride","tss":117,"dur":120,"status":"completed"},...]},...]}
@@ -303,8 +336,11 @@ def load_chart(payload):
         today     = payload.get("today")
         seed_ctl  = payload.get("seed_ctl")
         seed_atl  = payload.get("seed_atl")
+        if "level" in payload:
+            coaching_level = payload["level"]
     else:
         return None
+    L = _lbl(coaching_level)
     if not days:
         return None
 
@@ -349,7 +385,7 @@ def load_chart(payload):
     else:
         tsb_vals = [round(d.get("tsb") or 0, 1) for d in days]
     datasets.append({
-        "type": "line", "label": "TSB (form)",
+        "type": "line", "label": L["load_tsb"],
         "data": tsb_vals,
         "borderColor": "rgba(70,70,70,0.80)",
         "backgroundColor": "transparent",
@@ -399,7 +435,7 @@ def load_chart(payload):
             "plugins": {
                 "title": {
                     "display": True,
-                    "text": "Training load — TSS by sport  ·  TSB form (right axis)",
+                    "text": f"Training load — {L['load_tss']} by sport  ·  {L['load_tsb']} (right axis)",
                     "font": {"size": 14},
                 },
                 "legend": {
@@ -420,13 +456,13 @@ def load_chart(payload):
                 },
                 "y": {
                     "stacked": True, "beginAtZero": True, "position": "left",
-                    "title": {"display": True, "text": "TSS", "font": {"size": 12}},
+                    "title": {"display": True, "text": L["load_tss"], "font": {"size": 12}},
                     "ticks": {"font": {"size": 11}},
                     "grid": {"color": "rgba(0,0,0,0.06)"},
                 },
                 "y1": {
                     "position": "right",
-                    "title": {"display": True, "text": "TSB", "font": {"size": 12}},
+                    "title": {"display": True, "text": L["load_tsb"], "font": {"size": 12}},
                     "ticks": {"font": {"size": 11}},
                     "suggestedMin": -40, "suggestedMax": 20,
                     "grid": {"drawOnChartArea": False},

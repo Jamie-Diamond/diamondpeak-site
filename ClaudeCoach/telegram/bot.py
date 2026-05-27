@@ -311,10 +311,20 @@ TELEGRAM_RE = re.compile(r'<telegram>(.*?)</telegram>', re.DOTALL | re.IGNORECAS
 
 
 
-def process_charts(token, chat_id, response):
+def _profile_coaching_level(slug):
+    """Read coaching_level from athlete profile.json, defaulting to 'mid'."""
+    try:
+        p = BASE.parent / "athletes" / slug / "profile.json"
+        return json.loads(p.read_text()).get("coaching_level", "mid")
+    except Exception:
+        return "mid"
+
+
+def process_charts(token, chat_id, response, slug=None):
     """Send any [[CHART:TYPE:JSON]] images, return response with markers stripped."""
     if _charts is None:
         return CHART_RE.sub('', response).strip()
+    coaching_level = _profile_coaching_level(slug) if slug else "mid"
     for m in CHART_RE.finditer(response):
         chart_type, raw = m.group(1), m.group(2)
         try:
@@ -326,9 +336,9 @@ def process_charts(token, chat_id, response):
                 if "today" not in data:
                     data["today"] = date.today().strftime("%m-%d")
                 if chart_type == "fitness":
-                    png = _charts.fitness_chart(data)
+                    png = _charts.fitness_chart(data, coaching_level=coaching_level)
                 else:
-                    png = _charts.form_chart(data)
+                    png = _charts.form_chart(data, coaching_level=coaching_level)
             elif chart_type == "week":
                 png = _charts.week_chart(
                     data.get("events", []),
@@ -337,7 +347,7 @@ def process_charts(token, chat_id, response):
                 )
             elif chart_type == "load":
                 log(f"load chart: days={len(data.get('days',[]))}, seed_ctl={data.get('seed_ctl')}, seed_atl={data.get('seed_atl')}")
-                png = _charts.load_chart(data)
+                png = _charts.load_chart(data, coaching_level=coaching_level)
             elif chart_type == "powercurve":
                 png = _charts.power_curve_chart(
                     data.get("efforts", []),
@@ -631,7 +641,7 @@ def _load_chart_quick(token, chat_id, slug):
             "days": days,
         }
         log(f"load chart (quick): days={len(days)}, seed_ctl={seed_ctl}, seed_atl={seed_atl}")
-        png = _charts.load_chart(payload)
+        png = _charts.load_chart(payload, coaching_level=_profile_coaching_level(slug))
         if png:
             send_photo(token, chat_id, png)
             if seed_ctl is not None:
@@ -677,9 +687,9 @@ def _fitness_charts_quick(token, chat_id, slug):
 
         payload = {"today": today.strftime("%m-%d"), "data": data}
         log(f"fitness charts (quick): {len(data)} days")
-
-        png_fit = _charts.fitness_chart(payload)
-        png_form = _charts.form_chart(payload)
+        cl = _profile_coaching_level(slug)
+        png_fit = _charts.fitness_chart(payload, coaching_level=cl)
+        png_form = _charts.form_chart(payload, coaching_level=cl)
         if png_fit:
             send_photo(token, chat_id, png_fit)
         if png_form:
@@ -1154,7 +1164,7 @@ def _handle_drill(token, chat_id, data, message_id, athletes, config):
     response = call_claude(question, config, history, model=MODEL_SONNET,
                            system_prompt_file=files["system_prompt"],
                            athlete_name=athlete_name, context=context)
-    clean = process_charts(token, chat_id, response)
+    clean = process_charts(token, chat_id, response, slug=slug)
     if clean:
         send(token, chat_id, clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athlete))
     history.append({"user": question, "assistant": clean})
@@ -2113,7 +2123,7 @@ def main():
                                     system_prompt_file=files["system_prompt"],
                                     athlete_name=athlete_name, context=context,
                                 )
-                                clean = process_charts(token, chat_id, response)
+                                clean = process_charts(token, chat_id, response, slug=slug)
                                 if clean:
                                     send(token, chat_id,
                                          clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athletes[chat_id]),
@@ -2280,7 +2290,7 @@ def main():
                                        system_prompt_file=files["system_prompt"],
                                        athlete_name=athlete_name, context=context)
 
-            clean = process_charts(token, chat_id, response)
+            clean = process_charts(token, chat_id, response, slug=slug)
             final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
             if placeholder_id:
                 tg_post(token, "editMessageText", {

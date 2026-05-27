@@ -130,7 +130,7 @@ def notify(msg, chat_id):
         pass
 
 
-def _send_morning_load_chart(chat_id, slug, wellness_rows):
+def _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level="mid"):
     """Generate and send the training load chart (±8 days) as part of the morning brief."""
     try:
         import charts as _charts
@@ -212,7 +212,7 @@ def _send_morning_load_chart(chat_id, slug, wellness_rows):
             "seed_atl": seed_atl,
             "days": days,
         }
-        png = _charts.load_chart(payload)
+        png = _charts.load_chart(payload, coaching_level=coaching_level)
         if png:
             import tempfile, os
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
@@ -330,7 +330,7 @@ def run_athlete(slug, athlete_cfg):
     output = m.group(1).strip() if m else ""
     if output:
         notify(output, chat_id)
-        _send_morning_load_chart(chat_id, slug, wellness_rows)
+        _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level=coaching_level)
     # Write sentinel regardless — if Claude ran without error, don't retry even if output was empty
     if result.returncode == 0:
         sentinel.touch()
