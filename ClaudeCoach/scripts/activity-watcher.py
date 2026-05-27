@@ -19,6 +19,9 @@ TOOLS = "Read,Write,Bash"
 
 _WATER_SPORTS = {"sail", "watersport", "windsurf", "kitesurf", "kiteboard"}
 
+sys.path.insert(0, str(BASE / "lib"))
+from coaching_levels import level_block as _level_block
+
 
 def _pace_str(speed_ms: float) -> str:
     if not speed_ms:
@@ -114,8 +117,13 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None):
         " Line 3 = \"RPE and how did it feel?\""
     )
 
+    coaching_level = (profile or {}).get("coaching_level", "mid")
+
     return f"""\
 Check for new activities for {first_name} and stub them into the session log.
+
+{_level_block(coaching_level)}
+
 
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
@@ -357,7 +365,8 @@ def _check_test_reminders(adir: Path, chat_id: str, state: dict, state_file: Pat
 def _strava_description(first_name: str, sport: str, analysis: str,
                          plan_delta_raw: str | None, session_entry: dict | None,
                          laps: list | None = None, splits: list | None = None,
-                         segment_prs: list | None = None) -> str:
+                         segment_prs: list | None = None,
+                         coaching_level: str = "mid") -> str:
     """Call Claude to write a witty 3-line Strava description."""
     import re as _re
 
@@ -410,6 +419,26 @@ def _strava_description(first_name: str, sport: str, analysis: str,
     if segment_prs:
         prs_block = f"Segment PRs set: {', '.join(segment_prs)}\n"
 
+    if coaching_level == "beginner":
+        line2_instruction = (
+            "[one plain-English observation about how it went vs the aim. "
+            "No power, pace, or zone numbers — effort and feel only. "
+            "Encouraging, matter-of-fact British tone.]"
+        )
+    elif coaching_level == "pro":
+        line2_instruction = (
+            "[one dry, data-dense observation. For bike sessions include NP, IF, and zone split. "
+            "For runs include avg GAP and decoupling %. Use lap/split data where relevant. "
+            "Never include RPE. Deadpan British wit — lead with numbers.]"
+        )
+    else:  # mid
+        line2_instruction = (
+            "[one dry, understated observation about how it went vs the aim. "
+            "For bike sessions include NP (e.g. \"NP 218W\") and HR avg. Never include RPE. "
+            "Use lap/split data if it adds something specific. Deadpan British wit — "
+            "matter-of-fact, slightly wry, never gushing.]"
+        )
+
     prompt = f"""\
 Write a Strava activity description for {first_name}.
 
@@ -421,7 +450,7 @@ IMPORTANT: The "Coaching analysis" may contain auto-detected interval efforts fr
 
 Write exactly 3 lines, plain text, no markdown, no hashtags, no exclamation marks:
 Line 1 — "Aim: [one plain sentence on what the session was PLANNED to target — from the Planned block, not the analysis]"
-Line 2 — [one dry, understated observation about how it went vs the aim. For bike sessions always include NP (e.g. "NP 218W") and HR avg. Never include RPE. Use lap/split data if it adds something specific. Deadpan British wit — matter-of-fact, slightly wry, never gushing.]
+Line 2 — {line2_instruction}
 Line 3 — "ClaudeCoach" [append " 🏆" if any segment PRs were set]
 
 Examples of the right tone:
@@ -508,7 +537,7 @@ def _rename_strava(slug: str, icu_id: str, new_name: str) -> bool:
 
 def _strava_update(slug: str, icu_activity_id: str, analysis: str,
                    plan_delta_raw: str | None = None, session_entry: dict | None = None,
-                   chat_id: str = ""):
+                   chat_id: str = "", coaching_level: str = "mid"):
     """Write a coaching note to the Strava activity description. Silent on any error."""
     # Water sports: no description — rename handled separately
     if (session_entry or {}).get("sport", "").lower() in _WATER_SPORTS:
@@ -561,6 +590,7 @@ def _strava_update(slug: str, icu_activity_id: str, analysis: str,
         description = _strava_description(
             first_name, sport, analysis, plan_delta_raw, session_entry,
             laps=laps, splits=splits, segment_prs=segment_prs,
+            coaching_level=coaching_level,
         )
 
         sc.update_description(strava_id, description)
@@ -858,7 +888,9 @@ def check_athlete(slug, athlete_cfg):
             pass
 
     # Write coaching note to Strava activity description and store initial field hash
-    _strava_update(slug, activity_id, analysis, plan_delta_raw=plan_delta_raw, session_entry=new_entry, chat_id=chat_id)
+    coaching_level = profile.get("coaching_level", "mid")
+    _strava_update(slug, activity_id, analysis, plan_delta_raw=plan_delta_raw,
+                   session_entry=new_entry, chat_id=chat_id, coaching_level=coaching_level)
     if new_entry:
         import hashlib as _hl
         fields = "|".join(str(new_entry.get(f, "")) for f in ("rpe", "nutrition_g_carb", "injury_pain_during", "feel", "notes"))

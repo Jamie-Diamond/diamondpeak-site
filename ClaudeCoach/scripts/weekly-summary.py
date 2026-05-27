@@ -14,6 +14,7 @@ sys.path.insert(0, str(BASE / "lib"))
 
 from icu_api import IcuClient
 import recovery_score as rs
+from coaching_levels import level_block as _level_block
 
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 TG_CONFIG       = BASE / "telegram/config.json"
@@ -192,9 +193,13 @@ def run_summary(slug: str = "jamie") -> str:
             f"Use this for T1/T8 evaluation — it is already derived from the wellness data below.\n"
         )
 
+    coaching_level = profile.get("coaching_level", "mid")
+
     # -- Build prompt ----------------------------------------------------------
     prompt = f"""You are generating the weekly training summary for {first_name}'s {race_name} coaching system.
 All IcuSync data has been fetched and is embedded below. Do NOT call any fetch commands — work only from the data provided. Use Write and Bash only for the state-file update and git commit at the end.
+
+{_level_block(coaching_level)}
 {recovery_block}
 ---
 

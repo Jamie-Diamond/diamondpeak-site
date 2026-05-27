@@ -30,10 +30,17 @@ SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 
 BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
+sys.path.insert(0, str(BASE.parent / "lib"))
 try:
     import charts as _charts
 except Exception:
     _charts = None
+
+try:
+    from coaching_levels import level_block as _level_block
+except Exception:
+    def _level_block(level: str) -> str:  # type: ignore[misc]
+        return ""
 
 _whisper_model = None
 
@@ -1844,6 +1851,21 @@ def _load_persistent_rules(sp_file: Path) -> str:
     return ""
 
 
+def _system_prompt_with_level(sp_file: Path) -> str:
+    """Read system_prompt.txt and append the athlete's coaching level block."""
+    text = sp_file.read_text().strip()
+    profile_path = sp_file.parent / "profile.json"
+    if profile_path.exists():
+        try:
+            level = json.loads(profile_path.read_text()).get("coaching_level", "mid")
+            block = _level_block(level)
+            if block:
+                text = text + "\n\n" + block
+        except Exception:
+            pass
+    return text
+
+
 def _build_prompt(user_message, history, system_prompt, athlete_name, context,
                   persistent_rules=""):
     parts = [system_prompt, ""]
@@ -1877,7 +1899,7 @@ def call_claude(user_message, config, history, model=MODEL_SONNET,
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
     full_prompt = _build_prompt(
         user_message, history,
-        sp_file.read_text().strip(), athlete_name, context,
+        _system_prompt_with_level(sp_file), athlete_name, context,
         persistent_rules=_load_persistent_rules(sp_file),
     )
     try:
@@ -1901,7 +1923,7 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
     full_prompt = _build_prompt(
         user_message, history,
-        sp_file.read_text().strip(), athlete_name, context,
+        _system_prompt_with_level(sp_file), athlete_name, context,
         persistent_rules=_load_persistent_rules(sp_file),
     )
     accumulated = ""
@@ -1961,7 +1983,7 @@ def call_claude_streaming(token, chat_id, placeholder_id,
 def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNET,
                            system_prompt_file=None, athlete_name="Jamie", context=""):
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
-    system_prompt = sp_file.read_text().strip()
+    system_prompt = _system_prompt_with_level(sp_file)
 
     parts = [system_prompt, ""]
     persistent_rules = _load_persistent_rules(sp_file)

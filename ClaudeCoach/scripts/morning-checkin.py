@@ -14,11 +14,12 @@ LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "telegram"))
+from coaching_levels import level_block as _level_block
 
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid"):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -71,6 +72,8 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
 
     return f"""\
 You are generating the morning briefing for {first_name}'s training day.
+
+{_level_block(coaching_level)}
 {recovery_block}{wellness_block}
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
@@ -309,8 +312,10 @@ def run_athlete(slug, athlete_cfg):
         print(f"[{slug}] wellness not yet synced — will retry", file=sys.stderr)
         return
 
+    coaching_level = profile.get("coaching_level", "mid")
     prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
-                           wellness_line=wellness_line, heat_protocol=heat_protocol)
+                           wellness_line=wellness_line, heat_protocol=heat_protocol,
+                           coaching_level=coaching_level)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(

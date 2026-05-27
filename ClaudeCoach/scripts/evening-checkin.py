@@ -11,11 +11,13 @@ NOTIFY          = BASE / "telegram/notify.py"
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+sys.path.insert(0, str(BASE / "lib"))
+from coaching_levels import level_block as _level_block
 
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, injuries, pain_next_morning=0):
+def _build_prompt(slug, first_name, injuries, pain_next_morning=0, coaching_level="mid"):
     today = date.today().isoformat()
     # Ask the injury question only if pain_next_morning > 0 — if last morning score
     # was 0, the ankle is fine and we don't ask every single run.
@@ -26,6 +28,9 @@ def _build_prompt(slug, first_name, injuries, pain_next_morning=0):
 
     return f"""\
 Evening training log check for {first_name}.
+
+{_level_block(coaching_level)}
+
 
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint history --days 1
@@ -93,7 +98,8 @@ def run_athlete(slug, athlete_cfg):
         except Exception:
             pass
 
-    prompt = _build_prompt(slug, first_name, injuries, pain_next_morning)
+    coaching_level = profile.get("coaching_level", "mid")
+    prompt = _build_prompt(slug, first_name, injuries, pain_next_morning, coaching_level=coaching_level)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(

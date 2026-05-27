@@ -9,6 +9,8 @@ from datetime import date
 from pathlib import Path
 
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
+sys.path.insert(0, str(BASE / "lib"))
+from coaching_levels import level_block as _level_block
 PROJECT_DIR = str(BASE.parent)               # diamondpeak-site/
 CLAUDE      = shutil.which("claude") or "/usr/bin/claude"
 NOTIFY      = BASE / "telegram/notify.py"
@@ -29,12 +31,15 @@ def trim_log(path: Path, max_lines: int = 5000):
         pass
 
 
-def build_prompt(slug: str, name: str, race_name: str) -> str:
+def build_prompt(slug: str, name: str, race_name: str, coaching_level: str = "mid") -> str:
     today = date.today().isoformat()
     athlete_dir = BASE / "athletes" / slug
     first_name  = name.split()[0]
 
     return f"""You are running the daily session prescription for {name}'s {race_name} coaching system.
+
+{_level_block(coaching_level)}
+
 
 Step 1 — Pull live data via Bash (use today's date {today} for all calculations):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
@@ -130,7 +135,15 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         print(f"[{slug}] SKIP: no chat_id in athletes.json", file=sys.stderr)
         return None
 
-    prompt = build_prompt(slug, name, race_name)
+    coaching_level = "mid"
+    profile_path = BASE / "athletes" / slug / "profile.json"
+    if profile_path.exists():
+        try:
+            coaching_level = json.loads(profile_path.read_text()).get("coaching_level", "mid")
+        except Exception:
+            pass
+
+    prompt = build_prompt(slug, name, race_name, coaching_level=coaching_level)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_prescription_", delete=False, suffix=".txt"
