@@ -7,8 +7,9 @@ _BLOCKS = {
         "Coaching level: BEGINNER. "
         "Use effort-based language: easy, comfortable, moderate, hard, very hard. "
         "Heart rate (bpm and avg/max) is fine to include. "
-        "Do not reference power, pace per km, zone numbers, TSS, NP, IF, or any other training metrics. "
-        "Duration, distance, and HR are fine. Describe sessions in plain terms. "
+        "For running, pace (min/km or min/mile) is fine to include. "
+        "Do not reference power, zone numbers, TSS, NP, IF, or any other training metrics. "
+        "Duration, distance, HR, and run pace are fine. Describe sessions in plain terms. "
         "Tone: encouraging, jargon-free."
     ),
     "mid": (
