@@ -63,7 +63,7 @@
 - **2026-05-24 REST** — Run 60 min / Ride 90 min missed. Still unwell with cold (day 4 of illness). Correct call — continue monitoring HRV/RHR before committing Mon 25 May session.
 - **2026-05-25 GO** — Bike Z2 80 min: no rules fired, execute as planned. ATL 48.4, CTL 72.8 (TSB +24.4 — very fresh after 2 full rest days). HRV not yet synced; sleep not yet synced. Illness day 5 — plan includes contingency to cut to 60 min if cold symptoms persist and stop if HR drifts >150 without effort.
 - **2026-05-26 GO** — Z2 walk-run 45 min (run_easy): no rules fired, execute as planned. ATL 55.2, CTL 73.7 (TSB +18.6 — very fresh). HRV not yet synced; sleep not yet synced. First run after illness — walk-run 5:30×8 format, HR cap 150, stop-if-ankle->2/10 protocol in force.
-- **2026-05-27 GO** — Bike Z2 80 min: no rules fired, execute as planned. ATL 60.0, CTL 74.4 (TSB +14.4 — fresh). HRV not yet synced; sleep not yet synced. Trainer ride Marseille — Z2 HR 133–146, cadence 85–95. Illness day 7 — monitor HR drift vs Monday; lower HR at same effort is a positive recovery signal.
+- **2026-05-27 GO** — Bike Z2 80 min: T6/T5/T7 fire (see watchdog flags) — session still GO. ATL 60.0, CTL 74.4 (TSB +14.4 — fresh). HRV not yet synced; sleep not yet synced. Trainer ride Marseille — Z2 HR 133–146, cadence 85–95. Illness day 7 — monitor HR drift vs Monday; lower HR at same effort is a positive recovery signal. T9: end-May actions (FTP/PH/fit) due Sat 31 — action needed on return.
 
 ## Body weight
 
@@ -162,6 +162,11 @@
 - **2026-05-26 — T3 (Tier 1):** HRV trend -7.3% over 7 days (41 on 05-19 → 38 on 05-25). Borderline but above threshold; trend improving vs prior week's -17.8–19.5% readings. RHR 53–54 (within baseline 50–54). Illness resolving. Monitor today's post-ride HRV; if recovers ≥40, downgrade to informational.
 - **2026-05-26 — T5 (Tier 1):** 2 planned sessions still in rolling 7-day window (05-24: Run 60 min + Ride 90 min, both missed — illness day 4). Same carry-over from 05-25. Illness-justified; TSB +18, athlete recovering. Will clear naturally when 05-24 exits the 7-day window.
 - **2026-05-26 — T6 (Tier 1):** Aerobic decoupling 6.86% on 05-25 Marseille Road Cycling (IF 0.69, NP 218 W, 110 min, avg HR 130, avg temp 25°C). Exceeds 5% cap. Context: first ride post-illness (day 5 of cold), warm hilly terrain (715 m gain, 21–29°C), return-to-training fatigue. Single session — monitor next Z2 ride decoupling before drawing durability conclusions.
+
+- **2026-05-27 — T6 (Tier 1):** Aerobic decoupling 8.16% on 05-26 Marseille Road Cycling (NP 218 W, IF 0.69, avg HR 126, 113 min, avg temp 25°C). Second consecutive Z2 ride above 5% cap (05-25: 6.86%, 05-26: 8.16%). Context: post-illness return sessions, hilly outdoor terrain (695 m gain), heat. Two consecutive >5% readings warrants monitoring; if next Z2 ride in controlled conditions also >5%, flag aerobic durability regression.
+- **2026-05-27 — T5 (Tier 1):** 2 planned sessions still in rolling 7-day window: 05-24 Run 60 min + Ride 90 min, both missed (illness day 4). Carryover from 05-25/05-26 watchdog. Will exit window on 31 May. Note: 05-26 prescribed run substituted by bike (regatta day — J70 Corinthian Worlds Race 1; Marseille ad-hoc block, play by ear).
+- **2026-05-27 — T7 (Tier 1):** Heat dose 2 sessions in last 14 days (05-25 outdoor ride 110 min @ avg 25°C; 05-26 outdoor ride 113 min @ avg 25°C) vs target ≥3. The 05-10 hot bath (25 min @ 45°C) has now exited the 14-day window. Marseille window closes Fri 29 May — need 1 more session Thu 28 or Fri 29. Sat 30 = travel home.
+- **2026-05-27 — T9 (Tier 2):** Three end-May actions now 4 days from due date (2026-05-31, Sat, travel/return home): (1) FTP retest — no power meter in Marseille, earliest window home 1–4 Jun; extend due date to 2026-06-04. (2) Book Precision Hydration sweat-sodium test — no booking made. (3) TT bike fit appointment — no booking made. Book PH test and bike fit before or immediately after return Sat 31 May.
 
 ## Notes for Claude
 
