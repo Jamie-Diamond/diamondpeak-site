@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i151850847",
+    "date": "2026-05-27",
+    "name": "Indoor Cycling",
+    "sport": "VirtualRide",
+    "tss": 54,
+    "duration_min": 70,
+    "distance_km": 30.4,
+    "avg_power": 124,
+    "norm_power": 129,
+    "avg_hr": 170,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-27T08:00:00",
+    "stub": true
+  },
+  {
     "activity_id": "i151530057",
     "date": "2026-05-26",
     "name": "Cardio",
