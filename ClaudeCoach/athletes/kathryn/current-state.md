@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-05-27
+Last updated: 2026-05-28
 
 ## Injuries / Niggles
 None
@@ -33,6 +33,7 @@ None
 - 2026-05-25: run_long 75min — GO, execute as planned (no rules fired). HRV null (not yet synced), sleep null (not yet synced); ATL 47.6, CTL 50.1. Note: today is Monday — KB (45min) + run (75min) = 120min exceeds 90min daily cap (open action flagged).
 - 2026-05-26: Rest day — no session in calendar (Tuesday: standing mobility class only; events endpoint returned empty). ATL 39.6, CTL 48.5; form +8.9. HRV null (not yet synced); last reading 65 (May 25) — highest in 2+ weeks, recovery trending strongly upward.
 - 2026-05-27: bike_race_pace 90min — GO, execute as planned (no rules fired). HRV null (not yet synced); last reading 37 (May 26, notable single-day dip from 65 on May 25). Sleep null (not yet synced). ATL 45.9, CTL 49.4; form +3.6.
+- 2026-05-28: run_quality 60min — GO, execute as planned (no rules fired). HRV null (not yet synced); last reading 51 (May 27). Sleep null (not yet synced); last reading 6.60h (May 27). ATL 48.0, CTL 49.7; form +1.7.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.

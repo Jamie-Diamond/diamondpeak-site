@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-05-27
+## Last updated: 2026-05-28
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -64,6 +64,7 @@
 - **2026-05-25 GO** — Bike Z2 80 min: no rules fired, execute as planned. ATL 48.4, CTL 72.8 (TSB +24.4 — very fresh after 2 full rest days). HRV not yet synced; sleep not yet synced. Illness day 5 — plan includes contingency to cut to 60 min if cold symptoms persist and stop if HR drifts >150 without effort.
 - **2026-05-26 GO** — Z2 walk-run 45 min (run_easy): no rules fired, execute as planned. ATL 55.2, CTL 73.7 (TSB +18.6 — very fresh). HRV not yet synced; sleep not yet synced. First run after illness — walk-run 5:30×8 format, HR cap 150, stop-if-ankle->2/10 protocol in force.
 - **2026-05-27 GO** — Bike Z2 80 min: T6/T5/T7 fire (see watchdog flags) — session still GO. ATL 60.0, CTL 74.4 (TSB +14.4 — fresh). HRV not yet synced; sleep not yet synced. Trainer ride Marseille — Z2 HR 133–146, cadence 85–95. Illness day 7 — monitor HR drift vs Monday; lower HR at same effort is a positive recovery signal. T9: end-May actions (FTP/PH/fit) due Sat 31 — action needed on return.
+- **2026-05-28 GO** — Z2 walk-run 50 min: no rules fired, execute as planned. CTL 73.9, ATL 58.1, TSB +15.8 — fresh. HRV not yet synced; sleep not yet synced. Walk-run 5:30 × 9 reps (~49 min), HR cap 150, stop-if-ankle->2/10 in force. Ankle monitor: Wed 27 May next-morning pain not yet logged — if >0.5/10, plan says hold to 45 min. Last logged during-session pain = 1/10 (Wed 27 May). T7: last Marseille heat session window is today or Fri 29 May — 1 more session needed to reach ≥3 in last 14 days.
 
 ## Body weight
 
