@@ -169,6 +169,11 @@
 - **2026-05-27 — T7 (Tier 1):** Heat dose 2 sessions in last 14 days (05-25 outdoor ride 110 min @ avg 25°C; 05-26 outdoor ride 113 min @ avg 25°C) vs target ≥3. The 05-10 hot bath (25 min @ 45°C) has now exited the 14-day window. Marseille window closes Fri 29 May — need 1 more session Thu 28 or Fri 29. Sat 30 = travel home.
 - **2026-05-27 — T9 (Tier 2):** Three end-May actions now 4 days from due date (2026-05-31, Sat, travel/return home): (1) FTP retest — no power meter in Marseille, earliest window home 1–4 Jun; extend due date to 2026-06-04. (2) Book Precision Hydration sweat-sodium test — no booking made. (3) TT bike fit appointment — no booking made. Book PH test and bike fit before or immediately after return Sat 31 May.
 
+- **2026-05-28 — T5 (Tier 1, carryover):** 2 planned sessions still in rolling 7-day window (05-24: Run 60 min + Ride 90 min, both missed — illness day 4). Illness-justified. CTL 73.9, TSB +15.8. Will clear when 05-24 exits the window on Sat 31 May.
+- **2026-05-28 — T6 (Tier 1, carryover):** Aerobic decoupling 6.86% on 05-25 Marseille ride (IF 0.69, 110 min, avg HR 130, 25°C); 8.16% on 05-26 Marseille ride (IF 0.69, 113 min, avg HR 126, 25°C). Both still in 7-day window. Two consecutive >5% readings in post-illness return rides on hilly outdoor terrain in heat. Monitor next controlled Z2 ride before drawing durability conclusions.
+- **2026-05-28 — T7 (Tier 1):** Heat dose 2 sessions in last 14 days (05-25: outdoor ride 110 min @ avg 25°C; 05-26: outdoor ride 113 min @ avg 25°C) vs target ≥3. 05-10 hot bath now outside 14-day window. Last Marseille session window is today Thu 28 or Fri 29 May — need 1 more to reach ≥3. Sat 30 = travel home.
+- **2026-05-28 — T9 (Tier 2):** Three end-May actions now 3 days from due date (Sat 2026-05-31, return-home day): (1) FTP retest — no power meter in Marseille, earliest home window 1–4 Jun; due date should be extended to 2026-06-04. (2) Book Precision Hydration sweat-sodium test — no booking made. (3) TT bike fit appointment — no booking made. Action PH test booking and bike fit appointment on return Sat 31 May or earlier.
+
 ## Notes for Claude
 
 Lines 1–4 of this file are the in-scope/out-of-scope rule. Honour it. If a prompt asks for a wellness-1–10 type input that isn't in scope, don't request it; substitute objective signals from IcuSync.
