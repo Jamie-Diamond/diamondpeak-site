@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i152155048",
+    "date": "2026-05-28",
+    "name": "Wandsworth - Thu 28 May - Tempo run 60min",
+    "sport": "Run",
+    "tss": 80,
+    "duration_min": 62,
+    "distance_km": 10.28,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 177,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-05-28T07:00:00",
+    "stub": true
+  },
+  {
     "activity_id": "i151850847",
     "date": "2026-05-27",
     "name": "Indoor Cycling",
@@ -44,7 +65,7 @@
   {
     "activity_id": "i151300071",
     "date": "2026-05-25",
-    "name": "Help please \u2b07\ufe0f",
+    "name": "Help please ⬇️",
     "sport": "Run",
     "tss": 64,
     "duration_min": 53,
@@ -95,7 +116,7 @@
     "norm_power": 133,
     "avg_hr": 143,
     "rpe": null,
-    "feel": "good \u2014 felt good, actively controlled heart rate",
+    "feel": "good — felt good, actively controlled heart rate",
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
     "nutrition_g_carb": 27,
@@ -107,7 +128,7 @@
   {
     "activity_id": "i150756848",
     "date": "2026-05-23",
-    "name": "Test \ud83e\udd12",
+    "name": "Test 🤒",
     "sport": "Ride",
     "tss": 55,
     "duration_min": 76,
@@ -128,7 +149,7 @@
   {
     "activity_id": "i150756848",
     "date": "2026-05-23",
-    "name": "Test \ud83e\udd12",
+    "name": "Test 🤒",
     "sport": "Ride",
     "tss": 55,
     "duration_min": 76,
@@ -163,7 +184,7 @@
     "injury_pain_next_morning": null,
     "nutrition_g_carb": 20,
     "hydration_ml": null,
-    "notes": "Pre-ride: half banana + toast (~37g carb). In-ride: 1x Kind bar (nuts + syrup, 225 kcal, ~20g carb) \u2014 under-fuelled, needed ~90-100g. Post-ride: toast + 30g protein shake (~20g carb), smoked salmon sandwich (40g carb), overnight protein oats (36g carb). Total post-ride carb ~96g. No food until 5pm.",
+    "notes": "Pre-ride: half banana + toast (~37g carb). In-ride: 1x Kind bar (nuts + syrup, 225 kcal, ~20g carb) — under-fuelled, needed ~90-100g. Post-ride: toast + 30g protein shake (~20g carb), smoked salmon sandwich (40g carb), overnight protein oats (36g carb). Total post-ride carb ~96g. No food until 5pm.",
     "logged_at": "2026-05-16T09:30:00",
     "stub": true
   },
