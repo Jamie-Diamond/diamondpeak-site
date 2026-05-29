@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-05-28
+Last updated: 2026-05-29
 
 ## Injuries / Niggles
 None
@@ -34,6 +34,7 @@ None
 - 2026-05-26: Rest day — no session in calendar (Tuesday: standing mobility class only; events endpoint returned empty). ATL 39.6, CTL 48.5; form +8.9. HRV null (not yet synced); last reading 65 (May 25) — highest in 2+ weeks, recovery trending strongly upward.
 - 2026-05-27: bike_race_pace 90min — GO, execute as planned (no rules fired). HRV null (not yet synced); last reading 37 (May 26, notable single-day dip from 65 on May 25). Sleep null (not yet synced). ATL 45.9, CTL 49.4; form +3.6.
 - 2026-05-28: run_quality 60min — GO, execute as planned (T4, T6 fired). HRV null (not yet synced); last reading 51 (May 27). Sleep null (not yet synced); last reading 6.60h (May 27). ATL 48.0, CTL 49.7; form +1.7.
+- 2026-05-29: swim CSS sets 2km — GO, execute as planned (no rules fired). HRV null (not yet synced); last reading 50 (May 28), 7d avg 53.4, trend -6.4% (T3 clear). Sleep null (not yet synced); last reading 6.98h (May 28). ATL 42.7, CTL 48.7; form +6.1.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
@@ -50,6 +51,7 @@ None
 - 2026-05-26 (watchdog): T3 clear — HRV improving: 7d avg (May 20–25, 6 readings) = 55.0 vs prior 7d avg (May 13–19) = 57.1 = −3.7% (well under 7% threshold). Last reading 65 (May 25). T4 fired: May 21 = 6.83h, May 22 = 6.77h, May 23 = 6.63h — 3 days <7h in last 7 (May 24 = 8.90h, May 25 = 7.95h — trend clearly reversing). T5 fired: May 21 run_easy and May 22 swim still unrecorded in ICU (0 ATL) — illness context; window clears ~2026-05-28. T6 clear (May 23 decoupling 4.3%, May 24 decoupling 0.6%). T7 + T8 fired (see Heat section). ATL 39.6, CTL 48.5; rest day (mobility class only).
 - 2026-05-27 (watchdog): T3 re-fired — HRV null (May 27 not yet synced); 7d avg (May 20–26) = 52.4 vs prior 7d avg (May 13–19) = 57.1 = −8.2% (threshold 7%). Last reading 37 (May 26) — notable single-day drop from 65 (May 25). T4 re-fired: May 21 = 6.83h, May 22 = 6.77h, May 23 = 6.63h — 3 days <7h; last 3 nights all ≥7h, trend clearly reversing. T5 re-fired: May 21 run_easy and May 22 swim unrecorded in ICU — window clears ~2026-05-28. T7 + T8 fired (see Heat section). ATL 45.9, CTL 49.4; form +3.6. bike_race_pace 90min today — GO.
 - 2026-05-28 (watchdog): T3 clear — HRV improving: 7d avg (May 22–27, 6 readings) = 54.0 vs prior 7d avg (May 15–21) = 50.9 = +6.1% (threshold not met). T4 re-fired: May 22 = 6.77h, May 23 = 6.63h, May 27 = 6.60h — 3 days <7h in last 7; May 27 is new data (dip from prior improving trend). T5 clear: May 21 run_easy outside rolling window; only May 22 swim unrecorded (1 session, below threshold of 2). T6 fired: May 27 VirtualRide (i151850847) decoupling 10.65% (IF 0.68 < 0.75 threshold met); note icu_power_hr_z2_mins = 4 only — structured session with embedded 15min threshold interval likely inflates decoupling metric; signal to watch but interpret with caution. ATL 48.0, CTL 49.7; form +1.7. run_quality 60min today — GO.
+- 2026-05-29 (watchdog): T3 clear — HRV: last reading 50 (May 28); 7d avg (May 22–28) = 53.4 vs prior 7d avg (May 15–21) = 50.9 = +4.9% (threshold not met). T4 assessment: May 23 = 6.63h, May 27 = 6.60h, May 28 = 6.98h — 3 days <7h; trend mixed but no worsening. T5 clear: no unrecorded sessions in rolling window. No T6 flag. ATL 42.7, CTL 48.7; form +6.1. swim CSS sets 2km today — GO.
 
 ## Heat Acclimatisation
 
@@ -65,6 +67,7 @@ None
 - 2026-05-25: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 10. Race 118 days away; CTL 50.1, continuing post-illness recovery. Run_long completed today (ctlLoad 79). Heat sessions must begin immediately on confirmation of recovery — urgency critical.
 - 2026-05-26: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 117 days away; CTL 48.5, ATL 39.6, form +8.9. HRV improving (65 May 25, highest in 2+ weeks). Rest day — heat sessions must begin this week without further delay.
 - 2026-05-27: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 116 days away; CTL 49.4, ATL 45.9, form +3.6. bike_race_pace 90min today. HRV 37 (May 26 — single-day dip; cause unclear). Heat sessions critically overdue — must begin immediately.
+- 2026-05-29: T7 + T8 status — heat-log.json not re-checked today (swim session; heat acclimatisation via post-session sauna/hot bath remains outstanding). Race 113 days away; CTL 48.7, ATL 42.7, form +6.1. Heat sessions critically overdue.
 
 ## Open Actions
 - [x] Plan generated through 2026-06-07 (2026-05-24)
