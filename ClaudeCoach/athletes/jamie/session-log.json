@@ -14,11 +14,11 @@
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
-    "hydration_ml": null,
-    "notes": null,
+    "nutrition_g_carb": 95,
+    "hydration_ml": 1200,
+    "notes": "2 Decathlon date bars (~70g carbs) + handful Haribo (~25g). 1.2L fluid. ~53g/hr over 107 min.",
     "logged_at": "2026-05-29T09:00:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i152291882",
