@@ -174,6 +174,8 @@
 - **2026-05-28 — T7 (Tier 1):** Heat dose 2 sessions in last 14 days (05-25: outdoor ride 110 min @ avg 25°C; 05-26: outdoor ride 113 min @ avg 25°C) vs target ≥3. 05-10 hot bath now outside 14-day window. Last Marseille session window is today Thu 28 or Fri 29 May — need 1 more to reach ≥3. Sat 30 = travel home.
 - **2026-05-28 — T9 (Tier 2):** Three end-May actions now 3 days from due date (Sat 2026-05-31, return-home day): (1) FTP retest — no power meter in Marseille, earliest home window 1–4 Jun; due date should be extended to 2026-06-04. (2) Book Precision Hydration sweat-sodium test — no booking made. (3) TT bike fit appointment — no booking made. Action PH test booking and bike fit appointment on return Sat 31 May or earlier.
 
+- **2026-05-29 GO** — Bike Z2 85 min: no rules fired, execute as planned. CTL 76.4, ATL 71.8, TSB +4.6 — mildly fresh. HRV not yet synced (fallback 0.0 trend); sleep not yet synced. RHR 55 (slightly above 50–54 baseline — single data point, not actionable). Last Marseille trainer session of the block — keep controlled; long ride Sun 31 May (home) is the key session. T7: heat dose still 2/3 target — indoor trainer session will not count toward heat protocol. Last outdoor window was today; if session can move outdoors in Marseille warmth it would help clear T7, but plan explicitly calls for trainer.
+
 ## Notes for Claude
 
 Lines 1–4 of this file are the in-scope/out-of-scope rule. Honour it. If a prompt asks for a wellness-1–10 type input that isn't in scope, don't request it; substitute objective signals from IcuSync.
