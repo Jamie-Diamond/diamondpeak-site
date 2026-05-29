@@ -55,6 +55,10 @@ body_battery = client.get_body_battery("2026-05-27")
 ```
 Store tokens after login (client exports `garth` session tokens — persist as JSON in athlete folder to avoid re-auth on every run).  
 Use this to give the morning briefing HRV/sleep data *immediately* at boot, before Garmin → ICU sync completes.  
+**Security — pin the package version:** credentials go directly to `connect.garmin.com` over HTTPS; the library has no third-party server. The only realistic leak vector is a supply chain attack via a malicious PyPI update. Mitigate by pinning to a specific reviewed version and only upgrading intentionally:
+```
+pip install garminconnect==<version>   # pin — do NOT pip install --upgrade blindly
+```
 **Risk:** unofficial — Garmin can break it with a site update. Acceptable for 3 athletes; not for a commercial product.
 
 #### 1b — Writing workouts to Garmin device (official, apply when ready)
