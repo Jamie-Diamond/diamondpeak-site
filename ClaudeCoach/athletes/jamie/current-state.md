@@ -186,6 +186,10 @@
 - **2026-05-30 — T6 (Tier 1):** Aerobic decoupling >5% on 4 Z2-classified rides in last 7 days: 05-25 (6.86%, IF 0.69, 110 min, 25°C), 05-26 (8.16%, IF 0.69, 113 min, 25°C), 05-28 (17.7%, IF 0.75, 154 min, 23.8°C), 05-29 (8.11%, IF 0.72, 107 min, 24°C). Context: all post-illness return rides on hilly outdoor terrain in heat; interval structure (VI 1.33 on 05-29) drove the higher readings. Four consecutive flagged rides — monitor first controlled Z2 ride at home in stable conditions before drawing aerobic durability conclusions.
 - **2026-05-30 — T9 (Tier 2):** Three end-May open actions due tomorrow (2026-05-31, return-home day) all pending: (1) FTP retest — no power meter in Marseille; extend due date to 2026-06-04, earliest home window. (2) Book Precision Hydration sweat-sodium test — still no booking made. (3) TT bike fit appointment — still no booking made. Also: ISM saddle order due 2026-06-06 — still pending. Action FTP date extension + PH test booking + bike fit appointment immediately on return.
 
+## Plan changes
+
+- 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
+
 ## Notes for Claude
 
 Lines 1–4 of this file are the in-scope/out-of-scope rule. Honour it. If a prompt asks for a wellness-1–10 type input that isn't in scope, don't request it; substitute objective signals from IcuSync.
