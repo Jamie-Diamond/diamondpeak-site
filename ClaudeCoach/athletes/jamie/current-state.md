@@ -182,6 +182,10 @@
 - **2026-05-29 — T5 (Tier 1, carryover):** 2 planned sessions still in rolling 7-day window (05-24: Run 60 min + Ride 90 min, both missed — illness day 4). Will clear naturally when 05-24 exits the 7-day window on Sat 31 May. CTL 76.4, TSB +4.6.
 - **2026-05-29 — T7 CLEARED:** Heat dose = 3 sessions in last 14 days (05-25: 110 min @ 25°C; 05-26: 113 min @ 25°C; 05-28: 154 min @ 23.8°C). Target of ≥3 reached for the first time. T7 and T8 both clear as of today.
 
+- **2026-05-30 — T5 (Tier 1, carryover):** 2 planned sessions in rolling 7-day window (05-24: Run 60 min + Ride 90 min, both missed — illness day 4). Clears naturally on 05-31 when 05-24 exits the window. CTL 77.1, ATL 74.6, TSB +2.5.
+- **2026-05-30 — T6 (Tier 1):** Aerobic decoupling >5% on 4 Z2-classified rides in last 7 days: 05-25 (6.86%, IF 0.69, 110 min, 25°C), 05-26 (8.16%, IF 0.69, 113 min, 25°C), 05-28 (17.7%, IF 0.75, 154 min, 23.8°C), 05-29 (8.11%, IF 0.72, 107 min, 24°C). Context: all post-illness return rides on hilly outdoor terrain in heat; interval structure (VI 1.33 on 05-29) drove the higher readings. Four consecutive flagged rides — monitor first controlled Z2 ride at home in stable conditions before drawing aerobic durability conclusions.
+- **2026-05-30 — T9 (Tier 2):** Three end-May open actions due tomorrow (2026-05-31, return-home day) all pending: (1) FTP retest — no power meter in Marseille; extend due date to 2026-06-04, earliest home window. (2) Book Precision Hydration sweat-sodium test — still no booking made. (3) TT bike fit appointment — still no booking made. Also: ISM saddle order due 2026-06-06 — still pending. Action FTP date extension + PH test booking + bike fit appointment immediately on return.
+
 ## Notes for Claude
 
 Lines 1–4 of this file are the in-scope/out-of-scope rule. Honour it. If a prompt asks for a wellness-1–10 type input that isn't in scope, don't request it; substitute objective signals from IcuSync.
