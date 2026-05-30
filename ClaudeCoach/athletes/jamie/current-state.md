@@ -18,7 +18,6 @@
 
 | Dates | Location | Training access | Notes |
 |---|---|---|---|
-| 18–22 May | Travel (UK, work) | Run + swim only | No bike for 5 days |
 | 23 May | Travel day → Marseille | Rest | Flight Sat |
 | 24–30 May | Marseille (not a camp — work/personal) | Bike (trainers) + run — no swims | **Nothing long** — alternating 70–90 min cycles / 30–60 min runs, cycle/run/cycle pattern. Swims dropped for this block. Sat 30 = rest / travel home. |
 | 31 May | Home | Long ride | Plan updated 2026-05-23 — long ride moved from rest to Sun 31 (back home) |
