@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-05-29
+Last updated: 2026-05-30
 
 ## Injuries / Niggles
 None
@@ -35,6 +35,7 @@ None
 - 2026-05-27: bike_race_pace 90min — GO, execute as planned (no rules fired). HRV null (not yet synced); last reading 37 (May 26, notable single-day dip from 65 on May 25). Sleep null (not yet synced). ATL 45.9, CTL 49.4; form +3.6.
 - 2026-05-28: run_quality 60min — GO, execute as planned (T4, T6 fired). HRV null (not yet synced); last reading 51 (May 27). Sleep null (not yet synced); last reading 6.60h (May 27). ATL 48.0, CTL 49.7; form +1.7.
 - 2026-05-29: swim CSS sets 2km — GO, execute as planned (no rules fired). HRV null (not yet synced); last reading 50 (May 28), 7d avg 53.4, trend -6.4% (T3 clear). Sleep null (not yet synced); last reading 6.98h (May 28). ATL 42.7, CTL 48.7; form +6.1.
+- 2026-05-30: Rest day — no session in calendar (events endpoint returned empty). ATL 41.5, CTL 48.5; form +7.0. HRV null (not yet synced); last reading 62 (May 29), 7d avg 54.3.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
