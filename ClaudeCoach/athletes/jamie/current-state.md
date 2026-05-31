@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-05-28
+## Last updated: 2026-05-31
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -175,6 +175,8 @@
 
 - **2026-05-29 GO** — Bike Z2 85 min: no rules fired, execute as planned. CTL 76.4, ATL 71.8, TSB +4.6 — mildly fresh. HRV not yet synced (fallback 0.0 trend); sleep not yet synced. RHR 55 (slightly above 50–54 baseline — single data point, not actionable). Last Marseille trainer session of the block — keep controlled; long ride Sun 31 May (home) is the key session. T7: heat dose still 2/3 target — indoor trainer session will not count toward heat protocol. Last outdoor window was today; if session can move outdoors in Marseille warmth it would help clear T7, but plan explicitly calls for trainer.
 - **2026-05-30 GO (conditional)** — Travel day: Z2 walk-run 45 min (5:30 × 8 reps) if already home / not flying Sat; DROP if flying Sat (current-state.md flags Sat 30 = rest/travel home from Marseille). No modulation rules fired: CTL 77.1, ATL 74.6, TSB +2.5 — near-neutral. HRV not synced; sleep not synced. Walk-run protocol (5:30 min run / 1 min walk × 8 reps, ~45 min total), ankle stop-if->2/10 in force. Ankle last logged 1/10 during Wed 27 May run.
+
+- **2026-05-31 GO** — Long Z2 ride 120 min (bike_z2): no rules fired, execute as planned. CTL 75.5, ATL 66.0, TSB +9.5 — fresh. HRV trend -17.9% (last reading HRV 33 on 05-30 vs 7d avg 40.2) — borderline but session is Z2 only; no intensity modulation warranted. Sleep last night not yet synced (wearable hasn't uploaded). T6 (ongoing): first controlled Z2 ride at home in stable conditions — monitor aerobic decoupling vs first/last 30 min (target <15%); this ride is the key diagnostic after 4 consecutive >5% Marseille readings. Planned escape valve in session description: cap at 90 min if it feels laboured. T9: three open actions were due today (FTP retest, PH sweat test, bike fit) — FTP due date extended to 2026-06-04 (no power meter in Marseille); PH test and bike fit still pending action.
 
 - **2026-05-29 — T9 (Tier 2):** Three end-May actions 2 days from due date (Sat 2026-05-31, return-home day): (1) FTP retest — no power meter in Marseille; extend due date to 2026-06-04 (earliest home window); action on return. (2) Book Precision Hydration sweat-sodium test — still no booking made. (3) TT bike fit appointment — still no booking made. PH test booking + bike fit must be actioned Sat 31 May or immediately after return.
 - **2026-05-29 — T6 (Tier 1):** Aerobic decoupling 17.7% on 05-28 "Spicy climb" Marseille ride (NP 236 W, IF 0.747, 154 min, avg HR 133, VI 1.27, 1138m elevation, 23.8°C avg temp). Context: heavily surged session with structured interval efforts (281–285 W), VI 1.27, hilly outdoor terrain — decoupling driven primarily by interval structure/terrain, not aerobic ceiling failure. However, third consecutive Z2-classified ride >5% decoupling (05-25: 6.86%, 05-26: 8.16%, 05-28: 17.7%). Monitor next controlled Z2 ride in stable conditions; if >5% persists, flag aerobic durability regression.
