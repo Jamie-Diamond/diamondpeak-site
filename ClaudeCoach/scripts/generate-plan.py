@@ -43,7 +43,38 @@ def load_profile(slug: str) -> dict:
 
 
 def build_prompt(slug: str, cfg: dict, profile: dict) -> str:
-    today     = date.today().isoformat()
+    from datetime import timedelta
+    _today      = date.today()
+    today       = _today.isoformat()
+    today_dow   = _today.strftime("%A")
+    _days_to_mon = (7 - _today.weekday()) % 7 or 7
+    _next_mon   = _today + timedelta(days=_days_to_mon)
+    next_monday = _next_mon.isoformat()
+    date_grid_lines = []
+    for i in range(14):
+        d = _next_mon + timedelta(days=i)
+        date_grid_lines.append(f"  {d.isoformat()} = {d.strftime('%A')}")
+    date_grid_str = "\n".join(date_grid_lines)
+    end_35      = (_today + timedelta(days=35)).isoformat()
+
+    # Phase / week calculation from athletes.json
+    plan_start_str = cfg.get("plan_start", "2026-04-27")
+    try:
+        from datetime import date as _d
+        plan_start_date = _d.fromisoformat(plan_start_str)
+    except Exception:
+        from datetime import date as _d
+        plan_start_date = _d(2026, 4, 27)
+    weeks_elapsed = max(1, (_next_mon - plan_start_date).days // 7 + 1)
+
+    ctl_targets  = cfg.get("ctl_targets", {})
+    ctl_race_min = ctl_targets.get("race_min", 75)
+    phase_tss_cfg = cfg.get("phase_tss", {})
+    base_end_wk  = phase_tss_cfg.get("base_end_week", 6)
+    build_end_wk = phase_tss_cfg.get("build_end_week", 10)
+    spec_end_wk  = phase_tss_cfg.get("specific_end_week", 14)
+    peak_end_wk  = phase_tss_cfg.get("peak_end_week", 17)
+
     athlete_dir = BASE / "athletes" / slug
 
     name       = cfg.get("name", slug)
@@ -51,19 +82,18 @@ def build_prompt(slug: str, cfg: dict, profile: dict) -> str:
     race_date  = profile.get("race_date")  or cfg.get("race_date", "")
     ftp        = profile.get("ftp_watts")
 
-    # Derive today+35 for events window
-    from datetime import timedelta
-    end_35 = (date.today() + timedelta(days=35)).isoformat()
-
     ftp_note = f"\nAthlete FTP from profile: {ftp} W" if ftp else ""
 
     is_triathlete = bool(profile.get("swim_css_per_100m") or profile.get("run_threshold_pace_per_km"))
 
     if is_triathlete:
-        phase_milestones = """    End of Base     (week 6):  >= 75 CTL
-    End of Build    (week 10): >= 85 CTL
-    End of Specific (week 14): >= 95 CTL
-    End of Peak     (week 17): >= 100 CTL"""
+        phase_milestones = (
+            f"    Plan week: {weeks_elapsed} (plan start {plan_start_str})\n"
+            f"    End of Base     (week {base_end_wk}):  >= {round(ctl_race_min * 0.73)} CTL\n"
+            f"    End of Build    (week {build_end_wk}): >= {round(ctl_race_min * 0.88)} CTL\n"
+            f"    End of Specific (week {spec_end_wk}): >= {round(ctl_race_min * 0.97)} CTL\n"
+            f"    End of Peak     (week {peak_end_wk}): >= {ctl_race_min} CTL (race target)"
+        )
         phase_tss = """  Week 1-6   (Base):     350-500 TSS/wk, focus Z2 bike volume + aerobic swim + easy run
   Week 7-10  (Build):    450-600 TSS/wk, add threshold bike work, extend long run
   Week 11-14 (Specific): 550-720 TSS/wk, race-pace intervals, brick sessions
@@ -107,6 +137,15 @@ def build_prompt(slug: str, cfg: dict, profile: dict) -> str:
     return f"""You are generating the rolling 2-week training plan for {name}'s {race_name} coaching system.
 {ftp_note}
 
+## DATE ANCHOR — Python-computed, authoritative
+Today       : {today} ({today_dow})
+Next Monday : {next_monday} (planning window start — always a Monday)
+Current plan week: {weeks_elapsed} (plan started {plan_start_str})
+14-day date grid (use for ALL session names — never guess the day):
+{date_grid_str}
+RULE: every session name must include the day-of-week from this grid.
+If the profile endpoint current_date_local disagrees with {today}, flag it and use {today}.
+
 Step 1 — Pull live data via Bash (use today's date {today} for all calculations):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint fitness --days 14 --newest {end_35}
@@ -145,7 +184,7 @@ Step 3b — Trajectory check (use fitness endpoint forward projection):
     -> set pre_event_taper = true: cap WEEK 2 TSS at BOTTOM of phase range regardless of trajectory_status
 
 Step 4 — Determine phase and TSS target:
-- Week number = ceil((Monday date - plan_start_date) / 7), where plan_start_date is from athletes.json plan_start field if present, otherwise use 2026-04-27 as default.
+- Current plan week: {weeks_elapsed} (pre-computed from plan start {plan_start_str} and next Monday {next_monday}). Do NOT recompute.
 - Phase and TSS ranges:
 {phase_tss}
 - Apply trajectory_status from Step 3b to select the TSS target within the range

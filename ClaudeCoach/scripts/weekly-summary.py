@@ -82,8 +82,14 @@ def run_summary(slug: str = "jamie") -> str:
     client, chat_id = _load_client(slug)
 
     today      = date.today()
+    today_dow  = today.strftime("%A")
     week_start = today - timedelta(days=today.weekday())  # Monday
     week_end   = week_start + timedelta(days=6)           # Sunday
+    week_date_grid_lines = []
+    for i in range(7):
+        d = week_start + timedelta(days=i)
+        week_date_grid_lines.append(f"  {d.isoformat()} = {d.strftime('%A')}")
+    week_date_grid_str = "\n".join(week_date_grid_lines)
 
     # -- Fetch IcuSync data ----------------------------------------------------
     wellness_14d    = client.get_wellness(14)
@@ -198,6 +204,15 @@ def run_summary(slug: str = "jamie") -> str:
     # -- Build prompt ----------------------------------------------------------
     prompt = f"""You are generating the weekly training summary for {first_name}'s {race_name} coaching system.
 All IcuSync data has been fetched and is embedded below. Do NOT call any fetch commands — work only from the data provided. Use Write and Bash only for the state-file update and git commit at the end.
+
+## DATE ANCHOR — Python-computed, authoritative
+Today     : {today} ({today_dow})
+Week      : {week_start} (Mon) → {week_end} (Sun)
+Day-of-week map:
+{week_date_grid_str}
+RULE: any session referenced by date must use the day from this map.
+If IcuSync current_date_local disagrees with {today}, flag it — do not silently use the wrong date.
+
 
 {_level_block(coaching_level)}
 {recovery_block}
