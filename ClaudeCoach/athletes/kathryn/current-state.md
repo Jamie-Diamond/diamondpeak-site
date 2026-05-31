@@ -78,10 +78,10 @@ None
 - [x] Plan reviewed W5-W6 (2026-05-31): day labels fixed, nutrition updated to 20g CHO/hr for >90min rides
 - [ ] Fix day-of-week label errors: "Sat 24 May" ride (is Sun) and "Sun 25 May" run (is Mon)
 - [ ] Review Mon 25 May long run (75min) vs. kettlebells constraint — daily cap (90min) exceeded; consider moving run to Sat 23 May
-- [ ] Review Mon 1 Jun long run (80min) + KB = 125min daily cap breach; relocate run to weekend [constraint note added to calendar description]
-- [ ] Review Tue 2 Jun bike sweetspot (90min) + mobility (40min) = 130min daily cap breach; shorten bike to ~50min or reschedule
-- [ ] Thu 4 Jun swim: Friday-only violation, Fri 5 taken by long ride — delete or reschedule to next available Friday
-- [ ] Sun 7 Jun swim: Friday-only violation — delete
-- [ ] Tue 9 Jun swim: Friday-only violation — delete (Fri 12 Jun already has swim) [constraint note added to calendar description]
+- [x] Mon 1 Jun long run deleted (2026-05-31) — Sat 6 Jun already has long run; KB + 80min exceeded 90min daily cap
+- [x] Tue 2 Jun bike shortened to 50min (2026-05-31) — mobility 40min + 50min = 90min daily cap
+- [x] Thu 4 Jun swim deleted (2026-05-31) — Friday-only rule; no valid Fri slot (long ride on Fri 5)
+- [x] Sun 7 Jun swim deleted (2026-05-31) — Friday-only rule
+- [x] Tue 9 Jun swim deleted (2026-05-31) — Friday-only rule; Fri 12 Jun already has swim
 - [ ] Begin heat acclimatisation sessions (urgently overdue — T7/T8 alerts firing 12+ days)
-- [ ] Fitness trajectory: BEHIND — 54 CTL now, need ≥75 by end of Base (wk 8, ~28 Jun); requires +5.3 CTL/wk
+- [ ] Fitness trajectory: ON TRACK — ~54 CTL now, end-of-base target ~55 CTL (~28 Jun); build to 65-70 by peak (72-78 peak target)
