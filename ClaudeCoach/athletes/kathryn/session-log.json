@@ -11,14 +11,14 @@
     "norm_power": null,
     "avg_hr": 164,
     "rpe": null,
-    "feel": null,
+    "feel": "too fatigued — cut short at 43min",
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
     "nutrition_g_carb": null,
     "hydration_ml": null,
-    "notes": null,
-    "logged_at": "2026-05-31T18:00:00",
-    "stub": true
+    "notes": "Planned 80min easy long run. Cut to 43min due to fatigue from back-to-back ride (138 TSS Sat) + high ATL. Form was -17.4 going in.",
+    "logged_at": "2026-05-31T20:30:00",
+    "stub": false
   },
   {
     "activity_id": "i152952492",
