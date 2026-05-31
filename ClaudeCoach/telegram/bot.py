@@ -110,12 +110,16 @@ def select_model(text: str) -> str:
     return MODEL_SONNET
 
 
-def build_keyboard():
+def build_keyboard(slug=None):
     now  = datetime.now()
     hour = now.hour
     wday = now.weekday()  # 0=Mon … 6=Sun
 
-    last_act_file = BASE.parent / "last_activity_state.json"
+    # Per-athlete state file (activity-watcher writes to athletes/{slug}/)
+    if slug:
+        last_act_file = BASE.parent / "athletes" / slug / "last_activity_state.json"
+    else:
+        last_act_file = BASE.parent / "last_activity_state.json"
     post_session = False
     if last_act_file.exists():
         try:
@@ -128,14 +132,16 @@ def build_keyboard():
             pass
 
     if post_session:
+        # Just finished a session — offer logging and analysis, not general form check
         buttons = [
-            {"text": "Log RPE + feel",    "callback_data": "log session"},
-            {"text": "How am I looking?", "callback_data": "how am I looking?"},
+            {"text": "Log session",      "callback_data": "log session"},
+            {"text": "Analyse session",  "callback_data": "analyse this session"},
         ]
     elif wday == 6 and hour >= 18:  # Sunday evening
+        # Weekly review fires automatically via cron; these let athlete re-fetch or check ahead
         buttons = [
-            {"text": "Week review",    "callback_data": "show me this week"},
-            {"text": "Next week plan", "callback_data": "what's the plan for next week?"},
+            {"text": "How was this week?", "callback_data": "show me this week"},
+            {"text": "What's next week?",  "callback_data": "what's the plan for next week?"},
         ]
     elif 5 <= hour < 10:  # morning
         buttons = [
@@ -144,12 +150,12 @@ def build_keyboard():
         ]
     else:
         buttons = [
-            {"text": "Today's plan",      "callback_data": "what's today's session?"},
+            {"text": "Today's session",   "callback_data": "what's today's session?"},
             {"text": "How am I looking?", "callback_data": "how am I looking?"},
         ]
     graph_row = [
-        {"text": "📊 Load",    "callback_data": "/load"},
-        {"text": "📈 Fitness", "callback_data": "/fitness"},
+        {"text": "Load chart",    "callback_data": "/load"},
+        {"text": "Fitness chart", "callback_data": "/fitness"},
     ]
     return {"inline_keyboard": [buttons, graph_row]}
 
@@ -563,7 +569,7 @@ def _bot_norm_sport(s):
 def _load_chart_quick(token, chat_id, slug):
     """Fetch live data and send the load chart directly — no Claude round-trip."""
     if _charts is None:
-        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard())
+        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug))
         return
     try:
         sys.path.insert(0, str(BASE.parent / "lib"))
@@ -648,18 +654,18 @@ def _load_chart_quick(token, chat_id, slug):
                 tsb = round(seed_ctl - seed_atl, 1)
                 send(token, chat_id,
                      f"CTL *{seed_ctl}* · ATL {seed_atl} · TSB *{tsb:+.1f}*",
-                     reply_markup=build_keyboard())
+                     reply_markup=build_keyboard(slug))
         else:
-            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard())
+            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
     except Exception as e:
         log(f"load chart quick error: {e}")
-        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard())
+        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
 
 
 def _fitness_charts_quick(token, chat_id, slug):
     """Fetch 42-day wellness and send fitness (CTL/ATL) + form (TSB) charts — no Claude round-trip."""
     if _charts is None:
-        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard())
+        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug))
         return
     try:
         sys.path.insert(0, str(BASE.parent / "lib"))
@@ -672,7 +678,7 @@ def _fitness_charts_quick(token, chat_id, slug):
         today = date.today()
         wellness = client.get_wellness(42)
         if not wellness:
-            send(token, chat_id, "No fitness data available.", reply_markup=build_keyboard())
+            send(token, chat_id, "No fitness data available.", reply_markup=build_keyboard(slug))
             return
 
         data = []
@@ -701,12 +707,12 @@ def _fitness_charts_quick(token, chat_id, slug):
             tsb = round(ctl - atl, 1)
             send(token, chat_id,
                  f"CTL *{ctl}* · ATL {atl} · TSB *{tsb:+.1f}*",
-                 reply_markup=build_keyboard())
+                 reply_markup=build_keyboard(slug))
         else:
-            send(token, chat_id, "Could not generate charts.", reply_markup=build_keyboard())
+            send(token, chat_id, "Could not generate charts.", reply_markup=build_keyboard(slug))
     except Exception as e:
         log(f"fitness charts quick error: {e}")
-        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard())
+        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
 
 
 def _git_commit(msg):
@@ -2127,7 +2133,7 @@ def main():
                                 if clean:
                                     send(token, chat_id,
                                          clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athletes[chat_id]),
-                                         reply_markup=build_keyboard())
+                                         reply_markup=build_keyboard(slug))
                                 log(f"Out (image): {clean[:80]}")
                                 history.append({"user": caption or "[image]", "assistant": clean})
                                 save_history(history, files["history"])
@@ -2181,7 +2187,7 @@ def main():
                      "  _log session_ (after a workout)\n"
                      "  _rebalance plan_\n"
                      "  _generate plan_",
-                     reply_markup=build_keyboard())
+                     reply_markup=build_keyboard(slug))
                 continue
 
             log(f"In: {text[:80]}")
@@ -2196,26 +2202,26 @@ def main():
                         cwd=str(PROJECT_DIR), timeout=600,
                     )
                     out = (result.stdout or result.stderr or "Done.").strip()
-                    send(token, chat_id, out[:4096], reply_markup=build_keyboard())
+                    send(token, chat_id, out[:4096], reply_markup=build_keyboard(slug))
                 except Exception as e:
-                    send(token, chat_id, f"Plan generation failed: {e}", reply_markup=build_keyboard())
+                    send(token, chat_id, f"Plan generation failed: {e}", reply_markup=build_keyboard(slug))
                 log("Out (fast): plan generated")
                 continue
             elif fast and fast.startswith("__FTP_RETEST__:"):
                 new_ftp = int(float(fast.split(":", 1)[1]))
                 reply = _update_ftp(new_ftp)
                 _mark_test_completed(slug, "ftp")
-                send(token, chat_id, reply, reply_markup=build_keyboard())
+                send(token, chat_id, reply, reply_markup=build_keyboard(slug))
                 log(f"Out (FTP update): {new_ftp} W")
                 continue
             elif fast and fast.startswith("__CSS__:"):
                 reply = _update_css(slug, fast.split(":", 1)[1])
-                send(token, chat_id, reply, reply_markup=build_keyboard())
+                send(token, chat_id, reply, reply_markup=build_keyboard(slug))
                 log(f"Out (CSS update): {fast.split(':', 1)[1]}")
                 continue
             elif fast and fast.startswith("__LTHR__:"):
                 reply = _update_lthr(slug, int(fast.split(":", 1)[1]))
-                send(token, chat_id, reply, reply_markup=build_keyboard())
+                send(token, chat_id, reply, reply_markup=build_keyboard(slug))
                 log(f"Out (LTHR update): {fast.split(':', 1)[1]}")
                 continue
             elif fast == "__LOAD_CHART__":
@@ -2240,7 +2246,7 @@ def main():
                 log("Out (fast): weekly summary triggered")
                 continue
             elif fast:
-                send(token, chat_id, fast, reply_markup=build_keyboard())
+                send(token, chat_id, fast, reply_markup=build_keyboard(slug))
                 log(f"Out (fast): {fast[:80]}")
                 continue
 
@@ -2257,13 +2263,13 @@ def main():
                         out = r.stdout.strip() or "Race plan updated."
                         send(token, chat_id,
                              f"{out}\n\nAsk me to _summarise my race plan_ for the targets.",
-                             reply_markup=build_keyboard())
+                             reply_markup=build_keyboard(slug))
                     else:
                         send(token, chat_id,
                              f"Race plan generation failed:\n{r.stderr.strip()[:300]}",
-                             reply_markup=build_keyboard())
+                             reply_markup=build_keyboard(slug))
                 except Exception as e:
-                    send(token, chat_id, f"Error generating race plan: {e}", reply_markup=build_keyboard())
+                    send(token, chat_id, f"Error generating race plan: {e}", reply_markup=build_keyboard(slug))
                 log("Out (fast): race plan generated")
                 continue
 
@@ -2296,10 +2302,10 @@ def main():
                 tg_post(token, "editMessageText", {
                     "chat_id": chat_id, "message_id": placeholder_id,
                     "text": final, "parse_mode": "Markdown",
-                    "reply_markup": build_keyboard(),
+                    "reply_markup": build_keyboard(slug),
                 })
             elif clean:
-                send(token, chat_id, final, reply_markup=build_keyboard())
+                send(token, chat_id, final, reply_markup=build_keyboard(slug))
             log(f"Out: {clean[:80]}")
 
             history.append({"user": text, "assistant": clean})
