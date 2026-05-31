@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i152948089",
+    "date": "2026-05-31",
+    "name": "Hot and windy",
+    "sport": "Ride",
+    "tss": 146,
+    "duration_min": 182,
+    "distance_km": 94.4,
+    "avg_power": null,
+    "norm_power": 219,
+    "avg_hr": 142,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": 200,
+    "hydration_ml": 2250,
+    "notes": "2x SiS Beta Fuel chews (90g) + PF30 (30g) + Maurten 320 (80g) + PF 1500 tab (0g) = 200g in-ride carbs = ~66g/hr. Pre-ride meal (2.5 eggs, tomatoes, brioche ~40g carbs, ~335g mass) excluded from carb rate. 700ml×2.5 + 500ml = 2250ml on bike. Post-ride 400ml. Net weight loss 500g. Food mass between weighings ~335g. Gross sweat = 500g + 335g food + 2250ml fluid = 3085ml over 182 min. Sweat rate ~1020ml/hr. Race target 90g/hr carbs.",
+    "logged_at": "2026-05-31",
+    "stub": false
+  },
+  {
     "activity_id": "i152707172",
     "date": "2026-05-30",
     "name": "Saturday",
