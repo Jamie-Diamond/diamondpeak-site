@@ -26,6 +26,7 @@ No
 ## Open Actions
 - [x] Set up initial training plan
 - [x] Plan generated through 2026-06-07 (2026-05-24)
+- [x] Plan generated through 2026-06-14 (2026-05-31)
 
 ## Watchdog Log
 | Date | CTL | ATL | Form | Note |
