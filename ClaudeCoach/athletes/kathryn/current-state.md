@@ -81,3 +81,4 @@ None
 - [ ] Review Tue 2 Jun bike sweetspot (90min) + mobility (40min) = 130min daily cap breach; shorten or reschedule
 - [ ] Move Thu 4 Jun swim to Fri 6 Jun (Friday-only constraint); remove/rescheduled Sun 7 Jun swim
 - [ ] Begin heat acclimatisation sessions (urgently overdue — T7/T8 alerts firing 9+ days)
+- [ ] Fix calendar day-of-week label error: calendar showed "Sat 31 May — Long ride 2.5hr" when Sunday 31 May is the long run; review all upcoming labels for similar off-by-one errors
