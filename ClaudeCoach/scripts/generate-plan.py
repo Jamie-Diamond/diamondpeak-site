@@ -104,8 +104,9 @@ def build_prompt(slug: str, cfg: dict, profile: dict) -> str:
 - Pre-event fatigue management: if pre_event_taper = true, week 2 avoids all intensity, prioritises swim + short Z2 rides only.
 - Travel / access constraints: scan current-state.md "Travel & training blocks" for any dates in the planning window where bike is unavailable. Substitute with swims or runs of equivalent TSS."""
         week_template = """Standard week template (adapt to phase):
-- Monday: Rest or recovery swim
-- Tuesday: Run (Z2, walk-run if ankle protocol applies) + optional swim
+SWIM RULE — HARD: Swims on TUESDAY and THURSDAY only. Never prescribe a swim on Monday, Wednesday, Friday, Saturday, or Sunday.
+- Monday: Rest only — no swim, no hard sessions
+- Tuesday: Swim (aerobic/CSS) + Run (Z2, walk-run if ankle protocol applies)
 - Wednesday: Bike Z2 (60-90 min) or strength
 - Thursday: Swim (CSS-based) + optional short run
 - Friday: Long ride (Z2 NP target) — key session
@@ -204,6 +205,13 @@ Session description consistency rules:
 - Never combine a fixed-distance label with a fixed-duration label unless provably equivalent
 - Walk-run interval counts must match the stated duration (verify arithmetic)
 - State distance OR duration in the session name, not both, unless both are internally consistent
+
+VALIDATION GATE — before pushing ANY session, verify each one against rules.md:
+1. List every session you are about to push (date, day-of-week from the date grid, sport, duration).
+2. For each session, check it against rules.md constraints. Flag any violation.
+3. If a violation is found: remove or reschedule the session before pushing. Do NOT push a session that breaks a hard constraint.
+4. Check total weekly duration against daily and weekly caps in rules.md. If over cap, reduce lowest-priority sessions first.
+5. Only after this check passes for all sessions: proceed to push.
 
 For each session push to Intervals.icu via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint push_workout --payload '{{"sport":"Ride|Run|Swim|WeightTraining", "date":"YYYY-MM-DD", "name":"[Day date] — [description]", "description":"full coaching notes", "planned_training_load": N}}'
