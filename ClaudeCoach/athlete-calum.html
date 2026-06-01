@@ -206,6 +206,12 @@
 
   </div>
 
+  <!-- TRAINING ZONES -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Training zones</h2>
+    <div id="zones-content"></div>
+  </div>
+
   <!-- TRAINING LOAD -->
   <div class="panel" style="margin-bottom:14px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px">
@@ -785,6 +791,64 @@ function renderCtlProjection(proj) {
   window.chartFitness.update();
 }
 
+// ── TRAINING ZONES ───────────────────────────────────────────────────────────
+
+function renderZones(p) {
+  const ftp = p.ftp_watts;
+  if (!ftp) return;
+  function fmtS(s) { return Math.floor(s/60)+":"+(s%60).toString().padStart(2,"0"); }
+  function parseTimeMin(str) {
+    if (!str) return null;
+    str = String(str).trim();
+    const minM = str.match(/(\d+)\s*min/i);
+    if (minM) return parseInt(minM[1]);
+    const parts = str.replace(/[~≈]/g,"").trim().split(":");
+    if (parts.length===2) { const a=parseInt(parts[0]),b=parseInt(parts[1]); if(!isNaN(a)&&!isNaN(b)) return a*60+b; }
+    return null;
+  }
+  let html = "";
+  const wpkg = p.weight_kg ? (ftp/p.weight_kg).toFixed(2) : null;
+  html += `<h3 style="margin-bottom:8px">Bike &middot; FTP ${ftp} W${wpkg?" &middot; "+wpkg+" W/kg":""}</h3>`;
+  [["Z2 Endurance",0.55,0.75],["Sweet Spot",0.88,0.93],["Threshold",0.95,1.05]].forEach(([l,lo,hi]) => {
+    html += `<div class="target-row"><span class="target-label">${l}</span><span class="target-val">${Math.round(ftp*lo)}&ndash;${Math.round(ftp*hi)} W</span></div>`;
+  });
+  if (p.run_threshold_pace_per_km) {
+    const m = p.run_threshold_pace_per_km.match(/(\d+):(\d{2})/);
+    if (m) {
+      const threshS = parseInt(m[1])*60+parseInt(m[2]);
+      html += `<h3 style="margin-top:14px;margin-bottom:8px">Run</h3>`;
+      html += `<div class="target-row"><span class="target-label">Threshold</span><span class="target-val">${fmtS(threshS)}/km</span></div>`;
+      html += `<div class="target-row"><span class="target-label">Easy / Z2</span><span class="target-val">${fmtS(Math.round(threshS*1.25))}&ndash;${fmtS(Math.round(threshS*1.40))}/km</span></div>`;
+    }
+  }
+  if (p.swim_css_per_100m) {
+    const m = p.swim_css_per_100m.match(/(\d+):(\d{2})/);
+    if (m) {
+      const cssS = parseInt(m[1])*60+parseInt(m[2]);
+      html += `<h3 style="margin-top:14px;margin-bottom:8px">Swim</h3>`;
+      html += `<div class="target-row"><span class="target-label">CSS</span><span class="target-val">${fmtS(cssS)}/100m</span></div>`;
+      html += `<div class="target-row"><span class="target-label">Aerobic / Z2</span><span class="target-val">${fmtS(cssS+8)}/100m</span></div>`;
+    }
+  }
+  const rt = p.race_targets;
+  if (rt && rt.swim_time && rt.bike_time && rt.run_time) {
+    const swimMin = parseTimeMin(rt.swim_time), bikeMin = parseTimeMin(rt.bike_time), runMin = parseTimeMin(rt.run_time);
+    if (swimMin && bikeMin && runMin) {
+      const dist = (p.race_distance||"").toLowerCase();
+      const isHalf = dist.includes("70.3")||dist.includes("half");
+      const bikeIF = rt.bike_np_watts_target_if||(isHalf?0.79:0.71);
+      let runIF = isHalf?0.82:0.77;
+      const pm = (p.run_threshold_pace_per_km||"").match(/(\d+):(\d{2})/);
+      if (pm) { const ts=parseInt(pm[1])*60+parseInt(pm[2]),rp=(runMin*60)/(isHalf?21.1:42.2); if(rp>0) runIF=Math.min(ts/rp,0.95); }
+      const raceTSS = (swimMin/60)*0.85*0.85*100 + (bikeMin/60)*bikeIF*bikeIF*100 + (runMin/60)*runIF*runIF*100;
+      html += `<h3 style="margin-top:14px;margin-bottom:8px">Race-day fitness target</h3>`;
+      html += `<div class="target-row"><span class="target-label">Min CTL at race day</span><span class="target-val">${Math.round(raceTSS/5.5)} CTL</span></div>`;
+    }
+  }
+  const el = document.getElementById("zones-content");
+  if (el) el.innerHTML = html;
+}
+
 // ── DATA LOADING ─────────────────────────────────────────────────────────────
 
 fetch('site-data.json?v='+Date.now())
@@ -857,6 +921,7 @@ fetch('training-data-calum.json?v='+Date.now())
         }
       }
       if (p.weight_kg) document.getElementById("rp-weight").textContent = p.weight_kg + " kg";
+      renderZones(p);
     }
     if (d.generated) {
       document.getElementById("snapshot-date").textContent = "Live · updated "+d.generated;
