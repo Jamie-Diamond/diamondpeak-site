@@ -191,6 +191,8 @@
 - **2026-05-31 — T6 (Tier 1):** Aerobic decoupling >5% on 4 Z2 rides in last 7 days: 05-25 (6.86%, IF 0.69, 110 min, 25°C), 05-26 (8.16%, IF 0.69, 113 min, 25°C), 05-28 (17.7%, IF 0.75, 154 min, 23.8°C), 05-29 (8.11%, IF 0.72, 107 min, 24°C). Today's long Z2 ride at home in stable conditions is the diagnostic — monitor first/last 30 min HR drift (target <5%). If controlled, Marseille readings were context-driven (post-illness, heat, hilly terrain). If >5% persists, flag aerobic durability regression.
 - **2026-05-31 — T9 (Tier 2):** Three actions due today (2026-05-31) all remain pending: (1) FTP retest — extend due date to 2026-06-04 (no power meter in Marseille; first home window this week). (2) Book Precision Hydration sweat-sodium test — no booking made. (3) TT bike fit appointment — no booking made. ISM saddle order also due 2026-06-06 (6 days), still pending. Book PH test and bike fit today; lock FTP retest for this week.
 
+- **2026-06-01 GO** — Recovery swim 40 min (swim): no rules fired, execute as planned. CTL 77.1, ATL 74.1, TSB +3.0. HRV trend −15.7% (last reading 33 on 05-31 vs 7d avg 39.1; wearable not yet synced today) — below R3 threshold but R3 applies to quality sessions only; swim is unaffected. Sleep not synced (null). First swim of Week 6, back home after swim-free Marseille block — re-establish pool rhythm, no CSS pressure; aerobic easy throughout.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
