@@ -980,18 +980,46 @@ function renderZones(p, fitnessCtl) {
       const act25Bike = p.prev_race ? parseRaceTime(p.prev_race.bike_time) : null;
       const act25Run  = p.prev_race ? parseRaceTime(p.prev_race.run_time)  : null;
       const act25Ttl  = (act25Swim!=null&&act25Bike!=null&&act25Run!=null) ? act25Swim+act25Bike+act25Run : null;
-      // Live = 2025 actuals scaled to current CTL (ctlScaleLive<1 means slower, >1 faster)
-      const liveSwimMin = (act25Swim!=null&&ctlScaleLive!=null) ? Math.round(act25Swim/ctlScaleLive) : null;
-      const liveBikeMin = (act25Bike!=null&&ctlScaleLive!=null) ? Math.round(act25Bike/Math.pow(ctlScaleLive,1/3)) : null;
-      const liveRunMin  = (act25Run!=null&&ctlScaleLive!=null)  ? Math.round(act25Run/ctlScaleLive)  : null;
-      const liveTtl = (liveSwimMin!=null&&liveBikeMin!=null&&liveRunMin!=null) ? liveSwimMin+liveBikeMin+liveRunMin : null;
-      // Target (swimMin/bikeMin/runMin from race_targets above)
-      const tgtTtl = swimMin+bikeMin+runMin;
-      // Projected = target times scaled by peak CTL vs current
-      const projSwimMin = (act25Swim!=null&&ctlScaleProj!=null) ? Math.round(act25Swim/ctlScaleProj) : null;
-      const projBikeMin = (act25Bike!=null&&ctlScaleProj!=null) ? Math.round(act25Bike/Math.pow(ctlScaleProj,1/3)) : null;
-      const projRunMin  = (act25Run!=null&&ctlScaleProj!=null)  ? Math.round(act25Run/ctlScaleProj)  : null;
-      const projTtl = (projSwimMin!=null&&projBikeMin!=null&&projRunMin!=null) ? projSwimMin+projBikeMin+projRunMin : null;
+      // Live & Projected: current FTP/CSS/threshold fixed; only IF scales with CTL
+      let liveSwimMin=null,liveBikeMin=null,liveRunMin=null;
+      let projSwimMin=null,projBikeMin=null,projRunMin=null;
+      // Swim — current CSS + margin from 2025 race pace; CTL scales CSS capability
+      {const csM=(p.swim_css_per_100m||"").match(/(\d+):(\d{2})/);
+      if(act25Swim!=null&&csM){
+        const csS=parseInt(csM[1])*60+parseInt(csM[2]);
+        const ap=act25Swim*60/(isHalf?19:38);const mg=ap-csS;
+        if(ctlScaleLive!=null)liveSwimMin=Math.round((csS/ctlScaleLive+mg)*(isHalf?19:38)/60);
+        if(ctlScaleProj!=null)projSwimMin=Math.round((csS/ctlScaleProj+mg)*(isHalf?19:38)/60);
+      }else if(act25Swim!=null){
+        if(ctlScaleLive!=null)liveSwimMin=Math.round(act25Swim/ctlScaleLive);
+        if(ctlScaleProj!=null)projSwimMin=Math.round(act25Swim/ctlScaleProj);
+      }}
+      // Bike — current FTP × (2025 race IF × CTL scale) → NP; speed ∝ NP^(1/3)
+      {const aNP=p.prev_race?p.prev_race.bike_np_watts:null;
+      const aBIF=p.prev_race?p.prev_race.bike_if:null;
+      if(act25Bike!=null&&aNP&&aBIF&&ftp){
+        if(ctlScaleLive!=null){const lNP=ftp*aBIF*ctlScaleLive;liveBikeMin=Math.round(act25Bike*Math.pow(aNP/lNP,1/3));}
+        if(ctlScaleProj!=null){const pNP=ftp*aBIF*ctlScaleProj;projBikeMin=Math.round(act25Bike*Math.pow(aNP/pNP,1/3));}
+      }else if(act25Bike!=null){
+        if(ctlScaleLive!=null)liveBikeMin=Math.round(act25Bike/Math.pow(ctlScaleLive,1/3));
+        if(ctlScaleProj!=null)projBikeMin=Math.round(act25Bike/Math.pow(ctlScaleProj,1/3));
+      }}
+      // Run — 2025 IF = current_threshold/2025_race_pace; current threshold / (2025 IF × CTL scale)
+      {const thM=(p.run_threshold_pace_per_km||"").match(/(\d+):(\d{2})/);
+      const rpM=(p.prev_race&&p.prev_race.run_pace||"").match(/(\d+):(\d{2})/);
+      if(act25Run!=null&&thM&&rpM){
+        const thS=parseInt(thM[1])*60+parseInt(thM[2]);
+        const rpS=parseInt(rpM[1])*60+parseInt(rpM[2]);
+        const aRIF=thS/rpS;
+        if(ctlScaleLive!=null){const lIF=aRIF*ctlScaleLive;liveRunMin=Math.round((thS/lIF)*(isHalf?21.1:42.2)/60);}
+        if(ctlScaleProj!=null){const pIF=aRIF*ctlScaleProj;projRunMin=Math.round((thS/pIF)*(isHalf?21.1:42.2)/60);}
+      }else if(act25Run!=null){
+        if(ctlScaleLive!=null)liveRunMin=Math.round(act25Run/ctlScaleLive);
+        if(ctlScaleProj!=null)projRunMin=Math.round(act25Run/ctlScaleProj);
+      }}
+      const liveTtl=(liveSwimMin!=null&&liveBikeMin!=null&&liveRunMin!=null)?liveSwimMin+liveBikeMin+liveRunMin:null;
+      const tgtTtl=swimMin+bikeMin+runMin;
+      const projTtl=(projSwimMin!=null&&projBikeMin!=null&&projRunMin!=null)?projSwimMin+projBikeMin+projRunMin:null;
       // Build table rows
       const bd="border-bottom:1px solid var(--line);";
       const mono="font-family:'DM Mono',monospace;";
@@ -1042,16 +1070,15 @@ function renderZones(p, fitnessCtl) {
       html+='<div class="target-row" style="margin-top:2px"><span class="target-label">Total</span><span class="target-val">'+ttlStr+"</span></div>";
       let noteLines=[];
       if(hasLive){
-        const livFact=Math.pow(ctl25/curCtlV,0.3);
-        const livPct=Math.round(Math.abs(livFact-1)*100);
-        const livDir=livFact>1?"slower":"faster";
-        noteLines.push("Live: 2025 time × ("+ctl25.toFixed(0)+"÷"+curCtlV.toFixed(0)+")^0.3 = ×"+livFact.toFixed(3)+" (~"+livPct+"% "+livDir+"). Higher CTL = higher sustainable threshold. Swim/run scale linearly; bike uses ^(1/3) since speed ∝ power^(1/3). CTL req. = min CTL to complete at target intensity.");
+        const livPct=Math.round(Math.abs(ctlScaleLive-1)*100);
+        const livDir=ctlScaleLive<1?"slower":"faster";
+        noteLines.push("Live: current FTP/CSS/threshold fixed; IF factor = ("+curCtlV.toFixed(0)+"÷"+ctl25.toFixed(0)+")^0.3 = "+ctlScaleLive.toFixed(3)+" (~"+livPct+"% "+livDir+"). Swim: CSS + 2025 margin, CTL scales CSS. Bike: FTP × (2025 IF × factor). Run: threshold ÷ (2025 pace IF × factor). CTL req. = min to execute target.");
       }
       if(hasProj){
         const prFact=Math.pow(ctl25/pkCtlV,0.3);
         const prPct=Math.round(Math.abs(prFact-1)*100);
         const prDir=prFact<1?"faster":"slower";
-        noteLines.push("Proj.: 2025 actual × ("+ctl25.toFixed(0)+"÷"+pkCtlV.toFixed(0)+")^0.3 = ×"+prFact.toFixed(3)+" (~"+prPct+"% "+prDir+" at peak CTL "+pkCtlV.toFixed(0)+"). FTP/threshold unchanged; gain is purely from higher sustainable IF. All deltas vs 2025.");
+        noteLines.push("Proj.: same current FTP/CSS/threshold; peak IF factor = ("+ctl25.toFixed(0)+"÷"+pkCtlV.toFixed(0)+")^0.3 = "+prFact.toFixed(3)+" (~"+prPct+"% "+prDir+"). No threshold improvement assumed. All deltas vs 2025.");
       }
       if(noteLines.length) html+='<div style="font-size:10px;color:var(--muted);margin-top:4px">'+noteLines.join(" ")+"</div>";
       // CTL / form readiness
