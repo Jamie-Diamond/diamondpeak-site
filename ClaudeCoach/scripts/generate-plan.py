@@ -119,6 +119,55 @@ def derive_phase_ctl_targets(
     return derived
 
 
+def compute_race_min_ctl(cfg: dict, profile: dict) -> "int | None":
+    """
+    Derive race-day minimum CTL from target splits + athlete profile data.
+    Formula: race_TSS / 5.5, where TSS_leg = duration_hr * IF^2 * 100.
+    Divisor 5.5 calibrated against real data: IM 9:30 target → 96 CTL, 70.3 5:30 → 63 CTL.
+    Returns None if race_target_splits is absent or incomplete.
+    """
+    import re as _re
+    splits = cfg.get("race_target_splits")
+    if not splits:
+        return None
+    swim_min = splits.get("swim_min", 0)
+    bike_min = splits.get("bike_min", 0)
+    run_min  = splits.get("run_min", 0)
+    if not (swim_min and bike_min and run_min):
+        return None
+
+    swim_hr = swim_min / 60.0
+    bike_hr = bike_min / 60.0
+    run_hr  = run_min  / 60.0
+
+    ftp         = float(profile.get("ftp_watts") or 0)
+    race_type   = (profile.get("race_distance") or "full").lower()
+    is_half     = race_type in ("70.3", "half", "half-ironman")
+    run_dist_km = 21.1 if is_half else 42.2
+
+    swim_if = 0.85
+
+    bike_np = splits.get("bike_np_target_watts")
+    if bike_np and ftp:
+        bike_if = float(bike_np) / ftp
+    else:
+        bike_if = 0.79 if is_half else 0.71
+
+    run_if = 0.82 if is_half else 0.77
+    threshold_str = str(profile.get("run_threshold_pace_per_km") or "")
+    m = _re.search(r"(\d+):(\d{2})", threshold_str)
+    if m:
+        threshold_s = int(m.group(1)) * 60 + int(m.group(2))
+        race_pace_s = (run_hr * 3600.0) / run_dist_km
+        if race_pace_s > 0:
+            run_if = min(threshold_s / race_pace_s, 0.95)
+
+    swim_tss = swim_hr * swim_if ** 2 * 100
+    bike_tss = bike_hr * bike_if ** 2 * 100
+    run_tss  = run_hr  * run_if  ** 2 * 100
+    return round((swim_tss + bike_tss + run_tss) / 5.5)
+
+
 def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) -> str:
     from datetime import timedelta
     _today      = date.today()
@@ -145,7 +194,7 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) ->
     weeks_elapsed = max(1, (_next_mon - plan_start_date).days // 7 + 1)
 
     ctl_targets  = cfg.get("ctl_targets", {})
-    ctl_race_min = ctl_targets.get("race_min", 75)
+    ctl_race_min = compute_race_min_ctl(cfg, profile) or ctl_targets.get("race_min") or 75
     phase_tss_cfg = cfg.get("phase_tss", {})
     base_end_wk  = phase_tss_cfg.get("base_end_week", 6)
     build_end_wk = phase_tss_cfg.get("build_end_week", 10)
