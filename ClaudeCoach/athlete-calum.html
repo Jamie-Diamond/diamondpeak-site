@@ -926,21 +926,30 @@ function renderZones(p, fitnessCtl) {
       scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(act25Swim)+"</td>";
       scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(liveSwimMin)+" "+fmtDelta(liveSwimMin,act25Swim)+"</td>";
       scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(swimMin)+" "+fmtDelta(swimMin,act25Swim)+"</td>";
-      scRows+='<td style="padding:5px 0;'+bd+'text-align:right;'+mono+'">'+fmtHM(projSwimMin)+" "+fmtDelta(projSwimMin,swimMin)+"</td></tr>";
+      scRows+='<td style="padding:5px 0;'+bd+'text-align:right;'+mono+'">'+fmtHM(projSwimMin)+" "+fmtDelta(projSwimMin,act25Swim)+"</td></tr>";
       // Bike
       scRows+="<tr>";
       scRows+='<td style="padding:5px 0;'+bd+'color:var(--ride)">Bike</td>';
       scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(act25Bike)+"</td>";
       scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(liveBikeMin)+" "+fmtDelta(liveBikeMin,act25Bike)+"</td>";
       scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(bikeMin)+" "+fmtDelta(bikeMin,act25Bike)+"</td>";
-      scRows+='<td style="padding:5px 0;'+bd+'text-align:right;'+mono+'">'+fmtHM(projBikeMin)+" "+fmtDelta(projBikeMin,bikeMin)+"</td></tr>";
+      scRows+='<td style="padding:5px 0;'+bd+'text-align:right;'+mono+'">'+fmtHM(projBikeMin)+" "+fmtDelta(projBikeMin,act25Bike)+"</td></tr>";
       // Run
       scRows+="<tr>";
       scRows+='<td style="padding:5px 0;color:var(--run)">Run</td>';
       scRows+='<td style="padding:5px 5px;text-align:right;'+mono+'">'+fmtHM(act25Run)+"</td>";
       scRows+='<td style="padding:5px 5px;text-align:right;'+mono+'">'+fmtHM(liveRunMin)+" "+fmtDelta(liveRunMin,act25Run)+"</td>";
       scRows+='<td style="padding:5px 5px;text-align:right;'+mono+'">'+fmtHM(runMin)+" "+fmtDelta(runMin,act25Run)+"</td>";
-      scRows+='<td style="padding:5px 0;text-align:right;'+mono+'">'+fmtHM(projRunMin)+" "+fmtDelta(projRunMin,runMin)+"</td></tr>";
+      scRows+='<td style="padding:5px 0;text-align:right;'+mono+'">'+fmtHM(projRunMin)+" "+fmtDelta(projRunMin,act25Run)+"</td></tr>";
+      // CTL row
+      const reqCtl=Math.round(raceTSS/5.5);
+      const bdt="border-top:1px solid var(--line);";
+      scRows+='<tr style="color:var(--muted)">';
+      scRows+='<td style="padding:5px 0;'+bdt+'font-size:9px;text-transform:uppercase;letter-spacing:.05em;'+mono+'">CTL</td>';
+      scRows+='<td style="padding:5px 5px;'+bdt+'text-align:right;font-size:11px;'+mono+'">'+( ctl25!=null ? Math.round(ctl25) : "—" )+"</td>";
+      scRows+='<td style="padding:5px 5px;'+bdt+'text-align:right;font-size:11px;'+mono+'">'+( curCtlV!=null ? curCtlV.toFixed(1) : "—" )+"</td>";
+      scRows+='<td style="padding:5px 5px;'+bdt+'text-align:right;font-size:11px;'+mono+'">'+reqCtl+"</td>";
+      scRows+='<td style="padding:5px 0;'+bdt+'text-align:right;font-size:11px;'+mono+'">'+( pkCtlV!=null ? pkCtlV.toFixed(0) : "—" )+"</td></tr>";
       html+='<h3 style="margin-top:14px;margin-bottom:8px">Race scenario</h3>';
       html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px">';
       html+='<thead><tr style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">';
@@ -956,8 +965,17 @@ function renderZones(p, fitnessCtl) {
       if(projTtl!=null) ttlStr+=" &middot; "+fmtHM(projTtl)+" proj.";
       html+='<div class="target-row" style="margin-top:2px"><span class="target-label">Total</span><span class="target-val">'+ttlStr+"</span></div>";
       let noteLines=[];
-      if(hasLive) noteLines.push("Live = 2025 actual adjusted for current CTL ("+curCtlV.toFixed(0)+" vs "+ctl25.toFixed(0)+" race-day).");
-      if(hasProj) noteLines.push("Proj. = targets at peak CTL "+pkCtlV.toFixed(0)+" (~+"+Math.round((ctlScaleProj-1)*100)+"% threshold).");
+      if(hasLive){
+        const livFact=Math.pow(ctl25/curCtlV,0.3);
+        const livPct=Math.round(Math.abs(livFact-1)*100);
+        const livDir=livFact>1?"slower":"faster";
+        noteLines.push("Live: 2025 time × ("+ctl25.toFixed(0)+"÷"+curCtlV.toFixed(0)+")^0.3 = ×"+livFact.toFixed(3)+" (~"+livPct+"% "+livDir+"). Higher CTL = higher sustainable threshold. Swim/run scale linearly; bike uses ^(1/3) since speed ∝ power^(1/3). CTL req. = min CTL to complete at target intensity.");
+      }
+      if(hasProj){
+        const prFact=Math.pow(curCtlV/pkCtlV,0.3);
+        const prPct=Math.round(Math.abs(prFact-1)*100);
+        noteLines.push("Proj.: target time × ("+curCtlV.toFixed(0)+"÷"+pkCtlV.toFixed(0)+")^0.3 = ×"+prFact.toFixed(3)+" (~"+prPct+"% faster at peak CTL "+pkCtlV.toFixed(0)+"). All deltas vs 2025.");
+      }
       if(noteLines.length) html+='<div style="font-size:10px;color:var(--muted);margin-top:4px">'+noteLines.join(" ")+"</div>";
       // CTL / form readiness
       const raceMinCtl=Math.round(raceTSS/5.5);
