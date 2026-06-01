@@ -87,12 +87,18 @@ def build_prompt(slug: str, cfg: dict, profile: dict) -> str:
     is_triathlete = bool(profile.get("swim_css_per_100m") or profile.get("run_threshold_pace_per_km"))
 
     if is_triathlete:
+        phase_ctl = ctl_targets.get("phase_ctl", {})
+        ctl_base  = phase_ctl.get("base",  round(ctl_race_min * 0.73))
+        ctl_build = phase_ctl.get("build", round(ctl_race_min * 0.88))
+        ctl_spec  = phase_ctl.get("specific", round(ctl_race_min * 0.97))
+        ctl_peak  = phase_ctl.get("peak", ctl_race_min)
         phase_milestones = (
             f"    Plan week: {weeks_elapsed} (plan start {plan_start_str})\n"
-            f"    End of Base     (week {base_end_wk}):  >= {round(ctl_race_min * 0.73)} CTL\n"
-            f"    End of Build    (week {build_end_wk}): >= {round(ctl_race_min * 0.88)} CTL\n"
-            f"    End of Specific (week {spec_end_wk}): >= {round(ctl_race_min * 0.97)} CTL\n"
-            f"    End of Peak     (week {peak_end_wk}): >= {ctl_race_min} CTL (race target)"
+            f"    End of Base     (week {base_end_wk}):  >= {ctl_base} CTL\n"
+            f"    End of Build    (week {build_end_wk}): >= {ctl_build} CTL\n"
+            f"    End of Specific (week {spec_end_wk}): >= {ctl_spec} CTL\n"
+            f"    End of Peak     (week {peak_end_wk}): >= {ctl_peak} CTL (peak before taper)\n"
+            f"    Race day target: {ctl_race_min} CTL"
         )
         phase_tss = """  Week 1-6   (Base):     350-500 TSS/wk, focus Z2 bike volume + aerobic swim + easy run
   Week 7-10  (Build):    450-600 TSS/wk, add threshold bike work, extend long run
@@ -105,13 +111,14 @@ def build_prompt(slug: str, cfg: dict, profile: dict) -> str:
 - Travel / access constraints: scan current-state.md "Travel & training blocks" for any dates in the planning window where bike is unavailable. Substitute with swims or runs of equivalent TSS."""
         week_template = """Standard week template (adapt to phase):
 SWIM RULE — HARD: Swims on TUESDAY and THURSDAY only. Never prescribe a swim on Monday, Wednesday, Friday, Saturday, or Sunday.
-- Monday: Rest only — no swim, no hard sessions
+CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Friday, Saturday, Sunday only.
+- Monday: Rest or short Z1 run — no cycling, no swimming
 - Tuesday: Swim (aerobic/CSS) + Run (Z2, walk-run if ankle protocol applies)
-- Wednesday: Bike Z2 (60-90 min) or strength
+- Wednesday: Strength or Run (Z2) — NO cycling
 - Thursday: Swim (CSS-based) + optional short run
-- Friday: Long ride (Z2 NP target) — key session
-- Saturday: Brick (ride + run) or long run
-- Sunday: Rest or short active recovery"""
+- Friday: Long ride (~3.5–4 hr, Z2 NP target) — key session
+- Saturday: Run (Z2) or Bike (if second ride week)
+- Sunday: Z2 ride (2–3 hr) or rest"""
     else:
         phase_milestones = """    End of Base     (week 6):  >= 30 CTL
     End of Build    (week 10): >= 40 CTL
