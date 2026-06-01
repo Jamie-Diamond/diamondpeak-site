@@ -76,6 +76,15 @@ def compute_required_tss(ctl_today: float, ctl_target: float, weeks_remaining: i
     return int(max(required_daily, 0.0) * 7)
 
 
+def compute_projected_ctl(ctl_today: float, weekly_tss: int, weeks: int) -> float:
+    """Project CTL after `weeks` weeks of constant `weekly_tss`, using day-by-day EMA."""
+    daily = weekly_tss / 7.0
+    ctl = ctl_today
+    for _ in range(weeks * 7):
+        ctl += (daily - ctl) / 42.0
+    return ctl
+
+
 def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) -> str:
     from datetime import timedelta
     _today      = date.today()
@@ -134,11 +143,13 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) ->
             f"    End of Peak     (week {peak_end_wk}): >= {ctl_peak} CTL (peak before taper)\n"
             f"    Race day target: {ctl_race_min} CTL"
         )
-        phase_tss = """  Week 1-6   (Base):     350-500 TSS/wk, focus Z2 bike volume + aerobic swim + easy run
-  Week 7-10  (Build):    450-600 TSS/wk, add threshold bike work, extend long run
-  Week 11-14 (Specific): 550-720 TSS/wk, race-pace intervals, brick sessions
-  Week 15-17 (Peak):     650-800 TSS/wk, race simulation, consolidate fitness
-  Week 18-21 (Taper):    200-350 TSS/wk, sharpen, no new stimuli"""
+        phase_tss = """  TSS target is Python-computed in the LOAD ACCOUNTABILITY block above — use that figure.
+  Indicative phase context (DO NOT use to override LOAD ACCOUNTABILITY target):
+    Base:     aerobic volume, Z2 dominance, build swim/run base
+    Build:    threshold bike work, extend long run, introduce bricks
+    Specific: race-pace intervals, brick sessions, sport-specific intensity
+    Peak:     race simulation, consolidate fitness — high density week
+    Taper:    sharpen, no new stimuli, 50–60% of peak load"""
         step5_constraints = """- Ankle: no quality run sessions (intervals/tempo/race-pace) until current-state.json ankle.four_pain_free_weeks_reached = true. Use walk-run format only (Z2 HR cap 150). Weekly run km increase <= 10%.
 - CTL ramp: <= +4 CTL/wk while ankle in rehab.
 - Pre-event fatigue management: if pre_event_taper = true, week 2 avoids all intensity, prioritises swim + short Z2 rides only.
@@ -177,7 +188,14 @@ CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Frid
 - Sunday: Rest or short active recovery"""
 
     # Load accountability — only for athletes with explicit phase CTL targets
+    _prescribe_tss   = 0  # 0 = fallback to phase ranges
+    _max_weekly_tss  = 0
+    _la_required_tss = 0
+    _la_target_ctl   = ctl_race_min
+    _la_phase        = ""
+    _la_phase_end_date = ""
     load_accountability_block = ""
+
     if ctl_today > 0 and is_triathlete and ctl_targets.get("phase_ctl"):
         if weeks_elapsed <= base_end_wk:
             _la_phase, _la_target_ctl, _la_phase_end_wk = "Base", ctl_base, base_end_wk
@@ -187,29 +205,106 @@ CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Frid
             _la_phase, _la_target_ctl, _la_phase_end_wk = "Specific", ctl_spec, spec_end_wk
         else:
             _la_phase, _la_target_ctl, _la_phase_end_wk = "Peak", ctl_peak, peak_end_wk
+
         _la_weeks_remaining = max(1, _la_phase_end_wk - weeks_elapsed + 1)
-        _la_required_tss = compute_required_tss(ctl_today, _la_target_ctl, _la_weeks_remaining)
-        _la_phase_end_date = (plan_start_date + timedelta(weeks=_la_phase_end_wk)).isoformat()
-        _la_gap_threshold = int(_la_required_tss * 0.9)
+        _la_required_tss    = compute_required_tss(ctl_today, _la_target_ctl, _la_weeks_remaining)
+        _la_phase_end_date  = (plan_start_date + timedelta(weeks=_la_phase_end_wk)).isoformat()
+
+        # Ramp rate ceiling — from athletes.json, default 5 CTL/wk
+        _max_ramp      = float(cfg.get("max_ctl_ramp_per_week", 5.0))
+        _decay_7       = (41.0 / 42.0) ** 7
+        _max_daily     = ctl_today + _max_ramp / (1.0 - _decay_7)
+        _max_weekly_tss = int(_max_daily * 7)
+        _prescribe_tss  = min(_la_required_tss, _max_weekly_tss)
+
+        # Timeline note — if target is not achievable at safe ramp rate, project actual landing CTL
+        if _la_required_tss > _max_weekly_tss:
+            _projected_ctl = compute_projected_ctl(ctl_today, _max_weekly_tss, _la_weeks_remaining)
+            _timeline_note = (
+                f"TIMELINE SLIPPAGE: reaching {_la_target_ctl} CTL by {_la_phase_end_date} requires "
+                f"{_la_required_tss} TSS/wk but the safe ramp limit ({_max_ramp:.0f} CTL/wk) caps "
+                f"prescribable load at {_max_weekly_tss} TSS/wk.\n"
+                f"At max safe load, projected CTL = {_projected_ctl:.0f} by {_la_phase_end_date} "
+                f"(target: {_la_target_ctl}).\n"
+                f"In Step 7/8 Telegram: state the projected landing CTL and ask {name} whether to "
+                f"accept the revised trajectory, extend the phase, or increase load beyond the ramp guideline."
+            )
+        else:
+            _timeline_note = f"Target achievable at safe ramp rate. Prescribe {_prescribe_tss} TSS/wk."
+
+        _la_gap_threshold = int(_prescribe_tss * 0.9)
         load_accountability_block = f"""
 ## LOAD ACCOUNTABILITY — Python-computed, authoritative
-CTL today        : {ctl_today:.1f}
-Current phase    : {_la_phase} (plan week {weeks_elapsed} of {_la_phase_end_wk})
-Phase CTL target : {_la_target_ctl} by end of week {_la_phase_end_wk} ({_la_phase_end_date})
-Weeks remaining  : {_la_weeks_remaining}
-Required weekly TSS to stay on track: {_la_required_tss}
+CTL today             : {ctl_today:.1f}
+Current phase         : {_la_phase} (plan week {weeks_elapsed} of {_la_phase_end_wk})
+Phase CTL target      : {_la_target_ctl} by end of week {_la_phase_end_wk} ({_la_phase_end_date})
+Weeks remaining       : {_la_weeks_remaining}
+Required weekly TSS   : {_la_required_tss} (to hit target in time)
+Max safe weekly TSS   : {_max_weekly_tss} (ramp rate cap: {_max_ramp:.0f} CTL/wk)
+PRESCRIBED WEEK 1 TSS : {_prescribe_tss}
+
+{_timeline_note}
 
 After Step 6 (plan built), sum the planned Load for WEEK 1.
-If week 1 planned TSS < {_la_gap_threshold} (>10% short of {_la_required_tss}):
+If week 1 planned TSS < {_la_gap_threshold} (>10% short of {_prescribe_tss}):
   Include a LOAD GAP section in the Step 7/8 Telegram notification:
-  "Load gap: Week {weeks_elapsed} totals [X] TSS — [Y] short of the {_la_required_tss} needed to reach {_la_target_ctl} CTL by {_la_phase_end_date}.
-   Options to close the gap (within schedule constraints):
+  "Load gap: Week {weeks_elapsed} totals [X] TSS — [Y] short of the {_prescribe_tss} target.
+   Options to close (within constraints):
    • [specific lever 1 with estimated TSS gain, e.g. +30 min Friday ride ≈ +25 TSS]
    • [specific lever 2 with estimated TSS gain]
    • [specific lever 3 with estimated TSS gain]
    Reply to apply any of these."
-If week 1 planned TSS >= {_la_gap_threshold}: proceed silently — no load gap comment.
+If week 1 planned TSS >= {_la_gap_threshold}: proceed silently.
 """
+
+    # Step 3b / Step 4 content — dynamic when LOAD ACCOUNTABILITY block is active
+    if _prescribe_tss > 0:
+        _traj_status = (
+            "AHEAD"    if ctl_today >= _la_target_ctl else
+            "BEHIND"   if _la_required_tss > _max_weekly_tss else
+            "ON_TRACK"
+        )
+        _traj_meaning = {
+            "ON_TRACK": f"required {_la_required_tss} TSS/wk is within safe ramp limit {_max_weekly_tss} — prescribe {_prescribe_tss}",
+            "BEHIND":   f"required {_la_required_tss} TSS/wk exceeds safe ramp limit {_max_weekly_tss} — prescribe max {_prescribe_tss} and flag timeline slippage",
+            "AHEAD":    f"CTL {ctl_today:.0f} already >= phase target {_la_target_ctl} — hold load at recovery level",
+        }[_traj_status]
+        step3b_content = (
+            f"Step 3b — Trajectory (Python-computed — do NOT re-derive):\n"
+            f"CTL today = {ctl_today:.1f}, phase target = {_la_target_ctl} by {_la_phase_end_date}\n"
+            f"Trajectory: {_traj_status} — {_traj_meaning}\n"
+            f"Race / key-event check: scan events for days 15–28. If type=Race or priority A/B:\n"
+            f"  set pre_event_taper = true; cap WEEK 2 TSS at 60% of {_prescribe_tss} = {int(_prescribe_tss * 0.6)}"
+        )
+        step4_content = (
+            f"Step 4 — TSS target (Python-computed — do NOT override with phase ranges):\n"
+            f"  Week 1: {_prescribe_tss} TSS\n"
+            f"  Week 2: {int(_prescribe_tss * 0.6)} TSS if pre_event_taper = true, otherwise {_prescribe_tss} TSS\n"
+            f"  Phase context (for session type selection only):\n"
+            f"{phase_tss}"
+        )
+    else:
+        step3b_content = (
+            "Step 3b — Trajectory check (use fitness endpoint forward projection):\n"
+            "- ctl_today = today's CTL value from fitness endpoint\n"
+            "- Phase-end CTL blueprint milestones:\n"
+            + phase_milestones + "\n"
+            "- required_weekly_gain = (target_ctl_phase_end - ctl_today) / max(weeks_to_phase_end, 1)\n"
+            "- Set trajectory_status:\n"
+            "    BEHIND   if required_weekly_gain > 3.0\n"
+            "    ON_TRACK if 1.5 <= required_weekly_gain <= 3.0\n"
+            "    AHEAD    if required_weekly_gain < 1.5\n"
+            "- Race / key-event check: scan events for days 15–28. If type=Race or priority A/B:\n"
+            "    -> set pre_event_taper = true"
+        )
+        step4_content = (
+            f"Step 4 — Determine phase and TSS target:\n"
+            f"Current plan week: {weeks_elapsed} (plan start {plan_start_str}, next Monday {next_monday}).\n"
+            f"Phase and TSS ranges:\n"
+            f"{phase_tss}\n"
+            f"Apply trajectory_status from Step 3b to select TSS within range.\n"
+            f"If pre_event_taper = true: cap week 2 at bottom of range."
+        )
 
     return f"""You are generating the rolling 2-week training plan for {name}'s {race_name} coaching system.
 {ftp_note}
@@ -247,26 +342,9 @@ Step 3 — Determine the planning window:
 - If there are already 7+ events planned: set plan_already_populated = true. Do NOT push new sessions (skip Steps 6–7). Continue through Steps 3b–5 for trajectory and constraint review, then jump to Step 8 to output a week-ahead summary of the existing sessions and send Telegram.
 - If <7 events: set plan_already_populated = false. Generate enough sessions to fill the week appropriately.
 
-Step 3b — Trajectory check (use fitness endpoint forward projection):
-- ctl_today = today's CTL value from fitness endpoint
-- ctl_end_wk2 = projected CTL on the last day of the 2-week planning window (passive decay baseline)
-- Phase-end CTL blueprint milestones:
-{phase_milestones}
-- required_weekly_gain = (target_ctl_phase_end - ctl_today) / max(weeks_to_phase_end, 1)
-- Set trajectory_status:
-    BEHIND   if required_weekly_gain > 3.0  -> use TOP 20% of phase TSS range
-    ON_TRACK if 1.5 <= required_weekly_gain <= 3.0 -> use MIDDLE of phase TSS range
-    AHEAD    if required_weekly_gain < 1.5  -> use LOWER 20% of phase TSS range
-- Race / key-event check: scan events for days 15-28 from next Monday. If any event has type "Race" or priority "A" or "B":
-    -> set pre_event_taper = true: cap WEEK 2 TSS at BOTTOM of phase range regardless of trajectory_status
+{step3b_content}
 
-Step 4 — Determine phase and TSS target:
-- Current plan week: {weeks_elapsed} (pre-computed from plan start {plan_start_str} and next Monday {next_monday}). Do NOT recompute.
-- Phase and TSS ranges:
-{phase_tss}
-- Apply trajectory_status from Step 3b to select the TSS target within the range
-- If pre_event_taper = true: week 2 is overridden to BOTTOM of range
-- If athlete has phase_tss defined in athletes.json (check current-state.json or athletes config), use those values in preference to the defaults above
+{step4_content}
 
 Step 5 — Apply mandatory constraints (from rules.md if present — these are HARD overrides):
 {step5_constraints}
