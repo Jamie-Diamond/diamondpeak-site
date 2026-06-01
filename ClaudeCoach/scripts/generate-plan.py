@@ -64,10 +64,16 @@ def fetch_ctl(slug: str) -> float:
 
 
 def compute_required_tss(ctl_today: float, ctl_target: float, weeks_remaining: int) -> int:
-    """Weekly TSS needed to reach ctl_target from ctl_today in weeks_remaining weeks."""
-    daily_gain_needed = (ctl_target - ctl_today) / max(weeks_remaining * 7, 1)
-    required_daily = ctl_target + daily_gain_needed * 42
-    return int(required_daily * 7)
+    """
+    Weekly TSS needed to reach ctl_target from ctl_today in weeks_remaining weeks.
+    Uses CTL EMA mechanics: CTL(N) = CTL0*(41/42)^N + D*(1-(41/42)^N), solved for D.
+    """
+    N = weeks_remaining * 7
+    if N <= 0:
+        return int(ctl_target * 7)
+    decay = (41.0 / 42.0) ** N
+    required_daily = (ctl_target - ctl_today * decay) / (1.0 - decay)
+    return int(max(required_daily, 0.0) * 7)
 
 
 def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) -> str:
