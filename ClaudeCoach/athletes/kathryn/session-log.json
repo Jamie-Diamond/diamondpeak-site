@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": null,
+    "date": "2026-06-01",
+    "name": "Kettlebells — Mon 1 Jun",
+    "sport": "Strength",
+    "tss": 27,
+    "duration_min": 46,
+    "distance_km": null,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": null,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": "Strength focus + 15min conditioning finish.",
+    "logged_at": "2026-06-01T00:00:00",
+    "stub": false
+  },
+  {
     "activity_id": "i152952492",
     "date": "2026-05-31",
     "name": "Afternoon Run ft Jam fly by",
