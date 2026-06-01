@@ -198,6 +198,7 @@
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
+- 2026-06-01: Mon walk-run 55 min swapped to elliptical Z2 55 min — legs tired, ankle management.
 
 ## Notes for Claude
 
