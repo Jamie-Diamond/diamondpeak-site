@@ -83,7 +83,7 @@ def _quick_log_keyboard(activity_id, slug, sport, has_injury, duration_min):
     return {"inline_keyboard": rows}
 
 
-def _build_prompt(slug, first_name, ftp, injuries, profile=None):
+def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150, nutrition_target=90):
     """Build the per-athlete activity analysis prompt."""
     today = date.today().isoformat()
     # Injury context for the athlete line and run analysis
@@ -102,9 +102,9 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None):
         f" Your ANALYSIS must be formatted EXACTLY as multiple output lines — each on its own line:"
         f" Line 1 (header): NxDUR / Xmin walk · avg GAP X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km)"
         f" Lines 2..N+1 (one per run rep, use gap_pace if present else pace): Rep N: DUR · GAP X:XX/km · AVGbpm/MAXbpm"
-        f" Final lines: % HR ≤150 bpm cap adherence · decoupling % if >40 min | Injury pain during and this morning? (0-10)"
+        f" Final lines: % HR ≤{run_hr_cap} bpm cap adherence · decoupling % if >40 min | Injury pain during and this morning? (0-10)"
         " Else (continuous run): Line 1 = distance + avg GAP pace vs threshold — state +/- sec/km."
-        " Line 2 = % time HR ≤150 bpm + aerobic decoupling % if >40 min."
+        f" Line 2 = % time HR ≤{run_hr_cap} bpm + aerobic decoupling % if >40 min."
         " Line 3 = \"Injury pain score during and this morning? (0-10)\""
         if injuries else
         f"- Run (walk-run): If Strava laps show alternating run/walk laps (walk laps: pace >8:00/km or duration ≤90s):"
@@ -188,7 +188,7 @@ RIDE:
   Rep lines: Rep N: DUR · XXXw (X% FTP) · AVGbpm/MAXbpm
   Final line: completion note if intervals missed, else "Nutrition — g carbs/hr and bottles?"
 - Unstructured ≤90 min: NP + IF | "Nutrition — g carbs/hr and bottles?"
-- Unstructured >90 min: NP + IF | aerobic decoupling % | "Nutrition — g carbs/hr and bottles? (recent avg: [avg g/hr from last 4 rides >90 min in session-log.json with nutrition_g_carb set] · race target 90g/hr)"
+- Unstructured >90 min: NP + IF | aerobic decoupling % | "Nutrition — g carbs/hr and bottles? (recent avg: [avg g/hr from last 4 rides >90 min in session-log.json with nutrition_g_carb set] · race target {nutrition_target}g/hr)"
 
 RUN:
 {run_injury_ask}
@@ -668,6 +668,8 @@ def check_athlete(slug, athlete_cfg):
     ftp = profile.get("ftp_watts") or 250
     first_name = profile.get("name", slug).split()[0]
     injuries = profile.get("injuries", [])
+    run_hr_cap       = int(athlete_cfg.get("run_hr_cap", 150))
+    nutrition_target = int(athlete_cfg.get("nutrition_target_g_hr", 90))
 
     state = load_state(state_file)
 
@@ -683,7 +685,8 @@ def check_athlete(slug, athlete_cfg):
         except (json.JSONDecodeError, OSError):
             pass
 
-    prompt = _build_prompt(slug, first_name, ftp, injuries, profile)
+    prompt = _build_prompt(slug, first_name, ftp, injuries, profile,
+                           run_hr_cap=run_hr_cap, nutrition_target=nutrition_target)
 
     t_start = time.time()
     try:

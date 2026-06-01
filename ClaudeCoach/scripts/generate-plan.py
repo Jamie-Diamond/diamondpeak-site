@@ -85,6 +85,40 @@ def compute_projected_ctl(ctl_today: float, weekly_tss: int, weeks: int) -> floa
     return ctl
 
 
+def derive_phase_ctl_targets(
+    ctl_today: float,
+    race_min: int,
+    plan_start_date,
+    base_end_wk: int,
+    build_end_wk: int,
+    spec_end_wk: int,
+    peak_end_wk: int,
+    max_ramp: float,
+    taper_overshoot: float = 1.15,
+) -> dict:
+    """
+    Auto-derive phase CTL targets from race goal, current CTL, and safe ramp rate.
+    Interpolates linearly from ctl_today to peak_target, capped by what is achievable
+    at max_ramp. Used when phase_ctl is not explicitly configured in athletes.json.
+    """
+    from datetime import date as _d, timedelta as _td
+    today = _d.today()
+    peak_target = round(race_min * taper_overshoot)
+    decay_7 = (41.0 / 42.0) ** 7
+    max_weekly_at_ramp = int((ctl_today + max_ramp / (1.0 - decay_7)) * 7)
+
+    derived = {}
+    for phase, end_wk in [("base", base_end_wk), ("build", build_end_wk),
+                           ("specific", spec_end_wk), ("peak", peak_end_wk)]:
+        phase_end_date   = plan_start_date + _td(weeks=end_wk)
+        weeks_from_today = max(1.0, (phase_end_date - today).days / 7.0)
+        progress         = end_wk / peak_end_wk
+        linear_target    = ctl_today + (peak_target - ctl_today) * progress
+        max_achievable   = compute_projected_ctl(ctl_today, max_weekly_at_ramp, int(weeks_from_today))
+        derived[phase]   = max(round(ctl_today) + 1, round(min(linear_target, max_achievable * 0.95)))
+    return derived
+
+
 def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) -> str:
     from datetime import timedelta
     _today      = date.today()
@@ -129,14 +163,32 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) ->
 
     is_triathlete = bool(profile.get("swim_css_per_100m") or profile.get("run_threshold_pace_per_km"))
 
+    # Resolve phase CTL targets — explicit config wins; auto-derive as fallback
+    _phase_ctl_dict   = {}
+    _phase_ctl_source = "none"
     if is_triathlete:
-        phase_ctl = ctl_targets.get("phase_ctl", {})
-        ctl_base  = phase_ctl.get("base",  round(ctl_race_min * 0.73))
-        ctl_build = phase_ctl.get("build", round(ctl_race_min * 0.88))
-        ctl_spec  = phase_ctl.get("specific", round(ctl_race_min * 0.97))
-        ctl_peak  = phase_ctl.get("peak", ctl_race_min)
+        _configured = ctl_targets.get("phase_ctl", {})
+        if _configured:
+            _phase_ctl_dict   = _configured
+            _phase_ctl_source = "configured"
+        elif ctl_today > 0 and ctl_race_min:
+            _taper_over  = float(cfg.get("taper_overshoot", 1.15))
+            _derive_ramp = float(cfg.get("max_ctl_ramp_per_week", 5.0))
+            _phase_ctl_dict   = derive_phase_ctl_targets(
+                ctl_today, ctl_race_min, plan_start_date,
+                base_end_wk, build_end_wk, spec_end_wk, peak_end_wk,
+                _derive_ramp, _taper_over,
+            )
+            _phase_ctl_source = "auto-derived"
+
+    if is_triathlete:
+        ctl_base  = _phase_ctl_dict.get("base",     round(ctl_race_min * 0.73))
+        ctl_build = _phase_ctl_dict.get("build",    round(ctl_race_min * 0.88))
+        ctl_spec  = _phase_ctl_dict.get("specific", round(ctl_race_min * 0.97))
+        ctl_peak  = _phase_ctl_dict.get("peak",     ctl_race_min)
+        _src_note = " (auto-derived — add phase_ctl to athletes.json to override)" if _phase_ctl_source == "auto-derived" else ""
         phase_milestones = (
-            f"    Plan week: {weeks_elapsed} (plan start {plan_start_str})\n"
+            f"    Plan week: {weeks_elapsed} (plan start {plan_start_str}){_src_note}\n"
             f"    End of Base     (week {base_end_wk}):  >= {ctl_base} CTL\n"
             f"    End of Build    (week {build_end_wk}): >= {ctl_build} CTL\n"
             f"    End of Specific (week {spec_end_wk}): >= {ctl_spec} CTL\n"
@@ -196,7 +248,7 @@ CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Frid
     _la_phase_end_date = ""
     load_accountability_block = ""
 
-    if ctl_today > 0 and is_triathlete and ctl_targets.get("phase_ctl"):
+    if ctl_today > 0 and is_triathlete and _phase_ctl_dict:
         if weeks_elapsed <= base_end_wk:
             _la_phase, _la_target_ctl, _la_phase_end_wk = "Base", ctl_base, base_end_wk
         elif weeks_elapsed <= build_end_wk:

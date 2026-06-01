@@ -81,6 +81,14 @@ def run_summary(slug: str = "jamie") -> str:
 
     client, chat_id = _load_client(slug)
 
+    _cfg_all = json.loads(ATHLETES_CONFIG.read_text())
+    _cfg = _cfg_all.get(slug, {})
+    nutrition_target   = int(_cfg.get("nutrition_target_g_hr", 90))
+    nutrition_alert    = int(_cfg.get("nutrition_alert_threshold_g_hr", 75))
+    tsb_fresh          = float(_cfg.get("tsb_fresh_threshold", 10))
+    tsb_overreach_thr  = float(_cfg.get("tsb_overreach_threshold", -30))
+    ctl_ramp_thr       = float(_cfg.get("ctl_ramp_overreach_threshold", 7))
+
     today      = date.today()
     today_dow  = today.strftime("%A")
     week_start = today - timedelta(days=today.weekday())  # Monday
@@ -152,12 +160,12 @@ def run_summary(slug: str = "jamie") -> str:
         nutrition_consequence = (
             f"{prev_race_name} post-race note: \"{prev_race_notes}\" — "
             f"underfuelling in training means the gut never adapts to high carb flux under load. "
-            f"Every long ride below 75g/hr is a missed adaptation."
+            f"Every long ride below {nutrition_alert}g/hr is a missed adaptation."
         )
     else:
         nutrition_consequence = (
             "Underfuelling in training means the gut never adapts to high carb flux under load. "
-            "Race-day bonk risk rises sharply when training rides average below 75g/hr."
+            f"Race-day bonk risk rises sharply when training rides average below {nutrition_alert}g/hr."
         )
 
     # -- Pre-compute recovery score --------------------------------------------
@@ -280,7 +288,7 @@ From the data above, extract:
   - This week avg g/hr (rides >90 min): compute from nutrition_history entries this week
   - 4-week rolling avg g/hr: mean across all entries in nutrition_history
   - Trend direction: compare most recent 3 sessions vs previous 3 — improving / declining / flat
-  - Gap to race target: 90 − this_week_avg (g/hr)
+  - Gap to race target: {nutrition_target} − this_week_avg (g/hr)
 - Injury pain: ankle_pain_during scores from session-log this week
 
 ## Step 2 — Output the summary card
@@ -298,7 +306,7 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 | Fatigue | X | — |
 | Sleep avg | Xh | ≥7h |
 | Heat sessions | N | — |
-| Fuelling (rides >90 min) | Xg/hr this wk (4wk avg: Y) | 90g/hr race target — gap: Zg/hr |
+| Fuelling (rides >90 min) | Xg/hr this wk (4wk avg: Y) | {nutrition_target}g/hr race target — gap: Zg/hr |
 
 **Completed:** [discipline summaries — e.g. "3 rides, 2 runs, 1 swim"]
 **Missed:** [session names, or "none"]
@@ -329,19 +337,19 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 
 Evaluate each trigger using the computed metrics. Output only the ones that FIRE. If none fire, output the all-clear line.
 
-**T1 RECOVERY** — fires if end-of-week TSB < −30:
+**T1 RECOVERY** — fires if end-of-week TSB < {tsb_overreach_thr}:
 ⚡ *T1 RECOVERY*: Form at [X] — accumulated fatigue is high.
 Options: A) 2-day recovery block (Mon–Tue easy only) | B) Continue as planned | C) Reduce Monday volume 40%
 
-**T2 OVERREACH** — fires if 4-week CTL ramp > 7/wk:
+**T2 OVERREACH** — fires if 4-week CTL ramp > {ctl_ramp_thr}/wk:
 ⚡ *T2 OVERREACH*: 4-week Fitness ramp at [X]/wk — approaching overreach threshold.
 Options: A) Cap next week at current Load | B) Insert recovery week now | C) Continue (accept fatigue risk)
 
-**T3 UNDERLOAD** — fires if week TSS < 75% of current phase TSS ceiling (from blueprint):
-⚡ *T3 UNDERLOAD*: Week Load [X] vs phase target [Y] ([Z]% of ceiling).
+**T3 UNDERLOAD** — fires if week compliance < 60%:
+⚡ *T3 UNDERLOAD*: Week compliance [X]% — well below minimum threshold.
 Availability issue or training fatigue? Reply to clarify and I'll adjust next week's plan.
 
-**T4 FRESH** — fires if end-of-week TSB > 10 AND days to race > 42:
+**T4 FRESH** — fires if end-of-week TSB > {tsb_fresh} AND days to race > 42:
 ⚡ *T4 FRESH*: Form at [X] with {days_to_race} days to race — you're fresher than the phase requires.
 Options: A) Add an extra session | B) Increase intensity on planned sessions | C) Hold (life/fatigue reason)
 
@@ -353,10 +361,10 @@ Readiness: [one line on whether athlete is prepared to step up]
 ⚡ *T6 INJURY*: Ankle pain avg [X]/10 this week [or: trending up — scores X→Y→Z].
 Options: A) Drop all runs this week | B) Reduce run volume 50% | C) Continue protocol (accept risk)
 
-**T7 NUTRITION** — fires if this-week avg g/hr < 75 on rides >90 min AND at least 1 such session was logged:
-⚡ *T7 NUTRITION*: Avg fuelling [X]g/hr on long rides — [Y]g/hr short of the 90g/hr race target. Trend: [improving / declining / flat] over last 6 sessions.
+**T7 NUTRITION** — fires if this-week avg g/hr < {nutrition_alert} on rides >90 min AND at least 1 such session was logged:
+⚡ *T7 NUTRITION*: Avg fuelling [X]g/hr on long rides — [Y]g/hr short of the {nutrition_target}g/hr race target. Trend: [improving / declining / flat] over last 6 sessions.
 Race consequence: {nutrition_consequence}
-Fix: Eat at 15 min and every 25 min after. This week's long ride target: [blueprint phase rate, e.g. 90]g/hr. Use Maurten 320 + chews if GI allows.
+Fix: Eat at 15 min and every 25 min after. This week's long ride target: {nutrition_target}g/hr. Use Maurten 320 + chews if GI allows.
 
 **T8 HRV** — fires if the pre-computed recovery score HRV ratio < 0.90 OR 3+ consecutive days with HRV below the 7-day rolling average in the wellness data:
 ⚡ *T8 HRV*: HRV ratio [X] vs baseline — accumulated fatigue signal (recovery score: [score]/100 [label]).
