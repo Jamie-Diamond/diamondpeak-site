@@ -916,9 +916,43 @@ function renderZones(p) {
       let runIF = isHalf?0.82:0.77;
       const pm = (p.run_threshold_pace_per_km||"").match(/(\d+):(\d{2})/);
       if (pm) { const ts=parseInt(pm[1])*60+parseInt(pm[2]),rp=(runMin*60)/(isHalf?21.1:42.2); if(rp>0) runIF=Math.min(ts/rp,0.95); }
-      const raceTSS = (swimMin/60)*0.85*0.85*100 + (bikeMin/60)*bikeIF*bikeIF*100 + (runMin/60)*runIF*runIF*100;
-      html += `<h3 style="margin-top:14px;margin-bottom:8px">Race-day fitness target</h3>`;
-      html += `<div class="target-row"><span class="target-label">Min CTL at race day</span><span class="target-val">${Math.round(raceTSS/5.5)} CTL</span></div>`;
+      const swimTSS = (swimMin/60)*0.85*0.85*100;
+      const bikeTSS = (bikeMin/60)*bikeIF*bikeIF*100;
+      const runTSS  = (runMin/60)*runIF*runIF*100;
+      const raceTSS = swimTSS + bikeTSS + runTSS;
+      html += `<h3 style="margin-top:14px;margin-bottom:8px">Race-day fitness target</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px">
+        <thead><tr style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">
+          <th style="text-align:left;padding:4px 0;border-bottom:1px solid var(--line);font-weight:500">Leg</th>
+          <th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--line);font-weight:500">Split</th>
+          <th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--line);font-weight:500">IF</th>
+          <th style="text-align:right;padding:4px 0;border-bottom:1px solid var(--line);font-weight:500">TSS</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="padding:5px 0;border-bottom:1px solid var(--line);color:var(--swim)">Swim</td>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace">${rt.swim_time}</td>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace;color:var(--muted)">85%</td>
+            <td style="padding:5px 0;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace">${Math.round(swimTSS)}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;border-bottom:1px solid var(--line);color:var(--ride)">Bike</td>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace">${rt.bike_time}</td>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace;color:var(--muted)">${Math.round(bikeIF*100)}%</td>
+            <td style="padding:5px 0;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace">${Math.round(bikeTSS)}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;color:var(--run)">Run</td>
+            <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace">${rt.run_time}</td>
+            <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;color:var(--muted)">${Math.round(runIF*100)}%</td>
+            <td style="padding:5px 0;text-align:right;font-family:'DM Mono',monospace">${Math.round(runTSS)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="target-row" style="margin-top:2px">
+        <span class="target-label">Race TSS &rarr; min CTL</span>
+        <span class="target-val">${Math.round(raceTSS)} &rarr; ${Math.round(raceTSS/5.5)}</span>
+      </div>`;
     }
   }
   const el = document.getElementById("zones-content");
