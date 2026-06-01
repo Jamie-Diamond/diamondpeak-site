@@ -869,7 +869,7 @@ function renderCtlProjection(proj) {
 
 // ── TRAINING ZONES ───────────────────────────────────────────────────────────
 
-function renderZones(p) {
+function renderZones(p, fitnessCtl) {
   const ftp = p.ftp_watts;
   if (!ftp) return;
   function fmtS(s) { return Math.floor(s/60)+":"+(s%60).toString().padStart(2,"0"); }
@@ -959,6 +959,39 @@ function renderZones(p) {
         <span class="target-label">Race TSS &rarr; min CTL</span>
         <span class="target-val">${Math.round(raceTSS)} &rarr; ${Math.round(raceTSS/5.5)}</span>
       </div>`;
+      // Achievability section
+      const fc = fitnessCtl || {};
+      const raceMinCtl = Math.round(raceTSS/5.5);
+      let achRows = '';
+      if (p.swim_css_per_100m) {
+        const cssMat2 = p.swim_css_per_100m.match(/(\d+):(\d{2})/);
+        if (cssMat2) {
+          const cssS2 = parseInt(cssMat2[1])*60+parseInt(cssMat2[2]);
+          const swimIF2 = cssS2/swimPaceS, deltaS = swimPaceS-cssS2;
+          const sSt = swimIF2<=0.95?{c:"var(--green)",s:"✓"}:swimIF2<=1.0?{c:"#b7950b",s:"~"}:{c:"var(--run)",s:"✗"};
+          achRows += `<tr><td style="padding:4px 8px 4px 0;border-bottom:1px solid var(--line);color:var(--swim);font-size:11px">Swim</td><td style="padding:4px 0;border-bottom:1px solid var(--line);font-family:'DM Mono',monospace;font-size:11px"><span style="color:${sSt.c}">${sSt.s}</span>&nbsp;${fmtS(swimPaceS)}/100m &middot; ${deltaS>=0?"+":""}${deltaS}s vs CSS</td></tr>`;
+        }
+      }
+      {const bMax=isHalf?0.85:0.77,bWrn=isHalf?0.90:0.82;
+      const bSt=bikeIF<=bMax?{c:"var(--green)",s:"✓"}:bikeIF<=bWrn?{c:"#b7950b",s:"~"}:{c:"var(--run)",s:"✗"};
+      achRows+=`<tr><td style="padding:4px 8px 4px 0;border-bottom:1px solid var(--line);color:var(--ride);font-size:11px">Bike</td><td style="padding:4px 0;border-bottom:1px solid var(--line);font-family:'DM Mono',monospace;font-size:11px"><span style="color:${bSt.c}">${bSt.s}</span>&nbsp;${bikeNP?bikeNP+"W NP &middot; ":""}${Math.round(bikeIF*100)}% FTP</td></tr>`;}
+      {const rMax=isHalf?0.85:0.80,rWrn=isHalf?0.90:0.85;
+      const rSt=runIF<=rMax?{c:"var(--green)",s:"✓"}:runIF<=rWrn?{c:"#b7950b",s:"~"}:{c:"var(--run)",s:"✗"};
+      achRows+=`<tr><td style="padding:4px 8px 4px 0;color:var(--run);font-size:11px">Run</td><td style="padding:4px 0;font-family:'DM Mono',monospace;font-size:11px"><span style="color:${rSt.c}">${rSt.s}</span>&nbsp;${runPaceStr} &middot; ${Math.round(runIF*100)}% threshold</td></tr>`;}
+      html += `<h3 style="margin-top:14px;margin-bottom:8px">Achievability</h3><table style="width:100%;border-collapse:collapse;margin-bottom:8px">${achRows}</table>`;
+      const curCtl=fc.currentCtl,curTsb=fc.currentTsb,pkCtl=fc.peakCtl;
+      if (curCtl!=null||pkCtl!=null) {
+        let ctlLine=`Min CTL: <strong>${raceMinCtl}</strong>`;
+        if (curCtl!=null){const g=raceMinCtl-curCtl;ctlLine+=` &middot; Now: <strong style="color:${g<=0?"var(--green)":g<=20?"#b7950b":"var(--run)}">${curCtl.toFixed(1)}</strong>`;}
+        if (pkCtl!=null){const g=raceMinCtl-pkCtl;ctlLine+=` &middot; Peak: <strong style="color:${g<=0?"var(--green)":g<=10?"#b7950b":"var(--run)}">${pkCtl.toFixed(1)}</strong>`;}
+        html+=`<div style="font-size:11px;margin-bottom:4px">${ctlLine}</div>`;
+      }
+      if (curTsb!=null) {
+        const tc=curTsb>5?"var(--green)":curTsb>-20?"#b7950b":"var(--run)";
+        const tl=curTsb>5?"fresh":curTsb>-10?"moderate":"fatigued";
+        html+=`<div style="font-size:11px;margin-bottom:2px">Form (TSB): <strong style="color:${tc}">${curTsb>0?"+":""}${curTsb.toFixed(1)}</strong> &mdash; ${tl} &middot; target race day: +5 to +15</div>`;
+        html+=`<div style="font-size:10px;color:var(--muted)">Race-day CTL drops ~5&#x2013;10 in taper; peak CTL + positive TSB = readiness</div>`;
+      }
     }
   }
   const el = document.getElementById("zones-content");
@@ -1091,7 +1124,11 @@ fetch('training-data-kathryn.json?v='+Date.now())
         }
       }
 
-      renderZones(p);
+      const fitnessCtl={};
+      if(d.kpi){fitnessCtl.currentCtl=d.kpi.ctl;fitnessCtl.currentTsb=d.kpi.tsb;}
+      if(d.ctlProjection&&d.ctlProjection.planned_build&&d.ctlProjection.planned_build.length)
+        fitnessCtl.peakCtl=Math.max(...d.ctlProjection.planned_build.map(e=>e.ctl));
+      renderZones(p,fitnessCtl);
     }
     if (d.currentState && d.currentState.bike_ftp)
       document.getElementById("rp-ftp").textContent = d.currentState.bike_ftp+" W";
