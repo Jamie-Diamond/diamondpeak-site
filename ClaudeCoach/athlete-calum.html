@@ -906,8 +906,8 @@ function renderZones(p, fitnessCtl) {
       const curCtl=fc.currentCtl,curTsb=fc.currentTsb,pkCtl=fc.peakCtl;
       if (curCtl!=null||pkCtl!=null) {
         let ctlLine=`Min CTL: <strong>${raceMinCtl}</strong>`;
-        if (curCtl!=null){const g=raceMinCtl-curCtl;ctlLine+=` &middot; Now: <strong style="color:${g<=0?"var(--green)":g<=20?"#b7950b":"var(--run)}">${curCtl.toFixed(1)}</strong>`;}
-        if (pkCtl!=null){const g=raceMinCtl-pkCtl;ctlLine+=` &middot; Peak: <strong style="color:${g<=0?"var(--green)":g<=10?"#b7950b":"var(--run)}">${pkCtl.toFixed(1)}</strong>`;}
+        if (curCtl!=null){const g=raceMinCtl-curCtl;const gc=g<=0?"var(--green)":g<=20?"#b7950b":"var(--run)";ctlLine+=` &middot; Now: <strong style="color:${gc}">${curCtl.toFixed(1)}</strong>`;}
+        if (pkCtl!=null){const g=raceMinCtl-pkCtl;const gc=g<=0?"var(--green)":g<=10?"#b7950b":"var(--run)";ctlLine+=` &middot; Peak: <strong style="color:${gc}">${pkCtl.toFixed(1)}</strong>`;}
         html+=`<div style="font-size:11px;margin-bottom:4px">${ctlLine}</div>`;
       }
       if (curTsb!=null) {
