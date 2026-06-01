@@ -1146,75 +1146,82 @@ function renderZones(p, fitnessCtl) {
         <span class="target-label">Race TSS &rarr; min CTL</span>
         <span class="target-val">${Math.round(raceTSS)} &rarr; ${Math.round(raceTSS/5.5)}</span>
       </div>`;
-      // Race scenario: Now / Projected / Target
+      // Race scenario: 2025 actual | Live (current fitness) | Target | Projected (peak fitness)
       const fc = fitnessCtl || {};
-      const curCtlV=fc.currentCtl, curTsbV=fc.currentTsb, pkCtlV=fc.peakCtl;
+      const curCtlV=fc.currentCtl, curTsbV=fc.currentTsb, pkCtlV=fc.peakCtl, ctl25=fc.ctl2025;
+      const hasLive = curCtlV!=null && ctl25!=null && ctl25>0;
+      const ctlScaleLive = hasLive ? Math.pow(curCtlV/ctl25, 0.3) : null;
       const hasProj = curCtlV!=null && pkCtlV!=null && pkCtlV>curCtlV;
-      const ctlScale = hasProj ? Math.pow(pkCtlV/curCtlV, 0.3) : 1;
+      const ctlScaleProj = hasProj ? Math.pow(pkCtlV/curCtlV, 0.3) : null;
       function fmtHM(m){if(m==null)return"—";return Math.floor(m/60)+":"+(m%60).toString().padStart(2,"0");}
-      function fmtDelta(a,t){
-        if(a==null||t==null)return"";
-        const d=a-t; if(d===0)return"";
+      function fmtDelta(a,b){
+        if(a==null||b==null)return"";
+        const d=Math.round(a-b); if(d===0)return"";
         const col=d<0?"var(--green)":"var(--run)";
-        return '<span style="font-size:9px;color:'+col+'">'+(d<0?"-":"+")+Math.abs(d)+"m</span>";
+        const sign=d<0?"":"+";
+        return '<span style="font-size:9px;color:'+col+'">'+sign+d+"m</span>";
       }
-      // Swim — from CSS + fixed margin
-      let nowSwimMin=swimMin, projSwimMin=null;
-      if(p.swim_css_per_100m){
-        const cssMat2=p.swim_css_per_100m.match(/(\d+):(\d{2})/);
-        if(cssMat2){
-          const cssS2=parseInt(cssMat2[1])*60+parseInt(cssMat2[2]);
-          const mgnS=swimPaceS-cssS2;
-          nowSwimMin=Math.round((cssS2+mgnS)*(isHalf?19:38)/60);
-          if(hasProj) projSwimMin=Math.round((cssS2/ctlScale+mgnS)*(isHalf?19:38)/60);
-        }
-      }
-      // Bike — same effort (IF) at current / projected FTP; speed ∝ NP^(1/3)
-      const nowBikeMin=bikeMin;
-      const projBikeMin=hasProj?Math.round(bikeMin/Math.pow(ctlScale,1/3)):null;
-      // Run — derived IF applied to current / projected threshold
-      let nowRunMin=runMin, projRunMin=null;
-      const thMatch2=(p.run_threshold_pace_per_km||"").match(/(\d+):(\d{2})/);
-      if(thMatch2){
-        const tS2=parseInt(thMatch2[1])*60+parseInt(thMatch2[2]);
-        nowRunMin=Math.round(tS2/runIF*(isHalf?21.1:42.2)/60);
-        if(hasProj) projRunMin=Math.round((tS2/ctlScale)/runIF*(isHalf?21.1:42.2)/60);
-      }
-      const nowTtl=nowSwimMin+nowBikeMin+nowRunMin;
-      const projTtl=hasProj?(projSwimMin||0)+(projBikeMin||0)+(projRunMin||0):null;
-      const tgtTtl=swimMin+bikeMin+runMin;
-      // Build table rows via concatenation (avoids template-literal } ambiguity)
+      function parseRaceTime(t){if(!t)return null;const m=t.match(/(\d+):(\d{2})/);if(!m)return null;return parseInt(m[1])*60+parseInt(m[2]);}
+      // 2025 actual times
+      const act25Swim = p.prev_race ? parseRaceTime(p.prev_race.swim_time) : null;
+      const act25Bike = p.prev_race ? parseRaceTime(p.prev_race.bike_time) : null;
+      const act25Run  = p.prev_race ? parseRaceTime(p.prev_race.run_time)  : null;
+      const act25Ttl  = (act25Swim!=null&&act25Bike!=null&&act25Run!=null) ? act25Swim+act25Bike+act25Run : null;
+      // Live = 2025 actuals scaled to current CTL (ctlScaleLive<1 means slower, >1 faster)
+      const liveSwimMin = (act25Swim!=null&&ctlScaleLive!=null) ? Math.round(act25Swim/ctlScaleLive) : null;
+      const liveBikeMin = (act25Bike!=null&&ctlScaleLive!=null) ? Math.round(act25Bike/Math.pow(ctlScaleLive,1/3)) : null;
+      const liveRunMin  = (act25Run!=null&&ctlScaleLive!=null)  ? Math.round(act25Run/ctlScaleLive)  : null;
+      const liveTtl = (liveSwimMin!=null&&liveBikeMin!=null&&liveRunMin!=null) ? liveSwimMin+liveBikeMin+liveRunMin : null;
+      // Target (swimMin/bikeMin/runMin from race_targets above)
+      const tgtTtl = swimMin+bikeMin+runMin;
+      // Projected = target times scaled by peak CTL vs current
+      const projSwimMin = ctlScaleProj!=null ? Math.round(swimMin/ctlScaleProj) : null;
+      const projBikeMin = ctlScaleProj!=null ? Math.round(bikeMin/Math.pow(ctlScaleProj,1/3)) : null;
+      const projRunMin  = ctlScaleProj!=null ? Math.round(runMin/ctlScaleProj)  : null;
+      const projTtl = (projSwimMin!=null&&projBikeMin!=null&&projRunMin!=null) ? projSwimMin+projBikeMin+projRunMin : null;
+      // Build table rows
       const bd="border-bottom:1px solid var(--line);";
       const mono="font-family:'DM Mono',monospace;";
       let scRows="";
       // Swim
       scRows+="<tr>";
       scRows+='<td style="padding:5px 0;'+bd+'color:var(--swim)">Swim</td>';
-      scRows+='<td style="padding:5px 8px;'+bd+'text-align:right;'+mono+'">'+fmtHM(nowSwimMin)+" "+fmtDelta(nowSwimMin,swimMin)+"</td>";
-      if(hasProj) scRows+='<td style="padding:5px 8px;'+bd+'text-align:right;'+mono+'">'+fmtHM(projSwimMin)+" "+fmtDelta(projSwimMin,swimMin)+"</td>";
-      scRows+='<td style="padding:5px 0;'+bd+'text-align:right;'+mono+'">'+fmtHM(swimMin)+"</td></tr>";
+      scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(act25Swim)+"</td>";
+      scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(liveSwimMin)+" "+fmtDelta(liveSwimMin,act25Swim)+"</td>";
+      scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(swimMin)+" "+fmtDelta(swimMin,act25Swim)+"</td>";
+      scRows+='<td style="padding:5px 0;'+bd+'text-align:right;'+mono+'">'+fmtHM(projSwimMin)+" "+fmtDelta(projSwimMin,swimMin)+"</td></tr>";
       // Bike
       scRows+="<tr>";
       scRows+='<td style="padding:5px 0;'+bd+'color:var(--ride)">Bike</td>';
-      scRows+='<td style="padding:5px 8px;'+bd+'text-align:right;'+mono+'">'+fmtHM(nowBikeMin)+" "+fmtDelta(nowBikeMin,bikeMin)+"</td>";
-      if(hasProj) scRows+='<td style="padding:5px 8px;'+bd+'text-align:right;'+mono+'">'+fmtHM(projBikeMin)+" "+fmtDelta(projBikeMin,bikeMin)+"</td>";
-      scRows+='<td style="padding:5px 0;'+bd+'text-align:right;'+mono+'">'+fmtHM(bikeMin)+"</td></tr>";
+      scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(act25Bike)+"</td>";
+      scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(liveBikeMin)+" "+fmtDelta(liveBikeMin,act25Bike)+"</td>";
+      scRows+='<td style="padding:5px 5px;'+bd+'text-align:right;'+mono+'">'+fmtHM(bikeMin)+" "+fmtDelta(bikeMin,act25Bike)+"</td>";
+      scRows+='<td style="padding:5px 0;'+bd+'text-align:right;'+mono+'">'+fmtHM(projBikeMin)+" "+fmtDelta(projBikeMin,bikeMin)+"</td></tr>";
       // Run
       scRows+="<tr>";
       scRows+='<td style="padding:5px 0;color:var(--run)">Run</td>';
-      scRows+='<td style="padding:5px 8px;text-align:right;'+mono+'">'+fmtHM(nowRunMin)+" "+fmtDelta(nowRunMin,runMin)+"</td>";
-      if(hasProj) scRows+='<td style="padding:5px 8px;text-align:right;'+mono+'">'+fmtHM(projRunMin)+" "+fmtDelta(projRunMin,runMin)+"</td>";
-      scRows+='<td style="padding:5px 0;text-align:right;'+mono+'">'+fmtHM(runMin)+"</td></tr>";
-      const hdrProj=hasProj?'<th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--line);font-weight:500">Projected</th>':"";
-      html+=`<h3 style="margin-top:14px;margin-bottom:8px">Race scenario</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px">
-        <thead><tr style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">
-          <th style="text-align:left;padding:4px 0;border-bottom:1px solid var(--line);font-weight:500">Leg</th>
-          <th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--line);font-weight:500">Now</th>
-          ${hdrProj}<th style="text-align:right;padding:4px 0;border-bottom:1px solid var(--line);font-weight:500">Target</th>
-        </tr></thead><tbody>${scRows}</tbody></table>`;
-      html+='<div class="target-row" style="margin-top:2px"><span class="target-label">Total</span><span class="target-val">'+fmtHM(nowTtl)+(hasProj?" &middot; "+fmtHM(projTtl)+" projected":"")+" &middot; "+fmtHM(tgtTtl)+" target</span></div>";
-      if(hasProj) html+='<div style="font-size:10px;color:var(--muted);margin-top:4px">Now = current thresholds at target race intensities. Projected = CTL build to '+pkCtlV.toFixed(0)+' scales thresholds ~'+Math.round((ctlScale-1)*100)+'%.</div>';
+      scRows+='<td style="padding:5px 5px;text-align:right;'+mono+'">'+fmtHM(act25Run)+"</td>";
+      scRows+='<td style="padding:5px 5px;text-align:right;'+mono+'">'+fmtHM(liveRunMin)+" "+fmtDelta(liveRunMin,act25Run)+"</td>";
+      scRows+='<td style="padding:5px 5px;text-align:right;'+mono+'">'+fmtHM(runMin)+" "+fmtDelta(runMin,act25Run)+"</td>";
+      scRows+='<td style="padding:5px 0;text-align:right;'+mono+'">'+fmtHM(projRunMin)+" "+fmtDelta(projRunMin,runMin)+"</td></tr>";
+      html+='<h3 style="margin-top:14px;margin-bottom:8px">Race scenario</h3>';
+      html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px">';
+      html+='<thead><tr style="font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">';
+      html+='<th style="text-align:left;padding:4px 0;border-bottom:1px solid var(--line);font-weight:500">Leg</th>';
+      html+='<th style="text-align:right;padding:4px 5px;border-bottom:1px solid var(--line);font-weight:500">2025</th>';
+      html+='<th style="text-align:right;padding:4px 5px;border-bottom:1px solid var(--line);font-weight:500">Live</th>';
+      html+='<th style="text-align:right;padding:4px 5px;border-bottom:1px solid var(--line);font-weight:500">Target</th>';
+      html+='<th style="text-align:right;padding:4px 0;border-bottom:1px solid var(--line);font-weight:500">Proj.</th>';
+      html+='</tr></thead><tbody>'+scRows+'</tbody></table>';
+      let ttlStr=fmtHM(act25Ttl);
+      if(liveTtl!=null) ttlStr+=" &middot; "+fmtHM(liveTtl)+" live";
+      ttlStr+=" &middot; "+fmtHM(tgtTtl)+" target";
+      if(projTtl!=null) ttlStr+=" &middot; "+fmtHM(projTtl)+" proj.";
+      html+='<div class="target-row" style="margin-top:2px"><span class="target-label">Total</span><span class="target-val">'+ttlStr+"</span></div>";
+      let noteLines=[];
+      if(hasLive) noteLines.push("Live = 2025 actual adjusted for current CTL ("+curCtlV.toFixed(0)+" vs "+ctl25.toFixed(0)+" race-day).");
+      if(hasProj) noteLines.push("Proj. = targets at peak CTL "+pkCtlV.toFixed(0)+" (~+"+Math.round((ctlScaleProj-1)*100)+"% threshold).");
+      if(noteLines.length) html+='<div style="font-size:10px;color:var(--muted);margin-top:4px">'+noteLines.join(" ")+"</div>";
       // CTL / form readiness
       const raceMinCtl=Math.round(raceTSS/5.5);
       if(curCtlV!=null||pkCtlV!=null){
@@ -1351,6 +1358,11 @@ fetch('training-data.json?v='+Date.now())
       if(d.kpi){fitnessCtl.currentCtl=d.kpi.ctl;fitnessCtl.currentTsb=d.kpi.tsb;}
       if(d.ctlProjection&&d.ctlProjection.planned_build&&d.ctlProjection.planned_build.length)
         fitnessCtl.peakCtl=Math.max(...d.ctlProjection.planned_build.map(e=>e.ctl));
+      if(d.fitnessPrev&&d.fitnessPrev.length&&p.prev_race&&p.prev_race.date){
+        const rd=p.prev_race.date;let best=null,bestDiff=Infinity;
+        d.fitnessPrev.forEach(([dt,ctl])=>{const diff=Math.abs(new Date(dt+"T00:00:00")-new Date(rd+"T00:00:00"));if(diff<bestDiff){bestDiff=diff;best=ctl;}});
+        if(best!=null) fitnessCtl.ctl2025=best;
+      }
       renderZones(p,fitnessCtl);
     }
     if (d.currentState && d.currentState.bike_ftp)
