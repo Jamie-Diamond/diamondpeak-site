@@ -42,7 +42,35 @@ def load_profile(slug: str) -> dict:
     return {}
 
 
-def build_prompt(slug: str, cfg: dict, profile: dict) -> str:
+def fetch_ctl(slug: str) -> float:
+    """Return the most recent CTL value from Intervals.icu, or 0.0 on failure."""
+    try:
+        result = subprocess.run(
+            ["python3", "ClaudeCoach/lib/icu_fetch.py", "--athlete", slug,
+             "--endpoint", "fitness", "--days", "3"],
+            capture_output=True, text=True, cwd=PROJECT_DIR,
+        )
+        if result.returncode != 0:
+            return 0.0
+        data = json.loads(result.stdout.strip())
+        if isinstance(data, list):
+            for entry in reversed(data):
+                ctl = entry.get("ctl")
+                if ctl is not None:
+                    return float(ctl)
+    except Exception:
+        pass
+    return 0.0
+
+
+def compute_required_tss(ctl_today: float, ctl_target: float, weeks_remaining: int) -> int:
+    """Weekly TSS needed to reach ctl_target from ctl_today in weeks_remaining weeks."""
+    daily_gain_needed = (ctl_target - ctl_today) / max(weeks_remaining * 7, 1)
+    required_daily = ctl_target + daily_gain_needed * 42
+    return int(required_daily * 7)
+
+
+def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) -> str:
     from datetime import timedelta
     _today      = date.today()
     today       = _today.isoformat()
@@ -142,6 +170,41 @@ CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Frid
 - Saturday: Long ride (Z2 NP target, progressive) — key session
 - Sunday: Rest or short active recovery"""
 
+    # Load accountability — only for athletes with explicit phase CTL targets
+    load_accountability_block = ""
+    if ctl_today > 0 and is_triathlete and ctl_targets.get("phase_ctl"):
+        if weeks_elapsed <= base_end_wk:
+            _la_phase, _la_target_ctl, _la_phase_end_wk = "Base", ctl_base, base_end_wk
+        elif weeks_elapsed <= build_end_wk:
+            _la_phase, _la_target_ctl, _la_phase_end_wk = "Build", ctl_build, build_end_wk
+        elif weeks_elapsed <= spec_end_wk:
+            _la_phase, _la_target_ctl, _la_phase_end_wk = "Specific", ctl_spec, spec_end_wk
+        else:
+            _la_phase, _la_target_ctl, _la_phase_end_wk = "Peak", ctl_peak, peak_end_wk
+        _la_weeks_remaining = max(1, _la_phase_end_wk - weeks_elapsed + 1)
+        _la_required_tss = compute_required_tss(ctl_today, _la_target_ctl, _la_weeks_remaining)
+        _la_phase_end_date = (plan_start_date + timedelta(weeks=_la_phase_end_wk)).isoformat()
+        _la_gap_threshold = int(_la_required_tss * 0.9)
+        load_accountability_block = f"""
+## LOAD ACCOUNTABILITY — Python-computed, authoritative
+CTL today        : {ctl_today:.1f}
+Current phase    : {_la_phase} (plan week {weeks_elapsed} of {_la_phase_end_wk})
+Phase CTL target : {_la_target_ctl} by end of week {_la_phase_end_wk} ({_la_phase_end_date})
+Weeks remaining  : {_la_weeks_remaining}
+Required weekly TSS to stay on track: {_la_required_tss}
+
+After Step 6 (plan built), sum the planned Load for WEEK 1.
+If week 1 planned TSS < {_la_gap_threshold} (>10% short of {_la_required_tss}):
+  Include a LOAD GAP section in the Step 7/8 Telegram notification:
+  "Load gap: Week {weeks_elapsed} totals [X] TSS — [Y] short of the {_la_required_tss} needed to reach {_la_target_ctl} CTL by {_la_phase_end_date}.
+   Options to close the gap (within schedule constraints):
+   • [specific lever 1 with estimated TSS gain, e.g. +30 min Friday ride ≈ +25 TSS]
+   • [specific lever 2 with estimated TSS gain]
+   • [specific lever 3 with estimated TSS gain]
+   Reply to apply any of these."
+If week 1 planned TSS >= {_la_gap_threshold}: proceed silently — no load gap comment.
+"""
+
     return f"""You are generating the rolling 2-week training plan for {name}'s {race_name} coaching system.
 {ftp_note}
 
@@ -153,7 +216,7 @@ Current plan week: {weeks_elapsed} (plan started {plan_start_str})
 {date_grid_str}
 RULE: every session name must include the day-of-week from this grid.
 If the profile endpoint current_date_local disagrees with {today}, flag it and use {today}.
-
+{load_accountability_block}
 Step 1 — Pull live data via Bash (use today's date {today} for all calculations):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint fitness --days 14 --newest {end_35}
@@ -255,8 +318,9 @@ Run: git add ClaudeCoach/athletes/{slug}/current-state.md && git fetch origin &&
 
 
 def run_for_athlete(slug: str, cfg: dict) -> str | None:
-    profile = load_profile(slug)
-    prompt  = build_prompt(slug, cfg, profile)
+    profile   = load_profile(slug)
+    ctl_today = fetch_ctl(slug)
+    prompt    = build_prompt(slug, cfg, profile, ctl_today)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_plan_", delete=False, suffix=".txt"
