@@ -76,7 +76,6 @@ None
 - 2026-05-29: T7 + T8 status — heat-log.json not re-checked today (swim session; heat acclimatisation via post-session sauna/hot bath remains outstanding). Race 113 days away; CTL 48.7, ATL 42.7, form +6.1. Heat sessions critically overdue.
 
 ## Open Actions
-- [x] Plan generated through 2026-06-07 (2026-05-24)
 - [x] Plan reviewed W5-W6 (2026-05-31): day labels fixed, nutrition updated to 20g CHO/hr for >90min rides
 - [ ] Fix day-of-week label errors: "Sat 24 May" ride (is Sun) and "Sun 25 May" run (is Mon)
 - [ ] Review Mon 25 May long run (75min) vs. kettlebells constraint — daily cap (90min) exceeded; consider moving run to Sat 23 May
