@@ -36,3 +36,4 @@ No
 | 2026-05-26 | 10.7 | 11.1 | +0.4 | Plan day 1. Z2 Aerobic Base Ride 60 min prescribed GO as-planned. No HRV or sleep data (wearable). |
 | 2026-05-30 | 9.7 | 6.3 | +3.4 | Long Z2 Ride 2h prescribed GO as-planned. No HRV or sleep data (wearable). |
 | 2026-05-31 | 9.5 | 5.4 | +4.1 | Weekly summary: 0 rides completed (planned 140 load). All sessions missed — no activities in IcuSync. T3 Underload fired. Recovery 100/100 GREEN. No HRV or sleep data. |
+| 2026-06-01 | 9.2 | 4.7 | +4.5 | T5: 2 missed sessions in rolling 7d (26-May Z2 60min, 30-May Z2 2h). 0 rides recorded since 21-May. No HRV or sleep data. |
