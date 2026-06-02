@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i153345612",
+    "date": "2026-06-02",
+    "name": "Bike sweetspot 50min — Tue 2 Jun",
+    "sport": "VirtualRide",
+    "tss": 46,
+    "duration_min": 52,
+    "distance_km": 22.4,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": null,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": 750,
+    "notes": "750ml water during 52min session.",
+    "logged_at": "2026-06-02T00:00:00",
+    "stub": false
+  },
+  {
     "activity_id": "i153083504",
     "date": "2026-06-01",
     "name": "Cardio",
