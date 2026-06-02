@@ -38,9 +38,9 @@
 - Quality sessions resumed: no — still 9:1 walk-run, no threshold or tempo run yet
 - Physio engagement status: on pause
 
-### Self-assessment — 2026-06-02
+### Self-assessment — 2026-06-02 deep diagnostic (10-question conversation)
 
-Self-tests performed in conversation, 14 weeks post-injury:
+Self-tests and symptom mapping performed in detailed conversation, 14 weeks post-injury:
 
 **Tests completed:**
 - Squeeze test: clear (was positive 6 weeks ago — syndesmosis now likely stable)
@@ -48,32 +48,49 @@ Self-tests performed in conversation, 14 weeks post-injury:
 - Single-leg calf raises / hops: can do 50 single-leg hops easily — calf/tendon strength intact
 - Passive ROM (seated, unloaded): full and pain-free
 - Palpation (anterolateral gutter): no sharp tenderness on direct pressure
-- Lunge test (weight-bearing dorsiflexion): **3–4cm asymmetry R vs L** — significant deficit under load despite pain-free passive ROM
+- Lunge test (weight-bearing dorsiflexion): **3–4cm asymmetry R vs L** — significant deficit under load despite pain-free passive ROM; both ankles very flexible in absolute terms, but injured side loses 3–4cm capacity when weight-bearing
 
-**Symptom clarification:**
-- Throbbing only occurs in driving (plantar flexion at accelerator) — confirmed not true rest pain; sitting at desk, on planes, extended sitting all fine
-- Visible swelling still present at front of joint at 14 weeks
+**Symptom clarification — detailed:**
+- Throbbing: **positional only** (driving pedal position, sustained plantar flexion under light load) — NOT true rest pain; desk work, planes, extended sitting all pain-free
+- Visible swelling: still present at front of joint after 14 weeks
 - Pain during run: dull ache (never sharp), eases mid-run but never reaches 0
-- Achilles soreness: variable, especially on warmup/uphills — likely compensatory overload from dorsiflexion restriction
+- Pain location: varies front-outside ankle or sometimes Achilles, especially warmup/uphills
+- Pain timing: takes a while to come on, then warms up through the session (mostly yes, but not to zero)
+- Next morning after run: normally 0.5–1/10
+- Progression: very similar to 4 weeks ago (minimal change)
 
-**Clinical picture (2026-06-02 assessment):**
-- Original diagnosis of "ligament damage" may be incomplete — pain is at front-outside of ankle, not at syndesmotic location (between tibia/fibula higher up)
-- Stability tests now clear → syndesmosis likely healed
-- Most probable: **intra-articular effusion** (synovium still reactive, producing fluid) driving the lunge deficit mechanically — not capsular tightness alone; fluid creates hydraulic pressure under bodyweight load
-- OCD lesion not ruled out but less likely given no tenderness on palpation and driving-specific throbbing
-- Running keeps feeding the effusion cycle — each session stimulates the synovium; joint loads, swells, never fully settles
+**Clinical picture (2026-06-02 assessment — revised):**
+- Original diagnosis of "ligament damage" incomplete — pain location (front-outside ankle, not higher at syndesmosis) + swelling at 14 weeks + lunge deficit + no tenderness on palpation suggests:
+- Stability tests now clear → syndesmosis likely healed (squeeze test clear, 50 hops, no giving way, rotation intact)
+- **Most probable: intra-articular effusion** — synovium still reactive, producing fluid. This explains:
+  - Lunge deficit: fluid creates hydraulic pressure under bodyweight, mechanically blocks dorsiflexion at end-range
+  - Persistent swelling visible (the fluid itself)
+  - Throbbing in driving: joint compressed under sustained load in plantar flexion
+  - No improvement in 14 weeks: fluid cycle perpetuates — each run stimulates synovium → more swelling → never fully settles
+- Secondary: capsular tightness likely contributing to lunge loss (fluid + capsular contraction = combined restriction)
+- OCD lesion (osteochondral lesion): not ruled out by self-tests alone — requires MRI; no palpation tenderness argues against it, but driving-specific throbbing doesn't rule it out
 
-**9:1 protocol verdict:**
-- Not actively damaging the joint (pain ≤1/10 during, ≤0.5/10 next morning = within safe window)
-- But 9 minutes continuous may be too long for the joint under sustained effusion — shorter intervals (2–3 min run / 1–2 min walk) would offload more frequently
-- Protocol should be validated by physio specifically — 9:1 is a training tool not a clinical rehab protocol
+**9:1 protocol verdict — refined:**
+- Not actively wrecking the joint: pain ≤1/10 during, ≤0.5/10 next morning = within safe tolerance window
+- However: 9 min continuous may be perpetuating the effusion cycle
+  - Sustained dorsiflexion under load irritates synovium repeatedly
+  - Frequent load-off (shorter intervals) would reduce stimulus per session
+  - 2–3 min run / 1–2 min walk allows joint to decompress more frequently
+- 9:1 is a training tool (Galloway), not a clinical rehab protocol — should be validated by physio for *this* injury type before continuing
+
+**Self-management actions while awaiting physio:**
+1. *Compression sleeve* all day (snug, not restrictive) — reduces fluid pooling
+2. *Elevation* 1–2x daily, 20–30 min legs above heart — gravity aids fluid reabsorption
+3. *Ice after running* 10–15 min within 30 min of finishing — reduces synovial irritation
+4. *Reduce plantar flexion load* — adjust car seat, take breaks on long drives
+5. *Consider short NSAID course* (5–7 days ibuprofen 400–600mg 3x/day with food) — can break the inflammation cycle if synovium is actively reactive
 
 **Priority physio actions:**
 1. Report: 3–4cm lunge test asymmetry, visible swelling at 14 weeks, all stability tests clear
-2. Ask about intra-articular effusion — is there enough to warrant aspiration or targeted treatment?
-3. Request MRI if not already done — X-ray won't show OCD lesion or soft tissue impingement
-4. Ask about talocrural AP glides (joint mobilisation for dorsiflexion restriction)
-5. Confirm whether 9:1 run format or shorter intervals (2–3 min) is more appropriate for this picture
+2. Ask specifically about intra-articular effusion — size, treatment options (ultrasound-guided aspiration, mobilisation)
+3. Request MRI if not already done — mandatory to rule out OCD lesion
+4. Request talocrural anterior-posterior glides (joint mobilisation for the dorsiflexion restriction)
+5. Confirm whether 9:1 run format or shorter intervals (2–3 min) is more appropriate for effusion-driven presentation
 6. Push for concrete milestone: "X weeks of Y before we add tempo" — not open-ended
 
 > Hard rule: increase load only if pain ≤2/10 during and 0/10 next morning. Cap weekly run-km increase at 10% while in rehab. Cap CTL ramp at +4/wk while ankle in rehab. (See `reference/rules.md`.)
