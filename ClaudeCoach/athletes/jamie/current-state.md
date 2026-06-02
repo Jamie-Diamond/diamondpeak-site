@@ -59,16 +59,30 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 - Next morning after run: normally 0.5–1/10
 - Progression: very similar to 4 weeks ago (minimal change)
 
-**Clinical picture (2026-06-02 assessment — revised):**
-- Original diagnosis of "ligament damage" incomplete — pain location (front-outside ankle, not higher at syndesmosis) + swelling at 14 weeks + lunge deficit + no tenderness on palpation suggests:
-- Stability tests now clear → syndesmosis likely healed (squeeze test clear, 50 hops, no giving way, rotation intact)
-- **Most probable: intra-articular effusion** — synovium still reactive, producing fluid. This explains:
-  - Lunge deficit: fluid creates hydraulic pressure under bodyweight, mechanically blocks dorsiflexion at end-range
-  - Persistent swelling visible (the fluid itself)
-  - Throbbing in driving: joint compressed under sustained load in plantar flexion
-  - No improvement in 14 weeks: fluid cycle perpetuates — each run stimulates synovium → more swelling → never fully settles
-- Secondary: capsular tightness likely contributing to lunge loss (fluid + capsular contraction = combined restriction)
-- OCD lesion (osteochondral lesion): not ruled out by self-tests alone — requires MRI; no palpation tenderness argues against it, but driving-specific throbbing doesn't rule it out
+**Clinical picture (2026-06-02 assessment — final revision after full self-test battery):**
+- Stability tests clear → syndesmosis likely healed (squeeze test clear, 50 hops, no giving way, rotation intact)
+- Swelling confirmed SOLID — rules out intra-articular effusion
+- Self-test results:
+  - Swelling texture: bone-hard with slightly soft layer → NOT soft/rubbery meniscoid tissue; more consistent with osteophyte (bony spur) or periosteal thickening
+  - Molloy-Bendall anterolateral impingement test: NEGATIVE — no change on direct lateral gutter pressure during dorsiflexion → anterolateral soft tissue impingement (meniscoid lesion) now UNLIKELY
+  - End-range dorsiflexion quality: dull compressive pressure building to a hard stop — "something being compressed in there"; NOT a catching or sharp impingement sensation
+  - Talar dome palpation: no deep pain → OCD lesion lower probability (inconclusive — uncertain if pressed deep enough)
+  - Forced dorsiflexion under load: reproduces ache slightly → anterior impingement confirmed under weight-bearing end range
+- **MOST LIKELY DIAGNOSIS: Anterior bony impingement (osteophyte / exostosis)**
+  - Bony spur(s) at the anterior tibiotalar joint margin get compressed when the talus dorsiflexes under the tibia at end range
+  - Classic post-sprain complication ("footballer's ankle") — repeated microtrauma → periosteal reaction → osteophyte formation
+  - Explains: solid bone-hard swelling, compressive stop at end-range dorsiflexion, no soft-tissue impingement provocation, ache reproduced on loaded dorsiflexion
+  - Will NOT resolve with conservative running load — bone doesn't reabsorb
+- Secondary: posterior capsular tightness likely still contributing to lunge deficit alongside the bony block
+- OCD lesion: lower probability given no deep talar dome tenderness, but requires MRI to definitively rule out
+
+**Updated physio priorities (post-test-battery):**
+1. Lateral ankle X-ray in dorsiflexion — will show anterior tibial osteophyte (unlike OCD or soft tissue)
+2. Ask specifically about anterior bony impingement vs meniscoid lesion — Molloy-Bendall was negative here
+3. Request MRI if X-ray is clear — still needed to rule out OCD
+4. Discuss treatment path: corticosteroid injection (symptom management), vs arthroscopic debridement (definitive — very common procedure, good outcomes for anterior impingement)
+5. Ask about dorsiflexion-limiting taping during running to reduce impingement stimulus per stride
+6. Confirm whether 9:1 is appropriate or shorter intervals are better for this specific pathology
 
 **9:1 protocol verdict — refined:**
 - Not actively wrecking the joint: pain ≤1/10 during, ≤0.5/10 next morning = within safe tolerance window
