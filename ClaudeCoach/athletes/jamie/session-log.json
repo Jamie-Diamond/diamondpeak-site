@@ -1,5 +1,19 @@
 [
   {
+    "activity_id": "i153677776",
+    "date": "2026-06-02",
+    "name": "Elliptical — aerobic intervals",
+    "sport": "Elliptical",
+    "tss": 42,
+    "duration_min": 61,
+    "avg_hr": 138,
+    "rpe": null,
+    "feel": null,
+    "notes": null,
+    "logged_at": "2026-06-02T19:55:00",
+    "stub": true
+  },
+  {
     "activity_id": "i153345612",
     "date": "2026-06-02",
     "name": "Pool Swim",
