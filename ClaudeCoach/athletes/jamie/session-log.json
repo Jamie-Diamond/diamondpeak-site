@@ -10,10 +10,10 @@
     "pace_per_100m": 108.3,
     "avg_hr": 123,
     "rpe": null,
-    "feel": null,
-    "notes": null,
+    "feel": "hard, pace was poor",
+    "notes": "Felt hard. Pace 1:48/100m vs CSS 1:39 — 9s off target.",
     "logged_at": "2026-06-02T08:10:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i153261309",
