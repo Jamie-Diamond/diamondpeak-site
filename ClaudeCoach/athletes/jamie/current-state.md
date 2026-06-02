@@ -197,6 +197,10 @@
 
 - **2026-06-02 GO** — Aerobic swim 60 min + Elliptical Z2 60 min: no rules fired, both sessions execute as planned. CTL 76.1, ATL 68.5, TSB +7.6 — fresh. HRV not yet synced (fallback 0.0 trend); sleep not yet synced. RHR 58 (slightly above 50–54 baseline — single point, not actionable for Z2/aerobic sessions). Swim: re-establish pool rhythm after swim-free Marseille block, 8×200m @ 1:44–1:50/100m aerobic comfort pace, no CSS pressure. Elliptical: HR 133–146, cadence 85–95, smooth steady state, ~45 TSS.
 
+- **2026-06-02 — T3 (Tier 1):** HRV trend −13.3% over 7 days (45 on 05-26 → 39 on 06-01). Today's HRV not yet synced. RHR 58 (above 50–54 baseline). Multi-signal: HRV declining + RHR elevated. Sleep 05-31 = 4.65h was the acute driver; 06-01 sleep 7.8h was an improvement. Today's aerobic sessions (swim + elliptical) unaffected — no intensity flag applies to Z1–Z2. Monitor tomorrow's HRV; if recovers >40, downgrade. Hold any threshold/quality sessions until HRV >40 confirmed.
+- **2026-06-02 — T6 (Tier 1):** Aerobic decoupling >5% on all Z2 rides in last 7-day window: 05-26 (8.16%, IF 0.69), 05-28 (17.7%, IF 0.75), 05-29 (8.11%, IF 0.72), 05-31 home (7.93%, IF 0.69, 182 min, avg 25.7°C — hot and windy). The 05-31 home ride was in 24–31°C conditions; decoupling better than Marseille peaks but still >5%. True diagnostic is next Z2 ride in neutral/cool conditions (<22°C) — target <5%. If >5% persists in cool, flag aerobic durability gap requiring investigation.
+- **2026-06-02 — T9 (Tier 2):** Four open actions overdue or imminent: (1) FTP retest (end-May) — due 05-31, extended to 06-04 per prior watchdog; earliest home window now Wed/Thu this week — 2 days away. (2) Book Precision Hydration sweat-sodium test — due 05-31, still no booking made. (3) TT bike fit appointment — due 05-31, still no booking made. (4) ISM saddle order — due 06-06 (4 days), still pending. Action FTP retest Wed 03 or Thu 04 Jun; order ISM saddle today; book PH test and bike fit today.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
