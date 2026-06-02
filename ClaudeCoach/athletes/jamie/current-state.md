@@ -195,6 +195,8 @@
 - **2026-06-01 — T3 (Tier 1):** HRV trend −13.2% over 7 days (38 on 05-25 → 33 on 05-31). Today's HRV not yet synced. RHR 55 (near-top of baseline 50–54). Sleep 05-31: 4.65h (< 7h). Session today = recovery swim (Z2) — no intensity impacted. Monitor tomorrow's HRV before prescribing W6 quality sessions.
 - **2026-06-01 — T6 (Tier 1):** Aerobic decoupling >5% on all 5 Z2 rides in last 7-day window: 05-25 (6.86%, IF 0.69), 05-26 (8.16%, IF 0.69), 05-28 (17.7%, IF 0.75), 05-29 (8.11%, IF 0.72), 05-31 home (7.93%, IF 0.69, 182 min, avg 25.7°C — "Hot and windy"). 05-31 is best result of the block (lower than Marseille peaks) but still >5%. Primary driver likely heat (24–31°C ambient). True diagnostic: next Z2 ride in neutral/cool conditions (< 22°C) — target <5%. Persistent decoupling in cool conditions would indicate aerobic durability gap requiring investigation.
 
+- **2026-06-02 GO** — Aerobic swim 60 min + Elliptical Z2 60 min: no rules fired, both sessions execute as planned. CTL 76.1, ATL 68.5, TSB +7.6 — fresh. HRV not yet synced (fallback 0.0 trend); sleep not yet synced. RHR 58 (slightly above 50–54 baseline — single point, not actionable for Z2/aerobic sessions). Swim: re-establish pool rhythm after swim-free Marseille block, 8×200m @ 1:44–1:50/100m aerobic comfort pace, no CSS pressure. Elliptical: HR 133–146, cadence 85–95, smooth steady state, ~45 TSS.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
