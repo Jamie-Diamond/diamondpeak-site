@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-06-02
+Last updated: 2026-06-03
 
 ## Injuries / Niggles
 None
@@ -39,6 +39,7 @@ None
 - 2026-05-31: bike_z2 130min (long ride with sweetspot — 20m WU, 2x15m @ 88% + 5m rec, 50m @ 65%, 20m CD) — GO, execute as planned (no rules fired). HRV null (not yet synced); last reading 67 (May 30), 7d avg 55.9. Sleep null (not yet synced). ATL 65.8, CTL 53.0; form -12.8. Last session RPE 5 (swim May 29).
 - 2026-06-01: Rest day — no session in calendar (Mon 1 Jun long run previously deleted; standing KB 45min applies as usual). ATL 61.9, CTL 52.7; form −9.2. HRV null (not yet synced); last reading 53 (May 31). Sleep null (not yet synced). Last session RPE 6 (run May 31).
 - 2026-06-02: bike_threshold (sweetspot) 50min — GO, execute as planned (T4, T7, T8 fired). ATL 46.2, CTL 49.6; form +3.5. HRV null (not yet synced); last reading 65 (Jun 1). Sleep null (not yet synced); last reading 7.73h (Jun 1). Last session RPE 6 (run May 31). Session: 2×12min @ sweetspot 144–165W (76–87% FTP), 5min Z2 recovery, 10min WU + 11min CD.
+- 2026-06-03: run_easy 50min with strides — GO, execute as planned (no rules fired). ATL 45.3, CTL 49.5; form +4.2. HRV null (not yet synced); last reading 68 (Jun 2), 7d avg 59.4, trend +14.4% (improving). Sleep null (not yet synced); last reading 6.83h (Jun 2). Last session RPE 8 (bike sweetspot Jun 2 — noted as hard).
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
