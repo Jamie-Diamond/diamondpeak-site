@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-06-03
+## Last updated: 2026-06-04
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -275,6 +275,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 - **2026-06-03 — T3 (Tier 1):** HRV trend −20.9% over 7 days (43 on 05-27 → 34 on 06-02; today's HRV not yet synced). RHR 58 today (above 50–54 baseline). Sleep has improved (06-01: 7.8h, 06-02: 7.6h) — acute driver was 05-30/05-31 poor sleep. Z2 sessions unaffected; hold any threshold/quality sessions until HRV recovers >40.
 - **2026-06-03 — T6 (Tier 1, carryover):** Aerobic decoupling >5% on all Z2 rides in last 7-day window: 05-28 (17.7%, IF 0.747, hilly surged terrain), 05-29 (8.11%, IF 0.721), 05-31 (7.93%, IF 0.693, avg 25.7°C hot day). No new Z2 rides since 05-31. True diagnostic — first controlled Z2 ride in cool conditions (<22°C) — still pending.
 - **2026-06-03 — T9 (Tier 2):** ISM saddle order due 2026-06-06 (3 days), status pending. FTP retest (extended due date 06-04) — due tomorrow, status pending. Book Precision Hydration sweat-sodium test — due 05-31, still no booking made. TT bike fit appointment — due 05-31, still no booking made. Four actions require immediate action today/tomorrow.
+
+- **2026-06-04 GO** — CSS swim 60 min (swim): no rules fired, execute as planned. CTL 75.7, ATL 65.7, TSB +10.0 — fresh. HRV not yet synced (fallback 0.0 trend); sleep not yet synced. Full-dose CSS: 5×300m @ 1:39/100m with 30 sec rest; warm-up 400m easy (1:48+/100m), cool-down 200m easy; total ~1,900m in 60 min. If rep 4–5 slips >3 sec/100m, hold form and finish the set. Ankle not relevant for swim.
 
 ## Plan changes
 
