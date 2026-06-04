@@ -81,7 +81,7 @@ None
 - 2026-05-29: T7 + T8 status — heat-log.json not re-checked today (swim session; heat acclimatisation via post-session sauna/hot bath remains outstanding). Race 113 days away; CTL 48.7, ATL 42.7, form +6.1. Heat sessions critically overdue.
 - 2026-06-02: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 110 days away; CTL 49.6, ATL 46.2, form +3.5. Heat sessions critically overdue.
 - 2026-06-03: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 109 days away; CTL 49.5, ATL 45.3, form +4.2. Heat sessions critically overdue — 19 days since first alert (2026-05-15). No further delay acceptable.
-- 2026-06-04: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 108 days away; CTL 49.7, ATL 46.2, form +3.5. Rest day.
+- 2026-06-04: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 108 days away; CTL 49.7, ATL 46.2, form +3.5. Rest day. T4 re-fired: May 28=6.98h, May 29=6.03h, May 31=6.47h, Jun 02=6.83h — 4 nights <7h in rolling 7-day window; Jun 01=7.73h, Jun 03=7.81h recovery nights. HRV trending up (7d avg 60.0 vs prior 53.1 = +12.8%). T1/T3/T5/T10 clear.
 
 ## Open Actions
 - [x] Plan reviewed W5-W6 (2026-05-31): day labels fixed, nutrition updated to 20g CHO/hr for >90min rides
