@@ -1,0 +1,71 @@
+{
+  "slug": "jamie",
+  "name": "Jamie Diamond",
+  "age": null,
+  "weight_kg": 83.3,
+  "race_weight_kg": 79.0,
+  "race_name": "IM Italy Emilia-Romagna",
+  "race_date": "2026-09-19",
+  "race_distance": "Full Ironman",
+  "a_goal": "Sub 9:30",
+  "b_goal": "Sub 10:00",
+  "c_goal": "Finish",
+  "ftp_watts": 316,
+  "indoor_ftp_watts": null,
+  "swim_css_per_100m": "1:39",
+  "run_threshold_pace_per_km": "4:02",
+  "lthr": null,
+  "training_days": [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday"
+  ],
+  "max_hours_per_week": 15,
+  "icu_athlete_id": "i196362",
+  "injuries": [
+    {
+      "location": "right ankle",
+      "description": "lateral sprain",
+      "protocol": "5:30 run-walk, HR cap 150, weekly km increase \u226410%"
+    }
+  ],
+  "prev_race": {
+    "name": "IM Italy Emilia-Romagna",
+    "date": "2025-09-20",
+    "total_time": "10:06",
+    "swim_time": "1:09",
+    "bike_time": "4:55",
+    "bike_np_watts": 201,
+    "bike_if": 0.636,
+    "bike_vi": 1.14,
+    "t1t2_time": "~10:00",
+    "run_time": "3:52",
+    "run_pace": "5:37/km",
+    "notes": "Bike: Lap 2 fade (-60W on Bertinoro vs Lap 1), decoupling 14.5%. Run: walk-breaks added ~15 min from km 13."
+  },
+  "race_targets": {
+    "total_time": "~9:26",
+    "swim_time": "~1:07",
+    "swim_pace_per_100m": "1:42",
+    "swim_gain": "-2 min",
+    "swim_how": "Bilateral breathing, sighting, OWS sets from May",
+    "bike_time": "4:44",
+    "bike_np_watts_target_if": 0.71,
+    "bike_gain": "-11 min",
+    "bike_how": "First 90 min \u2264IF 0.68. Bertinoro \u2264IF 0.78. VI <1.05. Long Z2 volume to fix 14.5% decoupling.",
+    "t1t2_time": "\u22645:30",
+    "t1t2_gain": "-4\u00bd min",
+    "t1t2_how": "Transition drill: bag layout, wetsuit-off, helmet-on sequence",
+    "run_time": "3:30",
+    "run_pace": "4:58/km",
+    "run_gain": "-22 min",
+    "run_how": "Aid-station \u226430 sec (walk-breaks cost ~15 min in 2025). Heat acclimatisation from 15 May. Loop 1: ease to 5:10\u2192settle to 4:58."
+  },
+  "prev2_race_date": "2023-10-07",
+  "prev2_race_name": "Barcelona IM",
+  "coaching_level": "pro"
+}
