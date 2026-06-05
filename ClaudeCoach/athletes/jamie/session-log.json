@@ -14,9 +14,9 @@
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
+    "nutrition_g_carb": 199,
     "hydration_ml": null,
-    "notes": null,
+    "notes": "Nutrition: PF30 (30g) + SiS Beta Fuel chews (45g) + Maurten 320 (80g) + High5 caffeine gel (44g) = 199g carbs. ~59g/hr over 202 min.",
     "logged_at": "2026-06-05T11:00:00",
     "stub": true
   },
