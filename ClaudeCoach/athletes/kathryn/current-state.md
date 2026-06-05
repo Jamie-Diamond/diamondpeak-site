@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 ## Injuries / Niggles
 None
@@ -41,6 +41,7 @@ None
 - 2026-06-02: bike_threshold (sweetspot) 50min — GO, execute as planned (T4, T7, T8 fired). ATL 46.2, CTL 49.6; form +3.5. HRV null (not yet synced); last reading 65 (Jun 1). Sleep null (not yet synced); last reading 7.73h (Jun 1). Last session RPE 6 (run May 31). Session: 2×12min @ sweetspot 144–165W (76–87% FTP), 5min Z2 recovery, 10min WU + 11min CD.
 - 2026-06-03: run_easy 50min with strides — GO, execute as planned (T4, T7, T8 fired). ATL 45.3, CTL 49.5; form +4.2. HRV null (not yet synced); last reading 68 (Jun 2), 7d avg 59.4, trend +14.4% (improving). Sleep null (not yet synced); last reading 6.83h (Jun 2). Last session RPE 8 (bike sweetspot Jun 2 — noted as hard).
 - 2026-06-04: Rest day — no session in calendar (Thu 4 Jun swim deleted 2026-05-31; Friday-only swim rule, no valid Fri slot with long ride on Fri 5). ATL 46.2, CTL 49.7; form +3.5. HRV null (not yet synced); last reading 55 (Jun 3), 7d avg 60.0. Sleep null (not yet synced); last reading 7.81h (Jun 3). Last session RPE 3 (easy run Jun 3).
+- 2026-06-05: bike_z2 150min (long ride Z2 2hr 30min) — GO, execute as planned (no rules fired). ATL 40.1, CTL 48.6; form +8.5. HRV null (not yet synced); last reading 64 (Jun 4), 7d avg 62.0, trend 0.0% (null today, neutral). Sleep null (not yet synced); last reading 8.00h (Jun 4). Last session RPE 3 (easy run Jun 3). Target: 104–143W, HR 130–158bpm; aim upper half of zone (120–135W) on flat. Nutrition target 20g CHO/hr.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
@@ -82,6 +83,7 @@ None
 - 2026-06-02: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 110 days away; CTL 49.6, ATL 46.2, form +3.5. Heat sessions critically overdue.
 - 2026-06-03: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 109 days away; CTL 49.5, ATL 45.3, form +4.2. Heat sessions critically overdue — 19 days since first alert (2026-05-15). No further delay acceptable.
 - 2026-06-04: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 108 days away; CTL 49.7, ATL 46.2, form +3.5. Rest day. T4 re-fired: May 28=6.98h, May 29=6.03h, May 31=6.47h, Jun 02=6.83h — 4 nights <7h in rolling 7-day window; Jun 01=7.73h, Jun 03=7.81h recovery nights. HRV trending up (7d avg 60.0 vs prior 53.1 = +12.8%). T1/T3/T5/T10 clear.
+- 2026-06-05: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 107 days away; CTL 48.6, ATL 40.1, form +8.5. Long ride Z2 150min today. HRV null (not yet synced); last reading 64 (Jun 4), 7d avg 62.0 — stable. Sleep null (not yet synced); last reading 8.00h (Jun 4). T1/T3/T4/T5/T10 clear. Heat sessions critically overdue — 21 days since first alert. No further delay acceptable.
 
 ## Open Actions
 - [x] Plan reviewed W5-W6 (2026-05-31): day labels fixed, nutrition updated to 20g CHO/hr for >90min rides
