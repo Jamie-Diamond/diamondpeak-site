@@ -285,6 +285,10 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-05 GO** — Long Z2 ride 4 hr (bike_z2): no rules fired, execute as planned. CTL 75.2 (Fitness), ATL 63.8 (Fatigue), TSB +11.4 (Form) — fresh. HRV null (not synced); sleep null (not synced); last RPE 8 (swim 04 Jun). No modulation rules triggered. Session: Cervelo TT position, NP 174–237W (55–75% FTP), HR 133–146, cadence 85–95 rpm, VI <1.08, ~165 TSS. Nutrition: 80g CHO/hr from 30 min.
 
+- **2026-06-05 — T9 (Tier 2):** ISM saddle order due 2026-06-06 (tomorrow, Sat), status pending — must order today. FTP retest (end-May) due 2026-05-31, status pending — overdue; earliest home window this week. Book Precision Hydration sweat-sodium test — due 2026-05-31, still no booking made. TT bike fit appointment — due 2026-05-31, still no booking made. Four actions require immediate action.
+- **2026-06-05 — T10 (Tier 2):** Run km +20.3% w/w — this week (Mon–Fri) 8.34 km (06-03 run only) vs last week 6.93 km (05-27 Marseille walk-run only). Week is not yet complete; any weekend run would push further above cap. 10% cap applies while ankle in rehab. Monitor ankle response to 06-03 run before prescribing weekend session.
+- **2026-06-05 — T6 (Tier 1, carryover — Telegram suppressed):** Aerobic decoupling >5% on 05-31 "Hot and windy" ride still in 7-day window (7.93%, IF 0.693, avg 25.7°C, confirmed via activity_detail). No new Z2 rides since 05-31. T6 fired 2026-06-04 with same ride logged — Telegram suppressed per suppression rule (fired <3 days ago, same activity dates). Diagnostic: today's 4hr long Z2 ride is next candidate — check decoupling post-ride if data syncs.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
