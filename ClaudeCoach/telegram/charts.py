@@ -57,7 +57,7 @@ SPORT_COLOURS = {
     "Run":            "#c0392b",
     "Strength":       "#7f8c8d",
     "WeightTraining": "#7f8c8d",
-    "Other":          "#9b59b6",
+    "Other":          "#b0aaa0",
 }
 _PLANNED_ALPHA = 0.28
 
@@ -345,7 +345,7 @@ def load_chart(payload, coaching_level="mid"):
         return None
 
     SPORTS = ["Ride", "Run", "Swim", "Strength", "Other"]
-    BASE   = {"Ride": "#1d6840", "Run": "#c0392b", "Swim": "#1a5276", "Strength": "#7f8c8d", "Other": "#9b59b6"}
+    BASE   = {"Ride": "#1d6840", "Run": "#c0392b", "Swim": "#1a5276", "Strength": "#7f8c8d", "Other": "#b0aaa0"}
 
     labels   = [d["date"][5:] for d in days]
     datasets = []
