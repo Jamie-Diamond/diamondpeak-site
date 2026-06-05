@@ -134,7 +134,7 @@ Step 2 — Read ClaudeCoach/athletes/{slug}/session-log.json and note all existi
 
 Step 3 — For the most recent activity that is NOT already in session-log.json:
   - Fetch full detail via Bash: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint activity_detail --activity-id <id>
-  - If sport is Run or VirtualRun: also fetch extended metrics:
+  - If sport is Run, VirtualRun, or Swim: also fetch extended metrics:
     python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint extended_metrics --activity-id <id>
   - If the activity has a strava_id field: fetch Strava laps and splits:
     python3 ClaudeCoach/lib/strava_fetch.py --athlete {slug} --strava-id <strava_id>
@@ -194,11 +194,14 @@ RUN:
 {run_injury_ask}
 
 SWIM:
-- If Strava splits_metric available (pool — splits ≤200m each): header + one line per split.
-  Header: Xm total · avg X:XX/100m · +/-Xsec vs CSS target
-  Split lines: Split N: X:XX/100m · AVGbpm (if HR available)
+- Pool (icu_intervals available in extended metrics): use WORK intervals only (type="WORK").
+  Pace per rep (seconds/100m) = (moving_time / distance) * 100 → format as M:SS/100m.
+  CSS target from profile swim_css_per_100m. Delta = rep_pace_s - css_s (positive = slower than CSS).
+  Header: Nx(distance)m · CSS X:XX/100m · avg rep X:XX/100m (+/-Xsec vs CSS)
+  Rep lines (one per WORK interval): Rep N: X:XX/100m (+/-Xsec vs CSS) · AVGbpm
   Final line: "RPE and how did it feel?"
-- Else (OWS or no splits): distance + avg pace vs CSS +/- seconds | "RPE and how did it feel?"
+- Else (OWS or no icu_intervals): use interval_summary from activity detail if present, else distance + avg pace vs CSS +/- seconds.
+  Final line: "RPE and how did it feel?"
 
 STRENGTH: duration | "RPE and what was the main focus?"
 

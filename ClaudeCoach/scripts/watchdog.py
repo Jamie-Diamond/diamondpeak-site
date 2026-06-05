@@ -42,8 +42,8 @@ def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: 
     athlete_dir = BASE / "athletes" / slug
 
     heat_log_read = f"- {athlete_dir}/heat-log.json\n" if heat_protocol else ""
-    heat_triggers = """T7 (Tier 1): From 15 May 2026 only — sum of dose in heat-log.json for last 14 days < 3.0 (skip if heat-log.json does not exist or is empty)
-T8 (Tier 2): From 15 May 2026 only — most recent date in heat-log.json is >7 days ago (skip if heat-log.json does not exist or is empty)
+    heat_triggers = """T7 (Tier 1): From 18 Aug 2026 only — sum of dose in heat-log.json for last 14 days < 3.0 (skip if heat-log.json does not exist or is empty)
+T8 (Tier 2): From 18 Aug 2026 only — most recent date in heat-log.json is >7 days ago (skip if heat-log.json does not exist or is empty)
 """ if heat_protocol else ""
 
     return f"""You are running the daily watchdog check for {name}'s {race_name} coaching system.
@@ -68,8 +68,12 @@ T2 (Tier 2): CTL ramp >4/wk while ankle still in rehab (check current-state.md a
 T3 (Tier 1): HRV trend down >7% over last 7 days
 T4 (Tier 1): Sleep <7h for 3+ days in last 7 (skip if no sleep data available)
 T5 (Tier 1): Missed planned sessions >=2 in last rolling 7 days
+  Suppression: before sending Telegram, check current-state.md for the most recent T5 entry.
+  If T5 fired yesterday (or earlier) and the SAME missed session dates are already logged there, do NOT send a Telegram message — log to current-state.md only. Only send Telegram if there is a new missed session not present in the prior T5 entry.
 T6 (Tier 1): Aerobic decoupling >5% on any Z2 ride in last 7 days (check via activity_detail for rides with IF < 0.75):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint activity_detail --activity-id ID
+  Suppression: before sending Telegram, check current-state.md for the most recent T6 entry.
+  If T6 fired in the last 3 days and all flagged rides are already logged there (same activity dates), do NOT send a Telegram message — log to current-state.md only. Only send Telegram if there is a new Z2 ride with decoupling >5% not present in the prior T6 entry.
 {heat_triggers}T9 (Tier 2): Decision-point action due within 7 days and not marked done in current-state.json open_actions[].status
   - Read {athlete_dir}/reference/decision-points.md for dated items (skip if file missing)
   - Cross-check against open_actions in current-state.json; fire for any item whose due date <= today+7 and status != "done"

@@ -169,7 +169,7 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 |---|---|---|
 | Sweat rate L/hr (heat) | [self-reported >1 L/hr] | old data — re-test pending |
 | Sweat sodium mg/L | unknown — assumed salty | pending PH test |
-| FTP (W) | 320 (Nov 2025 test, project) / 316 (Intervals as of 2026-04-25) | end-May retest due |
+| FTP (W) | 297 (eFTP from Intervals.icu, updated 2026-06-05) — no formal test; eFTP is the live source | ongoing |
 | Race-day weight (kg) | target 79; current 83 | 2026-04-25 |
 
 ## Watchdog flags

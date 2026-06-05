@@ -14,9 +14,9 @@
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
-    "hydration_ml": null,
-    "notes": null,
+    "nutrition_g_carb": 115,
+    "hydration_ml": 1250,
+    "notes": "Nutrition: 1x Clif Bar white choc & macadamia (~44g carb), 1x Clif Blok pack (~24g carb), 1x Hilltop gel (~22g carb), 1x Decathlon date bar (~25g carb) = ~115g total (~33g/hr vs 60g/hr target). Hydration: 1.25L water. Under-fuelled for 3hr 26min session.",
     "logged_at": "2026-06-05T11:00:00",
     "stub": true
   },
