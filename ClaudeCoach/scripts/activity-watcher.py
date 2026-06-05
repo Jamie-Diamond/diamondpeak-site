@@ -301,18 +301,17 @@ def _resolve_ftp(slug: str, profile: dict, session_log_f: Path) -> int:
                         return profile.get("ftp_watts") or 250
     except Exception:
         pass
-    # No recent test — try ICU eFTP
+    # No recent test — use ICU eFTP from fitness endpoint sportInfo
     try:
         r = subprocess.run(
-            ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug, "--endpoint", "sport_settings"],
+            ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug, "--endpoint", "fitness", "--days", "1"],
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
         )
-        settings = json.loads(r.stdout)
-        for s in (settings if isinstance(settings, list) else [settings]):
-            if "Ride" in (s.get("types") or []):
-                eftp = s.get("ftp")
-                if eftp:
-                    return int(eftp)
+        rows = json.loads(r.stdout)
+        row = rows[-1] if rows else {}
+        for s in (row.get("sportInfo") or []):
+            if s.get("type") == "Ride" and s.get("eftp"):
+                return int(s["eftp"])
     except Exception:
         pass
     return profile.get("ftp_watts") or 250

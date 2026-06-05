@@ -32,6 +32,40 @@ _POWER_DURATIONS = [
 ]
 
 
+def _eftp_from_fitness(fitness_rows: list) -> int | None:
+    """Extract eFTP (W) for Ride from the most recent fitness row's sportInfo. Returns None if unavailable."""
+    row = fitness_rows[-1] if fitness_rows else {}
+    for s in (row.get("sportInfo") or []):
+        if s.get("type") == "Ride" and s.get("eftp"):
+            return int(s["eftp"])
+    return None
+
+
+def _has_recent_ftp_test(session_log_path: Path, weeks: int = 10) -> bool:
+    """Return True if a named FTP test appears in session-log.json within the last N weeks."""
+    if not session_log_path.exists():
+        return False
+    cutoff = (date.today() - timedelta(weeks=weeks)).isoformat()
+    keywords = ("ramp", "ftp test", "20 min", "20-min", "threshold test")
+    try:
+        for e in json.loads(session_log_path.read_text()):
+            if e.get("date", "") >= cutoff and e.get("sport") in ("Ride", "VirtualRide"):
+                if any(kw in (e.get("name") or "").lower() for kw in keywords):
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def _resolve_ftp(profile_ftp: int | None, fitness_rows: list, session_log_path: Path) -> int:
+    """Use profile FTP if a confirmed test exists in last 10 weeks, else ICU eFTP, else profile."""
+    if not _has_recent_ftp_test(session_log_path):
+        eftp = _eftp_from_fitness(fitness_rows)
+        if eftp:
+            return eftp
+    return profile_ftp or 250
+
+
 def fetch_fitness_prev(client):
     """Fetch 2025 CTL series once and cache it. Skips if cache already exists."""
     if FITNESS_PREV_CACHE.exists():
@@ -337,7 +371,7 @@ def post_process(data):
                 "swim_css_per_100m":         prof.get("swim_css_per_100m"),
                 "run_threshold_pace_per_km": prof.get("run_threshold_pace_per_km"),
                 "lthr":                      prof.get("lthr"),
-                "ftp_watts":                 prof.get("ftp_watts"),
+                "ftp_watts":                 _resolve_ftp(prof.get("ftp_watts"), fitness_ytd, SESSION_LOG),
                 "weight_kg":                 prof.get("weight_kg"),
                 "race_distance":             prof.get("race_distance"),
                 "race_date":                 prof.get("race_date"),
@@ -697,13 +731,14 @@ def _build_athlete_training_data(slug, athlete_cfg):
     if profile_f.exists():
         try:
             prof = json.loads(profile_f.read_text())
+            session_log_f = BASE / f"athletes/{slug}/session-log.json"
             data["profile"] = {
                 "a_goal":                    prof.get("a_goal"),
                 "b_goal":                    prof.get("b_goal"),
                 "swim_css_per_100m":         prof.get("swim_css_per_100m"),
                 "run_threshold_pace_per_km": prof.get("run_threshold_pace_per_km"),
                 "lthr":                      prof.get("lthr"),
-                "ftp_watts":                 prof.get("ftp_watts"),
+                "ftp_watts":                 _resolve_ftp(prof.get("ftp_watts"), fitness_ytd, session_log_f),
                 "weight_kg":                 prof.get("weight_kg"),
                 "race_distance":             prof.get("race_distance"),
                 "race_date":                 prof.get("race_date"),
