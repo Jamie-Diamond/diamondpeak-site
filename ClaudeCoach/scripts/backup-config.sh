@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SRC="$PROJECT_DIR/ClaudeCoach/config/athletes.json"
 DST="$PROJECT_DIR/ClaudeCoach/config/athletes.json.enc"
-KEY="$HOME/.claudecoach_key"
+KEY="$PROJECT_DIR/ClaudeCoach/config/backup.key"
 
 if [ ! -f "$KEY" ]; then
   echo "[backup-config] ERROR: key not found at $KEY" >&2
