@@ -283,6 +283,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-04 GO** — CSS swim 60 min (swim): no rules fired, execute as planned. CTL 75.7, ATL 65.7, TSB +10.0 — fresh. HRV not yet synced (fallback 0.0 trend); sleep not yet synced. Full-dose CSS: 5×300m @ 1:39/100m with 30 sec rest; warm-up 400m easy (1:48+/100m), cool-down 200m easy; total ~1,900m in 60 min. If rep 4–5 slips >3 sec/100m, hold form and finish the set. Ankle not relevant for swim.
 
+- **2026-06-05 GO** — Long Z2 ride 4 hr (bike_z2): no rules fired, execute as planned. CTL 75.2 (Fitness), ATL 63.8 (Fatigue), TSB +11.4 (Form) — fresh. HRV null (not synced); sleep null (not synced); last RPE 8 (swim 04 Jun). No modulation rules triggered. Session: Cervelo TT position, NP 174–237W (55–75% FTP), HR 133–146, cadence 85–95 rpm, VI <1.08, ~165 TSS. Nutrition: 80g CHO/hr from 30 min.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
