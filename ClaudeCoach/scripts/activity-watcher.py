@@ -19,6 +19,18 @@ TOOLS = "Read,Write,Bash"
 
 _WATER_SPORTS = {"sail", "watersport", "windsurf", "kitesurf", "kiteboard"}
 
+
+def _log_to_history(slug: str, message: str) -> None:
+    """Append an outbound notification to the athlete's Telegram history so the bot has context for replies."""
+    history_file = BASE / "athletes" / slug / "telegram" / "history.json"
+    history_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        history = json.loads(history_file.read_text()) if history_file.exists() else []
+    except Exception:
+        history = []
+    history.append({"user": "", "assistant": message})
+    history_file.write_text(json.dumps(history[-30:], indent=2))
+
 sys.path.insert(0, str(BASE / "lib"))
 from coaching_levels import level_block as _level_block
 
@@ -233,7 +245,7 @@ CRITICAL: Your entire response must contain only the ACTIVITY_ID and ANALYSIS li
 ANALYSIS scope: describe only the activity being analysed. Do NOT mention other planned sessions from today's calendar, ask whether a different planned session happened, or comment on sessions that were not completed."""
 
 
-def _notify(msg, chat_id):
+def _notify(msg, chat_id, slug=None):
     try:
         subprocess.run(
             ["python3", str(NOTIFY), "--chat-id", str(chat_id), msg],
@@ -241,6 +253,69 @@ def _notify(msg, chat_id):
         )
     except Exception:
         pass
+    if slug:
+        try:
+            _log_to_history(slug, msg)
+        except Exception:
+            pass
+
+
+def _dedup_session_log(path: Path) -> None:
+    """Remove duplicate activity_ids, keeping the most-complete entry for each."""
+    if not path.exists():
+        return
+    try:
+        entries = json.loads(path.read_text())
+        seen: dict = {}
+        order: list = []
+        for e in entries:
+            aid = str(e.get("activity_id", ""))
+            if not aid:
+                order.append(e)
+                continue
+            if aid not in seen:
+                seen[aid] = e
+                order.append(aid)
+            else:
+                existing = seen[aid]
+                if sum(1 for v in e.values() if v is not None) > sum(1 for v in existing.values() if v is not None):
+                    seen[aid] = e
+        deduped = [seen[x] if isinstance(x, str) else x for x in order]
+        if len(deduped) < len(entries):
+            path.write_text(json.dumps(deduped, indent=2))
+            print(f"[dedup] removed {len(entries) - len(deduped)} duplicate(s)", file=sys.stderr)
+    except Exception:
+        pass
+
+
+def _resolve_ftp(slug: str, profile: dict, session_log_f: Path) -> int:
+    """Return FTP to use: profile value if a test exists in last 10 weeks, else ICU sport_settings eFTP."""
+    from datetime import date, timedelta
+    cutoff = (date.today() - timedelta(weeks=10)).isoformat()
+    test_keywords = ("ramp", "ftp test", "20 min", "20-min", "threshold test")
+    try:
+        if session_log_f.exists():
+            for e in json.loads(session_log_f.read_text()):
+                if e.get("date", "") >= cutoff and e.get("sport") in ("Ride", "VirtualRide"):
+                    if any(kw in (e.get("name") or "").lower() for kw in test_keywords):
+                        return profile.get("ftp_watts") or 250
+    except Exception:
+        pass
+    # No recent test — try ICU eFTP
+    try:
+        r = subprocess.run(
+            ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug, "--endpoint", "sport_settings"],
+            capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
+        )
+        settings = json.loads(r.stdout)
+        for s in (settings if isinstance(settings, list) else [settings]):
+            if "Ride" in (s.get("types") or []):
+                eftp = s.get("ftp")
+                if eftp:
+                    return int(eftp)
+    except Exception:
+        pass
+    return profile.get("ftp_watts") or 250
 
 
 def load_state(state_file):
@@ -265,7 +340,7 @@ def release_lock():
     LOCK_FILE.unlink(missing_ok=True)
 
 
-def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_file=None):
+def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_file=None, slug=None):
     """If any stub from today is >2h old with rpe=null and hasn't been nudged, send one re-ping."""
     if not session_log_f.exists():
         return
@@ -313,10 +388,13 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
             elif sport == "Swim":
                 msg = f"RPE for the {name or 'swim'}? And how did it feel overall?"
             elif sport == "Ride" and (e.get("duration_min") or 0) >= 90:
-                msg = f"Fuelling check for the {name or 'ride'} — roughly g carbs/hr?"
+                if e.get("nutrition_g_carb") is None:
+                    msg = f"Fuelling check for the {name or 'ride'} — roughly g carbs/hr?"
+                else:
+                    msg = f"RPE for the {name or 'ride'}? (1–10)"
             else:
                 msg = f"RPE for {name or 'last session'}? (1–10)"
-            _notify(msg, chat_id)
+            _notify(msg, chat_id, slug=slug)
             nudged_ids.add(aid)
             state["nudged_ids"] = list(nudged_ids)
             # Persist nudged_ids so the same stub is never nudged again
@@ -327,6 +405,7 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
 
 def _check_test_reminders(adir: Path, chat_id: str, state: dict, state_file: Path | None):
     """Nudge athlete if a performance test is due within 3 days and not yet notified."""
+    slug = adir.name
     test_f = adir / "test-schedule.json"
     if not test_f.exists():
         return
@@ -356,7 +435,7 @@ def _check_test_reminders(adir: Path, chat_id: str, state: dict, state_file: Pat
             when = "today" if days_until == 0 else ("tomorrow" if days_until == 1
                    else f"in {days_until} days ({test_dt.strftime('%A')})")
             protocol = t.get("protocol", "")
-            _notify(f"⏱ Test due {when}: *{label}*\n_{protocol}_", chat_id)
+            _notify(f"⏱ Test due {when}: *{label}*\n_{protocol}_", chat_id, slug=slug)
             notified_tests.add(key)
             state["notified_tests"] = list(notified_tests)
             changed = True
@@ -589,7 +668,7 @@ def _strava_update(slug: str, icu_activity_id: str, analysis: str,
         # Notify segment PRs via Telegram
         if segment_prs and chat_id:
             pr_lines = "\n".join(f"🏆 PR: {n}" for n in segment_prs)
-            _notify(pr_lines, chat_id)
+            _notify(pr_lines, chat_id, slug=slug)
 
         description = _strava_description(
             first_name, sport, analysis, plan_delta_raw, session_entry,
@@ -668,13 +747,16 @@ def check_athlete(slug, athlete_cfg):
         except Exception:
             pass
 
-    ftp = profile.get("ftp_watts") or 250
+    ftp = _resolve_ftp(slug, profile, session_log_f)
     first_name = profile.get("name", slug).split()[0]
     injuries = profile.get("injuries", [])
     run_hr_cap       = int(athlete_cfg.get("run_hr_cap", 150))
     nutrition_target = int(athlete_cfg.get("nutrition_target_g_hr", 90))
 
     state = load_state(state_file)
+
+    # Dedup session log before any processing to catch merge-conflict duplicates
+    _dedup_session_log(session_log_f)
 
     # Test reminders and Strava refresh run every cycle regardless of new activity
     _check_test_reminders(adir, chat_id, state, state_file)
@@ -702,7 +784,7 @@ def check_athlete(slug, athlete_cfg):
         _notify(
             f"Activity watcher timed out for {first_name} (300s). "
             f"Last known activity: {state.get('last_id', 'unknown')}.",
-            chat_id,
+            chat_id, slug=slug,
         )
         return
     except Exception as exc:
@@ -751,21 +833,24 @@ def check_athlete(slug, athlete_cfg):
             analysis_lines.append(line)
 
     if not activity_id or activity_id == "none":
-        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
+        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file, slug=slug)
         return
 
     # Dedup check
     if activity_id in existing_ids:
-        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
+        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file, slug=slug)
         return
 
     if activity_id == state.get("last_id"):
-        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
+        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file, slug=slug)
         return
 
     state["last_id"] = activity_id
     state["notified_at"] = datetime.now().isoformat()
     save_state(state, state_file)
+
+    # Dedup again in case Claude introduced a duplicate stub
+    _dedup_session_log(session_log_f)
 
     # Commit stub entry written by Claude
     try:
@@ -852,7 +937,7 @@ def check_athlete(slug, athlete_cfg):
     if plan_delta_note:
         analysis = f"{analysis}\n_{plan_delta_note}_" if analysis else plan_delta_note
     if analysis and analysis != "none":
-        _notify(f"*New activity*\n\n{analysis}", chat_id)
+        _notify(f"*New activity*\n\n{analysis}", chat_id, slug=slug)
 
     # Send quick-log keyboard for immediate data capture
     new_entry = None
@@ -874,8 +959,12 @@ def check_athlete(slug, athlete_cfg):
         else:
             hdr = f"Quick log — {activity_label}:"
         _tg_send_keyboard(chat_id, hdr, kb)
+        try:
+            _log_to_history(slug, hdr)
+        except Exception:
+            pass
 
-    _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file)
+    _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries, state_file=state_file, slug=slug)
 
     # Zone-spotting: if Claude detected a threshold test, prompt for confirmation
     if test_result_raw and test_result_raw != "none":
@@ -887,14 +976,19 @@ def check_athlete(slug, athlete_cfg):
                 labels = {"ftp": "FTP", "css": "CSS", "lthr": "LTHR"}.get(t_type, t_type.upper())
                 confirm_data = f"test:{t_type}:{slug}:{t_value}"
                 dismiss_data = f"test:dismiss:{slug}:{t_aid}"
+                tst_hdr = f"⚡ That looks like a {labels} test.\nSuggested: *{t_value} {units}*\n\nConfirm to update thresholds:"
                 _tg_send_keyboard(
                     chat_id,
-                    f"⚡ That looks like a {labels} test.\nSuggested: *{t_value} {units}*\n\nConfirm to update thresholds:",
+                    tst_hdr,
                     {"inline_keyboard": [[
                         {"text": f"✅ Confirm {t_value} {units}", "callback_data": confirm_data},
                         {"text": "❌ Dismiss", "callback_data": dismiss_data},
                     ]]},
                 )
+                try:
+                    _log_to_history(slug, tst_hdr)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -919,7 +1013,7 @@ def check_athlete(slug, athlete_cfg):
             _notify(
                 f"Sailing session logged ({activity_date}). What should I name it on Strava? "
                 f"(ICU: {activity_id})",
-                chat_id,
+                chat_id, slug=slug,
             )
 
     # Trigger site data refresh in background

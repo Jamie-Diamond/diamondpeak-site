@@ -92,6 +92,11 @@ If ANY trigger fires:
    Run: python3 {NOTIFY} --chat-id {chat_id} "message"
 2. Update current-state.md — append to the relevant section with today's date and trigger name + signal value. Do not rewrite sections that do not need updating.
 3. Run: git add ClaudeCoach/athletes/{slug}/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "watchdog: [trigger list] {today}" && git push origin main
+3b. Append the Telegram message you sent to the athlete's history file so the bot has context for any reply:
+    - Read ClaudeCoach/athletes/{slug}/telegram/history.json (or use [] if it does not exist)
+    - Append: {{"user": "", "assistant": "<exact message you sent via Telegram>"}}
+    - Trim to the last 30 entries
+    - Write back to ClaudeCoach/athletes/{slug}/telegram/history.json
 4. Output one L2 reasoning trail per trigger to stdout (this goes to the coaching log only — NOT to athletes):
    [signal with real number] -> [rule: T1-T10] -> [suggested adjustment] -> [expected effect]
    Example: "ATL 148 vs CTL 121 for 4 days -> T1 (ATL > CTL +25) -> insert recovery day -> TSB recovers ~8 pts by weekend"

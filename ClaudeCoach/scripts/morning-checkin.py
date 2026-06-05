@@ -120,6 +120,18 @@ Rules:
 Wrap your entire output in <telegram> and </telegram> tags. Output nothing outside those tags — no preamble, no reasoning, no tool commentary."""
 
 
+def _log_to_history(slug: str, message: str) -> None:
+    """Append an outbound notification to the athlete's Telegram history so the bot has context for replies."""
+    history_file = BASE / "athletes" / slug / "telegram" / "history.json"
+    history_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        history = json.loads(history_file.read_text()) if history_file.exists() else []
+    except Exception:
+        history = []
+    history.append({"user": "", "assistant": message})
+    history_file.write_text(json.dumps(history[-30:], indent=2))
+
+
 def notify(msg, chat_id):
     try:
         subprocess.run(
@@ -330,6 +342,10 @@ def run_athlete(slug, athlete_cfg):
     output = m.group(1).strip() if m else ""
     if output:
         notify(output, chat_id)
+        try:
+            _log_to_history(slug, output)
+        except Exception:
+            pass
         _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level=coaching_level)
     # Write sentinel regardless — if Claude ran without error, don't retry even if output was empty
     if result.returncode == 0:

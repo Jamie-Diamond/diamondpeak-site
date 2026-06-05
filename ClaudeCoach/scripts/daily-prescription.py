@@ -113,7 +113,6 @@ Step 7 — Output the prescription card in exactly this format:
 If no rules fired: output "Today: [session name] — execute as planned." and the planned targets only (no reasoning trails section).
 
 Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired. Also update ankle section if today's prescription was affected by ankle status.
-Run: git -C {PROJECT_DIR} add ClaudeCoach/athletes/{slug}/current-state.md && git -C {PROJECT_DIR} fetch origin && git -C {PROJECT_DIR} merge origin/main --no-edit && git -C {PROJECT_DIR} commit -m "prescription: {today} [status]" && git -C {PROJECT_DIR} push origin main
 
 Step 9 — If the session was modified, swapped, or blocked, append this at the very end of your response:
 <telegram>[session name]: [one plain-English sentence on what changed and why]</telegram>
@@ -164,6 +163,32 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         if stderr:
             with open(LOG_FILE, "a") as lf:
                 lf.write(f"[prescription:{slug}] STDERR: {stderr}\n")
+        # Commit any current-state.md changes Claude made
+        try:
+            today = date.today().isoformat()
+            subprocess.run(
+                ["git", "add", f"ClaudeCoach/athletes/{slug}/current-state.md"],
+                cwd=PROJECT_DIR, capture_output=True, timeout=15,
+            )
+            subprocess.run(
+                ["git", "fetch", "origin"],
+                cwd=PROJECT_DIR, capture_output=True, timeout=30,
+            )
+            subprocess.run(
+                ["git", "merge", "origin/main", "--no-edit"],
+                cwd=PROJECT_DIR, capture_output=True, timeout=15,
+            )
+            subprocess.run(
+                ["git", "commit", "-m", f"prescription: {today} {slug}"],
+                cwd=PROJECT_DIR, capture_output=True, timeout=15,
+            )
+            subprocess.run(
+                ["git", "push", "origin", "main"],
+                cwd=PROJECT_DIR, capture_output=True, timeout=30,
+            )
+        except Exception as e:
+            with open(LOG_FILE, "a") as lf:
+                lf.write(f"[prescription:{slug}] git error: {e}\n")
         return output or None
     except Exception as e:
         with open(LOG_FILE, "a") as lf:
