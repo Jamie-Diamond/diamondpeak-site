@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i154745265",
+    "date": "2026-06-06",
+    "name": "Wandsworth Running",
+    "sport": "Run",
+    "tss": 53,
+    "duration_min": 46,
+    "distance_km": 9.57,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 145,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-06-06T21:17:21",
+    "stub": true
+  },
+  {
     "activity_id": "i154743605",
     "date": "2026-06-06",
     "name": "Wandsworth Running",
