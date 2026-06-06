@@ -1,17 +1,5 @@
 [
   {
-    "user": "It's likely just hardened fluid, ice and compression plus ankle mobility should help - from a. Friend who's a physio",
-    "assistant": "That's a reasonable starting hypothesis but it doesn't fit the test results from yesterday well.\n\n\"Hardened fluid\" \u2014 chronic organized effusion \u2014 is compressible and fluctuant. What you described was *bone-hard with a thin soft layer*, which is osteophyte texture, not organized fluid. Fluid also responds to the Molloy-Bendall test (pain on dorsiflexion + pressure); yours was negative.\n\nIce and compression won't do much for a bony spur, but they won't cause harm either. Ankle mobility work is fine and useful regardless of diagnosis.\n\nThe physio friend hasn't examined you in person and doesn't have the test findings \u2014 their guess is lower-confidence than a hands-on assessment. Stick with the lateral X-ray in dorsiflexion as the priority. That will settle it definitively."
-  },
-  {
-    "user": "Feels like last night was the first good sleep in a while",
-    "assistant": "HRV back to *43* this morning (was 34 yesterday) and sleep score *84*. Body caught up \u2014 good timing before the swim today."
-  },
-  {
-    "user": "We pushed the saddle back. \n\nAlso the load graph seems to miss today evrytime. You see? Log as a bug",
-    "assistant": "Saddle noted. Bug logged."
-  },
-  {
     "user": "I mean we pushed the date back, not the saddle",
     "assistant": "Got it \u2014 corrected. Order date pushed, no saddle change."
   },
@@ -118,5 +106,17 @@
   {
     "user": "We also said this is a bug not showing the planned tsss for today",
     "assistant": "Logged."
+  },
+  {
+    "user": "",
+    "assistant": "*New activity*\n\n9.57 km \u00b7 avg GAP 4:50/km \u00b7 +48 sec/km vs threshold (4:02/km)\n~67% time HR \u2264150 \u00b7 decoupling n/a\nInjury pain score during and this morning? (0-10)\n_vs plan (Sat 6 Jun \u2014 Z2 walk-run 60 min): 45\u219253 TSS (+18%)_"
+  },
+  {
+    "user": "",
+    "assistant": "Injury pain during (0\u201310) \u2014 Wandsworth Running:"
+  },
+  {
+    "user": "2 in the warm up dropped to zero from km2",
+    "assistant": "Logged. *2/10 warmup \u2192 0 from km 2* \u2014 up from 1/10 on the last run (Wed 3 Jun), but clearing mid-run is a good sign. Classic warmup irritation pattern for anterior impingement.\n\nRPE for the run?"
   }
 ]

@@ -12,11 +12,11 @@
     "avg_hr": 144,
     "rpe": null,
     "feel": null,
-    "injury_pain_during": null,
+    "injury_pain_during": 2,
     "injury_pain_next_morning": null,
     "nutrition_g_carb": null,
     "hydration_ml": null,
-    "notes": null,
+    "notes": "Ankle 2/10 in warm-up, cleared to 0 from km 2 onwards.",
     "logged_at": "2026-06-06T09:30:00",
     "stub": true
   },
