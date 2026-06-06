@@ -1,13 +1,5 @@
 [
   {
-    "user": "The swim tomorrow and ride on Friday look good. Saturday I will probably do a three hour ride with Catherine which will mostly be easy with some hard hills. I can also do a run. Sunday only have half the day free so probably four hours is too much maybe three hours is terrible. And then Monday will be the usual rest day or easy-ish exercise.",
-    "assistant": "Thu and Fri: confirmed as planned.\n\n*Sat:* 3hr with Catherine + run is a solid brick day. The hills will push that ride to ~*120 TSS* rather than ~100 for flat Z2 \u2014 account for that when you assess how fresh you feel before the run. Z2 continuous 60 min run adds ~*54 TSS*. Total Saturday ~174 TSS.\n\n*Sun:* 2\u20132.5hr is the right call. Standing rule caps Sunday at 3hr when Friday is 4hr, and half-day availability makes 3hr tight anyway. 2.5hr Z2 \u2192 ~*95 TSS*, which is enough to compound without burying you before next week's FTP retest.\n\n*Mon:* rest or easy (\u226460 min) \u2014 correct.\n\nWeek projection with that plan:\nThu *60* + Fri *150* + Sat *174* + Sun *95* \u2192 adds *479 TSS* to the *172* already banked = *~651 TSS* for the week. That'll push Fitness from 77 to roughly *81\u201382*. Strong week."
-  },
-  {
-    "user": "And then if we did next week the same, but with Monday rest day, how would our fitness look after that and are we getting to where we need to.",
-    "assistant": "Projecting from current *77.5* CTL:\n\n*End of this week (Sun 7 Jun):* ~*81* CTL\nSat is the big day \u2014 174 TSS from the Catherine ride + run. Sunday 2.5hr adds consolidation. Rest Monday pulls it back slightly.\n\n*End of next week (Sun 14 Jun):* ~*83* CTL\nSimilar structure gets you roughly +2/week at this load level.\n\n*Where you need to be:*\nRace is 19 Sep \u2014 taper starts ~4 weeks out (late Aug), so peak CTL should land *mid-August*. That's 10 weeks from now. At +2 CTL/week you'd peak at *~83+20 = 103* \u2014 but that assumes zero rest weeks, which isn't realistic. With one recovery week in there you're looking at *~95* peak, which is a good Ironman prep number.\n\n*Honest assessment:*\nYou're on track *if* the ankle holds. The run volume is the missing piece \u2014 Z2 continuous 45 min (47 TSS today) vs where you should be (60\u201390 min/session, 3\u20134x/week, 150+ run TSS/week). Swim and bike are carrying the CTL build fine, but run fitness for a 42km IM run needs more than this by August.\n\nTwo things matter most before the July France camp: physio appointment + X-ray to confirm the bony impingement, and whether you can get a surgical consult moving. If surgery clears you to run normally by mid-July, the run block has 8 weeks \u2014 tight but workable. If not, race-day run pace will be managed to survival.\n\n*Summary:* fitness trajectory is fine; timeline is fine; ankle diagnosis is the only variable that changes the race outcome projection."
-  },
-  {
     "user": "It's likely just hardened fluid, ice and compression plus ankle mobility should help - from a. Friend who's a physio",
     "assistant": "That's a reasonable starting hypothesis but it doesn't fit the test results from yesterday well.\n\n\"Hardened fluid\" \u2014 chronic organized effusion \u2014 is compressible and fluctuant. What you described was *bone-hard with a thin soft layer*, which is osteophyte texture, not organized fluid. Fluid also responds to the Molloy-Bendall test (pain on dorsiflexion + pressure); yours was negative.\n\nIce and compression won't do much for a bony spur, but they won't cause harm either. Ankle mobility work is fine and useful regardless of diagnosis.\n\nThe physio friend hasn't examined you in person and doesn't have the test findings \u2014 their guess is lower-confidence than a hands-on assessment. Stick with the lateral X-ray in dorsiflexion as the priority. That will settle it definitively."
   },
@@ -118,5 +110,13 @@
   {
     "user": "We spoke about the FTP test yesterday! This is the message I keep saying it's a load of junk, yet you keep sending it",
     "assistant": "Fixed. The FTP retest open actions were still showing as pending in the table \u2014 watchdog kept reading them as overdue. Both marked done now. Won't fire again."
+  },
+  {
+    "user": "",
+    "assistant": "*Good morning \u2014 Sat 6 Jun*\n\n*Today:* Z2 walk-run 60 min + Bike Z2 90 min \u2014 ~115 TSS\n\n\u26a0\ufe0f Weekly run km \u2014 today's ~11 km puts the week at ~20 km vs 6.9 km last week (+163%, 10% ankle rehab cap). Check total before starting; call is yours.\n\nInjury pain score before heading out? (0\u201310)\n\n_105 days to IM Italy Emilia-Romagna_"
+  },
+  {
+    "user": "We also said this is a bug not showing the planned tsss for today",
+    "assistant": "Logged."
   }
 ]
