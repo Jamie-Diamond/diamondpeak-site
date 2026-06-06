@@ -208,6 +208,7 @@ RIDE:
 
 RUN:
 {run_injury_ask}
+Running power: if icu_average_watts is not null in activity_detail (Garmin running power configured), add one line after the HR line: "Running power: Xw avg · pace-power check: [brief note if pace and power effort level diverge — e.g. power high vs easy pace = headwind/elevation]". Skip entirely if icu_average_watts is null.
 
 SWIM:
 - Pool (icu_intervals available in extended metrics): use WORK intervals only (type="WORK").

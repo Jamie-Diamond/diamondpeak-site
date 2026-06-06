@@ -49,6 +49,7 @@ Step 1 — Pull live data via Bash (use today's date {today} for all calculation
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
 Step 2 — Read these files:
+- {athlete_dir}/persistent-rules.md (permanent coaching rules — zone targets, HR caps, and any [perm] rules OVERRIDE all defaults when writing event descriptions)
 - {athlete_dir}/current-state.md
 - {athlete_dir}/session-log.json (most recent entry = last RPE)
 
