@@ -142,9 +142,13 @@ Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint history --days 3
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
-Step 2 — Read ClaudeCoach/athletes/{slug}/session-log.json and note all existing activity_id values.
+Step 2 — Read:
+- ClaudeCoach/athletes/{slug}/persistent-rules.md (permanent coaching rules — these override defaults)
+- ClaudeCoach/athletes/{slug}/session-log.json — note all existing activity_id values.
 
 Step 3 — For the most recent activity that is NOT already in session-log.json:
+  Duplicate upload guard: if multiple activities of the same sport on the same date are NOT in session-log.json, they are likely the same session uploaded from two sources (e.g. Garmin + Strava). Only process the one with the highest numeric ID. If that highest-ID activity is already in session-log.json (by ID, date, or both), output ACTIVITY_ID: none — the session is already logged.
+
   - Fetch full detail via Bash: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint activity_detail --activity-id <id>
   - If sport is Run, VirtualRun, or Swim: also fetch extended metrics:
     python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint extended_metrics --activity-id <id>

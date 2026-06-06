@@ -76,7 +76,7 @@ T6 (Tier 1): Aerobic decoupling >5% on any Z2 ride in last 7 days (check via act
   If T6 fired in the last 3 days and all flagged rides are already logged there (same activity dates), do NOT send a Telegram message — log to current-state.md only. Only send Telegram if there is a new Z2 ride with decoupling >5% not present in the prior T6 entry.
 {heat_triggers}T9 (Tier 2): Decision-point action due within 7 days and not marked done in current-state.json open_actions[].status
   - Read {athlete_dir}/reference/decision-points.md for dated items (skip if file missing)
-  - Cross-check against open_actions in current-state.json; fire for any item whose due date <= today+7 and status != "done"
+  - Cross-check against open_actions in current-state.json; fire for any item whose due date <= today+7 and status does not start with "done" and status is not "dropped" and status is not "noted"
   - Example fire: "FTP retest due 2026-05-31 — not yet done"
 T10 (Tier 2): Run weekly km increase >10% week-on-week
   - Sum run distance (km) from history endpoint for Mon–today (current week)

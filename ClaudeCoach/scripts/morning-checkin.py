@@ -79,7 +79,8 @@ Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
 Step 2 — Read:
-- ClaudeCoach/athletes/{slug}/current-state.md (open actions, watchdog flags)
+- ClaudeCoach/athletes/{slug}/persistent-rules.md (permanent coaching rules — these override defaults and MUST be followed)
+- ClaudeCoach/athletes/{slug}/current-state.md (open actions, watchdog flags — only surface flags dated within the last 3 days)
 - ClaudeCoach/athletes/{slug}/current-state.json (weight_readings, injury pain scores)
 {"- ClaudeCoach/athletes/" + slug + "/heat-log.json (count entries in current ISO week to get sessions_this_week)" if heat_protocol else ""}
 - ClaudeCoach/athletes/{slug}/session-log.json — only if today's planned event is a Ride or Brick >90 min: extract the last 4 entries with sport Ride/GravelRide/Brick, duration_min ≥ 90, and nutrition_g_carb set. Compute each g_per_hr and the avg.
@@ -94,7 +95,12 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 
 *Good morning — [Day date, e.g. Sat 9 May]*
 
-*Today:* [session name] — [duration] min[, ~[TSS] TSS if available]
+*Today:* [session name] — [duration] min[, ~[TSS] TSS]
+  TSS: use icu_training_load if set. If null, estimate from the session description:
+    - Ride: TSS ≈ (duration_min × 60 × NP_mid²) / (FTP² × 3600) × 100 where NP_mid = midpoint of the NP range in description; if no NP range, use IF 0.65 for Z2 or 0.75 for tempo
+    - Run: TSS ≈ duration_min × 0.45 for Z2/easy; duration_min × 0.60 for tempo
+    - Swim: TSS ≈ duration_min × 0.55
+    Always show as ~[N] TSS (round to nearest 5).
 
 [Form line — only include if notable:
   · Form < −20: ⚠️ Heavy load today — keep intensity in check
