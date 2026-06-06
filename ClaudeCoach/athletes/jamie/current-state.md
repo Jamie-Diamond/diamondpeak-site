@@ -151,8 +151,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 | Action | Owner | Due | Status |
 |---|---|---|---|
 | Book Precision Hydration sweat-sodium test | Jamie | end May | [pending / booked / done] |
-| FTP retest (end-May target) | Jamie | end May | [pending / scheduled / done — value W] |
-| FTP retest (mid-July target) | Jamie | mid Jul | [pending / scheduled / done — value W] |
+| FTP retest (end-May target) | Jamie | end May | done — replaced by eFTP 297W (2026-06-05: Jamie confirmed, no formal test; eFTP is live source) |
+| FTP retest (mid-July target) | Jamie | mid Jul | cancelled — eFTP from Intervals.icu is the working FTP; no formal retest protocol |
 | CSS swim test #2 | Jamie | mid Jul | [pending / done — pace] |
 | TT bike fit appointment | Jamie | before June | [pending / booked / done] |
 | ISM saddle order | Jamie | 2026-08-06 (pushed back 2 months) | [pending / ordered / fitted] |
