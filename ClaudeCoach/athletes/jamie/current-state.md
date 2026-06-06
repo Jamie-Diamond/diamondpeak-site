@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-06-04
+## Last updated: 2026-06-06
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -290,6 +290,10 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 - **2026-06-05 — T9 (Tier 2):** ISM saddle order due 2026-06-06 (tomorrow, Sat), status pending — must order today. FTP retest (end-May) due 2026-05-31, status pending — overdue; earliest home window this week. Book Precision Hydration sweat-sodium test — due 2026-05-31, still no booking made. TT bike fit appointment — due 2026-05-31, still no booking made. Four actions require immediate action.
 - **2026-06-05 — T10 (Tier 2):** Run km +20.3% w/w — this week (Mon–Fri) 8.34 km (06-03 run only) vs last week 6.93 km (05-27 Marseille walk-run only). Week is not yet complete; any weekend run would push further above cap. 10% cap applies while ankle in rehab. Monitor ankle response to 06-03 run before prescribing weekend session.
 - **2026-06-05 — T6 (Tier 1, carryover — Telegram suppressed):** Aerobic decoupling >5% on 05-31 "Hot and windy" ride still in 7-day window (7.93%, IF 0.693, avg 25.7°C, confirmed via activity_detail). No new Z2 rides since 05-31. T6 fired 2026-06-04 with same ride logged — Telegram suppressed per suppression rule (fired <3 days ago, same activity dates). Diagnostic: today's 4hr long Z2 ride is next candidate — check decoupling post-ride if data syncs.
+
+- **2026-06-06 — T6 (Tier 1):** Aerobic decoupling 15.64% on 06-05 "Wandsworth Road Cycling" (IF 0.645, NP 204W, 202 min, avg temp 18.8°C, VI 1.36). New ride not in prior T6 entry — Telegram sent. High VI (1.36) and embedded threshold intervals (1×4:32 @ 294W, 1×6:00 @ 342W / 108% FTP) are primary driver. Power zone distribution: Z1 53%, Z2 27%, Z3–Z7 19% — not a clean Z2 session. Context: cool conditions (17–22°C, <22°C diagnostic threshold), but stop-start urban terrain with two hard climbs. Decoupling does NOT confirm aerobic durability regression — Saturday's 3hr with Catherine in steadier conditions is the true diagnostic.
+- **2026-06-06 — T9 (Tier 2):** 3 actions overdue (all due 2026-05-31, status pending): (1) Book Precision Hydration sweat-sodium test — still no booking made. (2) FTP retest (end-May) — extended to 06-04 informally; now replaced by eFTP 297W (Jamie confirmed 06-05: use eFTP, no formal test). (3) TT bike fit appointment — still no booking made. Note: ISM saddle corrected to due 2026-08-06 (pushed back 2 months per 2026-06-04 plan change — JSON stale; update JSON to 08-06).
+- **2026-06-06 — T10 (Tier 2):** Run km +20.3% w/w — this week (Mon–Sat) 8.34 km (06-03 run only; today's planned 60 min not yet logged) vs last week 6.93 km (05-27 Marseille walk-run only). If today's 60 min run completes (~11 km), week ends ~19–20 km vs cap of 7.6 km (+163%). 10% cap still applies while ankle in rehab (quality_sessions_resumed = false). Ankle stop-if->2/10 in force for today's session; monitor during/after before prescribing next week.
 
 ## Plan changes
 
