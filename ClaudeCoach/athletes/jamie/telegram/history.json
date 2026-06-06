@@ -1,9 +1,5 @@
 [
   {
-    "user": "you can see intervals eftps",
-    "assistant": "eFTP model shows *297W* \u2014 based on today's best 390-second (6m30s) effort at *353W* peak. Rolling eFTP went +1W today (was 296, now 297).\n\nThat's *below* your set FTP of 316W, not above it. Whatever Intervals flagged, the model is extrapolating 297W from that effort \u2014 short efforts inflate peak power but the curve penalty at 6 min is steep.\n\nThe 342W/6min Box Hill effort is good W' evidence. It does not support revising FTP above 316W via the model. Wednesday retest stands."
-  },
-  {
     "user": "maybe the 300 is more accuarte than the old old 316",
     "assistant": "Plausible. If *316W* was set months ago before the ankle layoff reduced bike intensity, it may have drifted. The eFTP model penalises short efforts heavily but 297W is what it's deriving from recent actual work \u2014 that's a real signal, not just noise.\n\nWednesday's test will settle it. If you come out at *300\u2013305W*, update FTP and your Z2 targets drop accordingly (174W floor becomes ~165W). Worth knowing \u2014 your 55 min Z2 today at 174\u2013237W may have been slightly above true Z2."
   },
@@ -118,5 +114,9 @@
   {
     "user": "why did you send it twice? also the dots are yellow for form, when in the green section of the graph?",
     "assistant": "Two separate things:\n\n**Double send** \u2014 bug on my end. The delete confirmation and the chart went out as two separate responses. Logging it.\n\n**Yellow dots in the green zone** \u2014 the dot colour is set by TSB value, independently of where it sits on the chart. The zone bands (green/amber/red) are background regions, but dots are coloured by their own threshold: amber = TSB 0 to \u221220. Your TSB across the last week has been \u22121 to \u22127, which is technically in the amber load zone, even when it sits visually close to the green boundary on the chart. The dots are correct \u2014 it's a visual mismatch between where the dot lands and what colour you'd expect. Worth flagging to the chart renderer \u2014 if TSB is within the amber band, the dot should probably match the band colour it's sitting inside."
+  },
+  {
+    "user": "Why do you say cervelo TT. I don't have a cervelo",
+    "assistant": "The model hallucinated a bike brand. It appeared in the June 5 session prescription in your athlete file \u2014 \"Cervelo TT position\". No idea where it came from; you don't ride a Cervelo. Removed. It was only in the internal file, not sent to you in a Telegram message \u2014 but worth knowing. What bike do you actually race on so I can use the right name going forward?"
   }
 ]
