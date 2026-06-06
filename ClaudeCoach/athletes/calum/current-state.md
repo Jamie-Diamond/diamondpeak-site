@@ -1,6 +1,6 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 ## Training Availability
 Max weekly training: **5 hours/week** (cycling)
@@ -38,3 +38,4 @@ No
 | 2026-06-01 | 9.2 | 4.7 | +4.5 | T5: 2 missed sessions in rolling 7d (26-May Z2 60min, 30-May Z2 2h). 0 rides recorded since 21-May. No HRV or sleep data. |
 | 2026-06-03 | 10.1 | 9.4 | +0.7 | Z2 Aerobic Base Ride 75 min — GO as-planned. Activity logged 2026-06-01 (Geneva Road Cycling, 81 min). No HRV or sleep data. |
 | 2026-06-05 | 9.7 | 7.1 | +2.6 | No session planned today. Rest day — no events in calendar. No HRV or sleep data. |
+| 2026-06-06 | 11.4 | 17.5 | −6.0 | Long Z2 Ride 2h 30min — GO as-planned. No HRV or sleep data. No rules fired. |
