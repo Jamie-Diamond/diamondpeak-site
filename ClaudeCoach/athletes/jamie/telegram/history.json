@@ -1,13 +1,5 @@
 [
   {
-    "user": "I mean we pushed the date back, not the saddle",
-    "assistant": "Got it \u2014 corrected. Order date pushed, no saddle change."
-  },
-  {
-    "user": "Ankle is 0 this morning",
-    "assistant": "Logged. *0/10* \u2014 same as yesterday morning. First continuous 40 min run since the sprain, clean recovery."
-  },
-  {
     "user": "Why have you picked up a new activity",
     "assistant": "Today's pool swim (*i154165826*) synced \u2014 *42 min, 2.4 km, 59 TSS*. That's the activity-watcher detecting it from Garmin Connect. Matches today's planned CSS swim.\n\nWant me to debrief it?"
   },
@@ -118,5 +110,13 @@
   {
     "user": "2 in the warm up dropped to zero from km2",
     "assistant": "Logged. *2/10 warmup \u2192 0 from km 2* \u2014 up from 1/10 on the last run (Wed 3 Jun), but clearing mid-run is a good sign. Classic warmup irritation pattern for anterior impingement.\n\nRPE for the run?"
+  },
+  {
+    "user": "",
+    "assistant": "*New activity*\n\n9.57 km \u00b7 avg GAP 4:50/km \u00b7 +48s/km vs threshold (4:02/km)\n95% time HR \u2264150 bpm cap (only lap 4 breached at avg 151 \u00b7 max 157) \u00b7 decoupling unavailable\nInjury pain score during and this morning? (0-10)\n_vs plan (Sat 6 Jun \u2014 Z2 walk-run 60 min): 45\u219253 TSS (+18%)_"
+  },
+  {
+    "user": "We already discussed that activity",
+    "assistant": "Logged as a bug \u2014 duplicate activity notification for the same run."
   }
 ]
