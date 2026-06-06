@@ -1,9 +1,5 @@
 [
   {
-    "user": "Why have you picked up a new activity",
-    "assistant": "Today's pool swim (*i154165826*) synced \u2014 *42 min, 2.4 km, 59 TSS*. That's the activity-watcher detecting it from Garmin Connect. Matches today's planned CSS swim.\n\nWant me to debrief it?"
-  },
-  {
     "user": "Yes why didn't you pick it up at 8.15. log as a bug. Then remind me of the rpe scale as I found that tough. Last 2 reps I really went for it",
     "assistant": "Bug logged.\n\n**RPE scale (1\u201310):**\n1\u20132: Very easy, barely trying\n3\u20134: Easy, could hold conversation\n5\u20136: Moderate, somewhat hard\n7\u20138: Hard, difficult to talk\n9\u201310: Very hard, max effort\n\n**Swim debrief:**\n*57 sec/100m* average \u2014 much faster than CSS *1:39*, only 42 min instead of 60. Rep-structured with hard efforts at the end? That's *59 TSS* (high for duration \u2014 closer to a hard swim than aerobic maintenance). Last 2 reps hard is strong finishing. \n\nWas this an intentional change to rep format or did it get cut short?"
   },
@@ -118,5 +114,9 @@
   {
     "user": "We already discussed that activity",
     "assistant": "Logged as a bug \u2014 duplicate activity notification for the same run."
+  },
+  {
+    "user": "Can you see running power? Garmin uses that and wind to give a more realistic figures. \n\nLooking at power I didn't fade in the second half.",
+    "assistant": "Yes \u2014 Garmin running power is in the raw stream. *416W average* (running watts, not cycling).\n\nSecond half verdict: you're right \u2014 no fade.\n\nFirst half: *417W avg*\nSecond half: *415W avg*\nQuartile split: Q1 419 \u00b7 Q2 415 \u00b7 Q3 425 \u00b7 Q4 405W\n\nVirtually flat across all four quarters. That Q3 bump suggests you actually pushed *harder* mid-run before a slight ease in the final stretch. No meaningful power drop.\n\nWorth noting: Intervals.icu isn't using this stream for its zone or TSS calculations (it shows null watts in the interval analysis) \u2014 so all the HR-based TSS and zone figures in the debrief are unaffected by power. But the raw stream confirms what you felt: consistent output start to finish."
   }
 ]
