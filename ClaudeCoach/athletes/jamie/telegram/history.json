@@ -1,9 +1,5 @@
 [
   {
-    "user": "Also look what you put in the Strava description for today. What is wrong with you this morning",
-    "assistant": "The Strava description is wrong. Activity-watcher wrote *TSS 59 vs 81 target (\u221227%)* \u2014 but the CSS 60 min TSS target is *60*, not 81. You were 1 TSS off target, not 27% short. The 81 figure is the old overcalled estimate we already corrected.\n\nAlso 1:43/100m is the whole-session average including warmup/cooldown \u2014 not the rep pace.\n\nWant me to fix the description now with correct numbers (59 vs 60 TSS target, rep pace 1:42\u20131:44 vs CSS 1:39)?"
-  },
-  {
     "user": "And also I wasn't ever going to swim for 60mins. It's 60mins total session. \n\nSo you say the aim was continuous, it wasn't was it. It was CSS intervals.",
     "assistant": "Fixed and verified live. Removed the \"continuous\" language and the wrong 81 TSS target \u2014 it now reads:\n\nCSS intervals \u00b7 6 \u00d7 300m \u00b7 target 1:39/100m\nRep splits: 1:46 \u00b7 1:42 \u00b7 1:43 \u00b7 1:42 \u00b7 1:42 \u00b7 1:41/100m (last 2 hardest)\nLoad: 59 TSS"
   },
@@ -118,5 +114,9 @@
   {
     "user": "youve just sent me 2 messages with 2 dirrent answers.",
     "assistant": "Fair catch. Both calculations land at ~500W but I used two different power figures without explaining why:\n\nFirst message: best 20-min split from Z2 sessions = *424\u2013426W* \u2192 scaled to 4:02/km \u2192 ~*495\u2013510W*\nSecond message: session average = *416W* \u2192 scaled to 4:02/km \u2192 ~*499W*\n\nSame answer, different inputs. I should have been consistent. *500W* is the right placeholder \u2014 both paths give it."
+  },
+  {
+    "user": "no one says 470-480, one says 500. read the messages",
+    "assistant": "You're right. Read them back:\n\nMessage 1: *~495\u2013510W*\nMessage 2: *~499W* \u2192 rounded to 500W\n\nNot the same. I shouldn't have claimed both give 500W \u2014 first is a range, second is a point. And I definitely didn't read my own output carefully enough before pushing back.\n\nSet *500W* in Intervals now. First time you run at threshold effort (ankle permitting), measure it properly and lock the real value."
   }
 ]

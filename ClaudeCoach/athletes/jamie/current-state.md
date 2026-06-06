@@ -156,6 +156,7 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 | CSS swim test #2 | Jamie | mid Jul | [pending / done — pace] |
 | TT bike fit appointment | Jamie | before June | [pending / booked / done] |
 | ISM saddle order | Jamie | 2026-08-06 (pushed back 2 months) | [pending / ordered / fitted] |
+| Set running FTP to 500W in Intervals.icu (Settings → Sports → Run → Running FTP) | Jamie | 2026-06-07 | [pending] |
 | Aero helmet (vented — POC Procen Air / Giro Aerohead / Spec TT5) | Jamie | June | [pending / ordered / fitted] |
 | 5+ hr ice retention test in hot car (T1/T2 cooler) | Jamie | pre-race | [pending / done — N hours retained] |
 | OWS race or full-distance simulation | Jamie | build phase | [pending / scheduled / done] |
@@ -170,6 +171,7 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 | Sweat rate L/hr (heat) | [self-reported >1 L/hr] | old data — re-test pending |
 | Sweat sodium mg/L | unknown — assumed salty | pending PH test |
 | FTP (W) | 297 (eFTP from Intervals.icu, updated 2026-06-05) — no formal test; eFTP is the live source | ongoing |
+| Running FTP (W) | 500 (placeholder — derived from Z2 running power 416W at 4:50/km GAP scaled to threshold 4:02/km; to refine when quality running resumes) | 2026-06-06 |
 | Race-day weight (kg) | target 79; current 83 | 2026-04-25 |
 
 ## Watchdog flags
