@@ -430,6 +430,17 @@ def post_process(data):
     if SESSION_LOG.exists():
         try:
             all_s = json.loads(SESSION_LOG.read_text())
+            # Drop double-uploaded activities (same date+sport+distance+duration under
+            # different ICU ids) — keep whichever entry has the most fields filled in.
+            best = {}
+            for s in all_s:
+                k = (s.get("date"), s.get("sport"),
+                     round(float(s.get("distance_km") or 0), 1),
+                     int(s.get("duration_min") or 0))
+                cur = best.get(k)
+                if cur is None or sum(v is not None for v in s.values()) > sum(v is not None for v in cur.values()):
+                    best[k] = s
+            all_s = list(best.values())
             long_rides = sorted(
                 [s for s in all_s if s.get("sport") == "Ride"
                  and s.get("norm_power") and s.get("avg_power")
