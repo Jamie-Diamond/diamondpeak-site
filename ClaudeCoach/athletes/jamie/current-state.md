@@ -161,6 +161,7 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 | OWS race or full-distance simulation | Jamie | build phase | [pending / scheduled / done] |
 | Tested run-fuelling protocol on a long run in heat | Jamie | recurring | [last done: date / outcome] |
 | Plan generated through 2026-06-21 (W7–W8 Build) | Claude | 2026-05-31 | done — 16 sessions pushed; W7 ~435 TSS (FTP retest Wed 10 Jun + first 3x20 SS); W8 ~513 TSS (first brick Sat 20 Jun); ankle walk-run 5:30 throughout; CHO 60g/hr on rides >90 min |
+| Plan reviewed W7–W8 2026-06-08 to 2026-06-21 | Claude | 2026-06-07 | done — 15 sessions already in Intervals.icu; 2 hard constraint breaches flagged (Mon 15 Jun swim → must be Tue/Thu; Wed 17 Jun bike → must be Fri-Sun); load gap flagged (W7 ~370 TSS, W8 ~420 TSS vs 754 target); CTL 82 → target 95 by 6 Jul, BEHIND; CHO target updated to 70g/hr; Telegram sent |
 | Marseille 24–30 May: ad-hoc sessions only, nothing long — play by ear | Claude | rolling | noted |
 
 ## Race-day-relevant tested data
