@@ -1,9 +1,5 @@
 [
   {
-    "user": "We also said this is a bug not showing the planned tsss for today",
-    "assistant": "Logged."
-  },
-  {
     "user": "",
     "assistant": "*New activity*\n\n9.57 km \u00b7 avg GAP 4:50/km \u00b7 +48 sec/km vs threshold (4:02/km)\n~67% time HR \u2264150 \u00b7 decoupling n/a\nInjury pain score during and this morning? (0-10)\n_vs plan (Sat 6 Jun \u2014 Z2 walk-run 60 min): 45\u219253 TSS (+18%)_"
   },
@@ -118,5 +114,9 @@
   {
     "user": "What's the overall decoupling score?",
     "assistant": "*+2.5%* \u2014 calculated from EF (power\u00f7HR) first half vs second half.\n\nFirst Z2 block: 207W / 134 bpm = EF 1.545\nSecond Z2 block: 205W / 136 bpm = EF 1.507\n\n(1.545 \u2212 1.507) / 1.545 = *2.5%* overall drift\n\nWell within the \u22645% threshold for good aerobic efficiency. For a 232-min ride with two hard climbs in the middle, that's a strong result."
+  },
+  {
+    "user": "Why no description update on Strava?",
+    "assistant": "My fault \u2014 I debriefed the session but didn't push the description to Strava. Done now.\n\nStrava description updated for Wandsworth Road Cycling:\nNP 226W \u00b7 IF 0.76 \u00b7 TSS 198 \u00b7 232 min \u00b7 129.9km\nZone split, decoupling, HR, nutrition."
   }
 ]
