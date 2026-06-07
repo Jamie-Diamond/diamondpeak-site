@@ -1,6 +1,6 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-06-06
+Last updated: 2026-06-07
 
 ## Training Availability
 Max weekly training: **5 hours/week** (cycling)
@@ -19,9 +19,8 @@ Weight: **93 kg**
 No
 
 ## Off-plan in last 7 days
-- 2026-05-26: Z2 Aerobic Base Ride 60 min — watchdog GO, no activity recorded (likely missed)
-- 2026-05-30: Long Z2 Ride 2h — watchdog GO, no activity recorded (likely missed)
-- 2026-05-31: Z3 Ride 10h — watchdog GO, no activity recorded. Event is erroneous (10h far exceeds 5h/week cap) — needs deletion or correction in calendar.
+- 2026-06-01: Geneva Road Cycling (81 min, 28.7 km) — completed Monday; credited to Wed 3 Jun Z2 75min plan (done 2 days early)
+- 2026-06-06: Sat Long Z2 Ride 2h 30min — not completed; hike done instead (Saint-Cergue Hiking, 97 min, 8.3 km, 163 m climb)
 
 ## Open Actions
 - [x] Set up initial training plan
@@ -38,5 +37,5 @@ No
 | 2026-06-01 | 9.2 | 4.7 | +4.5 | T5: 2 missed sessions in rolling 7d (26-May Z2 60min, 30-May Z2 2h). 0 rides recorded since 21-May. No HRV or sleep data. |
 | 2026-06-03 | 10.1 | 9.4 | +0.7 | Z2 Aerobic Base Ride 75 min — GO as-planned. Activity logged 2026-06-01 (Geneva Road Cycling, 81 min). No HRV or sleep data. |
 | 2026-06-05 | 9.7 | 7.1 | +2.6 | No session planned today. Rest day — no events in calendar. No HRV or sleep data. |
-| 2026-06-06 | 11.4 | 17.5 | −6.0 | Long Z2 Ride 2h 30min — GO as-planned. No HRV or sleep data. No rules fired. |
-| 2026-06-07 | 11.2 | 15.1 | −4.0 | Rest day — Sunday, no ride planned (weekday-only rule). No HRV or sleep data. |
+| 2026-06-06 | 9.4 | 6.1 | +3.3 | Long Z2 Ride 2h 30min — GO as-planned. Ride not completed; hike done instead (Saint-Cergue, 97 min). Actual IcuSync values used (projected had assumed ride completed). No HRV or sleep data. |
+| 2026-06-07 | 9.2 | 5.3 | +3.9 | Weekly summary. T3 Underload fired (41% compliance). 1 ride completed (Mon, 81 min). Sat long ride missed. Recovery 100/100 GREEN. No HRV or sleep data. |
