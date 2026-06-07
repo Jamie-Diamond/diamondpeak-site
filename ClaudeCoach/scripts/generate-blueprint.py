@@ -23,6 +23,20 @@ from pathlib import Path
 BASE = Path(__file__).parent.parent  # ClaudeCoach/
 PROJECT_DIR = str(BASE.parent)
 
+# Validate the structured sidecar against the shared schema (remediation WS B).
+sys.path.insert(0, str(BASE / "ironman-analysis"))
+from primitives.blueprint import validate_blueprint, SCHEMA_VERSION  # noqa: E402
+
+# Brick targets by phase family — single source for both the markdown table and
+# the structured sidecar.
+BRICK_MIN = {"base": "1", "build": "2–3", "peak": "3–4", "taper": "1"}
+BRICK_TYPE = {
+    "base":  "Short brick (30–45 min ride + 10–20 min easy run)",
+    "build": "Standard and quality bricks",
+    "peak":  "Include at least 1 long brick (race simulation)",
+    "taper": "Short brick only; no fatigue accumulation",
+}
+
 
 # -- Mesocycle algorithm ------------------------------------------------------
 
@@ -556,6 +570,80 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     return "\n".join(lines)
 
 
+# -- Structured sidecar --------------------------------------------------------
+
+def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
+                         current_ctl: float | None,
+                         fitness_note: str | None) -> dict:
+    """Serialise the computed methodology into the machine-readable sidecar.
+
+    This is the structured counterpart to render_blueprint()'s prose — same
+    values, consumable by the planner/validator. Phase windows are whatever
+    `phases` carries (see the anchor decision in remediation-plan WS B); this
+    function does not re-derive them.
+    """
+    event = profile.get("race_distance", "Full Ironman")
+    max_hours = profile.get("max_hours_per_week", 10)
+    race_date_str = profile.get("race_date", "")
+    try:
+        race_dt: date | None = date.fromisoformat(race_date_str)
+        weeks_to_race = round((race_dt - date.today()).days / 7, 1)
+    except (ValueError, TypeError):
+        race_dt = None
+        weeks_to_race = 0.0
+
+    event_dist = DISTRIBUTION.get(event, {})
+
+    phase_objs: list[dict] = []
+    for p in phases:
+        fam = phase_family(p["name"])
+        ceil = tss_ceiling(max_hours, p["name"])
+        entry = ctl_range(event, p["name"])
+        phase_objs.append({
+            "name": p["name"],
+            "family": fam,
+            "start": p["start"].isoformat(),
+            "end": p["end"].isoformat(),
+            "weeks": p["weeks"],
+            "tss_ceiling": int(ceil) if ceil else None,
+            "if_target": IF_TARGETS.get(fam),
+            "ctl_entry_low": entry[0] if entry else None,
+            "ctl_entry_high": entry[1] if entry else None,
+            "distribution": event_dist.get(fam, {}),
+            "fuelling": fuelling_note(event, p["name"]),
+            "brick_min": BRICK_MIN.get(fam),
+            "brick_type": BRICK_TYPE.get(fam),
+        })
+
+    race_conditions = profile.get("race_conditions", "temperate")
+    heat = {"active": False, "starts": None}
+    if race_conditions == "hot" and race_dt:
+        heat = {"active": True, "starts": (race_dt - timedelta(weeks=4)).isoformat()}
+    altitude = profile.get("altitude_m", 0) or 0
+    course_type = profile.get("course_type", "flat")
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "slug": slug,
+        "generated": date.today().isoformat(),
+        "event_type": event,
+        "race_name": profile.get("race_name", "Race"),
+        "race_date": race_date_str,
+        "weeks_to_race": weeks_to_race,
+        "max_hours_per_week": max_hours,
+        "current_ctl": current_ctl,
+        "fitness_note": fitness_note,
+        "phases": phase_objs,
+        "tests": _test_events(phases),
+        "env_protocols": {
+            "heat": heat,
+            "altitude": {"active": bool(altitude and altitude > 1500),
+                         "altitude_m": altitude},
+        },
+        "course": {"type": course_type, "note": course_note(course_type)},
+    }
+
+
 # -- Entry point ---------------------------------------------------------------
 
 def main():
@@ -624,6 +712,20 @@ def main():
     out_path = out_dir / "training-blueprint.md"
     out_path.write_text(blueprint)
     print(f"Blueprint written to {out_path}", file=sys.stderr)
+
+    # Structured sidecar — machine-readable counterpart consumed by the planner
+    # (remediation WS B). Validate before writing so a malformed sidecar fails
+    # loudly here, not at planning time.
+    data = build_blueprint_data(slug, profile, phases, current_ctl, fitness_note)
+    errs = validate_blueprint(data)
+    if errs:
+        print("ERROR: blueprint sidecar failed schema validation:", file=sys.stderr)
+        for e in errs:
+            print(f"  - {e}", file=sys.stderr)
+        sys.exit(1)
+    json_path = out_dir / "training-blueprint.json"
+    json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    print(f"Blueprint sidecar written to {json_path}", file=sys.stderr)
 
     # Write test schedule — merge with existing to preserve completion/notification state
     fresh_events = _test_events(phases)

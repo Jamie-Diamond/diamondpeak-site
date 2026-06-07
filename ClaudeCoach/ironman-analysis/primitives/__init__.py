@@ -64,6 +64,11 @@ from primitives.debrief import (
     session_quality_label,
     build_debrief,
 )
+from primitives.blueprint import (
+    SCHEMA_VERSION,
+    validate_blueprint,
+    is_valid,
+)
 
 __all__ = [
     # load
@@ -119,4 +124,8 @@ __all__ = [
     "power_zone_distribution",
     "session_quality_label",
     "build_debrief",
+    # blueprint
+    "SCHEMA_VERSION",
+    "validate_blueprint",
+    "is_valid",
 ]

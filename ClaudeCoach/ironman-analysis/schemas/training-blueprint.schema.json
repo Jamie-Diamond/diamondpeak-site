@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ClaudeCoach training-blueprint sidecar",
+  "description": "Machine-readable counterpart to athletes/{slug}/reference/training-blueprint.md. Emitted by generate-blueprint.py, consumed by the planner and validator (remediation-plan WS B/C/E). Authoritative validation is primitives/blueprint.py:validate_blueprint — this file is the human reference and is intentionally close to, but not enforced by, draft-07.",
+  "type": "object",
+  "required": ["schema_version", "slug", "generated", "event_type", "race_date", "phases", "tests"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "slug": {"type": "string"},
+    "generated": {"type": "string", "format": "date"},
+    "event_type": {"type": "string", "description": "e.g. 'Full Ironman', '70.3', 'Sportive'"},
+    "race_name": {"type": "string"},
+    "race_date": {"type": "string", "format": "date"},
+    "weeks_to_race": {"type": "number"},
+    "max_hours_per_week": {"type": "number"},
+    "current_ctl": {"type": ["number", "null"]},
+    "fitness_note": {"type": ["string", "null"]},
+    "phases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "family", "start", "end", "weeks"],
+        "properties": {
+          "name": {"type": "string", "description": "e.g. 'Base1', 'Build2', 'Peak', 'Taper'"},
+          "family": {"enum": ["base", "build", "peak", "taper"]},
+          "start": {"type": "string", "format": "date"},
+          "end": {"type": "string", "format": "date"},
+          "weeks": {"type": "integer"},
+          "tss_ceiling": {"type": ["integer", "null"]},
+          "if_target": {"type": ["number", "null"]},
+          "ctl_entry_low": {"type": ["integer", "null"]},
+          "ctl_entry_high": {"type": ["integer", "null"]},
+          "distribution": {
+            "type": "object",
+            "description": "sport -> 'NN% Z1-2 / ...' string. Empty {} for events not yet specified (stubs).",
+            "additionalProperties": {"type": "string"}
+          },
+          "fuelling": {"type": "string"},
+          "brick_min": {"type": ["string", "null"]},
+          "brick_type": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "description": "Performance tests with dates; mirrors test-schedule.json entries.",
+      "items": {
+        "type": "object",
+        "required": ["type", "label", "date"],
+        "properties": {
+          "type": {"enum": ["ftp", "lthr", "css"]},
+          "label": {"type": "string"},
+          "date": {"type": "string", "format": "date"},
+          "protocol": {"type": "string"}
+        }
+      }
+    },
+    "env_protocols": {
+      "type": "object",
+      "properties": {
+        "heat": {
+          "type": "object",
+          "properties": {
+            "active": {"type": "boolean"},
+            "starts": {"type": ["string", "null"], "format": "date"}
+          }
+        },
+        "altitude": {
+          "type": "object",
+          "properties": {
+            "active": {"type": "boolean"},
+            "altitude_m": {"type": "number"}
+          }
+        }
+      }
+    },
+    "course": {
+      "type": "object",
+      "properties": {
+        "type": {"type": "string"},
+        "note": {"type": "string"}
+      }
+    }
+  }
+}
