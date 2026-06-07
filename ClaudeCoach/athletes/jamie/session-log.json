@@ -10,7 +10,7 @@
     "avg_power": null,
     "norm_power": 226,
     "avg_hr": 135,
-    "rpe": null,
+    "rpe": 5,
     "feel": null,
     "ankle_pain_during": null,
     "ankle_pain_next_morning": null,
