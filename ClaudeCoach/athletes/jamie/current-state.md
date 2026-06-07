@@ -163,6 +163,7 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 | Plan generated through 2026-06-21 (W7–W8 Build) | Claude | 2026-05-31 | done — 16 sessions pushed; W7 ~435 TSS (FTP retest Wed 10 Jun + first 3x20 SS); W8 ~513 TSS (first brick Sat 20 Jun); ankle walk-run 5:30 throughout; CHO 60g/hr on rides >90 min |
 | Plan reviewed W7–W8 2026-06-08 to 2026-06-21 | Claude | 2026-06-07 | done — 15 sessions already in Intervals.icu; 2 hard constraint breaches flagged (Mon 15 Jun swim → must be Tue/Thu; Wed 17 Jun bike → must be Fri-Sun); load gap flagged (W7 ~370 TSS, W8 ~420 TSS vs 754 target); CTL 82 → target 95 by 6 Jul, BEHIND; CHO target updated to 70g/hr; Telegram sent |
 | Plan generated through 2026-06-21 (W7–W8 re-check) | Claude | 2026-06-07 | done — plan_already_populated (15 events); W7 ~370 TSS vs 745 target (load gap flagged: missing Tue swim, Sat ride, Sun ride); W8 ~520 TSS; 2 constraint violations persisting (Mon 15 swim, Wed 17 bike); projected CTL 93 by 6 Jul (target 95, BEHIND); CHO target 70g/hr; Telegram sent |
+| Plan generated through 2026-06-21 (W7–W8 Replan) | Claude | 2026-06-07 | done — REPLAN MODE: 5 edits to W8: Mon 15 swim → Tue 16, Wed 17 bike deleted (hard constraint), Fri 19 extended 180→240 min, Sat 20 brick 70→120 min, Sun 21 new 4hr Z2; W7 ~720 TSS, W8 ~736 TSS; CTL 80.8, projecting 93 by 6 Jul (target 95, BEHIND); CHO target 70g/hr; Telegram sent |
 | Marseille 24–30 May: ad-hoc sessions only, nothing long — play by ear | Claude | rolling | noted |
 
 ## Race-day-relevant tested data
