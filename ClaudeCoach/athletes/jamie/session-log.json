@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i154978635",
+    "date": "2026-06-07",
+    "name": "Wandsworth Road Cycling",
+    "sport": "Ride",
+    "tss": 198,
+    "duration_min": 232,
+    "distance_km": 129.9,
+    "avg_power": null,
+    "norm_power": 226,
+    "avg_hr": 135,
+    "rpe": null,
+    "feel": null,
+    "ankle_pain_during": null,
+    "ankle_pain_next_morning": null,
+    "nutrition_g_carb": 402,
+    "hydration_ml": 2800,
+    "notes": "2x SiS Energy Choco Fudge bar (86g) + 2x SiS Beta Fuel Chews (90g) + 2x Maurten 320 (160g) + 3x High 5 Caffeine scoops (66g) + 2x PH1500 (electrolytes). Total 402g carbs over 232 min = ~104g/hr. 5 bottles: 500+650+500+650+500 = 2800ml.",
+    "logged_at": "2026-06-07",
+    "stub": false
+  },
+  {
     "activity_id": "i154745265",
     "date": "2026-06-06",
     "name": "Wandsworth Running",

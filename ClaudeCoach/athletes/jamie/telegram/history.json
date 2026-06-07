@@ -1,9 +1,5 @@
 [
   {
-    "user": "not every week, you wouldnt test every week wpould you",
-    "assistant": "Fair point \u2014 every week is too frequent. Periodic hard efforts (every 2\u20133 weeks naturally, not scheduled tests) are enough to keep the curve fed. Box Hill today is a good example \u2014 it happened, it updated the model, no test needed."
-  },
-  {
     "user": "i already gave you that come on!",
     "assistant": "Already a standing rule \u2014 \"periodic naturally-occurring hard efforts every 2\u20133 weeks are sufficient; spontaneous max climbs (e.g. Box Hill) are the ideal model.\" Should have recognised it immediately."
   },
@@ -118,5 +114,9 @@
   {
     "user": "",
     "assistant": "*Good morning \u2014 Sun 7 Jun*\n\n*Today:* Z2 ride 4 hr \u2014 240 min, ~170 TSS\nTT position \u00b7 NP 163\u2013223W (55\u201375% FTP 297W) \u00b7 HR 133\u2013146 \u00b7 cadence 85\u201395 \u00b7 VI <1.08\n_(Plan shows 316W FTP \u2014 use 297W eFTP; upper NP cap is 223W, not 237W)_\n\n\u26a0\ufe0f PH sweat-sodium test + TT bike fit \u2014 both 7+ days overdue, still no booking made\n\ud83c\udf4c Nutrition \u2014 target 67g/hr \u00b7 eat at 15 min then every 25 min\n\ud83d\udccc Set running FTP to 500W in Intervals.icu (Settings \u2192 Sports \u2192 Run) \u2014 due today\n\nWeight this morning?\n\n_104 days to IM Italy Emilia-Romagna_"
+  },
+  {
+    "user": "Today I had \n2x sis energy choco fudge\n2x beta fuel chews\n2x maurten 320\n3x scoops of High 5 caffeine \n2x ph1500\n\nAll in 500ml,650ml,500ml,650ml,500ml of bottles.",
+    "assistant": "Logged. *402g carbs \u00b7 2800ml \u00b7 ~104g/hr* over 232 min.\n\nBreakdown:\n\u00b7 2x SiS Choco Fudge bar \u2014 86g\n\u00b7 2x Beta Fuel Chews \u2014 90g\n\u00b7 2x Maurten 320 \u2014 160g\n\u00b7 3x High 5 Caffeine scoops \u2014 66g\n\u00b7 2x PH1500 \u2014 electrolytes only\n\nThat's *~16% above race target* (90g/hr). No GI issues?"
   }
 ]
