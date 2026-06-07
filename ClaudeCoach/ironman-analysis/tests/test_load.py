@@ -32,6 +32,11 @@ from primitives.load import (
     separate_actual_projection,
     trajectory_check,
     weekly_ramp,
+    compute_required_tss,
+    compute_projected_ctl,
+    derive_phase_ctl_targets,
+    compute_race_min_ctl,
+    phase_ctl_band_targets,
 )
 
 
@@ -402,3 +407,137 @@ class TestRealDataCoherence:
             assert p.ctl == pytest.approx(row["ctl"], abs=0.05)
             assert p.atl == pytest.approx(row["atl"], abs=0.05)
             assert p.tsb == pytest.approx(row["tsb"], abs=0.05)
+
+
+# ---------------------------------------------------------------------------
+# Forward plan-generation maths (consolidated from generate-plan.py)
+# ---------------------------------------------------------------------------
+
+# Jamie config/profile snapshot — golden anchors captured 2026-06-07 from the
+# pre-consolidation inline implementation. These pin the refactor as a no-op.
+JAMIE_CFG = {
+    "ctl_targets": {"phase_ctl": {"base": 85, "build": 95, "specific": 105, "peak": 112},
+                    "race_min": 97},
+    "phase_tss": {"base_end_week": 5, "build_end_week": 10,
+                  "specific_end_week": 14, "peak_end_week": 17},
+    "plan_start": "2026-04-27",
+    "max_ctl_ramp_per_week": 4.0,
+    "race_target_splits": {"swim_min": 67, "bike_min": 284, "run_min": 210,
+                           "bike_np_target_watts": 225, "t1t2_min": 5.5},
+}
+JAMIE_PROFILE = {
+    "ftp_watts": 316, "race_distance": "Full Ironman",
+    "run_threshold_pace_per_km": "4:02", "race_date": "2026-09-19",
+}
+
+
+class TestComputeRequiredTss:
+    def test_golden_anchors(self):
+        # Pinned from the inline implementation pre-refactor.
+        assert compute_required_tss(79, 95, 5) == 749
+        assert compute_required_tss(79, 112, 17) == 797
+
+    def test_zero_or_negative_horizon(self):
+        # N <= 0 falls back to target * 7.
+        assert compute_required_tss(80, 90, 0) == 90 * 7
+
+    def test_clamps_at_zero_when_already_above(self):
+        # Target below current decayed CTL must never demand negative TSS.
+        assert compute_required_tss(120, 60, 8) >= 0
+
+    def test_higher_target_needs_more_tss(self):
+        assert compute_required_tss(79, 100, 8) > compute_required_tss(79, 90, 8)
+
+
+class TestComputeProjectedCtl:
+    def test_golden_anchor(self):
+        assert compute_projected_ctl(79, 650, 5) == pytest.approx(86.8953, abs=1e-4)
+
+    def test_holding_at_equilibrium_is_stable(self):
+        # weekly_tss == ctl*7 is the daily-CTL fixed point: CTL should barely move.
+        assert compute_projected_ctl(80, 80 * 7, 6) == pytest.approx(80.0, abs=0.5)
+
+    def test_round_trip_required_then_projected_reaches_target(self):
+        # The core self-consistency: TSS required to hit a target, when applied,
+        # lands within rounding error of that target.
+        ctl0, target, weeks = 79.0, 100.0, 10
+        req = compute_required_tss(ctl0, target, weeks)
+        landed = compute_projected_ctl(ctl0, req, weeks)
+        assert landed == pytest.approx(target, abs=2.0)
+
+
+class TestDerivePhaseCtlTargets:
+    def test_golden_anchor_with_injected_today(self):
+        d = derive_phase_ctl_targets(
+            79, 100, date(2026, 4, 27), 5, 10, 14, 17, 4.0, 1.15,
+            today=date(2026, 6, 7),
+        )
+        assert d == {"base": 80, "build": 87, "specific": 93, "peak": 96}
+
+    def test_today_is_injectable_and_deterministic(self):
+        a = derive_phase_ctl_targets(79, 100, date(2026, 4, 27), 5, 10, 14, 17, 4.0,
+                                     today=date(2026, 6, 7))
+        b = derive_phase_ctl_targets(79, 100, date(2026, 4, 27), 5, 10, 14, 17, 4.0,
+                                     today=date(2026, 6, 7))
+        assert a == b
+
+    def test_targets_non_decreasing_across_phases(self):
+        d = derive_phase_ctl_targets(79, 110, date(2026, 4, 27), 5, 10, 14, 17, 5.0,
+                                     today=date(2026, 5, 1))
+        assert d["base"] <= d["build"] <= d["specific"] <= d["peak"]
+
+    def test_floor_above_current_ctl(self):
+        # Every target must sit at least 1 above current CTL.
+        d = derive_phase_ctl_targets(90, 100, date(2026, 4, 27), 5, 10, 14, 17, 4.0,
+                                     today=date(2026, 6, 7))
+        assert all(v >= round(90) + 1 for v in d.values())
+
+
+class TestComputeRaceMinCtl:
+    def test_jamie_golden(self):
+        assert compute_race_min_ctl(JAMIE_CFG, JAMIE_PROFILE) == 100
+
+    def test_none_when_splits_absent(self):
+        assert compute_race_min_ctl({}, JAMIE_PROFILE) is None
+
+    def test_none_when_splits_incomplete(self):
+        cfg = {"race_target_splits": {"swim_min": 67, "bike_min": 0, "run_min": 210}}
+        assert compute_race_min_ctl(cfg, JAMIE_PROFILE) is None
+
+    def test_scales_with_duration(self):
+        slow = {**JAMIE_CFG, "race_target_splits":
+                {**JAMIE_CFG["race_target_splits"], "bike_min": 360, "run_min": 270}}
+        assert compute_race_min_ctl(slow, JAMIE_PROFILE) > compute_race_min_ctl(JAMIE_CFG, JAMIE_PROFILE)
+
+    def test_half_distance_branch(self):
+        half_profile = {**JAMIE_PROFILE, "race_distance": "70.3"}
+        half_cfg = {**JAMIE_CFG, "race_target_splits":
+                    {"swim_min": 33, "bike_min": 150, "run_min": 100,
+                     "bike_np_target_watts": 250}}
+        assert compute_race_min_ctl(half_cfg, half_profile) is not None
+
+
+class TestPhaseCtlBandTargets:
+    def test_builds_one_milestone_per_configured_phase(self):
+        out = phase_ctl_band_targets(JAMIE_CFG, date(2026, 4, 27))
+        assert [label for *_, label in out] == ["End base", "End build", "End specific", "Peak"]
+
+    def test_bands_centre_on_configured_ctl(self):
+        out = phase_ctl_band_targets(JAMIE_CFG, date(2026, 4, 27), band=3.0)
+        base = next(t for t in out if t[3] == "End base")
+        _, lo, hi, _ = base
+        assert (lo, hi) == (82.0, 88.0)  # 85 +/- 3
+
+    def test_dates_match_phase_end_weeks(self):
+        out = phase_ctl_band_targets(JAMIE_CFG, date(2026, 4, 27))
+        base_date = next(t[0] for t in out if t[3] == "End base")
+        assert base_date == date(2026, 4, 27) + timedelta(weeks=5)
+
+    def test_race_day_appended_when_race_date_given(self):
+        out = phase_ctl_band_targets(JAMIE_CFG, date(2026, 4, 27),
+                                     race_date=date(2026, 9, 19))
+        assert out[-1][3] == "Race day"
+        assert out[-1][0] == date(2026, 9, 19)
+
+    def test_empty_when_no_phase_ctl(self):
+        assert phase_ctl_band_targets({"phase_tss": {}}, date(2026, 4, 27)) == []

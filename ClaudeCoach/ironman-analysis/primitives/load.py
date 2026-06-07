@@ -31,9 +31,11 @@ from typing import Iterable, Sequence
 CTL_TC = 42  # days — Banister long-term time constant
 ATL_TC = 7   # days — Banister short-term time constant
 
-# Build-table CTL targets from project knowledge.
-# Each entry: (target_date, target_ctl_low, target_ctl_high, label).
-# Race day 19 Sept 2026.
+# LEGACY fixture — Jamie-specific build-table CTL targets, hardcoded to 2026
+# dates. NOT the production source of truth: production trajectory checks must
+# derive milestones from athletes.json via `phase_ctl_band_targets()`. Retained
+# only as the default for run_baseline.py and as a test fixture.
+# Each entry: (target_date, target_ctl_low, target_ctl_high, label). Race 19 Sept 2026.
 BUILD_TABLE: list[tuple[date, float, float, str]] = [
     (date(2026, 5, 31),  82.0,  88.0, "End base"),
     (date(2026, 6, 30),  92.0,  98.0, "End build"),
@@ -462,3 +464,167 @@ def separate_actual_projection(
     actual = [p for p in points if p.date <= today]
     projection = [p for p in points if p.date > today]
     return actual, projection
+
+
+# ---------------------------------------------------------------------------
+# Forward plan-generation maths
+#
+# Consolidated from generate-plan.py, where these were duplicated inline (the
+# "two Banister implementations" drift risk). These are the forward-planning
+# counterparts to the analysis functions above: given a CTL target and a
+# horizon, what weekly TSS is required, and where does a given weekly TSS land
+# you. Kept here as pure functions so the planner and the analysis package
+# share one tested implementation.
+#
+# Arithmetic note: the (41/42) and /42.0 literals below are (CTL_TC-1)/CTL_TC
+# and 1/CTL_TC. They are intentionally kept as literals (not refactored to use
+# CTL_TC) to guarantee byte-identical output to the previous inline copy.
+# ---------------------------------------------------------------------------
+
+def compute_required_tss(ctl_today: float, ctl_target: float, weeks_remaining: int) -> int:
+    """Weekly TSS needed to reach ctl_target from ctl_today in weeks_remaining weeks.
+
+    Uses CTL EMA mechanics: CTL(N) = CTL0*(41/42)^N + D*(1-(41/42)^N), solved for D.
+    """
+    N = weeks_remaining * 7
+    if N <= 0:
+        return int(ctl_target * 7)
+    decay = (41.0 / 42.0) ** N
+    required_daily = (ctl_target - ctl_today * decay) / (1.0 - decay)
+    return int(max(required_daily, 0.0) * 7)
+
+
+def compute_projected_ctl(ctl_today: float, weekly_tss: int, weeks: int) -> float:
+    """Project CTL after `weeks` weeks of constant `weekly_tss`, using day-by-day EMA."""
+    daily = weekly_tss / 7.0
+    ctl = ctl_today
+    for _ in range(weeks * 7):
+        ctl += (daily - ctl) / 42.0
+    return ctl
+
+
+def derive_phase_ctl_targets(
+    ctl_today: float,
+    race_min: int,
+    plan_start_date: date,
+    base_end_wk: int,
+    build_end_wk: int,
+    spec_end_wk: int,
+    peak_end_wk: int,
+    max_ramp: float,
+    taper_overshoot: float = 1.15,
+    today: date | None = None,
+) -> dict:
+    """Auto-derive phase CTL targets from race goal, current CTL, and safe ramp rate.
+
+    Interpolates linearly from ctl_today to peak_target, capped by what is achievable
+    at max_ramp. Used when phase_ctl is not explicitly configured in athletes.json.
+
+    `today` is injected for purity/testability; defaults to date.today() to match
+    the original inline behaviour.
+    """
+    if today is None:
+        today = date.today()
+    peak_target = round(race_min * taper_overshoot)
+    decay_7 = (41.0 / 42.0) ** 7
+    max_weekly_at_ramp = int((ctl_today + max_ramp / (1.0 - decay_7)) * 7)
+
+    derived = {}
+    for phase, end_wk in [("base", base_end_wk), ("build", build_end_wk),
+                          ("specific", spec_end_wk), ("peak", peak_end_wk)]:
+        phase_end_date   = plan_start_date + timedelta(weeks=end_wk)
+        weeks_from_today = max(1.0, (phase_end_date - today).days / 7.0)
+        progress         = end_wk / peak_end_wk
+        linear_target    = ctl_today + (peak_target - ctl_today) * progress
+        max_achievable   = compute_projected_ctl(ctl_today, max_weekly_at_ramp, int(weeks_from_today))
+        derived[phase]   = max(round(ctl_today) + 1, round(min(linear_target, max_achievable * 0.95)))
+    return derived
+
+
+def compute_race_min_ctl(cfg: dict, profile: dict) -> "int | None":
+    """Derive race-day minimum CTL from target splits + athlete profile data.
+
+    Formula: race_TSS / 5.5, where TSS_leg = duration_hr * IF^2 * 100.
+    Divisor 5.5 calibrated against real data: IM 9:30 target -> 96 CTL, 70.3 5:30 -> 63 CTL.
+    Returns None if race_target_splits is absent or incomplete.
+    """
+    import re as _re
+    splits = cfg.get("race_target_splits")
+    if not splits:
+        return None
+    swim_min = splits.get("swim_min", 0)
+    bike_min = splits.get("bike_min", 0)
+    run_min  = splits.get("run_min", 0)
+    if not (swim_min and bike_min and run_min):
+        return None
+
+    swim_hr = swim_min / 60.0
+    bike_hr = bike_min / 60.0
+    run_hr  = run_min  / 60.0
+
+    ftp         = float(profile.get("ftp_watts") or 0)
+    race_type   = (profile.get("race_distance") or "full").lower()
+    is_half     = race_type in ("70.3", "half", "half-ironman")
+    run_dist_km = 21.1 if is_half else 42.2
+
+    swim_if = 0.85
+
+    bike_np = splits.get("bike_np_target_watts")
+    if bike_np and ftp:
+        bike_if = float(bike_np) / ftp
+    else:
+        bike_if = 0.79 if is_half else 0.71
+
+    run_if = 0.82 if is_half else 0.77
+    threshold_str = str(profile.get("run_threshold_pace_per_km") or "")
+    m = _re.search(r"(\d+):(\d{2})", threshold_str)
+    if m:
+        threshold_s = int(m.group(1)) * 60 + int(m.group(2))
+        race_pace_s = (run_hr * 3600.0) / run_dist_km
+        if race_pace_s > 0:
+            run_if = min(threshold_s / race_pace_s, 0.95)
+
+    swim_tss = swim_hr * swim_if ** 2 * 100
+    bike_tss = bike_hr * bike_if ** 2 * 100
+    run_tss  = run_hr  * run_if  ** 2 * 100
+    return round((swim_tss + bike_tss + run_tss) / 5.5)
+
+
+def phase_ctl_band_targets(
+    cfg: dict,
+    plan_start: date,
+    band: float = 3.0,
+    race_date: date | None = None,
+) -> list[tuple[date, float, float, str]]:
+    """Build trajectory milestones from athletes.json config — the single CTL-target source.
+
+    Derives one (date, ctl_low, ctl_high, label) milestone per phase end from
+    `cfg["ctl_targets"]["phase_ctl"]` and `cfg["phase_tss"]` end-weeks, plus an
+    optional race-day milestone from `race_min` when `race_date` is supplied.
+
+    This replaces the hardcoded, Jamie-specific BUILD_TABLE for production
+    trajectory checks: pass the result as `trajectory_check(points, targets=...)`.
+    Returns [] if no phase_ctl is configured.
+    """
+    ctl_targets = cfg.get("ctl_targets") or {}
+    phase_ctl = ctl_targets.get("phase_ctl") or {}
+    race_min = ctl_targets.get("race_min")
+    ptss = cfg.get("phase_tss") or {}
+
+    plan: list[tuple[str, int, str]] = [
+        ("base",     ptss.get("base_end_week", 6),      "End base"),
+        ("build",    ptss.get("build_end_week", 10),    "End build"),
+        ("specific", ptss.get("specific_end_week", 14), "End specific"),
+        ("peak",     ptss.get("peak_end_week", 17),     "Peak"),
+    ]
+    out: list[tuple[date, float, float, str]] = []
+    for key, end_wk, label in plan:
+        ctl = phase_ctl.get(key)
+        if ctl is None:
+            continue
+        d = plan_start + timedelta(weeks=end_wk)
+        out.append((d, float(ctl) - band, float(ctl) + band, label))
+
+    if race_date is not None and race_min is not None:
+        out.append((race_date, float(race_min) - band, float(race_min) + band, "Race day"))
+    return out

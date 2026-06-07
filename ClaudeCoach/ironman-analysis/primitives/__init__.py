@@ -17,6 +17,11 @@ from primitives.load import (
     trajectory_check,
     flag_conditions,
     separate_actual_projection,
+    compute_required_tss,
+    compute_projected_ctl,
+    derive_phase_ctl_targets,
+    compute_race_min_ctl,
+    phase_ctl_band_targets,
 )
 from primitives.modulation import (
     SessionPrescription,
@@ -73,6 +78,11 @@ __all__ = [
     "trajectory_check",
     "flag_conditions",
     "separate_actual_projection",
+    "compute_required_tss",
+    "compute_projected_ctl",
+    "derive_phase_ctl_targets",
+    "compute_race_min_ctl",
+    "phase_ctl_band_targets",
     # modulation
     "SessionPrescription",
     "modulate_session",
