@@ -6,7 +6,7 @@ Safe to run manually:
   python3 ClaudeCoach/scripts/generate-plan.py              # all active athletes
   python3 ClaudeCoach/scripts/generate-plan.py --athlete jamie
 """
-import argparse, json, subprocess, sys, tempfile, os
+import argparse, json, re, subprocess, sys, tempfile, os
 from datetime import date
 from pathlib import Path
 
@@ -20,6 +20,17 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE    = LOG_DIR / "generate-plan.log"
 
 TOOLS = "Read,Write,Edit,Bash"
+
+# Load maths live in the tested ironman-analysis package — single implementation
+# shared with the analysis primitives. Do NOT reintroduce inline copies here
+# (see tests/test_no_duplicate_maths.py and docs/remediation-plan.md WS A).
+sys.path.insert(0, str(BASE / "ironman-analysis"))
+from primitives.load import (   # noqa: E402
+    compute_required_tss,
+    compute_projected_ctl,
+    derive_phase_ctl_targets,
+    compute_race_min_ctl,
+)
 
 
 def trim_log(path: Path, max_lines: int = 5000):
@@ -63,112 +74,7 @@ def fetch_ctl(slug: str) -> float:
     return 0.0
 
 
-def compute_required_tss(ctl_today: float, ctl_target: float, weeks_remaining: int) -> int:
-    """
-    Weekly TSS needed to reach ctl_target from ctl_today in weeks_remaining weeks.
-    Uses CTL EMA mechanics: CTL(N) = CTL0*(41/42)^N + D*(1-(41/42)^N), solved for D.
-    """
-    N = weeks_remaining * 7
-    if N <= 0:
-        return int(ctl_target * 7)
-    decay = (41.0 / 42.0) ** N
-    required_daily = (ctl_target - ctl_today * decay) / (1.0 - decay)
-    return int(max(required_daily, 0.0) * 7)
-
-
-def compute_projected_ctl(ctl_today: float, weekly_tss: int, weeks: int) -> float:
-    """Project CTL after `weeks` weeks of constant `weekly_tss`, using day-by-day EMA."""
-    daily = weekly_tss / 7.0
-    ctl = ctl_today
-    for _ in range(weeks * 7):
-        ctl += (daily - ctl) / 42.0
-    return ctl
-
-
-def derive_phase_ctl_targets(
-    ctl_today: float,
-    race_min: int,
-    plan_start_date,
-    base_end_wk: int,
-    build_end_wk: int,
-    spec_end_wk: int,
-    peak_end_wk: int,
-    max_ramp: float,
-    taper_overshoot: float = 1.15,
-) -> dict:
-    """
-    Auto-derive phase CTL targets from race goal, current CTL, and safe ramp rate.
-    Interpolates linearly from ctl_today to peak_target, capped by what is achievable
-    at max_ramp. Used when phase_ctl is not explicitly configured in athletes.json.
-    """
-    from datetime import date as _d, timedelta as _td
-    today = _d.today()
-    peak_target = round(race_min * taper_overshoot)
-    decay_7 = (41.0 / 42.0) ** 7
-    max_weekly_at_ramp = int((ctl_today + max_ramp / (1.0 - decay_7)) * 7)
-
-    derived = {}
-    for phase, end_wk in [("base", base_end_wk), ("build", build_end_wk),
-                           ("specific", spec_end_wk), ("peak", peak_end_wk)]:
-        phase_end_date   = plan_start_date + _td(weeks=end_wk)
-        weeks_from_today = max(1.0, (phase_end_date - today).days / 7.0)
-        progress         = end_wk / peak_end_wk
-        linear_target    = ctl_today + (peak_target - ctl_today) * progress
-        max_achievable   = compute_projected_ctl(ctl_today, max_weekly_at_ramp, int(weeks_from_today))
-        derived[phase]   = max(round(ctl_today) + 1, round(min(linear_target, max_achievable * 0.95)))
-    return derived
-
-
-def compute_race_min_ctl(cfg: dict, profile: dict) -> "int | None":
-    """
-    Derive race-day minimum CTL from target splits + athlete profile data.
-    Formula: race_TSS / 5.5, where TSS_leg = duration_hr * IF^2 * 100.
-    Divisor 5.5 calibrated against real data: IM 9:30 target → 96 CTL, 70.3 5:30 → 63 CTL.
-    Returns None if race_target_splits is absent or incomplete.
-    """
-    import re as _re
-    splits = cfg.get("race_target_splits")
-    if not splits:
-        return None
-    swim_min = splits.get("swim_min", 0)
-    bike_min = splits.get("bike_min", 0)
-    run_min  = splits.get("run_min", 0)
-    if not (swim_min and bike_min and run_min):
-        return None
-
-    swim_hr = swim_min / 60.0
-    bike_hr = bike_min / 60.0
-    run_hr  = run_min  / 60.0
-
-    ftp         = float(profile.get("ftp_watts") or 0)
-    race_type   = (profile.get("race_distance") or "full").lower()
-    is_half     = race_type in ("70.3", "half", "half-ironman")
-    run_dist_km = 21.1 if is_half else 42.2
-
-    swim_if = 0.85
-
-    bike_np = splits.get("bike_np_target_watts")
-    if bike_np and ftp:
-        bike_if = float(bike_np) / ftp
-    else:
-        bike_if = 0.79 if is_half else 0.71
-
-    run_if = 0.82 if is_half else 0.77
-    threshold_str = str(profile.get("run_threshold_pace_per_km") or "")
-    m = _re.search(r"(\d+):(\d{2})", threshold_str)
-    if m:
-        threshold_s = int(m.group(1)) * 60 + int(m.group(2))
-        race_pace_s = (run_hr * 3600.0) / run_dist_km
-        if race_pace_s > 0:
-            run_if = min(threshold_s / race_pace_s, 0.95)
-
-    swim_tss = swim_hr * swim_if ** 2 * 100
-    bike_tss = bike_hr * bike_if ** 2 * 100
-    run_tss  = run_hr  * run_if  ** 2 * 100
-    return round((swim_tss + bike_tss + run_tss) / 5.5)
-
-
-def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) -> str:
+def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, replan: bool = False) -> str:
     from datetime import timedelta
     _today      = date.today()
     today       = _today.isoformat()
@@ -182,6 +88,26 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) ->
         date_grid_lines.append(f"  {d.isoformat()} = {d.strftime('%A')}")
     date_grid_str = "\n".join(date_grid_lines)
     end_35      = (_today + timedelta(days=35)).isoformat()
+
+    if replan:
+        replan_directive = (
+            "- REPLAN MODE IS ON (athlete tapped Replan). IGNORE the 7-event threshold: even if the\n"
+            "  window is already populated, you WILL rebuild it to hit the Step 4 TSS target. Set\n"
+            "  plan_already_populated = false and run Step 6 (Build to Target) in full.\n"
+            "  Goal = hit the Step 4 TSS target. Don't add sessions for the sake of it — only to\n"
+            "  the extent needed to reach target. How to rebuild safely, in order of preference:\n"
+            "    • FIRST extend sessions that are shorter than the rules prescribe (e.g. a 170-min\n"
+            "      Friday ride → 210–240 min) via edit_workout on the existing event id.\n"
+            "    • THEN, only if still below target, ADD a session on a rule-permitted day via\n"
+            "      push_workout. Stop adding once the week meets target — empty days are fine.\n"
+            "    • Do NOT delete an existing session unless it breaks a HARD constraint in rules.md.\n"
+            "      Prefer editing over deleting. Never wipe the whole week.\n"
+            "  In the Step 7 message, lead with what you CHANGED (added/extended), not the old state."
+        )
+    else:
+        replan_directive = (
+            "- Normal mode: respect the 7-event threshold below (do not rebuild a populated week)."
+        )
 
     # Phase / week calculation from athletes.json
     plan_start_str = cfg.get("plan_start", "2026-04-27")
@@ -226,7 +152,7 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) ->
             _phase_ctl_dict   = derive_phase_ctl_targets(
                 ctl_today, ctl_race_min, plan_start_date,
                 base_end_wk, build_end_wk, spec_end_wk, peak_end_wk,
-                _derive_ramp, _taper_over,
+                _derive_ramp, _taper_over, today=_today,
             )
             _phase_ctl_source = "auto-derived"
 
@@ -251,10 +177,28 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0) ->
     Specific: race-pace intervals, brick sessions, sport-specific intensity
     Peak:     race simulation, consolidate fitness — high density week
     Taper:    sharpen, no new stimuli, 50–60% of peak load"""
-        step5_constraints = """- Ankle: no quality run sessions (intervals/tempo/race-pace) until current-state.json ankle.four_pain_free_weeks_reached = true. Use walk-run format only (Z2 HR cap 150). Weekly run km increase <= 10%.
-- CTL ramp: <= +4 CTL/wk while ankle in rehab.
-- Pre-event fatigue management: if pre_event_taper = true, week 2 avoids all intensity, prioritises swim + short Z2 rides only.
-- Travel / access constraints: scan current-state.md "Travel & training blocks" for any dates in the planning window where bike is unavailable. Substitute with swims or runs of equivalent TSS."""
+        _injuries = profile.get("injuries") or []
+        _ramp_cap = cfg.get("max_ctl_ramp_per_week", 5.0)
+        _injury_block = ""
+        if _injuries:
+            _inj = _injuries[0]
+            _injury_block = (
+                f"- INJURY ({_inj.get('location','')}): {_inj.get('protocol','follow the rehab protocol')}. "
+                f"No quality run sessions (intervals/tempo/race-pace) until cleared; walk-run format only where the protocol requires it. "
+                f"This is athlete-specific — do NOT apply it to athletes without a logged injury.\n"
+            )
+        step5_constraints = (
+            _injury_block
+            + f"- CTL ramp: <= +{_ramp_cap:.0f} CTL/wk"
+            + (" while injury in rehab.\n" if _injuries else ".\n")
+            + "- Run progression (ALL athletes): run TSS may rise at most +10% week-on-week vs the "
+              "trailing 4-week average run TSS, unless the athlete explicitly asks for more. See the "
+              "RUN PROGRESSION GUARD in Step 6.\n"
+            + "- Pre-event fatigue management: if pre_event_taper = true, week 2 avoids all intensity, "
+              "prioritises swim + short Z2 rides only.\n"
+            + "- Travel / access constraints: scan current-state.md \"Travel & training blocks\" for any "
+              "dates in the planning window where bike is unavailable. Substitute with swims or runs of equivalent TSS."
+        )
         week_template = """Standard week template (adapt to phase):
 SWIM RULE — HARD: Swims on TUESDAY and THURSDAY only. Never prescribe a swim on Monday, Wednesday, Friday, Saturday, or Sunday.
 CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Friday, Saturday, Sunday only.
@@ -346,16 +290,19 @@ PRESCRIBED WEEK 1 TSS : {_prescribe_tss}
 
 {_timeline_note}
 
-After Step 6 (plan built), sum the planned Load for WEEK 1.
+MANDATORY GAP CHECK — runs on EVERY path, including plan_already_populated = true:
+Once the week's sessions are final (Step 6 if you built them, the existing events from
+Step 3 if the plan was already populated), sum the planned Load for WEEK 1.
 If week 1 planned TSS < {_la_gap_threshold} (>10% short of {_prescribe_tss}):
   Include a LOAD GAP section in the Step 7/8 Telegram notification:
-  "Load gap: Week {weeks_elapsed} totals [X] TSS — [Y] short of the {_prescribe_tss} target.
-   Options to close (within constraints):
+  "⚠ Load gap: W{weeks_elapsed} totals [X] TSS — [Y] short of the {_prescribe_tss} target.
+   Can we find more time? Options:
    • [specific lever 1 with estimated TSS gain, e.g. +30 min Friday ride ≈ +25 TSS]
    • [specific lever 2 with estimated TSS gain]
    • [specific lever 3 with estimated TSS gain]
    Reply to apply any of these."
 If week 1 planned TSS >= {_la_gap_threshold}: proceed silently.
+A plan that is >10% short of target with no LOAD GAP section in the message is a FAILED run.
 """
 
     # Step 3b / Step 4 content — dynamic when LOAD ACCOUNTABILITY block is active
@@ -414,9 +361,15 @@ If week 1 planned TSS >= {_la_gap_threshold}: proceed silently.
 Today       : {today} ({today_dow})
 Next Monday : {next_monday} (planning window start — always a Monday)
 Current plan week: {weeks_elapsed} (plan started {plan_start_str})
-14-day date grid (use for ALL session names — never guess the day):
+14-day date grid — THE ONLY source of truth for day-of-week:
 {date_grid_str}
-RULE: every session name must include the day-of-week from this grid.
+HARD RULE — day-of-week comes ONLY from this grid. You are bad at date arithmetic; do
+NOT compute weekdays in your head. For any date, find its line in the grid above and copy
+that weekday verbatim. E.g. if a session is on 2026-06-15 and the grid says
+"2026-06-15 = Monday", you write "Mon 15" — never "Sun 15".
+SELF-CHECK before emitting the message: for every day-name you wrote, re-locate that date
+in the grid and confirm the weekday matches. If any disagree, fix them. A wrong weekday is
+a failed run — {name} loses trust when the dates are wrong.
 If the profile endpoint current_date_local disagrees with {today}, flag it and use {today}.
 {load_accountability_block}
 Step 1 — Pull live data via Bash (use today's date {today} for all calculations):
@@ -440,12 +393,34 @@ From nutrition_history compute:
 Step 3 — Determine the planning window:
 - Target: the 2 weeks starting NEXT Monday (not today).
 - Check events endpoint for that window.
-- If there are already 7+ events planned: set plan_already_populated = true. Do NOT push new sessions (skip Steps 6–7). Continue through Steps 3b–5 for trajectory and constraint review, then jump to Step 8 to output a week-ahead summary of the existing sessions and send Telegram.
+{replan_directive}
+- If there are already 7+ events planned: set plan_already_populated = true. Do NOT push new sessions (skip Step 6's session building). Continue through Steps 3b–5 for trajectory and constraint review, run the MANDATORY GAP CHECK against the existing sessions, then go to Step 7 to compose the summary and Step 8 to send it.
 - If <7 events: set plan_already_populated = false. Generate enough sessions to fill the week appropriately.
 
 {step3b_content}
 
 {step4_content}
+
+Step 4b — DELOAD CHECK (do this before deciding the week is a recovery/deload week):
+A "recovery week" means reduced TSS and easy/Z2-only sessions. Do NOT designate one unless
+it is genuinely earned. Before scheduling a deload, answer these from the live data:
+  1. Has there been a sustained build to recover FROM? (3+ progressively loaded weeks just gone.)
+  2. Is the athlete actually fatigued? (TSB clearly negative / form negative, HRV suppressed.)
+  3. Has a deload effectively ALREADY happened by accident? Real life deloads you without it
+     being planned — illness, travel, a busy week, missed sessions. Check the ACTUAL TSS of the
+     last 2–3 weeks (history endpoint, all sports). If a recent week was well below the phase
+     band, THAT was the deload — do not stack another planned one on top.
+Decision:
+  • If fatigued after a real build AND no recent accidental deload → schedule the recovery week;
+    state WHY in the message ("recovery week — you're at TSB X after 3 build weeks").
+  • If the athlete is FRESH (TSB ≥ 0 / positive form), OR a recent week already ran light
+    (accidental deload), OR they are behind their CTL target → do NOT deload. Build a normal
+    load week toward the Step 4 target instead, and ASK in the Step 7 message:
+      "A recovery week was on the cadence, but you're [fresh at TSB +X / coming off a light
+       week (Y TSS, illness/travel)] and [N] CTL below target — I've built a normal week instead.
+       Want a deload anyway?"
+Never schedule an all-Z2 reduced week silently on cadence alone. Cadence is a prompt to ASK,
+not a licence to deload.
 
 Step 5 — Apply mandatory constraints (from rules.md if present — these are HARD overrides):
 {step5_constraints}
@@ -455,6 +430,59 @@ Step 5 — Apply mandatory constraints (from rules.md if present — these are H
 
 Step 6 — Build the 2-week session structure:
 {week_template}
+
+KEY SESSION — for a long-course triathlon in base/build, the weekly LONG AEROBIC RIDE is the
+anchor. It must be present, must be a genuine long Z2/endurance ride (not displaced by an
+interval/sweetspot session), and must be its full prescribed duration. Quality/interval work
+is secondary to it. Never drop or shorten the long ride to make room for intervals.
+
+BUILD TO TARGET — the weekly TSS target (Step 4) is the objective. Session count and which
+days are used are just the MEANS to reach it, not goals in themselves.
+- Hitting the TSS target with fewer, longer sessions is perfectly fine. A blank day or an
+  unused permitted slot is NOT a problem if the week still hits target. Do NOT pad the week
+  with extra sessions just to fill slots.
+- The failure mode to avoid is the opposite: under-loading. Conservative forks (run instead
+  of a planned long ride, 170 min where the rules say 3.5–4 hr) leave TSS on the table.
+- Method: draft the week, sum its planned TSS. If it is BELOW target, close the gap — prefer
+  EXTENDING existing sessions to their full prescribed duration first, then ADD a session on a
+  rule-permitted day only if extending isn't enough. If it already MEETS target, stop — do not
+  add more.
+- GAP-CLOSING ORDER (do NOT close a gap by piling on runs): 1st extend/add the LONG RIDE and
+  bike volume, 2nd swim, 3rd cross-training (if available — see below), and ONLY then running,
+  within the run-progression cap below. Running is the LAST lever, never the first.
+
+RUN PROGRESSION GUARD — HARD. Running carries the most injury risk; never balloon it to hit a
+TSS target.
+- Metric is run TSS (not km). Weekly run TSS may increase by at most +10% week-on-week, UNLESS
+  the athlete has explicitly asked for more.
+- Baseline is the AVERAGE weekly run TSS over the LAST 4 WEEKS (from the history endpoint, all
+  run sessions), NOT a single week. Using a 4-week mean stops one anomalous week — a deload,
+  an illness/travel week, or a single big week — from distorting the cap up or down.
+- So: this week's planned run TSS ≤ (4-week average weekly run TSS) × 1.10. Compute the 4-week
+  average, state it and the resulting ceiling in your reasoning, and keep planned run TSS at or
+  under it.
+- Respect the athlete's normal run STRUCTURE too: don't suddenly add a run day or multiple long
+  runs if they normally do e.g. 3 runs with one long. Match their pattern.
+- If a load gap remains after the long ride / bike / swim / cross-training are maxed within their
+  rules, leave the gap and surface it (per the MANDATORY GAP CHECK) — do NOT close it with runs
+  beyond this +10% cap. An over-built run week is a FAILED plan, same as an under-built one.
+
+CROSS-TRAINING — the gap-closer when bike/run/swim are capped (e.g. ankle limits run volume,
+bike is locked to Fri–Sun). Low-impact aerobic on an elliptical / basic hotel-gym machine /
+aqua-jog is NOT cycling, so it can sit on the otherwise-empty Mon and Wed without breaking the
+no-Mon–Thu-cycling rule, and adds Z2 load with no ankle impact.
+- DO NOT assume it's available — the athlete travels and hotel-gym access varies by week.
+- DO NOT speculatively push cross-training sessions to the calendar.
+- Instead, if a load gap remains after maxing the rule-permitted bike/run/swim, ASK in the
+  Step 7 message which days this week have elliptical/hotel-gym access, and state the TSS each
+  day would add. E.g.: "Still ~Xtss short. If you'll have elliptical/gym access, tell me which
+  days (Mon/Wed are free) and I'll add Z2 cross-training — ~45 TSS for 45 min each."
+- When the athlete replies with the available days, those sessions get added then (not now).
+
+- If you genuinely cannot reach target within the rules — and cross-training availability is
+  unknown — that in-week shortfall is fine; surface it honestly with the cross-training ask
+  above. Do NOT call it a failed plan when the constraints simply cap it.
+Judge the plan on TSS vs target, never on how many slots are filled.
 
 Session description consistency rules:
 - Never combine a fixed-distance label with a fixed-duration label unless provably equivalent
@@ -476,36 +504,43 @@ For each session push to Intervals.icu via Bash:
 Nutrition instructions for ALL sessions >90 min: state the specific nutrition_target_g_hr computed above.
 If nutrition_avg_g_hr is null: "Target: 60g CHO/hr — start building gut training."
 
-Step 7 — Output summary:
-If plan_already_populated = true:
-  "Week ahead [date range]:
-  Week [N] ([phase]): [list each existing session — date, sport, session name, Load]
-  Week [N+1] ([phase]): [list each existing session — date, sport, session name, Load]
-  Fitness: [X] CTL today → target [Y] by end of [phase] (wk [Z]) · status: [BEHIND / ON_TRACK / AHEAD]
-  [Any travel/access constraints flagged in current-state.md for this window]
-  Active constraints: [ankle/ramp/strength rules currently in force]"
+Step 7 — Compose the message. {name}'s exact spec: "tell me at a high level what's
+happening when, if that's OK, any flags, or ask if we can find more time." Answer in
+THAT order. The #1 thing he must learn from this message is WHAT HIS WEEK IS — lead
+with the plain week, always. Never make him hunt for it.
 
-If plan_already_populated = false:
-  "Plan generated: [date range]
-  Week [N] ([phase]): [N sessions] · [total Load] planned
-  Week [N+1] ([phase]): [N sessions] · [total Load] planned
-  Fitness: [X] today -> target [Y] by end of [phase] (wk [Z]) · status: [BEHIND / ON_TRACK / AHEAD]
-  Key constraints applied: [list any ankle/ramp/strength rules that shaped the plan]"
+Format (fill the brackets; drop any optional line that doesn't apply):
 
-Step 8 — Send Telegram notification:
-  python3 {NOTIFY} --chat-id CHAT_ID "[summary from Step 7]"
-  (Replace CHAT_ID with the value from athletes.json for slug={slug})
-  Send this regardless of whether the plan was already populated or freshly generated.
+  *W[N] ([date range]) · [phase] — [ON TRACK / BEHIND / AHEAD]*
+  This week: [plain-English one-liner of the week — e.g. "2 easy runs, Thu swim, Fri threshold ride (3×20 SS), strength ×2"].
+  [Load line ONLY if behind or load changed: "[planned] TSS planned vs [required] to stay on track. Can we find more time?"]
+  [• lever (+TSS)  • lever (+TSS)   ← only if a load gap, max 3, one line total if they fit]
+  [Fix in ICU: [breach → where to move it] · [breach → where]   ← only if constraint breaches]
+  [📌 [travel/race/access constraint in window] — one line]
+
+Hard rules:
+- Max 6 lines. No Markdown tables (Telegram shows raw pipes). Never list every session — group the routine ones.
+- If STEADY (on-track, no gap, no breach, no travel, same pattern as last week): collapse to TWO lines —
+  the header line + "This week: [plain one-liner]. On track, nothing to change."
+- No methodology, no CTL projection maths, no "15 sessions already in Intervals.icu", no nutrition-target
+  arithmetic. Those live in the logs, not in {name}'s message.
+
+Step 8 — Output ONLY the message from Step 7, wrapped in <telegram>...</telegram> tags, and
+NOTHING ELSE. Do NOT run notify.py. Do NOT send anything yourself. Do NOT print a "here's
+what ran" report, preamble, or reasoning. The Python wrapper extracts the tagged text and
+sends it exactly once — if you send it too, {name} gets duplicates. Your entire stdout must
+be the <telegram> block.
 
 Step 9 — Update {athlete_dir}/current-state.md "Open actions" section: mark "Plan generated through [date]" with today's date.
 Run: git add ClaudeCoach/athletes/{slug}/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "plan: generated W[N]-W[N+1] {today}" && git push origin main
+Do this BEFORE emitting the <telegram> block so the block is the last thing in your output.
 """
 
 
-def run_for_athlete(slug: str, cfg: dict) -> str | None:
+def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
     profile   = load_profile(slug)
     ctl_today = fetch_ctl(slug)
-    prompt    = build_prompt(slug, cfg, profile, ctl_today)
+    prompt    = build_prompt(slug, cfg, profile, ctl_today, replan=replan)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_plan_", delete=False, suffix=".txt"
@@ -526,7 +561,14 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         if stderr:
             with open(LOG_FILE, "a") as lf:
                 lf.write(f"[generate-plan:{slug}] STDERR: {stderr}\n")
-        return output or None
+        # Extract ONLY the athlete-facing message. Never fall back to raw stdout —
+        # that is Claude's internal report and must never reach the athlete.
+        m = re.search(r"<telegram>(.*?)</telegram>", output, re.DOTALL | re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[generate-plan:{slug}] NO <telegram> TAG — sending fallback. Raw output:\n{output[:1000]}\n")
+        return "Plan updated — check your week in Intervals.icu."
     except Exception as e:
         with open(LOG_FILE, "a") as lf:
             lf.write(f"[generate-plan:{slug}] Exception: {e}\n")
@@ -539,6 +581,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--athlete", default=None,
                     help="Slug of a single athlete to run for (default: all active)")
+    ap.add_argument("--replan", action="store_true",
+                    help="Rebuild the upcoming window to target even if already populated")
     args = ap.parse_args()
 
     athletes = json.loads(CONFIG.read_text())
@@ -554,16 +598,17 @@ def main():
     for slug in slugs:
         cfg    = athletes[slug]
         chat_id = str(cfg.get("chat_id", ""))
-        output = run_for_athlete(slug, cfg)
+        output = run_for_athlete(slug, cfg, replan=args.replan)
         with open(LOG_FILE, "a") as lf:
-            lf.write(f"[generate-plan:{slug}] {'output' if output else 'no output'}\n")
-        if output:
-            print(output, flush=True)
-            if chat_id:
-                subprocess.run(
-                    ["python3", str(NOTIFY), "--chat-id", chat_id, output[:4000]],
-                    cwd=PROJECT_DIR,
-                )
+            lf.write(f"[generate-plan:{slug}] {'output' if output else 'no output'}{' (replan)' if args.replan else ''}\n")
+        if output and chat_id:
+            # Single canonical send. notify.py also logs to the athlete's history.
+            subprocess.run(
+                ["python3", str(NOTIFY), "--chat-id", chat_id, output[:4000]],
+                cwd=PROJECT_DIR,
+            )
+        # stdout is a short status only — the bot must NOT echo the message (notify sent it).
+        print(f"[{slug}] plan message sent" if output else f"[{slug}] no message", flush=True)
     trim_log(LOG_FILE)
 
 
