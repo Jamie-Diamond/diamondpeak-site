@@ -25,7 +25,7 @@ No
 
 ## Open Actions
 - [x] Set up initial training plan
-- [x] Plan generated through 2026-06-14 (2026-05-31)
+- [x] Plan generated through 2026-06-21 (2026-06-07)
 - [ ] Delete or correct "Z3 Ride 10h" event in Intervals.icu (erroneous 10h hard ride, far exceeds 5h/week cap)
 
 ## Watchdog Log
