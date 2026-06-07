@@ -39,3 +39,4 @@ No
 | 2026-06-03 | 10.1 | 9.4 | +0.7 | Z2 Aerobic Base Ride 75 min — GO as-planned. Activity logged 2026-06-01 (Geneva Road Cycling, 81 min). No HRV or sleep data. |
 | 2026-06-05 | 9.7 | 7.1 | +2.6 | No session planned today. Rest day — no events in calendar. No HRV or sleep data. |
 | 2026-06-06 | 11.4 | 17.5 | −6.0 | Long Z2 Ride 2h 30min — GO as-planned. No HRV or sleep data. No rules fired. |
+| 2026-06-07 | 11.2 | 15.1 | −4.0 | Rest day — Sunday, no ride planned (weekday-only rule). No HRV or sleep data. |
