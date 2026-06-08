@@ -187,7 +187,10 @@ class TestSportiveProfile:
         assert base["brick_min"] is None                       # bricks N/A for bike-only
         assert "rides" in base["fuelling"]
 
-    def test_ftp_only_tests(self, gb):
+    def test_ftp_only_tests(self, gb, monkeypatch):
+        # Scheduling is OFF by default (see TestPerformanceTestPolicy); this
+        # exercises the scheduling LOGIC with it switched on.
+        monkeypatch.setattr(gb, "SCHEDULE_PERFORMANCE_TESTS", True)
         data = gb.build_blueprint_data("cyc", SPORTIVE_PROFILE, self._phases(gb), 60.0, None)
         test_types = {t["type"] for t in data["tests"]}
         assert test_types == {"ftp"}                           # no lthr (run) / css (swim)
@@ -402,7 +405,10 @@ class TestBaselineAnchoring:
             date(2026, 9, 19),
         )
 
-    def test_baselines_anchor_to_plan_start_not_today(self, gb):
+    def test_baselines_anchor_to_plan_start_not_today(self, gb, monkeypatch):
+        # Scheduling is OFF by default now; this guards the anchoring LOGIC with
+        # it switched on (so re-enabling can never reintroduce the re-dating bug).
+        monkeypatch.setattr(gb, "SCHEDULE_PERFORMANCE_TESTS", True)
         phases = self._phases(gb)
         plan_start = phases[0]["start"]
         evs = gb._test_events(phases, ["swim", "bike", "run"])
@@ -413,7 +419,24 @@ class TestBaselineAnchoring:
             # And — the whole point — not stamped with the current date.
             assert b["date"] != date.today().isoformat(), b
 
-    def test_no_phases_falls_back_to_today(self, gb):
+    def test_no_phases_falls_back_to_today(self, gb, monkeypatch):
         # Defensive: with no phases (shouldn't happen) it must not crash.
+        monkeypatch.setattr(gb, "SCHEDULE_PERFORMANCE_TESTS", True)
         evs = gb._test_events([], ["bike"])
         assert all("date" in e for e in evs)
+
+
+class TestPerformanceTestPolicy:
+    """Standing coach decision (2026-06-08): no system-scheduled FTP/LTHR/CSS
+    field tests — thresholds come from intervals.icu. _test_events must be empty
+    by default so nothing is scheduled, pushed to the calendar, or nudged."""
+
+    def test_no_tests_scheduled_by_default(self, gb):
+        phases = gb.canonical_phases(
+            date(2026, 4, 27),
+            {"base_end_week": 6, "build_end_week": 10,
+             "specific_end_week": 14, "peak_end_week": 17},
+            date(2026, 9, 19),
+        )
+        assert gb._test_events(phases, ["swim", "bike", "run"]) == []
+        assert gb.SCHEDULE_PERFORMANCE_TESTS is False   # default stays off

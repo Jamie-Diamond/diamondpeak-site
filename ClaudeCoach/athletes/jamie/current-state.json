@@ -59,7 +59,7 @@
     {
       "action": "CSS swim test #2",
       "due": "2026-07-15",
-      "status": "pending"
+      "status": "done - thresholds from intervals.icu; no scheduled test per Jamie 2026-06-08"
     },
     {
       "action": "TT bike fit appointment",
