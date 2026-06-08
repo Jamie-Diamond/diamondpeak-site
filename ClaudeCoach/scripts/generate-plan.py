@@ -31,6 +31,7 @@ from primitives.load import (   # noqa: E402
     derive_phase_ctl_targets,
     compute_race_min_ctl,
 )
+from primitives.blueprint import current_phase  # noqa: E402
 
 
 def trim_log(path: Path, max_lines: int = 5000):
@@ -45,6 +46,23 @@ def trim_log(path: Path, max_lines: int = 5000):
 def load_profile(slug: str) -> dict:
     """Load athletes/{slug}/profile.json if present; return {} if missing."""
     p = BASE / "athletes" / slug / "profile.json"
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def load_blueprint(slug: str) -> dict:
+    """Load athletes/{slug}/reference/training-blueprint.json if present; {} if missing/invalid.
+
+    Emitted by generate-blueprint.py. Windows are anchored to athletes.json
+    (plan_start + phase_tss), so they agree with this script's own phase
+    resolution. Absent (e.g. before regeneration on a host) → {} → built-in
+    phase template is used unchanged.
+    """
+    p = BASE / "athletes" / slug / "reference" / "training-blueprint.json"
     if p.exists():
         try:
             return json.loads(p.read_text())
@@ -362,6 +380,43 @@ A plan that is >10% short of target with no LOAD GAP section in the message is a
             f"If pre_event_taper = true: cap week 2 at bottom of range."
         )
 
+    # WS C — blueprint guidance: pull per-phase content (intensity distribution,
+    # bricks, fuelling, tests due) from the sidecar, keyed by the phase the
+    # 14-day window falls in. Absent sidecar → empty block (built-in template
+    # used unchanged), logged once.
+    from datetime import date as _bd
+    _bp = load_blueprint(slug)
+    blueprint_block = ""
+    _cur = current_phase(_bp, _next_mon)
+    if _cur:
+        _win_end = _next_mon + timedelta(days=13)
+        _dist = _cur.get("distribution") or {}
+        _dist_line = " / ".join(f"{s}: {d}" for s, d in _dist.items()) if _dist else "(not specified for this event)"
+        _tests_due = []
+        for _t in _bp.get("tests", []):
+            try:
+                _td = _bd.fromisoformat(_t["date"])
+            except Exception:
+                continue
+            if _next_mon <= _td <= _win_end:
+                _tests_due.append(f"{_t.get('label', _t.get('type', 'test'))} ({_t['date']})")
+        _tests_line = "; ".join(_tests_due) if _tests_due else "none"
+        blueprint_block = f"""
+## BLUEPRINT GUIDANCE — phase {_cur.get('name')} ({_cur.get('start')}–{_cur.get('end')}), from training-blueprint.json
+Shapes session TYPE and intensity mix. Does NOT override the LOAD ACCOUNTABILITY TSS target above.
+- Intensity distribution (weekly average per sport): {_dist_line}
+- Bricks this phase: aim {_cur.get('brick_min', '—')} — {_cur.get('brick_type', '')}
+- Fuelling target: {_cur.get('fuelling', '—')}
+- Performance tests due in this 14-day window: {_tests_line}
+In Step 6, honour this distribution, include the brick(s), and schedule any due test in the first 1–2 days of an easy/recovery block.
+"""
+    else:
+        try:
+            with open(LOG_FILE, "a") as _lf:
+                _lf.write(f"[generate-plan:{slug}] no training-blueprint.json sidecar — built-in phase template used.\n")
+        except Exception:
+            pass
+
     return f"""You are generating the rolling 2-week training plan for {name}'s {race_name} coaching system.
 {ftp_note}
 
@@ -380,6 +435,7 @@ in the grid and confirm the weekday matches. If any disagree, fix them. A wrong 
 a failed run — {name} loses trust when the dates are wrong.
 If the profile endpoint current_date_local disagrees with {today}, flag it and use {today}.
 {load_accountability_block}
+{blueprint_block}
 Step 1 — Pull live data via Bash (use today's date {today} for all calculations):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint fitness --days 14 --newest {end_35}

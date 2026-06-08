@@ -69,6 +69,7 @@ from primitives.blueprint import (
     validate_blueprint,
     is_valid,
     canonical_phases,
+    current_phase,
 )
 
 __all__ = [
@@ -130,4 +131,5 @@ __all__ = [
     "validate_blueprint",
     "is_valid",
     "canonical_phases",
+    "current_phase",
 ]

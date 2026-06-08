@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from primitives.blueprint import (
-    validate_blueprint, is_valid, SCHEMA_VERSION, canonical_phases,
+    validate_blueprint, is_valid, SCHEMA_VERSION, canonical_phases, current_phase,
 )
 
 REPO = Path(__file__).resolve().parents[2]            # ClaudeCoach/
@@ -186,6 +186,33 @@ class TestCanonicalPhases:
         assert canonical_phases(None, JAMIE_PHASE_TSS, date(2026, 9, 19)) == []
         assert canonical_phases(date(2026, 4, 27), None, date(2026, 9, 19)) == []
         assert canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, None) == []
+
+
+class TestCurrentPhase:
+    def _bp(self):
+        phases = canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19))
+        return {"phases": [{"name": p["name"], "family": p["family"],
+                            "start": p["start"].isoformat(), "end": p["end"].isoformat()}
+                           for p in phases]}
+
+    def test_date_inside_window(self):
+        # 2026-06-08 is in Build (2026-06-01..2026-07-05)
+        assert current_phase(self._bp(), date(2026, 6, 8))["name"] == "Build"
+
+    def test_window_boundaries_inclusive(self):
+        assert current_phase(self._bp(), date(2026, 4, 27))["name"] == "Base"   # first day
+        assert current_phase(self._bp(), date(2026, 5, 31))["name"] == "Base"   # last day of Base
+        assert current_phase(self._bp(), date(2026, 6, 1))["name"] == "Build"   # first day of Build
+
+    def test_before_first_clamps_to_first(self):
+        assert current_phase(self._bp(), date(2026, 1, 1))["name"] == "Base"
+
+    def test_after_last_clamps_to_last(self):
+        assert current_phase(self._bp(), date(2027, 1, 1))["name"] == "Taper"
+
+    def test_none_when_no_phases(self):
+        assert current_phase({}, date(2026, 6, 8)) is None
+        assert current_phase({"phases": []}, date(2026, 6, 8)) is None
 
 
 class TestSpecificPhaseContent:

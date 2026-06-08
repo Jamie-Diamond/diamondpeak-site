@@ -137,3 +137,30 @@ def validate_blueprint(data: dict) -> list[str]:
 
 def is_valid(data: dict) -> bool:
     return not validate_blueprint(data)
+
+
+def current_phase(blueprint: dict, on_date: date) -> dict | None:
+    """Return the phase dict whose [start, end] window contains on_date.
+
+    If on_date falls outside every window, clamps to the nearest edge phase
+    (before the first → first; after the last → last). Returns None only when
+    the blueprint has no parseable phases. Used by the planner/validator to key
+    per-phase content (distribution, bricks, fuelling) to the planning window.
+    """
+    parsed: list[tuple[date, date, dict]] = []
+    for ph in (blueprint or {}).get("phases") or []:
+        try:
+            s = date.fromisoformat(ph["start"])
+            e = date.fromisoformat(ph["end"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        parsed.append((s, e, ph))
+    if not parsed:
+        return None
+    for s, e, ph in parsed:
+        if s <= on_date <= e:
+            return ph
+    parsed.sort(key=lambda x: x[0])
+    if on_date < parsed[0][0]:
+        return parsed[0][2]
+    return parsed[-1][2]
