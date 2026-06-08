@@ -74,6 +74,36 @@ class TestBuildPromptSmoke:
         assert "Specific" in p               # full periodisation present
 
 
+class TestDayRuleSingleSource:
+    """day_rules in athletes.json is THE single source — it drives both the prompt's
+    HARD rule lines and the validate_plan backstop, so they cannot drift (WS E)."""
+
+    def test_renders_allowed_and_forbidden(self, gp):
+        s = gp.hard_day_rule_lines({"swim_days": ["Tue", "Thu"],
+                                    "bike_days": ["Fri", "Sat", "Sun"]})
+        assert "SWIM RULE — HARD: Swims ONLY on Tuesday, Thursday." in s
+        assert "CYCLING RULE — HARD: Bike sessions ONLY on Friday, Saturday, Sunday." in s
+        assert "Monday" in s  # forbidden days listed
+
+    def test_empty_without_rules(self, gp):
+        assert gp.hard_day_rule_lines({}) == ""
+        assert gp.hard_day_rule_lines(None) == ""
+
+    def test_prompt_reflects_this_athletes_day_rules(self, gp):
+        # Prove the prompt is generated from the athlete's own day_rules, not
+        # hardcoded — so what the planner is told == what the validator enforces.
+        cfg = {"name": "T", "race_distance": "Full Ironman", "plan_start": "2026-04-27",
+               "phase_tss": {"base_end_week": 6, "build_end_week": 10,
+                             "specific_end_week": 14, "peak_end_week": 17},
+               "ctl_targets": {"race_min": 95,
+                               "phase_ctl": {"base": 70, "build": 82, "specific": 90, "peak": 95}},
+               "day_rules": {"swim_days": ["Mon", "Wed"], "bike_days": ["Sat"]}}
+        prof = {"race_distance": "Full Ironman", "race_date": "2026-09-19", "max_hours_per_week": 15}
+        p = gp.build_prompt("t", cfg, prof, ctl_today=70.0)
+        assert "Swims ONLY on Monday, Wednesday" in p
+        assert "Bike sessions ONLY on Saturday" in p
+
+
 class TestBackstopValidate:
     """_backstop_validate is the function actually wired into the live send path
     (WS E warn mode). Exercise it directly — env-mode parsing, breach aggregation,
@@ -95,11 +125,20 @@ class TestBackstopValidate:
         log = self._patch(gp, monkeypatch, tmp_path, self._breaching_events())
         monkeypatch.setenv("ENFORCE_VALIDATION", "warn")
         cfg = {"max_ctl_ramp_per_week": 4, "day_rules": {"bike_days": ["Fri", "Sat", "Sun"]}}
-        gp._backstop_validate("smoke", cfg, ctl_today=40.0, replan=False)
+        res = gp._backstop_validate("smoke", cfg, ctl_today=40.0, replan=False)
         text = log.read_text()
         assert "VALIDATION (warn)" in text
         assert "ride_forbidden_day" in text
         assert "UNCHANGED" in text            # warn mode states it does not gate
+        assert res["mode"] == "warn" and res["hard"]   # returns the breaches
+
+    def test_block_mode_returns_hard_breaches(self, gp, monkeypatch, tmp_path):
+        self._patch(gp, monkeypatch, tmp_path, self._breaching_events())
+        monkeypatch.setenv("ENFORCE_VALIDATION", "block")
+        cfg = {"max_ctl_ramp_per_week": 4, "day_rules": {"bike_days": ["Fri", "Sat", "Sun"]}}
+        res = gp._backstop_validate("smoke", cfg, ctl_today=40.0, replan=False)
+        assert res["mode"] == "block"
+        assert any(v.code == "ride_forbidden_day" for v in res["hard"])
 
     def test_logs_clean_when_no_breach(self, gp, monkeypatch, tmp_path):
         clean = [{"start_date_local": "2026-06-19T00:00:00", "type": "Ride",
@@ -124,4 +163,14 @@ class TestBackstopValidate:
         monkeypatch.setattr(gp, "LOG_FILE", tmp_path / "gp.log")
         monkeypatch.setenv("ENFORCE_VALIDATION", "warn")
         # Must not raise — plan delivery can never break on a validator error.
-        gp._backstop_validate("smoke", {}, ctl_today=40.0, replan=False)
+        res = gp._backstop_validate("smoke", {}, ctl_today=40.0, replan=False)
+        assert res["hard"] == []
+
+    def test_coach_alert_logs_loudly_without_coach_chat(self, gp, monkeypatch, tmp_path):
+        log = tmp_path / "gp.log"
+        monkeypatch.setattr(gp, "LOG_FILE", log)
+        monkeypatch.delenv("COACH_CHAT_ID", raising=False)
+        from primitives.validate_plan import Violation
+        gp._coach_alert("smoke", [Violation("ride_forbidden_day", "hard", "Ride on Monday")])
+        text = log.read_text()
+        assert "COACH ALERT" in text and "WITHHELD" in text

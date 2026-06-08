@@ -97,6 +97,39 @@ def fetch_ctl(slug: str) -> float:
     return 0.0
 
 
+_FULL_DAY = {"mon": "Monday", "tue": "Tuesday", "wed": "Wednesday", "thu": "Thursday",
+             "fri": "Friday", "sat": "Saturday", "sun": "Sunday"}
+_DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _full_day(d: str) -> str:
+    return _FULL_DAY.get(str(d).strip().lower()[:3], str(d))
+
+
+def hard_day_rule_lines(day_rules: dict) -> str:
+    """Render the HARD per-sport day-rule lines from structured day_rules.
+
+    THE single source: the same day_rules dict drives this prompt text AND the
+    validate_plan backstop (remediation WS E), so what the planner is told and what
+    the validator enforces cannot diverge. Returns "" if no rules — caller falls
+    back to its built-in text.
+    """
+    lines = []
+    for key, label, verb in (("swim_days", "SWIM", "Swims"),
+                             ("bike_days", "CYCLING", "Bike sessions"),
+                             ("run_days", "RUN", "Runs")):
+        days = (day_rules or {}).get(key)
+        if not days:
+            continue
+        allowed = [_full_day(d) for d in days]
+        forbidden = [d for d in _DAY_ORDER if d not in allowed]
+        lines.append(
+            f"{label} RULE — HARD: {verb} ONLY on {', '.join(allowed)}. "
+            f"Never on any other day ({', '.join(forbidden) or 'none'})."
+        )
+    return "\n".join(lines)
+
+
 def planning_window_start(today: date, replan: bool) -> date:
     """First Monday of the planning window — the single source for both the prompt
     and the post-run validation backstop.
@@ -274,9 +307,15 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
             + "- Travel / access constraints: scan current-state.md \"Travel & training blocks\" for any "
               "dates in the planning window where bike is unavailable. Substitute with swims or runs of equivalent TSS."
         )
-        week_template = """Standard week template (adapt to phase):
-SWIM RULE — HARD: Swims on TUESDAY and THURSDAY only. Never prescribe a swim on Monday, Wednesday, Friday, Saturday, or Sunday.
-CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Friday, Saturday, Sunday only.
+        # Day-rule lines come from athletes.json day_rules (the single source also
+        # used by the validate_plan backstop). Fall back to the built-in text if an
+        # athlete has no day_rules configured.
+        _dr_lines = hard_day_rule_lines(cfg.get("day_rules"))
+        if not _dr_lines:
+            _dr_lines = ("SWIM RULE — HARD: Swims on TUESDAY and THURSDAY only. Never prescribe a swim on Monday, Wednesday, Friday, Saturday, or Sunday.\n"
+                         "CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Friday, Saturday, Sunday only.")
+        week_template = f"""Standard week template (adapt to phase):
+{_dr_lines}
 - Monday: Rest or short Z1 run — no cycling, no swimming
 - Tuesday: Swim (aerobic/CSS) + Run (Z2, walk-run if ankle protocol applies)
 - Wednesday: Strength or Run (Z2) — NO cycling
@@ -712,29 +751,31 @@ def _refetch_window_events(slug: str, window_start: date) -> list[dict]:
         return []
 
 
-def _backstop_validate(slug: str, cfg: dict, ctl_today: float, replan: bool) -> None:
+def _backstop_validate(slug: str, cfg: dict, ctl_today: float, replan: bool) -> dict:
     """Deterministic backstop (remediation WS E). Re-fetches the plan the LLM pushed
     and validates it against the athlete's hard constraints.
 
-    WARN MODE (default, and the only mode implemented): logs any breach and does
-    NOT alter what reaches the athlete. Flipping to blocking is a deliberate future
-    step (set ENFORCE_VALIDATION=block) that must also remediate the pushed events
-    (the LLM has already written them to intervals.icu) — not done yet. Set
-    ENFORCE_VALIDATION=0 to skip entirely. Read-only and fully soft-failing: a
-    validator error must never break plan delivery."""
+    Returns {"mode", "breaches", "hard"} for the caller to act on. Read-only and
+    fully soft-failing — any error returns an empty result so plan delivery never
+    breaks.
+
+    Modes (env ENFORCE_VALIDATION):
+      "warn" (default) — log breaches, send the athlete's plan UNCHANGED.
+      "block"          — caller runs a single remediation re-prompt, then coach-
+                         alerts and withholds the athlete message if still breached.
+      "0"/"off"        — skip entirely.
+
+    ACTIVE checks: CTL ramp (always) + day-rules (when the athlete has day_rules in
+    athletes.json — the same source the prompt's HARD rule lines are rendered from).
+    weekly_tss_cap is intentionally not passed (redundant with the ramp ceiling)."""
     mode = os.environ.get("ENFORCE_VALIDATION", "warn").strip().lower()
     if mode in ("0", "off", "none", "false"):
-        return
+        return {"mode": "off", "breaches": [], "hard": []}
     try:
         ws = planning_window_start(date.today(), replan)
         events = _refetch_window_events(slug, ws)
         if not events:
-            return
-        # ACTIVE check today: CTL ramp (ctl_today + ramp_cap) — which is also the
-        # load ceiling, since the planner derives its max weekly TSS from the same
-        # ramp cap, so weekly_tss_cap is intentionally NOT passed (it would be
-        # redundant). day_rules is absent until added to athletes.json → day-rule
-        # checks are inert for now (see WS E follow-ups).
+            return {"mode": mode, "breaches": [], "hard": []}
         day_rules = cfg.get("day_rules")
         ramp_cap  = float(cfg.get("max_ctl_ramp_per_week", 5.0))
         reports = validate_plan(
@@ -742,6 +783,7 @@ def _backstop_validate(slug: str, cfg: dict, ctl_today: float, replan: bool) -> 
             day_rules=day_rules, ctl_today=ctl_today, ramp_cap=ramp_cap,
         )
         breaches = [v for r in reports for v in r.violations]
+        hard = [v for v in breaches if v.severity == "hard"]
         total = sum(r.total_tss for r in reports)
         with open(LOG_FILE, "a") as lf:
             if breaches:
@@ -753,14 +795,83 @@ def _backstop_validate(slug: str, cfg: dict, ctl_today: float, replan: bool) -> 
                     lf.write("    warn mode — plan sent to athlete UNCHANGED. "
                              f"day_rules={'set' if day_rules else 'ABSENT → day-rule checks inert'}.\n")
                 else:
-                    lf.write("    NOTE: ENFORCE_VALIDATION=block set, but blocking/remediation "
-                             "is not yet implemented — treating as warn. Plan sent unchanged.\n")
+                    lf.write("    block mode — attempting one remediation pass before sending.\n")
             else:
                 lf.write(f"[generate-plan:{slug}] VALIDATION ({mode}): clean — "
                          f"{total:.0f} TSS over {len(reports)} week(s), no breaches.\n")
+        return {"mode": mode, "breaches": breaches, "hard": hard}
     except Exception as e:
         with open(LOG_FILE, "a") as lf:
             lf.write(f"[generate-plan:{slug}] VALIDATION error (non-fatal): {e}\n")
+        return {"mode": mode, "breaches": [], "hard": []}
+
+
+def _coach_alert(slug: str, breaches: list) -> None:
+    """Coach-facing alert (block mode): a hard breach survived remediation, so the
+    athlete message is withheld. Always logs loudly; also Telegrams a coach chat if
+    COACH_CHAT_ID is set (kept off the athlete's own chat)."""
+    summary = "; ".join(str(v) for v in breaches)
+    with open(LOG_FILE, "a") as lf:
+        lf.write(f"[generate-plan:{slug}] *** COACH ALERT — plan WITHHELD from athlete: "
+                 f"unresolved hard breach after remediation: {summary}\n")
+    coach_chat = os.environ.get("COACH_CHAT_ID", "").strip()
+    if coach_chat:
+        try:
+            subprocess.run(
+                ["python3", str(NOTIFY), "--chat-id", coach_chat,
+                 f"⚠️ ClaudeCoach: {slug}'s plan withheld — unresolved breach: {summary[:600]}"],
+                cwd=PROJECT_DIR,
+            )
+        except Exception:
+            pass
+
+
+def _remediate_plan(slug: str, cfg: dict, profile: dict, ctl_today: float,
+                    replan: bool, hard_breaches: list) -> str | None:
+    """Block mode: one correction pass. Re-prompts the LLM to FIX the breaching
+    sessions it already pushed (edit/delete by date+sport — idempotent), then
+    re-fetches and re-validates. Returns the corrected athlete message if the plan
+    is then clean of hard breaches, else None (caller coach-alerts + withholds).
+
+    NOTE (must verify before relying on this in production): assumes intervals.icu
+    is read-after-write consistent enough that the post-correction re-fetch sees the
+    LLM's edits. In warn mode this is harmless; in block mode it is load-bearing."""
+    breach_text = "\n".join(f"  - {v.detail}" for v in hard_breaches)
+    correction = build_prompt(slug, cfg, profile, ctl_today, replan=replan) + f"""
+
+## VALIDATION FAILURE — you MUST fix these before the message is sent
+The plan you just pushed breaches HARD constraints that were independently checked:
+{breach_text}
+
+This is a CORRECTION pass. For each breach, locate the offending session in the
+events endpoint by its date + sport and FIX it: move it to a permitted day or
+delete it via edit_workout/push_workout (check date+sport first so you don't
+double-push). Do NOT introduce new breaches and do NOT touch compliant sessions.
+Then re-emit ONLY the <telegram> block for the corrected week."""
+    with tempfile.NamedTemporaryFile(mode="w", prefix="claudecoach_fix_",
+                                     delete=False, suffix=".txt") as f:
+        f.write(correction)
+        fix_file = f.name
+    try:
+        result = subprocess.run(
+            [CLAUDE, "-p", open(fix_file).read(), "--allowedTools", TOOLS,
+             "--model", "claude-sonnet-4-6"],
+            capture_output=True, text=True, cwd=PROJECT_DIR,
+        )
+        m = re.search(r"<telegram>(.*?)</telegram>", result.stdout.strip(),
+                      re.DOTALL | re.IGNORECASE)
+        recheck = _backstop_validate(slug, cfg, ctl_today, replan)
+        if not recheck["hard"]:
+            with open(LOG_FILE, "a") as lf:
+                lf.write(f"[generate-plan:{slug}] remediation SUCCEEDED — corrected plan is clean.\n")
+            return m.group(1).strip() if m else "Plan updated — check your week in Intervals.icu."
+        return None
+    except Exception as e:
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[generate-plan:{slug}] remediation error (non-fatal): {e}\n")
+        return None
+    finally:
+        os.unlink(fix_file)
 
 
 def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
@@ -788,8 +899,15 @@ def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
             with open(LOG_FILE, "a") as lf:
                 lf.write(f"[generate-plan:{slug}] STDERR: {stderr}\n")
         # Backstop: independently validate the plan the LLM just pushed (WS E).
-        # Warn-only today — logs breaches, never alters the athlete's message.
-        _backstop_validate(slug, cfg, ctl_today, replan)
+        # warn (default) logs only; block remediates once, then withholds + alerts.
+        _v = _backstop_validate(slug, cfg, ctl_today, replan)
+        if _v["mode"] == "block" and _v["hard"]:
+            fixed = _remediate_plan(slug, cfg, profile, ctl_today, replan, _v["hard"])
+            if fixed is not None:
+                return fixed
+            # Still breaching after one correction — withhold from athlete, alert coach.
+            _coach_alert(slug, _v["hard"])
+            return None
         # Extract ONLY the athlete-facing message. Never fall back to raw stdout —
         # that is Claude's internal report and must never reach the athlete.
         m = re.search(r"<telegram>(.*?)</telegram>", output, re.DOTALL | re.IGNORECASE)
