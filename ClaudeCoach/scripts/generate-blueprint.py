@@ -25,7 +25,9 @@ PROJECT_DIR = str(BASE.parent)
 
 # Validate the structured sidecar against the shared schema (remediation WS B).
 sys.path.insert(0, str(BASE / "ironman-analysis"))
-from primitives.blueprint import validate_blueprint, SCHEMA_VERSION  # noqa: E402
+from primitives.blueprint import (  # noqa: E402
+    validate_blueprint, canonical_phases, SCHEMA_VERSION,
+)
 
 # Brick targets by phase family — single source for both the markdown table and
 # the structured sidecar.
@@ -113,14 +115,28 @@ def phase_family(name: str) -> str:
     n = name.lower()
     if "base" in n:
         return "base"
+    if "specific" in n:
+        return "specific"
     if "build" in n:
         return "build"
     if "peak" in n:
         return "peak"
     return "taper"
 
+
+def content_family(family: str) -> str:
+    """Map a structural phase family to the family whose content tables apply.
+
+    The blueprint's content tables (distribution, fuelling, IF, CTL ranges,
+    bricks) are defined for base/build/peak/taper. A 'specific' phase is
+    late-build race-specific work, so it reuses build-family content (its own
+    CTL *target* still comes from athletes.json phase_ctl). See remediation
+    decision 2026-06-07.
+    """
+    return "build" if family == "specific" else family
+
 def tss_ceiling(max_hours: float, phase_name: str) -> float | None:
-    fam = phase_family(phase_name)
+    fam = content_family(phase_family(phase_name))
     if fam == "taper":
         return None
     IF = IF_TARGETS[fam]
@@ -146,7 +162,7 @@ CTL_TARGETS = {
 
 def ctl_range(event: str, phase_name: str) -> tuple[int, int] | None:
     """Return (low, high) CTL target for entry to a phase, or None if unknown."""
-    fam = phase_family(phase_name)
+    fam = content_family(phase_family(phase_name))
     return CTL_TARGETS.get(event, {}).get(fam)
 
 
@@ -217,7 +233,7 @@ FUELLING = {
 }
 
 def fuelling_note(event: str, phase_name: str) -> str:
-    fam = phase_family(phase_name)
+    fam = content_family(phase_family(phase_name))
     event_fuel = FUELLING.get(event, FUELLING["Full Ironman"])
     return event_fuel.get(fam, "Follow phase-progressive protocol.")
 
@@ -408,7 +424,7 @@ def dist_table(event: str, phases: list[dict]) -> list[str]:
     lines = []
     seen_fams = set()
     for p in phases:
-        fam = phase_family(p["name"])
+        fam = content_family(phase_family(p["name"]))
         if fam == "taper" or fam in seen_fams:
             continue
         seen_fams.add(fam)
@@ -493,7 +509,7 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
             lines.append(f"- **{p['name']}:** 40–50% of preceding peak week. Intensity touches maintained.")
         else:
             ceil = tss_ceiling(max_hours, p["name"])
-            IF = IF_TARGETS.get(fam, 0.65)
+            IF = IF_TARGETS.get(content_family(fam), 0.65)
             lines.append(
                 f"- **{p['name']}:** Target up to {int(ceil)} TSS/week "
                 f"(IF {IF:.2f}, {max_hours} hr ceiling). "
@@ -541,15 +557,8 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     lines.append("| Phase | Min bricks | Type |")
     lines.append("|---|---|---|")
     for p in phases:
-        fam = phase_family(p["name"])
-        if fam == "base":
-            lines.append(f"| {p['name']} | 1 | Short brick (30–45 min ride + 10–20 min easy run) |")
-        elif fam == "build":
-            lines.append(f"| {p['name']} | 2–3 | Standard and quality bricks |")
-        elif fam == "peak":
-            lines.append(f"| {p['name']} | 3–4 | Include at least 1 long brick (race simulation) |")
-        elif fam == "taper":
-            lines.append(f"| {p['name']} | 1 | Short brick only; no fatigue accumulation |")
+        fam = content_family(phase_family(p["name"]))
+        lines.append(f"| {p['name']} | {BRICK_MIN.get(fam, '—')} | {BRICK_TYPE.get(fam, '—')} |")
     lines.append("")
 
     lines.append("## Recovery Triggers")
@@ -597,6 +606,7 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
     phase_objs: list[dict] = []
     for p in phases:
         fam = phase_family(p["name"])
+        cfam = content_family(fam)          # specific -> build for content tables
         ceil = tss_ceiling(max_hours, p["name"])
         entry = ctl_range(event, p["name"])
         phase_objs.append({
@@ -606,13 +616,13 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
             "end": p["end"].isoformat(),
             "weeks": p["weeks"],
             "tss_ceiling": int(ceil) if ceil else None,
-            "if_target": IF_TARGETS.get(fam),
+            "if_target": IF_TARGETS.get(cfam),
             "ctl_entry_low": entry[0] if entry else None,
             "ctl_entry_high": entry[1] if entry else None,
-            "distribution": event_dist.get(fam, {}),
+            "distribution": event_dist.get(cfam, {}),
             "fuelling": fuelling_note(event, p["name"]),
-            "brick_min": BRICK_MIN.get(fam),
-            "brick_type": BRICK_TYPE.get(fam),
+            "brick_min": BRICK_MIN.get(cfam),
+            "brick_type": BRICK_TYPE.get(cfam),
         })
 
     race_conditions = profile.get("race_conditions", "temperate")
@@ -687,9 +697,29 @@ def main():
         print("Error: race_date is in the past.", file=sys.stderr)
         sys.exit(1)
 
-    phases = phase_structure(int(weeks_to_race))
-    phases = assign_dates(phases, date.today())
-    phases[-1]["end"] = race_dt  # extend last phase to race day
+    # Canonical phases come from athletes.json (plan_start + phase_tss end-weeks),
+    # so the blueprint windows agree with what the planner prescribes
+    # (remediation decision 2026-06-07). Fall back to weeks-to-race
+    # auto-derivation only for athletes with no phase config (e.g. calum).
+    acfg = {}
+    if ATHLETES_CONFIG.exists():
+        try:
+            acfg = json.loads(ATHLETES_CONFIG.read_text()).get(slug, {})
+        except Exception:
+            acfg = {}
+    plan_start_str = acfg.get("plan_start")
+    try:
+        plan_start = date.fromisoformat(plan_start_str) if plan_start_str else None
+    except ValueError:
+        plan_start = None
+    phases = canonical_phases(plan_start, acfg.get("phase_tss"), race_dt)
+    if phases:
+        print(f"Phases from athletes.json config (anchor {plan_start}).", file=sys.stderr)
+    else:
+        print("No phase config — falling back to weeks-to-race auto-derivation.", file=sys.stderr)
+        phases = phase_structure(int(weeks_to_race))
+        phases = assign_dates(phases, date.today())
+        phases[-1]["end"] = race_dt  # extend last phase to race day
 
     print(f"Fetching live CTL for {slug}...", file=sys.stderr)
     current_ctl = fetch_ctl(slug)

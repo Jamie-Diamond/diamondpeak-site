@@ -37,7 +37,32 @@ LLM-for-judgement design, which is correct.
 - **Determinism (#2):** **Backstop pattern.** Keep the LLM building and calling;
   add a deterministic post-step that *blocks any push violating a hard
   constraint* and re-prompts. Not a full orchestrator rewrite.
-- **This turn:** plan document only; no code changes.
+- **This turn (superseded):** plan document only; no code changes.
+
+### Decision log
+
+**2026-06-07 — Phase-model reconciliation (WS B→C boundary).** Discovered three
+distinct periodisation shapes in play: the blueprint generator invents its own
+(`Base/Build1/Build2/Peak`, anchored to `date.today()`), while `athletes.json`
+carries per-athlete phase config that itself differs by athlete — jamie:
+`base/build/specific/peak` (tuned `phase_ctl` incl. specific=105); kathryn:
+`base/build/peak` (no specific, no `phase_ctl`); calum: none. All three disagree
+on anchor and structure.
+
+Decision: **`athletes.json` per-athlete phase config is canonical** (anchored to
+`plan_start`); `generate-blueprint.py` is changed to *adopt* those boundaries
+rather than invent its own, so the sidecar windows agree with what the planner
+already prescribes. Rationale: this unifies anchor + windows + source onto one
+place **without rewriting any athlete's live, tuned plan** — the non-destructive
+correct option, chosen over making the blueprint canonical (which would drop
+jamie's specific phase and shift his boundaries mid-build). Athletes with no
+config (calum) fall back to the existing `phase_structure()` auto-derivation.
+
+Baked-in assumption (flagged): the blueprint's content tables (distribution,
+fuelling, IF) have no `specific` column, so a **specific phase reuses build-family
+content** for those, while keeping its own `phase_ctl` target. Reasonable
+(specific = late-build race-specific work) but a coaching call — revisit if a
+distinct specific-phase distribution is wanted.
 
 ---
 
@@ -171,14 +196,22 @@ nothing else has consumed it yet if A/C not yet merged.
 **Problem.** `generate-plan.py` ignores the blueprint and uses a hardcoded,
 Jamie-specific weekly template and phase context.
 
-**Design.**
-1. `generate-plan.py` reads `training-blueprint.json` for the current athlete and
-   resolves the **current phase** from the phase windows (replaces the
-   `weeks_elapsed` arithmetic against `athletes.json` `phase_tss`, which becomes
-   redundant — one source).
-2. Replace the hardcoded `week_template` / `phase_tss` prompt strings with values
-   rendered from the sidecar: permitted days, per-phase intensity distribution,
-   brick frequency, and any test due in the window.
+**Design.** (revised per the 2026-06-07 phase-model decision — `athletes.json`
+is canonical; the sidecar's windows are *generated from* it, so reading the
+sidecar and reading `athletes.json` now agree by construction.)
+1. Precursor (lands in this workstream's first step): `generate-blueprint.py`
+   builds phases from `athletes.json` (`plan_start` + `phase_tss` end-weeks) via a
+   new pure `primitives/blueprint.canonical_phases()`, falling back to
+   `phase_structure()` only when an athlete has no config. This makes the sidecar
+   windows match the planner before anything consumes them. Handle the `specific`
+   family (content reuses `build`; CTL target from `athletes.json` `phase_ctl`).
+2. `generate-plan.py` then reads `training-blueprint.json` for per-phase
+   **content** — intensity distribution, brick frequency, fuelling, tests due in
+   the window — keyed by the phase it already resolves from `plan_start`. It does
+   NOT take phase boundaries from a second source; `athletes.json` stays the
+   boundary authority.
+3. `week_template` sport-day rules (swim/bike days) have no blueprint source and
+   stay in the planner for now (or move to a profile field) — out of WS C scope.
 3. Inject the phase distribution and brick target into the prompt as **explicit
    build targets** the LLM must hit, not just context.
 4. If the sidecar is missing (athlete never had a blueprint generated), fall back

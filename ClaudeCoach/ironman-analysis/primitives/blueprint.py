@@ -8,9 +8,18 @@ so a malformed sidecar fails loudly at generation time, not at planning time.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 SCHEMA_VERSION = 1
+
+# Ordered phase spec: (family, display name, athletes.json end-week key).
+# An athlete may omit phases (e.g. no 'specific') — missing keys are skipped.
+_PHASE_SPEC = [
+    ("base",     "Base",     "base_end_week"),
+    ("build",    "Build",    "build_end_week"),
+    ("specific", "Specific", "specific_end_week"),
+    ("peak",     "Peak",     "peak_end_week"),
+]
 
 REQUIRED_TOP = [
     "schema_version",
@@ -22,7 +31,58 @@ REQUIRED_TOP = [
     "tests",
 ]
 REQUIRED_PHASE = ["name", "family", "start", "end", "weeks"]
-VALID_FAMILIES = {"base", "build", "peak", "taper"}
+VALID_FAMILIES = {"base", "build", "specific", "peak", "taper"}
+
+
+def canonical_phases(
+    plan_start: date | None,
+    phase_tss: dict | None,
+    race_date: date | None,
+) -> list[dict]:
+    """Build canonical phase windows from athletes.json config, anchored to plan_start.
+
+    This is the single source of phase boundaries (remediation 2026-06-07
+    decision): the planner already resolves phases from plan_start + phase_tss
+    end-weeks, and the blueprint generator adopts the same windows so the
+    sidecar agrees with what is actually prescribed.
+
+    Returns a list of phase dicts {name, family, weeks, start, end} (start/end
+    are date objects, matching generate-blueprint's internal shape), or [] when
+    the athlete has no plan_start/phase_tss/race_date (caller falls back to the
+    weeks-to-race auto-derivation).
+
+    Phases present are driven by which *_end_week keys exist — an athlete with no
+    `specific_end_week` simply has no Specific phase. Taper runs from the last
+    configured phase end to race day.
+    """
+    if not plan_start or not phase_tss or not race_date:
+        return []
+
+    phases: list[dict] = []
+    cursor_week = 0
+    for family, name, key in _PHASE_SPEC:
+        end_wk = phase_tss.get(key)
+        if end_wk is None:
+            continue
+        start = plan_start + timedelta(weeks=cursor_week)
+        end = plan_start + timedelta(weeks=end_wk) - timedelta(days=1)
+        phases.append({
+            "name": name, "family": family,
+            "weeks": end_wk - cursor_week, "start": start, "end": end,
+        })
+        cursor_week = end_wk
+
+    if not phases:
+        return []
+
+    taper_start = phases[-1]["end"] + timedelta(days=1)
+    if taper_start <= race_date:
+        weeks = max(1, round((race_date - taper_start).days / 7))
+        phases.append({
+            "name": "Taper", "family": "taper",
+            "weeks": weeks, "start": taper_start, "end": race_date,
+        })
+    return phases
 
 
 def validate_blueprint(data: dict) -> list[str]:

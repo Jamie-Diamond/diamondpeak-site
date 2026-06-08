@@ -13,7 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from primitives.blueprint import validate_blueprint, is_valid, SCHEMA_VERSION
+from primitives.blueprint import (
+    validate_blueprint, is_valid, SCHEMA_VERSION, canonical_phases,
+)
 
 REPO = Path(__file__).resolve().parents[2]            # ClaudeCoach/
 GEN_BLUEPRINT = REPO / "scripts" / "generate-blueprint.py"
@@ -151,3 +153,57 @@ class TestBuildBlueprintData:
         # Sportive has no DISTRIBUTION entry yet (WS D) — empty, but valid shape.
         assert all(p["distribution"] == {} for p in data["phases"])
         assert validate_blueprint(data) == []
+
+
+# Canonical phase config (jamie-shaped: includes a specific phase).
+JAMIE_PHASE_TSS = {"base_end_week": 5, "build_end_week": 10,
+                   "specific_end_week": 14, "peak_end_week": 17}
+
+
+class TestCanonicalPhases:
+    def test_jamie_shape_five_phases(self):
+        ph = canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19))
+        assert [p["name"] for p in ph] == ["Base", "Build", "Specific", "Peak", "Taper"]
+        assert [p["family"] for p in ph] == ["base", "build", "specific", "peak", "taper"]
+
+    def test_windows_anchored_to_plan_start(self):
+        ph = canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19))
+        base = ph[0]
+        assert base["start"] == date(2026, 4, 27)
+        assert base["end"] == date(2026, 5, 31)      # plan_start + 5w - 1d
+        assert base["weeks"] == 5
+        # contiguous: each phase starts the day after the previous ends
+        for a, b in zip(ph, ph[1:]):
+            assert b["start"] == a["end"] + timedelta(days=1)
+        assert ph[-1]["end"] == date(2026, 9, 19)    # taper ends on race day
+
+    def test_no_specific_when_unconfigured(self):
+        tss = {"base_end_week": 8, "build_end_week": 14, "peak_end_week": 17}
+        ph = canonical_phases(date(2026, 5, 4), tss, date(2026, 9, 20))
+        assert [p["name"] for p in ph] == ["Base", "Build", "Peak", "Taper"]
+
+    def test_empty_when_no_config(self):
+        assert canonical_phases(None, JAMIE_PHASE_TSS, date(2026, 9, 19)) == []
+        assert canonical_phases(date(2026, 4, 27), None, date(2026, 9, 19)) == []
+        assert canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, None) == []
+
+
+class TestSpecificPhaseContent:
+    """A specific phase reuses build-family content (remediation 2026-06-07)."""
+
+    def test_specific_phase_gets_build_content_and_validates(self, gb):
+        phases = canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19))
+        data = gb.build_blueprint_data("jamie", FIXTURE_PROFILE, phases, 90.0, None)
+        assert validate_blueprint(data) == []          # 'specific' is a valid family
+        spec = next(p for p in data["phases"] if p["family"] == "specific")
+        build = next(p for p in data["phases"] if p["family"] == "build")
+        assert spec["if_target"] == 0.68               # build IF
+        assert spec["distribution"] == build["distribution"]
+        assert spec["brick_min"] == "2–3"
+        assert spec["tss_ceiling"] == build["tss_ceiling"]
+
+    def test_render_blueprint_handles_specific_without_crashing(self, gb):
+        phases = canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19))
+        md = gb.render_blueprint("jamie", FIXTURE_PROFILE, phases, 90.0, None, None)
+        assert "Specific" in md
+        assert "| Specific |" in md                    # brick table row present
