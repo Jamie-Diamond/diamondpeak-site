@@ -226,8 +226,8 @@ The following events share the mesocycle algorithm and ramp rules. Their phase-s
 | Ultramarathon | Stub | Volume-dominant; IF ceiling lower (0.60 base, 0.64 peak). Time-on-feet over pace. |
 | Duathlon | Stub | Brick-heavy from base (run–bike–run format). No swim block. |
 | Aquathlon | Stub | Swim–run format. Bike as cross-training. Transitions and pacing across disciplines key. |
-| Road Sportive / Gran Fondo | Stub | Bike-only. Climbing-weighted if route is hilly. No run/swim block after base. |
-| Gravel Race | Stub | Extended Z2–3 bike with power management. Bike handling skills integrated. |
+| Road Sportive / Gran Fondo | **Implemented** (`Sportive`) | Bike-only: bike distribution by phase (Base 80/12/8 → Build 70/18/12 → Peak 65/18/17 Z1–2/Z3/Z4–5), FTP tests only (no LTHR/CSS), no bricks. Climbing-weighted via the course modifier on hilly routes. |
+| Gravel Race | **Implemented** (maps to `Sportive`) | Shares the Sportive bike-only profile; extended Z2–3 with power management. |
 | Endurance Swim | Stub | Swim-dominant. Run/bike as active recovery only. |
 
 ---

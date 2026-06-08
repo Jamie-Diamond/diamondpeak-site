@@ -146,13 +146,57 @@ class TestBuildBlueprintData:
         import json
         assert validate_blueprint(json.loads(json.dumps(data))) == []
 
-    def test_stub_event_has_empty_distribution_but_still_valid(self, gb):
-        prof = {**FIXTURE_PROFILE, "race_distance": "Sportive"}
+    def test_unknown_event_has_empty_distribution_but_still_valid(self, gb):
+        # A genuinely-unsupported event (no DISTRIBUTION entry) → empty, valid shape.
+        prof = {**FIXTURE_PROFILE, "race_distance": "Marathon"}
         phases = self._phases(gb, date(2026, 5, 12))
         data = gb.build_blueprint_data("tester", prof, phases, 70.0, None)
-        # Sportive has no DISTRIBUTION entry yet (WS D) — empty, but valid shape.
         assert all(p["distribution"] == {} for p in data["phases"])
         assert validate_blueprint(data) == []
+
+
+SPORTIVE_PROFILE = {
+    "name": "Cyclist", "slug": "cyc", "race_name": "Gran Fondo",
+    "race_date": "2026-08-29", "race_distance": "Sportive",
+    "max_hours_per_week": 8, "ftp_watts": 260, "course_type": "hilly",
+}
+
+
+class TestSportiveProfile:
+    """WS D — cycling events: bike-only, FTP-only tests, no bricks."""
+
+    def _phases(self, gb):
+        ph = gb.phase_structure(14)
+        ph = gb.assign_dates(ph, date(2026, 5, 26))
+        return ph
+
+    def test_event_sports_and_normalisation(self, gb):
+        assert gb.event_sports("Sportive") == ["bike"]
+        assert gb.event_sports("Gravel") == ["bike"]
+        assert gb.event_sports("Full Ironman") == ["swim", "bike", "run"]
+        assert gb._event_key("Gravel") == "Sportive"     # cycling synonyms share content
+        assert gb._event_key("70.3") == "70.3"
+
+    def test_bike_only_distribution_and_no_bricks(self, gb):
+        data = gb.build_blueprint_data("cyc", SPORTIVE_PROFILE, self._phases(gb), 60.0, None)
+        assert data["sports"] == ["bike"]
+        base = next(p for p in data["phases"] if p["family"] == "base")
+        assert set(base["distribution"].keys()) == {"Bike"}   # no Swim/Run
+        assert base["brick_min"] is None                       # bricks N/A for bike-only
+        assert "rides" in base["fuelling"]
+
+    def test_ftp_only_tests(self, gb):
+        data = gb.build_blueprint_data("cyc", SPORTIVE_PROFILE, self._phases(gb), 60.0, None)
+        test_types = {t["type"] for t in data["tests"]}
+        assert test_types == {"ftp"}                           # no lthr (run) / css (swim)
+
+    def test_validates(self, gb):
+        data = gb.build_blueprint_data("cyc", SPORTIVE_PROFILE, self._phases(gb), 60.0, None)
+        assert validate_blueprint(data) == []
+
+    def test_render_marks_bricks_not_applicable(self, gb):
+        md = gb.render_blueprint("cyc", SPORTIVE_PROFILE, self._phases(gb), 60.0, None, None)
+        assert "single-discipline event" in md
 
 
 # Canonical phase config (jamie-shaped: includes a specific phase).
