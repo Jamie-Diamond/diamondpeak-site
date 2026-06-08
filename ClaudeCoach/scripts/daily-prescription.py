@@ -11,6 +11,10 @@ from pathlib import Path
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
 sys.path.insert(0, str(BASE / "lib"))
 from coaching_levels import level_block as _level_block
+sys.path.insert(0, str(BASE / "ironman-analysis"))
+from primitives.modulation import (  # noqa: E402
+    modulate_session, classify_session_type,
+)
 PROJECT_DIR = str(BASE.parent)               # diamondpeak-site/
 CLAUDE      = shutil.which("claude") or "/usr/bin/claude"
 NOTIFY      = BASE / "telegram/notify.py"
@@ -127,6 +131,152 @@ The <telegram> content is the ONLY thing sent to the athlete — keep it clean.
 """
 
 
+# ---------------------------------------------------------------------------
+# Prescription backstop (remediation WS E) — the wrapper computes the modulation
+# engine's prescription from deterministic inputs, rather than trusting the LLM to
+# call it. SHADOW mode (default): log the engine result next to the LLM's so it can
+# be observed on real runs; not yet authoritative. Set PRESCRIPTION_BACKSTOP=off to
+# skip. Authoritative injection is a deliberate later flip after shadow observation.
+# ---------------------------------------------------------------------------
+
+def _icu(slug: str, endpoint: str, *extra) -> object:
+    try:
+        r = subprocess.run(
+            ["python3", "ClaudeCoach/lib/icu_fetch.py", "--athlete", slug,
+             "--endpoint", endpoint, *extra],
+            capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
+        )
+        if r.returncode != 0:
+            return None
+        return json.loads(r.stdout.strip())
+    except Exception:
+        return None
+
+
+def _latest_fitness(slug: str):
+    data = _icu(slug, "fitness", "--days", "7")
+    if isinstance(data, list):
+        for e in reversed(data):
+            if e.get("ctl") is not None:
+                return float(e.get("atl") or 0.0), float(e.get("ctl") or 0.0)
+    return None, None
+
+
+def _hrv_trend_and_sleep(slug: str):
+    """hrv_trend_pct (latest vs trailing mean, negative = declining) + last sleep h."""
+    data = _icu(slug, "wellness", "--days", "14")
+    if not isinstance(data, list) or not data:
+        return 0.0, None
+    hrvs = [float(e["hrv"]) for e in data if e.get("hrv") is not None]
+    trend = 0.0
+    if len(hrvs) >= 3:
+        latest, prior = hrvs[-1], hrvs[:-1]
+        base = sum(prior) / len(prior)
+        if base:
+            trend = round((latest - base) / base * 100, 1)
+    sleep_h = None
+    for e in reversed(data):
+        if e.get("sleepSecs"):
+            sleep_h = round(float(e["sleepSecs"]) / 3600.0, 2)
+            break
+    return trend, sleep_h
+
+
+def _last_rpe(slug: str):
+    p = BASE / "athletes" / slug / "session-log.json"
+    if p.exists():
+        try:
+            log = json.loads(p.read_text())
+            for e in reversed(log if isinstance(log, list) else []):
+                if e.get("rpe") is not None and not e.get("stub"):
+                    return int(e["rpe"])
+        except Exception:
+            pass
+    return None
+
+
+def _ankle_state(slug: str):
+    """(pain_score, quality_cleared) from current-state.json's nested ankle block."""
+    p = BASE / "athletes" / slug / "current-state.json"
+    if p.exists():
+        try:
+            a = (json.loads(p.read_text()) or {}).get("ankle") or {}
+            pain = max(float(a.get("pain_during", 0) or 0),
+                       float(a.get("pain_next_morning", 0) or 0))
+            cleared = bool(a.get("four_pain_free_weeks_reached", False))
+            return int(round(pain)), cleared
+        except Exception:
+            pass
+    return 0, True   # no ankle block → not an injured athlete → unrestricted
+
+
+_INTENSITY_BY_TYPE = {
+    "bike_threshold": 0.95, "bike_vo2": 1.1, "bike_race_pace": 0.85, "bike_z2": 0.65,
+    "run_quality": 1.0, "run_long": 0.7, "run_easy": 0.65, "brick": 0.75,
+    "swim": 0.7, "strength": 0.0,
+}
+
+
+def _todays_planned(slug: str, today: str):
+    """The day's primary planned session as a modulation `planned` dict, or None."""
+    data = _icu(slug, "events", "--start", today, "--end", today)
+    workouts = [e for e in (data or []) if e.get("category") == "WORKOUT"]
+    if not workouts:
+        return None
+    # Primary = highest planned load (so a strength add-on doesn't mask the key session).
+    primary = max(workouts, key=lambda e: float(e.get("load_target") or 0))
+    st = classify_session_type(primary.get("type", ""), primary.get("name", ""))
+    dur = primary.get("moving_time")
+    dur_min = int(float(dur) / 60) if dur else int(float(primary.get("load_target") or 60))
+    return {
+        "session_type": st,
+        "target_intensity": _INTENSITY_BY_TYPE.get(st, 0.7),
+        "interval_count": None, "interval_duration_min": None, "recovery_min": None,
+        "total_duration_min": dur_min,
+        "_name": primary.get("name", ""),
+    }
+
+
+def _prescription_shadow(slug: str, cfg: dict) -> None:
+    """Compute and LOG the engine's prescription for today (shadow, non-authoritative)."""
+    mode = os.environ.get("PRESCRIPTION_BACKSTOP", "shadow").strip().lower()
+    if mode in ("0", "off", "none", "false"):
+        return
+    try:
+        today = date.today().isoformat()
+        planned = _todays_planned(slug, today)
+        if not planned:
+            with open(LOG_FILE, "a") as lf:
+                lf.write(f"[prescription:{slug}] BACKSTOP ({mode}): no planned session today — nothing to modulate.\n")
+            return
+        atl, ctl = _latest_fitness(slug)
+        hrv_trend, sleep_h = _hrv_trend_and_sleep(slug)
+        pain, cleared = _ankle_state(slug)
+        readiness = {
+            "atl": atl or 0.0, "ctl": ctl or 0.0,
+            "hrv_trend_pct": hrv_trend, "sleep_h_last_night": sleep_h,
+            "last_session_rpe": _last_rpe(slug),
+            "ankle_pain_score": pain, "ankle_quality_cleared": cleared,
+            # temp_c / dew_point_c omitted → engine uses benign defaults (no heat fetch).
+        }
+        rx = modulate_session({k: v for k, v in planned.items() if not k.startswith("_")},
+                              readiness)
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[prescription:{slug}] BACKSTOP ({mode}) — engine prescription for "
+                     f"'{planned['_name']}' [{planned['session_type']}]:\n")
+            lf.write(f"    {rx.summary}\n")
+            if rx.applied_rules:
+                lf.write(f"    rules fired: {', '.join(rx.applied_rules)}\n")
+            lf.write(f"    inputs: atl={readiness['atl']:.0f} ctl={readiness['ctl']:.0f} "
+                     f"hrv_trend={hrv_trend}% sleep={sleep_h}h rpe={readiness['last_session_rpe']} "
+                     f"ankle_pain={pain} cleared={cleared}\n")
+            lf.write("    shadow mode — LLM's own prescription is what reached the athlete; "
+                     "compare the two before making this authoritative.\n")
+    except Exception as e:
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[prescription:{slug}] BACKSTOP error (non-fatal): {e}\n")
+
+
 def run_for_athlete(slug: str, cfg: dict) -> str | None:
     name      = cfg.get("name", slug)
     race_name = cfg.get("race_name", "upcoming race")
@@ -164,6 +314,9 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         if stderr:
             with open(LOG_FILE, "a") as lf:
                 lf.write(f"[prescription:{slug}] STDERR: {stderr}\n")
+        # Prescription backstop (WS E): compute + log the engine's prescription from
+        # deterministic inputs. Shadow-only — additive, does not change the LLM output.
+        _prescription_shadow(slug, cfg)
         # Commit any current-state.md changes Claude made
         try:
             today = date.today().isoformat()

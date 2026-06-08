@@ -5,6 +5,7 @@ import pytest
 
 from primitives.modulation import (
     modulate_session,
+    classify_session_type,
     SessionPrescription,
     _ATL_SWAP_GAP,
     _ATL_MODERATE_GAP,
@@ -367,3 +368,44 @@ class TestSummary:
         r = fresh_readiness({"hrv_trend_pct": -9.0})
         p = modulate_session(planned_threshold(), r)
         assert "R3" in p.summary
+
+
+class TestClassifySessionType:
+    """Classifier for the prescription backstop. Cases mirror REAL roster event
+    names (verified 100% on jamie + calum's live calendars 2026-06)."""
+
+    def test_real_event_names(self):
+        cases = [
+            ("Run", "Tue 9 Jun — Z2 walk-run 60 min", "run_easy"),
+            ("Ride", "Fri 12 Jun — Long Z2 ride 240 min", "bike_z2"),
+            ("Ride", "Sat 13 Jun — Build ride 210 min (3x20 min sweet spot)", "bike_threshold"),
+            ("Ride", "Wed 10 Jun — Sweetspot Intro 85 min", "bike_threshold"),
+            ("Ride", "Sat 20 Jun — Brick ride 120 min Z2", "brick"),
+            ("Run", "Sat 20 Jun — Brick run 35 min (off bike)", "brick"),
+            ("Swim", "Thu 11 Jun — CSS swim 55 min", "swim"),
+            ("WeightTraining", "Wed 10 Jun — Strength 35 min", "strength"),
+        ]
+        for sport, name, expected in cases:
+            assert classify_session_type(sport, name) == expected, (sport, name)
+
+    def test_run_quality_and_long(self):
+        assert classify_session_type("Run", "Thu — 5x800m intervals") == "run_quality"
+        assert classify_session_type("Run", "Sun — Long run 90 min") == "run_long"
+        assert classify_session_type("Run", "Tempo run 40 min") == "run_quality"
+
+    def test_bike_subtypes(self):
+        assert classify_session_type("Ride", "VO2 intervals 6x3") == "bike_vo2"
+        assert classify_session_type("Ride", "Race-pace rehearsal 90 min") == "bike_race_pace"
+        assert classify_session_type("Ride", "Threshold 4x10") == "bike_threshold"
+
+    def test_unknown_defaults_to_easy_bucket(self):
+        # Safe default: no quality keyword → easy (engine won't over-modulate).
+        assert classify_session_type("Ride", "Saturday spin") == "bike_z2"
+        assert classify_session_type("Run", "Easy jog") == "run_easy"
+
+    def test_description_does_not_trigger_quality(self):
+        # The reliability fix: prose keywords in the description must NOT classify
+        # an easy session as quality (real bug — walk-run notes say "intervals").
+        st = classify_session_type("Run", "Z2 walk-run 60 min",
+                                   "5 min run / 30 sec walk intervals, sweet spot effort never")
+        assert st == "run_easy"

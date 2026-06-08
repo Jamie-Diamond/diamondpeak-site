@@ -19,6 +19,7 @@ Sources: reference/rules.md, upgrade plan W2 spec, multi-signal corroboration ru
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -86,6 +87,56 @@ def _is_quality(session_type: str) -> bool:
 
 def _is_run(session_type: str) -> bool:
     return session_type in _RUN_LOAD_TYPES
+
+
+# Intensity keywords → quality. Word-boundary matched (so "ss" etc. don't
+# false-match inside other words). Order matters: vo2/race-pace before generic.
+_QUALITY_KW = [
+    (r"\bvo ?2\b|\bv02\b", "bike_vo2", "run_quality"),
+    (r"race[ -]?pace|race[ -]?rehearsal|race[ -]?sim", "bike_race_pace", "run_quality"),
+    (r"threshold|sweet ?spot|\bss\b|\bftp\b|interval|over[ /-]?under|tempo|\breps?\b|fartlek|hill repeat",
+     "bike_threshold", "run_quality"),
+]
+
+
+def classify_session_type(sport: str, name: str = "", description: str = "") -> str:
+    """Map an intervals.icu event (sport + name + description) to a modulation
+    session_type — the single classifier shared by the prescription backstop.
+
+    Coarse by design: the safety rules gate on the quality / run / Z2 buckets, so
+    getting the bucket right matters more than the exact subtype. Unknown bike/run
+    sessions default to the EASY bucket (bike_z2 / run_easy) — the engine won't
+    over-modulate an easy session; a missed quality session is caught by the
+    readiness-driven rules (R1 ankle) regardless. Heuristic — measured against real
+    events, not assumed perfect.
+
+    Classifies from the session NAME, not the description: names are structured
+    ("Build ride (3x20 sweet spot)", "Long Z2 ride") whereas descriptions are
+    coaching prose where keywords like "intervals"/"sweet spot"/"brick" appear
+    incidentally and cause false quality/brick hits (measured against real events).
+    `description` is accepted for compatibility but not keyword-matched."""
+    s = (sport or "").strip().lower()
+    text = (name or "").lower()
+
+    if "brick" in text or s == "brick":
+        return "brick"
+    if s in ("weighttraining", "strength", "workout") or "strength" in text or "gym" in text:
+        return "strength"
+    if s == "swim":
+        return "swim"
+
+    is_run = s == "run"
+    is_bike = s in ("ride", "virtualride", "gravelride", "bike")
+    if not is_run and not is_bike:
+        return "strength" if "strength" in text else "bike_z2"
+
+    for pattern, bike_type, run_type in _QUALITY_KW:
+        if re.search(pattern, text):
+            return run_type if is_run else bike_type
+
+    if is_run:
+        return "run_long" if "long" in text else "run_easy"
+    return "bike_z2"
 
 
 def _fmt_gap(atl: float, ctl: float) -> str:
