@@ -1,9 +1,5 @@
 [
   {
-    "user": "How about pace. TSS, decoupling the usual",
-    "assistant": "*Wandsworth Road Cycling \u00b7 Sun 7 Jun*\n232 min \u00b7 129.9km \u00b7 *TSS 198*\n\n*Power*\nNP 226W \u00b7 IF 0.72 \u00b7 avg 207W\nNP 3W above the Z2 upper cap (223W) \u2014 the two embedded climbs drove it. Pure Z2 sections were clean.\n\n*Zone split*\nZ2 (174\u2013237W): 13,734s \u2014 99% of ride\nZ4 (285\u2013331W): 119s \u2014 308W avg (~9% climb)\nZ5 (332\u2013379W): 54s \u2014 347W avg (~10% climb)\n\n*Decoupling*\nFirst 132 min: *\u22128.6%* (HR dropped relative to power \u2014 aerobically very clean, warming-up effect)\nSecond 97 min: *+2.6%* (clean, well within norm)\n\n*HR / cadence*\nAvg HR 135 \u00b7 max 160 (climbs) \u00b7 avg cadence 81 rpm (target 85\u201395, slightly low throughout)\n\n*Nutrition* (already logged)\n402g carbs \u00b7 2800ml \u00b7 104g/hr\n\n*Summary*\nTSS 198 vs ~163 expected for pure Z2 \u2014 delta explained entirely by the two hard climbs. The Z2 body of the ride is excellent: HR stable, both decoupling readings well-controlled. Strong day.\n\nRPE?"
-  },
-  {
     "user": "Rpe 5",
     "assistant": "Logged. RPE 5 \u2014 solid output for 198 TSS."
   },
@@ -118,5 +114,9 @@
   {
     "user": "",
     "assistant": "*Tomorrow \u2014 Z2 walk-run + Aerobic swim*\n\nRun: \u2022 Walk-run 5:30 format \u00d7 11 (60.5 min) \u2022 Pace 4:50\u20135:05/km on run portions \u2022 HR cap 150 \u2022 Ankle: stop if >2/10 pain, log score next morning\n\nSwim: \u2022 WU 200m + 8\u00d7200m @ 1:44\u20131:50/100m (vs CSS 1:39) + CD 200m (~2,000m total) \u2022 HR 110\u2013130 \u2022 High elbow catch, bilateral every 3 \u2014 no CSS pressure\n\n*Nutrition:* Zero \u2014 both sessions aerobic\n*Sleep:* \u22658h tonight\n*Form:* -3 (In training)"
+  },
+  {
+    "user": "lets plan a 60min swim using the pb for some reps. (60 min session time, inc. breaks)",
+    "assistant": "*Tue 9 Jun \u2014 Aerobic swim with PB efforts \u00b7 60 min (inc. breaks)*\n\nWU: 400m easy @ 1:55\u20132:00/100m\n\n4\u00d750m build (:10s rest) \u2014 last rep at CSS pace 1:39/100m\n\n*Main \u2014 4\u00d7200m PB effort \u00b7 :90s full rest*\nGuide target: 1:30\u20131:33/100m\nFull recovery between reps \u2014 don't carry fatigue into the next\n\nRecovery: 200m easy\n\nAerobic \u2014 3\u00d7400m @ 1:44\u20131:47/100m \u00b7 :30s rest\nHigh elbow catch, bilateral every 3\n\nCD: 200m easy\n\nTotal: ~3,000m \u00b7 ~60 min\n\n*Structurally:* 800m quality, 1,200m aerobic \u2014 PB reps are the lead quality block, aerobic holds the volume with longer sustained reps."
   }
 ]
