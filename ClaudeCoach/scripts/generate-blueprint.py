@@ -161,6 +161,30 @@ def tss_ceiling(max_hours: float, phase_name: str) -> float | None:
     return round(max_hours * 100 * IF ** 2, 0)
 
 
+# -- Event → sports ------------------------------------------------------------
+# The one place that says which disciplines an event involves. Drives which
+# tests are scheduled, whether bricks apply, and which distribution rows show.
+
+EVENT_SPORTS = {
+    "Full Ironman": ["swim", "bike", "run"],
+    "70.3":         ["swim", "bike", "run"],
+    "Sportive":     ["bike"],
+    "Gravel":       ["bike"],
+}
+# Cycling events share one content profile keyed "Sportive".
+CYCLING_EVENTS = {"Sportive", "Gravel", "Gran Fondo", "Road Sportive"}
+
+
+def event_sports(event: str) -> list[str]:
+    """Disciplines an event involves; defaults to full triathlon if unknown."""
+    return EVENT_SPORTS.get(event, ["swim", "bike", "run"])
+
+
+def _event_key(event: str) -> str:
+    """Normalise an event to its content-table key (cycling events → 'Sportive')."""
+    return "Sportive" if event in CYCLING_EVENTS else event
+
+
 # -- CTL phase targets ---------------------------------------------------------
 
 CTL_TARGETS = {
@@ -181,7 +205,7 @@ CTL_TARGETS = {
 def ctl_range(event: str, phase_name: str) -> tuple[int, int] | None:
     """Return (low, high) CTL target for entry to a phase, or None if unknown."""
     fam = content_family(phase_family(phase_name))
-    return CTL_TARGETS.get(event, {}).get(fam)
+    return CTL_TARGETS.get(_event_key(event), {}).get(fam)
 
 
 # -- Live CTL fetch ------------------------------------------------------------
@@ -248,11 +272,17 @@ FUELLING = {
         "peak":  "65–75 g CHO/hr; race-simulation sessions at race rate",
         "taper": "70–80 g CHO/hr on race-simulation sessions only",
     },
+    "Sportive": {
+        "base":  "40–55 g CHO/hr on rides > 60 min",
+        "build": "55–65 g CHO/hr on rides > 45 min",
+        "peak":  "60–75 g CHO/hr; long-ride/event-simulation at event rate",
+        "taper": "60–75 g CHO/hr on event-simulation rides only",
+    },
 }
 
 def fuelling_note(event: str, phase_name: str) -> str:
     fam = content_family(phase_family(phase_name))
-    event_fuel = FUELLING.get(event, FUELLING["Full Ironman"])
+    event_fuel = FUELLING.get(_event_key(event), FUELLING["Full Ironman"])
     return event_fuel.get(fam, "Follow phase-progressive protocol.")
 
 
@@ -261,8 +291,14 @@ def fuelling_note(event: str, phase_name: str) -> str:
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 
 
-def _test_events(phases: list[dict]) -> list[dict]:
-    """Return structured list of performance tests with dates."""
+def _test_events(phases: list[dict], sports: list[str] | None = None) -> list[dict]:
+    """Return structured performance tests with dates, only for the event's sports.
+
+    sports defaults to full triathlon for backward compatibility. A bike-only
+    event (Sportive) gets FTP tests only — no run LTHR or swim CSS.
+    """
+    if sports is None:
+        sports = ["swim", "bike", "run"]
     today = date.today()
     events: list[dict] = []
 
@@ -272,29 +308,33 @@ def _test_events(phases: list[dict]) -> list[dict]:
             "protocol": protocol, "notified": False, "completed": False,
         })
 
-    # FTP
-    add("ftp", "FTP Baseline", today, "20-min test × 0.95 or ramp test")
     build_phases = [p for p in phases if phase_family(p["name"]) == "build"]
-    for p in phases:
-        fam = phase_family(p["name"])
-        if fam == "base":
-            mid = p["start"] + timedelta(weeks=p["weeks"] // 2)
-            add("ftp", f"FTP Mid-{p['name']}", mid, "Ramp test")
-        elif fam == "build" and build_phases and p == build_phases[-1]:
-            add("ftp", "FTP End-Build", p["end"] - timedelta(days=2), "20-min test × 0.95")
 
-    # LTHR
-    add("lthr", "LTHR Baseline", today, "30-min run TT; avg HR final 20 min = LTHR")
-    base_phases = [p for p in phases if "base" in p["name"].lower()]
-    if base_phases:
-        add("lthr", "LTHR End-Base", base_phases[-1]["end"] - timedelta(days=2),
-            "30-min run TT; avg HR final 20 min = LTHR")
+    # FTP (cycling)
+    if "bike" in sports:
+        add("ftp", "FTP Baseline", today, "20-min test × 0.95 or ramp test")
+        for p in phases:
+            fam = phase_family(p["name"])
+            if fam == "base":
+                mid = p["start"] + timedelta(weeks=p["weeks"] // 2)
+                add("ftp", f"FTP Mid-{p['name']}", mid, "Ramp test")
+            elif fam == "build" and build_phases and p == build_phases[-1]:
+                add("ftp", "FTP End-Build", p["end"] - timedelta(days=2), "20-min test × 0.95")
 
-    # CSS
-    add("css", "CSS Baseline", today, "400m + 200m TT (CSS calculator)")
-    if build_phases:
-        add("css", "CSS Mid-Build", build_phases[0]["start"] + timedelta(weeks=2),
-            "400m + 200m TT (CSS calculator)")
+    # LTHR (running)
+    if "run" in sports:
+        add("lthr", "LTHR Baseline", today, "30-min run TT; avg HR final 20 min = LTHR")
+        base_phases = [p for p in phases if "base" in p["name"].lower()]
+        if base_phases:
+            add("lthr", "LTHR End-Base", base_phases[-1]["end"] - timedelta(days=2),
+                "30-min run TT; avg HR final 20 min = LTHR")
+
+    # CSS (swimming)
+    if "swim" in sports:
+        add("css", "CSS Baseline", today, "400m + 200m TT (CSS calculator)")
+        if build_phases:
+            add("css", "CSS Mid-Build", build_phases[0]["start"] + timedelta(weeks=2),
+                "400m + 200m TT (CSS calculator)")
 
     return events
 
@@ -335,14 +375,14 @@ def push_test_events(slug: str, events: list[dict]) -> int:
     return pushed
 
 
-def test_schedule(phases: list[dict]) -> list[str]:
+def test_schedule(phases: list[dict], sports: list[str] | None = None) -> list[str]:
     """Format test events as text lines for the blueprint."""
     today = date.today()
     lines: list[str] = []
     current_type: str | None = None
     type_headings = {"ftp": "Cycling FTP:", "lthr": "Running LTHR:", "css": "Swim CSS:"}
 
-    for t in _test_events(phases):
+    for t in _test_events(phases, sports):
         if t["type"] != current_type:
             lines.append(type_headings.get(t["type"], t["type"].upper() + ":"))
             current_type = t["type"]
@@ -433,10 +473,15 @@ DISTRIBUTION = {
                   "Bike": "65% Z1–2 / 18% Z3 / 17% Z4–5",
                   "Run":  "72% Z1–2 / 14% Z3 / 14% Z4–5"},
     },
+    "Sportive": {
+        "base":  {"Bike": "80% Z1–2 / 12% Z3 / 8% Z4–5"},
+        "build": {"Bike": "70% Z1–2 / 18% Z3 / 12% Z4–5"},
+        "peak":  {"Bike": "65% Z1–2 / 18% Z3 / 17% Z4–5"},
+    },
 }
 
 def dist_table(event: str, phases: list[dict]) -> list[str]:
-    event_dist = DISTRIBUTION.get(event)
+    event_dist = DISTRIBUTION.get(_event_key(event))
     if not event_dist:
         return [f"  Intensity distribution not yet defined for event: {event}"]
     lines = []
@@ -569,15 +614,19 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     lines.append("")
 
     lines.append("## Test / Retest Schedule")
-    lines.extend(test_schedule(phases))
+    lines.extend(test_schedule(phases, event_sports(event)))
     lines.append("")
 
     lines.append("## Brick Session Schedule")
-    lines.append("| Phase | Min bricks | Type |")
-    lines.append("|---|---|---|")
-    for p in phases:
-        fam = content_family(phase_family(p["name"]))
-        lines.append(f"| {p['name']} | {BRICK_MIN.get(fam, '—')} | {BRICK_TYPE.get(fam, '—')} |")
+    _sports = event_sports(event)
+    if "bike" in _sports and "run" in _sports:
+        lines.append("| Phase | Min bricks | Type |")
+        lines.append("|---|---|---|")
+        for p in phases:
+            fam = content_family(phase_family(p["name"]))
+            lines.append(f"| {p['name']} | {BRICK_MIN.get(fam, '—')} | {BRICK_TYPE.get(fam, '—')} |")
+    else:
+        lines.append("Not applicable — single-discipline event (no bike→run transition).")
     lines.append("")
 
     lines.append("## Recovery Triggers")
@@ -620,7 +669,9 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
         race_dt = None
         weeks_to_race = 0.0
 
-    event_dist = DISTRIBUTION.get(event, {})
+    event_dist = DISTRIBUTION.get(_event_key(event), {})
+    sports = event_sports(event)
+    bricks_apply = "bike" in sports and "run" in sports  # a brick is bike→run
 
     phase_objs: list[dict] = []
     for p in phases:
@@ -640,8 +691,8 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
             "ctl_entry_high": entry[1] if entry else None,
             "distribution": event_dist.get(cfam, {}),
             "fuelling": fuelling_note(event, p["name"]),
-            "brick_min": BRICK_MIN.get(cfam),
-            "brick_type": BRICK_TYPE.get(cfam),
+            "brick_min": BRICK_MIN.get(cfam) if bricks_apply else None,
+            "brick_type": BRICK_TYPE.get(cfam) if bricks_apply else None,
         })
 
     race_conditions = profile.get("race_conditions", "temperate")
@@ -656,6 +707,7 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
         "slug": slug,
         "generated": date.today().isoformat(),
         "event_type": event,
+        "sports": sports,
         "race_name": profile.get("race_name", "Race"),
         "race_date": race_date_str,
         "weeks_to_race": weeks_to_race,
@@ -663,7 +715,7 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
         "current_ctl": current_ctl,
         "fitness_note": fitness_note,
         "phases": phase_objs,
-        "tests": _test_events(phases),
+        "tests": _test_events(phases, event_sports(event)),
         "env_protocols": {
             "heat": heat,
             "altitude": {"active": bool(altitude and altitude > 1500),
@@ -777,7 +829,7 @@ def main():
     print(f"Blueprint sidecar written to {json_path}", file=sys.stderr)
 
     # Write test schedule — merge with existing to preserve completion/notification state
-    fresh_events = _test_events(phases)
+    fresh_events = _test_events(phases, event_sports(event))
     test_schedule_f = BASE / f"athletes/{slug}/test-schedule.json"
     if test_schedule_f.exists():
         try:
