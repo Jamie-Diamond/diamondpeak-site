@@ -1,17 +1,5 @@
 [
   {
-    "user": "",
-    "assistant": "warning T9/T10: PH test + bike fit overdue since 31 May; run km +160% w/w (17.9 vs 6.9 km) \u2014 10% cap while ankle in rehab"
-  },
-  {
-    "user": "",
-    "assistant": "*Good morning \u2014 Sun 7 Jun*\n\n*Today:* Z2 ride 4 hr \u2014 240 min, ~170 TSS\nTT position \u00b7 NP 163\u2013223W (55\u201375% FTP 297W) \u00b7 HR 133\u2013146 \u00b7 cadence 85\u201395 \u00b7 VI <1.08\n_(Plan shows 316W FTP \u2014 use 297W eFTP; upper NP cap is 223W, not 237W)_\n\n\u26a0\ufe0f PH sweat-sodium test + TT bike fit \u2014 both 7+ days overdue, still no booking made\n\ud83c\udf4c Nutrition \u2014 target 67g/hr \u00b7 eat at 15 min then every 25 min\n\ud83d\udccc Set running FTP to 500W in Intervals.icu (Settings \u2192 Sports \u2192 Run) \u2014 due today\n\nWeight this morning?\n\n_104 days to IM Italy Emilia-Romagna_"
-  },
-  {
-    "user": "Today I had \n2x sis energy choco fudge\n2x beta fuel chews\n2x maurten 320\n3x scoops of High 5 caffeine \n2x ph1500\n\nAll in 500ml,650ml,500ml,650ml,500ml of bottles.",
-    "assistant": "Logged. *402g carbs \u00b7 2800ml \u00b7 ~104g/hr* over 232 min.\n\nBreakdown:\n\u00b7 2x SiS Choco Fudge bar \u2014 86g\n\u00b7 2x Beta Fuel Chews \u2014 90g\n\u00b7 2x Maurten 320 \u2014 160g\n\u00b7 3x High 5 Caffeine scoops \u2014 66g\n\u00b7 2x PH1500 \u2014 electrolytes only\n\nThat's *~16% above race target* (90g/hr). No GI issues?"
-  },
-  {
     "user": "No gi issues",
     "assistant": "Noted. 104g/hr at race nutrition target \u2014 dial that in for Cervia."
   },
@@ -118,5 +106,17 @@
   {
     "user": "3 strength sessions and only 1 mid week run are you drunk. This plan is terrible",
     "assistant": "Fixed. Two problems, two changes:\n\nWed strength deleted \u2192 replaced with Z2 walk-run 40 min.\nThu + Sun keep the 2 strength sessions (not 3).\n\n*Week 7 \u2014 Mon 8 to Sun 14 Jun*\n\nMon: Rest\nTue: Walk-run 60 min \u00b7 45 TSS + Aerobic swim 45 min \u00b7 35 TSS\nWed: Walk-run 40 min \u00b7 33 TSS\nThu: CSS swim 55 min \u00b7 50 TSS + Strength 35 min \u00b7 20 TSS\nFri: *Long Z2 ride 240 min \u2014 KEY SESSION* \u00b7 170 TSS\nSat: Walk-run 60 min \u00b7 45 TSS (AM) + Build ride 240 min 3\u00d720 SS @ 261\u2013276W \u00b7 177 TSS (PM)\nSun: Z2 ride 180 min \u00b7 114 TSS + Strength 35 min \u00b7 20 TSS\n\n*Total: ~709 TSS*\n3 runs \u00b7 3 bikes \u00b7 2 swims \u00b7 2 strength \u2014 all constraints clean."
+  },
+  {
+    "user": "Ok I'll help you here. \n\nMonday rest.\nTuesday morning swim. Evening run\nWednesday longer run.+ A spare slot of needed. \nThursday swim then travel in evening. \n\nFriday long ride.\nSaturday/Sunday have options",
+    "assistant": "**Week 7 \u2014 Mon 8\u2013Sun 14 Jun**\n\nMon: Rest\nTue: Swim 45 min + Run 60 min \u2192 80 TSS\nWed: Run 45 min + Strength 35 min \u2192 55 TSS\nThu: Swim 55 min \u2192 50 TSS\nFri: *Long Z2 ride 240 min \u2014 KEY SESSION* \u2192 170 TSS\nSat: Run 45 min (AM) + Build ride 210 min 3\u00d720 SS @ 261\u2013276W (PM, \u22652hr gap) \u2192 220 TSS\nSun: Z2 ride 150 min + Strength 35 min \u2192 125 TSS\n\n**Total: 700 TSS** \u00b7 Run 150 min (21 km, 7% over cap \u2014 ankle improving, OK?) \u00b7 Swims Tue/Thu \u2713 \u00b7 Bikes Fri/Sat/Sun \u2713 \u00b7 Strength 2\u00d7 \u2713\n\nPush to Intervals?"
+  },
+  {
+    "user": "Longer run on Wednesday. \n\nBoth swims should be 60 mins total session",
+    "assistant": "*Week 7 \u2014 Mon 8 to Sun 14 Jun*\n\nMon: Rest\nTue: Swim *60 min* \u00b7 ~60 TSS + Run 60 min \u00b7 ~45 TSS\nWed: Run *60 min* \u00b7 ~45 TSS + Strength 35 min \u00b7 ~20 TSS\nThu: CSS swim *60 min* \u00b7 ~60 TSS\nFri: *Long Z2 ride 240 min \u2014 KEY SESSION* \u00b7 ~170 TSS\nSat: Run 45 min \u00b7 ~35 TSS (AM) + Build ride 210 min 3\u00d720 SS @ 261\u2013276W \u00b7 ~177 TSS (PM)\nSun: Z2 ride 150 min \u00b7 ~114 TSS + Strength 35 min \u00b7 ~20 TSS\n\n*Total: ~746 TSS*\n3 runs \u00b7 3 bikes \u00b7 2 swims \u00b7 2 strength \u2014 all constraints clean.\n\n\u26a0\ufe0f Run volume ~22 km \u2014 11% over the 19.7 km cap. Ankle improving, but worth noting. OK?\n\nPush to Intervals?"
+  },
+  {
+    "user": "That looks like a better plan",
+    "assistant": "Done. Week 7 updated in Intervals.\n\nMon: Rest\nTue: Aerobic swim *60 min* + Walk-run *60 min*\nWed: Walk-run *60 min* + Strength *35 min*\nThu: CSS swim *60 min*\nFri: *Long Z2 ride 240 min \u2014 KEY SESSION*\nSat: Walk-run *45 min* (AM) + Build ride *210 min* 3\u00d720 SS @ 261\u2013276W (PM)\nSun: Z2 ride *150 min* + Strength *35 min*\n\n*~737 TSS \u00b7 3 runs \u00b7 3 bikes \u00b7 2 swims \u00b7 2 strength*"
   }
 ]
