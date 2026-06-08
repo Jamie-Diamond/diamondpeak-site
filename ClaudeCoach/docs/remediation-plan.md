@@ -14,7 +14,7 @@ defines done for each workstream.
 | **B** | Structured `training-blueprint.json` sidecar + validator | ✅ Done + deployed |
 | **C** | Wire blueprint guidance into the planner prompt | ✅ Done + deployed |
 | **D** | One methodology for all athletes/events (retire `is_triathlete` branch) | ✅ Done + deployed + verified live |
-| **E** | Backstop validation | 🟡 **Warn-mode core done + deployed.** `validate_week` primitive (mechanical constraints) + planner re-fetches & validates the pushed plan behind `ENFORCE_VALIDATION` (default `warn` → logs breaches, sends unchanged). Follow-ups: activate day-rule checks (`day_rules` in athletes.json), block mode + event remediation, prescription backstop. |
+| **E** | Backstop validation | ✅ **Done + deployed.** `validate_week` primitive (wrong-day / TSS-cap / ramp). Planner re-fetches & validates the pushed plan behind `ENFORCE_VALIDATION`. **Day-rule checks active** via `day_rules` in athletes.json — the single source that also renders the prompt's HARD rule lines. **Block mode** (remediation re-prompt + coach-alert + withhold) implemented, default-off (`=block` to enable after warn observation). **Prescription backstop**: daily-prescription computes the modulation engine's result from deterministic inputs (`classify_session_type` + readiness assembly), shadow-logged (`PRESCRIPTION_BACKSTOP=shadow`), authoritative-flip pending observation. Live-verified on the VM. |
 | **F** | README refresh + drift guards | ✅ Done (README rewrite, no-duplicate-maths guard, path-existence guard) |
 
 Out-of-plan but completed alongside: fixed a baseline-test scheduling bug that
