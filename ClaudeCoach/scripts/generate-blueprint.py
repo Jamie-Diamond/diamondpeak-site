@@ -124,6 +124,24 @@ def phase_family(name: str) -> str:
     return "taper"
 
 
+def _css_seconds(css) -> int | None:
+    """Parse swim_css_per_100m to integer seconds.
+
+    Tolerant of both representations seen in profiles: integer seconds (e.g. 99)
+    and an "m:ss" string (e.g. "1:39"). Returns None if absent/unparseable.
+    """
+    if css is None or css == "":
+        return None
+    try:
+        return int(css)
+    except (ValueError, TypeError):
+        try:
+            mm, ss = str(css).split(":")
+            return int(mm) * 60 + int(ss)
+        except (ValueError, AttributeError):
+            return None
+
+
 def content_family(family: str) -> str:
     """Map a structural phase family to the family whose content tables apply.
 
@@ -468,8 +486,9 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     lines.append(f"- **Race:** {race_name} ({race_date_str}) — {event}")
     lines.append(f"- **A goal:** {a_goal}")
     lines.append(f"- **FTP:** {ftp} W")
-    if css:
-        m, s = divmod(int(css), 60)
+    css_s = _css_seconds(css)
+    if css_s:
+        m, s = divmod(css_s, 60)
         lines.append(f"- **CSS:** {m}:{s:02d}/100m")
     lines.append(f"- **Max training hours/week:** {max_hours}")
     ctl_str = f"{current_ctl:.0f}" if current_ctl is not None else "unknown"

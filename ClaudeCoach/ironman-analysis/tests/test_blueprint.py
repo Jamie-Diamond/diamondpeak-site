@@ -207,3 +207,26 @@ class TestSpecificPhaseContent:
         md = gb.render_blueprint("jamie", FIXTURE_PROFILE, phases, 90.0, None, None)
         assert "Specific" in md
         assert "| Specific |" in md                    # brick table row present
+
+
+class TestCssSeconds:
+    """swim_css_per_100m appears as both int seconds and 'm:ss' strings."""
+
+    def test_mmss_string(self, gb):
+        assert gb._css_seconds("1:39") == 99
+
+    def test_integer_seconds(self, gb):
+        assert gb._css_seconds(99) == 99
+
+    def test_none_and_empty(self, gb):
+        assert gb._css_seconds(None) is None
+        assert gb._css_seconds("") is None
+
+    def test_unparseable(self, gb):
+        assert gb._css_seconds("fast") is None
+
+    def test_render_with_mmss_css_does_not_crash(self, gb):
+        prof = {**FIXTURE_PROFILE, "swim_css_per_100m": "1:39"}
+        phases = canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19))
+        md = gb.render_blueprint("jamie", prof, phases, 90.0, None, None)
+        assert "**CSS:** 1:39/100m" in md
