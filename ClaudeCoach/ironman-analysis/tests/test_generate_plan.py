@@ -122,6 +122,27 @@ class TestDayRuleSingleSource:
         assert "no-Mon–Thu-cycling rule" not in p
 
 
+class TestWeekdayLabelGuard:
+    """Deterministic fix for the LLM's miscomputed weekday words (dates are right,
+    the day-of-week drifts). 2026-06-29 is a Monday, so 'Sun 29 Jun' must become
+    'Mon 29 Jun'; a correct label yields no change."""
+
+    def test_corrects_wrong_weekday(self, gp):
+        out = gp.corrected_weekday_name("Sun 29 Jun — Long run easy 90min", "2026-06-29")
+        assert out == "Mon 29 Jun — Long run easy 90min"
+
+    def test_no_change_when_correct(self, gp):
+        # 2026-06-13 is a Saturday.
+        assert gp.corrected_weekday_name("Sat 13 Jun — Long ride", "2026-06-13") is None
+
+    def test_no_leading_weekday_is_left_alone(self, gp):
+        assert gp.corrected_weekday_name("Long ride Z2 4hr", "2026-06-29") is None
+
+    def test_handles_datetime_prefix(self, gp):
+        out = gp.corrected_weekday_name("Tue 1 Jul — Bike threshold", "2026-07-01T06:00:00")
+        assert out == "Wed 1 Jul — Bike threshold"   # 1 Jul 2026 is a Wednesday
+
+
 class TestBackstopValidate:
     """_backstop_validate is the function actually wired into the live send path
     (WS E warn mode). Exercise it directly — env-mode parsing, breach aggregation,

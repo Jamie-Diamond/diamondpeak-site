@@ -100,6 +100,28 @@ def fetch_ctl(slug: str) -> float:
 _FULL_DAY = {"mon": "Monday", "tue": "Tuesday", "wed": "Wednesday", "thu": "Thursday",
              "fri": "Friday", "sat": "Saturday", "sun": "Sunday"}
 _DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+_WD_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+_WD_LEAD_RE = re.compile(r"^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b", re.IGNORECASE)
+
+
+def corrected_weekday_name(name: str, start_date_iso: str) -> str | None:
+    """If a session name leads with a weekday word that disagrees with its actual
+    date, return the name with the weekday corrected; else None (no change needed).
+
+    The LLM reliably gets the date number right but miscomputes the weekday word
+    (a long-standing failure mode). This is the deterministic correction."""
+    nm = (name or "").strip()
+    d = (start_date_iso or "")[:10]
+    m = _WD_LEAD_RE.match(nm)
+    if not m or not d:
+        return None
+    try:
+        correct = _WD_ABBR[date.fromisoformat(d).weekday()]
+    except Exception:
+        return None
+    if m.group(1).capitalize() == correct:
+        return None
+    return correct + nm[len(m.group(1)):]
 
 
 def _full_day(d: str) -> str:
@@ -779,6 +801,35 @@ def _refetch_window_events(slug: str, window_start: date) -> list[dict]:
         return []
 
 
+def _correct_weekday_labels(slug: str, window_start: date) -> int:
+    """Deterministic post-push guard: fix any pushed event whose name leads with a
+    weekday word that disagrees with its actual date. Edits ONLY the wrong names via
+    edit_workout (idempotent — a correct name yields no change). Soft-fails; returns
+    the count corrected."""
+    fixed = 0
+    try:
+        for e in _refetch_window_events(slug, window_start):
+            eid = e.get("id")
+            new_name = corrected_weekday_name(e.get("name", ""), e.get("start_date_local", ""))
+            if not eid or not new_name:
+                continue
+            subprocess.run(
+                ["python3", "ClaudeCoach/lib/icu_fetch.py", "--athlete", slug,
+                 "--endpoint", "edit_workout", "--event-id", str(eid),
+                 "--payload", json.dumps({"name": new_name})],
+                capture_output=True, text=True, cwd=PROJECT_DIR,
+            )
+            fixed += 1
+        if fixed:
+            with open(LOG_FILE, "a") as lf:
+                lf.write(f"[generate-plan:{slug}] weekday-label guard: corrected "
+                         f"{fixed} mislabelled event name(s).\n")
+    except Exception as e:
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[generate-plan:{slug}] weekday-label guard error (non-fatal): {e}\n")
+    return fixed
+
+
 def _backstop_validate(slug: str, cfg: dict, ctl_today: float, replan: bool) -> dict:
     """Deterministic backstop (remediation WS E). Re-fetches the plan the LLM pushed
     and validates it against the athlete's hard constraints.
@@ -926,6 +977,10 @@ def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
         if stderr:
             with open(LOG_FILE, "a") as lf:
                 lf.write(f"[generate-plan:{slug}] STDERR: {stderr}\n")
+        # Deterministic guard: fix any weekday word the LLM miscomputed in the names
+        # it just pushed (dates are right, the day-of-week word drifts). Runs before
+        # validation so the athlete never sees a wrong weekday.
+        _correct_weekday_labels(slug, planning_window_start(date.today(), replan))
         # Backstop: independently validate the plan the LLM just pushed (WS E).
         # warn (default) logs only; block remediates once, then withholds + alerts.
         _v = _backstop_validate(slug, cfg, ctl_today, replan)
