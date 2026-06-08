@@ -1,13 +1,5 @@
 [
   {
-    "user": "whats the impact of not doing it tday? doing the 3h50m tomorow?",
-    "assistant": "Minimal. You've already got 53 TSS from the run today, and tomorrow's 3h50m is the key session.\n\nSkipping the 90 min bike means ~60 TSS less this week \u2014 but you arrive at tomorrow's long ride slightly fresher, which actually gives a cleaner decoupling read. That's the aerobic diagnostic that's been outstanding.\n\n*Call: skip today's bike, prioritise tomorrow's ride.* No meaningful fitness loss."
-  },
-  {
-    "user": "ok remove it, then show me the load chart. As the load chart you just sent has 100tss in for today",
-    "assistant": "Done. Bike deleted.\n\n>>"
-  },
-  {
     "user": "why did you send it twice? also the dots are yellow for form, when in the green section of the graph?",
     "assistant": "Two separate things:\n\n**Double send** \u2014 bug on my end. The delete confirmation and the chart went out as two separate responses. Logging it.\n\n**Yellow dots in the green zone** \u2014 the dot colour is set by TSB value, independently of where it sits on the chart. The zone bands (green/amber/red) are background regions, but dots are coloured by their own threshold: amber = TSB 0 to \u221220. Your TSB across the last week has been \u22121 to \u22127, which is technically in the amber load zone, even when it sits visually close to the green boundary on the chart. The dots are correct \u2014 it's a visual mismatch between where the dot lands and what colour you'd expect. Worth flagging to the chart renderer \u2014 if TSB is within the amber band, the dot should probably match the band colour it's sitting inside."
   },
@@ -118,5 +110,13 @@
   {
     "user": "",
     "assistant": "[chart/photo sent]"
+  },
+  {
+    "user": "",
+    "assistant": "\u23f1 Test due today: *FTP Baseline*\n_20-min test \u00d7 0.95 or ramp test_"
+  },
+  {
+    "user": "",
+    "assistant": "\u23f1 Test due today: *LTHR Baseline*\n_30-min run TT; avg HR final 20 min = LTHR_"
   }
 ]
