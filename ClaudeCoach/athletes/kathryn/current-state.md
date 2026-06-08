@@ -89,17 +89,11 @@ None
 - 2026-06-05: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 107 days away; CTL 48.6, ATL 40.1, form +8.5. Long ride Z2 150min today. HRV null (not yet synced); last reading 64 (Jun 4), 7d avg 62.0 — stable. Sleep null (not yet synced); last reading 8.00h (Jun 4). T1/T3/T4/T5/T10 clear. Heat sessions critically overdue — 21 days since first alert. No further delay acceptable.
 
 ## Open Actions
-- [x] Plan reviewed W5-W6 (2026-05-31): day labels fixed, nutrition updated to 20g CHO/hr for >90min rides
 - [x] Plan reviewed W6-W7 (2026-06-07): 13 sessions existing, 4 constraint violations flagged in W7 (see below)
 - [x] Plan generated W6–W7 (2026-06-07): rebuilt W6 as build week (~519 TSS), W7 violations fixed, nutrition updated to 30g CHO/hr
 - [x] Plan generated W7–W8 (2026-06-08): rebuilt both weeks; W8 had 6 day-label errors + 2 hard violations (Mon swim→run, Wed bike→strength) fixed; Sat 20 extended to 4hr, Sun 21 Z2 spin 2hr added, Sat 27 brick extended to 90min bike, Sun 28 extended to 4hr; nutrition target 30g CHO/hr
 - [ ] Fix day-of-week label errors: "Sat 24 May" ride (is Sun) and "Sun 25 May" run (is Mon)
 - [ ] Review Mon 25 May long run (75min) vs. kettlebells constraint — daily cap (90min) exceeded; consider moving run to Sat 23 May
-- [x] Mon 1 Jun long run deleted (2026-05-31) — Sat 6 Jun already has long run; KB + 80min exceeded 90min daily cap
-- [x] Tue 2 Jun bike shortened to 50min (2026-05-31) — mobility 40min + 50min = 90min daily cap
-- [x] Thu 4 Jun swim deleted (2026-05-31) — Friday-only rule; no valid Fri slot (long ride on Fri 5)
-- [x] Sun 7 Jun swim deleted (2026-05-31) — Friday-only rule
-- [x] Tue 9 Jun swim deleted (2026-05-31) — Friday-only rule; Fri 12 Jun already has swim
 - [x] W7 VIOLATIONS fixed (2026-06-07): Mon 15 swim deleted (Fri-only rule) · Tue 16 ride → run 50min · Wed 17 bike → run 90min · Fri/Sat/Sun day labels corrected
 - [ ] Begin heat acclimatisation sessions (urgently overdue — T7/T8 alerts firing 12+ days)
 - [ ] Fitness trajectory: ON TRACK — 51.9 CTL now, end-of-base target 60 CTL (29 Jun); required 561 TSS/wk
