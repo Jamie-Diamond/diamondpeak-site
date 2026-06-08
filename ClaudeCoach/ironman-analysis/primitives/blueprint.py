@@ -34,6 +34,46 @@ REQUIRED_PHASE = ["name", "family", "start", "end", "weeks"]
 VALID_FAMILIES = {"base", "build", "specific", "peak", "taper"}
 
 
+# -- Event → sports ------------------------------------------------------------
+# The single source of which disciplines an event involves. Drives which tests
+# are scheduled, whether bricks apply, which distribution rows show (the
+# blueprint generator) and the multisport-vs-cycling planning branch (the
+# planner). Both scripts import these so the partition is defined once
+# (remediation WS D — one methodology for all athletes/events).
+
+EVENT_SPORTS = {
+    "Full Ironman": ["swim", "bike", "run"],
+    "70.3":         ["swim", "bike", "run"],
+    "Sportive":     ["bike"],
+    "Gravel":       ["bike"],
+}
+# Cycling events share one content profile keyed "Sportive".
+CYCLING_EVENTS = {"Sportive", "Gravel", "Gran Fondo", "Road Sportive"}
+
+
+def event_sports(event: str) -> list[str]:
+    """Disciplines an event involves; defaults to full triathlon if unknown.
+
+    Any cycling event (CYCLING_EVENTS) is bike-only, so the two sets stay
+    consistent — e.g. 'Gran Fondo' keys to 'Sportive' content AND is bike-only,
+    rather than falling through to the triathlon default.
+    """
+    if event in CYCLING_EVENTS:
+        return ["bike"]
+    return EVENT_SPORTS.get(event, ["swim", "bike", "run"])
+
+
+def is_multisport(event: str) -> bool:
+    """True when the event involves swim or run (not a cycling-only event)."""
+    sports = event_sports(event)
+    return ("swim" in sports) or ("run" in sports)
+
+
+def event_key(event: str) -> str:
+    """Normalise an event to its content-table key (cycling events → 'Sportive')."""
+    return "Sportive" if event in CYCLING_EVENTS else event
+
+
 def canonical_phases(
     plan_start: date | None,
     phase_tss: dict | None,

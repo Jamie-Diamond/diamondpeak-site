@@ -31,7 +31,10 @@ from primitives.load import (   # noqa: E402
     derive_phase_ctl_targets,
     compute_race_min_ctl,
 )
-from primitives.blueprint import current_phase  # noqa: E402
+from primitives.blueprint import (  # noqa: E402
+    current_phase,
+    is_multisport as event_is_multisport,
+)
 
 
 def trim_log(path: Path, max_lines: int = 5000):
@@ -162,12 +165,17 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
 
     ftp_note = f"\nAthlete FTP from profile: {ftp} W" if ftp else ""
 
-    is_triathlete = bool(profile.get("swim_css_per_100m") or profile.get("run_threshold_pace_per_km"))
+    # Event-driven discipline branch: the event (race_distance) is the source of
+    # truth for whether this is a multisport plan, via the shared event_sports
+    # map in primitives.blueprint — one methodology for all athletes/events
+    # (remediation WS D). Was a profile-field heuristic (swim/run thresholds).
+    _event = profile.get("race_distance") or cfg.get("race_distance") or ""
+    is_multisport = event_is_multisport(_event)
 
     # Resolve phase CTL targets — explicit config wins; auto-derive as fallback
     _phase_ctl_dict   = {}
     _phase_ctl_source = "none"
-    if is_triathlete:
+    if is_multisport:
         _configured = ctl_targets.get("phase_ctl", {})
         if _configured:
             _phase_ctl_dict   = _configured
@@ -182,7 +190,7 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
             )
             _phase_ctl_source = "auto-derived"
 
-    if is_triathlete:
+    if is_multisport:
         ctl_base  = _phase_ctl_dict.get("base",     round(ctl_race_min * 0.73))
         ctl_build = _phase_ctl_dict.get("build",    round(ctl_race_min * 0.88))
         ctl_spec  = _phase_ctl_dict.get("specific", round(ctl_race_min * 0.97))
@@ -267,7 +275,7 @@ CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Frid
     _la_phase_end_date = ""
     load_accountability_block = ""
 
-    if ctl_today > 0 and is_triathlete and _phase_ctl_dict:
+    if ctl_today > 0 and is_multisport and _phase_ctl_dict:
         if weeks_elapsed <= base_end_wk:
             _la_phase, _la_target_ctl, _la_phase_end_wk = "Base", ctl_base, base_end_wk
         elif weeks_elapsed <= build_end_wk:

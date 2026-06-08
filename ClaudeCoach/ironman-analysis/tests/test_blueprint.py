@@ -15,6 +15,7 @@ import pytest
 
 from primitives.blueprint import (
     validate_blueprint, is_valid, SCHEMA_VERSION, canonical_phases, current_phase,
+    event_sports, is_multisport, event_key, EVENT_SPORTS, CYCLING_EVENTS,
 )
 
 REPO = Path(__file__).resolve().parents[2]            # ClaudeCoach/
@@ -301,3 +302,46 @@ class TestCssSeconds:
         phases = canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19))
         md = gb.render_blueprint("jamie", prof, phases, 90.0, None, None)
         assert "**CSS:** 1:39/100m" in md
+
+
+class TestEventSports:
+    """The event→sports partition is the single source shared by the planner
+    (multisport-vs-cycling branch) and the blueprint generator (tests, bricks,
+    distribution rows). Lock its behaviour and self-consistency (WS D)."""
+
+    def test_triathlon_events_are_multisport(self):
+        for ev in ("Full Ironman", "70.3"):
+            assert event_sports(ev) == ["swim", "bike", "run"]
+            assert is_multisport(ev) is True
+
+    def test_cycling_events_are_bike_only(self):
+        for ev in ("Sportive", "Gravel"):
+            assert event_sports(ev) == ["bike"]
+            assert is_multisport(ev) is False
+
+    def test_unknown_event_defaults_to_triathlon(self):
+        # Conservative default: an unrecognised event is treated as full
+        # triathlon (don't silently drop swim/run from someone's plan).
+        assert event_sports("Marathon") == ["swim", "bike", "run"]
+        assert is_multisport("Marathon") is True
+        assert is_multisport("") is True
+
+    def test_cycling_set_is_self_consistent(self):
+        # Every CYCLING_EVENTS member must be bike-only and key to 'Sportive' —
+        # the two sets agreeing is the invariant that fixed the Gran Fondo gap.
+        for ev in CYCLING_EVENTS:
+            assert event_sports(ev) == ["bike"], ev
+            assert is_multisport(ev) is False, ev
+            assert event_key(ev) == "Sportive", ev
+
+    def test_event_key_passthrough_for_non_cycling(self):
+        assert event_key("Full Ironman") == "Full Ironman"
+        assert event_key("70.3") == "70.3"
+
+    def test_roster_partition_matches_legacy_selector(self):
+        # The live roster's race_distance values must produce the same
+        # multisport/cycling split the old swim-or-run-threshold heuristic gave:
+        # jamie (Full Ironman) + kathryn (70.3) multisport, calum (Sportive) not.
+        assert is_multisport("Full Ironman") is True
+        assert is_multisport("70.3") is True
+        assert is_multisport("Sportive") is False

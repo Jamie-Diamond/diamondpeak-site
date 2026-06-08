@@ -27,6 +27,8 @@ PROJECT_DIR = str(BASE.parent)
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 from primitives.blueprint import (  # noqa: E402
     validate_blueprint, canonical_phases, SCHEMA_VERSION,
+    EVENT_SPORTS, CYCLING_EVENTS, event_sports,
+    event_key as _event_key,
 )
 
 # Brick targets by phase family — single source for both the markdown table and
@@ -161,28 +163,9 @@ def tss_ceiling(max_hours: float, phase_name: str) -> float | None:
     return round(max_hours * 100 * IF ** 2, 0)
 
 
-# -- Event → sports ------------------------------------------------------------
-# The one place that says which disciplines an event involves. Drives which
-# tests are scheduled, whether bricks apply, and which distribution rows show.
-
-EVENT_SPORTS = {
-    "Full Ironman": ["swim", "bike", "run"],
-    "70.3":         ["swim", "bike", "run"],
-    "Sportive":     ["bike"],
-    "Gravel":       ["bike"],
-}
-# Cycling events share one content profile keyed "Sportive".
-CYCLING_EVENTS = {"Sportive", "Gravel", "Gran Fondo", "Road Sportive"}
-
-
-def event_sports(event: str) -> list[str]:
-    """Disciplines an event involves; defaults to full triathlon if unknown."""
-    return EVENT_SPORTS.get(event, ["swim", "bike", "run"])
-
-
-def _event_key(event: str) -> str:
-    """Normalise an event to its content-table key (cycling events → 'Sportive')."""
-    return "Sportive" if event in CYCLING_EVENTS else event
+# Event → sports partition (EVENT_SPORTS, CYCLING_EVENTS, event_sports,
+# _event_key) now lives in primitives.blueprint — the single source shared with
+# the planner. Imported at the top of this module.
 
 
 # -- CTL phase targets ---------------------------------------------------------
