@@ -218,11 +218,17 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
         )
         _phase_ctl_source = "auto-derived"
 
+    # Phase CTL milestones — defined on EVERY path the LOAD ACCOUNTABILITY block
+    # can take. That block now gates on _phase_ctl_dict (not is_multisport), so a
+    # cycling athlete who is given a CTL basis (race_min/phase_ctl in athletes.json)
+    # also reaches it — these must exist for them too, not only inside the
+    # multisport content branch. Defaults derive from race-day CTL.
+    ctl_base  = _phase_ctl_dict.get("base",     round(ctl_race_min * 0.73))
+    ctl_build = _phase_ctl_dict.get("build",    round(ctl_race_min * 0.88))
+    ctl_spec  = _phase_ctl_dict.get("specific", round(ctl_race_min * 0.97))
+    ctl_peak  = _phase_ctl_dict.get("peak",     ctl_race_min)
+
     if is_multisport:
-        ctl_base  = _phase_ctl_dict.get("base",     round(ctl_race_min * 0.73))
-        ctl_build = _phase_ctl_dict.get("build",    round(ctl_race_min * 0.88))
-        ctl_spec  = _phase_ctl_dict.get("specific", round(ctl_race_min * 0.97))
-        ctl_peak  = _phase_ctl_dict.get("peak",     ctl_race_min)
         _src_note = " (auto-derived — add phase_ctl to athletes.json to override)" if _phase_ctl_source == "auto-derived" else ""
         phase_milestones = (
             f"    Plan week: {weeks_elapsed} (plan start {plan_start_str}){_src_note}\n"
