@@ -730,7 +730,12 @@ def _backstop_validate(slug: str, cfg: dict, ctl_today: float, replan: bool) -> 
         events = _refetch_window_events(slug, ws)
         if not events:
             return
-        day_rules = cfg.get("day_rules")            # absent → day checks inert
+        # ACTIVE check today: CTL ramp (ctl_today + ramp_cap) — which is also the
+        # load ceiling, since the planner derives its max weekly TSS from the same
+        # ramp cap, so weekly_tss_cap is intentionally NOT passed (it would be
+        # redundant). day_rules is absent until added to athletes.json → day-rule
+        # checks are inert for now (see WS E follow-ups).
+        day_rules = cfg.get("day_rules")
         ramp_cap  = float(cfg.get("max_ctl_ramp_per_week", 5.0))
         reports = validate_plan(
             events, [ws, ws + timedelta(days=7)],

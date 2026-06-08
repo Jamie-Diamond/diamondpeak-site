@@ -72,3 +72,56 @@ class TestBuildPromptSmoke:
         p = gp.build_prompt("smoke", cfg, prof, ctl_today=70.0)
         assert "## LOAD ACCOUNTABILITY" in p
         assert "Specific" in p               # full periodisation present
+
+
+class TestBackstopValidate:
+    """_backstop_validate is the function actually wired into the live send path
+    (WS E warn mode). Exercise it directly — env-mode parsing, breach aggregation,
+    and the log writes — so the safety net can't be silently dead. The network
+    re-fetch is stubbed; we only test the wrapper logic, not icu_fetch."""
+
+    def _patch(self, gp, monkeypatch, tmp_path, events):
+        monkeypatch.setattr(gp, "_refetch_window_events", lambda slug, ws: events)
+        log = tmp_path / "gp.log"
+        monkeypatch.setattr(gp, "LOG_FILE", log)
+        return log
+
+    def _breaching_events(self):
+        # A ride on Monday (forbidden by the day_rules below).
+        return [{"start_date_local": "2026-06-15T00:00:00", "type": "Ride",
+                 "load_target": 80, "category": "WORKOUT", "name": "Mon ride"}]
+
+    def test_logs_breach_in_warn_mode(self, gp, monkeypatch, tmp_path):
+        log = self._patch(gp, monkeypatch, tmp_path, self._breaching_events())
+        monkeypatch.setenv("ENFORCE_VALIDATION", "warn")
+        cfg = {"max_ctl_ramp_per_week": 4, "day_rules": {"bike_days": ["Fri", "Sat", "Sun"]}}
+        gp._backstop_validate("smoke", cfg, ctl_today=40.0, replan=False)
+        text = log.read_text()
+        assert "VALIDATION (warn)" in text
+        assert "ride_forbidden_day" in text
+        assert "UNCHANGED" in text            # warn mode states it does not gate
+
+    def test_logs_clean_when_no_breach(self, gp, monkeypatch, tmp_path):
+        clean = [{"start_date_local": "2026-06-19T00:00:00", "type": "Ride",
+                  "load_target": 80, "category": "WORKOUT"}]   # Friday — allowed
+        log = self._patch(gp, monkeypatch, tmp_path, clean)
+        monkeypatch.setenv("ENFORCE_VALIDATION", "warn")
+        cfg = {"max_ctl_ramp_per_week": 5, "day_rules": {"bike_days": ["Fri", "Sat", "Sun"]}}
+        gp._backstop_validate("smoke", cfg, ctl_today=40.0, replan=False)
+        assert "clean" in log.read_text()
+
+    def test_off_switch_skips_entirely(self, gp, monkeypatch, tmp_path):
+        log = self._patch(gp, monkeypatch, tmp_path, self._breaching_events())
+        monkeypatch.setenv("ENFORCE_VALIDATION", "0")
+        gp._backstop_validate("smoke", {"day_rules": {"bike_days": ["Fri"]}},
+                              ctl_today=40.0, replan=False)
+        assert not log.exists()               # nothing logged when disabled
+
+    def test_soft_fails_on_refetch_error(self, gp, monkeypatch, tmp_path):
+        def boom(slug, ws):
+            raise RuntimeError("icu down")
+        monkeypatch.setattr(gp, "_refetch_window_events", boom)
+        monkeypatch.setattr(gp, "LOG_FILE", tmp_path / "gp.log")
+        monkeypatch.setenv("ENFORCE_VALIDATION", "warn")
+        # Must not raise — plan delivery can never break on a validator error.
+        gp._backstop_validate("smoke", {}, ctl_today=40.0, replan=False)
