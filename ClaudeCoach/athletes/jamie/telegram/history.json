@@ -1,17 +1,5 @@
 [
   {
-    "user": "Why do you say cervelo TT. I don't have a cervelo",
-    "assistant": "The model hallucinated a bike brand. It appeared in the June 5 session prescription in your athlete file \u2014 \"Cervelo TT position\". No idea where it came from; you don't ride a Cervelo. Removed. It was only in the internal file, not sent to you in a Telegram message \u2014 but worth knowing. What bike do you actually race on so I can use the right name going forward?"
-  },
-  {
-    "user": "You know the run happened. Why are you asking",
-    "assistant": "You're right. Already logged \u2014 ankle 2 warmup \u2192 0 from km 2. Won't ask again."
-  },
-  {
-    "user": "This is obviously a bug.",
-    "assistant": "Logged."
-  },
-  {
     "user": "",
     "assistant": "warning T9/T10: PH test + bike fit overdue since 31 May; run km +160% w/w (17.9 vs 6.9 km) \u2014 10% cap while ankle in rehab"
   },
@@ -118,5 +106,17 @@
   {
     "user": "",
     "assistant": "\u23f1 Test due today: *CSS Baseline*\n_400m + 200m TT (CSS calculator)_"
+  },
+  {
+    "user": "Replans this week",
+    "assistant": "*Week 7 \u2014 Mon 8 to Sun 14 Jun \u2014 in Intervals.icu*\n\nMon 8: Rest\nTue 9: Walk-run 60 min \u00b7 45 TSS + Aerobic swim 45 min \u00b7 35 TSS\nWed 10: Strength 35 min \u00b7 20 TSS\nThu 11: CSS swim 55 min \u00b7 50 TSS + Strength 35 min \u00b7 20 TSS\nFri 12: *Long Z2 ride 240 min \u2014 KEY SESSION* \u00b7 170 TSS\nSat 13: Walk-run 60 min \u00b7 45 TSS (AM) + Build ride 210 min 3\u00d720 SS @ 261\u2013276W \u00b7 185 TSS (PM)\nSun 14: Z2 ride 150 min \u00b7 105 TSS + Strength 35 min \u00b7 20 TSS\n\n*Total: 695 TSS*\n\nAll 10 sessions are confirmed in Intervals.icu. The three test alerts (FTP/LTHR/CSS) that fired this morning are a watchdog bug \u2014 they conflict with your standing rule (no formal retest protocol; eFTP is the live source). Ignore them."
+  },
+  {
+    "user": "",
+    "assistant": "*W7\u2013W8 (8\u201321 Jun) \u00b7 Build \u2014 BEHIND*\nW7: walk-run + swim Tue, strength Wed, CSS + strength Thu, 4 hr Z2 Fri (key), walk-run + 4 hr build Sat (3\u00d720 SS), 3 hr Z2 Sun.\nW8: walk-run + swim Tue, strength Wed, CSS Thu, 4 hr build Fri (3\u00d720 SS), 3 hr brick + 35 min run Sat, 4 hr Z2 Sun.\n659 / 637 TSS vs 732 \u2014 safe ramp gives projected CTL 91 by 6 Jul (target 95). Can we find more time?\n\u2022 Mon/Wed elliptical 45 min \u2248 +45 TSS each \u2014 which days have gym access (either week)?"
+  },
+  {
+    "user": "3 strength sessions and only 1 mid week run are you drunk. This plan is terrible",
+    "assistant": "Fixed. Two problems, two changes:\n\nWed strength deleted \u2192 replaced with Z2 walk-run 40 min.\nThu + Sun keep the 2 strength sessions (not 3).\n\n*Week 7 \u2014 Mon 8 to Sun 14 Jun*\n\nMon: Rest\nTue: Walk-run 60 min \u00b7 45 TSS + Aerobic swim 45 min \u00b7 35 TSS\nWed: Walk-run 40 min \u00b7 33 TSS\nThu: CSS swim 55 min \u00b7 50 TSS + Strength 35 min \u00b7 20 TSS\nFri: *Long Z2 ride 240 min \u2014 KEY SESSION* \u00b7 170 TSS\nSat: Walk-run 60 min \u00b7 45 TSS (AM) + Build ride 240 min 3\u00d720 SS @ 261\u2013276W \u00b7 177 TSS (PM)\nSun: Z2 ride 180 min \u00b7 114 TSS + Strength 35 min \u00b7 20 TSS\n\n*Total: ~709 TSS*\n3 runs \u00b7 3 bikes \u00b7 2 swims \u00b7 2 strength \u2014 all constraints clean."
   }
 ]
