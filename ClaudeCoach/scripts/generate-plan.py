@@ -7,7 +7,7 @@ Safe to run manually:
   python3 ClaudeCoach/scripts/generate-plan.py --athlete jamie
 """
 import argparse, json, re, subprocess, sys, tempfile, os
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
@@ -36,6 +36,7 @@ from primitives.blueprint import (  # noqa: E402
     resolve_phases,
     is_multisport as event_is_multisport,
 )
+from primitives.validate_plan import validate_plan  # noqa: E402
 
 
 def trim_log(path: Path, max_lines: int = 5000):
@@ -96,18 +97,24 @@ def fetch_ctl(slug: str) -> float:
     return 0.0
 
 
+def planning_window_start(today: date, replan: bool) -> date:
+    """First Monday of the planning window — the single source for both the prompt
+    and the post-run validation backstop.
+
+    Replan fixes the CURRENT live plan → this week's Monday. Scheduled generation
+    plans the upcoming fortnight → next Monday.
+    """
+    if replan:
+        return today - timedelta(days=today.weekday())
+    days_to_mon = (7 - today.weekday()) % 7 or 7
+    return today + timedelta(days=days_to_mon)
+
+
 def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, replan: bool = False) -> str:
-    from datetime import timedelta
     _today      = date.today()
     today       = _today.isoformat()
     today_dow   = _today.strftime("%A")
-    if replan:
-        # Replan fixes the CURRENT live plan → window starts this week's Monday, not next week's.
-        _next_mon = _today - timedelta(days=_today.weekday())
-    else:
-        # Scheduled generation plans the upcoming fortnight → start next Monday.
-        _days_to_mon = (7 - _today.weekday()) % 7 or 7
-        _next_mon   = _today + timedelta(days=_days_to_mon)
+    _next_mon   = planning_window_start(_today, replan)
     next_monday = _next_mon.isoformat()
     date_grid_lines = []
     for i in range(14):
@@ -687,6 +694,70 @@ Do this BEFORE emitting the <telegram> block so the block is the last thing in y
 """
 
 
+def _refetch_window_events(slug: str, window_start: date) -> list[dict]:
+    """Re-read the events the LLM just pushed for the 2-week window (read-only)."""
+    end = window_start + timedelta(days=13)
+    try:
+        result = subprocess.run(
+            ["python3", "ClaudeCoach/lib/icu_fetch.py", "--athlete", slug,
+             "--endpoint", "events",
+             "--start", window_start.isoformat(), "--end", end.isoformat()],
+            capture_output=True, text=True, cwd=PROJECT_DIR,
+        )
+        if result.returncode != 0:
+            return []
+        data = json.loads(result.stdout.strip())
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _backstop_validate(slug: str, cfg: dict, ctl_today: float, replan: bool) -> None:
+    """Deterministic backstop (remediation WS E). Re-fetches the plan the LLM pushed
+    and validates it against the athlete's hard constraints.
+
+    WARN MODE (default, and the only mode implemented): logs any breach and does
+    NOT alter what reaches the athlete. Flipping to blocking is a deliberate future
+    step (set ENFORCE_VALIDATION=block) that must also remediate the pushed events
+    (the LLM has already written them to intervals.icu) — not done yet. Set
+    ENFORCE_VALIDATION=0 to skip entirely. Read-only and fully soft-failing: a
+    validator error must never break plan delivery."""
+    mode = os.environ.get("ENFORCE_VALIDATION", "warn").strip().lower()
+    if mode in ("0", "off", "none", "false"):
+        return
+    try:
+        ws = planning_window_start(date.today(), replan)
+        events = _refetch_window_events(slug, ws)
+        if not events:
+            return
+        day_rules = cfg.get("day_rules")            # absent → day checks inert
+        ramp_cap  = float(cfg.get("max_ctl_ramp_per_week", 5.0))
+        reports = validate_plan(
+            events, [ws, ws + timedelta(days=7)],
+            day_rules=day_rules, ctl_today=ctl_today, ramp_cap=ramp_cap,
+        )
+        breaches = [v for r in reports for v in r.violations]
+        total = sum(r.total_tss for r in reports)
+        with open(LOG_FILE, "a") as lf:
+            if breaches:
+                lf.write(f"[generate-plan:{slug}] VALIDATION ({mode}): "
+                         f"{len(breaches)} breach(es) in the pushed plan ({total:.0f} TSS):\n")
+                for v in breaches:
+                    lf.write(f"    {v}\n")
+                if mode != "block":
+                    lf.write("    warn mode — plan sent to athlete UNCHANGED. "
+                             f"day_rules={'set' if day_rules else 'ABSENT → day-rule checks inert'}.\n")
+                else:
+                    lf.write("    NOTE: ENFORCE_VALIDATION=block set, but blocking/remediation "
+                             "is not yet implemented — treating as warn. Plan sent unchanged.\n")
+            else:
+                lf.write(f"[generate-plan:{slug}] VALIDATION ({mode}): clean — "
+                         f"{total:.0f} TSS over {len(reports)} week(s), no breaches.\n")
+    except Exception as e:
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[generate-plan:{slug}] VALIDATION error (non-fatal): {e}\n")
+
+
 def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
     profile   = load_profile(slug)
     ctl_today = fetch_ctl(slug)
@@ -711,6 +782,9 @@ def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
         if stderr:
             with open(LOG_FILE, "a") as lf:
                 lf.write(f"[generate-plan:{slug}] STDERR: {stderr}\n")
+        # Backstop: independently validate the plan the LLM just pushed (WS E).
+        # Warn-only today — logs breaches, never alters the athlete's message.
+        _backstop_validate(slug, cfg, ctl_today, replan)
         # Extract ONLY the athlete-facing message. Never fall back to raw stdout —
         # that is Claude's internal report and must never reach the athlete.
         m = re.search(r"<telegram>(.*?)</telegram>", output, re.DOTALL | re.IGNORECASE)
