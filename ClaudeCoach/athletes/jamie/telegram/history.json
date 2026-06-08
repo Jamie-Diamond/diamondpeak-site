@@ -1,9 +1,5 @@
 [
   {
-    "user": "why did you send it twice? also the dots are yellow for form, when in the green section of the graph?",
-    "assistant": "Two separate things:\n\n**Double send** \u2014 bug on my end. The delete confirmation and the chart went out as two separate responses. Logging it.\n\n**Yellow dots in the green zone** \u2014 the dot colour is set by TSB value, independently of where it sits on the chart. The zone bands (green/amber/red) are background regions, but dots are coloured by their own threshold: amber = TSB 0 to \u221220. Your TSB across the last week has been \u22121 to \u22127, which is technically in the amber load zone, even when it sits visually close to the green boundary on the chart. The dots are correct \u2014 it's a visual mismatch between where the dot lands and what colour you'd expect. Worth flagging to the chart renderer \u2014 if TSB is within the amber band, the dot should probably match the band colour it's sitting inside."
-  },
-  {
     "user": "Why do you say cervelo TT. I don't have a cervelo",
     "assistant": "The model hallucinated a bike brand. It appeared in the June 5 session prescription in your athlete file \u2014 \"Cervelo TT position\". No idea where it came from; you don't ride a Cervelo. Removed. It was only in the internal file, not sent to you in a Telegram message \u2014 but worth knowing. What bike do you actually race on so I can use the right name going forward?"
   },
@@ -118,5 +114,9 @@
   {
     "user": "",
     "assistant": "\u23f1 Test due today: *LTHR Baseline*\n_30-min run TT; avg HR final 20 min = LTHR_"
+  },
+  {
+    "user": "",
+    "assistant": "\u23f1 Test due today: *CSS Baseline*\n_400m + 200m TT (CSS calculator)_"
   }
 ]
