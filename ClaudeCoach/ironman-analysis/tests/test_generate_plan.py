@@ -103,6 +103,24 @@ class TestDayRuleSingleSource:
         assert "Swims ONLY on Monday, Wednesday" in p
         assert "Bike sessions ONLY on Saturday" in p
 
+    def test_no_day_rules_gives_flexible_template_not_jamie_pattern(self, gp):
+        # An athlete WITHOUT day_rules must NOT inherit another athlete's day
+        # pattern: no HARD day-rule lines, no Tue/Thu fallback, no day-pinned
+        # skeleton, and no "bike locked to Fri–Sun" cross-training assertion.
+        cfg = {"name": "Flex", "race_distance": "Full Ironman", "plan_start": "2026-04-27",
+               "phase_tss": {"base_end_week": 6, "build_end_week": 10,
+                             "specific_end_week": 14, "peak_end_week": 17},
+               "ctl_targets": {"race_min": 95,
+                               "phase_ctl": {"base": 70, "build": 82, "specific": 90, "peak": 95}}}
+        prof = {"race_distance": "Full Ironman", "race_date": "2026-09-19", "max_hours_per_week": 12}
+        p = gp.build_prompt("flex", cfg, prof, ctl_today=70.0)
+        assert "RULE — HARD: Swims ONLY on" not in p
+        assert "Swims on TUESDAY and THURSDAY only" not in p   # old fallback retired
+        assert "- Tuesday: Swim (aerobic/CSS)" not in p        # Jamie skeleton absent
+        assert "NO fixed training days" in p                   # flexible header present
+        assert "bike is locked to Fri–Sun" not in p            # day-agnostic cross-training
+        assert "no-Mon–Thu-cycling rule" not in p
+
 
 class TestBackstopValidate:
     """_backstop_validate is the function actually wired into the live send path

@@ -268,6 +268,27 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
     ctl_spec  = _phase_ctl_dict.get("specific", round(ctl_race_min * 0.97))
     ctl_peak  = _phase_ctl_dict.get("peak",     ctl_race_min)
 
+    # Whether the athlete has fixed training days. Drives the day-specific wording in
+    # the cross-training block below — without it, never assert a particular athlete's
+    # day-lock (e.g. "bike locked to Fri–Sun") as if it were universal.
+    _has_day_rules = bool(cfg.get("day_rules"))
+    if _has_day_rules:
+        _xtrain_intro = (
+            "CROSS-TRAINING — the gap-closer when bike/run/swim are capped (e.g. ankle limits run volume,\n"
+            "bike is locked to Fri–Sun). Low-impact aerobic on an elliptical / basic hotel-gym machine /\n"
+            "aqua-jog is NOT cycling, so it can sit on the otherwise-empty Mon and Wed without breaking the\n"
+            "no-Mon–Thu-cycling rule, and adds Z2 load with no ankle impact."
+        )
+        _xt_free = "(Mon/Wed are free)"
+    else:
+        _xtrain_intro = (
+            "CROSS-TRAINING — the gap-closer when bike/run/swim are capped (e.g. a niggle limits run volume,\n"
+            "or travel limits bike access). Low-impact aerobic on an elliptical / basic hotel-gym machine /\n"
+            "aqua-jog is NOT cycling, so it can sit on any day with no bike/run/swim session already on it,\n"
+            "and adds Z2 load at low impact."
+        )
+        _xt_free = "(tell me which days)"
+
     if is_multisport:
         _src_note = " (auto-derived — add phase_ctl to athletes.json to override)" if _phase_ctl_source == "auto-derived" else ""
         phase_milestones = (
@@ -307,14 +328,15 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
             + "- Travel / access constraints: scan current-state.md \"Travel & training blocks\" for any "
               "dates in the planning window where bike is unavailable. Substitute with swims or runs of equivalent TSS."
         )
-        # Day-rule lines come from athletes.json day_rules (the single source also
-        # used by the validate_plan backstop). Fall back to the built-in text if an
-        # athlete has no day_rules configured.
+        # Day layout comes from athletes.json day_rules (the single source also used
+        # by the validate_plan backstop). An athlete WITH fixed days gets HARD day-rule
+        # lines + a day-specific skeleton; an athlete WITHOUT (a flexible week) gets
+        # neither — sessions are placed on whatever days suit their availability. Never
+        # assert a fixed day, or carry over another athlete's day pattern, for someone
+        # who has not set fixed days.
         _dr_lines = hard_day_rule_lines(cfg.get("day_rules"))
-        if not _dr_lines:
-            _dr_lines = ("SWIM RULE — HARD: Swims on TUESDAY and THURSDAY only. Never prescribe a swim on Monday, Wednesday, Friday, Saturday, or Sunday.\n"
-                         "CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Friday, Saturday, Sunday only.")
-        week_template = f"""Standard week template (adapt to phase):
+        if _dr_lines:
+            week_template = f"""Standard week template (adapt to phase):
 {_dr_lines}
 - Monday: Rest or short Z1 run — no cycling, no swimming
 - Tuesday: Swim (aerobic/CSS) + Run (Z2, walk-run if ankle protocol applies)
@@ -323,6 +345,15 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
 - Friday: Long ride (~3.5–4 hr, Z2 NP target) — key session
 - Saturday: Run (Z2) or Bike (if second ride week)
 - Sunday: Z2 ride (2–3 hr) or rest"""
+        else:
+            week_template = """Standard week template (adapt to phase). This athlete has NO fixed training days — place each session on whatever day fits their weekly availability (profile training_days, and any current-state.md travel blocks). Honour per-day duration caps from rules.md (e.g. a Saturday long-ride time cap). Do NOT impose a fixed day for any sport, and do NOT carry over another athlete's day pattern.
+Across the week, include (place freely, adapt to phase):
+- The weekly LONG RIDE — the key endurance session; protect its duration and grow it week to week.
+- A second, easier Z2 ride when the phase calls for more bike volume.
+- 2 swims (aerobic / CSS-based).
+- 2–3 runs (mostly Z2; add tempo/quality per phase, within the run-progression guard).
+- Strength 1–2×.
+- At least one rest or easy day. Do NOT pad days just to fill the week."""
     else:
         # Cycling-only event with no load-target basis (e.g. a survival Sportive).
         # No CTL/TSS numbers are chased — the plan is built around the weekly hour
@@ -663,16 +694,13 @@ TSS target.
   rules, leave the gap and surface it (per the MANDATORY GAP CHECK) — do NOT close it with runs
   beyond this +10% cap. An over-built run week is a FAILED plan, same as an under-built one.
 
-CROSS-TRAINING — the gap-closer when bike/run/swim are capped (e.g. ankle limits run volume,
-bike is locked to Fri–Sun). Low-impact aerobic on an elliptical / basic hotel-gym machine /
-aqua-jog is NOT cycling, so it can sit on the otherwise-empty Mon and Wed without breaking the
-no-Mon–Thu-cycling rule, and adds Z2 load with no ankle impact.
+{_xtrain_intro}
 - DO NOT assume it's available — the athlete travels and hotel-gym access varies by week.
 - DO NOT speculatively push cross-training sessions to the calendar.
 - Instead, if a load gap remains after maxing the rule-permitted bike/run/swim, ASK in the
   Step 7 message which days this week have elliptical/hotel-gym access, and state the TSS each
   day would add. E.g.: "Still ~Xtss short. If you'll have elliptical/gym access, tell me which
-  days (Mon/Wed are free) and I'll add Z2 cross-training — ~45 TSS for 45 min each."
+  days {_xt_free} and I'll add Z2 cross-training — ~45 TSS for 45 min each."
 - When the athlete replies with the available days, those sessions get added then (not now).
 
 - If you genuinely cannot reach target within the rules — and cross-training availability is
