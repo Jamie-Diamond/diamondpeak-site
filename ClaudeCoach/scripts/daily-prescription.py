@@ -216,6 +216,52 @@ _INTENSITY_BY_TYPE = {
     "swim": 0.7, "strength": 0.0,
 }
 
+# Fallback planned-duration (min) by session_type when the name carries nothing parseable.
+_DUR_DEFAULTS = {
+    "bike_threshold": 75, "bike_vo2": 75, "bike_race_pace": 90, "bike_z2": 90,
+    "run_quality": 60, "run_long": 90, "run_easy": 50, "brick": 75,
+    "swim": 45, "strength": 40,
+}
+
+
+def _css_seconds(css) -> int | None:
+    """Parse swim_css_per_100m ('1:40' or seconds) to integer seconds, or None."""
+    if not css:
+        return None
+    try:
+        if ":" in str(css):
+            mm, ss = str(css).split(":")
+            return int(mm) * 60 + int(ss)
+        return int(float(css))
+    except Exception:
+        return None
+
+
+def _duration_from_name(name: str, session_type: str, css_per_100m=None) -> int:
+    """Best-effort planned duration (minutes) when an event has no moving_time.
+
+    Planned events (esp. swims) often carry no moving_time. We read the duration the
+    coach wrote into the NAME ('4hr 30min', '90min', '50 min'); for swims given only a
+    distance ('2.6km') we estimate from CSS. We NEVER treat load_target (TSS) as
+    minutes — that produced a 2.6km swim = '5 min'. Falls back to a per-type default."""
+    n = (name or "").lower()
+    m = re.search(r"(\d+)\s*hr(?:\s*(\d+)\s*min)?", n)        # "4hr" / "2hr 30min"
+    if m:
+        return int(m.group(1)) * 60 + int(m.group(2) or 0)
+    m = re.search(r"(\d+)\s*min", n)                          # "90min" / "50 min"
+    if m:
+        return int(m.group(1))
+    if "swim" in (session_type or "") or "swim" in n:         # distance → CSS estimate
+        km = re.search(r"(\d+(?:\.\d+)?)\s*km", n)
+        metres = float(km.group(1)) * 1000 if km else None
+        if metres is None:
+            mm = re.search(r"(\d{3,4})\s*m\b", n)
+            metres = float(mm.group(1)) if mm else None
+        if metres:
+            css = _css_seconds(css_per_100m) or 110           # ~1:50/100m default
+            return int(round(metres / 100 * css / 60 * 1.15))  # +15% rest buffer
+    return _DUR_DEFAULTS.get(session_type, 60)
+
 
 def _todays_planned(slug: str, today: str):
     """The day's primary planned session as a modulation `planned` dict, or None."""
@@ -227,7 +273,17 @@ def _todays_planned(slug: str, today: str):
     primary = max(workouts, key=lambda e: float(e.get("load_target") or 0))
     st = classify_session_type(primary.get("type", ""), primary.get("name", ""))
     dur = primary.get("moving_time")
-    dur_min = int(float(dur) / 60) if dur else int(float(primary.get("load_target") or 60))
+    if dur:
+        dur_min = int(float(dur) / 60)
+    else:
+        css = None
+        prof_f = BASE / "athletes" / slug / "profile.json"
+        if prof_f.exists():
+            try:
+                css = json.loads(prof_f.read_text()).get("swim_css_per_100m")
+            except Exception:
+                css = None
+        dur_min = _duration_from_name(primary.get("name", ""), st, css)
     return {
         "session_type": st,
         "target_intensity": _INTENSITY_BY_TYPE.get(st, 0.7),

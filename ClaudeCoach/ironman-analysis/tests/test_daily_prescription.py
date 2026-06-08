@@ -40,6 +40,25 @@ class TestTodaysPlanned:
         monkeypatch.setattr(dp, "_icu", lambda *a, **k: [])
         assert dp._todays_planned("x", "2026-06-19") is None
 
+    def test_swim_without_moving_time_uses_name_not_tss(self, dp, monkeypatch):
+        # Planned swims carry no moving_time and a tiny load_target — the old code
+        # treated load_target as minutes (2.6km swim -> "5 min"). Must estimate from
+        # the distance in the name instead.
+        ev = [{"category": "WORKOUT", "type": "Swim", "load_target": 5,
+               "moving_time": None, "name": "Fri 19 Jun — Swim CSS sets 2.6km"}]
+        monkeypatch.setattr(dp, "_icu", lambda *a, **k: ev)
+        p = dp._todays_planned("x", "2026-06-19")
+        assert p["session_type"] == "swim"
+        assert p["total_duration_min"] >= 35      # realistic, not 5
+        assert p["total_duration_min"] != 5
+
+    def test_duration_parsed_from_hr_min_in_name(self, dp):
+        assert dp._duration_from_name("Sat — Long ride Z2 4hr 30min", "bike_z2") == 270
+        assert dp._duration_from_name("Tue — Easy Z2 run 50min", "run_easy") == 50
+        assert dp._duration_from_name("Bike threshold 90min", "bike_threshold") == 90
+        # nothing parseable → per-type default, never 0/None
+        assert dp._duration_from_name("Strength session", "strength") == 40
+
 
 class TestAnkleParse:
     def test_nested_ankle_block(self, dp, monkeypatch, tmp_path):
