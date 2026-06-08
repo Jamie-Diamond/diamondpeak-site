@@ -15,7 +15,8 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name):
+def _build_prompt(slug, first_name, reminded_ids=None):
+    reminded = ", ".join(reminded_ids or []) or "(none)"
     return f"""\
 You are running the evening session capture reminder for {first_name}.
 
@@ -29,9 +30,11 @@ Check for completed activities in the last 36 hours that meet ALL of:
 1. TSS > 40 OR duration > 45 minutes
 2. Sport is Ride, VirtualRide, Run, VirtualRun, Brick, or Swim (skip Strength)
 3. No entry in session-log.json with a matching activity_id
+4. activity_id is NOT in the already-reminded list: {reminded}
+   (one reminder per session — repeat nagging is not helpful)
 
 OUTPUT RULES — follow exactly:
-- If an unlogged key session is found: output <notify>Log [session name] — say 'log session'</notify>
+- If an unlogged key session is found: output <notify ids="[comma-separated activity_ids]">Log [session name] — say 'log session'</notify>
 - If no unlogged key sessions exist: output nothing at all. No explanation. No confirmation. Silence.
 
 Do not output anything outside the <notify> tag under any circumstances."""
@@ -60,7 +63,12 @@ def run_athlete(slug, athlete_cfg):
             pass
 
     first_name = profile.get("name", slug).split()[0]
-    prompt = _build_prompt(slug, first_name)
+    reminded_file = adir / ".capture-reminded.json"
+    try:
+        reminded_ids = json.loads(reminded_file.read_text()) if reminded_file.exists() else []
+    except Exception:
+        reminded_ids = []
+    prompt = _build_prompt(slug, first_name, reminded_ids)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
@@ -71,9 +79,15 @@ def run_athlete(slug, athlete_cfg):
 
     output = (result.stdout or "").strip()
     import re
-    m = re.search(r'<notify>(.*?)</notify>', output, re.DOTALL | re.IGNORECASE)
+    m = re.search(r'<notify(?:\s+ids="([^"]*)")?>(.*?)</notify>', output, re.DOTALL | re.IGNORECASE)
     if m:
-        notify(m.group(1).strip(), chat_id)
+        notify(m.group(2).strip(), chat_id)
+        new_ids = [i.strip() for i in (m.group(1) or "").split(",") if i.strip()]
+        if new_ids:
+            try:
+                reminded_file.write_text(json.dumps((reminded_ids + new_ids)[-50:]))
+            except Exception:
+                pass
 
 
 def main():

@@ -252,8 +252,9 @@ ANALYSIS scope: describe only the activity being analysed. Do NOT mention other 
 
 def _notify(msg, chat_id, slug=None):
     try:
+        # --no-history: this script appends to history itself (below)
         subprocess.run(
-            ["python3", str(NOTIFY), "--chat-id", str(chat_id), msg],
+            ["python3", str(NOTIFY), "--no-history", "--chat-id", str(chat_id), msg],
             cwd=PROJECT_DIR, timeout=15,
         )
     except Exception:

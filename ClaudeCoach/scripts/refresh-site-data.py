@@ -218,6 +218,17 @@ def _build_jamie_data(client) -> dict:
     except Exception as e:
         log(f"Power curve fetch failed (non-fatal): {e}")
 
+    # Resolve FTP here while raw fitness rows are in scope; post_process (which builds
+    # the profile block) cannot see fitness_ytd, so it reads this stashed value instead.
+    _prof_f = BASE / "athletes/jamie/profile.json"
+    _prof_ftp = None
+    if _prof_f.exists():
+        try:
+            _prof_ftp = json.loads(_prof_f.read_text()).get("ftp_watts")
+        except Exception:
+            pass
+    resolved_ftp = _resolve_ftp(_prof_ftp, fitness_ytd, SESSION_LOG)
+
     return {
         "generated":    today.isoformat(),
         "kpi":          kpi,
@@ -227,6 +238,7 @@ def _build_jamie_data(client) -> dict:
         "loadChart":    load_chart,
         "weightTrend":  weight_trend,
         "powerCurve":   power_curve,
+        "resolvedFtp":  resolved_ftp,
     }
 
 
@@ -371,7 +383,7 @@ def post_process(data):
                 "swim_css_per_100m":         prof.get("swim_css_per_100m"),
                 "run_threshold_pace_per_km": prof.get("run_threshold_pace_per_km"),
                 "lthr":                      prof.get("lthr"),
-                "ftp_watts":                 _resolve_ftp(prof.get("ftp_watts"), fitness_ytd, SESSION_LOG),
+                "ftp_watts":                 data.get("resolvedFtp") or prof.get("ftp_watts"),
                 "weight_kg":                 prof.get("weight_kg"),
                 "race_distance":             prof.get("race_distance"),
                 "race_date":                 prof.get("race_date"),
@@ -382,8 +394,10 @@ def post_process(data):
                 "prev2_race_name":           prof.get("prev2_race_name"),
                 "race_targets":              prof.get("race_targets"),
             }
-        except Exception:
-            pass
+        except Exception as e:
+            # Loud, not silent: an empty profile makes the whole zones/race-scenario
+            # panel vanish from the athlete page (regression: 2026-06-07).
+            log(f"PROFILE BUILD FAILED — athlete page zones/race panel will be empty: {e}")
 
     # Current state snapshot (ankle, watchdog flags, open actions)
     if STATE_JSON.exists():

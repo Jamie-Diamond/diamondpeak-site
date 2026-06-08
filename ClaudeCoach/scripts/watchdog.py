@@ -87,16 +87,19 @@ T10 (Tier 2): Run weekly km increase >10% week-on-week
 
 If NO triggers fire: output nothing. Silent run.
 
+DO NOT SEND ANY TELEGRAM MESSAGE — ever. The watchdog is silent. Its job is to DETECT and
+LOG only. The 06:30 morning card reads current-state.md and surfaces any relevant flag to the
+athlete then. A 05:30 ping is exactly what the athlete asked us to stop. NEVER run notify.py.
+
 If ANY trigger fires:
-1. Send ONE Telegram notification (under 200 characters): "warning [trigger]: [action]" (Tier 2) or "info [trigger]: [note]" (Tier 1). Multiple triggers: list names, lead with highest tier.
-   Run: python3 {NOTIFY} --chat-id {chat_id} "message"
-2. Update current-state.md — append to the relevant section with today's date and trigger name + signal value. Do not rewrite sections that do not need updating.
-3. Run: git add ClaudeCoach/athletes/{slug}/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "watchdog: [trigger list] {today}" && git push origin main
-3b. Append the Telegram message you sent to the athlete's history file so the bot has context for any reply:
-    - Read ClaudeCoach/athletes/{slug}/telegram/history.json (or use [] if it does not exist)
-    - Append: {{"user": "", "assistant": "<exact message you sent via Telegram>"}}
-    - Trim to the last 30 entries
-    - Write back to ClaudeCoach/athletes/{slug}/telegram/history.json
+1. DAILY-NAG SUPPRESSION — before logging, read current-state.md and check whether this SAME
+   trigger (same trigger name + same underlying item/signal, e.g. the same overdue action) was
+   already logged within the last 3 days. If it was, do NOTHING for that trigger — no new entry,
+   no commit. Only log a trigger that is NEW or whose signal has materially changed. This stops
+   the athlete being reminded of the same unfinished thing every single morning.
+2. For genuinely new/changed triggers only: update current-state.md — append to the relevant
+   section with today's date and trigger name + signal value. Do not rewrite untouched sections.
+3. If you appended anything, run: git add ClaudeCoach/athletes/{slug}/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "watchdog: [trigger list] {today}" && git push origin main
 4. Output one L2 reasoning trail per trigger to stdout (this goes to the coaching log only — NOT to athletes):
    [signal with real number] -> [rule: T1-T10] -> [suggested adjustment] -> [expected effect]
    Example: "ATL 148 vs CTL 121 for 4 days -> T1 (ATL > CTL +25) -> insert recovery day -> TSB recovers ~8 pts by weekend"

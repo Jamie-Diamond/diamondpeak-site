@@ -204,17 +204,20 @@ def main():
     for slug, cfg in athletes.items():
         if not cfg.get("active"):
             continue
-        chat_id = str(cfg.get("chat_id", ""))
+        if not cfg.get("daily_prescription", True):
+            continue
         output = run_for_athlete(slug, cfg)
         with open(LOG_FILE, "a") as lf:
             lf.write(f"[prescription:{slug}]\n{output or '(no output)'}\n---\n")
         if output:
             m = re.search(r"<telegram>(.*?)</telegram>", output, re.DOTALL)
-            notification = m.group(1).strip() if m else None
-            if notification and chat_id:
-                subprocess.run(
-                    ["python3", str(NOTIFY), "--chat-id", chat_id, notification],
-                    cwd=PROJECT_DIR,
+            summary = m.group(1).strip() if m else None
+            if summary:
+                # No 05:00 Telegram message — the summary is written here and the
+                # 06:30 morning card surfaces the key points instead.
+                latest = BASE / f"athletes/{slug}/daily-prescription-latest.md"
+                latest.write_text(
+                    f"date: {date.today().isoformat()}\n\n{summary}\n"
                 )
     trim_log(LOG_FILE)
 

@@ -79,8 +79,13 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
     _today      = date.today()
     today       = _today.isoformat()
     today_dow   = _today.strftime("%A")
-    _days_to_mon = (7 - _today.weekday()) % 7 or 7
-    _next_mon   = _today + timedelta(days=_days_to_mon)
+    if replan:
+        # Replan fixes the CURRENT live plan → window starts this week's Monday, not next week's.
+        _next_mon = _today - timedelta(days=_today.weekday())
+    else:
+        # Scheduled generation plans the upcoming fortnight → start next Monday.
+        _days_to_mon = (7 - _today.weekday()) % 7 or 7
+        _next_mon   = _today + timedelta(days=_days_to_mon)
     next_monday = _next_mon.isoformat()
     date_grid_lines = []
     for i in range(14):
@@ -91,9 +96,12 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
 
     if replan:
         replan_directive = (
-            "- REPLAN MODE IS ON (athlete tapped Replan). IGNORE the 7-event threshold: even if the\n"
-            "  window is already populated, you WILL rebuild it to hit the Step 4 TSS target. Set\n"
-            "  plan_already_populated = false and run Step 6 (Build to Target) in full.\n"
+            "- REPLAN MODE IS ON (athlete tapped Replan). The window starts THIS week's Monday\n"
+            f"  ({next_monday}) — i.e. the CURRENT live plan, not next week. IGNORE the 7-event\n"
+            "  threshold: even if the window is already populated, you WILL rebuild it to hit the\n"
+            "  Step 4 TSS target. Set plan_already_populated = false and run Step 6 (Build to Target).\n"
+            f"  ONLY touch sessions dated TODAY ({today}) or later — never modify or re-push a day\n"
+            "  already completed earlier this week; leave past days exactly as they are.\n"
             "  Goal = hit the Step 4 TSS target. Don't add sessions for the sake of it — only to\n"
             "  the extent needed to reach target. How to rebuild safely, in order of preference:\n"
             "    • FIRST extend sessions that are shorter than the rules prescribe (e.g. a 170-min\n"

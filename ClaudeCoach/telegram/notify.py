@@ -29,6 +29,32 @@ if "--chat-id" in _args:
 else:
     chat_id = config["chat_id"]
 
+# --no-history: for senders that append to the athlete's history themselves
+log_history = True
+if "--no-history" in _args:
+    _args.remove("--no-history")
+    log_history = False
+
+
+def _append_history(message):
+    """Append an outbound message to the matching athlete's Telegram history so the
+    bot has context for replies. Fail-soft — never block the send."""
+    try:
+        athletes = json.loads((Path(__file__).parent.parent / "config" / "athletes.json").read_text())
+        slug = next((s for s, a in athletes.items() if str(a.get("chat_id")) == str(chat_id)), None)
+        if not slug:
+            return
+        hf = Path(__file__).parent.parent / "athletes" / slug / "telegram" / "history.json"
+        hf.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            history = json.loads(hf.read_text()) if hf.exists() else []
+        except Exception:
+            history = []
+        history.append({"user": "", "assistant": message})
+        hf.write_text(json.dumps(history[-30:], indent=2))
+    except Exception:
+        pass
+
 
 def send_text(text):
     for chunk in [text[i:i+4096] for i in range(0, len(text), 4096)]:
@@ -60,6 +86,8 @@ def send_text(text):
         except Exception as e:
             print(f"Telegram error: {e}", file=sys.stderr)
             sys.exit(1)
+    if log_history:
+        _append_history(text)
 
 
 def send_photo(photo_bytes, caption=""):
@@ -84,6 +112,8 @@ def send_photo(photo_bytes, caption=""):
     except Exception as e:
         print(f"Telegram photo error: {e}", file=sys.stderr)
         sys.exit(1)
+    if log_history:
+        _append_history(("[chart/photo sent] " + caption).strip())
 
 
 if __name__ == "__main__":

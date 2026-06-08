@@ -157,7 +157,10 @@ def build_keyboard(slug=None):
         {"text": "Load chart",    "callback_data": "/load"},
         {"text": "Fitness chart", "callback_data": "/fitness"},
     ]
-    return {"inline_keyboard": [buttons, graph_row]}
+    plan_row = [
+        {"text": "🔄 Replan week", "callback_data": "/replan"},
+    ]
+    return {"inline_keyboard": [buttons, graph_row, plan_row]}
 
 TOOLS = "Read,Write,Edit,Bash"
 # IcuSync MCP tools are intentionally excluded — the MCP connector is bound to a single
@@ -331,8 +334,12 @@ def process_charts(token, chat_id, response, slug=None):
     if _charts is None:
         return CHART_RE.sub('', response).strip()
     coaching_level = _profile_coaching_level(slug) if slug else "mid"
+    sent_types = set()
     for m in CHART_RE.finditer(response):
         chart_type, raw = m.group(1), m.group(2)
+        if chart_type in sent_types:
+            log(f"skipping duplicate {chart_type} chart marker in response")
+            continue
         try:
             data = json.loads(raw)
             png = None
@@ -361,6 +368,7 @@ def process_charts(token, chat_id, response, slug=None):
                 )
             if png:
                 send_photo(token, chat_id, png)
+                sent_types.add(chart_type)
         except Exception as e:
             log(f"Chart error ({chart_type}): {e}")
     text = CHART_RE.sub('', response).strip()
@@ -404,9 +412,13 @@ _WEEKLY_SUMMARY_RE = re.compile(
 _WEIGHT_RE   = re.compile(r'^(?:weight|kg|weigh(?:ed)?)\s+([\d.]+)\s*(?:kg)?\s*$', re.I)
 _HEAT_RE     = re.compile(r'^(?:heat|bath)\s+([\d.]+)\s*(?:min|m)?\s*$', re.I)
 _PLAN_RE     = re.compile(r'^(?:generate\s+plan|plan\s+(?:next\s+)?(?:2\s+)?weeks?|plan\s+ahead)\s*$', re.I)
+_REPLAN_RE   = re.compile(r'^/?replan(?:\s+week)?\s*$', re.I)
 _FTP_RE      = re.compile(r'^(?:ftp\s+(?:retest|result|update|new)|new\s+ftp)\s+([\d.]+)\s*(?:w(?:atts?)?)?\s*$', re.I)
 _WEEK_CMD_RE     = re.compile(r'^/week\s*$', re.I)
 _FORM_CMD_RE     = re.compile(r'^/form\s*$', re.I)
+# (chat_id, callback_data) -> last-handled timestamp, for command-callback debounce
+_RECENT_CALLBACKS = {}
+
 _LOAD_CMD_RE     = re.compile(r'^/load\s*$', re.I)
 _FITNESS_CMD_RE  = re.compile(r'^/fitness\s*$', re.I)
 _STRENGTH_RE     = re.compile(
@@ -873,6 +885,9 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
         total = state["heat"]["sessions_cumulative"]
         remaining = max(0, 14 - total)
         return f"Logged heat session {mins} min. {total} done" + (f" — {remaining} still needed to hit 14-session floor." if remaining else " — above minimum, keep banking.")
+
+    if _REPLAN_RE.match(text.strip()):
+        return "__REPLAN__"
 
     if _PLAN_RE.match(text.strip()):
         return "__GENERATE_PLAN__"
@@ -2091,6 +2106,15 @@ def main():
                     continue
                 if _handle_drill(token, chat_id, text, msg_id, athletes, config):
                     continue
+                # Debounce duplicate command callbacks (e.g. /load): a failed
+                # answerCallbackQuery leaves the button spinning, so users re-tap.
+                # Quick-log/drill taps above are exempt — repeat taps there are legit.
+                _cb_key = (chat_id, text)
+                _cb_now = time.time()
+                if _cb_now - _RECENT_CALLBACKS.get(_cb_key, 0) < 15:
+                    log(f"debounced duplicate callback: {text}")
+                    continue
+                _RECENT_CALLBACKS[_cb_key] = _cb_now
             else:
                 msg = update.get("message", {})
                 chat_id = str(msg.get("chat", {}).get("id", ""))
@@ -2193,19 +2217,28 @@ def main():
             log(f"In: {text[:80]}")
 
             fast = fast_path(text, slug=slug, athlete_cfg=athlete)
-            if fast == "__GENERATE_PLAN__":
-                send(token, chat_id, "_Generating plan — this takes a few minutes…_")
+            if fast in ("__GENERATE_PLAN__", "__REPLAN__"):
+                is_replan = fast == "__REPLAN__"
+                send(token, chat_id,
+                     "_Rebuilding your week to target — this takes a few minutes…_" if is_replan
+                     else "_Generating plan — this takes a few minutes…_")
                 try:
+                    # The script sends the athlete-facing message itself via notify.py.
+                    # Do NOT echo stdout here — stdout is an internal status line only,
+                    # and echoing it is what caused duplicate / verbose plan messages.
+                    cmd = ["python3", str(GENERATE_PLAN_SCRIPT), "--athlete", slug]
+                    if is_replan:
+                        cmd.append("--replan")
                     result = subprocess.run(
-                        ["python3", str(GENERATE_PLAN_SCRIPT), "--athlete", slug],
-                        capture_output=True, text=True,
+                        cmd, capture_output=True, text=True,
                         cwd=str(PROJECT_DIR), timeout=600,
                     )
-                    out = (result.stdout or result.stderr or "Done.").strip()
-                    send(token, chat_id, out[:4096], reply_markup=build_keyboard(slug))
+                    if result.returncode != 0:
+                        send(token, chat_id, "Plan generation hit an error — check the logs.",
+                             reply_markup=build_keyboard(slug))
+                    log(f"Out (fast): {'replan' if is_replan else 'plan generated'} — {(result.stdout or '').strip()[:120]}")
                 except Exception as e:
                     send(token, chat_id, f"Plan generation failed: {e}", reply_markup=build_keyboard(slug))
-                log("Out (fast): plan generated")
                 continue
             elif fast and fast.startswith("__FTP_RETEST__:"):
                 new_ftp = int(float(fast.split(":", 1)[1]))

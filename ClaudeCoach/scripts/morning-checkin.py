@@ -81,6 +81,7 @@ Step 1 — Fetch data via Bash:
 Step 2 — Read:
 - ClaudeCoach/athletes/{slug}/persistent-rules.md (permanent coaching rules — these override defaults and MUST be followed)
 - ClaudeCoach/athletes/{slug}/current-state.md (open actions, watchdog flags — only surface flags dated within the last 3 days)
+- ClaudeCoach/athletes/{slug}/daily-prescription-latest.md — the 05:00 prescription check (no longer messaged directly). Use it ONLY if its date line is today. Key points to carry into the card: whether today's session is GO as planned or was modified/swapped (and the one-line reason). Ignore it if dated earlier than today.
 - ClaudeCoach/athletes/{slug}/current-state.json (weight_readings, injury pain scores)
 {"- ClaudeCoach/athletes/" + slug + "/heat-log.json (count entries in current ISO week to get sessions_this_week)" if heat_protocol else ""}
 - ClaudeCoach/athletes/{slug}/session-log.json — only if today's planned event is a Ride or Brick >90 min: extract the last 4 entries with sport Ride/GravelRide/Brick, duration_min ≥ 90, and nutrition_g_carb set. Compute each g_per_hr and the avg.
@@ -108,6 +109,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
   · Form −1 to −20: omit entirely, that's normal training]
 [If recovery ORANGE or RED: ⚠️ [one plain-English sentence on what to do differently — no scores]]
 [If watchdog flag active: ⚠️ [flag in plain English — one line]]
+[If the 05:00 prescription check modified or swapped today's session: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, say nothing]]
 [If today's session is Ride or Brick >90 min: 🍌 Nutrition — target [min(avg+10,90)]g/hr · eat at 15 min then every 25 min]
 [If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact]]
 [If open action is due within 3 days: 📌 [action] due [date]]
@@ -140,8 +142,9 @@ def _log_to_history(slug: str, message: str) -> None:
 
 def notify(msg, chat_id):
     try:
+        # --no-history: this script appends to history itself after the send
         subprocess.run(
-            ["python3", str(NOTIFY), "--chat-id", str(chat_id), msg],
+            ["python3", str(NOTIFY), "--no-history", "--chat-id", str(chat_id), msg],
             cwd=PROJECT_DIR, timeout=15,
         )
     except Exception:
