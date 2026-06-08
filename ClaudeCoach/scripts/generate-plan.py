@@ -167,7 +167,13 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
     weeks_elapsed = max(1, (_next_mon - plan_start_date).days // 7 + 1)
 
     ctl_targets  = cfg.get("ctl_targets", {})
-    ctl_race_min = compute_race_min_ctl(cfg, profile) or ctl_targets.get("race_min") or 75
+    _race_min_calc = compute_race_min_ctl(cfg, profile)
+    ctl_race_min = _race_min_calc or ctl_targets.get("race_min") or 75
+    # A defensible CTL basis = a race_min derived from race_target_splits, or an
+    # explicit ctl_targets.race_min. Without one, ctl_race_min is just the 75
+    # default — NOT a real target — so we must not synthesise a phase CTL ramp
+    # off it (that would fabricate periodisation for e.g. a survival Sportive).
+    _has_ctl_basis = bool(_race_min_calc or ctl_targets.get("race_min"))
     phase_tss_cfg = cfg.get("phase_tss", {})
     base_end_wk  = phase_tss_cfg.get("base_end_week", 6)
     build_end_wk = phase_tss_cfg.get("build_end_week", 10)
@@ -190,23 +196,27 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
     _event = profile.get("race_distance") or cfg.get("race_distance") or ""
     is_multisport = event_is_multisport(_event)
 
-    # Resolve phase CTL targets — explicit config wins; auto-derive as fallback
+    # Resolve phase CTL targets — explicit config wins; auto-derive as fallback.
+    # Event-agnostic (was gated on is_multisport, which conflated "is a triathlete"
+    # with "has a load target"). An athlete only gets targets if they have a
+    # defensible basis: configured phase_ctl, or a derivable race_min. Athletes
+    # without one (e.g. a survival Sportive) get no targets and fall through to
+    # availability-based guidance — never a fabricated CTL ramp (remediation WS D).
     _phase_ctl_dict   = {}
     _phase_ctl_source = "none"
-    if is_multisport:
-        _configured = ctl_targets.get("phase_ctl", {})
-        if _configured:
-            _phase_ctl_dict   = _configured
-            _phase_ctl_source = "configured"
-        elif ctl_today > 0 and ctl_race_min:
-            _taper_over  = float(cfg.get("taper_overshoot", 1.15))
-            _derive_ramp = float(cfg.get("max_ctl_ramp_per_week", 5.0))
-            _phase_ctl_dict   = derive_phase_ctl_targets(
-                ctl_today, ctl_race_min, plan_start_date,
-                base_end_wk, build_end_wk, spec_end_wk, peak_end_wk,
-                _derive_ramp, _taper_over, today=_today,
-            )
-            _phase_ctl_source = "auto-derived"
+    _configured = ctl_targets.get("phase_ctl", {})
+    if _configured:
+        _phase_ctl_dict   = _configured
+        _phase_ctl_source = "configured"
+    elif ctl_today > 0 and _has_ctl_basis:
+        _taper_over  = float(cfg.get("taper_overshoot", 1.15))
+        _derive_ramp = float(cfg.get("max_ctl_ramp_per_week", 5.0))
+        _phase_ctl_dict   = derive_phase_ctl_targets(
+            ctl_today, ctl_race_min, plan_start_date,
+            base_end_wk, build_end_wk, spec_end_wk, peak_end_wk,
+            _derive_ramp, _taper_over, today=_today,
+        )
+        _phase_ctl_source = "auto-derived"
 
     if is_multisport:
         ctl_base  = _phase_ctl_dict.get("base",     round(ctl_race_min * 0.73))
@@ -262,27 +272,46 @@ CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Frid
 - Saturday: Run (Z2) or Bike (if second ride week)
 - Sunday: Z2 ride (2–3 hr) or rest"""
     else:
-        phase_milestones = """    End of Base     (week 6):  >= 30 CTL
-    End of Build    (week 10): >= 40 CTL
-    End of Specific (week 14): >= 50 CTL
-    End of Peak     (week 17): >= 55 CTL"""
-        phase_tss = """  Week 1-6   (Base):     100-200 TSS/wk, focus Z2 bike volume, building aerobic base
-  Week 7-10  (Build):    150-280 TSS/wk, add sweetspot work, extend long ride
-  Week 11-14 (Specific): 200-350 TSS/wk, threshold and over-threshold intervals, longer rides
-  Week 15-17 (Peak):     250-400 TSS/wk, consolidate fitness, race simulation rides
-  Week 18-21 (Taper):    80-150 TSS/wk, sharpen, no new stimuli"""
-        step5_constraints = """- CTL ramp: <= +5 CTL/wk.
-- Pre-event fatigue management: if pre_event_taper = true, week 2 prioritises short Z2 rides only, no intensity.
-- Concurrent training: check current-state.md for CrossFit or other non-cycling load not captured in CTL — plan hard bike sessions on CrossFit rest days where possible.
-- Travel / access constraints: scan current-state.md "Travel & training blocks" for any dates in the planning window where bike is unavailable. Substitute with strength sessions."""
-        week_template = """Standard week template — cycling only (adapt to phase; do NOT add swim or run sessions):
-- Monday: Rest
-- Tuesday: Strength or easy Z2 ride 45–60 min
-- Wednesday: Key bike session — sweetspot or threshold intervals
-- Thursday: Rest or strength
-- Friday: Rest or easy Z2 ride 45–60 min
-- Saturday: Long ride (Z2 NP target, progressive) — key session
-- Sunday: Rest or short active recovery"""
+        # Cycling-only event with no load-target basis (e.g. a survival Sportive).
+        # No CTL/TSS numbers are chased — the plan is built around the weekly hour
+        # ceiling and a progressive long ride. Numbers come from the athlete's
+        # profile (max_hours_per_week, live CTL), never hardcoded per-athlete.
+        _hrs = profile.get("max_hours_per_week")
+        _hrs_str = f"~{_hrs} hr/wk" if _hrs else "the athlete's stated weekly availability"
+        _ctl_note = (f"~{ctl_today:.0f} bike CTL" if ctl_today > 0
+                     else "not available from the fitness feed")
+        phase_milestones = (
+            f"    Plan week: {weeks_elapsed} (plan start {plan_start_str})\n"
+            f"    Goal: COMPLETE the event (finish/survive) — there is NO CTL target to chase, so do\n"
+            f"      not invent one or flag the athlete as 'behind'.\n"
+            f"    Bike fitness is {_ctl_note}; any CrossFit/other training adds general base not\n"
+            f"      captured in bike CTL — factor it in, do not try to 'make it up' with extra rides.\n"
+            f"    Progress = a steadily longer LONG RIDE (durability), inside the weekly hour ceiling."
+        )
+        phase_tss = (
+            f"  Weekly bike volume CEILING: {_hrs_str} — a hard CAP, not a target to fill. Do NOT exceed it.\n"
+            f"  Keep most riding easy Z2 endurance. The weekly LONG RIDE is the key session — grow its\n"
+            f"  duration progressively toward the event demand; that durability matters more than CTL.\n"
+            f"  Base: build the habit + aerobic base.   Build: extend the long ride, add some climbing tempo.\n"
+            f"  Peak: longest long ride(s), event-terrain simulation where possible.   Taper: freshen, no new load.\n"
+            f"  This is survival prep for a long, hard day — set expectations honestly, do not over-prescribe."
+        )
+        step5_constraints = (
+            "- Weekly bike hours must NOT exceed the athlete's stated ceiling (above). More volume is not "
+            "the goal here; consistency and the long ride are.\n"
+            "- Concurrent training (CrossFit etc.): real load not captured in bike CTL. Plan the key long "
+            "ride clear of hard CrossFit days, keep easy bike days genuinely easy, and do NOT add bike load "
+            "to compensate for what CTL doesn't 'see'.\n"
+            "- Pre-event fatigue management: if pre_event_taper = true, cut volume to easy spins only, no new stimuli.\n"
+            "- Travel / access constraints: scan current-state.md \"Travel & training blocks\" for dates in the "
+            "window where the bike is unavailable; substitute strength/cross-training — don't try to recoup the load."
+        )
+        week_template = """Standard week template — cycling only (do NOT add swim or run sessions). Built around the weekly hour ceiling:
+- The LONG RIDE is the anchor: schedule it first, protect its duration, grow it week to week.
+- Add 1–2 shorter rides around it (Z2 endurance or an easy spin), staying within the weekly hour cap.
+- Strength / CrossFit continues on non-key days (the athlete already does this) — leave room for it.
+- Rest days are expected at this volume; do NOT pad the week to fill empty days.
+Indicative shape: one weekend long ride (key) + one midweek shorter ride; remaining days rest or CrossFit."""
 
     # Load accountability — only for athletes with explicit phase CTL targets
     _prescribe_tss   = 0  # 0 = fallback to phase ranges
@@ -293,7 +322,7 @@ CYCLING RULE — HARD: No cycling Monday through Thursday. Bike sessions on Frid
     _la_phase_end_date = ""
     load_accountability_block = ""
 
-    if ctl_today > 0 and is_multisport and _phase_ctl_dict:
+    if ctl_today > 0 and _phase_ctl_dict:
         if weeks_elapsed <= base_end_wk:
             _la_phase, _la_target_ctl, _la_phase_end_wk = "Base", ctl_base, base_end_wk
         elif weeks_elapsed <= build_end_wk:
@@ -383,7 +412,9 @@ A plan that is >10% short of target with no LOAD GAP section in the message is a
             f"  Phase context (for session type selection only):\n"
             f"{phase_tss}"
         )
-    else:
+    elif _has_ctl_basis:
+        # No live CTL (ctl_today == 0, e.g. ICU fetch failed) but the athlete has
+        # CTL milestones — fall back to the milestone-driven trajectory estimate.
         step3b_content = (
             "Step 3b — Trajectory check (use fitness endpoint forward projection):\n"
             "- ctl_today = today's CTL value from fitness endpoint\n"
@@ -404,6 +435,27 @@ A plan that is >10% short of target with no LOAD GAP section in the message is a
             f"{phase_tss}\n"
             f"Apply trajectory_status from Step 3b to select TSS within range.\n"
             f"If pre_event_taper = true: cap week 2 at bottom of range."
+        )
+    else:
+        # No CTL target at all (completion/survival goal). Do NOT compute a CTL
+        # trajectory or label the athlete BEHIND/AHEAD against a target that
+        # doesn't exist — assess readiness qualitatively instead.
+        step3b_content = (
+            "Step 3b — Readiness check (NO CTL target — completion/survival goal):\n"
+            "- There is no phase CTL target. Do NOT compute required_weekly_gain or label the athlete\n"
+            "  BEHIND / AHEAD / ON_TRACK against a CTL number — there is nothing to be behind.\n"
+            "- Assess readiness qualitatively from live data: is weekly bike volume consistent and within\n"
+            "  the hour ceiling? Is the LONG RIDE growing week to week? Is the athlete fresh (TSB >= 0) or\n"
+            "  carrying fatigue? Factor in CrossFit / other training as uncaptured general base.\n"
+            "- Race / key-event check: scan events for days 15–28. If type=Race or priority A/B:\n"
+            "    -> set pre_event_taper = true"
+        )
+        step4_content = (
+            f"Step 4 — Determine phase and weekly volume:\n"
+            f"Current plan week: {weeks_elapsed} (plan start {plan_start_str}, next Monday {next_monday}).\n"
+            f"There is no TSS target. Build the week WITHIN the volume ceiling, prioritising the long ride:\n"
+            f"{phase_tss}\n"
+            f"If pre_event_taper = true: reduce volume, easy spins only, no new stimuli."
         )
 
     # WS C — blueprint guidance: pull per-phase content (intensity distribution,
@@ -427,11 +479,13 @@ A plan that is >10% short of target with no LOAD GAP section in the message is a
             if _next_mon <= _td <= _win_end:
                 _tests_due.append(f"{_t.get('label', _t.get('type', 'test'))} ({_t['date']})")
         _tests_line = "; ".join(_tests_due) if _tests_due else "none"
+        # Bricks only apply to multisport events; omit the line for bike-only.
+        _brick_line = (f"\n- Bricks this phase: aim {_cur.get('brick_min')} — {_cur.get('brick_type')}"
+                       if _cur.get("brick_min") else "")
         blueprint_block = f"""
 ## BLUEPRINT GUIDANCE — phase {_cur.get('name')} ({_cur.get('start')}–{_cur.get('end')}), from training-blueprint.json
-Shapes session TYPE and intensity mix. Does NOT override the LOAD ACCOUNTABILITY TSS target above.
-- Intensity distribution (weekly average per sport): {_dist_line}
-- Bricks this phase: aim {_cur.get('brick_min', '—')} — {_cur.get('brick_type', '')}
+{"Shapes session TYPE and intensity mix. Does NOT override the LOAD ACCOUNTABILITY TSS target above." if _prescribe_tss > 0 else "Shapes session TYPE, intensity mix, and weekly emphasis."}
+- Intensity distribution (weekly average per sport): {_dist_line}{_brick_line}
 - Fuelling target: {_cur.get('fuelling', '—')}
 - Performance tests due in this 14-day window: {_tests_line}
 In Step 6, honour this distribution, include the brick(s), and schedule any due test in the first 1–2 days of an easy/recovery block.
@@ -484,7 +538,7 @@ Step 3 — Determine the planning window:
 - Target: the 2 weeks starting NEXT Monday (not today).
 - Check events endpoint for that window.
 {replan_directive}
-- If there are already 7+ events planned: set plan_already_populated = true. Do NOT push new sessions (skip Step 6's session building). Continue through Steps 3b–5 for trajectory and constraint review, run the MANDATORY GAP CHECK against the existing sessions, then go to Step 7 to compose the summary and Step 8 to send it.
+- If there are already 7+ events planned: set plan_already_populated = true. Do NOT push new sessions (skip Step 6's session building). Continue through Steps 3b–5 for trajectory and constraint review, {"run the MANDATORY GAP CHECK against the existing sessions, then " if _prescribe_tss > 0 else ""}go to Step 7 to compose the summary and Step 8 to send it.
 - If <7 events: set plan_already_populated = false. Generate enough sessions to fill the week appropriately.
 
 {step3b_content}
