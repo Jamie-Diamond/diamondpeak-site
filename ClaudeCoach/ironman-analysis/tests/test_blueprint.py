@@ -16,6 +16,7 @@ import pytest
 from primitives.blueprint import (
     validate_blueprint, is_valid, SCHEMA_VERSION, canonical_phases, current_phase,
     event_sports, is_multisport, event_key, EVENT_SPORTS, CYCLING_EVENTS,
+    resolve_phases, phase_structure, assign_dates,
 )
 
 REPO = Path(__file__).resolve().parents[2]            # ClaudeCoach/
@@ -231,6 +232,42 @@ class TestCanonicalPhases:
         assert canonical_phases(None, JAMIE_PHASE_TSS, date(2026, 9, 19)) == []
         assert canonical_phases(date(2026, 4, 27), None, date(2026, 9, 19)) == []
         assert canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, None) == []
+
+
+class TestResolvePhases:
+    """resolve_phases is the single phase-window resolver shared by the blueprint
+    generator and the planner (WS D), so the two never disagree on Calum."""
+
+    def test_configured_uses_canonical(self):
+        # A configured athlete gets canonical_phases anchored to plan_start —
+        # identical to calling canonical_phases directly.
+        got = resolve_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19),
+                             today=date(2026, 6, 8))
+        want = canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19))
+        assert [(p["name"], p["start"], p["end"]) for p in got] == \
+               [(p["name"], p["start"], p["end"]) for p in want]
+
+    def test_unconfigured_derives_from_race_date(self):
+        # No plan_start/phase_tss → auto-derive anchored to today, last phase
+        # extended to race day (calum's path: ~12 weeks out → no Specific phase).
+        today = date(2026, 6, 8)
+        race  = date(2026, 8, 29)
+        got = resolve_phases(None, None, race, today=today)
+        assert got[0]["start"] == today
+        assert got[-1]["end"] == race
+        assert "Specific" not in [p["name"] for p in got]
+        # contiguous
+        for a, b in zip(got, got[1:]):
+            assert b["start"] == a["end"] + timedelta(days=1)
+
+    def test_matches_inline_autoderive(self):
+        # Equivalent to the generator's old inline fallback, exactly.
+        today, race = date(2026, 6, 8), date(2026, 8, 29)
+        inline = assign_dates(phase_structure(int((race - today).days / 7)), today)
+        inline[-1]["end"] = race
+        got = resolve_phases(None, None, race, today=today)
+        assert [(p["name"], p["start"], p["end"]) for p in got] == \
+               [(p["name"], p["start"], p["end"]) for p in inline]
 
 
 class TestCurrentPhase:

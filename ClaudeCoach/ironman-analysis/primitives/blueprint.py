@@ -125,6 +125,100 @@ def canonical_phases(
     return phases
 
 
+def phase_structure(weeks: int) -> list[dict]:
+    """Auto-derive ordered phase dicts (name, weeks) from weeks-to-race.
+
+    Used for athletes with no plan_start/phase_tss config in athletes.json — the
+    fallback when canonical_phases() returns []. The mesocycle shape scales with
+    the runway: a 12-week build has no Specific phase, a 24-week one has three
+    Base blocks. Dates are added by assign_dates().
+    """
+    if weeks >= 24:
+        return [
+            {"name": "Base1",  "weeks": 6},
+            {"name": "Base2",  "weeks": 4},
+            {"name": "Base3",  "weeks": 4},
+            {"name": "Build1", "weeks": 4},
+            {"name": "Build2", "weeks": 4},
+            {"name": "Peak",   "weeks": 2},
+            {"name": "Taper",  "weeks": min(weeks - 24, 3)},
+        ]
+    elif weeks >= 20:
+        return [
+            {"name": "Base1",  "weeks": 6},
+            {"name": "Base2",  "weeks": 4},
+            {"name": "Build1", "weeks": 4},
+            {"name": "Build2", "weeks": 4},
+            {"name": "Peak",   "weeks": 2},
+            {"name": "Taper",  "weeks": min(weeks - 20, 3)},
+        ]
+    elif weeks >= 16:
+        return [
+            {"name": "Base",   "weeks": 6},
+            {"name": "Build1", "weeks": 4},
+            {"name": "Build2", "weeks": 4},
+            {"name": "Peak",   "weeks": 2},
+            {"name": "Taper",  "weeks": min(weeks - 16, 2)},
+        ]
+    elif weeks >= 12:
+        return [
+            {"name": "Base",   "weeks": 4},
+            {"name": "Build",  "weeks": 4},
+            {"name": "Peak",   "weeks": 2},
+            {"name": "Taper",  "weeks": min(weeks - 12, 2)},
+        ]
+    elif weeks >= 8:
+        return [
+            {"name": "Base",   "weeks": 3},
+            {"name": "Build",  "weeks": 3},
+            {"name": "Peak",   "weeks": 2},
+            {"name": "Taper",  "weeks": min(weeks - 8, 2)},
+        ]
+    else:
+        return [
+            {"name": "Build",  "weeks": max(weeks - 4, 1)},
+            {"name": "Peak",   "weeks": 2},
+            {"name": "Taper",  "weeks": 2},
+        ]
+
+
+def assign_dates(phases: list[dict], start: date) -> list[dict]:
+    """Assign contiguous start/end dates to each phase, beginning at `start`."""
+    current = start
+    for p in phases:
+        p["start"] = current
+        p["end"] = current + timedelta(weeks=p["weeks"]) - timedelta(days=1)
+        current = p["end"] + timedelta(days=1)
+    return phases
+
+
+def resolve_phases(
+    plan_start: date | None,
+    phase_tss: dict | None,
+    race_date: date,
+    today: date,
+) -> list[dict]:
+    """Resolve an athlete's phase windows — the single entry point for BOTH the
+    blueprint generator and the planner, so the two never disagree.
+
+    Configured athletes (plan_start + phase_tss in athletes.json) get
+    canonical_phases anchored to plan_start. Unconfigured athletes (e.g. calum)
+    auto-derive from the race date via phase_structure, anchored to `today`, with
+    the final phase extended to race day. This replaces the planner's old
+    fallback of pinning everyone to a hardcoded plan_start + 6/10/14/17 weeks —
+    which silently put cycling athletes on another athlete's stale calendar.
+    """
+    phases = canonical_phases(plan_start, phase_tss, race_date)
+    if phases:
+        return phases
+    weeks_to_race = (race_date - today).days / 7
+    phases = phase_structure(int(weeks_to_race))
+    phases = assign_dates(phases, today)
+    if phases:
+        phases[-1]["end"] = race_date
+    return phases
+
+
 def validate_blueprint(data: dict) -> list[str]:
     """Return a list of human-readable errors. Empty list == valid.
 

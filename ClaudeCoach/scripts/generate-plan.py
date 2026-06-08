@@ -33,6 +33,7 @@ from primitives.load import (   # noqa: E402
 )
 from primitives.blueprint import (  # noqa: E402
     current_phase,
+    resolve_phases,
     is_multisport as event_is_multisport,
 )
 
@@ -138,14 +139,31 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
             "- Normal mode: respect the 7-event threshold below (do not rebuild a populated week)."
         )
 
-    # Phase / week calculation from athletes.json
-    plan_start_str = cfg.get("plan_start", "2026-04-27")
+    # Phase / week calculation. Configured athletes (plan_start in athletes.json)
+    # anchor to plan_start exactly as prescribed; unconfigured athletes (e.g.
+    # calum) derive their plan start from the race date via the shared
+    # resolve_phases — the same source the blueprint sidecar uses — rather than
+    # inheriting a hardcoded calendar that belongs to another athlete.
+    from datetime import date as _d
+    _plan_start_cfg = cfg.get("plan_start")
+    _race_date_str  = profile.get("race_date") or cfg.get("race_date", "")
     try:
-        from datetime import date as _d
-        plan_start_date = _d.fromisoformat(plan_start_str)
+        _race_dt = _d.fromisoformat(_race_date_str) if _race_date_str else None
     except Exception:
-        from datetime import date as _d
+        _race_dt = None
+    if _plan_start_cfg:
+        plan_start_str = _plan_start_cfg
+        try:
+            plan_start_date = _d.fromisoformat(plan_start_str)
+        except Exception:
+            plan_start_date = _d(2026, 4, 27)
+    elif _race_dt:
+        _derived_phases = resolve_phases(None, None, _race_dt, _today)
+        plan_start_date = _derived_phases[0]["start"] if _derived_phases else _today
+        plan_start_str  = plan_start_date.isoformat()
+    else:
         plan_start_date = _d(2026, 4, 27)
+        plan_start_str  = plan_start_date.isoformat()
     weeks_elapsed = max(1, (_next_mon - plan_start_date).days // 7 + 1)
 
     ctl_targets  = cfg.get("ctl_targets", {})

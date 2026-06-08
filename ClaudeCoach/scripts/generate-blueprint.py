@@ -26,7 +26,8 @@ PROJECT_DIR = str(BASE.parent)
 # Validate the structured sidecar against the shared schema (remediation WS B).
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 from primitives.blueprint import (  # noqa: E402
-    validate_blueprint, canonical_phases, SCHEMA_VERSION,
+    validate_blueprint, canonical_phases, resolve_phases,
+    phase_structure, assign_dates, SCHEMA_VERSION,
     EVENT_SPORTS, CYCLING_EVENTS, event_sports,
     event_key as _event_key,
 )
@@ -43,66 +44,9 @@ BRICK_TYPE = {
 
 
 # -- Mesocycle algorithm ------------------------------------------------------
-
-def phase_structure(weeks: int) -> list[dict]:
-    """Return ordered list of phase dicts given weeks_to_race."""
-    if weeks >= 24:
-        return [
-            {"name": "Base1",  "weeks": 6},
-            {"name": "Base2",  "weeks": 4},
-            {"name": "Base3",  "weeks": 4},
-            {"name": "Build1", "weeks": 4},
-            {"name": "Build2", "weeks": 4},
-            {"name": "Peak",   "weeks": 2},
-            {"name": "Taper",  "weeks": min(weeks - 24, 3)},
-        ]
-    elif weeks >= 20:
-        return [
-            {"name": "Base1",  "weeks": 6},
-            {"name": "Base2",  "weeks": 4},
-            {"name": "Build1", "weeks": 4},
-            {"name": "Build2", "weeks": 4},
-            {"name": "Peak",   "weeks": 2},
-            {"name": "Taper",  "weeks": min(weeks - 20, 3)},
-        ]
-    elif weeks >= 16:
-        return [
-            {"name": "Base",   "weeks": 6},
-            {"name": "Build1", "weeks": 4},
-            {"name": "Build2", "weeks": 4},
-            {"name": "Peak",   "weeks": 2},
-            {"name": "Taper",  "weeks": min(weeks - 16, 2)},
-        ]
-    elif weeks >= 12:
-        return [
-            {"name": "Base",   "weeks": 4},
-            {"name": "Build",  "weeks": 4},
-            {"name": "Peak",   "weeks": 2},
-            {"name": "Taper",  "weeks": min(weeks - 12, 2)},
-        ]
-    elif weeks >= 8:
-        return [
-            {"name": "Base",   "weeks": 3},
-            {"name": "Build",  "weeks": 3},
-            {"name": "Peak",   "weeks": 2},
-            {"name": "Taper",  "weeks": min(weeks - 8, 2)},
-        ]
-    else:
-        return [
-            {"name": "Build",  "weeks": max(weeks - 4, 1)},
-            {"name": "Peak",   "weeks": 2},
-            {"name": "Taper",  "weeks": 2},
-        ]
-
-
-def assign_dates(phases: list[dict], start: date) -> list[dict]:
-    """Assign start/end dates to each phase."""
-    current = start
-    for p in phases:
-        p["start"] = current
-        p["end"] = current + timedelta(weeks=p["weeks"]) - timedelta(days=1)
-        current = p["end"] + timedelta(days=1)
-    return phases
+# phase_structure / assign_dates / resolve_phases now live in
+# primitives.blueprint — the single source shared with the planner. Imported at
+# the top of this module (re-exported here so gb.phase_structure still resolves).
 
 
 # -- TSS ceiling --------------------------------------------------------------
@@ -772,14 +716,11 @@ def main():
         plan_start = date.fromisoformat(plan_start_str) if plan_start_str else None
     except ValueError:
         plan_start = None
-    phases = canonical_phases(plan_start, acfg.get("phase_tss"), race_dt)
-    if phases:
+    phases = resolve_phases(plan_start, acfg.get("phase_tss"), race_dt, date.today())
+    if plan_start and acfg.get("phase_tss"):
         print(f"Phases from athletes.json config (anchor {plan_start}).", file=sys.stderr)
     else:
         print("No phase config — falling back to weeks-to-race auto-derivation.", file=sys.stderr)
-        phases = phase_structure(int(weeks_to_race))
-        phases = assign_dates(phases, date.today())
-        phases[-1]["end"] = race_dt  # extend last phase to race day
 
     print(f"Fetching live CTL for {slug}...", file=sys.stderr)
     current_ctl = fetch_ctl(slug)
