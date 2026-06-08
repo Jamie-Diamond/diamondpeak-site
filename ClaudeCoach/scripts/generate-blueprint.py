@@ -282,7 +282,13 @@ def _test_events(phases: list[dict], sports: list[str] | None = None) -> list[di
     """
     if sports is None:
         sports = ["swim", "bike", "run"]
-    today = date.today()
+    # Baselines anchor to the PLAN START, not date.today(). Anchoring to today
+    # re-dated every baseline to the regeneration day on each run, so a mid-plan
+    # athlete (who tested at the start and already has thresholds) got nudged to
+    # "redo baseline test today" every time the blueprint was regenerated. With
+    # plan-start anchoring, a mid-plan athlete's baselines sit in the past
+    # (never "due"), while a genuinely new athlete's land at their start date.
+    plan_start = phases[0]["start"] if phases else date.today()
     events: list[dict] = []
 
     def add(test_type: str, label: str, dt: date, protocol: str):
@@ -295,7 +301,7 @@ def _test_events(phases: list[dict], sports: list[str] | None = None) -> list[di
 
     # FTP (cycling)
     if "bike" in sports:
-        add("ftp", "FTP Baseline", today, "20-min test × 0.95 or ramp test")
+        add("ftp", "FTP Baseline", plan_start, "20-min test × 0.95 or ramp test")
         for p in phases:
             fam = phase_family(p["name"])
             if fam == "base":
@@ -306,7 +312,7 @@ def _test_events(phases: list[dict], sports: list[str] | None = None) -> list[di
 
     # LTHR (running)
     if "run" in sports:
-        add("lthr", "LTHR Baseline", today, "30-min run TT; avg HR final 20 min = LTHR")
+        add("lthr", "LTHR Baseline", plan_start, "30-min run TT; avg HR final 20 min = LTHR")
         base_phases = [p for p in phases if "base" in p["name"].lower()]
         if base_phases:
             add("lthr", "LTHR End-Base", base_phases[-1]["end"] - timedelta(days=2),
@@ -314,7 +320,7 @@ def _test_events(phases: list[dict], sports: list[str] | None = None) -> list[di
 
     # CSS (swimming)
     if "swim" in sports:
-        add("css", "CSS Baseline", today, "400m + 200m TT (CSS calculator)")
+        add("css", "CSS Baseline", plan_start, "400m + 200m TT (CSS calculator)")
         if build_phases:
             add("css", "CSS Mid-Build", build_phases[0]["start"] + timedelta(weeks=2),
                 "400m + 200m TT (CSS calculator)")

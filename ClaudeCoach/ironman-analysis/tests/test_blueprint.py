@@ -345,3 +345,38 @@ class TestEventSports:
         assert is_multisport("Full Ironman") is True
         assert is_multisport("70.3") is True
         assert is_multisport("Sportive") is False
+
+
+class TestBaselineAnchoring:
+    """Regression guard: baseline tests anchor to PLAN START, never date.today().
+
+    Anchoring baselines to the regeneration day re-dated FTP/CSS/LTHR baselines
+    to 'today' on every run, so the activity-watcher nudged mid-plan athletes to
+    'redo your baseline test today' each time the blueprint was regenerated
+    (it spammed two live athletes on 2026-06-08). Baselines must sit at the plan
+    start so a mid-plan athlete's are historical and never 'due'."""
+
+    def _phases(self, gb):
+        # A plan that started well in the past — a mid-plan athlete.
+        return gb.canonical_phases(
+            date(2026, 4, 27),
+            {"base_end_week": 6, "build_end_week": 10,
+             "specific_end_week": 14, "peak_end_week": 17},
+            date(2026, 9, 19),
+        )
+
+    def test_baselines_anchor_to_plan_start_not_today(self, gb):
+        phases = self._phases(gb)
+        plan_start = phases[0]["start"]
+        evs = gb._test_events(phases, ["swim", "bike", "run"])
+        baselines = [e for e in evs if "Baseline" in e["label"]]
+        assert baselines, "expected FTP/LTHR/CSS baselines"
+        for b in baselines:
+            assert b["date"] == plan_start.isoformat(), b
+            # And — the whole point — not stamped with the current date.
+            assert b["date"] != date.today().isoformat(), b
+
+    def test_no_phases_falls_back_to_today(self, gb):
+        # Defensive: with no phases (shouldn't happen) it must not crash.
+        evs = gb._test_events([], ["bike"])
+        assert all("date" in e for e in evs)
