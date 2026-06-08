@@ -1,11 +1,25 @@
 # ClaudeCoach — Planning Engine Remediation Plan
 
-_Version 1.0 — 7 June 2026. Status: proposed, not started._
+_Version 1.0 — 7 June 2026. Updated 8 June 2026._
 
 This plan fixes six issues found in an appraisal of the training-planning engine.
 It records the design decisions taken, sequences the work by dependency, and
-defines done for each workstream. **No code has been changed yet — this is the
-brief.**
+defines done for each workstream.
+
+## Status — 8 June 2026
+
+| WS | Scope | Status |
+|----|-------|--------|
+| **A** | Consolidate load maths into `primitives/load.py` | ✅ Done + deployed |
+| **B** | Structured `training-blueprint.json` sidecar + validator | ✅ Done + deployed |
+| **C** | Wire blueprint guidance into the planner prompt | ✅ Done + deployed |
+| **D** | One methodology for all athletes/events (retire `is_triathlete` branch) | ✅ Done + deployed + verified live |
+| **E** | Backstop validation | 🟡 **Warn-mode core done + deployed.** `validate_week` primitive (mechanical constraints) + planner re-fetches & validates the pushed plan behind `ENFORCE_VALIDATION` (default `warn` → logs breaches, sends unchanged). Follow-ups: activate day-rule checks (`day_rules` in athletes.json), block mode + event remediation, prescription backstop. |
+| **F** | README refresh + drift guards | ✅ Done (README rewrite, no-duplicate-maths guard, path-existence guard) |
+
+Out-of-plan but completed alongside: fixed a baseline-test scheduling bug that
+re-dated FTP/CSS/LTHR baselines to "today" on every blueprint regen and spammed
+two live athletes (anchored to plan start instead).
 
 ---
 
