@@ -43,6 +43,17 @@ BRICK_TYPE = {
 }
 
 
+# -- Performance-test policy --------------------------------------------------
+# The coach's standing decision (Jamie, 2026-06-08): do NOT schedule or nag
+# athletes to run formal FTP / LTHR / CSS field tests. Thresholds come from
+# intervals.icu directly — cycling FTP from eFTP, run threshold pace and swim CSS
+# from intervals' own estimates off normal training data. If an athlete DOES log a
+# test (e.g. names a ride "FTP test"), _resolve_ftp still uses it — we just never
+# schedule one, push test events to the calendar, or send "test due" reminders.
+# Flip to True to restore the scheduled-testing programme.
+SCHEDULE_PERFORMANCE_TESTS = False
+
+
 # -- Mesocycle algorithm ------------------------------------------------------
 # phase_structure / assign_dates / resolve_phases now live in
 # primitives.blueprint — the single source shared with the planner. Imported at
@@ -224,6 +235,10 @@ def _test_events(phases: list[dict], sports: list[str] | None = None) -> list[di
     sports defaults to full triathlon for backward compatibility. A bike-only
     event (Sportive) gets FTP tests only — no run LTHR or swim CSS.
     """
+    if not SCHEDULE_PERFORMANCE_TESTS:
+        # Policy: thresholds come from intervals.icu (eFTP / threshold pace / CSS),
+        # never from a scheduled field test. No tests scheduled, pushed, or nudged.
+        return []
     if sports is None:
         sports = ["swim", "bike", "run"]
     # Baselines anchor to the PLAN START, not date.today(). Anchoring to today
