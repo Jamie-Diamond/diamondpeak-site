@@ -1,10 +1,6 @@
 [
   {
     "user": "",
-    "assistant": "warning T9: PH sweat test + bike fit overdue; ankle clearance review due Mon 15 Jun \u2014 book physio this week"
-  },
-  {
-    "user": "",
     "assistant": "*Good morning \u2014 Mon 8 Jun*\n\nRest day.\n\n\u26a0\ufe0f PH sweat test + TT bike fit \u2014 both unbooked, now 8 days overdue.\n\nWeight this morning?\n\n_103 days to IM Italy Emilia-Romagna_"
   },
   {
@@ -118,5 +114,9 @@
   {
     "user": "",
     "assistant": "*W7\u2013W8 (8\u201321 Jun) \u00b7 Build \u2014 BEHIND*\nThis week: 2 runs Tue/Wed (walk-run 5:30), 2 swims Tue/Thu, Fri 4hr Z2, Sat 4hr build (3\u00d720 SS), Sun 3hr Z2, strength \u00d72 \u2014 748 TSS. Next: run+swim Tue, CSS Thu, Fri 4hr build (3\u00d720 SS), Sat brick (3hr Z2 + run), Sun 4hr Z2, strength \u00d72 \u2014 722 TSS.\nChanged: Sat 13 stand-alone run removed (4-wk run-TSS cap: 125 planned vs 98 ceiling); Sat 13 ride extended 3.5\u21924hr; Sun 14 ride 2.5\u21923hr.\nSafe ramp caps weekly load at 731 TSS \u2014 projected CTL 91 by 6 Jul vs 95 target. Accept 91, extend the Build phase, or push above the ramp guideline?"
+  },
+  {
+    "user": "Let's push a little harder.",
+    "assistant": "W8 updated \u2014 two additions:\n\n*Wed 17:* Walk-run 40 min added alongside Strength \u2192 +35 TSS\n*Sat 20:* Brick ride 180 \u2192 210 min \u2192 +26 TSS\n\nW8 total: *~783 TSS* (was 722)\nRun km: Tue 10.5 + Wed 6 + Sat 4.5 = 21 km \u2014 just inside cap.\n\nProjected CTL by 6 Jul: *~93* (was 91). France camp Jun 24\u201329 is still the big lever \u2014 900+ TSS there is where we close the gap to 95."
   }
 ]
