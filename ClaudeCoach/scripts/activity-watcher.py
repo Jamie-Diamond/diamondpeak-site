@@ -33,6 +33,8 @@ def _log_to_history(slug: str, message: str) -> None:
 
 sys.path.insert(0, str(BASE / "lib"))
 from coaching_levels import level_block as _level_block
+import ops_log
+from git_sync import sync_commit_push
 
 
 def _pace_str(speed_ms: float) -> str:
@@ -251,19 +253,27 @@ ANALYSIS scope: describe only the activity being analysed. Do NOT mention other 
 
 
 def _notify(msg, chat_id, slug=None):
-    try:
-        # --no-history: this script appends to history itself (below)
-        subprocess.run(
-            ["python3", str(NOTIFY), "--no-history", "--chat-id", str(chat_id), msg],
-            cwd=PROJECT_DIR, timeout=15,
-        )
-    except Exception:
-        pass
-    if slug:
+    sent = False
+    for _attempt in (1, 2):
+        try:
+            # --no-history: this script appends to history itself (below)
+            r = subprocess.run(
+                ["python3", str(NOTIFY), "--no-history", "--chat-id", str(chat_id), msg],
+                cwd=PROJECT_DIR, timeout=15,
+            )
+            if r.returncode == 0:
+                sent = True
+                break
+        except Exception:
+            pass
+    if not sent:
+        ops_log.alert("activity-watcher", "Telegram send failed after retry", athlete=slug or "")
+    if slug and sent:
         try:
             _log_to_history(slug, msg)
         except Exception:
             pass
+    return sent
 
 
 def _dedup_session_log(path: Path) -> None:
@@ -858,25 +868,12 @@ def check_athlete(slug, athlete_cfg):
     _dedup_session_log(session_log_f)
 
     # Commit stub entry written by Claude
-    try:
-        files_to_add = [
-            f"ClaudeCoach/athletes/{slug}/session-log.json",
-            f"ClaudeCoach/athletes/{slug}/swim-log.json",
-        ]
-        subprocess.run(
-            ["git", "add"] + files_to_add,
-            cwd=PROJECT_DIR, capture_output=True, timeout=15,
-        )
-        subprocess.run(
-            ["git", "commit", "-m", f"stub: activity {activity_id} {slug}"],
-            cwd=PROJECT_DIR, capture_output=True, timeout=15,
-        )
-        subprocess.run(
-            ["git", "push", "origin", "main"],
-            cwd=PROJECT_DIR, capture_output=True, timeout=30,
-        )
-    except Exception:
-        pass
+    sync_commit_push(
+        [f"ClaudeCoach/athletes/{slug}/session-log.json",
+         f"ClaudeCoach/athletes/{slug}/swim-log.json"],
+        f"stub: activity {activity_id} {slug}",
+        script="activity-watcher", athlete=slug,
+    )
 
     # Log decoupling for long rides
     if decoupling_raw and decoupling_raw != "none":

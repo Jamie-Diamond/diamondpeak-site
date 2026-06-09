@@ -15,6 +15,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "telegram"))
 from coaching_levels import level_block as _level_block
+import ops_log
 
 TOOLS = "Read,Bash"
 
@@ -140,15 +141,23 @@ def _log_to_history(slug: str, message: str) -> None:
     history_file.write_text(json.dumps(history[-30:], indent=2))
 
 
-def notify(msg, chat_id):
-    try:
-        # --no-history: this script appends to history itself after the send
-        subprocess.run(
-            ["python3", str(NOTIFY), "--no-history", "--chat-id", str(chat_id), msg],
-            cwd=PROJECT_DIR, timeout=15,
-        )
-    except Exception:
-        pass
+def notify(msg, chat_id, slug=""):
+    """Send via notify.py, retry once. Returns True only if the send succeeded —
+    the caller uses this to decide whether to write the sent-today sentinel."""
+    for _attempt in (1, 2):
+        try:
+            # --no-history: this script appends to history itself after the send
+            r = subprocess.run(
+                ["python3", str(NOTIFY), "--no-history", "--chat-id", str(chat_id), msg],
+                cwd=PROJECT_DIR, timeout=15,
+            )
+            if r.returncode == 0:
+                return True
+        except Exception:
+            pass
+    ops_log.alert("morning-checkin", "Telegram send failed after retry — card not delivered",
+                  athlete=slug)
+    return False
 
 
 def _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level="mid"):
@@ -349,15 +358,24 @@ def run_athlete(slug, athlete_cfg):
     import re as _re
     m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
     output = m.group(1).strip() if m else ""
+    sent = False
     if output:
-        notify(output, chat_id)
-        try:
-            _log_to_history(slug, output)
-        except Exception:
-            pass
-        _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level=coaching_level)
-    # Write sentinel regardless — if Claude ran without error, don't retry even if output was empty
-    if result.returncode == 0:
+        sent = notify(output, chat_id, slug=slug)
+        if sent:
+            ops_log.record_run("morning-checkin", athlete=slug, ok=True, detail="card sent")
+            try:
+                _log_to_history(slug, output)
+            except Exception:
+                pass
+            _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level=coaching_level)
+    elif result.returncode == 0:
+        ops_log.alert("morning-checkin", "claude produced no card output", athlete=slug)
+    else:
+        ops_log.alert("morning-checkin",
+                      f"claude CLI exit {result.returncode} — no card generated", athlete=slug)
+    # Sentinel only once the card is actually delivered (or claude genuinely
+    # produced nothing) — a failed Telegram send must retry on the next poll.
+    if result.returncode == 0 and (sent or not output):
         sentinel.touch()
 
 
@@ -377,6 +395,7 @@ def main():
             run_athlete(slug, cfg)
         except Exception as exc:
             print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] morning-checkin error: {exc}", file=sys.stderr)
+            ops_log.alert("morning-checkin", f"exception: {exc}", athlete=slug)
 
 
 if __name__ == "__main__":

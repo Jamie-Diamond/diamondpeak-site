@@ -10,6 +10,8 @@ from pathlib import Path
 
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
 PROJECT_DIR = str(BASE.parent)               # diamondpeak-site/
+sys.path.insert(0, str(BASE / "lib"))
+import ops_log
 CLAUDE      = "/usr/bin/claude"
 NOTIFY      = BASE / "telegram/notify.py"
 CONFIG      = BASE / "config/athletes.json"
@@ -136,10 +138,17 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         if stderr:
             with open(LOG_FILE, "a") as lf:
                 lf.write(f"[watchdog:{slug}] STDERR: {stderr}\n")
+        if result.returncode != 0:
+            ops_log.alert("watchdog",
+                          f"claude CLI exit {result.returncode}: {stderr[-300:]}", athlete=slug)
+            return None
+        ops_log.record_run("watchdog", athlete=slug, ok=True,
+                           detail="triggered" if output else "silent")
         return output or None
     except Exception as e:
         with open(LOG_FILE, "a") as lf:
             lf.write(f"[watchdog:{slug}] Exception: {e}\n")
+        ops_log.alert("watchdog", f"exception: {e}", athlete=slug)
         return None
     finally:
         os.unlink(prompt_file)
