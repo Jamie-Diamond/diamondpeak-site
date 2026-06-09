@@ -58,15 +58,17 @@ def build_digest(entries: list[dict], athletes: dict) -> list[str]:
             for e in entries
         )
 
+    # Gap lines report heartbeat absence — "we have no record it happened",
+    # which is distinct from "we recorded a failure" (the ✗ lines above).
     active = {s: c for s, c in athletes.items() if c.get("active")}
     for slug in active:
         if not _ran("morning-checkin", athlete=slug, detail="card sent"):
-            lines.append(f"⚠ no morning card sent for {slug}")
+            lines.append(f"⚠ no morning-card heartbeat for {slug}")
     for slug, cfg in active.items():
         if cfg.get("daily_prescription", True) and not _ran("daily-prescription", athlete=slug):
-            lines.append(f"⚠ no daily prescription for {slug}")
+            lines.append(f"⚠ no prescription heartbeat for {slug}")
     if not _ran("watchdog"):
-        lines.append("⚠ watchdog did not run today")
+        lines.append("⚠ no watchdog heartbeat today")
 
     return lines
 

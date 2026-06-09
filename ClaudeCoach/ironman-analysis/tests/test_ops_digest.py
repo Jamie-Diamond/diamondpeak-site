@@ -75,7 +75,7 @@ class TestBuildDigest:
         entries = [e for e in self.all_clean_entries()
                    if not (e["script"] == "morning-checkin" and e["athlete"] == "kathryn")]
         lines = digest.build_digest(entries, ATHLETES)
-        assert any("no morning card" in l and "kathryn" in l for l in lines)
+        assert any("morning-card heartbeat" in l and "kathryn" in l for l in lines)
 
     def test_missing_prescription_respects_optout(self, digest):
         # kathryn has daily_prescription=False — her absence is not a gap
@@ -85,7 +85,7 @@ class TestBuildDigest:
     def test_missing_watchdog_flagged(self, digest):
         entries = [e for e in self.all_clean_entries() if e["script"] != "watchdog"]
         lines = digest.build_digest(entries, ATHLETES)
-        assert any("watchdog did not run" in l for l in lines)
+        assert any("no watchdog heartbeat" in l for l in lines)
 
     def test_failures_are_listed(self, digest):
         entries = self.all_clean_entries() + [
