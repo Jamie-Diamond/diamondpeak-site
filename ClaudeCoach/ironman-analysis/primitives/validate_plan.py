@@ -99,11 +99,27 @@ class WeekReport:
         return [v for v in self.violations if v.severity == "hard"]
 
 
+_STRENGTH_KW = ("strength", "kettlebell", "s&c", "conditioning", "weight")
+
+
+def _is_strength(ev: dict) -> bool:
+    """A strength session — by type (WeightTraining) or name (some are typed Workout)."""
+    if str(ev.get("type") or "").strip().lower() == "weighttraining":
+        return True
+    nm = str(ev.get("name") or "").lower()
+    return any(k in nm for k in _STRENGTH_KW)
+
+
 def _normalise_day_rules(day_rules: dict | None) -> dict[str, set[int]]:
-    """Turn {'swim_days': ['Tue','Thu'], …} into {'swim_days': {1,3}, …}."""
+    """Turn {'swim_days': ['Tue','Thu'], …} into {'swim_days': {1,3}, …}.
+
+    Only list-valued keys (the *_days) are day rules; scalar keys like
+    strength_max are config that lives in the same dict and is skipped here."""
     out: dict[str, set[int]] = {}
     for key, days in (day_rules or {}).items():
-        wd = {_to_weekday(d) for d in (days or [])}
+        if not isinstance(days, (list, tuple, set)):
+            continue
+        wd = {_to_weekday(d) for d in days}
         wd.discard(None)
         out[key] = wd
     return out
@@ -118,6 +134,7 @@ def validate_week(
     tss_tolerance: float = 0.10,
     ctl_today: float | None = None,
     ramp_cap: float | None = None,
+    strength_max: int | None = None,
 ) -> WeekReport:
     """Validate the planned sessions for the 7 days starting `week_start`.
 
@@ -182,6 +199,18 @@ def validate_week(
                 detail=(f"week of {week_start}: {total_tss:.0f} TSS implies "
                         f"+{ramp:.1f} CTL/wk (from {ctl_today:.1f}), over cap "
                         f"+{ramp_cap:.1f}"),
+            ))
+
+    # 4. Strength-session weekly cap (composition quality — soft; logged in warn mode,
+    #    not block-worthy on its own). Only asserted when strength_max is supplied.
+    if strength_max is not None and strength_max >= 0:
+        n_strength = sum(1 for e in week_events if _is_strength(e))
+        if n_strength > strength_max:
+            violations.append(Violation(
+                code="strength_over_cap",
+                severity="soft",
+                detail=(f"week of {week_start}: {n_strength} strength sessions "
+                        f"planned, over the cap of {strength_max}"),
             ))
 
     return WeekReport(week_start=week_start, total_tss=total_tss, violations=violations)

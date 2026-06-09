@@ -134,3 +134,42 @@ class TestValidatePlanMultiWeek:
                                 day_rules=DAY_RULES)
         assert len(reports) == 2
         assert all(r.ok for r in reports)
+
+
+class TestStrengthCap:
+    """≤N strength sessions/week (composition quality). Soft severity — logged in
+    warn mode, never block-worthy on its own."""
+
+    def _ev_named(self, day_iso, name, sport="WeightTraining"):
+        return {"start_date_local": f"{day_iso}T00:00:00", "type": sport,
+                "name": name, "load_target": 20, "category": "WORKOUT"}
+
+    def test_over_cap_flags_soft(self):
+        evs = [self._ev_named("2026-06-15", "Strength & conditioning"),
+               self._ev_named("2026-06-17", "Kettlebell circuit"),
+               self._ev_named("2026-06-19", "S&C lower body", sport="Workout")]  # typed Workout
+        rep = validate_week(evs, WEEK, strength_max=2)
+        hits = [v for v in rep.violations if v.code == "strength_over_cap"]
+        assert len(hits) == 1 and hits[0].severity == "soft"
+        assert "3 strength" in hits[0].detail
+
+    def test_at_cap_is_clean(self):
+        evs = [self._ev_named("2026-06-15", "Strength & conditioning"),
+               self._ev_named("2026-06-17", "Kettlebell circuit")]
+        rep = validate_week(evs, WEEK, strength_max=2)
+        assert not [v for v in rep.violations if v.code == "strength_over_cap"]
+
+    def test_not_checked_when_unset(self):
+        evs = [self._ev_named("2026-06-15", "Strength"),
+               self._ev_named("2026-06-16", "Strength"),
+               self._ev_named("2026-06-17", "Strength")]
+        rep = validate_week(evs, WEEK)        # no strength_max → no check
+        assert not [v for v in rep.violations if v.code == "strength_over_cap"]
+
+    def test_strength_max_key_in_day_rules_does_not_crash_day_parsing(self):
+        # day_rules now carries scalar strength_max alongside the *_days lists.
+        dr = {"swim_days": ["Tue", "Thu"], "run_days": ["Tue", "Wed", "Sat", "Sun"],
+              "strength_max": 2}
+        evs = [_ev("2026-06-16", "Swim", 35), _ev("2026-06-17", "Run", 45)]
+        rep = validate_week(evs, WEEK, day_rules=dr, strength_max=2)  # must not raise
+        assert isinstance(rep, WeekReport)

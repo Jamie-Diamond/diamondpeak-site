@@ -103,6 +103,24 @@ class TestDayRuleSingleSource:
         assert "Swims ONLY on Monday, Wednesday" in p
         assert "Bike sessions ONLY on Saturday" in p
 
+    def test_template_does_not_default_wednesday_to_strength(self, gp):
+        # Regression: the model picked strength on Wed because the template OFFERED
+        # "Strength or Run". Wed must lead with the run; strength is a capped extra.
+        cfg = {"name": "T", "race_distance": "Full Ironman", "plan_start": "2026-04-27",
+               "phase_tss": {"base_end_week": 6, "build_end_week": 10,
+                             "specific_end_week": 14, "peak_end_week": 17},
+               "ctl_targets": {"race_min": 95,
+                               "phase_ctl": {"base": 70, "build": 82, "specific": 90, "peak": 95}},
+               "day_rules": {"swim_days": ["Tue", "Thu"], "bike_days": ["Fri", "Sat", "Sun"],
+                             "run_days": ["Tue", "Wed", "Sat", "Sun"], "strength_max": 2}}
+        prof = {"race_distance": "Full Ironman", "race_date": "2026-09-19", "max_hours_per_week": 15}
+        p = gp.build_prompt("t", cfg, prof, ctl_today=70.0)
+        assert "Wednesday: Strength or Run" not in p          # bad option removed
+        assert "Wednesday: Run (Z2)" in p                     # run-first
+        assert "Thursday: Swim only" in p
+        assert "never more than 2 strength" in p              # hard cap, from strength_max
+        assert "Runs ONLY on Tuesday, Wednesday, Saturday, Sunday" in p   # run_days HARD line
+
     def test_no_day_rules_gives_flexible_template_not_jamie_pattern(self, gp):
         # An athlete WITHOUT day_rules must NOT inherit another athlete's day
         # pattern: no HARD day-rule lines, no Tue/Thu fallback, no day-pinned

@@ -294,6 +294,7 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
     # the cross-training block below — without it, never assert a particular athlete's
     # day-lock (e.g. "bike locked to Fri–Sun") as if it were universal.
     _has_day_rules = bool(cfg.get("day_rules"))
+    _strength_max = int((cfg.get("day_rules") or {}).get("strength_max", 2))
     if _has_day_rules:
         _xtrain_intro = (
             "CROSS-TRAINING — the gap-closer when bike/run/swim are capped (e.g. ankle limits run volume,\n"
@@ -360,13 +361,13 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, re
         if _dr_lines:
             week_template = f"""Standard week template (adapt to phase):
 {_dr_lines}
-- Monday: Rest or short Z1 run — no cycling, no swimming
-- Tuesday: Swim (aerobic/CSS) + Run (Z2, walk-run if ankle protocol applies)
-- Wednesday: Strength or Run (Z2) — NO cycling
-- Thursday: Swim (CSS-based) + optional short run
+- Monday: Rest (recovery day — no training)
+- Tuesday: Swim (aerobic/CSS) AM + Run (Z2, walk-run if ankle protocol applies) PM
+- Wednesday: Run (Z2) + ONE optional spare slot (strength OR low-impact cross-training) — NOT a default strength day; the run is the priority. NO cycling.
+- Thursday: Swim only (CSS-based) — no run
 - Friday: Long ride (~3.5–4 hr, Z2 NP target) — key session
-- Saturday: Run (Z2) or Bike (if second ride week)
-- Sunday: Z2 ride (2–3 hr) or rest"""
+- Saturday: Prefer riding — second long/endurance ride (or a run/brick if the week needs it)
+- Sunday: Prefer riding — Z2 ride (or rest)"""
         else:
             week_template = """Standard week template (adapt to phase). This athlete has NO fixed training days — place each session on whatever day fits their weekly availability (profile training_days, and any current-state.md travel blocks). Honour per-day duration caps from rules.md (e.g. a Saturday long-ride time cap). Do NOT impose a fixed day for any sport, and do NOT carry over another athlete's day pattern.
 Across the week, include (place freely, adapt to phase):
@@ -673,7 +674,7 @@ not a licence to deload.
 
 Step 5 — Apply mandatory constraints (from rules.md if present — these are HARD overrides):
 {step5_constraints}
-- Strength: minimum 1 session/week (target 2).
+- Strength: 1–2 sessions/week. HARD CAP: never more than {_strength_max} strength sessions in a single week — extra strength is a FAILED plan. It is supplementary; do NOT use strength to fill slots that should hold a run, swim, or ride.
 - Never prescribe new fuel/kit/shoes in the last 4 weeks.
 - Always state day-of-week alongside date in session names.
 
@@ -857,9 +858,11 @@ def _backstop_validate(slug: str, cfg: dict, ctl_today: float, replan: bool) -> 
             return {"mode": mode, "breaches": [], "hard": []}
         day_rules = cfg.get("day_rules")
         ramp_cap  = float(cfg.get("max_ctl_ramp_per_week", 5.0))
+        strength_max = (day_rules or {}).get("strength_max")
         reports = validate_plan(
             events, [ws, ws + timedelta(days=7)],
             day_rules=day_rules, ctl_today=ctl_today, ramp_cap=ramp_cap,
+            strength_max=strength_max,
         )
         breaches = [v for r in reports for v in r.violations]
         hard = [v for v in breaches if v.severity == "hard"]
