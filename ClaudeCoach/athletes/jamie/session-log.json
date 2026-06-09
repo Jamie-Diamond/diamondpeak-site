@@ -1,5 +1,21 @@
 [
   {
+    "activity_id": "i155628473",
+    "date": "2026-06-09",
+    "name": "Pool Swim",
+    "sport": "Swim",
+    "tss": 74,
+    "duration_min": 68,
+    "distance_km": 3.0,
+    "pace_per_100m": 104.83,
+    "avg_hr": 125,
+    "rpe": null,
+    "feel": null,
+    "notes": null,
+    "logged_at": "2026-06-09T08:00:00",
+    "stub": true
+  },
+  {
     "activity_id": "i154522450",
     "date": "2026-06-05",
     "name": "Wandsworth Road Cycling",
