@@ -31,7 +31,7 @@ When the algorithm produces more than one Base phase, each successive base build
 
 **Peak** — quality over quantity. Volume reduces by 15–20% vs build. Intensity maintained or sharpened. Final long race-simulation sessions in first half of peak.
 
-**Taper** — volume cut to 40–50% of peak week. Intensity touches maintained (2–3 short sharp sessions). TSS/day drops, CTL declines, TSB rises toward +5 to +15 by race eve.
+**Taper** — volume steps down across the taper to ~70% → 55% → 40% of peak week (per-event tables in §4 are authoritative). Intensity touches maintained (2–3 short sharp sessions). TSS/day drops, CTL declines, TSB rises toward +5 to +15 by race eve.
 
 ### 1.3 TSS Ceiling Formula
 
@@ -48,7 +48,7 @@ Intensity Factor (IF) targets by phase:
 | Base | 0.65 | 634 | 465 |
 | Build | 0.68 | 694 | 509 |
 | Peak | 0.72 | 778 | 570 |
-| Taper | — | 40–50% of peak week | 40–50% of peak week |
+| Taper | — | steps 70→55→40% of peak week | steps 70→55→40% of peak week |
 
 The ceiling is a hard upper bound. Actual weekly TSS targets start lower and ramp toward the ceiling progressively.
 
@@ -106,17 +106,17 @@ Distribution is expressed as a **weekly average per sport**, not a per-session r
 
 ### 3.1 Zone Definitions
 
-**Cycling (power-based):**
+**Cycling (power-based — intervals.icu 7-zone scheme; the athlete's live sportSettings in intervals.icu override this reference table):**
 
 | Zone | % FTP | Description |
 |---|---|---|
 | Z1 | < 55% | Active recovery |
 | Z2 | 55–75% | Aerobic endurance |
-| Z3 | 76–87% | Tempo / sweet spot |
-| Z4 | 88–94% | Threshold |
-| Z5 | 95–105% | VO₂ max |
-| Z6 | 106–120% | Anaerobic capacity |
-| Z7 | > 120% | Neuromuscular |
+| Z3 | 75–90% | Tempo / sweet spot |
+| Z4 | 90–105% | Threshold |
+| Z5 | 105–120% | VO₂ max |
+| Z6 | 120–150% | Anaerobic capacity |
+| Z7 | > 150% | Neuromuscular |
 
 **Running (HR-based, % LTHR):**
 
@@ -169,7 +169,7 @@ Each event profile defines the race-specific demands that shape the build and pe
 **Race demands:** 3.8km swim / 180km bike / 42.2km run. Total duration 9–17 hours. Dominantly aerobic (Z2). Bike pacing critical — target IF 0.68–0.72. Run is a controlled Z2 effort with final-km surge only.
 
 **Key sessions:**
-- Long ride: 4–6 hours at Z2 with fuelling practice. Frequency: weekly in build/peak.
+- Long ride: 4–6 hours at Z2 with fuelling practice. Frequency: weekly in build/peak. Durability: from build onwards the ride finishes WITH work — early build last 2×20 min at race IF, progressing to a continuous 60–90 min race-IF finish by peak (fatigue resistance is trained at intensity on tired legs, not by Z2 hours alone).
 - Long run: 2–3.5 hours. Cap at 32km in build; pull back to 26km in peak.
 - Swim: 3–4 km sets including 1×1500m continuous sub-race-pace effort.
 - Bricks: minimum 1/week in build, 2/week in peak. Standard brick = 90–120 min ride + 30–40 min run.

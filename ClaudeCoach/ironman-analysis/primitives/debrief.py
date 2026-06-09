@@ -10,14 +10,18 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
-# Coggan 6-zone power model (fraction of FTP)
+# intervals.icu 7-zone power model (fraction of FTP) — the SAME scheme the
+# athlete sees in ICU and that rules.md / the planner prompts mean by "Z4".
+# (Was a compressed 6-zone model with Z4 = 87–95%; unified 2026-06-09 so
+# debrief zone labels agree with every other zone reference in the system.)
 POWER_ZONES: dict[str, tuple[float, float]] = {
     "Z1": (0.0,  0.55),
     "Z2": (0.55, 0.75),
-    "Z3": (0.75, 0.87),
-    "Z4": (0.87, 0.95),
-    "Z5": (0.95, 1.05),
-    "Z6": (1.05, float("inf")),
+    "Z3": (0.75, 0.90),
+    "Z4": (0.90, 1.05),
+    "Z5": (1.05, 1.20),
+    "Z6": (1.20, 1.50),
+    "Z7": (1.50, float("inf")),
 }
 
 _DECOUPLING_FLAG_PCT = 5.0    # > 5% HR:power drift = aerobic stress

@@ -523,7 +523,7 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     lines.append("|---|---|---|---|---|")
     for p in phases:
         ceil = tss_ceiling(max_hours, p["name"])
-        ceil_str = f"{int(ceil)}" if ceil else "40–50% of peak"
+        ceil_str = f"{int(ceil)}" if ceil else "steps 70→55→40% of peak"
         lines.append(
             f"| {p['name']} | {p['start'].isoformat()} | {p['end'].isoformat()} "
             f"| {p['weeks']} | {ceil_str} |"
@@ -534,7 +534,7 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     for p in phases:
         fam = phase_family(p["name"])
         if fam == "taper":
-            lines.append(f"- **{p['name']}:** 40–50% of preceding peak week. Intensity touches maintained.")
+            lines.append(f"- **{p['name']}:** volume steps down ~70 → 55 → 40% of the preceding peak week. Intensity touches maintained.")
         else:
             ceil = tss_ceiling(max_hours, p["name"])
             IF = IF_TARGETS.get(content_family(fam), 0.65)

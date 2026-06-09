@@ -237,15 +237,16 @@ class TestPowerZoneDistribution:
         dist = power_zone_distribution(laps, ftp=300)
         assert dist["Z4"] == pytest.approx(600.0)
 
-    def test_z5_at_ftp(self):
-        laps = [LapMetrics(1, 600, 300, 160, None)]  # exactly FTP = Z5 lower bound
+    def test_at_ftp_is_z4_threshold(self):
+        # ICU 7-zone scheme: threshold (Z4) spans 90-105% FTP, so riding AT FTP is Z4
+        laps = [LapMetrics(1, 600, 300, 160, None)]
         dist = power_zone_distribution(laps, ftp=300)
-        assert dist["Z5"] == pytest.approx(600.0)
+        assert dist["Z4"] == pytest.approx(600.0)
 
-    def test_z6_above_ftp(self):
-        laps = [LapMetrics(1, 300, 330, 170, None)]  # 110% FTP = Z6
+    def test_z5_above_ftp(self):
+        laps = [LapMetrics(1, 300, 330, 170, None)]  # 110% FTP = Z5 (VO2max)
         dist = power_zone_distribution(laps, ftp=300)
-        assert dist["Z6"] == pytest.approx(300.0)
+        assert dist["Z5"] == pytest.approx(300.0)
 
     def test_no_power_data_returns_zeros(self):
         laps = [LapMetrics(1, 600, None, 140, None)]

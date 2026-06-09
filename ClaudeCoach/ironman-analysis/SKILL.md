@@ -65,7 +65,7 @@ Primitives are pure: dicts/lists in, dicts/lists out. No MCP coupling.
 | `quality_label` | str | executed_well \| adequate \| undercooked \| overdone |
 | `flags` | list[str] | Auto-generated concern strings (decoupling, power drop, execution gap) |
 
-Power zones (Coggan): Z1 <55% FTP, Z2 55–75%, Z3 75–87%, Z4 87–95%, Z5 95–105%, Z6 >105%.
+Power zones (intervals.icu 7-zone): Z1 <55% FTP, Z2 55–75%, Z3 75–90%, Z4 90–105%, Z5 105–120%, Z6 120–150%, Z7 >150%. The athlete's live sportSettings in intervals.icu are authoritative; this is the reference scheme used by debrief binning.
 
 Lap data comes from `get_activity_detail` → `laps` key. Pace field `avg_pace` in Intervals.icu is seconds/metre → `build_debrief` converts to s/km automatically.
 

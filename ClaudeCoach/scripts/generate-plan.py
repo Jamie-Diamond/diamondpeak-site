@@ -38,7 +38,7 @@ from primitives.blueprint import (  # noqa: E402
     resolve_phases,
     is_multisport as event_is_multisport,
 )
-from primitives.validate_plan import validate_plan  # noqa: E402
+from primitives.validate_plan import validate_week  # noqa: E402
 
 
 def trim_log(path: Path, max_lines: int = 5000):
@@ -446,7 +446,7 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0,
     Build:    threshold bike work, extend long run, introduce bricks
     Specific: race-pace intervals, brick sessions, sport-specific intensity
     Peak:     race simulation, consolidate fitness — high density week
-    Taper:    sharpen, no new stimuli, 50–60% of peak load"""
+    Taper:    sharpen, no new stimuli; volume steps down ~70 → 55 → 40% of peak week"""
         _injuries = profile.get("injuries") or []
         _ramp_cap = cfg.get("max_ctl_ramp_per_week", 5.0)
         _injury_block = ""
@@ -689,7 +689,22 @@ A plan that is >10% short of target with no LOAD GAP section in the message is a
     from datetime import date as _bd
     _bp = load_blueprint(slug)
     blueprint_block = ""
+    durability_block = ""
     _cur = current_phase(_bp, _next_mon)
+    # Durability — fatigue resistance is trained by working at intensity on tired
+    # legs, not by Z2 hours alone; the long ride must finish with work from build
+    # onwards. (Jamie's 2025 race limiter: −60 W on lap 2, 14.5% decoupling.)
+    if _cur and any(k in str(_cur.get("name", "")).lower()
+                    for k in ("build", "specific", "peak")):
+        durability_block = """
+DURABILITY — in build/specific/peak the weekly long ride must FINISH WITH WORK, not just
+accumulate hours. Schedule the final portion at race intensity and write it explicitly into the
+session description: early build = last 2x20 min at race IF; progress through the phase toward a
+continuous 60–90 min race-IF finish by peak. The Z2 body of the ride stays; only the closing
+block is at intensity, and it counts toward the quality share of the weekly distribution. Long
+RUNS keep their existing structure — the run progression guard applies and no quality is added
+to long runs unless the athlete's rules say so.
+"""
     if _cur:
         _win_end = _next_mon + timedelta(days=13)
         _dist = _cur.get("distribution") or {}
@@ -817,6 +832,7 @@ KEY SESSION — for a long-course triathlon in base/build, the weekly LONG AEROB
 anchor. It must be present, must be a genuine long Z2/endurance ride (not displaced by an
 interval/sweetspot session), and must be its full prescribed duration. Quality/interval work
 is secondary to it. Never drop or shorten the long ride to make room for intervals.
+{durability_block}
 
 BUILD TO TARGET — the weekly TSS target (Step 4) is the objective. Session count and which
 days are used are just the MEANS to reach it, not goals in themselves.
@@ -1002,11 +1018,18 @@ def _backstop_validate(slug: str, cfg: dict, ctl_today: float, replan: bool) -> 
         day_rules = cfg.get("day_rules")
         ramp_cap  = float(cfg.get("max_ctl_ramp_per_week", 5.0))
         strength_max = (day_rules or {}).get("strength_max")
-        reports = validate_plan(
-            events, [ws, ws + timedelta(days=7)],
-            day_rules=day_rules, ctl_today=ctl_today, ramp_cap=ramp_cap,
-            strength_max=strength_max,
-        )
+        bp = load_blueprint(slug)
+        reports = []
+        for ws_i in (ws, ws + timedelta(days=7)):
+            # Distribution targets are per-phase — resolve the phase containing
+            # each validated week so boundary weeks check against the right table.
+            phase = current_phase(bp, ws_i) or {}
+            reports.append(validate_week(
+                events, ws_i,
+                day_rules=day_rules, ctl_today=ctl_today, ramp_cap=ramp_cap,
+                strength_max=strength_max,
+                distribution=phase.get("distribution"),
+            ))
         breaches = [v for r in reports for v in r.violations]
         hard = [v for v in breaches if v.severity == "hard"]
         total = sum(r.total_tss for r in reports)

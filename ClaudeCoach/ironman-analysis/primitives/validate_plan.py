@@ -23,10 +23,12 @@ the athlete's day_rules through; this module never invents them.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from primitives.load import compute_projected_ctl
+from primitives.modulation import classify_session_type
 
 # Weekday name → Python weekday() int (Mon=0). Accepts common abbreviations.
 _DOW = {
@@ -99,6 +101,73 @@ class WeekReport:
         return [v for v in self.violations if v.severity == "hard"]
 
 
+# -- Intensity-distribution drift ----------------------------------------------
+# The blueprint's per-phase tables ("75% Z1–2 / 15% Z3 / 10% Z4–5") are weekly
+# time-in-zone guidance. We can't see inside a session, but we CAN classify whole
+# sessions easy vs quality (the same coarse classifier the prescription backstop
+# uses) and flag a week whose easy share falls far below the phase's Z1–2 target.
+# Tolerance is generous (interval sessions contain Z2 warmup/recovery the binary
+# classification can't credit) and the check only fires on EXCESS QUALITY — extra
+# easy volume is never a safety problem, and undershooting load is the gap-check's
+# job. Swims and bricks are excluded: name-based quality detection is unreliable
+# for swims, and bricks are mixed by definition.
+
+_EASY_TYPES = {"bike_z2", "run_easy", "run_long"}
+_QUALITY_TYPES = {"bike_threshold", "bike_vo2", "bike_race_pace", "run_quality"}
+_SPORT_BUCKET = {"ride": "Bike", "virtualride": "Bike", "gravelride": "Bike", "run": "Run"}
+
+# Fallback planned minutes when an event carries no moving_time (planned events
+# often don't) — coarse, mirrors the planner's own per-type defaults.
+_TYPE_FALLBACK_MIN = {
+    "bike_z2": 90, "bike_threshold": 75, "bike_vo2": 75, "bike_race_pace": 90,
+    "run_easy": 50, "run_long": 90, "run_quality": 60,
+}
+
+DIST_TOLERANCE_PP = 12.0   # percentage points below the Z1–2 target before flagging
+DIST_MIN_SESSIONS = 2      # don't judge a sport on a single session
+DIST_MIN_MINUTES  = 120    # ...or on under two hours of planned work
+
+
+def _easy_target_pct(dist_row) -> float | None:
+    """Leading Z1–2 share from a row like '75% Z1–2 / 15% Z3 / 10% Z4–5'."""
+    m = re.match(r"\s*(\d+(?:\.\d+)?)\s*%\s*Z1", str(dist_row or ""))
+    return float(m.group(1)) if m else None
+
+
+def _check_distribution(week_events: list[dict], week_start: date,
+                        distribution: dict, tolerance_pp: float) -> list["Violation"]:
+    buckets: dict[str, dict[str, float]] = {}   # sport → {easy_min, total_min, n}
+    for e in week_events:
+        sport = _SPORT_BUCKET.get(str(e.get("type") or "").strip().lower())
+        if not sport:
+            continue
+        st = classify_session_type(e.get("type", ""), e.get("name", ""))
+        if st not in _EASY_TYPES and st not in _QUALITY_TYPES:
+            continue
+        mins = (float(e.get("moving_time") or 0) / 60) or _TYPE_FALLBACK_MIN.get(st, 60)
+        b = buckets.setdefault(sport, {"easy": 0.0, "total": 0.0, "n": 0})
+        b["total"] += mins
+        b["n"] += 1
+        if st in _EASY_TYPES:
+            b["easy"] += mins
+
+    out: list[Violation] = []
+    for sport, b in buckets.items():
+        target = _easy_target_pct((distribution or {}).get(sport))
+        if target is None or b["n"] < DIST_MIN_SESSIONS or b["total"] < DIST_MIN_MINUTES:
+            continue
+        easy_pct = b["easy"] / b["total"] * 100
+        if easy_pct < target - tolerance_pp:
+            out.append(Violation(
+                code="intensity_distribution",
+                severity="soft",
+                detail=(f"week of {week_start}: {sport} is {easy_pct:.0f}% easy by "
+                        f"session time vs the phase target {target:.0f}% Z1–2 "
+                        f"(tolerance −{tolerance_pp:.0f}pp) — too much quality planned"),
+            ))
+    return out
+
+
 _STRENGTH_KW = ("strength", "kettlebell", "s&c", "conditioning", "weight")
 
 
@@ -135,6 +204,8 @@ def validate_week(
     ctl_today: float | None = None,
     ramp_cap: float | None = None,
     strength_max: int | None = None,
+    distribution: dict | None = None,
+    dist_tolerance_pp: float = DIST_TOLERANCE_PP,
 ) -> WeekReport:
     """Validate the planned sessions for the 7 days starting `week_start`.
 
@@ -212,6 +283,12 @@ def validate_week(
                 detail=(f"week of {week_start}: {n_strength} strength sessions "
                         f"planned, over the cap of {strength_max}"),
             ))
+
+    # 5. Intensity-distribution drift (soft) — excess planned quality vs the
+    #    blueprint phase's Z1–2 share. Only asserted when a distribution is supplied.
+    if distribution:
+        violations.extend(
+            _check_distribution(week_events, week_start, distribution, dist_tolerance_pp))
 
     return WeekReport(week_start=week_start, total_tss=total_tss, violations=violations)
 

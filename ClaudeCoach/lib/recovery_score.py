@@ -60,6 +60,19 @@ def _score_tsb(tsb):
     return 15
 
 
+def _score_tsb_taper(tsb):
+    """TSB during TAPER → 0-100. Rising freshness is the goal (+5…+15 by race
+    eve), so high TSB scores well here — the normal scorer would mark correct
+    taper days 'too fresh' (65 → AMBER) all race week."""
+    if tsb is None:
+        return None
+    if tsb >= 25:    return 70   # excessively fresh even for taper — detraining check
+    if tsb >= 5:     return 95   # on target
+    if tsb >= -5:    return 85   # normal early taper
+    if tsb >= -15:   return 70   # still carrying load — fine early taper, watch late
+    return 40                    # heavily fatigued in taper — something is wrong
+
+
 def _score_sleep(hrs):
     """Sleep hours → 0-100. Target ≥ 7h."""
     if hrs is None:
@@ -97,14 +110,16 @@ _LABELS = [
 ]
 
 
-def compute(hrv_today=None, hrv_baseline=None, tsb=None, sleep_hrs=None, pain=0):
+def compute(hrv_today=None, hrv_baseline=None, tsb=None, sleep_hrs=None, pain=0,
+            in_taper=False):
     """
     Returns the recovery dict. Any input may be None — missing signals are
-    excluded and remaining weights are rescaled proportionally.
+    excluded and remaining weights are rescaled proportionally. `in_taper`
+    switches the TSB scorer to the taper variant (high TSB is the goal there).
     """
     raw = {
         "hrv":   _score_hrv(hrv_today, hrv_baseline),
-        "tsb":   _score_tsb(tsb),
+        "tsb":   _score_tsb_taper(tsb) if in_taper else _score_tsb(tsb),
         "sleep": _score_sleep(sleep_hrs),
         "pain":  _score_pain(pain if pain is not None else 0),
     }
@@ -153,6 +168,22 @@ def compute(hrv_today=None, hrv_baseline=None, tsb=None, sleep_hrs=None, pain=0)
         "available_signals": list(available),
         "missing_signals":   missing,
     }
+
+
+def in_taper(slug: str) -> bool:
+    """True when today falls inside the athlete's Taper phase (blueprint sidecar).
+    Missing/invalid sidecar → False (normal scoring)."""
+    p = ROOT / f"athletes/{slug}/reference/training-blueprint.json"
+    try:
+        phases = json.loads(p.read_text()).get("phases") or []
+    except Exception:
+        return False
+    today = date.today().isoformat()
+    return any(
+        "taper" in str(ph.get("name", "")).lower()
+        and str(ph.get("start", "")) <= today <= str(ph.get("end", ""))
+        for ph in phases
+    )
 
 
 # ── CLI entry point ───────────────────────────────────────────────────────────
@@ -221,7 +252,8 @@ def main():
         else:
             pain = 0
 
-    result = compute(hrv_today, hrv_baseline, tsb, sleep_hrs, pain)
+    result = compute(hrv_today, hrv_baseline, tsb, sleep_hrs, pain,
+                     in_taper=in_taper(args.athlete))
     print(json.dumps(result, indent=2))
 
 

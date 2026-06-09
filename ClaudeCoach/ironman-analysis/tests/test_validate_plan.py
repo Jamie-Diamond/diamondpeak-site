@@ -173,3 +173,58 @@ class TestStrengthCap:
         evs = [_ev("2026-06-16", "Swim", 35), _ev("2026-06-17", "Run", 45)]
         rep = validate_week(evs, WEEK, day_rules=dr, strength_max=2)  # must not raise
         assert isinstance(rep, WeekReport)
+
+
+# -- Intensity-distribution drift (check 5) ------------------------------------
+
+DIST = {"Bike": "75% Z1–2 / 15% Z3 / 10% Z4–5",
+        "Run":  "80% Z1–2 / 12% Z3 / 8% Z4–5"}
+
+
+def _named(day_iso, sport, name, mins):
+    return {"start_date_local": f"{day_iso}T00:00:00", "type": sport, "name": name,
+            "moving_time": mins * 60, "load_target": 50, "category": "WORKOUT"}
+
+
+class TestDistributionDrift:
+    def test_easy_dominant_week_passes(self):
+        evs = [
+            _named("2026-06-19", "Ride", "Long Z2 ride", 240),
+            _named("2026-06-20", "Ride", "Threshold ride (3x10)", 75),
+            _named("2026-06-15", "Run", "Easy run", 50),
+            _named("2026-06-16", "Run", "Long run", 100),
+        ]
+        r = validate_week(evs, WEEK, distribution=DIST)
+        assert not [v for v in r.violations if v.code == "intensity_distribution"]
+
+    def test_quality_heavy_bike_week_flagged_soft(self):
+        evs = [
+            _named("2026-06-19", "Ride", "VO2max intervals (5x4)", 75),
+            _named("2026-06-20", "Ride", "Threshold ride (3x15 sweet spot)", 90),
+            _named("2026-06-21", "Ride", "Z2 spin", 60),
+        ]
+        r = validate_week(evs, WEEK, distribution=DIST)
+        hits = [v for v in r.violations if v.code == "intensity_distribution"]
+        assert len(hits) == 1 and hits[0].severity == "soft" and "Bike" in hits[0].detail
+
+    def test_single_session_never_judged(self):
+        evs = [_named("2026-06-19", "Ride", "VO2max intervals", 150)]
+        r = validate_week(evs, WEEK, distribution=DIST)
+        assert not [v for v in r.violations if v.code == "intensity_distribution"]
+
+    def test_no_distribution_supplied_check_inert(self):
+        evs = [
+            _named("2026-06-19", "Ride", "VO2max intervals (5x4)", 75),
+            _named("2026-06-20", "Ride", "Threshold ride", 90),
+        ]
+        r = validate_week(evs, WEEK)
+        assert not [v for v in r.violations if v.code == "intensity_distribution"]
+
+    def test_swims_and_bricks_excluded(self):
+        evs = [
+            _named("2026-06-16", "Swim", "CSS test set", 60),
+            _named("2026-06-18", "Swim", "CSS intervals", 60),
+            _named("2026-06-20", "Ride", "Brick: 90min Z3 + 20min run", 110),
+        ]
+        r = validate_week(evs, WEEK, distribution=DIST)
+        assert not [v for v in r.violations if v.code == "intensity_distribution"]

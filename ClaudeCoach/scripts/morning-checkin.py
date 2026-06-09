@@ -335,7 +335,8 @@ def run_athlete(slug, athlete_cfg):
             resting_today = ankle.get("pain_today_resting_date") == today_str
             pain = (ankle.get("pain_today_resting", 0) if resting_today
                     else ankle.get("pain_next_morning", 0)) or 0
-        recovery = rs.compute(hrv_t, hrv_b, tsb, sleep, pain)
+        recovery = rs.compute(hrv_t, hrv_b, tsb, sleep, pain,
+                              in_taper=rs.in_taper(slug))
     except Exception:
         pass  # score is optional — morning card still sends without it
 
