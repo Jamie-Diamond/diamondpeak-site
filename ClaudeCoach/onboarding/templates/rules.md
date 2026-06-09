@@ -69,6 +69,12 @@ For $race_distance — gains follow this priority order when weekly volume must 
 2. **Run** — determines finishing place more than swim at this distance
 3. **Swim** — maintain, don't sacrifice
 
+### Swim pace rules
+
+- **CSS is the anchor (see the table above / profile.json); all swim paces are RELATIVE to it** — never store a derived absolute, so a CSS retest updates them automatically. (The bot's `css <time>` command rewrites the CSS value + profile.json.) Race-pace = CSS +3s/100m, aerobic/easy = CSS +4–9s, threshold = AT CSS. Always compute from the current CSS.
+- **"PB" = PULL BUOY**, never "personal best". A "PB set" is swum with a pull buoy (isolates the pull, cuts leg drag); buoy reps run ~CSS to a few sec faster — judge against CSS, never as a PB time.
+- **Rep pace realism — repeatability, not a CSS floor.** Faster-than-CSS speed/interval reps are fine at any rep length (sub-CSS is normal training). The target must be holdable across the WHOLE set for the rep length/count/rest; a one-off TT pace dressed up as a repeated set is wrong — sanity-check against what the athlete can actually sustain.
+
 ---
 
 ## Fuelling guidelines

@@ -1009,6 +1009,28 @@ def _update_css(slug: str, css_str: str) -> str:
     except Exception as e:
         return f"Failed to update CSS: {e}"
 
+    # Keep the stated CSS in the coaching files in sync (like _update_ftp does for FTP).
+    # Swim pace zones in those files are RELATIVE to CSS, so updating this one anchor
+    # value keeps every derived pace correct. Replace the old value only on CSS lines.
+    if prev and prev != css_str.strip():
+        adir = BASE.parent / "athletes" / slug
+        for fp in (adir / "system_prompt.txt", adir / "reference" / "rules.md"):
+            try:
+                if not fp.exists():
+                    continue
+                lines = fp.read_text().splitlines(keepends=True)
+                out, changed = [], False
+                for ln in lines:
+                    if "css" in ln.lower() and prev in ln:
+                        new_ln = ln.replace(prev, css_str.strip())
+                        changed = changed or (new_ln != ln)
+                        ln = new_ln
+                    out.append(ln)
+                if changed:
+                    fp.write_text("".join(out))
+            except Exception:
+                pass
+
     _mark_test_completed(slug, "css")
 
     try:
