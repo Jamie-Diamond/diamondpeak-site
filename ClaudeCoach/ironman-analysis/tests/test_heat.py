@@ -59,7 +59,8 @@ class TestState:
     def test_inactive_when_race_not_hot(self, athlete):
         self._write(athlete, False, None)
         s = heat.state("x")
-        assert s == {"active": False, "starts": None, "in_protocol_window": False}
+        assert s == {"active": False, "starts": None,
+                     "in_protocol_window": False, "maintenance": False}
 
     def test_active_but_paused_before_starts(self, athlete):
         future = (date.today() + timedelta(days=30)).isoformat()
@@ -80,3 +81,12 @@ class TestState:
     def test_missing_sidecar_inactive(self, monkeypatch, tmp_path):
         monkeypatch.setattr(heat, "BASE", tmp_path)
         assert heat.state("nobody")["active"] is False
+
+    def test_maintenance_is_optin(self, athlete):
+        future = (date.today() + timedelta(days=30)).isoformat()
+        self._write(athlete, True, future)
+        assert heat.state("x")["maintenance"] is False                     # default: silent pre-window
+        assert heat.state("x", {"heat_maintenance": True})["maintenance"] is True
+        # opt-in means nothing if heat itself is inactive
+        self._write(athlete, False, None)
+        assert heat.state("x", {"heat_maintenance": True})["maintenance"] is False

@@ -28,12 +28,19 @@ PROTOCOL_DOSE_14D    = 3.0   # race-proximal target once the formal block starts
 
 
 def state(slug: str, profile: dict | None = None) -> dict:
-    """{active, starts, in_protocol_window} for an athlete. `active` False means
-    no heat prep for this race (or athlete kill switch); `in_protocol_window`
-    True means the formal race−4wk block has begun."""
+    """{active, starts, in_protocol_window, maintenance} for an athlete.
+
+    `active` False means no heat prep for this race (or athlete kill switch);
+    `in_protocol_window` True means the formal race−4wk block has begun;
+    `maintenance` True means the athlete opted in (profile `heat_maintenance`)
+    to having their ambient-exposure dose policed BEFORE the window — for an
+    athlete who deliberately paused formal heat work on "I'm in hot venues
+    enough". Without it, nothing nags before `starts`.
+    """
     profile = profile or {}
     if profile.get("heat_protocol") is False:
-        return {"active": False, "starts": None, "in_protocol_window": False}
+        return {"active": False, "starts": None,
+                "in_protocol_window": False, "maintenance": False}
     f = BASE / "athletes" / slug / "reference/training-blueprint.json"
     try:
         h = (json.loads(f.read_text()).get("env_protocols") or {}).get("heat") or {}
@@ -47,7 +54,8 @@ def state(slug: str, profile: dict | None = None) -> dict:
             in_window = starts is None or date.fromisoformat(starts) <= date.today()
         except (ValueError, TypeError):
             in_window = True
-    return {"active": active, "starts": starts, "in_protocol_window": in_window}
+    return {"active": active, "starts": starts, "in_protocol_window": in_window,
+            "maintenance": active and bool(profile.get("heat_maintenance"))}
 
 
 def exposure_entry(act: dict) -> dict | None:

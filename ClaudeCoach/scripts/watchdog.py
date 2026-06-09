@@ -57,12 +57,18 @@ def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: 
                      "an entry with no dose field counts as 1.0; a missing or empty "
                      "heat-log.json counts as total dose 0.")
         if today < starts:
-            heat_triggers = (
-                f"T7 (Tier 2): Heat maintenance — the formal heat protocol is PAUSED on ambient "
-                f"exposure until {starts}. {dose_note} If 14-day dose < {heat_lib.MAINTENANCE_DOSE_14D} "
-                f"fire: \"heat maintenance dose low — ambient exposure is not covering the pause; "
-                f"add a sauna/hot-bath session or plan hot-venue training time\".\n"
-            )
+            # Pre-window checks are opt-in (profile heat_maintenance) — only an
+            # athlete who deliberately paused formal heat work on ambient
+            # exposure wants that pause policed months before the race.
+            if heat.get("maintenance"):
+                heat_triggers = (
+                    f"T7 (Tier 2): Heat maintenance — the formal heat protocol is PAUSED on ambient "
+                    f"exposure until {starts}. {dose_note} If 14-day dose < {heat_lib.MAINTENANCE_DOSE_14D} "
+                    f"fire: \"heat maintenance dose low — ambient exposure is not covering the pause; "
+                    f"add a sauna/hot-bath session or plan hot-venue training time\".\n"
+                )
+            else:
+                heat_log_read = ""
         else:
             heat_triggers = (
                 f"T7 (Tier 1): Formal heat protocol active since {starts}. {dose_note} "
