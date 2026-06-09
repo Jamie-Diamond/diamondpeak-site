@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-06-06
+## Last updated: 2026-06-09
 
 ## Travel & training blocks (logged 2026-05-10)
 
@@ -162,6 +162,7 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 | Plan generated through 2026-06-21 (W7–W8 re-check) | Claude | 2026-06-07 | done — plan_already_populated (15 events); W7 ~370 TSS vs 745 target (load gap flagged: missing Tue swim, Sat ride, Sun ride); W8 ~520 TSS; 2 constraint violations persisting (Mon 15 swim, Wed 17 bike); projected CTL 93 by 6 Jul (target 95, BEHIND); CHO target 70g/hr; Telegram sent |
 | Plan generated through 2026-06-21 (W7–W8 Replan) | Claude | 2026-06-07 | done — REPLAN MODE: 5 edits to W8: Mon 15 swim → Tue 16, Wed 17 bike deleted (hard constraint), Fri 19 extended 180→240 min, Sat 20 brick 70→120 min, Sun 21 new 4hr Z2; W7 ~720 TSS, W8 ~736 TSS; CTL 80.8, projecting 93 by 6 Jul (target 95, BEHIND); CHO target 70g/hr; Telegram sent |
 | Plan generated through 2026-06-21 (W7–W8 Replan 2) | Claude | 2026-06-08 | done — REPLAN MODE: 3 edits (Sat 13 build ride 210→240 min, Sun 14 Z2 ride 150→180 min, Sat 20 brick 120→180 min); W7 ~659 TSS (above 658 threshold), W8 ~637 TSS; both short of 732 target; cross-training ask sent; projected CTL 91 by 6 Jul (target 95, BEHIND); CHO target 70g/hr; Telegram sent |
+| Plan generated through 2026-06-21 (W7–W8 Replan 3) | Claude | 2026-06-09 | done — REPLAN MODE: deleted Sat 13 run (run-TSS cap breach: 125 planned vs 98.5 ceiling, 4-wk avg 89.5); extended Sat 13 ride 210→240 min (name+desc updated); extended Sun 14 ride 150→180 min (name+desc updated); W7 ~748 TSS, W8 ~722 TSS; projected CTL 91 by 6 Jul (target 95, BEHIND); CHO target 70g CHO/hr; Telegram sent |
 | Marseille 24–30 May: ad-hoc sessions only, nothing long — play by ear | Claude | rolling | noted |
 
 ## Race-day-relevant tested data
