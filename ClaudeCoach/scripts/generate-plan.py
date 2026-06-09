@@ -743,10 +743,18 @@ VALIDATION GATE — before pushing ANY session, verify each one against rules.md
 4. Check total weekly duration against daily and weekly caps in rules.md. If over cap, reduce lowest-priority sessions first.
 5. Only after this check passes for all sessions: proceed to push.
 
-For each session push to Intervals.icu via Bash:
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint push_workout --payload '{{"sport":"Ride|Run|Swim|WeightTraining", "date":"YYYY-MM-DD", "name":"[Day date] — [description]", "description":"full coaching notes", "planned_training_load": N}}'
-  Do NOT overwrite sessions that already exist — check date+sport from events output before pushing.
-  For any edit required: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint edit_workout --event-id EVENT_ID --payload '{{"name":"...", "description":"..."}}'
+ICU COMMANDS — this is the COMPLETE interface. Do NOT run `--help`, grep, sed, cat, or
+otherwise inspect ClaudeCoach/lib (icu_fetch.py / icu_api.py): everything you need is here.
+Issuing an unnecessary exploration command wastes a full turn — there are only three commands:
+  ADD a new session:
+    python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint push_workout --payload '{{"sport":"Ride|Run|Swim|WeightTraining", "date":"YYYY-MM-DD", "name":"[Day date] — [description]", "description":"full coaching notes", "planned_training_load": N}}'
+  EDIT an existing session (use its event id from the Step 1 events output):
+    python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint edit_workout --event-id EVENT_ID --payload '{{"name":"...", "description":"...", "planned_training_load": N}}'
+  DELETE a session (no payload):
+    python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint delete_workout --event-id EVENT_ID
+  Do NOT push a duplicate — if a session for that date+sport already exists in the Step 1 events
+  output, EDIT it by its event id instead. Decide ALL changes first, then issue the calls back to
+  back; do not re-read files or re-derive your plan between each call.
 
 Nutrition instructions for ALL sessions >90 min: state the specific nutrition_target_g_hr computed above.
 If nutrition_avg_g_hr is null: "Target: 60g CHO/hr — start building gut training."
@@ -779,7 +787,10 @@ sends it exactly once — if you send it too, {name} gets duplicates. Your entir
 be the <telegram> block.
 
 Step 9 — Update {athlete_dir}/current-state.md "Open actions" section: mark "Plan generated through [date]" with today's date.
-Run: git add ClaudeCoach/athletes/{slug}/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "plan: generated W[N]-W[N+1] {today}" && git push origin main
+Then run this ONCE to persist it (the */30 sync also commits it, so this is best-effort):
+  git add ClaudeCoach/athletes/{slug}/current-state.md && git commit -m "plan: generated W[N]-W[N+1] {today}" && git push origin main
+If any git step errors (nothing to commit, push rejected, rebase needed), that is NON-FATAL —
+do NOT retry, re-stage, force, or debug it; the scheduled sync reconciles it. Move on to Step 8.
 Do this BEFORE emitting the <telegram> block so the block is the last thing in your output.
 """
 
