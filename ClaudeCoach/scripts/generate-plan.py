@@ -6,7 +6,7 @@ Safe to run manually:
   python3 ClaudeCoach/scripts/generate-plan.py              # all active athletes
   python3 ClaudeCoach/scripts/generate-plan.py --athlete jamie
 """
-import argparse, json, re, subprocess, sys, tempfile, os
+import argparse, json, re, subprocess, sys, tempfile, os, time
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -1099,6 +1099,43 @@ Then re-emit ONLY the <telegram> block for the corrected week."""
         os.unlink(fix_file)
 
 
+def _scan_transcripts_for_telegram(name: str, start_ts: float) -> str | None:
+    """Find the <telegram> message in the newest claude session transcript touched since
+    start_ts (matched to this athlete by name). claude writes the transcript even when the
+    process later hangs on exit, so this recovers the message reliably without waiting out
+    the hang. Returns the last <telegram> block found, or None."""
+    try:
+        proj = Path.home() / ".claude" / "projects" / str(PROJECT_DIR).replace("/", "-")
+        cands = [f for f in proj.glob("*.jsonl") if f.stat().st_mtime >= start_ts - 3]
+    except Exception:
+        return None
+    for f in sorted(cands, key=lambda x: x.stat().st_mtime, reverse=True):
+        try:
+            raw = f.read_text()
+        except Exception:
+            continue
+        if name and name not in raw:
+            continue                       # not this athlete's run
+        texts = []
+        for line in raw.splitlines():
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue
+            m = r.get("message", {})
+            c = m.get("content") if isinstance(m, dict) else None
+            if isinstance(c, list):
+                texts += [x.get("text", "") for x in c
+                          if isinstance(x, dict) and x.get("type") == "text"]
+            elif isinstance(c, str):
+                texts.append(c)
+        found = re.findall(r"<telegram>(.*?)</telegram>", "\n".join(texts),
+                           re.DOTALL | re.IGNORECASE)
+        if found:
+            return found[-1].strip()
+    return None
+
+
 def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
     profile   = load_profile(slug)
     ctl_today = fetch_ctl(slug)
@@ -1116,62 +1153,59 @@ def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
         f.write(prompt)
         prompt_file = f.name
 
+    name = cfg.get("name", slug)
     try:
-        try:
-            result = subprocess.run(
-                [CLAUDE, "-p", open(prompt_file).read(),
-                 "--allowedTools", TOOLS,
-                 "--model", "claude-sonnet-4-6",
-                 "--output-format", "json"],   # headless mode: emit one result object + exit cleanly
-                capture_output=True, text=True,
-                cwd=PROJECT_DIR,
-                stdin=subprocess.DEVNULL,
-                timeout=420,                    # backstop in case the CLI still hangs on exit
-            )
-            output = (result.stdout or "").strip()
-            stderr = (result.stderr or "").strip()
-        except subprocess.TimeoutExpired as te:
-            output = (te.stdout or "").strip() if isinstance(te.stdout, str) else (te.stdout or b"").decode("utf-8", "ignore").strip()
-            stderr = ""
-            with open(LOG_FILE, "a") as lf:
-                lf.write(f"[generate-plan:{slug}] claude timed out at 420s — recovered {len(output)} chars.\n")
-        # --output-format json: the assistant text is in .result; also gives turns/duration.
-        # Fall back to raw text if it isn't JSON (older CLI / partial output on timeout).
-        if output:
+        # `claude -p` builds the plan (pushes sessions + git, then emits the <telegram>
+        # block LAST per Step 8/9) in ~1-3 min, then HANGS on a post-completion CLI step
+        # for several minutes before exiting. So we run it as a background process and
+        # poll its session transcript: the instant the <telegram> message appears the
+        # plan is fully built, so we reap the (hung) process and move on — no waiting out
+        # the hang, and the message is recovered from the transcript (stdout never flushes
+        # on a kill). Hard cap stops a genuinely stuck run.
+        start_ts = time.time()
+        proc = subprocess.Popen(
+            [CLAUDE, "-p", open(prompt_file).read(),
+             "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6",
+             "--output-format", "json"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, cwd=PROJECT_DIR,
+        )
+        message = None
+        HARD_CAP = 600
+        while time.time() - start_ts < HARD_CAP:
+            exited = proc.poll() is not None
+            message = _scan_transcripts_for_telegram(name, start_ts)
+            if message or exited:
+                break
+            time.sleep(5)
+        # Reap the process — it has almost certainly emitted the plan and is now hanging
+        # on exit; there's no more useful work for it to do.
+        if proc.poll() is None:
+            proc.terminate()
             try:
-                _j = json.loads(output)
-                if isinstance(_j, dict) and "result" in _j:
-                    with open(LOG_FILE, "a") as lf:
-                        lf.write(f"[generate-plan:{slug}] claude: {_j.get('num_turns')} turns, "
-                                 f"{(_j.get('duration_ms') or 0)/1000:.0f}s api, "
-                                 f"${_j.get('total_cost_usd')}\n")
-                    output = str(_j.get("result") or "").strip()
+                proc.wait(8)
             except Exception:
-                pass
-        if stderr:
-            with open(LOG_FILE, "a") as lf:
-                lf.write(f"[generate-plan:{slug}] STDERR: {stderr}\n")
-        # Deterministic guard: fix any weekday word the LLM miscomputed in the names
-        # it just pushed (dates are right, the day-of-week word drifts). Runs before
-        # validation so the athlete never sees a wrong weekday.
+                proc.kill()
+        if message is None:                       # final sweep after exit
+            message = _scan_transcripts_for_telegram(name, start_ts)
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[generate-plan:{slug}] claude finished in {time.time()-start_ts:.0f}s "
+                     f"(message {'recovered' if message else 'MISSING'}).\n")
+        # Deterministic guard: fix any weekday word the LLM miscomputed in the names it
+        # pushed (dates are right, the day-of-week word drifts). Runs before validation.
         _correct_weekday_labels(slug, planning_window_start(date.today(), replan))
         # Backstop: independently validate the plan the LLM just pushed (WS E).
-        # warn (default) logs only; block remediates once, then withholds + alerts.
         _v = _backstop_validate(slug, cfg, ctl_today, replan)
         if _v["mode"] == "block" and _v["hard"]:
             fixed = _remediate_plan(slug, cfg, profile, ctl_today, replan, _v["hard"])
             if fixed is not None:
                 return fixed
-            # Still breaching after one correction — withhold from athlete, alert coach.
             _coach_alert(slug, _v["hard"])
             return None
-        # Extract ONLY the athlete-facing message. Never fall back to raw stdout —
-        # that is Claude's internal report and must never reach the athlete.
-        m = re.search(r"<telegram>(.*?)</telegram>", output, re.DOTALL | re.IGNORECASE)
-        if m:
-            return m.group(1).strip()
+        if message:
+            return message
         with open(LOG_FILE, "a") as lf:
-            lf.write(f"[generate-plan:{slug}] NO <telegram> TAG — sending fallback. Raw output:\n{output[:1000]}\n")
+            lf.write(f"[generate-plan:{slug}] NO <telegram> recovered — sending fallback.\n")
         return "Plan updated — check your week in Intervals.icu."
     except Exception as e:
         with open(LOG_FILE, "a") as lf:
