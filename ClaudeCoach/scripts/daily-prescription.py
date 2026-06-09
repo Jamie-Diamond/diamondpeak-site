@@ -11,6 +11,8 @@ from pathlib import Path
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
 sys.path.insert(0, str(BASE / "lib"))
 from coaching_levels import level_block as _level_block
+import ops_log
+from git_sync import sync_commit_push
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 from primitives.modulation import (  # noqa: E402
     modulate_session, classify_session_type,
@@ -349,6 +351,21 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         except Exception:
             pass
 
+    # ICU preflight — if intervals.icu is unreachable (outage, revoked key) the
+    # LLM must not prescribe on null CTL/HRV/sleep. Standing rule: say so and
+    # ask for a manual paste instead.
+    fitness = _icu(slug, "fitness", "--days", "7")
+    if not isinstance(fitness, list) or not fitness:
+        ops_log.alert("daily-prescription",
+                      "ICU fitness fetch failed — prescription aborted, needs manual data paste",
+                      athlete=slug)
+        return None
+    if _icu(slug, "wellness", "--days", "14") is None:
+        ops_log.alert("daily-prescription",
+                      "ICU wellness fetch failed — prescription aborted, needs manual data paste",
+                      athlete=slug)
+        return None
+
     prompt = build_prompt(slug, name, race_name, coaching_level=coaching_level)
 
     with tempfile.NamedTemporaryFile(
@@ -374,35 +391,17 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         # deterministic inputs. Shadow-only — additive, does not change the LLM output.
         _prescription_shadow(slug, cfg)
         # Commit any current-state.md changes Claude made
-        try:
-            today = date.today().isoformat()
-            subprocess.run(
-                ["git", "add", f"ClaudeCoach/athletes/{slug}/current-state.md"],
-                cwd=PROJECT_DIR, capture_output=True, timeout=15,
-            )
-            subprocess.run(
-                ["git", "fetch", "origin"],
-                cwd=PROJECT_DIR, capture_output=True, timeout=30,
-            )
-            subprocess.run(
-                ["git", "merge", "origin/main", "--no-edit"],
-                cwd=PROJECT_DIR, capture_output=True, timeout=15,
-            )
-            subprocess.run(
-                ["git", "commit", "-m", f"prescription: {today} {slug}"],
-                cwd=PROJECT_DIR, capture_output=True, timeout=15,
-            )
-            subprocess.run(
-                ["git", "push", "origin", "main"],
-                cwd=PROJECT_DIR, capture_output=True, timeout=30,
-            )
-        except Exception as e:
-            with open(LOG_FILE, "a") as lf:
-                lf.write(f"[prescription:{slug}] git error: {e}\n")
+        today = date.today().isoformat()
+        sync_commit_push(
+            [f"ClaudeCoach/athletes/{slug}/current-state.md"],
+            f"prescription: {today} {slug}",
+            script="daily-prescription", athlete=slug,
+        )
         return output or None
     except Exception as e:
         with open(LOG_FILE, "a") as lf:
             lf.write(f"[prescription:{slug}] Exception: {e}\n")
+        ops_log.alert("daily-prescription", f"exception: {e}", athlete=slug)
         return None
     finally:
         os.unlink(prompt_file)
@@ -419,6 +418,7 @@ def main():
         with open(LOG_FILE, "a") as lf:
             lf.write(f"[prescription:{slug}]\n{output or '(no output)'}\n---\n")
         if output:
+            ops_log.record_run("daily-prescription", athlete=slug, ok=True, detail="prescribed")
             m = re.search(r"<telegram>(.*?)</telegram>", output, re.DOTALL)
             summary = m.group(1).strip() if m else None
             if summary:

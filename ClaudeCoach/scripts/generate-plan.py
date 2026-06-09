@@ -25,6 +25,8 @@ TOOLS = "Read,Write,Edit,Bash"
 # shared with the analysis primitives. Do NOT reintroduce inline copies here
 # (see tests/test_no_duplicate_maths.py and docs/remediation-plan.md WS A).
 sys.path.insert(0, str(BASE / "ironman-analysis"))
+sys.path.insert(0, str(BASE / "lib"))
+import ops_log  # noqa: E402
 from primitives.load import (   # noqa: E402
     compute_required_tss,
     compute_projected_ctl,
@@ -196,6 +198,12 @@ def prefetch_plan_data(slug: str) -> dict | None:
         "history":  _icu_json(slug, "history", "--days", "14"),
         "events":   _icu_json(slug, "events", "--start", today.isoformat(), "--end", end_35),
     }
+    failed = [k for k, v in data.items() if v is None]
+    if failed:
+        # Loud, not fatal — the LLM still has its own fetch fallback, but a
+        # plan built on partial ICU data is something the coach must know about.
+        ops_log.alert("generate-plan",
+                      f"ICU prefetch failed for: {', '.join(failed)}", athlete=slug)
     if data["profile"] is None and data["fitness"] is None and data["events"] is None:
         return None
     return data

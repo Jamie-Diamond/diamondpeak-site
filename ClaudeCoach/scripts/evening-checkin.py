@@ -13,6 +13,7 @@ LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 from coaching_levels import level_block as _level_block
+import ops_log
 
 TOOLS = "Read,Bash"
 
@@ -62,14 +63,20 @@ OUTPUT FORMAT — follow exactly:
 - Cases C or D: output nothing at all. No tags, no text, no punctuation. Absolute silence."""
 
 
-def notify(msg, chat_id):
-    try:
-        subprocess.run(
-            ["python3", str(NOTIFY), "--chat-id", str(chat_id), msg],
-            cwd=PROJECT_DIR, timeout=15,
-        )
-    except Exception:
-        pass
+def notify(msg, chat_id, slug=""):
+    """Send via notify.py, retry once; alert the ops log if delivery fails."""
+    for _attempt in (1, 2):
+        try:
+            r = subprocess.run(
+                ["python3", str(NOTIFY), "--chat-id", str(chat_id), msg],
+                cwd=PROJECT_DIR, timeout=15,
+            )
+            if r.returncode == 0:
+                return True
+        except Exception:
+            pass
+    ops_log.alert("evening-checkin", "Telegram send failed after retry", athlete=slug)
+    return False
 
 
 def run_athlete(slug, athlete_cfg):
@@ -113,7 +120,12 @@ def run_athlete(slug, athlete_cfg):
     import re
     m = re.search(r'<notify>(.*?)</notify>', output, re.DOTALL | re.IGNORECASE)
     if m:
-        notify(m.group(1).strip(), chat_id)
+        if notify(m.group(1).strip(), chat_id, slug=slug):
+            ops_log.record_run("evening-checkin", athlete=slug, ok=True, detail="sent")
+    else:
+        # Cases C/D — silence is the designed outcome; record it so the digest
+        # can tell "ran and had nothing to say" from "never ran".
+        ops_log.record_run("evening-checkin", athlete=slug, ok=True, detail="silent")
 
 
 def main():
@@ -132,6 +144,7 @@ def main():
             run_athlete(slug, cfg)
         except Exception as exc:
             print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] evening-checkin error: {exc}", file=sys.stderr)
+            ops_log.alert("evening-checkin", f"exception: {exc}", athlete=slug)
 
 
 if __name__ == "__main__":
