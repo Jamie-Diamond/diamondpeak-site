@@ -307,6 +307,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 - **2026-06-08 — T6 (Tier 1, carryover — Telegram suppressed):** 06-05 "Wandsworth Road Cycling" decoupling 15.64% (IF 0.645, NP 204W, VI 1.36, 202 min, avg 18.8°C) still in 7-day window. T6 Telegram sent 2026-06-06 for same activity date — suppressed per suppression rule (fired <3 days ago, same activity date). 06-07 "Wandsworth Road Cycling" (NP 226W, IF 0.761) exceeds 0.75 threshold — not assessed for T6; decoupling confirmed 2.5% overall by bot debrief (well within cap).
 - **2026-06-08 — T9 (Tier 2):** Three actions due or overdue: (1) Book Precision Hydration sweat-sodium test — due 2026-05-31, status pending — 8 days overdue. (2) TT bike fit appointment — due 2026-05-31, status pending — 8 days overdue. (3) Ankle clearance review (decision-points.md B5) — due ~2026-06-15 (Mon, 7 days) — not in open_actions, no status. Telegram sent.
 
+- **2026-06-09 GO** — Z2 walk-run 60 min (run_easy) + Aerobic swim 60 min (swim): no rules fired, both sessions execute as planned. CTL 77.0 (Fitness), ATL 70.9 (Fatigue), TSB +6.1 (Form) — fresh. HRV null (not synced today); sleep null (not synced). Last RPE 5 (2026-06-07 ride). Ankle: last logged 2/10 warmup on 2026-06-06 run, cleared to 0 from km 2 — walk-run format and stop-if->2/10 protocol retained; quality_cleared still false. T10 active: Week 6 run km = 17.91 km; today adds ~9.5 km → week total ~9.5 km; combined with planned Sat 13 Jun run must stay ≤19.7 km (10% cap).
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
