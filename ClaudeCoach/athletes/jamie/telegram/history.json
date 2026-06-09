@@ -1,10 +1,6 @@
 [
   {
     "user": "",
-    "assistant": "[chart/photo sent]"
-  },
-  {
-    "user": "",
     "assistant": "\u23f1 Test due today: *FTP Baseline*\n_20-min test \u00d7 0.95 or ramp test_"
   },
   {
@@ -118,5 +114,9 @@
   {
     "user": "May the Strava description out like a table for today's swim \n\nEg. \n\n4*200pb TGT: 1:35 actual 1:39 \n\nMake sense?",
     "assistant": "Done. Strava description updated:\n\n```\nPool Swim \u00b7 3,000m \u00b7 68 min \u00b7 TSS 74\n\nWU: 400m easy \u2014 1:49/100m\nBuild: 2\u00d7100m \u2014 1:44 / 1:40\n\n4\u00d7200m pull buoy  TGT: 1:33\u20131:36  ACT: 1:39 / 1:39 / 1:38 / 1:40\nRec: 200m easy\n\n3\u00d7400m Z2         TGT: 1:44\u20131:47  ACT: 1:48 / 1:49 / 1:46\nCD: 200m easy\n```"
+  },
+  {
+    "user": "It's seems like I can't hit my targets how ever hard I try when swimming. I've also swam more in the last 12 months than ever before yet I'm not getting faster",
+    "assistant": "Fair frustration \u2014 and it's the most common trap in swim training.\n\n*The problem: volume doesn't drive swim speed the way it does in cycling or running.*\n\nIn cycling, more hours at the right intensity = more watts. Swimming is 70\u201380% technique \u2014 if the mechanics aren't right, you're just repeating the same movement pattern more efficiently at the same speed. Volume consolidates what you already have; it doesn't break through a technique ceiling.\n\nA few things from today's data worth flagging:\n\n*Pull buoy at 1:38\u20131:40 = essentially CSS pace.* A buoy should make you meaningfully faster by removing leg drag \u2014 most swimmers gain 3\u20136s/100m. Hitting CSS pace with a buoy suggests either your kick is genuinely not costing you much (good), or your catch/pull mechanics are the limiting factor (the buoy can't fix that).\n\n*What's likely missing:* speed work above CSS pace. Short fast reps \u2014 25\u201350m \u2014 where you're forced to find a higher stroke rate or longer reach. Without anything faster than CSS in the diet, the speed ceiling doesn't move.\n\n*Practical options:*\n1. Get a swim coach for one session \u2014 video analysis. One technique fix applied consistently beats months of volume.\n2. Add a short speed block to Tue sessions: 8\u201310\u00d725m fast off 30s rest, at 1:25\u20131:30/100m target. Not fitness work \u2014 neural patterning.\n\nDo you have access to any coached sessions or Masters swim groups near you?"
   }
 ]
