@@ -1074,6 +1074,7 @@ Then re-emit ONLY the <telegram> block for the corrected week."""
             [CLAUDE, "-p", open(fix_file).read(), "--allowedTools", TOOLS,
              "--model", "claude-sonnet-4-6"],
             capture_output=True, text=True, cwd=PROJECT_DIR,
+            stdin=subprocess.DEVNULL, timeout=420,
         )
         m = re.search(r"<telegram>(.*?)</telegram>", result.stdout.strip(),
                       re.DOTALL | re.IGNORECASE)
@@ -1109,15 +1110,25 @@ def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
         prompt_file = f.name
 
     try:
-        result = subprocess.run(
-            [CLAUDE, "-p", open(prompt_file).read(),
-             "--allowedTools", TOOLS,
-             "--model", "claude-sonnet-4-6"],
-            capture_output=True, text=True,
-            cwd=PROJECT_DIR,
-        )
-        output = result.stdout.strip()
-        stderr = result.stderr.strip()
+        try:
+            result = subprocess.run(
+                [CLAUDE, "-p", open(prompt_file).read(),
+                 "--allowedTools", TOOLS,
+                 "--model", "claude-sonnet-4-6"],
+                capture_output=True, text=True,
+                cwd=PROJECT_DIR,
+                stdin=subprocess.DEVNULL,   # `claude -p` can hang on an inherited open stdin after it prints
+                timeout=420,                # backstop: bound a post-completion CLI exit-hang
+            )
+            output = (result.stdout or "").strip()
+            stderr = (result.stderr or "").strip()
+        except subprocess.TimeoutExpired as te:
+            # claude finished the work + printed the <telegram> message, then hung on exit.
+            # Recover whatever it printed before we killed it so the athlete still gets the plan.
+            output = (te.stdout or "").strip() if isinstance(te.stdout, str) else (te.stdout or b"").decode("utf-8", "ignore").strip()
+            stderr = ""
+            with open(LOG_FILE, "a") as lf:
+                lf.write(f"[generate-plan:{slug}] claude timed out at 420s (exit-hang) — recovered {len(output)} chars.\n")
         if stderr:
             with open(LOG_FILE, "a") as lf:
                 lf.write(f"[generate-plan:{slug}] STDERR: {stderr}\n")
