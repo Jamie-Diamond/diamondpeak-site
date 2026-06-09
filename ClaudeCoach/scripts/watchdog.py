@@ -12,6 +12,7 @@ BASE        = Path(__file__).parent.parent   # ClaudeCoach/
 PROJECT_DIR = str(BASE.parent)               # diamondpeak-site/
 sys.path.insert(0, str(BASE / "lib"))
 import ops_log
+import heat as heat_lib
 CLAUDE      = "/usr/bin/claude"
 NOTIFY      = BASE / "telegram/notify.py"
 CONFIG      = BASE / "config/athletes.json"
@@ -39,14 +40,35 @@ def load_profile(slug: str) -> dict:
         return {}
 
 
-def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: str, heat_protocol: bool = True) -> str:
+def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: str, heat: dict | None = None) -> str:
     today = date.today().isoformat()
     athlete_dir = BASE / "athletes" / slug
 
-    heat_log_read = f"- {athlete_dir}/heat-log.json\n" if heat_protocol else ""
-    heat_triggers = """T7 (Tier 1): From 18 Aug 2026 only — sum of dose in heat-log.json for last 14 days < 3.0 (skip if heat-log.json does not exist or is empty)
-T8 (Tier 2): From 18 Aug 2026 only — most recent date in heat-log.json is >7 days ago (skip if heat-log.json does not exist or is empty)
-""" if heat_protocol else ""
+    # Heat triggers are two-stage: before `starts` the formal protocol is paused
+    # on ambient exposure, so we check a maintenance dose floor that keeps that
+    # pause honest; from `starts` the full race-proximal targets apply.
+    heat = heat or {"active": False}
+    heat_log_read = ""
+    heat_triggers = ""
+    if heat.get("active"):
+        heat_log_read = f"- {athlete_dir}/heat-log.json\n"
+        starts = heat.get("starts") or today
+        dose_note = ("Dose accounting: sum the dose field over entries in the last 14 days; "
+                     "an entry with no dose field counts as 1.0; a missing or empty "
+                     "heat-log.json counts as total dose 0.")
+        if today < starts:
+            heat_triggers = (
+                f"T7 (Tier 2): Heat maintenance — the formal heat protocol is PAUSED on ambient "
+                f"exposure until {starts}. {dose_note} If 14-day dose < {heat_lib.MAINTENANCE_DOSE_14D} "
+                f"fire: \"heat maintenance dose low — ambient exposure is not covering the pause; "
+                f"add a sauna/hot-bath session or plan hot-venue training time\".\n"
+            )
+        else:
+            heat_triggers = (
+                f"T7 (Tier 1): Formal heat protocol active since {starts}. {dose_note} "
+                f"Fire if 14-day dose < {heat_lib.PROTOCOL_DOSE_14D}.\n"
+                f"T8 (Tier 2): Most recent date in heat-log.json is >7 days ago (or the log is missing/empty).\n"
+            )
 
     return f"""You are running the daily watchdog check for {name}'s {race_name} coaching system.
 Run silently — only produce output if a trigger fires.
@@ -115,9 +137,9 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     chat_id   = str(cfg.get("chat_id", ""))
 
     profile = load_profile(slug)
-    heat_protocol = profile.get("heat_protocol", True)
+    heat = heat_lib.state(slug, profile)
 
-    prompt = build_prompt(slug, name, race_name, race_date, chat_id, heat_protocol=heat_protocol)
+    prompt = build_prompt(slug, name, race_name, race_date, chat_id, heat=heat)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_watchdog_", delete=False, suffix=".txt"

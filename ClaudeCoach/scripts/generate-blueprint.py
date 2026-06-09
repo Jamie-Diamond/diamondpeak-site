@@ -350,7 +350,23 @@ def fitness_check(slug: str, event: str, current_ctl: float,
     If AWAITING_DECISION, returns the full decision block.
     If choice is set, applies it and returns a short note.
     """
-    first_non_taper = next(
+    # Check entry fitness for the phase containing TODAY — a mid-plan regen must
+    # not compare current CTL against the long-finished first phase (CTL 80 vs
+    # Base 55–70 misfired nine weeks into the plan). Before plan start there is
+    # no containing phase and we fall back to the first non-taper phase as before.
+    today = date.today()
+
+    def _contains_today(p):
+        try:
+            return (date.fromisoformat(str(p["start"]))
+                    <= today <= date.fromisoformat(str(p["end"])))
+        except (KeyError, ValueError, TypeError):
+            return False
+
+    current = next((p for p in phases if _contains_today(p)), None)
+    if current is not None and phase_family(current["name"]) == "taper":
+        return None  # being over-fit entering taper is not a coaching problem
+    first_non_taper = current or next(
         (p for p in phases if phase_family(p["name"]) != "taper"), None
     )
     if not first_non_taper:

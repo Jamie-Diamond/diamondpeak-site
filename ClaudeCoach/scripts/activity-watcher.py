@@ -34,6 +34,7 @@ def _log_to_history(slug: str, message: str) -> None:
 sys.path.insert(0, str(BASE / "lib"))
 from coaching_levels import level_block as _level_block
 import ops_log
+import heat as heat_lib
 from git_sync import sync_commit_push
 
 
@@ -274,6 +275,34 @@ def _notify(msg, chat_id, slug=None):
         except Exception:
             pass
     return sent
+
+
+def _credit_heat_exposure(slug: str, activity_id: str, profile: dict) -> None:
+    """Auto-log outdoor heat exposure (device ambient ≥25°C) as acclimation dose
+    in heat-log.json — "I'm in hot venues enough" becomes measured, not assumed."""
+    try:
+        if not heat_lib.state(slug, profile)["active"]:
+            return
+        r = subprocess.run(
+            ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug,
+             "--endpoint", "history", "--days", "3"],
+            capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
+        )
+        act = next((a for a in json.loads(r.stdout)
+                    if str(a.get("id")) == str(activity_id)), None)
+        entry = heat_lib.exposure_entry(act) if act else None
+        if not entry:
+            return
+        log_f = BASE / f"athletes/{slug}/heat-log.json"
+        entries = json.loads(log_f.read_text()) if log_f.exists() else []
+        if any(str(e.get("activity_id", "")) == str(activity_id) for e in entries):
+            return
+        entries.append(entry)
+        log_f.write_text(json.dumps(entries, indent=2))
+        ops_log.record_run("activity-watcher", athlete=slug, ok=True,
+                           detail=f"heat dose {entry['dose']} auto-credited ({entry['context']})")
+    except Exception as exc:
+        print(f"[heat-credit:{slug}] {exc}", file=sys.stderr)
 
 
 def _dedup_session_log(path: Path) -> None:
@@ -866,6 +895,9 @@ def check_athlete(slug, athlete_cfg):
 
     # Dedup again in case Claude introduced a duplicate stub
     _dedup_session_log(session_log_f)
+
+    # Ambient heat exposure → acclimation dose (no-op unless heat protocol active)
+    _credit_heat_exposure(slug, activity_id, profile)
 
     # Commit stub entry written by Claude
     sync_commit_push(
