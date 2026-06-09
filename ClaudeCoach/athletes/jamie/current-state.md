@@ -18,7 +18,6 @@
 
 | Dates | Location | Training access | Notes |
 |---|---|---|---|
-| 1 Jun | Home | Normal | |
 | 6 Jun | Dorney Lake | **C- race: Olympic tri (TBC entry)** | 1500/40k/10k — flag 10k run vs ankle |
 | 24–29 Jun | France (holiday) | Full swim/bike/run + heat | **Training camp #1** — late-June 900+ TSS spike target, full time available |
 | 10–17 Jul | France (holiday) | Full swim/bike/run + heat | **Training camp #2** — peak build window, full time available |
