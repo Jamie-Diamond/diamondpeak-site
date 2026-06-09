@@ -39,3 +39,4 @@ No
 | 2026-06-05 | 9.7 | 7.1 | +2.6 | No session planned today. Rest day — no events in calendar. No HRV or sleep data. |
 | 2026-06-06 | 9.4 | 6.1 | +3.3 | Long Z2 Ride 2h 30min — GO as-planned. Ride not completed; hike done instead (Saint-Cergue, 97 min). Actual IcuSync values used (projected had assumed ride completed). No HRV or sleep data. |
 | 2026-06-07 | 9.2 | 5.3 | +3.9 | Weekly summary. T3 Underload fired (41% compliance). 1 ride completed (Mon, 81 min). Sat long ride missed. Recovery 100/100 GREEN. No HRV or sleep data. |
+| 2026-06-09 | 8.8 | 4.0 | +4.8 | Rest day — no session planned in calendar. No HRV or sleep data. |
