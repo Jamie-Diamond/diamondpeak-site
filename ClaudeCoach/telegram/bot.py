@@ -2223,22 +2223,26 @@ def main():
                      "_Rebuilding your week to target — this takes a few minutes…_" if is_replan
                      else "_Generating plan — this takes a few minutes…_")
                 try:
-                    # The script sends the athlete-facing message itself via notify.py.
-                    # Do NOT echo stdout here — stdout is an internal status line only,
-                    # and echoing it is what caused duplicate / verbose plan messages.
-                    cmd = ["python3", str(GENERATE_PLAN_SCRIPT), "--athlete", slug]
+                    # Launch generate-plan DETACHED and return immediately. The script
+                    # sends the athlete-facing message itself via notify.py when it
+                    # finishes, so the bot does NOT need to wait for it. A *blocking*
+                    # subprocess.run froze the whole single-threaded bot for every
+                    # athlete while a plan generated, and timed out at 600s on a
+                    # populated replan (a fortnight of sessions = many sequential ICU
+                    # edits). `timeout` gives a generous hard cap so a stuck run can't
+                    # linger forever. Do NOT echo stdout (caused duplicate messages).
+                    cmd = ["timeout", "1500", "python3", str(GENERATE_PLAN_SCRIPT),
+                           "--athlete", slug]
                     if is_replan:
                         cmd.append("--replan")
-                    result = subprocess.run(
-                        cmd, capture_output=True, text=True,
-                        cwd=str(PROJECT_DIR), timeout=600,
+                    subprocess.Popen(
+                        cmd, cwd=str(PROJECT_DIR),
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     )
-                    if result.returncode != 0:
-                        send(token, chat_id, "Plan generation hit an error — check the logs.",
-                             reply_markup=build_keyboard(slug))
-                    log(f"Out (fast): {'replan' if is_replan else 'plan generated'} — {(result.stdout or '').strip()[:120]}")
+                    log(f"[{slug}] {'replan' if is_replan else 'plan'} launched in background (detached)")
                 except Exception as e:
-                    send(token, chat_id, f"Plan generation failed: {e}", reply_markup=build_keyboard(slug))
+                    send(token, chat_id, f"Couldn't start plan generation: {e}",
+                         reply_markup=build_keyboard(slug))
                 continue
             elif fast and fast.startswith("__FTP_RETEST__:"):
                 new_ftp = int(float(fast.split(":", 1)[1]))
