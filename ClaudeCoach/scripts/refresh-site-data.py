@@ -171,7 +171,7 @@ def _build_jamie_data(client) -> dict:
         if any(_sport_normalise(a.get("type","")) == ev_sport
                for a in completed_by_date.get(ev_date,[])):
             continue
-        ev_tss = ev.get("icu_training_load") or ev.get("load")
+        ev_tss = ev.get("load_target") or ev.get("icu_training_load") or ev.get("load")
         ev_dur = ev.get("moving_time") or ev.get("duration")
         week_calendar.append({"date":ev_date,"sport":ev_sport,"name":ev.get("name",""),
                                "tss":int(ev_tss) if ev_tss else None,
@@ -190,13 +190,14 @@ def _build_jamie_data(client) -> dict:
                  "dur":round((a.get("moving_time") or 0)/60),
                  "status":"completed"}
                 for a in history_21 if a.get("start_date_local","")[:10]==d]
-        if i > 0:
+        if i >= 0:   # include TODAY's planned sessions, not just future days
             for ev in events_21:
                 ev_d     = (ev.get("start_date_local") or "")[:10]
                 ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
                 if ev_d != d or any(a["sport"]==ev_sport for a in acts):
                     continue
-                ev_tss = ev.get("icu_training_load") or ev.get("load")
+                # Planned TSS lives in load_target; icu_training_load/load are null on planned events.
+                ev_tss = ev.get("load_target") or ev.get("icu_training_load") or ev.get("load")
                 ev_dur = ev.get("moving_time") or ev.get("duration")
                 acts.append({"sport":ev_sport,"tss":int(ev_tss) if ev_tss else None,
                               "dur":round(int(ev_dur)/60) if ev_dur else None,"status":"planned"})
