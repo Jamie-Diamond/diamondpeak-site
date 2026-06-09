@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i155832025",
+    "date": "2026-06-09",
+    "name": "Coventry Running",
+    "sport": "Run",
+    "tss": 65,
+    "duration_min": 48,
+    "distance_km": 10.17,
+    "avg_power": 430,
+    "norm_power": 433,
+    "avg_hr": 145,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-06-09T18:36:21",
+    "stub": true
+  },
+  {
     "activity_id": "i155628473",
     "date": "2026-06-09",
     "name": "Pool Swim",
