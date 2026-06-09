@@ -165,7 +165,117 @@ def planning_window_start(today: date, replan: bool) -> date:
     return today + timedelta(days=days_to_mon)
 
 
-def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0, replan: bool = False) -> str:
+def _icu_json(slug: str, endpoint: str, *extra):
+    """Run icu_fetch for one endpoint, return parsed JSON or None (soft-fail)."""
+    try:
+        r = subprocess.run(
+            ["python3", "ClaudeCoach/lib/icu_fetch.py", "--athlete", slug,
+             "--endpoint", endpoint, *extra],
+            capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
+        )
+        if r.returncode != 0:
+            return None
+        return json.loads(r.stdout.strip())
+    except Exception:
+        return None
+
+
+def prefetch_plan_data(slug: str) -> dict | None:
+    """Pre-fetch the Step-1 live data in Python so the LLM doesn't burn 5 tool-call
+    round-trips fetching it (~20s each). Returns a dict of the raw payloads, or None
+    if ICU is unreachable (caller then leaves the LLM to fetch). Each endpoint
+    soft-fails independently."""
+    today  = date.today()
+    end_35 = (today + timedelta(days=35)).isoformat()
+    data = {
+        "profile":  _icu_json(slug, "profile"),
+        # Recent 14d (up to today) — the actual CTL/ATL trend. (The old Step-1 command
+        # used --newest end_35, which returned FUTURE projected decay — not useful here.)
+        "fitness":  _icu_json(slug, "fitness", "--days", "14"),
+        "wellness": _icu_json(slug, "wellness", "--days", "14"),
+        "history":  _icu_json(slug, "history", "--days", "14"),
+        "events":   _icu_json(slug, "events", "--start", today.isoformat(), "--end", end_35),
+    }
+    if data["profile"] is None and data["fitness"] is None and data["events"] is None:
+        return None
+    return data
+
+
+def _render_prefetched(d: dict) -> str:
+    """Compact, complete-enough rendering of the pre-fetched Step-1 data — the fields
+    the prompt actually consumes (CTL/ATL/form, HRV/sleep, recent + planned load,
+    event ids), not raw dumps."""
+    WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    def _d10(x): return str(x or "")[:10]
+    def _wd(iso):
+        try: return WD[date.fromisoformat(iso).weekday()]
+        except Exception: return "?"
+    out = []
+
+    prof = d.get("profile") or {}
+    if isinstance(prof, dict) and prof:
+        # Training settings ONLY — never inject the raw ICU profile (it carries email,
+        # location, bikes, integration tokens that the planner has no use for).
+        sports = []
+        for s in (prof.get("sportSettings") or []):
+            types = s.get("types") or []
+            if not types:
+                continue
+            entry = {"sport": types[0], "ftp": s.get("ftp"), "lthr": s.get("lthr"),
+                     "max_hr": s.get("max_hr"), "threshold_pace": s.get("threshold_pace"),
+                     "sweet_spot_min": s.get("sweet_spot_min"), "sweet_spot_max": s.get("sweet_spot_max"),
+                     "power_zones": s.get("power_zones"), "hr_zones": s.get("hr_zones"),
+                     "pace_zones": s.get("pace_zones")}
+            sports.append({k: v for k, v in entry.items() if v not in (None, [])})
+        weight = prof.get("icu_weight") or prof.get("weight")
+        out.append(f"PROFILE (training settings only): weight={weight}")
+        out.append("  " + json.dumps(sports, separators=(",", ":"))[:1600])
+
+    fitness = d.get("fitness") or []
+    if isinstance(fitness, list) and fitness:
+        out.append("FITNESS (date · CTL · ATL · form TSB):")
+        eftp = None
+        for r in fitness[-14:]:
+            ctl = r.get("ctl"); atl = r.get("atl")
+            if ctl is None: continue
+            tsb = (ctl or 0) - (atl or 0)
+            out.append(f"  {_d10(r.get('id') or r.get('date'))}  CTL {ctl:.0f}  ATL {(atl or 0):.0f}  TSB {tsb:+.0f}")
+            for s in (r.get("sportInfo") or []):
+                if s.get("type") == "Ride" and s.get("eftp"):
+                    eftp = int(s["eftp"])
+        if eftp:
+            out.append(f"  Latest cycling eFTP: {eftp} W")
+
+    wellness = d.get("wellness") or []
+    if isinstance(wellness, list) and wellness:
+        out.append("WELLNESS (date · HRV · sleep h · RHR):")
+        for r in wellness[-14:]:
+            slp = r.get("sleepSecs")
+            slp_h = f"{slp/3600:.1f}h" if slp else "—"
+            out.append(f"  {_d10(r.get('id') or r.get('date'))}  HRV {r.get('hrv') or '—'}  sleep {slp_h}  RHR {r.get('restingHR') or '—'}")
+
+    history = d.get("history") or []
+    if isinstance(history, list) and history:
+        out.append("RECENT ACTIVITIES (last 14d · date · sport · TSS · min · name):")
+        for a in sorted(history, key=lambda x: str(x.get("start_date_local") or "")):
+            dt = _d10(a.get("start_date_local"))
+            mt = a.get("moving_time") or 0
+            out.append(f"  {dt} {_wd(dt)} {str(a.get('type') or ''):6} TSS {int(a.get('icu_training_load') or 0):>3} {round(mt/60):>3}min {str(a.get('name') or '')[:40]}")
+
+    events = d.get("events") or []
+    if isinstance(events, list):
+        wk = [e for e in events if (e.get("category") or "WORKOUT").upper() == "WORKOUT"]
+        out.append(f"PLANNED EVENTS today→+35d ({len(wk)}) (date · sport · id · planned TSS · min · name):")
+        for e in sorted(wk, key=lambda x: str(x.get("start_date_local") or "")):
+            dt = _d10(e.get("start_date_local"))
+            mt = e.get("moving_time")
+            out.append(f"  {dt} {_wd(dt)} {str(e.get('type') or ''):6} id={e.get('id')} L={e.get('load_target')} "
+                       f"{(str(round(mt/60))+'min') if mt else '—'} {str(e.get('name') or '')[:42]}")
+    return "\n".join(out)
+
+
+def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0,
+                 replan: bool = False, prefetched: dict | None = None) -> str:
     _today      = date.today()
     today       = _today.isoformat()
     today_dow   = _today.strftime("%A")
@@ -603,6 +713,25 @@ In Step 6, honour this distribution, include the brick(s), and schedule any due 
         except Exception:
             pass
 
+    # Step 1 data: if pre-fetched in Python (run_for_athlete), inject it so the LLM
+    # skips 5 tool-call round-trips. Otherwise tell it to fetch (tests / fallback).
+    if prefetched:
+        step1_block = (
+            "Step 1 — Live data has ALREADY been fetched for you and is in the STEP 1 DATA\n"
+            "block below. Do NOT run icu_fetch for profile / fitness / wellness / history /\n"
+            "events — use the block. (Only fetch if you genuinely need a field that isn't there.)\n\n"
+            "## STEP 1 DATA — pre-fetched (today " + today + ")\n" + _render_prefetched(prefetched)
+        )
+    else:
+        step1_block = (
+            "Step 1 — Pull live data via Bash (use today's date " + today + " for all calculations):\n"
+            "  python3 ClaudeCoach/lib/icu_fetch.py --athlete " + slug + " --endpoint profile\n"
+            "  python3 ClaudeCoach/lib/icu_fetch.py --athlete " + slug + " --endpoint fitness --days 14 --newest " + end_35 + "\n"
+            "  python3 ClaudeCoach/lib/icu_fetch.py --athlete " + slug + " --endpoint wellness --days 14\n"
+            "  python3 ClaudeCoach/lib/icu_fetch.py --athlete " + slug + " --endpoint history --days 14\n"
+            "  python3 ClaudeCoach/lib/icu_fetch.py --athlete " + slug + " --endpoint events --start " + today + " --end " + end_35
+        )
+
     return f"""You are generating the rolling 2-week training plan for {name}'s {race_name} coaching system.
 {ftp_note}
 
@@ -622,12 +751,7 @@ a failed run — {name} loses trust when the dates are wrong.
 If the profile endpoint current_date_local disagrees with {today}, flag it and use {today}.
 {load_accountability_block}
 {blueprint_block}
-Step 1 — Pull live data via Bash (use today's date {today} for all calculations):
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint fitness --days 14 --newest {end_35}
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint wellness --days 14
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint history --days 14
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {end_35}
+{step1_block}
 
 Step 2 — Read (skip any file that does not exist):
 - {athlete_dir}/current-state.md (ankle, niggles, open actions)
@@ -970,7 +1094,13 @@ Then re-emit ONLY the <telegram> block for the corrected week."""
 def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
     profile   = load_profile(slug)
     ctl_today = fetch_ctl(slug)
-    prompt    = build_prompt(slug, cfg, profile, ctl_today, replan=replan)
+    # Pre-fetch the Step-1 live data in Python (~2s) so the LLM doesn't spend ~5
+    # tool-call round-trips (~100s) fetching it. Soft-fails to None → LLM fetches.
+    prefetched = prefetch_plan_data(slug)
+    if prefetched is None:
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[generate-plan:{slug}] prefetch unavailable — LLM will fetch Step 1.\n")
+    prompt    = build_prompt(slug, cfg, profile, ctl_today, replan=replan, prefetched=prefetched)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_plan_", delete=False, suffix=".txt"
