@@ -1,13 +1,5 @@
 [
   {
-    "user": "",
-    "assistant": "*Good morning \u2014 Tue 9 Jun*\n\n*Today:* Z2 walk-run + Aerobic swim \u2014 120 min, ~60 TSS\n  Run (60 min, ~25 TSS): 5:30 format \u00d7 11 (5 min run / 30 sec walk), HR \u2264150, 4:50\u20135:05/km on running portions; stop if ankle >2/10\n  Swim (60 min, ~35 TSS): 8 \u00d7 200m @ 1:44\u20131:50/100m, HR 110\u2013130; WU/CD 200m each (~2,000m total)\n\n\u26a0\ufe0f Run km cap \u2014 today adds ~9.5 km to W7; combined with Sat 13 Jun run must stay \u226419.7 km this week\n\nInjury pain score before heading out? (0\u201310)\n\n_102 days to IM Italy Emilia-Romagna_"
-  },
-  {
-    "user": "",
-    "assistant": "[chart/photo sent]"
-  },
-  {
     "user": "Bug, today's sessions are showing on here again!",
     "assistant": "Logged."
   },
@@ -118,5 +110,13 @@
   {
     "user": "Also remove FTP for now while it's guessed",
     "assistant": "Done. Description updated \u2014 ankle and FTP lines removed:\n\n```\nCoventry Z2 Run \u00b7 10.17 km \u00b7 48 min \u00b7 TSS 65\n\nGAP: 4:41/km  |  Avg HR: 145  |  Elevation: +95m  |  Decoupling: 1.9%\nContinuous Z2 \u2014 no walk intervals\n```\n\nRule logged: no FTP % references on Strava while FTP is estimated."
+  },
+  {
+    "user": "",
+    "assistant": "*Tomorrow \u2014 Z2 Run + Strength*\n\n*Run (60 min):*\n\u2022 GAP 4:35\u20135:10/km\n\u2022 HR 133\u2013146 bpm\n\u2022 Cadence 80\u201385\n\n*Strength (35 min):*\n\u2022 Lower body + core\n\u2022 Goblet squat 3\u00d712, SL deadlift 3\u00d710, hip thrust 3\u00d712, Copenhagen plank, dead bugs\n\u2022 Ankle: bodyweight or light load on single-leg work \u2014 stop if >2/10\n\u2022 Do after the run\n\n*Nutrition:* Water only \u2014 Z2 effort\n*Sleep:* \u22658h tonight\n*Form:* -9 (In training)"
+  },
+  {
+    "user": "",
+    "assistant": "RPE for the Coventry Running? (1\u201310) \u2014 and how did the ankle feel this morning?"
   }
 ]
