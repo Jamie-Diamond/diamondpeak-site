@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i155615319",
+    "date": "2026-06-09",
+    "name": "Wandsworth - Tue 9 Jun — Easy Z2 run 50min",
+    "sport": "Run",
+    "tss": 53,
+    "duration_min": 55,
+    "distance_km": 9.09,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 161,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-06-09T07:45:00",
+    "stub": true
+  },
+  {
     "activity_id": "i155212378",
     "date": "2026-06-08",
     "name": "Cardio",
