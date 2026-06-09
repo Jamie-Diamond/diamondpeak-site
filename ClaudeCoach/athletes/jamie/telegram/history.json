@@ -1,10 +1,6 @@
 [
   {
     "user": "",
-    "assistant": "*Good morning \u2014 Mon 8 Jun*\n\nRest day.\n\n\u26a0\ufe0f PH sweat test + TT bike fit \u2014 both unbooked, now 8 days overdue.\n\nWeight this morning?\n\n_103 days to IM Italy Emilia-Romagna_"
-  },
-  {
-    "user": "",
     "assistant": "[chart/photo sent]"
   },
   {
@@ -118,5 +114,9 @@
   {
     "user": "Let's push a little harder.",
     "assistant": "W8 updated \u2014 two additions:\n\n*Wed 17:* Walk-run 40 min added alongside Strength \u2192 +35 TSS\n*Sat 20:* Brick ride 180 \u2192 210 min \u2192 +26 TSS\n\nW8 total: *~783 TSS* (was 722)\nRun km: Tue 10.5 + Wed 6 + Sat 4.5 = 21 km \u2014 just inside cap.\n\nProjected CTL by 6 Jul: *~93* (was 91). France camp Jun 24\u201329 is still the big lever \u2014 900+ TSS there is where we close the gap to 95."
+  },
+  {
+    "user": "May the Strava description out like a table for today's swim \n\nEg. \n\n4*200pb TGT: 1:35 actual 1:39 \n\nMake sense?",
+    "assistant": "Done. Strava description updated:\n\n```\nPool Swim \u00b7 3,000m \u00b7 68 min \u00b7 TSS 74\n\nWU: 400m easy \u2014 1:49/100m\nBuild: 2\u00d7100m \u2014 1:44 / 1:40\n\n4\u00d7200m pull buoy  TGT: 1:33\u20131:36  ACT: 1:39 / 1:39 / 1:38 / 1:40\nRec: 200m easy\n\n3\u00d7400m Z2         TGT: 1:44\u20131:47  ACT: 1:48 / 1:49 / 1:46\nCD: 200m easy\n```"
   }
 ]
