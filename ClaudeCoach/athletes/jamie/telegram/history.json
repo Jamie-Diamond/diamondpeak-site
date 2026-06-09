@@ -1,9 +1,5 @@
 [
   {
-    "user": "",
-    "assistant": "\u23f1 Test due today: *CSS Baseline*\n_400m + 200m TT (CSS calculator)_"
-  },
-  {
     "user": "Replans this week",
     "assistant": "*Week 7 \u2014 Mon 8 to Sun 14 Jun \u2014 in Intervals.icu*\n\nMon 8: Rest\nTue 9: Walk-run 60 min \u00b7 45 TSS + Aerobic swim 45 min \u00b7 35 TSS\nWed 10: Strength 35 min \u00b7 20 TSS\nThu 11: CSS swim 55 min \u00b7 50 TSS + Strength 35 min \u00b7 20 TSS\nFri 12: *Long Z2 ride 240 min \u2014 KEY SESSION* \u00b7 170 TSS\nSat 13: Walk-run 60 min \u00b7 45 TSS (AM) + Build ride 210 min 3\u00d720 SS @ 261\u2013276W \u00b7 185 TSS (PM)\nSun 14: Z2 ride 150 min \u00b7 105 TSS + Strength 35 min \u00b7 20 TSS\n\n*Total: 695 TSS*\n\nAll 10 sessions are confirmed in Intervals.icu. The three test alerts (FTP/LTHR/CSS) that fired this morning are a watchdog bug \u2014 they conflict with your standing rule (no formal retest protocol; eFTP is the live source). Ignore them."
   },
@@ -118,5 +114,9 @@
   {
     "user": "plan them for a 50m pool",
     "assistant": "**Tue \u2014 Skills/Speed \u00b7 60 min \u00b7 ~2,200m (50m pool)**\nWU: 400m easy\nDrills: 4\u00d7100m (catch-up, fingertip drag, fist, kick on side) \u00b7 :20s rest\nSpeed: 8\u00d7100m fast off :45s rest \u00b7 target 1:25\u20131:30/100m\nAerobic: 2\u00d7200m @ 1:44\u20131:47/100m \u00b7 :30s rest\nCD: 200m easy\n\n**Thu \u2014 Duration/Load \u00b7 60 min \u00b7 ~2,800m (50m pool)**\nWU: 400m easy\nDrill: 2\u00d7100m (catch-up, fingertip drag) \u00b7 :20s rest\nMain: 5\u00d7400m @ CSS 1:39/100m \u00b7 :20s rest\nCD: 200m easy\n\nThu 11 pushed to Intervals. These templates apply to all future normal weeks."
+  },
+  {
+    "user": "",
+    "assistant": "Plan updated \u2014 check your week in Intervals.icu."
   }
 ]

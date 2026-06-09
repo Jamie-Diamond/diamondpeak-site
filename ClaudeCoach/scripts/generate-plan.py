@@ -1177,7 +1177,7 @@ def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
             stdin=subprocess.DEVNULL, cwd=PROJECT_DIR,
         )
         message = None
-        HARD_CAP = 600
+        HARD_CAP = 900   # generous — a single planning turn can sit in API 429-backoff for ~7-8 min
         while time.time() - start_ts < HARD_CAP:
             exited = proc.poll() is not None
             message = _scan_transcripts_for_telegram(name, start_ts)
