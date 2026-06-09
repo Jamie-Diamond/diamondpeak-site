@@ -627,11 +627,11 @@ def _load_chart_quick(token, chat_id, slug):
                 {"sport": sport, "tss": tss, "dur": dur, "status": "completed"}
             )
 
-        # Planned events grouped by date (future only)
+        # Planned events grouped by date (today + future; skip only strictly-past)
         plans_by_date = {}
         for ev in (events or []):
             d = (ev.get("start_date_local") or "")[:10]
-            if not d or d <= today.isoformat():
+            if not d or d < today.isoformat():
                 continue
             sport = _bot_norm_sport(ev.get("type") or ev.get("category") or "Other")
             tss = round(float(ev.get("load_target") or ev.get("icu_training_load") or 0), 1)
@@ -642,15 +642,20 @@ def _load_chart_quick(token, chat_id, slug):
 
         # 16-day window: 8 past + today + 7 future
         days = []
+        today_str = today.isoformat()
         for i in range(-8, 8):
             d = today + timedelta(days=i)
             d_str = d.isoformat()
-            is_future = d > today
-            days.append({
-                "date": d_str,
-                "tsb": None if is_future else tsb_by_date.get(d_str),
-                "activities": plans_by_date.get(d_str, []) if is_future else acts_by_date.get(d_str, []),
-            })
+            if d_str < today_str:
+                acts = acts_by_date.get(d_str, [])                 # past: completed only
+                tsb = tsb_by_date.get(d_str)
+            else:
+                # today + future: completed sessions + any planned not already done
+                acts = list(acts_by_date.get(d_str, []))
+                done = {a["sport"] for a in acts}
+                acts += [p for p in plans_by_date.get(d_str, []) if p["sport"] not in done]
+                tsb = tsb_by_date.get(d_str) if d_str == today_str else None
+            days.append({"date": d_str, "tsb": tsb, "activities": acts})
 
         payload = {
             "today": today.strftime("%m-%d"),

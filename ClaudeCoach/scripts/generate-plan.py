@@ -1072,10 +1072,18 @@ Then re-emit ONLY the <telegram> block for the corrected week."""
     try:
         result = subprocess.run(
             [CLAUDE, "-p", open(fix_file).read(), "--allowedTools", TOOLS,
-             "--model", "claude-sonnet-4-6"],
+             "--model", "claude-sonnet-4-6", "--output-format", "json"],
             capture_output=True, text=True, cwd=PROJECT_DIR,
+            stdin=subprocess.DEVNULL, timeout=420,
         )
-        m = re.search(r"<telegram>(.*?)</telegram>", result.stdout.strip(),
+        _out = (result.stdout or "").strip()
+        try:
+            _j = json.loads(_out)
+            if isinstance(_j, dict) and "result" in _j:
+                _out = str(_j.get("result") or "").strip()
+        except Exception:
+            pass
+        m = re.search(r"<telegram>(.*?)</telegram>", _out,
                       re.DOTALL | re.IGNORECASE)
         recheck = _backstop_validate(slug, cfg, ctl_today, replan)
         if not recheck["hard"]:
@@ -1109,15 +1117,37 @@ def run_for_athlete(slug: str, cfg: dict, replan: bool = False) -> str | None:
         prompt_file = f.name
 
     try:
-        result = subprocess.run(
-            [CLAUDE, "-p", open(prompt_file).read(),
-             "--allowedTools", TOOLS,
-             "--model", "claude-sonnet-4-6"],
-            capture_output=True, text=True,
-            cwd=PROJECT_DIR,
-        )
-        output = result.stdout.strip()
-        stderr = result.stderr.strip()
+        try:
+            result = subprocess.run(
+                [CLAUDE, "-p", open(prompt_file).read(),
+                 "--allowedTools", TOOLS,
+                 "--model", "claude-sonnet-4-6",
+                 "--output-format", "json"],   # headless mode: emit one result object + exit cleanly
+                capture_output=True, text=True,
+                cwd=PROJECT_DIR,
+                stdin=subprocess.DEVNULL,
+                timeout=420,                    # backstop in case the CLI still hangs on exit
+            )
+            output = (result.stdout or "").strip()
+            stderr = (result.stderr or "").strip()
+        except subprocess.TimeoutExpired as te:
+            output = (te.stdout or "").strip() if isinstance(te.stdout, str) else (te.stdout or b"").decode("utf-8", "ignore").strip()
+            stderr = ""
+            with open(LOG_FILE, "a") as lf:
+                lf.write(f"[generate-plan:{slug}] claude timed out at 420s — recovered {len(output)} chars.\n")
+        # --output-format json: the assistant text is in .result; also gives turns/duration.
+        # Fall back to raw text if it isn't JSON (older CLI / partial output on timeout).
+        if output:
+            try:
+                _j = json.loads(output)
+                if isinstance(_j, dict) and "result" in _j:
+                    with open(LOG_FILE, "a") as lf:
+                        lf.write(f"[generate-plan:{slug}] claude: {_j.get('num_turns')} turns, "
+                                 f"{(_j.get('duration_ms') or 0)/1000:.0f}s api, "
+                                 f"${_j.get('total_cost_usd')}\n")
+                    output = str(_j.get("result") or "").strip()
+            except Exception:
+                pass
         if stderr:
             with open(LOG_FILE, "a") as lf:
                 lf.write(f"[generate-plan:{slug}] STDERR: {stderr}\n")
