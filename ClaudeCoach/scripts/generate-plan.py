@@ -1123,6 +1123,12 @@ def _scan_transcripts_for_telegram(name: str, start_ts: float) -> str | None:
             except Exception:
                 continue
             m = r.get("message", {})
+            # ASSISTANT messages ONLY. The user message IS the prompt, which itself
+            # contains the literal "<telegram>...</telegram>" instruction — matching that
+            # would fire instantly, before the model has built anything.
+            role = (m.get("role") if isinstance(m, dict) else None) or r.get("type")
+            if role != "assistant":
+                continue
             c = m.get("content") if isinstance(m, dict) else None
             if isinstance(c, list):
                 texts += [x.get("text", "") for x in c
