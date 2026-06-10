@@ -161,6 +161,86 @@ def notify(msg, chat_id, slug=""):
     return False
 
 
+_CHART_SPORT_MAP = {
+    "VirtualRide": "Ride", "GravelRide": "Ride", "MountainBikeRide": "Ride",
+    "EBikeRide": "Ride", "Cycling": "Ride", "TrailRun": "Run",
+    "VirtualRun": "Run", "OpenWaterSwim": "Swim",
+    "WeightTraining": "Strength", "Workout": "Strength", "Elliptical": "Strength",
+}
+
+
+def _build_load_chart_payload(today, wellness_rows, history_acts, events):
+    """Pure payload builder for the morning load chart (±8 days) — extracted from
+    the send path so the day construction is testable. The today-bar rule lives
+    here: today shows completed activities PLUS planned sessions whose sport has
+    not been completed yet (at a 06:30 send nothing is completed, which is why an
+    earlier completed-only version rendered today permanently empty)."""
+    seed_ctl = seed_atl = None
+    if wellness_rows:
+        w = wellness_rows[-1]
+        seed_ctl = round(float(w.get("ctl") or 0), 1)
+        seed_atl = round(float(w.get("atl") or 0), 1)
+
+    tsb_by_date = {}
+    for w in wellness_rows or []:
+        d = (w.get("id") or "")[:10]
+        if d:
+            tsb_by_date[d] = round((w.get("ctl") or 0) - (w.get("atl") or 0), 1)
+
+    acts_by_date = {}
+    for act in (history_acts or []):
+        d = (act.get("start_date_local") or "")[:10]
+        if not d:
+            continue
+        sport = _CHART_SPORT_MAP.get(act.get("type", ""), act.get("type", "Other"))
+        tss = round(float(act.get("icu_training_load") or 0), 1)
+        dur = round((act.get("moving_time") or 0) / 60)
+        acts_by_date.setdefault(d, []).append(
+            {"sport": sport, "tss": tss, "dur": dur, "status": "completed"}
+        )
+
+    # Planned events by date (today and future)
+    plans_by_date = {}
+    for ev in (events or []):
+        d = (ev.get("start_date_local") or "")[:10]
+        if not d or d < today.isoformat():
+            continue
+        raw   = ev.get("type") or ev.get("category") or ""
+        sport = _CHART_SPORT_MAP.get(raw, raw) or "Other"
+        tss = round(float(ev.get("load_target") or ev.get("icu_training_load") or 0), 1)
+        dur = round((ev.get("moving_time") or 0) / 60)
+        plans_by_date.setdefault(d, []).append(
+            {"sport": sport, "tss": tss, "dur": dur, "status": "planned"}
+        )
+
+    days = []
+    for i in range(-8, 8):
+        d = today + timedelta(days=i)
+        d_str = d.isoformat()
+        is_future = d > today
+        if is_future:
+            acts = plans_by_date.get(d_str, [])
+        elif d == today:
+            done = acts_by_date.get(d_str, [])
+            done_sports = {a["sport"] for a in done}
+            acts = done + [p for p in plans_by_date.get(d_str, [])
+                           if p["sport"] not in done_sports]
+        else:
+            acts = acts_by_date.get(d_str, [])
+        days.append({
+            "date": d_str,
+            "tsb": None if is_future else tsb_by_date.get(d_str),
+            "activities": acts,
+        })
+
+    return {
+        "today": today.strftime("%m-%d"),
+        "seed_ctl": seed_ctl,
+        "seed_atl": seed_atl,
+        "days": days,
+    }
+
+
 def _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level="mid"):
     """Generate and send the training load chart (±8 days) as part of the morning brief."""
     try:
@@ -179,83 +259,7 @@ def _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level="mid")
             ("get_events", today.isoformat(), end_date),
         )
 
-        # Seed CTL/ATL from last wellness row
-        seed_ctl = seed_atl = None
-        if wellness_rows:
-            w = wellness_rows[-1]
-            seed_ctl = round(float(w.get("ctl") or 0), 1)
-            seed_atl = round(float(w.get("atl") or 0), 1)
-
-        # Historical TSB by date from already-fetched wellness
-        tsb_by_date = {}
-        for w in wellness_rows:
-            d = (w.get("id") or "")[:10]
-            if d:
-                tsb_by_date[d] = round((w.get("ctl") or 0) - (w.get("atl") or 0), 1)
-
-        # Completed activities by date
-        acts_by_date = {}
-        _sport_map = {
-            "VirtualRide": "Ride", "GravelRide": "Ride", "MountainBikeRide": "Ride",
-            "EBikeRide": "Ride", "Cycling": "Ride", "TrailRun": "Run",
-            "VirtualRun": "Run", "OpenWaterSwim": "Swim",
-            "WeightTraining": "Strength", "Workout": "Strength", "Elliptical": "Strength",
-        }
-        for act in (history_acts or []):
-            d = (act.get("start_date_local") or "")[:10]
-            if not d:
-                continue
-            sport = _sport_map.get(act.get("type", ""), act.get("type", "Other"))
-            tss = round(float(act.get("icu_training_load") or 0), 1)
-            dur = round((act.get("moving_time") or 0) / 60)
-            acts_by_date.setdefault(d, []).append(
-                {"sport": sport, "tss": tss, "dur": dur, "status": "completed"}
-            )
-
-        # Planned events by date (today and future)
-        plans_by_date = {}
-        for ev in (events or []):
-            d = (ev.get("start_date_local") or "")[:10]
-            if not d or d < today.isoformat():
-                continue
-            raw   = ev.get("type") or ev.get("category") or ""
-            sport = _sport_map.get(raw, raw) or "Other"
-            tss = round(float(ev.get("load_target") or ev.get("icu_training_load") or 0), 1)
-            dur = round((ev.get("moving_time") or 0) / 60)
-            plans_by_date.setdefault(d, []).append(
-                {"sport": sport, "tss": tss, "dur": dur, "status": "planned"}
-            )
-
-        days = []
-        for i in range(-8, 8):
-            d = today + timedelta(days=i)
-            d_str = d.isoformat()
-            is_future = d > today
-            if is_future:
-                acts = plans_by_date.get(d_str, [])
-            elif d == today:
-                # Today must show this morning's PLANNED session(s) too — at a
-                # 06:30 send nothing is completed yet, which is why today's bar
-                # used to render empty. A sport already completed today drops
-                # its planned twin so the bar is never double-counted.
-                done = acts_by_date.get(d_str, [])
-                done_sports = {a["sport"] for a in done}
-                acts = done + [p for p in plans_by_date.get(d_str, [])
-                               if p["sport"] not in done_sports]
-            else:
-                acts = acts_by_date.get(d_str, [])
-            days.append({
-                "date": d_str,
-                "tsb": None if is_future else tsb_by_date.get(d_str),
-                "activities": acts,
-            })
-
-        payload = {
-            "today": today.strftime("%m-%d"),
-            "seed_ctl": seed_ctl,
-            "seed_atl": seed_atl,
-            "days": days,
-        }
+        payload = _build_load_chart_payload(today, wellness_rows, history_acts, events)
         png = _charts.load_chart(payload, coaching_level=coaching_level)
         if png:
             import tempfile, os
