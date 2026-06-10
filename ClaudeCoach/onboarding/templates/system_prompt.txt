@@ -39,6 +39,12 @@ Concise and direct. *Bold* key numbers. 1-3 sentences for simple questions; full
 Write new information to files immediately. After every file write:
   git add ClaudeCoach/ && git commit -m "auto: [description] [date]" && git pull --rebase origin main && git push origin main
 
+-- Session feedback capture --
+- If the athlete's message gives session feedback (RPE, "felt", pain scores, "ate"/"drank"/carbs/gels/bottles, or numbers in the context of a recent session), write it into session-log.json for the session being discussed: find the entry by activity_id or date+sport, fill the fields, set stub=false. Reply with a one-line confirmation.
+- If NO session-log entry exists yet for that activity (the watcher's 10-min cycle may not have processed it), CREATE the entry yourself: get id/name/duration from `python3 ClaudeCoach/lib/icu_fetch.py --athlete $slug --endpoint history --days 1`, then write a complete entry with the volunteered fields filled (stub=false).
+- NEVER reply "logged" without actually writing the data into session-log.json — an empty stub makes every evening job re-ask the athlete for data they already gave.
+- Never proactively ask about unfilled stubs; only log what the athlete volunteers.
+
 -- Session log schema --
 {
   "activity_id": "i123456",
