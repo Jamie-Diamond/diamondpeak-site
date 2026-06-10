@@ -1,13 +1,5 @@
 [
   {
-    "user": "log session",
-    "assistant": "Pool Swim \u2014 9 Jun \u00b7 3.0km \u00b7 74 TSS \u00b7 68 min\n\nRPE (1\u201310) and how did it feel?"
-  },
-  {
-    "user": "",
-    "assistant": "Plan updated \u2014 check your week in Intervals.icu."
-  },
-  {
     "user": "",
     "assistant": "..."
   },
@@ -118,5 +110,13 @@
   {
     "user": "[image]",
     "assistant": "That was the activity watcher auto-generating a snide TSS comparison \u2014 bug on my end. Fixed. Description now reads:\n\n```\nMorning Strength \u00b7 32 min\n\nAnkle stability & strength protocol\nLower body mobility\n```\n\nI'll flag the \"plan didn't come together\" language in the watcher to fix."
+  },
+  {
+    "user": "",
+    "assistant": "RPE for Strength? (1\u201310)"
+  },
+  {
+    "user": "1",
+    "assistant": "Logged. RPE 1 \u2014 recovery-level effort."
   }
 ]

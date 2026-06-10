@@ -6,11 +6,11 @@
     "sport": "Strength",
     "tss": 6,
     "duration_min": 32,
-    "rpe": null,
-    "feel": null,
-    "notes": null,
+    "rpe": 1,
+    "feel": "ankle stability + lower body mobility",
+    "notes": "Morning session: 15 min ankle stability/strength, 15 min lower body mobility",
     "logged_at": "2026-06-10T08:00:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i155832025",
