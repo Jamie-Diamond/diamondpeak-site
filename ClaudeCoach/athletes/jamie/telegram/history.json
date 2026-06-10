@@ -1,14 +1,6 @@
 [
   {
     "user": "",
-    "assistant": "Plan updated \u2014 check your week in Intervals.icu."
-  },
-  {
-    "user": "",
-    "assistant": "*New activity*\n\n10.17 km \u00b7 avg GAP 4:41/km \u00b7 +39 sec/km vs threshold (4:02/km)\n~86% time HR \u2264150 cap \u00b7 decoupling 1.9% (excellent, 48 min)\nRunning power: 430 W avg \u00b7 power exactly at running FTP despite sub-threshold pace \u2014 consistent with walk-run format absorbing walk intervals into lap averages\nInjury pain score during and this morning? (0-10)\n_vs plan (Tue 9 Jun \u2014 Z2 walk-run 60 min): 45\u219265 TSS (+44%)_"
-  },
-  {
-    "user": "",
     "assistant": "\ud83c\udfc6 PR: Memorial Park lap\n\ud83c\udfc6 PR: memorial park LAP\n\ud83c\udfc6 PR: WM park -  P&R entrance to EAS entrance\n\ud83c\udfc6 PR: 2 x Memorial Park\n\ud83c\udfc6 PR: 1k Rep"
   },
   {
@@ -118,5 +110,13 @@
   {
     "user": "We've already discussed this.",
     "assistant": "Correct \u2014 already logged. The watcher doesn't see our conversation, so it re-asks anyway. Nothing to do on your end."
+  },
+  {
+    "user": "",
+    "assistant": "*Tomorrow \u2014 CSS Swim 60 min*\n\n\u2022 Target pace 1:39/100m (CSS)\n\u2022 WU 400m easy \u2192 2\u00d7100m drill (catch-up, fingertip drag) :20s rest\n\u2022 Main: 5\u00d7400m @ 1:39/100m \u00b7 :20s rest\n\u2022 CD 200m easy \u00b7 ~2,800m total \u00b7 50m pool\n\n*Nutrition:* Light carb snack pre-session (~25g). No in-session fuelling needed.\n*Sleep:* \u22658h tonight\n*Form:* -7 (In training)"
+  },
+  {
+    "user": "",
+    "assistant": "RPE for the Coventry Running? (1\u201310) \u2014 and how did the ankle feel this morning?"
   }
 ]
