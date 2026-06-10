@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Evening check-in — runs via VM crontab at 21:00 daily. Loops over all active athletes."""
-import json, subprocess, sys
+import json, os, subprocess, sys, time
 from datetime import date, datetime
 from pathlib import Path
 
@@ -137,9 +137,14 @@ def main():
         print(f"[{ts}] Failed to load athletes config: {e}", file=sys.stderr)
         sys.exit(1)
 
+    stagger = int(os.environ.get("ATHLETE_STAGGER_S", "30"))
+    processed = False
     for slug, cfg in athletes.items():
         if not cfg.get("active", True):
             continue
+        if processed:
+            time.sleep(stagger)   # space Claude calls — rate-limit contention
+        processed = True
         try:
             run_athlete(slug, cfg)
         except Exception as exc:

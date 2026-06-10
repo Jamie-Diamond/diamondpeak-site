@@ -4,7 +4,7 @@ Daily watchdog — fires a Telegram notification only if a trigger trips.
 Runs via VM crontab at 05:30 daily. Loops over all active athletes.
 Safe to run manually: python3 ClaudeCoach/scripts/watchdog.py
 """
-import json, subprocess, sys, tempfile, os
+import json, subprocess, sys, tempfile, os, time
 from datetime import date
 from pathlib import Path
 
@@ -40,7 +40,7 @@ def load_profile(slug: str) -> dict:
         return {}
 
 
-def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: str, heat: dict | None = None) -> str:
+def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: str, heat: dict | None = None, strength_target: int | None = None) -> str:
     today = date.today().isoformat()
     athlete_dir = BASE / "athletes" / slug
 
@@ -75,6 +75,17 @@ def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: 
                 f"Fire if 14-day dose < {heat_lib.PROTOCOL_DOSE_14D}.\n"
                 f"T8 (Tier 2): Most recent date in heat-log.json is >7 days ago (or the log is missing/empty).\n"
             )
+
+    t11 = ""
+    if strength_target:
+        t11 = (
+            f"T11 (Tier 2): Strength compliance — target {strength_target}/week.\n"
+            f"  Count strength sessions (type WeightTraining, or name containing strength/gym/S&C)\n"
+            f"  in the history endpoint for each of the LAST 2 COMPLETED weeks (Mon-Sun, exclude the\n"
+            f"  current part-week). If BOTH weeks are below target, fire: \"warning T11: strength X\n"
+            f"  and Y sessions in last 2 weeks vs target {strength_target}/wk — schedule the missing\n"
+            f"  sessions (Tier C needs no equipment)\".\n"
+        )
 
     return f"""You are running the daily watchdog check for {name}'s {race_name} coaching system.
 Run silently — only produce output if a trigger fires.
@@ -114,7 +125,7 @@ T10 (Tier 2): Run weekly km increase >10% week-on-week
   - Also cross-check current-state.json ankle.weekly_run_km_this_week vs ankle.weekly_run_km_last_week (if fields exist)
   - Fire if this_week_km > last_week_km * 1.10 AND last_week_km > 0
   - Fire message: "warning T10: run km +X% week-on-week ([this]km vs [last]km) — 10% cap applies"
-
+{t11}
 If NO triggers fire: output nothing. Silent run.
 
 DO NOT SEND ANY TELEGRAM MESSAGE — ever. The watchdog is silent. Its job is to DETECT and
@@ -144,8 +155,12 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
 
     profile = load_profile(slug)
     heat = heat_lib.state(slug, profile)
+    strength_target = None
+    if profile.get("strength_programme"):
+        strength_target = int((cfg.get("day_rules") or {}).get("strength_max", 2))
 
-    prompt = build_prompt(slug, name, race_name, race_date, chat_id, heat=heat)
+    prompt = build_prompt(slug, name, race_name, race_date, chat_id, heat=heat,
+                          strength_target=strength_target)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_watchdog_", delete=False, suffix=".txt"
@@ -182,11 +197,19 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         os.unlink(prompt_file)
 
 
+ATHLETE_STAGGER_S = int(os.environ.get("ATHLETE_STAGGER_S", "90"))
+
+
 def main():
     athletes = json.loads(CONFIG.read_text())
+    processed = False
     for slug, cfg in athletes.items():
         if not cfg.get("active"):
             continue
+        if processed:
+            # Space the athletes' Claude runs to avoid bursting the rate limit.
+            time.sleep(ATHLETE_STAGGER_S)
+        processed = True
         chat_id = str(cfg.get("chat_id", ""))
         output = run_for_athlete(slug, cfg)
         with open(LOG_FILE, "a") as lf:

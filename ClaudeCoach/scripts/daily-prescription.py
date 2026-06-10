@@ -4,7 +4,7 @@ Daily session prescription — runs via VM crontab at 05:00 daily.
 Loops over all active athletes. Safe to run manually:
   python3 ClaudeCoach/scripts/daily-prescription.py
 """
-import json, re, shutil, subprocess, sys, tempfile, os
+import json, re, shutil, subprocess, sys, tempfile, os, time
 from datetime import date
 from pathlib import Path
 
@@ -407,13 +407,22 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         os.unlink(prompt_file)
 
 
+ATHLETE_STAGGER_S = int(os.environ.get("ATHLETE_STAGGER_S", "90"))
+
+
 def main():
     athletes = json.loads(CONFIG.read_text())
+    processed = False
     for slug, cfg in athletes.items():
         if not cfg.get("active"):
             continue
         if not cfg.get("daily_prescription", True):
             continue
+        if processed:
+            # Space the athletes' Claude runs out — back-to-back large requests
+            # burst the account rate limit (the 429s behind slow replans).
+            time.sleep(ATHLETE_STAGGER_S)
+        processed = True
         output = run_for_athlete(slug, cfg)
         with open(LOG_FILE, "a") as lf:
             lf.write(f"[prescription:{slug}]\n{output or '(no output)'}\n---\n")

@@ -690,6 +690,22 @@ A plan that is >10% short of target with no LOAD GAP section in the message is a
     _bp = load_blueprint(slug)
     blueprint_block = ""
     durability_block = ""
+    strength_block = ""
+    if profile.get("strength_programme"):
+        strength_block = f"""
+STRENGTH PROGRAMME — this athlete follows ClaudeCoach/blueprints/strength.md (READ it before
+Step 6). Rules:
+- PUSH the week's strength sessions ({_strength_max}/week in base/build/specific; taper = 1 light,
+  none in race week — see the phase table) as real workouts with the session content (warm-up /
+  main / ankle / core blocks) written into the event description. Default to the Tier C
+  (bodyweight + band) variant — always possible, so strength is never silently dropped.
+- Placement: Wednesday spare slot first, second session after a swim day; never the day before
+  the long ride; >=8 h from any quality bike/run session.
+- EQUIPMENT ASK — the Step 7 message must ALWAYS ask what equipment is available this week
+  (full gym / dumbbells-kettlebells / bodyweight only). When the athlete answers, upgrade the
+  pushed sessions' descriptions to the matching tier via edit_workout. Ask EVERY week — travel
+  changes availability.
+"""
     _cur = current_phase(_bp, _next_mon)
     # Durability — fatigue resistance is trained by working at intensity on tired
     # legs, not by Z2 hours alone; the long ride must finish with work from build
@@ -822,6 +838,7 @@ not a licence to deload.
 Step 5 — Apply mandatory constraints (from rules.md if present — these are HARD overrides):
 {step5_constraints}
 - Strength: 1–2 sessions/week. HARD CAP: never more than {_strength_max} strength sessions in a single week — extra strength is a FAILED plan. It is supplementary; do NOT use strength to fill slots that should hold a run, swim, or ride.
+{strength_block}
 - Never prescribe new fuel/kit/shoes in the last 4 weeks.
 - Always state day-of-week alongside date in session names.
 
@@ -1007,7 +1024,11 @@ def _backstop_validate(slug: str, cfg: dict, ctl_today: float, replan: bool) -> 
     ACTIVE checks: CTL ramp (always) + day-rules (when the athlete has day_rules in
     athletes.json — the same source the prompt's HARD rule lines are rendered from).
     weekly_tss_cap is intentionally not passed (redundant with the ramp ceiling)."""
-    mode = os.environ.get("ENFORCE_VALIDATION", "warn").strip().lower()
+    # Default flipped warn -> block 2026-06-10 (Jamie's call) after an all-clean
+    # observation window in warn mode: a hard breach now gets one remediation
+    # pass, then the plan is withheld with a coach alert instead of reaching
+    # the athlete. Soft violations (distribution, strength count) never block.
+    mode = os.environ.get("ENFORCE_VALIDATION", "block").strip().lower()
     if mode in ("0", "off", "none", "false"):
         return {"mode": "off", "breaches": [], "hard": []}
     try:
@@ -1062,6 +1083,8 @@ def _coach_alert(slug: str, breaches: list) -> None:
     with open(LOG_FILE, "a") as lf:
         lf.write(f"[generate-plan:{slug}] *** COACH ALERT — plan WITHHELD from athlete: "
                  f"unresolved hard breach after remediation: {summary}\n")
+    ops_log.alert("generate-plan", f"plan WITHHELD — unresolved hard breach: {summary[:300]}",
+                  athlete=slug)
     coach_chat = os.environ.get("COACH_CHAT_ID", "").strip()
     if coach_chat:
         try:
