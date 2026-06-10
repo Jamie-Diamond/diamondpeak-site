@@ -14,9 +14,9 @@
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
+    "nutrition_g_carb": 44,
     "hydration_ml": null,
-    "notes": null,
+    "notes": "1x Clif Bar macadamia & white chocolate (~44g carb) = ~31g/hr. Under target (40g/hr) but session ran short at 74min.",
     "logged_at": "2026-06-10T07:45:00",
     "stub": true
   },
