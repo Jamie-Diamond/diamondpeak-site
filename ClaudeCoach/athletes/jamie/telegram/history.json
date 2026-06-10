@@ -1,25 +1,5 @@
 [
   {
-    "user": "Let's push a little harder.",
-    "assistant": "W8 updated \u2014 two additions:\n\n*Wed 17:* Walk-run 40 min added alongside Strength \u2192 +35 TSS\n*Sat 20:* Brick ride 180 \u2192 210 min \u2192 +26 TSS\n\nW8 total: *~783 TSS* (was 722)\nRun km: Tue 10.5 + Wed 6 + Sat 4.5 = 21 km \u2014 just inside cap.\n\nProjected CTL by 6 Jul: *~93* (was 91). France camp Jun 24\u201329 is still the big lever \u2014 900+ TSS there is where we close the gap to 95."
-  },
-  {
-    "user": "May the Strava description out like a table for today's swim \n\nEg. \n\n4*200pb TGT: 1:35 actual 1:39 \n\nMake sense?",
-    "assistant": "Done. Strava description updated:\n\n```\nPool Swim \u00b7 3,000m \u00b7 68 min \u00b7 TSS 74\n\nWU: 400m easy \u2014 1:49/100m\nBuild: 2\u00d7100m \u2014 1:44 / 1:40\n\n4\u00d7200m pull buoy  TGT: 1:33\u20131:36  ACT: 1:39 / 1:39 / 1:38 / 1:40\nRec: 200m easy\n\n3\u00d7400m Z2         TGT: 1:44\u20131:47  ACT: 1:48 / 1:49 / 1:46\nCD: 200m easy\n```"
-  },
-  {
-    "user": "It's seems like I can't hit my targets how ever hard I try when swimming. I've also swam more in the last 12 months than ever before yet I'm not getting faster",
-    "assistant": "Fair frustration \u2014 and it's the most common trap in swim training.\n\n*The problem: volume doesn't drive swim speed the way it does in cycling or running.*\n\nIn cycling, more hours at the right intensity = more watts. Swimming is 70\u201380% technique \u2014 if the mechanics aren't right, you're just repeating the same movement pattern more efficiently at the same speed. Volume consolidates what you already have; it doesn't break through a technique ceiling.\n\nA few things from today's data worth flagging:\n\n*Pull buoy at 1:38\u20131:40 = essentially CSS pace.* A buoy should make you meaningfully faster by removing leg drag \u2014 most swimmers gain 3\u20136s/100m. Hitting CSS pace with a buoy suggests either your kick is genuinely not costing you much (good), or your catch/pull mechanics are the limiting factor (the buoy can't fix that).\n\n*What's likely missing:* speed work above CSS pace. Short fast reps \u2014 25\u201350m \u2014 where you're forced to find a higher stroke rate or longer reach. Without anything faster than CSS in the diet, the speed ceiling doesn't move.\n\n*Practical options:*\n1. Get a swim coach for one session \u2014 video analysis. One technique fix applied consistently beats months of volume.\n2. Add a short speed block to Tue sessions: 8\u201310\u00d725m fast off 30s rest, at 1:25\u20131:30/100m target. Not fitness work \u2014 neural patterning.\n\nDo you have access to any coached sessions or Masters swim groups near you?"
-  },
-  {
-    "user": "Can we make one session a week a skills/speed session and one a duration/load one then?",
-    "assistant": "Good split. Here's how I'll structure them every week:\n\n**Tue \u2014 Skills/Speed \u00b7 60 min \u00b7 ~2,000m**\nWU: 400m easy\nDrills: 4\u00d750m (catch-up, fingertip drag, fist)\nSpeed: 8\u00d725m fast off :30s \u00b7 target ~1:25\u20131:30/100m\nAerobic: 4\u00d7200m @ 1:43\u20131:48 (CSS +4\u20139s) \u00b7 :30s rest\nCD: 200m easy\n*The 25m reps are the key \u2014 too short to fake, forces you to find a different gear*\n\n**Thu \u2014 Duration/Load \u00b7 60 min \u00b7 ~2,800\u20133,000m**\nWU: 400m easy\nMain: 6\u00d7300m @ CSS 1:39/100m \u00b7 :20s rest\nOR 4\u00d7400m @ CSS+2s \u00b7 :30s rest (varies week to week)\nCD: 200m easy\n\nShall I update Thu 11 Jun to the duration/load format and push it to Intervals?"
-  },
-  {
-    "user": "plan them for a 50m pool",
-    "assistant": "**Tue \u2014 Skills/Speed \u00b7 60 min \u00b7 ~2,200m (50m pool)**\nWU: 400m easy\nDrills: 4\u00d7100m (catch-up, fingertip drag, fist, kick on side) \u00b7 :20s rest\nSpeed: 8\u00d7100m fast off :45s rest \u00b7 target 1:25\u20131:30/100m\nAerobic: 2\u00d7200m @ 1:44\u20131:47/100m \u00b7 :30s rest\nCD: 200m easy\n\n**Thu \u2014 Duration/Load \u00b7 60 min \u00b7 ~2,800m (50m pool)**\nWU: 400m easy\nDrill: 2\u00d7100m (catch-up, fingertip drag) \u00b7 :20s rest\nMain: 5\u00d7400m @ CSS 1:39/100m \u00b7 :20s rest\nCD: 200m easy\n\nThu 11 pushed to Intervals. These templates apply to all future normal weeks."
-  },
-  {
     "user": "",
     "assistant": "Plan updated \u2014 check your week in Intervals.icu."
   },
@@ -118,5 +98,25 @@
   {
     "user": "That will give a higher TSS than planned. Are we happy with that?",
     "assistant": "Yes \u2014 plan TSS was based on walk-run format. Continuous Z2 over 60 min will be ~80\u201385 TSS vs the ~55 walk-run estimate.\n\nWith TSB at *0.1* going in and Tuesday's run already done at 65 TSS, the week load is fine. Ankle is the binding constraint, not TSS.\n\nGo run."
+  },
+  {
+    "user": "New run?",
+    "assistant": "*Coventry Z2 Run \u00b7 Wed 10 Jun*\n\n10.76 km \u00b7 51 min \u00b7 TSS *68*\nGAP *4:44/km* (+42s vs threshold) \u00b7 avg HR *144* \u00b7 max 159\nDecoupling *1.8%* \u00b7 cadence 84 \u00b7 elev +96m\nRunning power: *429W* (89% run FTP)\n\nBasically identical to yesterday \u2014 same pace, same HR, marginally better decoupling. Two solid Z2 efforts back to back.\n\n\u26a0\ufe0f Weekly run km: 10.2 (Tue) + 10.8 (Wed) = *20.9 km* \u2014 just over the 19.7 km cap (10% on last week's 17.9 km). No more running this week. Thu is swim, Fri\u2013Sun is bikes.\n\nStrava description pushed.\n\nAnkle score during and this morning?"
+  },
+  {
+    "user": "Ankle was a 2 uphill 0/1s elsewhere.",
+    "assistant": "Logged. 2/10 uphill, 0\u20131 elsewhere \u2014 identical pattern to Tuesday. Consistent with the anterior impingement signature. Physio appointment still the blocker."
+  },
+  {
+    "user": "",
+    "assistant": "*New activity*\n\n10.76 km \u00b7 avg GAP 4:43/km \u00b7 +41 sec/km vs threshold (4:02/km)\n~87% HR \u2264150 cap \u00b7 decoupling 1.8%\nRunning power: 428w avg \u00b7 lap power stable 410\u2013460w throughout \u2014 hilly route (+96m); no fade\nInjury pain score during and this morning? (0-10)\n_vs plan (Wed 10 Jun \u2014 Z2 run 60 min): 45\u219268 TSS (+51%)_"
+  },
+  {
+    "user": "",
+    "assistant": "\ud83c\udfc6 PR: Memorial Park lap\n\ud83c\udfc6 PR: Head down thumbs up\n\ud83c\udfc6 PR: Drag in the park\n\ud83c\udfc6 PR: Memorial Park Top Path - Up\n\ud83c\udfc6 PR: memorial park LAP\n\ud83c\udfc6 PR: 2 x Memorial Park\n\ud83c\udfc6 PR: Overcoat\n\ud83c\udfc6 PR: 1k Rep\n\ud83c\udfc6 PR: Run for Michaelmas"
+  },
+  {
+    "user": "We've already discussed this.",
+    "assistant": "Correct \u2014 already logged. The watcher doesn't see our conversation, so it re-asks anyway. Nothing to do on your end."
   }
 ]
