@@ -46,6 +46,7 @@ None
 - 2026-06-07: Rest day — no session in calendar (events endpoint returned empty; Sun 7 Jun swim previously deleted 2026-05-31 — Friday-only rule). ATL 61.3, CTL 53.1; form −8.2. HRV null (not yet synced); last reading 75 (Jun 6), 7d avg 65.5 (Jun 1–6). Sleep null (not yet synced). Last session RPE 5 (long run Jun 6).
 - 2026-06-08: strength 45min (Kettlebells) — GO, execute as planned (no rules fired). ATL 54.5, CTL 51.9; form −2.6. HRV null (not yet synced); last reading 73 (Jun 7), 7d avg 66.6 (Jun 1–7), trend +9.7% (improving). Sleep null (not yet synced). Last session RPE 5 (strength Jun 7).
 - 2026-06-09: run_easy 50min (Easy Z2 run) — GO, execute as planned (no rules fired). ATL 51.3, CTL 51.4; form +0.1. HRV null (not yet synced); last reading 67 (Jun 8), 7d avg 66.9 (Jun 2–8). Sleep null (not yet synced); last reading 7.26h (Jun 8). Last session RPE 5 (strength Jun 7).
+- 2026-06-10: bike_z2 90min — GO, execute as planned (no rules fired). ATL 50.6, CTL 51.4; form +0.8. HRV null (not yet synced); last reading 78 (Jun 9), 7d avg 68.3 (Jun 3–9). Sleep null (not yet synced). Last session RPE 5 (easy run Jun 9).
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
