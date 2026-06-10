@@ -1,33 +1,5 @@
 [
   {
-    "user": "So it's 400m, 4x50, 4x200pb, 200, 3x 400 easyish. \n200m",
-    "assistant": "Yes. With the corrected PB pace:\n\nWU: 400m easy @ 1:55\u20132:00\n4\u00d750m build (:10s rest)\n*Main: 4\u00d7200m PB* \u00b7 :90s full rest \u00b7 *1:33\u20131:36/100m*\nRecovery: 200m easy\n3\u00d7400m @ 1:44\u20131:47/100m \u00b7 :30s rest\nCD: 200m easy\n\n~3,000m \u00b7 60 min"
-  },
-  {
-    "user": "",
-    "assistant": "*New activity*\n\n4\u00d7400m / 2\u00d7100m / 4\u00d7200m / 2\u00d7200m \u00b7 CSS 1:39/100m \u00b7 avg 1:46/100m (+7s vs CSS)\nRep 1: 400m \u00b7 1:49/100m (+10s) \u00b7 120bpm\nRep 2: 100m \u00b7 1:44/100m (+5s) \u00b7 121bpm\nRep 3: 100m \u00b7 1:40/100m (+1s) \u00b7 123bpm\nRep 4: 200m \u00b7 1:39/100m (0s) \u00b7 133bpm\nRep 5: 200m \u00b7 1:39/100m (0s) \u00b7 135bpm\nRep 6: 200m \u00b7 1:38/100m (-1s) \u00b7 129bpm\nRep 7: 200m \u00b7 1:40/100m (+1s) \u00b7 130bpm\nRep 8: 200m \u00b7 1:52/100m (+13s) \u00b7 129bpm\nRep 9: 400m \u00b7 1:48/100m (+9s) \u00b7 141bpm\nRep 10: 400m \u00b7 1:49/100m (+10s) \u00b7 128bpm\nRep 11: 400m \u00b7 1:46/100m (+7s) \u00b7 125bpm\nRep 12: 200m \u00b7 1:53/100m (+14s) \u00b7 131bpm\nRPE and how did it feel?\n_vs plan (Tue 9 Jun \u2014 Aerobic swim 60 min): 60\u219274 TSS (+23%)_"
-  },
-  {
-    "user": "How was it against the plan we made",
-    "assistant": "Structure matched the plan. Pace didn't.\n\n*Structure: \u2713*\nWU 400m \u2192 2\u00d7100m builds \u2192 4\u00d7200m PB block \u2192 200m recovery \u2192 3\u00d7400m aerobic \u2192 200m CD\n~3,000m, 60 min \u2014 all correct.\n\n*PB reps (4\u00d7200m): \u2717 missed target*\nReps came in at 1:38\u20131:40/100m \u2014 basically CSS pace. Target was *1:33\u20131:36/100m* (3\u20136s faster than CSS).\nRep 6 (1:38) got closest, 1s under CSS \u2014 but that's not a PB effort.\n\n*Aerobic 400s (3\u00d7400m): \u2713*\n1:46\u20131:49/100m vs plan 1:44\u20131:47 \u2014 Rep 11 at 1:46 bang on, other two 1\u20132s slow. Fine.\n\n*TSS: 74 vs ~60 planned \u2014 higher, likely from effort level on the 400s.*\n\nTakeaway: the PB efforts were CSS-pace efforts in disguise. When you hit the 200m PB block, were you holding back, or did 1:33\u20131:36 feel unreachable? That'll tell us whether to drop the target further or whether you had more in the tank."
-  },
-  {
-    "user": "Pb is pull bouy. You do know that right?",
-    "assistant": "Apologies \u2014 pull buoy, not personal best. Completely changes the read.\n\n*Pull buoy 4\u00d7200m: \u2713 solid*\n1:38\u20131:40/100m with buoy = at or just under CSS pace. That's good \u2014 buoy removes the kick and isolates catch/pull, so hitting CSS or better means your upper body mechanics are strong.\n\n*Aerobic 400s: \u2713*\n1:46\u20131:49/100m \u2014 fine for steady aerobic effort.\n\nOverall: well-executed session against the actual intent. The \"missed target\" call was wrong."
-  },
-  {
-    "user": "Ok add the session to Strava description then.",
-    "assistant": "Done."
-  },
-  {
-    "user": "",
-    "assistant": "RPE for the Pool Swim? And how did it feel overall?"
-  },
-  {
-    "user": "",
-    "assistant": "Plan updated \u2014 check your week in Intervals.icu."
-  },
-  {
     "user": "log session",
     "assistant": "Pool Swim \u2014 9 Jun \u00b7 3.0km \u00b7 74 TSS \u00b7 68 min\n\nRPE (1\u201310) and how did it feel?"
   },
@@ -118,5 +90,33 @@
   {
     "user": "Ankle is 0 this morning. Run is this evening m strength this morning, what shall I do?",
     "assistant": "Ankle 0 \u2014 logged.\n\nGood order. Strength this morning, run this evening gives 6\u20138 hrs between \u2014 legs fresher for the run and you can load properly on the strength work.\n\n**Strength (now):**\nGoblet squat 3\u00d712 \u00b7 SL deadlift 3\u00d710 \u00b7 Hip thrust 3\u00d712 \u00b7 Copenhagen plank 3\u00d720s \u00b7 Dead bugs 3\u00d710\nBodyweight or light load on single-leg \u2014 stop if ankle >2/10\n\n**Run (this evening) \u00b7 60 min:**\nContinuous Z2 \u00b7 HR 133\u2013146 \u00b7 GAP ~4:40\u20135:10/km\nStop if ankle >2/10"
+  },
+  {
+    "user": "https://www.youtube.com/watch?v=PxWp6I2eoEc https://www.youtube.com/watch?v=oBbM4V3-LzI i followed these for my morning strength and mobilty. 15 mins on ankle  stabilty and strength then 15 mins on lower body mobility.",
+    "assistant": "Good work \u2014 ankle-specific protocol over generic strength is the right call while the physio appointment is still pending.\n\n30 min of actual ankle load > 35 min of standard lower body with bodyweight SL modifications. No concerns about deviating from the template there.\n\nRun this evening as planned \u2014 HR 133\u2013146, continuous Z2, 60 min. Let me know ankle score before you head out."
+  },
+  {
+    "user": "",
+    "assistant": "*New activity*\n\n32 min \u00b7 avg HR 93/max 119 bpm \u00b7 Load (TSS) 6\nRPE and what was the main focus?\n_vs plan (Wed 10 Jun \u2014 Strength 35 min): 20\u21926 TSS (-70%)_"
+  },
+  {
+    "user": "",
+    "assistant": "Quick log \u2014 Strength:"
+  },
+  {
+    "user": "That was what the new activity was",
+    "assistant": "Got it \u2014 logged as the morning ankle stability + lower body mobility session."
+  },
+  {
+    "user": "So why the scathing Strava description",
+    "assistant": "The description on Intervals shows as blank \u2014 nothing was pushed for that activity. What does it say on Strava? If the activity watcher pushed something directly I want to see the exact text."
+  },
+  {
+    "user": "You can get it",
+    "assistant": "Description field is `null` \u2014 nothing was pushed for that activity by the watcher or by me. Nothing scathing to show. What are you seeing on Strava?"
+  },
+  {
+    "user": "[image]",
+    "assistant": "That was the activity watcher auto-generating a snide TSS comparison \u2014 bug on my end. Fixed. Description now reads:\n\n```\nMorning Strength \u00b7 32 min\n\nAnkle stability & strength protocol\nLower body mobility\n```\n\nI'll flag the \"plan didn't come together\" language in the watcher to fix."
   }
 ]
