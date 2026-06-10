@@ -29,6 +29,8 @@ When the algorithm produces more than one Base phase, each successive base build
 
 **Build** — race-specific intensity introduced. Volume holds or drops slightly. CTL maintained while aerobic power and economy improve. Bricks increase in frequency.
 
+**Specific** — convert fitness to race shape: work slightly above race effort (Z3 muscular endurance), race-IF finishes on long sessions, race-rate fuelling on ALL key sessions, bricks at race effort. First race simulation late in this phase.
+
 **Peak** — quality over quantity. Volume reduces by 15–20% vs build. Intensity maintained or sharpened. Final long race-simulation sessions in first half of peak.
 
 **Taper** — volume steps down across the taper to ~70% → 55% → 40% of peak week (per-event tables in §4 are authoritative). Intensity touches maintained (2–3 short sharp sessions). TSS/day drops, CTL declines, TSB rises toward +5 to +15 by race eve.
@@ -173,7 +175,7 @@ Each event profile defines the race-specific demands that shape the build and pe
 - Long run: 2–3.5 hours. Cap at 32km in build; pull back to 26km in peak.
 - Swim: 3–4 km sets including 1×1500m continuous sub-race-pace effort.
 - Bricks: minimum 1/week in build, 2/week in peak. Standard brick = 90–120 min ride + 30–40 min run.
-- Race simulation: 1× in late build (5hr ride + 60 min run); 1× in peak (4hr ride + 45 min run).
+- Race simulation: 1× late Specific (5hr ride + 60 min run; late build if the plan has no Specific phase); 1× in peak (4hr ride + 45 min run) — the second sim re-tests whatever the first exposed.
 
 **Taper:**
 - Week –3: 70% of peak volume.

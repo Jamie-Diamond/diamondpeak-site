@@ -303,16 +303,19 @@ class TestCurrentPhase:
 class TestSpecificPhaseContent:
     """A specific phase reuses build-family content (remediation 2026-06-07)."""
 
-    def test_specific_phase_gets_build_content_and_validates(self, gb):
+    def test_specific_phase_gets_own_content_and_validates(self, gb):
+        # Superseded 2026-06-10 (Jamie sign-off, docs/specific-phase-proposal.md):
+        # Specific no longer reuses Build content — it carries its own rows.
         phases = canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19))
         data = gb.build_blueprint_data("jamie", FIXTURE_PROFILE, phases, 90.0, None)
         assert validate_blueprint(data) == []          # 'specific' is a valid family
         spec = next(p for p in data["phases"] if p["family"] == "specific")
         build = next(p for p in data["phases"] if p["family"] == "build")
-        assert spec["if_target"] == 0.68               # build IF
-        assert spec["distribution"] == build["distribution"]
+        assert spec["if_target"] == 0.70               # between build 0.68 and peak 0.72
+        assert spec["distribution"] != build["distribution"]
+        assert spec["distribution"]["Bike"].startswith("72%")
         assert spec["brick_min"] == "2–3"
-        assert spec["tss_ceiling"] == build["tss_ceiling"]
+        assert spec["tss_ceiling"] > build["tss_ceiling"]   # higher IF -> higher ceiling
 
     def test_render_blueprint_handles_specific_without_crashing(self, gb):
         phases = canonical_phases(date(2026, 4, 27), JAMIE_PHASE_TSS, date(2026, 9, 19))

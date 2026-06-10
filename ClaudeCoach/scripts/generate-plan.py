@@ -444,7 +444,7 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0,
   Indicative phase context (DO NOT use to override LOAD ACCOUNTABILITY target):
     Base:     aerobic volume, Z2 dominance, build swim/run base
     Build:    threshold bike work, extend long run, introduce bricks
-    Specific: race-pace intervals, brick sessions, sport-specific intensity
+    Specific: convert fitness to race shape — race-IF work, race-rate fuelling on key sessions, race sim late in phase
     Peak:     race simulation, consolidate fitness — high density week
     Taper:    sharpen, no new stimuli; volume steps down ~70 → 55 → 40% of peak week"""
         _injuries = profile.get("injuries") or []

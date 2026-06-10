@@ -1,7 +1,9 @@
 # Specific Phase — Content Proposal (for sign-off)
 
-**Status: PROPOSAL — not implemented. 2026-06-09.**
-**Decision needed from Jamie before any code changes.**
+**Status: APPROVED + IMPLEMENTED 2026-06-10.** Jamie's decisions: distributions
+as proposed; race sims SPLIT (one late Specific, one Peak — amended from the
+original both-in-Specific suggestion); IF 0.70. Content rows live in
+generate-blueprint.py; sims split reflected in blueprints/blueprint.md.
 
 ## Problem
 

@@ -34,10 +34,11 @@ from primitives.blueprint import (  # noqa: E402
 
 # Brick targets by phase family — single source for both the markdown table and
 # the structured sidecar.
-BRICK_MIN = {"base": "1", "build": "2–3", "peak": "3–4", "taper": "1"}
+BRICK_MIN = {"base": "1", "build": "2–3", "specific": "2–3", "peak": "3–4", "taper": "1"}
 BRICK_TYPE = {
     "base":  "Short brick (30–45 min ride + 10–20 min easy run)",
     "build": "Standard and quality bricks",
+    "specific": "Quality and long bricks at race effort",
     "peak":  "Include at least 1 long brick (race simulation)",
     "taper": "Short brick only; no fatigue accumulation",
 }
@@ -63,9 +64,10 @@ SCHEDULE_PERFORMANCE_TESTS = False
 # -- TSS ceiling --------------------------------------------------------------
 
 IF_TARGETS = {
-    "base":  0.65,
-    "build": 0.68,
-    "peak":  0.72,
+    "base":     0.65,
+    "build":    0.68,
+    "specific": 0.70,
+    "peak":     0.72,
 }
 
 def phase_family(name: str) -> str:
@@ -102,13 +104,14 @@ def _css_seconds(css) -> int | None:
 def content_family(family: str) -> str:
     """Map a structural phase family to the family whose content tables apply.
 
-    The blueprint's content tables (distribution, fuelling, IF, CTL ranges,
-    bricks) are defined for base/build/peak/taper. A 'specific' phase is
-    late-build race-specific work, so it reuses build-family content (its own
-    CTL *target* still comes from athletes.json phase_ctl). See remediation
-    decision 2026-06-07.
+    Since 2026-06-10 (Jamie sign-off, docs/specific-phase-proposal.md) the
+    'specific' family carries its OWN content rows — race-shape conversion:
+    more work slightly above race effort, race-rate fuelling on all key
+    sessions, race sims split one late-Specific + one Peak. Events without a
+    specific row fall back at each lookup site (fuelling default string,
+    ctl_range None -> fitness check skipped), so this stays an identity map.
     """
-    return "build" if family == "specific" else family
+    return family
 
 def tss_ceiling(max_hours: float, phase_name: str) -> float | None:
     fam = content_family(phase_family(phase_name))
@@ -127,10 +130,11 @@ def tss_ceiling(max_hours: float, phase_name: str) -> float | None:
 
 CTL_TARGETS = {
     "Full Ironman": {
-        "base":  (55, 70),
-        "build": (70, 85),
-        "peak":  (80, 95),
-        "taper": (85, 100),
+        "base":     (55, 70),
+        "build":    (70, 85),
+        "specific": (75, 90),
+        "peak":     (80, 95),
+        "taper":    (85, 100),
     },
     "70.3": {
         "base":  (40, 55),
@@ -201,6 +205,7 @@ FUELLING = {
     "Full Ironman": {
         "base":  "40–55 g CHO/hr on sessions > 60 min",
         "build": "60–75 g CHO/hr on sessions > 45 min",
+        "specific": "75–90 g CHO/hr at race rate on ALL key sessions — the gut-training window",
         "peak":  "75–90 g CHO/hr; race-simulation sessions at race rate",
         "taper": "80–90 g CHO/hr on race-simulation sessions only",
     },
@@ -422,6 +427,9 @@ DISTRIBUTION = {
         "build": {"Swim": "65% Z1–2 / 25% Z3–4 / 10% Z5",
                   "Bike": "75% Z1–2 / 15% Z3 / 10% Z4–5",
                   "Run":  "80% Z1–2 / 12% Z3 / 8% Z4–5"},
+        "specific": {"Swim": "62% Z1–2 / 30% Z3–4 / 8% Z5",
+                     "Bike": "72% Z1–2 / 20% Z3 / 8% Z4–5",
+                     "Run":  "78% Z1–2 / 15% Z3 / 7% Z4–5"},
         "peak":  {"Swim": "60% Z1–2 / 25% Z3–4 / 15% Z5",
                   "Bike": "70% Z1–2 / 15% Z3 / 15% Z4–5",
                   "Run":  "75% Z1–2 / 12% Z3 / 13% Z4–5"},

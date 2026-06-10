@@ -59,3 +59,30 @@ class TestFitnessCheck:
         taper_now = [{"name": "Taper", "start": (today - timedelta(days=3)).isoformat(),
                       "end": (today + timedelta(weeks=2)).isoformat()}]
         assert gb.fitness_check("x", "Full Ironman", 120.0, taper_now, None) is None
+
+
+class TestSpecificPhaseContent:
+    """Specific carries its own content rows since 2026-06-10 (Jamie sign-off)."""
+
+    def test_content_family_no_longer_maps_to_build(self, gb):
+        assert gb.content_family("specific") == "specific"
+
+    def test_if_target_between_build_and_peak(self, gb):
+        assert gb.IF_TARGETS["specific"] == 0.70
+        assert gb.tss_ceiling(15, "Specific") == 735.0   # 15h x 100 x 0.70^2
+
+    def test_ctl_entry_range(self, gb):
+        assert gb.ctl_range("Full Ironman", "Specific") == (75, 90)
+
+    def test_distribution_row_exists(self, gb):
+        d = gb.DISTRIBUTION["Full Ironman"]["specific"]
+        assert d["Bike"].startswith("72%") and d["Run"].startswith("78%")
+
+    def test_fuelling_is_race_rate_on_all_key_sessions(self, gb):
+        note = gb.fuelling_note("Full Ironman", "Specific")
+        assert "race rate" in note and "ALL key sessions" in note
+
+    def test_event_without_specific_row_falls_back_gracefully(self, gb):
+        # 70.3 has no specific content rows — lookups must not blow up
+        assert gb.ctl_range("70.3", "Specific") is None
+        assert gb.fuelling_note("70.3", "Specific") == "Follow phase-progressive protocol."
