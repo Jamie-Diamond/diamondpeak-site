@@ -38,6 +38,9 @@ Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
 Step 2 — Read ClaudeCoach/athletes/{slug}/session-log.json (check which activity_ids are already stubbed).
+An entry with a matching activity_id counts as ACCOUNTED FOR even if stub is true or rpe/pain
+fields are null — missing field data is the capture-reminder's job, never yours. Case A applies
+ONLY when there is NO entry at all for the activity.
 
 Step 3 — Decide whether to send a message:
 

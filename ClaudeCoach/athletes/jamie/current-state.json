@@ -1,7 +1,7 @@
 {
   "last_updated": "2026-06-02",
   "ankle": {
-    "pain_during": 1,
+    "pain_during": 2,
     "pain_next_morning": 0.5,
     "pain_today_resting": 0,
     "pain_driving_positional": "throbbing when driving (plantar flexion at accelerator), no rest pain otherwise",

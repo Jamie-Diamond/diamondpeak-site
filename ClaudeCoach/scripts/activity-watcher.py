@@ -259,6 +259,9 @@ analysis of it was already given (match on sport, distance/duration, recency) �
 pace, HR, TSS, decoupling) are NOT new insight; only produce a normal ANALYSIS here if you have
 something material the chat did not cover. All logging steps (session-log stub, swim-log, etc.)
 still apply regardless — `discussed` suppresses the message, never the capture.
+When writing the session-log stub, if the chat above contains the athlete's feedback for THIS
+activity (RPE, injury/ankle pain scores, nutrition), fill those fields from the chat instead of
+leaving them null — data the athlete already gave must never be re-asked by the evening jobs.
 
 CRITICAL: Your entire response must contain only the ACTIVITY_ID and ANALYSIS lines above. Do not output reasoning steps, file read confirmations, tool call summaries, or any other text. All processing is internal and silent.
 ANALYSIS scope: describe only the activity being analysed. Do NOT mention other planned sessions from today's calendar, ask whether a different planned session happened, or comment on sessions that were not completed."""
