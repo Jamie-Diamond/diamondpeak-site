@@ -32,10 +32,12 @@ def _log_to_history(slug: str, message: str) -> None:
     history_file.write_text(json.dumps(history[-30:], indent=2))
 
 sys.path.insert(0, str(BASE / "lib"))
+sys.path.insert(0, str(BASE / "ironman-analysis"))
 from coaching_levels import level_block as _level_block
 import ops_log
 import heat as heat_lib
 from git_sync import sync_commit_push
+from primitives.run_durability import compute_run_durability, fade_line
 
 
 def _pace_str(speed_ms: float) -> str:
@@ -303,6 +305,40 @@ def _credit_heat_exposure(slug: str, activity_id: str, profile: dict) -> None:
                            detail=f"heat dose {entry['dose']} auto-credited ({entry['context']})")
     except Exception as exc:
         print(f"[heat-credit:{slug}] {exc}", file=sys.stderr)
+
+
+def _run_durability_note(slug: str, activity_id: str) -> str:
+    """Deterministic durability line for a completed RUN with power — computed
+    from the per-second streams, logged for trending, appended to the analysis
+    message. Empty string when not a run / no power / too short / any failure."""
+    try:
+        from icu_api import IcuClient
+        cfg = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+        detail = client.get_activity_detail(activity_id)
+        if (detail.get("type") or "") not in ("Run", "TrailRun", "VirtualRun"):
+            return ""
+        streams = {s.get("type"): s.get("data") for s in client.get_activity_streams(activity_id)}
+        m = compute_run_durability(streams.get("time"), streams.get("watts"),
+                                   streams.get("heartrate"), streams.get("cadence"),
+                                   streams.get("velocity_smooth"))
+        if not m:
+            return ""
+        log_f = BASE / f"athletes/{slug}/run-durability-log.json"
+        entries = json.loads(log_f.read_text()) if log_f.exists() else []
+        if not any(str(e.get("activity_id")) == str(activity_id) for e in entries):
+            entries.append({
+                "activity_id": str(activity_id),
+                "date": (detail.get("start_date_local") or "")[:10],
+                "name": detail.get("name", ""),
+                "duration_min": round((detail.get("moving_time") or 0) / 60),
+                **{k: m[k] for k in ("decoupling_pct", "cadence_fade_pct", "cost_fade_pct", "flags")},
+            })
+            log_f.write_text(json.dumps(entries[-200:], indent=2))
+        return "\n_" + fade_line(m) + "_"
+    except Exception as exc:
+        print(f"[run-durability:{slug}] {exc}", file=sys.stderr)
+        return ""
 
 
 def _dedup_session_log(path: Path) -> None:
@@ -971,6 +1007,7 @@ def check_athlete(slug, athlete_cfg):
     if plan_delta_note:
         analysis = f"{analysis}\n_{plan_delta_note}_" if analysis else plan_delta_note
     if analysis and analysis != "none":
+        analysis += _run_durability_note(slug, activity_id)
         _notify(f"*New activity*\n\n{analysis}", chat_id, slug=slug)
 
     # Send quick-log keyboard for immediate data capture

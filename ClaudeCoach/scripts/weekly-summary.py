@@ -102,6 +102,32 @@ def run_summary(slug: str = "jamie") -> str:
     # -- Fetch IcuSync data ----------------------------------------------------
     wellness_14d    = client.get_wellness(14)
     activities_7d   = client.get_training_history(7)
+
+    # Run aerobic efficiency (power:HR) — weekly means over the last 4 ISO weeks.
+    # Higher = more watts per heartbeat = the engine improving. Runs ≥20 min with
+    # power only (Garmin running power era, live since Jun 2026).
+    run_efficiency_line = ""
+    try:
+        eff_by_week = {}
+        for a in client.get_training_history(28) or []:
+            if (a.get("type") or "") not in ("Run", "TrailRun", "VirtualRun"):
+                continue
+            ph = a.get("icu_power_hr")
+            if not ph or (a.get("moving_time") or 0) < 1200:
+                continue
+            d = date.fromisoformat((a.get("start_date_local") or "")[:10])
+            wk = (d - timedelta(days=d.weekday())).isoformat()
+            eff_by_week.setdefault(wk, []).append(float(ph))
+        weeks = sorted(eff_by_week)[-4:]
+        if len(weeks) >= 2:
+            vals = [sum(eff_by_week[w]) / len(eff_by_week[w]) for w in weeks]
+            pct = (vals[-1] - vals[0]) / vals[0] * 100
+            run_efficiency_line = (
+                "Run aerobic efficiency (power:HR, weekly mean): "
+                + " → ".join(f"{v:.2f}" for v in vals)
+                + f" ({pct:+.1f}% over {len(weeks)} wk; higher = better)")
+    except Exception as exc:
+        print(f"[weekly-summary:{slug}] run efficiency calc failed: {exc}", file=sys.stderr)
     events_this_wk  = client.get_events(week_start.isoformat(), week_end.isoformat())
     athlete_profile = client.get_athlete_profile()
     outlook_end     = (today + timedelta(days=28)).isoformat()
@@ -144,6 +170,12 @@ def run_summary(slug: str = "jamie") -> str:
         and s.get("sport","") in ("Ride","VirtualRide","GravelRide","Brick")
         and s.get("duration_min", 0) >= 90
         and s.get("nutrition_g_carb") is not None
+    ]
+
+    four_weeks_ago = (today - timedelta(weeks=4)).isoformat()
+    run_durability_4wk = [
+        e for e in _read_json(adir / "run-durability-log.json", [])
+        if e.get("date", "") >= four_weeks_ago
     ]
 
     race_date    = date.fromisoformat(profile.get("race_date", "2026-09-19"))
@@ -268,6 +300,12 @@ Week: {week_start} → {week_end}
 ## Local — Nutrition history (rides/bricks >90 min, last 6 weeks — g/hr computed)
 {json.dumps(nutrition_history, indent=2)}
 
+## Local — Run aerobic efficiency trend (pre-computed)
+{run_efficiency_line or "Not enough run power:HR data yet."}
+
+## Local — Run durability log (last 4 weeks: per-run decoupling / cadence fade / cost fade)
+{json.dumps(run_durability_4wk, indent=2)}
+
 ---
 
 ## Step 1 — Compute week metrics
@@ -291,6 +329,7 @@ From the data above, extract:
   - Trend direction: compare most recent 3 sessions vs previous 3 — improving / declining / flat
   - Gap to race target: {nutrition_target} − this_week_avg (g/hr)
 - Injury pain: ankle_pain_during scores from session-log this week
+- Run engine + durability: quote the pre-computed run aerobic efficiency trend line if present; from the run durability log, note any run this week with flags (decoupling >5%, cadence fade, rising cost) and whether long-run durability is trending better or worse across the 4 weeks
 
 ## Step 2 — Output the summary card
 
