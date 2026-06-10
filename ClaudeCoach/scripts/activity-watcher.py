@@ -100,7 +100,7 @@ def _quick_log_keyboard(activity_id, slug, sport, has_injury, duration_min):
     return {"inline_keyboard": rows}
 
 
-def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150, nutrition_target=90):
+def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150, nutrition_target=90, recent_chat=""):
     """Build the per-athlete activity analysis prompt."""
     today = date.today().isoformat()
     # Injury context for the athlete line and run analysis
@@ -250,6 +250,15 @@ Rules:
 If not a recognisable threshold test: TEST_RESULT: none
 
 If no activities at all: ACTIVITY_ID: none  ANALYSIS: none
+
+ALREADY-DISCUSSED CHECK — recent Telegram chat with this athlete (oldest first):
+{recent_chat}
+If THIS activity has already been discussed in the chat above — the athlete asked about it or an
+analysis of it was already given (match on sport, distance/duration, recency) — output exactly
+`ANALYSIS: discussed` instead of repeating it. Numbers the athlete has already seen (distance,
+pace, HR, TSS, decoupling) are NOT new insight; only produce a normal ANALYSIS here if you have
+something material the chat did not cover. All logging steps (session-log stub, swim-log, etc.)
+still apply regardless — `discussed` suppresses the message, never the capture.
 
 CRITICAL: Your entire response must contain only the ACTIVITY_ID and ANALYSIS lines above. Do not output reasoning steps, file read confirmations, tool call summaries, or any other text. All processing is internal and silent.
 ANALYSIS scope: describe only the activity being analysed. Do NOT mention other planned sessions from today's calendar, ask whether a different planned session happened, or comment on sessions that were not completed."""
@@ -850,8 +859,26 @@ def check_athlete(slug, athlete_cfg):
         except (json.JSONDecodeError, OSError):
             pass
 
+    # Recent chat so the analysis can suppress itself when the athlete already
+    # discussed this activity with the bot ("we've already discussed this").
+    recent_chat = "(no recent chat)"
+    hist_f = adir / "telegram/history.json"
+    if hist_f.exists():
+        try:
+            chat_lines = []
+            for e in json.loads(hist_f.read_text())[-10:]:
+                if e.get("user"):
+                    chat_lines.append("athlete: " + str(e["user"])[:200].replace("\n", " "))
+                if e.get("assistant"):
+                    chat_lines.append("coach: " + str(e["assistant"])[:200].replace("\n", " "))
+            if chat_lines:
+                recent_chat = "\n".join(chat_lines[-16:])
+        except Exception:
+            pass
+
     prompt = _build_prompt(slug, first_name, ftp, injuries, profile,
-                           run_hr_cap=run_hr_cap, nutrition_target=nutrition_target)
+                           run_hr_cap=run_hr_cap, nutrition_target=nutrition_target,
+                           recent_chat=recent_chat)
 
     t_start = time.time()
     try:
@@ -1004,9 +1031,16 @@ def check_athlete(slug, athlete_cfg):
             pass
 
     analysis = "\n".join(analysis_lines).strip()
-    if plan_delta_note:
+    already_discussed = analysis.lower().startswith("discussed")
+    if plan_delta_note and not already_discussed:
         analysis = f"{analysis}\n_{plan_delta_note}_" if analysis else plan_delta_note
-    if analysis and analysis != "none":
+    if already_discussed:
+        # Chat already covered this activity — stay silent, but a durability
+        # flag is new insight the chat can't have had (it's computed here).
+        note = _run_durability_note(slug, activity_id)
+        if "⚠" in note:
+            _notify(f"*New activity*{note}", chat_id, slug=slug)
+    elif analysis and analysis != "none":
         analysis += _run_durability_note(slug, activity_id)
         _notify(f"*New activity*\n\n{analysis}", chat_id, slug=slug)
 
@@ -1020,7 +1054,8 @@ def check_athlete(slug, athlete_cfg):
                     break
         except Exception:
             pass
-    if new_entry and new_entry.get("sport", "").lower() not in _WATER_SPORTS:
+    if (new_entry and not already_discussed
+            and new_entry.get("sport", "").lower() not in _WATER_SPORTS):
         sport = new_entry.get("sport", "")
         dur = new_entry.get("duration_min", 0) or 0
         kb = _quick_log_keyboard(activity_id, slug, sport, bool(injuries), dur)
@@ -1065,7 +1100,8 @@ def check_athlete(slug, athlete_cfg):
 
     # Write coaching note to Strava activity description and store initial field hash
     coaching_level = profile.get("coaching_level", "mid")
-    _strava_update(slug, activity_id, analysis, plan_delta_raw=plan_delta_raw,
+    _strava_update(slug, activity_id, "" if already_discussed else analysis,
+                   plan_delta_raw=plan_delta_raw,
                    session_entry=new_entry, chat_id=chat_id, coaching_level=coaching_level)
     if new_entry:
         import hashlib as _hl
