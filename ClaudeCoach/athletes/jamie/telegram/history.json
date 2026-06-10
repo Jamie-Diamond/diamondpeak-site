@@ -1,9 +1,5 @@
 [
   {
-    "user": "Those pb paces are ridiculous. You think I can swim 200m at 1:30 .",
-    "assistant": "Fair call. With CSS at 1:39/100m, 1:30 is unrealistic for 4 reps on :90s rest \u2014 that's a true 200m TT pace, not something you can repeat.\n\nCorrected PB rep target: *1:33\u20131:36/100m* \u2014 meaningfully faster than CSS but holdable across all 4 reps with full recovery."
-  },
-  {
     "user": "So it's 400m, 4x50, 4x200pb, 200, 3x 400 easyish. \n200m",
     "assistant": "Yes. With the corrected PB pace:\n\nWU: 400m easy @ 1:55\u20132:00\n4\u00d750m build (:10s rest)\n*Main: 4\u00d7200m PB* \u00b7 :90s full rest \u00b7 *1:33\u20131:36/100m*\nRecovery: 200m easy\n3\u00d7400m @ 1:44\u20131:47/100m \u00b7 :30s rest\nCD: 200m easy\n\n~3,000m \u00b7 60 min"
   },
@@ -118,5 +114,9 @@
   {
     "user": "",
     "assistant": "[chart/photo sent]"
+  },
+  {
+    "user": "Ankle is 0 this morning. Run is this evening m strength this morning, what shall I do?",
+    "assistant": "Ankle 0 \u2014 logged.\n\nGood order. Strength this morning, run this evening gives 6\u20138 hrs between \u2014 legs fresher for the run and you can load properly on the strength work.\n\n**Strength (now):**\nGoblet squat 3\u00d712 \u00b7 SL deadlift 3\u00d710 \u00b7 Hip thrust 3\u00d712 \u00b7 Copenhagen plank 3\u00d720s \u00b7 Dead bugs 3\u00d710\nBodyweight or light load on single-leg \u2014 stop if ankle >2/10\n\n**Run (this evening) \u00b7 60 min:**\nContinuous Z2 \u00b7 HR 133\u2013146 \u00b7 GAP ~4:40\u20135:10/km\nStop if ankle >2/10"
   }
 ]
