@@ -1,13 +1,5 @@
 [
   {
-    "user": "Bug, today's sessions are showing on here again!",
-    "assistant": "Logged."
-  },
-  {
-    "user": "You gave me a swim workout last night then have changed it for this morning",
-    "assistant": "That's on me. The morning check-in defaulted to the generic aerobic swim description, not the session we built last night.\n\nDo the one from last night:\n\nWU: 400m easy\n4\u00d750m build (:10s rest)\n*Main: 4\u00d7200m PB effort* \u00b7 :90s full rest \u00b7 target 1:30\u20131:33/100m\nRecovery: 200m easy\nAerobic: 3\u00d7400m @ 1:44\u20131:47/100m \u00b7 :30s rest\nCD: 200m easy\n~3,000m \u00b7 60 min"
-  },
-  {
     "user": "Those pb paces are ridiculous. You think I can swim 200m at 1:30 .",
     "assistant": "Fair call. With CSS at 1:39/100m, 1:30 is unrealistic for 4 reps on :90s rest \u2014 that's a true 200m TT pace, not something you can repeat.\n\nCorrected PB rep target: *1:33\u20131:36/100m* \u2014 meaningfully faster than CSS but holdable across all 4 reps with full recovery."
   },
@@ -118,5 +110,13 @@
   {
     "user": "",
     "assistant": "RPE for the Coventry Running? (1\u201310) \u2014 and how did the ankle feel this morning?"
+  },
+  {
+    "user": "",
+    "assistant": "*Good morning \u2014 Wed 10 Jun*\n\n*Today:* Z2 run 60 min + Strength 35 min \u2014 95 min, ~65 TSS\n\n\u26a0\ufe0f PH sweat test + bike fit still unbooked \u2014 both 10+ days overdue\n\nAnkle pain score before heading out? (0\u201310)\n\n_101 days to IM Italy Emilia-Romagna_"
+  },
+  {
+    "user": "",
+    "assistant": "[chart/photo sent]"
   }
 ]
