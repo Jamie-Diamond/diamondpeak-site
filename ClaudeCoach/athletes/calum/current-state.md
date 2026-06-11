@@ -41,3 +41,4 @@ No
 | 2026-06-07 | 9.2 | 5.3 | +3.9 | Weekly summary. T3 Underload fired (41% compliance). 1 ride completed (Mon, 81 min). Sat long ride missed. Recovery 100/100 GREEN. No HRV or sleep data. |
 | 2026-06-09 | 8.8 | 4.0 | +4.8 | Rest day — no session planned in calendar. No HRV or sleep data. |
 | 2026-06-10 | 8.6 | 3.5 | +5.1 | Sweetspot Intro 85 min — GO as-planned. First Build phase session. No rules fired. No HRV or sleep data. |
+| 2026-06-11 | 8.4 | 3.0 | +5.4 | Rest day — no session planned in calendar. No HRV or sleep data. |
