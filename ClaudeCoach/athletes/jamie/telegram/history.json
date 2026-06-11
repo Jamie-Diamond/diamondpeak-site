@@ -1,13 +1,5 @@
 [
   {
-    "user": "",
-    "assistant": "*New activity*\n\n32 min \u00b7 avg HR 93/max 119 bpm \u00b7 Load (TSS) 6\nRPE and what was the main focus?\n_vs plan (Wed 10 Jun \u2014 Strength 35 min): 20\u21926 TSS (-70%)_"
-  },
-  {
-    "user": "",
-    "assistant": "Quick log \u2014 Strength:"
-  },
-  {
     "user": "That was what the new activity was",
     "assistant": "Got it \u2014 logged as the morning ankle stability + lower body mobility session."
   },
@@ -118,5 +110,13 @@
   {
     "user": "Can you get the right durations from intervals or is that not an option?",
     "assistant": "No \u2014 ICU doesn't expose native Garmin laps through any of its API endpoints. The only interval data available via ICU is the auto-detected type (velocity_smooth based), which is what we've already established is 3\u20135s longer per rep.\n\nThe stream types recorded for the swim are: time, cadence, heartrate, distance, velocity_smooth \u2014 no lap marker channel. The native Garmin button-press boundaries exist only in the raw .fit file, and Strava is the one that parses and surfaces them.\n\nSo the rule stands for the right reason: Strava laps = Garmin's actual button presses = correct. ICU intervals = velocity-smooth inference = consistently over-estimated duration. No way to fix that from ICU's API."
+  },
+  {
+    "user": "Ok where possible prefer Strava lap durations for swimming. Not that down and also update the description to match",
+    "assistant": "Confirmed. Description already updated with Strava lap durations \u2014 the reps show the correct times.\n\nStrava laps are the standing rule for swims (native Garmin button presses, not ICU velocity smoothing)."
+  },
+  {
+    "user": "Log the Strava /intervals times as a bug",
+    "assistant": "Logged."
   }
 ]
