@@ -91,6 +91,24 @@ None
 - 2026-06-04: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 108 days away; CTL 49.7, ATL 46.2, form +3.5. Rest day. T4 re-fired: May 28=6.98h, May 29=6.03h, May 31=6.47h, Jun 02=6.83h — 4 nights <7h in rolling 7-day window; Jun 01=7.73h, Jun 03=7.81h recovery nights. HRV trending up (7d avg 60.0 vs prior 53.1 = +12.8%). T1/T3/T5/T10 clear.
 - 2026-06-05: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 107 days away; CTL 48.6, ATL 40.1, form +8.5. Long ride Z2 150min today. HRV null (not yet synced); last reading 64 (Jun 4), 7d avg 62.0 — stable. Sleep null (not yet synced); last reading 8.00h (Jun 4). T1/T3/T4/T5/T10 clear. Heat sessions critically overdue — 21 days since first alert. No further delay acceptable.
 
+## Menstrual Cycle Tracking
+
+**Cycle start: 2026-06-10** (period started evening of Jun 10)
+
+| Phase | Days | Dates | Training implication |
+|---|---|---|---|
+| Menstrual | 1–5 | 10–14 Jun | Lower energy, potential cramping; hold targets loosely — RPE over pace/power |
+| Follicular | 6–13 | 15–22 Jun | Rising energy and strength; good window for quality sessions |
+| Ovulation | ~14 | ~23 Jun | Peak performance window |
+| Luteal | 15–28 | 24 Jun–7 Jul | Higher core temp, higher RPE, greater fatigue — monitor extra closely; important for heat-stress overlap |
+| Next period expected | — | ~8 Jul | |
+
+**Key conflicts to watch:**
+- Sat 13 + Sun 14 Jun (4hr ride, 2.5hr + brick) fall in the menstrual phase — performance may be lower; hold to power targets but don't chase them if energy is flat.
+- Luteal phase (24 Jun–7 Jul) coincides with start of build phase — plan for sessions to feel harder than numbers suggest; may need slight load modulation.
+
+---
+
 ## Open Actions
 - [x] Plan reviewed W6-W7 (2026-06-07): 13 sessions existing, 4 constraint violations flagged in W7 (see below)
 - [x] Plan generated W6–W7 (2026-06-07): rebuilt W6 as build week (~519 TSS), W7 violations fixed, nutrition updated to 30g CHO/hr
