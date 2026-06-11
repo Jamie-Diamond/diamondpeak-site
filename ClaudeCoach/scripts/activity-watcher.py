@@ -216,13 +216,20 @@ RUN:
 Running power: if icu_average_watts is not null in activity_detail (Garmin running power configured), add one line after the HR line: "Running power: Xw avg · pace-power check: [brief note if pace and power effort level diverge — e.g. power high vs easy pace = headwind/elevation]". Skip entirely if icu_average_watts is null.
 
 SWIM:
-- Pool (icu_intervals available in extended metrics): use WORK intervals only (type="WORK").
-  Pace per rep (seconds/100m) = (moving_time / distance) * 100 → format as M:SS/100m.
+- Pool with Strava laps (fetched above): rep durations/paces come from the STRAVA LAPS — they are
+  the native Garmin button-press boundaries and are correct. NEVER use icu_intervals for rep
+  timings: ICU infers boundaries from velocity_smooth and over-extends every rep ~2-4s into the
+  surrounding rest, so its paces read slower than actually swum (bug confirmed 2026-06-11).
+  Identify the work reps from the laps (skip warmup/cooldown/drill laps — obvious from the
+  distance/pace pattern). Pace per rep (seconds/100m) = (lap duration / lap distance) * 100 →
+  format as M:SS/100m. icu_intervals may be used ONLY for per-rep HR, matched to laps by order.
   CSS target from profile swim_css_per_100m. Delta = rep_pace_s - css_s (positive = slower than CSS).
   Header: Nx(distance)m · CSS X:XX/100m · avg rep X:XX/100m (+/-Xsec vs CSS)
-  Rep lines (one per WORK interval): Rep N: X:XX/100m (+/-Xsec vs CSS) · AVGbpm
+  Rep lines (one per work lap): Rep N: X:XX/100m (+/-Xsec vs CSS) · AVGbpm
   Final line: "RPE and how did it feel?"
-- Else (OWS or no icu_intervals): use interval_summary from activity detail if present, else distance + avg pace vs CSS +/- seconds.
+- Pool with NO Strava laps (no strava_id / fetch failed): fall back to icu_intervals WORK
+  intervals (type="WORK"), same format, and append "(paces from ICU — read ~2-4s/100m pessimistic)".
+- Else (OWS or neither): use interval_summary from activity detail if present, else distance + avg pace vs CSS +/- seconds.
   Final line: "RPE and how did it feel?"
 
 STRENGTH: duration | "RPE and what was the main focus?"
