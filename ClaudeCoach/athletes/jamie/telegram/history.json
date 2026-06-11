@@ -1,21 +1,5 @@
 [
   {
-    "user": "It was obviously all running no walking. Steady pace, steady HR. It was a solid z2 run. But why am I telling you that. You should know",
-    "assistant": "You're right, and I should have read the data instead of defaulting to the plan label.\n\n*Coventry Run \u2014 9 Jun \u00b7 correct read*\n10.17 km \u00b7 48 min \u00b7 GAP *4:41/km* (+39s vs threshold) \u00b7 avg HR 145 \u00b7 decoupling *1.9%* (excellent)\nRunning power: 430W = *90% of run FTP* (480W)\n\nBy GAP zone: ~54% Z2, ~24% Z3, ~8% Z4 \u2014 predominantly aerobic, HR well controlled, no drift. Solid Z2 run.\n\nThe plan says \"walk-run\" \u2014 clearly wrong. I'll update that going forward. Running continuous Z2, not walk-run format."
-  },
-  {
-    "user": "Ankle was 0 this morning. \n\n1 on average through the run. 2 at the start running up hill. 0 on the flat. 1/2 up hills otherwise \n\nWe need to be a bit cleverer here. You asked me to walk run. But I ran continuously. Why did I do that? Is my ankle ok. How's the rehab protocol. That what you should be thinking.",
-    "assistant": "Fair challenge \u2014 and you're right, I should be thinking ahead of you here.\n\n**Why did you run continuously?**\nBecause your ankle has been letting you. You've been running continuously since at least June 3rd \u2014 the walk-run format was a conservative hold from March when the sprain was acute. It was stale on the plan. I should have updated the label weeks ago rather than you having to correct me twice.\n\n**Is the ankle ok?**\nToday's profile: 0/10 morning \u2192 2/10 uphill warmup \u2192 0/10 flat \u2192 1\u20132/10 on hills. That's consistent with the last 3\u20134 weeks (same pattern Sat 6 Jun, Wed 3 Jun). The uphill sensitivity is the impingement signature \u2014 dorsiflexion under load compresses the anterior joint where the suspected bony spur is. Flat running is pain-free. 0/10 next morning = within the safe tolerance window per protocol.\n\nStable. Not getting worse. Not getting better either.\n\n**How's the rehab protocol?**\nWalk-run is behind you \u2014 you're running continuous Z2 up to ~10 km and the ankle is tolerating it. That's genuine progress.\n\nBut the structural issue hasn't been touched. The most likely diagnosis (anterior bony impingement \u2014 osteophyte from the original sprain) won't resolve with running load. Bone doesn't reabsorb. The uphill pain you'll keep feeling until someone looks at it properly \u2014 physio, lateral X-ray in dorsiflexion, probably MRI.\n\nThe ankle clearance review was due around June 15th. That open action is still sitting there. No quality sessions (tempo, threshold) until physio clears it \u2014 not because the pain is bad, but because we don't know what we're actually loading.\n\n**What changes from here:**\n- Plan labels updated to \"Z2 run\" \u2014 no more walk-run language\n- Z2 continuous is the run format, HR \u2264150, stop if >2/10\n- Weekly km cap stays (10% w/w while in rehab) \u2014 this week 17.9 km last week, so \u226419.7 km this week\n- Physio / imaging is the actual blocker for run progression\n\nDo you have a physio appointment lined up or is that still pending?"
-  },
-  {
-    "user": "Physio pending. What have you done with the Strava description",
-    "assistant": "Wasn't pushed \u2014 just did it now. Confirmed in Intervals/Strava:\n\n```\nCoventry Z2 Run \u00b7 10.17 km \u00b7 48 min \u00b7 TSS 65\n\nGAP: 4:41/km  |  Avg HR: 145  |  NP: 433W (90% run FTP)\nElevation: +95m  |  Decoupling: 1.9%\n\nAnkle: 0/10 morning \u2192 1/10 avg (2/10 uphill start, 0/10 flat)\nContinuous Z2 \u2014 no walk intervals\n```\n\nThat's a bug on my end \u2014 should have been pushed immediately after the debrief."
-  },
-  {
-    "user": "Don't put ankle stats on Strava unless specifically told to",
-    "assistant": "Got it. Ankle stats stay off Strava \u2014 logged as a standing rule."
-  },
-  {
     "user": "Also remove FTP for now while it's guessed",
     "assistant": "Done. Description updated \u2014 ankle and FTP lines removed:\n\n```\nCoventry Z2 Run \u00b7 10.17 km \u00b7 48 min \u00b7 TSS 65\n\nGAP: 4:41/km  |  Avg HR: 145  |  Elevation: +95m  |  Decoupling: 1.9%\nContinuous Z2 \u2014 no walk intervals\n```\n\nRule logged: no FTP % references on Strava while FTP is estimated."
   },
@@ -118,5 +102,21 @@
   {
     "user": "",
     "assistant": "*Good morning \u2014 Thu 11 Jun*\n\n*Today:* CSS swim 60 min \u00b7 ~35 TSS\nWU 400m easy \u00b7 Drill 2\u00d7100m \u00b7 Main 5\u00d7400m @ 1:39/100m \u00b7 20s rest \u00b7 CD 200m \u00b7 ~2,800m\n\n\u26a0\ufe0f 1 of 2 strength sessions done this week \u2014 aim for a second before Sunday\n\nWeight this morning?\n\n_100 days to IM Italy Emilia-Romagna_"
+  },
+  {
+    "user": "Ankle this morning of 1/2 But has loosened off quickly.",
+    "assistant": "Logged \u2014 1\u20132/10 this morning (after Wed run), loosened off quickly. Up from 0 yesterday morning. Pattern holds: impingement signature uphill/warmup, clears with movement. Swim today \u2014 ankle not relevant."
+  },
+  {
+    "user": "The TSS for the swim seems wrong",
+    "assistant": "You're right \u2014 ~35 was wrong. The planned event has no TSS assigned, and that was a bad estimate on my part.\n\nCorrect figure: a 60-min CSS session (IF \u2248 0.97\u20131.0) should be **~85\u201395 TSS**. Tuesday's 52-min swim was 74 TSS \u2014 Thursday's load session is longer and harder, so ~90 is the right number.\n\nI'll fix the plan TSS if it matters for the week view, but the session itself is correct."
+  },
+  {
+    "user": "I'm a bit short on time, maybe it's best we do 300 meters in to us.",
+    "assistant": "Done \u2014 session updated on the calendar.\n\n**CSS Swim \u00b7 ~46 min \u00b7 ~2,600m**\n\nWU: 400m easy\nDrill: 2\u00d7100m (catch-up, fingertip drag) \u00b7 :15s rest\nMain: **6\u00d7300m @ 1:39/100m** \u00b7 :20s rest\nCD: 200m easy\n\nEach 300m rep = 4:57. TSS ~70. You save ~14 min vs the original 5\u00d7400m without losing much load."
+  },
+  {
+    "user": "That's rubbish. You've taken 5 times 400 and gone to 6 times 300, which will not save 14 minutes with it.",
+    "assistant": "You're right \u2014 bad maths. \n\n5\u00d7400m main set = ~34 min. 6\u00d7300m = ~32 min. Saves about 2 minutes, not 14.\n\nHow long do you actually have total? I'll build something that fits."
   }
 ]
