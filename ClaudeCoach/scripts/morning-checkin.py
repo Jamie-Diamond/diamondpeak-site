@@ -14,14 +14,16 @@ LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "telegram"))
+sys.path.insert(0, str(BASE / "ironman-analysis"))
 from coaching_levels import level_block as _level_block
+from primitives.planned_tss import planned_sessions_block
 import ops_log
 import heat as heat_lib
 
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid"):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block=""):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -72,11 +74,16 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         "\n## Today's wellness\nNot yet synced — omit Sleep, HRV, and RHR from the card entirely.\n"
     )
 
+    planned_section = (
+        f"\n## Today's planned sessions (pre-computed — authoritative)\n{planned_block}\n"
+        if planned_block else ""
+    )
+
     return f"""\
 You are generating the morning briefing for {first_name}'s training day.
 
 {_level_block(coaching_level)}
-{recovery_block}{wellness_block}
+{recovery_block}{wellness_block}{planned_section}
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
@@ -98,12 +105,10 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 
 *Good morning — [Day date, e.g. Sat 9 May]*
 
-*Today:* [session name] — [duration] min[, ~[TSS] TSS]
-  TSS: use icu_training_load if set. If null, estimate from the session description:
-    - Ride: TSS ≈ (duration_min × 60 × NP_mid²) / (FTP² × 3600) × 100 where NP_mid = midpoint of the NP range in description; if no NP range, use IF 0.65 for Z2 or 0.75 for tempo
-    - Run: TSS ≈ duration_min × 0.45 for Z2/easy; duration_min × 0.60 for tempo
-    - Swim: TSS ≈ duration_min × 0.55
-    Always show as ~[N] TSS (round to nearest 5).
+*Today:* [session name] — [duration] min · [TSS] TSS
+  Name, duration and TSS come ONLY from the pre-computed planned-sessions block above — copy them
+  verbatim. NEVER estimate, recompute, or round TSS yourself. If that block is absent, omit the
+  TSS part entirely rather than guessing.
 
 [Form line — only include if notable:
   · Form < −20: ⚠️ Heavy load today — keep intensity in check
@@ -363,10 +368,21 @@ def run_athlete(slug, athlete_cfg):
         print(f"[{slug}] wellness not yet synced — will retry", file=sys.stderr)
         return
 
+    # Pre-compute today's planned-session TSS in Python — the 11 Jun card guessed
+    # "~35 TSS" for a swim whose plan event carried load_target=60.
+    planned_block = ""
+    try:
+        from icu_api import IcuClient as _Icu
+        _a = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        _events = _Icu(_a["icu_athlete_id"], _a["icu_api_key"]).get_events(today_str, today_str)
+        planned_block = planned_sessions_block(_events)
+    except Exception as exc:
+        print(f"[{slug}] planned-TSS prefetch failed: {exc}", file=sys.stderr)
+
     coaching_level = profile.get("coaching_level", "mid")
     prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
                            wellness_line=wellness_line, heat_protocol=heat_protocol,
-                           coaching_level=coaching_level)
+                           coaching_level=coaching_level, planned_block=planned_block)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
