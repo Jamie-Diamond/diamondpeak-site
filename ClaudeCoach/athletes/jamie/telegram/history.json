@@ -1,9 +1,5 @@
 [
   {
-    "user": "What are you an about m my running FTP is set a about 500?. \n\n4.41 obviously isn't a run walk is it",
-    "assistant": "Two corrections, both fair:\n\n1. **Running FTP**: Intervals.icu has your run FTP at **480W** \u2014 the 430W I quoted was the activity's auto-modelled CP estimate, not your set FTP. Big difference. 430W avg = 90% of run FTP, not \"exactly at FTP\" as I said.\n\n2. **4:41/km GAP**: That's the whole-session average including walk intervals \u2014 meaningless for run analysis. With 5:30 format (5 min run / 30 sec walk) your running portions would be considerably faster. I should have pulled and quoted the running-only intervals, not the blended average.\n\nCorrect read: avg 430W on running portions \u2248 90% of run FTP \u2014 solid Z3 effort. HR 145 avg across the session confirms aerobic load is appropriate for walk-run. Everything looks fine, I just reported the wrong numbers."
-  },
-  {
     "user": "It was obviously all running no walking. Steady pace, steady HR. It was a solid z2 run. But why am I telling you that. You should know",
     "assistant": "You're right, and I should have read the data instead of defaulting to the plan label.\n\n*Coventry Run \u2014 9 Jun \u00b7 correct read*\n10.17 km \u00b7 48 min \u00b7 GAP *4:41/km* (+39s vs threshold) \u00b7 avg HR 145 \u00b7 decoupling *1.9%* (excellent)\nRunning power: 430W = *90% of run FTP* (480W)\n\nBy GAP zone: ~54% Z2, ~24% Z3, ~8% Z4 \u2014 predominantly aerobic, HR well controlled, no drift. Solid Z2 run.\n\nThe plan says \"walk-run\" \u2014 clearly wrong. I'll update that going forward. Running continuous Z2, not walk-run format."
   },
@@ -118,5 +114,9 @@
   {
     "user": "",
     "assistant": "Good 10.8 km run done. Injury pain during today's run? (0-10)"
+  },
+  {
+    "user": "",
+    "assistant": "*Good morning \u2014 Thu 11 Jun*\n\n*Today:* CSS swim 60 min \u00b7 ~35 TSS\nWU 400m easy \u00b7 Drill 2\u00d7100m \u00b7 Main 5\u00d7400m @ 1:39/100m \u00b7 20s rest \u00b7 CD 200m \u00b7 ~2,800m\n\n\u26a0\ufe0f 1 of 2 strength sessions done this week \u2014 aim for a second before Sunday\n\nWeight this morning?\n\n_100 days to IM Italy Emilia-Romagna_"
   }
 ]
