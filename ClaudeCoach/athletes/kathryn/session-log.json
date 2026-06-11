@@ -2,7 +2,7 @@
   {
     "activity_id": "i156275759",
     "date": "2026-06-11",
-    "name": "Wandsworth - Thu 11 Jun — Easy Z2 run 30min",
+    "name": "Wandsworth - Thu 11 Jun \u2014 Easy Z2 run 30min",
     "sport": "Run",
     "tss": 59,
     "duration_min": 60,
@@ -10,7 +10,7 @@
     "avg_power": null,
     "norm_power": null,
     "avg_hr": 162,
-    "rpe": null,
+    "rpe": 5,
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
@@ -18,7 +18,7 @@
     "hydration_ml": null,
     "notes": null,
     "logged_at": "2026-06-11T07:30:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i155970950",
@@ -44,7 +44,7 @@
   {
     "activity_id": "i155615319",
     "date": "2026-06-09",
-    "name": "Wandsworth - Tue 9 Jun — Easy Z2 run 50min",
+    "name": "Wandsworth - Tue 9 Jun \u2014 Easy Z2 run 50min",
     "sport": "Run",
     "tss": 53,
     "duration_min": 55,
@@ -99,7 +99,7 @@
   {
     "activity_id": "i154759452",
     "date": "2026-06-06",
-    "name": "Wandsworth - Sat 6 Jun — Long run easy 80mi",
+    "name": "Wandsworth - Sat 6 Jun \u2014 Long run easy 80mi",
     "sport": "Run",
     "tss": 82,
     "duration_min": 81,
@@ -141,7 +141,7 @@
   {
     "activity_id": "i153863746",
     "date": "2026-06-03",
-    "name": "Wandsworth - Wed 3 Jun — Easy run Z2 50min",
+    "name": "Wandsworth - Wed 3 Jun \u2014 Easy run Z2 50min",
     "sport": "Run",
     "tss": 60,
     "duration_min": 64,
@@ -155,14 +155,14 @@
     "injury_pain_next_morning": null,
     "nutrition_g_carb": null,
     "hydration_ml": null,
-    "notes": "Strides skipped — forgot. RPE 3.",
+    "notes": "Strides skipped \u2014 forgot. RPE 3.",
     "logged_at": "2026-06-03T10:00:00",
     "stub": false
   },
   {
     "activity_id": "i153349093",
     "date": "2026-06-02",
-    "name": "Tue 2 Jun — Bike sweetspot 50m",
+    "name": "Tue 2 Jun \u2014 Bike sweetspot 50m",
     "sport": "VirtualRide",
     "tss": 49.5,
     "duration_min": 52,
@@ -183,7 +183,7 @@
   {
     "activity_id": "i153345612",
     "date": "2026-06-02",
-    "name": "Bike sweetspot 50min — Tue 2 Jun",
+    "name": "Bike sweetspot 50min \u2014 Tue 2 Jun",
     "sport": "VirtualRide",
     "tss": 46,
     "duration_min": 52,
@@ -225,7 +225,7 @@
   {
     "activity_id": null,
     "date": "2026-06-01",
-    "name": "Kettlebells — Mon 1 Jun",
+    "name": "Kettlebells \u2014 Mon 1 Jun",
     "sport": "Strength",
     "tss": 27,
     "duration_min": 46,
@@ -255,7 +255,7 @@
     "norm_power": null,
     "avg_hr": 164,
     "rpe": null,
-    "feel": "too fatigued — cut short at 43min",
+    "feel": "too fatigued \u2014 cut short at 43min",
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
     "nutrition_g_carb": null,
@@ -397,7 +397,7 @@
     "norm_power": 133,
     "avg_hr": 143,
     "rpe": null,
-    "feel": "good — felt good, actively controlled heart rate",
+    "feel": "good \u2014 felt good, actively controlled heart rate",
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
     "nutrition_g_carb": 27,
@@ -409,7 +409,7 @@
   {
     "activity_id": "i150756848",
     "date": "2026-05-23",
-    "name": "Test 🤒",
+    "name": "Test \ud83e\udd12",
     "sport": "Ride",
     "tss": 58.9,
     "duration_min": 76,
@@ -444,7 +444,7 @@
     "injury_pain_next_morning": null,
     "nutrition_g_carb": 20,
     "hydration_ml": null,
-    "notes": "Pre-ride: half banana + toast (~37g carb). In-ride: 1x Kind bar (nuts + syrup, 225 kcal, ~20g carb) — under-fuelled, needed ~90-100g. Post-ride: toast + 30g protein shake (~20g carb), smoked salmon sandwich (40g carb), overnight protein oats (36g carb). Total post-ride carb ~96g. No food until 5pm.",
+    "notes": "Pre-ride: half banana + toast (~37g carb). In-ride: 1x Kind bar (nuts + syrup, 225 kcal, ~20g carb) \u2014 under-fuelled, needed ~90-100g. Post-ride: toast + 30g protein shake (~20g carb), smoked salmon sandwich (40g carb), overnight protein oats (36g carb). Total post-ride carb ~96g. No food until 5pm.",
     "logged_at": "2026-05-16T09:30:00",
     "stub": true
   },

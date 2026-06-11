@@ -9,11 +9,11 @@
     "distance_km": 2.3,
     "pace_per_100m": 102.7,
     "avg_hr": 124,
-    "rpe": null,
+    "rpe": 8,
     "feel": null,
     "notes": null,
     "logged_at": "2026-06-11T07:30:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i156167057",
