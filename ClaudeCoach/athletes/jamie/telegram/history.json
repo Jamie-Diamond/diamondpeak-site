@@ -1,9 +1,5 @@
 [
   {
-    "user": "That was what the new activity was",
-    "assistant": "Got it \u2014 logged as the morning ankle stability + lower body mobility session."
-  },
-  {
     "user": "So why the scathing Strava description",
     "assistant": "The description on Intervals shows as blank \u2014 nothing was pushed for that activity. What does it say on Strava? If the activity watcher pushed something directly I want to see the exact text."
   },
@@ -118,5 +114,9 @@
   {
     "user": "Log the Strava /intervals times as a bug",
     "assistant": "Logged."
+  },
+  {
+    "user": "are we over reporting TSS for swims? this mornings swim doesnt feel as hard as yesterday run on the aerobic system?",
+    "assistant": "Short answer: yes, swim TSS over-represents aerobic load by roughly *15\u201325%* vs running.\n\nWhy:\n1. **Rest intervals counted** \u2014 20s between reps + turns aren't removed from the TSS clock; actual swimming time was ~32 min, not 39\n2. **Horizontal = lower cardiac demand** \u2014 hydrostatic pressure assists venous return; same \"effort\" requires less cardiac output than running\n3. **Less muscle mass** \u2014 running (legs, hip stability, ground reaction) has a higher absolute O2 demand\n\nYour 59 swim TSS is probably *45\u201350 run-equivalent* TSS. The 68 TSS run genuinely stressed the aerobic system more despite the lower raw number.\n\nICU doesn't apply sport-specific discounts \u2014 it's a raw pace/IF calculation. I'll keep using raw TSS for CTL/ATL projections (no choice), but your perception is correct: the form chart is slightly pessimistic after swim-heavy weeks."
   }
 ]
