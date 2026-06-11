@@ -311,6 +311,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-09 GO** — Z2 walk-run 60 min (run_easy) + Aerobic swim 60 min (swim): no rules fired, both sessions execute as planned. CTL 77.0 (Fitness), ATL 70.9 (Fatigue), TSB +6.1 (Form) — fresh. HRV null (not synced today); sleep null (not synced). Last RPE 5 (2026-06-07 ride). Ankle: last logged 2/10 warmup on 2026-06-06 run, cleared to 0 from km 2 — walk-run format and stop-if->2/10 protocol retained; quality_cleared still false. T10 active: Week 6 run km = 17.91 km; today adds ~9.5 km → week total ~9.5 km; combined with planned Sat 13 Jun run must stay ≤19.7 km (10% cap).
 
+- **2026-06-11 GO** — CSS swim 60 min (swim): no rules fired, execute as planned. CTL 78.1 (Fitness), ATL 75.8 (Fatigue), TSB +2.4 (Form) — slightly fresh. HRV null (not synced today); sleep null (not synced). Last RPE 1 (strength 2026-06-10). Ankle not relevant for swim. Session: 5×400m @ CSS 1:39/100m · 20s rest; WU 400m easy; Drill 2×100m; CD 200m easy; ~2,800m total.
+
 - **2026-06-10 GO** — Z2 continuous run 60 min (run_easy) + Strength 35 min: no rules fired, both sessions execute as planned. CTL 78.4 (Fitness), ATL 77.5 (Fatigue), TSB +0.9 (Form) — near-neutral. HRV null (not synced); sleep null (not synced). Last RPE 5 (2026-06-07 ride). Ankle: last logged 0 flat / 1–2 uphills on 2026-06-09 continuous run — quality_cleared still false; stop-if->2/10 protocol retained for today's run. Strength: lower body + core, bodyweight/light load on single-leg work per ankle protocol.
 
 ## Plan changes
