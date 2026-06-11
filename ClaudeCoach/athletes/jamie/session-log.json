@@ -1,5 +1,21 @@
 [
   {
+    "activity_id": "i156278830",
+    "date": "2026-06-11",
+    "name": "Pool Swim",
+    "sport": "Swim",
+    "tss": 59,
+    "duration_min": 39,
+    "distance_km": 2.3,
+    "pace_per_100m": 102.7,
+    "avg_hr": 124,
+    "rpe": null,
+    "feel": null,
+    "notes": null,
+    "logged_at": "2026-06-11T07:30:00",
+    "stub": true
+  },
+  {
     "activity_id": "i156167057",
     "date": "2026-06-10",
     "name": "Coventry Running",
