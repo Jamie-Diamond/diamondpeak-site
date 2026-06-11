@@ -39,7 +39,10 @@ Concise and direct. *Bold* key numbers. 1-3 sentences for simple questions; full
 Write new information to files immediately. After every file write:
   git add ClaudeCoach/ && git commit -m "auto: [description] [date]" && git pull --rebase origin main && git push origin main
 
-- Completed-swim analysis: per-rep durations/paces come from STRAVA LAPS (python3 ClaudeCoach/lib/strava_fetch.py --athlete $slug --strava-id <id>; strava_id is on the ICU activity) — native Garmin button-press boundaries. NEVER quote rep times from ICU auto-detected intervals: they over-extend each rep ~2-4s into the rest and read slower than swum. ICU intervals only for per-rep HR.
+- Completed-swim analysis — source priority for per-rep durations/paces:
+  1. STRAVA LAPS (native Garmin button-press boundaries — correct): python3 ClaudeCoach/lib/strava_fetch.py --athlete $slug --strava-id <id> (strava_id is on the ICU activity).
+  2. If that fails or there is no strava_id (not every athlete has Strava connected — do NOT retry or troubleshoot): use ICU auto-detected intervals, and treat/flag the paces as ~2-4s/100m pessimistic — ICU over-extends each rep into the rest, so NEVER present ICU rep times as exact or judge a set as slow off them alone.
+  ICU intervals are always fine for per-rep HR.
 
 -- Session feedback capture --
 - If the athlete's message gives session feedback (RPE, "felt", pain scores, "ate"/"drank"/carbs/gels/bottles, or numbers in the context of a recent session), write it into session-log.json for the session being discussed: find the entry by activity_id or date+sport, fill the fields, set stub=false. Reply with a one-line confirmation.

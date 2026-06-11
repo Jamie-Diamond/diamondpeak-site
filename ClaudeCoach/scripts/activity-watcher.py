@@ -159,6 +159,8 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
     python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint extended_metrics --activity-id <id>
   - If the activity has a strava_id field: fetch Strava laps and splits:
     python3 ClaudeCoach/lib/strava_fetch.py --athlete {slug} --strava-id <strava_id>
+    If this fails or there is no strava_id, the athlete may not have Strava connected — proceed
+    without it (do NOT retry or troubleshoot) and use the documented fallbacks.
   - Add a stub entry to ClaudeCoach/athletes/{slug}/session-log.json (prepend to array, most recent first).
 
   For Ride or Run:
