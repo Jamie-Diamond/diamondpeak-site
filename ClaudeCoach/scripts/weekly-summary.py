@@ -14,6 +14,8 @@ sys.path.insert(0, str(BASE / "lib"))
 
 from icu_api import IcuClient
 import recovery_score as rs
+sys.path.insert(0, str(BASE / "ironman-analysis"))
+from primitives.planned_tss import planned_session_tss
 from coaching_levels import level_block as _level_block
 
 ATHLETES_CONFIG = BASE / "config/athletes.json"
@@ -178,6 +180,27 @@ def run_summary(slug: str = "jamie") -> str:
         if e.get("date", "") >= four_weeks_ago
     ]
 
+    # Week TSS accounting — pre-computed so compliance is never LLM arithmetic
+    # (the old prompt said "or estimate from event duration/IF if not explicit").
+    planned_rows, planned_total = [], 0
+    for e in events_this_wk or []:
+        if (e.get("category") or "WORKOUT").upper() != "WORKOUT":
+            continue
+        r = planned_session_tss(e)
+        planned_total += r["tss"]
+        planned_rows.append(
+            f"  {(e.get('start_date_local') or '')[:10]}  {r['name']} — {r['tss']} TSS ({r['source']})")
+    actual_total = sum(
+        round(float(a.get("icu_training_load") or 0))
+        for a in activities_7d or []
+        if week_start.isoformat() <= (a.get("start_date_local") or "")[:10] <= week_end.isoformat())
+    compliance_pct = round(actual_total / planned_total * 100) if planned_total else None
+    tss_accounting = (
+        f"Planned TSS total: {planned_total}\n"
+        f"Actual TSS total: {actual_total}\n"
+        f"Compliance: {f'{compliance_pct}%' if compliance_pct is not None else 'n/a (no planned events)'}\n"
+        "Per planned session:\n" + ("\n".join(planned_rows) or "  (none)"))
+
     race_date    = date.fromisoformat(profile.get("race_date", "2026-09-19"))
     days_to_race = (race_date - today).days
     race_name    = profile.get("race_name", "race")
@@ -297,6 +320,9 @@ Week: {week_start} → {week_end}
 ## Upcoming training plans
 {upcoming_plans}
 
+## Local — Week TSS accounting (pre-computed — authoritative)
+{tss_accounting}
+
 ## Local — Nutrition history (rides/bricks >90 min, last 6 weeks — g/hr computed)
 {json.dumps(nutrition_history, indent=2)}
 
@@ -311,9 +337,8 @@ Week: {week_start} → {week_end}
 ## Step 1 — Compute week metrics
 
 From the data above, extract:
-- Total actual TSS (sum icu_training_load from activities this week)
-- Total planned TSS (sum planned_tss from events — or estimate from event duration/IF if not explicit)
-- Compliance % = actual / planned × 100
+- Total actual TSS, total planned TSS, compliance %: use the pre-computed "Week TSS accounting"
+  block above VERBATIM — never sum, estimate, or recompute these yourself
 - CTL at start of week vs end of week (from wellness — first and last entries for the week range)
 - ATL at end of week
 - TSB at end of week (form field in wellness, or ATL - CTL)

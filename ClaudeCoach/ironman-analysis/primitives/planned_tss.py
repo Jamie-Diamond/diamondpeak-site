@@ -80,6 +80,19 @@ def planned_session_tss(event: dict) -> dict:
             "duration_min": dur, "name": name}
 
 
+def hourly_rates_line() -> str:
+    """Standard TSS-per-hour rates derived from the IF table — for prompts that
+    quote lever estimates (e.g. '+30 min Z2 ride ≈ +21 TSS'), so prose rates can
+    never drift from the calculation."""
+    rates = {st: round(i ** 2 * 100) for st, i in _IF_BY_TYPE.items()}
+    swim_css = round(_SWIM_IF[0][1] ** 2 * 100)
+    swim_easy = round(_SWIM_IF_DEFAULT ** 2 * 100)
+    return (f"Z2 ride {rates['bike_z2']}/hr · threshold ride {rates['bike_threshold']}/hr · "
+            f"easy run {rates['run_easy']}/hr · quality run {rates['run_quality']}/hr · "
+            f"long run {rates['run_long']}/hr · CSS swim {swim_css}/hr · easy swim {swim_easy}/hr · "
+            f"brick {rates['brick']}/hr")
+
+
 def planned_sessions_block(events: list[dict]) -> str:
     """Prompt-ready lines for today's planned workouts, or '' when none."""
     rows = []

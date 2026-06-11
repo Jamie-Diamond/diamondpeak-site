@@ -39,6 +39,7 @@ from primitives.blueprint import (  # noqa: E402
     is_multisport as event_is_multisport,
 )
 from primitives.validate_plan import validate_week  # noqa: E402
+from primitives.planned_tss import hourly_rates_line  # noqa: E402
 
 
 def trim_log(path: Path, max_lines: int = 5000):
@@ -602,10 +603,12 @@ If week 1 planned TSS < {_la_gap_threshold} (>10% short of {_prescribe_tss}):
   Include a LOAD GAP section in the Step 7/8 Telegram notification:
   "⚠ Load gap: W{weeks_elapsed} totals [X] TSS — [Y] short of the {_prescribe_tss} target.
    Can we find more time? Options:
-   • [specific lever 1 with estimated TSS gain, e.g. +30 min Friday ride ≈ +25 TSS]
-   • [specific lever 2 with estimated TSS gain]
-   • [specific lever 3 with estimated TSS gain]
+   • [specific lever 1 with TSS gain, e.g. +30 min Friday Z2 ride ≈ +21 TSS]
+   • [specific lever 2 with TSS gain]
+   • [specific lever 3 with TSS gain]
    Reply to apply any of these."
+  Compute every lever's TSS at these standard rates (TSS per hour — never invent your own):
+  {hourly_rates_line()}"
 If week 1 planned TSS >= {_la_gap_threshold}: proceed silently.
 A plan that is >10% short of target with no LOAD GAP section in the message is a FAILED run.
 """

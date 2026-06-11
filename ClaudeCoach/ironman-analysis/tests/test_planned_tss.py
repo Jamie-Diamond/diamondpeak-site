@@ -57,3 +57,12 @@ class TestPlannedSessionsBlock:
 
     def test_empty_when_rest_day(self):
         assert planned_sessions_block([]) == ""
+
+
+class TestHourlyRatesLine:
+    def test_rates_derive_from_if_table(self):
+        from primitives.planned_tss import hourly_rates_line
+        line = hourly_rates_line()
+        assert "Z2 ride 42/hr" in line          # 0.65² × 100
+        assert "threshold ride 81/hr" in line   # 0.90² × 100
+        assert "CSS swim 72/hr" in line         # 0.85² × 100
