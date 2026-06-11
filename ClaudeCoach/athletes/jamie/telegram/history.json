@@ -1,9 +1,5 @@
 [
   {
-    "user": "So why the scathing Strava description",
-    "assistant": "The description on Intervals shows as blank \u2014 nothing was pushed for that activity. What does it say on Strava? If the activity watcher pushed something directly I want to see the exact text."
-  },
-  {
     "user": "You can get it",
     "assistant": "Description field is `null` \u2014 nothing was pushed for that activity by the watcher or by me. Nothing scathing to show. What are you seeing on Strava?"
   },
@@ -118,5 +114,9 @@
   {
     "user": "are we over reporting TSS for swims? this mornings swim doesnt feel as hard as yesterday run on the aerobic system?",
     "assistant": "Short answer: yes, swim TSS over-represents aerobic load by roughly *15\u201325%* vs running.\n\nWhy:\n1. **Rest intervals counted** \u2014 20s between reps + turns aren't removed from the TSS clock; actual swimming time was ~32 min, not 39\n2. **Horizontal = lower cardiac demand** \u2014 hydrostatic pressure assists venous return; same \"effort\" requires less cardiac output than running\n3. **Less muscle mass** \u2014 running (legs, hip stability, ground reaction) has a higher absolute O2 demand\n\nYour 59 swim TSS is probably *45\u201350 run-equivalent* TSS. The 68 TSS run genuinely stressed the aerobic system more despite the lower raw number.\n\nICU doesn't apply sport-specific discounts \u2014 it's a raw pace/IF calculation. I'll keep using raw TSS for CTL/ATL projections (no choice), but your perception is correct: the form chart is slightly pessimistic after swim-heavy weeks."
+  },
+  {
+    "user": "",
+    "assistant": "*Tomorrow \u2014 Long Z2 Ride 240 min*\n\n\u2022 NP target 163\u2013223 W (IF 0.55\u20130.75)\n\u2022 HR cap 146 bpm\n\u2022 Cadence 85\u201395 rpm \u00b7 VI <1.08\n\u2022 TT position throughout\n\n*Nutrition:* 70 g/hr carbs from 30 min \u00b7 700 ml/hr fluid\n*Sleep:* \u22658h tonight\n*Form:* \u22124.1 (In training)\n\nHot bath 20 min post-ride (heat acclimation)."
   }
 ]
