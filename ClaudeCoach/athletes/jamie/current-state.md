@@ -114,6 +114,9 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 ## Off-plan in last 7 days
 
+- **2026-06-12 GO** — Long Z2 ride 240 min (bike_z2): no rules fired, execute as planned. CTL 77.6 (Fitness), ATL 72.5 (Fatigue), TSB +5.2 (Form) — slightly fresh. HRV null (not synced today); sleep null (not synced). Last RPE 8 (swim 2026-06-11). Ankle not relevant for bike. Session: TT position, NP 163–223W (55–75% eFTP 297W), HR 133–146, cadence 85–95 rpm, VI <1.08. Nutrition: 70g CHO/hr from 30 min, 700ml/hr fluid. Key diagnostic: aerobic decoupling first/last hour (target <5%). Hot bath 20 min post-ride (heat acclimation).
+
+
 - Missed sessions: Wed 6 May easy run 5 km — moved and extended to Thu 7 May (13 km compensatory, completed); Sun 10 May brick run skipped (busy day, chose to wind down)
 - Cut sessions: none
 - Illness / life events: **cold/flu confirmed 2026-05-21** — late night + illness; swim cut short (31 min / 1.7 km vs planned 45 min / 2.1 km); lie in taken instead of full session. Correct call given multi-signal suppression (HRV ↓, RHR 57, symptoms).
