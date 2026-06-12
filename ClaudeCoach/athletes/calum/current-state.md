@@ -42,3 +42,4 @@ No
 | 2026-06-09 | 8.8 | 4.0 | +4.8 | Rest day — no session planned in calendar. No HRV or sleep data. |
 | 2026-06-10 | 8.6 | 3.5 | +5.1 | Sweetspot Intro 85 min — GO as-planned. First Build phase session. No rules fired. No HRV or sleep data. |
 | 2026-06-11 | 8.4 | 3.0 | +5.4 | Rest day — no session planned in calendar. No HRV or sleep data. |
+| 2026-06-12 | 8.2 | 2.6 | +5.6 | T5: 2 missed planned sessions in rolling 7d — 2026-06-06 Long Z2 2h 30min (hike done instead), 2026-06-10 Sweetspot Intro 85 min (no ICU activity recorded; 0 load since Jun 7). No HRV or sleep data. |
