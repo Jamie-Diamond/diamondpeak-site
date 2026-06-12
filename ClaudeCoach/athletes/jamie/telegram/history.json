@@ -1,10 +1,6 @@
 [
   {
     "user": "",
-    "assistant": "*New activity*\n\n10.76 km \u00b7 avg GAP 4:43/km \u00b7 +41 sec/km vs threshold (4:02/km)\n~87% HR \u2264150 cap \u00b7 decoupling 1.8%\nRunning power: 428w avg \u00b7 lap power stable 410\u2013460w throughout \u2014 hilly route (+96m); no fade\nInjury pain score during and this morning? (0-10)\n_vs plan (Wed 10 Jun \u2014 Z2 run 60 min): 45\u219268 TSS (+51%)_"
-  },
-  {
-    "user": "",
     "assistant": "\ud83c\udfc6 PR: Memorial Park lap\n\ud83c\udfc6 PR: Head down thumbs up\n\ud83c\udfc6 PR: Drag in the park\n\ud83c\udfc6 PR: Memorial Park Top Path - Up\n\ud83c\udfc6 PR: memorial park LAP\n\ud83c\udfc6 PR: 2 x Memorial Park\n\ud83c\udfc6 PR: Overcoat\n\ud83c\udfc6 PR: 1k Rep\n\ud83c\udfc6 PR: Run for Michaelmas"
   },
   {
@@ -118,5 +114,9 @@
   {
     "user": "Update the Strava caption to include the nutrition",
     "assistant": "Done \u2014 Strava description updated:\n\nLong Z2 Ride \u00b7 247 min \u00b7 137.9 km\n\nNP 224W \u00b7 IF 0.75 \u00b7 VI 1.14 \u00b7 TSS 229\nDecoupling 0.59%\n\nNutrition: 402g carbs \u00b7 2,800ml \u00b7 ~98g/hr"
+  },
+  {
+    "user": "",
+    "assistant": "*Tomorrow \u2014 Build ride 240 min (3\u00d720 SS)*\n\n\u2022 WU 20 min easy: NP <163 W, HR <133\n\u2022 Main: 3\u00d720 min sweet spot \u2014 NP 249\u2013288 W (IF 0.84\u20130.97), HR 146\u2013166; 5 min Z1 recovery between reps\n\u2022 Z2 remainder: NP 163\u2013223 W, HR 133\u2013146, cadence 85\u201395 rpm\n\u2022 TT position throughout, VI target <1.08\n\n*Nutrition:* 70 g/hr carbs + 600 ml/hr fluid \u2014 start at 30 min in\n*Sleep:* \u22658h tonight\n*Form:* \u221220 (In training)"
   }
 ]
