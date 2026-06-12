@@ -1,13 +1,5 @@
 [
   {
-    "user": "You can get it",
-    "assistant": "Description field is `null` \u2014 nothing was pushed for that activity by the watcher or by me. Nothing scathing to show. What are you seeing on Strava?"
-  },
-  {
-    "user": "[image]",
-    "assistant": "That was the activity watcher auto-generating a snide TSS comparison \u2014 bug on my end. Fixed. Description now reads:\n\n```\nMorning Strength \u00b7 32 min\n\nAnkle stability & strength protocol\nLower body mobility\n```\n\nI'll flag the \"plan didn't come together\" language in the watcher to fix."
-  },
-  {
     "user": "",
     "assistant": "RPE for Strength? (1\u201310)"
   },
@@ -118,5 +110,13 @@
   {
     "user": "",
     "assistant": "*Tomorrow \u2014 Long Z2 Ride 240 min*\n\n\u2022 NP target 163\u2013223 W (IF 0.55\u20130.75)\n\u2022 HR cap 146 bpm\n\u2022 Cadence 85\u201395 rpm \u00b7 VI <1.08\n\u2022 TT position throughout\n\n*Nutrition:* 70 g/hr carbs from 30 min \u00b7 700 ml/hr fluid\n*Sleep:* \u22658h tonight\n*Form:* \u22124.1 (In training)\n\nHot bath 20 min post-ride (heat acclimation)."
+  },
+  {
+    "user": "",
+    "assistant": "*Good morning \u2014 Fri 12 Jun*\n\n*Today:* Long Z2 ride 240 min \u2014 240 min \u00b7 170 TSS\nTT position \u00b7 NP 163\u2013223W (55\u201375% eFTP 297W) \u00b7 HR 133\u2013146 \u00b7 cadence 85\u201395 rpm \u00b7 VI <1.08 \u00b7 aerobic decoupling first/last hr target <5%\n\n\u26a0\ufe0f Heat maintenance dose is low \u2014 hot bath 20 min post-ride is already in the session plan; make sure it happens\n\ud83d\udccc Ankle clearance review due Mon 15 Jun \u2014 3 days\n\n\ud83c\udf4c Nutrition \u2014 target 81g/hr \u00b7 eat at 15 min then every 25 min\n\nWeight this morning?\n\n_99 days to IM Italy Emilia-Romagna_"
+  },
+  {
+    "user": "",
+    "assistant": "[chart/photo sent]"
   }
 ]
