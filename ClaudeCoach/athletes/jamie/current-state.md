@@ -25,6 +25,8 @@
 
 ## Ankle (high ankle sprain, onset ~1 March 2026)
 
+- **Physio clearance (2026-06-12):** Running cleared as pain allows. Pain up to **5/10 is acceptable** provided it resolves within 4 hours or by next morning. Ultrasound confirmed: **partial tear ATFL + CFL** (anterior talofibular ligament + calcaneofibular ligament). Rehab focus: ankle stability and foot strength. Previous self-assessment diagnosis (bony impingement/osteophyte) was incorrect — ligament tear is the actual finding.
+
 - **Run format update (2026-06-09):** Jamie is running continuously — no walk intervals. The walk-run (9:1) protocol is no longer being used. Plan labels should be updated to reflect this. 9 Jun run: 10.17 km / 48 min continuous, GAP 4:41/km, avg HR 145, decoupling 1.9% — clean Z2 effort.
 - Current pain 1–10 (during run): 2 uphill / 0–1 flat & elsewhere (Wed 10 Jun — Coventry Z2 Run 10.76 km, continuous). Previous: 0 flat / 1–2 uphills (Tue 9 Jun — Coventry Running 10.17 km, continuous). Pain location: uphill/warmup = anterior impingement stimulus (dorsiflexion under load); flat = pain-free. Pattern stable for ~3 weeks.
 - Current pain 1–10 (next morning): 1–2 (11 Jun AM — after Wed 10 Jun run; loosened off quickly); 0 (10 Jun AM — after Tue 9 Jun run); 0 (9 Jun AM — after Sat 6 Jun run)
@@ -47,7 +49,7 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 - Single-leg calf raises / hops: can do 50 single-leg hops easily — calf/tendon strength intact
 - Passive ROM (seated, unloaded): full and pain-free
 - Palpation (anterolateral gutter): no sharp tenderness on direct pressure
-- Lunge test (weight-bearing dorsiflexion): **3–4cm asymmetry R vs L** — significant deficit under load despite pain-free passive ROM; both ankles very flexible in absolute terms, but injured side loses 3–4cm capacity when weight-bearing
+- Lunge test (weight-bearing dorsiflexion): **2cm asymmetry R vs L** (updated 2026-06-12; was 3–4cm at initial assessment — improving) — deficit under load despite pain-free passive ROM; both ankles very flexible in absolute terms
 
 **Symptom clarification — detailed:**
 - Throbbing: **positional only** (driving pedal position, sustained plantar flexion under light load) — NOT true rest pain; desk work, planes, extended sitting all pain-free
@@ -99,14 +101,16 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 5. *Consider short NSAID course* (5–7 days ibuprofen 400–600mg 3x/day with food) — can break the inflammation cycle if synovium is actively reactive
 
 **Priority physio actions:**
-1. Report: 3–4cm lunge test asymmetry, visible swelling at 14 weeks, all stability tests clear
+1. Report: 2cm lunge test asymmetry (updated 2026-06-12; was 3–4cm), visible swelling at 14 weeks, all stability tests clear
 2. Ask specifically about intra-articular effusion — size, treatment options (ultrasound-guided aspiration, mobilisation)
 3. Request MRI if not already done — mandatory to rule out OCD lesion
 4. Request talocrural anterior-posterior glides (joint mobilisation for the dorsiflexion restriction)
 5. Confirm whether 9:1 run format or shorter intervals (2–3 min) is more appropriate for effusion-driven presentation
 6. Push for concrete milestone: "X weeks of Y before we add tempo" — not open-ended
 
-> Hard rule: increase load only if pain ≤2/10 during and 0/10 next morning. Cap weekly run-km increase at 10% while in rehab. Cap CTL ramp at +4/wk while ankle in rehab. (See `reference/rules.md`.)
+> Hard rule (updated 2026-06-12 per physio): pain ≤5/10 during is acceptable provided it resolves within 4 hours or by next morning. Pain >5/10 = stop. Pain not resolved next morning = no run that day. Cap weekly run-km increase at 10% while in rehab. Cap CTL ramp at +4/wk while ankle in rehab. (See `reference/rules.md`.)
+
+**Active rehab protocol (from 2026-06-12):** RICE + heavy ibuprofen course. Lunge asymmetry now 2cm (was 3–4cm — improving). Physio: partial ATFL + CFL tear confirmed ultrasound. Rehab focus: ankle stability + foot strength.
 
 ## Other niggles
 
