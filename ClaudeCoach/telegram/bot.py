@@ -47,6 +47,11 @@ try:
 except Exception:
     _menstrual = None
 
+try:
+    import heat as _heat_lib
+except Exception:
+    _heat_lib = None
+
 _whisper_model = None
 
 
@@ -400,13 +405,9 @@ def process_charts(token, chat_id, response, slug=None):
 
 
 PROJECT_DIR = BASE.parent.parent  # diamondpeak-site/
-STATE_JSON    = BASE.parent / "athletes/jamie/current-state.json"
-HEAT_LOG      = BASE.parent / "athletes/jamie/heat-log.json"
-SESSION_LOG_F = BASE.parent / "athletes/jamie/session-log.json"
-TRAINING_DATA = BASE.parent / "athletes/jamie/training-data.json"
 SITE_DATA     = BASE.parent / "site-data.json"
 
-_ANKLE_RE         = re.compile(r'^(ankle|pain|niggle)\s+(\w+[\s\w]*?)\s+(\d+(?:\.\d+)?)\s*$', re.I)
+_ANKLE_RE         = re.compile(r'^(ankle|pain|niggle)\s+(?:(\w+[\s\w]*?)\s+)?(\d+(?:\.\d+)?)\s*$', re.I)
 _RACE_PLAN_RE     = re.compile(r'^(?:regenerate|update|refresh|regen)\s+race\s+plan\s*$', re.I)
 _CSS_RE           = re.compile(r'^css\s+([\d:]+)\s*(?:/100m)?\s*$', re.I)
 _LTHR_RE          = re.compile(r'^lthr\s+(\d{2,3})\s*(?:bpm)?\s*$', re.I)
@@ -754,15 +755,28 @@ def _git_commit(msg):
     except Exception as e:
         log(f"git commit error: {e}")
 
-def _load_state_json():
-    if STATE_JSON.exists():
-        return json.loads(STATE_JSON.read_text())
+def _athlete_dir(slug: str) -> Path:
+    return BASE.parent / "athletes" / slug
+
+def _load_state_json(slug: str):
+    f = _athlete_dir(slug) / "current-state.json"
+    if f.exists():
+        return json.loads(f.read_text())
     return {}
 
-def _save_state_json(state):
-    STATE_JSON.write_text(json.dumps(state, indent=2))
+def _save_state_json(slug: str, state):
+    f = _athlete_dir(slug) / "current-state.json"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(state, indent=2))
 
-def _strength_session() -> str:
+def _load_profile(slug: str) -> dict:
+    f = _athlete_dir(slug) / "profile.json"
+    try:
+        return json.loads(f.read_text()) if f.exists() else {}
+    except Exception:
+        return {}
+
+def _strength_session(slug: str) -> str:
     """Return today's prescribed strength session based on day of week."""
     dow = date.today().weekday()  # Mon=0, Sun=6
 
@@ -790,7 +804,7 @@ def _strength_session() -> str:
     else:
         return "No strength session scheduled today. Next: Session A (Tue) or Session B (Thu)."
 
-    state = _load_state_json()
+    state = _load_state_json(slug)
     pain = state.get("ankle", {}).get("pain_during", 0) or 0
     ankle_note = ""
     if pain and pain > 0:
@@ -824,10 +838,10 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
         return "__FITNESS_CHARTS__"
 
     m = _ANKLE_RE.match(txt)
-    if m:
-        location = m.group(2).strip() if m.group(1).lower() != "ankle" else "ankle"
+    if m and slug:
+        location = (m.group(2) or m.group(1)).strip() if m.group(1).lower() != "ankle" else "ankle"
         score = float(m.group(3))
-        state = _load_state_json()
+        state = _load_state_json(slug)
         prev  = state.get("ankle", {}).get("pain_during")
         state.setdefault("ankle", {})["pain_during"] = int(score)
 
@@ -837,8 +851,8 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
         state["ankle"]["history"] = hist[-20:]
 
         state["last_updated"] = today
-        _save_state_json(state)
-        _git_commit(f"auto: ankle pain {score} {today}")
+        _save_state_json(slug, state)
+        _git_commit(f"auto: ankle pain {score} {slug} {today}")
 
         trend = ""
         if prev is not None:
@@ -870,33 +884,54 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
         return reply
 
     m = _WEIGHT_RE.match(text.strip())
-    if m:
+    if m and slug:
         kg = float(m.group(1))
-        state = _load_state_json()
+        state = _load_state_json(slug)
         state.setdefault("weight_readings", []).append({"date": today, "kg": kg})
         state["last_updated"] = today
-        _save_state_json(state)
-        _git_commit(f"auto: weight {kg} kg {today}")
-        target = 79.0
-        diff = round(kg - target, 1)
-        return f"Logged {kg} kg. {diff:+.1f} kg to race-day target (79 kg)."
+        _save_state_json(slug, state)
+        _git_commit(f"auto: weight {kg} kg {slug} {today}")
+        target = _load_profile(slug).get("race_weight_kg")
+        if target:
+            diff = round(kg - float(target), 1)
+            return f"Logged {kg} kg. {diff:+.1f} kg to race-day target ({target:g} kg)."
+        return f"Logged {kg} kg."
 
     m = _HEAT_RE.match(text.strip())
-    if m:
+    if m and slug:
         mins = int(float(m.group(1)))
-        entries = json.loads(HEAT_LOG.read_text()) if HEAT_LOG.exists() else []
+        heat_log = _athlete_dir(slug) / "heat-log.json"
+        try:
+            entries = json.loads(heat_log.read_text()) if heat_log.exists() else []
+        except Exception:
+            entries = []
         entries.append({"date": today, "duration_min": mins, "temp_c": 40, "hr_peak": None, "notes": ""})
-        HEAT_LOG.write_text(json.dumps(entries, indent=2))
-        state = _load_state_json()
+        heat_log.parent.mkdir(parents=True, exist_ok=True)
+        heat_log.write_text(json.dumps(entries, indent=2))
+        state = _load_state_json(slug)
         state.setdefault("heat", {})
         state["heat"]["sessions_cumulative"] = state["heat"].get("sessions_cumulative", 0) + 1
         state["heat"]["last_session_date"] = today
         state["last_updated"] = today
-        _save_state_json(state)
-        _git_commit(f"auto: heat session {mins}min {today}")
-        total = state["heat"]["sessions_cumulative"]
-        remaining = max(0, 14 - total)
-        return f"Logged heat session {mins} min. {total} done" + (f" — {remaining} still needed to hit 14-session floor." if remaining else " — above minimum, keep banking.")
+        _save_state_json(slug, state)
+        _git_commit(f"auto: heat session {mins}min {slug} {today}")
+        reply = f"Logged heat session {mins} min."
+        # 14-day dose vs the athlete's protocol floor (entries without a dose
+        # field count 1.0 — same convention as lib/heat.py).
+        if _heat_lib is not None:
+            cutoff = (date.today() - timedelta(days=14)).isoformat()
+            dose14 = sum(float(e.get("dose", 1.0) or 1.0)
+                         for e in entries if str(e.get("date", "")) >= cutoff)
+            hs = _heat_lib.state(slug, _load_profile(slug))
+            if hs["active"]:
+                floor = (_heat_lib.PROTOCOL_DOSE_14D if hs["in_protocol_window"]
+                         else _heat_lib.MAINTENANCE_DOSE_14D)
+                status = ("on target" if dose14 >= floor
+                          else f"{floor - dose14:g} more needed in the window")
+                reply += f" 14-day dose {dose14:g}/{floor:g} — {status}."
+            else:
+                reply += f" 14-day dose {dose14:g}."
+        return reply
 
     m = _PERIOD_RE.match(txt)
     if m and _menstrual is not None and slug:
@@ -954,41 +989,56 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
         return "__WEEKLY_SUMMARY__"
 
     if _STRENGTH_RE.match(text.strip()):
-        return _strength_session()
+        return _strength_session(slug)
 
     return None
 
 
-def _update_ftp(new_ftp: int) -> str:
-    """Update FTP across local files and current-state.json. Returns reply string."""
+def _update_ftp(slug: str, new_ftp: int) -> str:
+    """Update FTP across the athlete's local files and current-state.json. Returns reply string."""
     today = date.today().isoformat()
     updated = []
     errors = []
 
-    # system_prompt.txt — "FTP 316 W" style
+    # system_prompt.txt — "FTP 316 W" style (skip silently if the athlete has none)
+    sp_path = _athlete_dir(slug) / "system_prompt.txt"
     try:
-        sp = SYSTEM_PROMPT_FILE.read_text()
-        sp_new = re.sub(r'FTP \d+ W', f'FTP {new_ftp} W', sp)
-        if sp_new != sp:
-            SYSTEM_PROMPT_FILE.write_text(sp_new)
-            updated.append("system_prompt.txt")
+        if sp_path.exists():
+            sp = sp_path.read_text()
+            sp_new = re.sub(r'FTP \d+ W', f'FTP {new_ftp} W', sp)
+            if sp_new != sp:
+                sp_path.write_text(sp_new)
+                updated.append("system_prompt.txt")
     except Exception as e:
         errors.append(f"system_prompt: {e}")
 
-    # reference/rules.md — "Bike FTP: 316 W" style
-    rules_path = BASE.parent / "athletes/jamie/reference/rules.md"
+    # reference/rules.md — "Bike FTP: 316 W" style (skip silently if absent)
+    rules_path = _athlete_dir(slug) / "reference/rules.md"
     try:
-        rules = rules_path.read_text()
-        rules_new = re.sub(r'Bike FTP: \d+ W', f'Bike FTP: {new_ftp} W', rules)
-        if rules_new != rules:
-            rules_path.write_text(rules_new)
-            updated.append("rules.md")
+        if rules_path.exists():
+            rules = rules_path.read_text()
+            rules_new = re.sub(r'Bike FTP: \d+ W', f'Bike FTP: {new_ftp} W', rules)
+            if rules_new != rules:
+                rules_path.write_text(rules_new)
+                updated.append("rules.md")
     except Exception as e:
         errors.append(f"rules.md: {e}")
 
+    # profile.json — ftp_watts is what the planner reads
+    try:
+        prof_path = _athlete_dir(slug) / "profile.json"
+        if prof_path.exists():
+            prof = json.loads(prof_path.read_text())
+            if prof.get("ftp_watts") != new_ftp:
+                prof["ftp_watts"] = new_ftp
+                prof_path.write_text(json.dumps(prof, indent=2, ensure_ascii=False))
+                updated.append("profile.json")
+    except Exception as e:
+        errors.append(f"profile.json: {e}")
+
     # current-state.json
     try:
-        state = _load_state_json()
+        state = _load_state_json(slug)
         prev_ftp = state.get("bike_ftp")
         state["bike_ftp"] = new_ftp
         state["last_updated"] = today
@@ -999,12 +1049,12 @@ def _update_ftp(new_ftp: int) -> str:
             existing.update(action)
         else:
             acts.append(action)
-        _save_state_json(state)
+        _save_state_json(slug, state)
         updated.append("current-state.json")
     except Exception as e:
         errors.append(f"current-state.json: {e}")
 
-    _git_commit(f"ftp: updated to {new_ftp} W {today}")
+    _git_commit(f"ftp: updated to {new_ftp} W {slug} {today}")
 
     if errors:
         return f"FTP updated to *{new_ftp} W* in {', '.join(updated)}.\n⚠️ Errors: {'; '.join(errors)}\n\nZones recalculated. Update in Intervals.icu if not already done."
@@ -1284,7 +1334,7 @@ def _handle_test_confirm(token, chat_id, data, message_id, athletes):
             new_ftp = int(float(value))
         except ValueError:
             return False
-        reply = _update_ftp(new_ftp)
+        reply = _update_ftp(slug, new_ftp)
         _mark_test_completed(slug, "ftp")
     elif t_type == "css":
         reply = _update_css(slug, value)
@@ -2317,7 +2367,7 @@ def main():
                 continue
             elif fast and fast.startswith("__FTP_RETEST__:"):
                 new_ftp = int(float(fast.split(":", 1)[1]))
-                reply = _update_ftp(new_ftp)
+                reply = _update_ftp(slug, new_ftp)
                 _mark_test_completed(slug, "ftp")
                 send(token, chat_id, reply, reply_markup=build_keyboard(slug))
                 log(f"Out (FTP update): {new_ftp} W")
