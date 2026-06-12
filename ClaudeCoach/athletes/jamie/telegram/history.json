@@ -1,9 +1,5 @@
 [
   {
-    "user": "",
-    "assistant": "RPE for Strength? (1\u201310)"
-  },
-  {
     "user": "1",
     "assistant": "Logged. RPE 1 \u2014 recovery-level effort."
   },
@@ -118,5 +114,9 @@
   {
     "user": "",
     "assistant": "[chart/photo sent]"
+  },
+  {
+    "user": "That form graph looks wrong",
+    "assistant": "Fresh data \u2014 here's what ICU actually shows for the last 30 days:\n\n\n\nThe jump from \u22124 (Thu) to +5 today is real \u2014 no TSS added since Thursday's swim, ATL decayed overnight. What specifically looked wrong on the previous chart?"
   }
 ]
