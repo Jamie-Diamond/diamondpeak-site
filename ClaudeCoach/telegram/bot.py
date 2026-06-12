@@ -839,20 +839,31 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
 
     m = _ANKLE_RE.match(txt)
     if m and slug:
-        location = (m.group(2) or m.group(1)).strip() if m.group(1).lower() != "ankle" else "ankle"
+        kw = m.group(1).lower()
+        location = "ankle" if kw == "ankle" else (m.group(2) or "general").strip().lower()
         score = float(m.group(3))
         state = _load_state_json(slug)
-        prev  = state.get("ankle", {}).get("pain_during")
-        state.setdefault("ankle", {})["pain_during"] = int(score)
+        # The ankle keeps its long-standing block (R1 modulation, watchdog and the
+        # morning card read it); every other location tracks independently under
+        # state["pain"][location] so trends never mix across body parts.
+        if location == "ankle":
+            block = state.setdefault("ankle", {})
+            prev  = block.get("pain_during")
+            block["pain_during"] = int(score)
+        else:
+            block = state.setdefault("pain", {}).setdefault(location, {})
+            prev  = block.get("current")
+            block["current"] = int(score)
+            block["last_logged"] = today
 
-        # Rolling pain history — keep last 20 readings
-        hist = state["ankle"].setdefault("history", [])
+        # Rolling pain history — per location, keep last 20 readings
+        hist = block.setdefault("history", [])
         hist.append({"date": today, "score": int(score)})
-        state["ankle"]["history"] = hist[-20:]
+        block["history"] = hist[-20:]
 
         state["last_updated"] = today
         _save_state_json(slug, state)
-        _git_commit(f"auto: ankle pain {score} {slug} {today}")
+        _git_commit(f"auto: {location} pain {score} {slug} {today}")
 
         trend = ""
         if prev is not None:
@@ -863,8 +874,8 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
 
         reply = f"Logged {location} pain {int(score)}/10{trend}."
 
-        # Trend and rebalancing alerts
-        recent_scores = [h["score"] for h in state["ankle"]["history"][-3:]]
+        # Trend and rebalancing alerts — within this location's history only
+        recent_scores = [h["score"] for h in block["history"][-3:]]
         if len(recent_scores) >= 3 and recent_scores[-1] > recent_scores[-2] > recent_scores[-3]:
             reply += (
                 "\n\n⚠️ *Three readings rising in a row.* "

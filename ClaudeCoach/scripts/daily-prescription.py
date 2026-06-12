@@ -72,6 +72,7 @@ Step 1 — Pull live data via Bash (use today's date {today} for all calculation
 Step 2 — Read these files:
 - {athlete_dir}/persistent-rules.md (permanent coaching rules — zone targets, HR caps, and any [perm] rules OVERRIDE all defaults when writing event descriptions)
 - {athlete_dir}/current-state.md
+- {athlete_dir}/current-state.json (ankle block + per-location "pain" blocks from quick-logs — if any non-ankle location shows recent pain ≥4 or a rising history, factor it into today's prescription and say so in the reasoning)
 - {athlete_dir}/session-log.json (most recent entry = last RPE)
 
 Step 3 — Assemble the readiness dict:
