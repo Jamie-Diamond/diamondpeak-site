@@ -1,21 +1,5 @@
 [
   {
-    "user": "1",
-    "assistant": "Logged. RPE 1 \u2014 recovery-level effort."
-  },
-  {
-    "user": "What's my run plan?",
-    "assistant": "**This evening \u2014 Z2 Run \u00b7 60 min**\n\nContinuous Z2 \u00b7 HR 133\u2013146 \u00b7 GAP ~4:40\u20135:10/km\nStop if ankle >2/10"
-  },
-  {
-    "user": "That will give a higher TSS than planned. Are we happy with that?",
-    "assistant": "Yes \u2014 plan TSS was based on walk-run format. Continuous Z2 over 60 min will be ~80\u201385 TSS vs the ~55 walk-run estimate.\n\nWith TSB at *0.1* going in and Tuesday's run already done at 65 TSS, the week load is fine. Ankle is the binding constraint, not TSS.\n\nGo run."
-  },
-  {
-    "user": "New run?",
-    "assistant": "*Coventry Z2 Run \u00b7 Wed 10 Jun*\n\n10.76 km \u00b7 51 min \u00b7 TSS *68*\nGAP *4:44/km* (+42s vs threshold) \u00b7 avg HR *144* \u00b7 max 159\nDecoupling *1.8%* \u00b7 cadence 84 \u00b7 elev +96m\nRunning power: *429W* (89% run FTP)\n\nBasically identical to yesterday \u2014 same pace, same HR, marginally better decoupling. Two solid Z2 efforts back to back.\n\n\u26a0\ufe0f Weekly run km: 10.2 (Tue) + 10.8 (Wed) = *20.9 km* \u2014 just over the 19.7 km cap (10% on last week's 17.9 km). No more running this week. Thu is swim, Fri\u2013Sun is bikes.\n\nStrava description pushed.\n\nAnkle score during and this morning?"
-  },
-  {
     "user": "Ankle was a 2 uphill 0/1s elsewhere.",
     "assistant": "Logged. 2/10 uphill, 0\u20131 elsewhere \u2014 identical pattern to Tuesday. Consistent with the anterior impingement signature. Physio appointment still the blocker."
   },
@@ -118,5 +102,21 @@
   {
     "user": "That form graph looks wrong",
     "assistant": "Fresh data \u2014 here's what ICU actually shows for the last 30 days:\n\n\n\nThe jump from \u22124 (Thu) to +5 today is real \u2014 no TSS added since Thursday's swim, ATL decayed overnight. What specifically looked wrong on the previous chart?"
+  },
+  {
+    "user": "",
+    "assistant": "*New activity*\n\nNP 224w \u00b7 IF 0.75 \u00b7 VI 1.14 (plan <1.08) \u00b7 TSS 229 \u00b7 247 min \u00b7 137.9 km\nDecoupling 0.59% \u2014 outstanding, well inside <5% target\nNutrition \u2014 g carbs/hr and bottles? (recent avg: 82g/hr [Jun 5: 59g/hr \u00b7 Jun 7: 104g/hr] \u00b7 race target 90g/hr)\n_vs plan (Fri 12 Jun \u2014 Long Z2 ride 240 min): 170\u2192229 TSS (+35%)_"
+  },
+  {
+    "user": "",
+    "assistant": "Quick log \u2014 Wandsworth Road Cycling:"
+  },
+  {
+    "user": "",
+    "assistant": "\ud83c\udfc6 PR: Long Wood Pain\n\ud83c\udfc6 PR: Furze Platt Rd straight\n\ud83c\udfc6 PR: Gardner Road Sprint\n\ud83c\udfc6 PR: Cookham Moor Sprint\n\ud83c\udfc6 PR: Grid to Grid (Dorney - Eton Wick)\n\ud83c\udfc6 PR: Return Sprint\n\ud83c\udfc6 PR: Sign to sign, Eton Wick to Eton\n\ud83c\udfc6 PR: Quick, there\u2019s a 30!!!\n\ud83c\udfc6 PR: Home Park E Extended Dash\n\ud83c\udfc6 PR: Windsor to Walton\n\ud83c\udfc6 PR: Home Park E Short Dash\n\ud83c\udfc6 PR: King Edward Quick Climb\n\ud83c\udfc6 PR: Chertsey Rd before the roundabout\n\ud83c\udfc6 PR: 1km push back\n\ud83c\udfc6 PR: Hampton to Kingston flat\n\ud83c\udfc6 PR: Hampton 1k\n\ud83c\udfc6 PR: Hulme's Highway to Hell\n\ud83c\udfc6 PR: La  Tuesday Chaingang Sprint"
+  },
+  {
+    "user": "Same nutrition as Sundays ride.",
+    "assistant": "Logged. *402g carbs \u00b7 2,800ml \u00b7 ~98g/hr* (vs 104g/hr Sunday \u2014 marginally lighter over the longer ride). Solid fuelling, just above race target of 90g/hr."
   }
 ]

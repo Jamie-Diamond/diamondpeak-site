@@ -14,11 +14,11 @@
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
-    "hydration_ml": null,
-    "notes": null,
+    "nutrition_g_carb": 402,
+    "hydration_ml": 2800,
+    "notes": "Same nutrition as Sun 7 Jun: 2x SiS Energy Choco Fudge bar (86g) + 2x SiS Beta Fuel Chews (90g) + 2x Maurten 320 (160g) + 3x High 5 Caffeine scoops (66g) + 2x PH1500 (electrolytes). 402g carbs over 247 min = ~98g/hr. 5 bottles = 2800ml.",
     "logged_at": "2026-06-12T11:00:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i156278830",
