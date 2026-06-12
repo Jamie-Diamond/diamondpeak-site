@@ -1,9 +1,5 @@
 [
   {
-    "user": "Ankle was a 2 uphill 0/1s elsewhere.",
-    "assistant": "Logged. 2/10 uphill, 0\u20131 elsewhere \u2014 identical pattern to Tuesday. Consistent with the anterior impingement signature. Physio appointment still the blocker."
-  },
-  {
     "user": "",
     "assistant": "*New activity*\n\n10.76 km \u00b7 avg GAP 4:43/km \u00b7 +41 sec/km vs threshold (4:02/km)\n~87% HR \u2264150 cap \u00b7 decoupling 1.8%\nRunning power: 428w avg \u00b7 lap power stable 410\u2013460w throughout \u2014 hilly route (+96m); no fade\nInjury pain score during and this morning? (0-10)\n_vs plan (Wed 10 Jun \u2014 Z2 run 60 min): 45\u219268 TSS (+51%)_"
   },
@@ -118,5 +114,9 @@
   {
     "user": "Same nutrition as Sundays ride.",
     "assistant": "Logged. *402g carbs \u00b7 2,800ml \u00b7 ~98g/hr* (vs 104g/hr Sunday \u2014 marginally lighter over the longer ride). Solid fuelling, just above race target of 90g/hr."
+  },
+  {
+    "user": "Update the Strava caption to include the nutrition",
+    "assistant": "Done \u2014 Strava description updated:\n\nLong Z2 Ride \u00b7 247 min \u00b7 137.9 km\n\nNP 224W \u00b7 IF 0.75 \u00b7 VI 1.14 \u00b7 TSS 229\nDecoupling 0.59%\n\nNutrition: 402g carbs \u00b7 2,800ml \u00b7 ~98g/hr"
   }
 ]
