@@ -26,6 +26,7 @@ TOOLS = "Read,Write,Edit,Bash"
 # (see tests/test_no_duplicate_maths.py and docs/remediation-plan.md WS A).
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
+import menstrual  # noqa: E402
 import ops_log  # noqa: E402
 from primitives.load import (   # noqa: E402
     compute_required_tss,
@@ -755,6 +756,33 @@ In Step 6, honour this distribution, include the brick(s), and schedule any due 
         except Exception:
             pass
 
+    # Menstrual-cycle forecast (tracking athletes only — profile menstrual_tracking
+    # + a logged period start). Python-computed from the bot-logged anchor so the
+    # planner schedules around real phase dates, not the prose in current-state.md.
+    menstrual_block = ""
+    try:
+        _cycle_lines = menstrual.forecast_block(slug, _next_mon, 14, profile=profile)
+    except Exception:
+        _cycle_lines = ""
+    if _cycle_lines:
+        menstrual_block = f"""
+## MENSTRUAL CYCLE FORECAST — Python-computed from the logged cycle anchor, authoritative
+Phase windows across this 14-day plan:
+{_cycle_lines}
+Apply when PLACING sessions (within the HARD day rules — never break a day rule for this):
+- Where the day rules leave a choice, place the hardest quality sessions (threshold/VO2/race-pace)
+  on FOLLICULAR or OVULATION days, and prefer Z2/easy/technique work on MENSTRUAL days.
+- Sessions on MENSTRUAL days: keep them, but write the description RPE-led ("hold targets
+  loosely — RPE over pace/power; don't chase numbers if energy is flat").
+- Sessions on LUTEAL days: expect higher RPE and core temp for the same numbers — do not stack
+  the two hardest sessions of the week back-to-back in late luteal, and note the effect in the
+  description of key sessions. Heat sessions compound with luteal core-temp elevation.
+- Do NOT reduce the week's total TSS target because of cycle phase — this shapes WHERE quality
+  lands and how targets are framed, not how much training is planned.
+"""
+
+
+
     # Step 1 data: if pre-fetched in Python (run_for_athlete), inject it so the LLM
     # skips 5 tool-call round-trips. Otherwise tell it to fetch (tests / fallback).
     if prefetched:
@@ -793,6 +821,7 @@ a failed run — {name} loses trust when the dates are wrong.
 If the profile endpoint current_date_local disagrees with {today}, flag it and use {today}.
 {load_accountability_block}
 {blueprint_block}
+{menstrual_block}
 {step1_block}
 
 Step 2 — Read (skip any file that does not exist):

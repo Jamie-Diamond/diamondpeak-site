@@ -299,6 +299,51 @@ class TestR7Heat:
 
 
 # ---------------------------------------------------------------------------
+# R8 — Luteal-phase overlay
+# ---------------------------------------------------------------------------
+
+class TestR8Luteal:
+    def test_no_cycle_phase_never_fires(self):
+        p = modulate_session(planned_threshold(), fresh_readiness())
+        assert "R8" not in p.applied_rules
+
+    def test_luteal_high_intensity_reduces(self):
+        r = fresh_readiness({"cycle_phase": "luteal", "cycle_day": 20})
+        p = modulate_session(planned_threshold(), r)   # intensity 1.0 ≥ 0.85
+        assert "R8" in p.applied_rules
+        assert p.target_intensity == 1.0 - _INTENSITY_STEP
+        assert "cycle day 20" in p.reasoning_trails[0]
+
+    def test_luteal_warm_z2_intensity_triggers_on_temp(self):
+        r = fresh_readiness({"cycle_phase": "luteal", "cycle_day": 22, "temp_c": 24.0})
+        p = modulate_session(planned_threshold({"target_intensity": 0.8}), r)
+        assert "R8" in p.applied_rules
+
+    def test_luteal_cool_moderate_intensity_no_fire(self):
+        r = fresh_readiness({"cycle_phase": "luteal", "cycle_day": 22, "temp_c": 15.0})
+        p = modulate_session(planned_threshold({"target_intensity": 0.8}), r)
+        assert "R8" not in p.applied_rules
+
+    def test_follicular_never_fires(self):
+        r = fresh_readiness({"cycle_phase": "follicular", "cycle_day": 9, "temp_c": 25.0})
+        p = modulate_session(planned_threshold(), r)
+        assert "R8" not in p.applied_rules
+
+    def test_easy_session_immune(self):
+        r = fresh_readiness({"cycle_phase": "luteal", "cycle_day": 20, "temp_c": 25.0})
+        p = modulate_session(planned_z2(), r)
+        assert "R8" not in p.applied_rules
+
+    def test_stacks_with_heat(self):
+        r = fresh_readiness({"cycle_phase": "luteal", "cycle_day": 20,
+                             "temp_c": 28.0, "dew_point_c": 18.0})
+        p = modulate_session(planned_threshold(), r)
+        assert "R8" in p.applied_rules and "R7" in p.applied_rules
+        # R8 −5% then R7 multiplicative heat correction on top
+        assert p.target_intensity < 1.0 - _INTENSITY_STEP
+
+
+# ---------------------------------------------------------------------------
 # Stacking — multiple rules fire together
 # ---------------------------------------------------------------------------
 

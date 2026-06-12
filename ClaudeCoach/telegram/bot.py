@@ -42,6 +42,11 @@ except Exception:
     def _level_block(level: str) -> str:  # type: ignore[misc]
         return ""
 
+try:
+    import menstrual as _menstrual
+except Exception:
+    _menstrual = None
+
 _whisper_model = None
 
 
@@ -411,6 +416,8 @@ _WEEKLY_SUMMARY_RE = re.compile(
 )
 _WEIGHT_RE   = re.compile(r'^(?:weight|kg|weigh(?:ed)?)\s+([\d.]+)\s*(?:kg)?\s*$', re.I)
 _HEAT_RE     = re.compile(r'^(?:heat|bath)\s+([\d.]+)\s*(?:min|m)?\s*$', re.I)
+_PERIOD_RE    = re.compile(r'^period(?:\s+start(?:ed)?)?(?:\s+(today|yesterday|\d{4}-\d{2}-\d{2}))?\s*$', re.I)
+_CYCLE_DAY_RE = re.compile(r'^cycle\s+day\s+(\d{1,2})\s*$', re.I)
 _PLAN_RE     = re.compile(r'^(?:generate\s+plan|plan\s+(?:next\s+)?(?:2\s+)?weeks?|plan\s+ahead)\s*$', re.I)
 _REPLAN_RE   = re.compile(r'^/?replan(?:\s+week)?\s*$', re.I)
 _FTP_RE      = re.compile(r'^(?:ftp\s+(?:retest|result|update|new)|new\s+ftp)\s+([\d.]+)\s*(?:w(?:atts?)?)?\s*$', re.I)
@@ -890,6 +897,40 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
         total = state["heat"]["sessions_cumulative"]
         remaining = max(0, 14 - total)
         return f"Logged heat session {mins} min. {total} done" + (f" — {remaining} still needed to hit 14-session floor." if remaining else " — above minimum, keep banking.")
+
+    m = _PERIOD_RE.match(txt)
+    if m and _menstrual is not None and slug:
+        when = (m.group(1) or "today").lower()
+        if when == "today":
+            d = date.today()
+        elif when == "yesterday":
+            d = date.today() - timedelta(days=1)
+        else:
+            try:
+                d = date.fromisoformat(when)
+            except ValueError:
+                return ("Couldn't read that date — try `period started`, "
+                        "`period started yesterday`, or `period 2026-06-10`.")
+        mc = _menstrual.log_period_start(slug, d)
+        _git_commit(f"auto: cycle anchor update {slug} {today}")
+        cycle_len = int(mc.get("cycle_length_days", 28))
+        day_now = (date.today() - d).days + 1
+        nxt = (d + timedelta(days=cycle_len)).strftime("%-d %b")
+        tail = (" Phases are factored into your plan and daily sessions."
+                if _menstrual.enabled(slug) else "")
+        return (f"Logged period start {d.strftime('%-d %b')} — cycle day {day_now} today "
+                f"({_menstrual.phase_from_day(day_now, cycle_len)}). "
+                f"Next expected ~{nxt}.{tail}")
+
+    m = _CYCLE_DAY_RE.match(txt)
+    if m and _menstrual is not None and slug:
+        n = int(m.group(1))
+        if not 1 <= n <= 35:
+            return "Cycle day must be between 1 and 35."
+        mc = _menstrual.set_cycle_day(slug, n)
+        _git_commit(f"auto: cycle anchor update {slug} {today}")
+        phase = _menstrual.phase_from_day(n, int(mc.get("cycle_length_days", 28)))
+        return f"Set cycle day {n} ({phase}). Say `period started` on day 1 to keep this accurate."
 
     if _REPLAN_RE.match(text.strip()):
         return "__REPLAN__"
@@ -2221,6 +2262,8 @@ def main():
 
             if text.lower() in ("/start", "/help"):
                 race_name  = athlete.get("race_name", "your race")
+                cycle_help = ("  period started — log cycle start (phases feed your plan)\n"
+                              if _menstrual is not None and _menstrual.enabled(slug) else "")
                 send(token, chat_id,
                      f"*ClaudeCoach* — {race_name}\n\n"
                      "*Quick commands (instant):*\n"
@@ -2231,7 +2274,8 @@ def main():
                      "  strength — today's gym session\n"
                      "  ankle 3 — log pain score\n"
                      "  82.5 kg — log weight\n"
-                     "  heat 30 — log heat session\n\n"
+                     "  heat 30 — log heat session\n"
+                     f"{cycle_help}\n"
                      "*Ask anything:*\n"
                      "  _how am I looking?_\n"
                      "  _what's today's session?_\n"

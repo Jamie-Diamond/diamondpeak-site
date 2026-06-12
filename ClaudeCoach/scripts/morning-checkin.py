@@ -19,13 +19,35 @@ from coaching_levels import level_block as _level_block
 from primitives.planned_tss import planned_sessions_block
 import ops_log
 import heat as heat_lib
+import menstrual as menstrual_lib
 
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block=""):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
+
+    cycle_block = ""
+    cycle_card_line = ""
+    cycle_question = ""
+    if cycle:
+        if cycle.get("phase"):
+            cycle_block = (
+                f"\n## Menstrual cycle (pre-computed — authoritative)\n"
+                f"Cycle day {cycle['day']} — {cycle['phase']} phase: {cycle['cue']}\n"
+            )
+        if cycle.get("phase") in ("menstrual", "luteal"):
+            cycle_card_line = (
+                "[🌸 One plain-English line from the cycle block above — what today may "
+                "feel like and how to approach targets. No cycle-day numbers, no jargon.]\n"
+            )
+        if cycle.get("overdue"):
+            cycle_question = (
+                "- FIRST PRIORITY question (overrides the ones below): the cycle anchor is "
+                "overdue — ask \"Has your period started? Reply 'period started' (or "
+                "'period started yesterday') so cycle-aware planning stays accurate.\"\n"
+            )
 
     injury_question = ""
     if injuries:
@@ -35,6 +57,7 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
             "ask \"Injury pain score before heading out? (0-10)\"\n"
         )
     injury_question += "- Else if no weight reading in the last 3 days: ask \"Weight this morning?\""
+    injury_question = cycle_question + injury_question
 
     injuries_note = (
         "; ".join(
@@ -83,7 +106,7 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
 You are generating the morning briefing for {first_name}'s training day.
 
 {_level_block(coaching_level)}
-{recovery_block}{wellness_block}{planned_section}
+{recovery_block}{wellness_block}{cycle_block}{planned_section}
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
@@ -117,6 +140,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 [If recovery ORANGE or RED: ⚠️ [one plain-English sentence on what to do differently — no scores]]
 [If watchdog flag active: ⚠️ [flag in plain English — one line]]
 [If the 05:00 prescription check modified or swapped today's session: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, say nothing]]
+{cycle_card_line}
 [If today's session is Ride or Brick >90 min: 🍌 Nutrition — target [min(avg+10,90)]g/hr · eat at 15 min then every 25 min]
 [If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact]]
 [If open action is due within 3 days: 📌 [action] due [date]]
@@ -380,9 +404,19 @@ def run_athlete(slug, athlete_cfg):
         print(f"[{slug}] planned-TSS prefetch failed: {exc}", file=sys.stderr)
 
     coaching_level = profile.get("coaching_level", "mid")
+
+    # Menstrual-cycle phase (tracking athletes only) — same wellness rows give the
+    # same-day ICU override if the athlete also logs the phase in intervals.icu.
+    cycle = None
+    try:
+        cycle = menstrual_lib.phase_for(slug, profile=profile, wellness=wellness_rows)
+    except Exception:
+        pass
+
     prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
                            wellness_line=wellness_line, heat_protocol=heat_protocol,
-                           coaching_level=coaching_level, planned_block=planned_block)
+                           coaching_level=coaching_level, planned_block=planned_block,
+                           cycle=cycle)
 
     with open(log_file, "a") as lf:
         result = subprocess.run(

@@ -12,6 +12,8 @@ Rule inventory (applied in order; hard rules fire first):
     R5  Prior RPE reduction   — last session RPE ≥ 8 → −5% intensity
     R6  Sleep swap (two-sig)  — sleep < 6h AND HRV < −5% → swap quality → Z2
     R7  Heat adjustment       — temp > 18°C → apply L1 env_pacing correction
+    R8  Luteal overlay        — luteal phase AND (temp > 20°C OR intensity ≥ 0.85)
+                                → −5% intensity (core temp/RPE run higher in luteal)
 
 Design rule: start with 7; add only when an observed failure isn't caught.
 Sources: reference/rules.md, upgrade plan W2 spec, multi-signal corroboration rule.
@@ -39,6 +41,8 @@ _SLEEP_SWAP_H: float = 6.0        # hours below this → two-signal swap candida
 _SLEEP_REDUCE_H: float = 7.0      # hours below this → single-signal reduce (checked in R6)
 _ANKLE_PAIN_RUN_CAP: int = 2       # pain > this → no run quality
 _INTENSITY_STEP: float = 0.05      # standard reduction increment
+_LUTEAL_TEMP_C: float = 20.0       # luteal + ambient above this → R8 fires
+_LUTEAL_INTENSITY: float = 0.85    # luteal + planned intensity at/above this → R8 fires
 
 
 # Session types with run load — ankle rule applies
@@ -285,6 +289,40 @@ def _r6_sleep_two_signal(
     return RuleResult("R6", False, "")
 
 
+def _r8_luteal_overlay(
+    planned: dict, readiness: dict
+) -> RuleResult:
+    """R8: Luteal phase AND (ambient > 20°C OR planned intensity ≥ 0.85)
+    → −5% intensity.
+
+    Core temperature and RPE run higher in the luteal phase, and the effect
+    compounds with heat — preserve session completion over chasing numbers.
+    `cycle_phase` is computed deterministically (lib/menstrual.py) and is only
+    present for athletes with menstrual_tracking enabled; absent → never fires.
+    """
+    if not _is_quality(planned["session_type"]):
+        return RuleResult("R8", False, "")
+    if readiness.get("cycle_phase") != "luteal":
+        return RuleResult("R8", False, "")
+
+    temp = readiness.get("temp_c", 15.0)
+    base = planned.get("target_intensity", 1.0)
+    if temp <= _LUTEAL_TEMP_C and base < _LUTEAL_INTENSITY:
+        return RuleResult("R8", False, "")
+
+    driver = (f"ambient {temp:.0f}°C (>{_LUTEAL_TEMP_C:.0f}°C)"
+              if temp > _LUTEAL_TEMP_C
+              else f"planned intensity {base:.2f} (≥{_LUTEAL_INTENSITY:.2f})")
+    day = readiness.get("cycle_day")
+    day_str = f" (cycle day {day})" if day else ""
+    trail = (
+        f"Luteal phase{day_str} with {driver} "
+        f"→ R8 luteal overlay → intensity −{_INTENSITY_STEP * 100:.0f}% "
+        f"→ core temp and RPE run higher in luteal; complete the session rather than chase numbers"
+    )
+    return RuleResult("R8", True, trail)
+
+
 def _r7_heat(
     planned: dict, readiness: dict
 ) -> tuple[RuleResult, float]:
@@ -351,6 +389,8 @@ def modulate_session(
             "ankle_quality_cleared": bool,
             "temp_c": float,
             "dew_point_c": float,
+            "cycle_phase": str|None,        # optional — lib/menstrual.py (tracking athletes)
+            "cycle_day": int|None,          # optional — 1-based cycle day
         }
 
     Returns:
@@ -444,6 +484,13 @@ def modulate_session(
         if r5.fired:
             applied.append(r5.code)
             trails.append(r5.reasoning_trail)
+            intensity = round(intensity - _INTENSITY_STEP, 4)
+
+        # R8: luteal-phase overlay (menstrual_tracking athletes only)
+        r8 = _r8_luteal_overlay(planned, readiness)
+        if r8.fired:
+            applied.append(r8.code)
+            trails.append(r8.reasoning_trail)
             intensity = round(intensity - _INTENSITY_STEP, 4)
 
         # R6 partial: single sleep signal → reduce interval count only (no swap triggered above)

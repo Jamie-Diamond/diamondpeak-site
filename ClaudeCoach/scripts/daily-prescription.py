@@ -11,6 +11,7 @@ from pathlib import Path
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
 sys.path.insert(0, str(BASE / "lib"))
 from coaching_levels import level_block as _level_block
+import menstrual
 import ops_log
 from git_sync import sync_commit_push
 sys.path.insert(0, str(BASE / "ironman-analysis"))
@@ -37,14 +38,28 @@ def trim_log(path: Path, max_lines: int = 5000):
         pass
 
 
-def build_prompt(slug: str, name: str, race_name: str, coaching_level: str = "mid") -> str:
+def build_prompt(slug: str, name: str, race_name: str, coaching_level: str = "mid",
+                 cycle: dict | None = None) -> str:
     today = date.today().isoformat()
     athlete_dir = BASE / "athletes" / slug
     first_name  = name.split()[0]
 
+    cycle_block = ""
+    cycle_readiness_lines = ""
+    if cycle and cycle.get("phase"):
+        cycle_block = f"""
+## MENSTRUAL CYCLE (Python-computed — authoritative, do NOT re-derive)
+Cycle day {cycle['day']} — {cycle['phase'].upper()} phase: {cycle['cue']}
+{"If the phase is menstrual: write the prescribed session description RPE-led — hold pace/power targets loosely, do not chase numbers if energy is flat." if cycle['phase'] == 'menstrual' else ""}"""
+        cycle_readiness_lines = (
+            f'\n  cycle_phase: "{cycle["phase"]}"  [Python-computed above — copy verbatim]'
+            f"\n  cycle_day: {cycle['day']}"
+        )
+
     return f"""You are running the daily session prescription for {name}'s {race_name} coaching system.
 
 {_level_block(coaching_level)}
+{cycle_block}
 
 
 Step 1 — Pull live data via Bash (use today's date {today} for all calculations):
@@ -68,7 +83,7 @@ Step 3 — Assemble the readiness dict:
   ankle_pain_score: from current-state.md (0 if not present)
   ankle_quality_cleared: from current-state.md (True once 4 consecutive pain-free quality sessions confirmed)
   temp_c: today's forecast ambient temp — use 18.0 as fallback if unavailable
-  dew_point_c: today's forecast dew point — use 10.0 as fallback if unavailable
+  dew_point_c: today's forecast dew point — use 10.0 as fallback if unavailable{cycle_readiness_lines}
 
 Step 4 — Identify today's planned session from the events endpoint. Map to session_type:
   Threshold/FTP intervals -> bike_threshold
@@ -317,6 +332,10 @@ def _prescription_shadow(slug: str, cfg: dict) -> None:
             "ankle_pain_score": pain, "ankle_quality_cleared": cleared,
             # temp_c / dew_point_c omitted → engine uses benign defaults (no heat fetch).
         }
+        _cyc = menstrual.phase_for(slug)
+        if _cyc and _cyc.get("phase"):
+            readiness["cycle_phase"] = _cyc["phase"]
+            readiness["cycle_day"] = _cyc["day"]
         rx = modulate_session({k: v for k, v in planned.items() if not k.startswith("_")},
                               readiness)
         with open(LOG_FILE, "a") as lf:
@@ -344,10 +363,12 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         return None
 
     coaching_level = "mid"
+    profile = {}
     profile_path = BASE / "athletes" / slug / "profile.json"
     if profile_path.exists():
         try:
-            coaching_level = json.loads(profile_path.read_text()).get("coaching_level", "mid")
+            profile = json.loads(profile_path.read_text())
+            coaching_level = profile.get("coaching_level", "mid")
         except Exception:
             pass
 
@@ -366,7 +387,17 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
                       athlete=slug)
         return None
 
-    prompt = build_prompt(slug, name, race_name, coaching_level=coaching_level)
+    # Menstrual-cycle phase (tracking athletes only) — deterministic, with a
+    # same-day ICU wellness override if the athlete logs the phase there too.
+    cycle = None
+    try:
+        cycle = menstrual.phase_for(slug, profile=profile,
+                                    wellness=_icu(slug, "wellness", "--days", "3"))
+    except Exception:
+        pass
+
+    prompt = build_prompt(slug, name, race_name, coaching_level=coaching_level,
+                          cycle=cycle)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_prescription_", delete=False, suffix=".txt"
