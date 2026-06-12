@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i156622737",
+    "date": "2026-06-12",
+    "name": "Wandsworth Road Cycling",
+    "sport": "Ride",
+    "tss": 229,
+    "duration_min": 247,
+    "distance_km": 137.9,
+    "avg_power": 197,
+    "norm_power": 224,
+    "avg_hr": 141,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-06-12T11:00:00",
+    "stub": true
+  },
+  {
     "activity_id": "i156278830",
     "date": "2026-06-11",
     "name": "Pool Swim",
