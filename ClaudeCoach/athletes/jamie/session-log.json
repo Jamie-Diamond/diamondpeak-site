@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i156894312",
+    "date": "2026-06-13",
+    "name": "East Hampshire Road Cycling",
+    "sport": "Ride",
+    "tss": 127,
+    "duration_min": 180,
+    "distance_km": 75.4,
+    "avg_power": 153,
+    "norm_power": 196,
+    "avg_hr": 119,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-06-13T12:00:00",
+    "stub": true
+  },
+  {
     "activity_id": "i156622737",
     "date": "2026-06-12",
     "name": "Wandsworth Road Cycling",
