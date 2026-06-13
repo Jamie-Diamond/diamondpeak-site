@@ -1,9 +1,5 @@
 [
   {
-    "user": "I'm a bit short on time, maybe it's best we do 300 meters in to us.",
-    "assistant": "Done \u2014 session updated on the calendar.\n\n**CSS Swim \u00b7 ~46 min \u00b7 ~2,600m**\n\nWU: 400m easy\nDrill: 2\u00d7100m (catch-up, fingertip drag) \u00b7 :15s rest\nMain: **6\u00d7300m @ 1:39/100m** \u00b7 :20s rest\nCD: 200m easy\n\nEach 300m rep = 4:57. TSS ~70. You save ~14 min vs the original 5\u00d7400m without losing much load."
-  },
-  {
     "user": "That's rubbish. You've taken 5 times 400 and gone to 6 times 300, which will not save 14 minutes with it.",
     "assistant": "You're right \u2014 bad maths. \n\n5\u00d7400m main set = ~34 min. 6\u00d7300m = ~32 min. Saves about 2 minutes, not 14.\n\nHow long do you actually have total? I'll build something that fits."
   },
@@ -118,5 +114,9 @@
   {
     "user": "What do you mean ankle clearance review, we spoke about it last night",
     "assistant": "The physio appointment last night was the clearance review \u2014 it's done. Closed that action now so it won't keep appearing in morning check-ins."
+  },
+  {
+    "user": "What TSS do I need to stay Under to not go past -20 fatigue",
+    "assistant": "~**200 TSS** hits TSB \u221220.\n\nAt today's start (CTL 81.1 \u00b7 ATL 89.3 \u00b7 TSB \u22128.2):\n\n| TSS | End-of-day TSB |\n|-----|----------------|\n| 115 (planned Z2) | **\u221211** |\n| 150 | **\u221216** |\n| 200 | **\u221220** |\n\nThe planned 180 min Z2 at ~115 TSS keeps you at \u221211 \u2014 well clear."
   }
 ]
