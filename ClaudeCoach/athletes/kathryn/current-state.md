@@ -49,6 +49,7 @@ None
 - 2026-06-10: bike_z2 90min — GO, execute as planned (no rules fired). ATL 50.6, CTL 51.4; form +0.8. HRV null (not yet synced); last reading 78 (Jun 9), 7d avg 68.3 (Jun 3–9). Sleep null (not yet synced). Last session RPE 5 (easy run Jun 9).
 - 2026-06-11: run_easy 30min + strength 35min — GO, execute as planned (no rules fired for either). ATL 52.4, CTL 51.9; form +0.5. HRV null (not yet synced); last reading 77 (Jun 10), 7d avg 71.4 (Jun 4–10). Sleep null (not yet synced); last reading 7.75h (Jun 10). Last session RPE 6 (ride Jun 10).
 - 2026-06-12: swim 2.0km easy CSS — GO, execute as planned (no rules fired). ATL 52.2, CTL 52.0; form −0.2. HRV null (not yet synced); last reading 61 (Jun 11), 7d avg 71.0 (Jun 5–11). Sleep null (not yet synced). Last session RPE 5 (easy run Jun 11). Menstrual phase day 3 — targets stand, RPE may feel elevated.
+- 2026-06-13: bike_z2 210min (Long ride Z2 3h30) — GO, execute as planned (no rules fired). ATL 49.9, CTL 51.7; form +1.8. HRV null (not synced today); last reading 73 (Jun 12), 7d avg 72.0 (Jun 6–12). Sleep null (not synced). Last session RPE 7 (swim Jun 12 — elevated, menstrual context). Menstrual day 4 — targets stand but RPE-led; hold power loosely if energy flat.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
