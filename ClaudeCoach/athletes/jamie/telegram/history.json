@@ -1,9 +1,5 @@
 [
   {
-    "user": "Look at the Strava times",
-    "assistant": "Strava laps (from Garmin via Strava):\n\n- Rep 1: 5:05 \u2192 **1:42/100m**\n- Rep 2: 4:59 \u2192 **1:40/100m**\n- Rep 3: 5:05 \u2192 **1:42/100m**\n- Rep 4: 5:04 \u2192 **1:41/100m**\n- Rep 5: 4:53 \u2192 **1:38/100m**\n\nDescription updated to match. Sorry for the earlier wrong splits \u2014 those came from ICU auto-detected intervals, not Strava laps."
-  },
-  {
     "user": "If you look at the interval's lapturations do you get the same times and if so why are we reporting different times?",
     "assistant": "Yes and no. ICU intervals vs Strava laps:\n\n| Rep | ICU moving time | Strava elapsed | Diff |\n|-----|----------------|----------------|------|\n| 1 | 5:09 (1:43/100m) | 5:05 (1:42/100m) | +4s |\n| 2 | 5:02 (1:41/100m) | 4:59 (1:40/100m) | +3s |\n| 3 | 5:07 (1:42/100m) | 5:05 (1:42/100m) | +2s |\n| 4 | 5:06 (1:42/100m) | 5:04 (1:41/100m) | +2s |\n| 5 | 4:57 (1:39/100m) | 4:53 (1:38/100m) | +4s |\n\nICU is 2\u20134 seconds longer per rep. It uses `velocity_smooth` to detect interval boundaries, which slightly over-extends each rep into the surrounding rest. Garmin's native lap markers (what Strava shows) are based on actual button presses \u2014 those are the correct boundaries.\n\nSo the durations don't match exactly, which is why the paces differed slightly. The Strava splits are the right source \u2014 which is why the rule exists."
   },
@@ -118,5 +114,9 @@
   {
     "user": "It was an easy ride. I'm not going to do 90g for a chilled ride",
     "assistant": "Fair point \u2014 90g/hr is the race target, not a training minimum. 53g/hr is fine for a Z2 spin."
+  },
+  {
+    "user": "",
+    "assistant": "*Tomorrow \u2014 Z2 Ride 4 hr + Strength*\n\n\u2022 NP 163\u2013223 W (IF 0.52\u20130.71) \u2022 HR cap \u2264146 bpm\n\u2022 Cadence 85\u201395 rpm, TT position, VI <1.08\n\u2022 Strength: upper body + core, no loaded calf raises\n\n*Nutrition:* 70 g/hr carbs + 600 ml/hr fluid \u2014 Maurten 320 + Beta Fuel chews from 30 min\n*Sleep:* \u22658h tonight\n*Form:* \u221222 (Heavy)"
   }
 ]
