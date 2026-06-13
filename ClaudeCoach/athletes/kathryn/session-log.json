@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i156894312",
+    "date": "2026-06-13",
+    "name": "Long ride Z2 3h30",
+    "sport": "Ride",
+    "tss": 205,
+    "duration_min": 180,
+    "distance_km": 75.1,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": null,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": 98,
+    "hydration_ml": 1250,
+    "notes": "Food: 1x Clif macadamia & white choc bar (~44g carb), 1x SiS choc fudge bar (~23g carb), 6x Maynard's fizzy fish (~18g carb), 0.5x banana (~13g carb) = ~98g total (~33g/hr vs 30g/hr target). Hydration: 500ml electrolyte + 750ml water = 1,250ml (~417ml/hr vs 500ml/hr target). Menstrual Day 5.",
+    "logged_at": "2026-06-13T12:00:00",
+    "stub": false
+  },
+  {
     "activity_id": "i156579952",
     "date": "2026-06-12",
     "name": "Pool Swim",
