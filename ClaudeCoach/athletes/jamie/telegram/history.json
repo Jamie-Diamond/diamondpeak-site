@@ -1,17 +1,5 @@
 [
   {
-    "user": "",
-    "assistant": "*Good morning \u2014 Thu 11 Jun*\n\n*Today:* CSS swim 60 min \u00b7 ~35 TSS\nWU 400m easy \u00b7 Drill 2\u00d7100m \u00b7 Main 5\u00d7400m @ 1:39/100m \u00b7 20s rest \u00b7 CD 200m \u00b7 ~2,800m\n\n\u26a0\ufe0f 1 of 2 strength sessions done this week \u2014 aim for a second before Sunday\n\nWeight this morning?\n\n_100 days to IM Italy Emilia-Romagna_"
-  },
-  {
-    "user": "Ankle this morning of 1/2 But has loosened off quickly.",
-    "assistant": "Logged \u2014 1\u20132/10 this morning (after Wed run), loosened off quickly. Up from 0 yesterday morning. Pattern holds: impingement signature uphill/warmup, clears with movement. Swim today \u2014 ankle not relevant."
-  },
-  {
-    "user": "The TSS for the swim seems wrong",
-    "assistant": "You're right \u2014 ~35 was wrong. The planned event has no TSS assigned, and that was a bad estimate on my part.\n\nCorrect figure: a 60-min CSS session (IF \u2248 0.97\u20131.0) should be **~85\u201395 TSS**. Tuesday's 52-min swim was 74 TSS \u2014 Thursday's load session is longer and harder, so ~90 is the right number.\n\nI'll fix the plan TSS if it matters for the week view, but the session itself is correct."
-  },
-  {
     "user": "I'm a bit short on time, maybe it's best we do 300 meters in to us.",
     "assistant": "Done \u2014 session updated on the calendar.\n\n**CSS Swim \u00b7 ~46 min \u00b7 ~2,600m**\n\nWU: 400m easy\nDrill: 2\u00d7100m (catch-up, fingertip drag) \u00b7 :15s rest\nMain: **6\u00d7300m @ 1:39/100m** \u00b7 :20s rest\nCD: 200m easy\n\nEach 300m rep = 4:57. TSS ~70. You save ~14 min vs the original 5\u00d7400m without losing much load."
   },
@@ -118,5 +106,17 @@
   {
     "user": "It's now 2cm asymmetric \n\nWe will also do heavy ibuprofen and RICE",
     "assistant": "Logged. Lunge deficit down to **2cm** (from 3\u20134cm) \u2014 measurable improvement in dorsiflexion asymmetry since initial assessment.\n\nRICE + heavy ibuprofen noted. Standard NSAID guidance: 400\u2013600mg 3\u00d7/day with food for 5\u20137 days \u2014 if you're running longer than that, check with the physio. Ibuprofen reduces the synovial irritation cycle that's been maintaining the residual swelling; combined with RICE it's the right move given confirmed ligament tear.\n\nThe 2cm deficit is still functionally meaningful \u2014 explains why uphills still provoke \u2014 but the direction of travel is good."
+  },
+  {
+    "user": "",
+    "assistant": "*Good morning \u2014 Sat 13 Jun*\n\n*Today:* Z2 ride 180 min \u2014 180 min \u00b7 115 TSS\nNP 163\u2013223W \u00b7 HR 133\u2013146 \u00b7 cadence 85\u201395 rpm \u00b7 VI <1.08 \u00b7 TT position \u00b7 hold HR \u2264146 all terrain\n\n\ud83c\udf4c Nutrition \u2014 target 90g/hr \u00b7 eat at 15 min then every 25 min\n\n\u26a0\ufe0f Heat dose below maintenance (1 session in last 14 days) \u2014 add a sauna or hot bath post-ride today\n\n\ud83d\udccc Ankle clearance review due Mon 15 Jun\n\nWeight this morning?\n\n_98 days to IM Italy Emilia-Romagna_"
+  },
+  {
+    "user": "",
+    "assistant": "[chart/photo sent]"
+  },
+  {
+    "user": "What do you mean ankle clearance review, we spoke about it last night",
+    "assistant": "The physio appointment last night was the clearance review \u2014 it's done. Closed that action now so it won't keep appearing in morning check-ins."
   }
 ]
