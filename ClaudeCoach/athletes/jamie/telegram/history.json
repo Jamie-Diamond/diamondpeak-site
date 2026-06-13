@@ -1,21 +1,5 @@
 [
   {
-    "user": "If you look at the interval's lapturations do you get the same times and if so why are we reporting different times?",
-    "assistant": "Yes and no. ICU intervals vs Strava laps:\n\n| Rep | ICU moving time | Strava elapsed | Diff |\n|-----|----------------|----------------|------|\n| 1 | 5:09 (1:43/100m) | 5:05 (1:42/100m) | +4s |\n| 2 | 5:02 (1:41/100m) | 4:59 (1:40/100m) | +3s |\n| 3 | 5:07 (1:42/100m) | 5:05 (1:42/100m) | +2s |\n| 4 | 5:06 (1:42/100m) | 5:04 (1:41/100m) | +2s |\n| 5 | 4:57 (1:39/100m) | 4:53 (1:38/100m) | +4s |\n\nICU is 2\u20134 seconds longer per rep. It uses `velocity_smooth` to detect interval boundaries, which slightly over-extends each rep into the surrounding rest. Garmin's native lap markers (what Strava shows) are based on actual button presses \u2014 those are the correct boundaries.\n\nSo the durations don't match exactly, which is why the paces differed slightly. The Strava splits are the right source \u2014 which is why the rule exists."
-  },
-  {
-    "user": "Can you get the right durations from intervals or is that not an option?",
-    "assistant": "No \u2014 ICU doesn't expose native Garmin laps through any of its API endpoints. The only interval data available via ICU is the auto-detected type (velocity_smooth based), which is what we've already established is 3\u20135s longer per rep.\n\nThe stream types recorded for the swim are: time, cadence, heartrate, distance, velocity_smooth \u2014 no lap marker channel. The native Garmin button-press boundaries exist only in the raw .fit file, and Strava is the one that parses and surfaces them.\n\nSo the rule stands for the right reason: Strava laps = Garmin's actual button presses = correct. ICU intervals = velocity-smooth inference = consistently over-estimated duration. No way to fix that from ICU's API."
-  },
-  {
-    "user": "Ok where possible prefer Strava lap durations for swimming. Not that down and also update the description to match",
-    "assistant": "Confirmed. Description already updated with Strava lap durations \u2014 the reps show the correct times.\n\nStrava laps are the standing rule for swims (native Garmin button presses, not ICU velocity smoothing)."
-  },
-  {
-    "user": "Log the Strava /intervals times as a bug",
-    "assistant": "Logged."
-  },
-  {
     "user": "are we over reporting TSS for swims? this mornings swim doesnt feel as hard as yesterday run on the aerobic system?",
     "assistant": "Short answer: yes, swim TSS over-represents aerobic load by roughly *15\u201325%* vs running.\n\nWhy:\n1. **Rest intervals counted** \u2014 20s between reps + turns aren't removed from the TSS clock; actual swimming time was ~32 min, not 39\n2. **Horizontal = lower cardiac demand** \u2014 hydrostatic pressure assists venous return; same \"effort\" requires less cardiac output than running\n3. **Less muscle mass** \u2014 running (legs, hip stability, ground reaction) has a higher absolute O2 demand\n\nYour 59 swim TSS is probably *45\u201350 run-equivalent* TSS. The 68 TSS run genuinely stressed the aerobic system more despite the lower raw number.\n\nICU doesn't apply sport-specific discounts \u2014 it's a raw pace/IF calculation. I'll keep using raw TSS for CTL/ATL projections (no choice), but your perception is correct: the form chart is slightly pessimistic after swim-heavy weeks."
   },
@@ -118,5 +102,21 @@
   {
     "user": "",
     "assistant": "*Tomorrow \u2014 Z2 Ride 4 hr + Strength*\n\n\u2022 NP 163\u2013223 W (IF 0.52\u20130.71) \u2022 HR cap \u2264146 bpm\n\u2022 Cadence 85\u201395 rpm, TT position, VI <1.08\n\u2022 Strength: upper body + core, no loaded calf raises\n\n*Nutrition:* 70 g/hr carbs + 600 ml/hr fluid \u2014 Maurten 320 + Beta Fuel chews from 30 min\n*Sleep:* \u22658h tonight\n*Form:* \u221222 (Heavy)"
+  },
+  {
+    "user": "Isn't tomorrow short run and ride? 4h z2 would put me in a big big hole",
+    "assistant": "You're right \u2014 240 min Z2 would push TSB to roughly **\u221230**. That's too deep.\n\nCalendar currently shows: Strength 35 min + Z2 Ride 240 min. No run on Sunday.\n\nWere you expecting a run tomorrow, or is that a Tue/Thu thing?\n\nTSB options for Sunday:\n| Session | TSS | End-of-day TSB |\n|---------|-----|----------------|\n| 240 min Z2 + strength | ~161 | **\u221230** |\n| 120 min Z2 + strength | ~81 | **\u221219** |\n| Strength only | ~6 | **\u221214** |\n\nMy suggestion: **120 min Z2 + strength**. Keeps Sunday aerobic, TSB recovers toward \u221210 by Monday, and you're not digging into next week's run quality. What's your preference?"
+  },
+  {
+    "user": "I'm doing an easy run with friends in the morning, then may cycle in the evening. \n\nRun will be 12k at 530 pace",
+    "assistant": "Run (12km @ 5:30/km, ~66 min) \u2248 **50 TSS**\n\nStarting Sunday at ~TSB \u221224 (end of today):\n\n| Sunday sessions | Total TSS | End TSB |\n|----------------|-----------|---------|\n| Run only | 50 | **\u221217** |\n| Run + 120 min Z2 eve | ~125 | **\u221213** |\n| Run + 180 min Z2 eve | ~165 | **\u221219** |\n| Run + 240 min Z2 + strength | ~220 | **\u221228** \u2190 current plan, too deep |\n\nRecommendation: **run in morning + 90\u2013120 min Z2 eve if legs feel fresh** \u2014 that keeps TSB ~\u221213 to \u221217 going into Monday rest. Skip strength Sunday, move to Tuesday.\n\nWant me to update Sunday's calendar to: run 65 min + optional Z2 ride 120 min (drop the 240 min and strength)?Looking at the numbers for Sunday with the run added:\n\nRun (12km @ 5:30/km, ~66 min) \u2248 **50 TSS**\n\nStarting Sunday at ~TSB \u221224 (end of today):\n\n| Sunday sessions | Total TSS | End TSB |\n|----------------|-----------|---------|\n| Run only | 50 | **\u221217** |\n| Run + 120 min Z2 eve | ~125 | **\u221213** |\n| Run + 180 min Z2 eve | ~165 | **\u221219** |\n| Run + 240 min Z2 + strength | ~220 | **\u221228** \u2190 current plan, too deep |\n\nRecommendation: **run in morning + 90\u2013120 min Z2 eve if legs feel fresh** \u2014 that keeps TSB ~\u221213 to \u221217 going into Monday rest. Skip strength Sunday, move to Tuesday.\n\nWant me to update Sunday's calendar to: run 65 min + optional Z2 ride 120 min (drop the 240 min and strength)?"
+  },
+  {
+    "user": "How is run + 120 giving a lower end TSS than no cycle?",
+    "assistant": "That table had an error \u2014 sorry. More TSS always makes TSB more negative on the same day. Previous numbers were wrong.\n\nCorrected from today's estimated end-state (CTL ~85, ATL ~109, TSB ~\u221224):\n\n| Sunday sessions | Total TSS | End TSB |\n|----------------|-----------|---------|\n| Run only | 50 | **\u221216** |\n| Run + 120 min Z2 | ~125 | **\u221225** |\n| Run + 180 min Z2 | ~165 | **\u221230** |\n| Run + 240 min Z2 + strength | ~220 | **\u221237** |\n\nRun only is the lightest option. Any evening ride pushes you deeper going into Monday rest."
+  },
+  {
+    "user": "Ok let's do the run and then plan about the afternoon once done",
+    "assistant": "Done \u2014 Sunday updated to run 12k @ 5:30 in the morning, evening ride/rest TBD based on how you feel post-run."
   }
 ]
