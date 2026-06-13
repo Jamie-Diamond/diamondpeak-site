@@ -1,13 +1,5 @@
 [
   {
-    "user": "Why the sudden verbose Strava caption that's not how we normally do swims",
-    "assistant": "The watcher generated a verbose paragraph description instead of the standard table format \u2014 bug on my end. Fixed now:\n\n```\nCSS Swim \u00b7 39 min \u00b7 2,300m\n\n5\u00d7300m  TGT: 1:39/100m  ACT: 1:43 / 1:41 / 1:42 / 1:42 / 1:39\n\nTSS 59\n```\n\nI'll flag the watcher to follow the swim table format."
-  },
-  {
-    "user": "The lap times you've posted don't match driver or Garmin, where have you got them from and why are they different?",
-    "assistant": "Those splits came from Intervals.icu auto-detected intervals \u2014 not Garmin's native lap data. That's the same source I'm not supposed to use for interval detection.\n\nIntervals.icu is calculating pace from velocity_smooth over the rep duration, which differs slightly from Garmin's native length-by-length calculation.\n\nActual ICU auto-detected paces:\nRep 1: 1:43.0 \u00b7 Rep 2: 1:40.7 \u00b7 Rep 3: 1:42.3 \u00b7 Rep 4: 1:42.0 \u00b7 Rep 5: 1:39.0\n\nWhat do your Garmin splits show for each rep? I'll update the description to the correct numbers."
-  },
-  {
     "user": "Look at the Strava times",
     "assistant": "Strava laps (from Garmin via Strava):\n\n- Rep 1: 5:05 \u2192 **1:42/100m**\n- Rep 2: 4:59 \u2192 **1:40/100m**\n- Rep 3: 5:05 \u2192 **1:42/100m**\n- Rep 4: 5:04 \u2192 **1:41/100m**\n- Rep 5: 4:53 \u2192 **1:38/100m**\n\nDescription updated to match. Sorry for the earlier wrong splits \u2014 those came from ICU auto-detected intervals, not Strava laps."
   },
@@ -118,5 +110,13 @@
   {
     "user": "",
     "assistant": "\ud83c\udfc6 PR: Into Grayshott Straight\n\ud83c\udfc6 PR: Grayshott Green Sprint\n\ud83c\udfc6 PR: Crossways\n\ud83c\udfc6 PR: Hammer Vale drop\n\ud83c\udfc6 PR: www.wiggles\n\ud83c\udfc6 PR: Wrotham Hill\n\ud83c\udfc6 PR: Dunsfold to Laker's Green\n\ud83c\udfc6 PR: Little dipper\n\ud83c\udfc6 PR: Escape from Grayshott"
+  },
+  {
+    "user": "One mauryen 320, one beta fuel chews one sis choco fudge, half a banana",
+    "assistant": "Logged. **159g carbs \u00b7 ~53g/hr** (Maurten 320: 80g \u00b7 Beta Fuel Chews: 40g \u00b7 SiS Choco Fudge: ~26g \u00b7 half banana: ~13g).\n\nThat's well below your recent average (87g/hr) and race target (90g/hr). Strava updated."
+  },
+  {
+    "user": "It was an easy ride. I'm not going to do 90g for a chilled ride",
+    "assistant": "Fair point \u2014 90g/hr is the race target, not a training minimum. 53g/hr is fine for a Z2 spin."
   }
 ]

@@ -14,11 +14,11 @@
     "feel": null,
     "injury_pain_during": null,
     "injury_pain_next_morning": null,
-    "nutrition_g_carb": null,
+    "nutrition_g_carb": 159,
     "hydration_ml": null,
-    "notes": null,
+    "notes": "1x Maurten 320 (80g) + 1x SiS Beta Fuel Chews (40g) + 1x SiS Choco Fudge bar (~26g) + half banana (~13g) = 159g over 180 min = ~53g/hr. Well below recent avg (87g/hr) and race target (90g/hr).",
     "logged_at": "2026-06-13T12:00:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i156622737",
