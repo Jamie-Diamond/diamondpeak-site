@@ -1,17 +1,5 @@
 [
   {
-    "user": "That's rubbish. You've taken 5 times 400 and gone to 6 times 300, which will not save 14 minutes with it.",
-    "assistant": "You're right \u2014 bad maths. \n\n5\u00d7400m main set = ~34 min. 6\u00d7300m = ~32 min. Saves about 2 minutes, not 14.\n\nHow long do you actually have total? I'll build something that fits."
-  },
-  {
-    "user": "",
-    "assistant": "*New activity*\n\n5\u00d7300m \u00b7 CSS 1:39/100m \u00b7 avg rep 1:41/100m (+2s vs CSS)\nRep 1: 1:43/100m (+4s vs CSS) \u00b7 130/142 bpm\nRep 2: 1:41/100m (+2s vs CSS) \u00b7 141/152 bpm\nRep 3: 1:42/100m (+3s vs CSS) \u00b7 135/146 bpm\nRep 4: 1:42/100m (+3s vs CSS) \u00b7 136/150 bpm\nRep 5: 1:39/100m (0s vs CSS) \u00b7 137/151 bpm\n5 of 6 planned reps completed \u00b7 RPE and how did it feel?\n_vs plan (Thu 11 Jun \u2014 CSS swim ~46 min): 60\u219259 TSS (-2%)_"
-  },
-  {
-    "user": "",
-    "assistant": "Quick log \u2014 Pool Swim:"
-  },
-  {
     "user": "Why the sudden verbose Strava caption that's not how we normally do swims",
     "assistant": "The watcher generated a verbose paragraph description instead of the standard table format \u2014 bug on my end. Fixed now:\n\n```\nCSS Swim \u00b7 39 min \u00b7 2,300m\n\n5\u00d7300m  TGT: 1:39/100m  ACT: 1:43 / 1:41 / 1:42 / 1:42 / 1:39\n\nTSS 59\n```\n\nI'll flag the watcher to follow the swim table format."
   },
@@ -118,5 +106,17 @@
   {
     "user": "What TSS do I need to stay Under to not go past -20 fatigue",
     "assistant": "~**200 TSS** hits TSB \u221220.\n\nAt today's start (CTL 81.1 \u00b7 ATL 89.3 \u00b7 TSB \u22128.2):\n\n| TSS | End-of-day TSB |\n|-----|----------------|\n| 115 (planned Z2) | **\u221211** |\n| 150 | **\u221216** |\n| 200 | **\u221220** |\n\nThe planned 180 min Z2 at ~115 TSS keeps you at \u221211 \u2014 well clear."
+  },
+  {
+    "user": "",
+    "assistant": "*New activity*\n\nNP 196w \u00b7 IF 0.66 \u00b7 VI 1.28 \u00b7 75.4 km \u00b7 1,004m gain\nDecoupling \u22126.8% \u2014 HR fell relative to power across 180 min; strong aerobic state into Fitness (CTL) 84, Fatigue (ATL) 106\nLoad (TSS) 127 vs plan 115 (+10.4%) \u2014 within Z2 intent; lap 13 (214W avg \u00b7 HR 136/165) accounts for the overshoot (likely a climb)\nNutrition \u2014 g carbs/hr and bottles? (recent avg: 87g/hr \u00b7 race target 90g/hr)\n_vs plan (Sat 13 Jun \u2014 Z2 ride 180 min): 115\u2192127 TSS (+10%)_"
+  },
+  {
+    "user": "",
+    "assistant": "Quick log \u2014 East Hampshire Road Cycling:"
+  },
+  {
+    "user": "",
+    "assistant": "\ud83c\udfc6 PR: Into Grayshott Straight\n\ud83c\udfc6 PR: Grayshott Green Sprint\n\ud83c\udfc6 PR: Crossways\n\ud83c\udfc6 PR: Hammer Vale drop\n\ud83c\udfc6 PR: www.wiggles\n\ud83c\udfc6 PR: Wrotham Hill\n\ud83c\udfc6 PR: Dunsfold to Laker's Green\n\ud83c\udfc6 PR: Little dipper\n\ud83c\udfc6 PR: Escape from Grayshott"
   }
 ]
