@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i156998992",
+    "date": "2026-06-13",
+    "name": "Surrey hills delivering on their name",
+    "sport": "Ride",
+    "tss": 205,
+    "duration_min": 180,
+    "distance_km": 75.07,
+    "avg_power": 132,
+    "norm_power": 157,
+    "avg_hr": 151,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": 98,
+    "hydration_ml": 1250,
+    "notes": "Food: 1 cliff macadamia bar, sis chocolate fudge bar, 6 Maynard's fizzy fish, 1/2 banana. Drink: 500ml electrolyte, 750ml water.",
+    "logged_at": "2026-06-13T17:00:00",
+    "stub": true
+  },
+  {
     "activity_id": "i156894312",
     "date": "2026-06-13",
     "name": "Long ride Z2 3h30",
