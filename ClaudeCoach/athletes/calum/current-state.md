@@ -44,3 +44,4 @@ No
 | 2026-06-11 | 8.4 | 3.0 | +5.4 | Rest day — no session planned in calendar. No HRV or sleep data. |
 | 2026-06-12 | 8.2 | 2.6 | +5.6 | T5: 2 missed planned sessions in rolling 7d — 2026-06-06 Long Z2 2h 30min (hike done instead), 2026-06-10 Sweetspot Intro 85 min (no ICU activity recorded; 0 load since Jun 7). No HRV or sleep data. |
 | 2026-06-13 | 10.0 | 13.6 | −3.6 | Long Z2 Ride 2h 45min — GO as-planned. No rules fired. Athlete fresh (actual ATL ~2.6 pre-session). No HRV or sleep data. |
+| 2026-06-14 | 9.8 | 11.8 | −2.0 | Rest day — no session planned (Sunday; no weekend rides per persistent rules). No HRV or sleep data. |
