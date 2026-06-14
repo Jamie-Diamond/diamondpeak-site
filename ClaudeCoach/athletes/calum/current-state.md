@@ -23,7 +23,6 @@ No
 - 2026-06-06: Sat Long Z2 Ride 2h 30min — not completed; hike done instead (Saint-Cergue Hiking, 97 min, 8.3 km, 163 m climb)
 
 ## Open Actions
-- [x] Set up initial training plan
 - [x] Plan generated through 2026-06-21 (2026-06-07)
 - [ ] Delete or correct "Z3 Ride 10h" event in Intervals.icu (erroneous 10h hard ride, far exceeds 5h/week cap)
 

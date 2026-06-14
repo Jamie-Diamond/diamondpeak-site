@@ -113,13 +113,10 @@ None
 ---
 
 ## Open Actions
-- [x] Plan reviewed W6-W7 (2026-06-07): 13 sessions existing, 4 constraint violations flagged in W7 (see below)
-- [x] Plan generated W6–W7 (2026-06-07): rebuilt W6 as build week (~519 TSS), W7 violations fixed, nutrition updated to 30g CHO/hr
 - [x] Plan generated W7–W8 (2026-06-08): rebuilt both weeks; W8 had 6 day-label errors + 2 hard violations (Mon swim→run, Wed bike→strength) fixed; Sat 20 extended to 4hr, Sun 21 Z2 spin 2hr added, Sat 27 brick extended to 90min bike, Sun 28 extended to 4hr; nutrition target 30g CHO/hr
 - [x] Plan generated W6–W7 REPLAN (2026-06-08): rebuilt W6 (Wed run→strength, Thu run 60min, Sun ride 2.5hr + brick run 40min); W7 (Mon KB added, Sat extended to 4.5hr + race-pace blocks, Sun run reduced to 70min easy); ~495/505 TSS; nutrition 30g CHO/hr
 - [x] Plan generated W6–W7 REPLAN (2026-06-09): W6 added Wed Z2 bike 90min + Thu strength 35min; Thu run shortened to 30min (run progression cap ~114 TSS/wk); W7 Wed converted run→Z2 bike 90min (run cap breach), Sun run load corrected 100→68 TSS; W6 ~515 TSS / W7 ~520 TSS; nutrition 30g CHO/hr
 - [ ] Fix day-of-week label errors: "Sat 24 May" ride (is Sun) and "Sun 25 May" run (is Mon)
 - [ ] Review Mon 25 May long run (75min) vs. kettlebells constraint — daily cap (90min) exceeded; consider moving run to Sat 23 May
-- [x] W7 VIOLATIONS fixed (2026-06-07): Mon 15 swim deleted (Fri-only rule) · Tue 16 ride → run 50min · Wed 17 bike → run 90min · Fri/Sat/Sun day labels corrected
 - [ ] Begin heat acclimatisation sessions (urgently overdue — T7/T8 alerts firing 25+ days)
 - [ ] Fitness trajectory: ON TRACK — 52.6 CTL now, end-of-base target 60 CTL (29 Jun); required 498 TSS/wk
