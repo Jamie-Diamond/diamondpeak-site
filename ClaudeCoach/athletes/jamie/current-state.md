@@ -118,6 +118,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 ## Off-plan in last 7 days
 
+- **2026-06-14 GO** — Z2 run 66 min (run_easy): no rules fired, execute as planned. CTL 82.1 (Fitness), ATL 92.0 (Fatigue), TSB −10.0 (Form) — mildly fatigued after 356 TSS across Fri/Sat. HRV null (not synced); sleep null (not synced); RHR 56 (above 50–54 baseline — elevated but single signal, session is Z2). Last RPE 8 (swim 2026-06-11). Ankle: 2/10 during run within physio protocol (≤5/10 acceptable); stop-if->5/10 in force; quality_cleared still false. Session: continuous Z2 run with friends, 12 km @ ~5:30/km, HR cap 146. TSS est. ~50.
+
 - **2026-06-13 GO** — Z2 ride 180 min (bike_z2): no rules fired, execute as planned. CTL 81.1 (Fitness), ATL 89.3 (Fatigue), TSB −8.2 (Form) — mildly fatigued after 229 TSS / 247 min yesterday. HRV null (not synced); sleep null (not synced). Last RPE 8 (swim 2026-06-11). Ankle not relevant for bike. Session: TT position, NP 163–223W (55–75% eFTP 297W), HR 133–146, cadence 85–95 rpm, VI <1.08. Nutrition: 70g CHO/hr from 30 min, 600ml/hr fluid. Day-after recovery ride — do not exceed HR 146 regardless of terrain.
 
 - **2026-06-12 GO** — Long Z2 ride 240 min (bike_z2): no rules fired, execute as planned. CTL 77.6 (Fitness), ATL 72.5 (Fatigue), TSB +5.2 (Form) — slightly fresh. HRV null (not synced today); sleep null (not synced). Last RPE 8 (swim 2026-06-11). Ankle not relevant for bike. Session: TT position, NP 163–223W (55–75% eFTP 297W), HR 133–146, cadence 85–95 rpm, VI <1.08. Nutrition: 70g CHO/hr from 30 min, 700ml/hr fluid. Key diagnostic: aerobic decoupling first/last hour (target <5%). Hot bath 20 min post-ride (heat acclimation).
