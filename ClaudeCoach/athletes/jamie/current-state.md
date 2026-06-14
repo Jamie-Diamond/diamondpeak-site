@@ -333,6 +333,12 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-12 — T9 (Tier 2, CLOSED):** B5 ankle clearance review completed 2026-06-12 — physio appointment was the review. Outcome: running cleared as pain allows (≤5/10 during, must resolve ≤4hr/next morning). ATFL + CFL partial tear confirmed on ultrasound. quality_sessions_resumed = false still applies (run format continuous Z2 only; threshold/tempo not yet unlocked). Also persistent carryover (no material change, not re-logging): (1) Book Precision Hydration sweat-sodium test — due 2026-05-31, still pending. (2) TT bike fit appointment — due 2026-05-31, still pending.
 
+- **2026-06-14 — T2 (Tier 2):** CTL ramp peaked at +6.1/wk on Sat 13 Jun (CTL 84.1 on Jun 13 vs CTL 77.9 on Jun 6 = +6.1/wk) while ankle quality_sessions_resumed = false. Cap is +4/wk in rehab. Driven by 229 TSS (Fri 12 Jun) + 127 TSS (Sat 13 Jun) back-to-back. Today ramp has decayed to +1.3/wk (no load yet Jun 14). No immediate load-reduction action needed — the spike was a 2-day event. Monitor next week ramp; France camp Jun 24–29 will produce another spike.
+
+- **2026-06-14 — T7 (Tier 2):** Heat maintenance dose 0.0 in last 14 days (14-day window = Jun 1–Jun 14; May 31 outdoor ride 182 min @ avg 25.7°C exited the window today). Previous entry Jun 12 showed dose 1.0 — signal materially changed. Formal protocol PAUSED on ambient exposure until 2026-08-22. Action: add a sauna or hot-bath session this week (before France camp Jun 24). One session would bring dose to 1.0; two sessions would reach the 2.0 maintenance floor.
+
+- **2026-06-14 — T9 (Tier 2):** Two open actions overdue (last flagged Jun 8, 6 days ago): (1) Book Precision Hydration sweat-sodium test — due 2026-05-31, now 14 days overdue, status pending. (2) TT bike fit appointment — due 2026-05-31, now 14 days overdue, status pending. Race day is 97 days out (19 Sep 2026). Both must be booked before the France training camp (Jun 24) to allow time to act on results.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
