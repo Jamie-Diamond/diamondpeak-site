@@ -1,6 +1,6 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-06-10
+Last updated: 2026-06-14
 
 ## Training Availability
 Max weekly training: **5 hours/week** (cycling)
@@ -19,8 +19,8 @@ Weight: **93 kg**
 No
 
 ## Off-plan in last 7 days
-- 2026-06-01: Geneva Road Cycling (81 min, 28.7 km) — completed Monday; credited to Wed 3 Jun Z2 75min plan (done 2 days early)
-- 2026-06-06: Sat Long Z2 Ride 2h 30min — not completed; hike done instead (Saint-Cergue Hiking, 97 min, 8.3 km, 163 m climb)
+- 2026-06-10: Sweetspot Intro 85 min — not completed (no ICU activity recorded)
+- 2026-06-13: Long Z2 Ride 2h 45min — not completed (no ICU activity recorded)
 
 ## Open Actions
 - [x] Plan generated through 2026-06-28 (2026-06-14)
@@ -42,5 +42,5 @@ No
 | 2026-06-10 | 8.6 | 3.5 | +5.1 | Sweetspot Intro 85 min — GO as-planned. First Build phase session. No rules fired. No HRV or sleep data. |
 | 2026-06-11 | 8.4 | 3.0 | +5.4 | Rest day — no session planned in calendar. No HRV or sleep data. |
 | 2026-06-12 | 8.2 | 2.6 | +5.6 | T5: 2 missed planned sessions in rolling 7d — 2026-06-06 Long Z2 2h 30min (hike done instead), 2026-06-10 Sweetspot Intro 85 min (no ICU activity recorded; 0 load since Jun 7). No HRV or sleep data. |
-| 2026-06-13 | 10.0 | 13.6 | −3.6 | Long Z2 Ride 2h 45min — GO as-planned. No rules fired. Athlete fresh (actual ATL ~2.6 pre-session). No HRV or sleep data. |
-| 2026-06-14 | 9.8 | 11.8 | −2.0 | Rest day — no session planned (Sunday; no weekend rides per persistent rules). T5: 2 missed sessions in rolling 7d — 2026-06-10 Sweetspot Intro 85 min (no ICU activity recorded), 2026-06-13 Long Z2 Ride 2h 45min (absent from history endpoint; fitness load 85 TSS has updated timestamp 2026-06-07, confirming planned not actual). No HRV or sleep data. |
+| 2026-06-13 | 8.0 | 2.3 | +5.7 | Long Z2 Ride 2h 45min — NOT completed. No ICU activity recorded. Actual IcuSync: CTL 7.99 / ATL 2.26. Watchdog had projected session as complete; corrected in weekly summary. No HRV or sleep data. |
+| 2026-06-14 | 7.8 | 2.0 | +5.8 | Weekly summary. T3 Underload fired (0% compliance). Both sessions missed — Sweetspot Intro (Wed 10 Jun) and Long Z2 Ride 2h 45min (Sat 13 Jun). No activities recorded in Intervals.icu this week. Recovery 100/100 GREEN. No HRV or sleep data. |
