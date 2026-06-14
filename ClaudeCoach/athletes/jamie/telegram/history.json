@@ -1,29 +1,5 @@
 [
   {
-    "user": "",
-    "assistant": "[chart/photo sent]"
-  },
-  {
-    "user": "That form graph looks wrong",
-    "assistant": "Fresh data \u2014 here's what ICU actually shows for the last 30 days:\n\n\n\nThe jump from \u22124 (Thu) to +5 today is real \u2014 no TSS added since Thursday's swim, ATL decayed overnight. What specifically looked wrong on the previous chart?"
-  },
-  {
-    "user": "",
-    "assistant": "*New activity*\n\nNP 224w \u00b7 IF 0.75 \u00b7 VI 1.14 (plan <1.08) \u00b7 TSS 229 \u00b7 247 min \u00b7 137.9 km\nDecoupling 0.59% \u2014 outstanding, well inside <5% target\nNutrition \u2014 g carbs/hr and bottles? (recent avg: 82g/hr [Jun 5: 59g/hr \u00b7 Jun 7: 104g/hr] \u00b7 race target 90g/hr)\n_vs plan (Fri 12 Jun \u2014 Long Z2 ride 240 min): 170\u2192229 TSS (+35%)_"
-  },
-  {
-    "user": "",
-    "assistant": "Quick log \u2014 Wandsworth Road Cycling:"
-  },
-  {
-    "user": "",
-    "assistant": "\ud83c\udfc6 PR: Long Wood Pain\n\ud83c\udfc6 PR: Furze Platt Rd straight\n\ud83c\udfc6 PR: Gardner Road Sprint\n\ud83c\udfc6 PR: Cookham Moor Sprint\n\ud83c\udfc6 PR: Grid to Grid (Dorney - Eton Wick)\n\ud83c\udfc6 PR: Return Sprint\n\ud83c\udfc6 PR: Sign to sign, Eton Wick to Eton\n\ud83c\udfc6 PR: Quick, there\u2019s a 30!!!\n\ud83c\udfc6 PR: Home Park E Extended Dash\n\ud83c\udfc6 PR: Windsor to Walton\n\ud83c\udfc6 PR: Home Park E Short Dash\n\ud83c\udfc6 PR: King Edward Quick Climb\n\ud83c\udfc6 PR: Chertsey Rd before the roundabout\n\ud83c\udfc6 PR: 1km push back\n\ud83c\udfc6 PR: Hampton to Kingston flat\n\ud83c\udfc6 PR: Hampton 1k\n\ud83c\udfc6 PR: Hulme's Highway to Hell\n\ud83c\udfc6 PR: La  Tuesday Chaingang Sprint"
-  },
-  {
-    "user": "Same nutrition as Sundays ride.",
-    "assistant": "Logged. *402g carbs \u00b7 2,800ml \u00b7 ~98g/hr* (vs 104g/hr Sunday \u2014 marginally lighter over the longer ride). Solid fuelling, just above race target of 90g/hr."
-  },
-  {
     "user": "Update the Strava caption to include the nutrition",
     "assistant": "Done \u2014 Strava description updated:\n\nLong Z2 Ride \u00b7 247 min \u00b7 137.9 km\n\nNP 224W \u00b7 IF 0.75 \u00b7 VI 1.14 \u00b7 TSS 229\nDecoupling 0.59%\n\nNutrition: 402g carbs \u00b7 2,800ml \u00b7 ~98g/hr"
   },
@@ -118,5 +94,29 @@
   {
     "user": "Why are you showing today's planned activity on the load graph!",
     "assistant": "The morning load chart is built before any activity syncs \u2014 it pulls the calendar (planned events) for today and marks them faded. Today's Z2 run was still a future planned session at render time, so it shows as faded rather than completed.\n\nOnce ICU syncs the completed run, a regenerated chart would show it as a solid bar. The morning chart will always show today's unstarted sessions as faded \u2014 that's by design but I can see why it looks odd. Want me to stop plotting planned events for today-only (just show actuals up to now and projected TSB from seed values)?"
+  },
+  {
+    "user": "",
+    "assistant": "*New activity*\n\n11.93 km \u00b7 avg GAP 5:32/km \u00b7 +90 sec/km vs threshold (4:02/km)\n99% HR \u2264150 cap \u00b7 decoupling \u22120.6%\nRunning power: 360w avg \u00b7 pace-power consistent \u2014 no terrain divergence flag\nInjury pain score during and this morning? (0-10)\n_vs plan (Sun 14 Jun \u2014 Z2 run 66 min): 50\u219263 TSS (+26%)_\n_Durability: pw:hr decoupling -1.4% \u00b7 cadence -1.0% \u00b7 running cost +1.4% (final vs first third)_"
+  },
+  {
+    "user": "",
+    "assistant": "Injury pain during (0\u201310) \u2014 Sun 14 Jun \u2014 Z2 run 66 min:"
+  },
+  {
+    "user": "What about a cycle today?",
+    "assistant": "After the run (63 TSS), you're sitting at roughly **TSB \u221212** \u2014 the best you've been all week.\n\n| Evening option | Add TSS | End TSB |\n|---------------|---------|---------|\n| Rest | \u2014 | **\u221212** |\n| 60 min easy Z2 | ~50 | **\u221218** |\n| 90 min easy Z2 | ~75 | **\u221221** |\n\nWeek to date: 229 + 127 + 63 = **419 TSS** (Fri\u2013Sun). That's a heavy 3-day block. France camp is 10 days away and next week is loaded (build ride 240 min Fri + 210 min Sat).\n\n**Rest is the better call.** If you genuinely feel good and want to spin, 60 min easy cap (NP <163W) is fine \u2014 but it's not productive training at this fatigue level. You'd be adding cost for minimal aerobic return."
+  },
+  {
+    "user": "I've done more than 419 this week, what are you on about",
+    "assistant": "You're right \u2014 I only counted Fri\u2013Sun and missed Wednesday and Thursday.\n\nFull week (Mon 8\u2013Sun 14 Jun):\n- Wed 10: Run **68**\n- Thu 11: Swim **59**\n- Fri 12: Ride **229**\n- Sat 13: Ride **127**\n- Sun 14: Run **63**\n\n**Week total: 546 TSS.** Rest is the right call today."
+  },
+  {
+    "user": "What days are in a week?",
+    "assistant": "Mon 8 Jun had nothing logged. Full week (Mon 8\u2013Sun 14):\n\n| Date | Session | TSS |\n|------|---------|-----|\n| Mon 8 | \u2014 | 0 |\n| Tue 9 | Swim + Run | **139** |\n| Wed 10 | Run + Strength | **74** |\n| Thu 11 | Swim | **59** |\n| Fri 12 | Ride | **229** |\n| Sat 13 | Ride | **127** |\n| Sun 14 | Run | **63** |\n\n**Week total: 691 TSS.** Rest is very much the right call."
+  },
+  {
+    "user": "That was very stupid of you",
+    "assistant": "Yeah, that was sloppy \u2014 took three goes to count to seven. Sorry."
   }
 ]
