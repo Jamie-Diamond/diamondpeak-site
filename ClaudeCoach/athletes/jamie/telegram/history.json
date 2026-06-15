@@ -1,9 +1,5 @@
 [
   {
-    "user": "That was very stupid of you",
-    "assistant": "Yeah, that was sloppy \u2014 took three goes to count to seven. Sorry."
-  },
-  {
     "user": "What was this weeks target TSS,",
     "assistant": "Planned targets from the calendar:\n\n| Day | Session | Target TSS |\n|-----|---------|-----------|\n| Tue | Swim 60 min | 60 |\n| Tue | Run 60 min | 45 |\n| Wed | Run 60 min | 45 |\n| Wed | Strength 35 min | 20 |\n| Thu | CSS swim | 60 |\n| Fri | Long Z2 ride 240 min | 170 |\n| Sat | Z2 ride 180 min | 115 |\n| Sun | Z2 run 66 min | ~50 |\n\n**Planned total: ~565 TSS**\n**Actual: 691 TSS** (+22%)\n\nThe overshoot came almost entirely from Friday's ride \u2014 229 vs 170 planned (+59 TSS)."
   },
@@ -118,5 +114,9 @@
   {
     "user": "",
     "assistant": "Plan updated \u2014 check your week in Intervals.icu."
+  },
+  {
+    "user": "",
+    "assistant": "*Tomorrow \u2014 Skills swim + Z2 long run*\n\n*Swim (60 min):*\n\u2022 Pace: 1:34/100m (CSS\u22125s vs CSS 1:39)\n\u2022 Main: 8\u00d7100m @ 1:34, 15s rest \u2192 4\u00d750m race-pace (1:36), 20s rest\n\u2022 ~2,200m total\n\n*Run (75 min):*\n\u2022 GAP 5:30/km \u2022 HR cap 146\n\u2022 Ankle protocol: stop if >5/10 pain at any point\n\n*Nutrition:* Run only \u2014 30g/hr carbs, 500ml/hr fluid; nil during swim\n*Sleep:* \u22658h tonight\n*Form:* \u221211 (In training)"
   }
 ]
