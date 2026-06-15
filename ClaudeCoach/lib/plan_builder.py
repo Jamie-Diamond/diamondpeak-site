@@ -123,9 +123,15 @@ def push(slug: str, built: dict, replace: bool = True):
                     c.delete_workout(e["id"]); deleted.append(e["id"])
                 except Exception:
                     pass
+    # Map proposal sports to valid intervals.icu event types (Bike/Brick/Strength are NOT
+    # valid ICU types — that 422'd a push mid-week. Brick pushes as a Ride; the run leg is
+    # in description_raw).
+    icu_type = {"Bike": "Ride", "Brick": "Ride", "Strength": "WeightTraining",
+                "Weights": "WeightTraining"}
     pushed = []
     for s in built["sessions"]:
-        payload = {"sport": s["sport"], "event_date": s["date"], "name": s["name"],
+        payload = {"sport": icu_type.get(s["sport"], s["sport"]),
+                   "event_date": s["date"], "name": s["name"],
                    "description": s["description"], "description_raw": s["description_raw"],
                    "planned_training_load": s["load_target"]}
         r = c.push_workout(**payload)
