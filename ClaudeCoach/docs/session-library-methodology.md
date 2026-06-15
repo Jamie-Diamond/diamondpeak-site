@@ -71,6 +71,44 @@ cut endurance (Coggan Z2) riding — that's the zone to build.
 These map onto the blueprint's per-phase `distribution` field via §0; this section makes the
 targets evidence-based and event-specific (see §4).
 
+## 1b. Dosing — how much of each session, by sport & phase (+ progressive introduction)
+
+The amount and intensity of quality are **computed, not guessed**. You never "just start doing
+full VO2" because three deterministic gates prevent it:
+
+**Gate 1 — Phase sets the MENU (which session types are even allowed):**
+- **Base:** endurance, long, tempo, sweetspot (bike), CSS-lite (swim), strides/short hills (run),
+  technique/drills. **No VO2, no max race-pace.**
+- **Build:** + threshold, race-pace, harder CSS, hill work. **VO2 introduced late-build.**
+- **Specific/Peak:** + VO2, race-specific bricks, sharpening.
+- **Taper:** volume down, keep a little sharpening intensity.
+
+So VO2 simply isn't on the menu until build/specific.
+
+**Gate 2 — Phase distribution caps the weekly quality SHARE:** weekly TSS target (`required-tss`)
+× the phase's per-sport distribution (§0 — e.g. base bike 78/14/8 → only ~8% Z4–5) = the quality-TSS
+budget per sport. In base that budget is one short session; it grows through build→peak. The audit's
+distribution check enforces this **both ways** — Build must hit its quality, base mustn't exceed it.
+
+**Gate 3 — Week-in-phase sets the progression stage, starting LOW:** within a phase the session
+progression (bike threshold 3×10 → 4×10 → 2×20) is indexed by week — you **start at the low end and
+build**. A newly-introduced type starts **one step below the floor and at the easy end of the zone**
+(first VO2 ≈ 3×3min, not 5×4), ramping **reps/duration before intensity**.
+
+**Per sport:** each sport runs its own phase clock, distribution and progression — the bike can carry
+more quality than a rehabbing run; swim leans technique + CSS. day_rules place them; per-sport
+thresholds (§0) set the targets.
+
+**Anchored + guarded:** the progression's starting point is anchored to current fitness (eFTP/CTL/
+recent quality tolerance), not a fixed template, and capped by existing guardrails — **CTL ramp cap**
+(+4–6/wk), **quality-session spacing** (≥48h between hard sessions, `reoptimise.quality_session_spacing_ok`),
+athlete constraints (ankle → conservative run quality), and **readiness** (low HRV/high fatigue
+downgrades a planned quality session to aerobic — Layer 5).
+
+**Net:** *how much of each session* = phase-menu × distribution-budget × week-progression, anchored
+to fitness and capped by ramp/spacing/readiness — all deterministic, all audit-checked. The athlete
+is eased into intensity, never dropped into it.
+
 ---
 
 ## 2. Bike session library (Coggan %FTP) ✅ structures verified; 🟡 progressions
@@ -115,8 +153,20 @@ via CSS pace so sets read as distance.
 (drills + kick + easy form work), weighted higher in **base** and for weaker swimmers; and (2) as
 an **embedded warm-up/skill block** in CSS/aerobic/speed sessions (e.g. 200 easy + 6×50 drill before
 the main set). Open-water **skills** (sighting, drafting, turns) ramp through the specific phase for
-tri and 5k-OW events. Pull-buoy (PB) work sits with aerobic/CSS, not technique. **[your red-line:
-drill menu, base-phase technique weighting, OW-skill progression.]**
+tri and 5k-OW events.
+
+**Equipment-aware drills (NEW) 🟡:** every drill is tagged with the kit it needs, and the planner
+only prescribes drills the athlete actually owns (an **equipment profile** per athlete, asked once
+and stored — same pattern as the strength-kit ask). Tags:
+- **none / plain** — catch-up, single-arm, fingertip-drag, sculling, 6-3-6, fist swim, head-up *(always available)*
+- **kickboard/float** — kick sets, vertical kick
+- **pull buoy (PB)** — pull sets (isolate the catch; swum AT CSS or slightly faster)
+- **hand paddles** — strength/catch drills (*introduce gradually — shoulder load*)
+- **fins** — kick/speed/body-position drills
+- **buoyancy shorts** — pull/position work (wetsuit-position simulation)
+- **snorkel** — head-position/technique focus
+If kit is unknown, **ask** (don't assume); if the athlete has none, fall back to the *plain*
+no-equipment drills only. **[your red-line: the drill menu per kit, and what's in the equipment ask.]**
 
 ---
 
