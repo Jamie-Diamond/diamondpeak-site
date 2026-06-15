@@ -1,5 +1,16 @@
 # Why conversational planning is failing (root cause) — 2026-06-15
 
+> **RESOLVED & LIVE 2026-06-15** (commit 16bdb84). Fix shipped: `lib/plan_tools.py`
+> (deterministic tss/week-tss/project/required-tss CLI over the tested primitives);
+> `primitives/load.project_pmc_daily` as the single forward-PMC source (charts.py
+> delegates to it); `prefetch_context` injects this-week roll-up + phase TSS target
+> into every prompt (compute-and-inject); `system/planning-hard-rules.txt` appended
+> to all three athlete prompts forbidding hand-computed numbers; `select_model`
+> rewritten (Haiku retired, Opus default, Sonnet for trivia, sticky on athlete
+> turns); streaming reply-duplication fixed. Verified by running the real chat path
+> on the VM: the model now calls plan_tools for mid-week adjustments and quotes the
+> injected figures instead of freelancing. See the fix sections below for detail.
+
 Diagnosis from Jamie's Telegram conversation of **14 Jun 2026** (30 turns,
 `athletes/jamie/telegram/history.json`). Two symptom-level bugs were already
 logged to `athletes/jamie/feedback-log.json` on 14 Jun (both `resolved:false`).
