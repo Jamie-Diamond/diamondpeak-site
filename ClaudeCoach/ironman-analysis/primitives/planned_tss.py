@@ -79,6 +79,90 @@ def segment_if(sport: str, zone: str) -> float:
                                     _ZONE_DEFAULT_IF.get(sp, 0.75))
 
 
+# %-of-threshold bands per zone for STRUCTURED workout steps (what syncs to
+# Garmin). Bike bands are %FTP (power); run/swim bands are %threshold-pace.
+# Centred on the same intensities as _ZONE_IF so computed TSS and the pushed
+# structure agree.
+_ZONE_BAND = {
+    "swim": {"recovery": (58, 66), "easy": (70, 80), "warmup": (66, 74),
+             "cooldown": (60, 70), "aerobic": (76, 84), "drill": (62, 72),
+             "kick": (64, 74), "pull": (82, 88), "steady": (84, 92),
+             "race": (92, 98), "css": (97, 103), "threshold": (98, 104),
+             "speed": (104, 112), "sprint": (108, 118)},
+    "run":  {"recovery": (56, 64), "easy": (68, 76), "z2": (68, 76),
+             "warmup": (64, 72), "cooldown": (58, 66), "steady": (80, 86),
+             "z3": (80, 86), "tempo": (85, 91), "threshold": (95, 101),
+             "css": (95, 101), "interval": (102, 108), "vo2": (103, 110),
+             "hill": (92, 98), "sprint": (112, 120)},
+    "bike": {"recovery": (45, 55), "z1": (50, 58), "z2": (60, 70),
+             "endurance": (60, 70), "warmup": (55, 65), "cooldown": (50, 60),
+             "tempo": (76, 84), "z3": (76, 84), "sweetspot": (88, 94),
+             "ss": (88, 94), "threshold": (95, 102), "race": (76, 84),
+             "vo2": (105, 118), "anaerobic": (118, 135)},
+}
+
+
+def _band(sport: str, zone: str, intensity: float = None):
+    sp = _norm_sport(sport)
+    b = _ZONE_BAND.get(sp, {}).get((zone or "").lower().strip())
+    if b:
+        return b
+    pct = int(round((intensity if intensity is not None
+                     else segment_if(sport, zone)) * 100))
+    return (max(pct - 4, 1), pct + 4)
+
+
+def render_workout(sport: str, segments: list) -> dict:
+    """Render time-at-intensity segments into an Intervals.icu STRUCTURED workout
+    (the `description` text push_workout sends → parsed into steps → synced to
+    Garmin). Bike steps are %FTP power; run/swim are %threshold pace.
+
+    segments: flat {"minutes":N,"zone":"css"} (or "if"), and/or repeat blocks
+    {"repeat":N,"steps":[...]}. Returns {description, tss, duration_min, steps}.
+    `tss` is the deterministic estimate (ICU recomputes its own on push)."""
+    sp = _norm_sport(sport)
+    suffix = "" if sp == "bike" else " Pace"   # bare % = power; "% Pace" = pace
+    lines, flat = [], []
+
+    def _line(seg):
+        """Return the structured-text line for a segment, or None; never mutates flat."""
+        mins = int(round(float(seg.get("minutes") or seg.get("min") or 0)))
+        if mins <= 0:
+            return None, 0
+        zone = seg.get("zone")
+        lo, hi = (_band(sport, zone, float(seg["if"])) if seg.get("if") is not None
+                  else _band(sport, zone))
+        label = f" {zone}" if zone else ""
+        return f"- {mins}m {lo}-{hi}%{suffix}{label}", mins
+
+    def _flat(seg, mins):
+        flat.append({"minutes": mins, "zone": seg.get("zone"), "if": seg.get("if")})
+
+    # Render FLAT — one line per interval, no "Nx" header (ICU's API collapses
+    # repeat-header blocks to unique steps; a fully-expanded flat list parses into
+    # the correct step sequence and ICU then auto-computes the load — verified).
+    for seg in segments:
+        if seg.get("repeat") and seg.get("steps"):
+            for _ in range(int(seg["repeat"])):
+                for sub in seg["steps"]:
+                    line, mins = _line(sub)
+                    if line:
+                        lines.append(line)
+                        _flat(sub, mins)
+        else:
+            line, mins = _line(seg)
+            if line:
+                lines.append(line)
+                _flat(seg, mins)
+
+    calc = tss_from_segments(sport, [{"minutes": s["minutes"], "zone": s["zone"],
+                                      **({"if": s["if"]} if s.get("if") is not None else {})}
+                                     for s in flat])
+    return {"description": "\n".join(lines), "tss": calc["tss"],
+            "duration_min": calc["duration_min"], "avg_if": calc["avg_if"],
+            "steps": len([l for l in lines if l.strip().startswith("-")])}
+
+
 def tss_from_segments(sport: str, segments: list) -> dict:
     """Calculable planned TSS from time-at-intensity.
 

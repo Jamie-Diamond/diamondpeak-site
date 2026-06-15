@@ -949,11 +949,16 @@ VALIDATION GATE — before pushing ANY session, verify each one against rules.md
 
 ICU COMMANDS — this is the COMPLETE interface. Do NOT run `--help`, grep, sed, cat, or
 otherwise inspect ClaudeCoach/lib (icu_fetch.py / icu_api.py): everything you need is here.
-Issuing an unnecessary exploration command wastes a full turn — there are only three commands:
+
+STRUCTURED WORKOUTS — every Swim/Run/Ride session MUST be pushed as structured steps so
+it syncs to the athlete's Garmin as a follow-along workout (not just notes). For each
+session, express it as time-at-intensity segments and render the steps:
+    python3 ClaudeCoach/lib/plan_tools.py render-workout --sport Swim --segments '[{{"minutes":10,"zone":"easy"}},{{"repeat":8,"steps":[{{"minutes":2,"zone":"css"}},{{"minutes":1,"zone":"recovery"}}]}},{{"minutes":6,"zone":"cooldown"}}]'
+(zones: swim easy/aerobic/css/threshold/race/speed/drill/recovery; run easy/steady/tempo/threshold/interval; bike z2/tempo/sweetspot/threshold/vo2). It returns a `description` (structured: bike=%FTP, run/swim=%pace) and a `tss`. Use those in the push below — ICU recomputes its own load from the structure. WeightTraining stays free-text.
   ADD a new session:
-    python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint push_workout --payload '{{"sport":"Ride|Run|Swim|WeightTraining", "date":"YYYY-MM-DD", "name":"[Day date] — [description]", "description":"full coaching notes", "planned_training_load": N}}'
+    python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint push_workout --payload '{{"sport":"Ride|Run|Swim|WeightTraining", "date":"YYYY-MM-DD", "name":"[Day date] — [description]", "description":"<structured steps from render-workout>", "description_raw":"full coaching notes", "planned_training_load": <tss from render-workout>}}'
   EDIT an existing session (use its event id from the Step 1 events output):
-    python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint edit_workout --event-id EVENT_ID --payload '{{"name":"...", "description":"...", "planned_training_load": N}}'
+    python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint edit_workout --event-id EVENT_ID --payload '{{"name":"...", "description":"<structured steps>", "description_raw":"notes", "planned_training_load": N}}'
   DELETE a session (no payload):
     python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint delete_workout --event-id EVENT_ID
   Do NOT push a duplicate — if a session for that date+sport already exists in the Step 1 events

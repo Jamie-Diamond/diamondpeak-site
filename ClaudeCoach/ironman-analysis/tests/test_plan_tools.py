@@ -19,7 +19,7 @@ sys.path.insert(0, str(TELEGRAM))
 
 import plan_tools as pt                                   # noqa: E402
 from primitives.load import project_pmc_daily            # noqa: E402
-from primitives.planned_tss import tss_from_segments     # noqa: E402
+from primitives.planned_tss import tss_from_segments, render_workout  # noqa: E402
 
 
 # ── single-source guarantee: CLI projection ≡ the load chart's projection ──────
@@ -77,6 +77,28 @@ def test_segments_swim_css_beats_easy_same_duration():
 def test_segments_explicit_if_overrides_zone():
     r = tss_from_segments("run", [{"minutes": 60, "if": 0.8, "zone": "easy"}])
     assert r["segments"][0]["if"] == 0.8
+
+
+# ── structured-workout rendering (Garmin sync) ────────────────────────────────
+def test_render_flattens_repeats_no_header():
+    # 8x(2m/1m) must expand to 16 lines (ICU's API collapses "Nx" headers, so we
+    # flatten) — verified against a real push.
+    r = render_workout("swim", [{"minutes": 10, "zone": "easy"},
+                                {"repeat": 8, "steps": [{"minutes": 2, "zone": "css"},
+                                                        {"minutes": 1, "zone": "recovery"}]},
+                                {"minutes": 6, "zone": "cooldown"}])
+    body = r["description"].splitlines()
+    assert len(body) == 18                       # 1 WU + 8*2 + 1 CD
+    assert not any(l.strip().endswith("x") or l.strip()[:2].isdigit() and "x" in l for l in body)
+    assert all(l.startswith("- ") for l in body)
+    assert r["duration_min"] == 40
+
+
+def test_render_units_bike_power_vs_run_pace():
+    bike = render_workout("bike", [{"minutes": 20, "zone": "sweetspot"}])["description"]
+    run = render_workout("run", [{"minutes": 20, "zone": "threshold"}])["description"]
+    assert "Pace" not in bike and "%" in bike      # bare % = power (%FTP)
+    assert "Pace" in run                            # %pace for run/swim
 
 
 # ── required-tss: real basis prescribes; no basis refuses (don't fabricate) ────

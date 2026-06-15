@@ -41,7 +41,9 @@ BASE = Path(__file__).resolve().parent.parent          # ClaudeCoach/
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
-from primitives.planned_tss import planned_session_tss, tss_from_segments  # noqa: E402
+from primitives.planned_tss import (                            # noqa: E402
+    planned_session_tss, tss_from_segments, render_workout,
+)
 from primitives.load import (                                   # noqa: E402
     compute_required_tss,
     project_pmc_daily,
@@ -353,6 +355,22 @@ def cmd_validate(args) -> dict:
             "soft": [v for v in viol if v["severity"] != "hard"]}
 
 
+def cmd_render_workout(args) -> dict:
+    """Render time-at-intensity segments into an ICU STRUCTURED workout string.
+    Push the returned `description` via icu_fetch push_workout so it syncs to the
+    athlete's Garmin as a follow-along workout (ICU computes its own load)."""
+    try:
+        segs = json.loads(args.segments)
+    except json.JSONDecodeError as e:
+        raise SystemExit(_err(f"--segments is not valid JSON: {e}"))
+    if not args.sport:
+        raise SystemExit(_err("--sport required (swim/run/bike)"))
+    r = render_workout(args.sport, segs)
+    r["how_to_push"] = ("pass description=<the description field above> to "
+                        "icu_fetch.py push_workout (put coaching prose in description_raw)")
+    return r
+
+
 def main():
     p = argparse.ArgumentParser(description="Deterministic planning maths for ClaudeCoach")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -376,9 +394,14 @@ def main():
     pv.add_argument("--athlete", required=True); pv.add_argument("--week", required=True)
     pv.add_argument("--ctl-today", type=float)
 
+    prw = sub.add_parser("render-workout", help="segments -> ICU structured workout text (syncs to Garmin)")
+    prw.add_argument("--sport", required=True)
+    prw.add_argument("--segments", required=True)
+
     args = p.parse_args()
     handler = {"tss": cmd_tss, "week-tss": cmd_week_tss, "project": cmd_project,
-               "required-tss": cmd_required_tss, "validate": cmd_validate}[args.cmd]
+               "required-tss": cmd_required_tss, "validate": cmd_validate,
+               "render-workout": cmd_render_workout}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

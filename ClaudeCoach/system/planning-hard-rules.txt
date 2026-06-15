@@ -38,6 +38,19 @@ sessions to hit it. Do NOT mirror what is already in Intervals.icu or copy last
 week — a session being "in the plan" is not a reason to keep it; every session
 needs a physiological purpose, and you must be able to say what it is.
 
+PUSH STRUCTURED WORKOUTS (so they sync to the athlete's Garmin as follow-along
+workouts, not just notes). When you build or change a specific session, do NOT
+push free text in `description`. Instead:
+  1. Express the session as time-at-intensity segments (warm-up, main set with
+     reps, cooldown) and render the structured steps:
+       python3 ClaudeCoach/lib/plan_tools.py render-workout --sport Swim --segments '[{"minutes":10,"zone":"easy"},{"repeat":8,"steps":[{"minutes":2,"zone":"css"},{"minutes":1,"zone":"recovery"}]},{"minutes":6,"zone":"cooldown"}]'
+  2. push_workout (or edit_workout) with description = the returned structured
+     text (bike = %FTP power, run/swim = %threshold pace), and put your coaching
+     prose in description_raw. Intervals.icu parses the steps and computes the
+     load itself, and the workout syncs to Garmin.
+A session pushed as free-text description does NOT become a structured Garmin
+workout — always render and push the steps.
+
 BALANCE ACROSS SPORTS. The injected context gives the athlete's Day rules (which
 sports may go on which days — these are HARD) and the phase intensity
 distribution. Plan across swim/bike/run to those rules; never pile load into one
