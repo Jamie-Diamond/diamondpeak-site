@@ -303,6 +303,22 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0,
     # dip vs a 70 g/hr race target — 15 Jun fix).
     _nutri_floor = int(cfg.get("nutrition_alert_threshold_g_hr") or 60)
     _nutri_race  = int(cfg.get("nutrition_target_g_hr") or 90)
+    # Long-ride prescription anchored to the EVENT's bike demand — don't routinely
+    # prescribe rides well past race duration (junk fatigue for a 70.3). A DEFAULT,
+    # not a cap: the athlete may choose to ride longer; we just don't prescribe it.
+    _race_bike_min = (cfg.get("race_target_splits") or {}).get("bike_min")
+    if _race_bike_min:
+        _lr_peak = min(int(round(_race_bike_min * 1.15 / 15) * 15), 300)
+        _lrh = (f"{_lr_peak // 60}h{_lr_peak % 60:02d}m" if _lr_peak % 60 else f"{_lr_peak // 60}h")
+        _long_ride_guidance = (
+            f"The weekly LONG RIDE — anchor its peak to the event's bike demand: build toward "
+            f"~{_lrh} (≈ the {_race_bike_min}-min race bike + a little for durability), NOT beyond. "
+            f"Prescribing rides well past race duration every week is junk fatigue. This is a DEFAULT, "
+            f"not a hard cap — if the athlete chooses to ride longer in a given week that's fine; just "
+            f"don't prescribe it.")
+    else:
+        _long_ride_guidance = ("The weekly LONG RIDE — the key endurance session; protect its "
+            "duration and grow it week to week toward the event demand.")
 
     if replan:
         replan_directive = (
@@ -495,9 +511,9 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0,
 - Saturday: Prefer riding — second long/endurance ride (or a run/brick if the week needs it)
 - Sunday: Prefer riding — Z2 ride (or rest)"""
         else:
-            week_template = """Standard week template (adapt to phase). This athlete has NO fixed training days — place each session on whatever day fits their weekly availability (profile training_days, and any current-state.md travel blocks). Honour per-day duration caps from rules.md (e.g. a Saturday long-ride time cap). Do NOT impose a fixed day for any sport, and do NOT carry over another athlete's day pattern.
+            week_template = f"""Standard week template (adapt to phase). This athlete has NO fixed training days — place each session on whatever day fits their weekly availability (profile training_days, and any current-state.md travel blocks). Honour per-day duration caps from rules.md (e.g. a Saturday long-ride time cap). Do NOT impose a fixed day for any sport, and do NOT carry over another athlete's day pattern.
 Across the week, include (place freely, adapt to phase):
-- The weekly LONG RIDE — the key endurance session; protect its duration and grow it week to week.
+- {_long_ride_guidance}
 - A second, easier Z2 ride when the phase calls for more bike volume.
 - 2 swims (aerobic / CSS-based).
 - 2–3 runs (mostly Z2; add tempo/quality per phase, within the run-progression guard).
