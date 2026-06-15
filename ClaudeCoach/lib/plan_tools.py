@@ -47,6 +47,7 @@ from primitives.planned_tss import (                            # noqa: E402
 from primitives.load import (                                   # noqa: E402
     compute_required_tss,
     project_pmc_daily,
+    derive_phase_ctl_targets,
 )
 from primitives.validate_plan import validate_week              # noqa: E402
 from primitives.blueprint import current_phase                  # noqa: E402
@@ -269,15 +270,27 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None) -> dict
         return {"phase": "taper/race", "ctl_today": ctl_today, "training_week": week_now,
                 "note": "past the last build phase — taper logic applies, no build target"}
 
+    # Derive phase CTL milestones from race_min when not explicitly configured
+    # (mirrors generate-plan.py so athletes with a race_min but no phase_ctl — e.g.
+    # Kathryn — still get a defensible target rather than None).
+    ctl_source = "configured"
+    if not phase_ctl and ctl_targets.get("race_min") and ctl_today:
+        phase_ctl = derive_phase_ctl_targets(
+            ctl_today, int(ctl_targets["race_min"]), plan_start,
+            ends["base"], ends["build"], ends["specific"], ends["peak"],
+            float(cfg.get("max_ctl_ramp_per_week", 5.0)),
+            float(cfg.get("taper_overshoot", 1.15)), today=today)
+        ctl_source = "derived_from_race_min"
+
     target_ctl = phase_ctl.get(phase)
     if target_ctl is None:
-        return {"error": f"phase '{phase}' has no configured CTL target"}
+        return {"error": f"phase '{phase}' has no CTL target (no phase_ctl and no race_min basis)"}
     weeks_remaining = max(1, ends[phase] - week_now + 1)
     required = compute_required_tss(ctl_today, target_ctl, weeks_remaining)
 
     out = {"phase": phase, "training_week": week_now, "ctl_today": ctl_today,
-           "phase_target_ctl": target_ctl, "weeks_to_phase_end": weeks_remaining,
-           "required_weekly_tss": required}
+           "phase_target_ctl": target_ctl, "ctl_target_source": ctl_source,
+           "weeks_to_phase_end": weeks_remaining, "required_weekly_tss": required}
     max_ramp = cfg.get("max_ctl_ramp_per_week")
     if max_ramp:
         safe = compute_required_tss(ctl_today, ctl_today + float(max_ramp), 1)
