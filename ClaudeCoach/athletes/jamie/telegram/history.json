@@ -1,13 +1,5 @@
 [
   {
-    "user": "What about a cycle today?",
-    "assistant": "After the run (63 TSS), you're sitting at roughly **TSB \u221212** \u2014 the best you've been all week.\n\n| Evening option | Add TSS | End TSB |\n|---------------|---------|---------|\n| Rest | \u2014 | **\u221212** |\n| 60 min easy Z2 | ~50 | **\u221218** |\n| 90 min easy Z2 | ~75 | **\u221221** |\n\nWeek to date: 229 + 127 + 63 = **419 TSS** (Fri\u2013Sun). That's a heavy 3-day block. France camp is 10 days away and next week is loaded (build ride 240 min Fri + 210 min Sat).\n\n**Rest is the better call.** If you genuinely feel good and want to spin, 60 min easy cap (NP <163W) is fine \u2014 but it's not productive training at this fatigue level. You'd be adding cost for minimal aerobic return."
-  },
-  {
-    "user": "I've done more than 419 this week, what are you on about",
-    "assistant": "You're right \u2014 I only counted Fri\u2013Sun and missed Wednesday and Thursday.\n\nFull week (Mon 8\u2013Sun 14 Jun):\n- Wed 10: Run **68**\n- Thu 11: Swim **59**\n- Fri 12: Ride **229**\n- Sat 13: Ride **127**\n- Sun 14: Run **63**\n\n**Week total: 546 TSS.** Rest is the right call today."
-  },
-  {
     "user": "What days are in a week?",
     "assistant": "Mon 8 Jun had nothing logged. Full week (Mon 8\u2013Sun 14):\n\n| Date | Session | TSS |\n|------|---------|-----|\n| Mon 8 | \u2014 | 0 |\n| Tue 9 | Swim + Run | **139** |\n| Wed 10 | Run + Strength | **74** |\n| Thu 11 | Swim | **59** |\n| Fri 12 | Ride | **229** |\n| Sat 13 | Ride | **127** |\n| Sun 14 | Run | **63** |\n\n**Week total: 691 TSS.** Rest is very much the right call."
   },
@@ -118,5 +110,13 @@
   {
     "user": "We had already put the Wednesday run in",
     "assistant": "You're right \u2014 it was already agreed and pushed. I dropped it from the last message by mistake. Full W8 as it stands in ICU:\n\n| Day | Session | TSS |\n|-----|---------|-----|\n| Mon | Rest | 0 |\n| Tue | Skills swim 60 min + Long run 75 min (13.5km) | ~146 |\n| Wed | Strength A 35 min + Z2 run 50 min | ~69 |\n| Thu | CSS swim 60 min | ~90 |\n| Fri | Z2 ride 240 min | ~160 |\n| Sat | Brick ride 115 min + run 35 min | ~105 |\n| Sun | Z2 ride 90 min + run 30 min + Strength B | ~100 |\n\n**Total: ~670 TSS** \u2014 just under the 680 minimum build threshold. The plan is already in ICU as is. No changes needed."
+  },
+  {
+    "user": "",
+    "assistant": "*Good morning \u2014 Mon 15 Jun*\n\nRest day\n\n\u26a0\ufe0f Heat \u2014 0 sessions in last 14 days; add a sauna or hot bath this week before France camp\n\u26a0\ufe0f Strength \u2014 1/2 sessions last week; 2 needed this week (Tier C, no equipment required)\n\ud83d\udccc PH sweat test + TT bike fit both 15 days overdue \u2014 book both before France camp (Jun 24, 9 days)\n\nWeight this morning?\n\n_96 days to IM Italy Emilia-Romagna_"
+  },
+  {
+    "user": "",
+    "assistant": "[chart/photo sent]"
   }
 ]
