@@ -44,13 +44,18 @@ So Muñoz's "minimise grey-zone Z2 bike" = **minimise bike Z3 tempo / junk sweet
 **maximising bike Z2 endurance**. The blueprint's `Z1–2 / Z3 / Z4–5` grouping already matches this.
 The validator/audit must compare TID like-for-like via this mapping.
 
-**⚠️ Data discrepancies found during the audit — reconcile before encoding:**
-1. **Bike FTP:** ICU sport-settings = **300 W**, but the system prompt / memory say **316 W**.
-   Zones are %FTP so the *boundaries* are unaffected, but the *absolute watts* the planner writes
-   depend on which FTP is used — these must agree (use ICU as authoritative per the MCP rule).
-2. **Swim threshold pace:** ICU returns `threshold_pace = 1.01` but Jamie's CSS is **1:39/100m**.
-   Likely a units/stale-field issue — verify the swim threshold before any %CSS prescription.
-3. **Run threshold pace:** ICU = **4:08/km**; profile says **4:02/km**. Minor; use ICU (authoritative).
+**Thresholds are resolved LIVE from intervals.icu for all athletes** — `lib/thresholds.py`
+(15 Jun). They track eFTP and never hardcode:
+- **FTP** = live **eFTP** first (Jamie 297 W — the prompt's "316" and static "300" are both stale),
+  → static sport-settings ftp (Calum 250, no eFTP yet) → config. Always current.
+- **Run / swim thresholds** = ICU `threshold_pace`, which is stored in **METRES/SECOND** (the
+  `pace_units` field is only the display unit). Converted centrally: Jamie run 4.132 m/s = **4:02/km**,
+  swim 1.0101 m/s = **1:39/100m** — both match his profile exactly. *(My earlier "4:08 / 1.01"
+  flags were a unit-misread, not real discrepancies — fixed here so the bug can't recur.)*
+- **Fallbacks (all-athlete):** Kathryn & Calum have **no run threshold** set in ICU → run pace
+  zones unavailable, fall back to HR/RPE (flagged, not invented). Calum has no eFTP → static FTP.
+- ICU computes a pushed workout's load against the athlete's own configured zones, so the
+  configured FTP should be kept tracking eFTP (ICU auto-update) — open item below.
 
 ## 1. Intensity distribution (the TID targets per phase) — in 3-zone LOW/MOD/HIGH (see §0)
 
@@ -146,8 +151,12 @@ IM = long aerobic bike + 20–40min Z2 run. Run-off-bike at **goal race pace**, 
 - ✅ **Resolved (§0):** canonical = ICU/Coggan zones (Jamie, 15 Jun); zones audited against Jamie's
   live ICU settings and aligned (bike 90–105/105–120 etc.); render-library bands confirmed to sit
   within the canonical zones; TID expressed LOW/MOD/HIGH with an explicit ICU-zone bridge.
-- ⚠️ **Reconcile before encoding (data, not methodology):** bike FTP 300 (ICU) vs 316 (prompt);
-  swim threshold pace ICU `1.01` vs CSS 1:39; run threshold 4:08 (ICU) vs 4:02 (profile). See §0.
+- ✅ **Thresholds resolved (§0):** `lib/thresholds.py` pulls live eFTP + m/s-correct pace for all
+  athletes (Jamie FTP 297, run 4:02/km, swim 1:39; fallbacks for Kathryn/Calum). My earlier
+  FTP/pace "discrepancies" were a unit-misread, now centralised so it can't recur.
+- ⚠️ **Open (not blocking):** keep each athlete's ICU *configured* FTP auto-tracking eFTP, so the
+  load ICU computes on a pushed workout matches our intent; set Kathryn/Calum run thresholds (or
+  accept HR/RPE run zones).
 - ✅ **Trust:** bike (Coggan) + run (Daniels) zones/structures, TID models, PYR→POL, IM/70.3 anchors.
 - 🟡 **Check my extrapolation:** the week-to-week *progression numbers*, short-course event triplets,
   race-pace zones, brick scaling.
