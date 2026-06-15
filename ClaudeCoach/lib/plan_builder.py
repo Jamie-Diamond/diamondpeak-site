@@ -107,10 +107,22 @@ def build_sessions(slug: str, proposal: dict) -> dict:
             "hard": hard, "soft": soft, "sessions": built}
 
 
-def push(slug: str, built: dict):
+def push(slug: str, built: dict, replace: bool = True):
+    """Push the built week. replace=True first DELETES existing planned WORKOUT events
+    in the target week so we don't duplicate the old plan. Returns {deleted, pushed}."""
     from icu_api import IcuClient
+    from datetime import date as _d, timedelta as _td
     cfg = _cfg(slug)
     c = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+    ws = _d.fromisoformat(built["week_start"])
+    deleted = []
+    if replace:
+        for e in c.get_events(ws.isoformat(), (ws + _td(days=6)).isoformat()):
+            if e.get("category") == "WORKOUT" and e.get("id"):
+                try:
+                    c.delete_workout(e["id"]); deleted.append(e["id"])
+                except Exception:
+                    pass
     pushed = []
     for s in built["sessions"]:
         payload = {"sport": s["sport"], "event_date": s["date"], "name": s["name"],
@@ -118,7 +130,7 @@ def push(slug: str, built: dict):
                    "planned_training_load": s["load_target"]}
         r = c.push_workout(**payload)
         pushed.append(r.get("id"))
-    return pushed
+    return {"deleted": deleted, "pushed": pushed}
 
 
 def main():
@@ -133,7 +145,7 @@ def main():
         if not built["ok"]:
             print(json.dumps({"error": "validation failed — not pushing", **built}, indent=1))
             sys.exit(1)
-        built["pushed_ids"] = push(args.athlete, built)
+        built["push_result"] = push(args.athlete, built)
     print(json.dumps(built, indent=1, ensure_ascii=False))
 
 

@@ -204,7 +204,7 @@ def main():
             summary["pushed"] = False
             summary["reason"] = f"not ready (rules_ok={built['ok']}, load_on_target={load_on_target}) — not pushing"
         else:
-            summary["pushed_ids"] = pb.push(args.athlete, built)
+            summary["push_result"] = pb.push(args.athlete, built)
     print(json.dumps(summary, indent=1, ensure_ascii=False))
 
 
