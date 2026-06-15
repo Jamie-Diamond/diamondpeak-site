@@ -45,9 +45,38 @@ def _is_endurance(sess: dict) -> bool:
                < _QUALITY_IF for seg in segs)
 
 
-def close_to_target(athlete: str, proposal: dict, target, tol=0.06, max_iter=4):
-    """Reliable TSS (1st objective): keep quality fixed, scale ENDURANCE durations until
-    the week lands within `tol` of target. Zones/types untouched (2nd-objective opt)."""
+def _set_total_minutes(sess: dict, target_min: int):
+    """Scale a session's segments to a fixed total duration (for clamping key sessions)."""
+    segs = sess.get("segments") or []
+    cur = sum(s.get("minutes", 0) for s in segs)
+    if cur > 0 and target_min and abs(cur - target_min) > 1:
+        f = target_min / cur
+        for s in segs:
+            s["minutes"] = max(5, round(s["minutes"] * f))
+
+
+def _is_long_run(s):
+    return (s.get("sport") or "").lower() == "run" and "long" in (s.get("name") or "").lower()
+
+
+def _is_long_ride(s):
+    return (s.get("sport") or "").lower() in ("ride", "bike", "brick") and "long" in (s.get("name") or "").lower()
+
+
+def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06, max_iter=5):
+    """Reliable TSS — but PROTECT key sessions. The long run and long ride are CLAMPED to
+    their targets (never used to absorb TSS); quality is fixed by dose; only the OTHER easy
+    endurance (easy runs, 2nd/easy rides) is scaled to land the week on target."""
+    lr_min = (brief.get("long_run_target") or {}).get("minutes")
+    lrd_min = brief.get("long_ride_target_min")
+    # 1. Clamp the protected key sessions to their targets (once).
+    for s in proposal["sessions"]:
+        if _is_long_run(s) and lr_min:
+            _set_total_minutes(s, lr_min)
+        elif _is_long_ride(s) and lrd_min:
+            _set_total_minutes(s, lrd_min)
+    # 2. Flexible = endurance that is NOT a protected key session.
+    flex = lambda s: _is_endurance(s) and not _is_long_run(s) and not _is_long_ride(s)
     built = pb.build_sessions(athlete, proposal)
     if not target:
         return built
@@ -55,13 +84,12 @@ def close_to_target(athlete: str, proposal: dict, target, tol=0.06, max_iter=4):
         total = built["total_tss"]
         if abs(total - target) <= tol * target:
             break
-        flex_load = sum(b["load_target"] for s, b in zip(proposal["sessions"], built["sessions"])
-                        if _is_endurance(s))
+        flex_load = sum(b["load_target"] for s, b in zip(proposal["sessions"], built["sessions"]) if flex(s))
         if flex_load <= 0:
             break
-        factor = max(0.55, min(1.7, (flex_load + (target - total)) / flex_load))
+        factor = max(0.4, min(2.2, (flex_load + (target - total)) / flex_load))
         for s in proposal["sessions"]:
-            if _is_endurance(s):
+            if flex(s):
                 for seg in s.get("segments", []):
                     seg["minutes"] = max(15, round(seg["minutes"] * factor))
         built = pb.build_sessions(athlete, proposal)
@@ -197,13 +225,13 @@ def main():
         prompt = build_prompt(args.athlete, brief, week_start, feedback)
         proc = subprocess.run([CLAUDE, "-p", prompt, "--model", args.model,
                                "--no-session-persistence"],
-                              capture_output=True, text=True, cwd=PROJECT_DIR, timeout=300)
+                              capture_output=True, text=True, cwd=PROJECT_DIR, timeout=540)
         try:
             proposal = extract_json(proc.stdout.strip())
         except Exception as e:
             attempts.append(f"attempt {attempt+1}: parse error {e}")
             continue
-        built = close_to_target(args.athlete, proposal, target)
+        built = close_to_target(args.athlete, proposal, target, brief)
         issues = audit_built(brief, built, target, proposal)
         attempts.append(f"attempt {attempt+1}: {len(issues)} issue(s)" + (f" — {issues}" if issues else " — CLEAN"))
         if best is None or len(issues) < best[1]:
