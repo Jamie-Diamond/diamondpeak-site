@@ -228,13 +228,14 @@ def main():
     ap.add_argument("--athlete", required=True)
     ap.add_argument("--push", action="store_true")
     ap.add_argument("--notify", action="store_true", help="message the athlete on completion")
+    ap.add_argument("--week-start", help="Monday YYYY-MM-DD to plan (default: next Monday)")
     ap.add_argument("--model", default="claude-sonnet-4-6")
     ap.add_argument("--max-attempts", type=int, default=3)
     args = ap.parse_args()
 
     cfg = json.loads((BASE / "config" / "athletes.json").read_text())[args.athlete]
     today = date.today()
-    week_start = _next_monday(today)
+    week_start = date.fromisoformat(args.week_start) if args.week_start else _next_monday(today)
     brief = sl.planning_brief(args.athlete, cfg, today=today)
     if brief.get("event_unknown"):
         print(json.dumps({"error": f"event unknown for {args.athlete} — cannot plan"}))
