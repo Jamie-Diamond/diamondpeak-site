@@ -1,17 +1,5 @@
 [
   {
-    "user": "What was this weeks target TSS,",
-    "assistant": "Planned targets from the calendar:\n\n| Day | Session | Target TSS |\n|-----|---------|-----------|\n| Tue | Swim 60 min | 60 |\n| Tue | Run 60 min | 45 |\n| Wed | Run 60 min | 45 |\n| Wed | Strength 35 min | 20 |\n| Thu | CSS swim | 60 |\n| Fri | Long Z2 ride 240 min | 170 |\n| Sat | Z2 ride 180 min | 115 |\n| Sun | Z2 run 66 min | ~50 |\n\n**Planned total: ~565 TSS**\n**Actual: 691 TSS** (+22%)\n\nThe overshoot came almost entirely from Friday's ride \u2014 229 vs 170 planned (+59 TSS)."
-  },
-  {
-    "user": "Given tomorrow is a rest day, wouldn't it be wise to get a bit more load in",
-    "assistant": "Partially valid logic \u2014 rest day does absorb some cost. But the maths doesn't flip the call.\n\nAdding 60 min Z2 (~50 TSS) takes the week to **741 TSS** \u2014 31% over a 565 plan. Monday rest recovers ~5\u20137 TSB points, so you'd start Tuesday at roughly **TSB \u221218** instead of \u221211. That's a meaningful difference for the Thursday CSS swim quality.\n\nFrance camp is also 10 days away. Arriving already dug a hole limits what you can extract from it.\n\nThe rest day argument works better when you're *on* plan. You're 126 TSS over. Rest is genuinely the right call here.Partially valid logic \u2014 rest day does absorb some cost. But the maths doesn't flip the call.\n\nAdding 60 min Z2 (~50 TSS) takes the week to **741 TSS** \u2014 31% over a 565 plan. Monday rest recovers ~5\u20137 TSB points, so you'd start Tuesday at roughly **TSB \u221218** instead of \u221211. That's a meaningful difference for the Thursday CSS swim quality.\n\nFrance camp is also 10 days away. Arriving already dug a hole limits what you can extract from it.\n\nThe rest day argument works better when you're *on* plan. You're 126 TSS over. Rest is genuinely the right call here."
-  },
-  {
-    "user": "Are you sure that tsb maths is right. Doesn't align with the load chart",
-    "assistant": "You're right, my numbers were wrong.\n\nCorrect projections:\n\n| | End Sun | Start Tue (after rest) |\n|--|---------|------------------------|\n| Run only | TSB **\u221212** | TSB **\u22122** |\n| Run + 60 min Z2 | TSB **\u221218** | TSB **\u22126** |\n\nThe rest-day recovery is ~10\u201312 TSB points, not 5\u20137 \u2014 ATL decays fast on the 7-day constant. The end-of-day Sunday values were right; it was the Tuesday start values I got wrong. \u22122 vs \u22126 entering Tuesday, not \u221211 vs \u221218.\n\nThat said, rest is still the better call (you're 126 TSS over plan, France camp in 10 days), but the difference is 4 points not 7."
-  },
-  {
     "user": "I'm planning a 60-90 min z2 ride keeping it easy",
     "assistant": "Good call \u2014 rest day tomorrow absorbs it.\n\n**Z2 ride targets** (FTP 297W)\n- NP *166\u2013223W* \u00b7 HR cap \u2264146 \u00b7 cadence 85\u201395 \u00b7 VI <1.08\n\n**TSB impact:**\n| Duration | Add TSS | End Sunday TSB | Start Tue |\n|----------|---------|----------------|-----------|\n| 60 min | ~50 | **\u221218** | ~\u22126 |\n| 90 min | ~75 | **\u221221** | ~\u22129 |\n\nEither is fine \u2014 keep it genuinely easy, cap at 90 min if legs feel good. No need to push; France camp is 10 days out.\n\nWant me to add it to Sunday's calendar?"
   },
@@ -118,5 +106,17 @@
   {
     "user": "",
     "assistant": "*Tomorrow \u2014 Skills swim + Z2 long run*\n\n*Swim (60 min):*\n\u2022 Pace: 1:34/100m (CSS\u22125s vs CSS 1:39)\n\u2022 Main: 8\u00d7100m @ 1:34, 15s rest \u2192 4\u00d750m race-pace (1:36), 20s rest\n\u2022 ~2,200m total\n\n*Run (75 min):*\n\u2022 GAP 5:30/km \u2022 HR cap 146\n\u2022 Ankle protocol: stop if >5/10 pain at any point\n\n*Nutrition:* Run only \u2014 30g/hr carbs, 500ml/hr fluid; nil during swim\n*Sleep:* \u22658h tonight\n*Form:* \u221211 (In training)"
+  },
+  {
+    "user": "",
+    "assistant": "*Week of 2026-06-15* \u2014 build \u00b7 761 TSS\nMon: Strength \u2014 gym\nTue: Speed \u2014 8\u00d775m 35min\nTue: Easy run \u2014 run-walk 5:30 45min\nWed: Easy run \u2014 run-walk 5:30 50min\nWed: Strength \u2014 gym\nThu: CSS \u2014 5\u00d7200m 50min\nFri: Race pace long \u2014 2\u00d745 241min\nSat: Long Bike + Brick Run 240min\nSun: Endurance ride 187min\nSun: Long run \u2014 run-walk 5:30 70min\n_Synced to your calendar/Garmin._"
+  },
+  {
+    "user": "What's the swim tomorrow. \n\nI have pb and padels with me",
+    "assistant": "*Tomorrow \u2014 Skills/Speed swim (50m pool, ~2,200m)*\n\n*Warm-up (500m)*\n\u2022 300m easy free\n\u2022 4\u00d750m drill (catch-up / scull), 15s rest\n\n*Speed set (600m)* \u2014 the focus\n\u2022 8\u00d775m @ *1:32\u20131:34/100m* (~1:09\u20131:10 per 75m), 20s rest\n\u2022 Faster than CSS (1:39) but repeatable across all 8 \u2014 hold the pace, don't fade\n\n*Pull set \u2014 PB + paddles (600m)*\n\u2022 6\u00d7100m @ *1:36/100m* (CSS\u22123), 15s rest\n\u2022 Paddles + buoy: long, strong catch \u2014 power through the pull, no leg input\n\u2022 If shoulders feel loaded, drop paddles for the last 2\n\n*Cool-down (200m)* easy mixed\n\n*Cues:* paddles are strength/feel only \u2014 keep stroke rate controlled, don't yank. Speed reps are about clean turnover, not muscling it.\n\nGood that you've got the PB and paddles \u2014 the pull set is where they earn their place."
+  },
+  {
+    "user": "50m pool and your giving me 75 sets",
+    "assistant": "Good catch \u2014 fixed. 75s don't fit a 50m pool. Rebuilt in 100m units and pushed to ICU (~2,350m, syncs to Garmin):\n\n*Tomorrow \u2014 Skills/Speed swim (50m pool)*\n\n*Warm-up (500m)*\n\u2022 300m easy\n\u2022 4\u00d750m drill, 15s rest\n\n*Speed (800m)* \u2014 the focus\n\u2022 8\u00d7100m @ *1:32\u20131:34/100m*, 20s rest\n\u2022 Faster than CSS (1:39) but hold it across all 8 \u2014 clean turnover, don't fade\n\n*Pull \u2014 PB + paddles (600m)*\n\u2022 6\u00d7100m @ *1:36/100m* (CSS\u22123), 15s rest\n\u2022 Long strong catch, no leg input; drop paddles last 2 if shoulders load up\n\n*Cool-down (200m)* easy"
   }
 ]
