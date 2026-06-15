@@ -297,6 +297,12 @@ def build_prompt(slug: str, cfg: dict, profile: dict, ctl_today: float = 0.0,
         date_grid_lines.append(f"  {d.isoformat()} = {d.strftime('%A')}")
     date_grid_str = "\n".join(date_grid_lines)
     end_35      = (_today + timedelta(days=35)).isoformat()
+    # Fuelling floor — the progressive avg+10 target must never follow a dip BELOW
+    # the athlete's alert threshold; the job is to drive intake UP toward the race
+    # target, not mirror a bad week down (Kathryn was told 30 g/hr off a 20 g/hr
+    # dip vs a 70 g/hr race target — 15 Jun fix).
+    _nutri_floor = int(cfg.get("nutrition_alert_threshold_g_hr") or 60)
+    _nutri_race  = int(cfg.get("nutrition_target_g_hr") or 90)
 
     if replan:
         replan_directive = (
@@ -833,7 +839,8 @@ Step 2 — Read (skip any file that does not exist):
 
 From nutrition_history compute:
   nutrition_avg_g_hr = mean of all g_per_hr values (null if no entries)
-  nutrition_target_g_hr = min(round(nutrition_avg_g_hr + 10, -1), 90) if avg exists, else 60
+  nutrition_target_g_hr = max(min(round(nutrition_avg_g_hr + 10, -1), 90), {_nutri_floor}) if avg exists, else max(60, {_nutri_floor})
+  HARD FLOOR: never prescribe below {_nutri_floor} g/hr even if recent intake was lower — the goal is to progress fuelling UP toward the {_nutri_race} g/hr race target, never to follow a low week down. Always frame the number as progress toward {_nutri_race} g/hr (e.g. "build to {_nutri_floor}+ g/hr this block, race target {_nutri_race}").
 
 Step 3 — Determine the planning window:
 - Target: the 2 weeks starting NEXT Monday (not today).

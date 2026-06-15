@@ -19,6 +19,7 @@ sys.path.insert(0, str(TELEGRAM))
 
 import plan_tools as pt                                   # noqa: E402
 from primitives.load import project_pmc_daily            # noqa: E402
+from primitives.planned_tss import tss_from_segments     # noqa: E402
 
 
 # ── single-source guarantee: CLI projection ≡ the load chart's projection ──────
@@ -52,6 +53,30 @@ def test_tss_prefers_plan_load_target_over_estimate():
     # When the plan carries its own number, use it verbatim — never estimate over it.
     r = pt._event_tss({"sport": "Swim", "minutes": 60, "name": "CSS", "load_target": 90})
     assert r["tss"] == 90 and r["source"] == "plan"
+
+
+# ── calculable TSS from time-at-intensity (the swim fix) ──────────────────────
+def test_segments_tss_is_time_weighted_if_squared():
+    # 30 min @ IF 1.0 + 30 min @ IF 0.6 → (0.5*1 + 0.5*0.36)*100 = 68
+    r = tss_from_segments("bike", [{"minutes": 30, "if": 1.0}, {"minutes": 30, "if": 0.6}])
+    assert r["tss"] == 68 and r["duration_min"] == 60
+
+
+def test_segments_swim_css_beats_easy_same_duration():
+    # The inversion we found (easy load_target >= CSS) must not survive the calc.
+    css = tss_from_segments("swim", [{"minutes": 10, "zone": "easy"},
+                                     {"minutes": 44, "zone": "css"},
+                                     {"minutes": 6, "zone": "cooldown"}])
+    easy = tss_from_segments("swim", [{"minutes": 8, "zone": "easy"},
+                                      {"minutes": 28, "zone": "aerobic"},
+                                      {"minutes": 4, "zone": "cooldown"}])
+    assert css["tss"] > easy["tss"]
+    assert 0.85 <= css["avg_if"] <= 0.95   # matches Jamie's logged ~0.90 swims
+
+
+def test_segments_explicit_if_overrides_zone():
+    r = tss_from_segments("run", [{"minutes": 60, "if": 0.8, "zone": "easy"}])
+    assert r["segments"][0]["if"] == 0.8
 
 
 # ── required-tss: real basis prescribes; no basis refuses (don't fabricate) ────

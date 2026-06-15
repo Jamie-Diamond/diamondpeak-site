@@ -38,6 +38,72 @@ _DUR_DEFAULT_MIN = {
     "swim": 45, "strength": 40,
 }
 
+# ── Segment-based planned TSS (the calculable path) ──────────────────────────
+# A structured session is time-at-intensity; TSS = Σ (hours_i × IF_i²) × 100.
+# Segment IFs below are intensity factors relative to threshold (CSS for swim,
+# threshold pace for run, FTP for bike). Calibrated so a typical session
+# integrates to the session-average IF seen in logged history (e.g. Jamie's CSS
+# swims average ~0.90 → a WU/CSS-main/CD split integrates to ~0.88–0.92).
+_ZONE_IF = {
+    "swim": {"recovery": 0.60, "easy": 0.72, "warmup": 0.70, "cooldown": 0.65,
+             "aerobic": 0.80, "drill": 0.68, "kick": 0.70, "pull": 0.85,
+             "steady": 0.88, "race": 0.95, "css": 1.00, "threshold": 1.00,
+             "speed": 1.08, "sprint": 1.12},
+    "run":  {"recovery": 0.60, "easy": 0.72, "z2": 0.72, "warmup": 0.68,
+             "cooldown": 0.62, "steady": 0.83, "z3": 0.83, "tempo": 0.88,
+             "threshold": 0.97, "css": 0.97, "interval": 1.05, "vo2": 1.06,
+             "hill": 0.95, "sprint": 1.15},
+    "bike": {"recovery": 0.50, "z1": 0.55, "z2": 0.65, "endurance": 0.65,
+             "warmup": 0.60, "cooldown": 0.55, "tempo": 0.80, "z3": 0.80,
+             "sweetspot": 0.90, "ss": 0.90, "threshold": 0.95, "race": 0.80,
+             "vo2": 1.05, "anaerobic": 1.20},
+}
+_ZONE_DEFAULT_IF = {"swim": 0.80, "run": 0.75, "bike": 0.68, "brick": 0.78}
+
+
+def _norm_sport(sport: str) -> str:
+    s = (sport or "").lower()
+    if "swim" in s:
+        return "swim"
+    if "run" in s:
+        return "run"
+    if "ride" in s or "bike" in s or "cycl" in s or "brick" in s:
+        return "bike"
+    return s
+
+
+def segment_if(sport: str, zone: str) -> float:
+    """IF for a named intensity zone in a sport. Falls back to the sport default."""
+    sp = _norm_sport(sport)
+    return _ZONE_IF.get(sp, {}).get((zone or "").lower().strip(),
+                                    _ZONE_DEFAULT_IF.get(sp, 0.75))
+
+
+def tss_from_segments(sport: str, segments: list) -> dict:
+    """Calculable planned TSS from time-at-intensity.
+
+    segments: list of {"minutes": N, "zone": "css"} and/or {"minutes": N, "if": F}.
+    An explicit `if` wins; otherwise the zone is looked up for the sport. Returns
+    {tss, duration_min, avg_if, segments:[{minutes, if, zone, tss}]}.
+    This is the deterministic source planners should use to SET load_target —
+    never an LLM guess, never a flat per-session rate.
+    """
+    rows, total_tss, total_min = [], 0.0, 0.0
+    for seg in segments:
+        mins = float(seg.get("minutes") or seg.get("min") or 0)
+        if mins <= 0:
+            continue
+        zone = seg.get("zone")
+        intensity = float(seg["if"]) if seg.get("if") is not None else segment_if(sport, zone)
+        seg_tss = mins / 60.0 * intensity ** 2 * 100.0
+        total_tss += seg_tss
+        total_min += mins
+        rows.append({"minutes": round(mins), "if": round(intensity, 3),
+                     "zone": zone, "tss": round(seg_tss, 1)})
+    avg_if = (total_tss / (total_min / 60.0 * 100.0)) ** 0.5 if total_min else 0.0
+    return {"tss": int(round(total_tss)), "duration_min": int(round(total_min)),
+            "avg_if": round(avg_if, 3), "segments": rows}
+
 
 def _duration_min(event: dict, session_type: str) -> int:
     mt = event.get("moving_time")

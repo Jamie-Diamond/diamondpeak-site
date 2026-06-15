@@ -24,7 +24,7 @@ import menstrual as menstrual_lib
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, nutrition_floor=60, nutrition_race=90):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -141,7 +141,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 [If watchdog flag active: ⚠️ [flag in plain English — one line]]
 [If the 05:00 prescription check modified or swapped today's session: 🔁 [what changed and why — one plain line, e.g. "Swapped to easy spin — HRV low". If it confirmed the session as planned, say nothing]]
 {cycle_card_line}
-[If today's session is Ride or Brick >90 min: 🍌 Nutrition — target [min(avg+10,90)]g/hr · eat at 15 min then every 25 min]
+[If today's session is Ride or Brick >90 min: 🍌 Nutrition — target [max(min(avg+10,90), {nutrition_floor})]g/hr (never below {nutrition_floor}; progress toward {nutrition_race}g/hr race target) · eat at 15 min then every 25 min]
 [If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact]]
 [If open action is due within 3 days: 📌 [action] due [date]]
 {"[If sessions_this_week < 2 AND today is Wednesday or later: 🌡️ Heat bath due — [N] this week (target 2–3×)]" if heat_protocol else ""}
@@ -416,7 +416,9 @@ def run_athlete(slug, athlete_cfg):
     prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
                            wellness_line=wellness_line, heat_protocol=heat_protocol,
                            coaching_level=coaching_level, planned_block=planned_block,
-                           cycle=cycle)
+                           cycle=cycle,
+                           nutrition_floor=int(athlete_cfg.get("nutrition_alert_threshold_g_hr") or 60),
+                           nutrition_race=int(athlete_cfg.get("nutrition_target_g_hr") or 90))
 
     with open(log_file, "a") as lf:
         result = subprocess.run(

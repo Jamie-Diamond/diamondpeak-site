@@ -1529,11 +1529,25 @@ def prefetch_context(slug: str) -> str:
                         f"ramp-cap {req.get('ramp_capped_weekly_tss','n/a')}). {req.get('note','')}")
                 elif "error" in req:
                     lines.append(f"Weekly TSS target: {req['error']}")
+            # Sport-balance guardrails — so the model plans across sports to the
+            # athlete's rules, not "all running". day_rules are HARD (a sport on a
+            # forbidden day is a validation breach); distribution is the phase's
+            # easy-vs-quality mix.
+            dr = athletes[slug].get("day_rules")
+            if dr:
+                lines.append(f"Day rules (HARD — which sports go on which days): {json.dumps(dr)}")
+            try:
+                ph = _pt.current_phase(_pt._load_blueprint(slug), wk_start) or {}
+                if ph.get("distribution"):
+                    lines.append(f"Phase intensity distribution (easy vs quality per sport): {json.dumps(ph['distribution'])}")
+            except Exception:
+                pass
             lines.append(
-                "For per-session TSS or a CTL/ATL/TSB projection of a proposed week, call: "
-                f"python3 ClaudeCoach/lib/plan_tools.py tss --sessions '<json>'  |  "
-                f"python3 ClaudeCoach/lib/plan_tools.py project --athlete {slug} --daily '<json>'  |  "
-                f"python3 ClaudeCoach/lib/plan_tools.py required-tss --athlete {slug}")
+                "For per-session TSS or a projection of a proposed week, call: "
+                f"plan_tools.py tss --sport <s> --segments '<time-at-intensity json>'  |  "
+                f"plan_tools.py project --athlete {slug} --daily '<json>'  |  "
+                f"plan_tools.py required-tss --athlete {slug}  |  "
+                f"plan_tools.py validate --athlete {slug} --week '<json>' (hard-check sport-day rules + ramp before proposing a week)")
         except Exception as _e:
             log(f"prefetch planning numbers (non-fatal): {_e}")
 

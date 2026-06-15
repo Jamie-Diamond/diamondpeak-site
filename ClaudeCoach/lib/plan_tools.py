@@ -41,11 +41,13 @@ BASE = Path(__file__).resolve().parent.parent          # ClaudeCoach/
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
-from primitives.planned_tss import planned_session_tss          # noqa: E402
+from primitives.planned_tss import planned_session_tss, tss_from_segments  # noqa: E402
 from primitives.load import (                                   # noqa: E402
     compute_required_tss,
     project_pmc_daily,
 )
+from primitives.validate_plan import validate_week              # noqa: E402
+from primitives.blueprint import current_phase                  # noqa: E402
 
 ATHLETES_CONFIG = BASE / "config" / "athletes.json"
 
@@ -84,6 +86,16 @@ def _event_tss(ev: dict) -> dict:
 
 # ── subcommand: tss ────────────────────────────────────────────────────────────
 def cmd_tss(args) -> dict:
+    # Calculable path: time-at-intensity segments → TSS = Σ(hours × IF²) × 100.
+    # This is the preferred way to SET a session's load_target.
+    if args.segments:
+        try:
+            segs = json.loads(args.segments)
+        except json.JSONDecodeError as e:
+            raise SystemExit(_err(f"--segments is not valid JSON: {e}"))
+        if not args.sport:
+            raise SystemExit(_err("--segments requires --sport (swim/run/bike)"))
+        return tss_from_segments(args.sport, segs)
     if args.sessions:
         try:
             sessions = json.loads(args.sessions)
@@ -288,13 +300,67 @@ def cmd_required_tss(args) -> dict:
     return {"athlete": args.athlete, **required_tss(cfg, ctl_today)}
 
 
+# ── subcommand: validate ───────────────────────────────────────────────────────
+def _load_blueprint(slug: str) -> dict:
+    p = BASE / "athletes" / slug / "reference" / "training-blueprint.json"
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def cmd_validate(args) -> dict:
+    """Hard-check a proposed week against the athlete's rules — the same backstop
+    the Sunday generator uses (day_rules, CTL ramp, strength cap, intensity
+    distribution). Mirrors generate-plan.py's validate call: NO weekly_tss_cap
+    (the required-tss target is a floor, not a ceiling)."""
+    cfg = _load_cfg(args.athlete)
+    try:
+        week = json.loads(args.week)
+    except json.JSONDecodeError as e:
+        raise SystemExit(_err(f"--week is not valid JSON: {e}"))
+    if not isinstance(week, list) or not week:
+        raise SystemExit(_err("--week must be a non-empty JSON list of {date,sport,tss}"))
+
+    # Map the lightweight input to the event shape validate_week expects.
+    events = [{"start_date_local": s.get("date"), "type": s.get("sport") or s.get("type"),
+               "category": "WORKOUT",
+               "load_target": s.get("tss") if s.get("tss") is not None else s.get("load_target")}
+              for s in week]
+    week_start = _monday(min(date.fromisoformat(e["start_date_local"][:10]) for e in events))
+
+    ctl_today = args.ctl_today
+    if ctl_today is None:
+        w = _client(cfg).get_wellness(days=3)
+        ctl_today = round(float(w[-1].get("ctl") or 0), 1) if w else None
+
+    day_rules = cfg.get("day_rules")
+    phase = current_phase(_load_blueprint(args.athlete), week_start) or {}
+    rep = validate_week(
+        events, week_start,
+        day_rules=day_rules, ctl_today=ctl_today,
+        ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
+        strength_max=(day_rules or {}).get("strength_max"),
+        distribution=phase.get("distribution"),
+    )
+    viol = [{"code": v.code, "severity": v.severity, "message": str(v)} for v in rep.violations]
+    return {"athlete": args.athlete, "week_start": week_start.isoformat(),
+            "total_tss": round(rep.total_tss),
+            "ok": not any(v["severity"] == "hard" for v in viol),
+            "hard": [v for v in viol if v["severity"] == "hard"],
+            "soft": [v for v in viol if v["severity"] != "hard"]}
+
+
 def main():
     p = argparse.ArgumentParser(description="Deterministic planning maths for ClaudeCoach")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    pt = sub.add_parser("tss", help="TSS for one session or a list of sessions")
+    pt = sub.add_parser("tss", help="TSS for a session/list, or calculable from time-at-intensity segments")
     pt.add_argument("--sessions"); pt.add_argument("--sport")
     pt.add_argument("--minutes", type=int); pt.add_argument("--name")
+    pt.add_argument("--segments", help='JSON list of {"minutes":N,"zone":"css"} or {"minutes":N,"if":F}')
 
     pw = sub.add_parser("week-tss", help="deterministic weekly roll-up from the calendar")
     pw.add_argument("--athlete", required=True); pw.add_argument("--week-start")
@@ -306,9 +372,13 @@ def main():
     pr = sub.add_parser("required-tss", help="weekly TSS needed for the phase CTL target")
     pr.add_argument("--athlete", required=True); pr.add_argument("--ctl-today", type=float)
 
+    pv = sub.add_parser("validate", help="hard-check a proposed week against the athlete's rules")
+    pv.add_argument("--athlete", required=True); pv.add_argument("--week", required=True)
+    pv.add_argument("--ctl-today", type=float)
+
     args = p.parse_args()
-    handler = {"tss": cmd_tss, "week-tss": cmd_week_tss,
-               "project": cmd_project, "required-tss": cmd_required_tss}[args.cmd]
+    handler = {"tss": cmd_tss, "week-tss": cmd_week_tss, "project": cmd_project,
+               "required-tss": cmd_required_tss, "validate": cmd_validate}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:
