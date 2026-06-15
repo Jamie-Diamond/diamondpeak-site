@@ -461,6 +461,7 @@ _STRENGTH_RE     = re.compile(
 )
 
 GENERATE_PLAN_SCRIPT = BASE.parent.parent / "ClaudeCoach/scripts/generate-plan.py"
+STAGE1_PLAN_SCRIPT = BASE.parent.parent / "ClaudeCoach/scripts/stage1-plan.py"
 
 def _week_stats(slug: str, athlete_cfg: dict | None = None) -> str:
     """Python-only weekly training summary from athletes/{slug}/session-log.json."""
@@ -2463,10 +2464,10 @@ def main():
                     # populated replan (a fortnight of sessions = many sequential ICU
                     # edits). `timeout` gives a generous hard cap so a stuck run can't
                     # linger forever. Do NOT echo stdout (caused duplicate messages).
-                    cmd = ["timeout", "1500", "python3", str(GENERATE_PLAN_SCRIPT),
-                           "--athlete", slug]
-                    if is_replan:
-                        cmd.append("--replan")
+                    # Two-stage engine (gated --push, --notify messages the athlete on
+                    # completion). Replaces the old generate-plan for replan/generate.
+                    cmd = ["timeout", "1500", "python3", str(STAGE1_PLAN_SCRIPT),
+                           "--athlete", slug, "--push", "--notify"]
                     subprocess.Popen(
                         cmd, cwd=str(PROJECT_DIR),
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

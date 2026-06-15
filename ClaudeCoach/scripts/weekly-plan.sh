@@ -11,7 +11,7 @@ mkdir -p "$(dirname "$LOG")"
 echo "=== weekly-plan $(date) ===" >> "$LOG"
 for A in jamie kathryn; do
   echo "--- $A $(date) ---" >> "$LOG"
-  timeout 1200 python3 "$R/scripts/stage1-plan.py" --athlete "$A" --push --max-attempts 3 >> "$LOG" 2>&1
+  timeout 1200 python3 "$R/scripts/stage1-plan.py" --athlete "$A" --push --notify --max-attempts 3 >> "$LOG" 2>&1
   echo "--- $A rc=$? ---" >> "$LOG"
 done
 echo "=== done $(date) ===" >> "$LOG"

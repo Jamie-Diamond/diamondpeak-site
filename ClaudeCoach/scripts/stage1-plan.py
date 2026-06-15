@@ -67,30 +67,37 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
     """Reliable TSS — but PROTECT key sessions. The long run and long ride are CLAMPED to
     their targets (never used to absorb TSS); quality is fixed by dose; only the OTHER easy
     endurance (easy runs, 2nd/easy rides) is scaled to land the week on target."""
-    lr_min = (brief.get("long_run_target") or {}).get("minutes")
+    lr_cap = brief.get("long_run_cap_min")            # MAX long run
     lrd_min = brief.get("long_ride_target_min")
-    run_km_target = brief.get("run_mileage_target_km")
+    mileage_cap_km = brief.get("weekly_run_mileage_cap_km")  # MAX weekly run km
     PACE = 5.3  # ~easy min/km (matches the audit's km estimate)
 
-    # 1. Clamp the protected key sessions to their targets (once).
+    # 1. Long ride clamped to its target; long run CLAMPED DOWN to its cap (never up).
     for s in proposal["sessions"]:
-        if _is_long_run(s) and lr_min:
-            _set_total_minutes(s, lr_min)
-        elif _is_long_ride(s) and lrd_min:
+        if _is_long_ride(s) and lrd_min:
             _set_total_minutes(s, lrd_min)
+        elif _is_long_run(s) and lr_cap:
+            cur = sum(seg.get("minutes", 0) for seg in s.get("segments", []))
+            if cur > lr_cap:
+                _set_total_minutes(s, lr_cap)
 
-    # 2. RUN VOLUME is governed by the mileage target (NOT by TSS). Scale the non-long
-    #    runs so total run minutes ≈ run_km_target × pace (long run already clamped).
-    if run_km_target:
-        other_runs = [s for s in proposal["sessions"]
-                      if (s.get("sport") or "").lower() == "run" and not _is_long_run(s)]
-        cur_other = sum(sum(seg.get("minutes", 0) for seg in s.get("segments", [])) for s in other_runs)
-        target_other = max(0, run_km_target * PACE - (lr_min or 0))
-        if cur_other > 0 and target_other > 0:
-            f = target_other / cur_other
-            for s in other_runs:
+    # 2. Total run mileage is a CEILING: if over the weekly cap, scale ALL runs down to it.
+    #    (Never scale runs UP — mileage is a max, not a target.)
+    if mileage_cap_km:
+        run_sessions = [s for s in proposal["sessions"] if (s.get("sport") or "").lower() == "run"]
+        cur_min = sum(sum(seg.get("minutes", 0) for seg in s.get("segments", [])) for s in run_sessions)
+        cap_min = mileage_cap_km * PACE
+        if cur_min > cap_min and cur_min > 0:
+            f = cap_min / cur_min
+            for s in run_sessions:
                 for seg in s.get("segments", []):
                     seg["minutes"] = max(15, round(seg["minutes"] * f))
+            # re-clamp the long run in case scaling pushed it (it won't, but safe)
+            for s in run_sessions:
+                if _is_long_run(s) and lr_cap:
+                    cur = sum(seg.get("minutes", 0) for seg in s.get("segments", []))
+                    if cur > lr_cap:
+                        _set_total_minutes(s, lr_cap)
 
     # 3. TSS is closed with BIKE volume only (endurance rides, not the long ride, not runs).
     flex = lambda s: (_is_endurance(s) and (s.get("sport") or "").lower() in ("bike", "ride")
@@ -148,9 +155,9 @@ def audit_built(brief: dict, built: dict, target, proposal: dict) -> list:
     runs = [s for s in built["sessions"] if s["sport"] == "Run"]
     run_min = sum(s["duration_min"] for s in runs)
     run_km = round(run_min / 5.3, 1)   # ~easy pace 5.3 min/km
-    tgt_km = brief.get("run_mileage_target_km")
-    if tgt_km and not (tgt_km * 0.85 <= run_km <= tgt_km * 1.15):
-        issues.append(f"run mileage ~{run_km}km vs target {tgt_km}km — adjust run durations")
+    cap_km = brief.get("weekly_run_mileage_cap_km")   # MAX (highest of last 4 wks ×1.15)
+    if cap_km and run_km > cap_km:
+        issues.append(f"run mileage ~{run_km}km EXCEEDS cap {cap_km}km (+10-15% max) — cut run durations")
     rp = brief.get("run_protocol") or {}
     if rp.get("quality_allowed") is False:
         for s in proposal.get("sessions", []):
@@ -159,11 +166,9 @@ def audit_built(brief: dict, built: dict, target, proposal: dict) -> list:
             if any((seg.get("if") if seg.get("if") is not None else segment_if("run", seg.get("zone"))) >= 0.85
                    for seg in (s.get("segments") or [])):
                 issues.append(f"run '{s.get('name')}' has quality intensity but run quality is NOT allowed (ankle)")
-    lr = (brief.get("long_run_target") or {}).get("minutes")
-    if lr and runs:
-        longest = max(s["duration_min"] for s in runs)
-        if longest > lr * 1.2:
-            issues.append(f"long run {longest}min exceeds cap ~{lr}min (+10-15% rule)")
+    lrc = brief.get("long_run_cap_min")   # MAX single long run (×1.15)
+    if lrc and runs and max(s["duration_min"] for s in runs) > lrc:
+        issues.append(f"long run {max(s['duration_min'] for s in runs)}min EXCEEDS cap {lrc}min (+10-15% max)")
 
     # ── LONG RIDE must be present and protected ──
     lrt = brief.get("long_ride_target_min")
@@ -195,9 +200,10 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   skills/speed session and Thu swim is the CSS set, never the reverse.
 - Aim the week near the WEEKLY TSS TARGET and follow the intensity split (TID = low/mod/high %).
 - PROTECT THE LONG RIDE: include one Ride of ~long_ride_target_min as the week's KEY session.
-- RUNS: total ~run_mileage_target_km (≈ minutes/5.3 km); the longest run ≈ long_run_target.
-  If run_protocol.quality_allowed is false, EVERY run is easy Z2 — NO tempo/threshold/interval/
-  vo2 run (ankle gate). Honour run_protocol format (run-walk 5:30, HR cap).
+- RUNS: total run mileage must NOT exceed weekly_run_mileage_cap_km (≈ minutes/5.3 km) and the
+  longest run must NOT exceed long_run_cap_min — these are MAX ceilings (+10-15% on the highest of
+  the last 4 weeks). Plan at or under them. If run_protocol.quality_allowed is false, EVERY run is
+  easy Z2 — NO tempo/threshold/interval/vo2 run (ankle gate). Honour run_protocol format.
 - OBEY hard_rules (the athlete's protocol) absolutely — they override anything else here.
 - Swim sets: express in minutes (not metres). Strength: omit segments.
 - Do NOT output load_target, TSS numbers, or %FTP/pace targets — code derives them.
@@ -221,6 +227,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--athlete", required=True)
     ap.add_argument("--push", action="store_true")
+    ap.add_argument("--notify", action="store_true", help="message the athlete on completion")
     ap.add_argument("--model", default="claude-sonnet-4-6")
     ap.add_argument("--max-attempts", type=int, default=3)
     args = ap.parse_args()
@@ -282,9 +289,33 @@ def main():
         if not overall_ok:
             summary["pushed"] = False
             summary["reason"] = f"not ready (rules_ok={built['ok']}, load_on_target={load_on_target}) — not pushing"
+            if args.notify and cfg.get("chat_id"):
+                _notify(cfg["chat_id"], f"⚠️ Couldn't generate a clean week ({', '.join(built['hard'][:1]) or 'audit failed'}). Your existing plan is unchanged.")
         else:
             summary["push_result"] = pb.push(args.athlete, built)
+            if args.notify and cfg.get("chat_id"):
+                _notify(cfg["chat_id"], _week_message(brief, built))
     print(json.dumps(summary, indent=1, ensure_ascii=False))
+
+
+def _week_message(brief: dict, built: dict) -> str:
+    import datetime as _dt
+    lines = [f"*Week of {built['week_start']}* — {brief.get('phase','')} · {built['total_tss']} TSS"]
+    for s in built["sessions"]:
+        wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
+        dur = f" {s['duration_min']}min" if s["duration_min"] else ""
+        lines.append(f"{wd}: {s['name']}{dur}")
+    lines.append("_Synced to your calendar/Garmin._")
+    return "\n".join(lines)
+
+
+def _notify(chat_id, text):
+    try:
+        subprocess.run(["python3", str(BASE / "telegram" / "notify.py"),
+                        "--chat-id", str(chat_id), text],
+                       cwd=PROJECT_DIR, timeout=30, capture_output=True)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

@@ -106,10 +106,30 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # weekly TSS target (deterministic)
     thresh = th.get_thresholds(slug, cfg)
     ctl = None
+    # Run CAPS (max, not target): weekly mileage and longest single run each capped at
+    # their highest of the last 4 weeks × 1.15 (Jamie's rule — applies to both).
+    weekly_mileage_cap_km = None
+    long_run_cap_min = None
     try:
         from icu_api import IcuClient
-        w = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"]).get_wellness(days=3)
+        import datetime as _dt
+        from collections import defaultdict
+        _c = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+        w = _c.get_wellness(days=3)
         ctl = round(float(w[-1].get("ctl") or 0), 1) if w else None
+        wk_km, wk_longest = defaultdict(float), defaultdict(float)
+        for a in _c.get_training_history(days=35):
+            if (a.get("type") or "") != "Run":
+                continue
+            d = _dt.date.fromisoformat((a.get("start_date_local") or "")[:10])
+            iso = d.isocalendar()[:2]
+            wk_km[iso] += (a.get("distance") or 0) / 1000
+            wk_longest[iso] = max(wk_longest[iso], (a.get("moving_time") or 0) / 60)
+        cur = today.isocalendar()[:2]
+        last4 = [k for k in sorted(wk_km) if k != cur][-4:]
+        if last4:
+            weekly_mileage_cap_km = round(max(wk_km[k] for k in last4) * 1.15, 1)
+            long_run_cap_min = round(max(wk_longest[k] for k in last4) * 1.15)
     except Exception:
         pass
     req = pt.required_tss(cfg, ctl, today=today) if ctl else {}
@@ -143,24 +163,12 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
             rows.append(row)
         available[sport] = rows
 
-    # Run-mileage target (athlete protocol): seed weekly_km_next, else rolling-3wk-avg ×1.125.
     rp = cfg.get("run_protocol") or {}
-    run_km_target = rp.get("weekly_km_next")
     # Long-ride target (the protected key session): event bike demand × factor, capped.
     bike_min = (cfg.get("race_target_splits") or {}).get("bike_min")
     lr_factor = event.get("long_ride_factor", 0.9)
     long_ride_min = min(int(round((bike_min or 200) * lr_factor / 15) * 15),
                         240 if ekey == "ironman" else 300)
-    # Long-run target ~45% of the week's run km (a single Z2 session), in minutes via run pace.
-    run_thr_mps = None
-    try:
-        run_thr_mps = (_thr_run := thresh).get("run_threshold_mps")
-    except Exception:
-        pass
-    long_run_km = round((run_km_target or 12) * 0.45, 1)
-    # easy pace ≈ threshold/0.74 (Z2). minutes = km × pace(min/km).
-    easy_pace_min_km = (1000 / (thresh.get("run_threshold_mps") or 4.13) / 0.74 / 60) if thresh.get("run_threshold_mps") else 5.5
-    long_run_min = int(round(long_run_km * easy_pace_min_km))
     # Athlete hard rules (protocol prose) — so the proposer obeys them, like the old coach did.
     hard_rules = ""
     rp_path = BASE / "athletes" / slug / "reference" / "rules.md"
@@ -181,16 +189,18 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "brick": event.get("brick"),
         "day_rules": cfg.get("day_rules"),
         "run_protocol": rp,
-        "run_mileage_target_km": run_km_target,
-        "long_run_target": {"km": long_run_km, "minutes": long_run_min},
+        "weekly_run_mileage_cap_km": weekly_mileage_cap_km,   # MAX (highest of last 4 wks ×1.15)
+        "long_run_cap_min": long_run_cap_min,                 # MAX single long run (×1.15)
         "long_ride_target_min": long_ride_min,
         "thresholds": {"ftp": thresh["ftp_watts"], "run": thresh["run_threshold_per_km"],
                        "swim_css": thresh["swim_css_per_100m"]},
         "available_sessions": available,
         "hard_rules": hard_rules,
         "dosing_note": ("Build to weekly_tss_target. PROTECT the long ride (~long_ride_target_min). "
-                        "Runs total ~run_mileage_target_km; long run ~long_run_target; obey run_protocol "
-                        "(no quality if quality_allowed=false) and hard_rules. No type outside available_sessions."),
+                        "Total run mileage must NOT exceed weekly_run_mileage_cap_km and the longest "
+                        "run must NOT exceed long_run_cap_min (these are MAX ceilings, +10-15% on the "
+                        "highest of the last 4 weeks). Obey run_protocol (no quality if "
+                        "quality_allowed=false) and hard_rules. No type outside available_sessions."),
     }
 
 
