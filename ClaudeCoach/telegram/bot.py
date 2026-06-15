@@ -2466,7 +2466,7 @@ def main():
                     # linger forever. Do NOT echo stdout (caused duplicate messages).
                     # Two-stage engine (gated --push, --notify messages the athlete on
                     # completion). Replaces the old generate-plan for replan/generate.
-                    cmd = ["timeout", "1500", "python3", str(STAGE1_PLAN_SCRIPT),
+                    cmd = ["timeout", "1800", "python3", str(STAGE1_PLAN_SCRIPT),
                            "--athlete", slug, "--push", "--notify"]
                     subprocess.Popen(
                         cmd, cwd=str(PROJECT_DIR),
