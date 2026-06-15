@@ -132,8 +132,10 @@ def render_workout(sport: str, segments: list) -> dict:
         zone = seg.get("zone")
         lo, hi = (_band(sport, zone, float(seg["if"])) if seg.get("if") is not None
                   else _band(sport, zone))
-        label = f" {zone}" if zone else ""
-        return f"- {mins}m {lo}-{hi}%{suffix}{label}", mins
+        # NO trailing zone label: a token like "Z2" makes ICU parse the step as power
+        # ZONE 2 and discard the explicit %-range target (-> empty chart). The %-range
+        # IS the target; the human zone name lives in description_raw.
+        return f"- {mins}m {lo}-{hi}%{suffix}", mins
 
     def _flat(seg, mins):
         flat.append({"minutes": mins, "zone": seg.get("zone"), "if": seg.get("if")})
