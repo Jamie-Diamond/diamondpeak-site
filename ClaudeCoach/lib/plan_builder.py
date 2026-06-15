@@ -115,27 +115,31 @@ def push(slug: str, built: dict, replace: bool = True):
     cfg = _cfg(slug)
     c = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
     ws = _d.fromisoformat(built["week_start"])
-    deleted = []
-    if replace:
-        for e in c.get_events(ws.isoformat(), (ws + _td(days=6)).isoformat()):
-            if e.get("category") == "WORKOUT" and e.get("id"):
-                try:
-                    c.delete_workout(e["id"]); deleted.append(e["id"])
-                except Exception:
-                    pass
     # Map proposal sports to valid intervals.icu event types (Bike/Brick/Strength are NOT
-    # valid ICU types — that 422'd a push mid-week. Brick pushes as a Ride; the run leg is
-    # in description_raw).
+    # valid ICU types — Brick pushes as a Ride; the run leg is in description_raw).
     icu_type = {"Bike": "Ride", "Brick": "Ride", "Strength": "WeightTraining",
                 "Weights": "WeightTraining"}
+    # SAFE ORDERING: capture the OLD events, PUSH the new ones FIRST, and only delete the
+    # old ones once every new push succeeded. If a push fails the old plan is left intact
+    # (worst case: transient duplicates), so a failure can NEVER empty the week.
+    old_ids = []
+    if replace:
+        old_ids = [e["id"] for e in c.get_events(ws.isoformat(), (ws + _td(days=6)).isoformat())
+                   if e.get("category") == "WORKOUT" and e.get("id")]
     pushed = []
     for s in built["sessions"]:
         payload = {"sport": icu_type.get(s["sport"], s["sport"]),
                    "event_date": s["date"], "name": s["name"],
                    "description": s["description"], "description_raw": s["description_raw"],
                    "planned_training_load": s["load_target"]}
-        r = c.push_workout(**payload)
+        r = c.push_workout(**payload)        # raises before any delete if a payload is bad
         pushed.append(r.get("id"))
+    deleted = []
+    for eid in old_ids:                       # only reached if ALL pushes succeeded
+        try:
+            c.delete_workout(eid); deleted.append(eid)
+        except Exception:
+            pass
     return {"deleted": deleted, "pushed": pushed}
 
 
