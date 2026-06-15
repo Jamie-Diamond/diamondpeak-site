@@ -52,7 +52,11 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
 - Use ONLY session types and zones from AVAILABLE SESSIONS below. Do NOT invent types.
 - For a quality session, build its main set from that type's "this_week" dose (reps×min);
   wrap with an easy warm-up and cool-down. If "ramp_in" is true, keep it conservative.
-- Respect DAY RULES (which sports on which days). Place an easy/rest day too.
+- Respect DAY RULES: swim_days/bike_days/run_days set which sports go on which day, and
+  place an easy/rest day. If day_rules has "swim_focus" (or run_focus/bike_focus) mapping a
+  weekday to allowed session type(s), that day's session of that sport MUST be one of those
+  types — e.g. swim_focus {{"Tue":["technique","speed"],"Thu":["css"]}} means Tue swim is a
+  skills/speed session and Thu swim is the CSS set, never the reverse.
 - Aim the week near the WEEKLY TSS TARGET and follow the intensity split (TID = low/mod/high %).
 - Swim sets: express in minutes (not metres). Strength: omit segments.
 - Do NOT output load_target, TSS numbers, or %FTP/pace targets — code derives them.
@@ -99,20 +103,28 @@ def main():
         sys.exit(1)
 
     built = pb.build_sessions(args.athlete, proposal)
+    # Full guardrail: validate_week (in build_sessions) does NOT check load-on-target —
+    # only the audit does. Enforce it here so the dry-run can't falsely pass an
+    # under/over-target week. >12% off = not ready to push.
+    target = brief["weekly_tss_target"]
+    load_pct_off = (round((built["total_tss"] - target) / target * 100, 1) if target else None)
+    load_on_target = (target is None) or abs(load_pct_off) <= 12
+    overall_ok = built["ok"] and load_on_target
     summary = {
         "athlete": args.athlete, "week_start": built["week_start"],
         "event": brief["event"], "phase": brief["phase"], "week_in_phase": brief["week_in_phase"],
-        "target_tss": brief["weekly_tss_target"], "built_total_tss": built["total_tss"],
-        "fuel_g_hr": built["fuel_g_hr"], "validation_ok": built["ok"],
+        "target_tss": target, "built_total_tss": built["total_tss"],
+        "load_pct_off_target": load_pct_off, "load_on_target": load_on_target,
+        "fuel_g_hr": built["fuel_g_hr"], "rules_ok": built["ok"], "ready_to_push": overall_ok,
         "hard": built["hard"], "soft": built["soft"],
         "sessions": [{"date": s["date"], "sport": s["sport"], "name": s["name"],
                       "load": s["load_target"], "min": s["duration_min"],
                       "structured": bool(s["description"])} for s in built["sessions"]],
     }
     if args.push:
-        if not built["ok"]:
+        if not overall_ok:
             summary["pushed"] = False
-            summary["reason"] = "validation failed — not pushing"
+            summary["reason"] = f"not ready (rules_ok={built['ok']}, load_on_target={load_on_target}) — not pushing"
         else:
             summary["pushed_ids"] = pb.push(args.athlete, built)
     print(json.dumps(summary, indent=1, ensure_ascii=False))
