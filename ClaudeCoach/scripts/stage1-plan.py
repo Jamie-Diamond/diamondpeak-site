@@ -69,14 +69,32 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
     endurance (easy runs, 2nd/easy rides) is scaled to land the week on target."""
     lr_min = (brief.get("long_run_target") or {}).get("minutes")
     lrd_min = brief.get("long_ride_target_min")
+    run_km_target = brief.get("run_mileage_target_km")
+    PACE = 5.3  # ~easy min/km (matches the audit's km estimate)
+
     # 1. Clamp the protected key sessions to their targets (once).
     for s in proposal["sessions"]:
         if _is_long_run(s) and lr_min:
             _set_total_minutes(s, lr_min)
         elif _is_long_ride(s) and lrd_min:
             _set_total_minutes(s, lrd_min)
-    # 2. Flexible = endurance that is NOT a protected key session.
-    flex = lambda s: _is_endurance(s) and not _is_long_run(s) and not _is_long_ride(s)
+
+    # 2. RUN VOLUME is governed by the mileage target (NOT by TSS). Scale the non-long
+    #    runs so total run minutes ≈ run_km_target × pace (long run already clamped).
+    if run_km_target:
+        other_runs = [s for s in proposal["sessions"]
+                      if (s.get("sport") or "").lower() == "run" and not _is_long_run(s)]
+        cur_other = sum(sum(seg.get("minutes", 0) for seg in s.get("segments", [])) for s in other_runs)
+        target_other = max(0, run_km_target * PACE - (lr_min or 0))
+        if cur_other > 0 and target_other > 0:
+            f = target_other / cur_other
+            for s in other_runs:
+                for seg in s.get("segments", []):
+                    seg["minutes"] = max(15, round(seg["minutes"] * f))
+
+    # 3. TSS is closed with BIKE volume only (endurance rides, not the long ride, not runs).
+    flex = lambda s: (_is_endurance(s) and (s.get("sport") or "").lower() in ("bike", "ride")
+                      and not _is_long_ride(s))
     built = pb.build_sessions(athlete, proposal)
     if not target:
         return built
