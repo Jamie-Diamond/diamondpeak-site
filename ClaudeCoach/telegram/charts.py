@@ -308,10 +308,34 @@ def form_chart(payload, coaching_level="mid"):
 _K_CTL = 1 - math.exp(-1 / 42)
 _K_ATL = 1 - math.exp(-1 / 7)
 
+# Canonical forward-PMC projection (single source shared with the planning CLI).
+# Falls back to the identical inline EMA below if the primitive can't be imported,
+# so the chart can never break on a path issue.
+try:
+    import os as _os, sys as _sys
+    _IA = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                        "ironman-analysis")
+    if _IA not in _sys.path:
+        _sys.path.insert(0, _IA)
+    from primitives.load import project_pmc_daily as _project_pmc_daily
+except Exception:
+    _project_pmc_daily = None
+
 
 def _project_tsb(days, seed_ctl, seed_atl):
-    """Return TSB list: historical values for past/today, PMC-projected for future days."""
+    """Return TSB list: historical values for past/today, PMC-projected for future days.
+
+    Forward projection delegates to primitives.load.project_pmc_daily so the chart
+    and the conversational planning tools project identical numbers; the inline EMA
+    is an exact-math fallback used only if that import fails."""
     today_str = _date.today().strftime("%Y-%m-%d")
+    if _project_pmc_daily is not None:
+        future_tss = [sum((a.get("tss") or 0) for a in d.get("activities", []))
+                      for d in days if d.get("date", "") > today_str]
+        proj = iter(_project_pmc_daily(seed_ctl, seed_atl, future_tss))
+        return [next(proj)["tsb"] if d.get("date", "") > today_str
+                else round(d.get("tsb") or 0, 1)
+                for d in days]
     result = []
     ctl, atl = float(seed_ctl), float(seed_atl)
     for d in days:

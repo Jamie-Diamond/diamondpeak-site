@@ -19,6 +19,7 @@ Methodology — locked:
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from dataclasses import dataclass, asdict
 from datetime import date, datetime, timedelta
@@ -501,6 +502,35 @@ def compute_projected_ctl(ctl_today: float, weekly_tss: int, weeks: int) -> floa
     for _ in range(weeks * 7):
         ctl += (daily - ctl) / 42.0
     return ctl
+
+
+# Exponential EMA factors for day-by-day PMC projection. K = 1 - e^(-1/TC).
+# This is the form the load chart has always used (telegram/charts.py); the
+# canonical implementation now lives here so the chart and the planning CLI
+# project identical CTL/ATL/TSB numbers (see lib/plan_tools.py).
+PMC_K_CTL = 1.0 - math.exp(-1.0 / 42.0)
+PMC_K_ATL = 1.0 - math.exp(-1.0 / 7.0)
+
+
+def project_pmc_daily(seed_ctl: float, seed_atl: float,
+                      daily_tss: Iterable[float]) -> list:
+    """Day-by-day PMC projection from seed CTL/ATL forward over a TSS sequence.
+
+    `daily_tss` is one TSS value per future day, in order. Returns one
+    {"ctl","atl","tsb"} dict per day, each rounded to 1 dp. Pure: no clock
+    access, no IO. The single source of truth for forward CTL/ATL/TSB — used by
+    both the load chart and the conversational planning tools so they can never
+    disagree.
+    """
+    ctl, atl = float(seed_ctl), float(seed_atl)
+    out = []
+    for tss in daily_tss:
+        t = float(tss or 0)
+        ctl = ctl + (t - ctl) * PMC_K_CTL
+        atl = atl + (t - atl) * PMC_K_ATL
+        out.append({"ctl": round(ctl, 1), "atl": round(atl, 1),
+                    "tsb": round(ctl - atl, 1)})
+    return out
 
 
 def derive_phase_ctl_targets(

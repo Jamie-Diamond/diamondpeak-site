@@ -77,11 +77,13 @@ SYSTEM_PROMPT_FILE = BASE.parent / "athletes/jamie/system_prompt.txt"
 MAX_HISTORY_PAIRS = 30  # keep last 30 exchanges for context
 
 MODEL_SONNET = "claude-sonnet-4-6"
-MODEL_HAIKU  = "claude-haiku-4-5-20251001"
+MODEL_OPUS   = "claude-opus-4-8"
+MODEL_HAIKU  = "claude-haiku-4-5-20251001"  # retired from selection (kept for label map)
 
 _MODEL_LABEL = {
     MODEL_HAIKU:  "H",
     MODEL_SONNET: "S",
+    MODEL_OPUS:   "O",
     "claude-opus-4-7": "O4.7",
 }
 
@@ -97,27 +99,50 @@ def response_footer(model: str, slug: str = "", athlete_cfg: dict | None = None)
             pass
     return f"\n_{label}_"
 
-# Queries answered by Haiku — fast lookups and short conversational exchanges
-_SIMPLE_QUERY_RE = re.compile(
-    r"^(what'?s?\s+)?(today'?s?\s+)?(session|plan|workout|schedule)\b"
-    r"|^show\s+(me\s+)?this\s+week\b"
-    r"|^(this|next)\s+week\b"
-    r"|^what'?s?\s+(my\s+)?(tsb|ctl|atl|form|fitness)\b"
-    r"|^how\s+am\s+i\s+(looking|doing)\b"
-    r"|^(am\s+i\s+on\s+track|on\s+track)\b"
-    r"|^(what|when)\s+is\s+(my\s+)?(next|today'?s?)\b"
-    r"|^(good\s+)?(morning|evening)\b"
-    r"|^(thanks?|cheers|ok|okay|got\s+it|perfect|great|nice)\b"
-    r"|^(yes|no|yep|nope|yup)\b"
-    r"|^what'?s?\s+the\s+(weather|forecast|temp)\b"
-    r"|^\d+\s*(km|k|miles?|min|minutes?|hrs?|hours?)\b",
+# Model selection (Jamie's directive 15 Jun: Sonnet for simple, Opus for hard).
+#
+# Design: Opus is the SAFE DEFAULT. Mis-routing a hard planning question to a
+# weaker model is the expensive error — it caused the 14 Jun planning mess — so
+# anything not clearly trivial goes to Opus. Two reasons not to key "hard" off a
+# narrow regex (the very bug we diagnosed): (1) trivia is a small, closed set, so
+# match THAT and default everything else up; (2) stickiness — once a planning
+# thread is open, a short follow-up ("make Saturday shorter") needs the same
+# brain as the message before it, so we keep the thread on Opus.
+
+# Clearly trivial: greetings, acknowledgements, short pain logs, bare values.
+_TRIVIAL_RE = re.compile(
+    r"^(hi|hey|hello|yo|good\s+(morning|evening|afternoon)|"
+    r"thanks?|thank\s+you|cheers|ta|"
+    r"ok(ay)?|kk|got\s+it|noted|perfect|great|nice|cool|good|awesome|"
+    r"yes|yep|yup|yeah|no|nope|nah|sure|done)\b[\s!.]{0,3}$"
+    r"|^(ankle|niggle|pain|knee|achilles|calf|hamstring)\s+\d{1,2}\b.{0,30}$"
+    r"|^\d{1,3}(\.\d)?\s*(kg|km|k|mi|miles?|min|minutes?|hrs?|hours?|w|watts?|bpm)?\s*$",
     re.IGNORECASE,
 )
 
-def select_model(text: str) -> str:
-    if _SIMPLE_QUERY_RE.match(text.strip()):
-        return MODEL_HAIKU
-    return MODEL_SONNET
+# Topics that always warrant Opus AND make the surrounding thread sticky to Opus.
+_HARD_RE = re.compile(
+    r"\b(plan|planning|tss|ctl|atl|tsb|form|fitness|build|taper|phase|periodi[sz]e|"
+    r"week|weekly|block|ramp|load|projec|forecast|fuell?ing|nutrition|race|pacing|"
+    r"strateg|why|analy|compare|should\s+i|how\s+(do|should|much|many|far)|workout|"
+    r"session|brick|threshold|interval|zone|recovery|fatigue|overreach|long\s+run)\b",
+    re.IGNORECASE,
+)
+
+
+def select_model(text: str, history=None) -> str:
+    """Sonnet for clear trivia, Opus for anything substantive or planning-adjacent.
+    Sticky: stays on Opus through a planning thread. Stickiness keys on the
+    ATHLETE's recent messages only — the assistant's coaching replies are full of
+    'week/session/load/recovery' and would otherwise pin everything to Opus,
+    defeating the Sonnet path for genuine trivia."""
+    t = text.strip()
+    recent = " ".join(h.get("user", "") for h in (history or [])[-3:])
+    if _HARD_RE.search(t) or _HARD_RE.search(recent):
+        return MODEL_OPUS
+    if _TRIVIAL_RE.match(t):
+        return MODEL_SONNET
+    return MODEL_OPUS  # safe default — never silently downgrade the unknown
 
 
 def build_keyboard(slug=None):
@@ -1479,6 +1504,39 @@ def prefetch_context(slug: str) -> str:
             except Exception:
                 pass
 
+        # Deterministic planning numbers — computed here so the model never does
+        # TSS/CTL arithmetic by hand (the 14 Jun planning failure). Reuses data
+        # already fetched above; no extra network. See lib/plan_tools.py.
+        try:
+            import plan_tools as _pt
+            from datetime import timedelta as _td
+            wk_start = today - _td(days=today.weekday())
+            roll = _pt.week_rollup_summary(history_acts, events, wk_start, today)
+            lines.append(
+                f"\n=== DETERMINISTIC PLANNING NUMBERS (use these verbatim; do NOT recompute) ===")
+            lines.append(
+                f"This week ({roll['week_start']}): completed-to-date {roll['completed_to_date_tss']} TSS "
+                f"+ planned-remaining {roll['planned_remaining_tss']} TSS "
+                f"= projected {roll['projected_week_tss']} TSS")
+            ctl_now = round(float((wellness[-1].get("ctl") or 0)), 1) if wellness else None
+            if ctl_now:
+                req = _pt.required_tss(athletes[slug], ctl_now)
+                if "error" not in req and req.get("recommended_weekly_tss"):
+                    lines.append(
+                        f"Phase: {req['phase']} (training week {req.get('training_week')}). "
+                        f"Target weekly TSS to stay on the CTL plan: "
+                        f"~{req['recommended_weekly_tss']} (needs {req.get('required_weekly_tss')}, "
+                        f"ramp-cap {req.get('ramp_capped_weekly_tss','n/a')}). {req.get('note','')}")
+                elif "error" in req:
+                    lines.append(f"Weekly TSS target: {req['error']}")
+            lines.append(
+                "For per-session TSS or a CTL/ATL/TSB projection of a proposed week, call: "
+                f"python3 ClaudeCoach/lib/plan_tools.py tss --sessions '<json>'  |  "
+                f"python3 ClaudeCoach/lib/plan_tools.py project --athlete {slug} --daily '<json>'  |  "
+                f"python3 ClaudeCoach/lib/plan_tools.py required-tss --athlete {slug}")
+        except Exception as _e:
+            log(f"prefetch planning numbers (non-fatal): {_e}")
+
         return "\n".join(lines)
 
     except Exception as e:
@@ -2086,7 +2144,13 @@ def call_claude_streaming(token, chat_id, placeholder_id,
         _system_prompt_with_level(sp_file), athlete_name, context,
         persistent_rules=_load_persistent_rules(sp_file),
     )
-    accumulated = ""
+    # `streamed` drives the live placeholder; `final` is the authoritative full
+    # text from the terminal `result` event. We must NOT add `result` on top of
+    # the assistant text — doing so doubled every reply (the 14 Jun turns 3/15
+    # duplication bug). assistant events carry a FULL text snapshot (replace);
+    # content_block_delta events are incremental (append); result replaces all.
+    streamed = ""
+    final = None
     last_edit = 0.0
 
     try:
@@ -2103,41 +2167,43 @@ def call_claude_streaming(token, chat_id, placeholder_id,
                 ev = json.loads(raw_line)
             except Exception:
                 continue
-            # Extract text from stream-json events
-            chunk = ""
             ev_type = ev.get("type", "")
-            if ev_type == "assistant":
+            if ev_type == "result":
+                final = ev.get("result", "") or final
+                continue  # authoritative final text — never append to the stream
+            elif ev_type == "assistant":
+                snapshot = ""
                 for block in (ev.get("message") or {}).get("content", []):
                     if block.get("type") == "text":
-                        chunk = block.get("text", "")
+                        snapshot = block.get("text", "")
+                if snapshot:
+                    streamed = snapshot       # full snapshot — replace, don't append
             elif ev_type == "content_block_delta":
                 delta = ev.get("delta", {})
                 if delta.get("type") == "text_delta":
-                    chunk = delta.get("text", "")
-            elif ev_type == "result":
-                chunk = ev.get("result", "")
+                    streamed += delta.get("text", "")  # incremental — append
+            else:
+                continue
 
-            if chunk:
-                accumulated += chunk
-                now = time.time()
-                # Edit every 1.5 s to stay within Telegram rate limits
-                if now - last_edit >= 1.5 and accumulated.strip():
-                    tg_post(token, "editMessageText", {
-                        "chat_id": chat_id,
-                        "message_id": placeholder_id,
-                        "text": accumulated.strip() + " ▍",
-                        "parse_mode": "Markdown",
-                    })
-                    last_edit = now
+            now = time.time()
+            # Edit every 1.5 s to stay within Telegram rate limits
+            if now - last_edit >= 1.5 and streamed.strip():
+                tg_post(token, "editMessageText", {
+                    "chat_id": chat_id,
+                    "message_id": placeholder_id,
+                    "text": streamed.strip() + " ▍",
+                    "parse_mode": "Markdown",
+                })
+                last_edit = now
 
         proc.wait(timeout=10)
-        return accumulated.strip() or "(no response)"
+        return (final if final is not None else streamed).strip() or "(no response)"
 
     except subprocess.TimeoutExpired:
-        return accumulated.strip() or "Sorry, that took too long."
+        return (final if final is not None else streamed).strip() or "Sorry, that took too long."
     except Exception as e:
         log(f"Claude stream error: {e}")
-        return accumulated.strip() or f"Error: {e}"
+        return (final if final is not None else streamed).strip() or f"Error: {e}"
 
 
 def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNET,
@@ -2445,7 +2511,7 @@ def main():
             typing(token, chat_id)
             history = load_history(files["history"])
             context = prefetch_context(slug)
-            model = select_model(text)
+            model = select_model(text, history)
 
             # Send a placeholder and stream chunks into it
             placeholder = tg_post(token, "sendMessage", {
