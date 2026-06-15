@@ -1,9 +1,5 @@
 [
   {
-    "user": "What days are in a week?",
-    "assistant": "Mon 8 Jun had nothing logged. Full week (Mon 8\u2013Sun 14):\n\n| Date | Session | TSS |\n|------|---------|-----|\n| Mon 8 | \u2014 | 0 |\n| Tue 9 | Swim + Run | **139** |\n| Wed 10 | Run + Strength | **74** |\n| Thu 11 | Swim | **59** |\n| Fri 12 | Ride | **229** |\n| Sat 13 | Ride | **127** |\n| Sun 14 | Run | **63** |\n\n**Week total: 691 TSS.** Rest is very much the right call."
-  },
-  {
     "user": "That was very stupid of you",
     "assistant": "Yeah, that was sloppy \u2014 took three goes to count to seven. Sorry."
   },
@@ -118,5 +114,9 @@
   {
     "user": "",
     "assistant": "[chart/photo sent]"
+  },
+  {
+    "user": "",
+    "assistant": "Plan updated \u2014 check your week in Intervals.icu."
   }
 ]
