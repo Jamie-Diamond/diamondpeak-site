@@ -29,6 +29,43 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 
 import session_library as sl          # noqa: E402
 import plan_builder as pb             # noqa: E402
+from primitives.planned_tss import segment_if  # noqa: E402
+
+_QUALITY_IF = 0.85   # a session with any segment at/above this is "quality" (fixed); else endurance
+
+
+def _is_endurance(sess: dict) -> bool:
+    """True if the session is pure endurance (no quality main set) → its duration is the
+    flexible lever for hitting the weekly TSS target. Quality sessions stay fixed."""
+    segs = sess.get("segments") or []
+    if not segs:
+        return False
+    sport = sess.get("sport", "")
+    return all((seg.get("if") if seg.get("if") is not None else segment_if(sport, seg.get("zone")))
+               < _QUALITY_IF for seg in segs)
+
+
+def close_to_target(athlete: str, proposal: dict, target, tol=0.06, max_iter=4):
+    """Reliable TSS (1st objective): keep quality fixed, scale ENDURANCE durations until
+    the week lands within `tol` of target. Zones/types untouched (2nd-objective opt)."""
+    built = pb.build_sessions(athlete, proposal)
+    if not target:
+        return built
+    for _ in range(max_iter):
+        total = built["total_tss"]
+        if abs(total - target) <= tol * target:
+            break
+        flex_load = sum(b["load_target"] for s, b in zip(proposal["sessions"], built["sessions"])
+                        if _is_endurance(s))
+        if flex_load <= 0:
+            break
+        factor = max(0.55, min(1.7, (flex_load + (target - total)) / flex_load))
+        for s in proposal["sessions"]:
+            if _is_endurance(s):
+                for seg in s.get("segments", []):
+                    seg["minutes"] = max(15, round(seg["minutes"] * factor))
+        built = pb.build_sessions(athlete, proposal)
+    return built
 
 CLAUDE = shutil.which("claude") or "/usr/bin/claude"
 PROJECT_DIR = str(BASE.parent)
@@ -38,7 +75,32 @@ def _next_monday(today: date) -> date:
     return today + timedelta(days=(7 - today.weekday()) % 7 or 7)
 
 
-def build_prompt(slug: str, brief: dict, week_start: date) -> str:
+def audit_built(brief: dict, built: dict, target, proposal: dict) -> list:
+    """Everything the week must satisfy before it's offered. Returns issue strings
+    (empty = clean). Drives the iterate-until-clean loop."""
+    import datetime as _dt
+    issues = []
+    if target and abs(built["total_tss"] - target) > 0.08 * target:
+        d = built["total_tss"] - target
+        issues.append(f"week TSS {built['total_tss']} vs target {target} ({d:+}) — "
+                      f"{'add' if d < 0 else 'cut'} endurance volume")
+    issues += [f"rule(hard): {v['msg']}" for v in built.get("hard", [])]
+    issues += [f"rule(dist): {v['msg']}" for v in built.get("soft", [])]
+    # swim_focus: the swim on a focus day must match the allowed type(s)
+    sf = (brief.get("day_rules") or {}).get("swim_focus") or {}
+    if sf:
+        for s in proposal.get("sessions", []):
+            if (s.get("sport") or "").lower() != "swim":
+                continue
+            wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
+            allowed = sf.get(wd)
+            nm = (s.get("name") or "").lower()
+            if allowed and not any(a in nm or a.replace("technique", "drill")[:4] in nm for a in allowed):
+                issues.append(f"{wd} swim must be {allowed} (got '{s.get('name')}')")
+    return issues
+
+
+def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -> str:
     grid = "\n".join(f"  {(week_start + timedelta(days=i)).isoformat()} = "
                      f"{(week_start + timedelta(days=i)).strftime('%A')}" for i in range(7))
     return f"""You are proposing {slug}'s training week starting Monday {week_start.isoformat()}.
@@ -63,7 +125,7 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
 
 DATE GRID:
 {grid}
-
+{feedback}
 PLANNING BRIEF (authoritative, deterministic):
 {json.dumps(brief, indent=1)}
 """
@@ -81,6 +143,7 @@ def main():
     ap.add_argument("--athlete", required=True)
     ap.add_argument("--push", action="store_true")
     ap.add_argument("--model", default="claude-sonnet-4-6")
+    ap.add_argument("--max-attempts", type=int, default=3)
     args = ap.parse_args()
 
     cfg = json.loads((BASE / "config" / "athletes.json").read_text())[args.athlete]
@@ -91,26 +154,41 @@ def main():
         print(json.dumps({"error": f"event unknown for {args.athlete} — cannot plan"}))
         sys.exit(1)
 
-    prompt = build_prompt(args.athlete, brief, week_start)
-    proc = subprocess.run([CLAUDE, "-p", prompt, "--model", args.model,
-                           "--no-session-persistence"],
-                          capture_output=True, text=True, cwd=PROJECT_DIR, timeout=300)
-    out = proc.stdout.strip()
-    try:
-        proposal = extract_json(out)
-    except Exception as e:
-        print(json.dumps({"error": f"could not parse proposal: {e}", "raw": out[:500]}))
-        sys.exit(1)
-
-    built = pb.build_sessions(args.athlete, proposal)
-    # Full guardrail: validate_week (in build_sessions) does NOT check load-on-target —
-    # only the audit does. Enforce it here so the dry-run can't falsely pass an
-    # under/over-target week. >12% off = not ready to push.
     target = brief["weekly_tss_target"]
+    # ITERATE UNTIL CLEAN (iterative planning is fine — Jamie 15 Jun): propose → load-close
+    # → audit; if issues, feed them back and re-propose. Keep the best attempt.
+    feedback = ""
+    best = None
+    attempts = []
+    for attempt in range(args.max_attempts):
+        prompt = build_prompt(args.athlete, brief, week_start, feedback)
+        proc = subprocess.run([CLAUDE, "-p", prompt, "--model", args.model,
+                               "--no-session-persistence"],
+                              capture_output=True, text=True, cwd=PROJECT_DIR, timeout=300)
+        try:
+            proposal = extract_json(proc.stdout.strip())
+        except Exception as e:
+            attempts.append(f"attempt {attempt+1}: parse error {e}")
+            continue
+        built = close_to_target(args.athlete, proposal, target)
+        issues = audit_built(brief, built, target, proposal)
+        attempts.append(f"attempt {attempt+1}: {len(issues)} issue(s)" + (f" — {issues}" if issues else " — CLEAN"))
+        if best is None or len(issues) < best[1]:
+            best = (built, len(issues), proposal)
+        if not issues:
+            break
+        feedback = ("\nPREVIOUS ATTEMPT FAILED THESE CHECKS — fix them this time:\n- "
+                    + "\n- ".join(issues) + "\n")
+    if best is None:
+        print(json.dumps({"error": "no parseable proposal after retries", "attempts": attempts}))
+        sys.exit(1)
+    built, n_issues, proposal = best
+
     load_pct_off = (round((built["total_tss"] - target) / target * 100, 1) if target else None)
     load_on_target = (target is None) or abs(load_pct_off) <= 12
-    overall_ok = built["ok"] and load_on_target
+    overall_ok = built["ok"] and load_on_target and n_issues == 0
     summary = {
+        "attempts": attempts,
         "athlete": args.athlete, "week_start": built["week_start"],
         "event": brief["event"], "phase": brief["phase"], "week_in_phase": brief["week_in_phase"],
         "target_tss": target, "built_total_tss": built["total_tss"],
