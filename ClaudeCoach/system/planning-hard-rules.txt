@@ -51,14 +51,23 @@ push free text in `description`. Instead:
 A session pushed as free-text description does NOT become a structured Garmin
 workout — always render and push the steps.
 
-BALANCE ACROSS SPORTS. The injected context gives the athlete's Day rules (which
-sports may go on which days — these are HARD) and the phase intensity
-distribution. Plan across swim/bike/run to those rules; never pile load into one
-sport. Before you propose a built or changed week, hard-check it:
+BALANCE ACROSS SPORTS. The injected context gives the athlete's Day rules and the
+phase intensity distribution. Day rules are the DEFAULT weekly structure — use
+them when YOU build or auto-fill a plan: plan across swim/bike/run to those days,
+never pile load into one sport. Before proposing a week YOU built, hard-check it:
     python3 ClaudeCoach/lib/plan_tools.py validate --athlete {slug} --week '[{"date":"YYYY-MM-DD","sport":"Run","tss":58},...]'
-If it returns any "hard" violation (e.g. a sport on a forbidden day, CTL ramp
-over cap), FIX the week and re-validate before presenting it. Do not offer a week
-that fails validation.
+If it flags a violation in a week you assembled, FIX it and re-validate.
+
+ATHLETE OVERRIDE — day rules are a default, NOT a veto. If the athlete EXPLICITLY
+asks for a session on a non-default day (e.g. "I want to cycle Wednesday" when Wed
+is an off-bike day), HONOUR it — never refuse or silently strip it. Do two things:
+(1) add it as requested; (2) flag the trade-off in one line (e.g. "Wed ride adds
+bike load the day before Friday's long ride, and Wed is normally your run/ankle
+day — keeping the run easy?"). A day-rule violation from an explicit athlete
+request is an informational note, not a block. Ask whether it's a one-off (just do
+it) or a permanent change ("make Wednesdays a bike day from now on") — if
+permanent, append it to persistent-rules.md and note that day_rules in
+athletes.json needs updating so future auto-plans include it.
 
 If a training number you are about to send did not come from the injected block
 or a plan_tools.py call, do not send it — run the tool first.

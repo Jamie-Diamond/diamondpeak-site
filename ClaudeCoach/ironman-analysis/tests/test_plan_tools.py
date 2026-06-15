@@ -20,6 +20,7 @@ sys.path.insert(0, str(TELEGRAM))
 import plan_tools as pt                                   # noqa: E402
 from primitives.load import project_pmc_daily            # noqa: E402
 from primitives.planned_tss import tss_from_segments, render_workout  # noqa: E402
+from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 
 
 # ── single-source guarantee: CLI projection ≡ the load chart's projection ──────
@@ -99,6 +100,34 @@ def test_render_units_bike_power_vs_run_pace():
     run = render_workout("run", [{"minutes": 20, "zone": "threshold"}])["description"]
     assert "Pace" not in bike and "%" in bike      # bare % = power (%FTP)
     assert "Pace" in run                            # %pace for run/swim
+
+
+# ── fuelling ramp: aggressive <60, careful >=60, never below useful or above target ──
+def test_fuel_target_aggressive_from_low_base():
+    # 20 g/hr vs 70 target → big jump (+25 → 45), not the old timid +10 → 30.
+    assert fuel_target(20, 70) == 45
+    assert fuel_target(20, 70) > 30
+
+
+def test_fuel_target_careful_near_target():
+    # at/above 60, small steps; never exceeds the race target.
+    assert fuel_target(60, 70) == 65
+    assert fuel_target(68, 70) == 70          # +5 would be 73, capped at target
+    assert fuel_target(70, 70) == 70
+
+
+def test_fuel_target_floor_and_nodata():
+    assert fuel_target(5, 70) >= 40           # never uselessly low
+    assert fuel_target(None, 70) == 60        # no logs → solid base
+    assert fuel_target(None, 50) == 50        # never above a lower race target
+
+
+def test_recent_avg_only_long_rides():
+    log = [{"sport": "Ride", "duration_min": 120, "nutrition_g_carb": 60, "date": "2026-06-10"},
+           {"sport": "Run", "duration_min": 120, "nutrition_g_carb": 0, "date": "2026-06-09"},
+           {"sport": "Ride", "duration_min": 40, "nutrition_g_carb": 30, "date": "2026-06-08"}]
+    # only the 120-min ride counts: 60g/2h = 30 g/hr
+    assert recent_avg_g_hr(log) == 30
 
 
 # ── required-tss: real basis prescribes; no basis refuses (don't fabricate) ────

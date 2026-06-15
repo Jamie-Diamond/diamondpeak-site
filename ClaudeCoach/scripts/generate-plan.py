@@ -835,12 +835,9 @@ Step 2 — Read (skip any file that does not exist):
 - {athlete_dir}/current-state.json (ankle pain scores, weight)
 - {athlete_dir}/reference/rules.md (HARD CONSTRAINTS — read fully if present)
 - {athlete_dir}/reference/decision-points.md (upcoming forks if present)
-- {athlete_dir}/session-log.json — extract all Ride/GravelRide/Brick entries with duration_min >= 90 and nutrition_g_carb set. Compute g_per_hr = nutrition_g_carb / duration_min * 60 for each. Store as nutrition_history list (most recent first).
-
-From nutrition_history compute:
-  nutrition_avg_g_hr = mean of all g_per_hr values (null if no entries)
-  nutrition_target_g_hr = max(min(round(nutrition_avg_g_hr + 10, -1), 90), {_nutri_floor}) if avg exists, else max(60, {_nutri_floor})
-  HARD FLOOR: never prescribe below {_nutri_floor} g/hr even if recent intake was lower — the goal is to progress fuelling UP toward the {_nutri_race} g/hr race target, never to follow a low week down. Always frame the number as progress toward {_nutri_race} g/hr (e.g. "build to {_nutri_floor}+ g/hr this block, race target {_nutri_race}").
+For the fuelling target, call this and use its prescribed_g_hr — do NOT compute it yourself:
+  python3 ClaudeCoach/lib/plan_tools.py fuel-target --athlete {slug}
+nutrition_target_g_hr = the returned prescribed_g_hr. It reads the athlete's recent long-ride fuelling from session-log.json and applies a gap-closing ramp toward the {_nutri_race} g/hr race target (aggressive below 60 g/hr, careful at/above 60). This drives chronic under-fuelling UP toward race target — it never follows a low week down. State all >90-min fuelling as progress toward {_nutri_race} g/hr.
 
 Step 3 — Determine the planning window:
 - Target: the 2 weeks starting NEXT Monday (not today).

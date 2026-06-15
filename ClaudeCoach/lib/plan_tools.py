@@ -50,6 +50,7 @@ from primitives.load import (                                   # noqa: E402
 )
 from primitives.validate_plan import validate_week              # noqa: E402
 from primitives.blueprint import current_phase                  # noqa: E402
+from primitives.nutrition import fuel_target, recent_avg_g_hr   # noqa: E402
 
 ATHLETES_CONFIG = BASE / "config" / "athletes.json"
 
@@ -355,6 +356,23 @@ def cmd_validate(args) -> dict:
             "soft": [v for v in viol if v["severity"] != "hard"]}
 
 
+def cmd_fuel_target(args) -> dict:
+    """Deterministic fuelling prescription (g/hr) for >90-min sessions — gap-closing
+    ramp toward the athlete's race target (aggressive <60, careful >=60). Replaces
+    the old avg+10 guess."""
+    cfg = _load_cfg(args.athlete)
+    race_target = int(cfg.get("nutrition_target_g_hr") or 90)
+    sl_path = BASE / "athletes" / args.athlete / "session-log.json"
+    session_log = json.loads(sl_path.read_text()) if sl_path.exists() else []
+    avg = recent_avg_g_hr(session_log)
+    target = fuel_target(avg, race_target)
+    zone = "no logs yet" if avg is None else ("aggressive ramp (<60)" if avg < 60 else "careful ramp (>=60)")
+    return {"athlete": args.athlete,
+            "recent_avg_g_hr": round(avg, 1) if avg is not None else None,
+            "race_target_g_hr": race_target, "prescribed_g_hr": target,
+            "note": f"{zone}: prescribe {target} g/hr now (race target {race_target})"}
+
+
 def cmd_render_workout(args) -> dict:
     """Render time-at-intensity segments into an ICU STRUCTURED workout string.
     Push the returned `description` via icu_fetch push_workout so it syncs to the
@@ -398,10 +416,13 @@ def main():
     prw.add_argument("--sport", required=True)
     prw.add_argument("--segments", required=True)
 
+    pf = sub.add_parser("fuel-target", help="deterministic g/hr fuelling prescription for >90-min sessions")
+    pf.add_argument("--athlete", required=True)
+
     args = p.parse_args()
     handler = {"tss": cmd_tss, "week-tss": cmd_week_tss, "project": cmd_project,
                "required-tss": cmd_required_tss, "validate": cmd_validate,
-               "render-workout": cmd_render_workout}[args.cmd]
+               "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:
