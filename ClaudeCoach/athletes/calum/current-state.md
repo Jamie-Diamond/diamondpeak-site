@@ -1,6 +1,6 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-06-14
+Last updated: 2026-06-15
 
 ## Training Availability
 Max weekly training: **5 hours/week** (cycling)
@@ -44,3 +44,4 @@ No
 | 2026-06-12 | 8.2 | 2.6 | +5.6 | T5: 2 missed planned sessions in rolling 7d — 2026-06-06 Long Z2 2h 30min (hike done instead), 2026-06-10 Sweetspot Intro 85 min (no ICU activity recorded; 0 load since Jun 7). No HRV or sleep data. |
 | 2026-06-13 | 8.0 | 2.3 | +5.7 | Long Z2 Ride 2h 45min — NOT completed. No ICU activity recorded. Actual IcuSync: CTL 7.99 / ATL 2.26. Watchdog had projected session as complete; corrected in weekly summary. No HRV or sleep data. |
 | 2026-06-14 | 7.8 | 2.0 | +5.8 | Weekly summary. T3 Underload fired (0% compliance). Both sessions missed — Sweetspot Intro (Wed 10 Jun) and Long Z2 Ride 2h 45min (Sat 13 Jun). No activities recorded in Intervals.icu this week. Recovery 100/100 GREEN. No HRV or sleep data. |
+| 2026-06-15 | 7.6 | 1.7 | +5.9 | Rest day — no session planned in calendar. No HRV or sleep data. |
