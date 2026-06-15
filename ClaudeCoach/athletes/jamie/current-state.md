@@ -339,6 +339,14 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-14 — T9 (Tier 2):** Two open actions overdue (last flagged Jun 8, 6 days ago): (1) Book Precision Hydration sweat-sodium test — due 2026-05-31, now 14 days overdue, status pending. (2) TT bike fit appointment — due 2026-05-31, now 14 days overdue, status pending. Race day is 97 days out (19 Sep 2026). Both must be booked before the France training camp (Jun 24) to allow time to act on results.
 
+- **2026-06-15 — T2 (Tier 2):** CTL ramp persisting above +4/wk for 4 consecutive days — materially changed from Jun 14 entry (which said ramp had decayed to +1.3/wk before Jun 14 activities were logged). Confirmed actuals: Jun 12 rampRate 4.49, Jun 13 6.12, Jun 14 4.17, Jun 15 4.07 (rest day — no load yet). Cap is +4/wk while ankle quality_sessions_resumed = false. France camp Jun 24–29 will drive another ramp spike; ensure W9 (Jun 15–21) holds to recovery-to-moderate load to give headroom before camp.
+
+- **2026-06-15 — T3 (Tier 1):** HRV trend −13.0% over 7 days (46 on 06-07 → 40 on 06-14; 06-15 not yet synced). Single signal only: RHR 55 today (within 50–56 baseline), sleep Jun 14 7.85h (above 7h threshold) — no multi-signal corroboration. Per rules.md: no load-reduction action warranted without multi-signal convergence. Today is rest day — no action needed; monitor HRV tomorrow before prescribing Tuesday session.
+
+- **2026-06-15 — T10 (Tier 2):** Run km +83.5% w/w — completed week Mon 09–Sun 14 Jun: 32.86 km (Mon 09 Jun 10.17 km + Tue 10 Jun 10.76 km + Sun 14 Jun 11.93 km) vs prior complete week Mon 02–Sun 08 Jun: 17.91 km. 10% cap applies while ankle in rehab (quality_sessions_resumed = false). Next week cap based on this week's actuals: ≤36.1 km (32.86 × 1.10) — but note this compounds on a breach; consider rolling back to a safer base rather than ratcheting from 32.86. France camp (Jun 24–29) will increase run volume further.
+
+- **2026-06-15 — T11 (Tier 2):** Strength compliance updated — 1 session in Mon 09–Sun 14 Jun (Jun 10: ankle stability + lower body mobility, 32 min) vs 0 sessions in Mon 02–Sun 08 Jun. Both weeks remain below target 2/wk (signal changed from Jun 11 entry: was 0+0, now 1+0). Schedule 2 strength sessions in current week Mon 15–Sun 21 Jun — Tier C needs no equipment (ankle stability, core, upper body).
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
