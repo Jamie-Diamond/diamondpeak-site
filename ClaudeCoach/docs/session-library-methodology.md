@@ -14,25 +14,43 @@ sound, varied, and progressive. Once you red-line it, I encode it as JSON the pl
 
 ---
 
-## 0. Zone models — canonical definitions & mapping (READ FIRST)
+## 0. Zone models — CANONICAL reference & mapping (READ FIRST)
 
-Three zone models appear in the sources; mixing them silently inverts prescriptions (e.g.
-"minimise Z2" means opposite things). **The library standardises like this:**
+**DECIDED (Jamie, 15 Jun): canonical = the athlete's intervals.icu / Coggan zones.** Session
+prescriptions are expressed in these device zones; TID targets stay in the 3-zone LOW/MOD/HIGH
+model (that's how polarized/pyramidal are *defined*) and map onto the device zones below.
 
-- **TID / intensity-distribution targets use the 3-ZONE model** (this is how polarized/pyramidal
-  are *defined*): **LOW** = below LT1/VT1 (all easy aerobic) · **MOD** = the *grey zone* between
-  LT1 and LT2 (tempo) · **HIGH** = above LT2 (threshold + VO2). When this doc writes a TID triplet
-  it means **LOW / MOD / HIGH**, not device zones.
-- **Session prescriptions use the COGGAN / intervals.icu zone model** (what the athlete + Garmin
-  see): Z1 recovery · **Z2 endurance (60–75% FTP) — the GOOD base zone** · Z3 tempo · Z4 threshold
-  · Z5 VO2.
-- **Mapping (the bridge):** 3-zone **LOW** ≈ Coggan **Z1–Z2** · 3-zone **MOD/grey** ≈ Coggan **Z3 +
-  low sweetspot** · 3-zone **HIGH** ≈ Coggan **Z4–Z5+**.
+**Canonical zones — pulled from Jamie's live ICU sport settings (not textbook):**
 
-So Muñoz's "minimise grey-zone Z2 bike" = **minimise Coggan Z3 tempo / junk sweetspot**, while
-**maximising Coggan Z2 endurance**. The blueprint's `78% Z1–2 / 14% Z3 / 8% Z4–5` is already a
-Coggan-grouped distribution; the validator/audit must compare like-for-like in ONE model.
-**[needs your confirm: standardise on Coggan/ICU zones as canonical, TID expressed as LOW/MOD/HIGH?]**
+*Bike — power, %FTP:*
+| Z1 Recovery | Z2 Endurance | Z3 Tempo | Z4 Threshold | Z5 VO2max | Z6 Anaerobic | Z7 Neuromuscular |
+|---|---|---|---|---|---|---|
+| <55 | 55–75 | 75–90 | 90–105 | 105–120 | 120–150 | 150+ |
+
+*Run — pace, % of threshold pace (faster = higher %):*
+| Z1 | Z2 | Z3 | Z4 (threshold) | Z5a | Z5b | Z5c |
+|---|---|---|---|---|---|---|
+| <77.5 | 77.5–87.7 | 87.7–94.3 | 94.3–100 | 100–103.4 | 103.4–111.5 | 111.5+ |
+
+*Swim — pace, % of CSS:* same boundary structure as run pace (Z4 = at CSS).
+**Sweet spot = 88–94% FTP** (straddles upper Z3 / low Z4) — a named sub-band, not its own zone.
+
+**3-zone TID → ICU-zone mapping (the bridge):**
+- **LOW** (below LT1, easy aerobic) ≈ bike **Z1–Z2** / run **Z1–Z2** — *the base to maximise*.
+- **MOD / grey zone** (LT1–LT2, tempo) ≈ bike **Z3** (+ low sweetspot) / run **Z3**.
+- **HIGH** (above LT2) ≈ bike **Z4–Z5+** / run **Z4–Z5+**.
+
+So Muñoz's "minimise grey-zone Z2 bike" = **minimise bike Z3 tempo / junk sweetspot**, while
+**maximising bike Z2 endurance**. The blueprint's `Z1–2 / Z3 / Z4–5` grouping already matches this.
+The validator/audit must compare TID like-for-like via this mapping.
+
+**⚠️ Data discrepancies found during the audit — reconcile before encoding:**
+1. **Bike FTP:** ICU sport-settings = **300 W**, but the system prompt / memory say **316 W**.
+   Zones are %FTP so the *boundaries* are unaffected, but the *absolute watts* the planner writes
+   depend on which FTP is used — these must agree (use ICU as authoritative per the MCP rule).
+2. **Swim threshold pace:** ICU returns `threshold_pace = 1.01` but Jamie's CSS is **1:39/100m**.
+   Likely a units/stale-field issue — verify the swim threshold before any %CSS prescription.
+3. **Run threshold pace:** ICU = **4:08/km**; profile says **4:02/km**. Minor; use ICU (authoritative).
 
 ## 1. Intensity distribution (the TID targets per phase) — in 3-zone LOW/MOD/HIGH (see §0)
 
@@ -52,29 +70,32 @@ targets evidence-based and event-specific (see §4).
 
 ## 2. Bike session library (Coggan %FTP) ✅ structures verified; 🟡 progressions
 
-| Type | Intensity | Structure → progression (base→build→peak) | Recovery | Notes |
+| Type | Intensity (ICU zone) | Structure → progression (base→build→peak) | Recovery | Notes |
 |---|---|---|---|---|
-| **VO2max** | 106–120% FTP | 5×3min → 6×3min → 5×4min | 1:1–2:1 (≈3min) | ✅ zone/dur; 🟡 progression. Longer bouts > micro-intervals for time-at-VO2. |
-| **Threshold/LT** | 91–105% FTP | 3×10 → 4×10 → 3×15 → 2×20min | short, 3–5min | ✅ zone/dur (Coggan "10–30min repeats"); 🟡 progression |
-| **Sweetspot** | 88–94% FTP | 3×12 → 2×20 → 2×25 → 3×20min | 5–8min | 🟡 aerobic-builder, base/build; high TSS-per-hour |
-| **Race-pace (long-course)** | race watts (IM ~70–76%, 70.3 ~80–85% FTP) | 2×30 → 3×30 → 2×45min within long ride | 10min Z2 | 🟡 specificity work |
-| **Endurance** | 60–75% FTP (Z2) | continuous; grow duration to event anchor | — | the long ride |
+| **VO2max** | 105–120% FTP (Z5) | 5×3min → 6×3min → 5×4min | 1:1–2:1 (≈3min) | ✅ zone/dur; 🟡 progression. Longer bouts > micro-intervals for time-at-VO2. |
+| **Threshold/LT** | 90–105% FTP (Z4) | 3×10 → 4×10 → 3×15 → 2×20min | short, 3–5min | ✅ zone/dur (Coggan "10–30min repeats"); 🟡 progression |
+| **Sweetspot** | 88–94% FTP (top Z3 / low Z4) | 3×12 → 2×20 → 2×25 → 3×20min | 5–8min | 🟡 aerobic-builder, base/build; high TSS-per-hour |
+| **Race-pace (long-course)** | IM ~68–75% (Z2) · 70.3 ~80–88% (Z3) FTP | 2×30 → 3×30 → 2×45min within long ride | 10min Z2 | 🟡 specificity work; IM stays Z2, 70.3 is Z3 grey-zone *by design* (race intensity) |
+| **Endurance** | 55–75% FTP (Z2) | continuous; grow duration to event anchor | — | the long ride — the LOW base |
 
 ## 3. Run session library (Daniels VDOT) ✅ structures verified; 🟡 progressions
 
-| Type | Intensity | Structure → progression | Recovery | Cap (✅) |
+| Type | Intensity (ICU pace zone) | Structure → progression | Recovery | Cap (✅) |
 |---|---|---|---|---|
-| **VO2max (I)** | ~95–100% vVO2max (~3–5k pace) | 4×3min → 5×3 → 6×3min | 1:1 (≈3min jog) | ≤ lesser of 8% wk mileage / 10k. Canonical: **4×3min @95% vVO2max, 3min rec** ✅ |
-| **Threshold (T)** | ~1hr race pace (~tempo) | 20min steady → 2×15 → 3×10 (cruise) | short (1min) | ~10% wk mileage ✅ |
-| **Reps (R, economy)** | mile/1500 pace | 6–8×400m → 10×400 / ≤2min bouts | full recovery | ≤ lesser of 5% mileage / 5mi ✅ |
-| **Race-pace/specific** | goal-race pace | marathon: 2×4mi→3×4mi @ MP; HM: 3×3km @ HMP | float | 🟡 event-specific |
-| **Long** | Z2; long-run progression rule (existing) | grow 10–15%/wk to event need | — | ankle guard applies |
+| **VO2max (I)** | ~3–5k pace ≈ 104–112% thr-pace (Z5b) | 4×3min → 5×3 → 6×3min | 1:1 (≈3min jog) | ≤ lesser of 8% wk mileage / 10k. Canonical: **4×3min @95% vVO2max, 3min rec** ✅ |
+| **Threshold (T)** | ~1hr race pace ≈ 96–100% thr-pace (Z4) | 20min steady → 2×15 → 3×10 (cruise) | short (1min) | ~10% wk mileage ✅ |
+| **Reps (R, economy)** | mile/1500 pace ≈ 112%+ thr-pace (Z5c) | 6–8×400m → 10×400 / ≤2min bouts | full recovery | ≤ lesser of 5% mileage / 5mi ✅ |
+| **Race-pace/specific** | marathon ~88–94% (Z3) · HM ~94–100% (Z4) thr-pace | marathon: 2×4mi→3×4mi @ MP; HM: 3×3km @ HMP | float | 🟡 event-specific |
+| **Long / easy** | Z1–Z2 (<87.7% thr-pace) | grow 10–15%/wk to event need | — | the LOW base; ankle guard applies |
 
 ## 4. Swim session library (%CSS) 🔴 NEEDS YOUR RED-LINE (weakest evidence)
 
 The research did **not** verify concrete CSS structures/rest — these are my best-practice draft;
-please correct. Also: swim renders in **time** today (ICU reads "400m" as minutes) — I'll fix
-distance→time via CSS pace so sets read as distance.
+please correct. Intensities below are %CSS, which maps to the ICU swim pace zones (Z4 = at CSS;
+faster-than-CSS = Z5; easy/drills = Z1–Z2). **⚠️ Verify the swim threshold first** — ICU returns a
+threshold pace that doesn't match your 1:39 CSS (§0 flag); a wrong CSS makes every %CSS target
+wrong. Also: swim renders in **time** today (ICU reads "400m" as minutes) — I'll fix distance→time
+via CSS pace so sets read as distance.
 
 | Type | Intensity | Structure → progression | Rest | Confidence |
 |---|---|---|---|---|
@@ -122,8 +143,11 @@ Olympic = short/sharp off race-pace bike; 70.3 = race-pace bike + 20–35min run
 IM = long aerobic bike + 20–40min Z2 run. Run-off-bike at **goal race pace**, not easy.
 
 ## 7. Confidence summary & what to red-line
-- ⚠️ **Confirm first (§0):** standardise on Coggan/ICU zones as canonical, with TID as LOW/MOD/HIGH?
-  This resolves the 3-zone vs 5/7-zone ambiguity you flagged and must be settled before encoding.
+- ✅ **Resolved (§0):** canonical = ICU/Coggan zones (Jamie, 15 Jun); zones audited against Jamie's
+  live ICU settings and aligned (bike 90–105/105–120 etc.); render-library bands confirmed to sit
+  within the canonical zones; TID expressed LOW/MOD/HIGH with an explicit ICU-zone bridge.
+- ⚠️ **Reconcile before encoding (data, not methodology):** bike FTP 300 (ICU) vs 316 (prompt);
+  swim threshold pace ICU `1.01` vs CSS 1:39; run threshold 4:08 (ICU) vs 4:02 (profile). See §0.
 - ✅ **Trust:** bike (Coggan) + run (Daniels) zones/structures, TID models, PYR→POL, IM/70.3 anchors.
 - 🟡 **Check my extrapolation:** the week-to-week *progression numbers*, short-course event triplets,
   race-pace zones, brick scaling.
