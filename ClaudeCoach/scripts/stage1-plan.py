@@ -97,6 +97,34 @@ def audit_built(brief: dict, built: dict, target, proposal: dict) -> list:
             nm = (s.get("name") or "").lower()
             if allowed and not any(a in nm or a.replace("technique", "drill")[:4] in nm for a in allowed):
                 issues.append(f"{wd} swim must be {allowed} (got '{s.get('name')}')")
+
+    # ── RUN PROTOCOL (the gaps that produced the 22k run / illegal threshold run) ──
+    runs = [s for s in built["sessions"] if s["sport"] == "Run"]
+    run_min = sum(s["duration_min"] for s in runs)
+    run_km = round(run_min / 5.3, 1)   # ~easy pace 5.3 min/km
+    tgt_km = brief.get("run_mileage_target_km")
+    if tgt_km and not (tgt_km * 0.85 <= run_km <= tgt_km * 1.15):
+        issues.append(f"run mileage ~{run_km}km vs target {tgt_km}km — adjust run durations")
+    rp = brief.get("run_protocol") or {}
+    if rp.get("quality_allowed") is False:
+        for s in proposal.get("sessions", []):
+            if (s.get("sport") or "").lower() != "run":
+                continue
+            if any((seg.get("if") if seg.get("if") is not None else segment_if("run", seg.get("zone"))) >= 0.85
+                   for seg in (s.get("segments") or [])):
+                issues.append(f"run '{s.get('name')}' has quality intensity but run quality is NOT allowed (ankle)")
+    lr = (brief.get("long_run_target") or {}).get("minutes")
+    if lr and runs:
+        longest = max(s["duration_min"] for s in runs)
+        if longest > lr * 1.2:
+            issues.append(f"long run {longest}min exceeds cap ~{lr}min (+10-15% rule)")
+
+    # ── LONG RIDE must be present and protected ──
+    lrt = brief.get("long_ride_target_min")
+    rides = [s for s in built["sessions"] if s["sport"] in ("Ride", "Bike", "Brick")]
+    if lrt and (not rides or max(s["duration_min"] for s in rides) < lrt * 0.85):
+        have = max((s["duration_min"] for s in rides), default=0)
+        issues.append(f"no protected long ride — longest ride {have}min < target ~{lrt}min")
     return issues
 
 
@@ -120,6 +148,11 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   types — e.g. swim_focus {{"Tue":["technique","speed"],"Thu":["css"]}} means Tue swim is a
   skills/speed session and Thu swim is the CSS set, never the reverse.
 - Aim the week near the WEEKLY TSS TARGET and follow the intensity split (TID = low/mod/high %).
+- PROTECT THE LONG RIDE: include one Ride of ~long_ride_target_min as the week's KEY session.
+- RUNS: total ~run_mileage_target_km (≈ minutes/5.3 km); the longest run ≈ long_run_target.
+  If run_protocol.quality_allowed is false, EVERY run is easy Z2 — NO tempo/threshold/interval/
+  vo2 run (ankle gate). Honour run_protocol format (run-walk 5:30, HR cap).
+- OBEY hard_rules (the athlete's protocol) absolutely — they override anything else here.
 - Swim sets: express in minutes (not metres). Strength: omit segments.
 - Do NOT output load_target, TSS numbers, or %FTP/pace targets — code derives them.
 

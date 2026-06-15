@@ -143,6 +143,33 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
             rows.append(row)
         available[sport] = rows
 
+    # Run-mileage target (athlete protocol): seed weekly_km_next, else rolling-3wk-avg ×1.125.
+    rp = cfg.get("run_protocol") or {}
+    run_km_target = rp.get("weekly_km_next")
+    # Long-ride target (the protected key session): event bike demand × factor, capped.
+    bike_min = (cfg.get("race_target_splits") or {}).get("bike_min")
+    lr_factor = event.get("long_ride_factor", 0.9)
+    long_ride_min = min(int(round((bike_min or 200) * lr_factor / 15) * 15),
+                        240 if ekey == "ironman" else 300)
+    # Long-run target ~45% of the week's run km (a single Z2 session), in minutes via run pace.
+    run_thr_mps = None
+    try:
+        run_thr_mps = (_thr_run := thresh).get("run_threshold_mps")
+    except Exception:
+        pass
+    long_run_km = round((run_km_target or 12) * 0.45, 1)
+    # easy pace ≈ threshold/0.74 (Z2). minutes = km × pace(min/km).
+    easy_pace_min_km = (1000 / (thresh.get("run_threshold_mps") or 4.13) / 0.74 / 60) if thresh.get("run_threshold_mps") else 5.5
+    long_run_min = int(round(long_run_km * easy_pace_min_km))
+    # Athlete hard rules (protocol prose) — so the proposer obeys them, like the old coach did.
+    hard_rules = ""
+    rp_path = BASE / "athletes" / slug / "reference" / "rules.md"
+    if rp_path.exists():
+        try:
+            hard_rules = rp_path.read_text()[:3500]
+        except Exception:
+            pass
+
     return {
         "athlete": slug,
         "event": ekey, "event_unknown": ekey is None,
@@ -153,11 +180,17 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "emphasis": event.get("emphasis", []),
         "brick": event.get("brick"),
         "day_rules": cfg.get("day_rules"),
+        "run_protocol": rp,
+        "run_mileage_target_km": run_km_target,
+        "long_run_target": {"km": long_run_km, "minutes": long_run_min},
+        "long_ride_target_min": long_ride_min,
         "thresholds": {"ftp": thresh["ftp_watts"], "run": thresh["run_threshold_per_km"],
                        "swim_css": thresh["swim_css_per_100m"]},
         "available_sessions": available,
-        "dosing_note": ("Start quality at this_week dose; ramp_in=true means first exposure — "
-                        "ease in. Respect TID share + day_rules. No type outside available_sessions."),
+        "hard_rules": hard_rules,
+        "dosing_note": ("Build to weekly_tss_target. PROTECT the long ride (~long_ride_target_min). "
+                        "Runs total ~run_mileage_target_km; long run ~long_run_target; obey run_protocol "
+                        "(no quality if quality_allowed=false) and hard_rules. No type outside available_sessions."),
     }
 
 
