@@ -1430,6 +1430,19 @@ def prefetch_context(slug: str) -> str:
                 + (f"  FTP {ftp}W" if ftp else "")
                 + (f"  eFTP {round(eftp)}W" if eftp else "")
             )
+            # Authoritative live thresholds (eFTP-first, m/s-correct) — the model must
+            # use THESE, never a hardcoded number from the system prompt.
+            try:
+                import thresholds as _th
+                _t = _th.get_thresholds(slug, athletes[slug], client)
+                _bits = [f"FTP {_t['ftp_watts']}W ({_t['ftp_source']})"]
+                if _t["run_threshold_per_km"]: _bits.append(f"run threshold {_t['run_threshold_per_km']}")
+                if _t["swim_css_per_100m"]:    _bits.append(f"swim CSS {_t['swim_css_per_100m']}")
+                lines.append("CURRENT THRESHOLDS (live, AUTHORITATIVE — use these, not any number "
+                             "in the prompt): " + " · ".join(_bits)
+                             + ("  [" + "; ".join(_t["notes"]) + "]" if _t["notes"] else ""))
+            except Exception as _e:
+                log(f"prefetch thresholds (non-fatal): {_e}")
             fields = []
             if w.get("weight"):    fields.append(f"Weight {w['weight']:.1f}kg")
             if w.get("hrv"):       fields.append(f"HRV {w['hrv']}")
@@ -1660,12 +1673,19 @@ def _fetch_icu_data(icu_id, icu_key):
 
     last_w = wellness[-1] if isinstance(wellness, list) and wellness else {}
 
+    # ICU threshold_pace is METRES/SECOND — convert to a displayable pace, never show raw.
+    def _mps_pace(v, dist_m):
+        if not v:
+            return None
+        s = dist_m / v
+        return f"{int(s // 60)}:{s % 60:04.1f}"
+
     icu_data = {
         "ftp_watts":                 (ride or {}).get("ftp"),
         "indoor_ftp_watts":          (ride or {}).get("indoor_ftp"),
         "lthr":                      (ride or {}).get("lthr"),
-        "run_threshold_pace_per_km": (run_s or {}).get("threshold_pace"),
-        "swim_css_per_100m":         (swim or {}).get("css"),
+        "run_threshold_pace_per_km": _mps_pace((run_s or {}).get("threshold_pace"), 1000),
+        "swim_css_per_100m":         _mps_pace((swim or {}).get("threshold_pace"), 100),
         "weight_kg":                 weight,
         "icu_name":                  (profile or {}).get("name"),
         "ctl":                       last_w.get("ctl"),
