@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "_source": "docs/session-library-methodology.md (Jamie-approved 15 Jun). Canonical zones = ICU/Coggan. IFs match ironman-analysis/primitives/planned_tss.py _ZONE_IF/_ZONE_BAND so render + TSS agree.",
+  "canonical_zones": {
+    "bike":  { "unit": "%FTP",            "Z1": [0,55], "Z2": [55,75], "Z3": [75,90], "Z4": [90,105], "Z5": [105,120], "Z6": [120,150], "Z7": [150,999] },
+    "run":   { "unit": "%threshold_pace", "Z1": [0,77.5], "Z2": [77.5,87.7], "Z3": [87.7,94.3], "Z4": [94.3,100], "Z5a": [100,103.4], "Z5b": [103.4,111.5], "Z5c": [111.5,999] },
+    "swim":  { "unit": "%CSS",            "Z1": [0,77.5], "Z2": [77.5,87.7], "Z3": [87.7,94.3], "Z4": [94.3,100], "Z5a": [100,103.4], "Z5b": [103.4,111.5], "Z5c": [111.5,999] }
+  },
+
+  "phases": {
+    "base":     { "family": "pyramidal", "menu": ["endurance","long","tempo","sweetspot","css","aerobic","technique","strides","ow_skills"], "forbid": ["vo2","reps","race_pace_specific"] },
+    "build":    { "family": "transition", "menu": ["endurance","long","tempo","sweetspot","threshold","race_pace_long","css","speed","technique","strides","ow_skills","brick"], "vo2": "late_only", "forbid": [] },
+    "specific": { "family": "polarized", "menu": ["endurance","long","threshold","race_pace_long","race_pace_specific","vo2","css","speed","reps","technique","ow_skills","brick"], "forbid": [] },
+    "peak":     { "family": "polarized", "menu": ["endurance","threshold","race_pace_specific","vo2","reps","css","speed","brick"], "forbid": [] },
+    "taper":    { "family": "polarized", "menu": ["endurance","threshold","race_pace_specific","css","strides"], "forbid": ["vo2","long"], "volume_factor": 0.6 }
+  },
+
+  "session_types": {
+    "bike": {
+      "endurance":       { "system": "aerobic",   "zone": "Z2", "if": 0.65, "min_phase": "base",  "duration": "to_target" },
+      "long":            { "system": "aerobic",   "zone": "Z2", "if": 0.66, "min_phase": "base",  "duration": "event_anchor" },
+      "tempo":           { "system": "tempo",     "zone": "Z3", "if": 0.80, "min_phase": "base",  "progression": [{"reps":2,"min":15},{"reps":3,"min":15},{"reps":2,"min":25}], "rest_min": 5 },
+      "sweetspot":       { "system": "sweetspot", "zone": "Z3", "band": [88,94], "if": 0.90, "min_phase": "base", "progression": [{"reps":3,"min":12},{"reps":2,"min":20},{"reps":2,"min":25},{"reps":3,"min":20}], "rest_min": 6 },
+      "threshold":       { "system": "LT",        "zone": "Z4", "if": 0.95, "min_phase": "build", "progression": [{"reps":3,"min":10},{"reps":4,"min":10},{"reps":3,"min":15},{"reps":2,"min":20}], "rest_min": 4, "intro": {"reps":3,"min":8} },
+      "vo2":             { "system": "VO2max",    "zone": "Z5", "if": 1.05, "min_phase": "build_late", "progression": [{"reps":5,"min":3},{"reps":6,"min":3},{"reps":5,"min":4}], "rest_ratio": 1.0, "intro": {"reps":3,"min":3} },
+      "race_pace_long":  { "system": "specific",  "zone": "Z3", "if": 0.78, "min_phase": "build", "note": "long-course race watts (IM Z2 ~70-75%, 70.3 Z3 ~80-88%) inside the long ride", "progression": [{"reps":2,"min":30},{"reps":3,"min":30},{"reps":2,"min":45}], "rest_min": 10 }
+    },
+    "run": {
+      "easy":              { "system": "aerobic", "zone": "Z2", "if": 0.72, "min_phase": "base", "duration": "to_target" },
+      "long":              { "system": "aerobic", "zone": "Z2", "if": 0.74, "min_phase": "base", "duration": "long_run_progression", "note": "grow 10-15%/wk; honour ankle guard" },
+      "strides":           { "system": "neuromuscular", "zone": "Z5c", "if": 0.95, "min_phase": "base", "structure": "6-8x20s @ Z5c, full rec, after easy run", "note": "form/economy, low load" },
+      "tempo":             { "system": "tempo", "zone": "Z3", "if": 0.88, "min_phase": "base", "progression": [{"reps":1,"min":20},{"reps":2,"min":12},{"reps":2,"min":15}], "rest_min": 2 },
+      "threshold":         { "system": "LT", "zone": "Z4", "if": 0.97, "min_phase": "build", "progression": [{"reps":1,"min":20},{"reps":2,"min":15},{"reps":3,"min":10}], "rest_min": 1, "cap": "10% weekly mileage", "intro": {"reps":2,"min":10} },
+      "vo2":               { "system": "VO2max", "zone": "Z5b", "if": 1.06, "min_phase": "build_late", "progression": [{"reps":4,"min":3},{"reps":5,"min":3},{"reps":6,"min":3}], "rest_ratio": 1.0, "cap": "min(8% wk mileage, 10k)", "intro": {"reps":3,"min":3}, "canonical": "4x3min @95% vVO2max, 3min jog" },
+      "reps":              { "system": "economy", "zone": "Z5c", "if": 1.15, "min_phase": "specific", "progression": [{"reps":6,"dist":"400m"},{"reps":8,"dist":"400m"},{"reps":10,"dist":"400m"}], "rest": "full", "cap": "min(5% wk mileage, 5mi)" },
+      "race_pace_specific":{ "system": "specific", "zone": "Z3", "if": 0.90, "min_phase": "specific", "note": "marathon Z3 ~88-94% / HM Z4 ~94-100% thr-pace", "progression": [{"reps":2,"dist":"3km"},{"reps":3,"dist":"3km"}], "rest_min": 3 }
+    },
+    "swim": {
+      "aerobic":    { "system": "aerobic", "zone": "Z2", "if": 0.80, "min_phase": "base", "structure": "continuous 1500-3000m / pull sets at CSS+5-10s" },
+      "technique":  { "system": "skill",   "zone": "Z1", "if": 0.68, "min_phase": "base", "structure": "drill set (see drills) + kick; standalone or embedded WU", "confidence": "provisional" },
+      "css":        { "system": "threshold", "zone": "Z4", "if": 1.00, "min_phase": "base", "progression": [{"reps":8,"dist":"100m"},{"reps":6,"dist":"150m"},{"reps":5,"dist":"200m"},{"reps":4,"dist":"300m"}], "rest_sec": 15, "confidence": "provisional_rest" },
+      "speed":      { "system": "VO2/speed", "zone": "Z5b", "if": 1.08, "min_phase": "build", "progression": [{"reps":12,"dist":"50m"},{"reps":16,"dist":"50m"},{"reps":8,"dist":"75m"}], "rest_sec": 20, "confidence": "provisional" },
+      "ow_skills":  { "system": "skill", "zone": "Z2", "if": 0.80, "min_phase": "build", "structure": "sighting every 6-9 strokes, drafting, turns, deep starts", "note": "OW events only (tri, 5k swim)" },
+      "race_pace":  { "system": "specific", "zone": "Z4", "if": 0.95, "min_phase": "specific", "progression": [{"reps":3,"dist":"800m"},{"reps":2,"dist":"1500m"}], "rest_sec": 30, "note": "5k OW pace" }
+    }
+  },
+
+  "drills": {
+    "_note": "Prescribe only drills whose kit the athlete owns (equipment profile). Unknown kit -> ask. None -> plain only.",
+    "catch_up":        { "kit": "none" },
+    "single_arm":      { "kit": "none" },
+    "fingertip_drag":  { "kit": "none" },
+    "sculling":        { "kit": "none" },
+    "six_three_six":   { "kit": "none" },
+    "fist_swim":       { "kit": "none" },
+    "head_up":         { "kit": "none" },
+    "kick":            { "kit": "kickboard" },
+    "vertical_kick":   { "kit": "none" },
+    "pull":            { "kit": "pull_buoy", "note": "swim AT CSS or slightly faster" },
+    "paddle_catch":    { "kit": "hand_paddles", "note": "introduce gradually - shoulder load" },
+    "fin_kick":        { "kit": "fins" },
+    "fin_body_position":{ "kit": "fins" },
+    "buoyancy_pull":   { "kit": "buoyancy_shorts", "note": "wetsuit-position sim" },
+    "snorkel_position":{ "kit": "snorkel" }
+  },
+
+  "events": {
+    "ironman":        { "sports": ["swim","bike","run"], "tid": { "base":[85,10,5], "build":[80,12,8], "specific":[78,13,9], "peak":[78,12,10] }, "emphasis": ["endurance","long","race_pace_long","sweetspot"], "vo2": "minimal", "brick": "near_weekly_specific_long", "long_ride_factor": 0.90, "long_run_factor": 0.85 },
+    "70_3":           { "sports": ["swim","bike","run"], "tid": { "base":[83,12,5], "build":[80,11,9], "specific":[80,11,9], "peak":[76,12,12] }, "emphasis": ["threshold","race_pace_long","css","long"], "periodisation": "7wk_general+13wk_specific_4_4_5", "brick": "near_weekly_specific", "long_ride_factor": 1.15 },
+    "olympic":        { "sports": ["swim","bike","run"], "tid": { "base":[80,12,8], "build":[76,12,12], "specific":[74,11,15], "peak":[72,10,18] }, "emphasis": ["threshold","vo2","css","brick"], "brick": "weekly_short_sharp", "long_ride_factor": 1.4 },
+    "marathon":       { "sports": ["run"], "tid": { "base":[85,12,3], "build":[82,9,9], "specific":[80,8,12], "peak":[80,8,12] }, "emphasis": ["long","threshold","race_pace_specific"], "long_run_factor": 0.85 },
+    "half_marathon":  { "sports": ["run"], "tid": { "base":[82,13,5], "build":[80,10,10], "specific":[78,10,12], "peak":[76,10,14] }, "emphasis": ["threshold","vo2","race_pace_specific","long"] },
+    "10k":            { "sports": ["run"], "tid": { "base":[80,12,8], "build":[77,10,13], "specific":[75,8,17], "peak":[74,8,18] }, "emphasis": ["vo2","threshold","reps"] },
+    "5k":             { "sports": ["run"], "tid": { "base":[80,10,10], "build":[76,9,15], "specific":[72,8,20], "peak":[72,8,20] }, "emphasis": ["vo2","reps","threshold"] },
+    "sportive":       { "sports": ["bike"], "tid": { "base":[82,13,5], "build":[80,15,5], "specific":[78,15,7], "peak":[78,15,7] }, "emphasis": ["long","sweetspot","tempo","threshold"], "long_ride_factor": 1.0, "note": "durability-led" },
+    "swim_5k":        { "sports": ["swim"], "tid": { "base":[83,12,5], "build":[80,12,8], "specific":[78,12,10], "peak":[78,12,10] }, "emphasis": ["aerobic","css","race_pace","ow_skills"] }
+  }
+}
