@@ -45,3 +45,4 @@ No
 | 2026-06-13 | 8.0 | 2.3 | +5.7 | Long Z2 Ride 2h 45min — NOT completed. No ICU activity recorded. Actual IcuSync: CTL 7.99 / ATL 2.26. Watchdog had projected session as complete; corrected in weekly summary. No HRV or sleep data. |
 | 2026-06-14 | 7.8 | 2.0 | +5.8 | Weekly summary. T3 Underload fired (0% compliance). Both sessions missed — Sweetspot Intro (Wed 10 Jun) and Long Z2 Ride 2h 45min (Sat 13 Jun). No activities recorded in Intervals.icu this week. Recovery 100/100 GREEN. No HRV or sleep data. |
 | 2026-06-15 | 7.6 | 1.7 | +5.9 | Rest day — no session planned in calendar. No HRV or sleep data. |
+| 2026-06-16 | 7.4 | 1.5 | +6.0 | Rest day — no session planned in calendar. No HRV or sleep data. |
