@@ -1,29 +1,5 @@
 [
   {
-    "user": "I'm planning a 60-90 min z2 ride keeping it easy",
-    "assistant": "Good call \u2014 rest day tomorrow absorbs it.\n\n**Z2 ride targets** (FTP 297W)\n- NP *166\u2013223W* \u00b7 HR cap \u2264146 \u00b7 cadence 85\u201395 \u00b7 VI <1.08\n\n**TSB impact:**\n| Duration | Add TSS | End Sunday TSB | Start Tue |\n|----------|---------|----------------|-----------|\n| 60 min | ~50 | **\u221218** | ~\u22126 |\n| 90 min | ~75 | **\u221221** | ~\u22129 |\n\nEither is fine \u2014 keep it genuinely easy, cap at 90 min if legs feel good. No need to push; France camp is 10 days out.\n\nWant me to add it to Sunday's calendar?"
-  },
-  {
-    "user": "",
-    "assistant": "*W8\u2013W9 (15\u201328 Jun) \u00b7 Build \u2014 BEHIND*\nW8 (15\u201321 Jun): Tue swim + Z2 run, Thu CSS, Fri 240-min threshold ride (3\u00d720 SS finish), Sat brick (210 min + 35-min run), Sun Z2 ride 195 min \u2014 strength \u00d72 Wed+Sun. 731 TSS.\nW9 (22\u201328 Jun): Tue swim + run at home, then France camp 24\u201329 Jun \u2014 Wed Z2 run + strength, Thu CSS, Fri 5-hr key ride (race-IF finish), Sat brick, Sun Z2 ride + strength. 763 TSS.\nAt 765/wk max safe load, CTL lands ~94 by 6 Jul vs target 95. France camp can absorb 900+ TSS if you want to close that gap \u2014 say the word.\n\ud83d\udccc France 24\u201329 Jun: full swim/bike/run + heat. Tue/Wed run labels updated from walk-run to continuous Z2 in ICU.\nWhat gym/weights gear in France and at home this week? Pushing Tier C strength both weeks \u2014 reply to upgrade."
-  },
-  {
-    "user": "",
-    "assistant": "*New activity*\n\nNP 202w (68% FTP) \u00b7 IF 0.68 \u00b7 VI 1.21 | avg HR 120/149 bpm \u00b7 decoupling 3.9%\nNutrition \u2014 g carbs/hr and bottles?"
-  },
-  {
-    "user": "",
-    "assistant": "Quick log \u2014 Wandsworth Road Cycling:"
-  },
-  {
-    "user": "Load graph",
-    "assistant": ""
-  },
-  {
-    "user": "What's what is this message?",
-    "assistant": "The blank message was the load chart failing to render. Here it is properly:"
-  },
-  {
     "user": "What is the w8-w9 long message about upgrades. It's terrible? What's is supposed to be?",
     "assistant": "That was a weekly plan overview \u2014 but it was badly formatted. It violated the standing rule: plan messages should only show **day \u00b7 session \u00b7 duration \u00b7 TSS**, nothing else.\n\nWhat was wrong with it:\n- \"BEHIND\" status label \u2014 unsolicited load-gap analysis\n- CTL projection (\"lands ~94 by 6 Jul vs target 95\") \u2014 not requested\n- \"reply to upgrade\" \u2014 confusing; that was prompting you to request more detail on strength sessions, but it reads like a spam upsell\n- Gym gear question buried in a plan summary \u2014 should have been a separate message if needed at all\n\nWhat it *should* have looked like:\n\n**W8 (15\u201321 Jun)**\nMon \u2014 Rest\nTue \u2014 Swim 60 min \u00b7 Run 65 min\nWed \u2014 Strength 35 min \u00b7 Run 22 min\nThu \u2014 CSS Swim 60 min\nFri \u2014 Build Ride 240 min\nSat \u2014 Brick Ride 210 min\nSun \u2014 Z2 Ride 195 min\n~731 TSS\n\nThat's it. No projections, no status labels, no upgrade prompts."
   },
@@ -118,5 +94,29 @@
   {
     "user": "50m pool and your giving me 75 sets",
     "assistant": "Good catch \u2014 fixed. 75s don't fit a 50m pool. Rebuilt in 100m units and pushed to ICU (~2,350m, syncs to Garmin):\n\n*Tomorrow \u2014 Skills/Speed swim (50m pool)*\n\n*Warm-up (500m)*\n\u2022 300m easy\n\u2022 4\u00d750m drill, 15s rest\n\n*Speed (800m)* \u2014 the focus\n\u2022 8\u00d7100m @ *1:32\u20131:34/100m*, 20s rest\n\u2022 Faster than CSS (1:39) but hold it across all 8 \u2014 clean turnover, don't fade\n\n*Pull \u2014 PB + paddles (600m)*\n\u2022 6\u00d7100m @ *1:36/100m* (CSS\u22123), 15s rest\n\u2022 Long strong catch, no leg input; drop paddles last 2 if shoulders load up\n\n*Cool-down (200m)* easy"
+  },
+  {
+    "user": "Can we make that session closer to an hour? And the pull/pb reps 200",
+    "assistant": "*Today \u2014 Skills/Speed swim (50m pool, ~3,000m, ~58 min)* \u2014 pushed to ICU/Garmin\n\n*Warm-up (600m)*\n\u2022 400m easy + 4\u00d750m drill, 15s rest\n\n*Speed (1200m)* \u2014 the focus\n\u2022 12\u00d7100m @ *1:32\u20131:34/100m* (CSS\u22125 to \u22127), 20s rest\n\u2022 Faster than CSS (1:39) but hold across all 12 \u2014 clean turnover, don't fade\n\n*Pull \u2014 PB + paddles (800m)*\n\u2022 4\u00d7200m @ *1:36/100m* (CSS\u22123), 20s rest\n\u2022 Long strong catch, no leg input; drop paddles last rep if shoulders load\n\n*Cool-down (200m)* easy\n\nPull at CSS\u22123 over 200s is repeatable with the buoy cutting leg drag \u2014 hold it, don't TT it."
+  },
+  {
+    "user": "",
+    "assistant": "*Good morning \u2014 Tue 16 Jun*\n\n*Today:* Skills/Speed \u2014 12\u00d7100m + 4\u00d7200m PB (50m pool) \u2014 54 min \u00b7 37 TSS\nEasy run \u2014 run-walk 5:30 \u2014 45 min \u00b7 39 TSS\n\n\u26a0\ufe0f No heat sessions in 14 days \u2014 add a hot bath this week before France camp (8 days out)\n\nInjury pain score before heading out? (0-10)\n\n_95 days to IM Italy Emilia-Romagna_"
+  },
+  {
+    "user": "",
+    "assistant": "[chart/photo sent]"
+  },
+  {
+    "user": "Ankle is fine this morning. We're on day 3 ibuprofen",
+    "assistant": "Logged \u2014 ankle 0/10 this morning, day 3 ibuprofen. Cleared for today's run; protocol is stop if >5/10, no run tomorrow if it doesn't settle overnight."
+  },
+  {
+    "user": "Let's make Wednesday a shorter run as I only have just over an hour free for my ankle mobility/strength and the run. I then have more time on Thursday",
+    "assistant": "Done \u2014 shifted run volume to Thursday:\n\n*Wed 17:* Run 40 min \u00b7 35 TSS (was 50) + mobility/strength\n*Thu 18:* CSS swim 50 min \u00b7 53 + Run 45 min \u00b7 39\n\nSynced to Garmin. Thursday's normally swim-only \u2014 fine as a one-off given your time, just say if you want Thu runs to become a standing thing."
+  },
+  {
+    "user": "When you say Garmin do you mean ICU?",
+    "assistant": "Both. I push the workout to Intervals.icu, and ICU syncs structured workouts through to your Garmin automatically as follow-along workouts. So \"synced to Garmin\" = pushed to ICU \u2192 flows to your watch. The edit I made lives in ICU first."
   }
 ]
