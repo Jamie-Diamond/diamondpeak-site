@@ -2139,5 +2139,26 @@
     "notes": null,
     "logged_at": "2026-06-06T21:17:21",
     "stub": true
+  },
+  {
+    "activity_id": "i157654422",
+    "date": "2026-06-16",
+    "name": "Skills/Speed swim (50m pool)",
+    "sport": "Swim",
+    "tss": 61,
+    "duration_min": 41,
+    "distance_km": 2.4,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 119,
+    "rpe": null,
+    "feel": "struggled to go fast on the 100s; shoulders too tired for full pull set",
+    "ankle_pain_during": null,
+    "ankle_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": "Actual: 400 WU, 2x100 drill (long slow + finger drag), 10x100 hard (vs planned 12), 2x200 PB+paddles then 2x200 easy to finish (shoulders fatigued, vs planned 4x200). Total 2400m.",
+    "logged_at": "2026-06-16",
+    "stub": false
   }
 ]
