@@ -89,13 +89,74 @@ def get_thresholds(slug: str, cfg: dict | None = None, client=None) -> dict:
     }
 
 
+def sync_ftp_from_eftp(slug: str, cfg: dict | None = None, client=None,
+                       min_delta_w: int = 2, min_pct: float = 0.01,
+                       apply: bool = False) -> dict:
+    """Keep the ICU *configured* FTP tracking live eFTP — RAISE-ONLY.
+
+    The planner already reads eFTP-first, but intervals.icu's static `ftp` (which
+    drives the zones the athlete sees in ICU and on their Garmin) does not auto-update
+    — there is no athlete- or sport-level auto-apply flag in the API. So we mirror
+    ICU's own native semantics: bump the configured FTP up to eFTP when eFTP sets a
+    new high, and NEVER cut it because eFTP decayed over an easy week (eFTP falling
+    means 'no recent hard effort', not lost fitness). Guarded by a meaningful-delta
+    floor (≥min_delta_w AND ≥min_pct) so noise doesn't churn the setting. apply=False
+    is a dry-run. eFTP is computed from the power curve independently of FTP, so the
+    write can't create a feedback loop."""
+    if cfg is None:
+        cfg = json.loads(ATHLETES.read_text())[slug]
+    if client is None:
+        from icu_api import IcuClient
+        client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+    t = get_thresholds(slug, cfg, client)
+    eftp, static = t["eftp"], t["static_ftp"]
+    out = {"athlete": slug, "eftp": eftp, "static_ftp": static,
+           "changed": False, "applied": False, "reason": ""}
+    if not eftp or not static:
+        out["reason"] = "no eFTP" if not eftp else "no static FTP to compare"
+        return out
+    delta = eftp - static
+    if delta <= 0:
+        out["reason"] = f"eFTP {eftp} not above static {static} (raise-only — left as-is)"
+        return out
+    if delta < max(min_delta_w, static * min_pct):
+        out["reason"] = f"eFTP {eftp} only +{delta}W over {static} — below {max(min_delta_w, round(static*min_pct))}W floor"
+        return out
+    out.update(changed=True, new_ftp=eftp,
+               reason=f"raise {static} -> {eftp} (+{delta}W new eFTP high)")
+    if apply:
+        client._put("sport-settings/Ride", {"ftp": eftp})
+        out["applied"] = True
+    return out
+
+
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--athlete")
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--sync-ftp", action="store_true",
+                    help="raise ICU configured FTP up to eFTP (new high); dry-run unless --apply")
+    ap.add_argument("--apply", action="store_true", help="actually write the FTP change")
+    ap.add_argument("--notify", action="store_true",
+                    help="Telegram the athlete when an FTP change is applied")
     args = ap.parse_args()
     athletes = json.loads(ATHLETES.read_text())
     slugs = ([s for s, c in athletes.items() if c.get("active", True)] if args.all
              else [args.athlete])
-    print(json.dumps([get_thresholds(s, athletes[s]) for s in slugs], indent=1))
+    if args.sync_ftp:
+        res = [sync_ftp_from_eftp(s, athletes[s], apply=args.apply) for s in slugs]
+        for r in res:
+            tag = "APPLIED" if r["applied"] else ("WOULD CHANGE" if r["changed"] else "no change")
+            print(f"{r['athlete']:9} [{tag}] {r['reason']}")
+            if args.notify and r["applied"]:
+                import subprocess
+                cid = athletes[r["athlete"]].get("chat_id")
+                if cid:
+                    msg = (f"📈 *FTP auto-update* — your cycling FTP is now *{r['new_ftp']}W* "
+                           f"(was {r['static_ftp']}W). intervals.icu's estimated FTP set a new high, "
+                           "so I've updated it; your power zones and planned sessions now use this.")
+                    subprocess.run(["python3", str(BASE / "telegram/notify.py"),
+                                    "--chat-id", str(cid), msg], check=False)
+    else:
+        print(json.dumps([get_thresholds(s, athletes[s]) for s in slugs], indent=1))
