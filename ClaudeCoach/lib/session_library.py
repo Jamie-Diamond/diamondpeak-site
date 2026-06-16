@@ -244,7 +244,8 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "weekly_run_mileage_cap_km": weekly_mileage_cap_km,   # MAX (highest of last 4 wks ×1.15)
         "long_run_cap_min": long_run_cap_min,                 # MAX single long run (×1.15)
         "long_ride_target_min": long_ride_min,
-        "long_swim_target_m": event.get("swim_m"),   # race swim distance — scales long/race-sim swims (IM 3800 vs 70.3 1900)
+        "long_swim_target_m": event.get("long_swim_m"),  # OVERDISTANCE weekly long swim (70.3 ~3000, IM ~4500)
+        "race_sim_m": event.get("swim_m"),               # EXACT race distance — race-sim rehearsal (70.3 1900, IM 3800)
         "strength_programme": strength,
         "durability": durability,
         "menstrual_forecast": menstrual_forecast,

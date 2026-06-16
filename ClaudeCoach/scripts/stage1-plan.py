@@ -206,9 +206,10 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   easy Z2 — NO tempo/threshold/interval/vo2 run (ankle gate). Honour run_protocol format.
 - OBEY hard_rules (the athlete's protocol) absolutely — they override anything else here.
 - Swim sets: express in minutes (not metres). Strength: omit segments.
-- SWIM ENDURANCE scales to the event: build the long swim / race-sim toward long_swim_target_m
-  (the race swim distance — IM ~3800m, 70.3 ~1900m). Long-course (IM, 5k) needs a weekly long
-  swim approaching race distance; CSS/speed reps stay as their progression doses.
+- SWIM ENDURANCE scales to the event: the weekly LONG swim is OVERDISTANCE — build toward
+  long_swim_target_m, which is BEYOND race distance (70.3 ~3000m, IM ~4500m); overdistance is normal.
+  The RACE-SIM (race_pace) is the rehearsal at EXACT race distance = race_sim_m (70.3 1900m, IM 3800m).
+  CSS/speed reps stay as their progression doses.
 - STRENGTH: if the brief has a non-null "strength_programme", include EXACTLY its
   sessions_per_week Strength sessions, placed per its "placement" rule, with the session
   content (warm-up / main lifts / ankle / core, default its tier) written into "notes".
