@@ -1,13 +1,5 @@
 [
   {
-    "user": "What is the w8-w9 long message about upgrades. It's terrible? What's is supposed to be?",
-    "assistant": "That was a weekly plan overview \u2014 but it was badly formatted. It violated the standing rule: plan messages should only show **day \u00b7 session \u00b7 duration \u00b7 TSS**, nothing else.\n\nWhat was wrong with it:\n- \"BEHIND\" status label \u2014 unsolicited load-gap analysis\n- CTL projection (\"lands ~94 by 6 Jul vs target 95\") \u2014 not requested\n- \"reply to upgrade\" \u2014 confusing; that was prompting you to request more detail on strength sessions, but it reads like a spam upsell\n- Gym gear question buried in a plan summary \u2014 should have been a separate message if needed at all\n\nWhat it *should* have looked like:\n\n**W8 (15\u201321 Jun)**\nMon \u2014 Rest\nTue \u2014 Swim 60 min \u00b7 Run 65 min\nWed \u2014 Strength 35 min \u00b7 Run 22 min\nThu \u2014 CSS Swim 60 min\nFri \u2014 Build Ride 240 min\nSat \u2014 Brick Ride 210 min\nSun \u2014 Z2 Ride 195 min\n~731 TSS\n\nThat's it. No projections, no status labels, no upgrade prompts."
-  },
-  {
-    "user": "Ok that week plan doesn't look right. 22 min run in weds?",
-    "assistant": "You're right \u2014 I added that 22 min run without basis. The plan just says **strength 35 min** on Wed, nothing else.\n\nCorrected W8:\n\n**W8 (15\u201321 Jun)**\nMon \u2014 Rest\nTue \u2014 Swim 60 min \u00b7 Run 65 min\nWed \u2014 Strength 35 min\nThu \u2014 CSS Swim 60 min\nFri \u2014 Build Ride 240 min\nSat \u2014 Brick Ride 210 min + Run 35 min\nSun \u2014 Z2 Ride 195 min \u00b7 Strength 35 min\n~731 TSS"
-  },
-  {
     "user": "I don't think that will add to that TSS.",
     "assistant": "You're right \u2014 the TSS didn't add up because I incorrectly removed the Wed run from the list. It IS in the calendar. Here's the actual W8 from ICU with real load targets:\n\n**W8 (15\u201321 Jun)**\n| Day | Session | TSS |\n|-----|---------|-----|\n| Mon | Rest | 0 |\n| Tue | Recovery swim 45 min | 38 |\n| Tue | Z2 run 65 min | 50 |\n| Wed | Strength A 35 min | 20 |\n| Wed | Z2 run 22 min | 18 |\n| Thu | CSS swim 60 min | 55 |\n| Fri | Build ride 240 min | 210 |\n| Sat | Brick ride 210 min + run 35 min | 170 |\n| Sun | Z2 ride 195 min + Strength B 35 min | 170 |\n\n**Total: 731 TSS** \u2713\n\nTwo corrections from the earlier message: Tuesday swim is 45 min (not 60), and the Wed 22 min run is legitimate \u2014 it's been in the plan all along."
   },
@@ -118,5 +110,13 @@
   {
     "user": "When you say Garmin do you mean ICU?",
     "assistant": "Both. I push the workout to Intervals.icu, and ICU syncs structured workouts through to your Garmin automatically as follow-along workouts. So \"synced to Garmin\" = pushed to ICU \u2192 flows to your watch. The edit I made lives in ICU first."
+  },
+  {
+    "user": "What is 5tss equivalent to",
+    "assistant": "Not much \u2014 it's a rounding-level amount of load:\n\n\u2022 *~7 min* of Z2 riding (IF 0.65)\n\u2022 *~5 min* of easy Z2 running (IF 0.77)\n\u2022 *~3 min* of CSS swimming (IF 0.95)\n\nFor context, your Tue long run is ~74 TSS and Fri ride ~160. 5 TSS is inside the margin of error on any single session estimate \u2014 not worth planning around."
+  },
+  {
+    "user": "Talk me though the swim today",
+    "assistant": "*Today's swim \u2014 Skills/Speed (50m pool, ~3,000m, ~58 min)*\n\n*Warm-up (600m)*\n\u2022 400m easy free \u2014 settle in, long strokes\n\u2022 4\u00d750m drill (catch-up / scull), 15s rest \u2014 wake up the catch\n\n*Speed set (1,200m) \u2014 the main focus*\n\u2022 12\u00d7100m @ *1:32\u20131:34/100m*, 20s rest\n\u2022 That's CSS\u22125 to \u22127 (CSS is 1:39). Faster than CSS but the job is to *hold it across all 12* \u2014 don't blast the first few and fade.\n\u2022 Think clean, quick turnover, not muscling it. If you're slipping past 1:35 by rep 9, you went out too hard.\n\n*Pull set (800m) \u2014 PB + paddles*\n\u2022 4\u00d7200m @ *1:36/100m* (CSS\u22123), 20s rest\n\u2022 Buoy cuts leg drag, paddles load the catch \u2014 long, strong pull, no kick.\n\u2022 This is repeatable at CSS\u22123, not a TT. Hold the pace, don't chase it down.\n\u2022 Drop paddles for the last rep if your shoulders start loading up.\n\n*Cool-down (200m)* easy mixed\n\n*How to pace it:* speed set is about turnover and form under mild pressure; pull set is about strength and feel. Two different jobs \u2014 don't turn the pull reps into another speed effort.\n\nSend me the splits after and I'll check the reps against target."
   }
 ]
