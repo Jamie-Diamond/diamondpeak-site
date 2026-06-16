@@ -1,9 +1,5 @@
 [
   {
-    "user": "Or is it just that you understand call the TSS in the plan. As that's a week with more planned than this weeks actuals with a lower TSS.",
-    "assistant": "Fair challenge. Let me audit the estimates properly.\n\nThis week's Friday (247 min, 229 TSS) was at IF ~0.74 \u2014 that's not a Z2 ride, it was aggressive. W8 Friday at proper Z2 + controlled SS should be IF ~0.71 \u2192 ~195 TSS. That's the main source of the gap.\n\nBut looking more carefully, some of my session estimates for W8 are too low:\n\n| Session | My estimate | More accurate |\n|---------|------------|--------------|\n| Tue long run 75 min | 58 TSS | ~72 TSS (today's 66 min = 63 TSS) |\n| Wed run 50 min | 38 TSS | ~48 TSS (scaling from today) |\n| Sat brick 120+35 min | 115 TSS | ~125 TSS |\n\nRevised W8 total: **~695 TSS** \u2014 roughly in line with this week.\n\nSo yes, the plan does produce a similar load to this week. The earlier 666 figure was under-estimated. The plan I pushed to ICU is right in scope; the TSS number I quoted was wrong.\n\nWant me to update the ICU session targets to reflect the more accurate TSS values, or leave them as rough estimates since we review as we go?"
-  },
-  {
     "user": "Why are you forecasting them wrong.",
     "assistant": "Two reasons:\n\n1. **I'm using round-number guesses** instead of anchoring to your actual recent data. I have calibration points right here:\n   - Today's run: 66 min \u2192 63 TSS = **0.95 TSS/min**\n   - Sat ride: 179 min \u2192 127 TSS = **0.71 TSS/min** (true Z2)\n   - Fri ride: 247 min \u2192 229 TSS = **0.93 TSS/min** (not Z2 \u2014 that's why it was high)\n   - Thu swim: 39 min \u2192 59 TSS = **1.51 TSS/min**\n\n2. **I've been applying the right rate to the wrong session type.** I used Friday's rate (~200 TSS for 240 min) for a session that should run at Saturday's rate (~170 TSS for 240 min Z2).\n\nRecalculated W8 from actual rates:\n\n| Session | Dur | Rate | TSS |\n|---------|-----|------|-----|\n| Skills swim | 60 min | 1.51/min | 90 |\n| Long Z2 run 13.5km | 75 min | 0.95/min | 71 |\n| Strength A | 35 min | flat | 20 |\n| Z2 run 50 min | 50 min | 0.95/min | 48 |\n| CSS swim | 60 min | 1.51/min | 90 |\n| Z2 ride 240 min | 240 min | 0.71/min | 170 |\n| Brick ride 120 + run 35 | 155 min | mixed | 120 |\n| Z2 ride 120 + Strength B | 155 min | mixed | 100 |\n\n**~709 TSS** \u2014 heavier than this week, as it should be.\n\nWant me to update ICU with the corrected session targets?"
   },
@@ -118,5 +114,10 @@
   {
     "user": "I think today should be the 'long run' and Wednesday Thursday shorter ones.",
     "assistant": "Done \u2014 today's the long run now:\n\n*Tue 16:* *Long run \u2014 Z2 continuous, 75 min / 13.5 km \u00b7 65 TSS* (GAP ~5:30/km, HR cap 146)\n*Wed 17:* Easy run 40 min \u00b7 35 TSS (+ mobility/strength)\n*Thu 18:* Easy run 45 min \u00b7 39 TSS (+ CSS swim)\n\nTue is the anchor, Wed/Thu are the shorter ones. Synced to ICU/Garmin.\n\nAnkle's 0/10 and cleared \u2014 usual protocol on the long one: stop if pain goes >5/10."
+  },
+  {
+    "user": "8, felt hard!",
+    "assistant": "Logged \u2014 RPE 8 on the long run.\n\nThat's high for an easy Z2 session \u2014 RPE 8 should feel like tempo, not Z2. Two things stacking against you today:\n\n\u2022 *Form \u221214* \u2014 you're dug into a heavy week (229 + 127 TSS rides Fri/Sat, then today). Easy efforts feel disproportionately hard when ATL's this high.\n\u2022 Heat building + the swim earlier this morning already on the legs.\n\nNot a fitness flag \u2014 it's a fatigue flag. The pace/HR will tell the real story once it syncs.\n\nHow was the *ankle* through it? (0\u201310) \u2014 that's the one I need for the protocol, given it was the long one.",
+    "ts": "2026-06-16T14:49:40"
   }
 ]

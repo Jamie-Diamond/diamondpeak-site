@@ -2160,5 +2160,26 @@
     "notes": null,
     "logged_at": "2026-06-06T21:17:21",
     "stub": true
+  },
+  {
+    "activity_id": null,
+    "date": "2026-06-16",
+    "name": "Long run \u2014 Z2 continuous (13.5km)",
+    "sport": "Run",
+    "tss": 65,
+    "duration_min": 75,
+    "distance_km": 13.5,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": null,
+    "rpe": 8,
+    "feel": "felt hard",
+    "ankle_pain_during": null,
+    "ankle_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": "RPE 8 on an easy Z2 long run \u2014 high for Z2; athlete carrying fatigue (TSB -14). Run not yet synced to ICU.",
+    "logged_at": "2026-06-16",
+    "stub": false
   }
 ]
