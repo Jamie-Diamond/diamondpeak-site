@@ -1,21 +1,5 @@
 [
   {
-    "user": "Hello?",
-    "assistant": "Here. What do you need?"
-  },
-  {
-    "user": "How did I get to 120 fitness last year, that's weeks of 840+ tss",
-    "assistant": "The math is straightforward:\n\n**CTL maintenance load = CTL \u00d7 7**\nAt CTL 85 \u2192 maintenance = **595 TSS/week**\nAt CTL 120 \u2192 maintenance = **840 TSS/week**\n\nTo *build* CTL you need to consistently exceed maintenance. At 700 TSS/week from CTL 85:\n- Build rate \u2248 +1.5 CTL/week\n- 14 weeks to race \u2192 CTL ~106 at peak (before taper)\n\nTo hit CTL 120 again you'd need 850\u2013900 TSS sustained for 8\u201310 weeks. That's what last year's training looked like.\n\n**The honest picture:** The 583\u2013700 TSS weeks I've been planning are barely building load. France camp (5-6 days, likely 900+ TSS in one block) is your biggest lever right now. But one camp doesn't rebuild sustained fitness \u2014 you need big weeks before *and* after it.\n\nThe weeks between now and France should be 700\u2013750 TSS minimum if you want CTL moving. I've been underplanning them.\n\nWhat CTL do you want to arrive at Cervia with?"
-  },
-  {
-    "user": "Just forget I ever mentioned France, it's only relevent from heat. \n\nI mean what did my weeks look like to get to 840! \n\nAlso your supposed to tell.me.what my TSS should be. Your upsetting me the more I use you.",
-    "assistant": "Sorry \u2014 the planning has been a mess. Here's the honest picture.\n\n**What built CTL 117 last year:**\n\n| Period | Weekly TSS | CTL direction |\n|--------|-----------|--------------|\n| Mid Jun 2025 | 709 \u2192 966 | 91 \u2192 98 |\n| Jul 2025 | 750\u2013777 | 94 \u2192 100 |\n| Aug 2025 | 785 \u2192 952 \u2192 920 \u2192 **1057** | 102 \u2192 **117** |\n\nSustained 750\u2013950 TSS/week for 10 weeks, with one monster 1057 week in late August. That's what it took.\n\n---\n\n**Your target TSS \u2014 prescribed, not requested:**\n\nCurrent CTL: **85**. Race: 19 Sep. 11 build weeks left before taper.\nTo hit peak CTL ~100 by early September: **680 TSS/week minimum**.\n\nThat's the number. Every week below 680 is maintenance or decline. Every week at 700\u2013750 is meaningful progress.\n\n---\n\n**W8 problem:** The plan I pushed is ~588 TSS. That barely maintains CTL 85. It needs to be 680+.\n\nTo hit 680 with your Sat/Sun caps, something in Tue\u2013Thu has to do more work, OR the caps need to flex slightly. The current plan's Fri Z2 ride at 240 min is the biggest lever \u2014 correct calibrated TSS for that is ~160, and that's good. But Sat (115 min ride + 35 min run = ~105 TSS) and Sun (90 min ride + 30 min run = ~95 TSS) are both short.\n\nSat cap was 2.5h total \u2014 if you ran 35 min off a 115 min ride, that's only 2.5h. But there's room to make the ride 150 min and the run 30 min = 3h total, pushing Sat TSS from ~105 to ~135.\n\n**Revised W8 to hit 680:**\n\n| Day | Session | TSS |\n|-----|---------|-----|\n| Mon | Rest | 0 |\n| Tue | Skills swim 60 + Long run 75 min (13.5km) | 55+74 = **129** |\n| Wed | Strength A 35 min | 20 |\n| Thu | CSS swim 60 min | 90 |\n| Fri | Z2 ride 240 min | 160 |\n| Sat | Brick: ride 150 min + run 30 min | **135** |\n| Sun | Z2 ride 120 min + Strength B | **115** |\n\n**Total: 649 TSS** \u2014 still 30 short. The only way to close that gap is Wed run or loosening Sun.\n\nWant me to add a 45 min Z2 run on Wednesday and update ICU?"
-  },
-  {
-    "user": "We had already put the Wednesday run in",
-    "assistant": "You're right \u2014 it was already agreed and pushed. I dropped it from the last message by mistake. Full W8 as it stands in ICU:\n\n| Day | Session | TSS |\n|-----|---------|-----|\n| Mon | Rest | 0 |\n| Tue | Skills swim 60 min + Long run 75 min (13.5km) | ~146 |\n| Wed | Strength A 35 min + Z2 run 50 min | ~69 |\n| Thu | CSS swim 60 min | ~90 |\n| Fri | Z2 ride 240 min | ~160 |\n| Sat | Brick ride 115 min + run 35 min | ~105 |\n| Sun | Z2 ride 90 min + run 30 min + Strength B | ~100 |\n\n**Total: ~670 TSS** \u2014 just under the 680 minimum build threshold. The plan is already in ICU as is. No changes needed."
-  },
-  {
     "user": "",
     "assistant": "*Good morning \u2014 Mon 15 Jun*\n\nRest day\n\n\u26a0\ufe0f Heat \u2014 0 sessions in last 14 days; add a sauna or hot bath this week before France camp\n\u26a0\ufe0f Strength \u2014 1/2 sessions last week; 2 needed this week (Tier C, no equipment required)\n\ud83d\udccc PH sweat test + TT bike fit both 15 days overdue \u2014 book both before France camp (Jun 24, 9 days)\n\nWeight this morning?\n\n_96 days to IM Italy Emilia-Romagna_"
   },
@@ -122,5 +106,24 @@
     "user": "What was the longest last week",
     "assistant": "*11.9 km* (Sun 14 Jun, 65 min) was your longest last week.\n\nToday's 13.5 km cap is *+13%* on that \u2014 right in the 10\u201315% progression band.",
     "ts": "2026-06-16T17:52:26"
+  },
+  {
+    "user": "",
+    "assistant": "Activity watcher timed out for Jamie (300s). Last known activity: i157281011."
+  },
+  {
+    "user": "There's a new run",
+    "assistant": "Strava description pushed successfully (no message sent to Jamie \u2014 silent background action). Done.",
+    "ts": "2026-06-16T19:53:05"
+  },
+  {
+    "user": "Hello?",
+    "assistant": "*Long run debrief \u2014 Coventry, 13.5 km, 65 min*\n\n*GAP ~4:46/km* \u00b7 avg HR *144* (max 155, cap was 146 \u2014 held it) \u00b7 *decoupling 0.87%* \u00b7 TSS *88* \u00b7 23\u201328\u00b0C\n\nThe headline: you ran this *well under target pace* (GAP 4:46 vs planned 5:30) but kept HR pinned right at the 146 cap \u2014 and in 23\u201328\u00b0C heat. That's a strong aerobic read. Decoupling of 0.87% is essentially flat: zero cardiac drift across 65 min, HR and pace stayed locked together start to finish. No fade, no fitness flag \u2014 durability is excellent.\n\nTwo notes:\n\u2022 *Load:* it banked 88 TSS vs the planned 65 \u2014 you ran it as a quality aerobic effort, not a plod. Fine as a one-off, but it adds to an already heavy week (Form \u221216). Wed/Thu runs stay genuinely easy to absorb it.\n\u2022 *Heat:* holding 144 in that temp means cool-weather pace at the same HR would be faster still \u2014 good involuntary heat exposure banked, which you needed before France.\n\nDistance hit *exactly* the 13.5 km cap. Good discipline not running past it.\n\nOne thing I still need for the protocol: *ankle score after the run* (0\u201310)? You gave me 0/10 this morning but not post-run \u2014 that's the one that matters on the long one.",
+    "ts": "2026-06-16T19:53:59"
+  },
+  {
+    "user": "2/10",
+    "assistant": "Logged \u2014 ankle *2/10* after the long run (was 0/10 this morning).\n\nWell inside the protocol \u2014 \u22645/10 during is fine as long as it settles within 4 hrs or by tomorrow morning. Send me the score in the morning; if it's back to 0\u20131 you're clear for tomorrow's easy run, and given 13.5 km hard in the heat that's exactly the response we'd want.",
+    "ts": "2026-06-16T19:58:41"
   }
 ]
