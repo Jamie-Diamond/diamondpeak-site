@@ -2181,26 +2181,5 @@
     "notes": null,
     "logged_at": "2026-06-06T21:17:21",
     "stub": true
-  },
-  {
-    "activity_id": "i157839812",
-    "date": "2026-06-16",
-    "name": "A little further",
-    "sport": "Run",
-    "tss": 88,
-    "duration_min": 65,
-    "distance_km": 13.5,
-    "avg_power": null,
-    "norm_power": 433,
-    "avg_hr": 144,
-    "rpe": null,
-    "feel": null,
-    "ankle_pain_during": null,
-    "ankle_pain_next_morning": null,
-    "nutrition_g_carb": null,
-    "hydration_ml": null,
-    "notes": "13.5km long run. GAP ~4:46/km, avg HR 144 (cap 146), decoupling 0.87% in 23-28C heat. Ran faster than 5:30 Z2 target but HR held at cap.",
-    "logged_at": "2026-06-16",
-    "stub": false
   }
 ]
