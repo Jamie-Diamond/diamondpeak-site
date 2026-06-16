@@ -206,6 +206,10 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   easy Z2 — NO tempo/threshold/interval/vo2 run (ankle gate). Honour run_protocol format.
 - OBEY hard_rules (the athlete's protocol) absolutely — they override anything else here.
 - Swim sets: express in minutes (not metres). Strength: omit segments.
+- STRENGTH: if the brief has a non-null "strength_programme", include EXACTLY its
+  sessions_per_week Strength sessions, placed per its "placement" rule, with the session
+  content (warm-up / main lifts / ankle / core, default its tier) written into "notes".
+  Give each Strength session "minutes": 40 (no segments, no load — code/ICU handle load).
 - Do NOT output load_target, TSS numbers, or %FTP/pace targets — code derives them.
 
 DATE GRID:
@@ -307,6 +311,13 @@ def _week_message(brief: dict, built: dict) -> str:
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""
         lines.append(f"{wd}: {s['name']}{dur}")
     lines.append("_Synced to your calendar/Garmin._")
+    # EVERY-WEEK equipment ask (strength programme, signed off 10 Jun) — travel changes
+    # availability, so we ask each week and tailor the pushed sessions when you answer.
+    if brief.get("strength_programme"):
+        lines.append("")
+        lines.append("💪 *Strength* — what equipment do you have this week? "
+                     "(full gym / dumbbells-kettlebells / bodyweight only). "
+                     "Reply and I'll tailor the sessions.")
     return "\n".join(lines)
 
 

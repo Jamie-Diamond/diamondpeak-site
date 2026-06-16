@@ -1,9 +1,12 @@
-"""Tests for the strength programme blocks (planner + watchdog), opt-in via
+"""Tests for the strength programme (two-stage engine + watchdog), opt-in via
 profile `strength_programme` — signed off by Jamie 2026-06-10, including the
-EVERY-WEEK equipment ask."""
+EVERY-WEEK equipment ask. Ported from the retired generate-plan.py to stage1-plan.py
+(15 Jun): the brief carries the strength block, the proposer is instructed to place
+the sessions, and the weekly message carries the equipment ask."""
 from __future__ import annotations
 
 import importlib.util
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -19,8 +22,8 @@ def _load(name, rel):
 
 
 @pytest.fixture(scope="module")
-def gp():
-    return _load("gp_strength", "scripts/generate-plan.py")
+def s1():
+    return _load("s1_strength", "scripts/stage1-plan.py")
 
 
 @pytest.fixture(scope="module")
@@ -28,22 +31,24 @@ def wd():
     return _load("wd_strength", "scripts/watchdog.py")
 
 
-CFG = {"name": "Test Athlete", "race_name": "Race", "race_date": "2026-09-19",
-       "day_rules": {"strength_max": 2}}
-
-
 class TestPlannerStrengthBlock:
-    def test_flagged_athlete_gets_programme_and_weekly_equipment_ask(self, gp):
-        prompt = gp.build_prompt("x", CFG, {"strength_programme": True}, ctl_today=80.0)
-        assert "STRENGTH PROGRAMME" in prompt
-        assert "strength.md" in prompt
-        assert "EQUIPMENT ASK" in prompt
-        assert "Ask EVERY week" in prompt
-        assert "Tier C" in prompt          # default content pushed, never empty slots
+    def test_prompt_carries_strength_rule(self, s1):
+        # The proposer must always be told how to place strength when the brief flags it.
+        prompt = s1.build_prompt(
+            "x", {"weekly_tss_target": 400, "strength_programme": {"sessions_per_week": 2}},
+            date(2026, 6, 22))
+        assert "STRENGTH" in prompt and "strength_programme" in prompt
 
-    def test_unflagged_athlete_unchanged(self, gp):
-        prompt = gp.build_prompt("x", CFG, {}, ctl_today=80.0)
-        assert "STRENGTH PROGRAMME" not in prompt
+    def test_week_message_has_equipment_ask_when_flagged(self, s1):
+        built = {"week_start": "2026-06-22", "total_tss": 400, "sessions": []}
+        msg = s1._week_message(
+            {"phase": "build", "strength_programme": {"sessions_per_week": 2}}, built)
+        assert "equipment" in msg.lower()        # the EVERY-WEEK ask, never silently dropped
+
+    def test_no_equipment_ask_when_unflagged(self, s1):
+        built = {"week_start": "2026-06-22", "total_tss": 400, "sessions": []}
+        msg = s1._week_message({"phase": "build", "strength_programme": None}, built)
+        assert "equipment" not in msg.lower()
 
 
 class TestWatchdogT11:

@@ -56,7 +56,7 @@ ClaudeCoach/
 
 | Script | Cadence | Does |
 |---|---|---|
-| `generate-plan.py` | Sun 21:00 | Rolls the 2-week plan; Python computes the TSS target, the LLM builds sessions and pushes to intervals.icu. `--replan` rebuilds the current week. |
+| `weekly-plan.sh` → `stage1-plan.py` | Sun 18:00 | Two-stage engine: refreshes each athlete's ICU FTP from eFTP (raise-only), then the LLM proposes each week's SHAPE and deterministic code computes load/fuel/structure, validates against the athlete's protocol, and only pushes a clean week (gated). `--week-start` replans a specific week. |
 | `generate-blueprint.py` | manual | Emits `training-blueprint.md` + `.json` sidecar from `athletes.json` phase config. |
 | `daily-prescription.py` | daily | Modulates today's session vs readiness; writes `daily-prescription-latest.md` (no Telegram). |
 | `morning-checkin.py` | 06:30 | Athlete morning card; surfaces the prescription's key points. |

@@ -178,6 +178,22 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         except Exception:
             pass
 
+    # Strength programme (opt-in via profile.strength_programme) — ported from the old
+    # generate-plan.py so the two-stage engine doesn't silently drop Jamie's signed-off
+    # (10 Jun) sessions or the EVERY-WEEK equipment ask. The proposer includes the
+    # sessions (tier-C content by default); the weekly message carries the equipment ask.
+    strength = None
+    if profile.get("strength_programme"):
+        smd = BASE / "blueprints" / "strength.md"
+        strength = {
+            "sessions_per_week": (cfg.get("day_rules") or {}).get("strength_max") or 2,
+            "default_tier": "C (bodyweight + band — always possible, so strength is never dropped)",
+            "placement": ("Wednesday spare slot first; a 2nd session after a swim day; "
+                          "NEVER the day before the long ride; >=8h from any quality bike/run."),
+            "content_each": "warm-up / main lifts / ankle block / core — write this into notes.",
+            "guide": smd.read_text()[:1800] if smd.exists() else "",
+        }
+
     return {
         "athlete": slug,
         "event": ekey, "event_unknown": ekey is None,
@@ -192,6 +208,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "weekly_run_mileage_cap_km": weekly_mileage_cap_km,   # MAX (highest of last 4 wks ×1.15)
         "long_run_cap_min": long_run_cap_min,                 # MAX single long run (×1.15)
         "long_ride_target_min": long_ride_min,
+        "strength_programme": strength,
         "thresholds": {"ftp": thresh["ftp_watts"], "run": thresh["run_threshold_per_km"],
                        "swim_css": thresh["swim_css_per_100m"]},
         "available_sessions": available,

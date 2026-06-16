@@ -460,7 +460,6 @@ _STRENGTH_RE     = re.compile(
     re.I,
 )
 
-GENERATE_PLAN_SCRIPT = BASE.parent.parent / "ClaudeCoach/scripts/generate-plan.py"
 STAGE1_PLAN_SCRIPT = BASE.parent.parent / "ClaudeCoach/scripts/stage1-plan.py"
 
 def _week_stats(slug: str, athlete_cfg: dict | None = None) -> str:
