@@ -1,13 +1,5 @@
 [
   {
-    "user": "But also it's not just run duration it's intensity. Which you don't seem to understand today was a very very easy run.",
-    "assistant": "You're right. TSS scales with intensity squared (it's IF\u00b2 \u00d7 duration), not just duration. Today's easy Z2 run had a low IF \u2014 maybe 0.75 of run threshold. A moderate Z2 run at the same duration could be IF 0.82. That's a meaningful difference in TSS output.\n\nI've been treating run TSS/min as a fixed rate anchored to today's data, when today was an unusually easy session. That produces systematically low estimates for any run that's even slightly harder.\n\nCorrect approach: estimate IF per session, then apply TSS = IF\u00b2 \u00d7 duration \u00d7 100. For your sessions:\n\n| Run type | IF | 50 min TSS | 75 min TSS |\n|----------|-----|-----------|-----------|\n| Very easy Z2 (today) | ~0.75 | ~47 | ~70 |\n| Normal Z2 | ~0.82 | ~56 | ~84 |\n| Tempo/brick run | ~0.90 | ~68 | ~101 |\n\nSo Wed 50 min Z2 is ~56 TSS, not 48. Long run Tue 75 min is ~84 TSS, not 71. That pushes W8 total up meaningfully.\n\nI'll anchor estimates to IF going forward, not flat rates from a single session."
-  },
-  {
-    "user": "What the hell is the planning engine doing. If it can't even put the right TSS together. And even with the wrong tss it's getting the totals wrong. What is going on with this bot",
-    "assistant": "Two separate failures:\n\n**1. Wrong formula.** I was using TSS/min rates anchored to today's very easy run (0.95/min) and applying them to all runs. That's wrong. The correct formula is TSS = IF\u00b2 \u00d7 hours \u00d7 100. I need to estimate IF per session type, not copy a single session's rate.\n\n**2. Arithmetic errors.** The row totals were sometimes independently wrong \u2014 I was presenting numbers that didn't actually sum to what I wrote as the total. That's unacceptable and I can't explain it.\n\nHere's W8 recalculated using IF\u00b2 \u00d7 hours \u00d7 100, calibrated to recent actuals:\n\n| Session | Duration | IF | TSS |\n|---------|----------|----|-----|\n| Skills swim | 60 min | 0.87 | 72 |\n| Long Z2 run 13.5km | 75 min | 0.77 | 74 |\n| Strength A | 35 min | \u2014 | 20 |\n| Z2 run | 50 min | 0.77 | 49 |\n| CSS swim | 60 min | 0.95 | 90 |\n| Z2 ride | 240 min | 0.65 | 170 |\n| Brick ride 115 + run 35 | 150 min | \u2014 | 114 |\n| Z2 ride 90 + run 30 + Strength B | 155 min | \u2014 | 111 |\n\n**Total: 700 TSS** \u2014 marginally heavier than this week (691 actual). The plan is right; my earlier numbers were just wrong.\n\nIF calibration sources: Sat ride (179 min \u2192 127 TSS \u2192 IF 0.65); Thu swim (39 min \u2192 59 TSS \u2192 IF 0.95); today's run was unusually easy, so I used a normal Z2 run IF (0.77).\n\nBoth bugs are logged. The fix needs to lock IF-based estimation into the planning method \u2014 not flat rates from recent sessions."
-  },
-  {
     "user": "Hello?",
     "assistant": "Here. What do you need?"
   },
@@ -120,5 +112,15 @@
     "user": "that was for the swim, which you just asked me about, are you drunk.",
     "assistant": "Sorted \u2014 RPE 8 now sits on the swim where it belongs, run RPE cleared. The \"felt hard\" makes sense there: 10\u00d7100 hard off 20s rest at CSS\u22122, on Form \u221214, top-end was always going to bite.\n\nStill need the ankle score from the long run (0\u201310) for the protocol.",
     "ts": "2026-06-16T15:04:25"
+  },
+  {
+    "user": "What distance is the cap for today",
+    "assistant": "*13.5 km* \u2014 that's today's long run cap (75 min @ GAP ~5:30/km).\n\nIt's the W8 long-run target, up ~10\u201315% on last week. Don't run past it even if the ankle feels fine \u2014 the distance ceiling is the protocol, not just the pain score. Stop earlier if pain goes >5/10.",
+    "ts": "2026-06-16T17:51:48"
+  },
+  {
+    "user": "What was the longest last week",
+    "assistant": "*11.9 km* (Sun 14 Jun, 65 min) was your longest last week.\n\nToday's 13.5 km cap is *+13%* on that \u2014 right in the 10\u201315% progression band.",
+    "ts": "2026-06-16T17:52:26"
   }
 ]
