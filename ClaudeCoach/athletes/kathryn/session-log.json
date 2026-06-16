@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i157662863",
+    "date": "2026-06-16",
+    "name": "Hammersmith and Fulham Running",
+    "sport": "Run",
+    "tss": 71,
+    "duration_min": 63,
+    "distance_km": 10.59,
+    "avg_power": null,
+    "norm_power": null,
+    "avg_hr": 169,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-06-16T08:30:00",
+    "stub": true
+  },
+  {
     "activity_id": "i157645780",
     "date": "2026-06-16",
     "name": "Cardio",
