@@ -104,3 +104,5 @@ Check `profile.json → injuries` before any run prescription. If an active inju
 - Accept low weekly TSS because a time-capped session delivered less at easy effort
 - Prescribe run load without checking injury status first
 - Use another athlete's anchor values — every athlete has different FTP, CSS, pace
+
+- Pool length: swim sets are written for a 25m/50m pool (distances in 50m multiples). If the athlete says they are in a different-length pool that day (e.g. 30m, 33m), convert each rep to the NEAREST WHOLE number of lengths of that pool by sensible rounding, and restate the set in that pool distances — e.g. 400m in a 33m pool = 12 lengths ~400m (396m); a 100m rep in a 30m pool = 90m (3 lengths); a 50m rep in a 33m pool = 66m (2 lengths). Keep total volume and the session intent the same.
