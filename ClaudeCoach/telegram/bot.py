@@ -246,6 +246,29 @@ def save_history(history, history_file=None):
     f.write_text(json.dumps(history[-MAX_HISTORY_PAIRS:], indent=2))
 
 
+def _hist_entry(user, assistant):
+    """A history pair stamped with the local send time, so the bot can resolve
+    time-referenced questions ("my 8:08 message") instead of claiming it can't see
+    them (the 16 Jun misdiagnosis). Old entries without 'ts' render without a stamp."""
+    return {"user": user, "assistant": assistant,
+            "ts": datetime.now().isoformat(timespec="seconds")}
+
+
+def _render_history(history, athlete_name):
+    lines = []
+    for h in history:
+        stamp = ""
+        ts = h.get("ts", "")
+        if ts:
+            try:
+                stamp = datetime.fromisoformat(ts).strftime("[%a %H:%M] ")
+            except Exception:
+                stamp = ""
+        lines.append(f"{stamp}{athlete_name}: {h['user']}")
+        lines.append(f"ClaudeCoach: {h['assistant']}")
+    return lines
+
+
 def tg_post(token, method, payload):
     url = f"https://api.telegram.org/bot{token}/{method}"
     data = json.dumps(payload).encode()
@@ -254,6 +277,23 @@ def tg_post(token, method, payload):
         with urllib.request.urlopen(req, timeout=10, context=SSL_CONTEXT) as r:
             return json.loads(r.read())
     except Exception as e:
+        # Telegram returns HTTP 400 when legacy-Markdown can't be parsed (an unbalanced
+        # *, _, [ or ` in the LLM's reply). Without a fallback the whole message is lost —
+        # this is the 16 Jun bug where Jamie's 8:08 swim debrief was generated but never
+        # delivered. Retry ONCE as plain text so a reply is never silently dropped (worst
+        # case the user sees raw markdown chars). Mirrors notify.py's plain-text fallback.
+        if getattr(e, "code", None) == 400 and payload.get("parse_mode"):
+            log(f"tg_post {method} 400 (markdown parse?) — retrying as plain text")
+            retry = {k: v for k, v in payload.items() if k != "parse_mode"}
+            try:
+                req2 = urllib.request.Request(
+                    url, data=json.dumps(retry).encode(),
+                    headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req2, timeout=10, context=SSL_CONTEXT) as r:
+                    return json.loads(r.read())
+            except Exception as e2:
+                log(f"tg_post {method} plain-text retry failed: {e2}")
+                return {}
         log(f"tg_post {method} error: {e}")
         return {}
 
@@ -1342,7 +1382,7 @@ def _handle_drill(token, chat_id, data, message_id, athletes, config):
     clean = process_charts(token, chat_id, response, slug=slug)
     if clean:
         send(token, chat_id, clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athlete))
-    history.append({"user": question, "assistant": clean})
+    history.append(_hist_entry(question, clean))
     save_history(history, files["history"])
     return True
 
@@ -2130,9 +2170,7 @@ def _build_prompt(user_message, history, system_prompt, athlete_name, context,
         parts.append("")
     if history:
         parts.append("Recent conversation:")
-        for h in history:
-            parts.append(f"{athlete_name}: {h['user']}")
-            parts.append(f"ClaudeCoach: {h['assistant']}")
+        parts.extend(_render_history(history, athlete_name))
         parts.append("")
     parts.append(f"{athlete_name}: {user_message}")
     return "\n".join(parts)
@@ -2256,9 +2294,7 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNE
         parts.append("")
     if history:
         parts.append("Recent conversation:")
-        for h in history:
-            parts.append(f"{athlete_name}: {h['user']}")
-            parts.append(f"ClaudeCoach: {h['assistant']}")
+        parts.extend(_render_history(history, athlete_name))
         parts.append("")
 
     question = caption if caption else "analyse this"
@@ -2388,7 +2424,7 @@ def main():
                                          clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athletes[chat_id]),
                                          reply_markup=build_keyboard(slug))
                                 log(f"Out (image): {clean[:80]}")
-                                history.append({"user": caption or "[image]", "assistant": clean})
+                                history.append(_hist_entry(caption or "[image]", clean))
                                 save_history(history, files["history"])
                             finally:
                                 try:
@@ -2568,16 +2604,21 @@ def main():
             clean = process_charts(token, chat_id, response, slug=slug)
             final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
             if placeholder_id:
-                tg_post(token, "editMessageText", {
+                res = tg_post(token, "editMessageText", {
                     "chat_id": chat_id, "message_id": placeholder_id,
                     "text": final, "parse_mode": "Markdown",
                     "reply_markup": build_keyboard(slug),
                 })
+                # Last-resort guard: if the edit failed entirely (even the plain-text retry),
+                # send the reply as a fresh message so it is NEVER silently lost to a stuck "…".
+                if not (res or {}).get("ok") and clean:
+                    log("editMessageText final delivery failed — sending fresh message")
+                    send(token, chat_id, final, reply_markup=build_keyboard(slug))
             elif clean:
                 send(token, chat_id, final, reply_markup=build_keyboard(slug))
             log(f"Out: {clean[:80]}")
 
-            history.append({"user": text, "assistant": clean})
+            history.append(_hist_entry(text, clean))
             save_history(history, files["history"])
 
         time.sleep(1)
