@@ -473,6 +473,13 @@
     "min_phase": "base",
     "structure": "continuous 1500-3000m / pull sets at CSS+5-10s"
    },
+   "long": {
+    "system": "aerobic",
+    "zone": "Z2",
+    "if": 0.78,
+    "min_phase": "base",
+    "structure": "continuous (or minimally-broken) endurance swim building toward long_swim_target_m (the race swim distance) by the specific/peak phase. Long-course events (IM, 5k) need a weekly long swim approaching race distance; short-course can cap lower."
+   },
    "technique": {
     "system": "skill",
     "zone": "Z1",
@@ -543,23 +550,9 @@
     "zone": "Z4",
     "if": 0.95,
     "min_phase": "specific",
-    "progression": [
-     {
-      "reps": 3,
-      "dist": "800m"
-     },
-     {
-      "reps": 2,
-      "dist": "1500m"
-     },
-     {
-      "reps": 1,
-      "dist": "1900m"
-     }
-    ],
     "rest_sec": 30,
-    "note": "5k OW pace",
-    "confidence": "research-grounded (peak race-sim: continuous race-distance)"
+    "structure": "race-sim at race pace, scaled to the event: build broken->continuous toward long_swim_target_m \u2014 e.g. ~50% of target (broken) early, ~75% mid, 100% continuous by peak.",
+    "confidence": "research-grounded (peak race-sim = race distance continuous)"
    },
    "_pool_note": "Pool length: swim sets are written for a 25m/50m pool (distances in 50m multiples). If the athlete says they are in a different-length pool that day (e.g. 30m, 33m), convert each rep to the NEAREST WHOLE number of lengths of that pool by sensible rounding, and restate the set in that pool distances \u2014 e.g. 400m in a 33m pool = 12 lengths ~400m (396m); a 100m rep in a 30m pool = 90m (3 lengths); a 50m rep in a 33m pool = 66m (2 lengths). Keep total volume and the session intent the same."
   }
@@ -653,7 +646,8 @@
    "vo2": "minimal",
    "brick": "near_weekly_specific_long",
    "long_ride_factor": 0.9,
-   "long_run_factor": 0.85
+   "long_run_factor": 0.85,
+   "swim_m": 3800
   },
   "70_3": {
    "sports": [
@@ -691,7 +685,8 @@
    ],
    "periodisation": "7wk_general+13wk_specific_4_4_5",
    "brick": "near_weekly_specific",
-   "long_ride_factor": 1.15
+   "long_ride_factor": 1.15,
+   "swim_m": 1900
   },
   "olympic": {
    "sports": [
@@ -728,7 +723,8 @@
     "brick"
    ],
    "brick": "weekly_short_sharp",
-   "long_ride_factor": 1.4
+   "long_ride_factor": 1.4,
+   "swim_m": 1500
   },
   "marathon": {
    "sports": [
@@ -926,7 +922,8 @@
     "css",
     "race_pace",
     "ow_skills"
-   ]
+   ],
+   "swim_m": 5000
   }
  }
 }

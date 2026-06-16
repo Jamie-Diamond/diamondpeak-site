@@ -148,6 +148,8 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         types = lib["session_types"].get(sport, {})
         rows = []
         for name, st in types.items():
+            if name.startswith("_") or not isinstance(st, dict):
+                continue   # skip metadata keys (e.g. _pool_note)
             if name in forbid:
                 continue
             vo2_unlock = (name == "vo2" and vo2_late)
@@ -242,6 +244,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "weekly_run_mileage_cap_km": weekly_mileage_cap_km,   # MAX (highest of last 4 wks ×1.15)
         "long_run_cap_min": long_run_cap_min,                 # MAX single long run (×1.15)
         "long_ride_target_min": long_ride_min,
+        "long_swim_target_m": event.get("swim_m"),   # race swim distance — scales long/race-sim swims (IM 3800 vs 70.3 1900)
         "strength_programme": strength,
         "durability": durability,
         "menstrual_forecast": menstrual_forecast,
