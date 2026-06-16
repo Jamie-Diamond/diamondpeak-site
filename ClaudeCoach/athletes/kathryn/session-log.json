@@ -27,11 +27,11 @@
     "sport": "Strength",
     "tss": 22,
     "duration_min": 44,
-    "rpe": null,
+    "rpe": 6,
     "feel": null,
     "notes": null,
     "logged_at": "2026-06-16T07:30:00",
-    "stub": true
+    "stub": false
   },
   {
     "activity_id": "i157381325",
