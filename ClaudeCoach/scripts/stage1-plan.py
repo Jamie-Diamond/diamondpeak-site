@@ -210,6 +210,10 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   sessions_per_week Strength sessions, placed per its "placement" rule, with the session
   content (warm-up / main lifts / ankle / core, default its tier) written into "notes".
   Give each Strength session "minutes": 40 (no segments, no load — code/ICU handle load).
+- DURABILITY: if the brief has a non-null "durability", apply it to the long ride (closing block
+  at race intensity), expressed in the long ride's segments + notes.
+- MENSTRUAL: if the brief has a non-null "menstrual_forecast", follow its "apply" guidance when
+  PLACING quality vs easy sessions across the week (never breaking a day rule, never cutting TSS).
 - Do NOT output load_target, TSS numbers, or %FTP/pace targets — code derives them.
 
 DATE GRID:
@@ -240,7 +244,7 @@ def main():
     cfg = json.loads((BASE / "config" / "athletes.json").read_text())[args.athlete]
     today = date.today()
     week_start = date.fromisoformat(args.week_start) if args.week_start else _next_monday(today)
-    brief = sl.planning_brief(args.athlete, cfg, today=today)
+    brief = sl.planning_brief(args.athlete, cfg, today=today, plan_start=week_start)
     if brief.get("event_unknown"):
         print(json.dumps({"error": f"event unknown for {args.athlete} — cannot plan"}))
         sys.exit(1)

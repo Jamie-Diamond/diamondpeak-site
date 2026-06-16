@@ -39,6 +39,12 @@ class TestPlannerStrengthBlock:
             date(2026, 6, 22))
         assert "STRENGTH" in prompt and "strength_programme" in prompt
 
+    def test_prompt_carries_durability_and_menstrual_rules(self, s1):
+        # Both ported from generate-plan.py — guard against silently dropping them again.
+        prompt = s1.build_prompt("x", {"weekly_tss_target": 400}, date(2026, 6, 22))
+        assert "DURABILITY" in prompt and "durability" in prompt
+        assert "MENSTRUAL" in prompt and "menstrual_forecast" in prompt
+
     def test_week_message_has_equipment_ask_when_flagged(self, s1):
         built = {"week_start": "2026-06-22", "total_tss": 400, "sessions": []}
         msg = s1._week_message(

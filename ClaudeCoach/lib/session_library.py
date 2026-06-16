@@ -79,8 +79,10 @@ def _resolve_progression(stype: dict, eff_week: int) -> dict | None:
     return prog[min(max(eff_week, 1) - 1, len(prog) - 1)]
 
 
-def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None) -> dict:
+def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None,
+                   plan_start: date | None = None) -> dict:
     today = today or date.today()
+    plan_start = plan_start or today
     if cfg is None:
         cfg = json.loads(ATHLETES.read_text())[slug]
     lib = load_library()
@@ -194,6 +196,38 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
             "guide": smd.read_text()[:1800] if smd.exists() else "",
         }
 
+    # Durability (ported from generate-plan.py) — fatigue resistance is trained by working at
+    # intensity on tired legs, not Z2 hours alone; in build/specific/peak the long ride must
+    # FINISH WITH WORK. (Jamie's 2025 limiter: -60W on lap 2, 14.5% decoupling.)
+    durability = None
+    if phase_name in ("build", "build_late", "specific", "peak"):
+        durability = ("The weekly LONG RIDE must FINISH WITH WORK, not just accumulate hours: put the "
+                      "final portion at race intensity (early build = last 2x20min at race IF; progress "
+                      "toward a continuous 60-90min race-IF finish by peak) and write it into the notes. "
+                      "The Z2 body stays; only the closing block is at intensity (counts to the quality "
+                      "share). Long RUNS keep their structure — no quality added unless the rules allow.")
+
+    # Menstrual-cycle forecast (tracking athletes only) — Python-computed from the bot-logged
+    # anchor, aligned to the PLANNED week. Shapes WHERE quality lands, never the total TSS.
+    menstrual_forecast = None
+    if profile.get("menstrual_tracking"):
+        try:
+            import menstrual as _mens
+            _cl = _mens.forecast_block(slug, plan_start, 14, profile=profile)
+            if _cl:
+                menstrual_forecast = {
+                    "phase_windows": _cl,
+                    "apply": ("Where the day rules leave a choice, place the hardest quality "
+                              "(threshold/VO2/race-pace) on FOLLICULAR/OVULATION days and prefer "
+                              "Z2/easy/technique on MENSTRUAL days. Keep menstrual-day sessions but "
+                              "frame them RPE-led. On LUTEAL days expect higher RPE/core temp — don't "
+                              "stack the two hardest sessions back-to-back in late luteal; heat compounds "
+                              "with luteal. Never break a HARD day rule for this, and do NOT cut the "
+                              "week's TSS target because of cycle phase."),
+                }
+        except Exception:
+            pass
+
     return {
         "athlete": slug,
         "event": ekey, "event_unknown": ekey is None,
@@ -209,6 +243,8 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "long_run_cap_min": long_run_cap_min,                 # MAX single long run (×1.15)
         "long_ride_target_min": long_ride_min,
         "strength_programme": strength,
+        "durability": durability,
+        "menstrual_forecast": menstrual_forecast,
         "thresholds": {"ftp": thresh["ftp_watts"], "run": thresh["run_threshold_per_km"],
                        "swim_css": thresh["swim_css_per_100m"]},
         "available_sessions": available,
