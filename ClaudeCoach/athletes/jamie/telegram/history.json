@@ -1,13 +1,5 @@
 [
   {
-    "user": "When you say Garmin do you mean ICU?",
-    "assistant": "Both. I push the workout to Intervals.icu, and ICU syncs structured workouts through to your Garmin automatically as follow-along workouts. So \"synced to Garmin\" = pushed to ICU \u2192 flows to your watch. The edit I made lives in ICU first."
-  },
-  {
-    "user": "What is 5tss equivalent to",
-    "assistant": "Not much \u2014 it's a rounding-level amount of load:\n\n\u2022 *~7 min* of Z2 riding (IF 0.65)\n\u2022 *~5 min* of easy Z2 running (IF 0.77)\n\u2022 *~3 min* of CSS swimming (IF 0.95)\n\nFor context, your Tue long run is ~74 TSS and Fri ride ~160. 5 TSS is inside the margin of error on any single session estimate \u2014 not worth planning around."
-  },
-  {
     "user": "Talk me though the swim today",
     "assistant": "*Today's swim \u2014 Skills/Speed (50m pool, ~3,000m, ~58 min)*\n\n*Warm-up (600m)*\n\u2022 400m easy free \u2014 settle in, long strokes\n\u2022 4\u00d750m drill (catch-up / scull), 15s rest \u2014 wake up the catch\n\n*Speed set (1,200m) \u2014 the main focus*\n\u2022 12\u00d7100m @ *1:32\u20131:34/100m*, 20s rest\n\u2022 That's CSS\u22125 to \u22127 (CSS is 1:39). Faster than CSS but the job is to *hold it across all 12* \u2014 don't blast the first few and fade.\n\u2022 Think clean, quick turnover, not muscling it. If you're slipping past 1:35 by rep 9, you went out too hard.\n\n*Pull set (800m) \u2014 PB + paddles*\n\u2022 4\u00d7200m @ *1:36/100m* (CSS\u22123), 20s rest\n\u2022 Buoy cuts leg drag, paddles load the catch \u2014 long, strong pull, no kick.\n\u2022 This is repeatable at CSS\u22123, not a TT. Hold the pace, don't chase it down.\n\u2022 Drop paddles for the last rep if your shoulders start loading up.\n\n*Cool-down (200m)* easy mixed\n\n*How to pace it:* speed set is about turnover and form under mild pressure; pull set is about strength and feel. Two different jobs \u2014 don't turn the pull reps into another speed effort.\n\nSend me the splits after and I'll check the reps against target."
   },
@@ -136,5 +128,15 @@
     "user": "how am I looking?",
     "assistant": "Same numbers as a minute ago \u2014 *CTL 83.3 \u00b7 ATL 92.7 \u00b7 TSB \u22129.4* \u2014 here it is visually so you can see the shape:\n\n\n\n\n\n*Fitness chart:* CTL (teal) grinding up from ~76 a month ago to 83.3 \u2014 the build is landing. ATL (purple) spikes are your hard blocks; each one drags CTL up a notch.\n\n*Form chart:* the saw-tooth is textbook. You floated to +18 over the recovery week (24 May), then dug to \u221223 on Sat off the bike block, back to \u22129 now. Productive-load zone, recovery green (HRV 47 / sleep 90).\n\nThe Fri/Sat/Sun rides will pull form back toward \u221218/\u221220 by the weekend \u2014 that's the plan, just no extra volume on top.",
     "ts": "2026-06-17T07:46:51"
+  },
+  {
+    "user": "Retitle the morning strength as ankle training",
+    "assistant": "Done \u2014 Wed strength session retitled to *Ankle Training*. Synced to ICU/Garmin.",
+    "ts": "2026-06-17T08:00:37"
+  },
+  {
+    "user": "Test message 1234",
+    "assistant": "Got it \u2014 receiving you loud and clear. Anything you need?",
+    "ts": "2026-06-17T08:14:12"
   }
 ]
