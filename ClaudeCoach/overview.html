@@ -89,8 +89,8 @@
   <div class="stack-grid">
     <div class="stack-item">
       <div class="label">AI model</div>
-      <div class="name">Claude Sonnet 4</div>
-      <div class="desc">Coaching analysis, session debriefs, plan adjustments via Claude CLI</div>
+      <div class="name">Claude (Opus · Sonnet · Haiku)</div>
+      <div class="desc">Coaching analysis &amp; debriefs via Claude CLI; a shared wrapper auto-falls back across model tiers if one is rate-limited</div>
     </div>
     <div class="stack-item">
       <div class="label">Training data</div>
@@ -119,8 +119,8 @@
     </div>
     <div class="stack-item">
       <div class="label">Race planning</div>
-      <div class="name">generate-race-plan.py</div>
-      <div class="desc">Deterministic pace/power targets from FTP, CSS, LTHR, forecast CTL; works across all tri distances</div>
+      <div class="name">CTL-based predictor</div>
+      <div class="desc">Now / race-day / target race times from IF&nbsp;∝&nbsp;√CTL (fitness = TSS capacity), fixed FTP &amp; threshold, anchored to the athlete's own previous race</div>
     </div>
     <div class="stack-item">
       <div class="label">Data capture</div>
@@ -137,17 +137,22 @@
       </thead>
       <tbody>
         <tr>
-          <td class="mono">Every 15 min</td>
+          <td class="mono">Every 5 min</td>
           <td class="mono">activity-watcher.py</td>
-          <td>Detects new activities; triggers Claude analysis; stubs session-log.json; sends Telegram coaching note with inline keyboard for RPE, nutrition, and pain capture</td>
+          <td>Python-first new-activity check (no LLM unless something new); on a new activity triggers Claude analysis, stubs session-log.json, and sends a Telegram coaching note with inline keyboard for RPE, nutrition, and pain capture</td>
         </tr>
         <tr>
           <td class="mono">Continuous</td>
           <td class="mono">bot.py</td>
-          <td>Two-way Telegram bot; routes messages to Claude or fast-path handlers; processes inline keyboard callbacks (RPE, nutrition, pain scores, FTP/CSS/LTHR updates)</td>
+          <td>Two-way Telegram bot; routes messages to Claude or fast-path handlers; processes inline keyboard callbacks (RPE, nutrition, pain scores, FTP/CSS/LTHR updates); writes a poll-loop heartbeat</td>
         </tr>
         <tr>
-          <td class="mono">Daily 06:20</td>
+          <td class="mono">Every 5 min</td>
+          <td class="mono">bot-watchdog.py</td>
+          <td>Liveness guard — restarts the bot service if its heartbeat goes stale (catches a wedged poll loop)</td>
+        </tr>
+        <tr>
+          <td class="mono">Every 30 min · 06–09</td>
           <td class="mono">morning-checkin.py</td>
           <td>Fetches HRV, sleep, and wellness from Intervals.icu; sends personalised daily readiness note and today's session preview</td>
         </tr>
@@ -179,7 +184,7 @@
         <tr>
           <td class="mono">On demand</td>
           <td class="mono">generate-race-plan.py</td>
-          <td>Generates race-day targets from current FTP, CSS, LTHR, and forecast CTL; supports all triathlon distances; triggered via Telegram or manually</td>
+          <td>On-demand full race-day plan document — per-leg pacing bands, HR ceilings, and nutrition — across all tri distances; triggered via Telegram</td>
         </tr>
       </tbody>
     </table>
