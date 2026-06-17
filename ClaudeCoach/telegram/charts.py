@@ -902,3 +902,389 @@ def power_curve_chart(efforts, ftp=316):
         },
     }
     return _fetch(config, height=480)
+
+
+# ── Recovery chart (HRV vs own baseline + RHR + sleep) ─────────────────────────
+
+def recovery_chart(payload, coaching_level="mid"):
+    """
+    payload: {"today":"MM-DD","days":[{date,hrv,rhr,sleep_h},...]}  (~42 days)
+    HRV dots vs a 7-day trailing rolling-mean baseline ± 1 trailing SD (shaded band).
+    A dot below the band = under-recovered. RHR on a right axis, sleep as faint
+    bars pinned low on a hidden third axis so they stay subtle.
+    """
+    if isinstance(payload, dict):
+        days  = payload.get("days", [])
+        today = payload.get("today")
+        if "level" in payload:
+            coaching_level = payload["level"]
+    else:
+        return None
+    if not days:
+        return None
+
+    labels = [d["date"][5:] for d in days]
+    hrv    = [d.get("hrv") for d in days]
+    rhr    = [d.get("rhr") for d in days]
+    sleep  = [d.get("sleep_h") for d in days]
+
+    # 7-day trailing baseline (rolling mean) + band (mean ± 1 trailing SD), computed
+    # over non-None HRV values inside each trailing window. Fallback SD keeps the band
+    # from collapsing when too few points exist — and crucially gives every day a
+    # non-null band so fill-between never sees leading nulls (which render garbage).
+    baseline, band_lo, band_hi = [], [], []
+    for i in range(len(days)):
+        window = [hrv[j] for j in range(max(0, i - 6), i + 1) if hrv[j] is not None]
+        if not window:
+            baseline.append(None)
+            band_lo.append(None)
+            band_hi.append(None)
+            continue
+        mean = sum(window) / len(window)
+        if len(window) >= 3:
+            var = sum((v - mean) ** 2 for v in window) / (len(window) - 1)
+            sd  = math.sqrt(var)
+        else:
+            sd = 0.0
+        sd = max(sd, 0.5 * mean * 0.1)  # floor so the band is always visible
+        baseline.append(round(mean, 1))
+        band_lo.append(round(mean - sd, 1))
+        band_hi.append(round(mean + sd, 1))
+
+    # HRV-axis range fitted to the band + dots (don't force 0).
+    _vals = [v for v in (hrv + band_lo + band_hi) if v is not None]
+    if _vals:
+        _lo, _hi = min(_vals), max(_vals)
+        _pad = max(2, (_hi - _lo) * 0.12)
+        _ymin, _ymax = int(_lo - _pad), int(_hi + _pad) + 1
+    else:
+        _ymin, _ymax = 0, 100
+
+    # Sleep axis: pin bars to the bottom quarter so they never dominate.
+    _smax = max([s for s in sleep if s is not None], default=8) or 8
+
+    # Highlight today's HRV dot.
+    today_radius = [0] * len(days)
+    if today and today in labels:
+        ti = labels.index(today)
+        if hrv[ti] is not None:
+            today_radius[ti] = 7
+
+    annotations = {}
+    ann = _today_annotation(today, labels)
+    if ann:
+        annotations["today"] = ann
+
+    config = {
+        "type": "line",
+        "data": {
+            "labels": labels,
+            "datasets": [
+                # Sleep bars first (drawn under everything), hidden axis.
+                {
+                    "type": "bar",
+                    "label": "Sleep (h)",
+                    "data": [round(s, 1) if s is not None else None for s in sleep],
+                    "yAxisID": "y2",
+                    "backgroundColor": "rgba(120,120,120,0.16)",
+                    "borderWidth": 0,
+                    "order": 5,
+                },
+                # Band: lower then upper with fill:'-1' (fills between the two).
+                {
+                    "type": "line",
+                    "label": "−1 SD",
+                    "data": band_lo,
+                    "yAxisID": "y",
+                    "borderColor": "transparent",
+                    "backgroundColor": "rgba(46,156,142,0.14)",
+                    "pointRadius": 0,
+                    "fill": False,
+                    "spanGaps": True,
+                    "order": 4,
+                },
+                {
+                    "type": "line",
+                    "label": "+1 SD band",
+                    "data": band_hi,
+                    "yAxisID": "y",
+                    "borderColor": "transparent",
+                    "backgroundColor": "rgba(46,156,142,0.14)",
+                    "pointRadius": 0,
+                    "fill": "-1",
+                    "spanGaps": True,
+                    "order": 4,
+                },
+                # Baseline rolling-mean line.
+                {
+                    "type": "line",
+                    "label": "Baseline (7d)",
+                    "data": baseline,
+                    "yAxisID": "y",
+                    "borderColor": "#2e9c8e",
+                    "backgroundColor": "transparent",
+                    "borderWidth": 2,
+                    "pointRadius": 0,
+                    "fill": False,
+                    "spanGaps": True,
+                    "tension": 0.3,
+                    "order": 2,
+                },
+                # HRV dots (scatter — no connecting line).
+                {
+                    "type": "line",
+                    "label": "HRV",
+                    "data": [round(v, 1) if v is not None else None for v in hrv],
+                    "yAxisID": "y",
+                    "showLine": False,
+                    "borderColor": "#2e9c8e",
+                    "pointRadius": [r if r else 3.5 for r in today_radius],
+                    "pointBackgroundColor": "#2e9c8e",
+                    "pointBorderColor": "rgba(255,255,255,0.85)",
+                    "pointBorderWidth": 1,
+                    "spanGaps": False,
+                    "order": 1,
+                },
+                # RHR line on the right axis.
+                {
+                    "type": "line",
+                    "label": "RHR",
+                    "data": [r if r is not None else None for r in rhr],
+                    "yAxisID": "y1",
+                    "borderColor": "rgba(150,90,80,0.75)",
+                    "backgroundColor": "transparent",
+                    "borderWidth": 2,
+                    "borderDash": [5, 4],
+                    "pointRadius": 0,
+                    "fill": False,
+                    "spanGaps": True,
+                    "tension": 0.3,
+                    "order": 3,
+                },
+            ],
+        },
+        "options": {
+            "plugins": {
+                "title": {
+                    "display": True,
+                    "text": "Recovery — HRV vs baseline",
+                    "font": {"size": 14},
+                },
+                "legend": {
+                    "position": "top",
+                    # Default legend (a custom generateLabels reliably renders elsewhere but
+                    # silently drops here given the mixed scatter/band/bar datasets). Both band
+                    # bounds carry honest labels so no 'undefined' entry appears.
+                    "labels": {"boxWidth": 12, "font": {"size": 11}},
+                },
+                "annotation": {"annotations": annotations},
+            },
+            "scales": {
+                "x": {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 12, "font": {"size": 10}}},
+                "y": {
+                    "position": "left",
+                    "title": {"display": True, "text": "HRV (ms)", "font": {"size": 12}, "color": "#2e9c8e"},
+                    "ticks": {"font": {"size": 11}, "color": "#2e9c8e"},
+                    "min": _ymin, "max": _ymax,
+                    "grid": {"color": "rgba(0,0,0,0.06)"},
+                },
+                "y1": {
+                    "position": "right",
+                    "title": {"display": True, "text": "RHR (bpm)", "font": {"size": 12}, "color": "rgba(150,90,80,0.9)"},
+                    "ticks": {"font": {"size": 11}, "color": "rgba(150,90,80,0.9)"},
+                    "grid": {"drawOnChartArea": False},
+                },
+                "y2": {
+                    "display": False,
+                    "position": "right",
+                    "min": 0, "max": round(_smax * 3.5, 1),
+                    "grid": {"drawOnChartArea": False},
+                },
+            },
+        },
+    }
+    return _fetch(config, width=760, height=440)
+
+
+# ── Durability chart (Pa:HR decoupling) ────────────────────────────────────────
+
+def durability_chart(payload, coaching_level="mid"):
+    """
+    payload: {"today":"MM-DD","sessions":[{date,decoupling_pct,sport,if,duration_min},...]}
+    Scatter of decoupling % over date, dots coloured by sport (Ride green / Run red).
+    Green reference line at 5% ("good < 5%") and a faint zero line. Lower = better.
+    """
+    if isinstance(payload, dict):
+        sessions = payload.get("sessions", [])
+        today    = payload.get("today")
+        if "level" in payload:
+            coaching_level = payload["level"]
+    else:
+        return None
+    if not sessions:
+        return None
+
+    # Category x-axis over the session dates (matches the file's idiom). Duplicate
+    # dates would collide on a category axis — suffix them so each point is distinct.
+    labels, seen = [], {}
+    for s in sessions:
+        base = s["date"][5:]
+        if base in seen:
+            seen[base] += 1
+            labels.append(f"{base}·{seen[base]}")
+        else:
+            seen[base] = 0
+            labels.append(base)
+
+    SPORT_BASE = {"Ride": "#1d6840", "Run": "#c0392b"}
+    datasets = []
+    for sport, colour in SPORT_BASE.items():
+        data = []
+        present = False
+        for i, s in enumerate(sessions):
+            if _norm_sport(s.get("sport")) == sport:
+                data.append(round(s.get("decoupling_pct", 0), 1))
+                present = True
+            else:
+                data.append(None)
+        if present:
+            datasets.append({
+                "type": "line",
+                "label": sport,
+                "data": data,
+                "showLine": False,
+                "borderColor": colour,
+                "pointRadius": 6,
+                "pointHoverRadius": 8,
+                "pointBackgroundColor": colour,
+                "pointBorderColor": "rgba(255,255,255,0.85)",
+                "pointBorderWidth": 1.5,
+                "spanGaps": False,
+            })
+
+    _vals = [round(s.get("decoupling_pct", 0), 1) for s in sessions]
+    _lo = min(_vals + [0])
+    _hi = max(_vals + [5])
+    _pad = max(1.5, (_hi - _lo) * 0.12)
+    _ymin, _ymax = round(_lo - _pad, 1), round(_hi + _pad, 1)
+
+    annotations = {
+        "ref_zero": {
+            "type": "line", "yMin": 0, "yMax": 0,
+            "borderColor": "rgba(100,100,100,0.30)", "borderWidth": 1,
+        },
+        "ref_good": {
+            "type": "line", "yMin": 5, "yMax": 5,
+            "borderColor": "rgba(29,104,64,0.55)", "borderWidth": 1.5, "borderDash": [5, 4],
+            "label": {"display": True, "content": "good < 5%", "position": "end",
+                      "backgroundColor": "rgba(255,255,255,0.85)", "color": "#1d6840", "font": {"size": 10}},
+        },
+    }
+
+    config = {
+        "type": "line",
+        "data": {"labels": labels, "datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": {
+                    "display": True,
+                    "text": "Aerobic durability — Pa:HR decoupling (lower = better)",
+                    "font": {"size": 14},
+                },
+                "legend": {"position": "top", "labels": {"boxWidth": 12, "font": {"size": 12}, "usePointStyle": True}},
+                "annotation": {"annotations": annotations},
+            },
+            "scales": {
+                "x": {"ticks": {"maxRotation": 45, "autoSkip": False, "font": {"size": 11}}},
+                "y": {
+                    "title": {"display": True, "text": "Decoupling %", "font": {"size": 12}},
+                    "ticks": {"font": {"size": 11}},
+                    "min": _ymin, "max": _ymax,
+                    "grid": {"color": "rgba(0,0,0,0.06)"},
+                },
+            },
+        },
+    }
+    return _fetch(config, height=420)
+
+
+# ── Compliance chart (planned vs actual TSS) ───────────────────────────────────
+
+def compliance_chart(payload, coaching_level="mid"):
+    """
+    payload: {"today":"MM-DD","weeks":[{label,planned,actual},...]}  (~8 weeks)
+    Grouped bars per week: planned (faded grey) and actual (green ≥90%, amber 70–90%,
+    red <70% of plan; neutral if planned==0).
+    """
+    if isinstance(payload, dict):
+        weeks = payload.get("weeks", [])
+        if "level" in payload:
+            coaching_level = payload["level"]
+    else:
+        return None
+    if not weeks:
+        return None
+
+    labels  = [w["label"] for w in weeks]
+    planned = [round(w.get("planned", 0), 1) for w in weeks]
+    actual  = [round(w.get("actual", 0), 1) for w in weeks]
+
+    def _actual_colour(p, a):
+        if p <= 0:
+            return "rgba(150,150,150,0.75)"   # neutral — no plan
+        ratio = a / p
+        if ratio >= 0.9:
+            return "rgba(29,104,64,0.85)"     # green — on plan
+        if ratio >= 0.7:
+            return "rgba(201,135,31,0.85)"    # amber — under
+        return "rgba(192,57,43,0.85)"         # red — well under
+
+    actual_bg = [_actual_colour(p, a) for p, a in zip(planned, actual)]
+
+    config = {
+        "type": "bar",
+        "data": {
+            "labels": labels,
+            "datasets": [
+                {
+                    "label": "Planned",
+                    "data": planned,
+                    "backgroundColor": "rgba(120,120,120,0.28)",
+                    "borderWidth": 0,
+                    "order": 2,
+                },
+                {
+                    "label": "Actual",
+                    "data": actual,
+                    "backgroundColor": actual_bg,
+                    "borderWidth": 0,
+                    "order": 1,
+                },
+            ],
+        },
+        "options": {
+            "plugins": {
+                "title": {
+                    "display": True,
+                    "text": "Compliance — planned vs actual TSS",
+                    "font": {"size": 14},
+                },
+                "legend": {
+                    "position": "top",
+                    # Default legend: Chart.js represents the per-bar-array 'Actual' colour
+                    # with its first entry (green), which reads correctly as the on-plan swatch.
+                    "labels": {"boxWidth": 12, "font": {"size": 12}},
+                },
+            },
+            "scales": {
+                "x": {"ticks": {"maxRotation": 45, "autoSkip": False, "font": {"size": 11}}},
+                "y": {
+                    "beginAtZero": True,
+                    "title": {"display": True, "text": "TSS", "font": {"size": 12}},
+                    "ticks": {"font": {"size": 11}},
+                    "grid": {"color": "rgba(0,0,0,0.06)"},
+                },
+            },
+        },
+    }
+    return _fetch(config, height=420)

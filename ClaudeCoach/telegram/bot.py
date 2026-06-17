@@ -191,8 +191,7 @@ def build_keyboard(slug=None):
             {"text": "How am I looking?", "callback_data": "how am I looking?"},
         ]
     graph_row = [
-        {"text": "Load chart",    "callback_data": "/load"},
-        {"text": "Fitness chart", "callback_data": "/fitness"},
+        {"text": "📈 Graphs", "callback_data": "/graphs"},
     ]
     plan_row = [
         {"text": "🔄 Replan week",    "callback_data": "/replan"},
@@ -498,6 +497,10 @@ _RECENT_CALLBACKS = {}
 _LOAD_CMD_RE     = re.compile(r'^/load\s*$', re.I)
 _FITNESS_CMD_RE  = re.compile(r'^/fitness\s*$', re.I)
 _ACTIVITY_CMD_RE = re.compile(r'^/?activity(?:\s+check)?\s*$', re.I)
+_GRAPHS_RE       = re.compile(r'^/?graphs\s*$', re.I)
+_DURABILITY_RE   = re.compile(r'^/?durability\s*$', re.I)
+_RECOVERY_RE     = re.compile(r'^/?recovery\s*$', re.I)
+_COMPLIANCE_RE   = re.compile(r'^/?compliance\s*$', re.I)
 _STRENGTH_RE     = re.compile(
     r'^(?:strength(?:\s+session)?|gym(?:\s+session)?|lift(?:ing)?|'
     r'what(?:\'s|\s+is)\s+(?:today\'?s?\s+)?(?:strength|gym)(?:\s+session)?)\s*$',
@@ -854,6 +857,127 @@ def _fitness_charts_quick(token, chat_id, slug):
         send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
 
 
+def _recovery_chart_quick(token, chat_id, slug):
+    """HRV (vs rolling baseline) + RHR + sleep — no Claude round-trip."""
+    if _charts is None:
+        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug)); return
+    try:
+        sys.path.insert(0, str(BASE.parent / "lib"))
+        from icu_api import IcuClient
+        a = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+        today = date.today()
+        days = []
+        for w in (client.get_wellness(42) or []):
+            d = (w.get("id") or "")[:10]
+            if not d:
+                continue
+            ss = w.get("sleepSecs")
+            days.append({"date": d, "hrv": w.get("hrv"), "rhr": w.get("restingHR"),
+                         "sleep_h": round(ss / 3600, 1) if ss else None})
+        if not any(x.get("hrv") for x in days) and not any(x.get("rhr") for x in days):
+            send(token, chat_id, "No recovery data (HRV/RHR/sleep) available yet.", reply_markup=build_keyboard(slug)); return
+        payload = {"today": today.strftime("%m-%d"), "days": days}
+        log(f"recovery chart (quick): {len(days)} days")
+        png = _charts.recovery_chart(payload, coaching_level=_profile_coaching_level(slug))
+        if png:
+            send_photo(token, chat_id, png)
+            last = days[-1]
+            send(token, chat_id,
+                 f"HRV *{last.get('hrv') or '—'}* · RHR {last.get('rhr') or '—'} · sleep {last.get('sleep_h') or '—'}h",
+                 reply_markup=build_keyboard(slug))
+        else:
+            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
+    except Exception as e:
+        log(f"recovery chart error: {e}")
+        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
+
+
+def _durability_chart_quick(token, chat_id, slug):
+    """Aerobic decoupling (Pa:HR) per long session — bike + run, lower = better."""
+    if _charts is None:
+        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug)); return
+    try:
+        adir = BASE.parent / "athletes" / slug
+        sessions = []
+        for fn, sport in (("decoupling-log.json", "Ride"), ("run-durability-log.json", "Run")):
+            f = adir / fn
+            if not f.exists():
+                continue
+            try:
+                for e in json.loads(f.read_text()):
+                    if e.get("decoupling_pct") is not None and e.get("date"):
+                        sessions.append({"date": e["date"][:10],
+                                         "decoupling_pct": round(float(e["decoupling_pct"]), 1),
+                                         "sport": sport, "if": e.get("if"),
+                                         "duration_min": e.get("duration_min")})
+            except Exception:
+                pass
+        sessions.sort(key=lambda s: s["date"])
+        sessions = sessions[-12:]
+        if not sessions:
+            send(token, chat_id, "No durability data yet (needs long rides/runs with decoupling logged).",
+                 reply_markup=build_keyboard(slug)); return
+        payload = {"today": date.today().strftime("%m-%d"), "sessions": sessions}
+        log(f"durability chart (quick): {len(sessions)} sessions")
+        png = _charts.durability_chart(payload, coaching_level=_profile_coaching_level(slug))
+        if png:
+            send_photo(token, chat_id, png)
+            send(token, chat_id, "Lower decoupling = better durability (holding power/pace late).",
+                 reply_markup=build_keyboard(slug))
+        else:
+            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
+    except Exception as e:
+        log(f"durability chart error: {e}")
+        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
+
+
+def _compliance_chart_quick(token, chat_id, slug):
+    """Per-week planned vs actual TSS for the last ~8 weeks."""
+    if _charts is None:
+        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug)); return
+    try:
+        from collections import defaultdict
+        sys.path.insert(0, str(BASE.parent / "lib"))
+        from icu_api import IcuClient
+        a = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+        today = date.today()
+
+        def _wk(dstr):
+            dd = date.fromisoformat(dstr[:10])
+            return (dd - timedelta(days=dd.weekday())).isoformat()
+
+        actual, planned = defaultdict(float), defaultdict(float)
+        for act in (client.get_training_history(63) or []):
+            d = (act.get("start_date_local") or "")[:10]
+            if d:
+                actual[_wk(d)] += float(act.get("icu_training_load") or 0)
+        for ev in (client.get_events((today - timedelta(days=63)).isoformat(),
+                                      (today + timedelta(days=7)).isoformat()) or []):
+            d = (ev.get("start_date_local") or "")[:10]
+            if d:
+                planned[_wk(d)] += float(ev.get("load_target") or ev.get("icu_training_load") or 0)
+        this_wk = _wk(today.isoformat())
+        wks = sorted(w for w in set(list(actual) + list(planned)) if w <= this_wk)[-8:]
+        if not wks:
+            send(token, chat_id, "No weekly data available.", reply_markup=build_keyboard(slug)); return
+        weeks = [{"label": date.fromisoformat(w).strftime("%m-%d"),
+                  "planned": round(planned.get(w, 0)), "actual": round(actual.get(w, 0))} for w in wks]
+        payload = {"today": today.strftime("%m-%d"), "weeks": weeks}
+        log(f"compliance chart (quick): {len(weeks)} weeks")
+        png = _charts.compliance_chart(payload, coaching_level=_profile_coaching_level(slug))
+        if png:
+            send_photo(token, chat_id, png)
+            send(token, chat_id, "Planned vs actual weekly TSS — are you hitting the plan?",
+                 reply_markup=build_keyboard(slug))
+        else:
+            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
+    except Exception as e:
+        log(f"compliance chart error: {e}")
+        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
+
+
 def _git_commit(msg):
     try:
         subprocess.run(["git", "add", "ClaudeCoach/"],
@@ -953,6 +1077,15 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
 
     if _ACTIVITY_CMD_RE.match(txt):
         return "__ACTIVITY_CHECK__"
+
+    if _GRAPHS_RE.match(txt):
+        return "__GRAPHS__"
+    if _DURABILITY_RE.match(txt):
+        return "__DURABILITY__"
+    if _RECOVERY_RE.match(txt):
+        return "__RECOVERY__"
+    if _COMPLIANCE_RE.match(txt):
+        return "__COMPLIANCE__"
 
     m = _ANKLE_RE.match(txt)
     if m and slug:
@@ -2595,6 +2728,28 @@ def main():
                 typing(token, chat_id)
                 log("Out (fast): fitness charts")
                 _fitness_charts_quick(token, chat_id, slug)
+                continue
+            elif fast == "__GRAPHS__":
+                send(token, chat_id, "*Graphs* — pick one:", reply_markup={"inline_keyboard": [
+                    [{"text": "📈 Fitness & Form", "callback_data": "/fitness"}],
+                    [{"text": "🔋 Load",            "callback_data": "/load"}],
+                    [{"text": "💪 Durability",       "callback_data": "/durability"}],
+                    [{"text": "😴 Recovery",         "callback_data": "/recovery"}],
+                    [{"text": "✅ Compliance",       "callback_data": "/compliance"}],
+                ]})
+                log("Out (fast): graphs menu")
+                continue
+            elif fast == "__DURABILITY__":
+                typing(token, chat_id); log("Out (fast): durability")
+                _durability_chart_quick(token, chat_id, slug)
+                continue
+            elif fast == "__RECOVERY__":
+                typing(token, chat_id); log("Out (fast): recovery")
+                _recovery_chart_quick(token, chat_id, slug)
+                continue
+            elif fast == "__COMPLIANCE__":
+                typing(token, chat_id); log("Out (fast): compliance")
+                _compliance_chart_quick(token, chat_id, slug)
                 continue
             elif fast == "__ACTIVITY_CHECK__":
                 send(token, chat_id, "_Checking for new activity…_")
