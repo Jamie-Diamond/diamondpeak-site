@@ -1,13 +1,5 @@
 [
   {
-    "user": "Look at my 8:08 message you ignored",
-    "assistant": "You're right to call it out \u2014 and I can't see the text of your 8:08 message in my history, only the swim-splits exchange. If it asked for something specific, resend it and I'll deal with it now.\n\nWhat I *should* have done already: pulled the Strava laps instead of reading off ICU. Done now, and it changes the verdict \u2014 I was pessimistic before.\n\n*Swim \u2014 real Strava button-press splits*\n10\u00d7100m hard: 1:39 / 1:35 / 1:37 / 1:39 / 1:37 / 1:37 / 1:38 / 1:38 / 1:38 / 1:35 \u2014 *avg 1:37/100m*\n\nThat's *CSS\u22122*, not \"around CSS\" like I told you. You held it flat across all 10 with zero fade \u2014 repeatable, just ~3\u20135s off the 1:32\u20131:34 speed target. Top-end was capped by carried fatigue (Form \u221211), not lack of fitness.\n\nPull 2\u00d7200 PB+paddles: 1:42/100m (CSS+3) \u2014 slower as the shoulders loaded, which is why you cut it. Right call.\n\nStrava description pushed. What did 8:08 say?"
-  },
-  {
-    "user": "Look at my messages this morning I'm not going to retype it for you.",
-    "assistant": "I've gone back through everything from this morning, properly this time. Here's what landed and what I did with each:\n\n\u2022 *Ankle 0/10, day 3 ibuprofen* \u2192 logged, cleared you for the run\n\u2022 *Shorten Wednesday* \u2192 Wed run cut to 40 min + mobility/strength, volume moved to Thu (swim 50 + run 45)\n\u2022 *Garmin = ICU?* \u2192 answered\n\u2022 *What's 5 TSS* \u2192 answered\n\u2022 *Talk through the swim* \u2192 walked it\n\u2022 *Swim splits* \u2192 debriefed, logged to session-log, Strava pushed\n\nThe history I can read back has no timestamps, and none of the *text* messages above is unanswered \u2014 so the 8:08 one was almost certainly a *photo*, and I can't read image content back out of the stored history. That's the gap, and it's on me for not flagging it instead of brushing you off twice.\n\nForward me just that image again (no need to retype anything) and I'll deal with it right now."
-  },
-  {
     "user": "This is what I sent. \"I ended up doing. 400 wu,\n2x 100 long slow strokes and finger drag. \n\n10x100 hard. I struggled to go fast. \n2x200 pb and padels. Shoulders to tired so went to 2x200 easy to finish off.\" And you didn't reply. \n\nReply now AND log this as a bug.",
     "assistant": "Bug logged \u2014 that message should've been answered when you sent it, and I made it worse by guessing it was a photo. On me.\n\n*Swim \u2014 2,400m, 41 min, avg HR 119 (max 149)*\n\nYou ran it: 400 WU + 2\u00d7100 drill (slow strokes / finger drag) \u2192 10\u00d7100 hard \u2192 2\u00d7200 PB+paddles, then 2\u00d7200 easy once the shoulders went. Cutting the pull from 4\u00d7200 to 2 was the right call \u2014 backing off loaded shoulders avoids a niggle, it's not a soft option.\n\n*10\u00d7100 hard (Strava button-press splits):* 1:39 / 1:35 / 1:37 / 1:39 / 1:37 / 1:37 / 1:38 / 1:38 / 1:38 / 1:35 \u2014 *avg 1:37/100m*. That's CSS\u22122, dead flat across all 10, zero fade. So \"struggled to go fast\" is real vs the 1:32\u20131:34 target, but it's ~3\u20135s off, not a collapse \u2014 top-end was capped by carried fatigue (Form \u221211 off a heavy week), not fitness.\n\n*2\u00d7200 PB+paddles:* ~1:42/100m as the shoulders loaded \u2014 hence the cut.\n\nStrava description pushed. Solid aerobic work banked; genuine speed work wants a fresher day to land."
   },
@@ -138,5 +130,13 @@
   {
     "user": "",
     "assistant": "[chart/photo sent]"
+  },
+  {
+    "user": "",
+    "assistant": "*New activity*\n\n13 min \u00b7 Load (TSS) 2 \u00b7 Ankle Training\nRPE and what was the main focus?"
+  },
+  {
+    "user": "",
+    "assistant": "Quick log \u2014 Ankle Training:"
   }
 ]
