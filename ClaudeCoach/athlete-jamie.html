@@ -355,7 +355,7 @@
   <!-- CYCLING PROGRESS -->
   <div class="panel" style="margin-bottom:14px">
     <h2>Cycling progress</h2>
-    <div class="small" style="margin-bottom:8px">NP per long ride (≥2.5 h) &middot; VI = NP/AP — target &lt;1.05 (green), &lt;1.10 (amber), &gt;1.10 (red)</div>
+    <div class="small" style="margin-bottom:8px">NP per long ride (≥2.5 h) &middot; EF = NP ÷ avg HR (W per beat) — higher = better aerobic economy</div>
     <div class="chart-wrap short"><canvas id="chartCycling"></canvas></div>
   </div>
 
@@ -1020,12 +1020,10 @@ window.chartCycling = null;
     data:{datasets:[
       {label:"NP (W)",data:[],borderColor:"#1a5276",backgroundColor:"transparent",
        yAxisID:"yL",pointRadius:5,tension:0.2,borderWidth:2},
-      {label:"VI",data:[],borderColor:"rgba(192,57,43,0.7)",backgroundColor:"transparent",
+      {label:"EF (W/bpm)",data:[],borderColor:"rgba(142,68,173,0.7)",backgroundColor:"transparent",
        yAxisID:"yR",pointRadius:5,tension:0.2,borderWidth:1.5,borderDash:[4,3]},
       {label:"FTP",data:[],borderColor:"rgba(26,82,118,0.35)",backgroundColor:"transparent",
        yAxisID:"yL",pointRadius:0,borderWidth:1,borderDash:[6,4],showLine:true,_ref:true},
-      {label:"VI 1.05",data:[],borderColor:"rgba(39,174,96,0.5)",backgroundColor:"transparent",
-       yAxisID:"yR",pointRadius:0,borderWidth:1,borderDash:[4,3],showLine:true,_ref:true},
     ]},
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:"index",intersect:false},
@@ -1036,8 +1034,8 @@ window.chartCycling = null;
         yL:{type:"linear",position:"left",
             title:{display:true,text:"NP (W)",font:{size:10}},
             grid:{color:"#e8e3da"}},
-        yR:{type:"linear",position:"right",min:1.00,max:1.20,
-            title:{display:true,text:"VI",font:{size:10}},
+        yR:{type:"linear",position:"right",
+            title:{display:true,text:"EF (W/bpm)",font:{size:10}},
             grid:{drawOnChartArea:false}},
       }
     }
@@ -1470,11 +1468,8 @@ fetch('training-data.json?v='+Date.now())
         const dates = pd.rides.map(r=>r.date);
         const d0 = dates[0], d1 = dates[dates.length-1];
         window.chartCycling.data.datasets[0].data = pd.rides.map(r=>({x:r.date,y:r.np}));
-        window.chartCycling.data.datasets[1].data = pd.rides.map(r=>({x:r.date,y:r.vi}));
-        window.chartCycling.data.datasets[1].pointBackgroundColor =
-          pd.rides.map(r=>r.vi<1.05?"#27ae60":r.vi<1.10?"#e67e22":"#c0392b");
+        window.chartCycling.data.datasets[1].data = pd.rides.map(r=>({x:r.date,y:r.ef}));
         window.chartCycling.data.datasets[2].data = [{x:d0,y:ftp},{x:d1,y:ftp}];
-        window.chartCycling.data.datasets[3].data = [{x:d0,y:1.05},{x:d1,y:1.05}];
         window.chartCycling.update();
       }
       if (window.chartRunning && pd.runs && pd.runs.length) {

@@ -602,6 +602,7 @@ def post_process(data):
                 "rides": [
                     {"date": s["date"], "np": s["norm_power"],
                      "vi": round(s["norm_power"] / s["avg_power"], 3),
+                     "ef": round(s["norm_power"] / s["avg_hr"], 3) if s.get("avg_hr") else None,
                      "hr": s.get("avg_hr"), "dur": s.get("duration_min"),
                      "name": (s.get("name") or "")[:40]}
                     for s in long_rides
