@@ -1,21 +1,5 @@
 [
   {
-    "user": "",
-    "assistant": "*Good morning \u2014 Tue 16 Jun*\n\n*Today:* Skills/Speed \u2014 12\u00d7100m + 4\u00d7200m PB (50m pool) \u2014 54 min \u00b7 37 TSS\nEasy run \u2014 run-walk 5:30 \u2014 45 min \u00b7 39 TSS\n\n\u26a0\ufe0f No heat sessions in 14 days \u2014 add a hot bath this week before France camp (8 days out)\n\nInjury pain score before heading out? (0-10)\n\n_95 days to IM Italy Emilia-Romagna_"
-  },
-  {
-    "user": "",
-    "assistant": "[chart/photo sent]"
-  },
-  {
-    "user": "Ankle is fine this morning. We're on day 3 ibuprofen",
-    "assistant": "Logged \u2014 ankle 0/10 this morning, day 3 ibuprofen. Cleared for today's run; protocol is stop if >5/10, no run tomorrow if it doesn't settle overnight."
-  },
-  {
-    "user": "Let's make Wednesday a shorter run as I only have just over an hour free for my ankle mobility/strength and the run. I then have more time on Thursday",
-    "assistant": "Done \u2014 shifted run volume to Thursday:\n\n*Wed 17:* Run 40 min \u00b7 35 TSS (was 50) + mobility/strength\n*Thu 18:* CSS swim 50 min \u00b7 53 + Run 45 min \u00b7 39\n\nSynced to Garmin. Thursday's normally swim-only \u2014 fine as a one-off given your time, just say if you want Thu runs to become a standing thing."
-  },
-  {
     "user": "When you say Garmin do you mean ICU?",
     "assistant": "Both. I push the workout to Intervals.icu, and ICU syncs structured workouts through to your Garmin automatically as follow-along workouts. So \"synced to Garmin\" = pushed to ICU \u2192 flows to your watch. The edit I made lives in ICU first."
   },
@@ -132,5 +116,25 @@
     "user": "Is that decoupling or just the fact I'm warming up",
     "assistant": "Largely warm-up \u2014 you've nailed it.\n\nDecoupling splits the run in half and compares pace:HR efficiency first vs second. On a *28-min* run that maths is fragile: the first ~8\u201310 min is HR lag, your heart hasn't caught up to the pace yet, so HR sits artificially low. That makes the *first half look hyper-efficient*, which mechanically inflates the second-half \"drift\" \u2014 even if you were dead steady once warm.\n\nSo the 10.7% is mostly the warm-up ramp, not genuine cardiac drift. Two tells that back that up:\n\u2022 Your *13.5 km* run yesterday \u2014 long enough for warm-up to wash out \u2014 decoupled *0.87%*. A truly drifting engine doesn't go from 0.87% to 10.7% overnight.\n\u2022 avg HR 139, 90% in Z2, no late-run HR climb \u2014 the shape's flat once you're warm.\n\nRule of thumb: decoupling is only meaningful on runs *>60 min*. Under ~40 min, ignore it \u2014 the warm-up swamps the signal. Nothing to read into here.",
     "ts": "2026-06-17T07:28:11"
+  },
+  {
+    "user": "Why didn't you pick up the activity",
+    "assistant": "Honest answer: the activity-watcher is a cron job on the VM that polls ICU every ~10 min and fires the debrief when a new activity lands. Yesterday it *timed out at 300s* (you saw the \"watcher timed out, last known i157281011\" line) \u2014 so it never processed the long run, which is why you had to prompt me with \"there's a new run.\"\n\nTwo failure modes stacked this week:\n\u2022 *Watcher timeout* \u2014 the fetch/analysis run exceeded its 300s limit and got killed before it could send. That's why the long run debrief didn't auto-fire.\n\u2022 *Morning card didn't fire* \u2014 separate cron (the check-in), also missed this morning until you nudged.\n\nI can't see the VM cron logs from here to tell you the root cause of the timeout (network round-trip to ICU, a slow Strava pull, or the job overlapping its own previous run). If you want, I'll log it as a bug so it gets looked at properly \u2014 the watcher silently dying instead of retrying or alerting is the real issue.",
+    "ts": "2026-06-17T07:38:11"
+  },
+  {
+    "user": "No Strava description either?",
+    "assistant": "Pushed \u2014 that one was on me, it should've gone out with the debrief.\n\n*Today's run Strava description (live now):*\nEasy Z2 continuous \u2014 5.7 km / 28 min \u00b7 GAP 4:52/km \u00b7 avg HR 139 (max 151) \u00b7 90% in Z2. Clean aerobic run, controlled the morning after the 13.5 km long run; cut short on time, Thursday carries the rest.\n\nNo RPE, no ankle score, no heat framing (that temp reading was the wrist sensor, not real ambient).",
+    "ts": "2026-06-17T07:40:41"
+  },
+  {
+    "user": "how am I looking?",
+    "assistant": "*How you're looking \u2014 Wed 17 Jun*\n\n*Fitness (CTL) 83.3* \u00b7 *Fatigue (ATL) 92.7* \u00b7 *Form (TSB) \u22129.4*\n\nThe story in one line: *fitness is climbing and you're carrying it well.* CTL is up from ~77 a month ago to 83.3 \u2014 a clean build-phase ramp, right on plan. Form \u22129.4 is the \"productive load\" zone: enough fatigue that you're training hard, not so deep you're buried.\n\n*Trend through this week:*\n\u2022 You dug to \u221223 on Sat (14th) off the back-to-back rides, recovered to \u22129 today as the easy days bit in. That's exactly the saw-tooth you want \u2014 hard block, partial absorb, repeat.\n\u2022 HRV *47* / sleep *90* / RHR *51* this morning say the recovery side is keeping up. No autonomic red flags despite the load.\n\n*What it means for the rest of the week:*\n\u2022 You're projected to ~868 TSS this week vs the ~763 ramp-cap target. You're running slightly hot \u2014 the Fri/Sat/Sun bike block will push form back toward \u221218 to \u221220 by the weekend.\n\u2022 That's fine for a build week, but it means *no extra volume* \u2014 hold Wed/Thu genuinely easy (you have) and let the weekend rides do the work.\n\nNet: strong week, ankle behaving (1/10), recovery markers green. You're in good shape \u2014 keep the easy days easy and you'll bank the CTL.",
+    "ts": "2026-06-17T07:46:04"
+  },
+  {
+    "user": "how am I looking?",
+    "assistant": "Same numbers as a minute ago \u2014 *CTL 83.3 \u00b7 ATL 92.7 \u00b7 TSB \u22129.4* \u2014 here it is visually so you can see the shape:\n\n\n\n\n\n*Fitness chart:* CTL (teal) grinding up from ~76 a month ago to 83.3 \u2014 the build is landing. ATL (purple) spikes are your hard blocks; each one drags CTL up a notch.\n\n*Form chart:* the saw-tooth is textbook. You floated to +18 over the recovery week (24 May), then dug to \u221223 on Sat off the bike block, back to \u22129 now. Productive-load zone, recovery green (HRV 47 / sleep 90).\n\nThe Fri/Sat/Sun rides will pull form back toward \u221218/\u221220 by the weekend \u2014 that's the plan, just no extra volume on top.",
+    "ts": "2026-06-17T07:46:51"
   }
 ]
