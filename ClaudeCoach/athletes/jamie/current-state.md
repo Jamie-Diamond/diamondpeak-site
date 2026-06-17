@@ -171,7 +171,6 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 | 5+ hr ice retention test in hot car (T1/T2 cooler) | Jamie | pre-race | [pending / done — N hours retained] |
 | OWS race or full-distance simulation | Jamie | build phase | [pending / scheduled / done] |
 | Tested run-fuelling protocol on a long run in heat | Jamie | recurring | [last done: date / outcome] |
-| Plan generated through 2026-06-21 (W7–W8 Replan 3) | Claude | 2026-06-09 | done — REPLAN MODE: deleted Sat 13 run (run-TSS cap breach: 125 planned vs 98.5 ceiling, 4-wk avg 89.5); extended Sat 13 ride 210→240 min (name+desc updated); extended Sun 14 ride 150→180 min (name+desc updated); W7 ~748 TSS, W8 ~722 TSS; projected CTL 91 by 6 Jul (target 95, BEHIND); CHO target 70g CHO/hr; Telegram sent |
 | Plan generated through 2026-06-28 (W8–W9) | Claude | 2026-06-14 | done — W8 plan_already_populated (10 events, 731 TSS); 4 edits: Tue/Wed run labels walk-run→continuous Z2, strength A+B Tier C content added; W9 built (10 sessions, 763 TSS) — France camp 24–29 Jun (Wed run+strength, Thu CSS, Fri 5hr key ride, Sat brick, Sun ride+strength); projected CTL ~94 by 6 Jul (target 95, BEHIND); CHO target 70g/hr; Telegram sent |
 | Marseille 24–30 May: ad-hoc sessions only, nothing long — play by ear | Claude | rolling | noted |
 

@@ -1,13 +1,5 @@
 [
   {
-    "user": "This is what I sent. \"I ended up doing. 400 wu,\n2x 100 long slow strokes and finger drag. \n\n10x100 hard. I struggled to go fast. \n2x200 pb and padels. Shoulders to tired so went to 2x200 easy to finish off.\" And you didn't reply. \n\nReply now AND log this as a bug.",
-    "assistant": "Bug logged \u2014 that message should've been answered when you sent it, and I made it worse by guessing it was a photo. On me.\n\n*Swim \u2014 2,400m, 41 min, avg HR 119 (max 149)*\n\nYou ran it: 400 WU + 2\u00d7100 drill (slow strokes / finger drag) \u2192 10\u00d7100 hard \u2192 2\u00d7200 PB+paddles, then 2\u00d7200 easy once the shoulders went. Cutting the pull from 4\u00d7200 to 2 was the right call \u2014 backing off loaded shoulders avoids a niggle, it's not a soft option.\n\n*10\u00d7100 hard (Strava button-press splits):* 1:39 / 1:35 / 1:37 / 1:39 / 1:37 / 1:37 / 1:38 / 1:38 / 1:38 / 1:35 \u2014 *avg 1:37/100m*. That's CSS\u22122, dead flat across all 10, zero fade. So \"struggled to go fast\" is real vs the 1:32\u20131:34 target, but it's ~3\u20135s off, not a collapse \u2014 top-end was capped by carried fatigue (Form \u221211 off a heavy week), not fitness.\n\n*2\u00d7200 PB+paddles:* ~1:42/100m as the shoulders loaded \u2014 hence the cut.\n\nStrava description pushed. Solid aerobic work banked; genuine speed work wants a fresher day to land."
-  },
-  {
-    "user": "The run doesn't look right on that",
-    "assistant": "Fixed \u2014 today's run was still labelled \"run-walk 5:30\", the retired format. Walk-run was dropped on 9 Jun; all runs are continuous Z2 now.\n\n*Today's run (45 min \u00b7 39 TSS):*\n\u2022 Easy Z2 continuous \u2014 GAP ~5:30/km, HR cap 146\n\u2022 Ankle protocol: stop if >5/10 pain (you logged 0/10 this morning, cleared)\n\nThe morning card pulled the old label by mistake. Tue/Wed/Thu runs were already correct. Synced to ICU/Garmin."
-  },
-  {
     "user": "I think today should be the 'long run' and Wednesday Thursday shorter ones.",
     "assistant": "Done \u2014 today's the long run now:\n\n*Tue 16:* *Long run \u2014 Z2 continuous, 75 min / 13.5 km \u00b7 65 TSS* (GAP ~5:30/km, HR cap 146)\n*Wed 17:* Easy run 40 min \u00b7 35 TSS (+ mobility/strength)\n*Thu 18:* Easy run 45 min \u00b7 39 TSS (+ CSS swim)\n\nTue is the anchor, Wed/Thu are the shorter ones. Synced to ICU/Garmin.\n\nAnkle's 0/10 and cleared \u2014 usual protocol on the long one: stop if pain goes >5/10."
   },
@@ -138,5 +130,14 @@
   {
     "user": "",
     "assistant": "Quick log \u2014 Ankle Training:"
+  },
+  {
+    "user": "Look at my 7:24 message e this morning",
+    "assistant": "Logged.",
+    "ts": "2026-06-17T09:36:47"
+  },
+  {
+    "user": "",
+    "assistant": "No new activity since your last logged session. \ud83d\udc4d"
   }
 ]

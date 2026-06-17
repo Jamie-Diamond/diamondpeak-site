@@ -116,7 +116,6 @@ None
 
 ## Open Actions
 - [x] Plan generated W7–W8 through 2026-06-28 (generated 2026-06-14): plan already populated (15 events); reviewed existing sessions; W1 520 TSS (gap check OK); W2 436 TSS vs 542 target — flagged Mon 22 KB missing, swim events L=5 (should be ~50), W2 run TSS 158 vs cap 144; nutrition target 30g CHO/hr
-- [x] Plan generated W6–W7 REPLAN (2026-06-09): W6 added Wed Z2 bike 90min + Thu strength 35min; Thu run shortened to 30min (run progression cap ~114 TSS/wk); W7 Wed converted run→Z2 bike 90min (run cap breach), Sun run load corrected 100→68 TSS; W6 ~515 TSS / W7 ~520 TSS; nutrition 30g CHO/hr
 - [ ] Fix day-of-week label errors: "Sat 24 May" ride (is Sun) and "Sun 25 May" run (is Mon)
 - [ ] Review Mon 25 May long run (75min) vs. kettlebells constraint — daily cap (90min) exceeded; consider moving run to Sat 23 May
 - [ ] Begin heat acclimatisation sessions (urgently overdue — T7/T8 alerts firing 25+ days)
