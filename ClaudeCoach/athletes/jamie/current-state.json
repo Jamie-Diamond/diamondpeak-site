@@ -1,9 +1,9 @@
 {
-  "last_updated": "2026-06-16",
+  "last_updated": "2026-06-17",
   "ankle": {
     "pain_during": 2,
-    "pain_next_morning": 0,
-    "pain_next_morning_date": "2026-06-16",
+    "pain_next_morning": 1,
+    "pain_next_morning_date": "2026-06-17",
     "ibuprofen_course_day": 3,
     "pain_today_resting": 0,
     "pain_driving_positional": "throbbing when driving (plantar flexion at accelerator), no rest pain otherwise",

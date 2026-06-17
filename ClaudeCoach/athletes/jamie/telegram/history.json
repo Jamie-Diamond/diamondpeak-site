@@ -1,22 +1,6 @@
 [
   {
     "user": "",
-    "assistant": "*Week of 2026-06-15* \u2014 build \u00b7 761 TSS\nMon: Strength \u2014 gym\nTue: Speed \u2014 8\u00d775m 35min\nTue: Easy run \u2014 run-walk 5:30 45min\nWed: Easy run \u2014 run-walk 5:30 50min\nWed: Strength \u2014 gym\nThu: CSS \u2014 5\u00d7200m 50min\nFri: Race pace long \u2014 2\u00d745 241min\nSat: Long Bike + Brick Run 240min\nSun: Endurance ride 187min\nSun: Long run \u2014 run-walk 5:30 70min\n_Synced to your calendar/Garmin._"
-  },
-  {
-    "user": "What's the swim tomorrow. \n\nI have pb and padels with me",
-    "assistant": "*Tomorrow \u2014 Skills/Speed swim (50m pool, ~2,200m)*\n\n*Warm-up (500m)*\n\u2022 300m easy free\n\u2022 4\u00d750m drill (catch-up / scull), 15s rest\n\n*Speed set (600m)* \u2014 the focus\n\u2022 8\u00d775m @ *1:32\u20131:34/100m* (~1:09\u20131:10 per 75m), 20s rest\n\u2022 Faster than CSS (1:39) but repeatable across all 8 \u2014 hold the pace, don't fade\n\n*Pull set \u2014 PB + paddles (600m)*\n\u2022 6\u00d7100m @ *1:36/100m* (CSS\u22123), 15s rest\n\u2022 Paddles + buoy: long, strong catch \u2014 power through the pull, no leg input\n\u2022 If shoulders feel loaded, drop paddles for the last 2\n\n*Cool-down (200m)* easy mixed\n\n*Cues:* paddles are strength/feel only \u2014 keep stroke rate controlled, don't yank. Speed reps are about clean turnover, not muscling it.\n\nGood that you've got the PB and paddles \u2014 the pull set is where they earn their place."
-  },
-  {
-    "user": "50m pool and your giving me 75 sets",
-    "assistant": "Good catch \u2014 fixed. 75s don't fit a 50m pool. Rebuilt in 100m units and pushed to ICU (~2,350m, syncs to Garmin):\n\n*Tomorrow \u2014 Skills/Speed swim (50m pool)*\n\n*Warm-up (500m)*\n\u2022 300m easy\n\u2022 4\u00d750m drill, 15s rest\n\n*Speed (800m)* \u2014 the focus\n\u2022 8\u00d7100m @ *1:32\u20131:34/100m*, 20s rest\n\u2022 Faster than CSS (1:39) but hold it across all 8 \u2014 clean turnover, don't fade\n\n*Pull \u2014 PB + paddles (600m)*\n\u2022 6\u00d7100m @ *1:36/100m* (CSS\u22123), 15s rest\n\u2022 Long strong catch, no leg input; drop paddles last 2 if shoulders load up\n\n*Cool-down (200m)* easy"
-  },
-  {
-    "user": "Can we make that session closer to an hour? And the pull/pb reps 200",
-    "assistant": "*Today \u2014 Skills/Speed swim (50m pool, ~3,000m, ~58 min)* \u2014 pushed to ICU/Garmin\n\n*Warm-up (600m)*\n\u2022 400m easy + 4\u00d750m drill, 15s rest\n\n*Speed (1200m)* \u2014 the focus\n\u2022 12\u00d7100m @ *1:32\u20131:34/100m* (CSS\u22125 to \u22127), 20s rest\n\u2022 Faster than CSS (1:39) but hold across all 12 \u2014 clean turnover, don't fade\n\n*Pull \u2014 PB + paddles (800m)*\n\u2022 4\u00d7200m @ *1:36/100m* (CSS\u22123), 20s rest\n\u2022 Long strong catch, no leg input; drop paddles last rep if shoulders load\n\n*Cool-down (200m)* easy\n\nPull at CSS\u22123 over 200s is repeatable with the buoy cutting leg drag \u2014 hold it, don't TT it."
-  },
-  {
-    "user": "",
     "assistant": "*Good morning \u2014 Tue 16 Jun*\n\n*Today:* Skills/Speed \u2014 12\u00d7100m + 4\u00d7200m PB (50m pool) \u2014 54 min \u00b7 37 TSS\nEasy run \u2014 run-walk 5:30 \u2014 45 min \u00b7 39 TSS\n\n\u26a0\ufe0f No heat sessions in 14 days \u2014 add a hot bath this week before France camp (8 days out)\n\nInjury pain score before heading out? (0-10)\n\n_95 days to IM Italy Emilia-Romagna_"
   },
   {
@@ -128,5 +112,25 @@
   {
     "user": "",
     "assistant": "*Tomorrow \u2014 Easy run + Gym strength*\n\nRun:\n\u2022 Target pace 5:18\u20135:56/km (Z2 continuous, 40 min)\n\u2022 HR cap \u2264140 bpm\n\u2022 Ankle cleared to run \u2014 stop if pain exceeds 5/10; note score after\n\nStrength:\n\u2022 Endurance base + ankle rehab focus\n\u2022 Hip stability, single-leg work, foot strength\n\n*Nutrition:* 0 g/hr carbs \u00b7 0 ml/hr fluid \u2014 easy Z2 + gym, no fuelling needed\n*Sleep:* \u22658h tonight\n*Form:* -17 (Heavy)"
+  },
+  {
+    "user": "No messages this morning?",
+    "assistant": "*Good morning \u2014 Wed 17 Jun*\n\nSorry, the morning card didn't fire \u2014 here it is now.\n\n*Today:* Easy run 40 min \u00b7 35 TSS (Z2 continuous, HR cap \u2264140) + mobility/strength + gym\n\n*Form:* \u22129 (recovering from yesterday's \u221216) \u00b7 HRV 47 \u00b7 sleep 90, RHR 51 \u2014 good overnight numbers\n\nAnkle was 2/10 after yesterday's long run \u2014 *what's it this morning?* (0\u201310) If it's back to 0\u20131 you're clear for the run; per protocol no run today if it hasn't settled overnight.\n\n_94 days to IM Italy Emilia-Romagna_",
+    "ts": "2026-06-17T07:24:08"
+  },
+  {
+    "user": "Ankle 1 this morning. 2 on the run. It's ok.",
+    "assistant": "Logged \u2014 ankle *1/10* this morning, *2/10* on today's run. Both well inside protocol (\u22645/10, settled overnight from yesterday's 2). No flags \u2014 carry on.",
+    "ts": "2026-06-17T07:25:07"
+  },
+  {
+    "user": "And the run?",
+    "assistant": "*Run debrief \u2014 5.7 km, 28 min*\n\n*GAP ~4:52/km* \u00b7 avg HR *139* (max 151) \u00b7 TSS 36\n\nThis is the cleanest Z2 read you've had in a while \u2014 *90% of the run sat in Z2* (133\u2013146), avg 139 = mid-zone, not pinned at the ceiling like yesterday. Controlled, exactly what an easy day should look like.\n\nYou cut it to 28 min from the planned 40 \u2014 fine, that's the time-squeeze you flagged (mobility/strength + run in the hour). No need to make it up; Thursday carries the extra run volume.\n\nOne flag: *decoupling 10.7%* \u2014 elevated for a short run. That's the cost of running it the morning after a hard 13.5 km, on a still-fatigued system. Not a fitness concern on a 28-min effort, just confirms you're carrying load. Ankle 2/10 and settled \u2014 all within protocol.",
+    "ts": "2026-06-17T07:27:05"
+  },
+  {
+    "user": "Is that decoupling or just the fact I'm warming up",
+    "assistant": "Largely warm-up \u2014 you've nailed it.\n\nDecoupling splits the run in half and compares pace:HR efficiency first vs second. On a *28-min* run that maths is fragile: the first ~8\u201310 min is HR lag, your heart hasn't caught up to the pace yet, so HR sits artificially low. That makes the *first half look hyper-efficient*, which mechanically inflates the second-half \"drift\" \u2014 even if you were dead steady once warm.\n\nSo the 10.7% is mostly the warm-up ramp, not genuine cardiac drift. Two tells that back that up:\n\u2022 Your *13.5 km* run yesterday \u2014 long enough for warm-up to wash out \u2014 decoupled *0.87%*. A truly drifting engine doesn't go from 0.87% to 10.7% overnight.\n\u2022 avg HR 139, 90% in Z2, no late-run HR climb \u2014 the shape's flat once you're warm.\n\nRule of thumb: decoupling is only meaningful on runs *>60 min*. Under ~40 min, ignore it \u2014 the warm-up swamps the signal. Nothing to read into here.",
+    "ts": "2026-06-17T07:28:11"
   }
 ]
