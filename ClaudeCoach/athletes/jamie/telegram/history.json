@@ -1,14 +1,5 @@
 [
   {
-    "user": "I think today should be the 'long run' and Wednesday Thursday shorter ones.",
-    "assistant": "Done \u2014 today's the long run now:\n\n*Tue 16:* *Long run \u2014 Z2 continuous, 75 min / 13.5 km \u00b7 65 TSS* (GAP ~5:30/km, HR cap 146)\n*Wed 17:* Easy run 40 min \u00b7 35 TSS (+ mobility/strength)\n*Thu 18:* Easy run 45 min \u00b7 39 TSS (+ CSS swim)\n\nTue is the anchor, Wed/Thu are the shorter ones. Synced to ICU/Garmin.\n\nAnkle's 0/10 and cleared \u2014 usual protocol on the long one: stop if pain goes >5/10."
-  },
-  {
-    "user": "8, felt hard!",
-    "assistant": "Logged \u2014 RPE 8 on the long run.\n\nThat's high for an easy Z2 session \u2014 RPE 8 should feel like tempo, not Z2. Two things stacking against you today:\n\n\u2022 *Form \u221214* \u2014 you're dug into a heavy week (229 + 127 TSS rides Fri/Sat, then today). Easy efforts feel disproportionately hard when ATL's this high.\n\u2022 Heat building + the swim earlier this morning already on the legs.\n\nNot a fitness flag \u2014 it's a fatigue flag. The pace/HR will tell the real story once it syncs.\n\nHow was the *ankle* through it? (0\u201310) \u2014 that's the one I need for the protocol, given it was the long one.",
-    "ts": "2026-06-16T14:49:40"
-  },
-  {
     "user": "that was for the swim, which you just asked me about, are you drunk.",
     "assistant": "Sorted \u2014 RPE 8 now sits on the swim where it belongs, run RPE cleared. The \"felt hard\" makes sense there: 10\u00d7100 hard off 20s rest at CSS\u22122, on Form \u221214, top-end was always going to bite.\n\nStill need the ankle score from the long run (0\u201310) for the protocol.",
     "ts": "2026-06-16T15:04:25"
@@ -139,5 +130,14 @@
   {
     "user": "",
     "assistant": "No new activity since your last logged session. \ud83d\udc4d"
+  },
+  {
+    "user": "",
+    "assistant": "RPE for the Coventry Running? (1\u201310) \u2014 and how did the ankle feel this morning?"
+  },
+  {
+    "user": "Look at my 7:24 message e this morning",
+    "assistant": "Got it \u2014 you already gave me everything in your 7:25 message: *ankle 1/10 this morning, 2/10 on the run*, both logged and well inside protocol. That was the auto-watcher re-asking on a loop, not me \u2014 ignore it. Nothing outstanding from you; no RPE needed unless you want to add one.",
+    "ts": "2026-06-17T10:44:06"
   }
 ]
