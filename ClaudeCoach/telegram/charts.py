@@ -89,9 +89,10 @@ def _render(fig):
     """Save a figure to PNG bytes (white bg) and close it."""
     import io
     buf = io.BytesIO()
-    # dpi 300 ≈ 3× — renders crisp on high-DPI phone screens (110 looked soft when
-    # Telegram upscaled it). Files stay modest (~PNG a few hundred KB) and IPv4 upload is fast.
-    fig.savefig(buf, format="png", dpi=300, bbox_inches="tight", facecolor="white")
+    # dpi 400 ≈ 4× — crispest on high-DPI phone screens when tapped to full-screen.
+    # Telegram's sendPhoto still recompresses the inline preview, so the gain over 3×
+    # shows mainly on zoom; files stay well under Telegram's 10MB photo limit (~0.5-1.3MB).
+    fig.savefig(buf, format="png", dpi=400, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return buf.getvalue()
 
@@ -969,14 +970,22 @@ def recovery_chart(payload, coaching_level="mid"):
         ax1.set_ylim(rlo - rpad, rhi + rpad)
     ax1.invert_yaxis()   # lower RHR (better) now at the top, aligning with high HRV
 
-    # Sleep bars on the lower panel.
-    smax = max([s for s in sleep if s is not None], default=8) or 8
+    # Sleep bars on the lower panel, cropped to a relevant range so night-to-night
+    # variation is legible (bars zoom into ~min-1h .. max+0.5h, not 0..max).
     sleep_x = [d for d, s in zip(dts, sleep) if s is not None]
     sleep_y = [s for s in sleep if s is not None]
     if sleep_y:
         axs.bar(sleep_x, sleep_y, width=0.85, color=_col("#6b6256", 0.45),
                 edgecolor="none", zorder=2)
-    axs.set_ylim(0, smax * 1.15)
+        slo = max(0, math.floor(min(sleep_y)) - 1)
+        shi = math.ceil(max(sleep_y)) + 0.5
+        # Faint 8h reference if it's in view.
+        if slo < 8 < shi:
+            axs.axhline(8, color=_col("#1d6840", 0.45), linewidth=0.9,
+                        linestyle=(0, (4, 3)), zorder=1)
+    else:
+        slo, shi = 0, 9
+    axs.set_ylim(slo, shi)
     axs.set_ylabel("Sleep (h)", fontsize=9.5, color=BRAND_MUTED)
 
     # Today line + labelled values (drawn on BOTH panels so they line up).

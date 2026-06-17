@@ -511,6 +511,7 @@ _GRAPHS_RE       = re.compile(r'^/?graphs\s*$', re.I)
 _DURABILITY_RE   = re.compile(r'^/?durability\s*$', re.I)
 _RECOVERY_RE     = re.compile(r'^/?recovery\s*$', re.I)
 _COMPLIANCE_RE   = re.compile(r'^/?compliance\s*$', re.I)
+_POWERCURVE_RE   = re.compile(r'^/?power\s?curve\s*$', re.I)
 
 # Persistent-menu button labels (with emoji) → fast-path sentinels.
 _MENU_MAP = {
@@ -995,6 +996,64 @@ def _compliance_chart_quick(token, chat_id, slug):
         send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
 
 
+# Standard power-curve durations (mirrors scripts/refresh-site-data.py _POWER_DURATIONS).
+_PC_DURATIONS = [
+    (5, "5s"), (15, "15s"), (30, "30s"), (60, "1m"), (120, "2m"), (300, "5m"),
+    (600, "10m"), (1200, "20m"), (1800, "30m"), (3600, "60m"), (5400, "90m"),
+]
+
+
+def _power_curve_quick(token, chat_id, slug):
+    """90-day cycling power curve, pulled straight from intervals.icu (no Claude).
+
+    Replaces the old Claude-emitted [[CHART:powercurve:JSON]] path, which broke
+    whenever the model hand-wrote malformed JSON for the ~11-point efforts array.
+    """
+    if _charts is None:
+        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug)); return
+    try:
+        sys.path.insert(0, str(BASE.parent / "lib"))
+        from icu_api import IcuClient
+        a = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+
+        pc_raw = client.get_power_curves(sport="Ride", curves="90d")
+        curve  = (pc_raw.get("list") or [None])[0]
+        if not curve or not curve.get("secs"):
+            send(token, chat_id, "No cycling power-curve data in the last 90 days.",
+                 reply_markup=build_keyboard(slug)); return
+        secs_to_w = dict(zip(curve.get("secs", []), curve.get("values", [])))
+        efforts = [{"label": lbl, "power": round(secs_to_w[t])}
+                   for t, lbl in _PC_DURATIONS if secs_to_w.get(t)]
+        if not efforts:
+            send(token, chat_id, "No cycling power-curve data in the last 90 days.",
+                 reply_markup=build_keyboard(slug)); return
+
+        # Resolve FTP: profile.json first, then the athlete's cycling FTP, else 316.
+        ftp = _load_profile(slug).get("ftp_watts")
+        if not ftp:
+            try:
+                prof = client.get_athlete_profile()
+                for sp in (prof.get("sportSettings") or prof.get("sport_settings") or []):
+                    if (sp.get("type") in ("Ride", "VirtualRide", "Cycling")) and sp.get("ftp"):
+                        ftp = sp["ftp"]; break
+            except Exception:
+                pass
+        ftp = int(ftp or 316)
+
+        log(f"power curve (quick): {len(efforts)} efforts, ftp={ftp}")
+        png = _charts.power_curve_chart(efforts, ftp=ftp)
+        if png:
+            send_photo(token, chat_id, png)
+            send(token, chat_id, f"90-day best power by duration · FTP {ftp}W.",
+                 reply_markup=build_keyboard(slug))
+        else:
+            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
+    except Exception as e:
+        log(f"power curve chart error: {e}")
+        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
+
+
 def _git_commit(msg):
     try:
         subprocess.run(["git", "add", "ClaudeCoach/"],
@@ -1106,6 +1165,8 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
         return "__RECOVERY__"
     if _COMPLIANCE_RE.match(txt):
         return "__COMPLIANCE__"
+    if _POWERCURVE_RE.match(txt):
+        return "__POWERCURVE__"
 
     m = _ANKLE_RE.match(txt)
     if m and slug:
@@ -2756,6 +2817,7 @@ def main():
                     [{"text": "💪 Durability",       "callback_data": "/durability"}],
                     [{"text": "😴 Recovery",         "callback_data": "/recovery"}],
                     [{"text": "✅ Compliance",       "callback_data": "/compliance"}],
+                    [{"text": "⚡ Power curve",      "callback_data": "/powercurve"}],
                 ]})
                 log("Out (fast): graphs menu")
                 continue
@@ -2770,6 +2832,10 @@ def main():
             elif fast == "__COMPLIANCE__":
                 typing(token, chat_id); log("Out (fast): compliance")
                 _compliance_chart_quick(token, chat_id, slug)
+                continue
+            elif fast == "__POWERCURVE__":
+                typing(token, chat_id); log("Out (fast): power curve")
+                _power_curve_quick(token, chat_id, slug)
                 continue
             elif fast == "__ACTIVITY_CHECK__":
                 send(token, chat_id, "_Checking for new activity…_")
