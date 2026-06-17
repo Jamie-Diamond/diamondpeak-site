@@ -162,7 +162,35 @@ MENU_KEYBOARD = {
 
 
 def build_keyboard(slug=None):
-    """The always-on menu. (slug kept for call-site compatibility; menu is static.)"""
+    """Context-aware markup. Right after a session, or on Sunday evening, return the
+    intelligent INLINE action buttons; otherwise return the persistent menu. The
+    persistent reply keyboard stays pinned at the bottom regardless (Telegram keeps it
+    until replaced), so on contextual replies the inline buttons appear *alongside* it."""
+    now = datetime.now()
+    hour, wday = now.hour, now.weekday()  # wday 0=Mon … 6=Sun
+    last_act_file = (BASE.parent / "athletes" / slug / "last_activity_state.json") if slug \
+        else (BASE.parent / "last_activity_state.json")
+    post_session = False
+    if last_act_file.exists():
+        try:
+            st = json.loads(last_act_file.read_text())
+            ts = st.get("notified_at")
+            if ts:
+                post_session = (now - datetime.fromisoformat(ts)).total_seconds() < 10800
+        except Exception:
+            pass
+
+    if post_session:
+        # Just finished a session — offer logging/analysis.
+        return {"inline_keyboard": [[
+            {"text": "Log session",     "callback_data": "log session"},
+            {"text": "Analyse session", "callback_data": "analyse this session"},
+        ]]}
+    if wday == 6 and hour >= 18:  # Sunday evening — weekly review window
+        return {"inline_keyboard": [[
+            {"text": "How was this week?", "callback_data": "show me this week"},
+            {"text": "What's next week?",  "callback_data": "what's the plan for next week?"},
+        ]]}
     return MENU_KEYBOARD
 
 TOOLS = "Read,Write,Edit,Bash"
