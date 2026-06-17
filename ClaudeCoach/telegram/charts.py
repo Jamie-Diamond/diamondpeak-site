@@ -138,6 +138,34 @@ def _parse_fitness_payload(payload):
     return payload, None
 
 
+def _today_index(data):
+    """Last index of a non-projected day (i.e. 'today'). None if all projected/empty."""
+    ti = None
+    for i, d in enumerate(data):
+        if not d.get("projected"):
+            ti = i
+    return ti
+
+
+def _phase_box(ph, labels):
+    """Box annotation spanning a training-phase window, labelled with the phase name."""
+    x0, x1 = ph.get("x0"), ph.get("x1")
+    if not (x0 in labels and x1 in labels):
+        return None
+    return {
+        "type": "box",
+        "xMin": x0, "xMax": x1,
+        "backgroundColor": ph.get("color", "rgba(120,120,120,0.06)"),
+        "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
+        "label": {
+            "display": True, "content": ph.get("name", ""),
+            "position": {"x": "center", "y": "start"},
+            "color": "rgba(120,120,120,0.7)", "font": {"size": 9},
+            "backgroundColor": "transparent",
+        },
+    }
+
+
 # ── Fitness chart (CTL + ATL) ──────────────────────────────────────────────────
 
 def fitness_chart(payload, coaching_level="mid"):
@@ -164,13 +192,60 @@ def fitness_chart(payload, coaching_level="mid"):
     _cmin, _cmax = _yr(ctl)
     _amin, _amax = _yr(atl)
 
+    # Today index = last non-projected day.
+    ti = _today_index(data)
+    ctl_radius = [0] * len(data)
+    atl_radius = [0] * len(data)
+    if ti is not None:
+        ctl_radius[ti] = 5
+        atl_radius[ti] = 5
+
     annotations = {}
+    for i, ph in enumerate(payload.get("phases", []) if isinstance(payload, dict) else []):
+        pb = _phase_box(ph, labels)
+        if pb:
+            annotations[f"phase_{i}"] = pb
     box = _projected_box(today, labels)
     if box:
         annotations["projected"] = box
     ann = _today_annotation(today, labels)
     if ann:
         annotations["today"] = ann
+
+    # Today's CTL/ATL values as labelled dots.
+    if ti is not None and today and today in labels:
+        annotations["ctl_val"] = {
+            "type": "label", "xValue": today, "yValue": ctl[ti], "yScaleID": "y",
+            "content": [f"CTL {ctl[ti]:.0f}"], "color": "#2e9c8e",
+            "backgroundColor": "rgba(255,255,255,0.85)",
+            "font": {"size": 11, "weight": "bold"}, "yAdjust": -12,
+        }
+        annotations["atl_val"] = {
+            "type": "label", "xValue": today, "yValue": atl[ti], "yScaleID": "y1",
+            "content": [f"ATL {atl[ti]:.0f}"], "color": "#7c4dff",
+            "backgroundColor": "rgba(255,255,255,0.85)",
+            "font": {"size": 11, "weight": "bold"}, "yAdjust": -12,
+        }
+
+    # Ramp readout (CTL change over the trailing 7 days) — top-left label.
+    ramp = None
+    if ti is not None and ti - 7 >= 0:
+        ramp = round(ctl[ti] - ctl[ti - 7], 1)
+    if ramp is not None:
+        if ramp > 8:
+            _rc = "#c0392b"
+        elif ramp > 5 or ramp < -1:
+            _rc = "#c98a1f"
+        else:
+            _rc = "#1d6840"
+        annotations["ramp"] = {
+            "type": "label", "xValue": labels[0], "yValue": _cmax, "yScaleID": "y",
+            "content": [f"Ramp {ramp:+.1f} CTL/wk"], "color": _rc,
+            "backgroundColor": "rgba(255,255,255,0.85)",
+            "font": {"size": 11, "weight": "bold"},
+            "position": {"x": "start", "y": "start"},
+            "xAdjust": 4, "yAdjust": 4,
+        }
 
     config = {
         "type": "line",
@@ -184,7 +259,8 @@ def fitness_chart(payload, coaching_level="mid"):
                     "borderColor": "#2e9c8e",
                     "backgroundColor": "rgba(46,156,142,0.15)",
                     "borderWidth": 2.5,
-                    "pointRadius": 0,
+                    "pointRadius": ctl_radius,
+                    "pointBackgroundColor": "#2e9c8e",
                     "fill": "origin",
                     "tension": 0.3,
                 },
@@ -196,7 +272,8 @@ def fitness_chart(payload, coaching_level="mid"):
                     "backgroundColor": "transparent",
                     "borderWidth": 2,
                     "borderDash": [6, 3],
-                    "pointRadius": 0,
+                    "pointRadius": atl_radius,
+                    "pointBackgroundColor": "#7c4dff",
                     "fill": False,
                     "tension": 0.3,
                 },
@@ -300,12 +377,31 @@ def form_chart(payload, coaching_level="mid"):
         },
     }
 
+    for i, ph in enumerate(payload.get("phases", []) if isinstance(payload, dict) else []):
+        pb = _phase_box(ph, labels)
+        if pb:
+            annotations[f"phase_{i}"] = pb
     box = _projected_box(today, labels)
     if box:
         annotations["projected"] = box
     ann = _today_annotation(today, labels)
     if ann:
         annotations["today"] = ann
+
+    # Today's TSB value as a labelled dot.
+    ti = _today_index(data)
+    tsb_radius = [0] * len(data)
+    if ti is not None:
+        tsb_radius[ti] = 5
+        if today and today in labels:
+            _tv = round(tsb[ti])
+            _tlabel = "TSB 0" if _tv == 0 else f"TSB {_tv:+d}"
+            annotations["tsb_val"] = {
+                "type": "label", "xValue": today, "yValue": tsb[ti], "yScaleID": "y",
+                "content": [_tlabel], "color": "#3c3c3c",
+                "backgroundColor": "rgba(255,255,255,0.85)",
+                "font": {"size": 11, "weight": "bold"}, "yAdjust": -12,
+            }
 
     config = {
         "type": "line",
@@ -317,7 +413,8 @@ def form_chart(payload, coaching_level="mid"):
                 "borderColor": "rgba(60,60,60,0.75)",
                 "backgroundColor": "rgba(60,60,60,0.06)",
                 "borderWidth": 2,
-                "pointRadius": 0,
+                "pointRadius": tsb_radius,
+                "pointBackgroundColor": "rgba(60,60,60,0.9)",
                 "fill": "origin",
                 "tension": 0.3,
             }],

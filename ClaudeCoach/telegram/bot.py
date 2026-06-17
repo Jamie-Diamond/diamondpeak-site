@@ -806,8 +806,32 @@ def _fitness_charts_quick(token, chat_id, slug):
         except Exception as exc:
             log(f"fitness projection skipped: {exc}")
 
-        payload = {"today": today.strftime("%m-%d"), "data": data}
-        log(f"fitness charts (quick): {len(data)} days")
+        # Phase bands (Base/Build/Specific/Peak/Taper) clamped to the chart window,
+        # so the chart shows where in the plan each date sits. x0/x1 are MM-DD labels
+        # that exist in the data (daily series), so box annotations align.
+        phases = []
+        try:
+            if data and a.get("plan_start") and a.get("race_date"):
+                ps = date.fromisoformat(a["plan_start"]); rd = date.fromisoformat(a["race_date"])
+                pt = a.get("phase_tss", {})
+                spans, prev = [], ps
+                for nm, wk, col in (("Base", pt.get("base_end_week", 6), "rgba(41,128,185,0.07)"),
+                                    ("Build", pt.get("build_end_week", 10), "rgba(29,104,64,0.07)"),
+                                    ("Specific", pt.get("specific_end_week", 14), "rgba(39,174,96,0.07)"),
+                                    ("Peak", pt.get("peak_end_week", 17), "rgba(192,57,43,0.07)")):
+                    spans.append((nm, prev, ps + timedelta(weeks=wk), col)); prev = ps + timedelta(weeks=wk)
+                spans.append(("Taper", prev, rd, "rgba(124,77,255,0.07)"))
+                lo = date.fromisoformat(data[0]["date"]); hi = date.fromisoformat(data[-1]["date"])
+                for nm, s, e, col in spans:
+                    s2, e2 = max(s, lo), min(e, hi)
+                    if s2 < e2:
+                        phases.append({"name": nm, "x0": s2.strftime("%m-%d"),
+                                       "x1": e2.strftime("%m-%d"), "color": col})
+        except Exception as exc:
+            log(f"phase bands skipped: {exc}")
+
+        payload = {"today": today.strftime("%m-%d"), "data": data, "phases": phases}
+        log(f"fitness charts (quick): {len(data)} days, {len(phases)} phases")
         cl = _profile_coaching_level(slug)
         png_fit = _charts.fitness_chart(payload, coaching_level=cl)
         png_form = _charts.form_chart(payload, coaching_level=cl)
