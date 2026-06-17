@@ -1,10 +1,5 @@
 [
   {
-    "user": "What was the longest last week",
-    "assistant": "*11.9 km* (Sun 14 Jun, 65 min) was your longest last week.\n\nToday's 13.5 km cap is *+13%* on that \u2014 right in the 10\u201315% progression band.",
-    "ts": "2026-06-16T17:52:26"
-  },
-  {
     "user": "",
     "assistant": "Activity watcher timed out for Jamie (300s). Last known activity: i157281011."
   },
@@ -138,5 +133,10 @@
     "user": "1",
     "assistant": "Logged. RPE 1 \u2014 Ankle Training.",
     "ts": "2026-06-17T12:05:37"
+  },
+  {
+    "user": "what's today's session?",
+    "assistant": "*Today \u2014 Wed 17 Jun \u2014 both done* \u2705\n\n\u2022 *Easy run* \u2014 5.7 km / 28 min \u00b7 GAP 4:52/km \u00b7 avg HR 139 \u00b7 TSS 36 \u2714\n\u2022 *Ankle Training* \u2014 13 min \u00b7 RPE 1 \u2714\n\nNothing left on the card. Form \u22129, ankle 1/10 this morning \u2014 clean recovery day.\n\nTomorrow: *CSS swim 5\u00d7200m* + easy Z2 run.",
+    "ts": "2026-06-17T13:00:36"
   }
 ]
