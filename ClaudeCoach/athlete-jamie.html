@@ -265,12 +265,6 @@
     </table>
   </div>
 
-  <!-- TRAINING ZONES -->
-  <div class="panel" style="margin-bottom:14px">
-    <h2>Training zones</h2>
-    <div id="zones-content"></div>
-  </div>
-
   <!-- TRAINING LOAD -->
   <div class="panel" style="margin-bottom:14px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px">
@@ -1461,7 +1455,6 @@ fetch('training-data.json?v='+Date.now())
         d.fitnessPrev.forEach(([dt,ctl])=>{const diff=Math.abs(new Date(dt+"T00:00:00")-new Date(rd+"T00:00:00"));if(diff<bestDiff){bestDiff=diff;best=ctl;}});
         if(best!=null) fitnessCtl.ctl2025=best;
       }
-      renderZones(p,fitnessCtl);
     }
     if (d.currentState && d.currentState.bike_ftp)
       document.getElementById("rp-ftp").textContent = d.currentState.bike_ftp+" W";

@@ -583,12 +583,13 @@ def post_process(data):
             long_rides = sorted(
                 [s for s in all_s if s.get("sport") == "Ride"
                  and s.get("norm_power") and s.get("avg_power")
-                 and int(s.get("duration_min") or 0) >= 60],
+                 and int(s.get("duration_min") or 0) >= 150],   # rides > 2.5 h only
                 key=lambda x: x["date"]
             )
             hr_runs = sorted(
                 [s for s in all_s if s.get("sport") == "Run"
-                 and s.get("avg_hr") and s.get("distance_km") and s.get("duration_min")],
+                 and s.get("avg_hr") and s.get("distance_km")
+                 and int(s.get("duration_min") or 0) >= 60],     # runs > 60 min only
                 key=lambda x: x["date"]
             )
             carb_s = sorted(
