@@ -785,6 +785,27 @@ def _fitness_charts_quick(token, chat_id, slug):
                               "atl": round(float(atl), 1),
                               "tsb": round(float(ctl) - float(atl), 1)})
 
+        # Project the next 14 days of CTL/ATL/TSB from planned sessions, so the
+        # fitness + form charts show where training is heading, not just history.
+        try:
+            sys.path.insert(0, str(BASE.parent / "ironman-analysis"))
+            from primitives.load import project_pmc_daily
+            end14 = (today + timedelta(days=14)).isoformat()
+            planned = {}
+            for ev in (client.get_events(today.isoformat(), end14) or []):
+                d = (ev.get("start_date_local") or "")[:10]
+                if d and d > today.isoformat():
+                    planned[d] = planned.get(d, 0) + float(ev.get("load_target") or ev.get("icu_training_load") or 0)
+            if data:
+                fdates = [(today + timedelta(days=i)).isoformat() for i in range(1, 15)]
+                ftss = [planned.get(d, 0) for d in fdates]
+                for d, p in zip(fdates, project_pmc_daily(data[-1]["ctl"], data[-1]["atl"], ftss)):
+                    data.append({"date": d, "ctl": round(p["ctl"], 1),
+                                 "atl": round(p["atl"], 1), "tsb": round(p["tsb"], 1),
+                                 "projected": True})
+        except Exception as exc:
+            log(f"fitness projection skipped: {exc}")
+
         payload = {"today": today.strftime("%m-%d"), "data": data}
         log(f"fitness charts (quick): {len(data)} days")
         cl = _profile_coaching_level(slug)

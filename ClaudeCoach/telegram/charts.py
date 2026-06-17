@@ -108,15 +108,26 @@ def _today_annotation(today, labels):
         return {
             "type": "line",
             "xMin": today, "xMax": today,
-            "borderColor": "rgba(60,60,60,0.55)",
-            "borderWidth": 1.5,
-            "borderDash": [4, 3],
+            "borderColor": "rgba(30,30,30,0.85)",
+            "borderWidth": 2.5,
             "label": {
                 "display": True, "content": "Today",
                 "position": "start",
-                "backgroundColor": "rgba(255,255,255,0.9)",
-                "color": "#333", "font": {"size": 11},
+                "backgroundColor": "rgba(30,30,30,0.85)",
+                "color": "#fff", "font": {"size": 11, "weight": "bold"},
             },
+        }
+    return None
+
+
+def _projected_box(today, labels):
+    """Light shaded box over the future (projected) region — today → end of data."""
+    if today and labels and today in labels and labels[-1] != today:
+        return {
+            "type": "box",
+            "xMin": today, "xMax": labels[-1],
+            "backgroundColor": "rgba(120,120,120,0.07)",
+            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
         }
     return None
 
@@ -142,13 +153,21 @@ def fitness_chart(payload, coaching_level="mid"):
     ctl    = [round(d["ctl"], 1) for d in data]
     atl    = [round(d["atl"], 1) for d in data]
 
-    # Fit the y-axis to the data so the lines fill the panel (was a fixed 40–130).
-    _v = ctl + atl
-    _lo, _hi = (min(_v), max(_v)) if _v else (40, 130)
-    _pad = max(3, (_hi - _lo) * 0.10)
-    _ymin, _ymax = int(_lo - _pad), int(_hi + _pad) + 1
+    # Separate, data-fitted axes so Fitness (CTL) and Fatigue (ATL) each fill the
+    # panel — ATL is more volatile and was squashing the CTL line on a shared axis.
+    def _yr(vals):
+        if not vals:
+            return 40, 130
+        lo, hi = min(vals), max(vals)
+        pad = max(3, (hi - lo) * 0.12)
+        return int(lo - pad), int(hi + pad) + 1
+    _cmin, _cmax = _yr(ctl)
+    _amin, _amax = _yr(atl)
 
     annotations = {}
+    box = _projected_box(today, labels)
+    if box:
+        annotations["projected"] = box
     ann = _today_annotation(today, labels)
     if ann:
         annotations["today"] = ann
@@ -161,6 +180,7 @@ def fitness_chart(payload, coaching_level="mid"):
                 {
                     "label": L["ctl"],
                     "data": ctl,
+                    "yAxisID": "y",
                     "borderColor": "#2e9c8e",
                     "backgroundColor": "rgba(46,156,142,0.15)",
                     "borderWidth": 2.5,
@@ -171,12 +191,13 @@ def fitness_chart(payload, coaching_level="mid"):
                 {
                     "label": L["atl"],
                     "data": atl,
+                    "yAxisID": "y1",
                     "borderColor": "#7c4dff",
-                    "backgroundColor": "rgba(124,77,255,0.07)",
+                    "backgroundColor": "transparent",
                     "borderWidth": 2,
                     "borderDash": [6, 3],
                     "pointRadius": 0,
-                    "fill": "origin",
+                    "fill": False,
                     "tension": 0.3,
                 },
             ],
@@ -197,11 +218,18 @@ def fitness_chart(payload, coaching_level="mid"):
             "scales": {
                 "x": {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 10, "font": {"size": 11}}},
                 "y": {
-                    "title": {"display": True, "text": L["fitness_yaxis"], "font": {"size": 12}},
-                    "ticks": {"font": {"size": 11}},
-                    "min": _ymin,
-                    "max": _ymax,
+                    "position": "left",
+                    "title": {"display": True, "text": L["ctl"], "font": {"size": 12}, "color": "#2e9c8e"},
+                    "ticks": {"font": {"size": 11}, "color": "#2e9c8e"},
+                    "min": _cmin, "max": _cmax,
                     "grid": {"color": "rgba(0,0,0,0.06)"},
+                },
+                "y1": {
+                    "position": "right",
+                    "title": {"display": True, "text": L["atl"], "font": {"size": 12}, "color": "#7c4dff"},
+                    "ticks": {"font": {"size": 11}, "color": "#7c4dff"},
+                    "min": _amin, "max": _amax,
+                    "grid": {"drawOnChartArea": False},
                 },
             },
         },
@@ -272,6 +300,9 @@ def form_chart(payload, coaching_level="mid"):
         },
     }
 
+    box = _projected_box(today, labels)
+    if box:
+        annotations["projected"] = box
     ann = _today_annotation(today, labels)
     if ann:
         annotations["today"] = ann
