@@ -29,7 +29,9 @@ def _render(fig):
     """Save a figure to PNG bytes (white bg) and close it."""
     import io
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=110, bbox_inches="tight", facecolor="white")
+    # dpi 200 ≈ 2× — renders crisp on high-DPI phone screens (110 looked soft when
+    # Telegram upscaled it). Files stay modest (~2-3× the 110 size) and IPv4 upload is fast.
+    fig.savefig(buf, format="png", dpi=200, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return buf.getvalue()
 
