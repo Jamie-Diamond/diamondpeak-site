@@ -788,43 +788,71 @@ def _build_athlete_training_data(slug, athlete_cfg):
         except Exception:
             pass
 
-    # CTL projection (from phase_tss config in athlete_cfg)
+    # CTL projection — SINGLE SOURCE OF TRUTH. The target CTL milestones come from
+    # the SAME planner maths (derive_phase_ctl_targets / compute_required_tss in
+    # primitives.load) that stage1-plan uses, driven by ctl_targets.race_min in
+    # athletes.json. The site chart plots whatever lands in ctlProjection — there
+    # are NO hardcoded targets — so changing an athlete's race_min moves both the
+    # plan and the website together. (Was: a stale phase_tss-defaults projection
+    # that ignored ctl_targets and drifted from the plan.)
     try:
-        phase_cfg = athlete_cfg.get("phase_tss", {})
-        race_dt = date.fromisoformat(athlete_cfg["race_date"])
+        sys.path.insert(0, str(BASE / "ironman-analysis"))
+        from primitives.load import derive_phase_ctl_targets, compute_required_tss
+        phase_cfg      = athlete_cfg.get("phase_tss", {})
+        ctl_targets    = athlete_cfg.get("ctl_targets", {})
+        race_min       = ctl_targets.get("race_min")
         plan_start_str = athlete_cfg.get("plan_start")
-        if phase_cfg and plan_start_str and kpi.get("ctl"):
+        race_dt        = date.fromisoformat(athlete_cfg["race_date"])
+        if race_min and plan_start_str and kpi.get("ctl"):
             plan_start_dt = date.fromisoformat(plan_start_str)
-            base_end_wk  = phase_cfg.get("base_end_week", 6)
-            build_end_wk = phase_cfg.get("build_end_week", 10)
-            peak_end_wk  = phase_cfg.get("peak_end_week", 14)
-            t_base  = phase_cfg.get("base_daily",  65)
-            t_build = phase_cfg.get("build_daily", 78)
-            t_peak  = phase_cfg.get("peak_daily",  90)
-            t_taper = phase_cfg.get("taper_daily", 55)
+            current_ctl   = kpi["ctl"]
+            # Defaults MUST mirror plan_tools.required_tss exactly, or the site
+            # target and the plan target drift apart again.
+            ends = {
+                "base":     phase_cfg.get("base_end_week", 6),
+                "build":    phase_cfg.get("build_end_week", 10),
+                "specific": phase_cfg.get("specific_end_week", 14),
+                "peak":     phase_cfg.get("peak_end_week", 17),
+            }
+            max_ramp        = float(athlete_cfg.get("max_ctl_ramp_per_week", 5.0))
+            taper_overshoot = float(athlete_cfg.get("taper_overshoot", 1.15))
+            derived = derive_phase_ctl_targets(
+                current_ctl, int(race_min), plan_start_dt,
+                ends["base"], ends["build"], ends["specific"], ends["peak"],
+                max_ramp, taper_overshoot, today=today)
 
-            def _athlete_phase_tss(d):
-                wk = max(1, math.ceil((d - plan_start_dt).days / 7))
-                if wk <= base_end_wk:  return t_base
-                if wk <= build_end_wk: return t_build
-                if wk <= peak_end_wk:  return t_peak
-                return t_taper
+            # Target CTL milestones the planner is actually aiming for (deduped by date).
+            milestones = {}
+            for label, key in (("End Base", "base"), ("End Build", "build"),
+                               ("Specific", "specific"), ("Peak", "peak")):
+                md = plan_start_dt + timedelta(weeks=ends[key])
+                if today <= md <= race_dt:
+                    milestones[md.isoformat()] = {"date": md.isoformat(),
+                                                  "ctl": derived[key], "label": label}
+            milestones[race_dt.isoformat()] = {"date": race_dt.isoformat(),
+                                               "ctl": int(race_min), "label": "Race day"}
+            target_milestones = sorted(milestones.values(), key=lambda m: m["date"])
 
-            days_to_race = (race_dt - today).days + 1
-            current_ctl  = kpi["ctl"]
+            # Planned build: ramp to the peak target then taper, using the same
+            # required-TSS maths the planner prescribes (not a static phase table).
+            days_to_race  = (race_dt - today).days + 1
+            peak_end_date = plan_start_dt + timedelta(weeks=ends["peak"])
+            weeks_to_peak = max(1, math.ceil((peak_end_date - today).days / 7))
+            build_daily   = compute_required_tss(current_ctl, derived["peak"], weeks_to_peak) / 7.0
 
-            def _planned_build(d): return _athlete_phase_tss(d)
+            def _planned_build(d):
+                return build_daily if d <= peak_end_date else build_daily * 0.6
 
             proj_build = _ctl_project(current_ctl, _planned_build, days_to_race)
-            ctl_targets = athlete_cfg.get("ctl_targets", {})
             data["ctlProjection"] = {
-                "planned_build": proj_build,
-                "race_date": race_dt.isoformat(),
-                "target_ctl_min": ctl_targets.get("race_min", 60),
-                "target_ctl_max": ctl_targets.get("race_max", 80),
+                "planned_build":    proj_build,
+                "target_milestones": target_milestones,
+                "race_date":        race_dt.isoformat(),
+                "target_ctl_min":   ctl_targets.get("race_min", 60),
+                "target_ctl_max":   ctl_targets.get("race_max", 80),
             }
-    except Exception:
-        pass
+    except Exception as exc:
+        log(f"[{slug}] ctlProjection skipped: {exc}")
 
     out = BASE / f"training-data-{slug}.json"
     out.write_text(json.dumps(data, separators=(",", ":")))
