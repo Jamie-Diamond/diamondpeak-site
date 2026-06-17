@@ -245,6 +245,26 @@
 
   </div>
 
+  <!-- RACE PREDICTOR -->
+  <div class="panel" style="margin-bottom:14px">
+    <h2>Race predictor</h2>
+    <div class="small">Each scenario = your fixed FTP &amp; threshold, with sustainable IF scaled from fitness (IF ∝ √CTL), anchored to your last race.</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:10px">
+      <thead>
+        <tr style="font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">
+          <th style="padding:4px 6px 4px 0;border-bottom:1px solid var(--line);text-align:left;font-weight:500">Scenario</th>
+          <th style="padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:500">CTL</th>
+          <th style="padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:500">IF</th>
+          <th style="padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:500">Bike</th>
+          <th style="padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:500">Run</th>
+          <th style="padding:4px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:500">Swim</th>
+          <th style="padding:4px 0 4px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:500">Total</th>
+        </tr>
+      </thead>
+      <tbody id="race-predictor-body"></tbody>
+    </table>
+  </div>
+
   <!-- TRAINING ZONES -->
   <div class="panel" style="margin-bottom:14px">
     <h2>Training zones</h2>
@@ -943,6 +963,35 @@ function renderActions(cs) {
   actionsEl.innerHTML=html;
 }
 
+// ── RACE PREDICTOR ───────────────────────────────────────────────────────────
+function renderRacePredictor(rp) {
+  if (!rp || !rp.rows) return;
+  const fmtMin = m => Math.floor(m/60)+":"+String(Math.round(m%60)).padStart(2,"0");
+  const tb = document.getElementById("race-predictor-body");
+  if (!tb) return;
+  const cell = (extra="") => `padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace${extra}`;
+  const rowHtml = (r, muted=false) => {
+    const lblStyle = muted
+      ? "padding:5px 6px 5px 0;border-bottom:1px solid var(--line);color:var(--muted);font-style:italic"
+      : "padding:5px 6px 5px 0;border-bottom:1px solid var(--line);color:var(--ink2)";
+    const numStyle = cell(muted ? ";color:var(--muted);font-style:italic" : "");
+    const lastStyle = "padding:5px 0 5px 6px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace"
+      + (muted ? ";color:var(--muted);font-style:italic" : ";font-weight:500");
+    return `<tr>`
+      + `<td style="${lblStyle}">${r.label}</td>`
+      + `<td style="${numStyle}">${Math.round(r.ctl)}</td>`
+      + `<td style="${numStyle}">${r.if.toFixed(2)}</td>`
+      + `<td style="${numStyle}">${fmtMin(r.bike_min)} · ${r.bike_w}W</td>`
+      + `<td style="${numStyle}">${fmtMin(r.run_min)}</td>`
+      + `<td style="${numStyle}">${fmtMin(r.swim_min)}</td>`
+      + `<td style="${lastStyle}">${fmtMin(r.total_min)}</td>`
+      + `</tr>`;
+  };
+  let html = rp.rows.map(r => rowHtml(r, false)).join("");
+  if (rp.anchor) html += rowHtml(rp.anchor, true);
+  tb.innerHTML = html;
+}
+
 // ── CTL PROJECTION ───────────────────────────────────────────────────────────
 function renderCtlProjection(proj) {
   if (!window.chartFitness || !proj) return;
@@ -1355,6 +1404,7 @@ fetch('training-data.json?v='+Date.now())
     if (d.planVsActual)                          renderPlanActual(d.planVsActual);
     if (d.weeklyBreakdown && d.weeklyBreakdown.length) renderBreakdown(d.weeklyBreakdown);
     if (d.ctlProjection)                         renderCtlProjection(d.ctlProjection);
+    if (d.racePredictor)                         renderRacePredictor(d.racePredictor);
     if (d.currentState)                          renderActions(d.currentState);
     if (d.sessionLog && d.sessionLog.length)     renderSessionLog(d.sessionLog);
     if (d.swimLog || d.swimProgression) {
