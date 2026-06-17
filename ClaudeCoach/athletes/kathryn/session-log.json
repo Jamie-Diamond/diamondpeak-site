@@ -1,5 +1,26 @@
 [
   {
+    "activity_id": "i157956235",
+    "date": "2026-06-17",
+    "name": "Wandsworth Cycling",
+    "sport": "Ride",
+    "tss": 74,
+    "duration_min": 81,
+    "distance_km": 35.67,
+    "avg_power": 126,
+    "norm_power": 145,
+    "avg_hr": 148,
+    "rpe": null,
+    "feel": null,
+    "injury_pain_during": null,
+    "injury_pain_next_morning": null,
+    "nutrition_g_carb": null,
+    "hydration_ml": null,
+    "notes": null,
+    "logged_at": "2026-06-17T09:00:00",
+    "stub": true
+  },
+  {
     "activity_id": "i157662863",
     "date": "2026-06-16",
     "name": "Hammersmith and Fulham Running",
