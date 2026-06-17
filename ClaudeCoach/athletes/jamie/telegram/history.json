@@ -1,15 +1,5 @@
 [
   {
-    "user": "There's a new run",
-    "assistant": "Strava description pushed successfully (no message sent to Jamie \u2014 silent background action). Done.",
-    "ts": "2026-06-16T19:53:05"
-  },
-  {
-    "user": "Hello?",
-    "assistant": "*Long run debrief \u2014 Coventry, 13.5 km, 65 min*\n\n*GAP ~4:46/km* \u00b7 avg HR *144* (max 155, cap was 146 \u2014 held it) \u00b7 *decoupling 0.87%* \u00b7 TSS *88* \u00b7 23\u201328\u00b0C\n\nThe headline: you ran this *well under target pace* (GAP 4:46 vs planned 5:30) but kept HR pinned right at the 146 cap \u2014 and in 23\u201328\u00b0C heat. That's a strong aerobic read. Decoupling of 0.87% is essentially flat: zero cardiac drift across 65 min, HR and pace stayed locked together start to finish. No fade, no fitness flag \u2014 durability is excellent.\n\nTwo notes:\n\u2022 *Load:* it banked 88 TSS vs the planned 65 \u2014 you ran it as a quality aerobic effort, not a plod. Fine as a one-off, but it adds to an already heavy week (Form \u221216). Wed/Thu runs stay genuinely easy to absorb it.\n\u2022 *Heat:* holding 144 in that temp means cool-weather pace at the same HR would be faster still \u2014 good involuntary heat exposure banked, which you needed before France.\n\nDistance hit *exactly* the 13.5 km cap. Good discipline not running past it.\n\nOne thing I still need for the protocol: *ankle score after the run* (0\u201310)? You gave me 0/10 this morning but not post-run \u2014 that's the one that matters on the long one.",
-    "ts": "2026-06-16T19:53:59"
-  },
-  {
     "user": "2/10",
     "assistant": "Logged \u2014 ankle *2/10* after the long run (was 0/10 this morning).\n\nWell inside the protocol \u2014 \u22645/10 during is fine as long as it settles within 4 hrs or by tomorrow morning. Send me the score in the morning; if it's back to 0\u20131 you're clear for tomorrow's easy run, and given 13.5 km hard in the heat that's exactly the response we'd want.",
     "ts": "2026-06-16T19:58:41"
@@ -139,5 +129,15 @@
     "user": "That shows me going to -40 tsb!",
     "assistant": "*Yeah \u2014 that's real, and it's worth a look.* Pulled the live projection off the planned sessions:\n\n*Form (TSB) trajectory if you ride the week as planned:*\n\u2022 Thu \u22129 \u2192 *Fri \u221224* \u2192 Sat \u221230 \u2192 *Sun \u221237* (Mon morning reads ~\u221239/\u221240)\n\nSo the chart's right. The driver is the *weekend bike block*: Fri race-pace *228* + Sat *169* + Sun *192* (ride+brick) = *589 TSS over three days*. The single biggest spike is *Friday's \"Race pace long 2\u00d745\" at 228* \u2014 that one session drops you from \u22129 to \u221224.\n\n*Why I'd flag it:* the week projects *868 TSS vs your 763 ramp-cap target* \u2014 ~105 over. And \u221237/\u221240 in a *build* week is deeper than ideal; you want build-week troughs around \u221225 to \u221230 and save \u221235+ for a deliberate overload/peak block. Sustained sub-30 mid-build is where you stop absorbing and start digging.\n\nTwo things stand out on Friday specifically:\n1. It's the *biggest load of the week* by far.\n2. It's built as *2\u00d780min at 76\u201384% FTP (tempo/sweet-spot)* \u2014 but your standing rule is the *Friday anchor = pure Z2*, no structured intensity unless you ask for it.\n\n*My rec:* convert Friday to a pure Z2 long ride (~210\u2013240 min, NP in the 195 range). That drops it ~228\u2192~150, pulls the week to ~790 and the Sunday trough back to roughly *\u221230* \u2014 still a proper build, but you actually absorb it.\n\nWant me to make that change, or did you put the race-pace Friday in on purpose?",
     "ts": "2026-06-17T13:07:28"
+  },
+  {
+    "user": "Hello",
+    "assistant": "Here \u2014 still on the Friday question above. Want me to convert Friday to a pure Z2 long ride (drops the week to ~790 TSS and the Sunday trough back to ~\u221230), or did you put the race-pace Friday in on purpose?",
+    "ts": "2026-06-17T13:45:51"
+  },
+  {
+    "user": "Based on the 1306 message, reduce Friday to 4h z2. Same as last week. Saturday will be rushed 2-2.5h max. Sunday tbc, so don't change",
+    "assistant": "Done \u2014 Friday now *Long Z2 ride \u2014 4h* \u00b7 NP ~195W \u00b7 *169 TSS* (was 228). Synced to ICU/Garmin.\n\n*New form trajectory* (Sat/Sun unchanged for now):\nThu \u221210 \u2192 *Fri \u221218* \u2192 Sat \u221224 \u2192 *Sun \u221233*\n\nThat's already ~4 better at the trough than the race-pace version, and once you trim Saturday to 2\u20132.5h it'll pull Sunday back toward ~\u221228/\u221230. Week now projects ~805 TSS (was 868).\n\nLeaving Saturday and Sunday as-is per your note.",
+    "ts": "2026-06-17T13:51:00"
   }
 ]
