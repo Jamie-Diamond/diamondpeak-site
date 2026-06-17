@@ -20,18 +20,77 @@ _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 QUICKCHART = "https://quickchart.io/chart"
 
-# ── Local-render house style ───────────────────────────────────────────────────
+# ── Brand palette (from the Diamond Peak site CLAUDE.md) ────────────────────────
 
-GRID_COL = "#e8e3da"
+BRAND_INK    = "#18160f"   # titles
+BRAND_SECOND = "#4a4535"
+BRAND_MUTED  = "#9a9080"   # axis labels + ticks
+BRAND_HAIR   = "#ddd8cc"   # spines / hairlines
+GRID_COL     = "#e8e3da"   # very light grid
+
+# ── Brand font (DM Sans) + global softening ─────────────────────────────────────
+# Register the committed TTFs so the VM picks them up too; fall back silently to
+# the matplotlib default if anything is missing so rendering can NEVER break.
+try:
+    import os as _os
+    from matplotlib import font_manager as _fm
+    _FONT_DIR = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "fonts")
+    _registered = False
+    for _fn in ("DMSans-Regular.ttf", "DMSans-Medium.ttf", "DMSans-Bold.ttf"):
+        _fp = _os.path.join(_FONT_DIR, _fn)
+        if _os.path.exists(_fp):
+            _fm.fontManager.addfont(_fp)
+            _registered = True
+    if _registered:
+        matplotlib.rcParams["font.family"] = "DM Sans"
+except Exception:
+    pass  # default font — never break rendering on a font issue
+
+# Tasteful global defaults: lighter base type, muted axis furniture, thin hairline
+# spines, no top/right, very light grid, round line caps, antialiasing on.
+matplotlib.rcParams.update({
+    "font.size":            10.5,
+    "axes.titlesize":       12.5,
+    "axes.titleweight":     "bold",
+    "axes.titlecolor":      BRAND_INK,
+    "axes.labelsize":       10.5,
+    "axes.labelcolor":      BRAND_MUTED,
+    "axes.edgecolor":       BRAND_HAIR,
+    "axes.linewidth":       0.8,
+    "axes.spines.top":      False,
+    "axes.spines.right":    False,
+    "xtick.color":          BRAND_MUTED,
+    "ytick.color":          BRAND_MUTED,
+    "xtick.labelsize":      9,
+    "ytick.labelsize":      9,
+    "grid.color":           GRID_COL,
+    "grid.linewidth":       0.6,
+    "grid.alpha":           0.7,
+    "lines.solid_capstyle": "round",
+    "lines.dash_capstyle":  "round",
+    "lines.antialiased":    True,
+    "patch.antialiased":    True,
+    "axes.unicode_minus":   False,  # use a hyphen-minus the font definitely has
+})
+
+# Shape-preserving smoother for trend lines (interpolates every point, no overshoot
+# → never hides or fabricates a spike). PCHIP is preferred; if scipy is unavailable
+# the callers fall back to plotting the raw (thinner) line.
+try:
+    from scipy.interpolate import PchipInterpolator as _Pchip
+except Exception:
+    _Pchip = None
+
+# ── Local-render house style ───────────────────────────────────────────────────
 
 
 def _render(fig):
     """Save a figure to PNG bytes (white bg) and close it."""
     import io
     buf = io.BytesIO()
-    # dpi 200 ≈ 2× — renders crisp on high-DPI phone screens (110 looked soft when
-    # Telegram upscaled it). Files stay modest (~2-3× the 110 size) and IPv4 upload is fast.
-    fig.savefig(buf, format="png", dpi=200, bbox_inches="tight", facecolor="white")
+    # dpi 300 ≈ 3× — renders crisp on high-DPI phone screens (110 looked soft when
+    # Telegram upscaled it). Files stay modest (~PNG a few hundred KB) and IPv4 upload is fast.
+    fig.savefig(buf, format="png", dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return buf.getvalue()
 
@@ -66,9 +125,30 @@ def _style_ax(ax, twin=False):
         ax.spines["top"].set_visible(False)          # keep right spine for the twin series
     else:
         ax.spines[["top", "right"]].set_visible(False)
-    ax.grid(True, axis="y", color=GRID_COL, linewidth=0.6, alpha=0.8)
+    ax.grid(True, axis="y", color=GRID_COL, linewidth=0.6, alpha=0.7)
     ax.set_axisbelow(True)
-    ax.tick_params(labelsize=9)
+    ax.tick_params(labelsize=9, colors=BRAND_MUTED, length=3, width=0.8)
+
+
+def _smooth_xy(dts, ys, n=320):
+    """Gently shape-preserving-smooth a trend line over a datetime x-axis.
+
+    Returns (xs_num, ys_smooth) in matplotlib date-number space so callers can plot
+    directly (and fill_between) on the same float axis the date locator uses. PCHIP
+    interpolates every real point and never overshoots, so genuine spikes survive
+    and none are fabricated. Falls back to the raw points if scipy is missing or
+    there are too few points to interpolate.
+    """
+    import numpy as np
+    xnum = mdates.date2num(dts)
+    yarr = np.asarray(ys, dtype=float)
+    mask = ~np.isnan(yarr)
+    if _Pchip is None or mask.sum() < 3:
+        return xnum, yarr  # straight (thinner) line — honest fallback
+    xv, yv = xnum[mask], yarr[mask]
+    # PCHIP needs strictly increasing x; date numbers are already sorted/unique here.
+    grid = np.linspace(xv[0], xv[-1], n)
+    return grid, _Pchip(xv, yv)(grid)
 
 
 def _parse_dt(s):
@@ -82,7 +162,7 @@ def _date_axis(ax, dts, max_ticks=9):
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
     if dts:
         ax.set_xlim(dts[0], dts[-1])
-    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=9)
+    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=9, color=BRAND_MUTED)
 
 
 def _mmdd_to_dt(mmdd, dts, mmdd_labels):
@@ -314,18 +394,21 @@ def fitness_chart(payload, coaching_level="mid"):
     ax.set_ylim(*_lim(ctl))
     ax1.set_ylim(*_lim(atl))
 
-    # CTL filled area on left axis.
-    ax.plot(dts, ctl, color=_CTL_COL, linewidth=2.5, zorder=4)
-    ax.fill_between(dts, ctl, ax.get_ylim()[0], color=_CTL_COL, alpha=0.15, zorder=2)
-    # ATL dashed on right twin.
-    ax1.plot(dts, atl, color=_ATL_COL, linewidth=2.0, linestyle=(0, (6, 3)), zorder=3)
+    # CTL filled area on left axis — gently smoothed (shape-preserving), softer fill.
+    cx, cy = _smooth_xy(dts, ctl)
+    ax.plot(cx, cy, color=_CTL_COL, linewidth=1.8, alpha=0.95, zorder=4)
+    ax.fill_between(cx, cy, ax.get_ylim()[0], color=_CTL_COL, alpha=0.12, zorder=2)
+    # ATL dashed on right twin — smoothed too.
+    ax_x, ax_y = _smooth_xy(dts, atl)
+    ax1.plot(ax_x, ax_y, color=_ATL_COL, linewidth=1.4, alpha=0.9,
+             linestyle=(0, (6, 3)), zorder=3)
 
     # Phase bands.
     _draw_phase_bands(ax, _phase_spans(payload, dts, mmdd))
 
     # Today line + dots + value labels.
     if today_dt is not None:
-        ax.axvline(today_dt, color=(0.12, 0.12, 0.12, 0.85), linewidth=2.0, zorder=5)
+        ax.axvline(today_dt, color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=5)
     if ti is not None and today_dt is not None:
         ax.scatter([today_dt], [ctl[ti]], s=42, color=_CTL_COL, zorder=6, edgecolors="white", linewidths=1)
         ax1.scatter([today_dt], [atl[ti]], s=42, color=_ATL_COL, zorder=6, edgecolors="white", linewidths=1)
@@ -345,17 +428,17 @@ def fitness_chart(payload, coaching_level="mid"):
                 bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=rc, alpha=0.9), zorder=8)
 
     # Axes labels coloured to series.
-    ax.set_ylabel(L["ctl"], fontsize=11, color=_CTL_COL)
+    ax.set_ylabel(L["ctl"], fontsize=10.5, color=_CTL_COL)
     ax.tick_params(axis="y", labelcolor=_CTL_COL)
-    ax1.set_ylabel(L["atl"], fontsize=11, color=_ATL_COL)
+    ax1.set_ylabel(L["atl"], fontsize=10.5, color=_ATL_COL)
     ax1.tick_params(axis="y", labelcolor=_ATL_COL)
     ax1.spines["right"].set_color(_ATL_COL)
     _date_axis(ax, dts)
-    ax.set_title(L["fitness_title"], fontsize=14, fontweight="bold")
+    ax.set_title(L["fitness_title"], fontsize=12.5, fontweight="bold", color=BRAND_INK)
 
-    handles = [Line2D([0], [0], color=_CTL_COL, lw=2.5, label=L["ctl"]),
-               Line2D([0], [0], color=_ATL_COL, lw=2.0, linestyle=(0, (6, 3)), label=L["atl"])]
-    ax.legend(handles=handles, loc="upper right", frameon=False, fontsize=10)
+    handles = [Line2D([0], [0], color=_CTL_COL, lw=1.8, label=L["ctl"]),
+               Line2D([0], [0], color=_ATL_COL, lw=1.4, linestyle=(0, (6, 3)), label=L["atl"])]
+    ax.legend(handles=handles, loc="upper right", frameon=False, fontsize=9.5)
     return _render(fig)
 
 
@@ -406,19 +489,20 @@ def form_chart(payload, coaching_level="mid"):
     _draw_phase_bands(ax, _phase_spans(payload, dts, mmdd))
 
     # Reference lines (labelled at the right edge).
-    ax.axhline(5,   color="#2e9c8e", linewidth=1.0, linestyle=(0, (4, 3)), alpha=0.55, zorder=2)
-    ax.axhline(0,   color=(0.4, 0.4, 0.4, 0.45), linewidth=1.0, zorder=2)
-    ax.axhline(-20, color="#c0392b", linewidth=1.0, linestyle=(0, (4, 3)), alpha=0.55, zorder=2)
+    ax.axhline(5,   color="#2e9c8e", linewidth=0.9, linestyle=(0, (4, 3)), alpha=0.5, zorder=2)
+    ax.axhline(0,   color=(0.4, 0.4, 0.4, 0.4), linewidth=0.9, zorder=2)
+    ax.axhline(-20, color="#c0392b", linewidth=0.9, linestyle=(0, (4, 3)), alpha=0.5, zorder=2)
     ax.text(dts[-1], 5,   " +5 fresh",  va="bottom", ha="right", fontsize=8.5, color="#2e9c8e", zorder=3)
-    ax.text(dts[-1], -20, " −20 heavy", va="top",    ha="right", fontsize=8.5, color="#c0392b", zorder=3)
+    ax.text(dts[-1], -20, " -20 heavy", va="top",    ha="right", fontsize=8.5, color="#c0392b", zorder=3)
 
-    # TSB line (filled to zero).
-    ax.plot(dts, tsb, color=(0.24, 0.24, 0.24, 0.85), linewidth=2.0, zorder=4)
-    ax.fill_between(dts, tsb, 0, color=(0.24, 0.24, 0.24, 0.08), zorder=3)
+    # TSB line (smoothed, filled to zero) — soft near-ink grey.
+    tx, ty = _smooth_xy(dts, tsb)
+    ax.plot(tx, ty, color=_col(BRAND_INK, 0.75), linewidth=1.8, zorder=4)
+    ax.fill_between(tx, ty, 0, color=_col(BRAND_INK, 0.07), zorder=3)
 
     # Today line + dot + label.
     if today_dt is not None:
-        ax.axvline(today_dt, color=(0.12, 0.12, 0.12, 0.85), linewidth=2.0, zorder=5)
+        ax.axvline(today_dt, color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=5)
     if ti is not None and today_dt is not None:
         ax.scatter([today_dt], [tsb[ti]], s=42, color="#3c3c3c", zorder=6, edgecolors="white", linewidths=1)
         _tv = round(tsb[ti])
@@ -427,9 +511,9 @@ def form_chart(payload, coaching_level="mid"):
                     ha="center", fontsize=10, fontweight="bold", color="#3c3c3c",
                     bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=7)
 
-    ax.set_ylabel(L["form_yaxis"], fontsize=11)
+    ax.set_ylabel(L["form_yaxis"], fontsize=10.5, color=BRAND_MUTED)
     _date_axis(ax, dts)
-    ax.set_title(L["form_title"], fontsize=14, fontweight="bold")
+    ax.set_title(L["form_title"], fontsize=12.5, fontweight="bold", color=BRAND_INK)
     return _render(fig)
 
 
@@ -954,18 +1038,22 @@ def recovery_chart(payload, coaching_level="mid"):
     ax3.set_ylim(0, smax * 4)
     ax3.axis("off")
 
-    # HRV ±1SD band + baseline line.
-    ax.fill_between(dts, band_lo, band_hi, color=HRV_COL, alpha=0.14, zorder=2)
-    ax.plot(dts, baseline, color=HRV_COL, linewidth=2.0, zorder=4)
+    # HRV ±1SD band + baseline line. The band stays on the raw points (it's a
+    # statistical envelope, not a trend); only the baseline LINE is smoothed.
+    ax.fill_between(dts, band_lo, band_hi, color=HRV_COL, alpha=0.12, zorder=2)
+    bx, by = _smooth_xy(dts, baseline)
+    ax.plot(bx, by, color=HRV_COL, linewidth=1.8, alpha=0.95, zorder=4)
 
-    # HRV scatter (filter nan pairs).
+    # HRV scatter (filter nan pairs) — left as honest dots, not smoothed.
     hx = [d for d, v in zip(dts, hrv) if v is not None]
     hy = [v for v in hrv if v is not None]
-    ax.scatter(hx, hy, s=26, color=HRV_COL, edgecolors="white", linewidths=0.8, zorder=5)
+    ax.scatter(hx, hy, s=26, color=HRV_COL, edgecolors="white", linewidths=0.8,
+               alpha=0.9, zorder=5)
 
-    # RHR line on right twin (nan gaps).
+    # RHR line on right twin (nan gaps) — left straight (not in the smooth set), thinner.
     rhr_np = np.array([r if r is not None else np.nan for r in rhr], dtype=float)
-    ax1.plot(dts, rhr_np, color=RHR_COL, linewidth=2.0, linestyle=(0, (5, 4)), zorder=3)
+    ax1.plot(dts, rhr_np, color=RHR_COL, linewidth=1.4, alpha=0.9,
+             linestyle=(0, (5, 4)), zorder=3)
 
     # HRV axis range fitted to band + dots.
     _vals = [v for v in (hy + list(band_lo[~np.isnan(band_lo)]) + list(band_hi[~np.isnan(band_hi)]))]
@@ -976,7 +1064,7 @@ def recovery_chart(payload, coaching_level="mid"):
 
     # Today line + labelled values.
     if today_dt is not None:
-        ax.axvline(today_dt, color=(0.12, 0.12, 0.12, 0.85), linewidth=2.0, zorder=6)
+        ax.axvline(today_dt, color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=6)
         ti = mmdd.index(today) if today in mmdd else None
         if ti is not None:
             if hrv[ti] is not None:
@@ -989,20 +1077,20 @@ def recovery_chart(payload, coaching_level="mid"):
                              xytext=(0, -14), ha="center", fontsize=9.5, fontweight="bold", color=RHR_COL,
                              bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=8)
 
-    ax.set_ylabel("HRV (ms)", fontsize=11, color=HRV_COL)
+    ax.set_ylabel("HRV (ms)", fontsize=10.5, color=HRV_COL)
     ax.tick_params(axis="y", labelcolor=HRV_COL)
-    ax1.set_ylabel("RHR (bpm)", fontsize=11, color=RHR_COL)
+    ax1.set_ylabel("RHR (bpm)", fontsize=10.5, color=RHR_COL)
     ax1.tick_params(axis="y", labelcolor=RHR_COL)
     ax1.spines["right"].set_color(RHR_COL)
     _date_axis(ax, dts)
-    ax.set_title("Recovery — HRV vs baseline", fontsize=14, fontweight="bold")
+    ax.set_title("Recovery — HRV vs baseline", fontsize=12.5, fontweight="bold", color=BRAND_INK)
 
     handles = [
         Line2D([0], [0], marker="o", color="none", markerfacecolor=HRV_COL,
                markeredgecolor="white", markersize=7, label="HRV"),
-        Line2D([0], [0], color=HRV_COL, lw=2.0, label="Baseline (7d)"),
-        mpatches.Patch(facecolor=HRV_COL, alpha=0.14, label="±1 SD"),
-        Line2D([0], [0], color=RHR_COL, lw=2.0, linestyle=(0, (5, 4)), label="RHR"),
+        Line2D([0], [0], color=HRV_COL, lw=1.8, label="Baseline (7d)"),
+        mpatches.Patch(facecolor=HRV_COL, alpha=0.12, label="±1 SD"),
+        Line2D([0], [0], color=RHR_COL, lw=1.4, linestyle=(0, (5, 4)), label="RHR"),
         mpatches.Patch(facecolor=(0.47, 0.47, 0.47, 0.16), label="Sleep (h)"),
     ]
     ax.legend(handles=handles, loc="upper center", ncol=5, frameon=False,
@@ -1037,15 +1125,16 @@ def durability_chart(payload, coaching_level="mid"):
     _style_ax(ax)
 
     # Reference lines.
-    ax.axhline(0, color=(0.4, 0.4, 0.4, 0.30), linewidth=1.0, zorder=1)
-    ax.axhline(5, color="#1d6840", linewidth=1.5, linestyle=(0, (5, 4)), alpha=0.6, zorder=2)
+    ax.axhline(0, color=(0.4, 0.4, 0.4, 0.28), linewidth=0.9, zorder=1)
+    ax.axhline(5, color="#1d6840", linewidth=1.1, linestyle=(0, (5, 4)), alpha=0.55, zorder=2)
 
     present = {}
     for sport, colour in SPORT_BASE.items():
         sx = [d for d, s in zip(dts, sessions) if _norm_sport(s.get("sport")) == sport]
         sy = [v for v, s in zip(vals, sessions) if _norm_sport(s.get("sport")) == sport]
         if sx:
-            ax.scatter(sx, sy, s=60, color=colour, edgecolors="white", linewidths=1.2, zorder=5)
+            ax.scatter(sx, sy, s=58, color=colour, edgecolors="white", linewidths=1.2,
+                       alpha=0.9, zorder=5)
             present[sport] = colour
 
     lo = min(vals + [0]); hi = max(vals + [5])
@@ -1055,10 +1144,10 @@ def durability_chart(payload, coaching_level="mid"):
     # "good < 5%" label at the right edge.
     ax.text(dts[-1], 5, " good < 5%", va="bottom", ha="right", fontsize=9.5, color="#1d6840", zorder=3)
 
-    ax.set_ylabel("Decoupling %", fontsize=11)
+    ax.set_ylabel("Decoupling %", fontsize=10.5, color=BRAND_MUTED)
     _date_axis(ax, dts)
     ax.set_title("Aerobic durability — Pa:HR decoupling (lower = better)",
-                 fontsize=13, fontweight="bold")
+                 fontsize=12, fontweight="bold", color=BRAND_INK)
 
     handles = [Line2D([0], [0], marker="o", color="none", markerfacecolor=c,
                       markeredgecolor="white", markersize=8, label=sp)
@@ -1112,14 +1201,14 @@ def compliance_chart(payload, coaching_level="mid"):
 
     x = np.arange(len(weeks))
     w = 0.4
-    ax.bar(x - w / 2, planned, width=w, color=(0.47, 0.47, 0.47, 0.28), zorder=2, label="Planned")
-    ax.bar(x + w / 2, actual,  width=w, color=actual_bg, zorder=3)
+    ax.bar(x - w / 2, planned, width=w, color=(0.47, 0.47, 0.47, 0.26), zorder=2, label="Planned")
+    ax.bar(x + w / 2, actual,  width=w, color=[_col(c, 0.9) for c in actual_bg], zorder=3)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=9)
-    ax.set_ylabel("TSS", fontsize=11)
+    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=9, color=BRAND_MUTED)
+    ax.set_ylabel("TSS", fontsize=10.5, color=BRAND_MUTED)
     ax.set_ylim(0, max(planned + actual + [1]) * 1.12)
-    ax.set_title("Compliance — planned vs actual TSS", fontsize=14, fontweight="bold")
+    ax.set_title("Compliance — planned vs actual TSS", fontsize=12.5, fontweight="bold", color=BRAND_INK)
 
     handles = [
         mpatches.Patch(facecolor=(0.47, 0.47, 0.47, 0.28), label="Planned"),
