@@ -1,10 +1,5 @@
 [
   {
-    "user": "that was for the swim, which you just asked me about, are you drunk.",
-    "assistant": "Sorted \u2014 RPE 8 now sits on the swim where it belongs, run RPE cleared. The \"felt hard\" makes sense there: 10\u00d7100 hard off 20s rest at CSS\u22122, on Form \u221214, top-end was always going to bite.\n\nStill need the ankle score from the long run (0\u201310) for the protocol.",
-    "ts": "2026-06-16T15:04:25"
-  },
-  {
     "user": "What distance is the cap for today",
     "assistant": "*13.5 km* \u2014 that's today's long run cap (75 min @ GAP ~5:30/km).\n\nIt's the W8 long-run target, up ~10\u201315% on last week. Don't run past it even if the ankle feels fine \u2014 the distance ceiling is the protocol, not just the pain score. Stop earlier if pain goes >5/10.",
     "ts": "2026-06-16T17:51:48"
@@ -139,5 +134,9 @@
     "user": "Look at my 7:24 message e this morning",
     "assistant": "Got it \u2014 you already gave me everything in your 7:25 message: *ankle 1/10 this morning, 2/10 on the run*, both logged and well inside protocol. That was the auto-watcher re-asking on a loop, not me \u2014 ignore it. Nothing outstanding from you; no RPE needed unless you want to add one.",
     "ts": "2026-06-17T10:44:06"
+  },
+  {
+    "user": "",
+    "assistant": "RPE for Ankle Training? (1\u201310)"
   }
 ]
