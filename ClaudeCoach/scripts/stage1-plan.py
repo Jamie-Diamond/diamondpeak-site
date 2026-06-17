@@ -27,6 +27,7 @@ BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 
+import claude_call                    # noqa: E402
 import session_library as sl          # noqa: E402
 import plan_builder as pb             # noqa: E402
 from primitives.planned_tss import segment_if  # noqa: E402
@@ -261,9 +262,10 @@ def main():
     attempts = []
     for attempt in range(args.max_attempts):
         prompt = build_prompt(args.athlete, brief, week_start, feedback)
-        proc = subprocess.run([CLAUDE, "-p", prompt, "--model", args.model,
-                               "--no-session-persistence"],
-                              capture_output=True, text=True, cwd=PROJECT_DIR, timeout=540)
+        proc = claude_call.run_claude(
+            prompt, model=args.model, fallback=[claude_call.OPUS],
+            cwd=PROJECT_DIR, timeout=540, label=args.athlete,
+        )
         try:
             proposal = extract_json(proc.stdout.strip())
         except Exception as e:

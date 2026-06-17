@@ -15,6 +15,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "telegram"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
+import claude_call
 from coaching_levels import level_block as _level_block
 from primitives.planned_tss import planned_sessions_block
 from primitives.nutrition import fuel_target, recent_avg_g_hr
@@ -429,10 +430,9 @@ def run_athlete(slug, athlete_cfg):
                            nutrition_race=int(athlete_cfg.get("nutrition_target_g_hr") or 90))
 
     with open(log_file, "a") as lf:
-        result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6"],
-            stdout=subprocess.PIPE, stderr=lf, text=True,
-            cwd=PROJECT_DIR, timeout=180,
+        result = claude_call.run_claude(
+            prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
+            allowed_tools=TOOLS, stderr=lf, cwd=PROJECT_DIR, timeout=180, label=slug,
         )
 
     raw = (result.stdout or "").strip()

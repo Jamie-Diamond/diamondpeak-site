@@ -21,6 +21,9 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 MODEL   = "claude-sonnet-4-6"
 TOOLS   = "Read,Write,Edit"
 
+sys.path.insert(0, str(BASE / "lib"))
+import claude_call
+
 
 def _build_prompt(slug: str, first_name: str, history: list, today: str) -> str:
     # Format recent messages
@@ -103,11 +106,11 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
     with open(log_file, "a") as lf:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         lf.write(f"[{ts}] [{slug}] running sync\n")
-        result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS,
-             "--model", MODEL, "--no-session-persistence"],
-            stdout=subprocess.PIPE, stderr=lf, text=True,
-            cwd=PROJECT_DIR, timeout=300,
+        # Sonnet -> Haiku fallback (frequent, low-stakes): keeps sync alive when
+        # the Sonnet weekly bucket is maxed, without draining the all-models pool.
+        result = claude_call.run_claude(
+            prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
+            stderr=lf, cwd=PROJECT_DIR, timeout=300, label=slug,
         )
 
     output = (result.stdout or "").strip()

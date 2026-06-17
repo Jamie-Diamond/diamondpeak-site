@@ -193,7 +193,8 @@ def build_keyboard(slug=None):
         {"text": "Fitness chart", "callback_data": "/fitness"},
     ]
     plan_row = [
-        {"text": "🔄 Replan week", "callback_data": "/replan"},
+        {"text": "🔄 Replan week",    "callback_data": "/replan"},
+        {"text": "🔍 Check activity", "callback_data": "/activity"},
     ]
     return {"inline_keyboard": [buttons, graph_row, plan_row]}
 
@@ -494,6 +495,7 @@ _RECENT_CALLBACKS = {}
 
 _LOAD_CMD_RE     = re.compile(r'^/load\s*$', re.I)
 _FITNESS_CMD_RE  = re.compile(r'^/fitness\s*$', re.I)
+_ACTIVITY_CMD_RE = re.compile(r'^/?activity(?:\s+check)?\s*$', re.I)
 _STRENGTH_RE     = re.compile(
     r'^(?:strength(?:\s+session)?|gym(?:\s+session)?|lift(?:ing)?|'
     r'what(?:\'s|\s+is)\s+(?:today\'?s?\s+)?(?:strength|gym)(?:\s+session)?)\s*$',
@@ -901,6 +903,9 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
 
     if _FITNESS_CMD_RE.match(txt):
         return "__FITNESS_CHARTS__"
+
+    if _ACTIVITY_CMD_RE.match(txt):
+        return "__ACTIVITY_CHECK__"
 
     m = _ANKLE_RE.match(txt)
     if m and slug:
@@ -2538,6 +2543,18 @@ def main():
                 typing(token, chat_id)
                 log("Out (fast): fitness charts")
                 _fitness_charts_quick(token, chat_id, slug)
+                continue
+            elif fast == "__ACTIVITY_CHECK__":
+                send(token, chat_id, "_Checking for new activity…_")
+                # Detached single-athlete run; messages the athlete itself via
+                # notify.py (new activity, or a 'nothing new' confirmation).
+                subprocess.Popen(
+                    ["python3", str(BASE.parent / "scripts/activity-watcher.py"),
+                     "--athlete", slug],
+                    cwd=str(PROJECT_DIR),
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                log(f"[{slug}] on-demand activity check launched")
                 continue
             elif fast == "__WEEKLY_SUMMARY__":
                 send(token, chat_id,

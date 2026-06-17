@@ -36,6 +36,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 from coaching_levels import level_block as _level_block
 import ops_log
 import heat as heat_lib
+import claude_call
 from git_sync import sync_commit_push
 from primitives.run_durability import compute_run_durability, fade_line
 
@@ -417,6 +418,31 @@ def _resolve_ftp(slug: str, profile: dict, session_log_f: Path) -> int:
     except Exception:
         pass
     return profile.get("ftp_watts") or 250
+
+
+def _has_new_activity(slug: str, existing_ids: set) -> bool:
+    """Cheap, LLM-free pre-gate: True if ICU history shows any activity whose id
+    is not already in session-log.json. This lets the expensive analysis LLM be
+    skipped entirely on the ~99% of cycles with nothing new — so the watcher can
+    poll often without burning the Sonnet weekly bucket.
+
+    Fail-OPEN: any fetch/parse error returns True so we never silently miss an
+    activity (worst case = one wasted LLM call that returns ACTIVITY_ID: none,
+    exactly as before this gate existed)."""
+    try:
+        r = subprocess.run(
+            ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug,
+             "--endpoint", "history", "--days", "3"],
+            capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
+        )
+        if r.returncode != 0:
+            return True
+        for a in json.loads(r.stdout):
+            if str(a.get("id", "")) not in existing_ids:
+                return True
+        return False
+    except Exception:
+        return True
 
 
 def load_state(state_file):
@@ -832,8 +858,9 @@ def _strava_refresh_updated(slug: str, state: dict, state_file: Path | None):
             save_state(state, state_file)
 
 
-def check_athlete(slug, athlete_cfg):
-    """Run activity check for one athlete."""
+def check_athlete(slug, athlete_cfg, announce_empty=False):
+    """Run activity check for one athlete. announce_empty=True (on-demand button)
+    sends a brief 'nothing new' confirmation when the gate finds no new activity."""
     adir = BASE / f"athletes/{slug}"
     state_file = adir / "last_activity_state.json"
     session_log_f = adir / "session-log.json"
@@ -871,6 +898,17 @@ def check_athlete(slug, athlete_cfg):
         except (json.JSONDecodeError, OSError):
             pass
 
+    # Python-first gate: skip the analysis LLM entirely when ICU history shows
+    # nothing new. The cheap cyclic tasks above (test reminders, Strava refresh)
+    # and the follow-up nudge below still run every cycle — only the expensive
+    # Claude call is gated, so this script can poll every 5 min cheaply.
+    if not _has_new_activity(slug, existing_ids):
+        if announce_empty and chat_id:
+            _notify("No new activity since your last logged session. 👍", chat_id, slug=slug)
+        _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries,
+                             state_file=state_file, slug=slug)
+        return
+
     # Recent chat so the analysis can suppress itself when the athlete already
     # discussed this activity with the bot ("we've already discussed this").
     recent_chat = "(no recent chat)"
@@ -893,21 +931,18 @@ def check_athlete(slug, athlete_cfg):
                            recent_chat=recent_chat)
 
     t_start = time.time()
-    try:
-        result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6"],
-            capture_output=True, text=True,
-            cwd=PROJECT_DIR, timeout=300,
-        )
-    except subprocess.TimeoutExpired:
+    # Sonnet -> Haiku fallback: keeps activity analysis alive when the Sonnet
+    # weekly bucket is maxed. run_claude returns rc=-1 on timeout (no chain burn).
+    result = claude_call.run_claude(
+        prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
+        cwd=PROJECT_DIR, timeout=300, label=slug,
+    )
+    if result.returncode == -1:
         _notify(
             f"Activity watcher timed out for {first_name} (300s). "
             f"Last known activity: {state.get('last_id', 'unknown')}.",
             chat_id, slug=slug,
         )
-        return
-    except Exception as exc:
-        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Failed to launch Claude: {exc}", file=sys.stderr)
         return
 
     if result.returncode != 0:
@@ -1145,11 +1180,30 @@ def check_athlete(slug, athlete_cfg):
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--athlete", help="run one athlete on demand (e.g. from the bot's "
+                                       "'Check for activity' button); skips the shared lock")
+    args = ap.parse_args()
+
+    athletes = json.loads(ATHLETES_CONFIG.read_text())
+
+    # On-demand single athlete (manual / button): bypass the shared cron lock so a
+    # running cron cycle can't block the user's tap.
+    if args.athlete:
+        cfg = athletes.get(args.athlete)
+        if not cfg:
+            print(f"unknown athlete: {args.athlete}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            check_athlete(args.athlete, cfg, announce_empty=True)
+        except Exception as exc:
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{args.athlete}] Unhandled error: {exc}", file=sys.stderr)
+        return
+
     if not acquire_lock():
         sys.exit(0)
-
     try:
-        athletes = json.loads(ATHLETES_CONFIG.read_text())
         for slug, athlete_cfg in athletes.items():
             if not athlete_cfg.get("active", True):
                 continue

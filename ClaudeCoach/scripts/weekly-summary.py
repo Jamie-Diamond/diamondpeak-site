@@ -12,6 +12,7 @@ from pathlib import Path
 BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE / "lib"))
 
+import claude_call
 from icu_api import IcuClient
 import recovery_score as rs
 sys.path.insert(0, str(BASE / "ironman-analysis"))
@@ -474,9 +475,9 @@ Then using Bash:
 Wrap your entire output in <telegram> and </telegram> tags. Output nothing outside those tags — no preamble, no reasoning, no tool commentary.
 """
 
-    result = subprocess.run(
-        [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6"],
-        capture_output=True, text=True, cwd=PROJECT_DIR, timeout=600,
+    result = claude_call.run_claude(
+        prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
+        cwd=PROJECT_DIR, timeout=600, label=slug,
     )
 
     if result.stderr:

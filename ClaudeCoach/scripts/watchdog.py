@@ -11,6 +11,7 @@ from pathlib import Path
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
 PROJECT_DIR = str(BASE.parent)               # diamondpeak-site/
 sys.path.insert(0, str(BASE / "lib"))
+import claude_call
 import ops_log
 import heat as heat_lib
 CLAUDE      = "/usr/bin/claude"
@@ -169,12 +170,10 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         prompt_file = f.name
 
     try:
-        result = subprocess.run(
-            [CLAUDE, "-p", open(prompt_file).read(),
-             "--allowedTools", TOOLS,
-             "--model", "claude-sonnet-4-6"],
-            capture_output=True, text=True,
-            cwd=PROJECT_DIR,
+        result = claude_call.run_claude(
+            open(prompt_file).read(),
+            model=claude_call.SONNET, allowed_tools=TOOLS,
+            cwd=PROJECT_DIR, timeout=None, label=slug,
         )
         output = result.stdout.strip()
         stderr = result.stderr.strip()

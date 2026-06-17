@@ -11,6 +11,8 @@ NOTIFY          = BASE / "telegram/notify.py"
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+sys.path.insert(0, str(BASE / "lib"))
+import claude_call
 
 TOOLS = "Read,Bash"
 
@@ -106,10 +108,9 @@ def run_athlete(slug, athlete_cfg):
     prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries)
 
     with open(log_file, "a") as lf:
-        result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-sonnet-4-6"],
-            stdout=subprocess.PIPE, stderr=lf, text=True,
-            cwd=PROJECT_DIR, timeout=180,
+        result = claude_call.run_claude(
+            prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
+            allowed_tools=TOOLS, stderr=lf, cwd=PROJECT_DIR, timeout=180, label=slug,
         )
 
     import re as _re
