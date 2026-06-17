@@ -1,17 +1,5 @@
 [
   {
-    "user": "Talk me though the swim today",
-    "assistant": "*Today's swim \u2014 Skills/Speed (50m pool, ~3,000m, ~58 min)*\n\n*Warm-up (600m)*\n\u2022 400m easy free \u2014 settle in, long strokes\n\u2022 4\u00d750m drill (catch-up / scull), 15s rest \u2014 wake up the catch\n\n*Speed set (1,200m) \u2014 the main focus*\n\u2022 12\u00d7100m @ *1:32\u20131:34/100m*, 20s rest\n\u2022 That's CSS\u22125 to \u22127 (CSS is 1:39). Faster than CSS but the job is to *hold it across all 12* \u2014 don't blast the first few and fade.\n\u2022 Think clean, quick turnover, not muscling it. If you're slipping past 1:35 by rep 9, you went out too hard.\n\n*Pull set (800m) \u2014 PB + paddles*\n\u2022 4\u00d7200m @ *1:36/100m* (CSS\u22123), 20s rest\n\u2022 Buoy cuts leg drag, paddles load the catch \u2014 long, strong pull, no kick.\n\u2022 This is repeatable at CSS\u22123, not a TT. Hold the pace, don't chase it down.\n\u2022 Drop paddles for the last rep if your shoulders start loading up.\n\n*Cool-down (200m)* easy mixed\n\n*How to pace it:* speed set is about turnover and form under mild pressure; pull set is about strength and feel. Two different jobs \u2014 don't turn the pull reps into another speed effort.\n\nSend me the splits after and I'll check the reps against target."
-  },
-  {
-    "user": "I ended up doing. 400 wu,\n2x 100 long slow strokes and finger drag. \n\n10x100 hard. I struggled to go fast. \n2x200 pb and padels. Shoulders to tired so went to 2x200 easy to finish off.",
-    "assistant": "Logged.\n\n*Swim debrief \u2014 2,400m, 41 min, avg HR 119 (max 149)*\n\nYou cut it sensibly: 10\u00d7100 hard (vs 12) and 2\u00d7200 pull + 2\u00d7200 easy (vs 4\u00d7200) once the shoulders went. Good call backing off the pull rather than grinding through loaded \u2014 that's how you avoid a shoulder niggle, not a soft option.\n\n*The 100s:* ICU has them averaging ~1:42/100m. ICU over-reads pool splits by ~2\u20134s, so true pace was likely ~1:38\u20131:40 \u2014 i.e. around CSS (1:39), not the 1:32\u20131:34 target. So \"struggled to go fast\" is real: these were CSS-pace, not speed-set pace.\n\nTwo likely reasons, both expected:\n\u2022 *TSB \u221211* \u2014 you're carrying fatigue from a 691-TSS week. Top-end turnover is the first thing to go when you're dug in.\n\u2022 Speed off short rest (20s) is hard to hold for 10\u00d7100 when not fresh.\n\nNot a concern \u2014 the aerobic work still banked. When we want genuine speed work to land, it needs to come on a fresher day (lower ATL), not mid-heavy-week. Worth noting for how we slot the Tue speed session going forward.\n\nNo strava_id on this one yet, so I can't push a Strava description \u2014 it hasn't synced across. Flag me if/when it lands and I'll write it up."
-  },
-  {
-    "user": "Hello?",
-    "assistant": "Here. Anything you need \u2014 splits to recheck, or move on to tomorrow?"
-  },
-  {
     "user": "Look at my 8:08 message you ignored",
     "assistant": "You're right to call it out \u2014 and I can't see the text of your 8:08 message in my history, only the swim-splits exchange. If it asked for something specific, resend it and I'll deal with it now.\n\nWhat I *should* have done already: pulled the Strava laps instead of reading off ICU. Done now, and it changes the verdict \u2014 I was pessimistic before.\n\n*Swim \u2014 real Strava button-press splits*\n10\u00d7100m hard: 1:39 / 1:35 / 1:37 / 1:39 / 1:37 / 1:37 / 1:38 / 1:38 / 1:38 / 1:35 \u2014 *avg 1:37/100m*\n\nThat's *CSS\u22122*, not \"around CSS\" like I told you. You held it flat across all 10 with zero fade \u2014 repeatable, just ~3\u20135s off the 1:32\u20131:34 speed target. Top-end was capped by carried fatigue (Form \u221211), not lack of fitness.\n\nPull 2\u00d7200 PB+paddles: 1:42/100m (CSS+3) \u2014 slower as the shoulders loaded, which is why you cut it. Right call.\n\nStrava description pushed. What did 8:08 say?"
   },
@@ -138,5 +126,17 @@
     "user": "Test message 1234",
     "assistant": "Got it \u2014 receiving you loud and clear. Anything you need?",
     "ts": "2026-06-17T08:14:12"
+  },
+  {
+    "user": "",
+    "assistant": "*New activity*\n_Durability: pw:hr decoupling 7.2% \u00b7 cadence -1.3% \u00b7 running cost -7.6% (final vs first third) \u26a0_"
+  },
+  {
+    "user": "",
+    "assistant": "*Good morning \u2014 Wed 17 Jun*\n\n*Today:* Easy run \u2014 Z2 continuous \u2014 40 min \u00b7 35 TSS\nAnkle Training \u2014 40 min \u00b7 20 TSS\n\nWeight this morning?\n\n_94 days to IM Italy Emilia-Romagna_"
+  },
+  {
+    "user": "",
+    "assistant": "[chart/photo sent]"
   }
 ]
