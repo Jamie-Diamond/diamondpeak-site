@@ -1,10 +1,5 @@
 [
   {
-    "user": "Also it wasn't hot?  Is that really the top of my z2?",
-    "assistant": "Two honest corrections:\n\n*1. It wasn't hot \u2014 you're right.* The \"23\u201328\u00b0C\" was the *watch's onboard temp sensor*, not weather data (the activity has `has_weather: false`, no station temp). That sensor sits against your wrist/skin and over-reads ambient by several degrees \u2014 the 28\u00b0C max is the watch heating up, not the air. So scratch the heat framing: I overstated it, and the \"involuntary heat exposure banked\" line was weaker than I made out. Real ambient was likely cooler.\n\n*2. Yes, 146 is the top of your Z2 \u2014 as configured.* Your ICU run zones (set off *LTHR 170*):\n\u2022 Z1 <133 \u00b7 *Z2 133\u2013146* \u00b7 Z3 146\u2013159 \u00b7 Z4 159\u2013173 \u00b7 Z5 173+\n\nSo avg *144 = 84.7% LTHR = upper Z2*, and the 21.6 min over 146 = low Z3. That part of yesterday's read holds.\n\n*But your instinct is worth chasing:* 146 = *85.9% LTHR*, which is a fairly conservative aerobic ceiling. If running at 144 genuinely feels easy and you can hold it talking, the lever is *LTHR 170* \u2014 if that's stale (set high, your true LTHR is lower) the zones shift up and yesterday reads as solidly mid-Z2, not upper. When did you last set 170? A 30-min run-threshold check would settle whether the zones are right or just pinching you low.",
-    "ts": "2026-06-16T20:11:37"
-  },
-  {
     "user": "",
     "assistant": "*Tomorrow \u2014 Easy run + Gym strength*\n\nRun:\n\u2022 Target pace 5:18\u20135:56/km (Z2 continuous, 40 min)\n\u2022 HR cap \u2264140 bpm\n\u2022 Ankle cleared to run \u2014 stop if pain exceeds 5/10; note score after\n\nStrength:\n\u2022 Endurance base + ankle rehab focus\n\u2022 Hip stability, single-leg work, foot strength\n\n*Nutrition:* 0 g/hr carbs \u00b7 0 ml/hr fluid \u2014 easy Z2 + gym, no fuelling needed\n*Sleep:* \u22658h tonight\n*Form:* -17 (Heavy)"
   },
@@ -138,5 +133,10 @@
   {
     "user": "",
     "assistant": "No new activity since your last logged session. \ud83d\udc4d"
+  },
+  {
+    "user": "Today's session",
+    "assistant": "*Today \u2014 Wed 17 Jun \u2014 both done* \u2705\n\n\u2022 *Easy run* \u2014 5.7 km / 28 min \u00b7 GAP 4:52/km \u00b7 avg HR 139 \u00b7 TSS 36 \u2714\n\u2022 *Ankle Training* \u2014 13 min \u00b7 RPE 1 \u2714\n\nNothing left on the card. Form \u22129, ankle 1/10 \u2014 clean recovery day.\n\n*Tomorrow (Thu):* CSS swim 5\u00d7200m + easy Z2 run.",
+    "ts": "2026-06-17T15:00:10"
   }
 ]
