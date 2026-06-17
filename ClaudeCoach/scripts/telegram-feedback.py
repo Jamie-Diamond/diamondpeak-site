@@ -22,6 +22,9 @@ PROJECT_DIR     = str(BASE.parent)
 CLAUDE          = "/usr/bin/claude"
 CLAUDE_TIMEOUT  = 90   # seconds -- must respond before Python sends the error fallback
 
+sys.path.insert(0, str(BASE / "lib"))
+import claude_call
+
 _cfg    = json.loads((BASE / "telegram/config.json").read_text())
 TOKEN   = _cfg["bot_token"]
 
@@ -140,11 +143,9 @@ def parse_feedback(reply_text: str, stub: dict) -> tuple[dict, str | None]:
     )
     t_start = time.time()
     try:
-        result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", ""],
-            capture_output=True, text=True,
-            cwd=PROJECT_DIR, timeout=CLAUDE_TIMEOUT,
-        )
+        result = claude_call.run_claude(
+            prompt, model=claude_call.SONNET, allowed_tools="",
+            cwd=PROJECT_DIR, timeout=CLAUDE_TIMEOUT, label="feedback")
     except subprocess.TimeoutExpired:
         elapsed = int(time.time() - t_start)
         return {}, (

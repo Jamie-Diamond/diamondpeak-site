@@ -15,6 +15,9 @@ SESSION_LOG = BASE / "session-log.json"
 PROJECT_DIR = str(BASE.parent)
 CLAUDE      = "/usr/bin/claude"
 
+sys.path.insert(0, str(BASE / "lib"))
+import claude_call
+
 WEEKS_BACK   = 8
 CHUNK_WEEKS  = 2   # fetch in 2-week chunks to stay well within timeout
 
@@ -48,11 +51,9 @@ def log(msg):
 
 def fetch_chunk(start: str, end: str) -> list:
     prompt = FETCH_PROMPT.format(start=start, end=end)
-    result = subprocess.run(
-        [CLAUDE, "-p", prompt, "--allowedTools", TOOLS],
-        capture_output=True, text=True,
-        cwd=PROJECT_DIR, timeout=90,
-    )
+    result = claude_call.run_claude(
+        prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
+        cwd=PROJECT_DIR, timeout=90, label="backfill")
     if result.returncode != 0:
         log(f"  Warning: fetch failed for {start}→{end}: {result.stderr[:120]}")
         return []

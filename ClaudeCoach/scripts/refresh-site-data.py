@@ -274,6 +274,49 @@ def _ctl_project(start_ctl, daily_tss_fn, days):
     return series
 
 
+def _ctl_target_milestones(athlete_cfg, current_ctl, today):
+    """Phase CTL milestones the planner is aiming for — the SINGLE SOURCE shared by
+    the Jamie (post_process) and generic athlete paths, so the site target line can
+    never drift from the plan. Uses configured ctl_targets.phase_ctl when present
+    (e.g. Jamie), else derives from race_min (mirrors plan_tools exactly, e.g.
+    Kathryn/Calum). Returns a list of {date,ctl,label} or None if no CTL basis."""
+    ct = athlete_cfg.get("ctl_targets") or {}
+    pt = athlete_cfg.get("phase_tss") or {}
+    plan_start_str = athlete_cfg.get("plan_start")
+    race_str = athlete_cfg.get("race_date")
+    if not (plan_start_str and race_str and (ct.get("phase_ctl") or ct.get("race_min"))):
+        return None
+    plan_start = date.fromisoformat(plan_start_str)
+    race_dt    = date.fromisoformat(race_str)
+    ends = {"base": pt.get("base_end_week", 6), "build": pt.get("build_end_week", 10),
+            "specific": pt.get("specific_end_week", 14), "peak": pt.get("peak_end_week", 17)}
+    phase_ctl = ct.get("phase_ctl")
+    if phase_ctl:
+        derived = {k: phase_ctl.get(k) for k in ("base", "build", "specific", "peak")}
+    else:
+        sys.path.insert(0, str(BASE / "ironman-analysis"))
+        from primitives.load import derive_phase_ctl_targets
+        derived = derive_phase_ctl_targets(
+            current_ctl, int(ct["race_min"]), plan_start,
+            ends["base"], ends["build"], ends["specific"], ends["peak"],
+            float(athlete_cfg.get("max_ctl_ramp_per_week", 5.0)),
+            float(athlete_cfg.get("taper_overshoot", 1.15)), today=today)
+    ms = {}
+    for label, key in (("End Base", "base"), ("End Build", "build"),
+                       ("Specific", "specific"), ("Peak", "peak")):
+        if derived.get(key) is None:
+            continue
+        md = plan_start + timedelta(weeks=ends[key])
+        # First-write wins so collapsed phases keep the earlier, clearer label.
+        if today <= md <= race_dt and md.isoformat() not in ms:
+            ms[md.isoformat()] = {"date": md.isoformat(), "ctl": derived[key], "label": label}
+    race_ctl = ct.get("race_min") or derived.get("peak")
+    if race_ctl is not None:
+        ms[race_dt.isoformat()] = {"date": race_dt.isoformat(),
+                                   "ctl": int(race_ctl), "label": "Race day"}
+    return sorted(ms.values(), key=lambda m: m["date"]) or None
+
+
 def _phase_daily_tss(d):
     """Return planned daily TSS based on phase (week number from PLAN_START).
     Calibrated to 2025 actuals (spring ~110/day, peak ~133/day).
@@ -363,11 +406,18 @@ def post_process(data):
         week = max(1, math.ceil((d - PLAN_START).days / 7))
         return 0 if week == sick_week_num else _phase_daily_tss(d)
 
+    # Jamie's config (phase_ctl) drives the Target CTL line — same helper as every
+    # other athlete, so the displayed target tracks athletes.json automatically.
+    try:
+        _jamie_cfg = json.loads((BASE / "config/athletes.json").read_text()).get("jamie", {})
+    except Exception:
+        _jamie_cfg = {}
     data["ctlProjection"] = {
         "current_trend":    _ctl_project(current_ctl, current_trend_tss, days_to_race),
         "planned_build":    _ctl_project(current_ctl, _phase_daily_tss, days_to_race),
         "planned_sessions": _ctl_project(current_ctl, planned_sessions_tss, days_to_race),
         "sick_week":        _ctl_project(current_ctl, sick_week_tss, days_to_race),
+        "target_milestones": _ctl_target_milestones(_jamie_cfg, current_ctl, today),
         "race_date": RACE_DATE.isoformat(),
         "target_ctl_min": 105,
         "target_ctl_max": 115,
@@ -821,17 +871,9 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 ends["base"], ends["build"], ends["specific"], ends["peak"],
                 max_ramp, taper_overshoot, today=today)
 
-            # Target CTL milestones the planner is actually aiming for (deduped by date).
-            milestones = {}
-            for label, key in (("End Base", "base"), ("End Build", "build"),
-                               ("Specific", "specific"), ("Peak", "peak")):
-                md = plan_start_dt + timedelta(weeks=ends[key])
-                if today <= md <= race_dt:
-                    milestones[md.isoformat()] = {"date": md.isoformat(),
-                                                  "ctl": derived[key], "label": label}
-            milestones[race_dt.isoformat()] = {"date": race_dt.isoformat(),
-                                               "ctl": int(race_min), "label": "Race day"}
-            target_milestones = sorted(milestones.values(), key=lambda m: m["date"])
+            # Target CTL milestones — shared single-source helper (handles configured
+            # phase_ctl and race_min-derived identically for every athlete).
+            target_milestones = _ctl_target_milestones(athlete_cfg, current_ctl, today)
 
             # Planned build: ramp to the peak target then taper, using the same
             # required-TSS maths the planner prescribes (not a static phase table).

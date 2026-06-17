@@ -31,6 +31,8 @@ SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE.parent / "lib"))
+import claude_call
+HEARTBEAT_FILE = BASE.parent / ".bot_heartbeat"  # touched each poll loop; watched by bot-watchdog.py
 try:
     import charts as _charts
 except Exception:
@@ -1802,10 +1804,9 @@ def _lookup_race(race_name: str, race_date: str) -> dict:
         f'Use null for any field you cannot find. Return ONLY the JSON.'
     )
     try:
-        result = subprocess.run(
-            [CLAUDE_BIN, "-p", prompt, "--allowedTools", "WebSearch", "--model", MODEL_SONNET],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-            cwd=str(PROJECT_DIR), timeout=90,
+        result = claude_call.run_claude(
+            prompt, model=claude_call.SONNET, allowed_tools="WebSearch",
+            cwd=str(PROJECT_DIR), timeout=90, label="race-prefill",
         )
         raw = (result.stdout or "").strip()
         m = re.search(r'\{.*\}', raw, re.DOTALL)
@@ -2357,6 +2358,12 @@ def main():
 
     offset = 0
     while True:
+        # Liveness heartbeat — bot-watchdog.py restarts the service if this goes stale,
+        # so a wedged poll loop can't sit dead silently (no systemd watchdog needed).
+        try:
+            HEARTBEAT_FILE.write_text(datetime.now().isoformat())
+        except Exception:
+            pass
         # Reload athlete registry on each poll cycle so new athletes are picked up without restart
         athletes = load_athletes()
 
