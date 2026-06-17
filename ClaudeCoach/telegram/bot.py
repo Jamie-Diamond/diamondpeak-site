@@ -147,57 +147,23 @@ def select_model(text: str, history=None) -> str:
     return MODEL_OPUS  # safe default — never silently downgrade the unknown
 
 
+# Persistent reply keyboard (expense-bot style) — always pinned at the bottom of the
+# chat. Tapping a button sends its label as a message; the labels are routed by
+# fast_path's _MENU_MAP (action buttons) or fall through to Claude (the two questions).
+MENU_KEYBOARD = {
+    "keyboard": [
+        ["Today's session", "How am I looking?"],
+        ["📈 Graphs", "🔄 Replan week"],
+        ["🔍 Check activity"],
+    ],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
+
 def build_keyboard(slug=None):
-    now  = datetime.now()
-    hour = now.hour
-    wday = now.weekday()  # 0=Mon … 6=Sun
-
-    # Per-athlete state file (activity-watcher writes to athletes/{slug}/)
-    if slug:
-        last_act_file = BASE.parent / "athletes" / slug / "last_activity_state.json"
-    else:
-        last_act_file = BASE.parent / "last_activity_state.json"
-    post_session = False
-    if last_act_file.exists():
-        try:
-            st = json.loads(last_act_file.read_text())
-            ts = st.get("notified_at")
-            if ts:
-                notified = datetime.fromisoformat(ts)
-                post_session = (now - notified).total_seconds() < 10800
-        except Exception:
-            pass
-
-    if post_session:
-        # Just finished a session — offer logging and analysis, not general form check
-        buttons = [
-            {"text": "Log session",      "callback_data": "log session"},
-            {"text": "Analyse session",  "callback_data": "analyse this session"},
-        ]
-    elif wday == 6 and hour >= 18:  # Sunday evening
-        # Weekly review fires automatically via cron; these let athlete re-fetch or check ahead
-        buttons = [
-            {"text": "How was this week?", "callback_data": "show me this week"},
-            {"text": "What's next week?",  "callback_data": "what's the plan for next week?"},
-        ]
-    elif 5 <= hour < 10:  # morning
-        buttons = [
-            {"text": "Today's session",   "callback_data": "what's today's session?"},
-            {"text": "How am I looking?", "callback_data": "how am I looking?"},
-        ]
-    else:
-        buttons = [
-            {"text": "Today's session",   "callback_data": "what's today's session?"},
-            {"text": "How am I looking?", "callback_data": "how am I looking?"},
-        ]
-    graph_row = [
-        {"text": "📈 Graphs", "callback_data": "/graphs"},
-    ]
-    plan_row = [
-        {"text": "🔄 Replan week",    "callback_data": "/replan"},
-        {"text": "🔍 Check activity", "callback_data": "/activity"},
-    ]
-    return {"inline_keyboard": [buttons, graph_row, plan_row]}
+    """The always-on menu. (slug kept for call-site compatibility; menu is static.)"""
+    return MENU_KEYBOARD
 
 TOOLS = "Read,Write,Edit,Bash"
 # IcuSync MCP tools are intentionally excluded — the MCP connector is bound to a single
@@ -501,6 +467,13 @@ _GRAPHS_RE       = re.compile(r'^/?graphs\s*$', re.I)
 _DURABILITY_RE   = re.compile(r'^/?durability\s*$', re.I)
 _RECOVERY_RE     = re.compile(r'^/?recovery\s*$', re.I)
 _COMPLIANCE_RE   = re.compile(r'^/?compliance\s*$', re.I)
+
+# Persistent-menu button labels (with emoji) → fast-path sentinels.
+_MENU_MAP = {
+    "📈 graphs":         "__GRAPHS__",
+    "🔄 replan week":    "__REPLAN__",
+    "🔍 check activity": "__ACTIVITY_CHECK__",
+}
 _STRENGTH_RE     = re.compile(
     r'^(?:strength(?:\s+session)?|gym(?:\s+session)?|lift(?:ing)?|'
     r'what(?:\'s|\s+is)\s+(?:today\'?s?\s+)?(?:strength|gym)(?:\s+session)?)\s*$',
@@ -1062,6 +1035,9 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
     """
     today = date.today().isoformat()
     txt   = text.strip()
+
+    if txt.lower() in _MENU_MAP:           # persistent-menu button taps
+        return _MENU_MAP[txt.lower()]
 
     if _WEEK_CMD_RE.match(txt):
         return _week_stats(slug, athlete_cfg)
