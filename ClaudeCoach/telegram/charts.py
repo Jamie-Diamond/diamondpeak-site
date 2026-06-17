@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Chart generation for ClaudeCoach.
 
-fitness / form / recovery / durability / compliance render LOCALLY with matplotlib
-(Agg backend → PNG bytes). The remaining charts (session / week / power-curve / load)
-still use QuickChart.io (Chart.js 4) via _fetch.
+All charts render LOCALLY with matplotlib (Agg backend → PNG bytes): fitness, form,
+recovery, durability, compliance, load, week, session, power-curve. The legacy
+QuickChart.io path (_fetch / QUICKCHART / the *_annotation/_box/_rgba helpers) is
+retained as cheap insurance but is no longer wired to any chart.
 """
 
 import json, math, ssl, urllib.request
@@ -567,7 +568,8 @@ def load_chart(payload, coaching_level="mid"):
     """
     payload: {"today":"MM-DD","days":[{"date":"YYYY-MM-DD","tsb":-8.7,
               "activities":[{"sport":"Ride","tss":117,"dur":120,"status":"completed"},...]},...]}
-    Stacked TSS bars by sport (actual=solid, planned=28% alpha) + TSB line on right axis.
+    Stacked TSS bars by sport (actual solid, planned faded) + TSB line on a right axis
+    with fresh/load/heavy zone bands. Local matplotlib render.
     """
     if isinstance(payload, dict):
         days      = payload.get("days", [])
@@ -582,133 +584,95 @@ def load_chart(payload, coaching_level="mid"):
     if not days:
         return None
 
+    import numpy as np
     SPORTS = ["Ride", "Run", "Swim", "Strength", "Other"]
-    BASE   = {"Ride": "#1d6840", "Run": "#c0392b", "Swim": "#1a5276", "Strength": "#7f8c8d", "Other": "#b0aaa0"}
+    BASE   = {"Ride": "#1d6840", "Run": "#c0392b", "Swim": "#1a5276",
+              "Strength": "#7f8c8d", "Other": "#b0aaa0"}
 
-    labels   = [d["date"][5:] for d in days]
-    datasets = []
+    mmdd = [d["date"][5:] for d in days]
+    n    = len(days)
+    x    = np.arange(n)
 
+    fig, ax = plt.subplots(figsize=(7.8, 4.4))
+    ax1 = ax.twinx()
+    _style_ax(ax)
+    _style_ax(ax1, twin=True)
+
+    # Stacked TSS bars by sport; planned segments faded, actual solid.
+    bottom  = np.zeros(n)
+    present = []
     for sport in SPORTS:
-        tss_vals, bg_vals, has_data = [], [], False
+        tss_vals, colours, has_data = [], [], False
         for d in days:
-            sport_tss, is_planned = 0, False
+            sport_tss, is_planned = 0.0, False
             for a in d.get("activities", []):
                 if _norm_sport(a.get("sport", "")) == sport:
-                    sport_tss  += a.get("tss") or 0
+                    sport_tss += a.get("tss") or 0
                     if a.get("status") == "planned":
                         is_planned = True
             tss_vals.append(round(sport_tss, 1))
             if sport_tss > 0:
                 has_data = True
             alpha = (_PLANNED_ALPHA if is_planned else 0.87) if sport_tss > 0 else 0
-            bg_vals.append(_rgba(BASE.get(sport, "#9b59b6"), alpha))
-
+            colours.append(_col(BASE[sport], alpha))
         if not has_data:
             continue
+        ax.bar(x, tss_vals, bottom=bottom, width=0.8, color=colours, zorder=2)
+        bottom += np.array(tss_vals)
+        present.append(sport)
 
-        datasets.append({
-            "type": "bar", "label": sport,
-            "data": tss_vals, "backgroundColor": bg_vals,
-            "solidColor": BASE.get(sport, "#9b59b6"),
-            "stack": "tss", "order": 2, "yAxisID": "y",
-        })
-
-    def _tsb_dot(v):
-        if v > 5:   return "rgba(46,156,142,0.90)"   # teal — fresh
-        if v >= -20: return "rgba(201,135,31,0.90)"  # amber — load
-        return "rgba(192,57,43,0.90)"                # red — heavy
-
+    # TSB line on the right twin, with coloured zone bands behind it.
     if seed_ctl is not None and seed_atl is not None:
         tsb_vals = _project_tsb(days, seed_ctl, seed_atl)
     else:
         tsb_vals = [round(d.get("tsb") or 0, 1) for d in days]
-    datasets.append({
-        "type": "line", "label": L["load_tsb"],
-        "data": tsb_vals,
-        "borderColor": "rgba(70,70,70,0.80)",
-        "backgroundColor": "transparent",
-        "borderWidth": 2.5, "pointRadius": 7, "pointHoverRadius": 9,
-        "pointBackgroundColor": [_tsb_dot(v) for v in tsb_vals],
-        "pointBorderColor": "rgba(255,255,255,0.85)",
-        "pointBorderWidth": 1.5,
-        "fill": False, "tension": 0.3, "order": 1, "yAxisID": "y1",
-    })
 
-    annotations = {
-        "zone_fresh": {
-            "type": "box", "yMin": 5, "yMax": 40, "yScaleID": "y1",
-            "backgroundColor": "rgba(46,156,142,0.10)",
-            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
-        },
-        "zone_ok": {
-            "type": "box", "yMin": 0, "yMax": 5, "yScaleID": "y1",
-            "backgroundColor": "rgba(120,200,140,0.10)",
-            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
-        },
-        "zone_load": {
-            "type": "box", "yMin": -20, "yMax": 0, "yScaleID": "y1",
-            "backgroundColor": "rgba(200,160,60,0.08)",
-            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
-        },
-        "zone_heavy": {
-            "type": "box", "yMin": -60, "yMax": -20, "yScaleID": "y1",
-            "backgroundColor": "rgba(192,57,43,0.09)",
-            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
-        },
-        "tsb_zero": {
-            "type": "line", "scaleID": "y1",
-            "value": 0,
-            "borderColor": "rgba(100,100,100,0.28)",
-            "borderWidth": 1, "borderDash": [4, 3],
-        },
-    }
-    ann = _today_annotation(today, labels)
-    if ann:
-        annotations["today"] = ann
+    tlo = min(tsb_vals + [-25]); thi = max(tsb_vals + [10])
+    tpad = max(3, (thi - tlo) * 0.10)
+    ax1.set_ylim(tlo - tpad, thi + tpad)
+    y1lo, y1hi = ax1.get_ylim()
+    ax1.axhspan(5, y1hi,    facecolor=_CTL_COL,  alpha=0.09, zorder=0)   # fresh
+    ax1.axhspan(0, 5,       facecolor="#78c88c", alpha=0.10, zorder=0)   # ok
+    ax1.axhspan(-20, 0,     facecolor="#c8a03c", alpha=0.08, zorder=0)   # load
+    ax1.axhspan(y1lo, -20,  facecolor="#c0392b", alpha=0.09, zorder=0)   # heavy
+    ax1.axhline(0, color=(0.4, 0.4, 0.4, 0.3), linewidth=0.8,
+                linestyle=(0, (4, 3)), zorder=1)
 
-    config = {
-        "type": "bar",
-        "data": {"labels": labels, "datasets": datasets},
-        "options": {
-            "plugins": {
-                "title": {
-                    "display": True,
-                    "text": f"Training load — {L['load_tss']} by sport  ·  {L['load_tsb']} (right axis)",
-                    "font": {"size": 14},
-                },
-                "legend": {
-                    "position": "top",
-                    "labels": {
-                        "boxWidth": 12, "font": {"size": 11},
-                        "usePointStyle": False,
-                        "generateLabels": "function(chart){return chart.data.datasets.map(function(ds,i){var meta=chart.getDatasetMeta(i);var fill=ds.solidColor||(Array.isArray(ds.backgroundColor)?ds.backgroundColor[0]:ds.backgroundColor);var stroke=ds.type==='line'?ds.borderColor:fill;return{text:ds.label,fillStyle:ds.type==='line'?'transparent':fill,strokeStyle:stroke,lineDash:ds.borderDash||[],lineWidth:ds.type==='line'?2:0,hidden:!chart.getDataVisibility(i),datasetIndex:i,pointStyle:ds.type==='line'?'line':'rect',rotation:0};})}",
-                    },
-                },
-                "annotation": {"annotations": annotations},
-            },
-            "scales": {
-                "x": {
-                    "stacked": True,
-                    "ticks": {"maxRotation": 45, "autoSkip": True,
-                              "maxTicksLimit": 15, "font": {"size": 10}},
-                },
-                "y": {
-                    "stacked": True, "beginAtZero": True, "position": "left",
-                    "title": {"display": True, "text": L["load_tss"], "font": {"size": 12}},
-                    "ticks": {"font": {"size": 11}},
-                    "grid": {"color": "rgba(0,0,0,0.06)"},
-                },
-                "y1": {
-                    "position": "right",
-                    "title": {"display": True, "text": L["load_tsb"], "font": {"size": 12}},
-                    "ticks": {"font": {"size": 11}},
-                    "suggestedMin": -40, "suggestedMax": 20,
-                    "grid": {"drawOnChartArea": False},
-                },
-            },
-        },
-    }
-    return _fetch(config, width=760, height=460)
+    def _tsb_dot(v):
+        if v > 5:    return "#2e9c8e"   # fresh
+        if v >= -20: return "#c9871f"   # load
+        return "#c0392b"                # heavy
+
+    ax1.plot(x, tsb_vals, color=_col(BRAND_SECOND, 0.7), linewidth=1.4, zorder=4)
+    ax1.scatter(x, tsb_vals, s=34, color=[_tsb_dot(v) for v in tsb_vals],
+                edgecolors="white", linewidths=1.0, zorder=5)
+
+    # Today line.
+    if today in mmdd:
+        ax.axvline(mmdd.index(today), color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=6)
+
+    # Sparse, rotated date ticks (bars are categorical → tick by index).
+    step = max(1, n // 12)
+    ticks = list(range(0, n, step))
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([days[i]["date"][5:] for i in ticks], rotation=45, ha="right",
+                       fontsize=8.5, color=BRAND_MUTED)
+    ax.set_xlim(-0.6, n - 0.4)
+
+    ax.set_ylabel(L["load_tss"], fontsize=10.5, color=BRAND_MUTED)
+    ax.set_ylim(0, max(bottom.max(), 1) * 1.12)
+    ax1.set_ylabel(L["load_tsb"], fontsize=10.5, color=BRAND_SECOND)
+    ax1.tick_params(axis="y", labelcolor=BRAND_SECOND)
+    ax.set_title(f"Training load — {L['load_tss']} by sport  ·  {L['load_tsb']} (right)",
+                 fontsize=12, fontweight="bold", color=BRAND_INK)
+
+    handles = [mpatches.Patch(facecolor=_col(BASE[s], 0.87), label=s) for s in present]
+    handles.append(Line2D([0], [0], color=_col(BRAND_SECOND, 0.7), lw=1.4,
+                          marker="o", markerfacecolor="#c9871f", markeredgecolor="white",
+                          markersize=7, label=L["load_tsb"]))
+    ax.legend(handles=handles, loc="upper left", frameon=False, fontsize=8.5,
+              ncol=min(len(handles), 4), columnspacing=1.0, handletextpad=0.4)
+    return _render(fig)
 
 
 # ── Week calendar ─────────────────────────────────────────────────────────────
@@ -758,90 +722,58 @@ def week_chart(events, title="Training week", week_start=None):
         else:
             planned_tss[i] += tss
 
-    datasets = []
+    import numpy as np
+    x = np.arange(7)
 
-    if any(planned_tss):
-        datasets.append({
-            "type": "line",
-            "label": "Planned TSS",
-            "data": [v or None for v in planned_tss],
-            "borderColor": "rgba(100,100,100,0.65)",
-            "backgroundColor": "transparent",
-            "borderWidth": 2,
-            "borderDash": [5, 4],
-            "pointRadius": 6,
-            "pointBackgroundColor": "rgba(100,100,100,0.45)",
-            "fill": False,
-            "spanGaps": False,
-            "order": 0,
-        })
-
-    for sport in sports:
-        data = [round(v, 1) for v in actual.get(sport, [0]*7)]
-        if not any(data):
-            continue
-        colour = SPORT_COLOURS.get(sport, SPORT_COLOURS["Other"])
-        label  = "Strength" if sport == "WeightTraining" else sport
-        datasets.append({
-            "type": "bar",
-            "label": label,
-            "data": data,
-            "backgroundColor": colour,
-            "stack": "actual",
-            "order": 1,
-        })
-
-    if not datasets:
+    # Drop sports with no actual TSS this week, keeping the sport order.
+    active = [s for s in sports if any(actual.get(s, [0]*7))]
+    if not active and not any(planned_tss):
         return None
 
-    annotations = {
-        "sat": {
-            "type": "box",
-            "xMin": labels[5], "xMax": labels[5],
-            "backgroundColor": "rgba(0,0,0,0.04)",
-            "borderWidth": 0,
-            "drawTime": "beforeDatasetsDraw",
-        },
-        "sun": {
-            "type": "box",
-            "xMin": labels[6], "xMax": labels[6],
-            "backgroundColor": "rgba(0,0,0,0.04)",
-            "borderWidth": 0,
-            "drawTime": "beforeDatasetsDraw",
-        },
-    }
+    fig, ax = plt.subplots(figsize=(7.6, 4.4))
+    _style_ax(ax)
 
-    config = {
-        "type": "bar",
-        "data": {"labels": labels, "datasets": datasets},
-        "options": {
-            "plugins": {
-                "title": {"display": True, "text": title, "font": {"size": 15}},
-                "legend": {"position": "top", "labels": {"boxWidth": 14, "font": {"size": 12}}},
-                "annotation": {"annotations": annotations},
-            },
-            "scales": {
-                "x": {"ticks": {"font": {"size": 13}}},
-                "y": {
-                    "beginAtZero": True,
-                    "title": {"display": True, "text": "TSS", "font": {"size": 13}},
-                    "ticks": {"font": {"size": 12}},
-                    "stacked": True,
-                },
-            },
-        },
-    }
-    return _fetch(config, height=460)
+    # Weekend shading (Sat/Sun = index 5,6) in categorical index space.
+    ax.axvspan(4.5, 6.5, facecolor=(0, 0, 0, 0.035), zorder=0)
+
+    # Actual TSS as stacked bars by sport.
+    bottom = np.zeros(7)
+    for sport in active:
+        data   = np.array([round(v, 1) for v in actual.get(sport, [0]*7)])
+        colour = SPORT_COLOURS.get(sport, SPORT_COLOURS["Other"])
+        label  = "Strength" if sport == "WeightTraining" else sport
+        ax.bar(x, data, bottom=bottom, width=0.7, color=_col(colour, 0.87),
+               zorder=2, label=label)
+        bottom += data
+
+    # Planned TSS as a dashed line with markers (None days leave gaps).
+    if any(planned_tss):
+        py = np.array([v if v else np.nan for v in planned_tss], dtype=float)
+        ax.plot(x, py, color=_col(BRAND_SECOND, 0.7), linewidth=1.6,
+                linestyle=(0, (5, 4)), zorder=4)
+        ax.scatter(x, py, s=42, color=_col(BRAND_SECOND, 0.6),
+                   edgecolors="white", linewidths=1.0, zorder=5, label="Planned TSS")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=11, color=BRAND_MUTED)
+    ax.set_xlim(-0.6, 6.6)
+    ax.set_ylabel("TSS", fontsize=10.5, color=BRAND_MUTED)
+    ax.set_ylim(0, max(float(bottom.max()), max(planned_tss + [0]), 1) * 1.12)
+    ax.set_title(title, fontsize=12.5, fontweight="bold", color=BRAND_INK)
+    ax.legend(loc="upper right", frameon=False, fontsize=9.5, ncol=2,
+              columnspacing=1.2, handletextpad=0.5)
+    return _render(fig)
 
 
 # ── Session structure ─────────────────────────────────────────────────────────
 
 def session_chart(name, intervals, ftp=316):
-    """intervals: [{duration_seconds, average_power, type}]"""
+    """intervals: [{duration_seconds, average_power, type}]
+    Horizontal stacked bar of segments coloured by power zone. Local matplotlib render."""
     if not intervals:
         return None
 
-    datasets = []
+    segs = []
     for seg in intervals:
         dur_min = round(seg.get("duration_seconds", 0) / 60, 1)
         if dur_min < 0.5:
@@ -852,54 +784,48 @@ def session_chart(name, intervals, ftp=316):
         if pwr and ftp:
             pct = pwr / ftp
             if pct < 0.55:
-                zone, colour = "Z1",   ZONE_COLOURS["Z1"]
+                zone = "Z1"
             elif pct < 0.75:
-                zone, colour = "Z2",   ZONE_COLOURS["Z2"]
+                zone = "Z2"
             elif pct < 0.90:
-                zone, colour = "Z3",   ZONE_COLOURS["Z3"]
+                zone = "Z3"
             elif pct < 1.05:
-                zone, colour = "Z4",   ZONE_COLOURS["Z4"]
+                zone = "Z4"
             else:
-                zone, colour = "Z5+",  ZONE_COLOURS["Z5+"]
+                zone = "Z5+"
         elif itype == "RECOVERY":
-            zone, colour = "Recovery", ZONE_COLOURS["Recovery"]
+            zone = "Recovery"
         else:
-            zone, colour = "WU/CD",    ZONE_COLOURS["WU/CD"]
+            zone = "WU/CD"
+        segs.append((zone, dur_min, ZONE_COLOURS[zone]))
 
-        datasets.append({
-            "label": f"{zone} ({dur_min}m)",
-            "data": [dur_min],
-            "backgroundColor": colour,
-            "stack": "s",
-        })
-
-    if not datasets:
+    if not segs:
         return None
 
-    total = sum(d["data"][0] for d in datasets)
-    config = {
-        "type": "bar",
-        "data": {
-            "labels": [f"{name}  ({round(total)} min)"],
-            "datasets": datasets,
-        },
-        "options": {
-            "indexAxis": "y",
-            "plugins": {
-                "title": {"display": True, "text": "Session structure", "font": {"size": 15}},
-                "legend": {"position": "bottom", "labels": {"boxWidth": 14, "font": {"size": 12}}},
-            },
-            "scales": {
-                "x": {
-                    "stacked": True,
-                    "title": {"display": True, "text": "Minutes", "font": {"size": 12}},
-                    "ticks": {"beginAtZero": True, "font": {"size": 12}},
-                },
-                "y": {"stacked": True, "ticks": {"font": {"size": 13}}},
-            },
-        },
-    }
-    return _fetch(config, height=300)
+    total = sum(d for _, d, _ in segs)
+    fig, ax = plt.subplots(figsize=(7.6, 2.6))
+    _style_ax(ax)
+    ax.grid(False)
+
+    left = 0.0
+    seen = set()
+    for zone, dur, colour in segs:
+        ax.barh(0, dur, left=left, height=0.6, color=_col(colour, 0.92),
+                edgecolor="white", linewidth=0.8, zorder=2,
+                label=zone if zone not in seen else None)
+        seen.add(zone)
+        left += dur
+
+    ax.set_yticks([])
+    ax.set_ylim(-0.5, 0.5)
+    ax.set_xlim(0, total)
+    ax.set_xlabel("Minutes", fontsize=10.5, color=BRAND_MUTED)
+    ax.spines["left"].set_visible(False)
+    ax.set_title(f"Session structure — {name}  ({round(total)} min)",
+                 fontsize=12, fontweight="bold", color=BRAND_INK)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.32), ncol=min(len(seen), 7),
+              frameon=False, fontsize=9, columnspacing=1.0, handletextpad=0.4)
+    return _render(fig)
 
 
 # ── Power curve ───────────────────────────────────────────────────────────────
@@ -912,69 +838,49 @@ def power_curve_chart(efforts, ftp=316):
     if not efforts:
         return None
 
+    import numpy as np
     labels = [e["label"] for e in efforts]
     powers = [e["power"] for e in efforts]
     max_p  = max(powers) if powers else ftp * 2
+    x      = np.arange(len(labels))
 
-    zone_annotations = {
-        "z1": {"type": "box", "yMin": 0,          "yMax": ftp * 0.55, "backgroundColor": "rgba(200,200,200,0.07)", "borderWidth": 0},
-        "z2": {"type": "box", "yMin": ftp * 0.55, "yMax": ftp * 0.75, "backgroundColor": "rgba(86,160,211,0.07)",  "borderWidth": 0},
-        "z3": {"type": "box", "yMin": ftp * 0.75, "yMax": ftp * 0.90, "backgroundColor": "rgba(245,166,35,0.08)",  "borderWidth": 0},
-        "z4": {"type": "box", "yMin": ftp * 0.90, "yMax": ftp * 1.05, "backgroundColor": "rgba(224,92,0,0.09)",    "borderWidth": 0},
-        "z5": {"type": "box", "yMin": ftp * 1.05, "yMax": max_p * 1.1, "backgroundColor": "rgba(192,57,43,0.07)", "borderWidth": 0},
-        "ftp": {
-            "type": "line",
-            "yMin": ftp, "yMax": ftp,
-            "borderColor": "rgba(26,82,118,0.55)",
-            "borderWidth": 1.5,
-            "borderDash": [5, 4],
-            "label": {
-                "display": True,
-                "content": f"FTP {ftp}W",
-                "position": "end",
-                "backgroundColor": "rgba(255,255,255,0.85)",
-                "color": C_CTL,
-                "font": {"size": 11},
-            },
-        },
-    }
+    BLUE = _col(C_CTL)
+    fig, ax = plt.subplots(figsize=(7.6, 4.6))
+    _style_ax(ax)
 
-    config = {
-        "type": "line",
-        "data": {
-            "labels": labels,
-            "datasets": [{
-                "label": "Best power",
-                "data": powers,
-                "borderColor": C_CTL,
-                "backgroundColor": "rgba(26,82,118,0.15)",
-                "borderWidth": 3,
-                "pointRadius": 5,
-                "pointBackgroundColor": C_CTL,
-                "fill": "origin",
-                "tension": 0.35,
-            }],
-        },
-        "options": {
-            "plugins": {
-                "title": {"display": True, "text": "Power curve — best efforts", "font": {"size": 15}},
-                "legend": {"display": False},
-                "annotation": {"annotations": zone_annotations},
-            },
-            "scales": {
-                "x": {
-                    "title": {"display": True, "text": "Duration", "font": {"size": 12}},
-                    "ticks": {"font": {"size": 12}},
-                },
-                "y": {
-                    "title": {"display": True, "text": "Watts", "font": {"size": 12}},
-                    "ticks": {"font": {"size": 11}},
-                    "beginAtZero": False,
-                },
-            },
-        },
-    }
-    return _fetch(config, height=480)
+    ymax = max_p * 1.08
+    # Power-zone bands behind the curve.
+    ax.axhspan(0,          ftp * 0.55, facecolor="#c8c8c8", alpha=0.10, zorder=0)
+    ax.axhspan(ftp * 0.55, ftp * 0.75, facecolor="#56a0d3", alpha=0.10, zorder=0)
+    ax.axhspan(ftp * 0.75, ftp * 0.90, facecolor="#f5a623", alpha=0.11, zorder=0)
+    ax.axhspan(ftp * 0.90, ftp * 1.05, facecolor="#e05c00", alpha=0.11, zorder=0)
+    ax.axhspan(ftp * 1.05, ymax,       facecolor="#c0392b", alpha=0.10, zorder=0)
+
+    # Smoothed best-power curve filled to the floor.
+    if _Pchip is not None and len(x) >= 3:
+        grid = np.linspace(x[0], x[-1], 320)
+        gy   = _Pchip(x, np.asarray(powers, dtype=float))(grid)
+        ax.plot(grid, gy, color=BLUE, linewidth=1.8, alpha=0.95, zorder=4)
+        ax.fill_between(grid, gy, 0, color=BLUE, alpha=0.12, zorder=2)
+    else:
+        ax.plot(x, powers, color=BLUE, linewidth=1.8, alpha=0.95, zorder=4)
+        ax.fill_between(x, powers, 0, color=BLUE, alpha=0.12, zorder=2)
+    ax.scatter(x, powers, s=34, color=BLUE, edgecolors="white", linewidths=1.0, zorder=5)
+
+    # FTP reference line + label.
+    ax.axhline(ftp, color=_col(C_CTL, 0.55), linewidth=1.2, linestyle=(0, (5, 4)), zorder=3)
+    ax.text(x[-1], ftp, f" FTP {ftp}W", va="bottom", ha="right", fontsize=9.5,
+            color=_col(C_CTL), zorder=6,
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.8))
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=9.5, color=BRAND_MUTED)
+    ax.set_xlim(-0.3, len(labels) - 0.7)
+    ax.set_ylim(min(powers) * 0.9 if powers else 0, ymax)
+    ax.set_xlabel("Duration", fontsize=10.5, color=BRAND_MUTED)
+    ax.set_ylabel("Watts", fontsize=10.5, color=BRAND_MUTED)
+    ax.set_title("Power curve — best efforts", fontsize=12.5, fontweight="bold", color=BRAND_INK)
+    return _render(fig)
 
 
 # ── Recovery chart (HRV vs own baseline + RHR + sleep) ─────────────────────────
@@ -1022,21 +928,14 @@ def recovery_chart(payload, coaching_level="mid"):
 
     baseline = np.array(baseline); band_lo = np.array(band_lo); band_hi = np.array(band_hi)
 
-    fig, ax = plt.subplots(figsize=(7.6, 4.2))
-    ax1 = ax.twinx()    # RHR
-    ax3 = ax.twinx()    # sleep (hidden)
+    # Two stacked panels sharing the date axis: HRV+RHR (tall) over Sleep (short).
+    fig, (ax, axs) = plt.subplots(
+        2, 1, figsize=(7.6, 5.0), sharex=True,
+        gridspec_kw={"height_ratios": [3, 1], "hspace": 0.12})
+    ax1 = ax.twinx()    # RHR (inverted so lower RHR sits high = "better up")
     _style_ax(ax)
     _style_ax(ax1, twin=True)
-
-    # Sleep bars first, pinned to the bottom ~quarter via a tall hidden scale.
-    smax = max([s for s in sleep if s is not None], default=8) or 8
-    sleep_x = [d for d, s in zip(dts, sleep) if s is not None]
-    sleep_y = [s for s in sleep if s is not None]
-    if sleep_y:
-        ax3.bar(sleep_x, sleep_y, width=0.8, color=(0.47, 0.47, 0.47, 0.16),
-                zorder=0, edgecolor="none")
-    ax3.set_ylim(0, smax * 4)
-    ax3.axis("off")
+    _style_ax(axs)
 
     # HRV ±1SD band + baseline line. The band stays on the raw points (it's a
     # statistical envelope, not a trend); only the baseline LINE is smoothed.
@@ -1062,9 +961,28 @@ def recovery_chart(payload, coaching_level="mid"):
         pad = max(2, (hi - lo) * 0.12)
         ax.set_ylim(lo - pad, hi + pad)
 
-    # Today line + labelled values.
+    # RHR axis: fit, THEN invert (order matters — inverting after set_ylim un-flips).
+    _rvals = [r for r in rhr if r is not None]
+    if _rvals:
+        rlo, rhi = min(_rvals), max(_rvals)
+        rpad = max(1.5, (rhi - rlo) * 0.15)
+        ax1.set_ylim(rlo - rpad, rhi + rpad)
+    ax1.invert_yaxis()   # lower RHR (better) now at the top, aligning with high HRV
+
+    # Sleep bars on the lower panel.
+    smax = max([s for s in sleep if s is not None], default=8) or 8
+    sleep_x = [d for d, s in zip(dts, sleep) if s is not None]
+    sleep_y = [s for s in sleep if s is not None]
+    if sleep_y:
+        axs.bar(sleep_x, sleep_y, width=0.85, color=_col("#6b6256", 0.45),
+                edgecolor="none", zorder=2)
+    axs.set_ylim(0, smax * 1.15)
+    axs.set_ylabel("Sleep (h)", fontsize=9.5, color=BRAND_MUTED)
+
+    # Today line + labelled values (drawn on BOTH panels so they line up).
     if today_dt is not None:
-        ax.axvline(today_dt, color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=6)
+        ax.axvline(today_dt,  color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=6)
+        axs.axvline(today_dt, color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=6)
         ti = mmdd.index(today) if today in mmdd else None
         if ti is not None:
             if hrv[ti] is not None:
@@ -1073,27 +991,29 @@ def recovery_chart(payload, coaching_level="mid"):
                             xytext=(0, 11), ha="center", fontsize=9.5, fontweight="bold", color=HRV_COL,
                             bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=8)
             if rhr[ti] is not None:
+                ax1.scatter([today_dt], [rhr[ti]], s=60, color=RHR_COL, edgecolors="white", linewidths=1.2, zorder=7)
                 ax1.annotate(f"RHR {rhr[ti]:.0f}", (today_dt, rhr[ti]), textcoords="offset points",
-                             xytext=(0, -14), ha="center", fontsize=9.5, fontweight="bold", color=RHR_COL,
+                             xytext=(0, 12), ha="center", fontsize=9.5, fontweight="bold", color=RHR_COL,
                              bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=8)
 
-    ax.set_ylabel("HRV (ms)", fontsize=10.5, color=HRV_COL)
+    ax.set_ylabel("HRV (ms) — higher better", fontsize=10, color=HRV_COL)
     ax.tick_params(axis="y", labelcolor=HRV_COL)
-    ax1.set_ylabel("RHR (bpm)", fontsize=10.5, color=RHR_COL)
+    ax1.set_ylabel("RHR (bpm) — lower better", fontsize=10, color=RHR_COL)
     ax1.tick_params(axis="y", labelcolor=RHR_COL)
     ax1.spines["right"].set_color(RHR_COL)
-    _date_axis(ax, dts)
-    ax.set_title("Recovery — HRV vs baseline", fontsize=12.5, fontweight="bold", color=BRAND_INK)
+    _date_axis(axs, dts)              # date ticks only on the bottom panel
+    plt.setp(ax.get_xticklabels(), visible=False)
+    ax.set_title("Recovery — HRV & resting HR (both: up = better)",
+                 fontsize=12.5, fontweight="bold", color=BRAND_INK)
 
     handles = [
         Line2D([0], [0], marker="o", color="none", markerfacecolor=HRV_COL,
                markeredgecolor="white", markersize=7, label="HRV"),
         Line2D([0], [0], color=HRV_COL, lw=1.8, label="Baseline (7d)"),
         mpatches.Patch(facecolor=HRV_COL, alpha=0.12, label="±1 SD"),
-        Line2D([0], [0], color=RHR_COL, lw=1.4, linestyle=(0, (5, 4)), label="RHR"),
-        mpatches.Patch(facecolor=(0.47, 0.47, 0.47, 0.16), label="Sleep (h)"),
+        Line2D([0], [0], color=RHR_COL, lw=1.4, linestyle=(0, (5, 4)), label="RHR (inv)"),
     ]
-    ax.legend(handles=handles, loc="upper center", ncol=5, frameon=False,
+    ax.legend(handles=handles, loc="upper center", ncol=4, frameon=False,
               fontsize=8.5, bbox_to_anchor=(0.5, 1.0), columnspacing=1.0, handletextpad=0.4)
     return _render(fig)
 
