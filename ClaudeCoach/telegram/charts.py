@@ -1,12 +1,94 @@
 #!/usr/bin/env python3
-"""Chart generation for ClaudeCoach. Uses QuickChart.io (Chart.js 4) — no extra dependencies."""
+"""Chart generation for ClaudeCoach.
+
+fitness / form / recovery / durability / compliance render LOCALLY with matplotlib
+(Agg backend → PNG bytes). The remaining charts (session / week / power-curve / load)
+still use QuickChart.io (Chart.js 4) via _fetch.
+"""
 
 import json, math, ssl, urllib.request
-from datetime import date as _date
+from datetime import date as _date, datetime as _datetime
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
 
 _cafile = "/etc/ssl/cert.pem" if __import__("os").path.exists("/etc/ssl/cert.pem") else None
 SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 QUICKCHART = "https://quickchart.io/chart"
+
+# ── Local-render house style ───────────────────────────────────────────────────
+
+GRID_COL = "#e8e3da"
+
+
+def _render(fig):
+    """Save a figure to PNG bytes (white bg) and close it."""
+    import io
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=110, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def _col(c, alpha=None):
+    """Parse a colour (hex, rgb(), rgba(), or named) → an (r,g,b,a) tuple in 0..1.
+
+    matplotlib rejects CSS rgb()/rgba() strings, and the phase `color` field plus
+    several brand constants are exactly that format, so everything payload- or
+    constant-sourced is routed through here. `alpha` overrides any embedded alpha.
+    """
+    a = 1.0
+    if isinstance(c, str) and c.strip().lower().startswith(("rgb(", "rgba(")):
+        nums = c[c.index("(") + 1:c.rindex(")")].split(",")
+        r = int(float(nums[0])) / 255.0
+        g = int(float(nums[1])) / 255.0
+        b = int(float(nums[2])) / 255.0
+        if len(nums) >= 4:
+            a = float(nums[3])
+        rgba = (r, g, b, a)
+    else:
+        import matplotlib.colors as _mc
+        rgba = _mc.to_rgba(c)
+    if alpha is not None:
+        rgba = (rgba[0], rgba[1], rgba[2], alpha)
+    return rgba
+
+
+def _style_ax(ax, twin=False):
+    """Apply the shared house style to a primary or twin axis."""
+    if twin:
+        ax.spines["top"].set_visible(False)          # keep right spine for the twin series
+    else:
+        ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(True, axis="y", color=GRID_COL, linewidth=0.6, alpha=0.8)
+    ax.set_axisbelow(True)
+    ax.tick_params(labelsize=9)
+
+
+def _parse_dt(s):
+    """YYYY-MM-DD → datetime (date-only)."""
+    return _datetime.strptime(s[:10], "%Y-%m-%d")
+
+
+def _date_axis(ax, dts, max_ticks=9):
+    """Format an x-axis of real datetimes: ~8-10 ticks, '%d %b', rotated 30°."""
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator(maxticks=max_ticks, minticks=4))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
+    if dts:
+        ax.set_xlim(dts[0], dts[-1])
+    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=9)
+
+
+def _mmdd_to_dt(mmdd, dts, mmdd_labels):
+    """Resolve an MM-DD reference to its datetime by index match against the data
+    (never reconstruct a year — the 42+14 window can cross a year boundary)."""
+    if mmdd in mmdd_labels:
+        return dts[mmdd_labels.index(mmdd)]
+    return None
 
 # ── Coaching-level label sets ─────────────────────────────────────────────────
 def _lbl(coaching_level: str) -> dict:
@@ -168,150 +250,111 @@ def _phase_box(ph, labels):
 
 # ── Fitness chart (CTL + ATL) ──────────────────────────────────────────────────
 
+_CTL_COL = "#2e9c8e"   # teal
+_ATL_COL = "#7c4dff"   # purple
+
+
+def _phase_spans(payload, dts, mmdd_labels):
+    """Resolve payload phases → list of (x0_dt, x1_dt, name, color) in datetime space."""
+    out = []
+    for ph in (payload.get("phases", []) if isinstance(payload, dict) else []):
+        d0 = _mmdd_to_dt(ph.get("x0"), dts, mmdd_labels)
+        d1 = _mmdd_to_dt(ph.get("x1"), dts, mmdd_labels)
+        if d0 is not None and d1 is not None and d1 > d0:
+            out.append((d0, d1, ph.get("name", ""), ph.get("color", "rgba(120,120,120,0.06)")))
+    return out
+
+
+def _draw_phase_bands(ax, spans, label_y=None):
+    """Shade phase windows and label them just inside the top of the axis."""
+    for d0, d1, name, col in spans:
+        ax.axvspan(d0, d1, facecolor=_col(col), edgecolor="none", zorder=0)
+        if name:
+            ax.text(d0 + (d1 - d0) / 2, 0.975, name, transform=ax.get_xaxis_transform(),
+                    ha="center", va="top", fontsize=8, color="#8a857c", zorder=1, clip_on=True)
+
+
 def fitness_chart(payload, coaching_level="mid"):
     """
-    payload: {"today":"MM-DD","data":[{date,ctl,atl,tsb},...]}  or bare list.
-    Renders CTL (teal filled) + ATL (purple dashed) — TSB is a separate form_chart.
+    payload: {"today":"MM-DD","data":[{date,ctl,atl,tsb,projected?},...]}  or bare list.
+    CTL (teal filled area, left axis) + ATL (purple dashed, right twin axis).
+    Projected days shaded grey; phase bands; Today line; today dots; ramp box.
     """
     data, today = _parse_fitness_payload(payload)
     if isinstance(payload, dict) and "level" in payload:
         coaching_level = payload["level"]
     L = _lbl(coaching_level)
-    labels = [d["date"][5:] for d in data]
+    if not data:
+        return None
+
+    dts    = [_parse_dt(d["date"]) for d in data]
+    mmdd   = [d["date"][5:] for d in data]
     ctl    = [round(d["ctl"], 1) for d in data]
     atl    = [round(d["atl"], 1) for d in data]
+    ti     = _today_index(data)
+    today_dt = _mmdd_to_dt(today, dts, mmdd)
 
-    # Separate, data-fitted axes so Fitness (CTL) and Fatigue (ATL) each fill the
-    # panel — ATL is more volatile and was squashing the CTL line on a shared axis.
-    def _yr(vals):
-        if not vals:
-            return 40, 130
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    ax1 = ax.twinx()
+    _style_ax(ax)
+    _style_ax(ax1, twin=True)
+
+    # Projected region shading (today → end).
+    if today_dt is not None and dts[-1] > today_dt:
+        ax.axvspan(today_dt, dts[-1], facecolor="#9a9a9a", alpha=0.07, zorder=0)
+
+    # Fit each axis to its own data so neither squashes the other (set before fill
+    # so the area reaches the final axis floor).
+    def _lim(vals):
         lo, hi = min(vals), max(vals)
         pad = max(3, (hi - lo) * 0.12)
-        return int(lo - pad), int(hi + pad) + 1
-    _cmin, _cmax = _yr(ctl)
-    _amin, _amax = _yr(atl)
+        return lo - pad, hi + pad
+    ax.set_ylim(*_lim(ctl))
+    ax1.set_ylim(*_lim(atl))
 
-    # Today index = last non-projected day.
-    ti = _today_index(data)
-    ctl_radius = [0] * len(data)
-    atl_radius = [0] * len(data)
-    if ti is not None:
-        ctl_radius[ti] = 5
-        atl_radius[ti] = 5
+    # CTL filled area on left axis.
+    ax.plot(dts, ctl, color=_CTL_COL, linewidth=2.5, zorder=4)
+    ax.fill_between(dts, ctl, ax.get_ylim()[0], color=_CTL_COL, alpha=0.15, zorder=2)
+    # ATL dashed on right twin.
+    ax1.plot(dts, atl, color=_ATL_COL, linewidth=2.0, linestyle=(0, (6, 3)), zorder=3)
 
-    annotations = {}
-    for i, ph in enumerate(payload.get("phases", []) if isinstance(payload, dict) else []):
-        pb = _phase_box(ph, labels)
-        if pb:
-            annotations[f"phase_{i}"] = pb
-    box = _projected_box(today, labels)
-    if box:
-        annotations["projected"] = box
-    ann = _today_annotation(today, labels)
-    if ann:
-        annotations["today"] = ann
+    # Phase bands.
+    _draw_phase_bands(ax, _phase_spans(payload, dts, mmdd))
 
-    # Today's CTL/ATL values as labelled dots.
-    if ti is not None and today and today in labels:
-        annotations["ctl_val"] = {
-            "type": "label", "xValue": today, "yValue": ctl[ti], "yScaleID": "y",
-            "content": [f"CTL {ctl[ti]:.0f}"], "color": "#2e9c8e",
-            "backgroundColor": "rgba(255,255,255,0.85)",
-            "font": {"size": 11, "weight": "bold"}, "yAdjust": -12,
-        }
-        annotations["atl_val"] = {
-            "type": "label", "xValue": today, "yValue": atl[ti], "yScaleID": "y1",
-            "content": [f"ATL {atl[ti]:.0f}"], "color": "#7c4dff",
-            "backgroundColor": "rgba(255,255,255,0.85)",
-            "font": {"size": 11, "weight": "bold"}, "yAdjust": -12,
-        }
+    # Today line + dots + value labels.
+    if today_dt is not None:
+        ax.axvline(today_dt, color=(0.12, 0.12, 0.12, 0.85), linewidth=2.0, zorder=5)
+    if ti is not None and today_dt is not None:
+        ax.scatter([today_dt], [ctl[ti]], s=42, color=_CTL_COL, zorder=6, edgecolors="white", linewidths=1)
+        ax1.scatter([today_dt], [atl[ti]], s=42, color=_ATL_COL, zorder=6, edgecolors="white", linewidths=1)
+        ax.annotate(f"CTL {ctl[ti]:.0f}", (today_dt, ctl[ti]), textcoords="offset points",
+                    xytext=(0, 10), ha="center", fontsize=10, fontweight="bold", color=_CTL_COL,
+                    bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=7)
+        ax1.annotate(f"ATL {atl[ti]:.0f}", (today_dt, atl[ti]), textcoords="offset points",
+                     xytext=(0, 10), ha="center", fontsize=10, fontweight="bold", color=_ATL_COL,
+                     bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=7)
 
-    # Ramp readout (CTL change over the trailing 7 days) — top-left label.
-    ramp = None
+    # Ramp readout (trailing-7-day CTL change), top-left.
     if ti is not None and ti - 7 >= 0:
         ramp = round(ctl[ti] - ctl[ti - 7], 1)
-    if ramp is not None:
-        if ramp > 8:
-            _rc = "#c0392b"
-        elif ramp > 5 or ramp < -1:
-            _rc = "#c98a1f"
-        else:
-            _rc = "#1d6840"
-        annotations["ramp"] = {
-            "type": "label", "xValue": labels[0], "yValue": _cmax, "yScaleID": "y",
-            "content": [f"Ramp {ramp:+.1f} CTL/wk"], "color": _rc,
-            "backgroundColor": "rgba(255,255,255,0.85)",
-            "font": {"size": 11, "weight": "bold"},
-            "position": {"x": "start", "y": "start"},
-            "xAdjust": 4, "yAdjust": 4,
-        }
+        rc = "#1d6840" if ramp <= 5 else ("#c98a1f" if ramp <= 8 else "#c0392b")
+        ax.text(0.015, 0.97, f"Ramp {ramp:+.1f} CTL/wk", transform=ax.transAxes,
+                ha="left", va="top", fontsize=10.5, fontweight="bold", color=rc,
+                bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=rc, alpha=0.9), zorder=8)
 
-    config = {
-        "type": "line",
-        "data": {
-            "labels": labels,
-            "datasets": [
-                {
-                    "label": L["ctl"],
-                    "data": ctl,
-                    "yAxisID": "y",
-                    "borderColor": "#2e9c8e",
-                    "backgroundColor": "rgba(46,156,142,0.15)",
-                    "borderWidth": 2.5,
-                    "pointRadius": ctl_radius,
-                    "pointBackgroundColor": "#2e9c8e",
-                    "fill": "origin",
-                    "tension": 0.3,
-                },
-                {
-                    "label": L["atl"],
-                    "data": atl,
-                    "yAxisID": "y1",
-                    "borderColor": "#7c4dff",
-                    "backgroundColor": "transparent",
-                    "borderWidth": 2,
-                    "borderDash": [6, 3],
-                    "pointRadius": atl_radius,
-                    "pointBackgroundColor": "#7c4dff",
-                    "fill": False,
-                    "tension": 0.3,
-                },
-            ],
-        },
-        "options": {
-            "plugins": {
-                "title": {
-                    "display": True,
-                    "text": L["fitness_title"],
-                    "font": {"size": 14},
-                },
-                "legend": {
-                    "position": "top",
-                    "labels": {"boxWidth": 12, "font": {"size": 12}},
-                },
-                "annotation": {"annotations": annotations},
-            },
-            "scales": {
-                "x": {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 10, "font": {"size": 11}}},
-                "y": {
-                    "position": "left",
-                    "title": {"display": True, "text": L["ctl"], "font": {"size": 12}, "color": "#2e9c8e"},
-                    "ticks": {"font": {"size": 11}, "color": "#2e9c8e"},
-                    "min": _cmin, "max": _cmax,
-                    "grid": {"color": "rgba(0,0,0,0.06)"},
-                },
-                "y1": {
-                    "position": "right",
-                    "title": {"display": True, "text": L["atl"], "font": {"size": 12}, "color": "#7c4dff"},
-                    "ticks": {"font": {"size": 11}, "color": "#7c4dff"},
-                    "min": _amin, "max": _amax,
-                    "grid": {"drawOnChartArea": False},
-                },
-            },
-        },
-    }
-    return _fetch(config, height=420)
+    # Axes labels coloured to series.
+    ax.set_ylabel(L["ctl"], fontsize=11, color=_CTL_COL)
+    ax.tick_params(axis="y", labelcolor=_CTL_COL)
+    ax1.set_ylabel(L["atl"], fontsize=11, color=_ATL_COL)
+    ax1.tick_params(axis="y", labelcolor=_ATL_COL)
+    ax1.spines["right"].set_color(_ATL_COL)
+    _date_axis(ax, dts)
+    ax.set_title(L["fitness_title"], fontsize=14, fontweight="bold")
+
+    handles = [Line2D([0], [0], color=_CTL_COL, lw=2.5, label=L["ctl"]),
+               Line2D([0], [0], color=_ATL_COL, lw=2.0, linestyle=(0, (6, 3)), label=L["atl"])]
+    ax.legend(handles=handles, loc="upper right", frameon=False, fontsize=10)
+    return _render(fig)
 
 
 # ── Form chart (TSB with coloured zones) ──────────────────────────────────────
@@ -328,120 +371,64 @@ def form_chart(payload, coaching_level="mid"):
     if isinstance(payload, dict) and "level" in payload:
         coaching_level = payload["level"]
     L = _lbl(coaching_level)
-    labels = [d["date"][5:] for d in data]
+    if not data:
+        return None
+
+    dts    = [_parse_dt(d["date"]) for d in data]
+    mmdd   = [d["date"][5:] for d in data]
     tsb    = [round(d["tsb"], 1) for d in data]
+    ti     = _today_index(data)
+    today_dt = _mmdd_to_dt(today, dts, mmdd)
 
-    # Fit y-axis to the TSB data (was a fixed −40–20) but always keep the −20 (heavy)
-    # and +5 (fresh) reference lines in view so the zones stay meaningful.
-    _lo, _hi = (min(tsb), max(tsb)) if tsb else (-20, 5)
+    # Fit y to the data but always keep −20 (heavy) and +5 (fresh) refs in view.
+    _lo, _hi = min(tsb), max(tsb)
     _pad = max(3, (_hi - _lo) * 0.12)
-    _ymin = min(int(_lo - _pad), -22)
-    _ymax = max(int(_hi + _pad) + 1, 7)
+    ymin = min(_lo - _pad, -22)
+    ymax = max(_hi + _pad, 7)
 
-    annotations = {
-        "zone_fresh": {
-            "type": "box", "yMin": 5, "yMax": 60,
-            "backgroundColor": "rgba(46,156,142,0.10)",
-            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
-        },
-        "zone_ok": {
-            "type": "box", "yMin": 0, "yMax": 5,
-            "backgroundColor": "rgba(120,200,140,0.10)",
-            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
-        },
-        "zone_load": {
-            "type": "box", "yMin": -20, "yMax": 0,
-            "backgroundColor": "rgba(200,160,60,0.08)",
-            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
-        },
-        "zone_heavy": {
-            "type": "box", "yMin": -60, "yMax": -20,
-            "backgroundColor": "rgba(192,57,43,0.09)",
-            "borderWidth": 0, "drawTime": "beforeDatasetsDraw",
-        },
-        "ref_5": {
-            "type": "line", "yMin": 5, "yMax": 5,
-            "borderColor": "rgba(46,156,142,0.45)", "borderWidth": 1, "borderDash": [4, 3],
-            "label": {"display": True, "content": "+5 fresh", "position": "end",
-                      "backgroundColor": "transparent", "color": "#2e9c8e", "font": {"size": 9}},
-        },
-        "ref_0": {
-            "type": "line", "yMin": 0, "yMax": 0,
-            "borderColor": "rgba(100,100,100,0.30)", "borderWidth": 1,
-        },
-        "ref_m20": {
-            "type": "line", "yMin": -20, "yMax": -20,
-            "borderColor": "rgba(192,57,43,0.40)", "borderWidth": 1, "borderDash": [4, 3],
-            "label": {"display": True, "content": "−20 heavy", "position": "end",
-                      "backgroundColor": "transparent", "color": "#c0392b", "font": {"size": 9}},
-        },
-    }
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    _style_ax(ax)
+    ax.set_ylim(ymin, ymax)
 
-    for i, ph in enumerate(payload.get("phases", []) if isinstance(payload, dict) else []):
-        pb = _phase_box(ph, labels)
-        if pb:
-            annotations[f"phase_{i}"] = pb
-    box = _projected_box(today, labels)
-    if box:
-        annotations["projected"] = box
-    ann = _today_annotation(today, labels)
-    if ann:
-        annotations["today"] = ann
+    # Coloured zone bands across the full width.
+    ax.axhspan(5, ymax,   facecolor=_CTL_COL,  alpha=0.10, zorder=0)   # fresh
+    ax.axhspan(0, 5,      facecolor="#78c88c", alpha=0.12, zorder=0)   # ok
+    ax.axhspan(-20, 0,    facecolor="#c8a03c", alpha=0.10, zorder=0)   # load
+    ax.axhspan(ymin, -20, facecolor="#c0392b", alpha=0.10, zorder=0)   # heavy
 
-    # Today's TSB value as a labelled dot.
-    ti = _today_index(data)
-    tsb_radius = [0] * len(data)
-    if ti is not None:
-        tsb_radius[ti] = 5
-        if today and today in labels:
-            _tv = round(tsb[ti])
-            _tlabel = "TSB 0" if _tv == 0 else f"TSB {_tv:+d}"
-            annotations["tsb_val"] = {
-                "type": "label", "xValue": today, "yValue": tsb[ti], "yScaleID": "y",
-                "content": [_tlabel], "color": "#3c3c3c",
-                "backgroundColor": "rgba(255,255,255,0.85)",
-                "font": {"size": 11, "weight": "bold"}, "yAdjust": -12,
-            }
+    # Projected shading.
+    if today_dt is not None and dts[-1] > today_dt:
+        ax.axvspan(today_dt, dts[-1], facecolor="#9a9a9a", alpha=0.07, zorder=1)
 
-    config = {
-        "type": "line",
-        "data": {
-            "labels": labels,
-            "datasets": [{
-                "label": L["tsb_line"],
-                "data": tsb,
-                "borderColor": "rgba(60,60,60,0.75)",
-                "backgroundColor": "rgba(60,60,60,0.06)",
-                "borderWidth": 2,
-                "pointRadius": tsb_radius,
-                "pointBackgroundColor": "rgba(60,60,60,0.9)",
-                "fill": "origin",
-                "tension": 0.3,
-            }],
-        },
-        "options": {
-            "plugins": {
-                "title": {
-                    "display": True,
-                    "text": L["form_title"],
-                    "font": {"size": 14},
-                },
-                "legend": {"display": False},
-                "annotation": {"annotations": annotations},
-            },
-            "scales": {
-                "x": {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 10, "font": {"size": 11}}},
-                "y": {
-                    "title": {"display": True, "text": L["form_yaxis"], "font": {"size": 12}},
-                    "ticks": {"font": {"size": 11}},
-                    "min": _ymin,
-                    "max": _ymax,
-                    "grid": {"color": "rgba(0,0,0,0.06)"},
-                },
-            },
-        },
-    }
-    return _fetch(config, height=320)
+    # Phase bands.
+    _draw_phase_bands(ax, _phase_spans(payload, dts, mmdd))
+
+    # Reference lines (labelled at the right edge).
+    ax.axhline(5,   color="#2e9c8e", linewidth=1.0, linestyle=(0, (4, 3)), alpha=0.55, zorder=2)
+    ax.axhline(0,   color=(0.4, 0.4, 0.4, 0.45), linewidth=1.0, zorder=2)
+    ax.axhline(-20, color="#c0392b", linewidth=1.0, linestyle=(0, (4, 3)), alpha=0.55, zorder=2)
+    ax.text(dts[-1], 5,   " +5 fresh",  va="bottom", ha="right", fontsize=8.5, color="#2e9c8e", zorder=3)
+    ax.text(dts[-1], -20, " −20 heavy", va="top",    ha="right", fontsize=8.5, color="#c0392b", zorder=3)
+
+    # TSB line (filled to zero).
+    ax.plot(dts, tsb, color=(0.24, 0.24, 0.24, 0.85), linewidth=2.0, zorder=4)
+    ax.fill_between(dts, tsb, 0, color=(0.24, 0.24, 0.24, 0.08), zorder=3)
+
+    # Today line + dot + label.
+    if today_dt is not None:
+        ax.axvline(today_dt, color=(0.12, 0.12, 0.12, 0.85), linewidth=2.0, zorder=5)
+    if ti is not None and today_dt is not None:
+        ax.scatter([today_dt], [tsb[ti]], s=42, color="#3c3c3c", zorder=6, edgecolors="white", linewidths=1)
+        _tv = round(tsb[ti])
+        _tlabel = "TSB 0" if _tv == 0 else f"TSB {_tv:+d}"
+        ax.annotate(_tlabel, (today_dt, tsb[ti]), textcoords="offset points", xytext=(0, 10),
+                    ha="center", fontsize=10, fontweight="bold", color="#3c3c3c",
+                    bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=7)
+
+    ax.set_ylabel(L["form_yaxis"], fontsize=11)
+    _date_axis(ax, dts)
+    ax.set_title(L["form_title"], fontsize=14, fontweight="bold")
+    return _render(fig)
 
 
 # ── Training load chart (TSS stacked by sport + TSB overlay) ─────────────────
@@ -923,187 +910,102 @@ def recovery_chart(payload, coaching_level="mid"):
     if not days:
         return None
 
-    labels = [d["date"][5:] for d in days]
+    import numpy as np
+    dts    = [_parse_dt(d["date"]) for d in days]
+    mmdd   = [d["date"][5:] for d in days]
     hrv    = [d.get("hrv") for d in days]
     rhr    = [d.get("rhr") for d in days]
     sleep  = [d.get("sleep_h") for d in days]
+    today_dt = _mmdd_to_dt(today, dts, mmdd)
 
-    # 7-day trailing baseline (rolling mean) + band (mean ± 1 trailing SD), computed
-    # over non-None HRV values inside each trailing window. Fallback SD keeps the band
-    # from collapsing when too few points exist — and crucially gives every day a
-    # non-null band so fill-between never sees leading nulls (which render garbage).
+    HRV_COL = "#2e9c8e"
+    RHR_COL = "#96604f"   # muted red
+
+    # 7-day trailing baseline (rolling mean) + band (mean ± 1 trailing SD) over
+    # non-None HRV in each window. nan (not None) so fill_between leaves clean gaps.
     baseline, band_lo, band_hi = [], [], []
     for i in range(len(days)):
         window = [hrv[j] for j in range(max(0, i - 6), i + 1) if hrv[j] is not None]
         if not window:
-            baseline.append(None)
-            band_lo.append(None)
-            band_hi.append(None)
+            baseline.append(np.nan); band_lo.append(np.nan); band_hi.append(np.nan)
             continue
         mean = sum(window) / len(window)
-        if len(window) >= 3:
-            var = sum((v - mean) ** 2 for v in window) / (len(window) - 1)
-            sd  = math.sqrt(var)
-        else:
-            sd = 0.0
-        sd = max(sd, 0.5 * mean * 0.1)  # floor so the band is always visible
-        baseline.append(round(mean, 1))
-        band_lo.append(round(mean - sd, 1))
-        band_hi.append(round(mean + sd, 1))
+        sd = math.sqrt(sum((v - mean) ** 2 for v in window) / (len(window) - 1)) if len(window) >= 3 else 0.0
+        sd = max(sd, 0.05 * mean)  # floor so the band stays visible
+        baseline.append(mean); band_lo.append(mean - sd); band_hi.append(mean + sd)
 
-    # HRV-axis range fitted to the band + dots (don't force 0).
-    _vals = [v for v in (hrv + band_lo + band_hi) if v is not None]
+    baseline = np.array(baseline); band_lo = np.array(band_lo); band_hi = np.array(band_hi)
+
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    ax1 = ax.twinx()    # RHR
+    ax3 = ax.twinx()    # sleep (hidden)
+    _style_ax(ax)
+    _style_ax(ax1, twin=True)
+
+    # Sleep bars first, pinned to the bottom ~quarter via a tall hidden scale.
+    smax = max([s for s in sleep if s is not None], default=8) or 8
+    sleep_x = [d for d, s in zip(dts, sleep) if s is not None]
+    sleep_y = [s for s in sleep if s is not None]
+    if sleep_y:
+        ax3.bar(sleep_x, sleep_y, width=0.8, color=(0.47, 0.47, 0.47, 0.16),
+                zorder=0, edgecolor="none")
+    ax3.set_ylim(0, smax * 4)
+    ax3.axis("off")
+
+    # HRV ±1SD band + baseline line.
+    ax.fill_between(dts, band_lo, band_hi, color=HRV_COL, alpha=0.14, zorder=2)
+    ax.plot(dts, baseline, color=HRV_COL, linewidth=2.0, zorder=4)
+
+    # HRV scatter (filter nan pairs).
+    hx = [d for d, v in zip(dts, hrv) if v is not None]
+    hy = [v for v in hrv if v is not None]
+    ax.scatter(hx, hy, s=26, color=HRV_COL, edgecolors="white", linewidths=0.8, zorder=5)
+
+    # RHR line on right twin (nan gaps).
+    rhr_np = np.array([r if r is not None else np.nan for r in rhr], dtype=float)
+    ax1.plot(dts, rhr_np, color=RHR_COL, linewidth=2.0, linestyle=(0, (5, 4)), zorder=3)
+
+    # HRV axis range fitted to band + dots.
+    _vals = [v for v in (hy + list(band_lo[~np.isnan(band_lo)]) + list(band_hi[~np.isnan(band_hi)]))]
     if _vals:
-        _lo, _hi = min(_vals), max(_vals)
-        _pad = max(2, (_hi - _lo) * 0.12)
-        _ymin, _ymax = int(_lo - _pad), int(_hi + _pad) + 1
-    else:
-        _ymin, _ymax = 0, 100
+        lo, hi = min(_vals), max(_vals)
+        pad = max(2, (hi - lo) * 0.12)
+        ax.set_ylim(lo - pad, hi + pad)
 
-    # Sleep axis: pin bars to the bottom quarter so they never dominate.
-    _smax = max([s for s in sleep if s is not None], default=8) or 8
+    # Today line + labelled values.
+    if today_dt is not None:
+        ax.axvline(today_dt, color=(0.12, 0.12, 0.12, 0.85), linewidth=2.0, zorder=6)
+        ti = mmdd.index(today) if today in mmdd else None
+        if ti is not None:
+            if hrv[ti] is not None:
+                ax.scatter([today_dt], [hrv[ti]], s=70, color=HRV_COL, edgecolors="white", linewidths=1.2, zorder=7)
+                ax.annotate(f"HRV {hrv[ti]:.0f}", (today_dt, hrv[ti]), textcoords="offset points",
+                            xytext=(0, 11), ha="center", fontsize=9.5, fontweight="bold", color=HRV_COL,
+                            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=8)
+            if rhr[ti] is not None:
+                ax1.annotate(f"RHR {rhr[ti]:.0f}", (today_dt, rhr[ti]), textcoords="offset points",
+                             xytext=(0, -14), ha="center", fontsize=9.5, fontweight="bold", color=RHR_COL,
+                             bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=8)
 
-    # Highlight today's HRV dot.
-    today_radius = [0] * len(days)
-    if today and today in labels:
-        ti = labels.index(today)
-        if hrv[ti] is not None:
-            today_radius[ti] = 7
+    ax.set_ylabel("HRV (ms)", fontsize=11, color=HRV_COL)
+    ax.tick_params(axis="y", labelcolor=HRV_COL)
+    ax1.set_ylabel("RHR (bpm)", fontsize=11, color=RHR_COL)
+    ax1.tick_params(axis="y", labelcolor=RHR_COL)
+    ax1.spines["right"].set_color(RHR_COL)
+    _date_axis(ax, dts)
+    ax.set_title("Recovery — HRV vs baseline", fontsize=14, fontweight="bold")
 
-    annotations = {}
-    ann = _today_annotation(today, labels)
-    if ann:
-        annotations["today"] = ann
-
-    config = {
-        "type": "line",
-        "data": {
-            "labels": labels,
-            "datasets": [
-                # Sleep bars first (drawn under everything), hidden axis.
-                {
-                    "type": "bar",
-                    "label": "Sleep (h)",
-                    "data": [round(s, 1) if s is not None else None for s in sleep],
-                    "yAxisID": "y2",
-                    "backgroundColor": "rgba(120,120,120,0.16)",
-                    "borderWidth": 0,
-                    "order": 5,
-                },
-                # Band: lower then upper with fill:'-1' (fills between the two).
-                {
-                    "type": "line",
-                    "label": "−1 SD",
-                    "data": band_lo,
-                    "yAxisID": "y",
-                    "borderColor": "transparent",
-                    "backgroundColor": "rgba(46,156,142,0.14)",
-                    "pointRadius": 0,
-                    "fill": False,
-                    "spanGaps": True,
-                    "order": 4,
-                },
-                {
-                    "type": "line",
-                    "label": "+1 SD band",
-                    "data": band_hi,
-                    "yAxisID": "y",
-                    "borderColor": "transparent",
-                    "backgroundColor": "rgba(46,156,142,0.14)",
-                    "pointRadius": 0,
-                    "fill": "-1",
-                    "spanGaps": True,
-                    "order": 4,
-                },
-                # Baseline rolling-mean line.
-                {
-                    "type": "line",
-                    "label": "Baseline (7d)",
-                    "data": baseline,
-                    "yAxisID": "y",
-                    "borderColor": "#2e9c8e",
-                    "backgroundColor": "transparent",
-                    "borderWidth": 2,
-                    "pointRadius": 0,
-                    "fill": False,
-                    "spanGaps": True,
-                    "tension": 0.3,
-                    "order": 2,
-                },
-                # HRV dots (scatter — no connecting line).
-                {
-                    "type": "line",
-                    "label": "HRV",
-                    "data": [round(v, 1) if v is not None else None for v in hrv],
-                    "yAxisID": "y",
-                    "showLine": False,
-                    "borderColor": "#2e9c8e",
-                    "pointRadius": [r if r else 3.5 for r in today_radius],
-                    "pointBackgroundColor": "#2e9c8e",
-                    "pointBorderColor": "rgba(255,255,255,0.85)",
-                    "pointBorderWidth": 1,
-                    "spanGaps": False,
-                    "order": 1,
-                },
-                # RHR line on the right axis.
-                {
-                    "type": "line",
-                    "label": "RHR",
-                    "data": [r if r is not None else None for r in rhr],
-                    "yAxisID": "y1",
-                    "borderColor": "rgba(150,90,80,0.75)",
-                    "backgroundColor": "transparent",
-                    "borderWidth": 2,
-                    "borderDash": [5, 4],
-                    "pointRadius": 0,
-                    "fill": False,
-                    "spanGaps": True,
-                    "tension": 0.3,
-                    "order": 3,
-                },
-            ],
-        },
-        "options": {
-            "plugins": {
-                "title": {
-                    "display": True,
-                    "text": "Recovery — HRV vs baseline",
-                    "font": {"size": 14},
-                },
-                "legend": {
-                    "position": "top",
-                    # Default legend (a custom generateLabels reliably renders elsewhere but
-                    # silently drops here given the mixed scatter/band/bar datasets). Both band
-                    # bounds carry honest labels so no 'undefined' entry appears.
-                    "labels": {"boxWidth": 12, "font": {"size": 11}},
-                },
-                "annotation": {"annotations": annotations},
-            },
-            "scales": {
-                "x": {"ticks": {"maxRotation": 45, "autoSkip": True, "maxTicksLimit": 12, "font": {"size": 10}}},
-                "y": {
-                    "position": "left",
-                    "title": {"display": True, "text": "HRV (ms)", "font": {"size": 12}, "color": "#2e9c8e"},
-                    "ticks": {"font": {"size": 11}, "color": "#2e9c8e"},
-                    "min": _ymin, "max": _ymax,
-                    "grid": {"color": "rgba(0,0,0,0.06)"},
-                },
-                "y1": {
-                    "position": "right",
-                    "title": {"display": True, "text": "RHR (bpm)", "font": {"size": 12}, "color": "rgba(150,90,80,0.9)"},
-                    "ticks": {"font": {"size": 11}, "color": "rgba(150,90,80,0.9)"},
-                    "grid": {"drawOnChartArea": False},
-                },
-                "y2": {
-                    "display": False,
-                    "position": "right",
-                    "min": 0, "max": round(_smax * 3.5, 1),
-                    "grid": {"drawOnChartArea": False},
-                },
-            },
-        },
-    }
-    return _fetch(config, width=760, height=440)
+    handles = [
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=HRV_COL,
+               markeredgecolor="white", markersize=7, label="HRV"),
+        Line2D([0], [0], color=HRV_COL, lw=2.0, label="Baseline (7d)"),
+        mpatches.Patch(facecolor=HRV_COL, alpha=0.14, label="±1 SD"),
+        Line2D([0], [0], color=RHR_COL, lw=2.0, linestyle=(0, (5, 4)), label="RHR"),
+        mpatches.Patch(facecolor=(0.47, 0.47, 0.47, 0.16), label="Sleep (h)"),
+    ]
+    ax.legend(handles=handles, loc="upper center", ncol=5, frameon=False,
+              fontsize=8.5, bbox_to_anchor=(0.5, 1.0), columnspacing=1.0, handletextpad=0.4)
+    return _render(fig)
 
 
 # ── Durability chart (Pa:HR decoupling) ────────────────────────────────────────
@@ -1124,88 +1026,44 @@ def durability_chart(payload, coaching_level="mid"):
     if not sessions:
         return None
 
-    # Category x-axis over the session dates (matches the file's idiom). Duplicate
-    # dates would collide on a category axis — suffix them so each point is distinct.
-    labels, seen = [], {}
-    for s in sessions:
-        base = s["date"][5:]
-        if base in seen:
-            seen[base] += 1
-            labels.append(f"{base}·{seen[base]}")
-        else:
-            seen[base] = 0
-            labels.append(base)
-
     SPORT_BASE = {"Ride": "#1d6840", "Run": "#c0392b"}
-    datasets = []
+
+    dts  = [_parse_dt(s["date"]) for s in sessions]
+    vals = [round(s.get("decoupling_pct", 0), 1) for s in sessions]
+
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    _style_ax(ax)
+
+    # Reference lines.
+    ax.axhline(0, color=(0.4, 0.4, 0.4, 0.30), linewidth=1.0, zorder=1)
+    ax.axhline(5, color="#1d6840", linewidth=1.5, linestyle=(0, (5, 4)), alpha=0.6, zorder=2)
+
+    present = {}
     for sport, colour in SPORT_BASE.items():
-        data = []
-        present = False
-        for i, s in enumerate(sessions):
-            if _norm_sport(s.get("sport")) == sport:
-                data.append(round(s.get("decoupling_pct", 0), 1))
-                present = True
-            else:
-                data.append(None)
-        if present:
-            datasets.append({
-                "type": "line",
-                "label": sport,
-                "data": data,
-                "showLine": False,
-                "borderColor": colour,
-                "pointRadius": 6,
-                "pointHoverRadius": 8,
-                "pointBackgroundColor": colour,
-                "pointBorderColor": "rgba(255,255,255,0.85)",
-                "pointBorderWidth": 1.5,
-                "spanGaps": False,
-            })
+        sx = [d for d, s in zip(dts, sessions) if _norm_sport(s.get("sport")) == sport]
+        sy = [v for v, s in zip(vals, sessions) if _norm_sport(s.get("sport")) == sport]
+        if sx:
+            ax.scatter(sx, sy, s=60, color=colour, edgecolors="white", linewidths=1.2, zorder=5)
+            present[sport] = colour
 
-    _vals = [round(s.get("decoupling_pct", 0), 1) for s in sessions]
-    _lo = min(_vals + [0])
-    _hi = max(_vals + [5])
-    _pad = max(1.5, (_hi - _lo) * 0.12)
-    _ymin, _ymax = round(_lo - _pad, 1), round(_hi + _pad, 1)
+    lo = min(vals + [0]); hi = max(vals + [5])
+    pad = max(1.5, (hi - lo) * 0.12)
+    ax.set_ylim(lo - pad, hi + pad)
 
-    annotations = {
-        "ref_zero": {
-            "type": "line", "yMin": 0, "yMax": 0,
-            "borderColor": "rgba(100,100,100,0.30)", "borderWidth": 1,
-        },
-        "ref_good": {
-            "type": "line", "yMin": 5, "yMax": 5,
-            "borderColor": "rgba(29,104,64,0.55)", "borderWidth": 1.5, "borderDash": [5, 4],
-            "label": {"display": True, "content": "good < 5%", "position": "end",
-                      "backgroundColor": "rgba(255,255,255,0.85)", "color": "#1d6840", "font": {"size": 10}},
-        },
-    }
+    # "good < 5%" label at the right edge.
+    ax.text(dts[-1], 5, " good < 5%", va="bottom", ha="right", fontsize=9.5, color="#1d6840", zorder=3)
 
-    config = {
-        "type": "line",
-        "data": {"labels": labels, "datasets": datasets},
-        "options": {
-            "plugins": {
-                "title": {
-                    "display": True,
-                    "text": "Aerobic durability — Pa:HR decoupling (lower = better)",
-                    "font": {"size": 14},
-                },
-                "legend": {"position": "top", "labels": {"boxWidth": 12, "font": {"size": 12}, "usePointStyle": True}},
-                "annotation": {"annotations": annotations},
-            },
-            "scales": {
-                "x": {"ticks": {"maxRotation": 45, "autoSkip": False, "font": {"size": 11}}},
-                "y": {
-                    "title": {"display": True, "text": "Decoupling %", "font": {"size": 12}},
-                    "ticks": {"font": {"size": 11}},
-                    "min": _ymin, "max": _ymax,
-                    "grid": {"color": "rgba(0,0,0,0.06)"},
-                },
-            },
-        },
-    }
-    return _fetch(config, height=420)
+    ax.set_ylabel("Decoupling %", fontsize=11)
+    _date_axis(ax, dts)
+    ax.set_title("Aerobic durability — Pa:HR decoupling (lower = better)",
+                 fontsize=13, fontweight="bold")
+
+    handles = [Line2D([0], [0], marker="o", color="none", markerfacecolor=c,
+                      markeredgecolor="white", markersize=8, label=sp)
+               for sp, c in present.items()]
+    if handles:
+        ax.legend(handles=handles, loc="upper right", frameon=False, fontsize=10)
+    return _render(fig)
 
 
 # ── Compliance chart (planned vs actual TSS) ───────────────────────────────────
@@ -1225,66 +1083,47 @@ def compliance_chart(payload, coaching_level="mid"):
     if not weeks:
         return None
 
+    import numpy as np
     labels  = [w["label"] for w in weeks]
     planned = [round(w.get("planned", 0), 1) for w in weeks]
     actual  = [round(w.get("actual", 0), 1) for w in weeks]
 
+    C_NEUTRAL = "#969696"
+    C_GREEN   = "#1d6840"
+    C_AMBER   = "#c9871f"
+    C_RED     = "#c0392b"
+
     def _actual_colour(p, a):
         if p <= 0:
-            return "rgba(150,150,150,0.75)"   # neutral — no plan
+            return C_NEUTRAL
         ratio = a / p
         if ratio >= 0.9:
-            return "rgba(29,104,64,0.85)"     # green — on plan
+            return C_GREEN
         if ratio >= 0.7:
-            return "rgba(201,135,31,0.85)"    # amber — under
-        return "rgba(192,57,43,0.85)"         # red — well under
+            return C_AMBER
+        return C_RED
 
     actual_bg = [_actual_colour(p, a) for p, a in zip(planned, actual)]
 
-    config = {
-        "type": "bar",
-        "data": {
-            "labels": labels,
-            "datasets": [
-                {
-                    "label": "Planned",
-                    "data": planned,
-                    "backgroundColor": "rgba(120,120,120,0.28)",
-                    "borderWidth": 0,
-                    "order": 2,
-                },
-                {
-                    "label": "Actual",
-                    "data": actual,
-                    "backgroundColor": actual_bg,
-                    "borderWidth": 0,
-                    "order": 1,
-                },
-            ],
-        },
-        "options": {
-            "plugins": {
-                "title": {
-                    "display": True,
-                    "text": "Compliance — planned vs actual TSS",
-                    "font": {"size": 14},
-                },
-                "legend": {
-                    "position": "top",
-                    # Default legend: Chart.js represents the per-bar-array 'Actual' colour
-                    # with its first entry (green), which reads correctly as the on-plan swatch.
-                    "labels": {"boxWidth": 12, "font": {"size": 12}},
-                },
-            },
-            "scales": {
-                "x": {"ticks": {"maxRotation": 45, "autoSkip": False, "font": {"size": 11}}},
-                "y": {
-                    "beginAtZero": True,
-                    "title": {"display": True, "text": "TSS", "font": {"size": 12}},
-                    "ticks": {"font": {"size": 11}},
-                    "grid": {"color": "rgba(0,0,0,0.06)"},
-                },
-            },
-        },
-    }
-    return _fetch(config, height=420)
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    _style_ax(ax)
+
+    x = np.arange(len(weeks))
+    w = 0.4
+    ax.bar(x - w / 2, planned, width=w, color=(0.47, 0.47, 0.47, 0.28), zorder=2, label="Planned")
+    ax.bar(x + w / 2, actual,  width=w, color=actual_bg, zorder=3)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=9)
+    ax.set_ylabel("TSS", fontsize=11)
+    ax.set_ylim(0, max(planned + actual + [1]) * 1.12)
+    ax.set_title("Compliance — planned vs actual TSS", fontsize=14, fontweight="bold")
+
+    handles = [
+        mpatches.Patch(facecolor=(0.47, 0.47, 0.47, 0.28), label="Planned"),
+        mpatches.Patch(facecolor=C_GREEN, label="Actual ≥90%"),
+        mpatches.Patch(facecolor=C_AMBER, label="70–90%"),
+        mpatches.Patch(facecolor=C_RED,   label="<70%"),
+    ]
+    ax.legend(handles=handles, loc="upper left", frameon=False, fontsize=9, ncol=2)
+    return _render(fig)
