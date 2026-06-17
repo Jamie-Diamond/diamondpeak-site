@@ -536,14 +536,29 @@ window.chartFitness = null;
 
 function zoomFitness(days) {
   if (!window.chartFitness) return;
-  const sc = window.chartFitness.options.scales.x;
+  const ch = window.chartFitness;
+  const sx = ch.options.scales.x, sy = ch.options.scales.y;
   if (days === 0) {
-    sc.min = -285; sc.max = 14;
+    sx.min = -285; sx.max = 14;
+    sy.min = 20; sy.max = 135;            // full-season Y range
   } else {
     const todayTX = toTX(new Date().toISOString().slice(0,10));
-    sc.min = todayTX - days; sc.max = todayTX + 21;
+    sx.min = todayTX - days; sx.max = todayTX + 21;
+    // Fit Y to whatever data is visible in the X window so the lines fill the panel.
+    let lo = Infinity, hi = -Infinity;
+    ch.data.datasets.forEach(ds => (ds.data || []).forEach(p => {
+      if (p && p.x >= sx.min && p.x <= sx.max && p.y != null) {
+        if (p.y < lo) lo = p.y;
+        if (p.y > hi) hi = p.y;
+      }
+    }));
+    if (lo < hi) {
+      const pad = Math.max(2, (hi - lo) * 0.12);
+      sy.min = Math.floor(lo - pad);
+      sy.max = Math.ceil(hi + pad);
+    }
   }
-  window.chartFitness.update();
+  ch.update();
 }
 
 // ── LOAD CHART ───────────────────────────────────────────────────────────────

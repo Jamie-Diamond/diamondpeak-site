@@ -142,6 +142,12 @@ def fitness_chart(payload, coaching_level="mid"):
     ctl    = [round(d["ctl"], 1) for d in data]
     atl    = [round(d["atl"], 1) for d in data]
 
+    # Fit the y-axis to the data so the lines fill the panel (was a fixed 40–130).
+    _v = ctl + atl
+    _lo, _hi = (min(_v), max(_v)) if _v else (40, 130)
+    _pad = max(3, (_hi - _lo) * 0.10)
+    _ymin, _ymax = int(_lo - _pad), int(_hi + _pad) + 1
+
     annotations = {}
     ann = _today_annotation(today, labels)
     if ann:
@@ -193,8 +199,8 @@ def fitness_chart(payload, coaching_level="mid"):
                 "y": {
                     "title": {"display": True, "text": L["fitness_yaxis"], "font": {"size": 12}},
                     "ticks": {"font": {"size": 11}},
-                    "suggestedMin": 40,
-                    "suggestedMax": 130,
+                    "min": _ymin,
+                    "max": _ymax,
                     "grid": {"color": "rgba(0,0,0,0.06)"},
                 },
             },
@@ -219,6 +225,13 @@ def form_chart(payload, coaching_level="mid"):
     L = _lbl(coaching_level)
     labels = [d["date"][5:] for d in data]
     tsb    = [round(d["tsb"], 1) for d in data]
+
+    # Fit y-axis to the TSB data (was a fixed −40–20) but always keep the −20 (heavy)
+    # and +5 (fresh) reference lines in view so the zones stay meaningful.
+    _lo, _hi = (min(tsb), max(tsb)) if tsb else (-20, 5)
+    _pad = max(3, (_hi - _lo) * 0.12)
+    _ymin = min(int(_lo - _pad), -22)
+    _ymax = max(int(_hi + _pad) + 1, 7)
 
     annotations = {
         "zone_fresh": {
@@ -293,8 +306,8 @@ def form_chart(payload, coaching_level="mid"):
                 "y": {
                     "title": {"display": True, "text": L["form_yaxis"], "font": {"size": 12}},
                     "ticks": {"font": {"size": 11}},
-                    "suggestedMin": -40,
-                    "suggestedMax": 20,
+                    "min": _ymin,
+                    "max": _ymax,
                     "grid": {"color": "rgba(0,0,0,0.06)"},
                 },
             },
