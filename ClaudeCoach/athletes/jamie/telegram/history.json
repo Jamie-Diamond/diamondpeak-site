@@ -1,10 +1,5 @@
 [
   {
-    "user": "What distance is the cap for today",
-    "assistant": "*13.5 km* \u2014 that's today's long run cap (75 min @ GAP ~5:30/km).\n\nIt's the W8 long-run target, up ~10\u201315% on last week. Don't run past it even if the ankle feels fine \u2014 the distance ceiling is the protocol, not just the pain score. Stop earlier if pain goes >5/10.",
-    "ts": "2026-06-16T17:51:48"
-  },
-  {
     "user": "What was the longest last week",
     "assistant": "*11.9 km* (Sun 14 Jun, 65 min) was your longest last week.\n\nToday's 13.5 km cap is *+13%* on that \u2014 right in the 10\u201315% progression band.",
     "ts": "2026-06-16T17:52:26"
@@ -138,5 +133,10 @@
   {
     "user": "",
     "assistant": "RPE for Ankle Training? (1\u201310)"
+  },
+  {
+    "user": "1",
+    "assistant": "Logged. RPE 1 \u2014 Ankle Training.",
+    "ts": "2026-06-17T12:05:37"
   }
 ]
