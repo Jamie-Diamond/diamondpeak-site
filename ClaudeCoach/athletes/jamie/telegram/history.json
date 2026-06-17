@@ -1,9 +1,5 @@
 [
   {
-    "user": "",
-    "assistant": "Activity watcher timed out for Jamie (300s). Last known activity: i157281011."
-  },
-  {
     "user": "There's a new run",
     "assistant": "Strava description pushed successfully (no message sent to Jamie \u2014 silent background action). Done.",
     "ts": "2026-06-16T19:53:05"
@@ -138,5 +134,10 @@
     "user": "what's today's session?",
     "assistant": "*Today \u2014 Wed 17 Jun \u2014 both done* \u2705\n\n\u2022 *Easy run* \u2014 5.7 km / 28 min \u00b7 GAP 4:52/km \u00b7 avg HR 139 \u00b7 TSS 36 \u2714\n\u2022 *Ankle Training* \u2014 13 min \u00b7 RPE 1 \u2714\n\nNothing left on the card. Form \u22129, ankle 1/10 this morning \u2014 clean recovery day.\n\nTomorrow: *CSS swim 5\u00d7200m* + easy Z2 run.",
     "ts": "2026-06-17T13:00:36"
+  },
+  {
+    "user": "That shows me going to -40 tsb!",
+    "assistant": "*Yeah \u2014 that's real, and it's worth a look.* Pulled the live projection off the planned sessions:\n\n*Form (TSB) trajectory if you ride the week as planned:*\n\u2022 Thu \u22129 \u2192 *Fri \u221224* \u2192 Sat \u221230 \u2192 *Sun \u221237* (Mon morning reads ~\u221239/\u221240)\n\nSo the chart's right. The driver is the *weekend bike block*: Fri race-pace *228* + Sat *169* + Sun *192* (ride+brick) = *589 TSS over three days*. The single biggest spike is *Friday's \"Race pace long 2\u00d745\" at 228* \u2014 that one session drops you from \u22129 to \u221224.\n\n*Why I'd flag it:* the week projects *868 TSS vs your 763 ramp-cap target* \u2014 ~105 over. And \u221237/\u221240 in a *build* week is deeper than ideal; you want build-week troughs around \u221225 to \u221230 and save \u221235+ for a deliberate overload/peak block. Sustained sub-30 mid-build is where you stop absorbing and start digging.\n\nTwo things stand out on Friday specifically:\n1. It's the *biggest load of the week* by far.\n2. It's built as *2\u00d780min at 76\u201384% FTP (tempo/sweet-spot)* \u2014 but your standing rule is the *Friday anchor = pure Z2*, no structured intensity unless you ask for it.\n\n*My rec:* convert Friday to a pure Z2 long ride (~210\u2013240 min, NP in the 195 range). That drops it ~228\u2192~150, pulls the week to ~790 and the Sunday trough back to roughly *\u221230* \u2014 still a proper build, but you actually absorb it.\n\nWant me to make that change, or did you put the race-pace Friday in on purpose?",
+    "ts": "2026-06-17T13:07:28"
   }
 ]
