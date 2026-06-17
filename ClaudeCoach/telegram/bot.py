@@ -6,9 +6,25 @@ Run: python3 bot.py
 """
 
 import json, re, subprocess, sys, time, ssl, os, shutil
+import socket
 import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
 from datetime import datetime, date, timedelta
+
+# Force IPv4 for the Telegram API. The IPv6 path to api.telegram.org intermittently
+# stalls the FIRST connection after the bot's been idle — the new SYN is lost and TCP
+# retransmits for ~10s before it connects, which made button taps (e.g. opening Graphs)
+# feel frozen for ~10s. IPv4 (149.154.x.x) connects instantly here. Only telegram.org is
+# affected; ICU / QuickChart / GitHub resolution is untouched.
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_telegram_getaddrinfo(host, *args, **kwargs):
+    results = _orig_getaddrinfo(host, *args, **kwargs)
+    if isinstance(host, str) and "telegram.org" in host:
+        ipv4 = [r for r in results if r[0] == socket.AF_INET]
+        if ipv4:
+            return ipv4
+    return results
+socket.getaddrinfo = _ipv4_telegram_getaddrinfo
 
 
 def _resolve_claude_bin() -> str:
