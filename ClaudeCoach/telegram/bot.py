@@ -2934,10 +2934,15 @@ def main():
                     "text": final, "parse_mode": "Markdown",
                     "reply_markup": build_keyboard(slug),
                 })
-                # Last-resort guard: if the edit failed entirely (even the plain-text retry),
-                # send the reply as a fresh message so it is NEVER silently lost to a stuck "…".
+                # Last-resort guard: if the edit failed entirely (even the plain-text retry,
+                # e.g. MESSAGE_TOO_LONG), send the reply as a fresh message so it is NEVER
+                # silently lost to a stuck "…". Delete the placeholder first so the dead "…"
+                # (or partial stream) does not linger above the real reply.
                 if not (res or {}).get("ok") and clean:
-                    log("editMessageText final delivery failed — sending fresh message")
+                    log("editMessageText final delivery failed - sending fresh message")
+                    tg_post(token, "deleteMessage", {
+                        "chat_id": chat_id, "message_id": placeholder_id,
+                    })
                     send(token, chat_id, final, reply_markup=build_keyboard(slug))
             elif clean:
                 send(token, chat_id, final, reply_markup=build_keyboard(slug))
