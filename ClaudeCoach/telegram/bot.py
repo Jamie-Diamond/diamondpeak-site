@@ -88,6 +88,7 @@ def get_whisper():
 # --- Text-to-speech (Piper, local, CPU) ------------------------------------
 VOICES_DIR = BASE / "voices"
 PIPER_VOICE_NAME = "en_GB-alan-medium"   # clear UK English; swap voice by changing this + the model file
+PIPER_LENGTH_SCALE = 0.9                 # <1 = faster speech, >1 = slower (model default ~1.0)
 _piper_voice = None
 
 
@@ -153,7 +154,9 @@ def synthesize_voice(text: str):
     if not voice or not text.strip():
         return None
     try:
-        pcm = b"".join(chunk.audio_int16_bytes for chunk in voice.synthesize(text))
+        from piper.config import SynthesisConfig
+        syn = SynthesisConfig(length_scale=PIPER_LENGTH_SCALE)
+        pcm = b"".join(chunk.audio_int16_bytes for chunk in voice.synthesize(text, syn_config=syn))
         if not pcm:
             return None
         rate = getattr(voice.config, "sample_rate", 22050)
