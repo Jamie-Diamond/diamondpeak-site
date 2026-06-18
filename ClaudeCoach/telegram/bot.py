@@ -199,19 +199,33 @@ def send_voice(token, chat_id, ogg_bytes, reply_markup=None):
         return {}
 
 
-# Injected into the prompt when voice mode is on. The athlete HEARS the reply,
-# so it must be written for the ear, not the eye.
-VOICE_STYLE_DIRECTIVE = (
-    "## VOICE REPLY - the athlete will HEAR this, not read it\n"
-    "Write the reply to be spoken aloud by a text-to-speech voice:\n"
-    "- Plain flowing sentences only. NO markdown, NO bullet points, NO tables, NO headings, "
-    "NO emoji, NO asterisks or underscores.\n"
-    "- Keep it short and conversational, like a coach talking - usually 2 to 5 sentences. Lead with the answer.\n"
-    "- Say numbers, paces and sets the way you would say them out loud: 'five by two hundred metres at threshold', "
-    "'around five thirty per kilometre', 'ninety minutes', 'one forty-four beats per minute'. "
-    "Never use symbols like @, /, %, x or colons in times.\n"
-    "- If the answer truly needs a chart, give a one-line spoken summary; the chart image is sent separately.\n"
-)
+def _spoken_rewrite(reply_text: str) -> str:
+    """Render a rich (markdown) coaching reply as a short SPOKEN version for TTS.
+    The text shown to the athlete stays in the normal rich style; only the audio
+    is voice-friendly, and only when voice mode is on. Cheap Haiku pass; on any
+    failure returns the input unchanged (then _clean_for_speech strips markdown)."""
+    if not reply_text.strip():
+        return reply_text
+    prompt = (
+        "Rewrite the following coaching reply to be SPOKEN ALOUD by a voice assistant. "
+        "Plain conversational sentences only - no markdown, bullets, tables, headings or emoji. "
+        "Say numbers, paces and sets the way you'd say them out loud (e.g. 'five by two hundred "
+        "metres at threshold', 'around five thirty per kilometre', 'a hundred and forty-four beats "
+        "per minute'); never read symbols like @, /, %, x or colons in times. Keep it brief and "
+        "natural - 2 to 5 sentences, lead with the answer. Output only the spoken text.\n\nREPLY:\n"
+        + reply_text
+    )
+    try:
+        result = subprocess.run(
+            [CLAUDE_BIN, "-p", prompt, "--model", MODEL_HAIKU],
+            capture_output=True, text=True, timeout=60,
+        )
+        out = (result.stdout or "").strip()
+        if out:
+            return out
+    except Exception as e:
+        log(f"_spoken_rewrite error: {e}")
+    return reply_text
 
 CONFIG_FILE = BASE / "config.json"
 ATHLETES_CONFIG = BASE.parent / "config/athletes.json"
@@ -3083,27 +3097,28 @@ def main():
             model = select_model(text, history)
 
             if _voice_mode_on(slug):
-                # Spoken reply (sticky voice mode): generate once (no streaming
-                # placeholder), speak it, keep a short text copy. Charts still go out
-                # as images. ANY TTS failure or empty text falls straight through to a
-                # normal text send - a reply is never dropped.
+                # Sticky voice mode: the TEXT stays the normal rich style (as it used
+                # to be) - only the AUDIO is the voice-friendly version. Generate the
+                # rich reply, show it, then speak a short conversational rewrite of it.
+                # Charts still go out as images. Any TTS failure falls through to the
+                # rich text send - a reply is never dropped.
                 tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "record_voice"})
                 response = call_claude(
                     text, config, history, model=model,
                     system_prompt_file=files["system_prompt"], athlete_name=athlete_name,
-                    context=(context + "\n\n" + VOICE_STYLE_DIRECTIVE),
+                    context=context,
                 )
                 clean = process_charts(token, chat_id, response, slug=slug)
-                spoken = _clean_for_speech(clean) if clean else ""
-                ogg = synthesize_voice(spoken) if spoken else None
+                final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
+                ogg = None
+                if clean:
+                    spoken = _clean_for_speech(_spoken_rewrite(clean))
+                    ogg = synthesize_voice(spoken) if spoken else None
                 if ogg:
-                    send_voice(token, chat_id, ogg, reply_markup=build_keyboard(slug))
-                    if clean:
-                        send(token, chat_id, clean + response_footer(model, slug=slug, athlete_cfg=athlete))
+                    send_voice(token, chat_id, ogg)
+                    send(token, chat_id, final, reply_markup=build_keyboard(slug))
                 elif clean:
-                    send(token, chat_id,
-                         clean + response_footer(model, slug=slug, athlete_cfg=athlete),
-                         reply_markup=build_keyboard(slug))
+                    send(token, chat_id, final, reply_markup=build_keyboard(slug))
                 log(f"Out (voice): {clean[:80]}")
                 history.append(_hist_entry(text, clean))
                 save_history(history, files["history"])
