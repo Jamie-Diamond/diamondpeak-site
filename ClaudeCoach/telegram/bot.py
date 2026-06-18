@@ -294,6 +294,7 @@ def tg_post(token, method, payload):
         # this is the 16 Jun bug where Jamie's 8:08 swim debrief was generated but never
         # delivered. Retry ONCE as plain text so a reply is never silently dropped (worst
         # case the user sees raw markdown chars). Mirrors notify.py's plain-text fallback.
+        _body = (e.read().decode("utf-8", "replace")[:300] if hasattr(e, "read") else "")
         if getattr(e, "code", None) == 400 and payload.get("parse_mode"):
             log(f"tg_post {method} 400 (markdown parse?) — retrying as plain text")
             retry = {k: v for k, v in payload.items() if k != "parse_mode"}
@@ -304,9 +305,10 @@ def tg_post(token, method, payload):
                 with urllib.request.urlopen(req2, timeout=10, context=SSL_CONTEXT) as r:
                     return json.loads(r.read())
             except Exception as e2:
-                log(f"tg_post {method} plain-text retry failed: {e2}")
+                _b2 = (e2.read().decode("utf-8", "replace")[:300] if hasattr(e2, "read") else "")
+                log(f"tg_post {method} plain-text retry failed: {e2}; body: {_b2}")
                 return {}
-        log(f"tg_post {method} error: {e}")
+        log(f"tg_post {method} error: {e}; body: {_body}")
         return {}
 
 
