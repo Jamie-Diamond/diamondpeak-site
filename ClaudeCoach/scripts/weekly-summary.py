@@ -131,6 +131,56 @@ def run_summary(slug: str = "jamie") -> str:
                 + f" ({pct:+.1f}% over {len(weeks)} wk; higher = better)")
     except Exception as exc:
         print(f"[weekly-summary:{slug}] run efficiency calc failed: {exc}", file=sys.stderr)
+
+    # VO2max + body-composition trends (block-level — both move slowly, so use ~8wk).
+    # VO2max is an independent fitness check CTL can't give: rising = build working;
+    # falling while CTL climbs = possible non-functional overreaching. Body comp on a
+    # weight cut: weight down but body fat flat = losing lean mass, not fat.
+    vo2max_line = "Not enough VO2max readings yet."
+    composition_line = "No recent body-composition readings."
+    try:
+        w8 = client.get_wellness(56)
+        vo2 = [((r.get("id") or "")[:10], float(r["vo2max"])) for r in w8 if r.get("vo2max")]
+        if len(vo2) >= 2:
+            (d0, v0), (d1, v1) = vo2[0], vo2[-1]
+            dv = round(v1 - v0, 1)
+            ctls = [float(r["ctl"]) for r in w8 if r.get("ctl") is not None]
+            dctl = round(ctls[-1] - ctls[0]) if len(ctls) >= 2 else 0
+            if dv < 0 and dctl >= 3:
+                flag = " — ⚠️ VO2max falling while Fitness climbs: watch for non-functional overreaching."
+            elif dv > 0:
+                flag = " — engine improving, the build is productive."
+            else:
+                flag = " — stable."
+            vo2max_line = (f"VO2max {v0:.0f} ({d0}) → {v1:.0f} ({d1}), {dv:+.1f} over window; "
+                           f"Fitness (CTL) {dctl:+d} same window.{flag}")
+        elif vo2:
+            vo2max_line = f"VO2max {vo2[-1][1]:.0f} (single reading — need 2+ for a trend)."
+
+        wts = [((r.get("id") or "")[:10], float(r["weight"]),
+                (float(r["bodyFat"]) if r.get("bodyFat") else None))
+               for r in w8 if r.get("weight")]
+        if len(wts) >= 2:
+            (d0, w0, _f0), (d1, w1, _f1) = wts[0], wts[-1]
+            dw = round(w1 - w0, 1)
+            target = float(profile.get("race_weight_kg") or profile.get("target_weight_kg") or 79)
+            to_go = round(w1 - target, 1)
+            comp = (f"Weight {w0:.1f}kg ({d0}) → {w1:.1f}kg ({d1}), {dw:+.1f}kg; "
+                    f"{to_go:+.1f}kg to race target {target:.0f}kg.")
+            bf_pts = [(d, f) for (d, _w, f) in wts if f is not None]
+            if len(bf_pts) >= 2:
+                bf0, bf1 = bf_pts[0][1], bf_pts[-1][1]
+                dbf = round(bf1 - bf0, 1)
+                comp += f" Body fat {bf0:.1f}% → {bf1:.1f}% ({dbf:+.1f}pp)."
+                if dw <= -0.5 and dbf >= -0.1:
+                    comp += (" ⚠️ Weight down but body fat not falling — likely losing lean mass, "
+                             "not fat; check fuelling/protein on the cut.")
+                elif dw <= -0.5 and dbf < -0.1:
+                    comp += " ✅ Weight and body fat both down — losing fat, lean mass holding."
+            composition_line = comp
+    except Exception as exc:
+        print(f"[weekly-summary:{slug}] vo2max/composition calc failed: {exc}", file=sys.stderr)
+
     events_this_wk  = client.get_events(week_start.isoformat(), week_end.isoformat())
     athlete_profile = client.get_athlete_profile()
     outlook_end     = (today + timedelta(days=28)).isoformat()
@@ -330,6 +380,12 @@ Week: {week_start} → {week_end}
 ## Local — Run aerobic efficiency trend (pre-computed)
 {run_efficiency_line or "Not enough run power:HR data yet."}
 
+## Local — VO2max trend (block-level, pre-computed)
+{vo2max_line}
+
+## Local — Body composition trend (weight + body fat, pre-computed)
+{composition_line}
+
 ## Local — Run durability log (last 4 weeks: per-run decoupling / cadence fade / cost fade)
 {json.dumps(run_durability_4wk, indent=2)}
 
@@ -356,6 +412,7 @@ From the data above, extract:
   - Gap to race target: {nutrition_target} − this_week_avg (g/hr)
 - Injury pain: ankle_pain_during scores from session-log this week
 - Run engine + durability: quote the pre-computed run aerobic efficiency trend line if present; from the run durability log, note any run this week with flags (decoupling >5%, cadence fade, rising cost) and whether long-run durability is trending better or worse across the 4 weeks
+- VO2max + body composition: quote the pre-computed VO2max trend and body-composition lines verbatim. If either carries a ⚠️ flag (VO2max falling while Fitness climbs, or weight down without body fat falling), surface it in the Key finding or as a 📌 line — these are the signals the athlete cannot see elsewhere
 
 ## Step 2 — Output the summary card
 
@@ -371,6 +428,8 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 | Fitness change | +X / −X | phase ramp target |
 | Fatigue | X | — |
 | Sleep avg | Xh | ≥7h |
+| Body comp | X.Xkg (Y.Y% fat) | toward [race target]kg |
+| VO2max | NN (trend ±N) | rising/stable |
 | Heat sessions | N | — |
 | Fuelling (rides >90 min) | Xg/hr this wk (4wk avg: Y) | {nutrition_target}g/hr race target — gap: Zg/hr |
 
