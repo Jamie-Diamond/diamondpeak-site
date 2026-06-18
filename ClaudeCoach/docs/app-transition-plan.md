@@ -1,7 +1,15 @@
-# ClaudeCoach — Transition to Full App
+# ClaudeCoach — Transition to Full Web App
 
-**Written:** 2026-05-27  
-**Status:** Plan — execute incrementally over 6–18 months
+**Written:** 2026-05-27 · **Revised:** 2026-06-18
+**Status:** Plan — decisions locked, Phase 0 not started
+
+> ### What changed in the 2026-06-18 revision (read first)
+> The 27 May v1 is superseded on four points, all decided/validated this session:
+> - **Garmin integration is no longer Phase 1 — it is dropped from the critical path.** Research (18 Jun) found the official Garmin Developer Programme is closed to new applicants and enterprise-only; the unofficial `python-garminconnect` route means storing each athlete's Garmin credentials (a privacy/ToS liability for a multi-athlete product) and is fragile. Crucially, **the HRV/sleep data we wanted from Garmin was already in intervals.icu all along** — the daily "HRV null / sleep null" was a 05:00 prescription timing bug (reading before the watch synced), now fixed. The marquee Garmin metrics (Training Readiness/Status, HRV-status, stress) are not in any API anyway. So direct-Garmin adds almost nothing; revisit only if run biomechanics (GCT/vertical oscillation) become a priority, and then via an aggregator (Terra) with proper OAuth — never stored credentials.
+> - **Auth = Cloudflare Access** (was "API key → JWT → passkey"). Already in the stack across other hosts; email allow-list; no passwords to own.
+> - **Frontend = React + Vite SPA** (was "vanilla JS, no rewrite"). Decision: a real SPA for the rich interactions wanted (drag-and-drop calendar, streaming chat). React+Vite matches the existing CdA calculator app in this repo.
+> - **Telegram is demoted to notifications + quick-logging only** (was "parallel channel, full parity indefinitely"). Web becomes the primary surface.
+> - **Domain:** `coach.diamondpeak.uk`.
 
 ---
 
@@ -9,150 +17,74 @@
 
 | Component | Current implementation |
 |---|---|
-| AI coaching | Telegram bot (Python, Claude CLI) |
-| Dashboards | Static HTML on GitHub Pages, data via training-data.json |
-| Scheduling | Intervals.icu directly — no write-back from the dashboard |
-| Garmin data | Via Intervals.icu sync (delayed ~morning) |
-| Auth | None (website), Telegram identity (bot) |
-| Athletes | Jamie, Kathryn, Calum — all on same VM |
+| AI coaching | Telegram bot (Python, Claude CLI) on the VM — chat, voice, morning cards, activity analysis, logging |
+| Dashboards | Static HTML on GitHub Pages (`diamondpeak.uk`), fed a nightly **public subset** (`training-data.json`) |
+| Scheduling | Intervals.icu directly; no write-back from the web |
+| Wellness data | In intervals.icu daily (HRV/sleep/RHR/sleepScore/VO2max/weight/bodyFat); morning timing bug fixed 18 Jun |
+| Auth | None on the website (only a curated public subset is exposed); Telegram identity for the bot |
+| Athletes | Jamie, Kathryn, Calum — same VM |
 
-**Core constraint:** The website is fully static (GitHub Pages). There is no server the browser can talk to. Every interactive feature — rescheduling, session logging, chat — requires a backend.
+**Core constraint (unchanged):** the website is fully static (GitHub Pages), so the browser has no server to talk to. Every interactive feature — chat, logging, drag-and-drop rescheduling — requires a backend.
 
----
+## Decisions (locked 2026-06-18)
 
-## Target state
+| Decision | Choice |
+|---|---|
+| Coaching "brain" | **Reuse the existing VM Python engine** behind an HTTP API — no rewrite |
+| Backend | **FastAPI** on the VM, alongside `claudecoach-bot.service` |
+| Auth | **Cloudflare Access** (email allow-list) via a CF Tunnel |
+| Frontend | **React + Vite SPA**, mobile-first PWA, rich interactions (drag-and-drop) |
+| Domain | **coach.diamondpeak.uk** |
+| Telegram | **Notifications + quick-logging only** once web is primary |
+| Notifications | **Telegram only for now** (no web push yet) |
 
-A single product with three surfaces:
-1. **Mobile/web app** — dashboard, calendar, session log, in-app chat
-2. **Telegram** — retained as an optional parallel channel (low cost to keep)
-3. **Coach view** — admin panel: drag-and-drop scheduling, athlete overview
+## Target architecture
 
-Backed by:
-- A **FastAPI server** on the existing VM (single enabling step for all browser features)
-- **Garmin integration** for direct HRV/sleep reads and workout writes to device
-- **Intervals.icu write-back** for calendar changes
-- **Proper auth** (JWT or passkey — no passwords if possible)
+```
+Browser (React+Vite SPA / PWA)  ──HTTPS──►  Cloudflare Tunnel + Access (email gate)
+                                                   │
+                                            FastAPI on the VM
+                                                   │  (serves the SPA build + the API)
+                          ┌────────────────────────┼────────────────────────┐
+                     shared engine             ICU / Strava              athlete data
+                   (call_claude, tools,        (icu_api, fetch,          (session-log,
+                    plan_tools, prompts)         write-back)              current-state…)
+                                                   ▲
+                                        Telegram bot (same engine)
+                                        push + quick voice/RPE only
+```
+
+**Keystone — the shared engine.** Extract the coaching engine out of `bot.py` into an importable module that *both* the Telegram bot and the FastAPI API call. This is what prevents two divergent brains. Everything else depends on it; it is Phase 0 and must land before any browser feature, with the bot kept working off it throughout (no big-bang).
 
 ---
 
 ## Phases
 
-### Phase 1 — Garmin integration
-**Effort:** ~6 hours (unofficial read path) + ~developer programme approval wait (official write path)  
-**Why first:** No backend dependency — runs directly on the VM using the existing Python environment. Immediately improves morning briefings by delivering HRV/sleep data before Intervals.icu sync completes. Apply for the official Developer Programme now to start the 2–5 day approval clock running.
+### Phase 0 — Foundations (the enabler)
+- Extract the engine from `bot.py` into `lib/engine.py` (or similar): `run_chat()` (prompt build + tools + plan_tools + streaming), session logging, ICU read/write. Repoint the Telegram bot at it — behaviour-neutral; verify the bot still works.
+- Stand up FastAPI on the VM (systemd service beside the bot), behind a **Cloudflare Tunnel + Access** at `coach.diamondpeak.uk`. Map CF Access email → athlete slug.
+- Scaffold the React + Vite SPA; FastAPI serves the built static assets (one origin, no CORS).
 
-**Two sub-paths:**
+### Phase 1 — Live, auth'd dashboards
+- SPA renders each athlete's **full private** dashboards from the API (fitness/form/load/recovery/durability/compliance, plan, current state) — live, not the nightly public subset.
+- Replaces the read-only GitHub Pages dashboards. Mobile-first layout from day one.
 
-#### 1a — Reading health data (unofficial, can do now)
-Use `python-garminconnect` (PyPI, cyberjunky/python-garminconnect):
-```python
-from garminconnect import Garmin
-client = Garmin(email, password)
-client.login()
-hrv = client.get_heart_rate_variability("2026-05-27")   # returns RMSSD
-sleep = client.get_sleep_data("2026-05-27")             # stages, score, secs
-body_battery = client.get_body_battery("2026-05-27")
-```
-Store tokens after login (client exports `garth` session tokens — persist as JSON in athlete folder to avoid re-auth on every run).  
-Use this to give the morning briefing HRV/sleep data *immediately* at boot, before Garmin → ICU sync completes.  
-**Security — pin the package version:** credentials go directly to `connect.garmin.com` over HTTPS; the library has no third-party server. The only realistic leak vector is a supply chain attack via a malicious PyPI update. Mitigate by pinning to a specific reviewed version and only upgrading intentionally:
-```
-pip install garminconnect==<version>   # pin — do NOT pip install --upgrade blindly
-```
-**Risk:** unofficial — Garmin can break it with a site update. Acceptable for 3 athletes; not for a commercial product.
+### Phase 2 — Web chat (headline: the main interface moves)
+- Streaming chat UI (SSE) → `/chat` → shared engine, full tool + plan_tools capability. Markdown rendering, image upload, shared history with Telegram.
+- This is the point where "the main interface" is on the web.
 
-#### 1b — Writing workouts to Garmin device (official, apply when ready)
-Apply to Garmin Connect Developer Programme (developer.garmin.com).  
-Approval: 2–5 business days. Credentials: consumer key + consumer secret.  
-Use Training API to push a structured workout (name, steps, targets) to the athlete's Garmin device so it appears in their watch's workout list.  
-This is distinct from Intervals.icu — it pushes directly to the device, not the plan calendar.  
-**Required for production app** — unofficial path has no write capability.
+### Phase 3 — Interactive calendar + actions
+- Drag-and-drop session rescheduling on a calendar view → Intervals.icu `edit_workout` write-back; optimistic re-render; past-date guard.
+- Session logging/actions (RPE, pain, weight, nutrition, debrief, replan, push-workout) as web flows — the Telegram buttons, on the web.
 
----
+### Phase 4 — Demote Telegram + PWA polish
+- Telegram becomes push (morning card, activity alerts, PRs) + on-the-go quick-log/voice, off the shared engine.
+- PWA shell: `manifest.json` + service worker, installable on the phone home screen, offline shell + last-fetched data. Mobile-first throughout (web is replacing the phone touchpoint).
+- Notifications stay on Telegram (no web push yet, per decision).
 
-### Phase 2 — FastAPI backend on VM (enabler for browser features)
-**Effort:** ~4 hours  
-**Why second:** Every subsequent browser-facing phase depends on this. Without a backend the website stays static forever.
-
-What to build:
-- FastAPI app on VM, port 8080, proxied through nginx (or a new subdomain)
-- Endpoints:
-  - `GET /athletes/{slug}/data` — returns training-data.json content (replaces direct GitHub Pages file)
-  - `POST /athletes/{slug}/events/{id}/reschedule` — calls `IcuClient.edit_workout()`
-  - `POST /athletes/{slug}/sessions/{id}` — update session log fields (RPE, notes, nutrition)
-- Auth: shared API key in header for now (`X-CC-Key: <secret>`). One key per athlete, stored in athletes.json.
-- Deploy as a systemd service alongside claudecoach-bot.service
-
-This phase alone enables drag-and-drop and session log editing from the browser.
-
----
-
-### Phase 3 — Interactive calendar (drag-and-drop rescheduling)
-**Effort:** ~8–9 hours  
-**Depends on:** Phase 2
-
-Changes:
-- `refresh-site-data.py`: add `icu_event_id` to each planned event in `weekCalendar`
-- `renderLiveCalendar()`: refactor from `innerHTML` string-builder to DOM node construction; add `draggable` attribute and `dragstart`/`dragover`/`drop` event listeners
-- On drop: `POST /athletes/{slug}/events/{id}/reschedule` to the Phase 2 API; optimistic re-render; trigger background data refresh
-- Past-date guard: prevent dragging events to dates in the past
-
----
-
-### Phase 4 — PWA shell (installable, mobile-friendly)
-**Effort:** ~3 hours  
-**Depends on:** Phase 2 (for API-backed data)
-
-Changes:
-- Add `manifest.json` (name, icons, theme colour, display: standalone)
-- Add a service worker for offline caching of the shell and last-fetched data
-- Mobile CSS pass: ensure dashboards are usable on a phone (current pages are desktop-oriented)
-- This makes the website installable on iOS/Android home screen — no App Store needed
-
-At this point athletes have a "ClaudeCoach app" on their phone that shows dashboards and allows rescheduling. Coaching chat is still Telegram.
-
----
-
-### Phase 5 — In-app chat (replaces Telegram as primary surface)
-**Effort:** ~12 hours  
-**Depends on:** Phase 2 (API backend)
-
-What to build:
-- Chat UI in the PWA: message thread, send input, markdown rendering
-- Backend endpoint: `POST /athletes/{slug}/chat` — receives message, runs through the same Claude pipeline as bot.py, returns response
-- Streaming support: use Server-Sent Events so the response streams in like a real chat
-- Image upload: allow photo attachments (replaces Telegram photo handling)
-- History: share the same `telegram/history.json` so context is preserved across both surfaces
-- Push notifications via Web Push API (service worker) — replaces Telegram notifications for morning cards, activity analysis etc.
-
-Keep Telegram running in parallel indefinitely — low cost and some athletes may prefer it.
-
----
-
-### Phase 6 — Coach admin panel
-**Effort:** ~6 hours  
-**Depends on:** Phase 2, Phase 3
-
-A separate view (not athlete-facing) that shows all three athletes on one screen:
-- Today's sessions, completion status, RPE across all athletes
-- Drag-and-drop scheduling across athletes
-- Alert triage (watchdog flags, test reminders)
-- Link to individual athlete dashboards
-
-Simple authenticated HTML page served by the FastAPI backend. No new framework needed.
-
----
-
-### Phase 7 — Native app (defer until PWA is limiting)
-**Effort:** ~40+ hours  
-**Depends on:** All previous phases
-
-Only worth doing if:
-- Push notifications via Web Push are unreliable on iOS (Apple restricts these for PWAs)
-- Need deep Garmin SDK access (not HTTP API)
-- Want App Store distribution
-
-Technology choice when the time comes: React Native (shares JS logic with the PWA) or Flutter (better cross-platform consistency). The FastAPI backend from Phase 2 is already the right API target — nothing changes on the server.
+### Phase 5 — Later / optional
+- **Coach admin panel:** all athletes on one screen (today's sessions, completion, RPE, alert triage), cross-athlete drag-and-drop scheduling.
+- **Native app:** only if the PWA hits a real ceiling (e.g. iOS push limits). React Native shares JS with the SPA; the FastAPI API is already the right target.
 
 ---
 
@@ -160,19 +92,20 @@ Technology choice when the time comes: React Native (shares JS logic with the PW
 
 | Layer | Choice | Rationale |
 |---|---|---|
-| Backend | FastAPI (Python) | Already on VM, team knows Python, fits existing codebase |
-| Auth | API key → JWT → passkey over time | Start simple, upgrade without rearchitecting |
-| Frontend | Vanilla JS → add fetch/SSE calls | No rewrite needed; add features incrementally |
-| PWA | Web standard (manifest + service worker) | Zero cost, works today |
-| Chat | SSE streaming from FastAPI | Mirrors bot.py behaviour; no new infrastructure |
-| Garmin reads | python-garminconnect (unofficial) | Works today; replace with official SDK if commercialising |
-| Garmin writes | Official Developer Programme | Apply immediately — 2–5 day approval |
-| Native (future) | React Native or Flutter | Defer until PWA hits a real ceiling |
+| Backend | FastAPI (Python) on the VM | Reuses the proven engine; team knows Python |
+| Shared engine | `lib/engine.py` imported by both bot + API | One brain, no divergence |
+| Auth | Cloudflare Access (email) via CF Tunnel | Already in stack; no password ownership |
+| Frontend | React + Vite SPA, PWA | Rich interactions (drag-and-drop, streaming); matches existing CdA app |
+| Chat | SSE streaming from FastAPI | Mirrors bot streaming; no new infra |
+| Calendar write-back | `IcuClient.edit_workout` | Already implemented in the engine |
+| Garmin | **Deferred / dropped** | Data already in ICU; official API closed; unofficial = liability. Aggregator (Terra) only if run dynamics needed later |
+| Native (future) | React Native | Defer until PWA ceiling |
 
----
+## Risks / watch-items
+- **4GB VM:** FastAPI + uvicorn + bot + crons + Whisper + Piper. Should fit; keep worker count low and memory-watch.
+- **Engine refactor is make-or-break** — do it first, keep the bot working off it the whole time.
+- **Mobile-first is mandatory** — the SPA replaces the phone touchpoint, not a desktop dashboard.
+- **CF Access email → slug** mapping must be solid (wrong mapping = wrong athlete's data).
 
-## What to do next
-
-Phase 1 (Garmin reads) has no dependencies and can start immediately — install `python-garminconnect`, wire it into morning-checkin.py, and apply for the Developer Programme in parallel to start the approval clock. Phase 2 (FastAPI, ~4h) then unlocks everything browser-facing.
-
-Suggested first sprint: **Phase 1 → Phase 2 → Phase 3** in sequence. That delivers: earlier HRV/sleep in morning briefings, rescheduling from the dashboard, and groundwork for an installable mobile app — without touching Telegram, without an App Store, and without any new third-party dependencies beyond the Garmin SDK.
+## Next step
+Phase 0, starting with the **engine extraction** (`bot.py` → `lib/engine.py`, repoint the bot, verify behaviour-neutral). It is the foundation everything else builds on and carries no behaviour change. Then FastAPI skeleton + CF Tunnel/Access + SPA scaffold.
