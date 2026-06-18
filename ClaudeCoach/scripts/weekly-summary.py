@@ -227,13 +227,13 @@ def run_summary(slug: str = "jamie") -> str:
     # -- Pre-compute recovery score --------------------------------------------
     recovery = None
     try:
-        hrv_t, hrv_b, tsb_v, sleep_v = rs._parse_wellness(wellness_14d)
+        hrv_t, hrv_b, tsb_v, sleep_v, sleep_score_v = rs._parse_wellness(wellness_14d)
         pain = 0
         state_json = adir / "current-state.json"
         if state_json.exists():
             pain = json.loads(state_json.read_text()).get("ankle", {}).get("pain_during", 0) or 0
         recovery = rs.compute(hrv_t, hrv_b, tsb_v, sleep_v, pain,
-                              in_taper=rs.in_taper(slug))
+                              in_taper=rs.in_taper(slug), sleep_score=sleep_score_v)
     except Exception:
         pass
 

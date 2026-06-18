@@ -73,17 +73,37 @@ def _score_tsb_taper(tsb):
     return 40                    # heavily fatigued in taper — something is wrong
 
 
-def _score_sleep(hrs):
-    """Sleep hours → 0-100. Target ≥ 7h."""
-    if hrs is None:
+def _score_quality(sleep_score):
+    """Garmin overnight sleep SCORE (0-100 composite of duration, deep/REM, and
+    restlessness) → recovery sub-score. Captures fragmented nights that raw hours
+    miss (e.g. 13 Jun: 7.1h but score 57)."""
+    if sleep_score is None:
         return None
-    if hrs >= 8.5:   return 100
-    if hrs >= 8.0:   return 95
-    if hrs >= 7.5:   return 88
-    if hrs >= 7.0:   return 80
-    if hrs >= 6.5:   return 65
-    if hrs >= 6.0:   return 45
-    return 25
+    if sleep_score >= 90:   return 100
+    if sleep_score >= 80:   return 90
+    if sleep_score >= 70:   return 78
+    if sleep_score >= 60:   return 60
+    if sleep_score >= 50:   return 40
+    return 20
+
+
+def _score_sleep(hrs, sleep_score=None):
+    """Sleep → 0-100. Combines duration with Garmin's sleep SCORE (quality) and
+    returns the WORSE of the two: a fragmented night drags the signal down, but a
+    high score can never rescue a short night (downgrade-only — quality only ever
+    adds caution). Either input may be None."""
+    dur = None
+    if hrs is not None:
+        if hrs >= 8.5:   dur = 100
+        elif hrs >= 8.0: dur = 95
+        elif hrs >= 7.5: dur = 88
+        elif hrs >= 7.0: dur = 80
+        elif hrs >= 6.5: dur = 65
+        elif hrs >= 6.0: dur = 45
+        else:            dur = 25
+    qual = _score_quality(sleep_score)
+    subs = [s for s in (dur, qual) if s is not None]
+    return min(subs) if subs else None
 
 
 def _score_pain(pain):
@@ -111,16 +131,18 @@ _LABELS = [
 
 
 def compute(hrv_today=None, hrv_baseline=None, tsb=None, sleep_hrs=None, pain=0,
-            in_taper=False):
+            in_taper=False, sleep_score=None):
     """
     Returns the recovery dict. Any input may be None — missing signals are
     excluded and remaining weights are rescaled proportionally. `in_taper`
     switches the TSB scorer to the taper variant (high TSB is the goal there).
+    `sleep_score` is Garmin's overnight sleep score (quality); it can only pull
+    the sleep signal down, never lift it.
     """
     raw = {
         "hrv":   _score_hrv(hrv_today, hrv_baseline),
         "tsb":   _score_tsb_taper(tsb) if in_taper else _score_tsb(tsb),
-        "sleep": _score_sleep(sleep_hrs),
+        "sleep": _score_sleep(sleep_hrs, sleep_score),
         "pain":  _score_pain(pain if pain is not None else 0),
     }
 
@@ -155,6 +177,7 @@ def compute(hrv_today=None, hrv_baseline=None, tsb=None, sleep_hrs=None, pain=0,
             entry["value"] = tsb
         elif k == "sleep":
             entry["value"] = sleep_hrs
+            entry["sleep_score"] = sleep_score
         elif k == "pain":
             entry["value"] = pain
         signals[k] = entry
@@ -202,6 +225,7 @@ def _parse_wellness(rows):
     sleep_val    = today_row.get("hrsSleep") or today_row.get("sleepSecs")
     if sleep_val and sleep_val > 24:      # stored as seconds
         sleep_val = sleep_val / 3600
+    sleep_score_val = today_row.get("sleepScore")
 
     # 7-day HRV baseline (exclude today)
     hrv_vals = [
@@ -211,7 +235,7 @@ def _parse_wellness(rows):
     ]
     hrv_baseline = round(mean(hrv_vals), 1) if hrv_vals else None
 
-    return hrv_today, hrv_baseline, tsb_val, sleep_val
+    return hrv_today, hrv_baseline, tsb_val, sleep_val, sleep_score_val
 
 
 def main():
@@ -237,7 +261,7 @@ def main():
         client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
         wellness_rows = client.get_wellness(8)
 
-    hrv_today, hrv_baseline, tsb, sleep_hrs = _parse_wellness(wellness_rows)
+    hrv_today, hrv_baseline, tsb, sleep_hrs, sleep_score = _parse_wellness(wellness_rows)
 
     # Pain score
     pain = args.pain
@@ -253,7 +277,7 @@ def main():
             pain = 0
 
     result = compute(hrv_today, hrv_baseline, tsb, sleep_hrs, pain,
-                     in_taper=in_taper(args.athlete))
+                     in_taper=in_taper(args.athlete), sleep_score=sleep_score)
     print(json.dumps(result, indent=2))
 
 

@@ -373,7 +373,7 @@ def run_athlete(slug, athlete_cfg):
                     if steps_val  is not None: parts.append(f"Steps: {int(steps_val):,}")
                     wellness_line = " · ".join(parts)
                 break
-        hrv_t, hrv_b, tsb, sleep = rs._parse_wellness(wellness_rows)
+        hrv_t, hrv_b, tsb, sleep, sleep_score = rs._parse_wellness(wellness_rows)
         pain = 0
         state_f = adir / "current-state.json"
         if state_f.exists():
@@ -384,7 +384,7 @@ def run_athlete(slug, athlete_cfg):
             pain = (ankle.get("pain_today_resting", 0) if resting_today
                     else ankle.get("pain_next_morning", 0)) or 0
         recovery = rs.compute(hrv_t, hrv_b, tsb, sleep, pain,
-                              in_taper=rs.in_taper(slug))
+                              in_taper=rs.in_taper(slug), sleep_score=sleep_score)
     except Exception:
         pass  # score is optional — morning card still sends without it
 
