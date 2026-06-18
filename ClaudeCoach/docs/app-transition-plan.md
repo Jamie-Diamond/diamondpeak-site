@@ -1,7 +1,7 @@
 # ClaudeCoach — Transition to Full Web App
 
 **Written:** 2026-05-27 · **Revised:** 2026-06-18
-**Status:** Plan — decisions locked, Phase 0 not started
+**Status:** Phase 0 in progress — shared engine extracted (`lib/engine.py`, commit 8f1749c, live + verified). Next: FastAPI skeleton + CF Tunnel/Access, then SPA scaffold.
 
 > ### What changed in the 2026-06-18 revision (read first)
 > The 27 May v1 is superseded on four points, all decided/validated this session:
@@ -61,7 +61,7 @@ Browser (React+Vite SPA / PWA)  ──HTTPS──►  Cloudflare Tunnel + Access
 ## Phases
 
 ### Phase 0 — Foundations (the enabler)
-- Extract the engine from `bot.py` into `lib/engine.py` (or similar): `run_chat()` (prompt build + tools + plan_tools + streaming), session logging, ICU read/write. Repoint the Telegram bot at it — behaviour-neutral; verify the bot still works.
+- **[DONE 2026-06-18, commit 8f1749c]** Extract the engine from `bot.py` into `lib/engine.py`: prompt assembly (`build_prompt`, `system_prompt_with_level`, `load_persistent_rules`, `render_history`), `call_claude`, `call_claude_with_image`, and a transport-agnostic `stream_claude` generator yielding `('chunk'|'final', text)`. Bot repointed; `call_claude_streaming` is now a thin Telegram wrapper over `stream_claude`. Behaviour-neutral, verified live. (Follow-up: DRY the duplicated `CLAUDE_BIN`/`TOOLS`/`MODEL_*` constants once the API exists; extract session-logging + ICU read/write into the engine too.)
 - Stand up FastAPI on the VM (systemd service beside the bot), behind a **Cloudflare Tunnel + Access** at `coach.diamondpeak.uk`. Map CF Access email → athlete slug.
 - Scaffold the React + Vite SPA; FastAPI serves the built static assets (one origin, no CORS).
 
