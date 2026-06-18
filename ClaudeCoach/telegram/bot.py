@@ -113,14 +113,17 @@ _SPEECH_SUBS = [
     (re.compile(r'`([^`]*)`'), r'\1'),                 # inline code
     (re.compile(r'\[([^\]]+)\]\([^)]+\)'), r'\1'),     # [text](url) -> text
     (re.compile(r'https?://\S+'), ' '),                # bare URLs
+    (re.compile(r'<\s*(\d)'), r'under \1'),            # "<144" -> "under 144" (before md strip eats >)
+    (re.compile(r'>\s*(\d)'), r'over \1'),             # ">144" -> "over 144"
     (re.compile(r'[*_#>|]+'), ' '),                    # md emphasis / headings / table pipes
     (re.compile(r'(\d)\s*[x×]\s*(\d)'), r'\1 by \2'),  # 5x200 -> 5 by 200
     (re.compile(r'\s*@\s*'), ' at '),                  # @ -> at
     (re.compile(r'/100\s*m\b', re.I), ' per hundred metres'),
     (re.compile(r'/km\b', re.I), ' per kilometre'),
-    (re.compile(r'\bbpm\b', re.I), ' beats per minute'),
+    (re.compile(r'\s*bpm\b', re.I), ' beats per minute'),   # "144bpm" or "144 bpm"
     (re.compile(r'\s*&\s*'), ' and '),
     (re.compile(r'\s*%'), ' percent'),
+    (re.compile(r' +([,.;:])'), r'\1'),                # tidy " ," left by a prior sub
 ]
 # Strip emoji / pictographs so the TTS doesn't try to read them aloud.
 _EMOJI_RE = re.compile(
