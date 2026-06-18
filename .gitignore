@@ -1,6 +1,7 @@
 .claude/
 ClaudeCoach/telegram/config.json
 ClaudeCoach/telegram/bot.log
+ClaudeCoach/telegram/voices/
 ClaudeCoach/athletes/*/telegram/history.json
 __pycache__/
 *.pyc

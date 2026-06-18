@@ -84,6 +84,129 @@ def get_whisper():
             log(f"Whisper not available: {e}")
     return _whisper_model
 
+
+# --- Text-to-speech (Piper, local, CPU) ------------------------------------
+VOICES_DIR = BASE / "voices"
+PIPER_VOICE_NAME = "en_GB-alan-medium"   # clear UK English; swap voice by changing this + the model file
+_piper_voice = None
+
+
+def get_piper():
+    """Lazily load and cache the Piper voice. The ~63MB ONNX model loads ONCE
+    (a fresh subprocess per reply would reload it and add 2-5s every time)."""
+    global _piper_voice
+    if _piper_voice is None:
+        try:
+            from piper import PiperVoice
+            _piper_voice = PiperVoice.load(str(VOICES_DIR / f"{PIPER_VOICE_NAME}.onnx"))
+            log("Piper voice ready")
+        except Exception as e:
+            log(f"Piper not available: {e}")
+    return _piper_voice
+
+
+# Symbols/units that read badly when spoken verbatim. The MAIN lever is the
+# voice-style directive in the prompt; this is a backstop for structured text
+# that slips through (e.g. a copied session line like "5x200m @ 1:38/100m").
+_SPEECH_SUBS = [
+    (re.compile(r'```.*?```', re.S), ' '),            # code fences
+    (re.compile(r'`([^`]*)`'), r'\1'),                 # inline code
+    (re.compile(r'\[([^\]]+)\]\([^)]+\)'), r'\1'),     # [text](url) -> text
+    (re.compile(r'https?://\S+'), ' '),                # bare URLs
+    (re.compile(r'[*_#>|]+'), ' '),                    # md emphasis / headings / table pipes
+    (re.compile(r'(\d)\s*[x×]\s*(\d)'), r'\1 by \2'),  # 5x200 -> 5 by 200
+    (re.compile(r'\s*@\s*'), ' at '),                  # @ -> at
+    (re.compile(r'/100\s*m\b', re.I), ' per hundred metres'),
+    (re.compile(r'/km\b', re.I), ' per kilometre'),
+    (re.compile(r'\bbpm\b', re.I), ' beats per minute'),
+    (re.compile(r'\s*&\s*'), ' and '),
+    (re.compile(r'\s*%'), ' percent'),
+]
+# Strip emoji / pictographs so the TTS doesn't try to read them aloud.
+_EMOJI_RE = re.compile(
+    "[\U0001F000-\U0001FAFF"   # symbols & pictographs, emoticons, transport, supplemental
+    "\U00002600-\U000027BF"    # misc symbols + dingbats
+    "\U0001F1E6-\U0001F1FF"    # regional indicators (flags)
+    "←-⇿"            # arrows
+    "⬀-⯿"            # misc symbols & arrows
+    "️]"                  # variation selector
+)
+
+
+def _clean_for_speech(text: str) -> str:
+    """Reduce a markdown/emoji reply to clean prose Piper can read aloud."""
+    t = text
+    for pat, repl in _SPEECH_SUBS:
+        t = pat.sub(repl, t)
+    t = _EMOJI_RE.sub('', t)
+    t = re.sub(r'[ \t]+', ' ', t)
+    t = re.sub(r'\n{2,}', '\n', t)
+    return t.strip()
+
+
+def synthesize_voice(text: str):
+    """Return OGG/Opus bytes for `text`, or None on any failure (caller falls back to text)."""
+    voice = get_piper()
+    if not voice or not text.strip():
+        return None
+    try:
+        pcm = b"".join(chunk.audio_int16_bytes for chunk in voice.synthesize(text))
+        if not pcm:
+            return None
+        rate = getattr(voice.config, "sample_rate", 22050)
+        proc = subprocess.run(
+            ["ffmpeg", "-loglevel", "error", "-f", "s16le", "-ar", str(rate), "-ac", "1",
+             "-i", "pipe:0", "-c:a", "libopus", "-b:a", "32k", "-f", "ogg", "pipe:1"],
+            input=pcm, capture_output=True, timeout=60,
+        )
+        if proc.returncode != 0 or not proc.stdout:
+            log(f"ffmpeg opus encode failed: {proc.stderr.decode('utf-8', 'replace')[:200]}")
+            return None
+        return proc.stdout
+    except Exception as e:
+        log(f"synthesize_voice error: {e}")
+        return None
+
+
+def send_voice(token, chat_id, ogg_bytes, reply_markup=None):
+    """Upload an OGG/Opus voice note via sendVoice (multipart, mirrors send_photo)."""
+    boundary = "CCvoice"
+    parts = [
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{chat_id}\r\n".encode(),
+    ]
+    if reply_markup:
+        parts.append(
+            (f"--{boundary}\r\nContent-Disposition: form-data; name=\"reply_markup\"\r\n\r\n"
+             f"{json.dumps(reply_markup)}\r\n").encode())
+    parts.append(
+        (f"--{boundary}\r\nContent-Disposition: form-data; name=\"voice\"; "
+         f"filename=\"reply.ogg\"\r\nContent-Type: audio/ogg\r\n\r\n").encode())
+    body = b"".join(parts) + ogg_bytes + f"\r\n--{boundary}--\r\n".encode()
+    url = f"https://api.telegram.org/bot{token}/sendVoice"
+    req = urllib.request.Request(url, data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30, context=SSL_CONTEXT) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        log(f"send_voice error: {e}")
+        return {}
+
+
+# Injected into the prompt when voice mode is on. The athlete HEARS the reply,
+# so it must be written for the ear, not the eye.
+VOICE_STYLE_DIRECTIVE = (
+    "## VOICE REPLY - the athlete will HEAR this, not read it\n"
+    "Write the reply to be spoken aloud by a text-to-speech voice:\n"
+    "- Plain flowing sentences only. NO markdown, NO bullet points, NO tables, NO headings, "
+    "NO emoji, NO asterisks or underscores.\n"
+    "- Keep it short and conversational, like a coach talking - usually 2 to 5 sentences. Lead with the answer.\n"
+    "- Say numbers, paces and sets the way you would say them out loud: 'five by two hundred metres at threshold', "
+    "'around five thirty per kilometre', 'ninety minutes', 'one forty-four beats per minute'. "
+    "Never use symbols like @, /, %, x or colons in times.\n"
+    "- If the answer truly needs a chart, give a one-line spoken summary; the chart image is sent separately.\n"
+)
+
 CONFIG_FILE = BASE / "config.json"
 ATHLETES_CONFIG = BASE.parent / "config/athletes.json"
 LOG_FILE = BASE / "bot.log"
@@ -170,7 +293,7 @@ MENU_KEYBOARD = {
     "keyboard": [
         ["Today's session", "How am I looking?"],
         ["📈 Graphs", "🔄 Replan week"],
-        ["🔍 Check activity"],
+        ["🔍 Check activity", "🎙 Voice"],
     ],
     "resize_keyboard": True,
     "is_persistent": True,
@@ -1100,6 +1223,22 @@ def _load_profile(slug: str) -> dict:
         return json.loads(f.read_text()) if f.exists() else {}
     except Exception:
         return {}
+
+
+def _voice_mode_on(slug: str) -> bool:
+    """Sticky per-athlete voice-reply toggle (persists in profile.json, gitignored)."""
+    return bool(_load_profile(slug).get("voice_reply"))
+
+
+def _set_voice_mode(slug: str, on: bool) -> None:
+    f = _athlete_dir(slug) / "profile.json"
+    try:
+        prof = json.loads(f.read_text()) if f.exists() else {}
+    except Exception:
+        prof = {}
+    prof["voice_reply"] = bool(on)
+    f.write_text(json.dumps(prof, indent=2, ensure_ascii=False))
+
 
 def _strength_session(slug: str) -> str:
     """Return today's prescribed strength session based on day of week."""
@@ -2743,6 +2882,36 @@ def main():
             files = athlete_files(slug)
             athlete_name = athlete.get("name", slug).split()[0]  # first name only
 
+            # Sticky voice-reply toggle: /voice [on|off] or the 🎙 menu button.
+            _vt = text.strip().lower()
+            if _vt == "/voice" or _vt.startswith("/voice ") or _vt == "🎙 voice":
+                arg = _vt.replace("🎙 voice", "").replace("/voice", "").strip()
+                if arg in ("on", "start", "enable"):
+                    new_state = True
+                elif arg in ("off", "stop", "disable"):
+                    new_state = False
+                else:
+                    new_state = not _voice_mode_on(slug)   # bare /voice or button = flip
+                _set_voice_mode(slug, new_state)
+                if new_state:
+                    vb = synthesize_voice(
+                        "Voice replies are on. I'll talk back to you from now on. "
+                        "Say or type voice off any time to switch back to text.")
+                    note = ("🎙 Voice replies *on* - I'll talk back to you. "
+                            "Send /voice off (or tap 🎙 Voice again) to return to text.")
+                    if vb:
+                        send_voice(token, chat_id, vb)
+                        send(token, chat_id, note, reply_markup=build_keyboard(slug))
+                    else:
+                        send(token, chat_id,
+                             note + "\n\n_Voice engine is unavailable right now, so replies stay text until it's back._",
+                             reply_markup=build_keyboard(slug))
+                else:
+                    send(token, chat_id, "🔇 Voice replies *off* - back to text.",
+                         reply_markup=build_keyboard(slug))
+                log(f"Out (fast): voice mode {'on' if new_state else 'off'}")
+                continue
+
             if text.lower() in ("/start", "/help"):
                 race_name  = athlete.get("race_name", "your race")
                 cycle_help = ("  period started — log cycle start (phases feed your plan)\n"
@@ -2903,11 +3072,38 @@ def main():
                 log("Out (fast): race plan generated")
                 continue
 
-            typing(token, chat_id)
             history = load_history(files["history"])
             context = prefetch_context(slug)
             model = select_model(text, history)
 
+            if _voice_mode_on(slug):
+                # Spoken reply (sticky voice mode): generate once (no streaming
+                # placeholder), speak it, keep a short text copy. Charts still go out
+                # as images. ANY TTS failure or empty text falls straight through to a
+                # normal text send - a reply is never dropped.
+                tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "record_voice"})
+                response = call_claude(
+                    text, config, history, model=model,
+                    system_prompt_file=files["system_prompt"], athlete_name=athlete_name,
+                    context=(context + "\n\n" + VOICE_STYLE_DIRECTIVE),
+                )
+                clean = process_charts(token, chat_id, response, slug=slug)
+                spoken = _clean_for_speech(clean) if clean else ""
+                ogg = synthesize_voice(spoken) if spoken else None
+                if ogg:
+                    send_voice(token, chat_id, ogg, reply_markup=build_keyboard(slug))
+                    if clean:
+                        send(token, chat_id, clean + response_footer(model, slug=slug, athlete_cfg=athlete))
+                elif clean:
+                    send(token, chat_id,
+                         clean + response_footer(model, slug=slug, athlete_cfg=athlete),
+                         reply_markup=build_keyboard(slug))
+                log(f"Out (voice): {clean[:80]}")
+                history.append(_hist_entry(text, clean))
+                save_history(history, files["history"])
+                continue
+
+            typing(token, chat_id)
             # Send a placeholder and stream chunks into it
             placeholder = tg_post(token, "sendMessage", {
                 "chat_id": chat_id, "text": "…", "parse_mode": "Markdown",
