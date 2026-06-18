@@ -87,7 +87,7 @@ def get_whisper():
 
 # --- Text-to-speech (Piper, local, CPU) ------------------------------------
 VOICES_DIR = BASE / "voices"
-PIPER_VOICE_NAME = "en_GB-alan-medium"   # clear UK English; swap voice by changing this + the model file
+PIPER_VOICE_NAME = "en_GB-cori-high"     # high-quality UK female (trial); revert to "en_GB-alan-medium" if synth too slow
 PIPER_LENGTH_SCALE = 0.85                # <1 = faster speech, >1 = slower (model default ~1.0)
 _piper_voice = None
 
