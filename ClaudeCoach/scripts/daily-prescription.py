@@ -40,7 +40,7 @@ def trim_log(path: Path, max_lines: int = 5000):
 
 
 def build_prompt(slug: str, name: str, race_name: str, coaching_level: str = "mid",
-                 cycle: dict | None = None) -> str:
+                 cycle: dict | None = None, readiness_prefetch: str = "") -> str:
     today = date.today().isoformat()
     athlete_dir = BASE / "athletes" / slug
     first_name  = name.split()[0]
@@ -57,11 +57,13 @@ Cycle day {cycle['day']} — {cycle['phase'].upper()} phase: {cycle['cue']}
             f"\n  cycle_day: {cycle['day']}"
         )
 
+    readiness_section = f"\n{readiness_prefetch}\n" if readiness_prefetch else ""
+
     return f"""You are running the daily session prescription for {name}'s {race_name} coaching system.
 
 {_level_block(coaching_level)}
 {cycle_block}
-
+{readiness_section}
 
 Step 1 — Pull live data via Bash (use today's date {today} for all calculations):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
@@ -76,14 +78,13 @@ Step 2 — Read these files:
 - {athlete_dir}/current-state.json (ankle block + per-location "pain" blocks from quick-logs — if any non-ankle location shows recent pain ≥4 or a rising history, factor it into today's prescription and say so in the reasoning)
 - {athlete_dir}/session-log.json (most recent entry = last RPE)
 
-Step 3 — Assemble the readiness dict:
-  atl: from fitness endpoint most recent row
-  ctl: from fitness endpoint most recent row
-  hrv_trend_pct: (today HRV - 7d avg HRV) / 7d avg HRV x 100  [if no HRV data, use 0.0]
-  sleep_h_last_night: from wellness endpoint — use ONLY if the most recent wellness record is dated {today}. If it is dated before {today}, set sleep_h_last_night to null (wearable hasn't synced yet).
-  last_session_rpe: most recent rpe field in session-log.json (null if empty)
-  ankle_pain_score: from current-state.md (0 if not present)
-  ankle_quality_cleared: from current-state.md (True once 4 consecutive pain-free quality sessions confirmed)
+Step 3 — Assemble the readiness dict. For the fields below, COPY the values from the
+READINESS INPUTS block above verbatim — do NOT recompute them, and do NOT set hrv_trend_pct
+to 0.0 or sleep_h_last_night to null yourself. That block already carries the latest synced
+HRV trend (a trailing metric — correct even before today syncs) and the most recent synced
+sleep, so this prescription is never gated on a 05:00 sync gap:
+  atl, ctl, hrv_trend_pct, sleep_h_last_night, last_session_rpe, ankle_pain_score, ankle_quality_cleared
+  Then add:
   temp_c: today's forecast ambient temp — use 18.0 as fallback if unavailable
   dew_point_c: today's forecast dew point — use 10.0 as fallback if unavailable{cycle_readiness_lines}
 
@@ -312,6 +313,55 @@ def _todays_planned(slug: str, today: str):
     }
 
 
+def _readiness_prefetch(slug: str) -> str:
+    """Pre-compute the readiness inputs deterministically so the 05:00 prescription
+    never gates the day on null HRV/sleep (the cause of the daily "HRV null / sleep
+    null" log lines: at 05:00 today's wearable data has not synced, so the LLM was
+    forcing hrv_trend=0.0 and sleep=null). HRV trend is a TRAILING metric — the whole
+    window is already synced at 05:00, so latest-available-vs-baseline is correct.
+    Sleep carries forward the most recent synced night; the modulation engine's sleep
+    rules (R6) are downgrade-only, so a stale value can only add caution, never clear a
+    flag. Injected into the prompt like morning-checkin's wellness_line; mirrors the
+    deterministic shadow backstop that has been validating these values on every run."""
+    today = date.today().isoformat()
+    rows = _icu(slug, "wellness", "--days", "14")
+    if not isinstance(rows, list) or not rows:
+        return ""
+    hrv_pts   = [((r.get("id") or "")[:10], float(r["hrv"])) for r in rows if r.get("hrv") is not None]
+    sleep_pts = [((r.get("id") or "")[:10], float(r["sleepSecs"])) for r in rows if r.get("sleepSecs")]
+    atl, ctl  = _latest_fitness(slug)
+    rpe       = _last_rpe(slug)
+    pain, cleared = _ankle_state(slug)
+
+    lines = ["## READINESS INPUTS (pre-computed in Python — authoritative; use verbatim, do NOT recompute or null)"]
+    if len(hrv_pts) >= 3:
+        latest_d, latest_v = hrv_pts[-1]
+        prior = [v for _, v in hrv_pts[:-1]]
+        base  = sum(prior) / len(prior)
+        trend = round((latest_v - base) / base * 100, 1) if base else 0.0
+        fresh = ("today's reading included" if latest_d == today
+                 else f"latest HRV {int(latest_v)} on {latest_d}; today not synced yet at 05:00 — trailing trend, this is correct")
+        lines.append(f"hrv_trend_pct: {trend}   ({fresh})")
+    else:
+        lines.append("hrv_trend_pct: 0.0   (insufficient HRV history — genuinely no signal, not a sync gap)")
+    if sleep_pts:
+        sd, ss = sleep_pts[-1]
+        carried = ("last night" if sd == today
+                   else f"most recent synced night {sd}, carried forward — last night not synced at 05:00")
+        lines.append(f"sleep_h_last_night: {round(ss / 3600, 2)}   ({carried})")
+    else:
+        lines.append("sleep_h_last_night: null   (no sleep history available)")
+    if atl is not None: lines.append(f"atl: {atl:.0f}")
+    if ctl is not None: lines.append(f"ctl: {ctl:.0f}")
+    lines.append(f"last_session_rpe: {rpe if rpe is not None else 'null'}")
+    lines.append(f"ankle_pain_score: {pain}")
+    lines.append(f"ankle_quality_cleared: {str(cleared).lower()}")
+    lines.append("When logging today's prescription to current-state.md, record these values "
+                 "(e.g. \"HRV trend -22.7% (latest 17 Jun); sleep 6.8h carried\") — never write "
+                 "\"HRV null / sleep null\" when a trailing trend and a recent sleep value exist.")
+    return "\n".join(lines)
+
+
 def _prescription_shadow(slug: str, cfg: dict) -> None:
     """Compute and LOG the engine's prescription for today (shadow, non-authoritative)."""
     mode = os.environ.get("PRESCRIPTION_BACKSTOP", "shadow").strip().lower()
@@ -398,8 +448,12 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     except Exception:
         pass
 
+    # Pre-compute readiness deterministically so the 05:00 prescription is never
+    # gated on null HRV/sleep (today's wearable data has not synced that early).
+    readiness_prefetch = _readiness_prefetch(slug)
+
     prompt = build_prompt(slug, name, race_name, coaching_level=coaching_level,
-                          cycle=cycle)
+                          cycle=cycle, readiness_prefetch=readiness_prefetch)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_prescription_", delete=False, suffix=".txt"
