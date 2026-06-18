@@ -48,6 +48,8 @@ BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE.parent / "lib"))
 import claude_call
+import engine
+from engine import call_claude, call_claude_with_image, stream_claude
 HEARTBEAT_FILE = BASE.parent / ".bot_heartbeat"  # touched each poll loop; watched by bot-watchdog.py
 try:
     import charts as _charts
@@ -407,21 +409,6 @@ def _hist_entry(user, assistant):
     them (the 16 Jun misdiagnosis). Old entries without 'ts' render without a stamp."""
     return {"user": user, "assistant": assistant,
             "ts": datetime.now().isoformat(timespec="seconds")}
-
-
-def _render_history(history, athlete_name):
-    lines = []
-    for h in history:
-        stamp = ""
-        ts = h.get("ts", "")
-        if ts:
-            try:
-                stamp = datetime.fromisoformat(ts).strftime("[%a %H:%M] ")
-            except Exception:
-                stamp = ""
-        lines.append(f"{stamp}{athlete_name}: {h['user']}")
-        lines.append(f"ClaudeCoach: {h['assistant']}")
-    return lines
 
 
 def tg_post(token, method, payload):
@@ -2569,193 +2556,33 @@ def handle_admin_command(token, chat_id, text, config):
 # --- END ONBOARDING ----------------------------------------------------------
 
 
-def _load_persistent_rules(sp_file: Path) -> str:
-    """Return contents of persistent-rules.md adjacent to the system prompt, or ''."""
-    rules_file = sp_file.parent / "persistent-rules.md"
-    if rules_file.exists():
-        text = rules_file.read_text().strip()
-        return text if text else ""
-    return ""
-
-
-def _system_prompt_with_level(sp_file: Path) -> str:
-    """Read system_prompt.txt and append the athlete's coaching level block."""
-    text = sp_file.read_text().strip()
-    profile_path = sp_file.parent / "profile.json"
-    if profile_path.exists():
-        try:
-            level = json.loads(profile_path.read_text()).get("coaching_level", "mid")
-            block = _level_block(level)
-            if block:
-                text = text + "\n\n" + block
-        except Exception:
-            pass
-    return text
-
-
-def _build_prompt(user_message, history, system_prompt, athlete_name, context,
-                  persistent_rules=""):
-    parts = [system_prompt, ""]
-    if persistent_rules:
-        parts.append("## Standing rules — always apply (athlete-agreed, session-derived)")
-        parts.append(persistent_rules)
-        parts.append("")
-    if context:
-        parts.append(context)
-        parts.append("")
-    if history:
-        parts.append("Recent conversation:")
-        parts.extend(_render_history(history, athlete_name))
-        parts.append("")
-    parts.append(f"{athlete_name}: {user_message}")
-    return "\n".join(parts)
-
-
-def _claude_cmd(prompt, model, extra_args=None):
-    cmd = [CLAUDE_BIN, "-p", prompt, "--allowedTools", TOOLS,
-           "--model", model, "--no-session-persistence"]
-    if extra_args:
-        cmd.extend(extra_args)
-    return cmd
-
-
-def call_claude(user_message, config, history, model=MODEL_SONNET,
-                system_prompt_file=None, athlete_name="Jamie", context=""):
-    sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
-    full_prompt = _build_prompt(
-        user_message, history,
-        _system_prompt_with_level(sp_file), athlete_name, context,
-        persistent_rules=_load_persistent_rules(sp_file),
-    )
-    try:
-        result = subprocess.run(
-            _claude_cmd(full_prompt, model),
-            capture_output=True, text=True,
-            cwd=config["project_dir"], timeout=300,
-        )
-        return result.stdout.strip() or result.stderr.strip() or "(no response)"
-    except subprocess.TimeoutExpired:
-        return "Sorry, that took too long. Try a simpler question or break it into steps."
-    except Exception as e:
-        log(f"Claude error: {e}")
-        return f"Error calling claude: {e}"
-
-
 def call_claude_streaming(token, chat_id, placeholder_id,
                           user_message, config, history, model=MODEL_SONNET,
                           system_prompt_file=None, athlete_name="Jamie", context=""):
-    """Stream Claude's response, editing the Telegram placeholder as chunks arrive."""
-    sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
-    full_prompt = _build_prompt(
-        user_message, history,
-        _system_prompt_with_level(sp_file), athlete_name, context,
-        persistent_rules=_load_persistent_rules(sp_file),
-    )
-    # `streamed` drives the live placeholder; `final` is the authoritative full
-    # text from the terminal `result` event. We must NOT add `result` on top of
-    # the assistant text — doing so doubled every reply (the 14 Jun turns 3/15
-    # duplication bug). assistant events carry a FULL text snapshot (replace);
-    # content_block_delta events are incremental (append); result replaces all.
-    streamed = ""
-    final = None
+    """Thin Telegram wrapper over engine.stream_claude: edits the placeholder as
+    chunks arrive. All generation lives in lib/engine.py; this only does transport
+    (the 1.5s throttle + skip-unchanged guard that avoids "not modified" 400s)."""
     last_edit = 0.0
     last_sent = ""
-
-    try:
-        proc = subprocess.Popen(
-            _claude_cmd(full_prompt, model, ["--output-format", "stream-json", "--verbose"]),
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            text=True, cwd=config["project_dir"],
-        )
-        for raw_line in proc.stdout:
-            raw_line = raw_line.strip()
-            if not raw_line:
-                continue
-            try:
-                ev = json.loads(raw_line)
-            except Exception:
-                continue
-            ev_type = ev.get("type", "")
-            if ev_type == "result":
-                final = ev.get("result", "") or final
-                continue  # authoritative final text — never append to the stream
-            elif ev_type == "assistant":
-                snapshot = ""
-                for block in (ev.get("message") or {}).get("content", []):
-                    if block.get("type") == "text":
-                        snapshot = block.get("text", "")
-                if snapshot:
-                    streamed = snapshot       # full snapshot — replace, don't append
-            elif ev_type == "content_block_delta":
-                delta = ev.get("delta", {})
-                if delta.get("type") == "text_delta":
-                    streamed += delta.get("text", "")  # incremental — append
-            else:
-                continue
-
-            now = time.time()
-            # Edit every 1.5 s (Telegram rate limit), but only when the text actually
-            # grew - re-sending identical content just triggers "not modified" 400s.
-            snap = streamed.strip()
-            if now - last_edit >= 1.5 and snap and snap != last_sent:
-                tg_post(token, "editMessageText", {
-                    "chat_id": chat_id,
-                    "message_id": placeholder_id,
-                    "text": snap + " ▍",
-                    "parse_mode": "Markdown",
-                })
-                last_edit = now
-                last_sent = snap
-
-        proc.wait(timeout=10)
-        return (final if final is not None else streamed).strip() or "(no response)"
-
-    except subprocess.TimeoutExpired:
-        return (final if final is not None else streamed).strip() or "Sorry, that took too long."
-    except Exception as e:
-        log(f"Claude stream error: {e}")
-        return (final if final is not None else streamed).strip() or f"Error: {e}"
-
-
-def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNET,
-                           system_prompt_file=None, athlete_name="Jamie", context=""):
-    sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
-    system_prompt = _system_prompt_with_level(sp_file)
-
-    parts = [system_prompt, ""]
-    persistent_rules = _load_persistent_rules(sp_file)
-    if persistent_rules:
-        parts.append("## Standing rules — always apply (athlete-agreed, session-derived)")
-        parts.append(persistent_rules)
-        parts.append("")
-    if context:
-        parts.append(context)
-        parts.append("")
-    if history:
-        parts.append("Recent conversation:")
-        parts.extend(_render_history(history, athlete_name))
-        parts.append("")
-
-    question = caption if caption else "analyse this"
-    # Claude Code's Read tool supports images — direct Claude to read the file visually
-    user_msg = (
-        f"{athlete_name} sent an image. Read it from {img_path} then {question}."
-    )
-    parts.append(user_msg)
-    full_prompt = "\n".join(parts)
-
-    try:
-        result = subprocess.run(
-            _claude_cmd(full_prompt, model),
-            capture_output=True, text=True,
-            cwd=config["project_dir"], timeout=300,
-        )
-        return result.stdout.strip() or result.stderr.strip() or "(no response)"
-    except subprocess.TimeoutExpired:
-        return "Sorry, that took too long. Try a simpler question or break it into steps."
-    except Exception as e:
-        log(f"Claude image error: {e}")
-        return f"Error calling claude: {e}"
+    final = None
+    for kind, chunk in stream_claude(
+        user_message, config, history, model=model,
+        system_prompt_file=system_prompt_file, athlete_name=athlete_name, context=context,
+    ):
+        if kind == "final":
+            final = chunk
+            break
+        now = time.time()
+        if now - last_edit >= 1.5 and chunk and chunk != last_sent:
+            tg_post(token, "editMessageText", {
+                "chat_id": chat_id,
+                "message_id": placeholder_id,
+                "text": chunk + " ▍",
+                "parse_mode": "Markdown",
+            })
+            last_edit = now
+            last_sent = chunk
+    return final if final is not None else "(no response)"
 
 
 def get_updates(token, offset):
