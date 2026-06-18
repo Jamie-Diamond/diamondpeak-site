@@ -290,13 +290,22 @@ def tg_post(token, method, payload):
             return json.loads(r.read())
     except Exception as e:
         # Telegram returns HTTP 400 when legacy-Markdown can't be parsed (an unbalanced
-        # *, _, [ or ` in the LLM's reply). Without a fallback the whole message is lost —
+        # *, _, [ or ` in the LLM's reply). Without a fallback the whole message is lost -
         # this is the 16 Jun bug where Jamie's 8:08 swim debrief was generated but never
         # delivered. Retry ONCE as plain text so a reply is never silently dropped (worst
         # case the user sees raw markdown chars). Mirrors notify.py's plain-text fallback.
         _body = (e.read().decode("utf-8", "replace")[:300] if hasattr(e, "read") else "")
-        if getattr(e, "code", None) == 400 and payload.get("parse_mode"):
-            log(f"tg_post {method} 400 (markdown parse?) — retrying as plain text")
+        _code = getattr(e, "code", None)
+        # "message is not modified" - the edit's text+markup already match what is
+        # shown (fires on streaming ticks where no new token arrived). Benign: treat as
+        # success so we neither fire the bogus plain-text retry nor trip the caller fallback.
+        if _code == 400 and "not modified" in _body:
+            return {"ok": True, "result": {}}
+        # Genuine legacy-Markdown parse failure -> retry ONCE as plain text so the reply is
+        # never dropped. Skip MESSAGE_TOO_LONG: a plain-text edit cannot shorten it; the
+        # caller send() fallback chunks it instead.
+        if _code == 400 and payload.get("parse_mode") and "too_long" not in _body.lower():
+            log(f"tg_post {method} 400 (Markdown parse) - retrying as plain text")
             retry = {k: v for k, v in payload.items() if k != "parse_mode"}
             try:
                 req2 = urllib.request.Request(
@@ -2491,6 +2500,7 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     streamed = ""
     final = None
     last_edit = 0.0
+    last_sent = ""
 
     try:
         proc = subprocess.Popen(
@@ -2525,15 +2535,18 @@ def call_claude_streaming(token, chat_id, placeholder_id,
                 continue
 
             now = time.time()
-            # Edit every 1.5 s to stay within Telegram rate limits
-            if now - last_edit >= 1.5 and streamed.strip():
+            # Edit every 1.5 s (Telegram rate limit), but only when the text actually
+            # grew - re-sending identical content just triggers "not modified" 400s.
+            snap = streamed.strip()
+            if now - last_edit >= 1.5 and snap and snap != last_sent:
                 tg_post(token, "editMessageText", {
                     "chat_id": chat_id,
                     "message_id": placeholder_id,
-                    "text": streamed.strip() + " ▍",
+                    "text": snap + " ▍",
                     "parse_mode": "Markdown",
                 })
                 last_edit = now
+                last_sent = snap
 
         proc.wait(timeout=10)
         return (final if final is not None else streamed).strip() or "(no response)"
