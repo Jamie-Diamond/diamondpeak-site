@@ -2569,12 +2569,25 @@ def handle_admin_command(token, chat_id, text, config):
 # --- END ONBOARDING ----------------------------------------------------------
 
 
+def _telegram_visible(text):
+    """During streaming, show ONLY what's inside <telegram> — suppress the model's
+    pre-reply preamble / tool narration so internal thoughts never flash in the
+    placeholder. Returns '' until the opening tag appears (the system prompt makes
+    <telegram> the first output, so this is normally immediate). The final reply is
+    already extracted by process_charts, so this only fixes the live stream."""
+    i = text.find("<telegram>")
+    if i == -1:
+        return ""
+    return text[i + len("<telegram>"):].split("</telegram>")[0]
+
+
 def call_claude_streaming(token, chat_id, placeholder_id,
                           user_message, config, history, model=MODEL_SONNET,
                           system_prompt_file=None, athlete_name="Jamie", context=""):
     """Thin Telegram wrapper over engine.stream_claude: edits the placeholder as
     chunks arrive. All generation lives in lib/engine.py; this only does transport
-    (the 1.5s throttle + skip-unchanged guard that avoids "not modified" 400s)."""
+    (the 1.5s throttle + skip-unchanged guard that avoids "not modified" 400s).
+    Only the <telegram> content is shown live — preamble/tool-narration never leaks."""
     last_edit = 0.0
     last_sent = ""
     final = None
@@ -2586,15 +2599,16 @@ def call_claude_streaming(token, chat_id, placeholder_id,
             final = chunk
             break
         now = time.time()
-        if now - last_edit >= 1.5 and chunk and chunk != last_sent:
+        disp = _telegram_visible(chunk)
+        if now - last_edit >= 1.5 and disp.strip() and disp != last_sent:
             tg_post(token, "editMessageText", {
                 "chat_id": chat_id,
                 "message_id": placeholder_id,
-                "text": chunk + " ▍",
+                "text": disp + " ▍",
                 "parse_mode": "Markdown",
             })
             last_edit = now
-            last_sent = chunk
+            last_sent = disp
     return final if final is not None else "(no response)"
 
 

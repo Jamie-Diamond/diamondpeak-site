@@ -467,6 +467,25 @@ def release_lock():
     LOCK_FILE.unlink(missing_ok=True)
 
 
+def _chat_has_recent_feedback(slug, lookback=8):
+    """True if the athlete's recent Telegram messages already contain session
+    feedback (RPE / how-it-felt / pain) — so the follow-up nudge shouldn't re-ask
+    for data the athlete already gave (the logged re-ask bug)."""
+    hist_f = BASE / "athletes" / slug / "telegram" / "history.json"
+    if not hist_f.exists():
+        return False
+    try:
+        entries = json.loads(hist_f.read_text())
+    except Exception:
+        return False
+    kws = ("rpe", "/10", "felt", "feeling", "pain", "ankle")
+    for e in entries[-lookback:]:
+        u = (e.get("user") or "").lower()
+        if u and any(k in u for k in kws):
+            return True
+    return False
+
+
 def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_file=None, slug=None):
     """If any stub from today is >2h old with rpe=null and hasn't been nudged, send one re-ping."""
     if not session_log_f.exists():
@@ -496,6 +515,15 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
             continue
         aid = str(e.get("activity_id", ""))
         if aid in nudged_ids:
+            continue
+        # Don't re-ask if the athlete already gave RPE/feel/pain in chat recently —
+        # the analysis fills the stub from chat, but a race can leave rpe=null while
+        # the data sits in history; re-asking then is the logged bug.
+        if slug and _chat_has_recent_feedback(slug):
+            nudged_ids.add(aid)
+            state["nudged_ids"] = list(nudged_ids)
+            if state_file:
+                save_state(state, state_file)
             continue
         logged_at = e.get("logged_at")
         if not logged_at:

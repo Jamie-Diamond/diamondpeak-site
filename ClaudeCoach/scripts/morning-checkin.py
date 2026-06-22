@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Morning briefing — polls every 15 min from 06:00–09:00 via VM crontab. Sends once per athlete per day, after Garmin sleep data syncs."""
-import json, subprocess, sys
+import json, subprocess, sys, time
 from datetime import datetime
 from datetime import date, timedelta
 from pathlib import Path
@@ -10,6 +10,7 @@ PROJECT_DIR     = str(BASE.parent)
 CLAUDE          = "/usr/bin/claude"
 NOTIFY          = BASE / "telegram/notify.py"
 ATHLETES_CONFIG = BASE / "config/athletes.json"
+LOCK_FILE       = BASE / ".morning_checkin.lock"  # prevents overlapping cron runs double-sending
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
@@ -463,20 +464,31 @@ def run_athlete(slug, athlete_cfg):
 def main():
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] morning-checkin starting", file=sys.stderr)
-    try:
-        athletes = json.loads(ATHLETES_CONFIG.read_text())
-    except Exception as e:
-        print(f"[{ts}] Failed to load athletes config: {e}", file=sys.stderr)
-        sys.exit(1)
 
-    for slug, cfg in athletes.items():
-        if not cfg.get("active", True):
-            continue
+    # Lock: morning-checkin had no lock, so a slow 06:00 run still going when 06:30
+    # fired could pass the per-athlete sentinel check and BOTH send — the 17 Jun
+    # duplicate-card bug. Skip if another run is active (stale after 20 min).
+    if LOCK_FILE.exists() and time.time() - LOCK_FILE.stat().st_mtime < 1200:
+        print(f"[{ts}] another morning-checkin run is active — skipping", file=sys.stderr)
+        return
+    LOCK_FILE.touch()
+    try:
         try:
-            run_athlete(slug, cfg)
-        except Exception as exc:
-            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] morning-checkin error: {exc}", file=sys.stderr)
-            ops_log.alert("morning-checkin", f"exception: {exc}", athlete=slug)
+            athletes = json.loads(ATHLETES_CONFIG.read_text())
+        except Exception as e:
+            print(f"[{ts}] Failed to load athletes config: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        for slug, cfg in athletes.items():
+            if not cfg.get("active", True):
+                continue
+            try:
+                run_athlete(slug, cfg)
+            except Exception as exc:
+                print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] morning-checkin error: {exc}", file=sys.stderr)
+                ops_log.alert("morning-checkin", f"exception: {exc}", athlete=slug)
+    finally:
+        LOCK_FILE.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
