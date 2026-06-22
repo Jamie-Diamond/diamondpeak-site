@@ -7,7 +7,7 @@ QuickChart.io path (_fetch / QUICKCHART / the *_annotation/_box/_rgba helpers) i
 retained as cheap insurance but is no longer wired to any chart.
 """
 
-import json, math, ssl, urllib.request
+import json, logging, math, ssl, urllib.request
 from datetime import date as _date, datetime as _datetime
 
 import matplotlib
@@ -722,6 +722,11 @@ def week_chart(events, title="Training week", week_start=None):
                 actual[sport][i] += tss
         else:
             planned_tss[i] += tss
+
+    # Warn when stale/reconstructed data is suspected — blank bars are the symptom.
+    completed_count = sum(1 for e in events if e.get("status") == "completed" and e.get("date") in day_strs)
+    if completed_count < 3 and len(events) >= 3:
+        logging.warning("week_chart: only %d completed events in %d-event week — data may be stale (blank bars)", completed_count, len(events))
 
     import numpy as np
     x = np.arange(7)

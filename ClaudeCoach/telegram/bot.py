@@ -600,6 +600,14 @@ def process_charts(token, chat_id, response, slug=None):
                     week_start=data.get("week_start"),
                 )
             elif chart_type == "load":
+                # Always re-fetch live data from training_history and ICU events —
+                # never render the model's JSON, which may be reconstructed from
+                # conversation context and produce stale data or missing completed sessions.
+                if slug:
+                    try:
+                        data = _build_load_payload(slug)
+                    except Exception as _fe:
+                        log(f"load chart live re-fetch failed, falling back to model data: {_fe}")
                 log(f"load chart: days={len(data.get('days',[]))}, seed_ctl={data.get('seed_ctl')}, seed_atl={data.get('seed_atl')}")
                 png = _charts.load_chart(data, coaching_level=coaching_level)
             elif chart_type == "powercurve":
@@ -830,92 +838,96 @@ def _bot_norm_sport(s):
     return _SPORT_MAP.get(s, s) if s in ("Ride", "Run", "Swim", "Strength") or s in _SPORT_MAP else s
 
 
+def _build_load_payload(slug: str) -> dict:
+    """Fetch live ICU data and build the load_chart payload.
+    Always re-fetches from training_history and ICU events — never uses cached context.
+    Called by both _load_chart_quick (fast path) and process_charts (Claude path) so
+    the chart data is always authoritative regardless of how the render was triggered."""
+    sys.path.insert(0, str(BASE.parent / "lib"))
+    from icu_api import IcuClient
+
+    athletes_data = json.loads(ATHLETES_CONFIG.read_text())
+    a = athletes_data[slug]
+    client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+
+    today = date.today()
+    end_date = (today + timedelta(days=8)).isoformat()
+
+    wellness, history_acts, events = client.fetch_all(
+        ("get_wellness", 10),
+        ("get_training_history", 10),
+        ("get_events", today.isoformat(), end_date),
+    )
+
+    seed_ctl = seed_atl = None
+    if wellness:
+        w = wellness[-1]
+        seed_ctl = round(float(w.get("ctl") or 0), 1)
+        seed_atl = round(float(w.get("atl") or 0), 1)
+
+    tsb_by_date = {}
+    for w in (wellness or []):
+        d = (w.get("id") or "")[:10]
+        if d:
+            tsb_by_date[d] = round((w.get("ctl") or 0) - (w.get("atl") or 0), 1)
+
+    acts_by_date = {}
+    for act in (history_acts or []):
+        d = (act.get("start_date_local") or "")[:10]
+        if not d:
+            continue
+        sport = _bot_norm_sport(act.get("type", "Other"))
+        tss = round(float(act.get("icu_training_load") or 0), 1)
+        dur = round((act.get("moving_time") or 0) / 60)
+        acts_by_date.setdefault(d, []).append(
+            {"sport": sport, "tss": tss, "dur": dur, "status": "completed"}
+        )
+
+    plans_by_date = {}
+    for ev in (events or []):
+        d = (ev.get("start_date_local") or "")[:10]
+        if not d or d < today.isoformat():
+            continue
+        sport = _bot_norm_sport(ev.get("type") or ev.get("category") or "Other")
+        tss = round(float(ev.get("icu_training_load") or ev.get("load_target") or 0), 1)
+        dur = round((ev.get("moving_time") or 0) / 60)
+        plans_by_date.setdefault(d, []).append(
+            {"sport": sport, "tss": tss, "dur": dur, "status": "planned"}
+        )
+
+    days = []
+    today_str = today.isoformat()
+    for i in range(-8, 8):
+        d = today + timedelta(days=i)
+        d_str = d.isoformat()
+        if d_str < today_str:
+            acts = acts_by_date.get(d_str, [])
+            tsb = tsb_by_date.get(d_str)
+        else:
+            acts = list(acts_by_date.get(d_str, []))
+            done = {a["sport"] for a in acts}
+            acts += [p for p in plans_by_date.get(d_str, []) if p["sport"] not in done]
+            tsb = tsb_by_date.get(d_str) if d_str == today_str else None
+        days.append({"date": d_str, "tsb": tsb, "activities": acts})
+
+    return {
+        "today": today.strftime("%m-%d"),
+        "seed_ctl": seed_ctl,
+        "seed_atl": seed_atl,
+        "days": days,
+    }
+
+
 def _load_chart_quick(token, chat_id, slug):
     """Fetch live data and send the load chart directly — no Claude round-trip."""
     if _charts is None:
         send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug))
         return
     try:
-        sys.path.insert(0, str(BASE.parent / "lib"))
-        from icu_api import IcuClient
-
-        athletes_data = json.loads(ATHLETES_CONFIG.read_text())
-        a = athletes_data[slug]
-        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
-
-        today = date.today()
-        end_date = (today + timedelta(days=8)).isoformat()
-
-        wellness, history_acts, events = client.fetch_all(
-            ("get_wellness", 10),
-            ("get_training_history", 10),
-            ("get_events", today.isoformat(), end_date),
-        )
-
-        # Seed values from today's wellness entry
-        seed_ctl = seed_atl = None
-        if wellness:
-            w = wellness[-1]
-            seed_ctl = round(float(w.get("ctl") or 0), 1)
-            seed_atl = round(float(w.get("atl") or 0), 1)
-
-        # Historical TSB by date
-        tsb_by_date = {}
-        for w in (wellness or []):
-            d = (w.get("id") or "")[:10]
-            if d:
-                tsb_by_date[d] = round((w.get("ctl") or 0) - (w.get("atl") or 0), 1)
-
-        # Completed activities grouped by date
-        acts_by_date = {}
-        for act in (history_acts or []):
-            d = (act.get("start_date_local") or "")[:10]
-            if not d:
-                continue
-            sport = _bot_norm_sport(act.get("type", "Other"))
-            tss = round(float(act.get("icu_training_load") or 0), 1)
-            dur = round((act.get("moving_time") or 0) / 60)
-            acts_by_date.setdefault(d, []).append(
-                {"sport": sport, "tss": tss, "dur": dur, "status": "completed"}
-            )
-
-        # Planned events grouped by date (today + future; skip only strictly-past)
-        plans_by_date = {}
-        for ev in (events or []):
-            d = (ev.get("start_date_local") or "")[:10]
-            if not d or d < today.isoformat():
-                continue
-            sport = _bot_norm_sport(ev.get("type") or ev.get("category") or "Other")
-            tss = round(float(ev.get("icu_training_load") or ev.get("load_target") or 0), 1)
-            dur = round((ev.get("moving_time") or 0) / 60)
-            plans_by_date.setdefault(d, []).append(
-                {"sport": sport, "tss": tss, "dur": dur, "status": "planned"}
-            )
-
-        # 16-day window: 8 past + today + 7 future
-        days = []
-        today_str = today.isoformat()
-        for i in range(-8, 8):
-            d = today + timedelta(days=i)
-            d_str = d.isoformat()
-            if d_str < today_str:
-                acts = acts_by_date.get(d_str, [])                 # past: completed only
-                tsb = tsb_by_date.get(d_str)
-            else:
-                # today + future: completed sessions + any planned not already done
-                acts = list(acts_by_date.get(d_str, []))
-                done = {a["sport"] for a in acts}
-                acts += [p for p in plans_by_date.get(d_str, []) if p["sport"] not in done]
-                tsb = tsb_by_date.get(d_str) if d_str == today_str else None
-            days.append({"date": d_str, "tsb": tsb, "activities": acts})
-
-        payload = {
-            "today": today.strftime("%m-%d"),
-            "seed_ctl": seed_ctl,
-            "seed_atl": seed_atl,
-            "days": days,
-        }
-        log(f"load chart (quick): days={len(days)}, seed_ctl={seed_ctl}, seed_atl={seed_atl}")
+        payload = _build_load_payload(slug)
+        seed_ctl = payload.get("seed_ctl")
+        seed_atl = payload.get("seed_atl")
+        log(f"load chart (quick): days={len(payload.get('days',[]))}, seed_ctl={seed_ctl}, seed_atl={seed_atl}")
         png = _charts.load_chart(payload, coaching_level=_profile_coaching_level(slug))
         if png:
             send_photo(token, chat_id, png)
