@@ -80,6 +80,57 @@ def fetch_fitness_prev(client):
         log(f"fitnessPrev fetch failed (non-fatal): {e}")
 
 
+def _compute_per_sport_ctl(activities, start, today):
+    """Per-sport CTL = 42-day EWMA of each sport's daily TSS, day by day from `start`
+    to `today`. Returns {sport: [[date, ctl], ...]} for the three endurance sports."""
+    SPORTS = ("Ride", "Run", "Swim")
+    daily = {s: {} for s in SPORTS}
+    for a in activities or []:
+        d  = (a.get("start_date_local") or "")[:10]
+        sp = _sport_normalise(a.get("type", "Other"))
+        if not d or sp not in daily:
+            continue
+        daily[sp][d] = daily[sp].get(d, 0.0) + float(a.get("icu_training_load") or 0)
+    series = {}
+    for s in SPORTS:
+        ctl, out, cur = 0.0, [], start
+        while cur <= today:
+            ds = cur.isoformat()
+            ctl += (daily[s].get(ds, 0.0) - ctl) / 42.0
+            out.append([ds, round(ctl, 1)])
+            cur += timedelta(days=1)
+        series[s] = out
+    return series
+
+
+def _per_sport_ctl_cached(slug, client, today):
+    """Current-season per-sport CTL, cached daily — the season activity fetch is heavy and
+    refresh-site-data runs after every activity, so recompute at most once per day."""
+    cache_f = BASE / f"athletes/{slug}/fitness-bysport-cache.json"
+    try:
+        c = json.loads(cache_f.read_text())
+        if c.get("date") == today.isoformat() and c.get("current"):
+            return c["current"]
+    except Exception:
+        pass
+    start = date(today.year, 1, 1)
+    try:
+        series = _compute_per_sport_ctl(client.get_training_history((today - start).days + 1), start, today)
+    except Exception as e:
+        log(f"[{slug}] per-sport CTL failed: {e}")
+        return {}
+    try:
+        prev = json.loads(cache_f.read_text()) if cache_f.exists() else {}
+    except Exception:
+        prev = {}
+    prev.update({"date": today.isoformat(), "current": series})
+    try:
+        cache_f.write_text(json.dumps(prev))
+    except Exception:
+        pass
+    return series
+
+
 def _build_jamie_data(client) -> dict:
     """Fetch Jamie's training data via IcuClient — replaces the old Claude+MCP approach."""
     today         = date.today()
@@ -234,6 +285,7 @@ def _build_jamie_data(client) -> dict:
         "generated":    today.isoformat(),
         "kpi":          kpi,
         "fitnessThis":  fitness_this,
+        "fitnessBySport": _per_sport_ctl_cached("jamie", client, today),
         "recent":       recent,
         "weekCalendar": week_calendar,
         "loadChart":    load_chart,
@@ -856,6 +908,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "generated":    today.isoformat(),
         "kpi":          kpi,
         "fitnessThis":  fitness_this,
+        "fitnessBySport": _per_sport_ctl_cached(slug, client, today),
         "recent":       recent,
         "weekCalendar": week_calendar,
         "loadChart":    load_chart,
