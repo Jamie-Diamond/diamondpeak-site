@@ -599,13 +599,13 @@ function setFitnessSport(s){
   } else {
     const key = s === "Bike" ? "Ride" : s;
     const bs = d.fitnessBySport || {};
-    const cur = (bs.current && bs.current[key]) || [], prev = (bs.prev && bs.prev[key]) || [];
+    const cur = (bs.current && bs.current[key]) || [], prev = (bs.prev && bs.prev[key]) || [], prev2 = (bs.prev2 && bs.prev2[key]) || [];
     ch.data.datasets[0].label = "CTL — " + s + " this season";
     ch.data.datasets[0].data  = toXY(cur);
     const pr = (d.profile&&d.profile.prev_race_date) || (prev.length ? prev[prev.length-1][0] : null);
     ch.data.datasets[1].data  = toXY(prev, pr);
-    ch.data.datasets[2].data  = [];   // no per-sport '23 overlay
-    let hi = 0; [cur, prev].forEach(a => a.forEach(p => { if (p[1] > hi) hi = p[1]; }));
+    ch.data.datasets[2].data  = (d.profile && d.profile.prev2_race_date) ? toXY(prev2, d.profile.prev2_race_date) : [];
+    let hi = 0; [cur, prev, prev2].forEach(a => a.forEach(p => { if (p[1] > hi) hi = p[1]; }));
     ch.options.scales.y.min = 0; ch.options.scales.y.max = Math.max(10, Math.ceil((hi + 5) / 10) * 10);
   }
   ch.update();

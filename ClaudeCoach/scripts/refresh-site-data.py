@@ -84,11 +84,19 @@ def _compute_per_sport_ctl(activities, start, today):
     """Per-sport CTL = 42-day EWMA of each sport's daily TSS, day by day from `start`
     to `today`. Returns {sport: [[date, ctl], ...]} for the three endurance sports."""
     SPORTS = ("Ride", "Run", "Swim")
+    def _ctl_sport(raw):
+        # broader than _sport_normalise: catch every swim/bike/run variant
+        # (OpenWaterSwim, VirtualRide, GravelRide, TrailRun, ...) so none are dropped.
+        r = (raw or "").lower()
+        if "swim" in r:                                                   return "Swim"
+        if "run"  in r:                                                   return "Run"
+        if "ride" in r or "cycl" in r or "bik" in r or "velomobile" in r: return "Ride"
+        return None
     daily = {s: {} for s in SPORTS}
     for a in activities or []:
         d  = (a.get("start_date_local") or "")[:10]
-        sp = _sport_normalise(a.get("type", "Other"))
-        if not d or sp not in daily:
+        sp = _ctl_sport(a.get("type"))
+        if not d or sp is None:
             continue
         daily[sp][d] = daily[sp].get(d, 0.0) + float(a.get("icu_training_load") or 0)
     series = {}
@@ -105,14 +113,23 @@ def _compute_per_sport_ctl(activities, start, today):
 
 def _per_sport_ctl_cached(slug, client, today):
     """Per-sport CTL for the fitness-by-sport chart. Returns
-    {"current": {sport: series}, "prev": {sport: series}}.
+    {"current": {sport: series}, "prev": {sport: series}, "prev2": {sport: series}}.
     Current season is recomputed at most once a day (the season activity fetch is heavy
-    and refresh runs after every activity). The previous season is historical, so it is
-    fetched once (a heavier ~18-month pull) and cached forever."""
+    and refresh runs after every activity). The prior seasons are historical, so they are
+    fetched once (a single heavier pull back to the earliest one) and cached forever.
+    `prev` = last season (Jan 1 -> mid-Sep, to match fitnessPrev); `prev2` = the season of
+    the athlete's profile.prev2_race_date (Jan 1 -> that race), so it lines up with the
+    Barcelona '23 overlay. `prev2` is {} for athletes with no prev2_race_date."""
     cache_f = BASE / f"athletes/{slug}/fitness-bysport-cache.json"
     cache = {}
     try:
         cache = json.loads(cache_f.read_text())
+    except Exception:
+        pass
+
+    prev2_race = None
+    try:
+        prev2_race = json.loads((BASE / f"athletes/{slug}/profile.json").read_text()).get("prev2_race_date")
     except Exception:
         pass
 
@@ -126,24 +143,38 @@ def _per_sport_ctl_cached(slug, client, today):
         except Exception as e:
             log(f"[{slug}] per-sport CTL (current) failed: {e}")
 
-    # Previous season — one-time (last year, Jan 1 → mid-Sep to match fitnessPrev), cached.
-    prev = cache.get("prev")
-    if not prev:
-        ps, pe = date(today.year - 1, 1, 1), date(today.year - 1, 9, 19)
+    # Prior seasons — one-time, cached. One fetch back to the earliest season we need,
+    # then split into per-season windows.
+    prev  = cache.get("prev")
+    prev2 = cache.get("prev2")
+    need_prev2 = bool(prev2_race)
+    if not prev or (need_prev2 and not prev2):
+        p1s, p1e = date(today.year - 1, 1, 1), date(today.year - 1, 9, 19)
+        p2s = p2e = None
+        earliest = p1s
+        if need_prev2:
+            try:
+                p2e = date.fromisoformat(prev2_race[:10]); p2s = date(p2e.year, 1, 1)
+                earliest = min(earliest, p2s)
+            except Exception:
+                need_prev2 = False
         try:
-            acts = client.get_training_history((today - ps).days + 1)
-            window = [a for a in (acts or [])
-                      if ps.isoformat() <= (a.get("start_date_local") or "")[:10] <= pe.isoformat()]
-            prev = _compute_per_sport_ctl(window, ps, pe)
+            acts = client.get_training_history((today - earliest).days + 1)
+            def _win(s, e):
+                return [a for a in (acts or [])
+                        if s.isoformat() <= (a.get("start_date_local") or "")[:10] <= e.isoformat()]
+            prev = _compute_per_sport_ctl(_win(p1s, p1e), p1s, p1e)
+            prev2 = _compute_per_sport_ctl(_win(p2s, p2e), p2s, p2e) if need_prev2 else {}
         except Exception as e:
-            log(f"[{slug}] per-sport CTL (prev) failed: {e}")
-            prev = {}
+            log(f"[{slug}] per-sport CTL (prior seasons) failed: {e}")
+            prev = prev or {}; prev2 = prev2 or {}
 
+    out = {"current": current, "prev": prev or {}, "prev2": prev2 or {}}
     try:
-        cache_f.write_text(json.dumps({"date": today.isoformat(), "current": current, "prev": prev}))
+        cache_f.write_text(json.dumps({"date": today.isoformat(), **out}))
     except Exception:
         pass
-    return {"current": current, "prev": prev}
+    return out
 
 
 def _build_jamie_data(client) -> dict:
