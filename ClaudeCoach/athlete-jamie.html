@@ -608,6 +608,10 @@ function setFitnessSport(s){
     let hi = 0; [cur, prev, prev2].forEach(a => a.forEach(p => { if (p[1] > hi) hi = p[1]; }));
     ch.options.scales.y.min = 0; ch.options.scales.y.max = Math.max(10, Math.ceil((hi + 5) / 10) * 10);
   }
+  // The forward "Booked sessions" / "Phase target" projections and Target CTL points are
+  // whole-body CTL — meaningless on a single-sport view, so hide them unless we're on All.
+  const _per = (s !== "All");
+  ch.data.datasets.forEach(ds => { if (ds._projection || ds.label === "Target CTL") ds.hidden = _per; });
   ch.update();
 }
 (function(){
