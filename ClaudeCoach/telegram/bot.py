@@ -354,6 +354,19 @@ def build_keyboard(slug=None):
         ]]}
     return MENU_KEYBOARD
 
+
+def _reply_inline(slug=None):
+    """Inline keyboard for a conversational reply: any contextual buttons from
+    build_keyboard PLUS a 🔊 Speak button that re-renders the reply as a voice note
+    on demand (works regardless of voice mode). Inline-only, so it is valid on
+    editMessageText too (the persistent reply menu stays pinned separately) — this
+    also fixes the 'inline keyboard expected' 400 the final edit used to throw."""
+    speak_row = [{"text": "🔊 Speak", "callback_data": "__SPEAK_LAST__"}]
+    kb = build_keyboard(slug)
+    if isinstance(kb, dict) and kb.get("inline_keyboard"):
+        return {"inline_keyboard": kb["inline_keyboard"] + [speak_row]}
+    return {"inline_keyboard": [speak_row]}
+
 TOOLS = "Read,Write,Edit,Bash"
 # IcuSync MCP tools are intentionally excluded — the MCP connector is bound to a single
 # athlete's account. All Intervals.icu access must go through icu_fetch.py (Bash) which
@@ -2637,6 +2650,22 @@ def main():
                 text = cq.get("data", "").strip()
                 answer_callback(token, cq["id"])
                 msg_id = cq.get("message", {}).get("message_id")
+                # 🔊 Speak: re-render the last reply as a voice note on demand,
+                # regardless of voice mode (feature req 2026-06-21).
+                if text == "__SPEAK_LAST__":
+                    _ath = athletes.get(chat_id)
+                    if _ath:
+                        _hist = load_history(athlete_files(_ath["slug"])["history"])
+                        _last = next((h.get("assistant") for h in reversed(_hist)
+                                      if (h.get("assistant") or "").strip()), "")
+                        if _last:
+                            tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "record_voice"})
+                            _ogg = synthesize_voice(_clean_for_speech(_spoken_rewrite(_last)))
+                            if _ogg:
+                                send_voice(token, chat_id, _ogg)
+                            else:
+                                send(token, chat_id, "_Couldn't generate the voice note just now._")
+                    continue
                 if _handle_quick_log(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
@@ -2943,9 +2972,9 @@ def main():
                     ogg = synthesize_voice(spoken) if spoken else None
                 if ogg:
                     send_voice(token, chat_id, ogg)
-                    send(token, chat_id, final, reply_markup=build_keyboard(slug))
+                    send(token, chat_id, final, reply_markup=_reply_inline(slug))
                 elif clean:
-                    send(token, chat_id, final, reply_markup=build_keyboard(slug))
+                    send(token, chat_id, final, reply_markup=_reply_inline(slug))
                 log(f"Out (voice): {clean[:80]}")
                 history.append(_hist_entry(text, clean))
                 save_history(history, files["history"])
@@ -2976,7 +3005,7 @@ def main():
                 res = tg_post(token, "editMessageText", {
                     "chat_id": chat_id, "message_id": placeholder_id,
                     "text": final, "parse_mode": "Markdown",
-                    "reply_markup": build_keyboard(slug),
+                    "reply_markup": _reply_inline(slug),
                 })
                 # Last-resort guard: if the edit failed entirely (even the plain-text retry,
                 # e.g. MESSAGE_TOO_LONG), send the reply as a fresh message so it is NEVER
@@ -2987,9 +3016,9 @@ def main():
                     tg_post(token, "deleteMessage", {
                         "chat_id": chat_id, "message_id": placeholder_id,
                     })
-                    send(token, chat_id, final, reply_markup=build_keyboard(slug))
+                    send(token, chat_id, final, reply_markup=_reply_inline(slug))
             elif clean:
-                send(token, chat_id, final, reply_markup=build_keyboard(slug))
+                send(token, chat_id, final, reply_markup=_reply_inline(slug))
             log(f"Out: {clean[:80]}")
 
             history.append(_hist_entry(text, clean))
