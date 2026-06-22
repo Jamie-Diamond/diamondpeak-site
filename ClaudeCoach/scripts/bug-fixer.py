@@ -14,7 +14,7 @@ main only on an explicit Yes. NOTHING in this file fixes, writes, merges or depl
 Run:  python3 ClaudeCoach/scripts/bug-fixer.py [--athlete jamie] [--json]
 Cron (later): 0 0 * * *  (midnight)
 """
-import argparse, json, re, sys
+import argparse, json, re, sys, subprocess, py_compile
 from datetime import date
 from pathlib import Path
 
@@ -25,6 +25,12 @@ import claude_call
 
 # Read-only tools — the planner must NOT modify anything.
 TOOLS = "Read,Bash"
+
+# Stage 2 (fixer) constants.
+FIX_TOOLS     = "Read,Write,Edit,Bash"
+WORKTREE_BASE = "/tmp/cc-bugfix"
+REVIEWS_FILE  = BASE / ".bug-reviews.json"     # gitignored review state (awaiting/merged/dismissed)
+TG_CONFIG     = BASE / "telegram/config.json"
 
 
 def _load_entries(slug: str):
@@ -131,13 +137,133 @@ def _render(plan_obj: dict) -> str:
     return "\n".join(lines)
 
 
+# ── Stage 2: fixer (draft on a worktree branch + review card) ─────────────────
+
+FIX_PROMPT = """You are fixing ONE consolidated bug in the ClaudeCoach codebase. You are in a
+fresh git worktree on a dedicated branch — make ONLY the minimal change for this bug. Do NOT
+commit, push, deploy, or change anything unrelated. Do NOT edit athlete data under
+ClaudeCoach/athletes/.
+
+BUG: {title}
+ROOT CAUSE: {root_cause}
+PLAN: {plan}
+LIKELY FILES: {files}
+
+Implement the fix now (Read/Edit/Write, Bash for read-only inspection), tight and consistent
+with the surrounding code. When done, output ONE line: a <=140-char summary of what you changed."""
+
+
+def _load_reviews():
+    try:
+        return json.loads(REVIEWS_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def _save_reviews(r):
+    REVIEWS_FILE.write_text(json.dumps(r, indent=2))
+
+
+def _git(args, cwd=PROJECT_DIR):
+    return subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True)
+
+
+def _tg_card(chat_id, review):
+    """Post the review card with ✅Yes/❌No/✏️Edit. Best-effort."""
+    import ssl, urllib.request
+    try:
+        token = json.loads(TG_CONFIG.read_text())["bot_token"]
+        rid = review["id"]
+        text = (f"🛠 *Bug fix ready* — {review['title']}\n\n_{review['summary']}_\n\n"
+                f"`{review['stat'].strip()}`\n\nMerge to live?")
+        kb = {"inline_keyboard": [[
+            {"text": "✅ Yes",  "callback_data": f"bf:yes:{rid}"},
+            {"text": "❌ No",   "callback_data": f"bf:no:{rid}"},
+            {"text": "✏️ Edit", "callback_data": f"bf:edit:{rid}"},
+        ]]}
+        ctx = ssl.create_default_context(
+            cafile="/etc/ssl/cert.pem" if Path("/etc/ssl/cert.pem").exists() else None)
+        body = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "Markdown",
+                           "reply_markup": kb}).encode()
+        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage",
+                                     data=body, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10, context=ctx)
+    except Exception as e:
+        print(f"[bug-fixer] card post failed: {e}", file=sys.stderr)
+
+
+def _fix_group(group, idx, slug, dry_run):
+    """Draft the fix for one group on a dedicated branch. Returns review id or None.
+    Worktree is always removed; the branch persists only for a real (non-dry-run)
+    change that compiles — otherwise the branch is deleted too. Never merges."""
+    rid    = f"{date.today().isoformat()}-{idx}"
+    branch = f"bugfix/{rid}"
+    wt     = f"{WORKTREE_BASE}-{rid}"
+    keep_branch = False
+    if _git(["worktree", "add", "-b", branch, wt, "HEAD"]).returncode != 0:
+        print(f"[bug-fixer] {rid}: worktree add failed", file=sys.stderr)
+        return None
+    try:
+        prompt = FIX_PROMPT.format(title=group.get("title", ""), root_cause=group.get("root_cause", ""),
+                                   plan=group.get("plan", ""), files=", ".join(group.get("files") or []))
+        res = claude_call.run_claude(prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
+                                     allowed_tools=FIX_TOOLS, cwd=wt, timeout=900, label=f"bugfix:{rid}")
+        summary = ((res.stdout or "").strip().splitlines() or ["(fix attempted)"])[-1][:140]
+        _git(["add", "-A"], cwd=wt)
+        stat = _git(["diff", "--staged", "--stat"], cwd=wt).stdout
+        if not stat.strip():
+            print(f"[bug-fixer] {rid}: agent made no changes — discarding", file=sys.stderr)
+            return None
+        for n in _git(["diff", "--staged", "--name-only"], cwd=wt).stdout.split():
+            if n.endswith(".py"):
+                try:
+                    py_compile.compile(str(Path(wt) / n), doraise=True)
+                except Exception as e:
+                    print(f"[bug-fixer] {rid}: {n} fails compile ({e}) — discarding", file=sys.stderr)
+                    return None
+        _git(["commit", "-m", f"bugfix: {group.get('title', '')}"], cwd=wt)
+        review = {"id": rid, "branch": branch, "title": group.get("title", ""),
+                  "entries": group.get("entries", []), "summary": summary, "stat": stat,
+                  "files": _git(["diff", "HEAD~1", "--name-only"], cwd=wt).stdout.split(),
+                  "status": "awaiting", "created": date.today().isoformat()}
+        if dry_run:
+            print(f"\n--- WOULD POST [{rid}] {review['title']} ---\n{summary}\n{stat}")
+        else:
+            keep_branch = True
+            reviews = _load_reviews(); reviews[rid] = review; _save_reviews(reviews)
+            chat_id = json.loads((BASE / "config/athletes.json").read_text())[slug].get("chat_id", "")
+            if chat_id:
+                _tg_card(chat_id, review)
+        return rid
+    finally:
+        _git(["worktree", "remove", "--force", wt])
+        if not keep_branch:
+            _git(["branch", "-D", branch])
+
+
+def run_fix(slug, dry_run):
+    groups = [g for g in plan(slug).get("groups", []) if g.get("verdict") == "fixable_now"]
+    if not groups:
+        print("No fixable_now groups — nothing to fix.")
+        return
+    print(f"{len(groups)} fixable group(s){' (dry-run)' if dry_run else ''}.")
+    for i, g in enumerate(groups):
+        rid = _fix_group(g, i, slug, dry_run)
+        print(f"  {g.get('title')}: {'review ' + rid if rid else 'no change / discarded'}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--athlete", default="jamie")
     ap.add_argument("--json", action="store_true", help="print raw JSON plan")
+    ap.add_argument("--fix", action="store_true", help="draft fixes on branches + post review cards")
+    ap.add_argument("--dry-run", action="store_true", help="with --fix: build branches but never post or keep them")
     args = ap.parse_args()
-    p = plan(args.athlete)
-    print(json.dumps(p, indent=2) if args.json else _render(p))
+    if args.fix:
+        run_fix(args.athlete, args.dry_run)
+    else:
+        p = plan(args.athlete)
+        print(json.dumps(p, indent=2) if args.json else _render(p))
 
 
 if __name__ == "__main__":

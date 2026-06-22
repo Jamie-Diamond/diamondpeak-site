@@ -17,3 +17,4 @@ ClaudeCoach/config/backup.key
 ClaudeCoach/athletes/
 ClaudeCoach/ironman-analysis/fixtures/
 .DS_Store
+ClaudeCoach/.bug-reviews.json
