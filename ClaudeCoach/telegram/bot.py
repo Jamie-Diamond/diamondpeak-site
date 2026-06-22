@@ -2962,81 +2962,92 @@ def main():
                 log("Out (fast): race plan generated")
                 continue
 
-            history = load_history(files["history"])
-            context = prefetch_context(slug)
-            model = select_model(text, history)
+            # Missed-reply watchdog: a single reply must never crash the loop or
+            # leave the athlete with silence (the swim-splits no-reply bug). Any
+            # exception here sends a fallback and is logged, then the loop continues.
+            try:
+                history = load_history(files["history"])
+                context = prefetch_context(slug)
+                model = select_model(text, history)
 
-            if _voice_mode_on(slug):
-                # Sticky voice mode: the TEXT stays the normal rich style (as it used
-                # to be) - only the AUDIO is the voice-friendly version. Generate the
-                # rich reply, show it, then speak a short conversational rewrite of it.
-                # Charts still go out as images. Any TTS failure falls through to the
-                # rich text send - a reply is never dropped.
-                tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "record_voice"})
-                response = call_claude(
-                    text, config, history, model=model,
-                    system_prompt_file=files["system_prompt"], athlete_name=athlete_name,
-                    context=context,
-                )
+                if _voice_mode_on(slug):
+                    # Sticky voice mode: the TEXT stays the normal rich style (as it used
+                    # to be) - only the AUDIO is the voice-friendly version. Generate the
+                    # rich reply, show it, then speak a short conversational rewrite of it.
+                    # Charts still go out as images. Any TTS failure falls through to the
+                    # rich text send - a reply is never dropped.
+                    tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "record_voice"})
+                    response = call_claude(
+                        text, config, history, model=model,
+                        system_prompt_file=files["system_prompt"], athlete_name=athlete_name,
+                        context=context,
+                    )
+                    clean = process_charts(token, chat_id, response, slug=slug)
+                    final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
+                    ogg = None
+                    if clean:
+                        spoken = _clean_for_speech(_spoken_rewrite(clean))
+                        ogg = synthesize_voice(spoken) if spoken else None
+                    if ogg:
+                        send_voice(token, chat_id, ogg)
+                        send(token, chat_id, final, reply_markup=_reply_inline(slug))
+                    elif clean:
+                        send(token, chat_id, final, reply_markup=_reply_inline(slug))
+                    log(f"Out (voice): {clean[:80]}")
+                    history.append(_hist_entry(text, clean))
+                    save_history(history, files["history"])
+                    continue
+
+                typing(token, chat_id)
+                # Send a placeholder and stream chunks into it
+                placeholder = tg_post(token, "sendMessage", {
+                    "chat_id": chat_id, "text": "…", "parse_mode": "Markdown",
+                })
+                placeholder_id = (placeholder.get("result") or {}).get("message_id")
+
+                if placeholder_id:
+                    response = call_claude_streaming(
+                        token, chat_id, placeholder_id,
+                        text, config, history, model=model,
+                        system_prompt_file=files["system_prompt"],
+                        athlete_name=athlete_name, context=context,
+                    )
+                else:
+                    response = call_claude(text, config, history, model=model,
+                                           system_prompt_file=files["system_prompt"],
+                                           athlete_name=athlete_name, context=context)
+
                 clean = process_charts(token, chat_id, response, slug=slug)
                 final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
-                ogg = None
-                if clean:
-                    spoken = _clean_for_speech(_spoken_rewrite(clean))
-                    ogg = synthesize_voice(spoken) if spoken else None
-                if ogg:
-                    send_voice(token, chat_id, ogg)
-                    send(token, chat_id, final, reply_markup=_reply_inline(slug))
+                if placeholder_id:
+                    res = tg_post(token, "editMessageText", {
+                        "chat_id": chat_id, "message_id": placeholder_id,
+                        "text": final, "parse_mode": "Markdown",
+                        "reply_markup": _reply_inline(slug),
+                    })
+                    # Last-resort guard: if the edit failed entirely (even the plain-text retry,
+                    # e.g. MESSAGE_TOO_LONG), send the reply as a fresh message so it is NEVER
+                    # silently lost to a stuck "…". Delete the placeholder first so the dead "…"
+                    # (or partial stream) does not linger above the real reply.
+                    if not (res or {}).get("ok") and clean:
+                        log("editMessageText final delivery failed - sending fresh message")
+                        tg_post(token, "deleteMessage", {
+                            "chat_id": chat_id, "message_id": placeholder_id,
+                        })
+                        send(token, chat_id, final, reply_markup=_reply_inline(slug))
                 elif clean:
                     send(token, chat_id, final, reply_markup=_reply_inline(slug))
-                log(f"Out (voice): {clean[:80]}")
+                log(f"Out: {clean[:80]}")
+
                 history.append(_hist_entry(text, clean))
                 save_history(history, files["history"])
-                continue
-
-            typing(token, chat_id)
-            # Send a placeholder and stream chunks into it
-            placeholder = tg_post(token, "sendMessage", {
-                "chat_id": chat_id, "text": "…", "parse_mode": "Markdown",
-            })
-            placeholder_id = (placeholder.get("result") or {}).get("message_id")
-
-            if placeholder_id:
-                response = call_claude_streaming(
-                    token, chat_id, placeholder_id,
-                    text, config, history, model=model,
-                    system_prompt_file=files["system_prompt"],
-                    athlete_name=athlete_name, context=context,
-                )
-            else:
-                response = call_claude(text, config, history, model=model,
-                                       system_prompt_file=files["system_prompt"],
-                                       athlete_name=athlete_name, context=context)
-
-            clean = process_charts(token, chat_id, response, slug=slug)
-            final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
-            if placeholder_id:
-                res = tg_post(token, "editMessageText", {
-                    "chat_id": chat_id, "message_id": placeholder_id,
-                    "text": final, "parse_mode": "Markdown",
-                    "reply_markup": _reply_inline(slug),
-                })
-                # Last-resort guard: if the edit failed entirely (even the plain-text retry,
-                # e.g. MESSAGE_TOO_LONG), send the reply as a fresh message so it is NEVER
-                # silently lost to a stuck "…". Delete the placeholder first so the dead "…"
-                # (or partial stream) does not linger above the real reply.
-                if not (res or {}).get("ok") and clean:
-                    log("editMessageText final delivery failed - sending fresh message")
-                    tg_post(token, "deleteMessage", {
-                        "chat_id": chat_id, "message_id": placeholder_id,
-                    })
-                    send(token, chat_id, final, reply_markup=_reply_inline(slug))
-            elif clean:
-                send(token, chat_id, final, reply_markup=_reply_inline(slug))
-            log(f"Out: {clean[:80]}")
-
-            history.append(_hist_entry(text, clean))
-            save_history(history, files["history"])
+            except Exception as _reply_err:
+                log(f"reply handling error for {chat_id}: {_reply_err}")
+                try:
+                    send(token, chat_id, "Sorry - I hit a snag answering that. "
+                         "Give it another go in a moment.")
+                except Exception:
+                    pass
 
         time.sleep(1)
 
