@@ -177,6 +177,7 @@
         <button id="fit-sport-Run" onclick="setFitnessSport('Run')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Run</button>
       </div>
       <div class="chart-wrap"><canvas id="chartFitness"></canvas></div>
+      <div id="fit-sport-note" class="small" style="display:none;margin-top:6px;color:var(--muted)"></div>
       <div class="legend">
         <span><span class="swatch" style="background:#1a1a1a"></span>Fitness — actual</span>
         <span><span class="swatch" style="background:#c0392b;opacity:.6"></span>Target milestones</span>
@@ -612,6 +613,11 @@ function setFitnessSport(s){
   // whole-body CTL — meaningless on a single-sport view, so hide them unless we're on All.
   const _per = (s !== "All");
   ch.data.datasets.forEach(ds => { if (ds._projection || ds.label === "Target CTL") ds.hidden = _per; });
+  const note = document.getElementById("fit-sport-note");
+  if (note) {
+    note.style.display = _per ? "" : "none";
+    note.textContent = "Per-sport fitness = 42-day average of that sport's TSS. TSS is scored against your current threshold, so a season where your threshold rose (e.g. swim CSS) can read lower even with more or faster training — compare shapes, not absolute heights, across seasons.";
+  }
   ch.update();
 }
 (function(){
