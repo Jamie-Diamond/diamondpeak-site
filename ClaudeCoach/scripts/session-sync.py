@@ -68,8 +68,23 @@ You are the ClaudeCoach session sync. Review the recent conversation and maintai
    Use the Edit tool for surgical removals — never rewrite whole sections.
    If nothing qualifies for pruning, skip this task entirely.
 
+4. MAINTAIN the rolling context summary in {state_file} so the coach keeps context
+   across long conversations. Keep a section headed EXACTLY "## Recent context (auto-summary)".
+   If it does not exist, create it once (insert near the top, just after the title /
+   "Last updated" line). Each run, REPLACE only THIS section's body (leave every other
+   section completely untouched) with a concise bullet digest of what the coach should
+   remember right now:
+   - the last ~5 sessions with RPE / how-it-felt if given
+   - current injury / pain status and any active protocol
+   - latest weight + trend vs race-day target
+   - any open commitments or things {first_name} recently asked for
+   - notable preferences or changes from the recent conversation NOT already a [perm] rule
+   Keep it under ~15 bullets; drop anything older than ~10 days unless still relevant.
+   Use the Edit tool to replace only this section's contents (match from the
+   "## Recent context (auto-summary)" header to the next "## " header).
+
 OUTPUT FORMAT:
-- Use tools to write/edit files for tasks 1-3.
+- Use tools to write/edit files for tasks 1-4.
 - No text output under any circumstances. Absolute silence.
 """
 
