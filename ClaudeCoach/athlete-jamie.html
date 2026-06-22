@@ -274,6 +274,12 @@
         <button id="load-btn-dur" onclick="setLoadMode('dur')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Duration</button>
       </div>
     </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button id="load-sport-All" onclick="setLoadSport('All')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#1d6840;color:#fff;cursor:pointer">All</button>
+      <button id="load-sport-Swim" onclick="setLoadSport('Swim')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Swim</button>
+      <button id="load-sport-Bike" onclick="setLoadSport('Bike')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Bike</button>
+      <button id="load-sport-Run" onclick="setLoadSport('Run')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Run</button>
+    </div>
     <div class="small" id="load-chart-sub" style="margin-bottom:10px">TSS stacked by sport · faded bars = planned · TSB form line (right axis)</div>
     <div class="chart-wrap"><canvas id="chartLoad"></canvas></div>
     <div class="legend" style="margin-top:10px">
@@ -563,6 +569,13 @@ function zoomFitness(days) {
 
 // ── LOAD CHART ───────────────────────────────────────────────────────────────
 let _loadChartDays = [], _loadMode = "tss", _seedCtl = null, _seedAtl = null;
+let _loadSport = "All";   // "All" | "Swim" | "Bike" | "Run"
+function _pill(active){return (active?"background:#1d6840;color:#fff;":"background:#f8f5ef;color:#4a4535;")+"font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;cursor:pointer";}
+function setLoadSport(s){
+  _loadSport = s;
+  ["All","Swim","Bike","Run"].forEach(x=>{const b=document.getElementById("load-sport-"+x); if(b) b.style.cssText=_pill(x===s);});
+  renderLoadChart(_loadChartDays);
+}
 (function(){
   const ctx = document.getElementById("chartLoad").getContext("2d");
   window.chartLoad = new Chart(ctx, {
@@ -612,7 +625,8 @@ function renderLoadChart(days) {
   const labels = days.map(d => d.date.slice(5));
   const todayStr = new Date().toISOString().slice(5,10);
   const datasets = [];
-  SPORTS.forEach(sport => {
+  const _showSports = _loadSport === "All" ? SPORTS : [(_loadSport === "Bike" ? "Ride" : _loadSport)];
+  _showSports.forEach(sport => {
     const [r,g,b] = BASES[sport];
     const vals = [], bgVals = [];
     let hasData = false;
