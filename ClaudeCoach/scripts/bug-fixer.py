@@ -222,7 +222,7 @@ def _fix_group(group, idx, slug, dry_run):
                     print(f"[bug-fixer] {rid}: {n} fails compile ({e}) — discarding", file=sys.stderr)
                     return None
         _git(["commit", "-m", f"bugfix: {group.get('title', '')}"], cwd=wt)
-        review = {"id": rid, "branch": branch, "title": group.get("title", ""),
+        review = {"id": rid, "branch": branch, "slug": slug, "title": group.get("title", ""),
                   "entries": group.get("entries", []), "summary": summary, "stat": stat,
                   "files": _git(["diff", "HEAD~1", "--name-only"], cwd=wt).stdout.split(),
                   "status": "awaiting", "created": date.today().isoformat()}
@@ -252,14 +252,56 @@ def run_fix(slug, dry_run):
         print(f"  {g.get('title')}: {'review ' + rid if rid else 'no change / discarded'}")
 
 
+def refix(rid, feedback):
+    """Revise an existing awaiting review's branch per Jamie's Edit feedback, then re-post
+    the card. Invoked by the bot when Jamie taps ✏️ Edit and sends his change."""
+    reviews = _load_reviews(); rv = reviews.get(rid)
+    if not rv:
+        print(f"[bug-fixer] refix: no review {rid}", file=sys.stderr); return
+    branch = rv["branch"]; wt = f"{WORKTREE_BASE}-{rid}-edit"
+    if _git(["worktree", "add", wt, branch]).returncode != 0:
+        print(f"[bug-fixer] refix {rid}: worktree add failed", file=sys.stderr); return
+    try:
+        prompt = (f"You are revising an in-progress bug fix on branch {branch} (its current diff is "
+                  f"already committed). The athlete asked for this change:\n\n{feedback}\n\nApply it "
+                  f"(Read/Edit/Write; Bash read-only), keep it minimal, do not commit. Output ONE "
+                  f"<=140-char line summarising the revision.")
+        res = claude_call.run_claude(prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
+                                     allowed_tools=FIX_TOOLS, cwd=wt, timeout=900, label=f"refix:{rid}")
+        summary = ((res.stdout or "").strip().splitlines() or ["(revised)"])[-1][:140]
+        _git(["add", "-A"], cwd=wt)
+        if _git(["diff", "--staged", "--quiet"], cwd=wt).returncode != 0:
+            for n in _git(["diff", "--staged", "--name-only"], cwd=wt).stdout.split():
+                if n.endswith(".py"):
+                    try:
+                        py_compile.compile(str(Path(wt) / n), doraise=True)
+                    except Exception as e:
+                        print(f"[bug-fixer] refix {rid}: {n} fails compile ({e})", file=sys.stderr); return
+            _git(["commit", "-m", f"bugfix revise {rid}"], cwd=wt)
+        rv["summary"] = summary
+        rv["stat"]    = _git(["diff", "main", "--stat"], cwd=wt).stdout
+        rv["files"]   = _git(["diff", "main", "--name-only"], cwd=wt).stdout.split()
+        rv["status"]  = "awaiting"
+        reviews[rid]  = rv; _save_reviews(reviews)
+        chat_id = json.loads((BASE / "config/athletes.json").read_text())[rv.get("slug", "jamie")].get("chat_id", "")
+        if chat_id:
+            _tg_card(chat_id, rv)
+    finally:
+        _git(["worktree", "remove", "--force", wt])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--athlete", default="jamie")
     ap.add_argument("--json", action="store_true", help="print raw JSON plan")
     ap.add_argument("--fix", action="store_true", help="draft fixes on branches + post review cards")
     ap.add_argument("--dry-run", action="store_true", help="with --fix: build branches but never post or keep them")
+    ap.add_argument("--refix", metavar="RID", help="revise an existing review per --feedback, then re-post")
+    ap.add_argument("--feedback", default="", help="the revision instruction for --refix")
     args = ap.parse_args()
-    if args.fix:
+    if args.refix:
+        refix(args.refix, args.feedback)
+    elif args.fix:
         run_fix(args.athlete, args.dry_run)
     else:
         p = plan(args.athlete)

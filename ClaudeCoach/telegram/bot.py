@@ -1682,6 +1682,94 @@ def _update_lthr(slug: str, lthr_bpm: int) -> str:
     )
 
 
+#  Bug-fixer Stage 2 — review approval (✅Yes / ❌No / ✏️Edit on drafted fixes)
+BUG_REVIEWS_FILE  = BASE.parent / ".bug-reviews.json"      # written by scripts/bug-fixer.py --fix
+_BUGFIXER         = BASE.parent / "scripts/bug-fixer.py"
+_PENDING_BUG_EDIT = {}                                     # chat_id -> review id awaiting a revision msg
+_BOT_PATH_PREFIXES = ("ClaudeCoach/telegram/", "ClaudeCoach/lib/")  # changes here need a bot restart
+
+
+def _bug_reviews():
+    try:
+        return json.loads(BUG_REVIEWS_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def _bug_reviews_save(r):
+    BUG_REVIEWS_FILE.write_text(json.dumps(r, indent=2))
+
+
+def _bug_mark_feedback(slug, entries, status):
+    f = BASE.parent / f"athletes/{slug}/feedback-log.json"
+    try:
+        d = json.loads(f.read_text())
+        for i in entries:
+            if isinstance(i, int) and 0 <= i < len(d):
+                d[i]["status"] = status
+        f.write_text(json.dumps(d, indent=2))
+    except Exception as e:
+        log(f"bug-fixer mark feedback failed: {e}")
+
+
+def _handle_bugfix(token, chat_id, data, athletes, config):
+    """Yes = merge branch->main (+push, +restart if bot files changed, +mark resolved);
+    No = discard branch + dismiss; Edit = capture the next message as a revision.
+    Only merges a branch recorded 'awaiting' in .bug-reviews.json — never an arbitrary ref."""
+    if not data.startswith("bf:"):
+        return False
+    parts = data.split(":", 2)
+    if len(parts) != 3:
+        return True
+    _, action, rid = parts
+    reviews = _bug_reviews()
+    rv = reviews.get(rid)
+    if not rv or rv.get("status") != "awaiting":
+        send(token, chat_id, "That fix is no longer pending.")
+        return True
+    if chat_id not in athletes:
+        return True
+    proj   = config.get("project_dir", str(BASE.parent.parent))
+    branch = rv["branch"]
+    slug   = athletes[chat_id]["slug"]
+    title  = rv.get("title", "")
+
+    def _g(args):
+        return subprocess.run(["git", "-C", proj] + args, capture_output=True, text=True)
+
+    if action == "no":
+        _g(["branch", "-D", branch])
+        rv["status"] = "dismissed"; _bug_reviews_save(reviews)
+        _bug_mark_feedback(slug, rv.get("entries", []), "dismissed")
+        send(token, chat_id, f"❌ Dismissed: {title}")
+        return True
+
+    if action == "edit":
+        _PENDING_BUG_EDIT[chat_id] = rid
+        send(token, chat_id, f"✏️ Send your change for *{title}* as your next message and I'll revise it.")
+        return True
+
+    if action == "yes":
+        if _g(["rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip() != "main":
+            _g(["checkout", "main"])
+        m = _g(["merge", "--no-ff", "-m", f"bugfix {rid}: {title}", branch])
+        if m.returncode != 0:
+            _g(["merge", "--abort"])
+            send(token, chat_id, f"⚠️ Couldn't merge *{title}* cleanly (conflict). Branch kept: `{branch}` — needs a manual look.")
+            return True
+        _g(["push", "origin", "main"])
+        rv["status"] = "merged"; _bug_reviews_save(reviews)
+        _bug_mark_feedback(slug, rv.get("entries", []), "resolved")
+        _g(["branch", "-D", branch])
+        needs_restart = any(str(p).startswith(_BOT_PATH_PREFIXES) for p in rv.get("files", []))
+        send(token, chat_id, f"✅ Merged & deployed: {title}"
+             + ("\n_Restarting the bot to load it…_" if needs_restart else ""))
+        if needs_restart:
+            subprocess.Popen(["systemctl", "restart", "claudecoach-bot.service"], start_new_session=True)
+        return True
+    return True
+
+
 def _handle_quick_log(token, chat_id, data, message_id, athletes):
     """Handle quick-log callback from post-session inline keyboard. Returns True if handled."""
     parts = data.split(":", 3)
@@ -2680,6 +2768,8 @@ def main():
                             else:
                                 send(token, chat_id, "_Couldn't generate the voice note just now._")
                     continue
+                if text.startswith("bf:") and _handle_bugfix(token, chat_id, text, athletes, config):
+                    continue
                 if _handle_quick_log(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
@@ -2771,6 +2861,14 @@ def main():
             slug = athlete["slug"]
             files = athlete_files(slug)
             athlete_name = athlete.get("name", slug).split()[0]  # first name only
+
+            # Bug-fix Edit follow-up: this message is the revision for a pending review.
+            if chat_id in _PENDING_BUG_EDIT:
+                _rid = _PENDING_BUG_EDIT.pop(chat_id)
+                send(token, chat_id, "On it — revising that fix; I'll re-post when it's ready.")
+                subprocess.Popen(["python3", str(_BUGFIXER), "--refix", _rid, "--feedback", text],
+                                 cwd=config.get("project_dir"), start_new_session=True)
+                continue
 
             # Sticky voice-reply toggle: /voice [on|off] or the 🎙 menu button.
             _vt = text.strip().lower()
