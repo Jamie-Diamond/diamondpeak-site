@@ -104,31 +104,46 @@ def _compute_per_sport_ctl(activities, start, today):
 
 
 def _per_sport_ctl_cached(slug, client, today):
-    """Current-season per-sport CTL, cached daily — the season activity fetch is heavy and
-    refresh-site-data runs after every activity, so recompute at most once per day."""
+    """Per-sport CTL for the fitness-by-sport chart. Returns
+    {"current": {sport: series}, "prev": {sport: series}}.
+    Current season is recomputed at most once a day (the season activity fetch is heavy
+    and refresh runs after every activity). The previous season is historical, so it is
+    fetched once (a heavier ~18-month pull) and cached forever."""
     cache_f = BASE / f"athletes/{slug}/fitness-bysport-cache.json"
+    cache = {}
     try:
-        c = json.loads(cache_f.read_text())
-        if c.get("date") == today.isoformat() and c.get("current"):
-            return c["current"]
+        cache = json.loads(cache_f.read_text())
     except Exception:
         pass
-    start = date(today.year, 1, 1)
+
+    # Current season — daily.
+    current = cache.get("current") or {}
+    if cache.get("date") != today.isoformat() or not current:
+        start = date(today.year, 1, 1)
+        try:
+            current = _compute_per_sport_ctl(
+                client.get_training_history((today - start).days + 1), start, today)
+        except Exception as e:
+            log(f"[{slug}] per-sport CTL (current) failed: {e}")
+
+    # Previous season — one-time (last year, Jan 1 → mid-Sep to match fitnessPrev), cached.
+    prev = cache.get("prev")
+    if not prev:
+        ps, pe = date(today.year - 1, 1, 1), date(today.year - 1, 9, 19)
+        try:
+            acts = client.get_training_history((today - ps).days + 1)
+            window = [a for a in (acts or [])
+                      if ps.isoformat() <= (a.get("start_date_local") or "")[:10] <= pe.isoformat()]
+            prev = _compute_per_sport_ctl(window, ps, pe)
+        except Exception as e:
+            log(f"[{slug}] per-sport CTL (prev) failed: {e}")
+            prev = {}
+
     try:
-        series = _compute_per_sport_ctl(client.get_training_history((today - start).days + 1), start, today)
-    except Exception as e:
-        log(f"[{slug}] per-sport CTL failed: {e}")
-        return {}
-    try:
-        prev = json.loads(cache_f.read_text()) if cache_f.exists() else {}
-    except Exception:
-        prev = {}
-    prev.update({"date": today.isoformat(), "current": series})
-    try:
-        cache_f.write_text(json.dumps(prev))
+        cache_f.write_text(json.dumps({"date": today.isoformat(), "current": current, "prev": prev}))
     except Exception:
         pass
-    return series
+    return {"current": current, "prev": prev}
 
 
 def _build_jamie_data(client) -> dict:
