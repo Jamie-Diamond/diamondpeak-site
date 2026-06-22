@@ -250,6 +250,15 @@ def run_fix(slug, dry_run):
     if not groups:
         print("No fixable_now groups — nothing to fix.")
         return
+    # Dedup: skip groups whose log entries already have a review (awaiting / merged /
+    # dismissed) so the nightly run doesn't re-post the same bug every night. The
+    # feedback log is append-only, so entry indices are stable across runs.
+    if not dry_run:
+        seen = {e for rv in _load_reviews().values() for e in rv.get("entries", [])}
+        groups = [g for g in groups if not (set(g.get("entries", [])) & seen)]
+        if not groups:
+            print("All fixable groups already have reviews — nothing new.")
+            return
     print(f"{len(groups)} fixable group(s){' (dry-run)' if dry_run else ''}.")
     for i, g in enumerate(groups):
         rid = _fix_group(g, i, slug, dry_run)
