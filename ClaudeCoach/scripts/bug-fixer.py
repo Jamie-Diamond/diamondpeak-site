@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """
-ClaudeCoach nightly bug-fixer — STAGE 1: triage / consolidate / plan (read-only).
+ClaudeCoach nightly bug-fixer — two-stage pipeline.
 
-Reads the whole feedback/bug log, uses an agent to (a) check the codebase + git
-history for what's already been fixed, (b) consolidate open entries that share a
-root cause into work groups, and (c) classify each group fixable_now / needs_human
-/ already_resolved with a plan. Outputs a structured plan (JSON).
+Stage 1 (default, read-only): reads the feedback/bug log, uses an agent to
+(a) check the codebase + git history for what's already been fixed,
+(b) consolidate open entries that share a root cause into work groups, and
+(c) classify each group fixable_now / needs_human / already_resolved with a
+plan. Outputs a structured plan (JSON).
 
-Stage 2 (separate, later): for each fixable_now group, draft the fix on a git
-worktree branch, post a Telegram card with ✅ Yes / ❌ No / ✏️ Edit, and merge to
-main only on an explicit Yes. NOTHING in this file fixes, writes, merges or deploys.
+Stage 2 (--fix / --refix): for each fixable_now group, drafts the fix on a
+temporary git worktree branch, posts a Telegram review card with ✅ Yes /
+❌ No / ✏️ Edit, and merges to main only on an explicit Yes reply.
+--refix revises a draft after an Edit instruction without creating a new entry.
 
 Run:  python3 ClaudeCoach/scripts/bug-fixer.py [--athlete jamie] [--json]
-Cron (later): 0 0 * * *  (midnight)
+      python3 ClaudeCoach/scripts/bug-fixer.py --fix <group_id>
+      python3 ClaudeCoach/scripts/bug-fixer.py --refix <group_id> "<instruction>"
+Cron: 0 0 * * *  (midnight, Stage 1 only)
 """
 import argparse, json, re, sys, subprocess, py_compile
 from datetime import date
