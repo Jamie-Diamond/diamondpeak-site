@@ -229,10 +229,17 @@
       </div>
     </div>
     <div class="small" id="load-chart-sub" style="margin-bottom:10px">TSS stacked by sport · faded bars = planned · Form line (right axis)</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button id="load-sport-All" onclick="setLoadSport('All')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#1d6840;color:#fff;cursor:pointer">All</button>
+      <button id="load-sport-Swim" onclick="setLoadSport('Swim')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Swim</button>
+      <button id="load-sport-Bike" onclick="setLoadSport('Bike')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Bike</button>
+      <button id="load-sport-Run" onclick="setLoadSport('Run')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Run</button>
+    </div>
     <div class="chart-wrap"><canvas id="chartLoad"></canvas></div>
     <div class="legend" style="margin-top:10px">
       <span><span class="swatch" style="background:#1a5276;opacity:.87"></span>Ride</span>
       <span><span class="swatch" style="background:#7f8c8d;opacity:.87"></span>Strength</span>
+      <span><span class="swatch" style="background:#bea078;opacity:.87"></span>Other</span>
       <span style="color:var(--muted);font-size:11px">faded = planned</span>
     </div>
   </div>
@@ -521,22 +528,33 @@ function setLoadMode(mode) {
   renderLoadChart(_loadChartDays);
 }
 
+let _loadSport = "All";
+function setLoadSport(s){
+  _loadSport = s;
+  ["All","Swim","Bike","Run"].forEach(x=>{const b=document.getElementById("load-sport-"+x); if(b) b.style.cssText=_pill(x===s);});
+  renderLoadChart(_loadChartDays);
+}
+
 function renderLoadChart(days) {
   if (!window.chartLoad || !days || !days.length) return;
   _loadChartDays = days;
-  const SPORTS = ["Ride","Strength"];
-  const BASES  = {Ride:[26,82,118], Strength:[127,140,141]};
+  const SPORTS = ["Ride","Run","Swim","Strength","Other"];
+  const BASES  = {Ride:[26,82,118], Run:[192,57,43], Swim:[46,156,142], Strength:[127,140,141], Other:[190,160,120]};
   function normSport(s) {
     if (!s) return "Other";
     if (/Ride|Cycling|Gravel|Virtual/i.test(s)) return "Ride";
+    if (/Run/i.test(s)) return "Run";
+    if (/Swim/i.test(s)) return "Swim";
     if (/Strength|Weight|Gym/i.test(s)) return "Strength";
-    return "Other";
+    if (/Sail/i.test(s)) return "Sail";   // excluded — standing rule: sailing carries no TSS
+    return "Other";                        // Walk, Row, Elliptical, Hike, Ski, HIIT… all count toward "All"
   }
   const useDur = _loadMode === "dur";
   const labels = days.map(d => d.date.slice(5));
   const todayStr = new Date().toISOString().slice(5,10);
   const datasets = [];
-  SPORTS.forEach(sport => {
+  const _showSports = _loadSport === "All" ? SPORTS : [(_loadSport === "Bike" ? "Ride" : _loadSport)];
+  _showSports.forEach(sport => {
     const [r,g,b] = BASES[sport];
     const vals = [], bgVals = [];
     let hasData = false;

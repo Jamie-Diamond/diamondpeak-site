@@ -294,6 +294,7 @@
       <span><span class="swatch" style="background:#c0392b;opacity:.87"></span>Run</span>
       <span><span class="swatch" style="background:#2e9c8e;opacity:.87"></span>Swim</span>
       <span><span class="swatch" style="background:#7f8c8d;opacity:.87"></span>Strength</span>
+      <span><span class="swatch" style="background:#bea078;opacity:.87"></span>Other</span>
       <span style="color:var(--muted);font-size:11px">faded = planned</span>
     </div>
   </div>
@@ -655,15 +656,16 @@ function setLoadMode(mode) {
 function renderLoadChart(days) {
   if (!window.chartLoad || !days || !days.length) return;
   _loadChartDays = days;
-  const SPORTS = ["Ride","Run","Swim","Strength"];
-  const BASES  = {Ride:[26,82,118], Run:[192,57,43], Swim:[46,156,142], Strength:[127,140,141]};
+  const SPORTS = ["Ride","Run","Swim","Strength","Other"];
+  const BASES  = {Ride:[26,82,118], Run:[192,57,43], Swim:[46,156,142], Strength:[127,140,141], Other:[190,160,120]};
   function normSport(s) {
     if (!s) return "Other";
     if (/Ride|Cycling|Gravel|Virtual/i.test(s)) return "Ride";
     if (/Run/i.test(s)) return "Run";
     if (/Swim/i.test(s)) return "Swim";
     if (/Strength|Weight|Gym/i.test(s)) return "Strength";
-    return "Other";
+    if (/Sail/i.test(s)) return "Sail";   // excluded — standing rule: sailing carries no TSS
+    return "Other";                        // Walk, Row, Elliptical, Hike, Ski, HIIT… all count toward "All"
   }
   const useDur = _loadMode === "dur";
   const labels = days.map(d => d.date.slice(5));
