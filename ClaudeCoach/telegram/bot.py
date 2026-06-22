@@ -657,6 +657,8 @@ _WEEK_CMD_RE     = re.compile(r'^/week\s*$', re.I)
 _FORM_CMD_RE     = re.compile(r'^/form\s*$', re.I)
 # (chat_id, callback_data) -> last-handled timestamp, for command-callback debounce
 _RECENT_CALLBACKS = {}
+# (chat_id) -> expiry timestamp; set when replan confirmation is pending
+_PENDING_REPLAN: dict[str, float] = {}
 
 _LOAD_CMD_RE     = re.compile(r'^/load\s*$', re.I)
 _FITNESS_CMD_RE  = re.compile(r'^/fitness\s*$', re.I)
@@ -1953,6 +1955,32 @@ def _handle_test_confirm(token, chat_id, data, message_id, athletes):
     return True
 
 
+def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
+    """Handle replan confirmation/cancel callbacks. Returns True if handled."""
+    if data not in ("__REPLAN_CONFIRM__", "__REPLAN_CANCEL__"):
+        return False
+    athlete = athletes.get(chat_id)
+    if not athlete:
+        return False
+    slug = athlete["slug"]
+    expiry = _PENDING_REPLAN.pop(chat_id, None)
+    if data == "__REPLAN_CANCEL__" or expiry is None or time.time() > expiry:
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "❌ Replan cancelled")
+        return True
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id, "✅ Replan confirmed — rebuilding week…")
+    try:
+        cmd = ["timeout", "1800", "python3", str(STAGE1_PLAN_SCRIPT),
+               "--athlete", slug, "--push", "--notify"]
+        subprocess.Popen(cmd, cwd=str(PROJECT_DIR),
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        log(f"[{slug}] replan launched in background (confirmed)")
+    except Exception as e:
+        send(token, chat_id, f"Couldn't start replan: {e}", reply_markup=build_keyboard(slug))
+    return True
+
+
 def prefetch_context(slug: str) -> str:
     """Fetch standard training context in parallel and return as a formatted block.
     Falls back silently to empty string on any error so the bot keeps working."""
@@ -2774,6 +2802,8 @@ def main():
                     continue
                 if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
                     continue
+                if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
+                    continue
                 if _handle_drill(token, chat_id, text, msg_id, athletes, config):
                     continue
                 # Debounce duplicate command callbacks (e.g. /load): a failed
@@ -2928,6 +2958,15 @@ def main():
             log(f"In: {text[:80]}")
 
             fast = fast_path(text, slug=slug, athlete_cfg=athlete)
+            if fast == "__REPLAN__":
+                _PENDING_REPLAN[chat_id] = time.time() + 60
+                send(token, chat_id,
+                     "⚠️ Replan will rebuild this week from scratch — confirm?",
+                     reply_markup={"inline_keyboard": [[
+                         {"text": "✅ Yes, replan",  "callback_data": "__REPLAN_CONFIRM__"},
+                         {"text": "❌ Cancel",        "callback_data": "__REPLAN_CANCEL__"},
+                     ]]})
+                continue
             if fast in ("__GENERATE_PLAN__", "__REPLAN__"):
                 is_replan = fast == "__REPLAN__"
                 send(token, chat_id,
