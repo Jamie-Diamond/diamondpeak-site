@@ -170,7 +170,14 @@
           <button onclick="zoomFitness(0)"   style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">Season</button>
         </div>
       </div>
+      <div style="display:flex;gap:6px;margin:0 0 8px">
+        <button id="fit-sport-All" onclick="setFitnessSport('All')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#1d6840;color:#fff;cursor:pointer">All</button>
+        <button id="fit-sport-Swim" onclick="setFitnessSport('Swim')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Swim</button>
+        <button id="fit-sport-Bike" onclick="setFitnessSport('Bike')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Bike</button>
+        <button id="fit-sport-Run" onclick="setFitnessSport('Run')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Run</button>
+      </div>
       <div class="chart-wrap"><canvas id="chartFitness"></canvas></div>
+      <div id="fit-sport-note" class="small" style="display:none;margin-top:6px;color:var(--muted)"></div>
       <div class="legend">
         <span><span class="swatch" style="background:#1a1a1a"></span>CTL — actual</span>
         <span><span class="swatch" style="background:#c0392b;opacity:.6"></span>Target CTL milestones</span>
@@ -476,6 +483,43 @@ function zoomFitness(days) {
     sc.min = todayTX - days; sc.max = todayTX + 21;
   }
   window.chartFitness.update();
+}
+
+let _fitSport = "All";
+function _pill(active){return (active?"background:#1d6840;color:#fff;":"background:#f8f5ef;color:#4a4535;")+"font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;cursor:pointer";}
+function setFitnessSport(s){
+  _fitSport = s;
+  ["All","Swim","Bike","Run"].forEach(x=>{const b=document.getElementById("fit-sport-"+x); if(b) b.style.cssText=_pill(x===s);});
+  const ch = window.chartFitness, d = window._td;
+  if(!ch || !d) return;
+  const toXY = (series, raceStr) => (series||[]).map(([dt,v])=>({x:toTX(dt,raceStr),y:v}));
+  if(s === "All"){
+    ch.data.datasets[0].label = "CTL — this season";
+    ch.data.datasets[0].data  = toXY(d.fitnessThis);
+    const pr = (d.profile&&d.profile.prev_race_date) || (d.fitnessPrev&&d.fitnessPrev.length ? d.fitnessPrev[d.fitnessPrev.length-1][0] : null);
+    ch.data.datasets[1].data  = toXY(d.fitnessPrev, pr);
+    ch.data.datasets[2].data  = (d.fitnessPrev2&&d.profile&&d.profile.prev2_race_date) ? toXY(d.fitnessPrev2, d.profile.prev2_race_date) : [];
+    ch.options.scales.y.min = 0; ch.options.scales.y.max = 90;
+  } else {
+    const key = s === "Bike" ? "Ride" : s;
+    const bs = d.fitnessBySport || {};
+    const cur = (bs.current && bs.current[key]) || [], prev = (bs.prev && bs.prev[key]) || [], prev2 = (bs.prev2 && bs.prev2[key]) || [];
+    ch.data.datasets[0].label = "CTL — " + s + " this season";
+    ch.data.datasets[0].data  = toXY(cur);
+    const pr = (d.profile&&d.profile.prev_race_date) || (prev.length ? prev[prev.length-1][0] : null);
+    ch.data.datasets[1].data  = toXY(prev, pr);
+    ch.data.datasets[2].data  = (d.profile && d.profile.prev2_race_date) ? toXY(prev2, d.profile.prev2_race_date) : [];
+    let hi = 0; [cur, prev, prev2].forEach(a => a.forEach(p => { if (p[1] > hi) hi = p[1]; }));
+    ch.options.scales.y.min = 0; ch.options.scales.y.max = Math.max(10, Math.ceil((hi + 5) / 10) * 10);
+  }
+  const _per = (s !== "All");
+  ch.data.datasets.forEach(ds => { if (ds._projection || ds.label === "Target CTL") ds.hidden = _per; });
+  const note = document.getElementById("fit-sport-note");
+  if (note) {
+    note.style.display = _per ? "" : "none";
+    note.textContent = "Per-sport fitness = 42-day average of that sport's TSS. TSS is scored against your current threshold, so a season where your threshold rose (e.g. swim CSS) can read lower even with more or faster training — compare shapes, not absolute heights, across seasons.";
+  }
+  ch.update();
 }
 
 // ── LOAD CHART ───────────────────────────────────────────────────────────────
@@ -1135,6 +1179,7 @@ fetch('site-data.json?v='+Date.now())
 fetch('training-data-kathryn.json?v='+Date.now())
   .then(r=>r.json())
   .then(d=>{
+    window._td = d;   // expose for the fitness sport selector (setFitnessSport)
     if (d.fitnessThis && window.chartFitness) {
       window.chartFitness.data.datasets[0].data = d.fitnessThis.map(([dt,v])=>({x:toTX(dt),y:v}));
       if (d.fitnessPrev && d.fitnessPrev.length) {
