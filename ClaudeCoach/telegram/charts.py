@@ -709,10 +709,13 @@ def week_chart(events, title="Training week", week_start=None):
 
     planned_tss = [0.0] * 7
     actual      = {s: [0.0] * 7 for s in sports}
+    today_str   = _datetime.now().strftime("%Y-%m-%d")
 
     for e in events:
         day_str = e.get("date")
         if day_str not in day_strs:
+            continue
+        if day_str == today_str and e.get("status") != "completed":
             continue
         i      = day_strs.index(day_str)
         sport  = e.get("sport", "Other")
