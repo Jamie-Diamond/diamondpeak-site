@@ -69,6 +69,12 @@ notes. Your job, in order:
    - "needs_human": deep, ambiguous, or methodology-level (no safe mechanical fix). \
      Say why, and what decision is needed from Jamie.
 
+BE EFFICIENT AND TIME-BOUNDED. Do NOT read the whole codebase. Run `git log --oneline -60`
+ONCE for recent-fix context, and use at most one or two targeted `git grep` / file reads
+per OPEN issue to confirm status. Entries older than ~10 days are very likely already
+resolved — spend a quick git grep to confirm, don't deep-dive. Put your effort into
+consolidation and classification of the OPEN items, not exhaustive verification.
+
 OUTPUT: ONLY a JSON object wrapped in <plan></plan>, no other prose:
 <plan>
 {"groups":[
@@ -94,7 +100,7 @@ def plan(slug: str) -> dict:
     prompt = PLAN_PROMPT.replace("{log}", _format_entries(entries))
     result = claude_call.run_claude(
         prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
-        allowed_tools=TOOLS, cwd=PROJECT_DIR, timeout=600, label=f"bugplan:{slug}",
+        allowed_tools=TOOLS, cwd=PROJECT_DIR, timeout=800, label=f"bugplan:{slug}",
     )
     out = (result.stdout or "").strip()
     m = re.search(r"<plan>(.*?)</plan>", out, re.DOTALL)
