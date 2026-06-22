@@ -268,7 +268,8 @@ def _build_jamie_data(client) -> dict:
         if any(_sport_normalise(a.get("type","")) == ev_sport
                for a in completed_by_date.get(ev_date,[])):
             continue
-        ev_tss = ev.get("load_target") or ev.get("icu_training_load") or ev.get("load")
+        # Prefer the workout-computed load; load_target can be a stale/manual over-estimate.
+        ev_tss = ev.get("icu_training_load") or ev.get("load") or ev.get("load_target")
         ev_dur = ev.get("moving_time") or ev.get("duration")
         week_calendar.append({"date":ev_date,"sport":ev_sport,"name":ev.get("name",""),
                                "tss":int(ev_tss) if ev_tss else None,
@@ -293,8 +294,9 @@ def _build_jamie_data(client) -> dict:
                 ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
                 if ev_d != d or any(a["sport"]==ev_sport for a in acts):
                     continue
-                # Planned TSS lives in load_target; icu_training_load/load are null on planned events.
-                ev_tss = ev.get("load_target") or ev.get("icu_training_load") or ev.get("load")
+                # Prefer the workout-computed load (icu_training_load); load_target can be a stale/
+                # manual over-estimate that doesn't match the prescribed (e.g. Z2) structure.
+                ev_tss = ev.get("icu_training_load") or ev.get("load") or ev.get("load_target")
                 ev_dur = ev.get("moving_time") or ev.get("duration")
                 acts.append({"sport":ev_sport,"tss":int(ev_tss) if ev_tss else None,
                               "dur":round(int(ev_dur)/60) if ev_dur else None,"status":"planned"})
