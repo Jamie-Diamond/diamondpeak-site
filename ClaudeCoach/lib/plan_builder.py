@@ -36,7 +36,7 @@ BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
-from primitives.planned_tss import render_workout              # noqa: E402
+from primitives.planned_tss import render_workout, planned_session_tss  # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 from primitives.validate_plan import validate_week             # noqa: E402
 from primitives.blueprint import current_phase                 # noqa: E402
@@ -78,7 +78,13 @@ def build_sessions(slug: str, proposal: dict) -> dict:
             r = render_workout(sport, segs)
             desc, load, dur = r["description"], r["tss"], r["duration_min"]
         else:
-            desc, load, dur = "", int(s.get("load") or 0), int(s.get("minutes") or 0)
+            # No structured segments (Strength, or a session Stage 1 left unstructured):
+            # derive TSS deterministically from sport + duration. NEVER s.get("load") — the
+            # Stage-1 LLM's number is exactly the guessed load the two-stage design removes.
+            dur  = int(s.get("minutes") or s.get("duration_min") or 0)
+            load = planned_session_tss({"type": sport, "name": s.get("name", ""),
+                                        "moving_time": dur * 60})["tss"]
+            desc = ""
         # fuel note for long rides
         if sport in _LONG_FUEL_SPORTS and dur >= 90:
             notes = (notes + f"\nFuel {fuel} g CHO/hr (progress toward "

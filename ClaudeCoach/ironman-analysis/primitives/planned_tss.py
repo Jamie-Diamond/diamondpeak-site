@@ -4,8 +4,10 @@ The 11 Jun morning card showed "~35 TSS" for a swim whose plan event carried
 load_target=60: the prompt pointed the model at icu_training_load (null on
 planned events) and invited it to estimate. TSS now resolves here, in order:
 
-  1. load_target          — the plan's own number, authoritative
-  2. icu_training_load    — set once ICU analyses a structured workout
+  1. icu_training_load    — what ICU computes from the synced structured workout
+                            (authoritative; this is the number that reaches Garmin)
+  2. load_target          — the plan's own estimate (fallback; often the only number
+                            for structure-less sessions like text swims)
   3. calculated           — duration × IF² × 100, IF from the coarse session
                             type (the same classifier the backstop uses)
 
@@ -212,7 +214,7 @@ def planned_session_tss(event: dict) -> dict:
     st = classify_session_type(event.get("type", ""), name)
     dur = _duration_min(event, st)
 
-    for field, source in (("load_target", "plan"), ("icu_training_load", "icu")):
+    for field, source in (("icu_training_load", "icu"), ("load_target", "plan")):
         v = event.get(field)
         if v:
             return {"tss": int(round(float(v))), "source": source,

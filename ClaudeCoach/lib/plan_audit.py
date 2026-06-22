@@ -101,7 +101,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
         ws = win_start + timedelta(days=7 * wk)
         wk_evs = [e for e in events if ws.isoformat() <= (e.get("start_date_local") or "")[:10]
                   <= (ws + timedelta(days=6)).isoformat()]
-        total = sum(int(e.get("load_target") or 0) for e in wk_evs)
+        total = sum(int(e.get("icu_training_load") or e.get("load_target") or 0) for e in wk_evs)
         if ctl:
             req = pt.required_tss(cfg, ctl, today=ws)
             tgt = req.get("recommended_weekly_tss")

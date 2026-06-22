@@ -290,7 +290,7 @@ def _todays_planned(slug: str, today: str):
     if not workouts:
         return None
     # Primary = highest planned load (so a strength add-on doesn't mask the key session).
-    primary = max(workouts, key=lambda e: float(e.get("load_target") or 0))
+    primary = max(workouts, key=lambda e: float(e.get("icu_training_load") or e.get("load_target") or 0))
     st = classify_session_type(primary.get("type", ""), primary.get("name", ""))
     dur = primary.get("moving_time")
     if dur:

@@ -886,7 +886,7 @@ def _load_chart_quick(token, chat_id, slug):
             if not d or d < today.isoformat():
                 continue
             sport = _bot_norm_sport(ev.get("type") or ev.get("category") or "Other")
-            tss = round(float(ev.get("load_target") or ev.get("icu_training_load") or 0), 1)
+            tss = round(float(ev.get("icu_training_load") or ev.get("load_target") or 0), 1)
             dur = round((ev.get("moving_time") or 0) / 60)
             plans_by_date.setdefault(d, []).append(
                 {"sport": sport, "tss": tss, "dur": dur, "status": "planned"}
@@ -970,7 +970,7 @@ def _fitness_charts_quick(token, chat_id, slug):
             for ev in (client.get_events(today.isoformat(), end14) or []):
                 d = (ev.get("start_date_local") or "")[:10]
                 if d and d > today.isoformat():
-                    planned[d] = planned.get(d, 0) + float(ev.get("load_target") or ev.get("icu_training_load") or 0)
+                    planned[d] = planned.get(d, 0) + float(ev.get("icu_training_load") or ev.get("load_target") or 0)
             if data:
                 fdates = [(today + timedelta(days=i)).isoformat() for i in range(1, 15)]
                 ftss = [planned.get(d, 0) for d in fdates]
@@ -1129,7 +1129,7 @@ def _compliance_chart_quick(token, chat_id, slug):
                                       (today + timedelta(days=7)).isoformat()) or []):
             d = (ev.get("start_date_local") or "")[:10]
             if d:
-                planned[_wk(d)] += float(ev.get("load_target") or ev.get("icu_training_load") or 0)
+                planned[_wk(d)] += float(ev.get("icu_training_load") or ev.get("load_target") or 0)
         this_wk = _wk(today.isoformat())
         wks = sorted(w for w in set(list(actual) + list(planned)) if w <= this_wk)[-8:]
         if not wks:

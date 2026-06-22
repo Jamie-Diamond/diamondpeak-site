@@ -239,7 +239,7 @@ def _build_load_chart_payload(today, wellness_rows, history_acts, events):
             continue
         raw   = ev.get("type") or ev.get("category") or ""
         sport = _CHART_SPORT_MAP.get(raw, raw) or "Other"
-        tss = round(float(ev.get("load_target") or ev.get("icu_training_load") or 0), 1)
+        tss = round(float(ev.get("icu_training_load") or ev.get("load_target") or 0), 1)
         dur = round((ev.get("moving_time") or 0) / 60)
         plans_by_date.setdefault(d, []).append(
             {"sport": sport, "tss": tss, "dur": dur, "status": "planned"}
