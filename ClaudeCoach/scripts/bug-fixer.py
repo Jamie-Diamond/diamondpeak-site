@@ -173,13 +173,19 @@ def _git(args, cwd=PROJECT_DIR):
 
 
 def _tg_card(chat_id, review):
-    """Post the review card with ✅Yes/❌No/✏️Edit. Best-effort."""
-    import ssl, urllib.request
+    """Post the review card with ✅Yes/❌No/✏️Edit. Best-effort.
+    Uses HTML parse mode with escaped fields: the title/summary/stat come from the
+    fixer agent and routinely contain underscores, backticks and asterisks that break
+    Telegram's legacy Markdown (silent HTTP 400, so the card never arrives)."""
+    import html, ssl, urllib.request
     try:
         token = json.loads(TG_CONFIG.read_text())["bot_token"]
         rid = review["id"]
-        text = (f"🛠 *Bug fix ready* — {review['title']}\n\n_{review['summary']}_\n\n"
-                f"`{review['stat'].strip()}`\n\nMerge to live?")
+        title   = html.escape(review.get("title", ""))
+        summary = html.escape(review.get("summary", ""))
+        stat    = html.escape(review.get("stat", "").strip())
+        text = (f"🛠 <b>Bug fix ready</b>: {title}\n\n<i>{summary}</i>\n\n"
+                f"<pre>{stat}</pre>\n\nMerge to live?")
         kb = {"inline_keyboard": [[
             {"text": "✅ Yes",  "callback_data": f"bf:yes:{rid}"},
             {"text": "❌ No",   "callback_data": f"bf:no:{rid}"},
@@ -187,7 +193,7 @@ def _tg_card(chat_id, review):
         ]]}
         ctx = ssl.create_default_context(
             cafile="/etc/ssl/cert.pem" if Path("/etc/ssl/cert.pem").exists() else None)
-        body = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "Markdown",
+        body = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "HTML",
                            "reply_markup": kb}).encode()
         req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage",
                                      data=body, headers={"Content-Type": "application/json"})
@@ -265,6 +271,27 @@ def run_fix(slug, dry_run):
         print(f"  {g.get('title')}: {'review ' + rid if rid else 'no change / discarded'}")
 
 
+def repost_awaiting(slug):
+    """Re-post review cards for every 'awaiting' review of this athlete. Use after a
+    failed post run (e.g. the HTTP-400 Markdown bug) to deliver cards that never arrived.
+    Idempotent: it only re-sends the card, it does not touch branches or review state."""
+    reviews = _load_reviews()
+    try:
+        chat_id = json.loads((BASE / "config/athletes.json").read_text()).get(slug, {}).get("chat_id", "")
+    except Exception:
+        chat_id = ""
+    if not chat_id:
+        print(f"[bug-fixer] repost: no chat_id for {slug}", file=sys.stderr); return
+    pending = [r for r in reviews.values()
+               if r.get("status") == "awaiting" and r.get("slug", "jamie") == slug]
+    if not pending:
+        print("No awaiting reviews to repost."); return
+    print(f"Reposting {len(pending)} awaiting card(s) for {slug}.")
+    for rv in sorted(pending, key=lambda r: r.get("id", "")):
+        _tg_card(chat_id, rv)
+        print(f"  reposted {rv['id']}: {rv.get('title','')}")
+
+
 def refix(rid, feedback):
     """Revise an existing awaiting review's branch per Jamie's Edit feedback, then re-post
     the card. Invoked by the bot when Jamie taps ✏️ Edit and sends his change."""
@@ -311,9 +338,12 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="with --fix: build branches but never post or keep them")
     ap.add_argument("--refix", metavar="RID", help="revise an existing review per --feedback, then re-post")
     ap.add_argument("--feedback", default="", help="the revision instruction for --refix")
+    ap.add_argument("--repost", action="store_true", help="re-post cards for all awaiting reviews (e.g. after a failed post)")
     args = ap.parse_args()
     if args.refix:
         refix(args.refix, args.feedback)
+    elif args.repost:
+        repost_awaiting(args.athlete)
     elif args.fix:
         run_fix(args.athlete, args.dry_run)
     else:
