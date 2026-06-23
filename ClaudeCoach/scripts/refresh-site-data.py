@@ -302,6 +302,18 @@ def _build_jamie_data(client) -> dict:
                               "dur":round(int(ev_dur)/60) if ev_dur else None,"status":"planned"})
         load_chart.append({"date":d,"tsb":tsb_by_date.get(d),"activities":acts})
 
+    # Forward-project TSB for future loadChart days via Banister EMA decay
+    if kpi.get("ctl") is not None and kpi.get("atl") is not None:
+        _pctl, _patl = float(kpi["ctl"]), float(kpi["atl"])
+        for _entry in load_chart:
+            if _entry["date"] > today.isoformat():
+                _day_tss = sum((a.get("tss") or 0) for a in _entry.get("activities", [])
+                               if a.get("status") == "planned")
+                _pctl += (_day_tss - _pctl) / 42.0
+                _patl += (_day_tss - _patl) / 7.0
+                _entry["tsb"] = round(_pctl - _patl, 1)
+                _entry["projected"] = True
+
     # weightTrend (last 30 days where weight not null)
     weight_trend = [{"date":w.get("id","")[:10],"kg":w["weight"]}
                     for w in wellness_60 if w.get("weight")]
@@ -933,6 +945,18 @@ def _build_athlete_training_data(slug, athlete_cfg):
                     "status": "planned",
                 })
         load_chart.append({"date": d, "tsb": tsb_by_date.get(d), "activities": acts})
+
+    # Forward-project TSB for future loadChart days via Banister EMA decay
+    if kpi.get("ctl") is not None and kpi.get("atl") is not None:
+        _pctl, _patl = float(kpi["ctl"]), float(kpi["atl"])
+        for _entry in load_chart:
+            if _entry["date"] > today.isoformat():
+                _day_tss = sum((a.get("tss") or 0) for a in _entry.get("activities", [])
+                               if a.get("status") == "planned")
+                _pctl += (_day_tss - _pctl) / 42.0
+                _patl += (_day_tss - _patl) / 7.0
+                _entry["tsb"] = round(_pctl - _patl, 1)
+                _entry["projected"] = True
 
     # -- session log + swim log from local files -------------------------------
     session_log = []
