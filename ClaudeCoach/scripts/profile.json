@@ -10,6 +10,7 @@
   "a_goal": "Sub 9:30",
   "b_goal": "Sub 10:00",
   "c_goal": "Finish",
+  "bike_model": null,
   "ftp_watts": 316,
   "indoor_ftp_watts": null,
   "swim_css_per_100m": "1:39",
