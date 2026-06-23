@@ -144,7 +144,7 @@ def _render(plan_obj: dict) -> str:
 # ── Stage 2: fixer (draft on a worktree branch + review card) ─────────────────
 
 FIX_PROMPT = """You are fixing ONE consolidated bug in the ClaudeCoach codebase. You are in a
-fresh git worktree on a dedicated branch — make ONLY the minimal change for this bug. Do NOT
+fresh git worktree on a dedicated branch: make ONLY the minimal change for this bug. Do NOT
 commit, push, deploy, or change anything unrelated. Do NOT edit athlete data under
 ClaudeCoach/athletes/.
 
@@ -154,7 +154,11 @@ PLAN: {plan}
 LIKELY FILES: {files}
 
 Implement the fix now (Read/Edit/Write, Bash for read-only inspection), tight and consistent
-with the surrounding code. When done, output ONE line: a <=140-char summary of what you changed."""
+with the surrounding code. When done, output ONE line: a plain-English EXECUTIVE SUMMARY of the
+change for Jamie's review card, describing the OUTCOME (what now behaves differently), not the
+code mechanics. Do NOT name files, functions, variables, line numbers, or diff stats. Lead with
+the verb. Good: "Planning now counts strength-session load and no longer double-counts warm-up
+TSS." Bad: "Edited plan_builder.py, extracted _calc_load(), +12 lines." Max 200 chars."""
 
 
 def _load_reviews():
@@ -174,18 +178,21 @@ def _git(args, cwd=PROJECT_DIR):
 
 def _tg_card(chat_id, review):
     """Post the review card with ✅Yes/❌No/✏️Edit. Best-effort.
-    Uses HTML parse mode with escaped fields: the title/summary/stat come from the
-    fixer agent and routinely contain underscores, backticks and asterisks that break
-    Telegram's legacy Markdown (silent HTTP 400, so the card never arrives)."""
+    Uses HTML parse mode with escaped fields: the title/summary come from the fixer
+    agent and routinely contain underscores, backticks and asterisks that break
+    Telegram's legacy Markdown (silent HTTP 400, so the card never arrives). The card
+    leads with the plain-English outcome; file scope is a small footnote, not the focus."""
     import html, ssl, urllib.request
     try:
         token = json.loads(TG_CONFIG.read_text())["bot_token"]
         rid = review["id"]
         title   = html.escape(review.get("title", ""))
         summary = html.escape(review.get("summary", ""))
-        stat    = html.escape(review.get("stat", "").strip())
-        text = (f"🛠 <b>Bug fix ready</b>: {title}\n\n<i>{summary}</i>\n\n"
-                f"<pre>{stat}</pre>\n\nMerge to live?")
+        names   = [Path(f).name for f in review.get("files", []) if f]
+        footer  = html.escape(", ".join(names[:6]) + (f" +{len(names) - 6} more" if len(names) > 6 else ""))
+        text = (f"🛠 <b>Bug fix ready</b>\n\n<b>{title}</b>\n{summary}\n\n"
+                + (f"<i>Files: {footer}</i>\n\n" if footer else "")
+                + "Merge to live?")
         kb = {"inline_keyboard": [[
             {"text": "✅ Yes",  "callback_data": f"bf:yes:{rid}"},
             {"text": "❌ No",   "callback_data": f"bf:no:{rid}"},
@@ -218,7 +225,7 @@ def _fix_group(group, idx, slug, dry_run):
                                    plan=group.get("plan", ""), files=", ".join(group.get("files") or []))
         res = claude_call.run_claude(prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
                                      allowed_tools=FIX_TOOLS, cwd=wt, timeout=900, label=f"bugfix:{rid}")
-        summary = ((res.stdout or "").strip().splitlines() or ["(fix attempted)"])[-1][:140]
+        summary = ((res.stdout or "").strip().splitlines() or ["(fix attempted)"])[-1][:200]
         _git(["add", "-A"], cwd=wt)
         stat = _git(["diff", "--staged", "--stat"], cwd=wt).stdout
         if not stat.strip():
@@ -305,10 +312,12 @@ def refix(rid, feedback):
         prompt = (f"You are revising an in-progress bug fix on branch {branch} (its current diff is "
                   f"already committed). The athlete asked for this change:\n\n{feedback}\n\nApply it "
                   f"(Read/Edit/Write; Bash read-only), keep it minimal, do not commit. Output ONE "
-                  f"<=140-char line summarising the revision.")
+                  f"plain-English line (<=200 chars) describing the OUTCOME of the revision for "
+                  f"Jamie's review card: what now behaves differently. Do NOT name files, functions, "
+                  f"variables, line numbers or diff stats.")
         res = claude_call.run_claude(prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
                                      allowed_tools=FIX_TOOLS, cwd=wt, timeout=900, label=f"refix:{rid}")
-        summary = ((res.stdout or "").strip().splitlines() or ["(revised)"])[-1][:140]
+        summary = ((res.stdout or "").strip().splitlines() or ["(revised)"])[-1][:200]
         _git(["add", "-A"], cwd=wt)
         if _git(["diff", "--staged", "--quiet"], cwd=wt).returncode != 0:
             for n in _git(["diff", "--staged", "--name-only"], cwd=wt).stdout.split():
