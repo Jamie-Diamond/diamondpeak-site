@@ -667,7 +667,7 @@ def load_chart(payload, coaching_level="mid"):
     ax.set_title(f"Training load — {L['load_tss']} by sport  ·  {L['load_tsb']} (right)",
                  fontsize=12, fontweight="bold", color=BRAND_INK)
 
-    handles = [mpatches.Patch(facecolor=_col(BASE[s], 0.87), label=s) for s in present]
+    handles = [mpatches.Patch(facecolor=BASE[s], label=s) for s in present]
     handles.append(Line2D([0], [0], color=_col(BRAND_SECOND, 0.7), lw=1.4,
                           marker="o", markerfacecolor="#c9871f", markeredgecolor="white",
                           markersize=7, label=L["load_tsb"]))
