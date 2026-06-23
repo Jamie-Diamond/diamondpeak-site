@@ -114,6 +114,42 @@ def _weighted_mean(laps: list[LapMetrics], attr: str) -> Optional[float]:
     return total_val / total_dur
 
 
+def clip_laps(
+    laps: list[LapMetrics],
+    warmup_secs: float = 0.0,
+    cooldown_secs: float = 0.0,
+) -> list[LapMetrics]:
+    """Return work-block laps, skipping leading WU and trailing CD laps.
+
+    Skips leading laps whose cumulative duration falls within warmup_secs,
+    and trailing laps within cooldown_secs.  Falls back to the full list
+    when fewer than 2 laps would remain after clipping.
+    """
+    if warmup_secs <= 0 and cooldown_secs <= 0:
+        return laps
+
+    start = 0
+    cum = 0.0
+    for i, lap in enumerate(laps):
+        if cum + lap.duration_s <= warmup_secs:
+            cum += lap.duration_s
+            start = i + 1
+        else:
+            break
+
+    end = len(laps)
+    cum = 0.0
+    for i in range(len(laps) - 1, -1, -1):
+        if cum + laps[i].duration_s <= cooldown_secs:
+            cum += laps[i].duration_s
+            end = i
+        else:
+            break
+
+    clipped = laps[start:end]
+    return clipped if len(clipped) >= 2 else laps
+
+
 # ---------------------------------------------------------------------------
 # Public analytics functions
 # ---------------------------------------------------------------------------
@@ -218,6 +254,8 @@ def build_debrief(
     raw_laps: list[dict],
     ftp: float,
     planned_tss: Optional[float] = None,
+    warmup_secs: float = 0.0,
+    cooldown_secs: float = 0.0,
 ) -> DebriefResult:
     """Build a DebriefResult from IcuSync activity and lap data.
 
@@ -225,6 +263,8 @@ def build_debrief(
     raw_laps: laps list from the activity (may be empty for swims).
     ftp: current FTP from get_athlete_profile.
     planned_tss: from get_events for today (optional — set when available).
+    warmup_secs: seconds of leading laps to exclude from drift/decoupling.
+    cooldown_secs: seconds of trailing laps to exclude from drift/decoupling.
     """
     sport_raw = (activity.get("type") or "").lower()
     if "ride" in sport_raw:
@@ -241,13 +281,14 @@ def build_debrief(
     )
 
     laps = _parse_laps(raw_laps)
+    work_laps = clip_laps(laps, warmup_secs, cooldown_secs)
 
-    hr_drift = lap_drift(laps, "avg_hr")
-    power_drift = lap_drift(laps, "avg_watts")
-    pace_drift = lap_drift(laps, "avg_pace_s_per_km")
-    decoupling = hr_power_decoupling(laps)
+    hr_drift = lap_drift(work_laps, "avg_hr")
+    power_drift = lap_drift(work_laps, "avg_watts")
+    pace_drift = lap_drift(work_laps, "avg_pace_s_per_km")
+    decoupling = hr_power_decoupling(work_laps)
 
-    zone_dist = power_zone_distribution(laps, ftp) if sport == "bike" else {}
+    zone_dist = power_zone_distribution(work_laps, ftp) if sport == "bike" else {}
 
     ql = session_quality_label(execution_pct, decoupling)
 

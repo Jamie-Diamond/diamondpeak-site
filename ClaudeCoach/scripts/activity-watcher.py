@@ -206,6 +206,8 @@ Interval source: prefer Strava laps when they give a cleaner breakdown than ICU 
 
 Rules for ANALYSIS — each logical line must be a separate output line (no semicolons to merge lines):
 
+Drift / decoupling: when computing HR drift or HR:power decoupling, exclude laps that fall within icu_warmup_time seconds from the start and icu_cooldown_time seconds from the end (both fields in activity_detail; if absent or zero, use all laps).
+
 RIDE:
 - Structured (Strava laps show alternating hard/easy, or ICU >3 intervals): header line + one line per WORK interval.
   Header: NxDUR @ AVG W (X% FTP) · NP XXXw · IF X.XX
