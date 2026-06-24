@@ -4,19 +4,19 @@ Last updated: 2026-06-24
 
 ## Recent context (auto-summary)
 
-- **Tue 23 Jun** — Sweetspot 3×15 outside (90min cap). NP 162W (83% FTP), IF 0.83, HR 153avg/181max, 92 TSS, RPE 6. ICU had wrong session loaded — corrected per custom-plan rule.
-- **Mon 22 Jun** — Kettlebells 45min · 28 TSS · RPE 7. Base wk 8 plan confirmed ("Yes"). Secondary "Cardio" activity logged same day — RPE not received.
-- **Sun 21 Jun** — Long ride 65.9km · NP 138W (71% FTP) · HR 149avg/170max · decoupling −1.0% (excellent, 26–32°C) · 112 TSS · ~33g/hr carbs. Race-pace blocks fragmented (VI 1.11, 14 stops — Wandsworth roads); next long ride needs uninterrupted route (river path).
+- **Wed 24 Jun** — Rest day confirmed (travel block day 3, luteal day 15 begins). HRV 67 (best in 2+ weeks, recovering). Sleep 5.2h — short night.
+- **Tue 23 Jun** — Sweetspot 3×15 outside (90min cap per Kathryn's request). NP 162W (83% FTP), IF 0.83, HR 153avg/181max, 92 TSS, RPE 6. ICU had wrong session (Bike Z2 2hr) — corrected per custom-plan rule.
+- **Mon 22 Jun** — Kettlebells 45min · 28 TSS · RPE 7. Secondary "Cardio" activity same day — RPE not received.
+- **Sun 21 Jun** — Long ride 65.9km · NP 138W (71% FTP) · HR 149avg/170max · decoupling −1.0% (excellent, 26–32°C) · 112 TSS · ~33g/hr carbs. Race-pace blocks fragmented (VI 1.11, 14 stops — Wandsworth roads); next long ride needs uninterrupted route.
 - **Sat 20 Jun** — Run 13.1km · GAP 6:00/km · HR 167avg in 28°C · decoupling 0.5% · 85 TSS.
-- **Fri 19 Jun** — Swim CSS 2km · 8×198m · paces 1:39–1:41/100m · last rep faded to 1:46 · 34 TSS.
-- **Base wk 8 plan (~479 TSS)**: KB Mon ✓ · Sweetspot 3×15 Tue ✓ · Rest Wed ✓ · Sea swim ~40min + easy run 45min Thu · Bike Z2 2hr Fri · Bike Z2 2.5hr + brick Sat · Long run 90min Sun. 6 wrong auto-synced sessions cleared and replaced.
+- **Base wk 8 plan (~479 TSS)**: KB Mon ✓ · Sweetspot 3×15 Tue ✓ · Rest Wed ✓ · Sea swim 40min + Z2 ride 2hr Thu (with Jamie) · Bike Z2 2hr Fri · Bike Z2 2.5hr + brick Sat · Long run 90min Sun. Note: Thu brief sent as swim + Z2 bike (not swim + easy run as originally planned — possible plan adjustment).
 - **Fuelling gap (persistent)**: ~33g/hr on long rides vs 70g/hr race target — nudge on every long session.
-- **Menstrual phase**: luteal started 24 Jun, runs ~24 Jun–7 Jul; RPE-led, higher core temp; 25–35°C travel-heat stacks through end of travel block.
+- **Menstrual phase**: luteal started 24 Jun, runs ~24 Jun–7 Jul; RPE-led, higher core temp; stacks with 25–35°C travel heat through Jun 28.
 - **Travel block Jun 22–28 active**: sea swim Thu–Sun (open-water aerobic, no CSS targets); no cycle Sunday; no time cap Thu–Sat.
-- **Sleep concern**: patchy (5.2h Jun 24, multiple nights <7h Jun 16–24). HRV recovering (Jun 23=65, Jun 24=67 — best in 2+ weeks); monitor closely through luteal + heat.
-- **Fitness**: ATL 59, CTL 56, Form −3 (Wed 24 Jun rest day). Build phase starts w/c 29 Jun — always use ICU live engine for phase/week numbering.
-- **RPE scale**: explained to Kathryn this week — she was unfamiliar. 1–2=recovery, 3–4=Z2, 5–6=sweetspot/tempo, 7–8=threshold, 9=VO2, 10=max.
-- **Open**: fuelling gap to nudge each long session; next long ride needs uninterrupted route; sleep monitoring ongoing.
+- **Sleep concern**: patchy across Jun 16–24, multiple nights <7h. HRV recovering (Jun 23=65, Jun 24=67); monitor closely through luteal + heat.
+- **Fitness**: ATL 59, CTL 56, Form −3 (Wed 24 Jun). Build phase starts w/c 29 Jun — always use ICU live engine for phase/week numbering.
+- **RPE scale**: explained to Kathryn this session — she was unfamiliar. 1–2=recovery, 3–4=Z2, 5–6=sweetspot/tempo, 7–8=threshold, 9=VO2, 10=max.
+- **Open**: fuelling gap to nudge each long session; next long ride needs uninterrupted route (river path); sleep monitoring ongoing through travel block.
 
 ## Injuries / Niggles
 None
