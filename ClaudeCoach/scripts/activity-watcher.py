@@ -136,12 +136,9 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150,
     )
 
     coaching_level = (profile or {}).get("coaching_level", "mid")
-    bike = (profile or {}).get("bike_model")
-    bike_line = f"Bike: {bike}" if bike else "Bike: bike model not recorded"
 
     return f"""\
 Check for new activities for {first_name} and stub them into the session log.
-{bike_line}
 
 {_level_block(coaching_level)}
 
