@@ -4,7 +4,7 @@ Check for new activities and send a brief analysis to Telegram.
 Run every 15 min via cron. Loops over all active athletes. Skips if already running.
 """
 import json, ssl, subprocess, sys, time, urllib.request
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 
 BASE            = Path(__file__).parent.parent  # ClaudeCoach/
@@ -470,9 +470,9 @@ def release_lock():
     LOCK_FILE.unlink(missing_ok=True)
 
 
-def _chat_has_recent_feedback(slug, lookback=8):
-    """True if the athlete's recent Telegram messages already contain session
-    feedback (RPE / how-it-felt / pain) — so the follow-up nudge shouldn't re-ask
+def _chat_has_recent_feedback(slug, lookback_minutes=30):
+    """True if the athlete's Telegram messages in the last 30 minutes contain session
+    feedback (RPE / how-it-felt / pain) — so the follow-up nudge doesn't re-ask
     for data the athlete already gave (the logged re-ask bug)."""
     hist_f = BASE / "athletes" / slug / "telegram" / "history.json"
     if not hist_f.exists():
@@ -482,7 +482,15 @@ def _chat_has_recent_feedback(slug, lookback=8):
     except Exception:
         return False
     kws = ("rpe", "/10", "felt", "feeling", "pain", "ankle")
-    for e in entries[-lookback:]:
+    cutoff = datetime.now() - timedelta(minutes=lookback_minutes)
+    for e in reversed(entries):
+        ts_str = e.get("ts", "")
+        if ts_str:
+            try:
+                if datetime.fromisoformat(ts_str) < cutoff:
+                    break
+            except Exception:
+                pass
         u = (e.get("user") or "").lower()
         if u and any(k in u for k in kws):
             return True
@@ -509,7 +517,7 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
         sport = e.get("sport", "session")
         # For injury runs the ANALYSIS already asks for injury score — skip nudge if that's done
         if sport == "Run" and has_injury:
-            if e.get("injury_pain_during") is not None:
+            if e.get("injury_pain_during") is not None or e.get("rpe") is not None:
                 continue
         elif e.get("rpe") is not None:
             continue
