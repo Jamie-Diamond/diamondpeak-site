@@ -1714,13 +1714,17 @@ def _bug_reviews_save(r):
     BUG_REVIEWS_FILE.write_text(json.dumps(r, indent=2))
 
 
-def _bug_mark_feedback(slug, entries, status):
+def _bug_mark_feedback(slug, entries, status, commit_hash=None):
     f = BASE.parent / f"athletes/{slug}/feedback-log.json"
     try:
         d = json.loads(f.read_text())
         for i in entries:
             if isinstance(i, int) and 0 <= i < len(d):
-                d[i]["status"] = status
+                entry = d[i]
+                for old in ("resolution", "resolved", "fix"):
+                    entry.pop(old, None)
+                entry["status"] = status
+                entry["resolution_commit"] = commit_hash
         f.write_text(json.dumps(d, indent=2))
     except Exception as e:
         log(f"bug-fixer mark feedback failed: {e}")
@@ -1772,8 +1776,9 @@ def _handle_bugfix(token, chat_id, data, athletes, config):
             send(token, chat_id, f"⚠️ Couldn't merge *{title}* cleanly (conflict). Branch kept: `{branch}` — needs a manual look.")
             return True
         _g(["push", "origin", "main"])
+        commit_hash = _g(["rev-parse", "--short", "HEAD"]).stdout.strip()
         rv["status"] = "merged"; _bug_reviews_save(reviews)
-        _bug_mark_feedback(slug, rv.get("entries", []), "resolved")
+        _bug_mark_feedback(slug, rv.get("entries", []), "resolved", commit_hash=commit_hash)
         _g(["branch", "-D", branch])
         needs_restart = any(str(p).startswith(_BOT_PATH_PREFIXES) for p in rv.get("files", []))
         send(token, chat_id, f"✅ Merged & deployed: {title}"
