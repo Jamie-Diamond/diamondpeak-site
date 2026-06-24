@@ -1,0 +1,155 @@
+# Kathryn Hanna -- Current State
+
+Last updated: 2026-06-24
+
+## Recent context (auto-summary)
+
+- **Tue 23 Jun** — Sweetspot 3×15 outside (90min, capped), NP 162W (83% FTP), IF 0.83, HR 153avg/181max, 92 TSS — RPE 6 logged; nutrition not logged; ICU had wrong session (Bike Z2 2hr); Kathryn confirmed 3×15 sweetspot, plan corrected in ICU
+- **Wed 24 Jun** — Rest day (confirmed plan, travel block day 3). Luteal day 15. HRV trend +5.4% (latest 65, Jun 23 — best reading in ~2 weeks); sleep 7.32h; ATL 59, CTL 56, Form −3.
+- **Mon 22 Jun** — Kettlebells 45min · 28 TSS · RPE 7 · travel block day 1
+- **Sun 21 Jun** — Long Ride 65.9km · NP 138W (71% FTP) · HR 149avg/170max · decoupling −1.0% (excellent in 26–32°C) · 112 TSS · ~33g/hr carbs (Clif bar + Hilltop Honey + 1 Clif Blok, 1.1L) · 2h16 of planned 3h30 · race-pace blocks fragmented (VI 1.11, 14 stops) — next long ride needs uninterrupted route (river path / fewer junctions)
+- **Sat 20 Jun** — Run 13.1km · GAP 6:00/km · HR 167avg in 28°C · decoupling 0.5% · 85 TSS
+- **Fri 19 Jun** — Swim CSS 2km · 8×198m · 1:39–1:41/100m · last rep faded to 1:46 · 34 TSS
+- **Week 15–21 Jun (Base wk 7)**: 428 TSS · Fitness 57.8, Form −12; above maintenance (CTL 56→58)
+- **Fuelling gap (persistent)**: ~33g/hr on long rides vs 70g/hr race target — nudge on every long session
+- **HRV drifting**: 7d avg 57.7 vs prior 70.4 (−16.5%); 4 nights <7h (Jun 16/18/19/21); Jun 22 HRV 59 (slight uptick) — elevated risk continues through travel block
+- **Menstrual phase**: ovulation day 14 on 23 Jun (peak window); luteal starts 24 Jun → Thu–Sun RPE-led, higher core temp; 25–35°C heat overlay amplifies through travel block
+- **Travel block Jun 22–28 active**: sea swim Wed–Sun (open-water aerobic, no CSS targets); no cycle Sunday; Wed rest; no time cap Thu–Sat
+- **Week plan confirmed (Base wk 8, ~479 TSS)**: KB Mon ✓ · Sweetspot 3×15 Tue ✓ · Rest Wed · Sea swim ~40min + easy run 45min Thu · Bike Z2 2hr Fri · Bike Z2 2.5hr + brick Sat · Long run 90min easy Sun — pushed to Garmin; 6 wrong auto-synced sessions cleared
+- **Build phase starts w/c 29 Jun** — Base wk 8 is final base week; always use ICU live engine for phase/week numbering (static calendar was one week off)
+- **RPE scale**: 1–10 explained 23 Jun — Z2 = 3–4, sweetspot = 6–7, threshold = 7–8
+- **Open**: fuelling gap to nudge each long session; next long ride needs uninterrupted route; HRV/sleep to monitor through luteal phase + travel block
+
+## Injuries / Niggles
+None
+
+## Schedule Constraints (standing)
+
+- **Swim**: once per week, **Friday morning only**
+- **Mon–Thu**: max **90 min** total exercise per day
+- **Monday morning**: always **kettlebells, 45 min** (standing — treat as fixed)
+- **Tuesday morning**: always **mobility class, 40 min** (standing — treat as fixed)
+- **Long rides**: Friday, Saturday, or Sunday only
+- Long ride + swim cannot share a day (combined would exceed 3hr daily cap on any day)
+
+## Race Goal
+- **70.3 Emilia Romagna — 20 Sep 2026**: **5:30:00** (buffer ~4 min)
+  - Target splits: Swim ~34min (1:47/100m OW) | T1/T2 ~5min | Bike ~2:37 (~34.4 km/h, ~150W) | Run ~2:10 (~6:09/km)
+  - Swim benchmark: 400m pool in 400s (1:40/100m)
+  - Run benchmark: standalone 21.1km in 1:54 (5:24/km); expect ~13% hit off bike → 2:05–2:10
+
+## Off-plan in last 7 days
+
+- 2026-05-17: run_easy 60min — SKIPPED (sore throat, fatigue)
+- 2026-05-18: Rest day — no session in calendar (illness monitoring day)
+- 2026-05-19: Rest day — tonsillitis, complete rest (day 3). No sessions planned.
+- 2026-05-20: bike_threshold (sweet spot) — MODIFIED (R3). 2x15min @ 88% reduced to 1x15min @ 83%. HRV -47.5% vs 7d avg (last reading: 30, 2026-05-19; wearable not synced today). Tonsillitis recovery context.
+- 2026-05-21: run_easy 56min with strides — GO, execute as planned (no rules fired). HRV not synced, sleep not synced; all other signals neutral.
+- 2026-05-22: swim CSS sets 2.4km — GO, execute as planned (T3, T7, T8 fired). HRV null (not yet synced), sleep null (not yet synced); ATL 34.6, CTL 48.5; no ankle issues.
+- 2026-05-23: Rest day — no session in calendar (illness recovery day 8; events endpoint returned empty). ATL 29.8, CTL 47.3, form +17.5.
+- 2026-05-24: bike_z2 150min — GO, execute as planned (T3, T4, T5, T7, T8 fired — all illness/heat continuations, no acute load danger). ATL 45.5, CTL 49.8; HRV not synced, sleep not synced.
+- 2026-05-25: run_long 75min — GO, execute as planned (no rules fired). HRV null (not yet synced), sleep null (not yet synced); ATL 47.6, CTL 50.1. Note: today is Monday — KB (45min) + run (75min) = 120min exceeds 90min daily cap (open action flagged).
+- 2026-05-26: Rest day — no session in calendar (Tuesday: standing mobility class only; events endpoint returned empty). ATL 39.6, CTL 48.5; form +8.9. HRV null (not yet synced); last reading 65 (May 25) — highest in 2+ weeks, recovery trending strongly upward.
+- 2026-05-27: bike_race_pace 90min — GO, execute as planned (no rules fired). HRV null (not yet synced); last reading 37 (May 26, notable single-day dip from 65 on May 25). Sleep null (not yet synced). ATL 45.9, CTL 49.4; form +3.6.
+- 2026-05-28: run_quality 60min — GO, execute as planned (T4, T6 fired). HRV null (not yet synced); last reading 51 (May 27). Sleep null (not yet synced); last reading 6.60h (May 27). ATL 48.0, CTL 49.7; form +1.7.
+- 2026-05-29: swim CSS sets 2km — GO, execute as planned (no rules fired). HRV null (not yet synced); last reading 50 (May 28), 7d avg 53.4, trend -6.4% (T3 clear). Sleep null (not yet synced); last reading 6.98h (May 28). ATL 42.7, CTL 48.7; form +6.1.
+- 2026-05-30: Rest day — no session in calendar (events endpoint returned empty). ATL 41.5, CTL 48.5; form +7.0. HRV null (not yet synced); last reading 62 (May 29), 7d avg 54.3. T4 fired: May 27=6.60h, May 28=6.98h, May 29=6.03h — 3 nights <7h in last 7.
+- 2026-05-31: bike_z2 130min (long ride with sweetspot — 20m WU, 2x15m @ 88% + 5m rec, 50m @ 65%, 20m CD) — GO, execute as planned (no rules fired). HRV null (not yet synced); last reading 67 (May 30), 7d avg 55.9. Sleep null (not yet synced). ATL 65.8, CTL 53.0; form -12.8. Last session RPE 5 (swim May 29).
+- 2026-06-01: Rest day — no session in calendar (Mon 1 Jun long run previously deleted; standing KB 45min applies as usual). ATL 61.9, CTL 52.7; form −9.2. HRV null (not yet synced); last reading 53 (May 31). Sleep null (not yet synced). Last session RPE 6 (run May 31).
+- 2026-06-02: bike_threshold (sweetspot) 50min — GO, execute as planned (T4, T7, T8 fired). ATL 46.2, CTL 49.6; form +3.5. HRV null (not yet synced); last reading 65 (Jun 1). Sleep null (not yet synced); last reading 7.73h (Jun 1). Last session RPE 6 (run May 31). Session: 2×12min @ sweetspot 144–165W (76–87% FTP), 5min Z2 recovery, 10min WU + 11min CD.
+- 2026-06-03: run_easy 50min with strides — GO, execute as planned (T4, T7, T8 fired). ATL 45.3, CTL 49.5; form +4.2. HRV null (not yet synced); last reading 68 (Jun 2), 7d avg 59.4, trend +14.4% (improving). Sleep null (not yet synced); last reading 6.83h (Jun 2). Last session RPE 8 (bike sweetspot Jun 2 — noted as hard).
+- 2026-06-04: Rest day — no session in calendar (Thu 4 Jun swim deleted 2026-05-31; Friday-only swim rule, no valid Fri slot with long ride on Fri 5). ATL 46.2, CTL 49.7; form +3.5. HRV null (not yet synced); last reading 55 (Jun 3), 7d avg 60.0. Sleep null (not yet synced); last reading 7.81h (Jun 3). Last session RPE 3 (easy run Jun 3).
+- 2026-06-05: bike_z2 150min (long ride Z2 2hr 30min) — GO, execute as planned (no rules fired). ATL 40.1, CTL 48.6; form +8.5. HRV null (not yet synced); last reading 64 (Jun 4), 7d avg 62.0, trend 0.0% (null today, neutral). Sleep null (not yet synced); last reading 8.00h (Jun 4). Last session RPE 3 (easy run Jun 3). Target: 104–143W, HR 130–158bpm; aim upper half of zone (120–135W) on flat. Nutrition target 20g CHO/hr.
+- 2026-06-06: run_long 80min (Long run easy Z2) — GO, execute as planned (no rules fired). ATL 59.8, CTL 52.4; form −7.4. HRV null (not yet synced); last reading 66 (Jun 5), 7d avg 62.6, trend 0.0% (null today). Sleep null (not yet synced). Last session RPE null (Jun 5 ride stub, no RPE logged); prior RPE 3 (easy run Jun 3). Target: HR 130–158bpm, pace ~5:30–6:00/km Z2 throughout.
+- 2026-06-07: Rest day — no session in calendar (events endpoint returned empty; Sun 7 Jun swim previously deleted 2026-05-31 — Friday-only rule). ATL 61.3, CTL 53.1; form −8.2. HRV null (not yet synced); last reading 75 (Jun 6), 7d avg 65.5 (Jun 1–6). Sleep null (not yet synced). Last session RPE 5 (long run Jun 6).
+- 2026-06-08: strength 45min (Kettlebells) — GO, execute as planned (no rules fired). ATL 54.5, CTL 51.9; form −2.6. HRV null (not yet synced); last reading 73 (Jun 7), 7d avg 66.6 (Jun 1–7), trend +9.7% (improving). Sleep null (not yet synced). Last session RPE 5 (strength Jun 7).
+- 2026-06-09: run_easy 50min (Easy Z2 run) — GO, execute as planned (no rules fired). ATL 51.3, CTL 51.4; form +0.1. HRV null (not yet synced); last reading 67 (Jun 8), 7d avg 66.9 (Jun 2–8). Sleep null (not yet synced); last reading 7.26h (Jun 8). Last session RPE 5 (strength Jun 7).
+- 2026-06-10: bike_z2 90min — GO, execute as planned (no rules fired). ATL 50.6, CTL 51.4; form +0.8. HRV null (not yet synced); last reading 78 (Jun 9), 7d avg 68.3 (Jun 3–9). Sleep null (not yet synced). Last session RPE 5 (easy run Jun 9).
+- 2026-06-11: run_easy 30min + strength 35min — GO, execute as planned (no rules fired for either). ATL 52.4, CTL 51.9; form +0.5. HRV null (not yet synced); last reading 77 (Jun 10), 7d avg 71.4 (Jun 4–10). Sleep null (not yet synced); last reading 7.75h (Jun 10). Last session RPE 6 (ride Jun 10).
+- 2026-06-12: swim 2.0km easy CSS — GO, execute as planned (no rules fired). ATL 52.2, CTL 52.0; form −0.2. HRV null (not yet synced); last reading 61 (Jun 11), 7d avg 71.0 (Jun 5–11). Sleep null (not yet synced). Last session RPE 5 (easy run Jun 11). Menstrual phase day 3 — targets stand, RPE may feel elevated.
+- 2026-06-13: bike_z2 210min (Long ride Z2 3h30) — GO, execute as planned (no rules fired). ATL 49.9, CTL 51.7; form +1.8. HRV null (not synced today); last reading 73 (Jun 12), 7d avg 72.0 (Jun 6–12). Sleep null (not synced). Last session RPE 7 (swim Jun 12 — elevated, menstrual context). Menstrual day 4 — targets stand but RPE-led; hold power loosely if energy flat.
+- 2026-06-14: run_easy 70min (Easy Z2 run 12km) — GO, execute as planned (no rules fired). ATL 66.9, CTL 55.2; form −11.7. HRV null (not synced today); last reading 64 (Jun 13), 7d avg 70.0 (Jun 8–13). Sleep null (not synced). Last session RPE null (Jun 13 ride, no RPE logged). Menstrual day 5 — final day of phase; RPE-led approach, hold HR/pace loosely.
+- 2026-06-15: strength 45min (Kettlebells) — GO, execute as planned (no rules fired). ATL 67.7, CTL 55.8; form −11.9. HRV null (not synced); last reading 64 (Jun 14), 7d avg 69.1 (Jun 8–14). Sleep null (not synced). Last session RPE 7.5 (run Jun 14 — ran faster than Z2 target, avg GAP 5:34/km vs 5:50–6:20 plan). Follicular day 6 — rising energy; quality window beginning.
+- 2026-06-16: run_easy 50min (Easy Z2 Run 50min) — GO, execute as planned (no rules fired). ATL 62.1, CTL 55.2; form −6.9. HRV null (not synced today); last reading 74 (Jun 15), 7d avg 70.1 (Jun 9–15). Sleep null (not synced). Last session RPE null (strength Jun 15). Follicular day 7 — good energy window; targets stand.
+- 2026-06-17: bike_z2 81min (Wandsworth Cycling) — completed (no rules fired). ATL 74.4, CTL 57.7; form −16.7. HRV 56 (synced). Last session RPE 6. Follicular day 8.
+- 2026-06-18: strength 45min (Strength & Conditioning) — GO, execute as planned (no rules fired). ATL 64.5, CTL 56.3; form −8.2. HRV null (not synced); last reading 56 (Jun 17), 7d avg 63.6 (Jun 11–17). Sleep null (not synced). Last session RPE 6 (ride Jun 17). Follicular day 9 — quality window; strength targets stand.
+- 2026-06-19: swim CSS Sets 2km — GO, execute as planned (no rules fired). ATL 62, CTL 56; form −6.1. HRV trend −11.5% (latest 60 on Jun 18); sleep 6.73h carried (Jun 18). Last session RPE 5. Follicular day 10 — good quality window; CSS sets appropriate.
+- 2026-06-20: bike_race_pace 3h30 (Long Ride Z2 + Race-Pace Blocks) — MODIFIED (R3+R4+R6-single). Race-pace blocks reduced 4→2; intensity 80%→75% FTP (135–150W). ATL 76, CTL 59; form −17. HRV trend −25.7% (latest 50 on Jun 19); sleep 6.02h carried (Jun 19). Follicular day 11. Pushed modified event ID 117356109.
+- 2026-06-21: run_easy 70min (Easy Z2 Run) — GO, execute as planned (no rules fired). HRV trend −12.8% (latest 57 on Jun 20); sleep 7.13h carried (Jun 20). ATL 94, CTL 63; form −31. Last session RPE 5. Follicular day 12 — rising energy, quality window ongoing.
+- 2026-06-22: strength 45min (Kettlebells 45min) — GO, execute as planned (no rules fired). HRV trend −15.8% (latest 54 on Jun 21); sleep 6.65h carried (Jun 21). ATL 61, CTL 56; form −5. Last session RPE 5. Follicular day 13 — final day of quality window. Travel block begins today (Jun 22–28).
+- 2026-06-23: bike_threshold (sweetspot) 90min outside — GO, execute as planned (no rules fired). HRV trend −6.6% (latest 59 on Jun 22); sleep 7.63h carried (Jun 22). ATL 67, CTL 58; form −9. Last session RPE 7 (kettlebells Jun 22). Ovulation day 14 — peak performance window. Travel block active; session outside. Note: ICU calendar showed wrong session (Bike Z2 2hr) — confirmed plan (Sweetspot 3×15 @ 168–178W, 90min) takes precedence per persistent rules.
+- 2026-06-24: Rest day — no session planned (confirmed plan: Wed is rest during travel block Jun 22–28). HRV trend +5.4% (latest 65 on Jun 23); sleep 7.32h carried (Jun 23). ATL 59, CTL 56; form −3. Last session RPE 6 (bike Jun 23). Luteal day 15 begins.
+
+## Illness / Health
+- 2026-05-17: Sore throat + tiredness. Skipped evening run.
+- 2026-05-18: No session in calendar — illness monitoring continues. HRV yesterday 49 (vs 7d avg ~67), sleep score 68, poor quality. Conserving energy today.
+- 2026-05-18 (watchdog re-check): T3 re-fired. HRV 49 (May 17) vs 7d prior avg 70 = -30% decline. Today's HRV not yet synced. Sleep all 7 days ≥ 7h (T4 clear). Illness context ongoing.
+- 2026-05-18 (evening): **Tonsillitis confirmed.** Complete rest required. No training until symptom-free + 48hrs minimum. Week of 18–24 May will be a recovery/illness week — ramp to reset from actual TSS delivered when training resumes.
+- 2026-05-19 (watchdog): T3 re-fired. HRV 43 (May 18) vs 7d prior avg 68 = −37% decline. May 19 HRV not yet synced. Sleep all 7 days ≥ 7h (T4 clear). Tonsillitis day 3 — complete rest maintained.
+- 2026-05-20 (watchdog): T3 re-fired. 7d HRV avg (May 14–20) = 55 vs prior 7d avg (May 7–13) = 68 = −20% decline. Last reading 30 (May 19); May 20 not yet synced. Sleep: May 19 = 5.77h (1 day only — T4 not met). Tonsillitis day 5 — modified bike session executed (R3).
+- 2026-05-21 (watchdog): T3 re-fired. 7d HRV avg (May 15–20) = 51 vs prior 7d avg (May 8–14) = 69 = −25% decline. Last reading 46 (May 20); May 21 not yet synced. Sleep all 7 days ≥ 7h except May 19 = 5.77h (1 day only — T4 not met). Run_easy 56min with strides prescribed today — GO.
+- 2026-05-22 (watchdog): T3 re-fired. 7d HRV avg (May 16–21) = 48 vs prior 7d avg (May 9–15) = 69 = −30% decline. Last reading 48 (May 21); May 22 not yet synced. Sleep: May 19 = 5.77h, May 21 = 6.83h (2 days <7h — T4 not met, threshold is 3 days). Swim CSS sets prescribed today — GO.
+- 2026-05-23 (watchdog): T3 re-fired. 7d HRV avg (May 17–22) = 45 vs prior 7d avg (May 10–16) = 69 = −34% decline. Last reading 56 (May 22); May 23 not yet synced. T4 fired: May 19 = 5.77h, May 21 = 6.83h, May 22 = 6.77h — 3 days <7h in last 7 (threshold met for first time). T5 fired: ATL math confirms 0 training load since May 16; 4 planned sessions unrecorded (May 17 run, May 20 bike, May 21 run, May 22 swim) — illness recovery context. Recovery day 8.
+- 2026-05-24 (watchdog): T3 re-fired. 7d HRV avg (May 17–23) = 46.9 vs prior 7d avg (May 10–16) = 69.1 = −32% decline. Last reading 56 (May 23); May 24 not yet synced. T4 re-fired: May 19 = 5.77h, May 21 = 6.83h, May 22 = 6.78h, May 23 = 6.63h — 4 days <7h in last 7. T5 re-fired: May 17 run SKIPPED; May 21 run and May 22 swim show 0 ATL in ICU (not recorded). bike_z2 150min prescribed today — GO (all signals illness-depressed, no new acute danger). Recovery day 9.
+- 2026-05-25 (watchdog): T3 fired. 7d avg (May 19–24, 6 readings — May 25 null) = 49.2 vs prior 7d avg (May 12–18) = 62.1 = −20.8% decline (improving from −27.8% yesterday). Last reading 59 (May 24). T4 fired: May 19 = 5.77h, May 21 = 6.83h, May 22 = 6.77h, May 23 = 6.63h — 4 days <7h; May 24 recovery 8.9h (trend reversing). T5 fired: May 21 run_easy and May 22 swim unrecorded (0 ATL in ICU) — illness context, window clears in ~2 days. T6 clear: May 23 ride decoupling 4.3%, May 24 ride decoupling 0.6%. T7 + T8 fired (see Heat section). ATL 47.6, CTL 50.1; run_long today confirmed (ctlLoad 79).
+- 2026-05-26 (watchdog): T3 clear — HRV improving: 7d avg (May 20–25, 6 readings) = 55.0 vs prior 7d avg (May 13–19) = 57.1 = −3.7% (well under 7% threshold). Last reading 65 (May 25). T4 fired: May 21 = 6.83h, May 22 = 6.77h, May 23 = 6.63h — 3 days <7h in last 7 (May 24 = 8.90h, May 25 = 7.95h — trend clearly reversing). T5 fired: May 21 run_easy and May 22 swim still unrecorded in ICU (0 ATL) — illness context; window clears ~2026-05-28. T6 clear (May 23 decoupling 4.3%, May 24 decoupling 0.6%). T7 + T8 fired (see Heat section). ATL 39.6, CTL 48.5; rest day (mobility class only).
+- 2026-05-27 (watchdog): T3 re-fired — HRV null (May 27 not yet synced); 7d avg (May 20–26) = 52.4 vs prior 7d avg (May 13–19) = 57.1 = −8.2% (threshold 7%). Last reading 37 (May 26) — notable single-day drop from 65 (May 25). T4 re-fired: May 21 = 6.83h, May 22 = 6.77h, May 23 = 6.63h — 3 days <7h; last 3 nights all ≥7h, trend clearly reversing. T5 re-fired: May 21 run_easy and May 22 swim unrecorded in ICU — window clears ~2026-05-28. T7 + T8 fired (see Heat section). ATL 45.9, CTL 49.4; form +3.6. bike_race_pace 90min today — GO.
+- 2026-05-28 (watchdog): T3 clear — HRV improving: 7d avg (May 22–27, 6 readings) = 54.0 vs prior 7d avg (May 15–21) = 50.9 = +6.1% (threshold not met). T4 re-fired: May 22 = 6.77h, May 23 = 6.63h, May 27 = 6.60h — 3 days <7h in last 7; May 27 is new data (dip from prior improving trend). T5 clear: May 21 run_easy outside rolling window; only May 22 swim unrecorded (1 session, below threshold of 2). T6 fired: May 27 VirtualRide (i151850847) decoupling 10.65% (IF 0.68 < 0.75 threshold met); note icu_power_hr_z2_mins = 4 only — structured session with embedded 15min threshold interval likely inflates decoupling metric; signal to watch but interpret with caution. ATL 48.0, CTL 49.7; form +1.7. run_quality 60min today — GO.
+- 2026-05-29 (watchdog): T3 clear — HRV: last reading 50 (May 28); 7d avg (May 22–28) = 53.4 vs prior 7d avg (May 15–21) = 50.9 = +4.9% (threshold not met). T4 fired: May 23 = 6.63h, May 27 = 6.60h, May 28 = 6.98h — 3 days <7h in last 7 (threshold met; May 28 borderline at 6.98h); nudge toward earlier bedtime ahead of weekend. T5 clear: no unrecorded sessions in rolling window. No T6 flag. ATL 42.7, CTL 48.7; form +6.1. swim CSS sets 2km today — GO.
+- 2026-05-30 (watchdog): T3 clear — HRV trending up: 7d avg (May 24–29, 6 readings) = 54.0 vs prior 7d avg (May 17–23) = 46.9 = +15.2% (well above threshold, improving). Last reading 62 (May 29); May 30 not yet synced. T4 fired: May 27 = 6.60h, May 28 = 6.98h, May 29 = 6.03h — 3 nights <7h in last 7; nudge toward earlier bedtime this weekend. T5 clear. T6 clear (no new Z2 rides; May 27 ride already flagged May 28). T10 clear (prev week run km = 0 due to illness; denominator zero, rule does not fire). ATL 41.5, CTL 48.5; form +7.0. Rest day.
+- 2026-05-31 (watchdog): T1 clear (ATL 65.8, CTL 53.0, gap 12.8 — under +25 threshold). T2 N/A (no active ankle rehab). T3 clear — HRV trending up: 7d avg (May 25–30, 6 readings) = 55.3 vs prior 7d avg (May 18–24) = 48.3 = +14.5% (improving). Last reading 67 (May 30); May 31 not yet synced. T4 re-fired: May 27 = 6.60h, May 28 = 6.98h, May 29 = 6.03h — still 3 nights <7h in rolling window; May 30 = 8.72h (strong recovery, trend reversing). T5 clear. T6 clear (May 30 ride IF = 0.76, above 0.75 Z2 threshold; May 27 already flagged). T9 N/A (decision-points.md absent). T10 clear (last week run km = 0 due to illness; denominator zero, rule does not fire). ATL 65.8, CTL 53.0; form −12.8. bike_z2 130min today.
+- 2026-06-01 (watchdog): T1 clear (ATL 61.9, CTL 52.7, gap 9.2 — under +25 threshold). T2 N/A. T3 clear — HRV improving: 7d avg (May 26–31, 6 readings) = 53.3 vs prior 7d avg (May 19–25) = 51.4 = +3.7% (threshold not met). Last reading 53 (May 31); Jun 1 not yet synced. T4 re-fired: May 27 = 6.60h, May 28 = 6.98h, May 29 = 6.03h, May 31 = 6.47h — 4 nights <7h in last 7; May 30 = 8.72h, May 26 = 7.22h recovery nights provide partial offset but pattern persists. T5 clear. T6 clear (no new Z2 rides — May 30 ride IF = 0.763 above 0.75 threshold). T9 N/A. T10 clear (current week just started Mon Jun 1, 0km run vs last week 17.45km — denominator positive but this_week=0, rule does not fire). ATL 61.9, CTL 52.7; form −9.2. Rest day (standing KB 45min).
+- 2026-06-02 (watchdog): T3 clear — HRV improving: 7d avg (May 27–Jun 1, 6 readings) = 58.0 vs prior 7d avg (May 20–26) = 52.4 = +10.7% (improving). Last reading 65 (Jun 1); Jun 2 not yet synced. T4 re-fired: May 27 = 6.60h, May 28 = 6.98h, May 29 = 6.03h, May 31 = 6.47h — 4 nights <7h in rolling 7 days; Jun 1 = 7.73h (trend reversing). T5 clear. T6 clear (May 27 ride already flagged May 28; no new Z2 rides). T7 + T8 fired (see Heat section). ATL 46.2, CTL 49.6; form +3.5. bike_threshold 50min today — GO.
+- 2026-06-03 (watchdog): T3 clear — HRV trending up: 7d avg (May 28–Jun 2, 6 readings) = 59.4 vs prior 7d avg (May 21–27) = 52.4 = +13.4% (well above threshold, improving). Last reading 68 (Jun 2); Jun 3 not yet synced. T4 re-fired: May 28 = 6.98h, May 29 = 6.03h, May 31 = 6.47h, Jun 2 = 6.83h — 4 nights <7h in rolling 7-day window; Jun 1 = 7.73h the exception. T5 clear. T6 clear (Jun 2 sweetspot ride IF 0.726 < 0.75 but only 7 Z2-power mins — structured session, not Z2; decoupling 14.1% is interval artefact). T7 + T8 re-fired (see Heat section). ATL 45.3, CTL 49.5; form +4.2. run_easy 50min with strides today — GO.
+
+- 2026-06-18 (watchdog): T3 fired — HRV 7d avg 63.6 (Jun 11–17) vs prior 7d avg 71.4 (Jun 4–10) = −10.9% decline (threshold 7%). Last synced readings: Jun 16=53, Jun 17=56 — notable dip after strong HRV window (Jun 9=78, Jun 10=77, Jun 15=74). Likely training-load response to heavy mid-week block (205 TSS ride Jun 13 + 84 TSS run Jun 14 + 74 TSS ride Jun 17). Jun 18 HRV not yet synced. T1/T2/T4/T5/T6/T10 clear.
+
+- 2026-06-20 (watchdog): T3 re-fired (worsened) — HRV 7d avg 59.5 (Jun 14–19, 6 readings) vs prior 7d avg 70.4 (Jun 7–13) = −15.5% decline (worsened from −10.9% on Jun 18 watchdog). Readings: Jun 14=64, Jun 15=74, Jun 16=53, Jun 17=56, Jun 18=60, Jun 19=50 — continued downward trajectory after mid-week load block; Jun 19 reading of 50 is the lowest since illness in May. Jun 20 HRV not yet synced. T4 fired (new) — sleep <7h on Jun 16=6.75h (24,300s), Jun 18=6.73h (24,240s), Jun 19=6.02h (21,656s) — 3 nights in rolling 7-day window; was clear on Jun 18 watchdog. Jun 19 at 6.02h notably short going into today's 3h30 long ride. ATL 97.0, CTL 62.4 (post big ride); form −34.6. T1/T2/T5/T6/T10 clear.
+
+- 2026-06-22 (watchdog): T3 suppressed (filed Jun 20 — within 3-day window; 7d avg shifted Jun 15–21=57.7 vs prior Jun 8–14=69.1 = −16.5%; not materially changed from −15.5% on Jun 20). T4 re-fired (new data) — Jun 21=6.65h (23,940s) added; now 4 nights <7h in rolling 7-day window: Jun 16=6.75h, Jun 18=6.73h, Jun 19=6.02h, Jun 21=6.65h. Persistent low-sleep pattern entering travel block (Jun 22–28) — elevated risk given travel disruption. Jun 21 HRV=54 (Jun 22 not yet synced). T6 clear: Jun 21 ride (i159083395) decoupling −1.02% (excellent, 32 Z2-power mins, IF 0.70). T1/T2/T5/T10 clear. ATL 60.8, CTL 56.4; form −4.4. Travel block day 1.
+
+- 2026-06-24 (watchdog): T3 re-fired (recovering) — HRV 7d avg 58.9 (Jun 18–24) vs prior 7d avg 63.6 (Jun 11–17) = −7.4% decline (threshold 7%, just above; was −15.5% at Jun 20 log — trend clearly improving). Latest readings Jun 23=65, Jun 24=67 — highest in 2+ weeks; signal expected to clear within 1–2 days as Jun 19=50/Jun 21=54 drop out of window. T4 suppressed (last filed Jun 22, within 3-day window; Jun 24 sleep 18,720s/5.20h is new but window not yet expired). T1/T2/T5/T6/T9/T10 clear. ATL 59.1, CTL 56.5; form −2.6. Rest day (travel block day 3; luteal day 15).
+
+## Heat Acclimatisation
+
+- 2026-05-16: T7 fired — heat-log.json empty, 0.0 dose in last 14 days (threshold 3.0). Begin heat sessions immediately.
+- 2026-05-17: T7 + T8 fired — heat-log.json still empty, 0.0/3.0 dose (T7); no heat session ever recorded, >7 days gap (T8). Notification sent.
+- 2026-05-18: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. No heat sessions ever logged. Illness day 2 (rest maintained today); first heat session blocked until recovery confirmed.
+- 2026-05-19: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness day 3 (tonsillitis). Heat sessions remain blocked until symptom-free + 48h.
+- 2026-05-20: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness day 5. Heat sessions remain blocked until symptom-free + 48h.
+- 2026-05-21: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 6. Heat sessions remain blocked until symptom-free + 48h. First session must be logged urgently once cleared.
+- 2026-05-22: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 7. Heat sessions continue to be blocked pending symptom-free + 48h confirmation. Urgency increasing — race 121 days away.
+- 2026-05-23: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 8. Heat sessions remain blocked until symptom-free + 48h confirmed. Urgency critical — race 120 days away; CTL now 47.3, slipping from 55.9 peak (May 16).
+- 2026-05-24: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 9. Heat sessions remain blocked until symptom-free + 48h confirmed. Race 119 days away; CTL 49.8, beginning to recover post-illness.
+- 2026-05-25: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Illness recovery day 10. Race 118 days away; CTL 50.1, continuing post-illness recovery. Run_long completed today (ctlLoad 79). Heat sessions must begin immediately on confirmation of recovery — urgency critical.
+- 2026-05-26: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 117 days away; CTL 48.5, ATL 39.6, form +8.9. HRV improving (65 May 25, highest in 2+ weeks). Rest day — heat sessions must begin this week without further delay.
+- 2026-05-27: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 116 days away; CTL 49.4, ATL 45.9, form +3.6. bike_race_pace 90min today. HRV 37 (May 26 — single-day dip; cause unclear). Heat sessions critically overdue — must begin immediately.
+- 2026-05-29: T7 + T8 status — heat-log.json not re-checked today (swim session; heat acclimatisation via post-session sauna/hot bath remains outstanding). Race 113 days away; CTL 48.7, ATL 42.7, form +6.1. Heat sessions critically overdue.
+- 2026-06-02: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 110 days away; CTL 49.6, ATL 46.2, form +3.5. Heat sessions critically overdue.
+- 2026-06-03: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 109 days away; CTL 49.5, ATL 45.3, form +4.2. Heat sessions critically overdue — 19 days since first alert (2026-05-15). No further delay acceptable.
+- 2026-06-04: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 108 days away; CTL 49.7, ATL 46.2, form +3.5. Rest day. T4 re-fired: May 28=6.98h, May 29=6.03h, May 31=6.47h, Jun 02=6.83h — 4 nights <7h in rolling 7-day window; Jun 01=7.73h, Jun 03=7.81h recovery nights. HRV trending up (7d avg 60.0 vs prior 53.1 = +12.8%). T1/T3/T5/T10 clear.
+- 2026-06-05: T7 + T8 re-fired — heat-log.json still empty, 0.0/3.0 dose. Race 107 days away; CTL 48.6, ATL 40.1, form +8.5. Long ride Z2 150min today. HRV null (not yet synced); last reading 64 (Jun 4), 7d avg 62.0 — stable. Sleep null (not yet synced); last reading 8.00h (Jun 4). T1/T3/T4/T5/T10 clear. Heat sessions critically overdue — 21 days since first alert. No further delay acceptable.
+
+## Menstrual Cycle Tracking
+
+**Cycle start: 2026-06-10** (period started evening of Jun 10)
+
+| Phase | Days | Dates | Training implication |
+|---|---|---|---|
+| Menstrual | 1–5 | 10–14 Jun | Lower energy, potential cramping; hold targets loosely — RPE over pace/power |
+| Follicular | 6–13 | 15–22 Jun | Rising energy and strength; good window for quality sessions |
+| Ovulation | ~14 | ~23 Jun | Peak performance window |
+| Luteal | 15–28 | 24 Jun–7 Jul | Higher core temp, higher RPE, greater fatigue — monitor extra closely; important for heat-stress overlap |
+| Next period expected | — | ~8 Jul | |
+
+**Key conflicts to watch:**
+- Sat 13 + Sun 14 Jun (4hr ride, 2.5hr + brick) fall in the menstrual phase — performance may be lower; hold to power targets but don't chase them if energy is flat.
+- Luteal phase (24 Jun–7 Jul) coincides with start of build phase — plan for sessions to feel harder than numbers suggest; may need slight load modulation.
+
+---
+
+## Open Actions
+- [ ] Fix day-of-week label errors: "Sat 24 May" ride (is Sun) and "Sun 25 May" run (is Mon)
+- [ ] Review Mon 25 May long run (75min) vs. kettlebells constraint — daily cap (90min) exceeded; consider moving run to Sat 23 May
+- [ ] Begin heat acclimatisation sessions (urgently overdue — T7/T8 alerts firing 25+ days)
+- [ ] Fitness trajectory: ON TRACK — 52.6 CTL now, end-of-base target 60 CTL (29 Jun); required 498 TSS/wk
