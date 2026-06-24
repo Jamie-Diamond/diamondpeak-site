@@ -2018,6 +2018,10 @@ def prefetch_context(slug: str) -> str:
 
         lines = [f"=== LIVE TRAINING DATA ({today.isoformat()}) ==="]
 
+        prof = _load_profile(slug)
+        bike = prof.get("bike_model")
+        lines.append(f"Bike: {bike if bike else 'bike model not recorded'}")
+
         # Fitness snapshot
         if wellness:
             w = wellness[-1]
