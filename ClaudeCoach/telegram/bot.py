@@ -676,6 +676,10 @@ _DURABILITY_RE   = re.compile(r'^/?durability\s*$', re.I)
 _RECOVERY_RE     = re.compile(r'^/?recovery\s*$', re.I)
 _COMPLIANCE_RE   = re.compile(r'^/?compliance\s*$', re.I)
 _POWERCURVE_RE   = re.compile(r'^/?power\s?curve\s*$', re.I)
+_FEEDBACK_LOG_RE = re.compile(
+    r'^(?:feedback|note|log|correction|reminder|fyi|heads.?up)\s*:[ \t]*.{5,}',
+    re.I | re.DOTALL,
+)
 
 # Persistent-menu button labels (with emoji) → fast-path sentinels.
 _MENU_MAP = {
@@ -1516,6 +1520,9 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
 
     if _STRENGTH_RE.match(text.strip()):
         return _strength_session(slug)
+
+    if _FEEDBACK_LOG_RE.match(txt):
+        return "Logged."
 
     return None
 

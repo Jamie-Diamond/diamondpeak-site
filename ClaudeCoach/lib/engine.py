@@ -88,6 +88,13 @@ def system_prompt_with_level(sp_file) -> str:
     return text
 
 
+_FEEDBACK_LOG_RULE = (
+    "HARD RULE — feedback acknowledgement: When the athlete logs feedback, corrections, "
+    "or session data in a single message, reply with exactly one word: Logged. "
+    "Do not echo, summarise, or acknowledge the content."
+)
+
+
 def build_prompt(user_message, history, system_prompt, athlete_name, context,
                  persistent_rules=""):
     parts = [system_prompt, ""]
@@ -95,6 +102,8 @@ def build_prompt(user_message, history, system_prompt, athlete_name, context,
         parts.append("## Standing rules — always apply (athlete-agreed, session-derived)")
         parts.append(persistent_rules)
         parts.append("")
+    parts.append(_FEEDBACK_LOG_RULE)
+    parts.append("")
     if context:
         parts.append(context)
         parts.append("")
