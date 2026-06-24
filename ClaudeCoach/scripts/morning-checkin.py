@@ -131,10 +131,10 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 
 *Good morning — [Day date, e.g. Sat 9 May]*
 
-*Today:* [session name] — [duration] min · [TSS] TSS
-  Name, duration and TSS come ONLY from the pre-computed planned-sessions block above — copy them
-  verbatim. NEVER estimate, recompute, or round TSS yourself. If that block is absent, omit the
-  TSS part entirely rather than guessing.
+*Today:* [session name] — [duration] min · [Load] Load
+  Name, duration and Load come ONLY from the pre-computed planned-sessions block above — copy them
+  verbatim. NEVER estimate, recompute, or round Load yourself. If that block is absent, omit the
+  Load part entirely rather than guessing.
 
 [Form line — only include if notable:
   · Form < −20: ⚠️ Heavy load today — keep intensity in check

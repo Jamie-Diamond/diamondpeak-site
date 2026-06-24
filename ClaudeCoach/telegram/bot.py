@@ -735,12 +735,12 @@ def _week_stats(slug: str, athlete_cfg: dict | None = None) -> str:
 
     h, m   = divmod(int(total_min), 60)
     lines  = [f"*Week {week_start.strftime('%-d %b')} – {today.strftime('%-d %b')}*"]
-    lines.append(f"*{int(total_tss)} TSS* · {h}h {m:02d}m total\n")
+    lines.append(f"*{int(total_tss)} Load* · {h}h {m:02d}m total\n")
     for sport, v in sorted(by_sport.items(), key=lambda x: -x[1]["tss"]):
         sh, sm = divmod(int(v["min"]), 60)
         lines.append(
             f"  {sport}: {v['n']} session{'s' if v['n'] > 1 else ''}"
-            f" · {int(v['tss'])} TSS · {sh}h{sm:02d}m"
+            f" · {int(v['tss'])} Load · {sh}h{sm:02d}m"
         )
     if n_sessions and n_sessions > n_logged:
         diff = n_sessions - n_logged
@@ -791,7 +791,7 @@ def _form_stats(slug: str, athlete_cfg: dict | None = None) -> str:
     today    = date.today()
     tsb_zone = "Fresh" if tsb > 5 else ("Load" if tsb > -20 else "Heavy")
 
-    lines = [f"*CTL {ctl:.1f}* · ATL {atl:.1f} · TSB {tsb:+.1f} ({tsb_zone})"]
+    lines = [f"*Fitness {ctl:.1f}* · Fatigue {atl:.1f} · Form {tsb:+.1f} ({tsb_zone})"]
 
     # CTL target: prefer athletes.json ctl_targets.race_max, fallback 90
     ctl_race_target = 90.0
@@ -814,10 +814,10 @@ def _form_stats(slug: str, athlete_cfg: dict | None = None) -> str:
                 projected_ctl = ctl + weekly_ramp * (days_to_race / 7)
                 needed_ramp   = (ctl_race_target - ctl) / (days_to_race / 7) if days_to_race > 0 else 0
                 if projected_ctl >= ctl_race_target * 0.95:
-                    lines.append(f"On track: CTL *{projected_ctl:.0f}* by race day ✓")
+                    lines.append(f"On track: Fitness *{projected_ctl:.0f}* by race day ✓")
                 else:
                     lines.append(
-                        f"Projected: CTL *{projected_ctl:.0f}* — "
+                        f"Projected: Fitness *{projected_ctl:.0f}* — "
                         f"need *{needed_ramp:+.1f}/wk* to hit {int(ctl_race_target)}"
                     )
                 lines.append(f"_{days_to_race} days to {race_name}_")
@@ -936,7 +936,7 @@ def _load_chart_quick(token, chat_id, slug):
             if seed_ctl is not None:
                 tsb = round(seed_ctl - seed_atl, 1)
                 send(token, chat_id,
-                     f"CTL *{seed_ctl}* · ATL {seed_atl} · TSB *{tsb:+.1f}*",
+                     f"Fitness *{seed_ctl}* · Fatigue {seed_atl} · Form *{tsb:+.1f}*",
                      reply_markup=build_keyboard(slug))
         else:
             send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
@@ -1034,7 +1034,7 @@ def _fitness_charts_quick(token, chat_id, slug):
             atl = round(float(w.get("atl") or 0), 1)
             tsb = round(ctl - atl, 1)
             send(token, chat_id,
-                 f"CTL *{ctl}* · ATL {atl} · TSB *{tsb:+.1f}*",
+                 f"Fitness *{ctl}* · Fatigue {atl} · Form *{tsb:+.1f}*",
                  reply_markup=build_keyboard(slug))
         else:
             send(token, chat_id, "Could not generate charts.", reply_markup=build_keyboard(slug))
@@ -1155,7 +1155,7 @@ def _compliance_chart_quick(token, chat_id, slug):
         png = _charts.compliance_chart(payload, coaching_level=_profile_coaching_level(slug))
         if png:
             send_photo(token, chat_id, png)
-            send(token, chat_id, "Planned vs actual weekly TSS — are you hitting the plan?",
+            send(token, chat_id, "Planned vs actual weekly Load — are you hitting the plan?",
                  reply_markup=build_keyboard(slug))
         else:
             send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
@@ -2034,7 +2034,7 @@ def prefetch_context(slug: str) -> str:
             if eftp is None and sport_info:
                 eftp = sport_info[0].get("eftp")
             lines.append(
-                f"Fitness: CTL {ctl}  ATL {atl}  TSB {tsb}"
+                f"Fitness {ctl}  Fatigue {atl}  Form {tsb}"
                 + (f"  FTP {ftp}W" if ftp else "")
                 + (f"  eFTP {round(eftp)}W" if eftp else "")
             )
@@ -2062,7 +2062,7 @@ def prefetch_context(slug: str) -> str:
 
         # Wellness trend (last 7 days, compact)
         if len(wellness) > 1:
-            lines.append("Recent CTL/TSB: " + "  ".join(
+            lines.append("Recent Fitness/Form: " + "  ".join(
                 f"{w['id'][5:]}:{round(w.get('ctl') or 0, 0):.0f}/{round((w.get('ctl') or 0)-(w.get('atl') or 0), 0):.0f}"
                 for w in wellness[-7:]
             ))
@@ -2077,7 +2077,7 @@ def prefetch_context(slug: str) -> str:
                 tss = a.get("icu_training_load") or 0
                 dist = a.get("distance") or 0
                 dist_str = f"  {dist/1000:.1f}km" if dist else ""
-                lines.append(f"  {date_str}  {sport_type:<12} {dur}min{dist_str}  TSS={tss}")
+                lines.append(f"  {date_str}  {sport_type:<12} {dur}min{dist_str}  Load={tss}")
 
         # Upcoming planned events
         if events:
@@ -2136,20 +2136,20 @@ def prefetch_context(slug: str) -> str:
             lines.append(
                 f"\n=== DETERMINISTIC PLANNING NUMBERS (use these verbatim; do NOT recompute) ===")
             lines.append(
-                f"This week ({roll['week_start']}): completed-to-date {roll['completed_to_date_tss']} TSS "
-                f"+ planned-remaining {roll['planned_remaining_tss']} TSS "
-                f"= projected {roll['projected_week_tss']} TSS")
+                f"This week ({roll['week_start']}): completed-to-date {roll['completed_to_date_tss']} Load "
+                f"+ planned-remaining {roll['planned_remaining_tss']} Load "
+                f"= projected {roll['projected_week_tss']} Load")
             ctl_now = round(float((wellness[-1].get("ctl") or 0)), 1) if wellness else None
             if ctl_now:
                 req = _pt.required_tss(athletes[slug], ctl_now)
                 if "error" not in req and req.get("recommended_weekly_tss"):
                     lines.append(
                         f"Phase: {req['phase']} (training week {req.get('training_week')}). "
-                        f"Target weekly TSS to stay on the CTL plan: "
+                        f"Target weekly Load to stay on the Fitness plan: "
                         f"~{req['recommended_weekly_tss']} (needs {req.get('required_weekly_tss')}, "
                         f"ramp-cap {req.get('ramp_capped_weekly_tss','n/a')}). {req.get('note','')}")
                 elif "error" in req:
-                    lines.append(f"Weekly TSS target: {req['error']}")
+                    lines.append(f"Weekly Load target: {req['error']}")
             # Sport-balance guardrails — so the model plans across sports to the
             # athlete's rules, not "all running". day_rules are HARD (a sport on a
             # forbidden day is a validation breach); distribution is the phase's
@@ -2164,7 +2164,7 @@ def prefetch_context(slug: str) -> str:
             except Exception:
                 pass
             lines.append(
-                "For per-session TSS or a projection of a proposed week, call: "
+                "For per-session Load or a projection of a proposed week, call: "
                 f"plan_tools.py tss --sport <s> --segments '<time-at-intensity json>'  |  "
                 f"plan_tools.py project --athlete {slug} --daily '<json>'  |  "
                 f"plan_tools.py required-tss --athlete {slug}  |  "
@@ -2309,7 +2309,7 @@ def _fetch_icu_data(icu_id, icu_key):
     if icu_data["run_threshold_pace_per_km"]: metrics.append(f"Run {icu_data['run_threshold_pace_per_km']}/km")
     if icu_data["swim_css_per_100m"]: metrics.append(f"Swim CSS {icu_data['swim_css_per_100m']}/100m")
     if icu_data["weight_kg"]:        metrics.append(f"Weight {icu_data['weight_kg']}kg")
-    if icu_data["ctl"]:              metrics.append(f"CTL {round(icu_data['ctl'])}")
+    if icu_data["ctl"]:              metrics.append(f"Fitness {round(icu_data['ctl'])}")
     if metrics:
         lines.append("  ".join(metrics))
 
@@ -2953,10 +2953,10 @@ def main():
                 send(token, chat_id,
                      f"*ClaudeCoach* — {race_name}\n\n"
                      "*Quick commands (instant):*\n"
-                     "  /week — this week's sessions + TSS\n"
-                     "  /form — CTL/ATL/TSB + race projection\n"
+                     "  /week — this week's sessions + Load\n"
+                     "  /form — Fitness/Fatigue/Form + race projection\n"
                      "  /load — training load chart (±8 days)\n"
-                     "  /fitness — fitness (CTL/ATL) + form (TSB) charts\n"
+                     "  /fitness — Fitness & Fatigue + Form charts\n"
                      "  strength — today's gym session\n"
                      "  ankle 3 — log pain score\n"
                      "  82.5 kg — log weight\n"

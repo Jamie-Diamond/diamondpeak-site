@@ -255,5 +255,5 @@ def planned_sessions_block(events: list[dict]) -> str:
             continue
         r = planned_session_tss(e)
         src = {"plan": "from plan", "icu": "from ICU", "calculated": "calculated"}[r["source"]]
-        rows.append(f"- {r['name']} — {r['duration_min']} min · {r['tss']} TSS ({src})")
+        rows.append(f"- {r['name']} — {r['duration_min']} min · {r['tss']} Load ({src})")
     return "\n".join(rows)

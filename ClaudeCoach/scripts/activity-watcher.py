@@ -269,7 +269,7 @@ ALREADY-DISCUSSED CHECK — recent Telegram chat with this athlete (oldest first
 If THIS activity has already been discussed in the chat above — the athlete asked about it or an
 analysis of it was already given (match on sport, distance/duration, recency) — output exactly
 `ANALYSIS: discussed` instead of repeating it. Numbers the athlete has already seen (distance,
-pace, HR, TSS, decoupling) are NOT new insight; only produce a normal ANALYSIS here if you have
+pace, HR, Load, decoupling) are NOT new insight; only produce a normal ANALYSIS here if you have
 something material the chat did not cover. All logging steps (session-log stub, swim-log, etc.)
 still apply regardless — `discussed` suppresses the message, never the capture.
 When writing the session-log stub, if the chat above contains the athlete's feedback for THIS
@@ -620,8 +620,8 @@ def _strava_description(first_name: str, sport: str, analysis: str,
             plan_name, planned_tss, actual_tss, delta_pct = parts
             sign = "+" if float(delta_pct) >= 0 else ""
             plan_block = (
-                f"Planned: {plan_name.strip()} (target TSS {planned_tss.strip()})\n"
-                f"Actual TSS: {actual_tss.strip()} ({sign}{delta_pct.strip()}% vs plan)"
+                f"Planned: {plan_name.strip()} (target Load {planned_tss.strip()})\n"
+                f"Actual Load: {actual_tss.strip()} ({sign}{delta_pct.strip()}% vs plan)"
             )
 
     entry = session_entry or {}
@@ -696,7 +696,7 @@ Line 3 — "ClaudeCoach" [append " 🏆" if any segment PRs were set]
 
 Examples of the right tone:
 - "Held Z2 throughout. Decoupling 3.2%. The plan had a good day."
-- "Came in 8% under target TSS. The legs had opinions."
+- "Came in 8% under target Load. The legs had opinions."
 - "Intervals completed. NP 4W above target. We'll allow it."
 - "Ran without walking. The data agrees it was Z2, mostly."
 
@@ -1104,7 +1104,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
                 actual_tss = float(pd_parts[2].strip())
                 delta_pct = float(pd_parts[3].strip())
                 sign = "+" if delta_pct >= 0 else ""
-                plan_delta_note = f"vs plan ({plan_name}): {int(planned_tss)}→{int(actual_tss)} TSS ({sign}{delta_pct:.0f}%)"
+                plan_delta_note = f"vs plan ({plan_name}): {int(planned_tss)}→{int(actual_tss)} Load ({sign}{delta_pct:.0f}%)"
         except Exception:
             pass
 
