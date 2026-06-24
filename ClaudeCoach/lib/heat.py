@@ -15,6 +15,7 @@ roughly one exposure per 4–5 days maintains; confirm values with the coach):
   outdoor session 30–60 min at ≥25°C ambient   = 0.5
 """
 import json
+import math
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -27,6 +28,9 @@ MAINTENANCE_DOSE_14D = 2.0   # pre-`starts` floor that keeps the ambient-exposur
 PROTOCOL_DOSE_14D    = 3.0   # race-proximal target once the formal block starts
 SENSOR_SUSPECT_C     = 22.0  # Garmin wrist sensors read 3–8°C high; look up external weather at or above this
 LONG_SESSION_MIN     = 90    # for long sessions report both peak and mean ambient
+
+ACCL_TAU_DAYS = 21.0   # exponential decay time constant (3-week half-life)
+ACCL_SCALE    = 10.5   # maps raw score → %; 3×/week full-dose steady-state ≈ 100%
 
 
 def state(slug: str, profile: dict | None = None) -> dict:
@@ -140,3 +144,30 @@ def exposure_entry(act: dict) -> dict | None:
         "context": ctx,
         "logged_at": date.today().isoformat(),
     }
+
+
+def acclimation_score(slug: str, ref_date: date | None = None) -> float:
+    """0–100 heat acclimation percentage with a 21-day exponential decay.
+
+    Each heat-log entry contributes its dose × exp(−days_since/21) to a raw
+    total; ACCL_SCALE maps the raw total so sustained 3×/week full-dose
+    exposure saturates at ~100%.  Mirrors the Garmin heat-acclimation model.
+    """
+    if ref_date is None:
+        ref_date = date.today()
+    log_file = BASE / "athletes" / slug / "heat-log.json"
+    try:
+        entries = json.loads(log_file.read_text())
+    except Exception:
+        return 0.0
+    raw = 0.0
+    for entry in entries:
+        try:
+            d = date.fromisoformat(str(entry.get("date") or "")[:10])
+        except (ValueError, TypeError):
+            continue
+        days_since = (ref_date - d).days
+        if days_since < 0:
+            continue
+        raw += float(entry.get("dose") or 1.0) * math.exp(-days_since / ACCL_TAU_DAYS)
+    return min(100.0, raw * ACCL_SCALE)
