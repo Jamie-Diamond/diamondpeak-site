@@ -4,19 +4,19 @@ Last updated: 2026-06-24
 
 ## Recent context (auto-summary)
 
-- **Wed 24 Jun (today)** — Rest day (travel block day 3). Luteal day 15. HRV trend +5.4%, latest Jun 23=65, Jun 24=67 — best readings in 2+ weeks, T3 near clearing. Sleep Jun 24 only 5.2h (new concern). ATL 59, CTL 56, Form −3.
-- **Tue 23 Jun** — Sweetspot 3×15 outside (90min cap), NP 162W (83% FTP), IF 0.83, HR 153avg/181max, 92 TSS, RPE 6. ICU had wrong session (Bike Z2 2hr) — plan corrected.
-- **Mon 22 Jun** — Kettlebells 45min · 28 TSS · RPE 7 · travel block day 1
-- **Sun 21 Jun** — Long Ride 65.9km · NP 138W (71% FTP) · HR 149avg/170max · decoupling −1.0% (excellent in 26–32°C) · 112 TSS · ~33g/hr carbs · race-pace blocks fragmented (VI 1.11, 14 stops) — next long ride needs uninterrupted route (river path / fewer junctions)
-- **Sat 20 Jun** — Run 13.1km · GAP 6:00/km · HR 167avg in 28°C · decoupling 0.5% · 85 TSS
-- **Fri 19 Jun** — Swim CSS 2km · 8×198m · 1:39–1:41/100m · last rep faded to 1:46 · 34 TSS
-- **Week 15–21 Jun (Base wk 7)**: 428 TSS · Fitness 57.8, Form −12 · above maintenance (CTL rose 56→58)
-- **Fuelling gap (persistent)**: ~33g/hr on long rides vs 70g/hr race target — nudge on every long session
-- **Menstrual phase**: luteal started 24 Jun, runs ~24 Jun–7 Jul; RPE-led sessions, higher core temp; 25–35°C heat travel overlay stacks through rest of travel block
-- **Travel block Jun 22–28 active**: sea swim Thu–Sun (open-water aerobic, no CSS targets); no cycle Sunday; no time cap Thu–Sat
-- **Week plan confirmed (Base wk 8, ~479 TSS)**: KB Mon ✓ · Sweetspot 3×15 Tue ✓ · Rest Wed ✓ · Sea swim ~40min + easy run 45min Thu · Bike Z2 2hr Fri · Bike Z2 2.5hr + brick Sat · Long run 90min easy Sun — pushed to Garmin; 6 wrong auto-synced sessions cleared
-- **Build phase starts w/c 29 Jun** — Base wk 8 is final base week; always use ICU live engine for phase/week numbering (static calendar confirmed off by one week)
-- **Open**: fuelling gap to nudge each long session; next long ride needs uninterrupted route (river path); HRV/sleep monitoring ongoing (luteal + travel block + 5.2h sleep Jun 24)
+- **Wed 24 Jun (today)** — Rest day (travel block day 3, luteal day 15). Sleep Jun 24 = 5.2h (concern). HRV Jun 23=65, Jun 24=67 — best readings in 2+ weeks, T3 near clearing. ATL 59, CTL 56, Form −3.
+- **Tue 23 Jun** — Sweetspot 3×15 outside (90min cap). NP 162W (83% FTP), IF 0.83, HR 153avg/181max, 92 TSS, RPE 6. ICU had wrong session (Bike Z2 2hr) — confirmed plan corrected in calendar.
+- **Mon 22 Jun** — Kettlebells 45min · 28 TSS · RPE 7 · travel block day 1.
+- **Sun 21 Jun** — Long ride 65.9km · NP 138W (71% FTP) · HR 149avg/170max · decoupling −1.0% (excellent, 26–32°C) · 112 TSS · ~33g/hr carbs · race-pace blocks fragmented (VI 1.11, 14 stops) — next long ride needs uninterrupted route (river path / fewer junctions).
+- **Sat 20 Jun** — Run 13.1km · GAP 6:00/km · HR 167avg in 28°C · decoupling 0.5% · 85 TSS.
+- **Fri 19 Jun** — Swim CSS 2km · 8×198m · 1:39–1:41/100m · last rep faded to 1:46 · 34 TSS.
+- **Week 15–21 Jun (Base wk 7)**: 428 TSS · Fitness 57.8, Form −12 · above maintenance (CTL rose 56→58).
+- **Fuelling gap (persistent)**: ~33g/hr on long rides vs 70g/hr race target — nudge on every long session.
+- **Menstrual phase**: luteal started 24 Jun, runs ~24 Jun–7 Jul; RPE-led, higher core temp; 25–35°C travel-heat overlay stacks through rest of travel block.
+- **Travel block Jun 22–28 active**: sea swim Thu–Sun (open-water aerobic, no CSS targets); no cycle Sunday; no time cap Thu–Sat.
+- **Week plan confirmed (Base wk 8, ~479 TSS)**: KB Mon ✓ · Sweetspot 3×15 Tue ✓ · Rest Wed ✓ · Sea swim ~40min + easy run 45min Thu · Bike Z2 2hr Fri · Bike Z2 2.5hr + brick Sat · Long run 90min easy Sun — pushed to Garmin; 6 wrong auto-synced sessions cleared.
+- **Build phase starts w/c 29 Jun** — Base wk 8 is final base week; always use ICU live engine for phase/week numbering (static calendar confirmed off by one week).
+- **Open**: fuelling gap to nudge each long session; next long ride needs uninterrupted route (river path); HRV/sleep monitoring ongoing (luteal + travel block + 5.2h sleep Jun 24).
 
 ## Injuries / Niggles
 None
