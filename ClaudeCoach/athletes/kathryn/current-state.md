@@ -110,6 +110,8 @@ None
 
 - 2026-06-24 (watchdog): T3 re-fired (recovering) — HRV 7d avg 58.9 (Jun 18–24) vs prior 7d avg 63.6 (Jun 11–17) = −7.4% decline (threshold 7%, just above; was −15.5% at Jun 20 log — trend clearly improving). Latest readings Jun 23=65, Jun 24=67 — highest in 2+ weeks; signal expected to clear within 1–2 days as Jun 19=50/Jun 21=54 drop out of window. T4 suppressed (last filed Jun 22, within 3-day window; Jun 24 sleep 18,720s/5.20h is new but window not yet expired). T1/T2/T5/T6/T9/T10 clear. ATL 59.1, CTL 56.5; form −2.6. Rest day (travel block day 3; luteal day 15).
 
+- 2026-06-25 (watchdog): T4 re-fired (new data) — 4 nights <7h in rolling 7-day window: Jun 18=6.73h, Jun 19=6.02h, Jun 21=6.65h, Jun 24=5.20h. Jun 24=5.20h is new since last filing (Jun 22); 3-day suppression window now expired. Persistent sleep disruption through travel block (Jun 22–28); luteal phase + travel heat stacks with sleep debt — risk compounds entering build phase w/c 29 Jun. HRV recovering (Jun 23=65, Jun 24=67 — best in 2+ weeks; Jun 25 not yet synced). T3 suppressed (filed Jun 24, same signal, 3-day window active). T1/T2/T5/T6/T9/T10 clear. ATL 67.0, CTL 57.9; form −9.0. Travel block day 4; luteal day 16.
+
 ## Heat Acclimatisation
 
 - 2026-05-16: T7 fired — heat-log.json empty, 0.0 dose in last 14 days (threshold 3.0). Begin heat sessions immediately.
