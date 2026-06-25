@@ -3,15 +3,15 @@
 Last updated: 2026-06-25
 
 ## Recent context (auto-summary)
-- **Three consecutive zero-compliance weeks (9–21 Jun)**: no rides completed from ~27 May until 23 Jun; weeks of 9, 16, 21 Jun all at 0%
-- **Sat 13 Jun**: Long Z2 Ride 120 min — NOT completed; **Wed 17 Jun**: Sweetspot Build 90 min — NOT completed; **Sat 20 Jun**: Long Z2 3h — NOT completed
-- **Tue 23 Jun**: Short endurance 35 min — NOT completed; ICU atlLoad=0.0, history empty; ATL did not rise; corrected from projected values logged on Jun 23 watchdog run
-- **Wed 24 Jun**: Rest day; CTL 6.7, ATL 3.4, Form +3.3 — CTL near collapse after extended gap; rebuilding from near-zero base
+- **Extended zero-compliance block (9–23 Jun)**: no rides completed; weeks of 9, 16, and 22 Jun all at 0%; ~4 missed weeks total
+- **Sat 13 Jun**: Long Z2 Ride — NOT completed; **Wed 17 Jun**: Sweetspot Build 90 min — NOT completed; **Sat 20 Jun**: Long Z2 3h — NOT completed
+- **Tue 23 Jun**: Short endurance 35 min — NOT completed; ICU atlLoad=0.0, history empty; ATL did not rise
+- **Thu 25 Jun (today)**: Rest day; CTL 6.0, ATL 0.4, Form +5.6; T5 fired (2 missed sessions in rolling 7d: 20 Jun + 23 Jun); CTL near collapse from extended gap
 - **Next session**: Sat 28 Jun — Long ride 195 min; week of 22 Jun target = 162 TSS (Tue 35 min + Sat 195 min)
-- **Tour de Stations / Marmottes**: 66 days out as of 24 Jun; 3 missed weeks critical prep risk — every session now counts
+- **Tour de Stations / Marmottes**: 65 days out as of 25 Jun; extended missed block is critical prep risk — every session now counts
 - **Weight**: 93 kg (last confirmed; no response to morning weight prompts since early Jun)
 - **Fuelling**: 0 g/hr current habit; 60 g/hr target on long rides flagged repeatedly but not yet adopted; race-day risk on 6–8 hr mountain days
-- **Compliance/engagement**: Calum not responding to morning messages or session-confirmation prompts; low engagement streak since early Jun
+- **Compliance/engagement**: Calum not responding to morning messages or session-confirmation prompts; extended low-engagement streak since early Jun
 - **No injury**; no HRV/sleep wearable
 - **Open**: Erroneous "Z3 Ride 10h" event in Intervals.icu still needs deletion
 
