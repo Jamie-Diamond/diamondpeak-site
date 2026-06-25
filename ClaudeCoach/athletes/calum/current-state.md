@@ -3,15 +3,14 @@
 Last updated: 2026-06-25
 
 ## Recent context (auto-summary)
-- **Extended zero-compliance (~3 weeks)**: no rides completed in weeks of 9, 16, 22 Jun; CTL collapsed from ~11 (late May) to 6.0 as of 25 Jun
-- **Last known sessions**: Long Z2 3h Sat 20 Jun — NOT completed; Short endurance 35 min Tue 23 Jun — NOT completed
+- **Extended zero-compliance (4 weeks)**: no rides completed in weeks of 9, 16, 22 Jun; CTL collapsed from ~11 (late May) to 6.0 as of 25 Jun
+- **Week 22–28 Jun sessions**: Short endurance 35 min (Tue 23 Jun) — NOT completed; Long ride 195 min (Sat 28 Jun) — still upcoming and critical
+- **If Sat 28 Jun is also missed**: third consecutive week at 0 TSS; base-build effectively stalled
 - **Thu 25 Jun**: Rest day; CTL 6.0, ATL 0.4, Form +5.6; T5 fired (Sat 20 Jun Long Z2 + Tue 23 Jun short endurance both missed)
-- **Week 22–28 Jun**: Short endurance (Tue 23) missed; Long ride 195 min Sat 28 Jun is only remaining session — entire 162 TSS week rides on one day
-- **Upcoming**: Long Z2 ride Sat 28 Jun (195 min) — critical; if missed, third consecutive week at 0 TSS
-- **Tour de Stations / Marmottes**: 65 days out as of 25 Jun; extended non-compliance is a serious race-day prep risk; base-build window closing
-- **Weight**: 93 kg (last confirmed; no weight responses since early Jun; no engagement with morning check-ins)
-- **Fuelling**: 0 g/hr current habit; 60 g/hr target flagged repeatedly; not adopted; race-day risk on 6–8 hr mountain days
-- **Engagement**: not responding to morning messages or session-confirm prompts; extended low-engagement streak across 3+ weeks
+- **Tour de Stations / Marmottes**: 65 days out as of 25 Jun; base-build window closing; race-day prep at serious risk
+- **Weight**: 93 kg (last confirmed; no weight responses to morning check-ins since early Jun)
+- **Fuelling**: 0 g/hr current habit; 60 g/hr target flagged repeatedly for weeks; not adopted; race-day risk on 6–8 hr mountain days
+- **Engagement**: not responding to morning messages or session-confirm prompts; extended low-engagement streak across 4 weeks
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 
