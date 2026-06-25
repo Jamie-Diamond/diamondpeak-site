@@ -6,11 +6,11 @@ Last updated: 2026-06-25
 - **Extended zero-compliance block (early Jun – present)**: no rides completed; weeks of 9, 16, and 22 Jun all at 0%; CTL collapsed from ~11 (late May) to 6.0 by 25 Jun
 - **Sat 20 Jun**: Long Z2 Ride 3h — NOT completed; **Tue 23 Jun**: Short endurance 35 min — NOT completed; T5 fired 25 Jun
 - **Thu 25 Jun**: Rest day; CTL 6.0, ATL 0.4, Form +5.6; no response to morning messages or session-confirm prompts
-- **Next session**: Sat 28 Jun — Long ride 195 min (week of 22 Jun: 162 TSS target; Tue miss means only the Saturday ride remains)
+- **Week 22–28 Jun plan**: Short endurance 35 min (Tue, missed), Long ride 195 min (Sat 28 Jun, remaining); 162 TSS week target now riding on Saturday only
 - **Tour de Stations / Marmottes**: 65 days out as of 25 Jun; every session now critical — extended gap is a serious prep risk
 - **Weight**: 93 kg (last confirmed; no weight responses since early Jun)
 - **Fuelling**: 0 g/hr current habit; 60 g/hr target on long rides flagged repeatedly but not adopted; race-day risk on 6–8 hr mountain days
-- **Compliance/engagement**: Calum not responding to morning messages or session-confirmation prompts; extended low-engagement streak
+- **Compliance/engagement**: Calum not responding to morning messages or session-confirmation prompts; extended low-engagement streak across multiple weeks
 - **No injury**; no HRV/sleep wearable
 - **Open**: Erroneous "Z3 Ride 10h" event in Intervals.icu still needs deletion
 
