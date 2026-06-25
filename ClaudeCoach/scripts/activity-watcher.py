@@ -619,7 +619,7 @@ def _strava_description(first_name: str, sport: str, analysis: str,
                          laps: list | None = None, splits: list | None = None,
                          segment_prs: list | None = None,
                          coaching_level: str = "mid") -> str:
-    """Call Claude to write a witty 3-line Strava description."""
+    """Call Claude to write a neutral, factual 3-line Strava description."""
     import re as _re
 
     clean_analysis = _re.sub(r"[*_]", "", analysis or "").strip()
@@ -673,22 +673,22 @@ def _strava_description(first_name: str, sport: str, analysis: str,
 
     if coaching_level == "beginner":
         line2_instruction = (
-            "[one plain-English observation about how it went vs the aim. "
+            "[one plain-English observation about how the session went. "
             "No power, pace, or zone numbers — effort and feel only. "
-            "Encouraging, matter-of-fact British tone.]"
+            "Neutral, factual tone.]"
         )
     elif coaching_level == "pro":
         line2_instruction = (
-            "[one dry, data-dense observation. For bike sessions include NP, IF, and zone split. "
+            "[one factual, data-dense observation. For bike sessions include NP, IF, and zone split. "
             "For runs include avg GAP and decoupling %. Use lap/split data where relevant. "
-            "Never include RPE. Deadpan British wit — lead with numbers.]"
+            "Never include RPE. Neutral and factual — lead with numbers, no commentary.]"
         )
     else:  # mid
         line2_instruction = (
-            "[one dry, understated observation about how it went vs the aim. "
+            "[one factual observation about how the session went. "
             "For bike sessions include NP (e.g. \"NP 218W\") and HR avg. Never include RPE. "
-            "Use lap/split data if it adds something specific. Deadpan British wit — "
-            "matter-of-fact, slightly wry, never gushing.]"
+            "Use lap/split data if it adds something specific. Neutral and factual — "
+            "state what was done, no commentary or judgement.]"
         )
 
     prompt = f"""\
@@ -705,11 +705,13 @@ Line 1 — "Aim: [one plain sentence on what the session was PLANNED to target �
 Line 2 — {line2_instruction}
 Line 3 — "ClaudeCoach" [append " 🏆" if any segment PRs were set]
 
+The tone must be neutral and factual throughout — describe what was done using the data. No jokes, no wit, no sarcasm, no commentary on how the session compared to plan, nothing that implies the athlete fell short or quit.
+
 Examples of the right tone:
-- "Held Z2 throughout. Decoupling 3.2%. The plan had a good day."
-- "Came in 8% under target Load. The legs had opinions."
-- "Intervals completed. NP 4W above target. We'll allow it."
-- "Ran without walking. The data agrees it was Z2, mostly."
+- "Held Z2 throughout. Decoupling 3.2%."
+- "NP 206W, IF 0.69. Z1–Z2 71%, Z4–Z5 15% on the climbs."
+- "Intervals completed. NP 4W above target."
+- "Continuous run, avg GAP 5:10/km. HR held in Z2."
 
 Total under 300 characters. Output nothing else."""
 
