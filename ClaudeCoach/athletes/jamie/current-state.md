@@ -16,18 +16,18 @@
 
 ## Recent context (auto-summary)
 
-- **France camp (22–28 Jun) — Day 3 COMPLETE (Thu 25 Jun):** Mon 22 easy run ✓ 49 TSS · Tue 23 swim ✓ 52 TSS · Wed 24 Z2 run ✓ 51 TSS · **Thu 25 endurance ride ✓ 119 TSS** · Thu PM OW swim ~51 TSS (pending — Jamie said "maybe") · Fri 26 long ride 183 · Sat 27 endurance+climbs ride IF ~0.71 ~105 TSS · Sun 28 long run + OW swim ~117. **Projected week 727 TSS** (genuine build — floor 608 maintenance, cap ~788). Heat TSS undersells real stress.
-- **Thu 25 Jun — Endurance ride with climbs (COMPLETED, NOT clean Z2):** 151 min, NP 206W (IF 0.69), 740m gain, 119 TSS vs 92 planned (+29%). Zone split: 71% Z1–Z2 / 14% Z3 / 12% Z4 / 3% Z5 (climbing drove it). ERA5 32→35.5°C (hottest session to date). Nutrition: 86g/hr carbs (216g: Maurten 320 + Beta Fuel chews + SiS choc-fudge + High5 caffeine gel + 250ml Coke), ~1000ml/hr fluid (2.5L). Ankle not relevant.
-- **Wed 24 Jun — Z2 run (COMPLETED, EASY):** 8.91km, 51 TSS, GAP 5:10/km, avg HR 143 vs 150 ceiling. ERA5 30.9–32°C (RH 49%). Ankle 3/10 first half → 1–2/10 second half (highest during-run score since physio clearance; within 5/10 tolerance). Next: open at 5:15–5:20 GAP in heat.
-- **Tue 23 Jun — Speed/technique swim (COMPLETED):** 2,000m, 52 TSS. 4×100m drill WITH paddles (catch/DPS — no speed target); 8×100m paddle-OFF avg 1:38 vs TGT 1:36–1:38 (held to last rep, final 3 at 1:36); 2×200m pull buoy at CSS 1:41/1:40.
-- **Mon 22 Jun — Easy run (COMPLETED, EASY):** 7.62km, 49 TSS, GAP 4:53/km, avg HR 141 vs 146 ceiling. ERA5 ~28°C.
-- **Ankle:** ATFL + CFL partial tear (physio confirmed). Latest: 3/10 peak during 24 Jun France run, settled 1–2/10 second half. Protocol: ≤5/10 OK if resolves by next AM; >5/10 = stop.
-- **Heat acclimation:** Live score **39% ↑** (heat_accl.py). 5 exposures ≥28°C since 21 Jun; May Marseille block largely decayed. France camp will push it higher — well timed for Sep race. Morning card 25 Jun missed it (fired 06:30, before 07:08 deploy) — shows from 26 Jun onward. ⚠️ Coach error 25 Jun: estimated 65–70% instead of running live script; rule 82 added.
-- **CP vs FTP (25 Jun):** eFTP 297W = working metric for IM; CP+W′ passively populated from power curve; no structured test needed; race pacing far below threshold makes CP/FTP gap irrelevant.
-- **Camp remaining:** Thu PM OW swim 50 min (~51 TSS, unconfirmed) · Fri 4h long ride Z2 pure (183 TSS — unchanged) · Sat 2h endurance+climbs ride IF ~0.71 (~105 TSS — intensity via terrain, not duration) · Sun long run ~15km (~92 TSS) + OW swim (~25 TSS).
-- **Weight:** ~83 kg; race target 79 kg (19 Sep 2026); ~4 kg to lose.
-- **CTL/form (25 Jun):** CTL 86, ATL 91, TSB −5. HRV trend −2.6% (41 on 24 Jun). Sleep 5.05h. IM Italy 86 days.
-- **Bug list (25 Jun — 14 logged):** Pending code: #5 replan guard, #8 bug list maintenance, #11 voice reply, #14 run activity auto-debrief too long/data-heavy (covered by rule 81). Rules-corrected: #6→77, #7→74, #9→75, #10→76, #13→81, heat score→82. Deployed: #12 heat tracker 07:08 25 Jun.
+- **Thu 25 Jun PM — OW swim (COMPLETED, NOT easy):** 1,202m · 25 min · 6×~200m @ 2:01–2:08/100m avg 2:03 (vs CSS 1:40 — OWS gap expected). Avg HR 129 masked true effort; R2 peaked to 147 avg / 156 max. Per-rep HR reveals firm aerobic effort — NOT Z1. ~51 TSS. Neutral Strava description pushed (regenerated after "I quit" bug fixed).
+- **Thu 25 Jun — Endurance ride with climbs (COMPLETED, NOT clean Z2):** 151 min · NP 206W (IF 0.69 / VI 1.36) · 740m gain · 119 TSS (+29% vs 92 planned). Zone split: 71% Z1–Z2 / 14% Z3 / 12% Z4 / 3% Z5 (two cols drove it). ERA5 32→35.5°C (hottest session to date). Nutrition: 216g carbs (86g/hr) · 2.5L fluid (1,000ml/hr — on target for heat). Ankle not relevant.
+- **Wed 24 Jun — Z2 run (COMPLETED, EASY):** 8.91 km · 51 TSS · GAP 5:10/km · avg HR 143 vs 150 ceiling · ERA5 30.9–32°C (RH 49%). Ankle 3/10 peak first half → 1–2/10 second half (highest camp score; within 5/10 tolerance). Next: open 5:15–5:20 GAP in heat.
+- **Tue 23 Jun — Speed/technique swim (COMPLETED):** 2,000m · 52 TSS · 4×100m drill with paddles (catch/DPS) + 8×100m paddle-off avg 1:38 vs TGT 1:36–1:38 + 2×200m pull buoy CSS.
+- **Mon 22 Jun — Easy run (COMPLETED, EASY):** 7.62 km · 49 TSS · GAP 4:53/km · avg HR 141 vs 146 ceiling · ERA5 ~28°C.
+- **Ankle:** ATFL + CFL partial tear (physio confirmed ultrasound). Latest: 3/10 peak Wed 24 Jun France run, settled 1–2/10 second half. Protocol: ≤5/10 OK if resolves by next AM; >5/10 = stop.
+- **Heat acclimation score:** Live 39% ↑ (heat_accl.py, morning 25 Jun). 5 exposures ≥28°C since 21 Jun; hottest session 35.5°C today. May Marseille block largely decayed. Score climbing daily through camp — well timed for Sep race.
+- **Camp remaining:** Fri 26 long ride 4h pure Z2 (183 TSS — unchanged) · Sat 27 endurance+climbs ride 2h IF ~0.71 (~105 TSS) · Sun 28 long run ~15 km (~92 TSS) + OW swim (~25 TSS). Projected week ~727 TSS (genuine build vs 608 maintenance floor; heat load undersells true stress).
+- **Strava auto-desc bug fixed 25 Jun:** "I quit" on OWS (25 min vs 50 planned) — root cause was deadpan wit / plan-gap prompt in script. Removed entirely; descriptions now neutral+factual across all coaching levels (rule 36 reinforced).
+- **Weight:** ~83 kg · race target 79 kg (19 Sep 2026) · ~4 kg to lose.
+- **CTL/form (25 Jun):** CTL 86 · ATL 91 · TSB −5. HRV trend −2.6% (41 on 24 Jun). Sleep 5.05h. IM Italy 86 days.
+- **Bug list (25 Jun — 15 logged):** Pending code: #5 replan guard, #8 bug list maintenance, #11 voice reply, #14 run auto-debrief too long (rule 81). Rules-corrected: #6→77, #7→74, #9→75, #10→76, #13→81, heat score→82, OW swim effort→83. Deployed: #12 heat tracker 07:08 25 Jun.
 - **Open actions (overdue):** PH sweat-sodium test · TT bike fit · Running FTP 500W in Intervals.icu.
 
 ## Travel & training blocks (logged 2026-05-10)
