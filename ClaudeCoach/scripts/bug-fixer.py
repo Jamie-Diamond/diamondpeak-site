@@ -45,6 +45,70 @@ def _load_entries(slug: str):
         return []
 
 
+def _bug_mark_feedback(slug: str, entries: list, status: str, commit_hash: str = None):
+    """Write status + resolution_commit back to the athlete's feedback-log.json,
+    normalising any stale alternative field names in the same pass."""
+    f = BASE / "athletes" / slug / "feedback-log.json"
+    try:
+        d = json.loads(f.read_text())
+        for i in entries:
+            if isinstance(i, int) and 0 <= i < len(d):
+                entry = d[i]
+                for old in ("resolution", "resolved", "fix"):
+                    entry.pop(old, None)
+                entry["status"] = status
+                entry["resolution_commit"] = commit_hash
+        f.write_text(json.dumps(d, indent=2))
+    except Exception as e:
+        print(f"[bug-fixer] mark feedback failed: {e}", file=sys.stderr)
+
+
+def reconcile(slug: str):
+    """Normalise feedback-log.json schema and back-fill resolution_commit from merged reviews."""
+    f = BASE / "athletes" / slug / "feedback-log.json"
+    if not f.exists():
+        print("No feedback log found — nothing to reconcile.")
+        return
+    d = json.loads(f.read_text())
+    changed = False
+    # Step 1: normalise schema for every entry
+    for entry in d:
+        for old in ("resolution", "resolved", "fix"):
+            if old in entry:
+                if not entry.get("status"):
+                    entry["status"] = "resolved" if entry[old] else "open"
+                entry.pop(old)
+                changed = True
+        if "status" not in entry:
+            entry["status"] = "open"
+            changed = True
+        if "resolution_commit" not in entry:
+            entry["resolution_commit"] = None
+            changed = True
+    # Step 2: back-fill resolution_commit from merged reviews in .bug-reviews.json
+    reviews = _load_reviews()
+    for rv in reviews.values():
+        if rv.get("slug", "jamie") != slug or rv.get("status") != "merged":
+            continue
+        rid = rv["id"]
+        rv_entries = rv.get("entries", [])
+        log_out = _git(["log", "--oneline", "--grep", f"bugfix {rid}:"]).stdout.strip()
+        if not log_out:
+            continue
+        commit_hash = log_out.split()[0]
+        for i in rv_entries:
+            if isinstance(i, int) and 0 <= i < len(d):
+                if not d[i].get("resolution_commit"):
+                    d[i]["resolution_commit"] = commit_hash
+                    d[i]["status"] = "resolved"
+                    changed = True
+    if changed:
+        f.write_text(json.dumps(d, indent=2))
+        print(f"[reconcile] updated {slug}/feedback-log.json")
+    else:
+        print(f"[reconcile] {slug}/feedback-log.json already consistent — no changes")
+
+
 def _format_entries(entries):
     lines = []
     for i, e in enumerate(entries):
@@ -348,11 +412,14 @@ def main():
     ap.add_argument("--refix", metavar="RID", help="revise an existing review per --feedback, then re-post")
     ap.add_argument("--feedback", default="", help="the revision instruction for --refix")
     ap.add_argument("--repost", action="store_true", help="re-post cards for all awaiting reviews (e.g. after a failed post)")
+    ap.add_argument("--reconcile", action="store_true", help="normalise feedback-log.json schema and back-fill resolution_commit from git history")
     args = ap.parse_args()
     if args.refix:
         refix(args.refix, args.feedback)
     elif args.repost:
         repost_awaiting(args.athlete)
+    elif args.reconcile:
+        reconcile(args.athlete)
     elif args.fix:
         run_fix(args.athlete, args.dry_run)
     else:
