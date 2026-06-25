@@ -88,18 +88,37 @@ Examples of the right tone (neutral, factual, no judgement):
 
 Total under 300 characters. Output nothing else."""
 
+    fallback = f"Aim: {entry.get('name', sport)}.\n{metrics_str}\nClaudeCoach"
     try:
         result = subprocess.run(
             [CLAUDE, "-p", prompt, "--model", "claude-haiku-4-5-20251001"],
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
         )
         text = (result.stdout or "").strip()
-        if text:
-            return text
+        if result.returncode != 0 or not _looks_like_description(text):
+            print(f"Claude returned no usable description (rc={result.returncode}): {text[:120]!r}", file=sys.stderr)
+            return fallback
+        return text
     except Exception as e:
         print(f"Claude call failed: {e}", file=sys.stderr)
 
-    return f"Aim: {entry.get('name', sport)}.\n{metrics_str}\nClaudeCoach"
+    return fallback
+
+
+def _looks_like_description(text: str) -> bool:
+    """Reject CLI error output so it is never written to Strava as a description."""
+    if not text:
+        return False
+    low = text.lower()
+    bad_markers = (
+        "api error", "failed to authenticate", "invalid authentication",
+        "401", "403", "429", "rate limit", "credit balance", "usage limit",
+        "overloaded", "internal server error", "execution error", "command not found",
+    )
+    if any(m in low for m in bad_markers):
+        return False
+    # A real description is multi-line and ends on the ClaudeCoach signature.
+    return "claudecoach" in low
 
 
 def main():
