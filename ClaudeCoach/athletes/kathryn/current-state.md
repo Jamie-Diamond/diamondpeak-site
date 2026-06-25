@@ -4,20 +4,20 @@ Last updated: 2026-06-25
 
 ## Recent context (auto-summary)
 
-- **Base wk 8 plan (~479 TSS)**: KB Mon ✓ · Sweetspot 3×15 Tue ✓ · Rest Wed ✓ · Sea swim 40min + Z2 bike 2hr Thu ✓ · Bike Z2 2hr Fri · Bike Z2 2.5hr + brick Sat · Long run 90min Sun
-- **Thu 25 Jun** — Sea swim ~40min + bike 2hr with Jamie (no power meter; extreme heat 35–41°C). HR avg 157/max 191bpm; 53km/653m/132min; 126 TSS (+50% vs plan 84 — heat load). Nutrition: 1 honey gel + 1/3 bag Haribo (~47g total, ~21g/hr — well below 70g/hr race target). No RPE logged. HR unreliable effort proxy in this heat.
-- **Wed 24 Jun** — Rest day. Sleep 5.2h (short). HRV recovering (65→67 best in 2+ weeks).
-- **Tue 23 Jun** — Sweetspot 3×15 outside, 90min cap. NP 162W (83% FTP), IF 0.83, HR 153/181, 92 TSS, RPE 6. ICU had wrong session (Bike Z2 2hr) — corrected per custom-plan rule.
+- **Base wk 8 plan (~479 TSS)**: KB Mon ✓ · Sweetspot 3×15 Tue ✓ · Rest Wed ✓ · Sea swim + Z2 bike Thu ✓ · Bike Z2 2hr Fri · Bike Z2 2.5hr + brick Sat · Long run 90min Sun
+- **Thu 25 Jun** — Sea swim ~40min (open-water aerobic, no split data) + bike 132min/53km/653m with Jamie (no power meter; extreme heat 35–41°C). HR avg 157/max 191bpm; 126 TSS (+50% vs plan). Nutrition: 1 honey gel + 1/3 bag Haribo (~47g total, ~21g/hr — well below 70g/hr race target). No RPE logged. HR unreliable effort proxy in this heat.
+- **Wed 24 Jun** — Rest day. Sleep 5.2h (short). HRV recovering (65→67 — best in 2+ weeks).
+- **Tue 23 Jun** — Sweetspot 3×15 outside, 90min cap. NP 162W (83% FTP), IF 0.83, HR 153/181, 92 TSS, RPE 6. ICU had wrong session — corrected to custom plan.
 - **Mon 22 Jun** — Kettlebells 45min · 28 TSS · RPE 7.
-- **Sun 21 Jun** — Long ride 65.9km · NP 138W (71% FTP) · decoupling −1.0% (excellent, 26–32°C) · 112 TSS · nutrition ~33g/hr.
-- **Fuelling gap (persistent)**: Thu ride ~21g/hr; long ride Jun 21 ~33g/hr — both well below 70g/hr race target. Nudge on every long session.
-- **RPE scale**: explained to Kathryn this session — she was unfamiliar. 1–2=recovery, 3–4=Z2, 5–6=sweetspot/tempo, 7–8=threshold, 9=VO2, 10=max.
-- **Menstrual phase**: luteal from 24 Jun, runs ~24 Jun–7 Jul; RPE-led, higher core temp; stacks with 25–35°C travel heat through Jun 28. All remaining travel sessions RPE-led — hold power/pace loosely.
-- **Travel block Jun 22–28 active**: sea swim Thu–Sun (open-water aerobic, no CSS targets); no cycle Sunday; no time cap Thu–Sat.
+- **Sun 21 Jun** — Long ride 65.9km · NP 138W (71% FTP) · decoupling −1.0% (excellent) · 112 TSS · nutrition ~33g/hr.
+- **Fuelling gap (persistent)**: Thu ride ~21g/hr; Sun 21 ride ~33g/hr — both well below 70g/hr race target. Nudge on every long session.
+- **RPE scale**: explained this session — Kathryn was unfamiliar. 1–2=recovery, 3–4=Z2, 5–6=sweetspot/tempo, 7–8=threshold, 9=VO2, 10=max.
+- **Menstrual phase**: luteal from 24 Jun, runs ~24 Jun–7 Jul; RPE-led, higher core temp; stacks with 25–35°C travel heat through Jun 28. All remaining travel sessions RPE-led.
+- **Travel block Jun 22–28 active**: sea swims Thu–Sun (open-water aerobic, no CSS targets); no cycle Sunday; no time cap Thu–Sat.
 - **Sleep**: patchy — Jun 18=6.73h, Jun 19=6.02h, Jun 21=6.65h, Jun 24=5.20h (4 nights <7h in rolling window). HRV recovering (Jun 24=67 — best in 2+ weeks). Monitor into build phase w/c 29 Jun.
-- **Fitness**: ATL 67, CTL 58, Form −9 (Jun 25). Build phase starts w/c 29 Jun — always use ICU live engine for phase/week numbering.
+- **Fitness**: ATL 67, CTL 58, Form −9 (Jun 25). Build phase starts w/c 29 Jun — always use ICU live engine for phase/week numbering (static calendar confirmed off by 1 week).
 - **Weight**: not recently logged.
-- **Open**: fuelling gap to nudge each long session; next long ride needs uninterrupted route (river path, not Wandsworth); sleep monitoring ongoing through travel block and into build; heat acclimatisation sessions overdue (outdoor travel heat counts per rule).
+- **Open**: fuelling gap (nudge each long session); sleep monitoring through travel block and into build; heat acclimatisation overdue (outdoor travel heat counts per rule); next long ride needs uninterrupted route (not Wandsworth).
 
 ## Injuries / Niggles
 None
