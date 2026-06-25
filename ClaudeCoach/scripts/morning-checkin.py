@@ -27,7 +27,7 @@ import menstrual as menstrual_lib
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend=""):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -105,11 +105,26 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         if planned_block else ""
     )
 
+    heat_block = ""
+    heat_card_line = ""
+    if heat_protocol:
+        if heat_accl_pct is not None:
+            heat_block = (
+                f"\n## Heat acclimation (pre-computed — authoritative)\n"
+                f"Score: {heat_accl_pct}%{heat_accl_trend}. Copy verbatim into the card — do not recompute.\n"
+            )
+            heat_card_line = (
+                f"🌡️ Heat acclim: {heat_accl_pct}%{heat_accl_trend}"
+                f"[If sessions_this_week < 2 AND today is Wednesday or later: · bath due ([N] this week, target 2–3×)]"
+            )
+        else:
+            heat_card_line = "[If sessions_this_week < 2 AND today is Wednesday or later: 🌡️ Heat bath due — [N] this week (target 2–3×)]"
+
     return f"""\
 You are generating the morning briefing for {first_name}'s training day.
 
 {_level_block(coaching_level)}
-{recovery_block}{wellness_block}{cycle_block}{planned_section}
+{recovery_block}{wellness_block}{cycle_block}{planned_section}{heat_block}
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
@@ -147,7 +162,7 @@ Use the recovery score and signals ONLY to decide what to flag — do NOT show t
 [If today's session is Ride or Brick >90 min: 🍌 Nutrition — target {fuel_target_g_hr}g/hr (progress toward {nutrition_race}g/hr race target) · eat at 15 min then every 25 min]
 [If any travel block, race, or constraint from current-state.md "Travel & training blocks" starts within 5 days: 📌 [constraint name] in [N] days — [one-line impact]]
 [If open action is due within 3 days: 📌 [action] due [date]]
-{"[If sessions_this_week < 2 AND today is Wednesday or later: 🌡️ Heat bath due — [N] this week (target 2–3×)]" if heat_protocol else ""}
+{heat_card_line}
 
 [Question if applicable — one line]
 
@@ -339,6 +354,20 @@ def run_athlete(slug, athlete_cfg):
     # that the watchdog's maintenance-dose check owns heat visibility.
     heat_protocol = heat_lib.state(slug, profile)["in_protocol_window"]
 
+    # Pre-compute 0–100% acclimation score so the card shows it without Claude guessing.
+    heat_accl_pct = None
+    heat_accl_trend = ""
+    if heat_protocol and (adir / "heat-log.json").exists():
+        try:
+            _score_now = heat_lib.acclimation_score(slug)
+            _score_7d  = heat_lib.acclimation_score(slug, date.today() - timedelta(days=7))
+            _delta = _score_now - _score_7d
+            heat_accl_pct = round(_score_now)
+            if abs(_delta) > 5:
+                heat_accl_trend = " ↑" if _delta > 0 else " ↓"
+        except Exception:
+            pass
+
     try:
         rd = date.fromisoformat(race_date_str) if race_date_str else None
         days_to_race = (rd - date.today()).days if rd else "?"
@@ -428,7 +457,8 @@ def run_athlete(slug, athlete_cfg):
                            coaching_level=coaching_level, planned_block=planned_block,
                            cycle=cycle,
                            fuel_target_g_hr=_fuel_target_g_hr,
-                           nutrition_race=int(athlete_cfg.get("nutrition_target_g_hr") or 90))
+                           nutrition_race=int(athlete_cfg.get("nutrition_target_g_hr") or 90),
+                           heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend)
 
     with open(log_file, "a") as lf:
         result = claude_call.run_claude(
