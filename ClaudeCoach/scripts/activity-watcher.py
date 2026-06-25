@@ -206,6 +206,8 @@ Interval source: prefer Strava laps when they give a cleaner breakdown than ICU 
 
 Rules for ANALYSIS — each logical line must be a separate output line (no semicolons to merge lines):
 
+Lead with a one-sentence verdict (e.g. "Solid Z2. Form held to the end."). Then at most 2–3 supporting data points. Total under 200 characters. No headers, no bullet lists.
+
 Drift / decoupling: when computing HR drift or HR:power decoupling, exclude laps that fall within icu_warmup_time seconds from the start and icu_cooldown_time seconds from the end (both fields in activity_detail; if absent or zero, use all laps).
 
 RIDE:
