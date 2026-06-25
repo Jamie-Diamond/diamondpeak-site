@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Morning briefing — polls every 15 min from 06:00–09:00 via VM crontab. Sends once per athlete per day, after Garmin sleep data syncs."""
-import json, subprocess, sys, time
+import fcntl, json, subprocess, sys, time
 from datetime import datetime
 from datetime import date, timedelta
 from pathlib import Path
@@ -440,6 +440,18 @@ def run_athlete(slug, athlete_cfg):
     import re as _re
     m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
     output = m.group(1).strip() if m else ""
+
+    # Atomic sentinel claim: write BEFORE notifying so a second cron instance
+    # that slips past the 20-min process lock (slow multi-athlete run) can never
+    # also deliver. If Claude failed, skip — allow retry on next poll.
+    if result.returncode == 0:
+        _sl_lock_path = LOG_DIR / f"morning-sent-{slug}-{today_str}.flag.lock"
+        with open(_sl_lock_path, "w") as _sl_fd:
+            fcntl.flock(_sl_fd, fcntl.LOCK_EX)
+            if sentinel.exists():
+                return
+            sentinel.touch()
+
     sent = False
     if output:
         sent = notify(output, chat_id, slug=slug)
@@ -455,10 +467,6 @@ def run_athlete(slug, athlete_cfg):
     else:
         ops_log.alert("morning-checkin",
                       f"claude CLI exit {result.returncode} — no card generated", athlete=slug)
-    # Sentinel only once the card is actually delivered (or claude genuinely
-    # produced nothing) — a failed Telegram send must retry on the next poll.
-    if result.returncode == 0 and (sent or not output):
-        sentinel.touch()
 
 
 def main():
