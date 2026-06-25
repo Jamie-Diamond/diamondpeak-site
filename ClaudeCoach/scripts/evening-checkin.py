@@ -63,7 +63,7 @@ Priority: Case A > Case B > silence. Only ever send ONE message.
 
 OUTPUT FORMAT — follow exactly:
 - Cases A or B: wrap your single message in <notify>...</notify> tags. Nothing outside the tags.
-- Cases C or D: output nothing at all. No tags, no text, no punctuation. Absolute silence."""
+- Cases C or D: output exactly <notify>SKIP</notify>. No other text."""
 
 
 def notify(msg, chat_id, slug=""):
@@ -123,11 +123,14 @@ def run_athlete(slug, athlete_cfg):
     import re
     m = re.search(r'<notify>(.*?)</notify>', output, re.DOTALL | re.IGNORECASE)
     if m:
-        if notify(m.group(1).strip(), chat_id, slug=slug):
+        content = m.group(1).strip()
+        if content.upper() == "SKIP":
+            # Cases C/D — model confirmed nothing to send
+            ops_log.record_run("evening-checkin", athlete=slug, ok=True, detail="silent")
+        elif notify(content, chat_id, slug=slug):
             ops_log.record_run("evening-checkin", athlete=slug, ok=True, detail="sent")
     else:
-        # Cases C/D — silence is the designed outcome; record it so the digest
-        # can tell "ran and had nothing to say" from "never ran".
+        # No notify tag at all — treat as silent
         ops_log.record_run("evening-checkin", athlete=slug, ok=True, detail="silent")
 
 
