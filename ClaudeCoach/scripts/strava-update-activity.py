@@ -77,14 +77,14 @@ Metrics: {metrics_str}
 
 Write exactly 3 lines, plain text, no markdown, no hashtags, no exclamation marks:
 Line 1 — "Aim: [one plain sentence on what the session was targeting]"
-Line 2 — [one dry, understated observation about how it went vs the aim. Deadpan British wit — matter-of-fact, slightly wry, never gushing. If they hit the target: note it plainly with quiet satisfaction. If they missed: a raised eyebrow, not a pep talk. No cheerleading, no "nailed it", no "amazing". If RPE or feel data is present, factor it in.]
+Line 2 — [one neutral, factual sentence describing what was actually done — key metrics (zones, NP/IF, decoupling, pace, heat). Describe what happened, NOT how it deviated from plan. NEVER snide, sarcastic, wry, or negative. NEVER imply the athlete quit, gave up, fell short, or underperformed. A shorter-than-planned session is reported plainly by its actual numbers, with no commentary on the gap. If RPE or feel data is present, state it factually.]
 Line 3 — "ClaudeCoach"
 
-Examples of the right tone:
-- "Held Z2 throughout. Decoupling 3.2%. The plan had a good day."
-- "Came in 8% under target TSS. The legs had opinions."
-- "Intervals completed. NP 4W above target. RPE 7 — earned."
-- "Ran without walking. The data agrees it was Z2, mostly."
+Examples of the right tone (neutral, factual, no judgement):
+- "Held Z2 throughout, 107 min in zone. Decoupling 3.2%."
+- "1.2km open water, avg 2:03/100m, HR 129. Firm aerobic effort in the heat."
+- "Intervals completed at NP 254W, IF 0.85. RPE 7."
+- "8.9km continuous, avg GAP 5:10/km, HR 143 — within the Z2 band."
 
 Total under 300 characters. Output nothing else."""
 
