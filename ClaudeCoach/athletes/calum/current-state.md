@@ -3,14 +3,14 @@
 Last updated: 2026-06-25
 
 ## Recent context (auto-summary)
-- **Extended zero-compliance (4 weeks)**: no rides completed in weeks of 9, 16, 22 Jun; CTL collapsed from ~11 (late May) to 6.0 as of 25 Jun
-- **Week 22–28 Jun sessions**: Short endurance 35 min (Tue 23 Jun) — NOT completed; Long ride 195 min (Sat 28 Jun) — still upcoming and critical
-- **If Sat 28 Jun is also missed**: third consecutive week at 0 TSS; base-build effectively stalled
+- **Extended zero-compliance (4+ weeks)**: no rides completed in weeks of Jun 9, 16, 22; CTL collapsed from ~11 (late May) to 6.0 as of 25 Jun
+- **Week 22–28 Jun**: Short endurance 35 min (Tue 23 Jun) NOT completed; Long ride 195 min (Sat 28 Jun) still upcoming — critical to not miss
+- **If Sat 28 Jun also missed**: third consecutive week at 0 TSS; base-build stalled with 64 days to race
 - **Thu 25 Jun**: Rest day; CTL 6.0, ATL 0.4, Form +5.6; T5 fired (Sat 20 Jun Long Z2 + Tue 23 Jun short endurance both missed)
-- **Tour de Stations / Marmottes**: 65 days out as of 25 Jun; base-build window closing; race-day prep at serious risk
-- **Weight**: 93 kg (last confirmed; no weight responses to morning check-ins since early Jun)
+- **Tour de Stations / Marmottes**: 65 days out as of 25 Jun; base-build window closing rapidly; race-day prep at serious risk
+- **Weight**: 93 kg last confirmed; no weight responses to morning check-ins for several weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr target flagged repeatedly for weeks; not adopted; race-day risk on 6–8 hr mountain days
-- **Engagement**: not responding to morning messages or session-confirm prompts; extended low-engagement streak across 4 weeks
+- **Engagement**: not responding to morning messages or session-confirm prompts; extended low-engagement streak (4+ weeks)
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 
