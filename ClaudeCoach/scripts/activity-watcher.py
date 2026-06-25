@@ -211,6 +211,7 @@ Lead with a one-sentence verdict (e.g. "Solid Z2. Form held to the end."). Then 
 Drift / decoupling: when computing HR drift or HR:power decoupling, exclude laps that fall within icu_warmup_time seconds from the start and icu_cooldown_time seconds from the end (both fields in activity_detail; if absent or zero, use all laps).
 
 RIDE:
+- For Ride sessions: ALWAYS fetch power zone distribution (extended_metrics or icu_zone_times) before characterising intensity. Zone split (% time Z1–Z5) is the primary intensity descriptor. NP and IF are secondary and must be qualified against the zone split. Do not characterise a ride as Z2/easy unless >70% of time is in Z1–Z2 by power.
 - Structured (Strava laps show alternating hard/easy, or ICU >3 intervals): header line + one line per WORK interval.
   Header: NxDUR @ AVG W (X% FTP) · NP XXXw · IF X.XX
   Rep lines: Rep N: DUR · XXXw (X% FTP) · AVGbpm/MAXbpm
