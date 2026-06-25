@@ -414,10 +414,10 @@ def fitness_chart(payload, coaching_level="mid"):
     if ti is not None and today_dt is not None:
         ax.scatter([today_dt], [ctl[ti]], s=42, color=_CTL_COL, zorder=6, edgecolors="white", linewidths=1)
         ax1.scatter([today_dt], [atl[ti]], s=42, color=_ATL_COL, zorder=6, edgecolors="white", linewidths=1)
-        ax.annotate(f"CTL {ctl[ti]:.0f}", (today_dt, ctl[ti]), textcoords="offset points",
+        ax.annotate(f"{L['ctl']} {ctl[ti]:.0f}", (today_dt, ctl[ti]), textcoords="offset points",
                     xytext=(0, 10), ha="center", fontsize=10, fontweight="bold", color=_CTL_COL,
                     bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=7)
-        ax1.annotate(f"ATL {atl[ti]:.0f}", (today_dt, atl[ti]), textcoords="offset points",
+        ax1.annotate(f"{L['atl']} {atl[ti]:.0f}", (today_dt, atl[ti]), textcoords="offset points",
                      xytext=(0, 10), ha="center", fontsize=10, fontweight="bold", color=_ATL_COL,
                      bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=7)
 
@@ -425,7 +425,7 @@ def fitness_chart(payload, coaching_level="mid"):
     if ti is not None and ti - 7 >= 0:
         ramp = round(ctl[ti] - ctl[ti - 7], 1)
         rc = "#1d6840" if ramp <= 5 else ("#c98a1f" if ramp <= 8 else "#c0392b")
-        ax.text(0.015, 0.97, f"Ramp {ramp:+.1f} CTL/wk", transform=ax.transAxes,
+        ax.text(0.015, 0.97, f"Ramp {ramp:+.1f} {L['ctl']}/wk", transform=ax.transAxes,
                 ha="left", va="top", fontsize=10.5, fontweight="bold", color=rc,
                 bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=rc, alpha=0.9), zorder=8)
 
@@ -508,7 +508,7 @@ def form_chart(payload, coaching_level="mid"):
     if ti is not None and today_dt is not None:
         ax.scatter([today_dt], [tsb[ti]], s=42, color="#3c3c3c", zorder=6, edgecolors="white", linewidths=1)
         _tv = round(tsb[ti])
-        _tlabel = "TSB 0" if _tv == 0 else f"TSB {_tv:+d}"
+        _tlabel = f"{L['tsb_line']} 0" if _tv == 0 else f"{L['tsb_line']} {_tv:+d}"
         ax.annotate(_tlabel, (today_dt, tsb[ti]), textcoords="offset points", xytext=(0, 10),
                     ha="center", fontsize=10, fontweight="bold", color="#3c3c3c",
                     bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85), zorder=7)
@@ -678,7 +678,7 @@ def load_chart(payload, coaching_level="mid"):
 
 # ── Week calendar ─────────────────────────────────────────────────────────────
 
-def week_chart(events, title="Training week", week_start=None):
+def week_chart(events, title="Training week", week_start=None, coaching_level="mid"):
     """
     events: [{date, sport, duration_min, tss (optional), status, name}]
     Planned TSS shown as a dashed line; actual TSS as stacked bars by sport.
@@ -739,6 +739,7 @@ def week_chart(events, title="Training week", week_start=None):
     if not active and not any(planned_tss):
         return None
 
+    L = _lbl(coaching_level)
     fig, ax = plt.subplots(figsize=(7.6, 4.4))
     _style_ax(ax)
 
@@ -761,12 +762,12 @@ def week_chart(events, title="Training week", week_start=None):
         ax.plot(x, py, color=_col(BRAND_SECOND, 0.7), linewidth=1.6,
                 linestyle=(0, (5, 4)), zorder=4)
         ax.scatter(x, py, s=42, color=_col(BRAND_SECOND, 0.6),
-                   edgecolors="white", linewidths=1.0, zorder=5, label="Planned TSS")
+                   edgecolors="white", linewidths=1.0, zorder=5, label=f"Planned {L['load_tss']}")
 
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=11, color=BRAND_MUTED)
     ax.set_xlim(-0.6, 6.6)
-    ax.set_ylabel("TSS", fontsize=10.5, color=BRAND_MUTED)
+    ax.set_ylabel(L["load_tss"], fontsize=10.5, color=BRAND_MUTED)
     ax.set_ylim(0, max(float(bottom.max()), max(planned_tss + [0]), 1) * 1.12)
     ax.set_title(title, fontsize=12.5, fontweight="bold", color=BRAND_INK)
     ax.legend(loc="upper right", frameon=False, fontsize=9.5, ncol=2,
@@ -1141,11 +1142,12 @@ def compliance_chart(payload, coaching_level="mid"):
     ax.bar(x - w / 2, planned, width=w, color=(0.47, 0.47, 0.47, 0.26), zorder=2, label="Planned")
     ax.bar(x + w / 2, actual,  width=w, color=[_col(c, 0.9) for c in actual_bg], zorder=3)
 
+    L = _lbl(coaching_level)
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=9, color=BRAND_MUTED)
-    ax.set_ylabel("TSS", fontsize=10.5, color=BRAND_MUTED)
+    ax.set_ylabel(L["load_tss"], fontsize=10.5, color=BRAND_MUTED)
     ax.set_ylim(0, max(planned + actual + [1]) * 1.12)
-    ax.set_title("Compliance — planned vs actual TSS", fontsize=12.5, fontweight="bold", color=BRAND_INK)
+    ax.set_title(f"Compliance — planned vs actual {L['load_tss']}", fontsize=12.5, fontweight="bold", color=BRAND_INK)
 
     handles = [
         mpatches.Patch(facecolor=(0.47, 0.47, 0.47, 0.28), label="Planned"),
