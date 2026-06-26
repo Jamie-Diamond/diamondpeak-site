@@ -5,12 +5,12 @@ Last updated: 2026-06-26
 ## Recent context (auto-summary)
 - **Last ride**: Geneva Road Cycling 2026-06-01 (81 min, Z2) — only ride in ~8 weeks; no rides since
 - **Missed sessions (Jun 10 – Jun 23)**: Sweetspot Intro 85 min (10 Jun), Long Z2 2h 45min (13 Jun), Sweetspot Build 90 min (17 Jun), Long Z2 3h (20 Jun), Short endurance 35 min (23 Jun) — five consecutive misses confirmed
-- **Week 22–28 Jun**: Short endurance (Tue 23 Jun) NOT completed; Long ride 195 min (Sat 28 Jun) still upcoming — most critical session of the block; would be first ride in ~4 weeks
+- **Week 22–28 Jun**: Short endurance (Tue 23 Jun) NOT completed; Long ride 195 min (Sat 28 Jun) in 2 days — most critical session remaining in this block; would be first ride in ~4 weeks if completed
 - **CTL/ATL/Form** as of 26 Jun: 5.9 / 0.4 / +5.5 — CTL collapsed from ~11 in late May; near-zero training load
-- **Tour de Stations / Marmottes**: 64 days out (26 Jun); base-build window critically compressed; Sat 28 Jun is make-or-break for the block
+- **Tour de Stations / Marmottes**: 64 days out (26 Jun); base-build window critically compressed; Sat 28 Jun is make-or-break for this block
 - **Compliance**: T3 Underload and T5 firing every week; weeks of Jun 9, 16, and 22 all 0%; week of Jun 7 only 41%; activity watcher timed out Jun 16
 - **Weight**: 93 kg last confirmed; not responding to morning weight check-ins for ~6 weeks
-- **Fuelling**: 0 g/hr current habit; 60 g/hr target flagged repeatedly; not adopted; race-day risk on 6–8 hr mountain days
+- **Fuelling**: 0 g/hr current habit; 60 g/hr target flagged repeatedly across multiple weeks; not adopted; race-day risk on 6–8 hr mountain days
 - **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; ~6-week low-engagement streak
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
