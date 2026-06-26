@@ -394,6 +394,10 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-25 — T9 (Tier 2):** Two overdue open actions — suppression lapsed (last flagged Jun 21, 4 days ago): (1) Book Precision Hydration sweat-sodium test — due 2026-05-31, now 25 days overdue, status pending. (2) TT bike fit appointment — due 2026-05-31, now 25 days overdue, status pending. France camp runs Jun 24–29; next UK window Jul 2–9. Aero helmet (due Jun 30) suppressed — flagged Jun 23 (2 days ago).
 
+- **2026-06-26 — T3 (Tier 1):** HRV trend −15.6% over 7 days (HRV 45 on 2026-06-19 → 38 on 2026-06-25; today's HRV not yet synced). RHR 58 on 2026-06-26 (above 50–54 baseline) — corroborating signal. Multi-signal convergence: HRV + elevated RHR. Prior Jun 22 entry showed −23.9% (46→35); signal materially changed as 7-day window shifted and HRV briefly recovered to 50 on Jun 23 before settling back to 38 on Jun 25 after the hottest session to date (37.2°C, 119+22 TSS). Context: France camp day 3 (Fri 26 Jun), high heat, 183 TSS long ride today at reduced IF (R7 heat pacing). No intensity sessions impacted — today is Z2 only. Monitor HRV Sat 27 before prescribing Sunday long run intensity.
+
+- **2026-06-26 — T6 (Tier 1):** Aerobic decoupling 6.07% on 2026-06-25 "Morning Ride" (NP 206W, IF 0.69, 151 min, avg temp 37.2°C ERA5 Var coast, 740m gain, VI 1.36). New activity — not in prior T6 entry (last flagged Jun 20 for Jun 19 ride, 6 days ago). Context: hottest session to date (32–35.5°C actual ambient per ERA5), hilly terrain (740m / two cols), high VI 1.36 — terrain and heat are the primary drivers, not aerobic ceiling failure. Running trend: Jun 19 5.10%, Jun 25 6.07% — two consecutive Z2 rides above cap. Fri 26 Jun long Z2 ride (prescribed IF 0.633 / NP ≤202W under R7 heat pacing) is the next diagnostic — check decoupling once synced. If >5% persists in a cooler, flatter session, flag aerobic durability gap for investigation.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
