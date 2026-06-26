@@ -16,19 +16,18 @@
 
 ## Recent context (auto-summary)
 
-- **Thu 25 Jun PM — OW swim (COMPLETED, firm aerobic — NOT easy):** 1,202m · 25 min · 200m splits = Garmin auto laps, not marked reps (rule 84). Session avg HR 129 masked effort; per-rep peaks to 147/156 (rule 83: judge OW effort from per-rep HR). ~51 TSS. Strava: fixed from "I quit" (snide/plan-gap bug) to neutral+factual.
-- **Thu 25 Jun AM — Endurance ride + climbs (COMPLETED, NOT clean Z2):** 151 min · NP 206W · IF 0.69 · VI 1.36 · 740m gain · 119 TSS (+29% vs 92 planned). Zones: 71% Z1–Z2 / 14% Z3 / 12% Z4 / 3% Z5 (rule 71: zone-first verdict). ERA5 32–35.5°C (hottest session to date). Fuel: 216g carbs (86g/hr) · 2.5L (~1,000ml/hr). Strava: "hilly route" (not "camp route").
-- **Wed 24 Jun — Z2 run (COMPLETED, EASY):** 8.91 km · 51 TSS · GAP 5:10/km · avg HR 143 vs 150 ceiling · ERA5 31–32°C. Ankle 3/10 peak first half → 1–2/10 second half. Next: 5:15–5:20 GAP in heat.
-- **Tue 23 Jun — Speed/technique swim (COMPLETED):** 2,000m · 52 TSS · paddles + CSS reps avg 1:38 vs TGT 1:36–1:38.
-- **Mon 22 Jun — Easy run (COMPLETED, EASY):** 7.62 km · 49 TSS · GAP 4:53/km · avg HR 141 vs 146 ceiling · ERA5 ~28°C.
-- **Ankle:** ATFL + CFL partial tear (physio confirmed ultrasound). Latest: 3/10 peak Wed 24 Jun France run, settled 1–2/10. Protocol: ≤5/10 OK if resolves by next AM; >5/10 = stop.
-- **Heat acclimation:** Live 39% ↑ (heat_accl.py). 5 exposures ≥28°C since 21 Jun; hottest 35.5°C. Climbing daily. Error: ClaudeCoach hand-waved 65–70% instead of running tool (rule 82 corrects this).
-- **Holiday remaining (France, to 29 Jun):** Fri 26 long ride 4h pure Z2 (183 TSS) · Sat 27 endurance+climbs 2h IF ~0.71 (~105 TSS — extended by intensity not time) · Sun 28 long run ~15 km (~92 TSS) + OW swim (~25 TSS). Projected week ~727 TSS (genuine build vs 608 floor; heat undersells true stress).
-- **Strava description fixes 25 Jun:** 401 CLI error guard deployed (error strings can no longer land on Strava). All three activities verified neutral+factual. "I quit" and all snide/sarcasm removed from all prompt levels.
-- **New rules confirmed 25 Jun:** No "camp" = holiday/trip (rule 86) · TSS compare OK, neutral only (rule 87) · OW effort = per-rep HR not session avg (rule 83) · OW 200m auto laps ≠ marked reps (rule 84).
+- **Fri 26 Jun — Long ride 4h Z2 (PLANNED, heat-modified, today):** 240 min · 174 Load · ERA5 ~30°C Var coast · NP ceiling 202W (IF 0.633), HR cap 140. Watchdog R7 heat pacing fired. CTL 90 · ATL 109 · TSB −19.
+- **Thu 25 Jun PM — OW swim (COMPLETED, firm aerobic — NOT easy):** 1,202m · 25 min · 200m splits = Garmin auto laps, NOT marked reps (rule 84). Per-rep HR peaks to 147–156 — judge OW effort from per-rep HR, not session avg 129 (rule 83). ~51 TSS. Strava fixed from "I quit" to neutral+factual.
+- **Thu 25 Jun AM — Endurance ride + climbs (COMPLETED, NOT clean Z2):** 151 min · NP 206W · IF 0.69 · VI 1.36 · 740m gain · 119 TSS (+29% vs 92 planned). Zones: 71% Z1–Z2 / 14% Z3 / 12% Z4 / 3% Z5 (rule 71: zone-first verdict). ERA5 32–35.5°C (hottest session to date). Fuel: 216g (86g/hr) · 2.5L (~1,000ml/hr).
+- **Wed 24 Jun — Z2 run (COMPLETED, EASY):** 8.91 km · 51 TSS · GAP 5:10/km · avg HR 143 · ERA5 31–32°C. Ankle 3/10 peak → 1–2/10 settled.
+- **Tue 23 Jun — Speed/technique swim (COMPLETED):** 2,000m · paddles + CSS reps avg 1:38 vs TGT 1:36–1:38.
+- **Ankle:** ATFL + CFL partial tear (ultrasound confirmed). Latest: 3/10 peak Thu 25 Jun France run, settled 1–2/10. Protocol: ≤5/10 OK if resolves by next AM; >5/10 = stop.
+- **Heat acclimation:** Live 39% ↑ (heat_accl.py). 5 exposures ≥28°C since 21 Jun; hottest 35.5°C (Thu 25 Jun). Climbing daily with France heat.
+- **France holiday remaining (to 29 Jun):** Fri 26 long ride 4h pure Z2 (today, heat-modified 174 TSS) · Sat 27 endurance+climbs 2h IF ~0.71 (~105 TSS) · Sun 28 long run ~15km (~92 TSS) + OW swim (~25 TSS). Projected week ~727 TSS (genuine build vs 608 floor; heat undersells true stress).
+- **Terminology (confirmed 25 Jun):** France trip = holiday with training, NOT a "camp". TSS vs target comparisons OK stated neutrally — never sarcastically (rules 86, 87).
+- **Strava description status:** 401 CLI error guard deployed. All snide/sarcasm removed from all prompt levels. Neutral+factual across recent activities. CLI auth token for auto-descriptions may need refresh on VM (401 hit on Thu description gen).
 - **Weight:** ~83 kg · race target 79 kg (19 Sep 2026) · ~4 kg to lose.
-- **CTL/form (25 Jun):** CTL 86 · ATL 91 · TSB −5. HRV 41 (24 Jun). Sleep 5.05h. IM Italy 86 days.
-- **Bug list (25 Jun):** Open: #5 replan guard, #8 bug list maintenance, #11 voice reply, #14 run auto-debrief too long. Deployed: 401 guard, heat tracker #12 (07:08). Rules-corrected: #6→77, #7→74, #9→75, #10→76, #13→81, heat score→82, OW swim effort→83, OW auto laps→84.
+- **CTL/form (26 Jun):** CTL 90 · ATL 109 · TSB −19. HRV 38 (25 Jun). Sleep 7.28h (25 Jun). IM Italy 85 days.
 - **Open actions (overdue):** PH sweat-sodium test · TT bike fit · Running FTP 500W in Intervals.icu.
 
 ## Travel & training blocks (logged 2026-05-10)

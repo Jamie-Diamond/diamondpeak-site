@@ -4,21 +4,21 @@ Last updated: 2026-06-26
 
 ## Recent context (auto-summary)
 
-- **Base wk 8 plan (~479 TSS, confirmed custom plan)**: KB Mon ✓ · Sweetspot 3×15 Tue ✓ · Rest Wed ✓ · Z2 bike Thu ✓ · Sea swim Thu — unconfirmed (ClaudeCoach asked at session end, no reply received) · Fri Z2 2.5hr · Sat Z2 2.5hr + brick · Sun long run 90min
+- **Base wk 8 plan (~479 TSS, confirmed custom plan)**: KB Mon ✓ · Sweetspot 3×15 Tue ✓ · Rest Wed ✓ · Sea swim + Z2 bike Thu ✓ (sea swim unconfirmed) · Fri Z2 2.5hr (today) · Sat Z2 2.5hr + brick · Sun long run 90min
 - **Thu 25 Jun** — Bike 132min/53km/653m with Jamie (no power meter; extreme heat 35–41°C). HR avg 157/max 191bpm; 126 TSS (+50% vs plan). Nutrition: 1 honey gel + 1/3 bag Haribo (~47g total, ~21g/hr — well below 70g/hr race target). RPE not logged. Sea swim status unconfirmed — ask at next check-in.
 - **Wed 24 Jun** — Rest day. Sleep 5.2h (short). HRV recovering (65→67 — best in 2+ weeks).
-- **Tue 23 Jun** — Sweetspot 3×15 outside, 90min cap. NP 162W (83% FTP), IF 0.83, HR 153/181, 92 TSS, RPE 6. ICU auto-synced wrong session (Bike Z2 2hr) — corrected to custom plan per rules.
+- **Tue 23 Jun** — Sweetspot 3×15 outside, 90min cap. NP 162W (83% FTP), IF 0.83, HR 153/181, 92 TSS, RPE 6. ICU auto-synced wrong session — corrected to custom plan per rules.
 - **Mon 22 Jun** — Kettlebells 45min · 28 TSS · RPE 7.
 - **Sun 21 Jun** — Long ride 65.9km · NP 138W (71% FTP) · decoupling −1.0% (excellent) · 112 TSS · nutrition ~33g/hr.
 - **Fuelling gap (persistent)**: Thu ride ~21g/hr; Sun 21 ride ~33g/hr — both well below 70g/hr race target. Nudge on every long session.
-- **RPE scale**: explained to Kathryn this session (Jun 25) — she was unfamiliar with it. Now knows 1–10 scale: 1–2=recovery, 3–4=Z2, 5–6=sweetspot/tempo, 7–8=threshold, 9=VO2, 10=max.
-- **Phase confusion (resolved Jun 25)**: ClaudeCoach incorrectly stated Build starts next week using static notes — live ICU engine says next week is Base wk 8 (last base week). Build expected w/c 29 Jun. Always use live ICU engine, never static calendar.
+- **RPE scale**: explained to Kathryn (Jun 25) — she was unfamiliar with it. Now knows 1–10 scale: 1–2=recovery, 3–4=Z2, 5–6=sweetspot/tempo, 7–8=threshold, 9=VO2, 10=max.
+- **Phase**: Base wk 8 (last base week). Build expected w/c 29 Jun per live ICU engine. Phase confusion resolved Jun 25 — always use live ICU engine, never static calendar.
 - **Menstrual phase**: luteal from 24 Jun, runs ~24 Jun–7 Jul; RPE-led, higher core temp; stacks with 25–35°C travel heat through Jun 28. All remaining travel sessions RPE-led.
-- **Travel block Jun 22–28 active**: sea swims Thu–Sun (open-water aerobic, no CSS targets); no cycle Sunday; no time cap Thu–Sat. Remaining: Fri Z2 2.5hr, Sat Z2 2.5hr + brick, Sun long run 90min.
+- **Travel block Jun 22–28 active**: sea swims Thu–Sun (open-water aerobic, no CSS targets); no cycle Sunday. Remaining: Fri Z2 2.5hr (today), Sat Z2 2.5hr + brick, Sun long run 90min.
 - **Sleep**: patchy — Jun 18=6.73h, Jun 19=6.02h, Jun 21=6.65h, Jun 24=5.20h (4 nights <7h in rolling window). HRV recovering (Jun 24=67 — best in 2+ weeks). Monitor into build phase w/c 29 Jun.
-- **Fitness**: ATL 77, CTL 60, Form −17 (Jun 26). Build phase expected w/c 29 Jun per live ICU engine.
+- **Fitness**: ATL 77, CTL 60, Form −17 (Jun 26). Build phase starts w/c 29 Jun.
 - **Weight**: not recently logged.
-- **Open**: sea swim Thu 25 unconfirmed (ask next check-in); fuelling gap (nudge each long session); sleep monitoring through travel block and into build; heat acclimatisation overdue (outdoor travel heat counts per rule).
+- **Open**: sea swim Thu 25 unconfirmed (ask next check-in); fuelling gap (nudge each long session); sleep monitoring through travel and into build; heat acclimatisation overdue (outdoor travel heat counts per rule).
 
 ## Injuries / Niggles
 None
