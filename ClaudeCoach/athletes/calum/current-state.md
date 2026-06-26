@@ -1,6 +1,6 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-06-25
+Last updated: 2026-06-26
 
 ## Recent context (auto-summary)
 - **Extended zero-compliance (4+ weeks)**: no rides completed in weeks of Jun 9, 16, 22; CTL collapsed from ~11 (late May) to 6.0 as of 25 Jun
@@ -65,3 +65,4 @@ No
 | 2026-06-23 | 6.3 | 0.5 | +5.8 | Short endurance 35 min — NOT completed (ICU atlLoad=0.0; corrected from projected values). No HRV or sleep data. |
 | 2026-06-24 | 6.1 | 0.5 | +5.7 | Rest day — no session planned in calendar. No HRV or sleep data. (Values corrected from prior projection.) |
 | 2026-06-25 | 6.0 | 0.4 | +5.6 | Rest day — no session planned. T5: 2 missed sessions in rolling 7d — 2026-06-20 Long Z2 3h, 2026-06-23 Short endurance 35 min. Jun 23 miss is new vs prior T5 (2026-06-21). No HRV or sleep data. |
+| 2026-06-26 | 5.9 | 0.4 | +5.5 | Rest day — no session planned in calendar. No HRV or sleep data. |
