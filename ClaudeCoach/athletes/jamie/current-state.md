@@ -16,18 +16,17 @@
 
 ## Recent context (auto-summary)
 
-- **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 Load. NP 197W · IF 0.66 · 1,673m gain · 73% Z1–Z2. Whole-ride decoupling 22.1% = descent/coasting artifact (discard); pedalling-only 2.6% = clean aerobic control. ERA5 ~30°C. Big col: 253W @ 155 HR (efficient). Fuel: 277g (61g/hr) · 4.05L (890ml/hr). Strava updated: pedalling-only decoupling + heat.
-- **Thu 25 Jun PM — OW swim (COMPLETED, firm aerobic — NOT easy):** 1,202m · 25 min. 200m splits = Garmin auto-distance markers, NOT marked reps (rule 84). Per-rep HR peaked 147–156 — NOT easy (rule 83). ~22 TSS.
+- **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 TSS. NP 197W · IF 0.66 · 1,673m gain · 73% Z1–Z2. Pedalling-only decoupling 2.6% (whole-ride 22.1% = descent/coasting artifact, discard). ERA5 ~30°C. Big col 253W @ 155 HR — efficient. Fuel: 277g carbs (61g/hr) · 4.05L (890ml/hr). Strava updated.
+- **Thu 25 Jun PM — OW swim (COMPLETED, firm aerobic — NOT easy):** 1,202m · 25 min. 200m splits = Garmin auto-distance markers, NOT marked reps. Per-rep HR peaked 147–156. ~22 TSS.
 - **Thu 25 Jun AM — Endurance ride + climbs (COMPLETED, NOT clean Z2):** 151 min · NP 206W · IF 0.69 · VI 1.36 · 740m gain · 119 TSS (+29% vs 92 planned). Zones: 71% Z1–Z2 / 14% Z3 / 12% Z4 / 3% Z5. ERA5 32–35.5°C (hottest session to date). Fuel: 216g (86g/hr) · 2.5L (~1,000ml/hr).
 - **Wed 24 Jun — Z2 run (COMPLETED, EASY):** 8.91 km · GAP 5:10/km · avg HR 143 · ERA5 31–32°C. Ankle 3/10 peak → 1–2/10 settled.
 - **Tue 23 Jun — Speed/technique swim (COMPLETED):** 2,000m · paddles + CSS reps avg 1:38 vs TGT 1:36–1:38.
 - **Ankle:** ATFL + CFL partial tear (ultrasound confirmed). Latest: 3/10 peak Wed 24 Jun run, settled 1–2/10. Protocol: ≤5/10 OK if resolves by next AM; >5/10 = stop.
-- **Heat acclimation:** Live 39% ↑ (heat_accl.py, confirmed 25 Jun). 5+ exposures ≥28°C since 21 Jun; col peaks ~36–37°C ERA5. Climbing fast through France holiday.
-- **Week to date (Mon–Fri): 490 TSS** (Run 49 + Swim 52 + Run 51 + Ride 119 + OWS 22 + Ride 197). Projected week ~675 (Sat ~95 + Sun run ~65 + Sun swim ~25). Above maintenance floor 608 but ~75 below build target. Jamie confirmed: this must be a genuine build week, not maintenance.
-- **France holiday remaining (to 29 Jun):** Sat 27 endurance+climbs 2h IF ~0.71 (~95 TSS, NOT pure Z2) · Sun 28 long run ~15km (~65 TSS) + OW swim (~25 TSS). Rides keep overshooting — if Sat runs hilly real TSS lands higher.
-- **⚠️ Open: Saturday ICU calendar entry tagged at 184 TSS** (bogus — should be ~95 for 2h IF ~0.71). Will distort Sat morning card unless corrected.
-- **Strava auto-descriptions:** snide/witty tone fully removed. 401 error guard deployed. CLI auth token may need refresh on VM for rich descriptions.
-- **Terminology (rules 86/87):** France trip = holiday with training, NOT "camp". TSS vs target comparisons OK stated neutrally — never sarcastically.
+- **Heat acclimation:** Live 39% ↑ (heat_accl.py). 5+ exposures ≥28°C since 21 Jun; col peaks ~36–37°C ERA5. Climbing through France holiday.
+- **Week to date (Mon–Fri): 490 TSS** (Run 49 + Swim 52 + Run 51 + Ride 119 + OWS 22 + Ride 197). Projected ~675. Maintenance floor 608, build target ~752. Jamie confirmed this must be a genuine build week.
+- **France holiday remaining (to 29 Jun):** Sat 27 — 2h endurance+climbs IF ~0.71 (~95 TSS, same duration extended through intensity not time); Sun 28 — long run ~15km (~65 TSS) + OW swim (~25 TSS). Rides keep overshooting on hills — real total likely lands higher.
+- **⚠️ Open: Sat ICU calendar entry tagged at 184 TSS** (bogus — should be ~95 for 2h IF ~0.71). Distorts Sat morning card if not corrected.
+- **Strava auto-descriptions:** snide/witty tone fully removed. 401 error guard deployed. CLI auth token may need refresh on VM for rich auto-descriptions.
 - **Weight:** ~83 kg · race target 79 kg (19 Sep 2026) · ~4 kg to lose.
 - **CTL/form (26 Jun PM est.):** CTL ~91 · ATL ~111 · TSB ~−20. HRV 38 (25 Jun). Sleep 7.28h (25 Jun). IM Italy 85 days.
 - **Open actions (overdue):** PH sweat-sodium test · TT bike fit · Running FTP 500W in Intervals.icu.
