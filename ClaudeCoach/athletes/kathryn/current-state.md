@@ -4,20 +4,19 @@ Last updated: 2026-06-26
 
 ## Recent context (auto-summary)
 
-- **Base wk 8 plan (last base week)**: KB Mon ✓ · Sweetspot 3×15 Tue ✓ · Rest Wed ✓ · Bike + sea swim Thu ✓ (sea swim unconfirmed) · Ride + brick Fri ✓ · Sat Z2 2.5hr + brick · Sun long run 90min
-- **Fri 26 Jun — double session**: (1) Ride 132min/52km/882m, avg 148/max 182bpm, 82% Z1-Z2 HR, ~113 Load, no power meter, 32-38°C heat (Sainte-Maxime). Nutrition not answered — ask. (2) Brick run: 6.01km, GAP 5:26/km, avg 182/max 197bpm, Load 47, 89% Z3+ HR (heat + fatigue); cardiac drift 167→191bpm across 6 splits. RPE not logged — ask.
-- **Thu 25 Jun** — Bike 132min/53km/653m with Jamie (35–41°C heat), no power meter. HR avg 157/max 191bpm; 126 Load (+50% vs plan). Nutrition: 1 honey gel + 1/3 bag Haribo (~21g/hr). Sea swim unconfirmed — ask next check-in.
-- **Wed 24 Jun** — Rest day. Sleep 5.2h (short). HRV 67 — best in 2+ weeks.
-- **Tue 23 Jun** — Sweetspot 3×15 outside (90min cap). NP 162W (83% FTP), IF 0.83, 92 TSS, RPE 6.
+- **Fri 26 Jun — double session (completed)**: (1) Grimaud Cycling: 2hr22min, 52km, 882m, avg 148/max 182bpm, 82% Z1-Z2 HR, ~113 Load, no power meter, 32–38°C heat. Nutrition not answered — ask. (2) Grimaud Running (brick): 6.01km, GAP 5:26/km, avg 182/max 197bpm, Load 47, 89% Z3+ HR; drift 167→191bpm (heat + fatigue). RPE not logged — ask.
+- **Thu 25 Jun** — Sainte-Maxime Cycling with Jamie: 132min, 53km, 653m, avg 157/max 191bpm, 35–41°C heat, ~126 Load. Nutrition: 1 honey gel + 1/3 bag Haribo (~21g/hr). Sea swim status still unconfirmed.
+- **Wed 24 Jun** — Rest day. Sleep 5.2h. HRV 67 — best in 2+ weeks.
+- **Tue 23 Jun** — Sweetspot 3×15 outside (90min cap by Kathryn). NP 162W (83% FTP), IF 0.83, 92 TSS, RPE 6. ICU had wrong session loaded (Bike Z2 2hr); confirmed Sweetspot 3×15 took precedence.
 - **Mon 22 Jun** — Kettlebells 45min · 28 TSS · RPE 7.
-- **Fuelling gap (persistent)**: Fri 26 ride nutrition not answered; Thu 25 ~21g/hr; recent avg ~33g/hr — all well below 70g/hr race target. Nudge every long session.
-- **Phase**: Base wk 8 final days. Build starts w/c 29 Jun per live ICU engine. CTL ~60 base target met. Always use live ICU engine — never static calendar.
-- **Menstrual phase**: Luteal from 24 Jun, runs ~24 Jun–7 Jul. Higher RPE, higher core temp; stacks with heat. RPE-led for all remaining travel sessions.
-- **Travel block Jun 22–28**: Ends Sun 28. Remaining: Sat Z2 2.5hr + brick, Sun long run 90min. No cycle Sunday.
-- **Sleep**: Patchy through travel — 4 nights <7h (Jun 18, 19, 21, 24). HRV recovering (Jun 24=67, Jun 25=58). Monitor into build phase w/c 29 Jun.
-- **Fitness**: ATL 77+, CTL 60, Form heavily negative after Fri's double session. Base CTL target met. Build starts w/c 29 Jun.
+- **Fuelling gap (persistent)**: Fri 26 ride nutrition unanswered; Thu 25 ~21g/hr; recent avg ~33g/hr — all well below 70g/hr race target. Nudge every long session.
+- **Phase**: Build starts w/c 29 Jun per live ICU engine. CTL ~60 base target met. Always use live ICU engine — never static calendar.
+- **Menstrual phase**: Luteal from 24 Jun, runs ~24 Jun–7 Jul. Higher RPE, higher core temp; stacks with heat. All remaining travel sessions RPE-led.
+- **Travel block Jun 22–28**: Ends Sun 28. Remaining: Sat 27 Z2 2hr + 20min brick run; Sun 28 long run 90min (no cycling).
+- **Sleep**: Patchy — 4 nights <7h (Jun 18, 19, 21, 24). HRV Jun 24=67, Jun 25=58 (recovering). Monitor into build w/c 29 Jun.
+- **Fitness**: CTL ~60, Form heavily negative after double session. Base target met; build phase begins Mon 29 Jun.
 - **Weight**: Not recently logged.
-- **Open**: Sea swim Thu 25 unconfirmed; Fri 26 ride nutrition unanswered; Fri 26 brick RPE not logged; heat acclimatisation overdue.
+- **Open**: Sea swim Thu 25 unconfirmed; Fri 26 ride nutrition unanswered; Fri 26 brick RPE not logged; heat acclimatisation overdue (25+ days).
 
 ## Injuries / Niggles
 None
