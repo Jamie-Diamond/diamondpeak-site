@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-06-25
+## Last updated: 2026-06-26
 
 ## Recent context (auto-summary)
 
@@ -133,6 +133,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 - [Location]: [pain 1–10] / [trend: stable / improving / worsening] / [action]
 
 ## Off-plan in last 7 days
+
+- **2026-06-26 MODIFIED** — Long ride 4h Z2 (bike_z2): R7 heat pacing fired. CTL 90 (Fitness), ATL 109 (Fatigue), TSB −19 (Form). HRV trend −10.0% (latest 38 on 25 Jun; trailing, correct); sleep 7.28h carried (25 Jun, most recent synced). Last RPE 8. Ankle 3/10 (cycling unaffected). Heat: ~30°C ERA5 Var coast → IF 0.65 → 0.633 (−2.6%), NP ceiling 202W, HR cap 140, prescribed TSS ~174. Duration unchanged 240 min. ICU event 118737272 pushed.
 
 - **2026-06-22 GO** — Easy run 40min (run_easy): no rules fired, execute as planned. CTL 87 (Fitness), ATL 101 (Fatigue), TSB −14 (Form). HRV trend −16.5% (latest 35 on 21 Jun; today not synced at 05:00 — trailing trend, correct); sleep 6.63h carried (21 Jun, most recent synced). Last RPE 8. Ankle 2/10, quality_cleared false — within physio protocol (≤5/10 acceptable); stop-if >5/10 in force. Session: continuous Z2 easy run 40 min, HR cap 146, GAP ~5:00–5:30/km, 68–76% run pace (IF ~0.72).
 
