@@ -16,20 +16,19 @@
 
 ## Recent context (auto-summary)
 
-- **Sat 27 Jun — Z2 ride 2h (PRESCRIBED — GO, no rules fired):** 120 min, 60–75% FTP (178–223W), NP target ~211W (IF 0.71), TSS ~101. HRV trend -18.6% (34 on 26 Jun) — notable but below blocking threshold; Z2 session safe. ATL 108 / CTL 90 / TSB −18 (camp load block). Sleep 7.46h (carried from 26 Jun). Ankle 3/10 — bike, no concern. France (Var) ambient likely ~28–35°C based on recent ERA5 — monitor HR ceiling 155; reduce duration if HR drifts above ceiling.
-- **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 TSS · NP 197W · IF 0.66 · 1,673m gain · 73% Z1–Z2. Pedalling-only decoupling 2.6% (whole-ride 22.1% = descent/coasting artifact — discard). ERA5 ~30°C (Var coast). Big col 253W @ 155 HR — efficient. Fuel: 277g carbs (61g/hr) · 4.05L (890ml/hr). Strava description verified: neutral, factual, decoupling corrected to 2.6% pedalling-only.
-- **Thu 25 Jun PM — OW swim (COMPLETED, firm aerobic — NOT easy):** 1,202m · 25 min. 200m auto-laps = Garmin distance markers, NOT athlete-marked reps; do not analyse as discrete intervals. Per-rep HR peaked 147–156 (session avg 129 misleads). ~22 TSS.
+- **Sat 27 Jun — Z2 ride 2h (PRESCRIBED — morning card sent):** 120 min endurance+climbs IF ~0.71 (~95 TSS). HRV trend −18.6% (34 on 26 Jun) — below blocking threshold; Z2 safe. ATL 111 / CTL 91 / TSB −20. ERA5 ~30°C (Var); HR ceiling 155. Ankle 3/10 — bike, no concern.
+- **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 TSS · NP 197W · IF 0.66 · 1,673m gain · 73% Z1–Z2. Pedalling-only decoupling 2.6% (whole-ride 22.1% = descent/coasting artifact — discard). ERA5 ~30°C (Var coast). Big col 253W @ 155 HR — efficient. Fuel: 277g carbs (61g/hr) · 4.05L (890ml/hr). Strava description verified.
+- **Thu 25 Jun PM — OW swim (COMPLETED, firm aerobic — NOT easy):** 1,202m · 25 min. 200m splits = Garmin auto-laps only, NOT athlete-marked reps. Per-rep HR peaked 147–156 (session avg 129 misleads). ~22 TSS.
 - **Thu 25 Jun AM — Endurance ride + climbs (COMPLETED, NOT clean Z2):** 151 min · NP 206W · IF 0.69 · VI 1.36 · 119 TSS. Zones: 71% Z1–Z2 / 14% Z3 / 12% Z4 / 3% Z5. ERA5 32–35.5°C (hottest session to date). Fuel: 216g (86g/hr) · 2.5L (~1,000ml/hr).
 - **Wed 24 Jun — Z2 run (COMPLETED, EASY):** 8.91 km · GAP 5:10/km · avg HR 143 · ERA5 31–32°C. Ankle 3/10 peak → 1–2/10 settled.
-- **Tue 23 Jun — Speed/technique swim (COMPLETED):** 2,000m · paddles + CSS reps avg 1:38 vs TGT 1:36–1:38.
 - **Ankle:** ATFL + CFL partial tear (ultrasound confirmed). Latest: 3/10 peak Wed 24 Jun run, settled 1–2/10. Protocol: ≤5/10 OK if resolves by next AM; >5/10 = stop.
 - **Heat acclimation:** Live 39% ↑ (heat_accl.py). 5+ exposures ≥28°C since 21 Jun; France holiday driving it up fast. Always run heat_accl.py — never estimate the %.
-- **Week to date (Mon–Fri): 490 TSS** (Run 49 + Swim 52 + Run 51 + Ride 119 + OWS 22 + Ride 197). Projected ~675. Maintenance floor 608, build target ~752. Jamie confirmed must be a genuine build week, not maintenance.
-- **France holiday remaining (to 29 Jun):** Sat 27 — 2h endurance+climbs IF ~0.71 (~95 TSS, intensity extended not time); Sun 28 — long run ~15km (~65 TSS) + OW swim (~25 TSS). Rides keep overshooting on hills — real total likely lands above 675.
-- **⚠️ Open: Sat ICU calendar entry tagged at 184 TSS** (bogus — should be ~95 for 2h IF ~0.71). Fix before Sat morning card fires or it will distort the readiness prompt.
-- **Strava auto-descriptions — fixes deployed 26 Jun:** "British wit / deadpan" prompt removed (Jamie said unprofessional); 401 error guard deployed (CLI errors can no longer reach Strava); "holiday" replaces "camp"; last 3 activities (run 24 Jun, ride 25 Jun, OWS 25 Jun) verified compliant. CLI auth token may still need VM refresh for rich auto-descriptions.
+- **Week to date (Mon–Fri): 490 TSS** (Run 49 + Swim 52 + Run 51 + Ride 119 + OWS 22 + Ride 197). Projected ~675 as written — above maintenance floor 608, light of build target 752. Jamie confirmed it must be a genuine build week; rides keep overshooting hills so real total likely ≥695.
+- **France holiday remaining (to 29 Jun):** Sun 28 — long run ~15km (~65 TSS) + OW swim (~25 TSS). Projected close to 785 if Sat ride overshoots as usual.
+- **⚠️ Open: Sat ICU calendar entry bogus at 184 TSS** — correct figure ~95 for 2h IF ~0.71; fix before next readiness prompt or it distorts the card.
+- **Strava auto-description fixes (deployed 26 Jun):** "British wit/deadpan" prompt fully removed (Jamie flagged as unprofessional — remove any wit, sarcasm, plan-comparison snark); 401 error guard added (CLI errors can never reach Strava); "camp" → "holiday/trip" throughout. Last 3 activities verified compliant. CLI auth may still need VM token refresh for rich descriptions.
 - **Weight:** ~83 kg · race target 79 kg (19 Sep 2026) · ~4 kg to lose.
-- **CTL/form (26 Jun PM est.):** CTL ~91 · ATL ~111 · TSB ~−20. HRV 38 (25 Jun). Sleep 7.28h (25 Jun). IM Italy 85 days out.
+- **CTL/form (27 Jun AM):** CTL ~91 · ATL ~111 · TSB ~−20. IM Italy 84 days out.
 - **Open actions (overdue):** PH sweat-sodium test · TT bike fit · Running FTP 500W in Intervals.icu.
 
 ## Travel & training blocks (logged 2026-05-10)
