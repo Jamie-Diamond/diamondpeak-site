@@ -16,18 +16,18 @@
 
 ## Recent context (auto-summary)
 
-- **Sat 27 Jun — Z2 ride 2h (COMPLETED, debriefed):** NP 219W · IF 0.74 · 690m gain · ~105 TSS. Zone split: 65% Z1–Z2. Final climb isolated from altitude stream (km 30.9→36.8, +250m, 4.3% avg): 264W / 271W steep section = 89–91% FTP, HR 152→173 (above LTHR 170) — Z3/sweetspot finish, not Z2. Power discipline was good; cardiac drift was heat-driven (ERA5 33.6°C), not pacing failure. Fuel: Maurten 320 + SiS chew + PH1500, 1.3L (~64g/hr, 660ml/hr). Strava clean. Key rule confirmed: climb analysis = altitude stream base→summit only — 5km auto-laps blend descent/flat and understate true climbing power.
-- **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 TSS · NP 197W · IF 0.66 · 1,673m gain · 73% Z1–Z2. Pedalling-only decoupling 2.6% (whole-ride 22.1% = descent/coasting artifact — discard). Big col 253W @ 155 HR — efficient. ERA5 ~30°C. Fuel: 277g (61g/hr) · 4.05L (890ml/hr). Strava verified and clean.
-- **Thu 25 Jun PM — OW swim (COMPLETED, NOT easy — firm aerobic):** 1,202m · 25 min. 200m splits = Garmin auto-laps only, not athlete-marked reps. Per-lap HR peaked 147–156; session avg 129 misleads. ~22 TSS.
-- **Thu 25 Jun AM — Endurance ride + climbs (COMPLETED):** 151 min · NP 206W · IF 0.69 · 119 TSS. Zones: 71% Z1–Z2 / 14% Z3 / 12% Z4 / 3% Z5. ERA5 32–35.5°C. Fuel: 216g (86g/hr) · 2.5L (~1,000ml/hr).
+- **Sat 27 Jun — Z2 ride 2h (COMPLETED, debriefed):** NP 219W · IF 0.74 · 690m gain · ~105 TSS. Zone split: 65% Z1–Z2. Final climb isolated from altitude stream (km 30.9→36.8, +250m, 4.3% avg / 5.9% steep): 264W avg / 271W steep = 89–91% FTP, HR 152→173 (above LTHR 170) — Z3/sweetspot finish, not upper Z2. Power discipline good; cardiac drift heat-driven (ERA5 33.6°C). Fuel: Maurten 320 + SiS chew + PH1500, 1.3L (~64g/hr, 660ml/hr). Strava clean. RPE not provided. Key confirmed: climbs must be isolated via altitude stream base→summit — 5km auto-laps understate true climbing power.
+- **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 TSS · NP 197W · IF 0.66 · 1,673m gain · 73% Z1–Z2. Pedalling-only decoupling 2.6% (whole-ride 22.1% = descent/coasting artifact — discard). Big col 253W @ 155 HR — efficient. ERA5 ~30°C. Fuel: 277g (61g/hr) · 4.05L (890ml/hr). Strava verified clean.
+- **Thu 25 Jun PM — OW swim (COMPLETED, NOT easy — firm aerobic):** 1,202m · 25 min. 200m splits = Garmin auto-laps only, NOT athlete-marked reps. Per-lap HR peaked 147–156; session avg 129 misleads. ~22 TSS.
+- **Thu 25 Jun AM — Endurance ride + climbs (COMPLETED):** 151 min · NP 206W · IF 0.69 · 119 TSS. Zones: 71% Z1–Z2 / 14% Z3 / 12% Z4. ERA5 32–35.5°C. Fuel: 216g (86g/hr) · ~2.5L.
 - **Wed 24 Jun — Z2 run (COMPLETED, EASY):** 8.91 km · GAP 5:10/km · avg HR 143 · ERA5 31–32°C. Ankle 3/10 peak → 1–2/10 settled.
 - **Ankle:** ATFL + CFL partial tear. Latest: 3/10 peak Wed 24 Jun run, settled 1–2/10. Protocol: ≤5/10 OK if resolves by next AM; >5/10 = stop.
 - **Week to date (Mon–Sat): ~595 TSS** (Run 49 + Swim 52 + Run 51 + Ride 119 + OWS 22 + Ride 197 + Ride ~105). Sun 28 plan: long run ~15km (~85 TSS) + short OW swim (~25 TSS) → projected ~705. Above maintenance floor 608.
-- **France holiday ends 29 Jun.** Do NOT auto-generate next week's plan — wait for Jamie to request it after returning.
-- **Strava scripts (updated 26–27 Jun):** wit/humour fully removed (unprofessional per Jamie); 401 error guard added; "camp" → "holiday/trip". Last 3 activities re-verified compliant 27 Jun.
-- **⚠️ Open: Sat ICU calendar TSS bogus at 184** — correct ~105 for 2h IF 0.74; fix before Sunday readiness prompt.
+- **France holiday (not camp) ends 29 Jun.** Do NOT auto-generate next week's plan — wait for Jamie to request it after returning.
+- **Strava scripts (updated 26–27 Jun):** wit/humour fully removed (unprofessional); 401 error guard added; "camp"→"holiday/trip"; last 3 activities re-verified compliant 27 Jun.
+- **⚠️ Open: Sat 27 Jun ICU calendar TSS bogus at 184** — correct ~105 for 2h IF 0.74; fix before Sunday readiness prompt.
 - **Weight:** ~83 kg · race target 79 kg (19 Sep 2026) · ~4 kg to lose.
-- **CTL/form (27 Jun AM):** CTL ~91 · ATL ~111 · TSB ~−20. IM Italy 84 days out.
+- **CTL/form (27 Jun):** CTL ~91 · ATL ~111 · TSB ~−20. IM Italy 84 days out.
 - **Open actions (overdue):** PH sweat-sodium test · TT bike fit · Running FTP 500W in Intervals.icu.
 
 ## Travel & training blocks (logged 2026-05-10)
