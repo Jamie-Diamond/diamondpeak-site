@@ -3,15 +3,15 @@
 Last updated: 2026-06-27
 
 ## Recent context (auto-summary)
-- **Last confirmed ride**: Geneva Road Cycling 2026-06-01 (81 min, Z2) — 26 days without a confirmed ride
-- **Missed sessions (Jun 10–23)**: Sweetspot Intro 85 min (10 Jun), Long Z2 2h 45 min (13 Jun), Sweetspot Build 90 min (17 Jun), Long Z2 3h (20 Jun), Short endurance 35 min (23 Jun) — 5 consecutive misses confirmed
-- **Sat 27 Jun**: Long ride 195 min GO as-planned — morning message sent; no completion confirmation yet; target NP 150–175W, Z2 throughout, fuelling from 20 min mark; would be first ride in 26 days
+- **Last confirmed ride**: Geneva Road Cycling 2026-06-01 (81 min, Z2) — 26 days without a confirmed ride as of 27 Jun
+- **Sat 27 Jun**: Long ride 195 min GO as-planned — morning message + ride brief sent; no completion confirmation yet; target NP 150–175W, Z2 throughout, 60 g/hr carbs from 20 min; first ride in 26 days if completed
+- **Missed sessions (Jun 10–23)**: Sweetspot Intro 85 min (10 Jun), Long Z2 2h 45 min (13 Jun), Sweetspot Build 90 min (17 Jun), Long Z2 3h (20 Jun), Short endurance 35 min (23 Jun) — 5 consecutive misses
 - **CTL/ATL/Form** as of 27 Jun: watchdog projected 9.0 / 19.0 / −10.0 assuming today's ride completed; actual will depend on ICU sync
-- **Tour de Stations / Marmottes**: 63 days out (27 Jun); base-build window critically compressed; urgency flagged multiple times across multiple weeks
-- **Compliance**: T3 Underload firing every week since Jun 7; Jun 14 and Jun 21 weeks at 0%; Jun 22 week: short ride (23 Jun) missed, long ride (27 Jun) pending — zero rides in 4 consecutive plan weeks
-- **Weight**: 93 kg last confirmed; not responding to morning weight check-ins for ~6 weeks
+- **Tour de Stations / Marmottes**: 63 days out (27 Jun); base-build window critically compressed; urgency flagged repeatedly
+- **Compliance**: T3 Underload firing every week since Jun 7; Jun 14 and Jun 21 weeks at 0%; Jun 22 week: short ride (23 Jun) missed, long ride (27 Jun) pending — zero confirmed rides in 4 consecutive plan weeks
+- **Weight**: 93 kg last confirmed; not responding to morning weight check-ins for ~6+ weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target (→ 90 g/hr race target) flagged repeatedly; race-day risk on 6–8 hr mountain days
-- **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; ~6-week low-engagement streak
+- **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; ~6+ week low-engagement streak
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 
