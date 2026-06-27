@@ -399,6 +399,10 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-26 — T6 (Tier 1):** Aerobic decoupling 6.07% on 2026-06-25 "Morning Ride" (NP 206W, IF 0.69, 151 min, avg temp 37.2°C ERA5 Var coast, 740m gain, VI 1.36). New activity — not in prior T6 entry (last flagged Jun 20 for Jun 19 ride, 6 days ago). Context: hottest session to date (32–35.5°C actual ambient per ERA5), hilly terrain (740m / two cols), high VI 1.36 — terrain and heat are the primary drivers, not aerobic ceiling failure. Running trend: Jun 19 5.10%, Jun 25 6.07% — two consecutive Z2 rides above cap. Fri 26 Jun long Z2 ride (prescribed IF 0.633 / NP ≤202W under R7 heat pacing) is the next diagnostic — check decoupling once synced. If >5% persists in a cooler, flatter session, flag aerobic durability gap for investigation.
 
+- **2026-06-27 — T4 (Tier 1):** Sleep <7h on 3 of last 7 nights: 21 Jun 6.63h, 24 Jun 5.05h, 27 Jun 6.58h. Prior T4 (Jun 25) flagged Jun 19/21/24 — Jun 27's 6.58h is a new night not in that entry; signal materially changed. Context: France camp load + travel fatigue compounding deficit. Prioritise sleep tonight (Sat 27 Jun); no alarm Sunday if schedule allows. No intensity flags — today is Z2 ride only.
+
+- **2026-06-27 — T9 (Tier 2):** Aero helmet due 2026-06-30 (Tue, 3 days away) — status pending. Last flagged Jun 23 (4 days ago, suppression lapsed). France camp ends Jun 29 (Sun); return home Jun 29–30. Order online today or immediately on return — 3-day window remaining. PH sweat test + TT bike fit suppressed — flagged Jun 25 (2 days ago).
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
