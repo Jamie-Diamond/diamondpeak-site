@@ -12,10 +12,11 @@
 
 ---
 
-## Last updated: 2026-06-26
+## Last updated: 2026-06-27
 
 ## Recent context (auto-summary)
 
+- **Sat 27 Jun — Z2 ride 2h (PRESCRIBED — GO, no rules fired):** 120 min, 60–75% FTP (178–223W), NP target ~211W (IF 0.71), TSS ~101. HRV trend -18.6% (34 on 26 Jun) — notable but below blocking threshold; Z2 session safe. ATL 108 / CTL 90 / TSB −18 (camp load block). Sleep 7.46h (carried from 26 Jun). Ankle 3/10 — bike, no concern. France (Var) ambient likely ~28–35°C based on recent ERA5 — monitor HR ceiling 155; reduce duration if HR drifts above ceiling.
 - **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 TSS · NP 197W · IF 0.66 · 1,673m gain · 73% Z1–Z2. Pedalling-only decoupling 2.6% (whole-ride 22.1% = descent/coasting artifact — discard). ERA5 ~30°C (Var coast). Big col 253W @ 155 HR — efficient. Fuel: 277g carbs (61g/hr) · 4.05L (890ml/hr). Strava description verified: neutral, factual, decoupling corrected to 2.6% pedalling-only.
 - **Thu 25 Jun PM — OW swim (COMPLETED, firm aerobic — NOT easy):** 1,202m · 25 min. 200m auto-laps = Garmin distance markers, NOT athlete-marked reps; do not analyse as discrete intervals. Per-rep HR peaked 147–156 (session avg 129 misleads). ~22 TSS.
 - **Thu 25 Jun AM — Endurance ride + climbs (COMPLETED, NOT clean Z2):** 151 min · NP 206W · IF 0.69 · VI 1.36 · 119 TSS. Zones: 71% Z1–Z2 / 14% Z3 / 12% Z4 / 3% Z5. ERA5 32–35.5°C (hottest session to date). Fuel: 216g (86g/hr) · 2.5L (~1,000ml/hr).
