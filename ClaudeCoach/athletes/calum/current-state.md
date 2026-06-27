@@ -1,6 +1,6 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-06-26
+Last updated: 2026-06-27
 
 ## Recent context (auto-summary)
 - **Last ride**: Geneva Road Cycling 2026-06-01 (81 min, Z2) — only ride in ~8 weeks; 25+ days without cycling as of today
@@ -34,6 +34,7 @@ No
 ## Off-plan in last 7 days
 - 2026-06-20: Long Z2 Ride 3h — not completed (no ICU activity recorded)
 - 2026-06-23: Short endurance 35 min — not completed (ICU atlLoad=0.0; history endpoint empty for last 14 days)
+- 2026-06-27: Long ride 195 min — GO as-planned (no rules fired; first ride in 26 days)
 
 ## Open Actions
 - [ ] Delete or correct "Z3 Ride 10h" event in Intervals.icu (erroneous 10h hard ride, far exceeds 5h/week cap)
@@ -67,3 +68,4 @@ No
 | 2026-06-24 | 6.1 | 0.5 | +5.7 | Rest day — no session planned in calendar. No HRV or sleep data. (Values corrected from prior projection.) |
 | 2026-06-25 | 6.0 | 0.4 | +5.6 | Rest day — no session planned. T5: 2 missed sessions in rolling 7d — 2026-06-20 Long Z2 3h, 2026-06-23 Short endurance 35 min. Jun 23 miss is new vs prior T5 (2026-06-21). No HRV or sleep data. |
 | 2026-06-26 | 5.9 | 0.4 | +5.5 | Rest day — no session planned in calendar. No HRV or sleep data. |
+| 2026-06-27 | 9.0 | 19.0 | −10.0 | Long ride 195 min — GO as-planned. No rules fired. First ride in 26 days. No HRV or sleep data. |
