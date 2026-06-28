@@ -1,10 +1,11 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-06-27
+Last updated: 2026-06-28
 
 ## Recent context (auto-summary)
 
-- **Sat 27 Jun (today)**: Bike Z2 2hr planned (114–133W, HR cap 170, 55g/hr carbs). No brick — brought forward to Fri 26. Travel block final day. Form −20 (Heavy). Luteal day 18. No activity logged yet; weight unanswered.
+- **Sun 28 Jun (today)**: Long Run 90min Easy + Sea Swim 40min — both GO, execute as planned. ATL 65, CTL 59, Form −6 (Neutral). HRV trend −3.1% (latest 58 Jun 27); sleep 7.79h. Luteal day 19. Last day of travel block. Travel block [expires:2026-06-28] in effect for sea swim (open water aerobic, no CSS targets).
+- **Sat 27 Jun**: Bike Z2 2hr planned — NOT COMPLETED (ICU shows 0 load on Jun 27). Travel block final day. Form was −20 (Heavy). Luteal day 18.
 - **Fri 26 Jun — double sessions**: (1) Grimaud Cycling: 2hr22min, 52km, 882m, avg 148/max 182bpm, 82% Z1–Z2 HR, Load 113, 32–38°C. Nutrition: ~33g/hr (white choc macadamia Clif bar + honey gel + 8 Haribo + 700ml water + 600ml electrolyte). (2) Brick Run: 6.01km, GAP 5:26/km, avg 182/max 197bpm, Load 47, 89% Z3+ HR; drift 167→191bpm across 6 splits — heat + brick fatigue. RPE not given despite prompts.
 - **Thu 25 Jun**: Sainte-Maxime Cycling with Jamie: 132min, 53km, 653m, avg 157/max 191bpm, Load 126, 35–41°C. Nutrition ~21g/hr (1 honey gel + ⅓ Haribo). Sea swim Thu 25 unconfirmed.
 - **Tue 23 Jun**: Sweetspot 3×15 outside: NP 162W (83% FTP), 92 TSS, RPE 6. Kathryn corrected ICU plan (was showing 2×15; she did 3×15).
@@ -80,6 +81,8 @@ None
 - 2026-06-26: bike_z2 150min (Long Ride Z2 2.5hr) — GO, execute as planned (no rules fired). HRV trend −5.3% (latest 58 on Jun 25); sleep 7.95h carried (Jun 25). ATL 77, CTL 60; form −17. Last session RPE 5. Luteal day 17. Travel block active (last full day).
 - 2026-06-27: bike_z2 120min (Bike Z2 2hr) — GO, execute as planned (no rules fired). HRV trend +1.5% (latest 61 on Jun 26); sleep 7.87h carried (Jun 26). ATL 81, CTL 61; form −20. Last session RPE 8 (brick run Jun 26 — heat + brick fatigue). Luteal day 18. Travel block final day; Grimaud heat likely 30°C+. Brick run 20min easy Z1–Z2 planned off the back.
 - 2026-06-24: Rest day — no session planned (confirmed plan: Wed is rest during travel block Jun 22–28). HRV trend +5.4% (latest 65 on Jun 23); sleep 7.32h carried (Jun 23). ATL 59, CTL 56; form −3. Last session RPE 6 (bike Jun 23). Luteal day 15 begins.
+- 2026-06-27: bike_z2 120min — NOT COMPLETED (0 load recorded in ICU). HRV trend +1.5% (latest 61 on Jun 26); sleep 7.87h carried (Jun 26). ATL 70, CTL 59; form −11. Luteal day 18. Travel block final day; session likely skipped or not synced.
+- 2026-06-28: run_long 90min (Long Run 90min Easy) + swim 40min (Sea Swim open water aerobic) — GO, both execute as planned (no rules fired). HRV trend −3.1% (latest 58 on Jun 27; today not synced at 05:00); sleep 7.79h carried (Jun 27). ATL 65, CTL 59; form −6. Last session RPE 5. Luteal day 19 — sessions feel harder than numbers suggest; HR-led execution. Travel block expires today.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
