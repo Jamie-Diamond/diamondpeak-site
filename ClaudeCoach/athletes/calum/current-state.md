@@ -1,10 +1,10 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-06-27
+Last updated: 2026-06-28
 
 ## Recent context (auto-summary)
-- **Last confirmed ride**: Geneva Road Cycling 2026-06-01 (81 min, Z2) — 26 days without a confirmed ride as of 27 Jun
-- **Sat 27 Jun**: Long ride 195 min GO as-planned — morning message + ride brief sent; no completion confirmation yet; target NP 150–175W, Z2 throughout, 60 g/hr carbs from 20 min; first ride in 26 days if completed
+- **Last confirmed ride**: Long ride 2026-06-27 (195 min, Z2) — ICU load 138 confirmed; ended 26-day riding drought
+- **Sun 28 Jun**: Rest day — no session planned; ATL 16.2 decaying after yesterday's load
 - **Missed sessions (Jun 10–23)**: Sweetspot Intro 85 min (10 Jun), Long Z2 2h 45 min (13 Jun), Sweetspot Build 90 min (17 Jun), Long Z2 3h (20 Jun), Short endurance 35 min (23 Jun) — 5 consecutive misses
 - **CTL/ATL/Form** as of 27 Jun: watchdog projected 9.0 / 19.0 / −10.0 assuming today's ride completed; actual will depend on ICU sync
 - **Tour de Stations / Marmottes**: 63 days out (27 Jun); base-build window critically compressed; urgency flagged repeatedly
@@ -34,7 +34,8 @@ No
 ## Off-plan in last 7 days
 - 2026-06-20: Long Z2 Ride 3h — not completed (no ICU activity recorded)
 - 2026-06-23: Short endurance 35 min — not completed (ICU atlLoad=0.0; history endpoint empty for last 14 days)
-- 2026-06-27: Long ride 195 min — GO as-planned (no rules fired; first ride in 26 days)
+- 2026-06-27: Long ride 195 min — GO as-planned (confirmed completed; ICU load 138, ATL 18.7, CTL 9.0; first ride in 26 days)
+- 2026-06-28: Rest day — no session planned (Sunday; weekday-only cycling rule)
 
 ## Open Actions
 - [ ] Delete or correct "Z3 Ride 10h" event in Intervals.icu (erroneous 10h hard ride, far exceeds 5h/week cap)
@@ -68,4 +69,5 @@ No
 | 2026-06-24 | 6.1 | 0.5 | +5.7 | Rest day — no session planned in calendar. No HRV or sleep data. (Values corrected from prior projection.) |
 | 2026-06-25 | 6.0 | 0.4 | +5.6 | Rest day — no session planned. T5: 2 missed sessions in rolling 7d — 2026-06-20 Long Z2 3h, 2026-06-23 Short endurance 35 min. Jun 23 miss is new vs prior T5 (2026-06-21). No HRV or sleep data. |
 | 2026-06-26 | 5.9 | 0.4 | +5.5 | Rest day — no session planned in calendar. No HRV or sleep data. |
-| 2026-06-27 | 9.0 | 19.0 | −10.0 | Long ride 195 min — GO as-planned. No rules fired. First ride in 26 days. No HRV or sleep data. |
+| 2026-06-27 | 9.0 | 18.7 | −9.7 | Long ride 195 min — confirmed completed (ICU load 138). First ride in 26 days. No HRV or sleep data. |
+| 2026-06-28 | 8.8 | 16.2 | −7.4 | Rest day — no session planned (Sunday; weekday-only cycling rule). ATL decaying after yesterday's load. No HRV or sleep data. |
