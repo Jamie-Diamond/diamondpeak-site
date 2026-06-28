@@ -3,14 +3,17 @@
 Last updated: 2026-06-28
 
 ## Recent context (auto-summary)
-- **Last confirmed ride**: Long ride 2026-06-27 (195 min, Z2, load 138) — broke a 26-day / 4 plan-week drought; CTL 9.0 / ATL 18.7 / Form −9.7 post-ride; confirmed via ICU data (no response from Calum to session-confirm prompt)
-- **Today (Sun 28 Jun)**: Rest day — ATL decaying; CTL 8.8 / ATL 16.2 / Form −7.4; no weight response received
-- **Recent misses**: Sweetspot Build 90 min (17 Jun), Long Z2 3h (20 Jun), Short endurance 35 min (23 Jun) — 3 consecutive misses before 27 Jun ride
+- **2026-06-27**: Long ride 195 min (Z2, load 138) — COMPLETED; first ride in 26 days / 4 plan-weeks; CTL 9.0 / ATL 18.7 / Form −9.7 post-ride; confirmed via ICU (no Calum response to prompt)
+- **2026-06-23**: Short endurance 35 min — NOT completed (ICU confirmed 0 load)
+- **2026-06-20**: Long Z2 3h — NOT completed (no ICU activity)
+- **2026-06-17**: Sweetspot Build 90 min — NOT completed (no Calum response; ICU no activity)
+- **2026-06-13**: Long Z2 2h45 — NOT completed (no ICU activity)
+- **Today (Sun 28 Jun)**: Rest day; CTL 8.8 / ATL 16.2 / Form −7.4; ATL decaying from Sat load
 - **Tour de Stations / Marmottes**: 62 days out (28 Jun); base-build window critically compressed; urgency flagged repeatedly
-- **Compliance**: T3 Underload fired every week since Jun 7; Jun 14 and Jun 21 weeks 0%; Jun 22 week: short ride missed, long ride completed — first session in 4 plan weeks
-- **Weight**: 93 kg last confirmed; not responding to morning weight check-ins for ~6+ weeks
-- **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target (→ 90 g/hr race target); race-day risk on 6–8 hr mountain days
-- **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; ~6+ week low-engagement streak; did complete 27 Jun long ride
+- **Compliance**: T3 Underload fired every week since Jun 7; Jun 14 and Jun 21 weeks 0%; Jun 22 week: 1 of 2 completed (long ride only)
+- **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
+- **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target; race-day risk on 6–8 hr mountain days
+- **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; low-engagement ~6+ week streak; only signal is ICU activity data
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 

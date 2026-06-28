@@ -16,20 +16,20 @@
 
 ## Recent context (auto-summary)
 
-- **Sun 28 Jun — Long run 15.2km (COMPLETED, was blocked — Jamie ran it):** EASY · GAP 5:16/km · avg HR 143 vs 146 ceiling · ~84 TSS. Ankle 0→1→2/10, peak 2, within ≤5/10 protocol. AM pain not yet reported. Fuel: SiS choco fudge bar (~25g) + PF30 chew (30g) = 55g · ~41g/hr · 900ml + 2×PH1500 · 675ml/hr. ERA5 ~32°C.
-- **Sun 28 Jun — OW swim:** PENDING as of session-sync · ~25 TSS if completed.
-- **Sat 27 Jun — Z2 ride 2h (COMPLETED):** ~105 TSS · NP 219W · IF 0.74. Final climb isolated base→summit (km 30.9→36.8, +250m): 264–271W = 89–91% FTP, HR 152→173 — Z3/sweetspot, NOT upper Z2. 5km auto-laps blended descent/flat and understated power — not a valid climb proxy. ERA5 33.6°C. Fuel 64g/hr · 660ml/hr.
-- **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 TSS · NP 197W · IF 0.66 · 1,673m gain. Pedalling-only decoupling 2.6% (whole-ride 22.1% = coasting artifact — discard). ERA5 ~30°C. Fuel 61g/hr · 890ml/hr.
-- **Thu 25 Jun — OW swim + Endurance ride (COMPLETED):** OW 1,202m · ~22 TSS (auto-laps only, not marked reps). Ride 151 min · NP 206W · IF 0.69 · 119 TSS. ERA5 32–35.5°C.
-- **Week load (Mon 22–Sun 28):** ~704 TSS projected (679 confirmed + OW swim ~25). Floor 631 (CTL×7), target 748. 44 under target — appropriate given form −16 and France holiday block. Long-term average approach confirmed: do NOT push make-up TSS into next week.
-- **Ankle:** ATFL + CFL partial tear (ultrasound confirmed). Sun 28 Jun run peak 2/10, within ≤5/10 protocol. AM pain from Sun run not yet reported.
+- **Sun 28 Jun — Long run 15.2km (COMPLETED, was morning-blocked — Jamie ran it):** EASY · GAP 5:16/km · avg HR 143 vs 146 Z2 ceiling · ~84 TSS · ERA5 ~32°C. Decoupling −4.6% (cardiovascular held well in heat). Running power 363→399W in final 5km with pace flat = mild neuromuscular economy fade, not cardiac — limiter is run durability, not aerobic fitness. Ankle 0→1→2/10, peak 2, within ≤5/10 protocol; AM pain not reported. Fuel: SiS choco fudge bar (~25g) + PF30 chew (30g) = 55g · ~41g/hr · 900ml + 2×PH1500 · 675ml/hr.
+- **Sun 28 Jun — OW swim (PENDING/UNKNOWN):** Was on the plan (30 min · ~25 TSS). Not confirmed in this conversation.
+- **Sat 27 Jun — Z2 ride 2h (COMPLETED):** ~105 TSS · NP 219W · IF 0.74 · ERA5 33.6°C. Final climb (km 30.9–36.8, base→summit, +250m, 4.3% avg): 264–271W = 89–91% FTP, HR 152→173 — Z3/sweetspot in practice, NOT upper Z2. 5km auto-laps blended the preceding descent and understated climb power — confirmed rule: isolate climb from altitude stream, not laps. Fuel 64g/hr · 660ml/hr.
+- **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 TSS · NP 197W · IF 0.66 · 1,673m gain · ERA5 ~30°C. Pedalling-only decoupling 2.6% (whole-ride 22.1% = coasting artifact — discard). Fuel 61g/hr · 890ml/hr.
+- **Thu 25 Jun — OW swim + Endurance ride (COMPLETED):** OW 1,202m · ~22 TSS. Ride 151 min · NP 206W · IF 0.69 · 119 TSS · ERA5 32–35.5°C.
+- **Week Mon 22–Sun 28:** ~704 TSS projected (679 confirmed + OW swim TBC). Floor 631 (CTL×7), build target 748. Finishing ~44 under target — appropriate; France holiday, form −16, stacked back-to-back days. Long-term average approach confirmed: no make-up TSS next week.
+- **Ankle:** ATFL + CFL partial tear (ultrasound confirmed). Run trajectory good — 15km clean at pain ≤2/10. Approximately 7 weeks to reach ~30km race-confidence distance; zero setback margin.
 - **CTL/form (28 Jun est.):** CTL ~91 · ATL ~111 · TSB ~−20. IM Italy 83 days out.
-- **Race readiness (28 Jun):** Bike ~90% (3.6 W/kg, clean pacing). Swim ~75% (est. 66–70 min OW, adequate). Run ~50% — the only real question mark; 15km now vs ~30km needed; ~7 weeks to distance, zero ankle setback margin.
+- **Race readiness (28 Jun):** Bike ~90% — 3.6 W/kg, held 264–271W (90% FTP) at end of hot 4h ride; pacing discipline good. Swim ~75% — CSS 1:40/100m, OW est. 66–70 min, adequate, not a limiter. Run ~50% — the only real question mark; 15km now vs ~30km needed; all depends on ankle tolerating the progression.
 - **Weight:** ~83 kg · race target 79 kg by 19 Sep 2026 · ~4 kg to lose.
-- **France holiday (not camp) ends 29 Jun.** Do NOT auto-generate next week plan — wait for Jamie to return and explicitly request it.
+- **France holiday (not camp) ends 29 Jun.** Do NOT auto-generate next week plan — wait until Jamie explicitly requests it after return.
 - **Aero helmet due 30 Jun** — still pending; flag on return.
-- **Bug confirmed (28 Jun): "Logged" said without file write.** Rule added: verify write before sending confirmation. Check-in 16km bug also confirmed and rule in place.
-- **Nutrition note:** "sis choco" = SiS GO Choco Fudge Bar (~25g carbs), NEVER a gel (confirmed 28 Jun).
+- **Bug audit (28 Jun):** "Logged" without write confirmed (recurring) — rule added. Long-run check-in drifting above cap confirmed — rule added. Full audit found these two real gaps; nutrition and most other logged items were clean.
+- **Nutrition rule (28 Jun):** "sis choco" = SiS GO Energy Choco Fudge Bar (~25g carbs), NEVER a gel.
 - **Open actions (overdue):** PH sweat-sodium test · TT bike fit · Running FTP 500W in Intervals.icu. Sat 27 Jun ICU TSS shows 184 (bogus — actual ~105).
 
 ## Travel & training blocks (logged 2026-05-10)

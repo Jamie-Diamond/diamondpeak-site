@@ -4,8 +4,8 @@ Last updated: 2026-06-28
 
 ## Recent context (auto-summary)
 
-- **Sun 28 Jun**: Long Run 90min Easy — 12.7km, avg GAP 6:07/km, 167bpm avg (Z1 14% / Z2 52% / Z3 33%), Load 83, decoupling 2.7%, running cost +3.4%. RPE not given. Sea Swim 40min same day — completion unconfirmed at sync time.
-- **Sat 27 Jun**: Bike Z2 2hr — NOT COMPLETED. Brick brought forward to Fri 26 per Kathryn's instruction; Sat became unplanned rest day.
+- **Sun 28 Jun**: Long Run 90min Easy — 12.7km, avg GAP 6:07/km, 167bpm avg (Z1 14% / Z2 52% / Z3 33%), Load 83, decoupling 2.7%, running cost +3.4%. RPE not given; prompt outstanding. Sea Swim 40min same day — completion unconfirmed.
+- **Sat 27 Jun**: Bike Z2 2hr — NOT COMPLETED (0 load in ICU). Brick brought forward to Fri 26; Sat became unplanned rest day.
 - **Fri 26 Jun — double sessions**: (1) Grimaud Cycling: 2h22min, 52km, 882m, avg 148/max 182bpm, Load 113, 32–38°C. Nutrition ~33g/hr (Clif bar + honey gel + 8 Haribo + 700ml water + 600ml electrolyte). (2) Brick Run: 6.01km, GAP 5:26/km, avg 182/max 197bpm, Load 47, 89% Z3+ HR, heat drift 167→191bpm. RPE not given despite prompts.
 - **Thu 25 Jun**: Sainte-Maxime Cycling with Jamie: 132min, 53km, 653m, avg 157/max 191bpm, Load 126, 35–41°C. Nutrition ~21g/hr (honey gel + ⅓ Haribo bag). Sea swim same day unconfirmed.
 - **Tue 23 Jun**: Sweetspot 3×15 outside, NP 162W (83% FTP), Load 92, RPE 6. **Mon 22 Jun**: Kettlebells 45min, RPE 7.
@@ -16,6 +16,7 @@ Last updated: 2026-06-28
 - **Luteal phase**: Day 19 of 28 (24 Jun–7 Jul). Higher RPE and core temp overlaps with start of build phase — hold targets loosely, lead with feel.
 - **Sleep disruption through travel block**: HRV Jun 25=67, Jun 26=61, Jun 27=58 — recovering but patchy. Monitor closely entering build.
 - **Weight**: Not logged across entire travel block — morning prompts unanswered.
+- **Heat acclimatisation**: Travel block delivered 5+ days of outdoor riding in 32–41°C — effective real-world heat dose even though heat-log.json not updated.
 
 ## Injuries / Niggles
 None
