@@ -16,19 +16,20 @@
 
 ## Recent context (auto-summary)
 
-- **Sun 28 Jun — Long run BLOCKED:** Ankle 3/10 on last run (Wed 24 Jun) trips hard cap. Multi-signal block: CTL 90, ATL 107, TSB −17 + HRV −18% + 6.58h sleep + RPE 8 most recent session + ERA5 ~32°C. OW swim was discretionary — go only if genuinely fresh.
-- **Sat 27 Jun — Z2 ride 2h (COMPLETED):** NP 219W · IF 0.74 · 690m gain · ~105 TSS. 65% Z1–Z2. Final climb isolated (km 30.9→36.8, +250m): 264–271W = 89–91% FTP, HR 152→173 — Z3/sweetspot, NOT upper Z2. 5km auto-laps (7–8) had blended descent/flat and understated power. ERA5 33.6°C. Fuel 64g/hr · 660ml/hr. Strava clean.
-- **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 TSS · NP 197W · IF 0.66 · 1,673m gain · 73% Z1–Z2. Pedalling-only decoupling 2.6% (whole-ride 22.1% = descent/coasting artifact — discard). ERA5 ~30°C. Fuel 277g/61g/hr · 4.05L/890ml/hr. Strava clean.
-- **Thu 25 Jun PM — OW swim (COMPLETED):** 1,202m · 25 min. 200m splits = Garmin auto-laps only, NOT athlete-marked reps — do not analyse as discrete intervals. ~22 TSS. Strava clean.
-- **Thu 25 Jun AM — Endurance ride (COMPLETED):** 151 min · NP 206W · IF 0.69 · 119 TSS. 71% Z1–Z2. ERA5 32–35.5°C. Fuel 216g/86g/hr.
-- **Wed 24 Jun — Z2 run (COMPLETED, EASY):** 8.91 km · GAP 5:10/km · avg HR 143. Ankle 3/10 peak → 1–2/10 settled.
-- **Ankle:** ATFL + CFL partial tear. Latest: 3/10 Wed 24 Jun run (settled 1–2/10). Protocol: ≤5/10 OK if resolves by AM; >5/10 = stop. Run blocked Sun 28 Jun (ankle 3/10 + multi-signal).
-- **Week load (Mon 22–Sun 28):** Mon–Sat completed ~595 TSS. Projected week with Sun OW swim (~25): ~620. Maintenance floor 608, target 752 — above floor, below target; genuine build.
+- **Sun 28 Jun — Long run (COMPLETED, was BLOCKED — Jamie ran it):** 15.2km · GAP 5:16/km · avg HR 143 vs 146 ceiling (EASY) · ~84 TSS. Ankle: 0 first 5km → 1 (5–10km) → 2 (to end), within protocol. Fuel: SiS choco fudge bar (~25g) + PF30 chew (30g) = 55g total · ~41g/hr · 900ml + 2x PH1500 · 675ml/hr. ERA5 ~32°C.
+- **Sun 28 Jun — Short OW swim:** PENDING as of end of conversation · ~25 TSS if completed.
+- **Sat 27 Jun — Z2 ride 2h (COMPLETED):** NP 219W · IF 0.74 · 690m gain · ~105 TSS · 65% Z1–Z2. Final climb isolated (km 30.9→36.8, +250m): 264–271W = 89–91% FTP, HR 152→173 — Z3/sweetspot, NOT upper Z2. 5km auto-laps (7–8) blended descent/flat and understated power — not a valid climb proxy. ERA5 33.6°C. Fuel 64g/hr · 660ml/hr.
+- **Fri 26 Jun — Long ride 4h Z2 (COMPLETED):** 197 TSS · NP 197W · IF 0.66 · 1,673m gain · 73% Z1–Z2. Pedalling-only decoupling 2.6% (whole-ride 22.1% = descent/coasting artifact — discard). ERA5 ~30°C. Fuel 277g/61g/hr · 4.05L/890ml/hr.
+- **Thu 25 Jun — OW swim (COMPLETED):** 1,202m · 25 min · ~22 TSS. Auto-laps only — not marked reps; do not analyse as discrete intervals.
+- **Thu 25 Jun — Endurance ride (COMPLETED):** 151 min · NP 206W · IF 0.69 · 119 TSS. ERA5 32–35.5°C.
+- **Wed 24 Jun — Z2 run (COMPLETED, EASY):** 8.91km · GAP 5:10/km · avg HR 143. Ankle 3/10 peak, settled to 1–2/10.
+- **Ankle:** ATFL + CFL partial tear (ultrasound confirmed). Sun 28 Jun run: 0→1→2 progression, peak 2/10 — within ≤5/10 protocol. AM pain from Sun run not yet reported.
+- **Week load (Mon 22–Sun 28):** 679 TSS completed (incl. Sun long run). OW swim still pending (~25). Projected ~704 vs maintenance floor ~631 (CTL×7), target ~748. Genuine build — above floor, 44 under target, appropriate given form −16 and holiday block.
 - **France holiday (not camp) ends 29 Jun.** Do NOT auto-generate next week's plan — wait for Jamie to return and explicitly request it.
-- **Bug logged (28 Jun):** Morning check-in prescribed ~16km for long run; 10–15% progression cap from W8 baseline 13.5km limits W9 to 14.9–15.5km max (~15km). Application error — rule 42 already covers this; fix in implementation.
-- **Weight:** ~83 kg · race target 79 kg (19 Sep 2026) · ~4 kg to lose.
+- **Bug logged (28 Jun):** Morning check-in prescribed 16km; W9 ceiling from 10–15% cap off W8 baseline 13.5km = max 15.5km (~15km). Rule 42 covers this — implementation error.
+- **Weight:** ~83 kg · race target 79 kg by 19 Sep 2026 · ~4 kg to lose.
 - **CTL/form (28 Jun est.):** CTL ~91 · ATL ~111 · TSB ~−20. IM Italy 83 days out.
-- **Open actions (overdue):** PH sweat-sodium test · TT bike fit · Running FTP 500W in Intervals.icu. Sat 27 Jun ICU TSS still shows 184 (bogus — correct ~105).
+- **Open actions (overdue):** PH sweat-sodium test · TT bike fit · Running FTP 500W in Intervals.icu. Sat 27 Jun ICU TSS shows 184 (bogus — actual ~105).
 
 ## Travel & training blocks (logged 2026-05-10)
 
