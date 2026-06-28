@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-06-27
+## Last updated: 2026-06-28
 
 ## Recent context (auto-summary)
 
@@ -132,6 +132,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 - [Location]: [pain 1–10] / [trend: stable / improving / worsening] / [action]
 
 ## Off-plan in last 7 days
+
+- **2026-06-28 BLOCKED** — Long run ~15km (run_long): R1 fired. Ankle 3/10 last run (>2/10 hard cap for run quality) → no run today. Supporting signals: CTL 90 (Fitness), ATL 107 (Fatigue), TSB −17 (Form). HRV trend −18% (latest 34 on 27 Jun; trailing, correct); sleep 6.58h carried (27 Jun, most recent synced). Last RPE 8. Heat est. 32°C (Var). Multi-signal block — ankle + fatigue + HRV + RPE + heat all contraindicated. ICU recovery note pushed (event 119014154). OW swim "play it by ear" remains discretionary — go only if genuinely fresh.
 
 - **2026-06-26 MODIFIED** — Long ride 4h Z2 (bike_z2): R7 heat pacing fired. CTL 90 (Fitness), ATL 109 (Fatigue), TSB −19 (Form). HRV trend −10.0% (latest 38 on 25 Jun; trailing, correct); sleep 7.28h carried (25 Jun, most recent synced). Last RPE 8. Ankle 3/10 (cycling unaffected). Heat: ~30°C ERA5 Var coast → IF 0.65 → 0.633 (−2.6%), NP ceiling 202W, HR cap 140, prescribed TSS ~174. Duration unchanged 240 min. ICU event 118737272 pushed.
 
