@@ -403,6 +403,10 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-27 — T9 (Tier 2):** Aero helmet due 2026-06-30 (Tue, 3 days away) — status pending. Last flagged Jun 23 (4 days ago, suppression lapsed). France camp ends Jun 29 (Sun); return home Jun 29–30. Order online today or immediately on return — 3-day window remaining. PH sweat test + TT bike fit suppressed — flagged Jun 25 (2 days ago).
 
+- **2026-06-28 — T10 (Tier 2):** Run km +34.7% w/w — this week (Mon 22–Sun 28 Jun) 16.53 km (Mon 22 Jun 7.62 km + Wed 24 Jun 8.91 km; Sun 28 Jun long run blocked R1) vs last week (Mon 15–Sun 21 Jun) 12.27 km (Wed 17 Jun 5.67 km + Sun 21 Jun 6.60 km). 10% cap applies while ankle in rehab (quality_sessions_resumed = false). Last T10 logged Jun 15 (13 days ago — suppression lapsed). Context: France camp days 1–2 drove two solid run sessions in heat (31–32°C) without a recovery day between them; the third planned run (Sun 28 Jun long run ~15 km) was blocked by R1 (ankle 3/10). Next-week cap: ≤18.2 km (16.53 × 1.10).
+
+- **2026-06-28 — T11 (Tier 2):** Strength compliance — 0 sessions in Mon 22–Sun 28 Jun (France camp: no equipment, no strength done); 1 session in Mon 15–Sun 21 Jun (Wed 17 Jun per prior T11 log; not visible in API history, possibly short session). Both weeks below target 2/wk. Last T11 logged Jun 22 (6 days ago — suppression lapsed); window has now shifted to include Jun 22–28 (0 sessions). Camp #2 starts Jul 10 — schedule 2 bodyweight/Tier-C strength sessions in the return window Jul 2–9 before camp resumes.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
