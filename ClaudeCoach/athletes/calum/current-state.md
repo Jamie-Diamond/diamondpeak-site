@@ -3,15 +3,14 @@
 Last updated: 2026-06-28
 
 ## Recent context (auto-summary)
-- **2026-06-28**: Weekly summary — 0% compliance (both sessions missed); fitness fell to 5.6; Base phase ends today; Build starts Mon 29 Jun; T3 Underload + T5 Phase Transition fired
-- **2026-06-27**: Long ride 195 min — NOT completed (corrected: prior watchdog used planned-event projection values CTL 9.0/ATL 18.7 in error; IcuSync activities array empty; actual wellness CTL 5.7/ATL 0.3 confirms no load)
+- **2026-06-28**: Weekly summary — 0% compliance (both sessions missed); CTL 5.6; Base phase ends today; Build starts Mon 29 Jun; T3 Underload + T5 Phase Transition fired
+- **2026-06-27**: Long ride 195 min — NOT completed (corrected: prior watchdog used planned-event projection values in error; IcuSync activities array empty; actual CTL 5.7/ATL 0.3 confirms no load)
 - **2026-06-23**: Short endurance 35 min — NOT completed (ICU confirmed 0 load)
 - **2026-06-20**: Long Z2 3h — NOT completed (no ICU activity)
 - **2026-06-17**: Sweetspot Build 90 min — NOT completed (no ICU activity)
-- **2026-06-13**: Long Z2 2h45 — NOT completed (no ICU activity)
 - **Week of 29 Jun plan sent**: Tue endurance 50 min, Thu sweetspot 2×25 85 min, Sun long ride 195 min — 252 load target
-- **Tour de Stations / Marmottes**: 62 days out (28 Jun); base-build window critically compressed; urgency flagged repeatedly
-- **Compliance**: T3 Underload fired every week since Jun 7; Jun 22 week 0% (both sessions missed — Jun 27 ride previously logged as completed in error); Jun 14 and Jun 21 weeks 0%
+- **Tour de Stations / Marmottes**: 62 days out (as of 28 Jun); base-build window critically compressed; Build phase now active; urgency flagged repeatedly
+- **Compliance**: T3 Underload fired every week since Jun 7; Jun 22 and Jun 29 weeks both 0% (all sessions missed); Jun 14 and Jun 21 weeks also 0%
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target; race-day risk on 6–8 hr mountain days
 - **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; low-engagement 6+ week streak; only signal is ICU activity data
