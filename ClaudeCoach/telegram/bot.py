@@ -1255,6 +1255,23 @@ def _save_state_json(slug: str, state):
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps(state, indent=2))
 
+
+def _verify_logged_reply(slug: str, before_ts: float, clean: str) -> str:
+    """Return clean unchanged if it isn't 'Logged.' or if a log file was written
+    since before_ts.  Otherwise log a warning and return a failure notice."""
+    if clean.strip().lower() != "logged.":
+        return clean
+    adir = _athlete_dir(slug)
+    for fname in ("feedback-log.json", "session-log.json"):
+        f = adir / fname
+        try:
+            if f.exists() and f.stat().st_mtime >= before_ts:
+                return clean
+        except Exception:
+            pass
+    log(f"[{slug}] WARN: Claude replied 'Logged.' but no log file was updated — possible silent write failure")
+    return "⚠️ Something went wrong saving that — please try again."
+
 def _load_profile(slug: str) -> dict:
     f = _athlete_dir(slug) / "profile.json"
     try:
@@ -1522,6 +1539,25 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
         return _strength_session(slug)
 
     if _FEEDBACK_LOG_RE.match(txt):
+        if slug:
+            _fm = re.match(r'^([\w-]+)\s*:[ \t]*(.*)', txt, re.I | re.DOTALL)
+            entry_type = _fm.group(1).lower() if _fm else "note"
+            content    = _fm.group(2).strip()  if _fm else txt
+            flog = _athlete_dir(slug) / "feedback-log.json"
+            try:
+                flog_entries = json.loads(flog.read_text()) if flog.exists() else []
+            except Exception:
+                flog_entries = []
+            flog_entries.append({
+                "date": today,
+                "type": entry_type,
+                "message": content,
+                "status": "open",
+                "resolution_commit": None,
+            })
+            flog.parent.mkdir(parents=True, exist_ok=True)
+            flog.write_text(json.dumps(flog_entries, indent=2))
+            _git_commit(f"auto: feedback-log {entry_type} {slug} {today}")
         return "Logged."
 
     return None
@@ -3134,6 +3170,7 @@ def main():
                 history = load_history(files["history"])
                 context = prefetch_context(slug)
                 model = select_model(text, history)
+                before_ts = time.time()
 
                 if _voice_mode_on(slug):
                     # Sticky voice mode: the TEXT stays the normal rich style (as it used
@@ -3148,6 +3185,7 @@ def main():
                         context=context,
                     )
                     clean = process_charts(token, chat_id, response, slug=slug)
+                    clean = _verify_logged_reply(slug, before_ts, clean)
                     final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
                     ogg = None
                     if clean:
@@ -3183,6 +3221,7 @@ def main():
                                            athlete_name=athlete_name, context=context)
 
                 clean = process_charts(token, chat_id, response, slug=slug)
+                clean = _verify_logged_reply(slug, before_ts, clean)
                 final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
                 if placeholder_id:
                     res = tg_post(token, "editMessageText", {
