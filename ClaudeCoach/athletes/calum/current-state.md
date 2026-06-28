@@ -3,11 +3,11 @@
 Last updated: 2026-06-28
 
 ## Recent context (auto-summary)
-- **Last confirmed ride**: Long ride 2026-06-27 (195 min, Z2, load 138) — broke a 26-day / 4 plan-week drought; CTL 9.0 / ATL 18.7 / Form −9.7 post-ride
-- **Today (Sun 28 Jun)**: Rest day — ATL decaying; CTL 8.8 / ATL 16.2 / Form −7.4
-- **Recent misses (before 27 Jun)**: Sweetspot Build 90 min (17 Jun), Long Z2 3h (20 Jun), Short endurance 35 min (23 Jun) — 3 consecutive misses
-- **Tour de Stations / Marmottes**: 62 days out (28 Jun); base-build window critically compressed; urgency flagged repeatedly by coach
-- **Compliance**: T3 Underload fired every week since Jun 7; Jun 14 and Jun 21 weeks 0%; Jun 22 week: short ride missed, long ride completed — first completed session in 4 plan weeks
+- **Last confirmed ride**: Long ride 2026-06-27 (195 min, Z2, load 138) — broke a 26-day / 4 plan-week drought; CTL 9.0 / ATL 18.7 / Form −9.7 post-ride; confirmed via ICU data (no response from Calum to session-confirm prompt)
+- **Today (Sun 28 Jun)**: Rest day — ATL decaying; CTL 8.8 / ATL 16.2 / Form −7.4; no weight response received
+- **Recent misses**: Sweetspot Build 90 min (17 Jun), Long Z2 3h (20 Jun), Short endurance 35 min (23 Jun) — 3 consecutive misses before 27 Jun ride
+- **Tour de Stations / Marmottes**: 62 days out (28 Jun); base-build window critically compressed; urgency flagged repeatedly
+- **Compliance**: T3 Underload fired every week since Jun 7; Jun 14 and Jun 21 weeks 0%; Jun 22 week: short ride missed, long ride completed — first session in 4 plan weeks
 - **Weight**: 93 kg last confirmed; not responding to morning weight check-ins for ~6+ weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target (→ 90 g/hr race target); race-day risk on 6–8 hr mountain days
 - **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; ~6+ week low-engagement streak; did complete 27 Jun long ride
