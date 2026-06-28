@@ -3,14 +3,15 @@
 Last updated: 2026-06-28
 
 ## Recent context (auto-summary)
-- **2026-06-27**: Long ride 195 min (Z2, NP target 150–175W, load 138) — COMPLETED; first ride in 26 days; CTL 9.0 / ATL 18.7 / Form −9.7 post-ride; confirmed via ICU (no Calum response to "did it happen?" prompt)
+- **2026-06-27**: Long ride 195 min (Z2, NP target 150–175W, load 138) — COMPLETED; first ride in 26 days; CTL 9.0 / ATL 18.7 / Form −9.7 post-ride; confirmed via ICU (no Calum response)
 - **2026-06-23**: Short endurance 35 min — NOT completed (ICU confirmed 0 load)
 - **2026-06-20**: Long Z2 3h — NOT completed (no ICU activity)
-- **2026-06-17**: Sweetspot Build 90 min — NOT completed (no ICU activity; no Calum response)
+- **2026-06-17**: Sweetspot Build 90 min — NOT completed (no ICU activity)
 - **2026-06-13**: Long Z2 2h45 — NOT completed (no ICU activity)
-- **Today (Sun 28 Jun)**: Rest day; CTL 8.8 / ATL 16.2 / Form −7.4; ATL decaying from Sat load; weight prompt sent — no response
+- **Sun 28 Jun**: Rest day; CTL 8.8 / ATL 16.2 / Form −7.4; weight prompt sent — no response
+- **Week of 29 Jun plan sent**: Tue endurance 50 min, Thu sweetspot 2×25 85 min, Sun long ride 195 min — 250 TSS target
 - **Tour de Stations / Marmottes**: 62 days out (28 Jun); base-build window critically compressed; urgency flagged repeatedly
-- **Compliance**: T3 Underload fired every week since Jun 7; Jun 14 and Jun 21 weeks 0%; Jun 22 week: 1 of 2 completed (long ride Sat 27 Jun only); first non-zero compliance week since Jun 7
+- **Compliance**: T3 Underload fired every week since Jun 7; Jun 22 week first non-zero (1 of 2: long ride Sat 27 Jun only); Jun 14 and Jun 21 weeks 0%
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target; race-day risk on 6–8 hr mountain days
 - **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; low-engagement 6+ week streak; only signal is ICU activity data
