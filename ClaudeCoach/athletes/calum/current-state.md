@@ -3,15 +3,15 @@
 Last updated: 2026-06-28
 
 ## Recent context (auto-summary)
-- **2026-06-27**: Long ride 195 min (Z2, NP target 150–175W, load 138) — COMPLETED; first ride in 26 days; CTL 9.0 / ATL 18.7 / Form −9.7 post-ride; confirmed via ICU (no Calum response)
+- **2026-06-28**: Weekly summary — 0% compliance (both sessions missed); fitness fell to 5.6; Base phase ends today; Build starts Mon 29 Jun; T3 Underload + T5 Phase Transition fired
+- **2026-06-27**: Long ride 195 min — NOT completed (corrected: prior watchdog used planned-event projection values CTL 9.0/ATL 18.7 in error; IcuSync activities array empty; actual wellness CTL 5.7/ATL 0.3 confirms no load)
 - **2026-06-23**: Short endurance 35 min — NOT completed (ICU confirmed 0 load)
 - **2026-06-20**: Long Z2 3h — NOT completed (no ICU activity)
 - **2026-06-17**: Sweetspot Build 90 min — NOT completed (no ICU activity)
 - **2026-06-13**: Long Z2 2h45 — NOT completed (no ICU activity)
-- **Sun 28 Jun**: Rest day; CTL 8.8 / ATL 16.2 / Form −7.4; weight prompt sent — no response
-- **Week of 29 Jun plan sent**: Tue endurance 50 min, Thu sweetspot 2×25 85 min, Sun long ride 195 min — 250 TSS target
+- **Week of 29 Jun plan sent**: Tue endurance 50 min, Thu sweetspot 2×25 85 min, Sun long ride 195 min — 252 load target
 - **Tour de Stations / Marmottes**: 62 days out (28 Jun); base-build window critically compressed; urgency flagged repeatedly
-- **Compliance**: T3 Underload fired every week since Jun 7; Jun 22 week first non-zero (1 of 2: long ride Sat 27 Jun only); Jun 14 and Jun 21 weeks 0%
+- **Compliance**: T3 Underload fired every week since Jun 7; Jun 22 week 0% (both sessions missed — Jun 27 ride previously logged as completed in error); Jun 14 and Jun 21 weeks 0%
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target; race-day risk on 6–8 hr mountain days
 - **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; low-engagement 6+ week streak; only signal is ICU activity data
@@ -35,9 +35,8 @@ Weight: **93 kg**
 No
 
 ## Off-plan in last 7 days
-- 2026-06-20: Long Z2 Ride 3h — not completed (no ICU activity recorded)
-- 2026-06-23: Short endurance 35 min — not completed (ICU atlLoad=0.0; history endpoint empty for last 14 days)
-- 2026-06-27: Long ride 195 min — GO as-planned (confirmed completed; ICU load 138, ATL 18.7, CTL 9.0; first ride in 26 days)
+- 2026-06-23: Short endurance 35 min — NOT completed (ICU atlLoad=0.0; history endpoint empty)
+- 2026-06-27: Long ride 195 min — NOT completed (corrected from prior 'confirmed completed'; IcuSync activities array empty; wellness CTL 5.7/ATL 0.3 confirms no load; prior entry had used planned-event projection values in error)
 - 2026-06-28: Rest day — no session planned (Sunday; weekday-only cycling rule)
 
 ## Open Actions
@@ -72,5 +71,5 @@ No
 | 2026-06-24 | 6.1 | 0.5 | +5.7 | Rest day — no session planned in calendar. No HRV or sleep data. (Values corrected from prior projection.) |
 | 2026-06-25 | 6.0 | 0.4 | +5.6 | Rest day — no session planned. T5: 2 missed sessions in rolling 7d — 2026-06-20 Long Z2 3h, 2026-06-23 Short endurance 35 min. Jun 23 miss is new vs prior T5 (2026-06-21). No HRV or sleep data. |
 | 2026-06-26 | 5.9 | 0.4 | +5.5 | Rest day — no session planned in calendar. No HRV or sleep data. |
-| 2026-06-27 | 9.0 | 18.7 | −9.7 | Long ride 195 min — confirmed completed (ICU load 138). First ride in 26 days. No HRV or sleep data. |
-| 2026-06-28 | 8.8 | 16.2 | −7.4 | Rest day — no session planned (Sunday; weekday-only cycling rule). ATL decaying after yesterday's load. No HRV or sleep data. |
+| 2026-06-27 | 5.7 | 0.3 | +5.4 | Long ride 195 min — NOT completed (corrected: prior entry used planned-event projection values CTL 9.0/ATL 18.7 in error; actual IcuSync: CTL 5.72/ATL 0.31, activities array empty, no load recorded). No HRV or sleep data. |
+| 2026-06-28 | 5.6 | 0.3 | +5.3 | Weekly summary. T3 Underload fired (0% compliance). T5 Phase Transition fired (Base ends today; Build starts Mon 29 Jun). Both sessions missed — Short endurance 35 min (Tue 23 Jun), Long ride 195 min (Sat 27 Jun). Jun 27 ride corrected from prior 'confirmed completed' in error. Recovery 100/100 GREEN. No HRV or sleep data. |
