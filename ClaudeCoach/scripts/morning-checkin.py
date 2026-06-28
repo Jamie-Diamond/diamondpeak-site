@@ -27,7 +27,7 @@ import menstrual as menstrual_lib
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend=""):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -120,11 +120,18 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
         else:
             heat_card_line = "[If sessions_this_week < 2 AND today is Wednesday or later: 🌡️ Heat bath due — [N] this week (target 2–3×)]"
 
+    long_run_cap_block = ""
+    if long_run_cap_km is not None:
+        long_run_cap_block = (
+            f"\n## Long-run cap (pre-computed — authoritative)\n"
+            f"Ceiling: {long_run_cap_km:.1f} km — do not reference or target a distance above this for today's long run.\n"
+        )
+
     return f"""\
 You are generating the morning briefing for {first_name}'s training day.
 
 {_level_block(coaching_level)}
-{recovery_block}{wellness_block}{cycle_block}{planned_section}{heat_block}
+{recovery_block}{wellness_block}{cycle_block}{planned_section}{long_run_cap_block}{heat_block}
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
@@ -442,6 +449,7 @@ def run_athlete(slug, athlete_cfg):
     # Pre-compute today's planned-session TSS in Python — the 11 Jun card guessed
     # "~35 TSS" for a swim whose plan event carried load_target=60.
     planned_block = ""
+    _events = []  # kept for long-run cap computation below
     try:
         from icu_api import IcuClient as _Icu
         _a = json.loads(ATHLETES_CONFIG.read_text())[slug]
@@ -467,13 +475,46 @@ def run_athlete(slug, athlete_cfg):
     except Exception:
         _fuel_target_g_hr = int(athlete_cfg.get("nutrition_alert_threshold_g_hr") or 60)
 
+    # Pre-compute long-run distance cap — rule 96 requires ≤10-15% progression/wk.
+    # Without a concrete number the model has drifted (e.g. 16km vs 15.2km cap on
+    # 2026-06-28). Only fires when today's calendar has a long-run WORKOUT event.
+    _long_run_cap_km = None
+    try:
+        import re as _lr_re
+        from primitives.modulation import classify_session_type as _lr_classify
+        _lr_events = [
+            e for e in _events
+            if (e.get("category") or "WORKOUT").upper() == "WORKOUT"
+            and _lr_classify(e.get("type", ""), str(e.get("name") or "")) == "run_long"
+        ]
+        if _lr_events:
+            _lr_sl_path = adir / "session-log.json"
+            _lr_sl = json.loads(_lr_sl_path.read_text()) if _lr_sl_path.exists() else []
+            _lr_last = next(
+                (s for s in _lr_sl
+                 if s.get("sport") in ("Run", "TrailRun") and float(s.get("distance_km") or 0) >= 10),
+                None,
+            )
+            if _lr_last:
+                _lr_prog_cap = float(_lr_last["distance_km"]) * 1.125
+                _lr_m = _lr_re.search(
+                    r"~?\s*(\d+(?:\.\d+)?)\s*km",
+                    str(_lr_events[0].get("name") or ""),
+                    _lr_re.IGNORECASE,
+                )
+                _lr_cal_km = float(_lr_m.group(1)) if _lr_m else None
+                _long_run_cap_km = min(_lr_prog_cap, _lr_cal_km) if _lr_cal_km else _lr_prog_cap
+    except Exception as exc:
+        print(f"[{slug}] long-run cap pre-compute failed: {exc}", file=sys.stderr)
+
     prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
                            wellness_line=wellness_line, heat_protocol=heat_protocol,
                            coaching_level=coaching_level, planned_block=planned_block,
                            cycle=cycle,
                            fuel_target_g_hr=_fuel_target_g_hr,
                            nutrition_race=int(athlete_cfg.get("nutrition_target_g_hr") or 90),
-                           heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend)
+                           heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend,
+                           long_run_cap_km=_long_run_cap_km)
 
     with open(log_file, "a") as lf:
         result = claude_call.run_claude(
