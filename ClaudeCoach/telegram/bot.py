@@ -7,6 +7,8 @@ Run: python3 bot.py
 
 import json, re, subprocess, sys, time, ssl, os, shutil
 import socket
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
 from datetime import datetime, date, timedelta
@@ -237,7 +239,55 @@ LOG_FILE = BASE / "bot.log"
 HISTORY_FILE = BASE.parent / "athletes/jamie/telegram/history.json"
 SYSTEM_PROMPT_FILE = BASE.parent / "athletes/jamie/system_prompt.txt"
 
-MAX_HISTORY_PAIRS = 30  # keep last 30 exchanges for context
+MAX_HISTORY_PAIRS = 30  # keep last 30 exchanges on disk (engine sends only the last few)
+
+# --- Concurrency -------------------------------------------------------------
+# The poll loop is single-threaded: a 15-40s coaching reply used to block EVERY
+# other athlete until it finished. Slow, blocking work (LLM generation, image
+# analysis, race-plan subprocess) is now handed to this pool so the main loop
+# keeps polling. A per-chat lock serialises an individual athlete's messages so
+# their history.json is never read-modify-written concurrently — different
+# athletes still run in parallel.
+_REPLY_EXECUTOR = ThreadPoolExecutor(max_workers=6, thread_name_prefix="cc-reply")
+_CHAT_LOCKS = {}
+_CHAT_LOCKS_GUARD = threading.Lock()
+
+
+def _chat_lock(chat_id):
+    with _CHAT_LOCKS_GUARD:
+        lk = _CHAT_LOCKS.get(chat_id)
+        if lk is None:
+            lk = threading.Lock()
+            _CHAT_LOCKS[chat_id] = lk
+        return lk
+
+
+def _submit(worker, chat_id, *args):
+    """Run worker(*args) on the reply pool under the chat's lock. A failed
+    worker must never kill its thread silently — log and move on."""
+    def _runner():
+        try:
+            with _chat_lock(chat_id):
+                worker(*args)
+        except Exception as e:
+            log(f"reply worker error for {chat_id}: {e}")
+    _REPLY_EXECUTOR.submit(_runner)
+
+
+# --- prefetch_context cache --------------------------------------------------
+# prefetch_context hits intervals.icu on every message. Within a short window the
+# data (CTL/ATL, recent activities, plan) doesn't change, so cache the rendered
+# block per athlete. Invalidated immediately when the athlete logs something
+# (weight/ankle/session) so the "already answered today" injection never goes
+# stale and re-asks a question they just answered.
+_PREFETCH_CACHE = {}            # slug -> (epoch, context_str)
+_PREFETCH_TTL = 150             # seconds
+_PREFETCH_GUARD = threading.Lock()
+
+
+def _invalidate_prefetch(slug):
+    with _PREFETCH_GUARD:
+        _PREFETCH_CACHE.pop(slug, None)
 
 MODEL_SONNET = "claude-sonnet-4-6"
 MODEL_OPUS   = "claude-opus-4-8"
@@ -1254,6 +1304,7 @@ def _save_state_json(slug: str, state):
     f = _athlete_dir(slug) / "current-state.json"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps(state, indent=2))
+    _invalidate_prefetch(slug)  # freshly-logged values must show in the next reply's context
 
 
 def _verify_logged_reply(slug: str, before_ts: float, clean: str) -> str:
@@ -1884,6 +1935,7 @@ def _handle_quick_log(token, chat_id, data, message_id, athletes):
 
     try:
         session_log_f.write_text(json.dumps(entries, indent=2))
+        _invalidate_prefetch(slug)  # session-log feeds prefetch context
     except Exception:
         return False
 
@@ -2043,7 +2095,13 @@ def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
 
 def prefetch_context(slug: str) -> str:
     """Fetch standard training context in parallel and return as a formatted block.
-    Falls back silently to empty string on any error so the bot keeps working."""
+    Falls back silently to empty string on any error so the bot keeps working.
+    Cached per athlete for _PREFETCH_TTL seconds (invalidated on any log write)."""
+    now_epoch = time.time()
+    with _PREFETCH_GUARD:
+        hit = _PREFETCH_CACHE.get(slug)
+    if hit and now_epoch - hit[0] < _PREFETCH_TTL:
+        return hit[1]
     try:
         import sys as _sys
         _sys.path.insert(0, str(BASE.parent / "lib"))
@@ -2220,7 +2278,44 @@ def prefetch_context(slug: str) -> str:
         except Exception as _e:
             log(f"prefetch planning numbers (non-fatal): {_e}")
 
-        return "\n".join(lines)
+        # Recent session-log entries — so "log session" / "analyse" / "how did I
+        # do" don't burn a tool round-trip reading session-log.json to find the
+        # stub. Stubs (stub=true) still need RPE/notes; filled ones are context.
+        try:
+            sl_path = BASE.parent / "athletes" / slug / "session-log.json"
+            if sl_path.exists():
+                sl = json.loads(sl_path.read_text())
+                recent_cut = (today - timedelta(days=4)).isoformat()
+                recent = [s for s in sl if (s.get("date") or "") >= recent_cut]
+                if recent:
+                    lines.append("\nRecent session-log (last 4 days — fill stubs on 'log session', "
+                                 "don't re-ask filled ones):")
+                    for s in sorted(recent, key=lambda x: x.get("date", ""), reverse=True)[:8]:
+                        flag = "STUB — needs RPE/notes" if s.get("stub") else f"RPE {s.get('rpe')}"
+                        lines.append(
+                            f"  {s.get('date')}  {s.get('sport','?'):<10} "
+                            f"id={s.get('activity_id','?')}  [{flag}]")
+        except Exception as _e:
+            log(f"prefetch session-log (non-fatal): {_e}")
+
+        # Subjective layer (top of current-state.md) — travel blocks, current
+        # ankle/niggle status, open actions. The full file is large (~65KB of
+        # historical logs); inject only the head and point the model at the rest.
+        try:
+            md_path = BASE.parent / "athletes" / slug / "current-state.md"
+            if md_path.exists():
+                head = md_path.read_text()[:2500].strip()
+                if head:
+                    lines.append(
+                        f"\n=== SUBJECTIVE LAYER (current-state.md, top section — "
+                        f"read the full file for older detail) ===\n{head}")
+        except Exception as _e:
+            log(f"prefetch current-state.md (non-fatal): {_e}")
+
+        out = "\n".join(lines)
+        with _PREFETCH_GUARD:
+            _PREFETCH_CACHE[slug] = (now_epoch, out)
+        return out
 
     except Exception as e:
         log(f"prefetch_context error (non-fatal): {e}")
@@ -2792,6 +2887,392 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     return final if final is not None else "(no response)"
 
 
+def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slug, text):
+    """The slow text-chat generation path, run off the poll loop on the reply
+    pool (under the chat lock). Mirrors the old inline try-block exactly."""
+    try:
+        history = load_history(files["history"])
+        context = prefetch_context(slug)
+        model = select_model(text, history)
+        before_ts = time.time()
+
+        if _voice_mode_on(slug):
+            # Sticky voice mode: the TEXT stays the normal rich style (as it used
+            # to be) - only the AUDIO is the voice-friendly version. Generate the
+            # rich reply, show it, then speak a short conversational rewrite of it.
+            # Charts still go out as images. Any TTS failure falls through to the
+            # rich text send - a reply is never dropped.
+            tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "record_voice"})
+            response = call_claude(
+                text, config, history, model=model,
+                system_prompt_file=files["system_prompt"], athlete_name=athlete_name,
+                context=context,
+            )
+            clean = process_charts(token, chat_id, response, slug=slug)
+            clean = _verify_logged_reply(slug, before_ts, clean)
+            final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
+            ogg = None
+            if clean:
+                spoken = _clean_for_speech(_spoken_rewrite(clean))
+                ogg = synthesize_voice(spoken) if spoken else None
+            if ogg:
+                send_voice(token, chat_id, ogg)
+                send(token, chat_id, final, reply_markup=_reply_inline(slug))
+            elif clean:
+                send(token, chat_id, final, reply_markup=_reply_inline(slug))
+            log(f"Out (voice): {clean[:80]}")
+            history.append(_hist_entry(text, clean))
+            save_history(history, files["history"])
+            return
+
+        typing(token, chat_id)
+        # Send a placeholder and stream chunks into it
+        placeholder = tg_post(token, "sendMessage", {
+            "chat_id": chat_id, "text": "…", "parse_mode": "Markdown",
+        })
+        placeholder_id = (placeholder.get("result") or {}).get("message_id")
+
+        if placeholder_id:
+            response = call_claude_streaming(
+                token, chat_id, placeholder_id,
+                text, config, history, model=model,
+                system_prompt_file=files["system_prompt"],
+                athlete_name=athlete_name, context=context,
+            )
+        else:
+            response = call_claude(text, config, history, model=model,
+                                   system_prompt_file=files["system_prompt"],
+                                   athlete_name=athlete_name, context=context)
+
+        clean = process_charts(token, chat_id, response, slug=slug)
+        clean = _verify_logged_reply(slug, before_ts, clean)
+        final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
+        if placeholder_id:
+            res = tg_post(token, "editMessageText", {
+                "chat_id": chat_id, "message_id": placeholder_id,
+                "text": final, "parse_mode": "Markdown",
+                "reply_markup": _reply_inline(slug),
+            })
+            # Last-resort guard: if the edit failed entirely (even the plain-text retry,
+            # e.g. MESSAGE_TOO_LONG), send the reply as a fresh message so it is NEVER
+            # silently lost to a stuck "…". Delete the placeholder first so the dead "…"
+            # (or partial stream) does not linger above the real reply.
+            if not (res or {}).get("ok") and clean:
+                log("editMessageText final delivery failed - sending fresh message")
+                tg_post(token, "deleteMessage", {
+                    "chat_id": chat_id, "message_id": placeholder_id,
+                })
+                send(token, chat_id, final, reply_markup=_reply_inline(slug))
+        elif clean:
+            send(token, chat_id, final, reply_markup=_reply_inline(slug))
+        log(f"Out: {clean[:80]}")
+
+        history.append(_hist_entry(text, clean))
+        save_history(history, files["history"])
+    except Exception as _reply_err:
+        log(f"reply handling error for {chat_id}: {_reply_err}")
+        try:
+            send(token, chat_id, "Sorry - I hit a snag answering that. "
+                 "Give it another go in a moment.")
+        except Exception:
+            pass
+
+
+def _image_reply_worker(token, chat_id, file_id, caption, athlete_entry, config):
+    """Image analysis path, run off the poll loop on the reply pool."""
+    import tempfile as _tempfile
+    typing(token, chat_id)
+    raw = download_tg_file(token, file_id)
+    if not raw:
+        return
+    with _tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
+        tf.write(raw)
+        img_path = tf.name
+    try:
+        send(token, chat_id, "_On it..._")
+        slug = athlete_entry["slug"]
+        files = athlete_files(slug)
+        athlete_name = athlete_entry.get("name", slug).split()[0]
+        history = load_history(files["history"])
+        context = prefetch_context(slug)
+        response = call_claude_with_image(
+            img_path, caption, config, history,
+            system_prompt_file=files["system_prompt"],
+            athlete_name=athlete_name, context=context,
+        )
+        clean = process_charts(token, chat_id, response, slug=slug)
+        if clean:
+            send(token, chat_id,
+                 clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athlete_entry),
+                 reply_markup=build_keyboard(slug))
+        log(f"Out (image): {clean[:80]}")
+        history.append(_hist_entry(caption or "[image]", clean))
+        save_history(history, files["history"])
+    finally:
+        try:
+            os.unlink(img_path)
+        except Exception:
+            pass
+
+
+def _raceplan_worker(token, chat_id, slug):
+    """Race-plan generation (blocking ~60s subprocess), run off the poll loop."""
+    try:
+        r = subprocess.run(
+            ["python3", str(BASE.parent / "scripts/generate-race-plan.py"),
+             "--athlete", slug],
+            capture_output=True, text=True,
+            cwd=str(PROJECT_DIR), timeout=60,
+        )
+        if r.returncode == 0:
+            out = r.stdout.strip() or "Race plan updated."
+            send(token, chat_id,
+                 f"{out}\n\nAsk me to _summarise my race plan_ for the targets.",
+                 reply_markup=build_keyboard(slug))
+        else:
+            send(token, chat_id,
+                 f"Race plan generation failed:\n{r.stderr.strip()[:300]}",
+                 reply_markup=build_keyboard(slug))
+    except Exception as e:
+        send(token, chat_id, f"Error generating race plan: {e}", reply_markup=build_keyboard(slug))
+    log("Out (fast): race plan generated")
+
+
+def _route_text(token, chat_id, text, athletes, config):
+    """Route a typed-or-transcribed text message: admin/onboarding, fast paths,
+    then the chat-reply worker. Called synchronously from the poll loop for typed
+    messages, and from _voice_reply_worker after transcription."""
+    # Admin commands (/invite, /approve) — handled before athlete routing
+    if handle_admin_command(token, chat_id, text, config):
+        return
+
+    athlete = athletes.get(chat_id)
+    if not athlete:
+        if handle_onboarding(token, chat_id, text):
+            return
+        log(f"Unregistered message from chat_id {chat_id}: {text[:60]}")
+        send(token, chat_id, "This account isn't registered with ClaudeCoach yet.")
+        # Alert admin so missing chat_ids are caught immediately
+        admin_id = str(config.get("admin_chat_id") or config.get("chat_id", ""))
+        if admin_id and admin_id != chat_id:
+            send(token, admin_id,
+                 f"⚠️ Unregistered message\nchat\\_id: `{chat_id}`\n_{text[:120]}_")
+        return
+
+    slug = athlete["slug"]
+    files = athlete_files(slug)
+    athlete_name = athlete.get("name", slug).split()[0]  # first name only
+
+    # Bug-fix Edit follow-up: this message is the revision for a pending review.
+    if chat_id in _PENDING_BUG_EDIT:
+        _rid = _PENDING_BUG_EDIT.pop(chat_id)
+        send(token, chat_id, "On it — revising that fix; I'll re-post when it's ready.")
+        subprocess.Popen(["python3", str(_BUGFIXER), "--refix", _rid, "--feedback", text],
+                         cwd=config.get("project_dir"), start_new_session=True)
+        return
+
+    # Sticky voice-reply toggle: /voice [on|off] or the 🎙 menu button.
+    _vt = text.strip().lower()
+    if _vt == "/voice" or _vt.startswith("/voice ") or _vt == "🎙 voice":
+        arg = _vt.replace("🎙 voice", "").replace("/voice", "").strip()
+        if arg in ("on", "start", "enable"):
+            new_state = True
+        elif arg in ("off", "stop", "disable"):
+            new_state = False
+        else:
+            new_state = not _voice_mode_on(slug)   # bare /voice or button = flip
+        _set_voice_mode(slug, new_state)
+        if new_state:
+            vb = synthesize_voice(
+                "Voice replies are on. I'll talk back to you from now on. "
+                "Say or type voice off any time to switch back to text.")
+            note = ("🎙 Voice replies *on* - I'll talk back to you. "
+                    "Send /voice off (or tap 🎙 Voice again) to return to text.")
+            if vb:
+                send_voice(token, chat_id, vb)
+                send(token, chat_id, note, reply_markup=build_keyboard(slug))
+            else:
+                send(token, chat_id,
+                     note + "\n\n_Voice engine is unavailable right now, so replies stay text until it's back._",
+                     reply_markup=build_keyboard(slug))
+        else:
+            send(token, chat_id, "🔇 Voice replies *off* - back to text.",
+                 reply_markup=build_keyboard(slug))
+        log(f"Out (fast): voice mode {'on' if new_state else 'off'}")
+        return
+
+    if text.lower() in ("/start", "/help"):
+        race_name  = athlete.get("race_name", "your race")
+        cycle_help = ("  period started — log cycle start (phases feed your plan)\n"
+                      if _menstrual is not None and _menstrual.enabled(slug) else "")
+        send(token, chat_id,
+             f"*ClaudeCoach* — {race_name}\n\n"
+             "*Quick commands (instant):*\n"
+             "  /week — this week's sessions + Load\n"
+             "  /form — Fitness/Fatigue/Form + race projection\n"
+             "  /load — training load chart (±8 days)\n"
+             "  /fitness — Fitness & Fatigue + Form charts\n"
+             "  strength — today's gym session\n"
+             "  ankle 3 — log pain score\n"
+             "  82.5 kg — log weight\n"
+             "  heat 30 — log heat session\n"
+             f"{cycle_help}\n"
+             "*Ask anything:*\n"
+             "  _how am I looking?_\n"
+             "  _what's today's session?_\n"
+             "  _log session_ (after a workout)\n"
+             "  _rebalance plan_\n"
+             "  _generate plan_",
+             reply_markup=build_keyboard(slug))
+        return
+
+    log(f"In: {text[:80]}")
+
+    fast = fast_path(text, slug=slug, athlete_cfg=athlete)
+    if fast == "__REPLAN__":
+        _PENDING_REPLAN[chat_id] = time.time() + 60
+        send(token, chat_id,
+             "⚠️ Replan will rebuild this week from scratch — confirm?",
+             reply_markup={"inline_keyboard": [[
+                 {"text": "✅ Yes, replan",  "callback_data": "__REPLAN_CONFIRM__"},
+                 {"text": "❌ Cancel",        "callback_data": "__REPLAN_CANCEL__"},
+             ]]})
+        return
+    if fast in ("__GENERATE_PLAN__", "__REPLAN__"):
+        is_replan = fast == "__REPLAN__"
+        send(token, chat_id,
+             "_Rebuilding your week to target — this takes a few minutes…_" if is_replan
+             else "_Generating plan — this takes a few minutes…_")
+        try:
+            # Launch generate-plan DETACHED and return immediately. The script
+            # sends the athlete-facing message itself via notify.py when it
+            # finishes, so the bot does NOT need to wait for it. A *blocking*
+            # subprocess.run froze the whole single-threaded bot for every
+            # athlete while a plan generated, and timed out at 600s on a
+            # populated replan (a fortnight of sessions = many sequential ICU
+            # edits). `timeout` gives a generous hard cap so a stuck run can't
+            # linger forever. Do NOT echo stdout (caused duplicate messages).
+            # Two-stage engine (gated --push, --notify messages the athlete on
+            # completion). Replaces the old generate-plan for replan/generate.
+            cmd = ["timeout", "1800", "python3", str(STAGE1_PLAN_SCRIPT),
+                   "--athlete", slug, "--push", "--notify"]
+            subprocess.Popen(
+                cmd, cwd=str(PROJECT_DIR),
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            log(f"[{slug}] {'replan' if is_replan else 'plan'} launched in background (detached)")
+        except Exception as e:
+            send(token, chat_id, f"Couldn't start plan generation: {e}",
+                 reply_markup=build_keyboard(slug))
+        return
+    elif fast and fast.startswith("__FTP_RETEST__:"):
+        new_ftp = int(float(fast.split(":", 1)[1]))
+        reply = _update_ftp(slug, new_ftp)
+        _mark_test_completed(slug, "ftp")
+        send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+        log(f"Out (FTP update): {new_ftp} W")
+        return
+    elif fast and fast.startswith("__CSS__:"):
+        reply = _update_css(slug, fast.split(":", 1)[1])
+        send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+        log(f"Out (CSS update): {fast.split(':', 1)[1]}")
+        return
+    elif fast and fast.startswith("__LTHR__:"):
+        reply = _update_lthr(slug, int(fast.split(":", 1)[1]))
+        send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+        log(f"Out (LTHR update): {fast.split(':', 1)[1]}")
+        return
+    elif fast == "__LOAD_CHART__":
+        typing(token, chat_id)
+        log("Out (fast): load chart")
+        _load_chart_quick(token, chat_id, slug)
+        return
+    elif fast == "__FITNESS_CHARTS__":
+        typing(token, chat_id)
+        log("Out (fast): fitness charts")
+        _fitness_charts_quick(token, chat_id, slug)
+        return
+    elif fast == "__GRAPHS__":
+        send(token, chat_id, "*Graphs* — pick one:", reply_markup={"inline_keyboard": [
+            [{"text": "📈 Fitness & Form", "callback_data": "/fitness"}],
+            [{"text": "🔋 Load",            "callback_data": "/load"}],
+            [{"text": "💪 Durability",       "callback_data": "/durability"}],
+            [{"text": "😴 Recovery",         "callback_data": "/recovery"}],
+            [{"text": "✅ Compliance",       "callback_data": "/compliance"}],
+            [{"text": "⚡ Power curve",      "callback_data": "/powercurve"}],
+        ]})
+        log("Out (fast): graphs menu")
+        return
+    elif fast == "__DURABILITY__":
+        typing(token, chat_id); log("Out (fast): durability")
+        _durability_chart_quick(token, chat_id, slug)
+        return
+    elif fast == "__RECOVERY__":
+        typing(token, chat_id); log("Out (fast): recovery")
+        _recovery_chart_quick(token, chat_id, slug)
+        return
+    elif fast == "__COMPLIANCE__":
+        typing(token, chat_id); log("Out (fast): compliance")
+        _compliance_chart_quick(token, chat_id, slug)
+        return
+    elif fast == "__POWERCURVE__":
+        typing(token, chat_id); log("Out (fast): power curve")
+        _power_curve_quick(token, chat_id, slug)
+        return
+    elif fast == "__ACTIVITY_CHECK__":
+        send(token, chat_id, "_Checking for new activity…_")
+        # Detached single-athlete run; messages the athlete itself via
+        # notify.py (new activity, or a 'nothing new' confirmation).
+        subprocess.Popen(
+            ["python3", str(BASE.parent / "scripts/activity-watcher.py"),
+             "--athlete", slug],
+            cwd=str(PROJECT_DIR),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        log(f"[{slug}] on-demand activity check launched")
+        return
+    elif fast == "__WEEKLY_SUMMARY__":
+        send(token, chat_id,
+             "_Weekly summary running — Telegram message incoming in ~3 minutes._")
+        subprocess.Popen(
+            ["python3",
+             str(BASE.parent / "scripts/weekly-summary.py"),
+             "--athlete", slug],
+            cwd=str(PROJECT_DIR),
+        )
+        log("Out (fast): weekly summary triggered")
+        return
+    elif fast:
+        send(token, chat_id, fast, reply_markup=build_keyboard(slug))
+        log(f"Out (fast): {fast[:80]}")
+        return
+
+    if _RACE_PLAN_RE.match(text.strip()):
+        send(token, chat_id, "_Updating race plan..._")
+        _submit(_raceplan_worker, chat_id, token, chat_id, slug)
+        return
+
+    # Slow generation runs off the poll loop so one athlete's 15-40s reply
+    # never blocks the others. The per-chat lock (in _submit) serialises
+    # this athlete's own messages so history.json can't be corrupted.
+    _submit(_chat_reply_worker, chat_id,
+            token, chat_id, config, athlete, files, athlete_name, slug, text)
+
+
+def _voice_reply_worker(token, chat_id, file_id, athletes, config):
+    """Transcribe a voice note off the poll loop, then route the text. Whisper is
+    CPU-heavy (several seconds) and used to block every other athlete inline."""
+    typing(token, chat_id)
+    raw = download_tg_file(token, file_id)
+    if not raw:
+        return
+    text = transcribe_voice(raw) or ""
+    if not text:
+        return
+    send(token, chat_id, f"_Heard: {text}_")
+    _route_text(token, chat_id, text, athletes, config)
+
+
 def get_updates(token, offset):
     return tg_get(token, "getUpdates", {"offset": offset, "timeout": 30})
 
@@ -2887,371 +3368,23 @@ def main():
                 if not text:
                     voice = msg.get("voice") or msg.get("audio")
                     if voice and chat_id in athletes:
-                        typing(token, chat_id)
-                        raw = download_tg_file(token, voice["file_id"])
-                        if raw:
-                            text = transcribe_voice(raw) or ""
-                            if text:
-                                send(token, chat_id, f"_Heard: {text}_")
-
-                if not text:
+                        # Offload transcription (slow Whisper) + routing so a voice
+                        # note doesn't freeze the poll loop for other athletes.
+                        _submit(_voice_reply_worker, chat_id, token, chat_id,
+                                voice["file_id"], athletes, config)
                     photo = msg.get("photo")
                     if photo and chat_id in athletes:
-                        import tempfile as _tempfile
                         caption = (msg.get("caption") or "").strip()
-                        typing(token, chat_id)
-                        raw = download_tg_file(token, photo[-1]["file_id"])
-                        if raw:
-                            with _tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
-                                tf.write(raw)
-                                img_path = tf.name
-                            try:
-                                send(token, chat_id, "_On it..._")
-                                slug = athletes[chat_id]["slug"]
-                                files = athlete_files(slug)
-                                athlete_name = athletes[chat_id].get("name", slug).split()[0]
-                                history = load_history(files["history"])
-                                context = prefetch_context(slug)
-                                response = call_claude_with_image(
-                                    img_path, caption, config, history,
-                                    system_prompt_file=files["system_prompt"],
-                                    athlete_name=athlete_name, context=context,
-                                )
-                                clean = process_charts(token, chat_id, response, slug=slug)
-                                if clean:
-                                    send(token, chat_id,
-                                         clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athletes[chat_id]),
-                                         reply_markup=build_keyboard(slug))
-                                log(f"Out (image): {clean[:80]}")
-                                history.append(_hist_entry(caption or "[image]", clean))
-                                save_history(history, files["history"])
-                            finally:
-                                try:
-                                    os.unlink(img_path)
-                                except Exception:
-                                    pass
+                        # Offload the blocking download + image generation so it
+                        # doesn't freeze the poll loop for other athletes.
+                        _submit(_image_reply_worker, chat_id, token, chat_id,
+                                photo[-1]["file_id"], caption, athletes[chat_id], config)
                     continue
 
             if not text:
                 continue
 
-            # Admin commands (/invite, /approve) — handled before athlete routing
-            if handle_admin_command(token, chat_id, text, config):
-                continue
-
-            athlete = athletes.get(chat_id)
-            if not athlete:
-                if handle_onboarding(token, chat_id, text):
-                    continue
-                log(f"Unregistered message from chat_id {chat_id}: {text[:60]}")
-                send(token, chat_id, "This account isn't registered with ClaudeCoach yet.")
-                # Alert admin so missing chat_ids are caught immediately
-                admin_id = str(config.get("admin_chat_id") or config.get("chat_id", ""))
-                if admin_id and admin_id != chat_id:
-                    send(token, admin_id,
-                         f"⚠️ Unregistered message\nchat\\_id: `{chat_id}`\n_{text[:120]}_")
-                continue
-
-            slug = athlete["slug"]
-            files = athlete_files(slug)
-            athlete_name = athlete.get("name", slug).split()[0]  # first name only
-
-            # Bug-fix Edit follow-up: this message is the revision for a pending review.
-            if chat_id in _PENDING_BUG_EDIT:
-                _rid = _PENDING_BUG_EDIT.pop(chat_id)
-                send(token, chat_id, "On it — revising that fix; I'll re-post when it's ready.")
-                subprocess.Popen(["python3", str(_BUGFIXER), "--refix", _rid, "--feedback", text],
-                                 cwd=config.get("project_dir"), start_new_session=True)
-                continue
-
-            # Sticky voice-reply toggle: /voice [on|off] or the 🎙 menu button.
-            _vt = text.strip().lower()
-            if _vt == "/voice" or _vt.startswith("/voice ") or _vt == "🎙 voice":
-                arg = _vt.replace("🎙 voice", "").replace("/voice", "").strip()
-                if arg in ("on", "start", "enable"):
-                    new_state = True
-                elif arg in ("off", "stop", "disable"):
-                    new_state = False
-                else:
-                    new_state = not _voice_mode_on(slug)   # bare /voice or button = flip
-                _set_voice_mode(slug, new_state)
-                if new_state:
-                    vb = synthesize_voice(
-                        "Voice replies are on. I'll talk back to you from now on. "
-                        "Say or type voice off any time to switch back to text.")
-                    note = ("🎙 Voice replies *on* - I'll talk back to you. "
-                            "Send /voice off (or tap 🎙 Voice again) to return to text.")
-                    if vb:
-                        send_voice(token, chat_id, vb)
-                        send(token, chat_id, note, reply_markup=build_keyboard(slug))
-                    else:
-                        send(token, chat_id,
-                             note + "\n\n_Voice engine is unavailable right now, so replies stay text until it's back._",
-                             reply_markup=build_keyboard(slug))
-                else:
-                    send(token, chat_id, "🔇 Voice replies *off* - back to text.",
-                         reply_markup=build_keyboard(slug))
-                log(f"Out (fast): voice mode {'on' if new_state else 'off'}")
-                continue
-
-            if text.lower() in ("/start", "/help"):
-                race_name  = athlete.get("race_name", "your race")
-                cycle_help = ("  period started — log cycle start (phases feed your plan)\n"
-                              if _menstrual is not None and _menstrual.enabled(slug) else "")
-                send(token, chat_id,
-                     f"*ClaudeCoach* — {race_name}\n\n"
-                     "*Quick commands (instant):*\n"
-                     "  /week — this week's sessions + Load\n"
-                     "  /form — Fitness/Fatigue/Form + race projection\n"
-                     "  /load — training load chart (±8 days)\n"
-                     "  /fitness — Fitness & Fatigue + Form charts\n"
-                     "  strength — today's gym session\n"
-                     "  ankle 3 — log pain score\n"
-                     "  82.5 kg — log weight\n"
-                     "  heat 30 — log heat session\n"
-                     f"{cycle_help}\n"
-                     "*Ask anything:*\n"
-                     "  _how am I looking?_\n"
-                     "  _what's today's session?_\n"
-                     "  _log session_ (after a workout)\n"
-                     "  _rebalance plan_\n"
-                     "  _generate plan_",
-                     reply_markup=build_keyboard(slug))
-                continue
-
-            log(f"In: {text[:80]}")
-
-            fast = fast_path(text, slug=slug, athlete_cfg=athlete)
-            if fast == "__REPLAN__":
-                _PENDING_REPLAN[chat_id] = time.time() + 60
-                send(token, chat_id,
-                     "⚠️ Replan will rebuild this week from scratch — confirm?",
-                     reply_markup={"inline_keyboard": [[
-                         {"text": "✅ Yes, replan",  "callback_data": "__REPLAN_CONFIRM__"},
-                         {"text": "❌ Cancel",        "callback_data": "__REPLAN_CANCEL__"},
-                     ]]})
-                continue
-            if fast in ("__GENERATE_PLAN__", "__REPLAN__"):
-                is_replan = fast == "__REPLAN__"
-                send(token, chat_id,
-                     "_Rebuilding your week to target — this takes a few minutes…_" if is_replan
-                     else "_Generating plan — this takes a few minutes…_")
-                try:
-                    # Launch generate-plan DETACHED and return immediately. The script
-                    # sends the athlete-facing message itself via notify.py when it
-                    # finishes, so the bot does NOT need to wait for it. A *blocking*
-                    # subprocess.run froze the whole single-threaded bot for every
-                    # athlete while a plan generated, and timed out at 600s on a
-                    # populated replan (a fortnight of sessions = many sequential ICU
-                    # edits). `timeout` gives a generous hard cap so a stuck run can't
-                    # linger forever. Do NOT echo stdout (caused duplicate messages).
-                    # Two-stage engine (gated --push, --notify messages the athlete on
-                    # completion). Replaces the old generate-plan for replan/generate.
-                    cmd = ["timeout", "1800", "python3", str(STAGE1_PLAN_SCRIPT),
-                           "--athlete", slug, "--push", "--notify"]
-                    subprocess.Popen(
-                        cmd, cwd=str(PROJECT_DIR),
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                    )
-                    log(f"[{slug}] {'replan' if is_replan else 'plan'} launched in background (detached)")
-                except Exception as e:
-                    send(token, chat_id, f"Couldn't start plan generation: {e}",
-                         reply_markup=build_keyboard(slug))
-                continue
-            elif fast and fast.startswith("__FTP_RETEST__:"):
-                new_ftp = int(float(fast.split(":", 1)[1]))
-                reply = _update_ftp(slug, new_ftp)
-                _mark_test_completed(slug, "ftp")
-                send(token, chat_id, reply, reply_markup=build_keyboard(slug))
-                log(f"Out (FTP update): {new_ftp} W")
-                continue
-            elif fast and fast.startswith("__CSS__:"):
-                reply = _update_css(slug, fast.split(":", 1)[1])
-                send(token, chat_id, reply, reply_markup=build_keyboard(slug))
-                log(f"Out (CSS update): {fast.split(':', 1)[1]}")
-                continue
-            elif fast and fast.startswith("__LTHR__:"):
-                reply = _update_lthr(slug, int(fast.split(":", 1)[1]))
-                send(token, chat_id, reply, reply_markup=build_keyboard(slug))
-                log(f"Out (LTHR update): {fast.split(':', 1)[1]}")
-                continue
-            elif fast == "__LOAD_CHART__":
-                typing(token, chat_id)
-                log("Out (fast): load chart")
-                _load_chart_quick(token, chat_id, slug)
-                continue
-            elif fast == "__FITNESS_CHARTS__":
-                typing(token, chat_id)
-                log("Out (fast): fitness charts")
-                _fitness_charts_quick(token, chat_id, slug)
-                continue
-            elif fast == "__GRAPHS__":
-                send(token, chat_id, "*Graphs* — pick one:", reply_markup={"inline_keyboard": [
-                    [{"text": "📈 Fitness & Form", "callback_data": "/fitness"}],
-                    [{"text": "🔋 Load",            "callback_data": "/load"}],
-                    [{"text": "💪 Durability",       "callback_data": "/durability"}],
-                    [{"text": "😴 Recovery",         "callback_data": "/recovery"}],
-                    [{"text": "✅ Compliance",       "callback_data": "/compliance"}],
-                    [{"text": "⚡ Power curve",      "callback_data": "/powercurve"}],
-                ]})
-                log("Out (fast): graphs menu")
-                continue
-            elif fast == "__DURABILITY__":
-                typing(token, chat_id); log("Out (fast): durability")
-                _durability_chart_quick(token, chat_id, slug)
-                continue
-            elif fast == "__RECOVERY__":
-                typing(token, chat_id); log("Out (fast): recovery")
-                _recovery_chart_quick(token, chat_id, slug)
-                continue
-            elif fast == "__COMPLIANCE__":
-                typing(token, chat_id); log("Out (fast): compliance")
-                _compliance_chart_quick(token, chat_id, slug)
-                continue
-            elif fast == "__POWERCURVE__":
-                typing(token, chat_id); log("Out (fast): power curve")
-                _power_curve_quick(token, chat_id, slug)
-                continue
-            elif fast == "__ACTIVITY_CHECK__":
-                send(token, chat_id, "_Checking for new activity…_")
-                # Detached single-athlete run; messages the athlete itself via
-                # notify.py (new activity, or a 'nothing new' confirmation).
-                subprocess.Popen(
-                    ["python3", str(BASE.parent / "scripts/activity-watcher.py"),
-                     "--athlete", slug],
-                    cwd=str(PROJECT_DIR),
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
-                log(f"[{slug}] on-demand activity check launched")
-                continue
-            elif fast == "__WEEKLY_SUMMARY__":
-                send(token, chat_id,
-                     "_Weekly summary running — Telegram message incoming in ~3 minutes._")
-                subprocess.Popen(
-                    ["python3",
-                     str(BASE.parent / "scripts/weekly-summary.py"),
-                     "--athlete", slug],
-                    cwd=str(PROJECT_DIR),
-                )
-                log("Out (fast): weekly summary triggered")
-                continue
-            elif fast:
-                send(token, chat_id, fast, reply_markup=build_keyboard(slug))
-                log(f"Out (fast): {fast[:80]}")
-                continue
-
-            if _RACE_PLAN_RE.match(text.strip()):
-                send(token, chat_id, "_Updating race plan..._")
-                try:
-                    r = subprocess.run(
-                        ["python3", str(BASE.parent / "scripts/generate-race-plan.py"),
-                         "--athlete", slug],
-                        capture_output=True, text=True,
-                        cwd=str(PROJECT_DIR), timeout=60,
-                    )
-                    if r.returncode == 0:
-                        out = r.stdout.strip() or "Race plan updated."
-                        send(token, chat_id,
-                             f"{out}\n\nAsk me to _summarise my race plan_ for the targets.",
-                             reply_markup=build_keyboard(slug))
-                    else:
-                        send(token, chat_id,
-                             f"Race plan generation failed:\n{r.stderr.strip()[:300]}",
-                             reply_markup=build_keyboard(slug))
-                except Exception as e:
-                    send(token, chat_id, f"Error generating race plan: {e}", reply_markup=build_keyboard(slug))
-                log("Out (fast): race plan generated")
-                continue
-
-            # Missed-reply watchdog: a single reply must never crash the loop or
-            # leave the athlete with silence (the swim-splits no-reply bug). Any
-            # exception here sends a fallback and is logged, then the loop continues.
-            try:
-                history = load_history(files["history"])
-                context = prefetch_context(slug)
-                model = select_model(text, history)
-                before_ts = time.time()
-
-                if _voice_mode_on(slug):
-                    # Sticky voice mode: the TEXT stays the normal rich style (as it used
-                    # to be) - only the AUDIO is the voice-friendly version. Generate the
-                    # rich reply, show it, then speak a short conversational rewrite of it.
-                    # Charts still go out as images. Any TTS failure falls through to the
-                    # rich text send - a reply is never dropped.
-                    tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "record_voice"})
-                    response = call_claude(
-                        text, config, history, model=model,
-                        system_prompt_file=files["system_prompt"], athlete_name=athlete_name,
-                        context=context,
-                    )
-                    clean = process_charts(token, chat_id, response, slug=slug)
-                    clean = _verify_logged_reply(slug, before_ts, clean)
-                    final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
-                    ogg = None
-                    if clean:
-                        spoken = _clean_for_speech(_spoken_rewrite(clean))
-                        ogg = synthesize_voice(spoken) if spoken else None
-                    if ogg:
-                        send_voice(token, chat_id, ogg)
-                        send(token, chat_id, final, reply_markup=_reply_inline(slug))
-                    elif clean:
-                        send(token, chat_id, final, reply_markup=_reply_inline(slug))
-                    log(f"Out (voice): {clean[:80]}")
-                    history.append(_hist_entry(text, clean))
-                    save_history(history, files["history"])
-                    continue
-
-                typing(token, chat_id)
-                # Send a placeholder and stream chunks into it
-                placeholder = tg_post(token, "sendMessage", {
-                    "chat_id": chat_id, "text": "…", "parse_mode": "Markdown",
-                })
-                placeholder_id = (placeholder.get("result") or {}).get("message_id")
-
-                if placeholder_id:
-                    response = call_claude_streaming(
-                        token, chat_id, placeholder_id,
-                        text, config, history, model=model,
-                        system_prompt_file=files["system_prompt"],
-                        athlete_name=athlete_name, context=context,
-                    )
-                else:
-                    response = call_claude(text, config, history, model=model,
-                                           system_prompt_file=files["system_prompt"],
-                                           athlete_name=athlete_name, context=context)
-
-                clean = process_charts(token, chat_id, response, slug=slug)
-                clean = _verify_logged_reply(slug, before_ts, clean)
-                final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
-                if placeholder_id:
-                    res = tg_post(token, "editMessageText", {
-                        "chat_id": chat_id, "message_id": placeholder_id,
-                        "text": final, "parse_mode": "Markdown",
-                        "reply_markup": _reply_inline(slug),
-                    })
-                    # Last-resort guard: if the edit failed entirely (even the plain-text retry,
-                    # e.g. MESSAGE_TOO_LONG), send the reply as a fresh message so it is NEVER
-                    # silently lost to a stuck "…". Delete the placeholder first so the dead "…"
-                    # (or partial stream) does not linger above the real reply.
-                    if not (res or {}).get("ok") and clean:
-                        log("editMessageText final delivery failed - sending fresh message")
-                        tg_post(token, "deleteMessage", {
-                            "chat_id": chat_id, "message_id": placeholder_id,
-                        })
-                        send(token, chat_id, final, reply_markup=_reply_inline(slug))
-                elif clean:
-                    send(token, chat_id, final, reply_markup=_reply_inline(slug))
-                log(f"Out: {clean[:80]}")
-
-                history.append(_hist_entry(text, clean))
-                save_history(history, files["history"])
-            except Exception as _reply_err:
-                log(f"reply handling error for {chat_id}: {_reply_err}")
-                try:
-                    send(token, chat_id, "Sorry - I hit a snag answering that. "
-                         "Give it another go in a moment.")
-                except Exception:
-                    pass
+            _route_text(token, chat_id, text, athletes, config)
 
         time.sleep(1)
 

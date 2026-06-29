@@ -41,6 +41,11 @@ MODEL_OPUS   = "claude-opus-4-8"
 MODEL_HAIKU  = "claude-haiku-4-5-20251001"
 SYSTEM_PROMPT_FILE = BASE / "athletes/jamie/system_prompt.txt"
 
+# How many recent exchanges to feed the model. History is persisted longer on
+# disk (bot's MAX_HISTORY_PAIRS) but only the last few are worth re-sending —
+# every extra pair is re-ingested uncached on every reply, inflating latency.
+PROMPT_HISTORY_PAIRS = 12
+
 
 def log(msg):
     """Default logger (stderr). The Telegram bot points this at bot.log; the web
@@ -109,7 +114,7 @@ def build_prompt(user_message, history, system_prompt, athlete_name, context,
         parts.append("")
     if history:
         parts.append("Recent conversation:")
-        parts.extend(render_history(history, athlete_name))
+        parts.extend(render_history(history[-PROMPT_HISTORY_PAIRS:], athlete_name))
         parts.append("")
     parts.append(f"{athlete_name}: {user_message}")
     return "\n".join(parts)
@@ -216,7 +221,7 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNE
         parts.append("")
     if history:
         parts.append("Recent conversation:")
-        parts.extend(render_history(history, athlete_name))
+        parts.extend(render_history(history[-PROMPT_HISTORY_PAIRS:], athlete_name))
         parts.append("")
     question = caption if caption else "analyse this"
     user_msg = f"{athlete_name} sent an image. Read it from {img_path} then {question}."
