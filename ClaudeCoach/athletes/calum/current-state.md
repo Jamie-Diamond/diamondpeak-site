@@ -3,17 +3,17 @@
 Last updated: 2026-06-28
 
 ## Recent context (auto-summary)
-- **2026-06-29**: Unplanned easy ride completed on rest day — avg HR 124 bpm, max 159 bpm, easy/well-controlled effort; first activity recorded since late May; positive sign after 4+ week drought
+- **2026-06-29**: Unplanned easy ride (Geneva Road Cycling) on rest day — avg HR 124 bpm, max 159 bpm; RPE 7, "felt terrible but probably due to lack of sleep"; first activity since late May; positive sign despite subjective feel
 - **2026-06-28**: Weekly summary — 0% compliance (both sessions missed); CTL 5.6; Base phase ended; Build phase started Mon 29 Jun; T3 Underload + T5 Phase Transition fired
-- **2026-06-27**: Long ride 195 min — NOT completed (corrected: prior watchdog used planned-event projection values in error; IcuSync activities array empty)
+- **2026-06-27**: Long ride 195 min — NOT completed (corrected: IcuSync activities array empty)
 - **2026-06-23**: Short endurance 35 min — NOT completed (ICU confirmed 0 load)
-- **2026-06-20**: Long Z2 3h — NOT completed (no ICU activity)
+- **2026-06-20**: Long Z2 3h — NOT completed
 - **Week of 29 Jun**: Tue endurance 50 min, Thu sweetspot 2×25 85 min, Sun long ride 195 min — 250 TSS target; Build phase
 - **Tour de Stations / Marmottes**: 61 days out (as of 29 Jun); base-build window critically compressed; urgency flagged repeatedly
-- **Compliance**: T3 Underload fired every week since Jun 7; 4 consecutive weeks at 0%; unplanned ride on 29 Jun is first activity since late May
+- **Compliance**: T3 Underload fired every week since Jun 7; 4 consecutive weeks at 0%; Jun 29 ride is first activity since late May
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target; race-day risk on 6–8 hr mountain days
-- **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; only signal is ICU activity data
+- **Engagement**: not responding to morning messages, weight prompts, or session-confirm prompts; only signal is ICU activity data; didn't know what RPE means
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 
