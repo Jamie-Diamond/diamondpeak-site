@@ -3,13 +3,13 @@
 Last updated: 2026-06-29
 
 ## Recent context (auto-summary)
-- **2026-06-29**: Unplanned easy ride (Geneva Road Cycling) on rest day — avg HR 124 bpm, max 159 bpm; felt terrible ("how hard 1–10? → 7") due to lack of sleep; first cycling activity in ~4 weeks; positive signal despite subjective feel
+- **2026-06-29**: Unplanned easy ride (Geneva Road Cycling) on rest day — avg HR 124 bpm, max 159 bpm; RPE 7, felt terrible due to lack of sleep; first cycling activity in ~4 weeks; positive signal despite subjective feel
 - **2026-06-27**: Long ride 195 min — NOT completed (IcuSync activities array empty; actual CTL 5.72/ATL 0.31)
 - **2026-06-23**: Short endurance 35 min — NOT completed (ICU atlLoad=0.0)
 - **2026-06-20**: Long Z2 3h — NOT completed
 - **Build phase (week of 29 Jun)**: Tue endurance 50 min · Thu sweetspot 2×25 85 min · Sun long ride 195 min — 250 TSS target
 - **Tour de Stations / Marmottes**: 61 days out (as of 29 Jun); base-build window critically compressed
-- **Compliance**: T3 Underload fired every week since Jun 7; 4 consecutive weeks at 0%; Jun 29 unplanned ride is first activity in ~4 weeks
+- **Compliance**: T3 Underload fired every week since Jun 7; 4+ consecutive weeks at 0%; Jun 29 unplanned ride is first activity in ~4 weeks
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target; race-day risk on 6–8 hr mountain days
 - **Engagement**: not responding to morning messages or weight prompts; only signal is ICU activity data; doesn't know coaching jargon — always use plain language ("how hard did it feel, 1–10?" not "RPE")
