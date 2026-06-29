@@ -72,3 +72,4 @@ No
 | 2026-06-26 | 5.9 | 0.4 | +5.5 | Rest day — no session planned in calendar. No HRV or sleep data. |
 | 2026-06-27 | 5.7 | 0.3 | +5.4 | Long ride 195 min — NOT completed (corrected: prior entry used planned-event projection values CTL 9.0/ATL 18.7 in error; actual IcuSync: CTL 5.72/ATL 0.31, activities array empty, no load recorded). No HRV or sleep data. |
 | 2026-06-28 | 5.6 | 0.3 | +5.3 | Weekly summary. T3 Underload fired (0% compliance). T5 Phase Transition fired (Base ends today; Build starts Mon 29 Jun). Both sessions missed — Short endurance 35 min (Tue 23 Jun), Long ride 195 min (Sat 27 Jun). Jun 27 ride corrected from prior 'confirmed completed' in error. Recovery 100/100 GREEN. No HRV or sleep data. |
+| 2026-06-29 | 5.5 | 0.2 | +5.2 | Rest day — no session planned in calendar. Build phase begins. No HRV or sleep data. |
