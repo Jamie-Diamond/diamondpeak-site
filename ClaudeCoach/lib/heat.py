@@ -16,13 +16,23 @@ roughly one exposure per 4–5 days maintains; confirm values with the coach):
 
 The base dose (duration gate) is then weighted by two bounded multipliers so a
 brutal hot/hard day scores higher than a mild easy one — heat adaptation tracks
-thermal strain, which rises with both environmental heat and metabolic heat
-production:
+thermal strain, which rises with both cardiovascular load (measured via HR reserve
+fraction) and environmental heat:
   temperature multiplier  — relative to a 30°C reference (see DOSE_TEMP_*)
-  intensity   multiplier  — relative to a moderate-aerobic load rate ~60 TSS/hr
-                            ≈ IF 0.77 (see DOSE_INT_*)
-Both are centred so a typical maintenance session (~30°C, moderate) ≈ 1.0, which
+  HR strain multiplier    — fraction of HR reserve used, centred at 65% HRR
+                            (see DOSE_HR_*); falls back to TSS/hr proxy for
+                            historical entries that have no avg_hr stored
+
+Both are centred so a typical maintenance session (~30°C, ~65% HRR) ≈ 1.0, which
 preserves the score calibration; they only differentiate hotter/harder days.
+
+Physiological basis: the primary driver of heat adaptation is core-temperature
+elevation (controlled hyperthermia — Fox 1963; Taylor 2014). In the absence of
+a core-temp sensor, cardiovascular drift — HR elevated above what effort alone
+demands — is the next-best surrogate. Fraction of HR reserve (Karvonen) captures
+both the metabolic and thermal components of cardiovascular strain, and is more
+directly related to core-temp load than TSS/hr, which cannot distinguish a Z2
+ride in 38°C from one in 20°C.
 """
 import json
 import math
@@ -48,35 +58,67 @@ DOSE_TEMP_SLOPE   = 0.05    # per °C above/below the reference
 DOSE_TEMP_MIN     = 0.7     # floor (a 25°C session still counts, just less)
 DOSE_TEMP_MAX     = 1.6     # ceiling (≥42°C is brutal but capped)
 
-# Dose weighting — intensity multiplier (relative to ~60 TSS/hr ≈ IF 0.77)
-DOSE_INT_REF_TSS_HR = 60.0  # load rate at which int_mult == 1.0
-DOSE_INT_SLOPE      = 0.004 # per TSS/hr above/below the reference
-DOSE_INT_MIN        = 0.8   # floor (very easy hot session)
-DOSE_INT_MAX        = 1.3   # ceiling (threshold/VO2 in the heat)
+# Dose weighting — HR-based strain multiplier (fraction of HR reserve, Karvonen)
+# Centred at 65% HRR (moderate aerobic Z2 effort) = 1.0; slope gives ~0.7 at
+# very easy recovery (~45% HRR) and ~1.4 at hard threshold effort (~90% HRR).
+DOSE_HR_REF_FRACTION = 0.65   # HRR fraction at which hr_strain_mult == 1.0
+DOSE_HR_SLOPE        = 1.40   # multiplier change per unit HRR fraction
+DOSE_HR_MIN          = 0.70   # floor (passive / recovery-pace hot session)
+DOSE_HR_MAX          = 1.40   # ceiling (threshold/VO2-intensity heat effort)
+HR_RHR_DEFAULT       = 53     # fallback resting HR when not in athlete profile
+HR_MAX_DEFAULT       = 180    # fallback max HR when not in athlete profile
+
+# TSS/hr fallback — used for historical entries that pre-date HR logging
+DOSE_INT_REF_TSS_HR = 60.0   # load rate at which int_mult == 1.0
+DOSE_INT_SLOPE      = 0.004  # per TSS/hr above/below the reference
+DOSE_INT_MIN        = 0.8    # floor
+DOSE_INT_MAX        = 1.3    # ceiling
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
-def dose_multipliers(temp_c: float, tss: float | None, mins: float | None) -> tuple[float, float]:
-    """(temp_mult, int_mult) for a heat dose.
+def dose_multipliers(
+    temp_c: float,
+    avg_hr: float | None = None,
+    rhr: int = HR_RHR_DEFAULT,
+    max_hr: int = HR_MAX_DEFAULT,
+    tss: float | None = None,
+    mins: float | None = None,
+) -> tuple[float, float]:
+    """(temp_mult, strain_mult) for a heat dose.
 
-    temp_mult scales the environmental stimulus relative to DOSE_TEMP_REF_C;
-    int_mult scales the metabolic-heat stimulus from the session's load rate
-    (TSS/hr). Both are bounded so a single session can neither dominate nor
-    zero out the dose. int_mult falls back to 1.0 when load or duration is
-    missing.
+    temp_mult scales the environmental stimulus relative to DOSE_TEMP_REF_C.
+
+    strain_mult captures cardiovascular thermal load — the portion of the dose
+    that reflects how hard the cardiovascular system was working in the heat:
+      • Primary: HR reserve fraction (avg_hr - rhr) / (max_hr - rhr), centred
+        at DOSE_HR_REF_FRACTION. Directly proxies core-temp elevation because
+        cardiac drift in heat elevates HR beyond what effort alone demands.
+      • Fallback: TSS/hr proxy for historical entries that have no avg_hr stored.
+      • Default 1.0 when neither is available.
     """
     temp_mult = _clamp(1 + (float(temp_c) - DOSE_TEMP_REF_C) * DOSE_TEMP_SLOPE,
                        DOSE_TEMP_MIN, DOSE_TEMP_MAX)
-    if tss and mins and mins > 0:
+
+    hr_reserve = max_hr - rhr
+    if avg_hr is not None and hr_reserve > 0:
+        hrr_fraction = (float(avg_hr) - rhr) / hr_reserve
+        strain_mult = _clamp(
+            1 + (hrr_fraction - DOSE_HR_REF_FRACTION) * DOSE_HR_SLOPE,
+            DOSE_HR_MIN, DOSE_HR_MAX,
+        )
+    elif tss and mins and mins > 0:
         tss_hr = float(tss) / (float(mins) / 60.0)
-        int_mult = _clamp(1 + (tss_hr - DOSE_INT_REF_TSS_HR) * DOSE_INT_SLOPE,
-                          DOSE_INT_MIN, DOSE_INT_MAX)
+        strain_mult = _clamp(
+            1 + (tss_hr - DOSE_INT_REF_TSS_HR) * DOSE_INT_SLOPE,
+            DOSE_INT_MIN, DOSE_INT_MAX,
+        )
     else:
-        int_mult = 1.0
-    return round(temp_mult, 3), round(int_mult, 3)
+        strain_mult = 1.0
+
+    return round(temp_mult, 3), round(strain_mult, 3)
 
 
 def state(slug: str, profile: dict | None = None) -> dict:
@@ -177,16 +219,18 @@ def exposure_entry(act: dict) -> dict | None:
         return None
 
     base_dose = 1.0 if mins >= HEAT_FULL_DOSE_MIN else 0.5
+    avg_hr = act.get("average_heartrate")
     tss = act.get("icu_training_load")
-    temp_mult, int_mult = dose_multipliers(temp, tss, mins)
-    dose = round(base_dose * temp_mult * int_mult, 2)
+    temp_mult, strain_mult = dose_multipliers(temp, avg_hr=avg_hr, tss=tss, mins=mins)
+    dose = round(base_dose * temp_mult * strain_mult, 2)
 
     ctx = f"{act.get('type', '')} — ambient {round(temp, 1)}°C ({temp_source})"
     if mins >= LONG_SESSION_MIN and temp_peak is not None and temp_mean is not None:
         ctx += f"; peak {round(temp_peak, 1)}°C / mean {temp_mean}°C"
-    ctx += f"; dose {base_dose}×T{temp_mult}×I{int_mult}={dose}"
+    strain_label = f"HR{int(avg_hr)}" if avg_hr else "TSS"
+    ctx += f"; dose {base_dose}×T{temp_mult}×S{strain_mult}={dose} ({strain_label})"
 
-    return {
+    entry = {
         "date": str(act.get("start_date_local") or "")[:10],
         "method": "outdoor session (auto)",
         "activity_id": str(act.get("id") or ""),
@@ -194,11 +238,14 @@ def exposure_entry(act: dict) -> dict | None:
         "temperature_c": round(temp, 1),
         "base_dose": base_dose,
         "temp_mult": temp_mult,
-        "int_mult": int_mult,
+        "hr_strain_mult": strain_mult,
         "dose": dose,
         "context": ctx,
         "logged_at": date.today().isoformat(),
     }
+    if avg_hr is not None:
+        entry["avg_hr"] = int(avg_hr)
+    return entry
 
 
 def acclimation_score(slug: str, ref_date: date | None = None) -> float:

@@ -23,7 +23,7 @@
 - **Fri 26 Jun — Long Z2 ride 4h:** TSS 197 · NP 197W · IF 0.66 · 1,673m gain · ERA5 ~30°C. Pedalling-only decoupling 2.6%.
 - **Week Mon 22–Sun 28 FINAL: ~699 TSS.** Floor 631 (CTL×7), target 748. ~49 short — appropriate; France holiday, consecutive hot days, form ~−20. Load management = rolling-average, not weekly chasing (rule 93).
 - **Ankle:** ATFL + CFL partial tear. 29 Jun: 0/10 morning, 1/10 afternoon (rest day, OW swim only). ~7 weeks to 30km confidence; zero setback margin.
-- **Heat acclimation:** 75% (ClaudeCoach model, up from 39% a week ago; Garmin shows 100%). France holiday: 6 sessions in 7 days, dose 5.0 (three rides in 34–37°C). Temperature multiplier for dose scaling proposed by coach — not yet confirmed by Jamie.
+- **Heat acclimation:** 75% (ClaudeCoach model, up from 39% a week ago; Garmin shows 100%). France holiday: 6 sessions in 7 days, dose 5.0 (three rides in 34–37°C). **Dose model updated 2026-06-29:** now weighted by temperature AND intensity (base × temp_multiplier × intensity_multiplier); Jamie confirmed "Yes intensity and heat are key." HR-based thermal strain noted as next scientific upgrade (not yet implemented).
 - **CTL ~91 · ATL ~107 · TSB ~−16 (29 Jun).** IM Italy 81 days (19 Sep 2026).
 - **Race readiness:** Bike ~90% (3.6 W/kg, pacing confirmed) · Swim ~75% (CSS 1:40/100m, OW building) · Run ~50% — ankle progression sole question mark; next long run Thu 2 Jul (~17km, W10).
 - **Weight:** ~83 kg · race target 79 kg · ~4 kg to lose.
