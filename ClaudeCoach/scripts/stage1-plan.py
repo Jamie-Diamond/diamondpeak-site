@@ -244,6 +244,8 @@ def main():
     ap.add_argument("--week-start", help="Monday YYYY-MM-DD to plan (default: next Monday)")
     ap.add_argument("--model", default="claude-sonnet-4-6")
     ap.add_argument("--max-attempts", type=int, default=3)
+    ap.add_argument("--override-json", metavar="PATH",
+                    help="skip LLM generation; use this JSON file as the session proposal")
     args = ap.parse_args()
 
     cfg = json.loads((BASE / "config" / "athletes.json").read_text())[args.athlete]
@@ -255,34 +257,43 @@ def main():
         sys.exit(1)
 
     target = brief["weekly_tss_target"]
-    # ITERATE UNTIL CLEAN (iterative planning is fine — Jamie 15 Jun): propose → load-close
-    # → audit; if issues, feed them back and re-propose. Keep the best attempt.
-    feedback = ""
-    best = None
-    attempts = []
-    for attempt in range(args.max_attempts):
-        prompt = build_prompt(args.athlete, brief, week_start, feedback)
-        proc = claude_call.run_claude(
-            prompt, model=args.model, fallback=[claude_call.OPUS],
-            cwd=PROJECT_DIR, timeout=540, label=args.athlete,
-        )
-        try:
-            proposal = extract_json(proc.stdout.strip())
-        except Exception as e:
-            attempts.append(f"attempt {attempt+1}: parse error {e}")
-            continue
+    override_path = Path(args.override_json) if args.override_json else None
+    if override_path and override_path.exists():
+        proposal = json.loads(override_path.read_text())
         built = close_to_target(args.athlete, proposal, target, brief)
         issues = audit_built(brief, built, target, proposal)
-        attempts.append(f"attempt {attempt+1}: {len(issues)} issue(s)" + (f" — {issues}" if issues else " — CLEAN"))
-        if best is None or len(issues) < best[1]:
-            best = (built, len(issues), proposal)
-        if not issues:
-            break
-        feedback = ("\nPREVIOUS ATTEMPT FAILED THESE CHECKS — fix them this time:\n- "
-                    + "\n- ".join(issues) + "\n")
-    if best is None:
-        print(json.dumps({"error": "no parseable proposal after retries", "attempts": attempts}))
-        sys.exit(1)
+        n_issues = len(issues)
+        attempts = [f"override: {n_issues} issue(s)" + (f" — {issues}" if issues else " — CLEAN")]
+        best = (built, n_issues, proposal)
+    else:
+        # ITERATE UNTIL CLEAN (iterative planning is fine — Jamie 15 Jun): propose → load-close
+        # → audit; if issues, feed them back and re-propose. Keep the best attempt.
+        feedback = ""
+        best = None
+        attempts = []
+        for attempt in range(args.max_attempts):
+            prompt = build_prompt(args.athlete, brief, week_start, feedback)
+            proc = claude_call.run_claude(
+                prompt, model=args.model, fallback=[claude_call.OPUS],
+                cwd=PROJECT_DIR, timeout=540, label=args.athlete,
+            )
+            try:
+                proposal = extract_json(proc.stdout.strip())
+            except Exception as e:
+                attempts.append(f"attempt {attempt+1}: parse error {e}")
+                continue
+            built = close_to_target(args.athlete, proposal, target, brief)
+            issues = audit_built(brief, built, target, proposal)
+            attempts.append(f"attempt {attempt+1}: {len(issues)} issue(s)" + (f" — {issues}" if issues else " — CLEAN"))
+            if best is None or len(issues) < best[1]:
+                best = (built, len(issues), proposal)
+            if not issues:
+                break
+            feedback = ("\nPREVIOUS ATTEMPT FAILED THESE CHECKS — fix them this time:\n- "
+                        + "\n- ".join(issues) + "\n")
+        if best is None:
+            print(json.dumps({"error": "no parseable proposal after retries", "attempts": attempts}))
+            sys.exit(1)
     built, n_issues, proposal = best
 
     load_pct_off = (round((built["total_tss"] - target) / target * 100, 1) if target else None)
@@ -308,6 +319,11 @@ def main():
                 _notify(cfg["chat_id"], f"⚠️ Couldn't generate a clean week ({', '.join(built['hard'][:1]) or 'audit failed'}). Your existing plan is unchanged.")
         else:
             summary["push_result"] = pb.push(args.athlete, built)
+            if override_path and override_path.exists():
+                try:
+                    override_path.unlink()
+                except Exception:
+                    pass
             if args.notify and cfg.get("chat_id"):
                 _notify(cfg["chat_id"], _week_message(brief, built))
     print(json.dumps(summary, indent=1, ensure_ascii=False))
