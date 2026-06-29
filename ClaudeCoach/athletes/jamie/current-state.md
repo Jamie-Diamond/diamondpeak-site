@@ -411,6 +411,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-28 — T11 (Tier 2):** Strength compliance — 0 sessions in Mon 22–Sun 28 Jun (France camp: no equipment, no strength done); 1 session in Mon 15–Sun 21 Jun (Wed 17 Jun per prior T11 log; not visible in API history, possibly short session). Both weeks below target 2/wk. Last T11 logged Jun 22 (6 days ago — suppression lapsed); window has now shifted to include Jun 22–28 (0 sessions). Camp #2 starts Jul 10 — schedule 2 bodyweight/Tier-C strength sessions in the return window Jul 2–9 before camp resumes.
 
+- **2026-06-29 — T9 (Tier 2):** Two overdue open actions — suppression lapsed (last flagged Jun 25, 4 days ago): (1) Book Precision Hydration sweat-sodium test — due 2026-05-31, now 29 days overdue, status pending. (2) TT bike fit appointment — due 2026-05-31, now 29 days overdue, status pending. New context: France camp ends today (Jun 29), return window Jul 2–9 is the last booking opportunity before camp #2 (Jul 10–17). Both must be booked this week. Aero helmet (due Jun 30) suppressed — flagged Jun 27 (2 days ago).
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
