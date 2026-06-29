@@ -466,6 +466,38 @@ def save_history(history, history_file=None):
     f.write_text(json.dumps(history[-MAX_HISTORY_PAIRS:], indent=2))
 
 
+def _extract_plan_override(slug: str) -> dict | None:
+    """Scan recent conversation history for a conversation-agreed JSON session plan.
+    Returns the parsed plan dict (with a valid 'sessions' list) if found, else None.
+    Used to bypass LLM generation when a plan was already agreed in chat."""
+    files = athlete_files(slug)
+    history = load_history(files["history"])
+    for entry in reversed(history[-10:]):
+        text = entry.get("assistant") or ""
+        if '"sessions"' not in text:
+            continue
+        m = re.search(r'\{.*\}', text, re.S)
+        if not m:
+            continue
+        try:
+            plan = json.loads(m.group(0))
+        except Exception:
+            continue
+        sessions = plan.get("sessions")
+        if (isinstance(sessions, list) and sessions
+                and all(isinstance(s, dict) and "date" in s and "sport" in s
+                        for s in sessions[:3])):
+            return plan
+    return None
+
+
+def _write_plan_override(slug: str, plan: dict) -> str:
+    """Serialise a plan dict to a temp file for stage1-plan.py --override-json. Returns path."""
+    path = f"/tmp/replan_override_{slug}.json"
+    Path(path).write_text(json.dumps(plan))
+    return path
+
+
 def _hist_entry(user, assistant):
     """A history pair stamped with the local send time, so the bot can resolve
     time-referenced questions ("my 8:08 message") instead of claiming it can't see
@@ -2085,6 +2117,11 @@ def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
     try:
         cmd = ["timeout", "1800", "python3", str(STAGE1_PLAN_SCRIPT),
                "--athlete", slug, "--push", "--notify"]
+        override = _extract_plan_override(slug)
+        if override:
+            override_path = _write_plan_override(slug, override)
+            cmd += ["--override-json", override_path]
+            log(f"[{slug}] replan using conversation-agreed plan override")
         subprocess.Popen(cmd, cwd=str(PROJECT_DIR),
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         log(f"[{slug}] replan launched in background (confirmed)")
@@ -3156,6 +3193,11 @@ def _route_text(token, chat_id, text, athletes, config):
             # completion). Replaces the old generate-plan for replan/generate.
             cmd = ["timeout", "1800", "python3", str(STAGE1_PLAN_SCRIPT),
                    "--athlete", slug, "--push", "--notify"]
+            override = _extract_plan_override(slug)
+            if override:
+                override_path = _write_plan_override(slug, override)
+                cmd += ["--override-json", override_path]
+                log(f"[{slug}] plan using conversation-agreed plan override")
             subprocess.Popen(
                 cmd, cwd=str(PROJECT_DIR),
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
