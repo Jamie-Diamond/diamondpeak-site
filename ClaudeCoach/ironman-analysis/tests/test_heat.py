@@ -13,22 +13,44 @@ sys.path.insert(0, str(REPO / "lib"))
 import heat  # noqa: E402
 
 
-def _act(temp=27.0, mins=90, type_="Ride", trainer=None):
+def _act(temp=27.0, mins=90, type_="Ride", trainer=None, tss=None):
     return {"id": 12345, "average_temp": temp, "moving_time": mins * 60,
-            "type": type_, "trainer": trainer, "start_date_local": "2026-07-01T10:00:00"}
+            "type": type_, "trainer": trainer, "icu_training_load": tss,
+            "start_date_local": "2026-07-01T10:00:00"}
 
 
 class TestExposureEntry:
-    def test_long_hot_outdoor_ride_full_dose(self):
+    def test_long_hot_outdoor_ride_full_base_dose(self):
         e = heat.exposure_entry(_act(temp=28.5, mins=95))
         assert e is not None
-        assert e["dose"] == 1.0
+        assert e["base_dose"] == 1.0
         assert e["temperature_c"] == 28.5
         assert e["date"] == "2026-07-01"
 
-    def test_short_hot_session_half_dose(self):
+    def test_short_hot_session_half_base_dose(self):
         e = heat.exposure_entry(_act(mins=40))
-        assert e["dose"] == 0.5
+        assert e["base_dose"] == 0.5
+
+    def test_hotter_session_scores_higher(self):
+        cool = heat.exposure_entry(_act(temp=26.0, mins=90))
+        hot = heat.exposure_entry(_act(temp=37.0, mins=90))
+        assert hot["dose"] > cool["dose"]
+
+    def test_harder_session_scores_higher(self):
+        easy = heat.exposure_entry(_act(temp=30.0, mins=90, tss=45))
+        hard = heat.exposure_entry(_act(temp=30.0, mins=90, tss=130))
+        assert hard["dose"] > easy["dose"]
+
+    def test_reference_session_unweighted(self):
+        # 30°C, 60 TSS/hr (90 TSS over 90 min) → both multipliers == 1.0
+        e = heat.exposure_entry(_act(temp=30.0, mins=90, tss=90))
+        assert e["temp_mult"] == 1.0
+        assert e["int_mult"] == 1.0
+        assert e["dose"] == 1.0
+
+    def test_missing_tss_neutral_intensity(self):
+        e = heat.exposure_entry(_act(temp=30.0, mins=90, tss=None))
+        assert e["int_mult"] == 1.0
 
     def test_below_ambient_threshold_no_credit(self):
         assert heat.exposure_entry(_act(temp=22.0)) is None
@@ -42,6 +64,31 @@ class TestExposureEntry:
     def test_indoor_sessions_excluded(self):
         assert heat.exposure_entry(_act(trainer=True)) is None
         assert heat.exposure_entry(_act(type_="VirtualRide")) is None
+
+
+class TestDoseMultipliers:
+    def test_reference_is_neutral(self):
+        assert heat.dose_multipliers(30.0, 90, 90) == (1.0, 1.0)
+
+    def test_temp_above_reference_boosts(self):
+        t, _ = heat.dose_multipliers(37.0, None, 90)
+        assert t > 1.0
+
+    def test_temp_below_reference_discounts(self):
+        t, _ = heat.dose_multipliers(25.0, None, 90)
+        assert t < 1.0
+
+    def test_temp_clamped(self):
+        assert heat.dose_multipliers(60.0, None, 90)[0] == heat.DOSE_TEMP_MAX
+        assert heat.dose_multipliers(0.0, None, 90)[0] == heat.DOSE_TEMP_MIN
+
+    def test_intensity_clamped(self):
+        # 600 TSS over 60 min = 600 TSS/hr → clamps to ceiling
+        assert heat.dose_multipliers(30.0, 600, 60)[1] == heat.DOSE_INT_MAX
+
+    def test_missing_load_neutral(self):
+        assert heat.dose_multipliers(30.0, None, 90)[1] == 1.0
+        assert heat.dose_multipliers(30.0, 90, 0)[1] == 1.0
 
 
 class TestState:

@@ -11,8 +11,18 @@ The protocol has three layers:
 Dose model (standard heat-acclimation guidance — adaptations decay over days,
 roughly one exposure per 4–5 days maintains; confirm values with the coach):
   sauna / hot bath entry                       = 1.0 (entries without a dose field)
-  outdoor session ≥60 min at ≥25°C ambient     = 1.0
-  outdoor session 30–60 min at ≥25°C ambient   = 0.5
+  outdoor session ≥60 min at ≥25°C ambient     = 1.0 base
+  outdoor session 30–60 min at ≥25°C ambient   = 0.5 base
+
+The base dose (duration gate) is then weighted by two bounded multipliers so a
+brutal hot/hard day scores higher than a mild easy one — heat adaptation tracks
+thermal strain, which rises with both environmental heat and metabolic heat
+production:
+  temperature multiplier  — relative to a 30°C reference (see DOSE_TEMP_*)
+  intensity   multiplier  — relative to a moderate-aerobic load rate ~60 TSS/hr
+                            ≈ IF 0.77 (see DOSE_INT_*)
+Both are centred so a typical maintenance session (~30°C, moderate) ≈ 1.0, which
+preserves the score calibration; they only differentiate hotter/harder days.
 """
 import json
 import math
@@ -31,6 +41,42 @@ LONG_SESSION_MIN     = 90    # for long sessions report both peak and mean ambie
 
 ACCL_TAU_DAYS = 21.0   # exponential decay time constant (3-week half-life)
 ACCL_SCALE    = 10.5   # maps raw score → %; 3×/week full-dose steady-state ≈ 100%
+
+# Dose weighting — temperature multiplier (relative to 30°C reference)
+DOSE_TEMP_REF_C   = 30.0    # ambient at which temp_mult == 1.0
+DOSE_TEMP_SLOPE   = 0.05    # per °C above/below the reference
+DOSE_TEMP_MIN     = 0.7     # floor (a 25°C session still counts, just less)
+DOSE_TEMP_MAX     = 1.6     # ceiling (≥42°C is brutal but capped)
+
+# Dose weighting — intensity multiplier (relative to ~60 TSS/hr ≈ IF 0.77)
+DOSE_INT_REF_TSS_HR = 60.0  # load rate at which int_mult == 1.0
+DOSE_INT_SLOPE      = 0.004 # per TSS/hr above/below the reference
+DOSE_INT_MIN        = 0.8   # floor (very easy hot session)
+DOSE_INT_MAX        = 1.3   # ceiling (threshold/VO2 in the heat)
+
+
+def _clamp(x: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, x))
+
+
+def dose_multipliers(temp_c: float, tss: float | None, mins: float | None) -> tuple[float, float]:
+    """(temp_mult, int_mult) for a heat dose.
+
+    temp_mult scales the environmental stimulus relative to DOSE_TEMP_REF_C;
+    int_mult scales the metabolic-heat stimulus from the session's load rate
+    (TSS/hr). Both are bounded so a single session can neither dominate nor
+    zero out the dose. int_mult falls back to 1.0 when load or duration is
+    missing.
+    """
+    temp_mult = _clamp(1 + (float(temp_c) - DOSE_TEMP_REF_C) * DOSE_TEMP_SLOPE,
+                       DOSE_TEMP_MIN, DOSE_TEMP_MAX)
+    if tss and mins and mins > 0:
+        tss_hr = float(tss) / (float(mins) / 60.0)
+        int_mult = _clamp(1 + (tss_hr - DOSE_INT_REF_TSS_HR) * DOSE_INT_SLOPE,
+                          DOSE_INT_MIN, DOSE_INT_MAX)
+    else:
+        int_mult = 1.0
+    return round(temp_mult, 3), round(int_mult, 3)
 
 
 def state(slug: str, profile: dict | None = None) -> dict:
@@ -130,9 +176,15 @@ def exposure_entry(act: dict) -> dict | None:
     if temp < HEAT_AMBIENT_C:
         return None
 
+    base_dose = 1.0 if mins >= HEAT_FULL_DOSE_MIN else 0.5
+    tss = act.get("icu_training_load")
+    temp_mult, int_mult = dose_multipliers(temp, tss, mins)
+    dose = round(base_dose * temp_mult * int_mult, 2)
+
     ctx = f"{act.get('type', '')} — ambient {round(temp, 1)}°C ({temp_source})"
     if mins >= LONG_SESSION_MIN and temp_peak is not None and temp_mean is not None:
         ctx += f"; peak {round(temp_peak, 1)}°C / mean {temp_mean}°C"
+    ctx += f"; dose {base_dose}×T{temp_mult}×I{int_mult}={dose}"
 
     return {
         "date": str(act.get("start_date_local") or "")[:10],
@@ -140,7 +192,10 @@ def exposure_entry(act: dict) -> dict | None:
         "activity_id": str(act.get("id") or ""),
         "duration_min": round(mins),
         "temperature_c": round(temp, 1),
-        "dose": 1.0 if mins >= HEAT_FULL_DOSE_MIN else 0.5,
+        "base_dose": base_dose,
+        "temp_mult": temp_mult,
+        "int_mult": int_mult,
+        "dose": dose,
         "context": ctx,
         "logged_at": date.today().isoformat(),
     }
