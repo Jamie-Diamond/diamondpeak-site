@@ -4,9 +4,9 @@ Last updated: 2026-06-29
 
 ## Recent context (auto-summary)
 
-- **Mon 29 Jun — Off-plan tempo run (unexpected)**: Progressive tempo build easy to near-threshold; HR never settled. 5.5km · GAP 5:37/km · avg 172 bpm (Z4 37%, Z1+Z2 43%) · max 190 · decoupling 7.8% ⚠. RPE outstanding. Replaced/preceded the planned Technique Swim — status of swim unconfirmed.
+- **Mon 29 Jun — Off-plan tempo run (unexpected)**: Progressive build easy to near-threshold; HR never settled. 5.5km · GAP 5:37/km · avg 172 bpm (Z4 37%, Z1+Z2 43%) · max 190 · decoupling 7.8% ⚠. RPE outstanding. Planned Technique Swim status unclear — may be unlogged or skipped.
 - **Sun 28 Jun — Long Run 90min**: 12.7km · GAP 6:07/km · avg 167 bpm (Z1 14%/Z2 52%/Z3 33%) · Load 83 · decoupling 2.7%. RPE **5.5**, felt controlled.
-- **Sun 28 Jun — Sea Swim (OWS)**: Cut short — 1km/20min vs 40-min plan (Load 12 vs 43). Avg 2:01/100m · Z1 HR throughout. RPE still outstanding.
+- **Sun 28 Jun — Sea Swim (OWS)**: Cut short — 1km/20min vs 40-min plan (Load 12 vs 43). Avg 2:01/100m · Z1 HR throughout. RPE outstanding.
 - **Fri 26 Jun — Grimaud Cycling + Brick Run**: Cycling 2h22 · 52km · 882m · 148/182 bpm · Load 113 · heat 32–38°C. Brick run (brought forward from Sat) 6.01km · GAP 5:26/km · 182/197 bpm · Load 47 · cardiac drift 167→191. Nutrition ~33g/hr (Clif bar + honey gel + 8 Haribo + 700ml water + 600ml electrolyte). No RPE for either.
 - **Sat 27 Jun**: Unplanned rest — 0 load.
 - **Build week 1 (w/c 29 Jun) locked and synced**: Mon Technique 40min · Tue Tempo Intervals 80min · Wed CSS Set 55min · Thu Tempo Run 50min · Fri Long Aerobic Swim 60min · Sat Long Ride + Brick Run 195min · Sun Long Run 88min · 535 TSS.
@@ -15,6 +15,7 @@ Last updated: 2026-06-29
 - **Fuelling gap (persistent)**: Fri ride ~33g/hr vs 70g/hr race target. Nudge on every long session.
 - **Weight**: Not logged through travel block or Mon 29 Jun morning — persistent gap.
 - **Pending RPEs**: Mon 29 Jun run + Sun 28 Jun OWS both outstanding.
+- **Tomorrow (Tue 30 Jun)**: Tempo Intervals — WU 15min easy + 2×25min tempo at 144–160W (76–84% FTP), NP ~147W, HR cap 178 bpm; 60g/hr carbs + 500ml/hr fluid; Form −12.5.
 
 ## Injuries / Niggles
 None
