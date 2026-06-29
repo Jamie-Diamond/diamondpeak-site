@@ -12,7 +12,7 @@ Last updated: 2026-06-29
 - **Compliance**: T3 Underload fired every week since Jun 7; 4+ consecutive weeks at 0%; Jun 29 unplanned ride is first activity in ~4 weeks
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target; race-day risk on 6–8 hr mountain days
-- **Engagement**: not responding to morning messages or weight prompts; only signal is ICU activity data; doesn't know coaching jargon — always use plain language ("how hard did it feel, 1–10?" not "RPE")
+- **Engagement**: 29 Jun — Calum responded to post-ride RPE question (didn't know the term, coach explained, Calum replied "7 - felt terrible but probably due to lack of sleep"); otherwise not responding to morning messages or weight prompts; always use plain language for coaching terms
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 
