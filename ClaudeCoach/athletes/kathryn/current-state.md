@@ -82,6 +82,7 @@ None
 - 2026-06-24: Rest day — no session planned (confirmed plan: Wed is rest during travel block Jun 22–28). HRV trend +5.4% (latest 65 on Jun 23); sleep 7.32h carried (Jun 23). ATL 59, CTL 56; form −3. Last session RPE 6 (bike Jun 23). Luteal day 15 begins.
 - 2026-06-27: bike_z2 120min — NOT COMPLETED (0 load recorded in ICU). HRV trend +1.5% (latest 61 on Jun 26); sleep 7.87h carried (Jun 26). ATL 70, CTL 59; form −11. Luteal day 18. Travel block final day; session likely skipped or not synced.
 - 2026-06-28: run_long 90min (Long Run 90min Easy) + swim 40min (Sea Swim open water aerobic) — GO, both execute as planned (no rules fired). HRV trend −3.1% (latest 58 on Jun 27; today not synced at 05:00); sleep 7.79h carried (Jun 27). ATL 65, CTL 59; form −6. Last session RPE 5. Luteal day 19 — sessions feel harder than numbers suggest; HR-led execution. Travel block expires today.
+- 2026-06-29: swim 40min (Technique — 10m/20m/10m at 76–84% pace) — GO, execute as planned (no rules fired). HRV trend +9.5% (latest 65 on Jun 28); sleep 7.38h carried (Jun 28). ATL 72, CTL 60; form −12. Last session RPE 5 (run Jun 28). Luteal day 20 — sessions feel harder than numbers suggest. Build week 1 begins. Combines with standing KB 45min = 85min total (within 90min cap).
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
