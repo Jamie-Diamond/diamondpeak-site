@@ -14,17 +14,21 @@ roughly one exposure per 4–5 days maintains; confirm values with the coach):
   outdoor session ≥60 min at ≥25°C ambient     = 1.0 base
   outdoor session 30–60 min at ≥25°C ambient   = 0.5 base
 
-The base dose (duration gate) is then weighted by two bounded multipliers so a
-brutal hot/hard day scores higher than a mild easy one — heat adaptation tracks
-thermal strain, which rises with both cardiovascular load (measured via HR reserve
-fraction) and environmental heat:
+The base dose (duration gate) is then weighted by three bounded multipliers so a
+brutal hot/humid/hard day scores higher than a mild easy one — heat adaptation
+tracks thermal strain, which rises with cardiovascular load (measured via HR
+reserve fraction), environmental heat, and humidity (which suppresses evaporative
+cooling):
   temperature multiplier  — relative to a 30°C reference (see DOSE_TEMP_*)
   HR strain multiplier    — fraction of HR reserve used, centred at 65% HRR
                             (see DOSE_HR_*); falls back to TSS/hr proxy for
                             historical entries that have no avg_hr stored
+  humidity multiplier     — dew-point relative to a 16°C reference (see DOSE_DP_*);
+                            neutral 1.0 when dew-point is unavailable
 
-Both are centred so a typical maintenance session (~30°C, ~65% HRR) ≈ 1.0, which
-preserves the score calibration; they only differentiate hotter/harder days.
+All three are centred so a typical maintenance session (~30°C, ~16°C dew-point,
+~65% HRR) ≈ 1.0, which preserves the score calibration; they only differentiate
+hotter/more-humid/harder days.
 
 Physiological basis: the primary driver of heat adaptation is core-temperature
 elevation (controlled hyperthermia — Fox 1963; Taylor 2014). In the absence of
@@ -32,7 +36,12 @@ a core-temp sensor, cardiovascular drift — HR elevated above what effort alone
 demands — is the next-best surrogate. Fraction of HR reserve (Karvonen) captures
 both the metabolic and thermal components of cardiovascular strain, and is more
 directly related to core-temp load than TSS/hr, which cannot distinguish a Z2
-ride in 38°C from one in 20°C.
+ride in 38°C from one in 20°C. Humidity is the missing environmental input: at
+the same dry-bulb temperature a humid session impairs sweat evaporation and
+raises core temp faster than a dry one, so dew-point (absolute moisture, the
+gradient that governs evaporation) is added as a third stimulus — the same
+proxy used in the race-pacing model. This brings the dose closer to a WBGT-style
+integrated heat-stress measure without needing a globe thermometer.
 """
 import json
 import math
@@ -74,6 +83,16 @@ DOSE_INT_SLOPE      = 0.004  # per TSS/hr above/below the reference
 DOSE_INT_MIN        = 0.8    # floor
 DOSE_INT_MAX        = 1.3    # ceiling
 
+# Dose weighting — humidity multiplier (dew-point proxy for absolute moisture).
+# Centred at a 16°C dew-point (≈moderate, ~50% RH at 27°C) = 1.0. Above the
+# reference, impaired sweat evaporation raises core-temp strain (oppressive from
+# ~20°C dew-point, tropical from ~23°C); below it, dry air dissipates heat more
+# easily. Same dew-point proxy as the race-pacing humidity correction.
+DOSE_DP_REF_C  = 16.0   # dew-point at which humidity_mult == 1.0
+DOSE_DP_SLOPE  = 0.02   # per °C dew-point above/below the reference
+DOSE_DP_MIN    = 0.85   # floor (very dry heat)
+DOSE_DP_MAX    = 1.25   # ceiling (tropical / saturated air)
+
 
 def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
@@ -86,8 +105,9 @@ def dose_multipliers(
     max_hr: int = HR_MAX_DEFAULT,
     tss: float | None = None,
     mins: float | None = None,
-) -> tuple[float, float]:
-    """(temp_mult, strain_mult) for a heat dose.
+    dew_point_c: float | None = None,
+) -> tuple[float, float, float]:
+    """(temp_mult, strain_mult, humidity_mult) for a heat dose.
 
     temp_mult scales the environmental stimulus relative to DOSE_TEMP_REF_C.
 
@@ -98,6 +118,11 @@ def dose_multipliers(
         cardiac drift in heat elevates HR beyond what effort alone demands.
       • Fallback: TSS/hr proxy for historical entries that have no avg_hr stored.
       • Default 1.0 when neither is available.
+
+    humidity_mult scales the environmental stimulus by dew-point relative to
+    DOSE_DP_REF_C — humid air suppresses sweat evaporation and raises core-temp
+    strain for the same dry-bulb temperature. Default 1.0 when dew-point is
+    unavailable (device-temp fallback, no external weather).
     """
     temp_mult = _clamp(1 + (float(temp_c) - DOSE_TEMP_REF_C) * DOSE_TEMP_SLOPE,
                        DOSE_TEMP_MIN, DOSE_TEMP_MAX)
@@ -118,7 +143,15 @@ def dose_multipliers(
     else:
         strain_mult = 1.0
 
-    return round(temp_mult, 3), round(strain_mult, 3)
+    if dew_point_c is not None:
+        humidity_mult = _clamp(
+            1 + (float(dew_point_c) - DOSE_DP_REF_C) * DOSE_DP_SLOPE,
+            DOSE_DP_MIN, DOSE_DP_MAX,
+        )
+    else:
+        humidity_mult = 1.0
+
+    return round(temp_mult, 3), round(strain_mult, 3), round(humidity_mult, 3)
 
 
 def state(slug: str, profile: dict | None = None) -> dict:
@@ -152,24 +185,34 @@ def state(slug: str, profile: dict | None = None) -> dict:
             "maintenance": active and bool(profile.get("heat_maintenance"))}
 
 
-def fetch_ambient_weather(lat: float, lon: float, start_utc: str, end_utc: str) -> list[float]:
-    """Hourly ambient temperatures (°C) from Open-Meteo historical archive.
+def fetch_ambient_weather(
+    lat: float, lon: float, start_utc: str, end_utc: str
+) -> tuple[list[float], list[float]]:
+    """Hourly ambient temperatures and dew-points (°C) from Open-Meteo archive.
 
     start_utc / end_utc: ISO datetime strings "YYYY-MM-DDTHH:MM:SS" in UTC.
+    Returns (temps, dew_points) for the hours within the session window; the two
+    lists are filtered independently so a missing value in one does not drop the
+    other's hour.
     """
     import urllib.request
     url = (
         "https://archive-api.open-meteo.com/v1/archive"
         f"?latitude={lat:.4f}&longitude={lon:.4f}"
         f"&start_date={start_utc[:10]}&end_date={end_utc[:10]}"
-        "&hourly=temperature_2m&timezone=UTC"
+        "&hourly=temperature_2m,dew_point_2m&timezone=UTC"
     )
     with urllib.request.urlopen(url, timeout=10) as resp:
         data = json.loads(resp.read())
-    times = data["hourly"]["time"]           # "YYYY-MM-DDTHH:MM"
-    temps = data["hourly"]["temperature_2m"]
+    hourly = data["hourly"]
+    times = hourly["time"]                    # "YYYY-MM-DDTHH:MM"
     start_h, end_h = start_utc[:13], end_utc[:13]  # "YYYY-MM-DDTHH"
-    return [t for ts, t in zip(times, temps) if start_h <= ts[:13] <= end_h and t is not None]
+    in_window = [start_h <= ts[:13] <= end_h for ts in times]
+    temps = [v for keep, v in zip(in_window, hourly.get("temperature_2m") or [])
+             if keep and v is not None]
+    dews = [v for keep, v in zip(in_window, hourly.get("dew_point_2m") or [])
+            if keep and v is not None]
+    return temps, dews
 
 
 def exposure_entry(act: dict) -> dict | None:
@@ -194,6 +237,7 @@ def exposure_entry(act: dict) -> dict | None:
     temp_source = "device"
     temp_peak   = None
     temp_mean   = None
+    dew_point   = None
 
     latlng    = act.get("start_lat_lng")
     start_raw = (act.get("start_date") or act.get("start_date_local") or "").replace("Z", "")
@@ -202,7 +246,7 @@ def exposure_entry(act: dict) -> dict | None:
             lat, lon   = float(latlng[0]), float(latlng[1])
             start_dt   = datetime.fromisoformat(start_raw)
             end_dt     = start_dt + timedelta(seconds=int(act.get("moving_time") or 0))
-            ambient    = fetch_ambient_weather(
+            ambient, dews = fetch_ambient_weather(
                 lat, lon,
                 start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
                 end_dt.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -212,6 +256,8 @@ def exposure_entry(act: dict) -> dict | None:
                 temp_mean   = round(sum(ambient) / len(ambient), 1)
                 temp        = temp_peak
                 temp_source = "external"
+            if dews:
+                dew_point = round(max(dews), 1)   # peak dew-point over the session
         except Exception:
             temp_source = "device (external fetch failed)"
 
@@ -221,14 +267,18 @@ def exposure_entry(act: dict) -> dict | None:
     base_dose = 1.0 if mins >= HEAT_FULL_DOSE_MIN else 0.5
     avg_hr = act.get("average_heartrate")
     tss = act.get("icu_training_load")
-    temp_mult, strain_mult = dose_multipliers(temp, avg_hr=avg_hr, tss=tss, mins=mins)
-    dose = round(base_dose * temp_mult * strain_mult, 2)
+    temp_mult, strain_mult, humidity_mult = dose_multipliers(
+        temp, avg_hr=avg_hr, tss=tss, mins=mins, dew_point_c=dew_point)
+    dose = round(base_dose * temp_mult * strain_mult * humidity_mult, 2)
 
     ctx = f"{act.get('type', '')} — ambient {round(temp, 1)}°C ({temp_source})"
     if mins >= LONG_SESSION_MIN and temp_peak is not None and temp_mean is not None:
         ctx += f"; peak {round(temp_peak, 1)}°C / mean {temp_mean}°C"
+    if dew_point is not None:
+        ctx += f"; dew {dew_point}°C"
     strain_label = f"HR{int(avg_hr)}" if avg_hr else "TSS"
-    ctx += f"; dose {base_dose}×T{temp_mult}×S{strain_mult}={dose} ({strain_label})"
+    ctx += (f"; dose {base_dose}×T{temp_mult}×S{strain_mult}×H{humidity_mult}"
+            f"={dose} ({strain_label})")
 
     entry = {
         "date": str(act.get("start_date_local") or "")[:10],
@@ -239,12 +289,15 @@ def exposure_entry(act: dict) -> dict | None:
         "base_dose": base_dose,
         "temp_mult": temp_mult,
         "hr_strain_mult": strain_mult,
+        "humidity_mult": humidity_mult,
         "dose": dose,
         "context": ctx,
         "logged_at": date.today().isoformat(),
     }
     if avg_hr is not None:
         entry["avg_hr"] = int(avg_hr)
+    if dew_point is not None:
+        entry["dew_point_c"] = dew_point
     return entry
 
 

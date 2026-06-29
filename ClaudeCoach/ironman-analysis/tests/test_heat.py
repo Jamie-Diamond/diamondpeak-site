@@ -13,9 +13,10 @@ sys.path.insert(0, str(REPO / "lib"))
 import heat  # noqa: E402
 
 
-def _act(temp=27.0, mins=90, type_="Ride", trainer=None, tss=None):
+def _act(temp=27.0, mins=90, type_="Ride", trainer=None, tss=None, avg_hr=None):
     return {"id": 12345, "average_temp": temp, "moving_time": mins * 60,
             "type": type_, "trainer": trainer, "icu_training_load": tss,
+            "average_heartrate": avg_hr,
             "start_date_local": "2026-07-01T10:00:00"}
 
 
@@ -42,15 +43,22 @@ class TestExposureEntry:
         assert hard["dose"] > easy["dose"]
 
     def test_reference_session_unweighted(self):
-        # 30°C, 60 TSS/hr (90 TSS over 90 min) → both multipliers == 1.0
-        e = heat.exposure_entry(_act(temp=30.0, mins=90, tss=90))
+        # 30°C, 65% HRR (avg_hr 135.55 at rhr 53 / max 180), no dew-point → all 1.0
+        e = heat.exposure_entry(_act(temp=30.0, mins=90, avg_hr=135.55))
         assert e["temp_mult"] == 1.0
-        assert e["int_mult"] == 1.0
+        assert e["hr_strain_mult"] == 1.0
+        assert e["humidity_mult"] == 1.0
         assert e["dose"] == 1.0
 
-    def test_missing_tss_neutral_intensity(self):
-        e = heat.exposure_entry(_act(temp=30.0, mins=90, tss=None))
-        assert e["int_mult"] == 1.0
+    def test_missing_hr_and_tss_neutral_strain(self):
+        e = heat.exposure_entry(_act(temp=30.0, mins=90, tss=None, avg_hr=None))
+        assert e["hr_strain_mult"] == 1.0
+
+    def test_no_external_weather_neutral_humidity(self):
+        # _act has no GPS, so no dew-point lookup → humidity multiplier stays 1.0
+        e = heat.exposure_entry(_act(temp=33.0, mins=90))
+        assert e["humidity_mult"] == 1.0
+        assert "dew_point_c" not in e
 
     def test_below_ambient_threshold_no_credit(self):
         assert heat.exposure_entry(_act(temp=22.0)) is None
@@ -68,27 +76,50 @@ class TestExposureEntry:
 
 class TestDoseMultipliers:
     def test_reference_is_neutral(self):
-        assert heat.dose_multipliers(30.0, 90, 90) == (1.0, 1.0)
+        # 30°C, 65% HRR, 16°C dew-point → all three multipliers == 1.0
+        assert heat.dose_multipliers(
+            30.0, avg_hr=135.55, dew_point_c=16.0) == (1.0, 1.0, 1.0)
 
     def test_temp_above_reference_boosts(self):
-        t, _ = heat.dose_multipliers(37.0, None, 90)
-        assert t > 1.0
+        assert heat.dose_multipliers(37.0)[0] > 1.0
 
     def test_temp_below_reference_discounts(self):
-        t, _ = heat.dose_multipliers(25.0, None, 90)
-        assert t < 1.0
+        assert heat.dose_multipliers(25.0)[0] < 1.0
 
     def test_temp_clamped(self):
-        assert heat.dose_multipliers(60.0, None, 90)[0] == heat.DOSE_TEMP_MAX
-        assert heat.dose_multipliers(0.0, None, 90)[0] == heat.DOSE_TEMP_MIN
+        assert heat.dose_multipliers(60.0)[0] == heat.DOSE_TEMP_MAX
+        assert heat.dose_multipliers(0.0)[0] == heat.DOSE_TEMP_MIN
 
-    def test_intensity_clamped(self):
-        # 600 TSS over 60 min = 600 TSS/hr → clamps to ceiling
-        assert heat.dose_multipliers(30.0, 600, 60)[1] == heat.DOSE_INT_MAX
+    def test_hr_strain_above_reference_boosts(self):
+        assert heat.dose_multipliers(30.0, avg_hr=160)[1] > 1.0
 
-    def test_missing_load_neutral(self):
-        assert heat.dose_multipliers(30.0, None, 90)[1] == 1.0
-        assert heat.dose_multipliers(30.0, 90, 0)[1] == 1.0
+    def test_hr_strain_below_reference_discounts(self):
+        assert heat.dose_multipliers(30.0, avg_hr=110)[1] < 1.0
+
+    def test_hr_strain_clamped(self):
+        assert heat.dose_multipliers(30.0, avg_hr=300)[1] == heat.DOSE_HR_MAX
+        assert heat.dose_multipliers(30.0, avg_hr=53)[1] == heat.DOSE_HR_MIN
+
+    def test_tss_fallback_when_no_hr(self):
+        # 600 TSS over 60 min = 600 TSS/hr → clamps to TSS-proxy ceiling
+        assert heat.dose_multipliers(30.0, tss=600, mins=60)[1] == heat.DOSE_INT_MAX
+
+    def test_missing_strain_inputs_neutral(self):
+        assert heat.dose_multipliers(30.0)[1] == 1.0
+        assert heat.dose_multipliers(30.0, tss=90, mins=0)[1] == 1.0
+
+    def test_humidity_above_reference_boosts(self):
+        assert heat.dose_multipliers(30.0, dew_point_c=22.0)[2] > 1.0
+
+    def test_humidity_below_reference_discounts(self):
+        assert heat.dose_multipliers(30.0, dew_point_c=8.0)[2] < 1.0
+
+    def test_humidity_clamped(self):
+        assert heat.dose_multipliers(30.0, dew_point_c=40.0)[2] == heat.DOSE_DP_MAX
+        assert heat.dose_multipliers(30.0, dew_point_c=-30.0)[2] == heat.DOSE_DP_MIN
+
+    def test_missing_dewpoint_neutral_humidity(self):
+        assert heat.dose_multipliers(30.0, avg_hr=140)[2] == 1.0
 
 
 class TestState:
