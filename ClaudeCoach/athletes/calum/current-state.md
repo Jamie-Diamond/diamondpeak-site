@@ -3,17 +3,17 @@
 Last updated: 2026-06-30
 
 ## Recent context (auto-summary)
-- **2026-06-30**: Endurance 50 min scheduled today (Build phase week 1, day 1); awaiting completion confirmation
-- **2026-06-29**: Unplanned easy ride (Geneva Road Cycling) on rest day — avg HR 124 bpm, max 159 bpm, nearly all time at easy effort; RPE 7, felt terrible attributed to lack of sleep; first cycling activity in ~4 weeks
-- **2026-06-27**: Long ride 195 min — NOT completed (IcuSync activities array empty; corrected from prior erroneous 'confirmed')
+- **2026-06-30**: Endurance 50 min scheduled (Build phase week 1, day 1); outcome pending — no completion confirmation yet
+- **2026-06-29**: Unplanned easy ride on Sunday rest day (Geneva Road Cycling) — avg HR 124 bpm, max 159 bpm; RPE 7, "felt terrible due to lack of sleep"; first cycling activity in ~4 weeks and first message reply in weeks
+- **2026-06-27**: Long ride 195 min — NOT completed (IcuSync activities array empty; CTL 5.72/ATL 0.31; corrected from prior erroneous 'confirmed completed')
 - **2026-06-23**: Short endurance 35 min — NOT completed
 - **2026-06-20**: Long Z2 3h — NOT completed
 - **Build phase week 1 (w/c 29 Jun)**: Tue endurance 50 min · Thu sweetspot 2×25 85 min · Sun long ride 195 min — 250 TSS target
-- **Tour de Stations / Marmottes**: 60 days out (as of 30 Jun); base-build window critically compressed by 4+ weeks of near-zero training
-- **Compliance**: T3 Underload fired every week since Jun 7; Jun 29 unplanned ride is first cycling activity in ~4 weeks; CTL 7.1 / ATL 9.5 as of 30 Jun
+- **Tour de Stations / Marmottes**: 60 days out (as of 30 Jun); base-build window critically compressed — 4+ weeks of near-zero training; race is ~6–8 hr mountain day
+- **Compliance**: T3 Underload fired every week since Jun 7; CTL 7.1 / ATL 9.5 as of 30 Jun (Jun 29 ride drove ATL spike)
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
-- **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target; race-day risk on 6–8 hr mountain days
-- **Engagement**: Calum largely unresponsive to daily messages; first reply in weeks on 29 Jun (RPE 7 + "felt terrible due to lack of sleep"); did not know term "RPE" — always use plain language for all coaching terms
+- **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target; race-day energy depletion risk
+- **Engagement**: largely unresponsive to daily messages; single reply on 29 Jun; does not know coaching jargon — always use plain language (e.g. "how hard did it feel 1–10" not "RPE")
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 

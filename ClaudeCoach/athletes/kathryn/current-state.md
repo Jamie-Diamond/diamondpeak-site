@@ -4,19 +4,20 @@ Last updated: 2026-06-30
 
 ## Recent context (auto-summary)
 
-- **Tue 30 Jun — Tempo Intervals 80min** (today): Build week 1 day 2. Morning GO sent. CTL 61 · ATL 73 · Form −12. Luteal day 21 — feel will exceed power targets; ride to zones. 2×25min at 144–160W (76–84% FTP), NP ~147W.
-- **Mon 29 Jun — Off-plan tempo run**: Progressive easy→near-threshold, HR never settled. 5.5km · GAP 5:37/km · avg 172 bpm · Z4 37% · max 190 · decoupling 7.8% ⚠. RPE **outstanding**.
-- **Mon 29 Jun — Technique swim**: Likely skipped — absent from ICU. Contributes to T5 alert (2 missed sessions in rolling window).
-- **Sun 28 Jun — Long Run 90min**: 12.7km · GAP 6:07/km · avg 167 bpm (Z2 52%/Z3 33%) · Load 83 · decoupling 2.7%. RPE **5.5**, felt controlled.
-- **Sun 28 Jun — Sea Swim (OWS)**: Cut short — 1km/20min vs 40-min plan (Load 12 vs 43). Avg 2:01/100m · Z1 HR (avg 137, max 149). RPE **outstanding**.
-- **Fri 26 Jun — Bike Z2 + Brick Run (brought forward from Sat)**: Bike 2hr22 · 52km · Load 113. Brick 6.01km · GAP 5:26/km · cardiac drift 167→191 · Load 47. Nutrition ~33g/hr (Clif bar + gel + 8 Haribo + 1.3L fluid). No RPE logged.
-- **Sat 27 Jun**: Unplanned rest — brick brought forward to Fri; form at −20, fatigue from 5-day heat block.
-- **Missed sessions**: Jun 27 bike Z2 (unplanned rest) + Jun 29 technique swim (absent from ICU). T5 fired today's watchdog.
+- **Tue 30 Jun — Tempo Intervals 80min** (today, build wk 1 day 2): 2×25min at 144–160W (NP ~147W, IF 0.77). Morning GO sent. No RPE yet.
+- **Mon 29 Jun — Grimaud run (off-plan intensity)**: Progressive easy→near-threshold, HR never settled. 5.5km · GAP 5:37/km · avg 172 bpm · Z4 37% · max 190 · decoupling 7.8% ⚠. RPE **outstanding** (asked twice, no response).
+- **Mon 29 Jun — Technique swim**: Absent from ICU — likely skipped. Contributes to T5 alert (2 missed sessions in rolling window).
+- **Sun 28 Jun — Long Run 90min Easy**: 12.7km · GAP 6:07/km · avg 167 bpm (Z2 52%/Z3 33%) · Load 83 · decoupling 2.7%. RPE **5.5**, felt controlled.
+- **Sun 28 Jun — Sea Swim (OWS)**: Cut short — 1km/20min vs 40-min plan (Load 12 vs 43). Avg 2:01/100m · Z1 HR (avg 137, max 149). RPE **outstanding** (not given).
+- **Sat 27 Jun**: Unplanned rest — brick brought forward to Fri; form at −20, fifth aerobic day of travel block.
+- **Fri 26 Jun — Bike Z2 + Brick Run (Grimaud)**: Bike 2hr22 · 52km · Load 113. Brick 6.01km · GAP 5:26/km · cardiac drift 167→191 · Load 47. Nutrition ~33g/hr (Clif bar + gel + 8 Haribo + 1.3L fluid).
+- **Missed sessions (T5)**: Jun 27 bike Z2 (unplanned rest) + Jun 29 technique swim (absent from ICU).
 - **Pending RPEs**: Mon 29 Jun run + Sun 28 Jun OWS — both still outstanding.
-- **Luteal phase**: Day 21 of 28 (24 Jun–7 Jul). Elevated RPE and core temp — lead with feel. Quality window resumes ~8 Jul (follicular).
+- **Luteal phase**: Day 21 of 28 (24 Jun–7 Jul). Higher RPE and core temp — lead with feel. Quality window resumes ~8 Jul (follicular).
 - **CTL 61 · ATL 73 · Form −12**: HRV improving (Jun 29=70, +19.3% trend). Sleep 7.45h. No injuries.
 - **Build week 1 plan confirmed and synced** (535 TSS): Mon Technique · Tue Tempo Intervals · Wed CSS Set · Thu Tempo Run · Fri Long Aerobic Swim · Sat Long Ride + Brick · Sun Long Run.
 - **Fuelling gap (persistent)**: ~33g/hr vs 70g/hr race target — nudge on every long session.
+- **Fitness target met**: CTL 61 vs end-of-base target 60 by 29 Jun. ✓
 
 ## Injuries / Niggles
 None
