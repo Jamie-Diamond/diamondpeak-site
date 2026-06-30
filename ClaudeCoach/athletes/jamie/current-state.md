@@ -16,19 +16,19 @@
 
 ## Recent context (auto-summary)
 
-- **Tue 30 Jun (today) — Z2 Run 55min pending:** target GAP 4:36–5:12/km · HR ceiling 146 · ankle 0/10 AM confirmed; morning check-in sent.
-- **Mon 29 Jun — OW swim (Long Swim slot):** 2,618m · 2:07/100m · HR avg 112/max 122 (Z1) · TSS 45 vs plan 54 (−17%); 622m short. Ankle 0/10 AM, 1/10 PM.
-- **Sun 28 Jun — Long run 15.2km (EASY):** GAP 5:16/km · avg HR 143 vs 146 Z2 ceiling · ERA5 ~32°C. Decoupling −4.6% (CV held); economy fade +6.9% final 5km (neuromuscular durability). Ankle 0→2/10 peak, resolved.
-- **Sat 27 Jun — Z2 ride ~2h:** NP 219W · IF 0.74 · ERA5 33.6°C · climb 264–271W = 89–91% FTP.
-- **Fri 26 Jun — Long Z2 ride 4h:** TSS 197 · pedalling-only decoupling 2.6% · ERA5 ~30°C.
-- **Week Mon 22–Sun 28 FINAL: ~699 TSS** (target 748 — ~49 short, appropriate for holiday block; managed to rolling average).
-- **Ankle:** ATFL + CFL partial tear. 30 Jun: 0/10 AM. ~7 weeks to 30km run durability; zero setback margin. Next long run Thu 2 Jul (~17km, W10).
-- **Heat model (finalized 2026-06-29/30):** dose = base × temp_mult × HR-strain_mult (Karvonen HRR, ref 65% HRR = ×1.0) × humidity_mult (dew-point, ref 16°C = ×1.0). Sauna/bath = flat 1.0. Indoor turbo = 0. All sessions backfilled with dew-point. Score: **77%**. France was dry heat — humidity multiplier matters most at humid Cervia.
-- **Race readiness (81 days, IM Italy 19 Sep):** Bike ~90% (FTP 297W, 3.6W/kg) · Swim ~75% (CSS 1:40, ~63min raw) · Run ~50% — sole question mark; ~7wks to marathon durability if ankle holds.
+- **Tue 30 Jun (today) — Z2 Run 55min:** morning check-in sent · target GAP 4:36–5:12/km · HR ceiling 146 · ankle 0/10 AM. Awaiting completion.
+- **Mon 29 Jun — OW swim (Long Swim slot):** 2,618m · 2:07/100m · HR avg 112/max 122 (Z1) · TSS 45 vs plan 54 (−17%); 622m short of plan. Ankle 0/10 AM, 1/10 PM.
+- **Sun 28 Jun — OW swim (recovery, after blocked long run):** 1,031m · 1:59/100m · HR avg 125 · Z1 · TSS 20 vs plan 25 (−20%).
+- **Sat 27 Jun — Long run 15.2km (EASY):** GAP 5:16/km · avg HR 143 vs 146 Z2 ceiling · ERA5 ~32°C. Decoupling −4.6% (CV held); economy fade +6.9% final 5km (neuromuscular fatigue, not cardiac). Ankle 0→2/10 peak, resolved by next morning.
+- **Fri 26 Jun — Z2 ride ~2h:** NP 219W · IF 0.74 · ERA5 33.6°C · climb 264–271W = 89–91% FTP.
+- **Thu 25 Jun — Long Z2 ride 4h:** TSS 197 · pedalling-only decoupling 2.6% · ERA5 ~30°C.
+- **Ankle:** ATFL + CFL partial tear. 30 Jun: 0/10 AM, 1/10 PM. ~7 weeks to 30km run durability; zero setback margin. Next long run Thu 2 Jul (~17km, W10).
+- **Heat model (finalized 2026-06-29/30):** dose = base × temp_mult × HR-strain_mult (Karvonen HRR, 65% HRR = ×1.0) × humidity_mult (dew-point, 16°C = ×1.0). Sauna/bath = flat 1.0. Turbo = 0 (or manual log). All sessions backfilled with dew-point. Score: **77%**. France was dry heat — humidity matters most at Cervia (Adriatic, dew 18–21°C).
+- **Race readiness (81 days to IM Italy 19 Sep):** Bike ~90% (FTP 297W, 3.6W/kg, IM IF 0.70–0.73 in range) · Swim ~75% (CSS 1:40, ~63min raw) · Run ~50% (sole risk — ankle durability to 30km in 7–8 weeks, zero margin).
 - **CTL ~91 · ATL ~95 · TSB ~−4 (30 Jun est)** · weight ~83kg → race target 79kg.
-- **W10 bespoke plan (one-off, travel return):** Mon long swim 70min ✓ (TSS 45) · Tue Z2 run 55min · Wed strength 40min · Thu long run ~17km + CSS swim · Fri long Z2 ride 240min · Sat sweetspot 110min + brick 25min · Sun Z2 ride 150min + brick 25min. ~744 TSS. Re-synced after calendar bug (rule 100).
+- **W10 bespoke plan (one-off, travel return from work):** Mon long swim ✓ (TSS 45) · Tue Z2 run 55min · Wed strength 40min · Thu long run ~17km + CSS swim · Fri long Z2 ride 240min · Sat sweetspot 110min + brick 25min · Sun Z2 ride 150min + brick 25min. ~744 TSS. Re-synced after calendar bug.
 - **Aero helmet — still pending (due Tue 30 Jun).**
-- **Wed W10 strength kit not confirmed** (full gym / dumbbells-KBs / bodyweight?).
+- **Wed W10 strength kit not confirmed** (full gym / DB-KB / bodyweight?).
 - **Bug backlog (3 active — all recurring in current session):** (1) "Logged." without file write (rule 99). (2) Long-run check-in above progression cap (rule 98). (3) Calendar sync pushed generic template not bespoke plan (rule 100).
 
 ## Travel & training blocks (logged 2026-05-10)
