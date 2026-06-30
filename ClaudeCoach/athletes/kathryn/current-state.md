@@ -4,6 +4,7 @@ Last updated: 2026-06-30
 
 ## Recent context (auto-summary)
 
+- **Replan 1–10 Jul (athlete-requested, 30 Jun)**: No swimming 1–10 Jul (all swims removed). Tue 30 Jun ride moved to Wed 1 Jul (no cycle today). Wk1 (29 Jun–5 Jul) = 511 Load: Wed Tempo ride · Thu Tempo Run · Fri Endurance ride (replaces swim) · Sat Long Ride+Brick · Sun Long Run. Wk2 (6–12) = 440: Mon 6 + Tue 7 are golf+heat days, ≤50min cap, no cycle → Mon kettlebells 45min, Tue mobility 40min only. Wed 8 Z2 bike · Thu 9 sweetspot ride 70min (athlete's cap) · Fri 10 long run 80min (no cycle 10th). Both weeks validated clean.
 - **Tue 30 Jun — Tempo Intervals 80min** (build wk 1 day 2): Morning GO sent, no activity logged yet. 2×25min at 144–160W (NP ~147W, IF 0.77). Weight check pending.
 - **Mon 29 Jun — Grimaud run (off-plan intensity)**: Progressive easy→near-threshold, HR never settled. 5.5km · GAP 5:37/km · avg 172 bpm · Z4 37% · max 190 · decoupling 7.8% ⚠. RPE **outstanding** (asked twice, no response).
 - **Mon 29 Jun — Technique swim (build wk 1 day 1)**: Absent from ICU — skipped. T5 alert: 2 missed sessions rolling window (Jun 27 bike + Jun 29 swim).
