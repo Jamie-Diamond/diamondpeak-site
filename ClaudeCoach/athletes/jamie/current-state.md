@@ -16,20 +16,19 @@
 
 ## Recent context (auto-summary)
 
-- **Tue 30 Jun (today) — Z2 Run 55min:** morning check-in sent · target GAP 4:36–5:12/km · HR ceiling 146 · ankle 0/10 AM. Awaiting completion.
+- **Tue 30 Jun (today) — Z2 Run 55min:** morning check-in sent · target GAP 4:36–5:12/km · HR ceiling 146 · ankle 0/10 AM. Awaiting completion data.
 - **Mon 29 Jun — OW swim (Long Swim slot):** 2,618m · 2:07/100m · HR avg 112/max 122 (Z1) · TSS 45 vs plan 54 (−17%); 622m short of plan. Ankle 0/10 AM, 1/10 PM.
 - **Sun 28 Jun — OW swim (recovery, after blocked long run):** 1,031m · 1:59/100m · HR avg 125 · Z1 · TSS 20 vs plan 25 (−20%).
-- **Sat 27 Jun — Long run 15.2km (EASY):** GAP 5:16/km · avg HR 143 vs 146 Z2 ceiling · ERA5 ~32°C. Decoupling −4.6% (CV held); economy fade +6.9% final 5km (neuromuscular fatigue, not cardiac). Ankle 0→2/10 peak, resolved next morning.
-- **Fri 26 Jun — Z2 ride ~2h:** NP 219W · IF 0.74 · ERA5 33.6°C · climb isolated 264–271W = 89–91% FTP.
+- **Sat 27 Jun — Long run 15.2km (EASY):** GAP 5:16/km · avg HR 143 vs 146 ceiling · ERA5 ~32°C. Decoupling −4.6% (CV held); economy fade +6.9% final 5km (neuromuscular fatigue, not cardiac). Ankle 0→2/10 peak, resolved next morning.
+- **Fri 26 Jun — Z2 ride ~2h:** NP 219W · IF 0.74 · ERA5 33.6°C · isolated climb 264–271W = 89–91% FTP.
 - **Thu 25 Jun — Long Z2 ride 4h:** TSS 197 · pedalling-only decoupling 2.6% · ERA5 ~30°C.
 - **Ankle:** ATFL + CFL partial tear. 30 Jun: 0/10 AM, 1/10 PM. ~7 weeks to 30km run durability; zero setback margin. Next long run Thu 2 Jul (~17km, W10).
-- **Heat model (finalized 2026-06-29/30):** dose = base × temp_mult × HR-strain_mult (Karvonen HRR, 65% HRR = ×1.0) × humidity_mult (dew-point, 16°C = ×1.0). Sauna/bath = flat 1.0 (passive heat, HR multiplier excluded). Indoor turbo = 0 by default; manually log deliberate hot turbo at 1.0/0.5. All sessions backfilled. Score: **77%**. France was dry heat — humidity multiplier earns its keep at Cervia (Adriatic, dew 18–21°C).
-- **Race readiness (81 days to IM Italy 19 Sep):** Bike ~90% · Swim ~75% (CSS 1:40, ~63min raw) · Run ~50% — sole risk; ankle durability to 30km needed in 7–8 weeks with zero setback margin.
-- **CTL ~91 · ATL ~95 · TSB ~−4 (30 Jun est)** · weight ~83kg → race target 79kg.
+- **Heat model (finalised 2026-06-29/30):** dose = base × temp_mult × HR-strain_mult (Karvonen HRR, 65% HRR = ×1.0) × humidity_mult (dew-point, 16°C = ×1.0). Sauna/bath = flat 1.0 (passive, HR multiplier excluded). Indoor turbo = 0 by default; manually log deliberate hot no-fan turbo at 1.0/0.5. All sessions backfilled with dew-point. Score: **77%**. France was dry — humidity multiplier earns its keep at Cervia (Adriatic, dew 18–21°C).
+- **Race readiness (81 days to IM Italy 19 Sep):** Bike ~90% · Swim ~75% (CSS 1:40/100m, ~63min raw) · Run ~50% — sole risk; ankle durability to 30km in 7–8 weeks with zero setback margin. CTL ~91 · ATL ~95 · TSB ~−4.
+- **Weight:** 85.3kg (30 Jun) vs 82.9kg on 19 Jun (+2.4kg); heat-fluid likely accounts for 1.0–1.5kg (plasma expansion + glycogen); race target 79kg (81 days). Do not chase weight during heat work — judge trend in a cooler week.
 - **W10 bespoke plan (one-off, travel return from work):** Mon long swim ✓ (TSS 45) · Tue Z2 run 55min · Wed strength 40min · Thu long run ~17km + CSS swim · Fri long Z2 ride 240min · Sat sweetspot 110min + brick 25min · Sun Z2 ride 150min + brick 25min. ~744 TSS. Re-synced after calendar bug.
-- **Aero helmet — still pending (due Tue 30 Jun).**
-- **Wed W10 strength kit not confirmed** (full gym / DB-KB / bodyweight?).
-- **Bug backlog (3 active — both #1 and #3 recurred in this session):** (1) "Logged." without file write (rule 99) — triggered again. (2) Long-run check-in above progression cap (rule 98). (3) Calendar sync pushed generic template not bespoke plan (rule 100) — triggered again.
+- **Open:** Aero helmet still pending (due Tue 30 Jun). Wed W10 strength kit not confirmed (full gym / DB-KB / bodyweight?).
+- **Bug backlog (both #1 and #3 recurred this session):** (1) "Logged." without file write (rule 99) — triggered again. (2) Long-run check-in above progression cap (rule 98). (3) Calendar sync pushed generic template not bespoke plan (rule 100) — triggered again.
 
 ## Travel & training blocks (logged 2026-05-10)
 

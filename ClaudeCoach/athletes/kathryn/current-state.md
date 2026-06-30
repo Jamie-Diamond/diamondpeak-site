@@ -4,13 +4,13 @@ Last updated: 2026-06-30
 
 ## Recent context (auto-summary)
 
-- **Tue 30 Jun — Tempo Intervals 80min** (today, build wk 1 day 2): 2×25min at 144–160W (NP ~147W, IF 0.77). Morning GO sent. No activity recorded yet.
+- **Tue 30 Jun — Tempo Intervals 80min** (today, build wk 1 day 2): 2×25min at 144–160W (NP ~147W, IF 0.77). Morning GO sent, weight check pending. No activity recorded yet.
 - **Mon 29 Jun — Grimaud run (off-plan intensity)**: Progressive easy→near-threshold, HR never settled. 5.5km · GAP 5:37/km · avg 172 bpm · Z4 37% · max 190 · decoupling 7.8% ⚠. RPE **outstanding** (asked twice, no response).
 - **Mon 29 Jun — Technique swim**: Absent from ICU — skipped. T5 alert active (2 missed sessions: Jun 27 bike + Jun 29 swim).
 - **Sun 28 Jun — Long Run 90min Easy**: 12.7km · GAP 6:07/km · avg 167 bpm (Z2 52%/Z3 33%) · Load 83 · decoupling 2.7%. RPE **5.5**, felt controlled.
 - **Sun 28 Jun — Sea Swim (OWS)**: Cut short — 1km/20min vs 40-min plan (Load 12 vs 43). Avg 2:01/100m · Z1 HR (avg 137, max 149). RPE **outstanding** (not given).
-- **Fri 26 Jun — Bike Z2 + Brick Run (Grimaud)**: Brick brought forward from Sat (Form −20, fifth aerobic day). Bike 2hr22 · 52km · Load 113. Brick 6.01km · GAP 5:26/km · cardiac drift 167→191 · Load 47. Nutrition logged: Clif bar (white choc macadamia) + honey gel + 8 Haribo + 700ml water + 600ml electrolyte (~33g/hr vs 70g/hr target).
-- **Sat 27 Jun**: Unplanned rest — brick already done Fri; travel block exit day.
+- **Fri 26 Jun — Bike Z2 + Brick Run (Grimaud)**: Brick brought forward from Sat (Form −20, fifth aerobic day). Bike 2hr22 · 52km · Load 113. Brick 6.01km · GAP 5:26/km · cardiac drift 167→191 · Load 47. Nutrition ~33g/hr vs 70g/hr target.
+- **Sat 27 Jun**: Unplanned rest — brick done Fri, Kathryn called it off to preserve Form ahead of build phase.
 - **Pending RPEs**: Mon 29 Jun run + Sun 28 Jun OWS — both outstanding.
 - **Luteal phase**: Day 21 of 28 (24 Jun–7 Jul). Higher RPE and core temp — lead with feel. Quality window resumes ~8 Jul (follicular).
 - **CTL 61 · ATL 73 · Form −12.5**: HRV improving (Jun 29=70, +19.3% trend). Sleep 7.45h (Jun 29). No injuries.
