@@ -3,17 +3,17 @@
 Last updated: 2026-06-30
 
 ## Recent context (auto-summary)
-- **2026-06-30**: Endurance 50 min scheduled (Build phase week 1, Tue); outcome pending — no completion confirmation yet
-- **2026-06-29 (Sun)**: Unplanned easy ride on rest day (Geneva Road Cycling) — avg HR 124 bpm, max 159 bpm; RPE 7, "felt terrible due to lack of sleep"; first activity in ~4 weeks and first message reply in weeks; CTL 7.1 / ATL 9.5
-- **2026-06-27**: Long ride 195 min — NOT completed (IcuSync empty; corrected from prior erroneous 'confirmed completed')
+- **2026-06-30**: Endurance 50 min scheduled (Build phase week 1, Tue); outcome pending — no confirmation yet; morning weight prompt sent, no response
+- **2026-06-29 (Sun)**: Unplanned easy ride on rest day (Geneva Road Cycling) — avg HR 124 bpm, max 159 bpm; RPE 7, "felt terrible but probably due to lack of sleep"; first activity in ~4 weeks and first reply in weeks
+- **2026-06-27**: Long ride 195 min — NOT completed (IcuSync activities array empty; prior 'confirmed completed' was projection error)
 - **2026-06-23**: Short endurance 35 min — NOT completed
 - **2026-06-20**: Long Z2 3h — NOT completed
 - **Build phase week 1 (w/c 29 Jun)**: Tue endurance 50 min · Thu sweetspot 2×25 85 min · Sun long ride 195 min — 250 TSS target
-- **Tour de Stations / Marmottes**: 60 days out (as of 30 Jun); 4+ weeks near-zero training; race ~6–8 hr mountain day
-- **Compliance**: T3 Underload fired every week since Jun 7; pattern of consistent non-compliance
+- **Tour de Stations / Marmottes**: 60 days out (as of 30 Jun); 4+ weeks near-zero training entering build; race ~6–8 hr mountain day
+- **Compliance**: T3 Underload fired every week since Jun 7; 0% compliance for 3 consecutive weeks before Jun 29 ride
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target
-- **Engagement**: largely unresponsive; single reply 29 Jun ("what does RPE mean" — does not know jargon, always use plain language)
+- **Jargon**: Calum does not know coaching terms — asked "what does RPE mean" on Jun 29; always use plain language
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 
