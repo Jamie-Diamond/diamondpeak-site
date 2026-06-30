@@ -3,14 +3,15 @@
 Last updated: 2026-06-30
 
 ## Recent context (auto-summary)
-- **2026-06-30 (Tue)**: Endurance 50 min scheduled (Build week 1) — outcome pending; morning weight prompt sent, no response
-- **2026-06-29 (Sun)**: Unplanned rest-day ride (Geneva Road Cycling) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, lack of sleep"); first activity in ~4 weeks; Calum asked what RPE means (now a perm rule)
-- **Prior 3 sessions all missed**: Long Z2 3h (20 Jun), Short endurance 35 min (23 Jun), Long ride 195 min (27 Jun) — 0% compliance across those weeks
-- **Build phase week 1 (w/c 29 Jun)**: Tue 50 min endurance · Thu 2×25 sweetspot 85 min · Sun long ride 195 min — 250 TSS target
-- **Tour de Stations / Marmottes**: 60 days out as of 30 Jun; building from near-zero fitness; race ~6–8 hr mountain effort
-- **Compliance**: T3 Underload fired every week since Jun 7; Jun 29 Geneva Road Cycling was first ride in ~4 weeks
+- **2026-06-30 (Tue)**: Endurance 50 min scheduled (Build week 1) — outcome pending; no weight response
+- **2026-06-29 (Sun)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, lack of sleep"); first activity in ~4 weeks; CTL now 7.1
+- **3 consecutive sessions missed (Jun 20–27)**: Long Z2 3h (20 Jun), Short endurance 35 min (23 Jun), Long ride 195 min (27 Jun) — 0% compliance
+- **Build phase week 1 (w/c 29 Jun)**: 250 TSS target — Tue 50 min endurance · Thu 2×25 sweetspot 85 min · Sun long ride 195 min
+- **Tour de Stations / Marmottes**: 60 days out (30 Jun); building from near-zero fitness; race ~6–8 hr mountain effort
+- **Compliance**: T3 Underload fired every week since Jun 7; Jun 29 was first ride in ~4 weeks
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; target 60 g/hr (short-term) → 90 g/hr (race day)
+- **Jargon**: Calum doesn't know coaching terms — asked what "RPE" means on Jun 29; always use plain language
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 
