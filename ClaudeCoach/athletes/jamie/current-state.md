@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-06-29
+## Last updated: 2026-06-30
 
 ## Recent context (auto-summary)
 
@@ -135,6 +135,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 - [Location]: [pain 1–10] / [trend: stable / improving / worsening] / [action]
 
 ## Off-plan in last 7 days
+
+- **2026-06-30 GO** — Z2 Run 55 min (run_easy): no rules fired, execute as planned. CTL 89 (Fitness), ATL 95 (Fatigue), TSB −6 (Form). HRV trend −5.4% (latest 38 on 29 Jun; trailing, correct); sleep 7.52h carried (29 Jun, most recent synced). Last RPE 8. Ankle 2/10 — within physio protocol (≤5/10 acceptable); stop-if >5/10 in force. Structure: 10m WU → 40m Z2 → 5m CD; HR ceiling 146, GAP 4:36–5:12/km.
 
 - **2026-06-29 GO** — Long Swim 70 min (swim): no rules fired, execute as planned. CTL 90 (Fitness), ATL 102 (Fatigue), TSB −12 (Form). HRV trend −14.6% (latest 35 on 28 Jun; trailing, correct); sleep 7.1h carried (28 Jun, most recent synced). Last RPE 8. Ankle not relevant for swim. Final training day of France holiday — return home today.
 
