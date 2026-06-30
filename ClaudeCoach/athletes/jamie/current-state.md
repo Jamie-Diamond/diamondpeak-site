@@ -416,6 +416,10 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-29 — T9 (Tier 2):** Two overdue open actions — suppression lapsed (last flagged Jun 25, 4 days ago): (1) Book Precision Hydration sweat-sodium test — due 2026-05-31, now 29 days overdue, status pending. (2) TT bike fit appointment — due 2026-05-31, now 29 days overdue, status pending. New context: France camp ends today (Jun 29), return window Jul 2–9 is the last booking opportunity before camp #2 (Jul 10–17). Both must be booked this week. Aero helmet (due Jun 30) suppressed — flagged Jun 27 (2 days ago).
 
+- **2026-06-30 — T3 (Tier 1):** HRV trend −24% over 7 days (HRV 50 on 2026-06-23 → 38 on 2026-06-29). RHR 58 on 2026-06-29 (above 50–54 baseline) — corroborating signal. Two-signal convergence (HRV + elevated RHR); sleep 2026-06-29 = 7.52h (above 7h — no third-signal corroboration, so no load-reduction action yet). Last T3 logged 2026-06-26 (4 days ago, suppression lapsed); signal materially changed (deeper drop, higher baseline HRV 50 vs 45 on Jun 19, RHR now 58 vs 55–56 prior). Context: France camp high-load week complete, return home today — natural recovery trough expected. Post-camp rides Jun 26 (decoupling 2.6%) and Jun 27 (decoupling −6.7%) show aerobic system coping. Monitor HRV this week; if fails to recover above 40 by Wed 2 Jul AND RHR stays elevated, flag for recovery day insertion.
+
+- **2026-06-30 — T9 (Tier 2):** Aero helmet (due 2026-06-30) — status pending; due today. Signal materially changed from Jun 27 entry (was "due in 3 days," now "due today/overdue"). PH sweat test + TT bike fit suppressed (flagged Jun 29, within 3-day window).
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
