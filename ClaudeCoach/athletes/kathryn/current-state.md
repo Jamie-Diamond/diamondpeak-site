@@ -1,21 +1,20 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 ## Recent context (auto-summary)
 
+- **Tue 30 Jun — Tempo Intervals 80min**: GO, execute as planned (no rules fired). HRV trend +19.3% (latest 70 on Jun 29); sleep 7.45h carried. ATL 73, CTL 61; form −12. Cycle day 21 luteal — sessions will feel harder than numbers suggest. 2×25min at 144–160W (76–84% FTP), 5min Z2 rec, WU 15min + CD 10min. NP ~147W. Load target 74.
 - **Mon 29 Jun — Off-plan tempo run (unexpected)**: Progressive build easy to near-threshold; HR never settled. 5.5km · GAP 5:37/km · avg 172 bpm (Z4 37%, Z1+Z2 43%) · max 190 · decoupling 7.8% ⚠. RPE outstanding. Planned Technique Swim status unclear — may be unlogged or skipped.
 - **Sun 28 Jun — Long Run 90min**: 12.7km · GAP 6:07/km · avg 167 bpm (Z1 14%/Z2 52%/Z3 33%) · Load 83 · decoupling 2.7%. RPE **5.5**, felt controlled.
 - **Sun 28 Jun — Sea Swim (OWS)**: Cut short — 1km/20min vs 40-min plan (Load 12 vs 43). Avg 2:01/100m · Z1 HR throughout. RPE outstanding.
 - **Fri 26 Jun — Grimaud Cycling + Brick Run**: Cycling 2h22 · 52km · 882m · 148/182 bpm · Load 113 · heat 32–38°C. Brick run (brought forward from Sat) 6.01km · GAP 5:26/km · 182/197 bpm · Load 47 · cardiac drift 167→191. Nutrition ~33g/hr (Clif bar + honey gel + 8 Haribo + 700ml water + 600ml electrolyte). No RPE for either.
 - **Sat 27 Jun**: Unplanned rest — 0 load.
 - **Build week 1 (w/c 29 Jun) locked and synced**: Mon Technique 40min · Tue Tempo Intervals 80min · Wed CSS Set 55min · Thu Tempo Run 50min · Fri Long Aerobic Swim 60min · Sat Long Ride + Brick Run 195min · Sun Long Run 88min · 535 TSS.
-- **Luteal phase**: Day 22 of 28 (24 Jun–7 Jul). Higher RPE and core temp — hold targets loosely, lead with feel. Quality window resumes ~8 Jul (follicular).
-- **CTL ~60 · Form −12**: Base CTL target met; build phase begins this week. HRV improving (Jun 28=65), sleep 7.38h. No injuries.
+- **Luteal phase**: Day 21 of 28 (24 Jun–7 Jul). Higher RPE and core temp — hold targets loosely, lead with feel. Quality window resumes ~8 Jul (follicular).
+- **CTL 61 · Form −12**: Build phase week 1. HRV improving (Jun 29=70, trend +19.3%), sleep 7.45h. No injuries.
 - **Fuelling gap (persistent)**: Fri ride ~33g/hr vs 70g/hr race target. Nudge on every long session.
-- **Weight**: Not logged through travel block or Mon 29 Jun morning — persistent gap.
 - **Pending RPEs**: Mon 29 Jun run + Sun 28 Jun OWS both outstanding.
-- **Tomorrow (Tue 30 Jun)**: Tempo Intervals — WU 15min easy + 2×25min tempo at 144–160W (76–84% FTP), NP ~147W, HR cap 178 bpm; 60g/hr carbs + 500ml/hr fluid; Form −12.5.
 
 ## Injuries / Niggles
 None
@@ -81,6 +80,7 @@ None
 - 2026-06-24: Rest day — no session planned (confirmed plan: Wed is rest during travel block Jun 22–28). HRV trend +5.4% (latest 65 on Jun 23); sleep 7.32h carried (Jun 23). ATL 59, CTL 56; form −3. Last session RPE 6 (bike Jun 23). Luteal day 15 begins.
 - 2026-06-27: bike_z2 120min — NOT COMPLETED (0 load recorded in ICU). HRV trend +1.5% (latest 61 on Jun 26); sleep 7.87h carried (Jun 26). ATL 70, CTL 59; form −11. Luteal day 18. Travel block final day; session likely skipped or not synced.
 - 2026-06-28: run_long 90min (Long Run 90min Easy) + swim 40min (Sea Swim open water aerobic) — GO, both execute as planned (no rules fired). HRV trend −3.1% (latest 58 on Jun 27; today not synced at 05:00); sleep 7.79h carried (Jun 27). ATL 65, CTL 59; form −6. Last session RPE 5. Luteal day 19 — sessions feel harder than numbers suggest; HR-led execution. Travel block expires today.
+- 2026-06-30: bike_threshold 80min (Tempo Intervals) — GO, execute as planned (no rules fired). HRV trend +19.3% (latest 70 on Jun 29); sleep 7.45h carried (Jun 29). ATL 73, CTL 61; form −12. Last session RPE 5. Luteal day 21 — sessions feel harder than numbers suggest.
 - 2026-06-29: swim 40min (Technique — 10m/20m/10m at 76–84% pace) — GO, execute as planned (no rules fired). HRV trend +9.5% (latest 65 on Jun 28); sleep 7.38h carried (Jun 28). ATL 72, CTL 60; form −12. Last session RPE 5 (run Jun 28). Luteal day 20 — sessions feel harder than numbers suggest. Build week 1 begins. Combines with standing KB 45min = 85min total (within 90min cap).
 
 ## Illness / Health
