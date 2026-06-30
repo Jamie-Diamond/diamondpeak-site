@@ -1,18 +1,19 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 ## Recent context (auto-summary)
-- **2026-06-29**: Unplanned easy ride (Geneva Road Cycling) on rest day — avg HR 124 bpm, max 159 bpm; RPE 7, felt terrible, attributed to lack of sleep; first cycling activity in ~4 weeks; positive engagement signal despite subjective feel
-- **2026-06-27**: Long ride 195 min — NOT completed (IcuSync activities array empty; actual CTL 5.72/ATL 0.31)
-- **2026-06-23**: Short endurance 35 min — NOT completed (ICU atlLoad=0.0)
+- **2026-06-30**: Endurance 50 min scheduled GO today (Build phase week 1, day 1); awaiting completion confirmation
+- **2026-06-29**: Unplanned easy ride (Geneva Road Cycling) on rest day — avg HR 124 bpm, max 159 bpm; RPE 7, felt terrible, attributed to lack of sleep; first cycling activity in ~4 weeks
+- **2026-06-27**: Long ride 195 min — NOT completed (IcuSync activities array empty)
+- **2026-06-23**: Short endurance 35 min — NOT completed
 - **2026-06-20**: Long Z2 3h — NOT completed
-- **Build phase (week of 29 Jun)**: Tue 30 Jun endurance 50 min · Thu sweetspot 2×25 85 min · Sun long ride 195 min — 250 TSS target; first prescribed session tomorrow (Tue 30 Jun)
-- **Tour de Stations / Marmottes**: 61 days out (as of 29 Jun); base-build window critically compressed
+- **Build phase week 1 (w/c 29 Jun)**: Tue 30 Jun endurance 50 min · Thu sweetspot 2×25 85 min · Sun long ride 195 min — 250 TSS target
+- **Tour de Stations / Marmottes**: 60 days out (as of 30 Jun); base-build window critically compressed
 - **Compliance**: T3 Underload fired every week since Jun 7; 4+ consecutive weeks at 0%; Jun 29 unplanned ride is first activity in ~4 weeks
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; 60 g/hr short-term target → 90 g/hr race target; race-day risk on 6–8 hr mountain days
-- **Engagement**: Calum not responding to most messages; replied 29 Jun with RPE 7 + "felt terrible but probably due to lack of sleep"; didn't know coaching term "RPE" — always use plain language for all coaching terms
+- **Engagement**: Calum largely unresponsive; replied 29 Jun with RPE 7 + "felt terrible but probably due to lack of sleep"; did not know coaching term "RPE" — always use plain language for all coaching terms
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 
