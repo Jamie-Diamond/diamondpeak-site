@@ -3,12 +3,13 @@
 Last updated: 2026-07-01
 
 ## Recent context (auto-summary)
+- **2026-07-01 (Wed)**: Rest day; T5 fired (2 missed in rolling 7d: Jun 27 long ride + Jun 30 endurance)
 - **2026-06-30 (Tue)**: Endurance 50 min — NOT completed (no activity recorded; second miss in build phase week 1)
-- **2026-06-29 (Sun)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, lack of sleep"); first activity in ~4 weeks
-- **2026-06-27 (Sat)**: Long ride 195 min — NOT completed; third missed session across base block finale
+- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, lack of sleep"); first activity in ~4 weeks
+- **2026-06-27 (Sat)**: Long ride 195 min — NOT completed; third consecutive base block miss
 - **2026-06-23 (Tue)**: Short endurance 35 min — NOT completed
-- **Build phase week 1 (w/c 29 Jun)**: 250 TSS target — only Jun 29 Geneva ride completed so far; Thu 2×25 sweetspot 85 min and Sun long ride 195 min still to come
-- **CTL 6.9 / ATL 8.2 / Form −1.3** as of 2026-07-01; T5 fired today (2 missed in rolling 7d: Jun 27 + Jun 30)
+- **Build phase week 1 (w/c 29 Jun)**: 250 TSS target — only Jun 29 Geneva ride completed so far; Thu sweetspot 2×25 85 min and Sun long ride 195 min still to come
+- **CTL 6.9 / ATL 8.2 / Form −1.3** as of 2026-07-01
 - **Tour de Stations / Marmottes**: 59 days out (1 Jul); building from near-zero fitness; race ~6–8 hr mountain effort
 - **Compliance**: T3 Underload fired every week since Jun 7; only 1 ride in past ~4 weeks (Jun 29 Geneva)
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
