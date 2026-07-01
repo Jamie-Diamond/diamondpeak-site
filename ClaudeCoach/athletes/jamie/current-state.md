@@ -12,10 +12,11 @@
 
 ---
 
-## Last updated: 2026-06-30
+## Last updated: 2026-07-01
 
 ## Recent context (auto-summary)
 
+- **Wed 1 Jul — Z2 Run (60 min):** GO, no rules fired. HRV +25.5% (latest 50 on 30 Jun), TSB +2. Ankle 2/10 — within 5/10 tolerance. Execute as planned: GAP 4:36–5:12/km, HR ≤146, IF 0.83, target TSS 69.
 - **Tue 30 Jun — Z2 run missed:** Called too late in the day. Rest day. Run moved to Wed 1 Jul.
 - **Mon 29 Jun — OW swim (Long Swim slot):** 2,618m · 2:07/100m · HR avg 112/max 122 (Z1) · TSS 45 vs plan 54 (−17%). Ankle 0/10 AM, 1/10 PM.
 - **Sun 28 Jun — OW swim (recovery):** 1,031m · 1:59/100m · HR avg 125 · Z1 · TSS 20 vs plan 25 (−20%).
