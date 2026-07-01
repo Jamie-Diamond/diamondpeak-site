@@ -27,9 +27,18 @@ def build_description(first_name: str, sport: str, entry: dict, detail: dict, ev
     pain    = entry.get("injury_pain_during")
     dur     = entry.get("duration_min") or round((detail.get("moving_time") or 0) / 60)
     dist    = entry.get("distance_km") or (round((detail.get("distance") or 0) / 1000, 1) or None)
-    avg_t   = detail.get("average_temp")
-    min_t   = detail.get("min_temp")
-    max_t   = detail.get("max_temp")
+
+    # Ambient temp is ONLY trustworthy when the activity has real weather-station
+    # data (has_weather). The watch onboard sensor over-reads and must NEVER be
+    # cited as ambient — so if has_weather is false, drop temp entirely.
+    has_weather = bool(detail.get("has_weather"))
+    avg_t   = detail.get("average_temp") if has_weather else None
+    min_t   = detail.get("min_temp")     if has_weather else None
+    max_t   = detail.get("max_temp")     if has_weather else None
+    # Heat is only a real stimulus at confirmed ambient ≥25°C.
+    heat_confirmed = has_weather and max(
+        v for v in (avg_t, max_t) if v is not None
+    ) >= 25 if (avg_t is not None or max_t is not None) else False
 
     metrics = []
     if np_w:  metrics.append(f"NP {np_w}W · IF {round(np_w/ftp, 2):.2f}")
@@ -68,6 +77,12 @@ def build_description(first_name: str, sport: str, entry: dict, detail: dict, ev
     if dur:  sport_line += f", {dur} min"
     if dist: sport_line += f", {dist:.1f}km"
 
+    heat_rule = (
+        "You MAY note the heat as a training factor."
+        if heat_confirmed else
+        "Do NOT mention heat, temperature, or weather — no confirmed ambient ≥25°C data is available for this session."
+    )
+
     prompt = f"""\
 Write a Strava activity description for {first_name}.
 
@@ -77,7 +92,7 @@ Metrics: {metrics_str}
 
 Write exactly 3 lines, plain text, no markdown, no hashtags, no exclamation marks:
 Line 1 — "Aim: [one plain sentence on what the session was targeting]"
-Line 2 — [one neutral, factual sentence describing what was actually done — key metrics (zones, NP/IF, decoupling, pace, heat). Describe what happened, NOT how it deviated from plan. NEVER snide, sarcastic, wry, or negative. NEVER imply the athlete quit, gave up, fell short, or underperformed. A shorter-than-planned session is reported plainly by its actual numbers, with no commentary on the gap. If RPE or feel data is present, state it factually.]
+Line 2 — [one neutral, factual sentence describing what was actually done — key metrics (zones, NP/IF, decoupling, pace). Describe what happened, NOT how it deviated from plan. NEVER snide, sarcastic, wry, or negative. NEVER imply the athlete quit, gave up, fell short, or underperformed. A shorter-than-planned session is reported plainly by its actual numbers, with no commentary on the gap. If RPE or feel data is present, state it factually. {heat_rule}]
 Line 3 — "ClaudeCoach"
 
 Examples of the right tone (neutral, factual, no judgement):
