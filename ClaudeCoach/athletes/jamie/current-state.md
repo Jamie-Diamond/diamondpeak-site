@@ -418,6 +418,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-06-30 — T9 (Tier 2):** Aero helmet (due 2026-06-30) — status pending; due today. Signal materially changed from Jun 27 entry (was "due in 3 days," now "due today/overdue"). PH sweat test + TT bike fit suppressed (flagged Jun 29, within 3-day window).
 
+- **2026-07-01 — T4 (Tier 1):** Sleep <7h on 3 of last 7 nights: 24 Jun 5.05h, 27 Jun 6.58h, 30 Jun 5.54h. Prior T4 (Jun 27) flagged Jun 21/24/27 — Jun 30's 5.54h is a new night not in that entry; signal materially changed. Context: post-France-camp fatigue + return-home day (Jun 30). HRV recovered to 50 on Jun 30 — no T3 co-fire (trend +22% over 7 days, Jun 24→Jun 30). RHR 51 on Jun 30 (within 50–54 baseline). Single-signal T4 only; no multi-signal convergence, no load-reduction action warranted for today's Z2 run. Prioritise sleep this week (Jul 1–9); if sleep fails to recover ≥7h for 3+ consecutive nights by mid-week, re-evaluate.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
