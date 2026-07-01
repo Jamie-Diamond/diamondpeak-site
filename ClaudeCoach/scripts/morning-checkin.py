@@ -394,8 +394,8 @@ def run_athlete(slug, athlete_cfg):
         client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
         wellness_rows = client.get_wellness(8)
         has_sleep_device = any(r.get("sleepSecs") is not None for r in wellness_rows)
-        # ICU/Garmin stores last night's sleep under yesterday's date, not today's
-        sleep_date = (date.today() - timedelta(days=1)).isoformat()
+        # ICU/Garmin stores last night's sleep under the WAKING day = today's date
+        sleep_date = date.today().isoformat()
         print(f"[{slug}] querying sleep data for {sleep_date}", file=sys.stderr)
         for row in wellness_rows:
             if (row.get("id") or "")[:10] == sleep_date:
@@ -414,14 +414,14 @@ def run_athlete(slug, athlete_cfg):
                     wellness_line = " · ".join(parts)
                 break
         if wellness_line is None:
-            # Guard: if yesterday's sleep is absent, check whether the day before has data
+            # Guard: if today's sleep hasn't synced yet, check whether yesterday has data
             # so we can warn rather than silently appear as "not yet synced"
-            two_ago = (date.today() - timedelta(days=2)).isoformat()
+            prev_day = (date.today() - timedelta(days=1)).isoformat()
             for row in wellness_rows:
-                if (row.get("id") or "")[:10] == two_ago and row.get("sleepSecs") is not None:
+                if (row.get("id") or "")[:10] == prev_day and row.get("sleepSecs") is not None:
                     print(
                         f"[{slug}] WARNING: no sleep data for {sleep_date}; "
-                        f"stale data exists for {two_ago} — not using it",
+                        f"stale data exists for {prev_day} — not using it",
                         file=sys.stderr,
                     )
                     break
