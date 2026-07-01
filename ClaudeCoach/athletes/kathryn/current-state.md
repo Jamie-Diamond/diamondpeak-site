@@ -4,15 +4,15 @@ Last updated: 2026-07-01
 
 ## Recent context (auto-summary)
 
-- **Wed 1 Jul — Wandsworth Cycling (Tempo Intervals, modified 1×25min)**: 78 min · NP 161W (82% FTP) · IF 0.83 · Z1+Z2 56%, Z3–Z5 37% — punchier than a clean Z2/tempo split. Load 88 (+17% vs plan 75). RPE and nutrition still outstanding.
+- **Wed 1 Jul — Wandsworth Cycling (Tempo Intervals, modified 1×25min)**: Completed. 78 min · NP 161W (82% FTP) · IF 0.83 · Z1+Z2 56%, Z3–Z5 37% — punchier than clean Z2/tempo split. Load 88 (+17% vs plan). RPE and nutrition not yet given.
 - **Tue 30 Jun — Tempo Intervals**: SKIPPED; moved to Wed 1 Jul.
-- **Mon 29 Jun — Grimaud run (off-plan)**: 5.5km · GAP 5:37/km · avg 172 bpm · Z4 37% · decoupling 7.8% ⚠. RPE not given.
+- **Mon 29 Jun — Grimaud run (progressive tempo, off-plan)**: 5.5km · GAP 5:37/km · avg 172 bpm · Z4 37% · decoupling 7.8% ⚠. RPE not given.
 - **Mon 29 Jun — Technique swim**: SKIPPED.
 - **Sun 28 Jun — Long Run**: 12.7km · GAP 6:07/km · avg 167 bpm · Load 83 · RPE 5.5.
 - **Sun 28 Jun — Sea Swim OWS**: 1km/20min (vs 40-min plan) · avg 2:01/100m · Z1 · RPE not given.
-- **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5 · Nutrition: handful of haribo + one honey gel (~33g/hr vs 70g/hr target — confirmed 1 Jul).
-- **Outstanding RPE**: Mon 29 Jun run · Sun 28 Jun OWS · Wed 1 Jul ride. Outstanding nutrition: Wed 1 Jul ride.
-- **Replan 1–10 Jul confirmed, synced to Garmin**: No swimming this window. Wed 1 Tempo Intervals · Thu 2 Tempo Run · Fri 3 Endurance+2×20min tempo (120min cap) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 kettlebells 45min · Tue 7 easy Z2 run 45min · Wed 8 Z2 bike 75min · Thu 9 sweetspot 70min cap · Fri 10 long run 80min.
+- **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5 · Nutrition: handful of haribo + one honey gel (~33g/hr vs 70g/hr target).
+- **Outstanding**: RPE for Mon 29 Jun run · Sun 28 Jun OWS · Wed 1 Jul ride; nutrition for Wed 1 Jul ride.
+- **Replan 1–10 Jul confirmed, synced to Garmin**: No swimming this window. Thu 2 Tempo Run · Fri 3 Endurance+2×20min tempo (120min cap) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 kettlebells 45min · Tue 7 easy Z2 run 45min · Wed 8 Z2 bike 75min · Thu 9 sweetspot 70min cap · Fri 10 long run 80min.
 - **Mon 6/Tue 7**: golf + heat · ≤50 min each · anything except cycle or swim OK (running, gym, kettlebells all fine).
 - **Luteal phase**: Day 22 of 28 (24 Jun–7 Jul). Higher RPE/core temp — lead with feel. Quality window resumes ~8 Jul (follicular).
 - **CTL 60 · ATL 68 · Form −8** (1 Jul): HRV 69 (+19% trend). Sleep 6.01h (1 Jul — short). No injuries.

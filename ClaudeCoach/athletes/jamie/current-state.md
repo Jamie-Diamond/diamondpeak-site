@@ -16,18 +16,18 @@
 
 ## Recent context (auto-summary)
 
-- **Wed 1 Jul — Z2 Run 60min (COMPLETED):** EASY — avg HR 145 vs 146 ceiling. 10.8km · GAP 4:51/km · TSS 67 (vs plan 69, −3%) · rolling terrain (+92m). Running power 415W avg / 420W NP — held steadily across hills. Ankle 2/10 during-run (terrain-driven, within 5/10 tolerance, not a flare).
-- **Tue 30 Jun — Rest:** Z2 run too late in day to execute; moved to Wed.
+- **Wed 1 Jul — Z2 Run 60min (COMPLETED):** EASY — avg HR 145 vs 146 ceiling. 10.8km · GAP 4:51/km · TSS 67 (vs plan 69, −3%) · rolling terrain (+92m). Running power 415W avg / 420W NP — held steadily across hills. PRs: Drag in the park + Memorial Park Top Path - Up. Ankle 2/10 during-run (terrain-driven, within 5/10 tolerance, not a flare). No next-morning score yet.
+- **Tue 30 Jun — Rest:** Z2 run too late in day to execute; rescheduled to Wed.
 - **Mon 29 Jun — OW swim (Long Swim slot):** 2,618m · 2:07/100m · HR avg 112/max 122 (Z1) · TSS 45. Ankle 0/10 AM, 1/10 PM.
 - **Sun 28 Jun — OW swim (recovery):** 1,031m · 1:59/100m · HR avg 125 · Z1 · TSS 20.
 - **Sat 27 Jun — Long run 15.2km (EASY):** GAP 5:16/km · avg HR 143 vs 146 ceiling · ERA5 ~32°C · economy fade +6.9% final 5km. Ankle 0→2/10, resolved AM.
-- **Ankle:** ATFL + CFL partial tear. 1 Jul during-run 2/10 (rolling terrain, within 5/10 tolerance). 30 Jun: 0/10 AM, 1/10 PM. Zero setback margin. Next long run Sun 5 Jul (~17km).
-- **Heat model (finalised 29 Jun):** dose = base × temp_mult × HR-strain_mult (Karvonen HRR) × humidity_mult (dew-point centred 16°C). Sauna/bath = flat 1.0; indoor turbo = 0 (manual log only). Scientific basis confirmed: core-temp elevation is the driver; HR in heat encodes combined metabolic + ambient stress (cardiac drift). Score: **77%** (80 days to race). All multipliers backfilled on historic sessions.
-- **W10 plan (active, calendar pushed to Garmin):** Wed ✓ done · Thu CSS Swim 55min + Z2 Ride 150min · Fri Long Z2 Ride 5h30 · Sat Sweetspot 1h50 · Sun Long Run ~17km/95min. Projected ~742 TSS vs target ~789 (−6% — managing to multi-week trend, not chasing). Three load levers on hold (Wed strength, Thu +30min, Fri +30min) — revisit as week unfolds.
+- **Ankle:** ATFL + CFL partial tear. 1 Jul during-run 2/10 (rolling terrain, within 5/10 tolerance). Protocol: ≤5/10 during = continue; >5/10 = stop; not resolved next AM = no run. Next long run Sun 5 Jul (~17km).
+- **Heat model (finalised 29 Jun):** dose = base × temp_mult × HR-strain_mult (Karvonen HRR) × humidity_mult (dew-point centred 16°C). Scientific basis: core-temp elevation drives adaptation; HR in heat encodes combined metabolic + ambient stress. Sauna/bath = flat 1.0; indoor turbo = 0 (manual log only). Score: **77%** (80 days to race). All multipliers backfilled on historic sessions.
+- **W10 plan (active, calendar pushed to Garmin):** Wed ✓ run done · Thu CSS Swim 55min + Z2 Ride 150min · Fri Long Z2 Ride 5h30 · Sat Sweetspot 1h50 · Sun Long Run ~17km/95min. Projected ~742 TSS vs target ~789 (−6% — managing to multi-week trend, not chasing). Three load levers still on hold (Wed strength, Thu +30min, Fri +30min) — revisit as week unfolds.
 - **Weight:** 85.3kg (30 Jun) vs race target 79kg (+6.3kg, 80 days out). Likely 1.0–1.5kg heat-fluid (PV expansion + glycogen water). Do not chase during heat work; judge fat trend on 7-day rolling average in a cooler week.
 - **Race readiness (80 days to IM Italy 19 Sep):** CTL ~91 · ATL ~95 · TSB ~−4. Bike ~90% · Swim ~75% · Run ~50%.
-- **Bugs fixed 1 Jul:** (1) Sleep morning-card reading stale prior-day sleep → fixed to waking-day. (2) Strava description citing watch sensor temp when has_weather=false and flagging "heat" below 25°C → gated: watch sensor never cited in descriptions; heat line only at ERA5-confirmed ≥25°C. (3) 401 auth blip → fallback to plain data-only template confirmed working.
-- **Coaching correction 1 Jul (rule 104):** Start-of-run HR ramp (125→143 in first 500m) is normal physiology — not a pacing fault; never prescribe "slow the first km" to eliminate it. Only flag opening pace if whole-run HR overshot the ceiling.
+- **Bugs fixed 1 Jul:** (1) Sleep morning-card was querying prior-day date → fixed to waking-day (Garmin files sleep under the day you wake). (2) Strava description script cited watch sensor temp (21°C) when has_weather=false and labelled it "heat" → fixed: watch sensor never cited; heat line gated to ERA5-confirmed ≥25°C only. (3) 401 auth blip on Haiku → fallback to plain data-only template confirmed working.
+- **Coaching corrections 1 Jul:** (a) Start-of-run HR ramp (125→143 in first 500m) is normal physiology — never flag as pacing fault, never prescribe "slow the first km"; only flag if whole-run HR overshot the ceiling (rule 104). (b) "Next time: slow the first km" line in session debrief was wrong — removed.
 
 ## Travel & training blocks (logged 2026-05-10)
 
