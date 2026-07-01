@@ -16,19 +16,19 @@
 
 ## Recent context (auto-summary)
 
-- **Wed 1 Jul — Z2 Run (60 min):** GO, no rules fired. HRV +25.5% (latest 50 on 30 Jun), TSB +2. Ankle 2/10 — within 5/10 tolerance. Execute as planned: GAP 4:36–5:12/km, HR ≤146, IF 0.83, target TSS 69.
-- **Tue 30 Jun — Z2 run missed:** Called too late in the day. Rest day. Run moved to Wed 1 Jul.
-- **Mon 29 Jun — OW swim (Long Swim slot):** 2,618m · 2:07/100m · HR avg 112/max 122 (Z1) · TSS 45 vs plan 54 (−17%). Ankle 0/10 AM, 1/10 PM.
-- **Sun 28 Jun — OW swim (recovery):** 1,031m · 1:59/100m · HR avg 125 · Z1 · TSS 20 vs plan 25 (−20%).
-- **Sat 27 Jun — Long run 15.2km (EASY):** GAP 5:16/km · avg HR 143 vs 146 ceiling · ERA5 ~32°C · economy fade +6.9% final 5km (neuromuscular). Ankle 0→2/10 peak, resolved AM.
+- **Wed 1 Jul — Z2 Run 60min (COMPLETED):** EASY — avg HR 145 vs 146 ceiling. 10.8km · GAP 4:51/km · TSS 67 · rolling terrain (+92m). Ankle 2/10 during-run (terrain-driven, within 5/10 tolerance). Decoupling 4.5%.
+- **Tue 30 Jun — Z2 run missed:** Too late in day. Rest day. Moved to Wed.
+- **Mon 29 Jun — OW swim (Long Swim slot):** 2,618m · 2:07/100m · HR avg 112/max 122 (Z1) · TSS 45. Ankle 0/10 AM, 1/10 PM.
+- **Sun 28 Jun — OW swim (recovery):** 1,031m · 1:59/100m · HR avg 125 · Z1 · TSS 20.
+- **Sat 27 Jun — Long run 15.2km (EASY):** GAP 5:16/km · avg HR 143 vs 146 ceiling · ERA5 ~32°C · economy fade +6.9% final 5km. Ankle 0→2/10, resolved AM.
 - **Fri 26 Jun — Z2 ride ~2h:** NP 219W · IF 0.74 · ERA5 33.6°C · isolated climb 264–271W = 89–91% FTP.
 - **Thu 25 Jun — Long Z2 ride 4h:** TSS 197 · pedalling-only decoupling 2.6% · ERA5 ~30°C.
-- **Ankle:** ATFL + CFL partial tear. 30 Jun: 0/10 AM, 1/10 PM. Zero setback margin. Next long run Sun 5 Jul (~17km).
-- **Heat model (finalised 2026-06-29/30):** dose = base × temp_mult × HR-strain_mult (Karvonen HRR) × humidity_mult (dew-point). Sauna/bath = flat 1.0. Indoor turbo = 0. Score: **77%**.
-- **W10 revised plan (calendar synced 2026-06-30, one-off travel week):** Wed Z2 Run 60min · Thu CSS Swim 55min + Z2 Ride 150min · Fri Long Z2 Ride 5h30 · Sat Sweetspot 1h50 · Sun Long Run ~17km/95min. ~742 TSS. Thu bike is a one-off override (normally swim-only). Three load levers on hold (Wed strength +35min, Thu ride +30min, Fri +30min) — revisit as week progresses.
-- **Weight:** 85.3kg (30 Jun) vs 82.9kg on 19 Jun (+2.4kg); heat-fluid likely 1.0–1.5kg. Race target 79kg. Do not chase during heat work.
-- **Race readiness (81 days to IM Italy 19 Sep):** CTL ~91 · ATL ~95 · TSB ~−4. Bike ~90% · Swim ~75% · Run ~50%.
-- **Open:** Aero helmet still pending. Calendar sync bug re-triggered this session (rule 100) — calendar corrected to bespoke plan.
+- **Ankle:** ATFL + CFL partial tear. 1 Jul during-run 2/10 (rolling terrain, not a flare). 30 Jun: 0/10 AM, 1/10 PM. Zero setback margin. Next long run Sun 5 Jul (~17km).
+- **Heat model (finalised 2026-06-29/30):** dose = base × temp_mult × HR-strain_mult (Karvonen HRR) × humidity_mult (dew-point). Sauna/bath = flat 1.0. Indoor turbo = 0. Score: **77%** (80 days to race).
+- **W10 plan (active, 1 Jul 2026):** Wed done ✓ · Thu CSS Swim 55min + Z2 Ride 150min · Fri Long Z2 Ride 5h30 · Sat Sweetspot 1h50 · Sun Long Run ~17km/95min. ~742 TSS. Thu bike one-off override. Three load levers on hold (Wed strength, Thu +30min, Fri +30min) — revisit as week progresses.
+- **Weight:** 85.3kg (30 Jun) vs race target 79kg (+6.3kg). Heat-fluid likely 1.0–1.5kg of rise. Do not chase during heat work.
+- **Race readiness (80 days to IM Italy 19 Sep):** CTL ~91 · ATL ~95 · TSB ~−4. Bike ~90% · Swim ~75% · Run ~50%.
+- **Open:** Aero helmet still pending (overdue). Sleep bug fixed 1 Jul — morning check-in now reads sleep from waking day, not yesterday.
 
 ## Travel & training blocks (logged 2026-05-10)
 
