@@ -72,3 +72,4 @@ No
 | 2026-06-28 | 5.6 | 0.3 | +5.3 | Weekly summary. T3 Underload fired (0% compliance). T5 Phase Transition fired (Base ends today; Build starts Mon 29 Jun). Both sessions missed — Short endurance 35 min (Tue 23 Jun), Long ride 195 min (Sat 27 Jun). Jun 27 ride corrected from prior 'confirmed completed' in error. Recovery 100/100 GREEN. No HRV or sleep data. |
 | 2026-06-29 | 5.5 | 0.2 | +5.2 | Rest day — no session planned in calendar. Build phase begins. No HRV or sleep data. |
 | 2026-06-30 | 7.1 | 9.5 | −2.4 | Endurance 50 min — GO as-planned. No rules fired. Last session RPE 7 (Geneva Road Cycling, 29 Jun). No HRV or sleep data. |
+| 2026-07-01 | 6.9 | 8.2 | −1.3 | Rest day — no session planned in calendar (Wed; build plan: Tue/Thu/Sun). No HRV or sleep data. |
