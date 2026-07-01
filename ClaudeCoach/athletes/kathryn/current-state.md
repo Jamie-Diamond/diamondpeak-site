@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-06-30
+Last updated: 2026-07-01
 
 ## Recent context (auto-summary)
 
@@ -83,6 +83,7 @@ None
 - 2026-06-27: bike_z2 120min — NOT COMPLETED (0 load recorded in ICU). HRV trend +1.5% (latest 61 on Jun 26); sleep 7.87h carried (Jun 26). ATL 70, CTL 59; form −11. Luteal day 18. Travel block final day; session likely skipped or not synced.
 - 2026-06-28: run_long 90min (Long Run 90min Easy) + swim 40min (Sea Swim open water aerobic) — GO, both execute as planned (no rules fired). HRV trend −3.1% (latest 58 on Jun 27; today not synced at 05:00); sleep 7.79h carried (Jun 27). ATL 65, CTL 59; form −6. Last session RPE 5. Luteal day 19 — sessions feel harder than numbers suggest; HR-led execution. Travel block expires today.
 - 2026-06-30: bike_threshold 80min (Tempo Intervals) — GO, execute as planned (no rules fired). HRV trend +19.3% (latest 70 on Jun 29); sleep 7.45h carried (Jun 29). ATL 73, CTL 61; form −12. Last session RPE 5. Luteal day 21 — sessions feel harder than numbers suggest.
+- 2026-07-01: bike_threshold 80min (Tempo Intervals) — MODIFIED (R6-single). Intervals reduced 2→1 (1×25 min @ 76-84% FTP, 144-160W). Sleep 6.01h (<7h); HRV trend +15.0% (latest 69 on Jun 30 — positive, no HRV corroboration of poor readiness so full swap not triggered). ATL 68, CTL 60; form −8. Last session RPE 5. Luteal day 22. Pushed modified event ID 119838141.
 - 2026-06-29: swim 40min (Technique — 10m/20m/10m at 76–84% pace) — GO, execute as planned (no rules fired). HRV trend +9.5% (latest 65 on Jun 28); sleep 7.38h carried (Jun 28). ATL 72, CTL 60; form −12. Last session RPE 5 (run Jun 28). Luteal day 20 — sessions feel harder than numbers suggest. Build week 1 begins. Combines with standing KB 45min = 85min total (within 90min cap).
 
 ## Illness / Health
