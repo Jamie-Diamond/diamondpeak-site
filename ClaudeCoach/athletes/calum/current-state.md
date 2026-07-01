@@ -3,18 +3,18 @@
 Last updated: 2026-07-01
 
 ## Recent context (auto-summary)
-- **2026-07-01 (Wed)**: Rest day; T5 fired (2 missed in rolling 7d: Jun 27 long ride + Jun 30 endurance)
-- **2026-06-30 (Tue)**: Endurance 50 min — NOT completed; second miss in build phase week 1
-- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, lack of sleep"); first ride in ~4 weeks
-- **2026-06-27 (Sat)**: Long ride 195 min — NOT completed; third consecutive base block miss
+- **2026-07-01 (Wed)**: Rest day; T5 fired (2 missed in rolling 7d: Jun 27 long ride + Jun 30 endurance); Wed morning message confirmed both misses
+- **2026-06-30 (Tue)**: Endurance 50 min — NOT completed; ClaudeCoach asked "Did the Endurance happen today?" — no response; confirmed missed by Jul 1 morning message
+- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); first ride in ~4 weeks; Calum asked what "RPE" meant on this session
+- **2026-06-27 (Sat)**: Long ride 195 min — NOT completed; fourth consecutive planned session missed
 - **2026-06-23 (Tue)**: Short endurance 35 min — NOT completed
-- **Build phase week 1 (w/c 29 Jun)**: 250 TSS target — only Jun 29 Geneva ride completed (unplanned); Jun 30 endurance missed; Thu 2 Jul sweetspot 2×25 85 min and Sun 5 Jul long ride 195 min still to come
+- **Build phase week 1 (w/c 29 Jun)**: 250 TSS target — only Jun 29 Geneva ride completed (unplanned); Thu 2 Jul sweetspot 2×25 85 min and Sun 5 Jul long ride 195 min still to come
 - **CTL 6.9 / ATL 8.2 / Form −1.3** as of 2026-07-01
 - **Tour de Stations / Marmottes**: 59 days out (1 Jul); building from near-zero fitness; race ~6–8 hr mountain effort
-- **Compliance**: T3 Underload fired every week since Jun 7; only 1 ride in past ~4 weeks (Jun 29 Geneva)
+- **Compliance**: T3 Underload fired every week since Jun 7; only 1 ride in past ~4 weeks (Jun 29 Geneva, unplanned)
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; target 60 g/hr (short-term) → 90 g/hr (race day)
-- **Jargon**: Calum doesn't know coaching terms — always use plain language (e.g. "how hard did it feel, 1–10?" not "RPE")
+- **Jargon**: does not know coaching terms — always use plain language (confirmed again Jun 29 — did not know "RPE")
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
 
