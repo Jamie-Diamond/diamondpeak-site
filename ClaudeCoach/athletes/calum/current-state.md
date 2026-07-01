@@ -1,9 +1,9 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-06-30
+Last updated: 2026-07-01
 
 ## Recent context (auto-summary)
-- **2026-06-30 (Tue)**: Endurance 50 min scheduled (Build week 1) — outcome pending; no weight response
+- **2026-06-30 (Tue)**: Endurance 50 min — NOT completed (history endpoint empty; atlLoad=35 on Jun 30 was planned-event projection, updated timestamp Jun 29). No weight response
 - **2026-06-29 (Sun)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, lack of sleep"); first activity in ~4 weeks; CTL now 7.1
 - **3 consecutive sessions missed (Jun 20–27)**: Long Z2 3h (20 Jun), Short endurance 35 min (23 Jun), Long ride 195 min (27 Jun) — 0% compliance
 - **Build phase week 1 (w/c 29 Jun)**: 250 TSS target — Tue 50 min endurance · Thu 2×25 sweetspot 85 min · Sun long ride 195 min
@@ -32,9 +32,9 @@ Weight: **93 kg**
 No
 
 ## Off-plan in last 7 days
-- 2026-06-23: Short endurance 35 min — NOT completed (ICU atlLoad=0.0; history endpoint empty)
-- 2026-06-27: Long ride 195 min — NOT completed (corrected from prior 'confirmed completed'; IcuSync activities array empty; wellness CTL 5.7/ATL 0.3 confirms no load; prior entry had used planned-event projection values in error)
+- 2026-06-27: Long ride 195 min — NOT completed (IcuSync activities array empty; wellness CTL 5.7/ATL 0.3 confirms no load)
 - 2026-06-28: Rest day — no session planned (Sunday; weekday-only cycling rule)
+- 2026-06-30: Endurance 50 min — NOT completed (history endpoint empty; atlLoad=35 was planned-event projection)
 
 ## Open Actions
 - [ ] Delete or correct "Z3 Ride 10h" event in Intervals.icu (erroneous 10h hard ride, far exceeds 5h/week cap)
@@ -72,4 +72,4 @@ No
 | 2026-06-28 | 5.6 | 0.3 | +5.3 | Weekly summary. T3 Underload fired (0% compliance). T5 Phase Transition fired (Base ends today; Build starts Mon 29 Jun). Both sessions missed — Short endurance 35 min (Tue 23 Jun), Long ride 195 min (Sat 27 Jun). Jun 27 ride corrected from prior 'confirmed completed' in error. Recovery 100/100 GREEN. No HRV or sleep data. |
 | 2026-06-29 | 5.5 | 0.2 | +5.2 | Rest day — no session planned in calendar. Build phase begins. No HRV or sleep data. |
 | 2026-06-30 | 7.1 | 9.5 | −2.4 | Endurance 50 min — GO as-planned. No rules fired. Last session RPE 7 (Geneva Road Cycling, 29 Jun). No HRV or sleep data. |
-| 2026-07-01 | 6.9 | 8.2 | −1.3 | Rest day — no session planned in calendar (Wed; build plan: Tue/Thu/Sun). No HRV or sleep data. |
+| 2026-07-01 | 6.9 | 8.2 | −1.3 | Rest day — no session planned in calendar (Wed; build plan: Tue/Thu/Sun). T5: 2 missed sessions in rolling 7d — 2026-06-27 Long ride 195 min, 2026-06-30 Endurance 50 min. Jun 30 miss is new vs prior T5 (2026-06-28). No HRV or sleep data. |
