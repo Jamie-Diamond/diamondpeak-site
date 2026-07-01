@@ -4,20 +4,20 @@ Last updated: 2026-07-01
 
 ## Recent context (auto-summary)
 
-- **Wed 1 Jul — Tempo Intervals ride (modified 1×25min)**: 78 min · NP 161W (82% FTP) · IF 0.83 · Z1+Z2 only 56%, Z3-Z5 37% — punchier than a clean Z2/tempo split. Load 88 (+17% vs plan). Nutrition not captured.
+- **Wed 1 Jul — Tempo Intervals ride (modified 1×25min)**: 78 min · NP 161W (82% FTP) · IF 0.83 · Z1+Z2 only 56%, Z3-Z5 37% — punchier than a clean Z2/tempo split. Load 88 (+17% vs plan). Nutrition not given.
 - **Tue 30 Jun** — Tempo Intervals SKIPPED; moved to Wed 1 Jul.
-- **Mon 29 Jun — Grimaud run (off-plan)**: 5.5km · GAP 5:37/km · avg 172 bpm · Z4 37% · max 190 · decoupling 7.8% ⚠. RPE outstanding.
-- **Mon 29 Jun — Technique swim**: SKIPPED. T5: 2 missed sessions in rolling window (Jun 27 bike + Jun 29 swim).
+- **Mon 29 Jun — Grimaud run (off-plan)**: 5.5km · GAP 5:37/km · avg 172 bpm · Z4 37% · max 190 · decoupling 7.8% ⚠. RPE not given.
+- **Mon 29 Jun — Technique swim**: SKIPPED (also Jun 27 bike missed — 2 missed sessions in rolling window).
 - **Sun 28 Jun — Long Run**: 12.7km · GAP 6:07/km · avg 167 bpm · Load 83 · RPE 5.5.
-- **Sun 28 Jun — Sea Swim OWS**: 1km/20min vs 40-min plan. Avg 2:01/100m · Z1. RPE outstanding.
-- **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5. Nutrition: handful of haribo + one honey gel (~33g/hr — well under 70g/hr target).
-- **Outstanding RPEs/data**: Mon 29 Jun run · Sun 28 Jun OWS · Wed 1 Jul nutrition.
-- **Replan 1–10 Jul (all synced Garmin, 1 Jul)**: No swimming. Wed 1 Tempo Intervals · Thu 2 Tempo Run · Fri 3 Endurance+2×20min tempo (120min cap) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 kettlebells 45min (golf+heat, ≤50min, any non-cycle/swim OK) · Tue 7 easy Z2 run 45min (golf+heat, ≤50min) · Wed 8 Z2 bike 75min · Thu 9 sweetspot 70min cap · Fri 10 long run 80min.
+- **Sun 28 Jun — Sea Swim OWS**: 1km/20min vs 40-min plan. Avg 2:01/100m · Z1. RPE not given.
+- **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5. Nutrition: handful of haribo + one honey gel (~33g/hr vs 70g/hr target).
+- **Outstanding**: RPE (Mon 29 Jun run, Sun 28 Jun OWS), nutrition (Wed 1 Jul ride).
+- **Replan 1–10 Jul confirmed, synced to Garmin (1 Jul)**: No swimming. Wed 1 Tempo Intervals · Thu 2 Tempo Run · Fri 3 Endurance+2×20min tempo (120min cap) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 kettlebells 45min (golf+heat, ≤50min) · Tue 7 easy Z2 run 45min (golf+heat, ≤50min) · Wed 8 Z2 bike 75min · Thu 9 sweetspot 70min cap · Fri 10 long run 80min.
 - **Luteal phase**: Day 22 of 28 (24 Jun–7 Jul). Higher RPE/core temp — lead with feel. Quality window resumes ~8 Jul (follicular).
-- **CTL 60 · ATL 68 · Form −8**: HRV 69 (1 Jul watchdog). Sleep 6.01h (1 Jul — short). No injuries.
+- **CTL 60 · ATL 68 · Form −8**: HRV 69 (1 Jul). Sleep 6.01h (1 Jul — short). No injuries.
 - **Weight**: 61.8 kg (1 Jul, device sync).
 - **Fuelling gap (persistent)**: ~33g/hr vs 70g/hr race target — nudge every long session.
-- **Fitness target met**: CTL 60 vs end-of-base target 60 by 29 Jun. ✓
+- **Fitness target met**: CTL 60 ✓ (end-of-base target, 29 Jun).
 
 ## Injuries / Niggles
 None
