@@ -419,6 +419,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-07-01 — T4 (Tier 1):** Sleep <7h on 3 of last 7 nights: 24 Jun 5.05h, 27 Jun 6.58h, 30 Jun 5.54h. Prior T4 (Jun 27) flagged Jun 21/24/27 — Jun 30's 5.54h is a new night not in that entry; signal materially changed. Context: post-France-camp fatigue + return-home day (Jun 30). HRV recovered to 50 on Jun 30 — no T3 co-fire (trend +22% over 7 days, Jun 24→Jun 30). RHR 51 on Jun 30 (within 50–54 baseline). Single-signal T4 only; no multi-signal convergence, no load-reduction action warranted for today's Z2 run. Prioritise sleep this week (Jul 1–9); if sleep fails to recover ≥7h for 3+ consecutive nights by mid-week, re-evaluate.
 
+- **2026-07-02 — T6 (Tier 1):** Aerobic decoupling 22.1% on 2026-06-26 "Hot out" (IF 0.659, NP 197W, 5.14h elapsed, avg temp 36.8°C, VI 1.34, TSS 197). New activity — not in any prior T6 entry. Last T6 logged 2026-06-26 for Jun 25 ride (6 days ago, suppression lapsed). Context: hottest long ride to date (37°C ambient), 5-hour duration, high VI 1.34 (surged terrain/traffic stops), heat-modified pacing (R7 fired — IF capped 0.633, NP ceiling 202W). The Jun 27 "Morning Ride" (2h, 33.6°C) returned −6.7% (negative drift — HR fell relative to power across the ride). The extreme Jun 26 reading is most likely heat + duration driven rather than structural aerobic ceiling failure, but cannot be distinguished without a controlled diagnostic. Next diagnostic: a 4h+ Z2 ride in cool/neutral conditions (<22°C ambient) — target <5% per KPI (race-day 2025 was 14.5%, target <5% by August).
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
