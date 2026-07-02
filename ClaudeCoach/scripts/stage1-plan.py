@@ -242,7 +242,7 @@ def main():
     ap.add_argument("--push", action="store_true")
     ap.add_argument("--notify", action="store_true", help="message the athlete on completion")
     ap.add_argument("--week-start", help="Monday YYYY-MM-DD to plan (default: next Monday)")
-    ap.add_argument("--model", default="claude-sonnet-4-6")
+    ap.add_argument("--model", default="claude-sonnet-5")
     ap.add_argument("--max-attempts", type=int, default=3)
     ap.add_argument("--override-json", metavar="PATH",
                     help="skip LLM generation; use this JSON file as the session proposal")

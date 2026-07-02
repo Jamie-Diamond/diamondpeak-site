@@ -22,7 +22,7 @@ CLAUDE = "/usr/bin/claude"
 
 # Model ids (keep in step with telegram/bot.py)
 OPUS   = "claude-opus-4-8"
-SONNET = "claude-sonnet-4-6"
+SONNET = "claude-sonnet-5"
 HAIKU  = "claude-haiku-4-5-20251001"
 
 # Default fallback chains keyed by the starting model. Cheap/frequent automation
@@ -113,6 +113,7 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=(stderr if stderr is not None else subprocess.PIPE),
+                stdin=subprocess.DEVNULL,  # `claude -p` reads piped stdin as prompt input
                 text=True, cwd=cwd, timeout=timeout,
             )
             out = r.stdout or ""

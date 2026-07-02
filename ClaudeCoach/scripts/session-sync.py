@@ -18,7 +18,7 @@ ATHLETES_CONFIG = BASE / "config/athletes.json"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-MODEL   = "claude-sonnet-4-6"
+MODEL   = "claude-sonnet-5"
 TOOLS   = "Read,Write,Edit"
 
 sys.path.insert(0, str(BASE / "lib"))
