@@ -1,8 +1,9 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-07-01
+Last updated: 2026-07-02
 
 ## Recent context (auto-summary)
+- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — prescribed GO as-planned. No modulation rules fired. No HRV or sleep data. Last session RPE 7 (Geneva 29 Jun). 58 days to Tour de Stations / Marmottes.
 - **2026-07-01 (Wed)**: Rest day; T5 fired (2 missed in rolling 7d: Jun 27 long ride + Jun 30 endurance); morning message warned about 2 missed sessions; pre-ride brief sent for Thu 2 Jul sweetspot 2×25 (NP 187W, IF 0.75, 85 min); 59 days to Tour de Stations / Marmottes
 - **2026-06-30 (Tue)**: Endurance 50 min — NOT completed; no response to check-in; confirmed missed
 - **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); first ride in ~4 weeks; Calum did not know what "RPE" meant — coach explained in plain language
@@ -76,3 +77,4 @@ No
 | 2026-06-29 | 5.5 | 0.2 | +5.2 | Rest day — no session planned in calendar. Build phase begins. No HRV or sleep data. |
 | 2026-06-30 | 7.1 | 9.5 | −2.4 | Endurance 50 min — GO as-planned. No rules fired. Last session RPE 7 (Geneva Road Cycling, 29 Jun). No HRV or sleep data. |
 | 2026-07-01 | 6.9 | 8.2 | −1.3 | Rest day — no session planned in calendar (Wed; build plan: Tue/Thu/Sun). T5: 2 missed sessions in rolling 7d — 2026-06-27 Long ride 195 min, 2026-06-30 Endurance 50 min. Jun 30 miss is new vs prior T5 (2026-06-28). No HRV or sleep data. |
+| 2026-07-02 | 8.0 | 14.1 | −6.1 | Sweetspot 2×25 85 min — GO as-planned. No modulation rules fired. ATL 14 / CTL 8 reflects planned load included in projection. Last session RPE 7 (Geneva 29 Jun, felt terrible / lack of sleep). No HRV or sleep data. |
