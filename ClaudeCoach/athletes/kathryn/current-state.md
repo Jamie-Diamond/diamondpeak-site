@@ -4,22 +4,19 @@ Last updated: 2026-07-02
 
 ## Recent context (auto-summary)
 
-- **Wed 1 Jul — Wandsworth Cycling (Tempo Intervals, modified 1×25min)**: 78 min · NP 161W (82% FTP) · IF 0.83 · Z1+Z2 56%, Z3–Z5 37% — punchier than clean Z2/tempo split. Load 88 (+17% vs plan). RPE and nutrition not yet logged.
-- **Tue 30 Jun — Tempo Intervals**: SKIPPED; rescheduled and executed Wed 1 Jul (see above).
+- **Thu 2 Jul — Tempo Run**: BLOCKED (ankle clearance not yet reached — 4 consecutive pain-free weeks not confirmed). Sub: 30–40 min easy walk or complete rest.
+- **Wed 1 Jul — Wandsworth Cycling (modified 1×25min tempo)**: 78 min · NP 161W (82% FTP) · IF 0.83 · Z1+Z2 56%, Z3–Z5 37% · Load 88 (+17% vs plan). RPE and nutrition not yet logged.
 - **Mon 29 Jun — Grimaud run (progressive tempo, off-plan)**: 5.5km · GAP 5:37/km · avg 172 bpm · Z4 37% · decoupling 7.8% ⚠. RPE not given.
-- **Mon 29 Jun — Technique swim**: SKIPPED.
 - **Sun 28 Jun — Long Run**: 12.7km · GAP 6:07/km · avg 167 bpm · Load 83 · RPE 5.5.
-- **Sun 28 Jun — Sea Swim OWS**: 1km/20min (vs 40-min plan) · avg 2:01/100m · Z1. RPE not given.
-- **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5 · Nutrition: handful of haribo + one honey gel (~33g/hr vs 70g/hr target). Confirmed logged.
-- **Outstanding**: RPE for Mon 29 Jun run · Sun 28 Jun OWS · Wed 1 Jul ride; nutrition for Wed 1 Jul ride.
-- **Thu 2 Jul — Tempo Run**: BLOCKED (R1). Ankle quality not yet cleared (4 consecutive pain-free weeks not confirmed). Sub: 30–40 min easy walk or rest. HRV trend +14.8% (latest 70, 2026-07-01); sleep 6.62h carried; ATL 60 · CTL 59 · Form −1. Luteal day 23.
-- **Replan 1–10 Jul confirmed, synced to Garmin**: No swimming this window. Fri 3 Endurance+2×20min tempo (120min cap) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 kettlebells 45min · Tue 7 easy Z2 run 45min · Wed 8 Z2 bike 75min · Thu 9 sweetspot 70min cap · Fri 10 long run 80min.
-- **Mon 6/Tue 7**: golf + heat · ≤50 min each · anything except cycle or swim OK (running, gym, kettlebells all fine).
-- **Luteal phase**: Day 22 of 28 (24 Jun–7 Jul). Higher RPE/core temp — lead with feel. Quality window resumes ~8 Jul (follicular).
-- **CTL 60 · ATL 68 · Form −8** (1 Jul): HRV 69 (+19% trend). Sleep 6.01h (1 Jul — short). No injuries.
+- **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5 · ~33g/hr carbs (haribo + honey gel; vs 70g/hr target).
+- **Ankle**: BLOCKED (R1) — run quality blocked until 4 consecutive pain-free weeks confirmed.
+- **Luteal phase**: Day 23 of 28 (24 Jun–7 Jul). Sessions feel harder; lead with feel. Quality window resumes ~8 Jul.
 - **Weight**: 61.8 kg (1 Jul, device sync).
+- **CTL 60 · ATL 60 · Form −1** (2 Jul). HRV 70 (1 Jul), trend +14.8%. Sleep 6.62h carried (2 Jul — short).
+- **Replan 1–10 Jul confirmed, synced to Garmin**: No swimming. Fri 3 Endurance+2×20min tempo (120min cap) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 anything ≤50min except cycle/swim (golf+heat) · Tue 7 easy Z2 run 45min (same) · Wed 8 Z2 bike 75min · Thu 9 sweetspot 70min cap · Fri 10 long run 80min.
+- **Outstanding**: RPE for Mon 29 Jun run · Sun 28 Jun OWS · Wed 1 Jul ride; nutrition for Wed 1 Jul ride.
 - **Fuelling gap (persistent)**: ~33g/hr actual vs 70g/hr race target — nudge every long session.
-- **Fitness target met**: CTL 60 ✓ (end-of-base goal achieved). Now in build phase.
+- **Fitness target met**: CTL 60 ✓ (end-of-base goal). Now in build phase.
 
 ## Injuries / Niggles
 None

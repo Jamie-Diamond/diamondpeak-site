@@ -16,18 +16,17 @@
 
 ## Recent context (auto-summary)
 
-- **Thu 2 Jul — CSS Swim 53min + Z2 Ride 150min (PRESCRIBED GO):** HRV trend +9.8% (latest 44), sleep 8.03h carried, ATL 95, CTL 89, TSB −6. No rules fired — both sessions execute as planned. Ankle not relevant to swim; no run today.
-- **Wed 1 Jul — Z2 Run 60min (COMPLETED):** EASY — avg HR 145 vs 146 ceiling. 10.8km · GAP 4:51/km · TSS 67 (vs plan 69, −3%) · rolling terrain (+92m). Running power 415W avg / 420W NP — steady across hills. PRs: Drag in the park + Memorial Park Top Path - Up. Ankle 2/10 during-run (terrain-driven, within 5/10 tolerance). Next-morning score not yet given.
+- **Thu 2 Jul — CSS Swim 53min + Z2 Ride 150min (TODAY):** Morning check-in sent. Swim prescribed for 33m pool: 74 lengths (2,442m) — WU 12+6L, Main 6×8L (264m each) @ 1:38/100m displayed (= 1:40 CSS equivalent after short-pool push-off bonus), CD 8L. Ride: Z2 150min NP ~195W. Sessions not yet completed.
+- **Wed 1 Jul — Z2 Run 60min (COMPLETED):** EASY — avg HR 145 vs 146 ceiling. 10.8km · GAP 4:51/km · TSS 67 (vs plan 69, −3%) · rolling terrain (+92m). Running power 415W avg / 420W NP. PRs: Drag in the Park + Memorial Park Top Path - Up. Ankle 2/10 during-run (terrain-driven, within tolerance). Next-morning score not yet given.
 - **Mon 29 Jun — OW swim:** 2,618m · 2:07/100m · TSS 45. Ankle 0/10 AM, 1/10 PM.
-- **Sun 28 Jun — OW swim (recovery):** 1,031m · 1:59/100m · TSS 20.
 - **Sat 27 Jun — Long run 15.2km (EASY):** GAP 5:16/km · avg HR 143 · ERA5 ~32°C · economy fade +6.9% final 5km. Ankle 0→2/10, resolved AM.
-- **Ankle:** ATFL + CFL partial tear. 1 Jul during-run 2/10 (rolling terrain, within tolerance). Protocol: ≤5/10 = continue; >5/10 = stop; not resolved next AM = no run. Next long run Sun 5 Jul (~17km).
-- **Heat model (finalised 29 Jun):** dose = base × temp_mult × HR-strain_mult (Karvonen HRR) × humidity_mult (dew-point centred 16°C). Sauna/bath = flat 1.0; indoor turbo = 0 (manual log only). Score: **77%** (80 days to race).
-- **W10 plan (active):** Wed ✓ run done · **Thu ✓ CSS Swim 53min + Z2 Ride 150min (GO)** · Fri Long Z2 Ride 5h30 · Sat Sweetspot 1h50 · Sun Long Run ~17km/95min. Projected ~742 TSS vs ~789 target (−6% — managing to multi-week trend). Three load levers on hold (Wed strength, Thu +30min, Fri +30min).
-- **Weight:** 85.3kg (30 Jun) vs 79kg race target (+6.3kg, 80 days out). ~1.0–1.5kg likely heat-fluid (PV expansion + glycogen water). Do not chase during heat work.
+- **Ankle:** ATFL + CFL partial tear. 1 Jul during-run 2/10 (terrain-driven, within 5/10 tolerance). Protocol: ≤5/10 = continue; >5/10 = stop; not resolved next AM = no run. Next long run Sun 5 Jul (~17km).
+- **Heat model (finalised 29 Jun):** dose = base × temp_mult × HR-strain_mult (Karvonen HRR) × humidity_mult (dew-point centred 16°C). Sauna/bath = flat 1.0; indoor turbo = 0 (manual log only). Score: **77%** (79 days to race).
+- **W10 plan (active):** Wed ✓ run done · **Thu (today): CSS Swim 53min + Z2 Ride 150min** · Fri Long Z2 Ride 5h30 · Sat Sweetspot 1h50 · Sun Long Run ~17km/95min. Projected ~742 TSS vs ~789 target (−6% — managing to multi-week trend). Three load levers on hold (Wed strength, Thu +30min, Fri +30min).
+- **Weight:** 85.3kg (30 Jun) vs 79kg race target (+6.3kg, 79 days out). ~1.0–1.5kg likely heat-fluid (PV expansion + glycogen water). Do not chase during heat work.
 - **Race readiness (79 days to IM Italy 19 Sep):** CTL 89 · ATL 95 · TSB −6. Bike ~90% · Swim ~75% · Run ~50%.
 - **Bugs fixed 1 Jul:** (1) Sleep morning-card date → fixed to waking-day. (2) Strava description watch sensor temp cited as ambient → fixed (watch sensor never cited; heat line gated to ERA5-confirmed ≥25°C). (3) 401 auth blip → fallback to plain data-only template confirmed working.
-- **Coaching corrections 1 Jul:** Start-of-run HR ramp (125→143 in first 500m) is normal physiology — never flag as pacing fault; only flag if whole-run HR overshot ceiling (rule 104).
+- **Coaching corrections:** Start-of-run HR ramp is normal physiology (rule 104); terrain-driven Z3 on easy runs = EASY verdict (rule 77); Strava heat commentary gated to ERA5 ≥25°C (rule 105). Non-50m pool swim prescription: use lengths (distance), even numbers per rep (rules confirmed 2026-07-02).
 
 ## Travel & training blocks (logged 2026-05-10)
 
