@@ -3,7 +3,7 @@
 Last updated: 2026-07-02
 
 ## Recent context (auto-summary)
-- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — morning brief sent; outcome not yet confirmed. Structure: 20m easy → 25m @ 190–210W → 5m easy → 25m @ 190–210W → 10m easy. 58 days to race.
+- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — morning brief sent; session outcome not yet confirmed. Structure: 20m easy → 25m @ 190–210W → 5m easy → 25m @ 190–210W → 10m easy. 58 days to race.
 - **2026-06-30 (Tue)**: Endurance 50 min — NOT completed; no response to check-in
 - **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); did not know what "RPE" meant — explained in plain language
 - **2026-06-27 (Sat)**: Long ride 195 min — NOT completed
