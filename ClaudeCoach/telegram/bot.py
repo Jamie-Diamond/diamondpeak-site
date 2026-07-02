@@ -2159,7 +2159,7 @@ def prefetch_context(slug: str) -> str:
             ("get_training_history", 7),
         )
 
-        lines = [f"=== LIVE TRAINING DATA ({today.isoformat()}) ==="]
+        lines = [f"=== LIVE TRAINING DATA ({today.strftime('%A')} {today.isoformat()}) ==="]
 
         prof = _load_profile(slug)
         bike = prof.get("bike_model")
