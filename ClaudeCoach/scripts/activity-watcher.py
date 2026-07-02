@@ -982,12 +982,36 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
         cwd=PROJECT_DIR, timeout=300, label=slug,
     )
     if result.returncode == -1:
-        _notify(
-            f"Activity watcher timed out for {first_name} (300s). "
-            f"Last known activity: {state.get('last_id', 'unknown')}.",
-            chat_id, slug=slug,
-        )
+        # A single timeout is almost always transient (API/CPU contention — e.g. an
+        # Opus chat reply running at the same time) and the next 5-min cycle recovers.
+        # Only alert after 2 consecutive timeouts stuck at the same position: last_id
+        # doesn't advance until an analysis succeeds, so a matching last_id means we
+        # are still stuck on the same new activity.
+        stuck_at = state.get("last_id")
+        if state.get("timeout_stuck_at") == stuck_at:
+            state["timeout_count"] = state.get("timeout_count", 1) + 1
+        else:
+            state["timeout_stuck_at"] = stuck_at
+            state["timeout_count"] = 1
+        save_state(state, state_file)
+        if state["timeout_count"] >= 2:
+            _notify(
+                f"Activity watcher timed out for {first_name} "
+                f"({state['timeout_count']}x consecutive, 300s each). "
+                f"Last known activity: {stuck_at or 'unknown'}.",
+                chat_id, slug=slug,
+            )
+        else:
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] activity analysis "
+                  f"timed out (1st, transient — alert suppressed, retry next cycle)",
+                  file=sys.stderr)
         return
+
+    # Analysis completed within budget — clear any prior transient-timeout streak.
+    if state.get("timeout_count"):
+        state.pop("timeout_stuck_at", None)
+        state.pop("timeout_count", None)
+        save_state(state, state_file)
 
     if result.returncode != 0:
         stderr_snippet = (result.stderr or "").strip()[:200]
