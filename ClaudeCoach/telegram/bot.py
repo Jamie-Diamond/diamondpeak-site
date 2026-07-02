@@ -289,14 +289,15 @@ def _invalidate_prefetch(slug):
     with _PREFETCH_GUARD:
         _PREFETCH_CACHE.pop(slug, None)
 
-MODEL_SONNET = "claude-sonnet-4-6"
+MODEL_SONNET = "claude-sonnet-5"
 MODEL_OPUS   = "claude-opus-4-8"
 MODEL_HAIKU  = "claude-haiku-4-5-20251001"  # retired from selection (kept for label map)
 
 _MODEL_LABEL = {
     MODEL_HAIKU:  "H",
-    MODEL_SONNET: "S",
+    MODEL_SONNET: "S5",
     MODEL_OPUS:   "O",
+    "claude-sonnet-4-6": "S",
     "claude-opus-4-7": "O4.7",
 }
 
@@ -312,26 +313,16 @@ def response_footer(model: str, slug: str = "", athlete_cfg: dict | None = None)
             pass
     return f"\n_{label}_"
 
-# Model selection (Jamie's directive 15 Jun: Sonnet for simple, Opus for hard).
+# Model selection (updated 2 Jul: Sonnet 5 trial — Jamie's approval).
 #
-# Design: Opus is the SAFE DEFAULT. Mis-routing a hard planning question to a
-# weaker model is the expensive error — it caused the 14 Jun planning mess — so
-# anything not clearly trivial goes to Opus. Two reasons not to key "hard" off a
-# narrow regex (the very bug we diagnosed): (1) trivia is a small, closed set, so
-# match THAT and default everything else up; (2) stickiness — once a planning
-# thread is open, a short follow-up ("make Saturday shorter") needs the same
-# brain as the message before it, so we keep the thread on Opus.
-
-# Clearly trivial: greetings, acknowledgements, short pain logs, bare values.
-_TRIVIAL_RE = re.compile(
-    r"^(hi|hey|hello|yo|good\s+(morning|evening|afternoon)|"
-    r"thanks?|thank\s+you|cheers|ta|"
-    r"ok(ay)?|kk|got\s+it|noted|perfect|great|nice|cool|good|awesome|"
-    r"yes|yep|yup|yeah|no|nope|nah|sure|done)\b[\s!.]{0,3}$"
-    r"|^(ankle|niggle|pain|knee|achilles|calf|hamstring)\s+\d{1,2}\b.{0,30}$"
-    r"|^\d{1,3}(\.\d)?\s*(kg|km|k|mi|miles?|min|minutes?|hrs?|hours?|w|watts?|bpm)?\s*$",
-    re.IGNORECASE,
-)
+# History: 15 Jun directive was "Sonnet for simple, Opus for hard" with Opus as
+# the safe default, because Sonnet 4.6 made too many mistakes (the 14 Jun
+# planning mess). Sonnet 5 (Claude 5 family) reaches near-Opus quality on
+# agentic work at much higher speed, so the default flips: Sonnet 5 for
+# everything except clearly-hard planning topics, which stay on Opus 4.8 via
+# _HARD_RE. Stickiness is unchanged — once a planning thread is open, short
+# follow-ups ("make Saturday shorter") stay on Opus. Revert = flip the final
+# return back to MODEL_OPUS.
 
 # Topics that always warrant Opus AND make the surrounding thread sticky to Opus.
 _HARD_RE = re.compile(
@@ -344,18 +335,16 @@ _HARD_RE = re.compile(
 
 
 def select_model(text: str, history=None) -> str:
-    """Sonnet for clear trivia, Opus for anything substantive or planning-adjacent.
+    """Sonnet 5 by default, Opus 4.8 for planning-adjacent topics (_HARD_RE).
     Sticky: stays on Opus through a planning thread. Stickiness keys on the
     ATHLETE's recent messages only — the assistant's coaching replies are full of
     'week/session/load/recovery' and would otherwise pin everything to Opus,
-    defeating the Sonnet path for genuine trivia."""
+    defeating the Sonnet path."""
     t = text.strip()
     recent = " ".join(h.get("user", "") for h in (history or [])[-3:])
     if _HARD_RE.search(t) or _HARD_RE.search(recent):
         return MODEL_OPUS
-    if _TRIVIAL_RE.match(t):
-        return MODEL_SONNET
-    return MODEL_OPUS  # safe default — never silently downgrade the unknown
+    return MODEL_SONNET  # Sonnet 5 trial default (2 Jul) — was MODEL_OPUS
 
 
 # Persistent reply keyboard (expense-bot style) — always pinned at the bottom of the
@@ -428,6 +417,11 @@ def log(msg):
     print(line)
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
+
+
+# Route engine logs (incl. per-reply [timing] lines) into bot.log instead of
+# stderr so latency data survives in one place.
+engine.log = lambda msg: log(f"[engine] {msg}")
 
 
 def load_config():
