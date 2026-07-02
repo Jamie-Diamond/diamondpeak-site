@@ -4,18 +4,18 @@ Last updated: 2026-07-02
 
 ## Recent context (auto-summary)
 
-- **Thu 2 Jul — Cardio (55 min)**: avg HR 132 bpm Z1 with brief Z4 spikes to 185 bpm; likely pre-run warm-up or separate session. RPE not logged.
-- **Thu 2 Jul — Tempo Run (Hammersmith)**: 35 min · 5.94km · GAP 5:48/km · avg 171 bpm · Z3 65% · Load 41 (−28% vs plan). Was briefed BLOCKED for ankle; ran anyway. Running cost +10.3% ⚠ in final third. RPE not logged.
-- **Wed 1 Jul — Wandsworth Cycling (modified 1×25min)**: 78 min · NP 161W (82% FTP) · IF 0.83 · Load 88 (+17% vs plan). Reduced 2→1 interval due to short sleep. RPE and nutrition not logged.
-- **Sun 28 Jun — Long Run**: 12.7km · GAP 6:07/km · avg 167 bpm · Load 83 · RPE 5.5.
-- **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5 · ~33g/hr carbs (haribo + honey gel; vs 70g/hr target).
-- **Ankle**: BLOCKED (R1) for run quality work; ran Thu 2 Jul tempo anyway — ankle status unclear. Running cost +10.3% ⚠ in final third — monitor closely.
+- **Thu 2 Jul — Cardio (55 min)**: avg HR 132 bpm (Z1) with brief Z4 spikes to 185 bpm; likely warm-up before tempo run. RPE pending.
+- **Thu 2 Jul — Tempo Run (Hammersmith)**: 35 min · 5.94 km · GAP 5:48/km · avg 171 bpm · Z3 65% · Load 41 (−28% vs plan). Was blocked for ankle; ran anyway — ankle status unclear. Running cost +10.3% ⚠ in final third. RPE pending.
+- **Wed 1 Jul — Wandsworth Cycling (modified 1×25 min)**: 78 min · NP 161W (82% FTP) · IF 0.83 · Load 88 (+17% vs plan). 2→1 intervals due to short sleep. RPE and nutrition not logged.
+- **Sun 28 Jun — Long Run**: 12.7 km · GAP 6:07/km · avg 167 bpm · Load 83 · RPE 5.5.
+- **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5 · ~33 g/hr carbs (haribo + honey gel; vs 70 g/hr target).
+- **Ankle**: BLOCKED (R1) for run quality work; ran Thu 2 Jul tempo anyway — running cost +10.3% ⚠ in final third — monitor closely.
 - **Luteal phase**: Day 23 of 28 (24 Jun–7 Jul). Sessions feel harder; quality window resumes ~8 Jul.
 - **Weight**: 61.8 kg (1 Jul, device sync).
 - **CTL 60 · ATL 60 · Form −1** (2 Jul). HRV 70 (1 Jul), trend +14.8%. Sleep 6.62h (2 Jul — short).
-- **Replan 1–10 Jul confirmed — all sessions synced to Garmin**: No swimming. Fri 3 Endurance+2×20min tempo (120min cap) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 anything ≤50min except cycle/swim (golf+heat) · Tue 7 easy Z2 run 45min · Wed 8 Z2 bike 75min · Thu 9 sweetspot 70min cap · Fri 10 long run 80min.
-- **Outstanding**: RPE/nutrition for Wed 1 Jul ride; RPE for Thu 2 Jul cardio and tempo run.
-- **Fuelling gap (persistent)**: ~33g/hr actual vs 70g/hr race target — nudge every long session.
+- **Replan 1–10 Jul confirmed — all sessions synced to Garmin**: No swimming. Fri 3 Endurance+2×20 min tempo (120 min cap) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 anything ≤50 min except cycle/swim (golf+heat) · Tue 7 easy Z2 run 45 min · Wed 8 Z2 bike 75 min · Thu 9 sweetspot 70 min cap · Fri 10 long run 80 min.
+- **Outstanding**: RPE for Thu 2 Jul cardio and tempo run; RPE/nutrition for Wed 1 Jul ride.
+- **Fuelling gap (persistent)**: ~33 g/hr actual vs 70 g/hr race target — nudge every long session.
 - **Fitness target met**: CTL 60 ✓ (end-of-base goal). Now in build phase.
 
 ## Injuries / Niggles

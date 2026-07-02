@@ -17,6 +17,7 @@ Last updated: 2026-07-02
 - **Jargon**: does not know coaching terms — always use plain language; never use "RPE", "NP", "IF", etc. without explaining
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
+- **Sleep**: Jun 29 Geneva ride RPE 7 attributed by Calum to lack of sleep — monitor if pattern continues
 
 ## Training Availability
 Max weekly training: **5 hours/week** (cycling)
