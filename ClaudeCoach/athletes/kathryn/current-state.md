@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-07-01
+Last updated: 2026-07-02
 
 ## Recent context (auto-summary)
 
@@ -12,7 +12,7 @@ Last updated: 2026-07-01
 - **Sun 28 Jun — Sea Swim OWS**: 1km/20min (vs 40-min plan) · avg 2:01/100m · Z1. RPE not given.
 - **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5 · Nutrition: handful of haribo + one honey gel (~33g/hr vs 70g/hr target). Confirmed logged.
 - **Outstanding**: RPE for Mon 29 Jun run · Sun 28 Jun OWS · Wed 1 Jul ride; nutrition for Wed 1 Jul ride.
-- **Next up — Thu 2 Jul**: Tempo Run (10 min WU + 2×15 min tempo at ~5:50–6:10/km · HR cap 178 bpm).
+- **Thu 2 Jul — Tempo Run**: BLOCKED (R1). Ankle quality not yet cleared (4 consecutive pain-free weeks not confirmed). Sub: 30–40 min easy walk or rest. HRV trend +14.8% (latest 70, 2026-07-01); sleep 6.62h carried; ATL 60 · CTL 59 · Form −1. Luteal day 23.
 - **Replan 1–10 Jul confirmed, synced to Garmin**: No swimming this window. Fri 3 Endurance+2×20min tempo (120min cap) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 kettlebells 45min · Tue 7 easy Z2 run 45min · Wed 8 Z2 bike 75min · Thu 9 sweetspot 70min cap · Fri 10 long run 80min.
 - **Mon 6/Tue 7**: golf + heat · ≤50 min each · anything except cycle or swim OK (running, gym, kettlebells all fine).
 - **Luteal phase**: Day 22 of 28 (24 Jun–7 Jul). Higher RPE/core temp — lead with feel. Quality window resumes ~8 Jul (follicular).
@@ -87,6 +87,7 @@ None
 - 2026-06-28: run_long 90min (Long Run 90min Easy) + swim 40min (Sea Swim open water aerobic) — GO, both execute as planned (no rules fired). HRV trend −3.1% (latest 58 on Jun 27; today not synced at 05:00); sleep 7.79h carried (Jun 27). ATL 65, CTL 59; form −6. Last session RPE 5. Luteal day 19 — sessions feel harder than numbers suggest; HR-led execution. Travel block expires today.
 - 2026-06-30: bike_threshold 80min (Tempo Intervals) — GO, execute as planned (no rules fired). HRV trend +19.3% (latest 70 on Jun 29); sleep 7.45h carried (Jun 29). ATL 73, CTL 61; form −12. Last session RPE 5. Luteal day 21 — sessions feel harder than numbers suggest.
 - 2026-07-01: bike_threshold 80min (Tempo Intervals) — MODIFIED (R6-single). Intervals reduced 2→1 (1×25 min @ 76-84% FTP, 144-160W). Sleep 6.01h (<7h); HRV trend +15.0% (latest 69 on Jun 30 — positive, no HRV corroboration of poor readiness so full swap not triggered). ATL 68, CTL 60; form −8. Last session RPE 5. Luteal day 22. Pushed modified event ID 119838141.
+- 2026-07-02: run_quality 50min (Tempo Run) — BLOCKED (R1). Ankle quality not yet cleared (4 consecutive pain-free weeks not reached). Sub: 30–40 min easy walk or complete rest. HRV trend +14.8% (latest 70, Jul 1); sleep 6.62h carried. ATL 60, CTL 59; form −1. Luteal day 23. Pushed blocked note event ID 120035084.
 - 2026-06-29: swim 40min (Technique — 10m/20m/10m at 76–84% pace) — GO, execute as planned (no rules fired). HRV trend +9.5% (latest 65 on Jun 28); sleep 7.38h carried (Jun 28). ATL 72, CTL 60; form −12. Last session RPE 5 (run Jun 28). Luteal day 20 — sessions feel harder than numbers suggest. Build week 1 begins. Combines with standing KB 45min = 85min total (within 90min cap).
 
 ## Illness / Health
