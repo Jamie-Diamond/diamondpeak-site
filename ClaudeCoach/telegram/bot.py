@@ -325,11 +325,21 @@ def response_footer(model: str, slug: str = "", athlete_cfg: dict | None = None)
 # return back to MODEL_OPUS.
 
 # Topics that always warrant Opus AND make the surrounding thread sticky to Opus.
+# Tightened 2 Jul from a review of 907 real messages (8 May-2 Jul): the old list
+# included everyday words (week/session/why/tss/fitness...) that routed 73% of
+# traffic to Opus once stickiness was counted, so the Sonnet 5 default barely
+# fired. This list = genuine planning/strategy topics + schedule-editing signals
+# (move/swap/busy/can't-make/add-drop a session/long run placement), which the
+# review showed are the real replan-class messages. Routes ~30% to Opus.
 _HARD_RE = re.compile(
-    r"\b(plan|planning|tss|ctl|atl|tsb|form|fitness|build|taper|phase|periodi[sz]e|"
-    r"week|weekly|block|ramp|load|projec|forecast|fuell?ing|nutrition|race|pacing|"
-    r"strateg|why|analy|compare|should\s+i|how\s+(do|should|much|many|far)|workout|"
-    r"session|brick|threshold|interval|zone|recovery|fatigue|overreach|long\s+run)\b",
+    r"\b(plan|planning|replan|taper|periodi[sz]e|phase|build|block|ramp|"
+    r"projec|forecast|race|pacing|strateg|fuell?ing|nutrition|"
+    r"move|swap|shift|reschedul\w*|"
+    r"long\s+(run|ride)|"
+    r"(increase|decrease|reduce|drop)\s+(the\s+|my\s+|training\s+)*load)\b"
+    r"|\bcan['’]?t\s+(do|make|train|swim|run|ride)\b"
+    r"|\bbusy\b"
+    r"|\b(add|drop|skip|squeeze)\b.{0,25}\b(session|swim|run|ride|rest\s+day)\b",
     re.IGNORECASE,
 )
 
