@@ -3,10 +3,9 @@
 Last updated: 2026-07-02
 
 ## Recent context (auto-summary)
-- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — prescribed GO as-planned; morning brief sent (structure: 20m easy → 25m @ 190–210W → 5m easy → 25m @ 190–210W → 10m easy); outcome not yet confirmed. 58 days to Tour de Stations / Marmottes.
-- **2026-07-01 (Wed)**: Rest day; T5 fired (2 missed in rolling 7d: Jun 27 long ride + Jun 30 endurance); pre-ride brief sent for Thu 2 Jul sweetspot 2×25
-- **2026-06-30 (Tue)**: Endurance 50 min — NOT completed; no response to check-in; confirmed missed
-- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); Calum did not know what "RPE" meant — explained in plain language
+- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — morning brief sent; outcome not yet confirmed. Structure: 20m easy → 25m @ 190–210W → 5m easy → 25m @ 190–210W → 10m easy. 58 days to race.
+- **2026-06-30 (Tue)**: Endurance 50 min — NOT completed; no response to check-in
+- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); did not know what "RPE" meant — explained in plain language
 - **2026-06-27 (Sat)**: Long ride 195 min — NOT completed
 - **2026-06-23 (Tue)**: Short endurance 35 min — NOT completed
 - **Build phase week 1 (w/c 29 Jun)**: 250 TSS target; only Jun 29 Geneva ride completed (unplanned); Thu 2 Jul sweetspot and Sun 5 Jul long ride 195 min still outstanding
