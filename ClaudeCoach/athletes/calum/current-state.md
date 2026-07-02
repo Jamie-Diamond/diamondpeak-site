@@ -3,15 +3,15 @@
 Last updated: 2026-07-02
 
 ## Recent context (auto-summary)
-- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — morning brief sent; session outcome not yet confirmed. Structure: 20m easy → 25m @ 190–210W → 5m easy → 25m @ 190–210W → 10m easy. 58 days to race.
+- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — morning brief sent, session outcome not yet confirmed. Structure: 20m easy → 25m @ 190–210W → 5m easy → 25m @ 190–210W → 10m easy. 58 days to race.
 - **2026-06-30 (Tue)**: Endurance 50 min — NOT completed; no response to check-in
-- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); did not know what "RPE" meant — explained in plain language
+- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); did not know what "RPE" meant — explained in plain language and logged
 - **2026-06-27 (Sat)**: Long ride 195 min — NOT completed
 - **2026-06-23 (Tue)**: Short endurance 35 min — NOT completed
 - **Build phase week 1 (w/c 29 Jun)**: 250 TSS target; only Jun 29 Geneva ride completed (unplanned); Thu 2 Jul sweetspot and Sun 5 Jul long ride 195 min still outstanding
 - **CTL 8.0 / ATL 14.1 / Form −6.1** as of 2026-07-02 (projected with today's planned session)
 - **Tour de Stations / Marmottes**: 58 days out (race day 2026-08-29); building from near-zero fitness; ~6–8 hr mountain effort
-- **Compliance**: T3 Underload fired every week since Jun 7; only 1 ride completed in ~5 weeks (Jun 29 Geneva, unplanned); Thu 2 Jul sweetspot and Sun 5 Jul long ride are critical
+- **Compliance**: T3 Underload fired every week since Jun 7; only 1 ride completed in ~5 weeks (Jun 29 Geneva, unplanned); Thu 2 Jul sweetspot and Sun 5 Jul long ride are critical to salvage build week 1
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; target 60 g/hr (short-term) → 90 g/hr (race day)
 - **Jargon**: does not know coaching terms — always use plain language; never use "RPE", "NP", "IF", etc. without explaining

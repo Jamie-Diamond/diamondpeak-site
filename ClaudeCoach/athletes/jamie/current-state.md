@@ -16,18 +16,19 @@
 
 ## Recent context (auto-summary)
 
-- **Thu 2 Jul — CSS Swim (COMPLETED):** 33m pool — 8×8 lengths (bonus 2 reps vs planned 6×8). 2,904m total (88 lengths). Rep paces 1:38–1:41/100m displayed (~1:40–1:42 50m-equivalent, dead on CSS). Avg HR 127 (Z1–low-Z2). TSS 80 vs planned 58 (+38%). RPE 7 — "manageable but each set was a push". 3s spread across all 8 — textbook CSS repeatability. Next time: hit target pace from rep 1 (reps 2–3 slowest at 1:41). Z2 Ride 150min Thu pending (planned this afternoon).
+- **Thu 2 Jul — CSS Swim (COMPLETED):** 33m pool — 8×8 lengths (264m reps; bonus 2 vs planned 6×8). 2,904m total (88 lengths). Rep paces 1:38–1:41/100m displayed (~1:40–1:42 50m-equivalent, right on CSS). Avg HR 127 (Z1–low-Z2). TSS 80 vs planned 58 (+38%). RPE 7 — "manageable but each set was a push". 3s spread across 8 reps — textbook repeatability. Next time: hit target pace from rep 1 (reps 2–3 slowest at 1:41).
+- **Thu 2 Jul — Z2 Ride 150min (PENDING this afternoon):** NP 180–208W (IF ~0.66), HR cap 145, 75g/hr carbs. Plan reviewed in conversation; not yet completed.
 - **Wed 1 Jul — Z2 Run 60min (COMPLETED):** EASY — avg HR 145 vs 146 ceiling. 10.8km · GAP 4:51/km · TSS 67 vs plan 69 (−3%) · rolling terrain +92m · 2 PRs. Running power 415W avg / 420W NP. Ankle 2/10 during-run (terrain-driven, within 5/10 tolerance).
 - **Mon 29 Jun — OW Swim (COMPLETED):** 2,618m · 2:07/100m · TSS 45. Ankle 0/10 AM, 1/10 PM.
 - **Sat 27 Jun — Long Run 15.2km (COMPLETED):** EASY — GAP 5:16/km · avg HR 143 · ERA5 ~32°C · economy fade +6.9% final 5km. Ankle 0→2/10, resolved AM.
-- **Ankle:** ATFL + CFL partial tear. Latest: 2/10 Wed 1 Jul (terrain-driven). Protocol: ≤5/10 = continue; >5/10 = stop; not resolved next AM = no run. Next long run Sun 5 Jul (~17km).
+- **Ankle:** ATFL + CFL partial tear. Latest: 2/10 Wed 1 Jul (terrain-driven, within 5/10 tolerance). Protocol: ≤5/10 = continue; >5/10 = stop; not resolved next AM = no run. Next long run Sun 5 Jul (~17km).
 - **Heat acclimation:** Score **77%** (79 days to race). Model: dose = base × temp_mult × HR-strain_mult (Karvonen HRR) × humidity_mult (dew-point centred 16°C). Sauna/bath = flat 1.0; indoor turbo = 0.
-- **W10 plan (29 Jun–5 Jul, active):** Mon ✓ swim (45) · Wed ✓ run (67) · Thu ✓ swim (80) + Z2 Ride 150min pending · Fri Long Z2 Ride 5h30 · Sat Sweetspot 1h50 · Sun Long Run ~17km. Completed: 192 TSS. Projected ~762 vs ~806 target (−5% — managing to multi-week trend). Three load levers on hold (Wed strength +18, Thu +30min +21, Fri +30min +22).
+- **W10 plan (29 Jun–5 Jul, active):** Mon ✓ swim (45) · Wed ✓ run (67) · Thu ✓ swim (80) + ride pending · Fri Long Z2 Ride 5h30 · Sat Sweetspot 1h50 · Sun Long Run ~17km. Completed so far: 192 TSS. Projected ~762 vs ~806 target (−5% — managing to multi-week trend). Three load levers on hold (Wed strength +18, Thu +30min +21, Fri +30min +22).
 - **Weight:** 85.3kg (30 Jun) vs 79kg race target (+6.3kg). ~1.0–1.5kg likely heat-fluid. Judge fat trend on 7-day rolling avg in a cooler week.
 - **Race readiness (79 days to IM Italy 19 Sep):** CTL 89 · ATL 95 · TSB −6. Bike ~90% · Swim ~75% · Run ~50%.
 - **Open actions:** Aero helmet — flagged overdue in Wed check-in; no confirmation received.
-- **Bugs fixed 1 Jul:** Sleep morning-card date fixed to waking-day (was one day stale). Strava: watch sensor never cited; heat line gated to ERA5-confirmed ≥25°C. Auth 401 blip → plain template fallback confirmed working.
-- **Rules confirmed 1–2 Jul:** Start-of-run HR ramp = normal physiology, never flag (104). Strava heat commentary only at ERA5 ≥25°C (105). Non-50m pool → prescribe even lengths not time, so Jamie ends at bottle wall (106–107). TSS-vs-target during debrief = session level not weekly (108).
+- **Bugs fixed 1 Jul:** Sleep morning-card date fixed to waking-day (was one day stale). Strava description script: watch sensor gated out entirely; heat commentary gated to ERA5-confirmed ≥25°C; 401 auth blip → plain data-only template fallback confirmed working.
+- **Rules confirmed 1–2 Jul:** Start-of-run HR ramp = normal physiology, never flag (rule 104). Strava heat wording only at ERA5 ≥25°C (rule 105). Non-50m pool → prescribe even number of lengths so Jamie finishes each rep at bottle wall (rules 106–107). TSS-vs-target mid-debrief = session level not weekly (rule 108).
 
 ## Travel & training blocks (logged 2026-05-10)
 
