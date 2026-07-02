@@ -3,16 +3,16 @@
 Last updated: 2026-07-02
 
 ## Recent context (auto-summary)
-- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — prescribed GO as-planned; morning brief sent; outcome not yet confirmed. No HRV or sleep data. 58 days to Tour de Stations / Marmottes.
-- **2026-07-01 (Wed)**: Rest day; T5 fired (2 missed in rolling 7d: Jun 27 long ride + Jun 30 endurance); pre-ride brief sent for Thu 2 Jul sweetspot 2×25 (NP 187W, IF 0.75, 85 min)
+- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — prescribed GO as-planned; morning brief sent (structure: 20m easy → 25m @ 190–210W → 5m easy → 25m @ 190–210W → 10m easy); outcome not yet confirmed. 58 days to Tour de Stations / Marmottes.
+- **2026-07-01 (Wed)**: Rest day; T5 fired (2 missed in rolling 7d: Jun 27 long ride + Jun 30 endurance); pre-ride brief sent for Thu 2 Jul sweetspot 2×25
 - **2026-06-30 (Tue)**: Endurance 50 min — NOT completed; no response to check-in; confirmed missed
-- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); first ride in ~4 weeks; Calum did not know what "RPE" meant — coach explained in plain language
+- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); Calum did not know what "RPE" meant — explained in plain language
 - **2026-06-27 (Sat)**: Long ride 195 min — NOT completed
 - **2026-06-23 (Tue)**: Short endurance 35 min — NOT completed
-- **Build phase week 1 (w/c 29 Jun)**: 250 TSS target — only Jun 29 Geneva ride completed (unplanned); Thu 2 Jul sweetspot and Sun 5 Jul long ride 195 min still outstanding
-- **CTL 8.0 / ATL 14.1 / Form −6.1** as of 2026-07-02 (projected with today's session)
-- **Tour de Stations / Marmottes**: 58 days out (2 Jul); building from near-zero fitness; race ~6–8 hr mountain effort
-- **Compliance**: T3 Underload fired every week since Jun 7; only 1 ride in past ~4 weeks (Jun 29 Geneva, unplanned); critical to protect Thu and Sun sessions this week
+- **Build phase week 1 (w/c 29 Jun)**: 250 TSS target; only Jun 29 Geneva ride completed (unplanned); Thu 2 Jul sweetspot and Sun 5 Jul long ride 195 min still outstanding
+- **CTL 8.0 / ATL 14.1 / Form −6.1** as of 2026-07-02 (projected with today's planned session)
+- **Tour de Stations / Marmottes**: 58 days out (race day 2026-08-29); building from near-zero fitness; ~6–8 hr mountain effort
+- **Compliance**: T3 Underload fired every week since Jun 7; only 1 ride completed in ~5 weeks (Jun 29 Geneva, unplanned); Thu 2 Jul sweetspot and Sun 5 Jul long ride are critical
 - **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
 - **Fuelling**: 0 g/hr current habit; target 60 g/hr (short-term) → 90 g/hr (race day)
 - **Jargon**: does not know coaching terms — always use plain language; never use "RPE", "NP", "IF", etc. without explaining
