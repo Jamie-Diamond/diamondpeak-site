@@ -1,0 +1,60 @@
+# Workflow-based GitHub Pages deploy, replacing the GitHub-managed branch build.
+#
+# Why this exists: the managed pages-build-deployment fails intermittently with
+# "Deployment failed, try again later" (transient Pages service errors), and every
+# failure emails Jamie. The build here is identical (same Jekyll builder GitHub
+# uses for branch deploys, honouring _config.yml excludes); the difference is the
+# deploy step retries twice (after 90s, then 5m) before declaring failure, so only
+# a genuine, persistent Pages outage fails the run and sends an email.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Hourly VM data pushes can overlap a slow deploy; queue rather than cancel so
+# every push still lands (a cancelled run can never leave the site stale-forever).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./
+          destination: ./_site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy1.outputs.page_url }}
+    steps:
+      - id: deploy1
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - if: steps.deploy1.outcome == 'failure'
+        run: sleep 90
+      - id: deploy2
+        if: steps.deploy1.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
+        run: sleep 300
+      - id: deploy3
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
+        uses: actions/deploy-pages@v4
