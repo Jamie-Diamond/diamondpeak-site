@@ -94,7 +94,8 @@ def build_sessions(slug: str, proposal: dict) -> dict:
                       "duration_min": dur, "load_target": load,
                       "description": desc, "description_raw": notes})
         events.append({"start_date_local": f"{date_s}T00:00:00", "type": sport,
-                       "category": "WORKOUT", "load_target": load})
+                       "category": "WORKOUT", "load_target": load,
+                       "name": s.get("name", ""), "description_raw": notes})
 
     # Validate the whole week against the athlete's hard rules.
     ws = min((date.fromisoformat(e["start_date_local"][:10]) for e in events),

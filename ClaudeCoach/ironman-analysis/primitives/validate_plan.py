@@ -168,6 +168,56 @@ def _check_distribution(week_events: list[dict], week_start: date,
     return out
 
 
+# -- Distance/duration internal consistency (walk-run sessions) ----------------
+# A run session whose NAME states a distance ("5k") and whose walk-run cycle
+# count implies a different one ("50 min 5x9:1 walk-run" ~ 8.5km) reached an
+# athlete with nothing catching it (11 May 2026 feedback: Jamie had to point out
+# the mismatch twice) — the same "no programmatic check" class as the long-run
+# progression cap. No athlete-specific pace is threaded through the plan
+# builder, so this uses conservative generic run/walk pace bands and a wide
+# tolerance: it only catches gross mismatches, not fine pacing disagreements.
+
+_WALK_RUN_RE  = re.compile(r"(\d+)\s*x\s*(\d+)\s*:\s*(\d+)", re.IGNORECASE)
+_DISTANCE_RE  = re.compile(r"(\d+(?:\.\d+)?)\s*k(?:m)?\b", re.IGNORECASE)
+_RUN_PACE_MIN_PER_KM  = 6.5    # conservative easy-run pace
+_WALK_PACE_MIN_PER_KM = 12.0   # brisk-walk pace
+DIST_DURATION_TOLERANCE = 0.35  # ±35% — generic pace bands, not athlete-specific
+
+
+def _implied_walk_run_km(reps: int, run_min: float, walk_min: float) -> float:
+    run_km = (reps * run_min) / _RUN_PACE_MIN_PER_KM
+    walk_km = (reps * walk_min) / _WALK_PACE_MIN_PER_KM
+    return run_km + walk_km
+
+
+def _check_distance_duration(week_events: list[dict]) -> list["Violation"]:
+    out: list[Violation] = []
+    for e in week_events:
+        if str(e.get("type") or "").strip().lower() != "run":
+            continue
+        name = str(e.get("name") or "")
+        text = f"{name} {e.get('description_raw') or ''}"
+        wr = _WALK_RUN_RE.search(text)
+        dm = _DISTANCE_RE.search(name)
+        if not wr or not dm:
+            continue
+        reps, run_min, walk_min = int(wr.group(1)), float(wr.group(2)), float(wr.group(3))
+        labelled_km = float(dm.group(1))
+        if labelled_km <= 0:
+            continue
+        implied_km = _implied_walk_run_km(reps, run_min, walk_min)
+        drift = abs(implied_km - labelled_km) / labelled_km
+        if drift > DIST_DURATION_TOLERANCE:
+            out.append(Violation(
+                code="distance_duration_mismatch",
+                severity="hard",
+                detail=(f"'{name}': labelled {labelled_km:g}km but {reps}x"
+                        f"{run_min:g}:{walk_min:g} walk-run implies ~{implied_km:.1f}km "
+                        "— distance and duration/interval labels disagree"),
+            ))
+    return out
+
+
 _STRENGTH_KW = ("strength", "kettlebell", "s&c", "conditioning", "weight")
 
 
@@ -289,6 +339,10 @@ def validate_week(
     if distribution:
         violations.extend(
             _check_distribution(week_events, week_start, distribution, dist_tolerance_pp))
+
+    # 6. Distance/duration internal consistency — walk-run sessions whose stated
+    #    distance and stated run/walk cycle count imply different totals.
+    violations.extend(_check_distance_duration(week_events))
 
     return WeekReport(week_start=week_start, total_tss=total_tss, violations=violations)
 
