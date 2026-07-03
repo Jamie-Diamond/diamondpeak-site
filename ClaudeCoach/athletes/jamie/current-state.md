@@ -16,7 +16,7 @@
 
 ## Recent context (auto-summary)
 
-- **Fri 3 Jul — Long Z2 Ride (PLANNED, in progress):** 330 min · 232 Load. NP target ~198W (IF 0.65), range 183–214W, HR cap 146bpm. Nutrition 70g/hr carbs, 750–850ml/hr fluid. Sleep ≥8h. Form −7.6 (Heavy). Weight asked this AM — no reply yet. Aero helmet flagged overdue again, still unconfirmed.
+- **Fri 3 Jul — Long Z2 Ride (PLANNED, in progress):** 330 min · 232 Load. NP target ~198W (IF 0.65), range 183–214W, HR cap 146bpm. Nutrition 75g/hr carbs (progressing toward 90g/hr race target), 750–850ml/hr fluid. Sleep ≥8h. Form −7.6 (Heavy) — morning check-in flagged heavy load, keep intensity in check. Weight asked this AM — no reply yet. Aero helmet flagged overdue again (due 30 Jun), still unconfirmed. 78 days to IM Italy Emilia-Romagna.
 - **Thu 2 Jul — CSS Swim (COMPLETED):** 33m pool — 8×8 lengths (264m reps; bonus 2 vs planned 6×8). 2,904m total (88 lengths). Rep paces 1:38–1:41/100m displayed (~1:40–1:42 50m-equivalent, right on CSS). Avg HR 127 (Z1–low-Z2). TSS 80 vs planned 58 (+38%). RPE 7 — "manageable but each set was a push". Next time: hit target pace from rep 1 (reps 2–3 slowest at 1:41).
 - **Thu 2 Jul — Z2 Ride 105min (COMPLETED):** Not Z2 — NP 224W (75% FTP) / IF 0.75, shorter than planned 150 min. HR avg 130, Z1+Z2 90% (aerobically controlled despite power variance). Decoupling 5.0%. TSS 97 vs planned 106 (−8%). Nutrition: Jamie reported "80g/ride". PR: Firmin roundabout. Heat: ERA5 peaked 24.4°C — just under 25°C gate, no dose (watch read 27–31°C, over-read, ignored). RPE not given.
 - **Wed 1 Jul — Z2 Run 60min (COMPLETED):** EASY — avg HR 145 vs 146 ceiling. 10.8km · GAP 4:51/km · TSS 67 vs plan 69 (−3%). Ankle 2/10 during-run (terrain-driven, within 5/10 tolerance).
