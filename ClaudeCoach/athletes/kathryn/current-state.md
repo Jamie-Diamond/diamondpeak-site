@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-07-02
+Last updated: 2026-07-03
 
 ## Recent context (auto-summary)
 
@@ -121,6 +121,7 @@ None
 - 2026-06-25 (watchdog): T4 re-fired (new data) — 4 nights <7h in rolling 7-day window: Jun 18=6.73h, Jun 19=6.02h, Jun 21=6.65h, Jun 24=5.20h. Jun 24=5.20h is new since last filing (Jun 22); 3-day suppression window now expired. Persistent sleep disruption through travel block (Jun 22–28); luteal phase + travel heat stacks with sleep debt — risk compounds entering build phase w/c 29 Jun. HRV recovering (Jun 23=65, Jun 24=67 — best in 2+ weeks; Jun 25 not yet synced). T3 suppressed (filed Jun 24, same signal, 3-day window active). T1/T2/T5/T6/T9/T10 clear. ATL 67.0, CTL 57.9; form −9.0. Travel block day 4; luteal day 16.
 
 - 2026-06-30 (watchdog): T5 fired — 2 missed sessions in rolling 7-day window: (1) Jun 27 bike Z2 120min = 0 load in ICU (confirmed not completed — travel block exit); (2) Jun 29 technique swim 40min = absent from ICU, ctlLoad 71 consistent with run+KB only, no swim component (noted in current-state as "status unclear — may be unlogged or skipped"). T1 clear (ATL 73.0, CTL 60.5, gap 12.5 — well under +25). T2 N/A. T3 clear — HRV improving (7d avg Jun 24–29: 63.2 vs prior Jun 17–23: 57.3 = +10.3%). T4 clear — only Jun 24=5.20h below 7h in rolling 7 days; Jun 25=7.95h, Jun 26=7.87h, Jun 27=7.79h, Jun 28=7.38h, Jun 29=7.45h all above threshold. T6 clear — no power-metered Z2 rides in last 7 days (Grimaud rides had no power meter). T9 skip (decision-points.md absent). T10 clear (5.48km this week vs 18.75km last week — 2 days elapsed).
+- 2026-07-03 (watchdog): T4 fired — 3 nights <7h in rolling 7-day window: Jun 30=6.01h, Jul 1=6.62h, Jul 2=6.57h (Jun 27=7.79h, Jun 28=7.38h, Jun 29=7.45h all above threshold; Jul 3 not yet synced). T1 clear (ATL 74.4, CTL 61.8, gap 12.6 — well under +25). T2 clear — current ramp rate 1.26/wk (was >4/wk Jun 26–29 and Jul 1, now settled); ankle still in rehab (quality run blocked, R1) so watch if ramp re-accelerates. T3 clear — HRV improving (7d avg Jun 27–Jul 2: 66.3 vs prior 7d avg Jun 20–26: 60.1 = +10.3%). T5 clear — now-synced data shows only Jun 30 with 0 training load (single miss, below 2-session threshold); Jun 27 Grimaud ride (86 TSS) and Jun 29 run (37 TSS) have since synced, superseding the stale "missed" flags logged 2026-06-30. T6 clear — no qualifying Z2 rides in last 7 days (Jul 1 Wandsworth ride IF 0.82, not Z2; Jun 27 Grimaud ride has no power meter). T9 skip (decision-points.md absent). T10 clear — 11.42km this week (Mon 29 Jun–Fri 3 Jul, partial) vs 18.75km last week. ATL 74.4, CTL 61.8; form −12.6.
 
 ## Heat Acclimatisation
 
