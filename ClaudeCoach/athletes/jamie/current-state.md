@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-07-02
+## Last updated: 2026-07-03
 
 ## Recent context (auto-summary)
 
@@ -24,10 +24,11 @@
 - **Ankle:** ATFL + CFL partial tear. Latest: 2/10 Wed 1 Jul (terrain-driven, within 5/10 tolerance). Protocol: ≤5/10 = continue; >5/10 = stop; not resolved next AM = no run. Next long run Sun 5 Jul (~17km).
 - **Heat acclimation:** Score **77%** (78 days to race). Thu's ride 24.4°C just missed the 25°C gate — no dose added.
 - **CTL/Fitness:** Confirmed 89.1 (not the provisional 89.4 shown at 8:12am) — reconciled: 87.03 + (177−87.03)/42 = 89.15. The 89.4 read implied the planned Ride Load (106) still in place before the actual (97) synced. ATL 96.7 · TSB −7.6 (Heavy).
-- **W10 plan (29 Jun–5 Jul, active):** Mon ✓ swim (45) · Wed ✓ run (67) · Thu ✓ swim (80) + ✓ ride (97) · Fri Long Z2 Ride (today) · Sat Sweetspot 1h50 · Sun Long Run ~17km. Completed pre-Friday: 289 TSS.
+- **W10 plan (29 Jun–5 Jul, active):** Mon ✓ swim (45) · Wed ✓ run (67) · Thu ✓ swim (80) + ✓ ride (97) · Fri Long Z2 Ride (today, in progress) · Sat Sweetspot 1h50 · Sun Long Run ~17km. Completed pre-Friday: 289 TSS.
 - **Weight:** 85.3kg (30 Jun) vs 79kg race target (+6.3kg). Fri 3 Jul weigh-in requested, no reply yet.
 - **Race readiness (78 days to IM Italy 19 Sep):** CTL 89.1 · ATL 96.7 · TSB −7.6. Bike ~90% · Swim ~75% · Run ~50%.
 - **Open actions:** Aero helmet — overdue since 30 Jun, flagged again in Fri 3 Jul morning check-in, still unconfirmed.
+- **Strava description generator (fixed 2026-07-03):** Was citing watch-sensor temp (21°C) and mislabeling a mild morning as "heat" on Wed 1 Jul run. Patched: temp only cited when has_weather true; "heat" wording only at ERA5-confirmed ≥25°C. Re-pushed Wed's description. Note: Haiku prose model hit a 401 auth blip during re-push, guard correctly fell back to plain data-only template — revisit re-running with full prose once auth clears (open commitment, no due date given).
 
 ## Travel & training blocks (logged 2026-05-10)
 
