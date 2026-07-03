@@ -4,20 +4,19 @@ Last updated: 2026-07-03
 
 ## Recent context (auto-summary)
 
-- **Fri 3 Jul — Endurance Ride + Tempo (120 min, Load 101 planned)**: in progress today. Recovery low this morning (HRV 51, sleep score 64, RHR 55, Form −12.6) — advised to skip tempo surges and hold steady Z2 throughout. No completion data yet.
-- **Thu 2 Jul — "Cardio" (55 min)**: avg HR 132 bpm (Z1) with brief Z4 spikes to 185 bpm — likely kettlebells/conditioning logged generically. Kathryn confirmed it "felt harder than it should have"; no numeric RPE given yet.
+- **Fri 3 Jul — Endurance Ride + Tempo**: COMPLETED. Actual Load 71 (planned 101, −30%) · NP 139W · IF 0.71 · avg HR 140 bpm · only 70% time in Z1+2 (rode harder than the steady-Z2-only ask, despite low recovery this morning — HRV 51, sleep score 64, RHR 55, Form −12.6). RPE/nutrition not yet given.
+- **Thu 2 Jul — "Cardio" (55 min)**: avg HR 132 bpm (Z1) with brief Z4 spikes to 185 bpm. Kathryn confirmed this was Kettlebells — "harder than it should have felt". No numeric RPE given yet.
 - **Thu 2 Jul — Tempo Run (Hammersmith)**: 35 min · 5.94 km · GAP 5:48/km · avg 171 bpm · Z3 65% · Load 41 (−28% vs plan, 70% of planned volume). Kathryn confirmed she didn't complete it — got too fatigued. Ran despite ankle block (R1); pw:hr decoupling −7.1%, running cost +10.3% ⚠ in final third. No numeric RPE given yet.
 - **Wed 1 Jul — Wandsworth Cycling (modified 1×25 min tempo)**: 78 min · NP 161W (82% FTP) · IF 0.83 · Z1+Z2 56% / Z3–Z5 37% (punchier than planned tempo split) · Load 88 (+17% vs plan). 2→1 intervals cut due to short sleep. RPE/nutrition not logged.
 - **Sun 28 Jun — Long Run**: 12.7 km · GAP 6:07/km · avg 167 bpm · Load 83 · RPE 5.5.
-- **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5 · ~33 g/hr carbs (haribo + honey gel; vs 70 g/hr target). Confirmed captured in ICU and now logged as its own session (was previously lumped with 26 Jun ride).
+- **Sat 27 Jun — Grimaud ride**: 119 min · 42.6 km · Load 86 · RPE 5 · ~33 g/hr carbs (haribo + honey gel; vs 70 g/hr target). Now logged as its own distinct session (was previously lumped with 26 Jun ride).
 - **Ankle**: still BLOCKED (R1) for run quality — ran Thu 2 Jul tempo despite the block. Do not prescribe quality run until ankle clears 4 consecutive pain-free weeks.
 - **Luteal phase**: ends ~7 Jul (day 24 of 28 on 3 Jul). Sessions feel harder through this week; quality window resumes ~8 Jul.
 - **Weight**: 61.8 kg (1 Jul, device sync) — no newer reading since.
-- **Latest load (3 Jul watchdog)**: ATL 74.4 · CTL 61.8 · Form −12.6. HRV dropped to 51 this morning (from ~66–70 recent trend); sleep score 64; RHR up to 55.
-- **Replan 1–10 Jul confirmed — all sessions synced to Garmin as structured follow-along workouts**: No swimming through 10 Jul. Wed 1 ✓ · Thu 2 ✓ (short, ankle) · Fri 3 Endurance+2×20 min tempo (120 min cap) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 ≤50 min no cycle/swim (golf+heat) · Tue 7 easy Z2 run 45 min · Wed 8 Z2 bike 75 min · Thu 9 sweetspot 70 min cap · Fri 10 long run 80 min. Kettlebells stays free-text (no follow-along).
-- **Outstanding**: numeric RPE (1–10) still not given for Thu 2 Jul "Cardio"/kettlebells and Hammersmith Tempo Run — qualitative feedback logged, no number yet.
-- **Fuelling gap (persistent)**: ~33 g/hr actual vs 70 g/hr race target — nudge every long session; Fri 3 Jul target stepped up to 55 g/hr.
-- **Fitness target met**: CTL 60 ✓ (end-of-base goal, hit ~1 Jul). Now in build phase — week 1 (29 Jun–5 Jul) landed at 511 Load vs ~615 build target (forced rest + swim removal trimmed it; judged sensible given golf-heat block next week).
+- **Mon 6 / Tue 7 replanned** (Kathryn, confirmed 3 Jul): "anything except cycle or swim" — Mon stays Kettlebells 45 min, Tue swapped mobility → Easy Z2 run 45 min (HR cap 170 bpm, ~52 Load). Week 2 validates clean (2 bike / 2 run / 1 strength).
+- **Replan 1–10 Jul — all sessions synced to Garmin as structured follow-along workouts**: No swimming through 10 Jul. Wed 1 ✓ · Thu 2 ✓ (short, ankle) · Fri 3 ✓ (see above) · Sat 4 Long Ride+Brick · Sun 5 Long Run · Mon 6 ≤50 min no cycle/swim (golf+heat) · Tue 7 easy Z2 run 45 min · Wed 8 Z2 bike 75 min (rendered from plain text to steps at Kathryn's request) · Thu 9 sweetspot 70 min cap · Fri 10 long run 80 min. Kettlebells stays free-text (no follow-along).
+- **Latest load (3 Jul watchdog, pre-Fri-ride sync)**: ATL 74.4 · CTL 61.8 · Form −12.6. Fitness target met: CTL 60 ✓ (hit ~1 Jul). Build week 1 (29 Jun–5 Jul) landed 511 Load vs ~615 target (forced rest + swim removal trimmed it; judged sensible given golf-heat block).
+- **Outstanding**: numeric RPE (1–10) still not given for Thu 2 Cardio/Kettlebells, Hammersmith Tempo Run, or Fri 3 Wandsworth ride. Fuelling gap persistent — ~33 g/hr actual vs 70 g/hr race target; Fri 3 target stepped up to 55 g/hr, actual not yet confirmed.
 
 ## Injuries / Niggles
 None
