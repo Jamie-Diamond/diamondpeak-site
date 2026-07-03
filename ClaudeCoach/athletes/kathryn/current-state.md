@@ -4,6 +4,7 @@ Last updated: 2026-07-03
 
 ## Recent context (auto-summary)
 
+- **Fri 3 Jul — Richmond upon Thames Golf**: ~2h25m, avg HR 102 bpm (low-intensity, easy day), Load 33. Logged, no RPE requested (golf).
 - **Fri 3 Jul — Endurance Ride + Tempo**: COMPLETED. Actual Load 71 (planned 101, −30%) · NP 139W · IF 0.71 · avg HR 140 bpm · only 70% time in Z1+2 (rode harder than the steady-Z2-only ask, despite low recovery this morning — HRV 51, sleep score 64, RHR 55, Form −12.6). RPE/nutrition not yet given.
 - **Thu 2 Jul — "Cardio" (55 min)**: avg HR 132 bpm (Z1) with brief Z4 spikes to 185 bpm. Kathryn confirmed this was Kettlebells — "harder than it should have felt". No numeric RPE given yet.
 - **Thu 2 Jul — Tempo Run (Hammersmith)**: 35 min · 5.94 km · GAP 5:48/km · avg 171 bpm · Z3 65% · Load 41 (−28% vs plan, 70% of planned volume). Kathryn confirmed she didn't complete it — got too fatigued. Ran despite ankle block (R1); pw:hr decoupling −7.1%, running cost +10.3% ⚠ in final third. No numeric RPE given yet.
