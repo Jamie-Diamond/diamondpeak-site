@@ -175,6 +175,47 @@ class TestStrengthCap:
         assert isinstance(rep, WeekReport)
 
 
+# -- Distance/duration internal consistency (check 6) --------------------------
+
+class TestDistanceDurationMismatch:
+    def _ev_walkrun(self, day_iso, name, notes=""):
+        return {"start_date_local": f"{day_iso}T00:00:00", "type": "Run",
+                "name": name, "description_raw": notes,
+                "load_target": 40, "category": "WORKOUT"}
+
+    def test_5k_label_with_50min_walkrun_flagged(self):
+        # 5x9:1 @ conservative paces implies ~7.3km, not the labelled 5k
+        # (the real 11 May 2026 incident: labelled 5k, 50 min 5x9:1 walk-run).
+        evs = [self._ev_walkrun("2026-06-15", "Easy run / walk-run 5k — 50 min 5x9:1")]
+        rep = validate_week(evs, WEEK)
+        hits = [v for v in rep.violations if v.code == "distance_duration_mismatch"]
+        assert len(hits) == 1 and hits[0].severity == "hard"
+        assert "5k" in hits[0].detail and "7.3km" in hits[0].detail
+
+    def test_consistent_label_passes(self):
+        # 5x5:1 implies ~4.4km — close enough to the labelled 4k.
+        evs = [self._ev_walkrun("2026-06-15", "Easy run / walk-run 4k — 30 min 5x5:1")]
+        rep = validate_week(evs, WEEK)
+        assert not [v for v in rep.violations if v.code == "distance_duration_mismatch"]
+
+    def test_no_distance_label_not_checked(self):
+        evs = [self._ev_walkrun("2026-06-15", "Easy run / walk-run — 50 min 5x9:1")]
+        rep = validate_week(evs, WEEK)
+        assert not [v for v in rep.violations if v.code == "distance_duration_mismatch"]
+
+    def test_no_walkrun_pattern_not_checked(self):
+        evs = [self._ev_walkrun("2026-06-15", "Easy run 5k")]
+        rep = validate_week(evs, WEEK)
+        assert not [v for v in rep.violations if v.code == "distance_duration_mismatch"]
+
+    def test_non_run_sport_not_checked(self):
+        evs = [{"start_date_local": "2026-06-15T00:00:00", "type": "Ride",
+                "name": "Ride 5k — 50 min 5x9:1", "load_target": 40,
+                "category": "WORKOUT"}]
+        rep = validate_week(evs, WEEK)
+        assert not [v for v in rep.violations if v.code == "distance_duration_mismatch"]
+
+
 # -- Intensity-distribution drift (check 5) ------------------------------------
 
 DIST = {"Bike": "75% Z1–2 / 15% Z3 / 10% Z4–5",
