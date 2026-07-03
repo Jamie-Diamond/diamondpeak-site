@@ -135,6 +135,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 ## Off-plan in last 7 days
 
+- **2026-07-03 GO** — Long Z2 Ride 330 min (bike_z2): no rules fired, execute as planned. CTL 93 (Fitness), ATL 115 (Fatigue), TSB −22 (Form) — heavily fatigued after 232 TSS yesterday. HRV trend +11.9% (latest 45 on 2 Jul; today not synced at 05:00 — trailing trend, correct); sleep 6.57h carried (2 Jul, most recent synced). Last RPE 8. Ankle 2/10, quality_cleared false — not relevant for bike. Session: 60–70% eFTP (297W), pure Z2, no structured intensity per Friday rule.
+
 - **2026-06-30 GO** — Z2 Run 55 min (run_easy): no rules fired, execute as planned. CTL 89 (Fitness), ATL 95 (Fatigue), TSB −6 (Form). HRV trend −5.4% (latest 38 on 29 Jun; trailing, correct); sleep 7.52h carried (29 Jun, most recent synced). Last RPE 8. Ankle 2/10 — within physio protocol (≤5/10 acceptable); stop-if >5/10 in force. Structure: 10m WU → 40m Z2 → 5m CD; HR ceiling 146, GAP 4:36–5:12/km.
 
 - **2026-06-29 GO** — Long Swim 70 min (swim): no rules fired, execute as planned. CTL 90 (Fitness), ATL 102 (Fatigue), TSB −12 (Form). HRV trend −14.6% (latest 35 on 28 Jun; trailing, correct); sleep 7.1h carried (28 Jun, most recent synced). Last RPE 8. Ankle not relevant for swim. Final training day of France holiday — return home today.
