@@ -12,7 +12,7 @@ Last updated: 2026-07-03
 - **Recurring pattern**: watchdog's same-day "GO as-planned" projections have repeatedly needed correcting to "NOT completed" once actual IcuSync data lands (Jun 27, Jun 30, Jul 2 all corrected) — always verify against IcuSync before confirming a session happened
 - **Tour de Stations / Marmottes**: 57 days out (race day 2026-08-29); building from near-zero fitness; ~6–8 hr mountain effort
 - **Compliance**: T3 Underload fired every week since Jun 7; T5 (missed sessions) firing most days
-- **Weight**: 93 kg last confirmed; still not responding to morning weight prompts (6+ weeks running, incl. through Fri 3 Jul)
+- **Weight**: 93 kg last confirmed; still not responding to morning weight prompts, now confirmed through every daily check-in Wed 24 Jun – Fri 3 Jul with zero replies (6+ weeks running)
 - **Fuelling**: 0 g/hr current habit; target 60 g/hr (short-term) → 90 g/hr (race day)
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
