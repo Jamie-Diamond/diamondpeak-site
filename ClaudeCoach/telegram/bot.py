@@ -313,6 +313,21 @@ def response_footer(model: str, slug: str = "", athlete_cfg: dict | None = None)
             pass
     return f"\n_{label}_"
 
+
+def _strip_model_countdown(text: str, athlete_cfg: dict | None) -> str:
+    """response_footer() is the single, harness-computed source of the race
+    countdown appended to every reply. Claude sometimes writes its own
+    '_N days to <race>_' line in the reply body (it has the race date in
+    context too) - strip that so the countdown never appears twice."""
+    if not athlete_cfg or not text:
+        return text
+    race_name = athlete_cfg.get("race_name", "race")
+    pattern = re.compile(
+        r'\n?[ \t]*_?\s*\d+\s*days?\s*to\s*' + re.escape(race_name) + r'\s*_?[ \t]*(?=\n|$)',
+        re.IGNORECASE,
+    )
+    return re.sub(r'\n{3,}', '\n\n', pattern.sub('', text)).strip()
+
 # Model selection (updated 2 Jul: Sonnet 5 trial — Jamie's approval).
 #
 # History: 15 Jun directive was "Sonnet for simple, Opus for hard" with Opus as
@@ -2951,6 +2966,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             )
             clean = process_charts(token, chat_id, response, slug=slug)
             clean = _verify_logged_reply(slug, before_ts, clean)
+            clean = _strip_model_countdown(clean, athlete)
             final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
             ogg = None
             if clean:
@@ -2987,6 +3003,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
 
         clean = process_charts(token, chat_id, response, slug=slug)
         clean = _verify_logged_reply(slug, before_ts, clean)
+        clean = _strip_model_countdown(clean, athlete)
         final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
         if placeholder_id:
             res = tg_post(token, "editMessageText", {
@@ -3042,6 +3059,7 @@ def _image_reply_worker(token, chat_id, file_id, caption, athlete_entry, config)
             athlete_name=athlete_name, context=context,
         )
         clean = process_charts(token, chat_id, response, slug=slug)
+        clean = _strip_model_countdown(clean, athlete_entry)
         if clean:
             send(token, chat_id,
                  clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athlete_entry),
