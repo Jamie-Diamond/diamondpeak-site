@@ -16,20 +16,18 @@
 
 ## Recent context (auto-summary)
 
-- **Thu 2 Jul — CSS Swim (COMPLETED):** 33m pool — 8×8 lengths (264m reps; bonus 2 vs planned 6×8). 2,904m total (88 lengths). Rep paces 1:38–1:41/100m displayed (~1:40–1:42 50m-equivalent, right on CSS). Avg HR 127 (Z1–low-Z2). TSS 80 vs planned 58 (+38%). RPE 7 — "manageable but each set was a push". 3s spread across 8 reps — textbook repeatability. Next time: hit target pace from rep 1 (reps 2–3 slowest at 1:41).
-- **Thu 2 Jul — Z2 Ride 105min (COMPLETED):** Not Z2 — NP 224W (75% FTP) / IF 0.75, shorter than planned 150 min. Zone split Z1 31% / Z2 28% / Z3 23% / Z4 10% / Z5+ 8%. HR avg 130, Z1+Z2 90% (aerobically controlled despite power variance). VI 1.20 · decoupling 5.0%. TSS 97 vs planned 106 (−8% — higher IF offset by shorter duration). Nutrition: Jamie reported "80g/ride" (as stated, not clarified vs g/hr). PR: Firmin roundabout. Heat: ERA5 ambient peaked 24.4°C — just under 25°C gate, no dose credited (watch read 27–31°C, over-read, ignored). RPE not yet given.
-- **Wed 1 Jul — Z2 Run 60min (COMPLETED):** EASY — avg HR 145 vs 146 ceiling. 10.8km · GAP 4:51/km · TSS 67 vs plan 69 (−3%) · rolling terrain +92m · 2 PRs. Running power 415W avg / 420W NP. Ankle 2/10 during-run (terrain-driven, within 5/10 tolerance).
+- **Fri 3 Jul — Long Z2 Ride (PLANNED, in progress):** 330 min · 232 Load. NP target ~198W (IF 0.65), range 183–214W, HR cap 146bpm. Nutrition 70g/hr carbs, 750–850ml/hr fluid. Sleep ≥8h. Form −7.6 (Heavy). Weight asked this AM — no reply yet. Aero helmet flagged overdue again, still unconfirmed.
+- **Thu 2 Jul — CSS Swim (COMPLETED):** 33m pool — 8×8 lengths (264m reps; bonus 2 vs planned 6×8). 2,904m total (88 lengths). Rep paces 1:38–1:41/100m displayed (~1:40–1:42 50m-equivalent, right on CSS). Avg HR 127 (Z1–low-Z2). TSS 80 vs planned 58 (+38%). RPE 7 — "manageable but each set was a push". Next time: hit target pace from rep 1 (reps 2–3 slowest at 1:41).
+- **Thu 2 Jul — Z2 Ride 105min (COMPLETED):** Not Z2 — NP 224W (75% FTP) / IF 0.75, shorter than planned 150 min. HR avg 130, Z1+Z2 90% (aerobically controlled despite power variance). Decoupling 5.0%. TSS 97 vs planned 106 (−8%). Nutrition: Jamie reported "80g/ride". PR: Firmin roundabout. Heat: ERA5 peaked 24.4°C — just under 25°C gate, no dose (watch read 27–31°C, over-read, ignored). RPE not given.
+- **Wed 1 Jul — Z2 Run 60min (COMPLETED):** EASY — avg HR 145 vs 146 ceiling. 10.8km · GAP 4:51/km · TSS 67 vs plan 69 (−3%). Ankle 2/10 during-run (terrain-driven, within 5/10 tolerance).
 - **Mon 29 Jun — OW Swim (COMPLETED):** 2,618m · 2:07/100m · TSS 45. Ankle 0/10 AM, 1/10 PM.
-- **Sat 27 Jun — Long Run 15.2km (COMPLETED):** EASY — GAP 5:16/km · avg HR 143 · ERA5 ~32°C · economy fade +6.9% final 5km. Ankle 0→2/10, resolved AM.
 - **Ankle:** ATFL + CFL partial tear. Latest: 2/10 Wed 1 Jul (terrain-driven, within 5/10 tolerance). Protocol: ≤5/10 = continue; >5/10 = stop; not resolved next AM = no run. Next long run Sun 5 Jul (~17km).
-- **Heat acclimation:** Score **77%** (79 days to race). Model: dose = base × temp_mult × HR-strain_mult (Karvonen HRR) × humidity_mult (dew-point centred 16°C). Sauna/bath = flat 1.0; indoor turbo = 0. Thu ride's 24.4°C just missed the 25°C gate — no dose added.
-- **W10 plan (29 Jun–5 Jul, active):** Mon ✓ swim (45) · Wed ✓ run (67) · Thu ✓ swim (80) + ✓ ride (97) · Fri Long Z2 Ride 5h30 (tomorrow — see below) · Sat Sweetspot 1h50 · Sun Long Run ~17km. Completed so far: 289 TSS.
-- **Fri 3 Jul plan — Long Z2 Ride:** NP target ~198W (IF 0.65), range 183–214W (60–70% FTP), HR cap 146bpm. Nutrition 70g/hr carbs, 750–850ml/hr fluid (warm, matches prior sweat-rate data). Sleep ≥8h. Form −7.6 (Heavy — ATL 96.7 > CTL 89.1, ramp elevated post-camp).
-- **Weight:** 85.3kg (30 Jun) vs 79kg race target (+6.3kg). ~1.0–1.5kg likely heat-fluid. Judge fat trend on 7-day rolling avg in a cooler week.
-- **Race readiness (79 days to IM Italy 19 Sep):** CTL 89.1 · ATL 96.7 · TSB −7.6. Bike ~90% · Swim ~75% · Run ~50%.
-- **Open actions:** Aero helmet — flagged overdue in Wed check-in; no confirmation received.
-- **Bugs fixed 1 Jul:** Sleep morning-card date fixed to waking-day (was one day stale). Strava description script: watch sensor gated out entirely; heat commentary gated to ERA5-confirmed ≥25°C; 401 auth blip → plain data-only template fallback confirmed working.
-- **Rules confirmed 1–2 Jul:** Start-of-run HR ramp = normal physiology, never flag (rule 104). Strava heat wording only at ERA5 ≥25°C (rule 105). Non-50m pool → prescribe even number of lengths so Jamie finishes each rep at bottle wall (rules 106–107). TSS-vs-target mid-debrief = session level not weekly (rule 108). Verify-before-explaining on disputed numbers (rule 109) — today's CTL 89.1 vs provisional 89.4 reconciled arithmetically (planned-Ride-Load placeholder before actual sync).
+- **Heat acclimation:** Score **77%** (78 days to race). Thu's ride 24.4°C just missed the 25°C gate — no dose added.
+- **CTL/Fitness:** Confirmed 89.1 (not the provisional 89.4 shown at 8:12am) — reconciled: 87.03 + (177−87.03)/42 = 89.15. The 89.4 read implied the planned Ride Load (106) still in place before the actual (97) synced. ATL 96.7 · TSB −7.6 (Heavy).
+- **W10 plan (29 Jun–5 Jul, active):** Mon ✓ swim (45) · Wed ✓ run (67) · Thu ✓ swim (80) + ✓ ride (97) · Fri Long Z2 Ride (today) · Sat Sweetspot 1h50 · Sun Long Run ~17km. Completed pre-Friday: 289 TSS.
+- **Weight:** 85.3kg (30 Jun) vs 79kg race target (+6.3kg). Fri 3 Jul weigh-in requested, no reply yet.
+- **Race readiness (78 days to IM Italy 19 Sep):** CTL 89.1 · ATL 96.7 · TSB −7.6. Bike ~90% · Swim ~75% · Run ~50%.
+- **Open actions:** Aero helmet — overdue since 30 Jun, flagged again in Fri 3 Jul morning check-in, still unconfirmed.
 
 ## Travel & training blocks (logged 2026-05-10)
 

@@ -3,20 +3,21 @@
 Last updated: 2026-07-02
 
 ## Recent context (auto-summary)
-- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — check-in sent ("Did the Sweetspot ride happen today?"), no response yet, outcome unconfirmed
-- **2026-06-30 (Tue)**: Endurance 50 min — NOT completed; no response to check-in
-- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); did not know what "RPE" meant — explained in plain language and logged
+- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — NOT completed (corrected 3 Jul: IcuSync confirms 0 load; initial "GO as-planned" projection was in error)
+- **2026-06-30 (Tue)**: Endurance 50 min — NOT completed (corrected 1 Jul; initial "GO as-planned" projection was in error)
+- **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); did not know what "RPE" meant — now covered by [perm] plain-language rule
 - **2026-06-27 (Sat)**: Long ride 195 min — NOT completed
-- **2026-06-23 (Tue)**: Short endurance 35 min — NOT completed
-- **Build phase week 1 (w/c 29 Jun)**: 250 TSS target, schedule Tue/Thu/Sun this block (long ride moved to Sunday); only Jun 29 Geneva ride completed (unplanned); Thu 2 Jul sweetspot outcome pending, Sun 5 Jul long ride 195 min still outstanding
-- **CTL 8.0 / ATL 14.1 / Form −6.1** as of 2026-07-02 (projected with today's planned session)
-- **Tour de Stations / Marmottes**: 58 days out (race day 2026-08-29); building from near-zero fitness; ~6–8 hr mountain effort
-- **Compliance**: T3 Underload fired every week since Jun 7; only 1 ride completed in ~5 weeks (Jun 29 Geneva, unplanned); Sun 5 Jul long ride is critical to salvage build week 1
-- **Weight**: 93 kg last confirmed; not responding to morning weight prompts for 6+ weeks
+- **No rides logged since Mon 29 Jun (Geneva)** as of Fri 3 Jul — all of build week 1 (Tue/Thu/Sun planned sessions) missed
+- **Build phase week 1 (w/c 29 Jun)**: 250 TSS target; only completed session was the unplanned Jun 29 Geneva ride
+- **CTL 5.8 / ATL 3.1 / Form +2.7** as of 2026-07-03 (actual IcuSync, corrected from planned-projection values)
+- **Recurring pattern**: watchdog's same-day "GO as-planned" projections have repeatedly needed correcting to "NOT completed" once actual IcuSync data lands (Jun 27, Jun 30, Jul 2 all corrected) — always verify against IcuSync before confirming a session happened
+- **Tour de Stations / Marmottes**: 57 days out (race day 2026-08-29); building from near-zero fitness; ~6–8 hr mountain effort
+- **Compliance**: T3 Underload fired every week since Jun 7; T5 (missed sessions) firing most days
+- **Weight**: 93 kg last confirmed; still not responding to morning weight prompts (6+ weeks running)
 - **Fuelling**: 0 g/hr current habit; target 60 g/hr (short-term) → 90 g/hr (race day)
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
-- **Sleep**: Jun 29 Geneva ride RPE 7 attributed by Calum to lack of sleep — monitor if pattern continues
+- **Sleep**: Jun 29 Geneva ride RPE 7 attributed by Calum to lack of sleep — no further data points since; monitor if pattern continues
 
 ## Training Availability
 Max weekly training: **5 hours/week** (cycling)
