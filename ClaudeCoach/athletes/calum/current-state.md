@@ -3,17 +3,16 @@
 Last updated: 2026-07-03
 
 ## Recent context (auto-summary)
-- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — NOT completed (corrected 3 Jul: IcuSync confirms 0 load; initial "GO as-planned" projection was in error)
-- **2026-06-30 (Tue)**: Endurance 50 min — NOT completed (corrected 1 Jul; initial "GO as-planned" projection was in error)
+- **2026-07-02 (Thu)**: Sweetspot 2×25 85 min — NOT completed (IcuSync confirms ctlLoad=0/atlLoad=0; initial "GO as-planned" projection was in error)
+- **2026-06-30 (Tue)**: Endurance 50 min — NOT completed (initial "GO as-planned" projection was in error)
 - **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); did not know what "RPE" meant — now covered by [perm] plain-language rule
 - **2026-06-27 (Sat)**: Long ride 195 min — NOT completed
-- **No rides logged since Mon 29 Jun (Geneva)** as of Fri 3 Jul — all of build week 1 (Tue/Thu/Sun planned sessions) missed
-- **Build phase week 1 (w/c 29 Jun)**: 250 TSS target; only completed session was the unplanned Jun 29 Geneva ride
+- **No rides logged since Mon 29 Jun (Geneva)** as of Fri 3 Jul (5 days) — build phase week 1 (w/c 29 Jun) fully missed: 0/3 planned sessions completed (Tue endurance, Thu sweetspot, Sun long ride)
 - **CTL 5.8 / ATL 3.1 / Form +2.7** as of 2026-07-03 (actual IcuSync, corrected from planned-projection values)
 - **Recurring pattern**: watchdog's same-day "GO as-planned" projections have repeatedly needed correcting to "NOT completed" once actual IcuSync data lands (Jun 27, Jun 30, Jul 2 all corrected) — always verify against IcuSync before confirming a session happened
 - **Tour de Stations / Marmottes**: 57 days out (race day 2026-08-29); building from near-zero fitness; ~6–8 hr mountain effort
 - **Compliance**: T3 Underload fired every week since Jun 7; T5 (missed sessions) firing most days
-- **Weight**: 93 kg last confirmed; still not responding to morning weight prompts (6+ weeks running)
+- **Weight**: 93 kg last confirmed; still not responding to morning weight prompts (6+ weeks running, incl. through Fri 3 Jul)
 - **Fuelling**: 0 g/hr current habit; target 60 g/hr (short-term) → 90 g/hr (race day)
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
