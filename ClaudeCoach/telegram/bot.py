@@ -517,11 +517,14 @@ def _write_plan_override(slug: str, plan: dict) -> str:
     return path
 
 
-def _hist_entry(user, assistant):
+def _hist_entry(user, assistant, kind="text"):
     """A history pair stamped with the local send time, so the bot can resolve
     time-referenced questions ("my 8:08 message") instead of claiming it can't see
-    them (the 16 Jun misdiagnosis). Old entries without 'ts' render without a stamp."""
-    return {"user": user, "assistant": assistant,
+    them (the 16 Jun misdiagnosis). Old entries without 'ts' render without a stamp.
+    'kind' marks whether 'user' is a plain text message or an image caption - the
+    two must never be conflated, or a lookup can mistake a real text message for a
+    photo (the swim-splits misdiagnosis)."""
+    return {"user": user, "assistant": assistant, "kind": kind,
             "ts": datetime.now().isoformat(timespec="seconds")}
 
 
@@ -2977,7 +2980,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 send(token, chat_id, final, reply_markup=_reply_inline(slug))
             elif clean:
                 send(token, chat_id, final, reply_markup=_reply_inline(slug))
-            log(f"Out (voice): {clean[:80]}")
+            log(f"[{slug}] Out (voice): {clean[:80]}")
             history.append(_hist_entry(text, clean))
             save_history(history, files["history"])
             return
@@ -3023,15 +3026,19 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 send(token, chat_id, final, reply_markup=_reply_inline(slug))
         elif clean:
             send(token, chat_id, final, reply_markup=_reply_inline(slug))
-        log(f"Out: {clean[:80]}")
+        log(f"[{slug}] Out: {clean[:80]}")
 
         history.append(_hist_entry(text, clean))
         save_history(history, files["history"])
     except Exception as _reply_err:
-        log(f"reply handling error for {chat_id}: {_reply_err}")
+        log(f"[{slug}] reply handling error for {chat_id}: {_reply_err}")
         try:
             send(token, chat_id, "Sorry - I hit a snag answering that. "
                  "Give it another go in a moment.")
+            # Still logged as "Out" even though it's an apology, not the real
+            # answer - the delivery watchdog only cares that SOMETHING was sent
+            # back, so a handled exception here must never look like a dropped reply.
+            log(f"[{slug}] Out (error-fallback): sent apology after {_reply_err}")
         except Exception:
             pass
 
@@ -3064,8 +3071,11 @@ def _image_reply_worker(token, chat_id, file_id, caption, athlete_entry, config)
             send(token, chat_id,
                  clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athlete_entry),
                  reply_markup=build_keyboard(slug))
-        log(f"Out (image): {clean[:80]}")
-        history.append(_hist_entry(caption or "[image]", clean))
+        log(f"[{slug}] Out (image): {clean[:80]}")
+        # Caption stored bare (never the "[image]" placeholder) and tagged kind=image,
+        # so a later lookup can't mistake this for a real text message with that literal
+        # content, or a real text message for a photo.
+        history.append(_hist_entry(caption or "", clean, kind="image"))
         save_history(history, files["history"])
     finally:
         try:
@@ -3094,7 +3104,7 @@ def _raceplan_worker(token, chat_id, slug):
                  reply_markup=build_keyboard(slug))
     except Exception as e:
         send(token, chat_id, f"Error generating race plan: {e}", reply_markup=build_keyboard(slug))
-    log("Out (fast): race plan generated")
+    log(f"[{slug}] Out (fast): race plan generated")
 
 
 def _route_text(token, chat_id, text, athletes, config):
@@ -3157,7 +3167,7 @@ def _route_text(token, chat_id, text, athletes, config):
         else:
             send(token, chat_id, "🔇 Voice replies *off* - back to text.",
                  reply_markup=build_keyboard(slug))
-        log(f"Out (fast): voice mode {'on' if new_state else 'off'}")
+        log(f"[{slug}] Out (fast): voice mode {'on' if new_state else 'off'}")
         return
 
     if text.lower() in ("/start", "/help"):
@@ -3185,7 +3195,7 @@ def _route_text(token, chat_id, text, athletes, config):
              reply_markup=build_keyboard(slug))
         return
 
-    log(f"In: {text[:80]}")
+    log(f"[{slug}] In: {text[:80]}")
 
     fast = fast_path(text, slug=slug, athlete_cfg=athlete)
     if fast == "__REPLAN__":
@@ -3234,26 +3244,26 @@ def _route_text(token, chat_id, text, athletes, config):
         reply = _update_ftp(slug, new_ftp)
         _mark_test_completed(slug, "ftp")
         send(token, chat_id, reply, reply_markup=build_keyboard(slug))
-        log(f"Out (FTP update): {new_ftp} W")
+        log(f"[{slug}] Out (FTP update): {new_ftp} W")
         return
     elif fast and fast.startswith("__CSS__:"):
         reply = _update_css(slug, fast.split(":", 1)[1])
         send(token, chat_id, reply, reply_markup=build_keyboard(slug))
-        log(f"Out (CSS update): {fast.split(':', 1)[1]}")
+        log(f"[{slug}] Out (CSS update): {fast.split(':', 1)[1]}")
         return
     elif fast and fast.startswith("__LTHR__:"):
         reply = _update_lthr(slug, int(fast.split(":", 1)[1]))
         send(token, chat_id, reply, reply_markup=build_keyboard(slug))
-        log(f"Out (LTHR update): {fast.split(':', 1)[1]}")
+        log(f"[{slug}] Out (LTHR update): {fast.split(':', 1)[1]}")
         return
     elif fast == "__LOAD_CHART__":
         typing(token, chat_id)
-        log("Out (fast): load chart")
+        log(f"[{slug}] Out (fast): load chart")
         _load_chart_quick(token, chat_id, slug)
         return
     elif fast == "__FITNESS_CHARTS__":
         typing(token, chat_id)
-        log("Out (fast): fitness charts")
+        log(f"[{slug}] Out (fast): fitness charts")
         _fitness_charts_quick(token, chat_id, slug)
         return
     elif fast == "__GRAPHS__":
@@ -3265,22 +3275,22 @@ def _route_text(token, chat_id, text, athletes, config):
             [{"text": "✅ Compliance",       "callback_data": "/compliance"}],
             [{"text": "⚡ Power curve",      "callback_data": "/powercurve"}],
         ]})
-        log("Out (fast): graphs menu")
+        log(f"[{slug}] Out (fast): graphs menu")
         return
     elif fast == "__DURABILITY__":
-        typing(token, chat_id); log("Out (fast): durability")
+        typing(token, chat_id); log(f"[{slug}] Out (fast): durability")
         _durability_chart_quick(token, chat_id, slug)
         return
     elif fast == "__RECOVERY__":
-        typing(token, chat_id); log("Out (fast): recovery")
+        typing(token, chat_id); log(f"[{slug}] Out (fast): recovery")
         _recovery_chart_quick(token, chat_id, slug)
         return
     elif fast == "__COMPLIANCE__":
-        typing(token, chat_id); log("Out (fast): compliance")
+        typing(token, chat_id); log(f"[{slug}] Out (fast): compliance")
         _compliance_chart_quick(token, chat_id, slug)
         return
     elif fast == "__POWERCURVE__":
-        typing(token, chat_id); log("Out (fast): power curve")
+        typing(token, chat_id); log(f"[{slug}] Out (fast): power curve")
         _power_curve_quick(token, chat_id, slug)
         return
     elif fast == "__ACTIVITY_CHECK__":
@@ -3304,11 +3314,11 @@ def _route_text(token, chat_id, text, athletes, config):
              "--athlete", slug],
             cwd=str(PROJECT_DIR),
         )
-        log("Out (fast): weekly summary triggered")
+        log(f"[{slug}] Out (fast): weekly summary triggered")
         return
     elif fast:
         send(token, chat_id, fast, reply_markup=build_keyboard(slug))
-        log(f"Out (fast): {fast[:80]}")
+        log(f"[{slug}] Out (fast): {fast[:80]}")
         return
 
     if _RACE_PLAN_RE.match(text.strip()):
