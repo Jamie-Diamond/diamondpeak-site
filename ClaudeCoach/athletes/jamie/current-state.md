@@ -433,6 +433,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-07-03 — T11 (Tier 2):** Strength compliance unchanged — 0 sessions in Mon 22–Sun 28 Jun; 1 session in Mon 15–Sun 21 Jun (Wed 17 Jun) vs target 2/wk. Both weeks still below target; current week (Mon 29 Jun–Sun 5 Jul) not yet complete so the "last 2 completed weeks" window is unchanged since the Jun 28 entry. Last T11 logged Jun 28 (5 days ago — suppression lapsed). Camp #2 starts Jul 10 (7 days away) — the Jul 2–9 return window is the last chance to bank 2 bodyweight/Tier-C sessions before camp resumes.
 
+- **2026-07-04 — T4 (Tier 1):** Sleep <7h on 3 of last 7 nights: 30 Jun 5.54h, 2 Jul 6.57h, 3 Jul 6.12h. Prior T4 (Jul 3) flagged 27 Jun/30 Jun/2 Jul — 3 Jul's 6.12h is a new night not in that entry; signal materially changed. HRV recovered to 46 on 3 Jul (trend +35% over 7 days, 34 on 26 Jun → 46) — no T3 co-fire. RHR 54 on 3 Jul (within 50–54 baseline) — no corroboration. Single-signal T4 only; no intensity flags today. Prioritise sleep this week; re-evaluate if the deficit deepens or a second signal joins it.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
