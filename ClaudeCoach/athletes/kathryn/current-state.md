@@ -6,7 +6,7 @@ Last updated: 2026-07-04
 
 - **Sat 4 Jul — Long Ride + Brick Run (actual)**: bike-only, rode hotter than the HR-capped Z2 plan — Load 175 vs planned 137 (+28%) · NP 138W · IF 0.70 · only 66% time Z1–2 by power (21% Z3, 13% Z4+) · decoupling 9.7%. Fuelling confirmed: 2 Honey Stinger gels + 1 Clif macadamia/white chocolate bar + 1 small banana + 2 Clif Bloks ≈ 127g carbs over ~212 min (~36g/hr vs 70g/hr race target — still well short).
 - Repeatedly confirmed in conversation (4 Jul): today's bike-only session was built that way, NOT due to any ankle constraint — ankle content is a cross-athlete data bug (see [[persistent-rules]] rule 27).
-- **Tomorrow (Sun 5 Jul) confirmed**: Long Run, 88 min easy (10/68/10 split), Z2 by HR 161–170 bpm; no ankle-related content applies.
+- **Tomorrow (Sun 5 Jul) — Long Run, confirmed plan**: 88 min easy (10/68/10 split) · pace target 5:41–6:25/km (78–88% threshold) · HR cap 170 bpm · nutrition 40g/hr carbs, 500ml/hr fluid · sleep ≥8h · Form −24 (Heavy, worsened from −19.3 on 4 Jul). No ankle-related content applies.
 - **Fri 3 Jul — Wandsworth Cycling (Endurance Ride + Tempo)**: actual Load 71 (planned 101, −30%) · NP 139W · IF 0.71 · avg HR 140 bpm · only 70% time in Z1+2 (rode harder than the steady-Z2 ask, despite HRV 51/sleep 64/RHR 55/Form −12.6 that morning). RPE unresolved; fuelling never confirmed.
 - **Fri 3 Jul — Richmond upon Thames Golf**: ~2h25m, avg HR 102 bpm (low-intensity, easy day), Load 33. RPE unresolved.
 - **"Rpe2" reply (4 Jul, still ambiguous)**: sent right after two RPE questions were outstanding (Wandsworth ride, Golf, both 3 Jul) — unclear which activity it answers.
