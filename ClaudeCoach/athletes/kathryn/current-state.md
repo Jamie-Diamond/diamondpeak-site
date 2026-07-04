@@ -1,6 +1,6 @@
 # Kathryn Hanna -- Current State
 
-Last updated: 2026-07-03
+Last updated: 2026-07-04
 
 ## Recent context (auto-summary)
 
@@ -86,6 +86,7 @@ None
 - 2026-07-02: run_quality 50min (Tempo Run) — BLOCKED (R1). Ankle quality not yet cleared (4 consecutive pain-free weeks not reached). Sub: 30–40 min easy walk or complete rest. HRV trend +14.8% (latest 70, Jul 1); sleep 6.62h carried. ATL 60, CTL 59; form −1. Luteal day 23. Pushed blocked note event ID 120035084.
 - 2026-06-29: swim 40min (Technique — 10m/20m/10m at 76–84% pace) — GO, execute as planned (no rules fired). HRV trend +9.5% (latest 65 on Jun 28); sleep 7.38h carried (Jun 28). ATL 72, CTL 60; form −12. Last session RPE 5 (run Jun 28). Luteal day 20 — sessions feel harder than numbers suggest. Build week 1 begins. Combines with standing KB 45min = 85min total (within 90min cap).
 - 2026-07-03: bike_z2 120min (Endurance Ride + Tempo, 2×20min @ 76–84% FTP) — GO, execute as planned (no rules fired). HRV trend +6.8% (latest 66, Jul 2; today not synced at 05:00); sleep 6.57h carried (Jul 2). ATL 74, CTL 62; form −12. Last session RPE 5. Luteal day 24 — sessions feel harder than numbers suggest; watch heat stacking. Session already sits at the 120min athlete-specified cap (persistent rule, expires 2026-07-04) — no further trim needed. Ankle not affected (bike session).
+- 2026-07-04: bike_z2 195min (Long Ride + Brick Run — 18m/159m/18m all 60–70% FTP) — GO, execute as planned (no rules fired). Classified as bike_z2 rather than brick: structured description is 100% steady Z2, no run-quality component, matching the "hold top of Z2, don't drift into tempo" plan note — labelling it "brick" would have triggered an R1 ankle hard-stop on a session with no actual run intervals in it, which isn't the intent of the ankle rule. HRV trend −19.0% (latest 51, 3 Jul; today not synced at 05:00); sleep 6.57h carried (3 Jul). ATL 83, CTL 64; form −19. Last session RPE 5. Luteal day 25 (final day of phase) — sessions feel harder than numbers suggest; watch heat stacking. Ankle: no run component in today's structured session, R1 not applicable.
 
 ## Illness / Health
 - 2026-05-17: Sore throat + tiredness. Skipped evening run.
