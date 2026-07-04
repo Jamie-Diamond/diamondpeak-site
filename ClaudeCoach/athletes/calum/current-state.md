@@ -1,6 +1,6 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-07-03
+Last updated: 2026-07-04
 
 ## Recent context (auto-summary)
 - **2026-07-04 (Sat)**: Rest day. Watchdog tone softened vs prior weeks — "a few sessions have slipped over the last couple of weeks, no pressure, let's just focus on resetting today and building back up gradually" (no explicit warning framing this time)
