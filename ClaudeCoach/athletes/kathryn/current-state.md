@@ -4,18 +4,18 @@ Last updated: 2026-07-04
 
 ## Recent context (auto-summary)
 
-- **Sat 4 Jul — Long Ride + Brick Run**: bike-only, 195 min all Z2 (18/159/18 min split). Kathryn questioned this at length — confirmed in conversation it's classified bike-only simply because that's how it was built, NOT because of any ankle constraint (ankle bug fully resolved, see below). Offered to add a 15–20 min easy run off the bike to make it a real brick if she wants. Weight asked again this morning; only a chart/photo came back, no numeric text reply — 61.8 kg (1 Jul) still the latest confirmed reading.
-- **Weekly load (w/c 29 Jun)**: projected total 542 vs build-phase target ~636 (−94 shortfall), only Sat ride + Sun run left. Coach recommendation: don't chase the gap — Form is −19.3 (heavy fatigue), landing under target this week is correct.
-- **"Rpe2" reply (4 Jul, ambiguous)**: Kathryn sent "Rpe2" right after two RPE questions were outstanding (Wandsworth Cycling ride 3 Jul, Richmond Golf 3 Jul). Unclear which activity it answers — still needs clarification before either is treated as resolved.
-- **Fri 3 Jul — Richmond upon Thames Golf**: ~2h25m, avg HR 102 bpm (low-intensity, easy day), Load 33. RPE status: see ambiguous "Rpe2" note above.
-- **Fri 3 Jul — Wandsworth Cycling (Endurance Ride + Tempo)**: COMPLETED. Actual Load 71 (planned 101, −30%) · NP 139W · IF 0.71 · avg HR 140 bpm · only 70% time in Z1+2 (rode harder than the steady-Z2-only ask, despite low recovery this morning — HRV 51, sleep score 64, RHR 55, Form −12.6). RPE status: see ambiguous "Rpe2" note above. Fuelling (g carbs/hr, bottles) still not confirmed.
-- **Thu 2 Jul — Kettlebells ("Cardio", 55 min)**: avg HR 132 bpm (Z1) with brief Z4 spikes to 185 bpm. Kathryn: "harder than it should have felt." No numeric RPE given yet.
-- **Thu 2 Jul — Tempo Run (Hammersmith)**: 35 min · 5.94 km · GAP 5:48/km · avg 171 bpm · Z3 65% · Load 41 (−28% vs plan, 70% of planned volume). Kathryn confirmed she didn't complete it — got too fatigued. No numeric RPE given yet.
-- **Ankle bug — RESOLVED in conversation 4 Jul**: cross-athlete data mixup confirmed (Jamie's ankle content bled into Kathryn's plan/summaries). Coach has explicitly told Kathryn nothing in her plan is shaped by an ankle constraint and will stop referencing it; standing suppression rule in [[persistent-rules]].
+- **Sat 4 Jul — Long Ride + Brick Run**: bike-only, 195 min all Z2 (18/159/18 min split), confirmed distance guidance ~85–90 km (effort-led, not a distance target). Repeatedly confirmed in conversation: bike-only purely because that's how it was built, NOT due to any ankle constraint. Weight still unconfirmed numerically — only chart/photo replies since 61.8 kg (1 Jul).
+- **Tomorrow (Sun 5 Jul) confirmed**: Long Run, 88 min easy (10/68/10 split), Z2 by HR 161–170 bpm — Kathryn explicitly confirmed the schedule (195 min bike today / 88 min run tomorrow); no ankle-related content applies.
+- **Weekly load (w/c 29 Jun)**: projected total 542 vs build-phase target ~636 (−94 shortfall). Coach recommendation: don't chase the gap given Form −19.3 (heavy fatigue); landing under target this week is correct.
+- **"Rpe2" reply (4 Jul, still ambiguous)**: sent right after two RPE questions were outstanding (Wandsworth Cycling ride 3 Jul, Richmond Golf 3 Jul) — unclear which activity it answers; still needs clarification.
+- **Fri 3 Jul — Richmond upon Thames Golf**: ~2h25m, avg HR 102 bpm (low-intensity, easy day), Load 33. RPE unresolved — see "Rpe2" note above.
+- **Fri 3 Jul — Wandsworth Cycling (Endurance Ride + Tempo)**: actual Load 71 (planned 101, −30%) · NP 139W · IF 0.71 · avg HR 140 bpm · only 70% time in Z1+2 (rode harder than the steady-Z2 ask, despite HRV 51/sleep 64/RHR 55/Form −12.6 that morning). RPE unresolved; fuelling (g carbs/hr, bottles) never confirmed.
+- **Thu 2 Jul — Kettlebells ("Cardio", 55 min)**: avg HR 132 bpm (Z1) with brief Z4 spikes to 185 bpm. Kathryn: "harder than it should have felt." No numeric RPE given.
+- **Thu 2 Jul — Tempo Run (Hammersmith)**: 35 min · 5.94 km · GAP 5:48/km · avg 171 bpm · Z3 65% · Load 41 (−28% vs plan, 70% of planned volume). Kathryn confirmed she didn't complete it — too fatigued. No numeric RPE given.
+- **Ankle bug — RESOLVED**: cross-athlete data mixup confirmed (Jamie's ankle content bled into Kathryn's plan/summaries), reconfirmed again on 4 Jul when Kathryn pressed on it further. Standing suppression rule in [[persistent-rules]] (rule 27) — do not reference ankle status in her plans/summaries.
 - **Luteal phase**: day 25 of cycle (final luteal day) as of 4 Jul; next period expected ~8 Jul; quality window resumes once follicular phase begins.
 - **Mon 6 / Tue 7 replanned** (confirmed 3 Jul): "anything except cycle or swim" — Mon Kettlebells 45 min, Tue Easy Z2 run 45 min (HR cap 170 bpm, ~52 Load).
-- **Tomorrow (Sun 5 Jul)**: Long Run, 88 min easy (10/68/10 split), Z2 by HR 161–170 bpm, conversational throughout — no ankle-related content applies.
-- **Outstanding**: numeric RPE (1–10) still needed for Thu 2 Kettlebells/Cardio and Hammersmith Tempo Run; RPE for Fri 3 Wandsworth ride and Golf pending clarification of the ambiguous "Rpe2" reply. Fuelling gap persistent — ~33 g/hr actual vs 70 g/hr race target; Fri 3 target stepped up to 55 g/hr, actual not yet confirmed.
+- **Outstanding**: numeric RPE (1–10) still needed for Thu 2 Kettlebells/Cardio and Hammersmith Tempo Run; RPE for Fri 3 Wandsworth ride and Golf pending clarification of the ambiguous "Rpe2" reply. Fuelling gap persistent — ~33 g/hr actual vs 70 g/hr race target; Fri 3 target stepped up to 55 g/hr, actual never confirmed.
 
 ## Injuries / Niggles
 None

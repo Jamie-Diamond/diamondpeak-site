@@ -28,7 +28,7 @@
 - **Wed 1 Jul — Z2 Run 60min (COMPLETED):** EASY — avg HR 145 vs 146 ceiling. Ankle 2/10 (terrain-driven, within tolerance).
 - **Ankle:** ATFL + CFL partial tear. Latest score 2/10 (Wed 1 Jul, within 5/10 tolerance). Protocol: ≤5/10 = continue; >5/10 = stop; not resolved next AM = no run.
 - **Heat acclimation:** Score **77%** (77 days to race). Thu and Fri rides both missed the 25°C gate — no dose added either day.
-- **W10 plan (29 Jun–5 Jul):** Completed to date 512 TSS. Projected week: 512 + Sat Sweetspot (97) + Sun Run (94) = 703 vs ~764 target.
+- **W10 plan (29 Jun–5 Jul):** Completed to date 512 TSS. Projected week (post run-distance correction): 512 + Sat Sweetspot (93) + Sun Run (94) = 699 vs ~764 target (−8%).
 - **Weight:** 85.3kg (30 Jun) vs 79kg race target (+6.3kg). Asked again Fri 3 Jul and Sat 4 Jul mornings — chart/photo sent Sat but no numeric figure logged yet.
 - **Open actions:** Aero helmet — overdue since 30 Jun, re-flagged a third time in Sat 4 Jul AM check-in, still unconfirmed.
 - **Strava description generator (fixed 2026-07-03):** Was citing watch-sensor temp and mislabeling a mild morning as "heat". Patched: temp only cited when has_weather true; "heat" wording only at ERA5-confirmed ≥25°C. Open commitment: re-run Wed 1 Jul's description with full prose once Haiku 401 auth blip clears (no due date given).

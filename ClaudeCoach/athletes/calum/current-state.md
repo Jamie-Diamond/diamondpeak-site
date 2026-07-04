@@ -4,11 +4,11 @@ Last updated: 2026-07-03
 
 ## Recent context (auto-summary)
 - **2026-07-04 (Sat)**: Rest day. Watchdog tone softened vs prior weeks — "a few sessions have slipped over the last couple of weeks, no pressure, let's just focus on resetting today and building back up gradually" (no explicit warning framing this time)
-- **2026-07-03 (Fri)**: Unplanned Geneva Gravel/Unpaved ride — huge effort, 5+ hrs, 60.5km, 1,156m climbed, avg HR 137 bpm; steady/controlled despite serious climbing; first substantial ride since Mon 29 Jun. Quick-logged; not yet reflected in Watchdog CTL/ATL figures below.
+- **2026-07-03 (Fri)**: Unplanned Geneva Gravel/Unpaved ride — huge effort, 5+ hrs, 60.5km, 1,156m climbed, avg HR 137 bpm; steady/controlled despite serious climbing; first substantial ride since Mon 29 Jun. Quick-logged; still not reflected in Watchdog CTL/ATL figures below as of Jul 4 morning.
 - **Build phase week 1 (w/c 29 Jun) fully missed on-plan**: 0/3 planned sessions completed (Sat 27 Jun long ride, Tue 30 Jun endurance 50min, Thu 2 Jul sweetspot 2×25) — only unplanned rides done (Mon 29 Jun Geneva Road, Fri 3 Jul Geneva Gravel)
 - **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); did not know what "RPE" meant — now covered by [perm] plain-language rule
 - **Recurring pattern**: watchdog's same-day "GO as-planned" projections have repeatedly needed correcting to "NOT completed" once actual IcuSync data lands (Jun 27, Jun 30, Jul 2 all corrected) — always verify against IcuSync before confirming a session happened
-- **CTL 5.8 / ATL 3.1 / Form +2.7** as of 2026-07-03 (pre-Gravel-ride sync; still not yet updated as of Jul 4 morning message — expect update once Jul 3 activity lands)
+- **CTL 5.8 / ATL 3.1 / Form +2.7** as of 2026-07-03 (pre-Gravel-ride sync; expect update once Jul 3 activity lands)
 - **Tour de Stations / Marmottes**: 56 days out as of 2026-07-04 (race day 2026-08-29); building from near-zero fitness; ~6–8 hr mountain effort
 - **Compliance**: T3 Underload fired every week since Jun 7; T5 (missed sessions) firing most days
 - **Weight**: 93 kg last confirmed; zero replies to daily weight prompts through Sat 4 Jul (7+ weeks running)
