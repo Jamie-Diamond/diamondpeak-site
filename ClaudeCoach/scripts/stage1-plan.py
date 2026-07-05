@@ -332,7 +332,10 @@ def main():
             summary["pushed"] = False
             summary["reason"] = f"not ready (rules_ok={built['ok']}, load_on_target={load_on_target}) — not pushing"
             if args.notify and cfg.get("chat_id"):
-                _notify(cfg["chat_id"], f"⚠️ Couldn't generate a clean week ({', '.join(built['hard'][:1]) or 'audit failed'}). Your existing plan is unchanged.")
+                # hard entries are {code, msg} dicts — joining them raw crashed here
+                # (masked every clean-week failure until 5 Jul 2026)
+                why = built["hard"][0]["msg"] if built.get("hard") else "audit failed"
+                _notify(cfg["chat_id"], f"⚠️ Couldn't generate a clean week ({why}). Your existing plan is unchanged.")
         else:
             summary["push_result"] = pb.push(args.athlete, built)
             if override_path and override_path.exists():
