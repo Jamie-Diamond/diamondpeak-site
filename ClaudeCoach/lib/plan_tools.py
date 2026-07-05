@@ -33,11 +33,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent          # ClaudeCoach/
+FUELLING_CLI = BASE.parent / "js" / "fuelling-cli.js"  # shared JS engine bridge
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
@@ -50,7 +52,7 @@ from primitives.load import (                                   # noqa: E402
     derive_phase_ctl_targets,
 )
 from primitives.validate_plan import validate_week              # noqa: E402
-from primitives.blueprint import current_phase                  # noqa: E402
+from primitives.blueprint import current_phase, tss_ceiling     # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr   # noqa: E402
 
 ATHLETES_CONFIG = BASE / "config" / "athletes.json"
@@ -329,9 +331,10 @@ def _load_blueprint(slug: str) -> dict:
 
 def cmd_validate(args) -> dict:
     """Hard-check a proposed week against the athlete's rules — the same backstop
-    the Sunday generator uses (day_rules, CTL ramp, strength cap, intensity
-    distribution). Mirrors generate-plan.py's validate call: NO weekly_tss_cap
-    (the required-tss target is a floor, not a ceiling)."""
+    the Sunday generator uses (day_rules, CTL ramp, weekly TSS ceiling, strength
+    cap, intensity distribution). The weekly_tss_cap here is the blueprint HOURS
+    ceiling (max_hours_per_week x 100 x IF^2) — a hard upper bound, distinct from
+    the required-tss target, which is a floor."""
     cfg = _load_cfg(args.athlete)
     try:
         week = json.loads(args.week)
@@ -354,9 +357,18 @@ def cmd_validate(args) -> dict:
 
     day_rules = cfg.get("day_rules")
     phase = current_phase(_load_blueprint(args.athlete), week_start) or {}
+    tss_cap = None
+    try:
+        prof_p = BASE / "athletes" / args.athlete / "profile.json"
+        max_h = (json.loads(prof_p.read_text()) if prof_p.exists() else {}).get("max_hours_per_week")
+        if max_h and phase.get("name"):
+            tss_cap = tss_ceiling(float(max_h), str(phase["name"]))
+    except Exception:
+        pass
     rep = validate_week(
         events, week_start,
         day_rules=day_rules, ctl_today=ctl_today,
+        weekly_tss_cap=tss_cap,
         ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
         strength_max=(day_rules or {}).get("strength_max"),
         distribution=phase.get("distribution"),
@@ -366,7 +378,8 @@ def cmd_validate(args) -> dict:
             "total_tss": round(rep.total_tss),
             "ok": not any(v["severity"] == "hard" for v in viol),
             "hard": [v for v in viol if v["severity"] == "hard"],
-            "soft": [v for v in viol if v["severity"] != "hard"]}
+            "soft": [v for v in viol if v["severity"] != "hard"],
+            "skipped_checks": rep.skipped}
 
 
 def cmd_fuel_target(args) -> dict:
@@ -384,6 +397,101 @@ def cmd_fuel_target(args) -> dict:
             "recent_avg_g_hr": round(avg, 1) if avg is not None else None,
             "race_target_g_hr": race_target, "prescribed_g_hr": target,
             "note": f"{zone}: prescribe {target} g/hr now (race target {race_target})"}
+
+
+def _fuelling_engine(cmd: str, params: dict) -> dict:
+    """Run the SHARED JS fuelling engine (js/fuelling-engine.js — the exact code
+    behind the web planner) via Node. Physiology lives there, not here, so the
+    coach and the planner never diverge. cmd is targets|check|caps."""
+    if not FUELLING_CLI.exists():
+        raise SystemExit(_err(f"fuelling engine not found at {FUELLING_CLI}"))
+    try:
+        proc = subprocess.run(
+            ["node", str(FUELLING_CLI), cmd, json.dumps(params)],
+            capture_output=True, text=True, timeout=20)
+    except FileNotFoundError:
+        raise SystemExit(_err("node is not installed — the fuelling engine needs Node.js"))
+    except subprocess.TimeoutExpired:
+        raise SystemExit(_err("fuelling engine timed out"))
+    out = (proc.stdout or "").strip()
+    if not out:
+        raise SystemExit(_err(f"fuelling engine returned nothing (stderr: {proc.stderr.strip()[:200]})"))
+    data = json.loads(out)
+    if isinstance(data, dict) and data.get("error"):
+        raise SystemExit(_err(f"fuelling engine: {data['error']}"))
+    return data
+
+
+def _race_hours(cfg) -> float:
+    """Total race duration (hours) from the athlete's race_target_splits."""
+    s = cfg.get("race_target_splits") or {}
+    total = (s.get("swim_min", 0) + s.get("bike_min", 0)
+             + s.get("run_min", 0) + s.get("t1t2_min", 0))
+    return (total / 60.0) if total else 0.0
+
+
+def _body_and_sweat(slug, cfg, args):
+    """Body weight and sweat inputs: CLI overrides, then athlete profile, then
+    config, then evidence-based defaults."""
+    prof = {}
+    pp = BASE / "athletes" / slug / "profile.json"
+    if pp.exists():
+        try:
+            prof = json.loads(pp.read_text())
+        except Exception:
+            prof = {}
+    wt = (getattr(args, "weight", None)
+          or prof.get("race_weight_kg") or prof.get("weight_kg")
+          or cfg.get("race_weight_kg") or 75.0)
+    sweat = getattr(args, "sweat", None) or cfg.get("sweat_ml_hr") or 1000.0
+    sweat_na = getattr(args, "sweat_na", None) or cfg.get("sweat_na_mg_l") or 950.0
+    return float(wt), float(sweat), float(sweat_na)
+
+
+def cmd_race_fuelling(args) -> dict:
+    """Evidence-based race fuelling targets (carb/fluid/sodium/caffeine) from the
+    athlete's race duration, body weight and sweat data. Runs the shared engine —
+    use these numbers, never invent your own. Points athletes to the web planner
+    for the interactive per-leg schedule."""
+    cfg = _load_cfg(args.athlete)
+    rH = args.hours if getattr(args, "hours", None) else _race_hours(cfg)
+    if not rH:
+        raise SystemExit(_err("no race duration — set race_target_splits in config or pass --hours"))
+    wt, sweat, sweat_na = _body_and_sweat(args.athlete, cfg, args)
+    t = _fuelling_engine("targets", {
+        "raceHours": rH, "bodyKg": wt, "sweatMlHr": sweat,
+        "sweatNaMgL": sweat_na, "gutTrained": bool(args.gut_trained)})
+    t["athlete"] = args.athlete
+    t["race_name"] = cfg.get("race_name")
+    t["inputs"] = {"body_kg": wt, "sweat_ml_hr": sweat, "sweat_na_mg_l": sweat_na}
+    t["web_planner"] = "https://diamondpeak.uk/cycling/fuelling-calculator.html"
+    return t
+
+
+def cmd_fuel_check(args) -> dict:
+    """Red-flag review of an intended fuelling rate against the evidence (glucose
+    transporter cap, glucose:fructose ratio, hydration, sodium, caffeine). Runs
+    the shared engine. Gut-backlog and fuelling-gap checks need the web planner."""
+    cfg = _load_cfg(args.athlete)
+    rH = args.hours if getattr(args, "hours", None) else _race_hours(cfg)
+    if not rH:
+        raise SystemExit(_err("no race duration — set race_target_splits in config or pass --hours"))
+    wt, sweat, sweat_na = _body_and_sweat(args.athlete, cfg, args)
+    carb = args.carb if args.carb is not None else 0.0
+    glu = args.glucose if args.glucose is not None else carb * 0.6
+    fru = args.fructose if args.fructose is not None else max(0.0, carb - glu)
+    data = _fuelling_engine("check", {
+        "carbGHr": carb, "glucoseGHr": glu, "fructoseGHr": fru,
+        "fluidMlHr": args.fluid or 0.0, "sodiumMgHr": args.sodium or 0.0,
+        "caffeineTotalMg": args.caffeine or 0.0, "raceHours": rH,
+        "bodyKg": wt, "sweatMlHr": sweat, "sweatNaMgL": sweat_na,
+        "gutTrained": bool(args.gut_trained)})
+    flags = data.get("flags", [])
+    return {"athlete": args.athlete, "race_hours": round(rH, 2),
+            "gut_trained": bool(args.gut_trained),
+            "risks": [f for f in flags if f["level"] == "risk"],
+            "warnings": [f for f in flags if f["level"] == "warn"],
+            "flags": flags}
 
 
 def cmd_render_workout(args) -> dict:
@@ -432,10 +540,32 @@ def main():
     pf = sub.add_parser("fuel-target", help="deterministic g/hr fuelling prescription for >90-min sessions")
     pf.add_argument("--athlete", required=True)
 
+    prf = sub.add_parser("race-fuelling", help="evidence-based race carb/fluid/sodium/caffeine targets (shared engine)")
+    prf.add_argument("--athlete", required=True)
+    prf.add_argument("--hours", type=float, help="race duration (defaults to race_target_splits)")
+    prf.add_argument("--weight", type=float, help="body weight kg (defaults to profile race_weight_kg)")
+    prf.add_argument("--sweat", type=float, help="sweat rate ml/hr (default 1000)")
+    prf.add_argument("--sweat-na", type=float, dest="sweat_na", help="sweat sodium mg/L (default 950)")
+    prf.add_argument("--gut-trained", action="store_true", help="raise caps to 72/48 (120 g/hr)")
+
+    pfc = sub.add_parser("fuel-check", help="red-flag review of an intended fuelling rate (shared engine)")
+    pfc.add_argument("--athlete", required=True)
+    pfc.add_argument("--carb", type=float, help="total carb g/hr")
+    pfc.add_argument("--glucose", type=float, help="glucose g/hr (default 60%% of carb)")
+    pfc.add_argument("--fructose", type=float, help="fructose g/hr (default carb - glucose)")
+    pfc.add_argument("--fluid", type=float, help="fluid ml/hr")
+    pfc.add_argument("--sodium", type=float, help="sodium mg/hr")
+    pfc.add_argument("--caffeine", type=float, help="total caffeine mg")
+    pfc.add_argument("--hours", type=float)
+    pfc.add_argument("--weight", type=float); pfc.add_argument("--sweat", type=float)
+    pfc.add_argument("--sweat-na", type=float, dest="sweat_na")
+    pfc.add_argument("--gut-trained", action="store_true")
+
     args = p.parse_args()
     handler = {"tss": cmd_tss, "week-tss": cmd_week_tss, "project": cmd_project,
                "required-tss": cmd_required_tss, "validate": cmd_validate,
-               "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target}[args.cmd]
+               "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target,
+               "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

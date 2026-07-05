@@ -30,6 +30,7 @@ from primitives.blueprint import (  # noqa: E402
     phase_structure, assign_dates, SCHEMA_VERSION,
     EVENT_SPORTS, CYCLING_EVENTS, event_sports,
     event_key as _event_key,
+    IF_TARGETS, phase_family, content_family, tss_ceiling,
 )
 
 # Brick targets by phase family — single source for both the markdown table and
@@ -62,25 +63,9 @@ SCHEDULE_PERFORMANCE_TESTS = False
 
 
 # -- TSS ceiling --------------------------------------------------------------
-
-IF_TARGETS = {
-    "base":     0.65,
-    "build":    0.68,
-    "specific": 0.70,
-    "peak":     0.72,
-}
-
-def phase_family(name: str) -> str:
-    n = name.lower()
-    if "base" in n:
-        return "base"
-    if "specific" in n:
-        return "specific"
-    if "build" in n:
-        return "build"
-    if "peak" in n:
-        return "peak"
-    return "taper"
+# IF_TARGETS / phase_family / content_family / tss_ceiling moved to
+# primitives.blueprint (5 Jul 2026) — single source shared with plan_builder,
+# which arms validate_week's weekly_tss_cap from the same maths. Imported above.
 
 
 def _css_seconds(css) -> int | None:
@@ -101,24 +86,7 @@ def _css_seconds(css) -> int | None:
             return None
 
 
-def content_family(family: str) -> str:
-    """Map a structural phase family to the family whose content tables apply.
-
-    Since 2026-06-10 (Jamie sign-off, docs/specific-phase-proposal.md) the
-    'specific' family carries its OWN content rows — race-shape conversion:
-    more work slightly above race effort, race-rate fuelling on all key
-    sessions, race sims split one late-Specific + one Peak. Events without a
-    specific row fall back at each lookup site (fuelling default string,
-    ctl_range None -> fitness check skipped), so this stays an identity map.
-    """
-    return family
-
-def tss_ceiling(max_hours: float, phase_name: str) -> float | None:
-    fam = content_family(phase_family(phase_name))
-    if fam == "taper":
-        return None
-    IF = IF_TARGETS[fam]
-    return round(max_hours * 100 * IF ** 2, 0)
+# content_family / tss_ceiling: see primitives.blueprint (imported above).
 
 
 # Event → sports partition (EVENT_SPORTS, CYCLING_EVENTS, event_sports,

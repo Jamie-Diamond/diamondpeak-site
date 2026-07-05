@@ -39,7 +39,7 @@ sys.path.insert(0, str(BASE / "lib"))
 from primitives.planned_tss import render_workout, planned_session_tss  # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 from primitives.validate_plan import validate_week             # noqa: E402
-from primitives.blueprint import current_phase                 # noqa: E402
+from primitives.blueprint import current_phase, tss_ceiling    # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
 _LONG_FUEL_SPORTS = {"Ride", "GravelRide", "VirtualRide", "Brick"}
@@ -61,6 +61,33 @@ def _fuel_for(slug, cfg):
     sl = BASE / "athletes" / slug / "session-log.json"
     log = json.loads(sl.read_text()) if sl.exists() else []
     return fuel_target(recent_avg_g_hr(log), int(cfg.get("nutrition_target_g_hr") or 90))
+
+
+def _ctl_today(cfg) -> float | None:
+    """Live CTL for the ramp hard check. None (-> check recorded as skipped) on
+    ICU failure rather than raising — a validation must never kill a build."""
+    try:
+        from icu_api import IcuClient
+        w = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"]).get_wellness(days=3)
+        for e in reversed(w or []):
+            if e.get("ctl") is not None:
+                return float(e["ctl"])
+    except Exception:
+        pass
+    return None
+
+
+def _weekly_tss_cap(slug, phase) -> float | None:
+    """Blueprint hours ceiling (max_hours_per_week x 100 x IF^2) for the TSS hard
+    check — same maths the blueprint document displays (primitives.blueprint)."""
+    try:
+        prof = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
+        max_h = prof.get("max_hours_per_week")
+        if max_h and phase.get("name"):
+            return tss_ceiling(float(max_h), str(phase["name"]))
+    except Exception:
+        pass
+    return None
 
 
 def build_sessions(slug: str, proposal: dict) -> dict:
@@ -103,15 +130,30 @@ def build_sessions(slug: str, proposal: dict) -> dict:
     ws -= timedelta(days=ws.weekday())
     dr = cfg.get("day_rules")
     phase = current_phase(_blueprint(slug), ws) or {}
+    # ARM the hard checks (audit P0-4): without ctl_today the ramp check silently
+    # no-ops, and without weekly_tss_cap the load check does — the validator's
+    # "a breach cannot reach the athlete" guarantee was void. Both inputs are
+    # sourced here; a missing one lands in rep.skipped and is surfaced loudly.
     rep = validate_week(events, ws, day_rules=dr,
+                        weekly_tss_cap=_weekly_tss_cap(slug, phase),
+                        ctl_today=_ctl_today(cfg),
                         ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
                         strength_max=(dr or {}).get("strength_max"),
                         distribution=phase.get("distribution"))
     hard = [{"code": v.code, "msg": str(v)} for v in rep.violations if v.severity == "hard"]
     soft = [{"code": v.code, "msg": str(v)} for v in rep.violations if v.severity != "hard"]
+    if rep.skipped:
+        for s in rep.skipped:
+            print(f"[plan_builder:{slug}] WARN {s}", file=sys.stderr)
+        try:
+            from ops_log import alert
+            alert("plan_builder", "; ".join(rep.skipped), athlete=slug)
+        except Exception:
+            pass
     return {"athlete": slug, "fuel_g_hr": fuel, "week_start": ws.isoformat(),
             "total_tss": round(rep.total_tss), "ok": not hard,
-            "hard": hard, "soft": soft, "sessions": built}
+            "hard": hard, "soft": soft, "skipped_checks": rep.skipped,
+            "sessions": built}
 
 
 def push(slug: str, built: dict, replace: bool = True):

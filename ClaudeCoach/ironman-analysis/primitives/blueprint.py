@@ -298,3 +298,53 @@ def current_phase(blueprint: dict, on_date: date) -> dict | None:
     if on_date < parsed[0][0]:
         return parsed[0][2]
     return parsed[-1][2]
+
+
+# ---------------------------------------------------------------------------
+# TSS ceiling — the athlete's hours-based hard weekly load bound.
+# Moved here from generate-blueprint.py (5 Jul 2026) so plan_builder can arm
+# validate_week's weekly_tss_cap from the SAME source the blueprint displays —
+# no dual implementation.
+# ---------------------------------------------------------------------------
+
+IF_TARGETS = {
+    "base":     0.65,
+    "build":    0.68,
+    "specific": 0.70,
+    "peak":     0.72,
+}
+
+
+def phase_family(name: str) -> str:
+    n = (name or "").lower()
+    if "base" in n:
+        return "base"
+    if "specific" in n:
+        return "specific"
+    if "build" in n:
+        return "build"
+    if "peak" in n:
+        return "peak"
+    return "taper"
+
+
+def content_family(family: str) -> str:
+    """Map a structural phase family to the family whose content tables apply.
+
+    Since 2026-06-10 (Jamie sign-off, docs/specific-phase-proposal.md) the
+    'specific' family carries its OWN content rows — race-shape conversion:
+    more work slightly above race effort, race-rate fuelling on all key
+    sessions, race sims split one late-Specific + one Peak. Events without a
+    specific row fall back at each lookup site (fuelling default string,
+    ctl_range None -> fitness check skipped), so this stays an identity map.
+    """
+    return family
+
+
+def tss_ceiling(max_hours: float, phase_name: str) -> float | None:
+    """Hard weekly TSS upper bound: max_hours x 100 x IF^2 (None in taper)."""
+    fam = content_family(phase_family(phase_name))
+    if fam == "taper":
+        return None
+    IF = IF_TARGETS[fam]
+    return round(max_hours * 100 * IF ** 2, 0)

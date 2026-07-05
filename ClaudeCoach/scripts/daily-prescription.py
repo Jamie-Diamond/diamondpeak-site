@@ -40,10 +40,12 @@ def trim_log(path: Path, max_lines: int = 5000):
 
 
 def build_prompt(slug: str, name: str, race_name: str, coaching_level: str = "mid",
-                 cycle: dict | None = None, readiness_prefetch: str = "") -> str:
+                 cycle: dict | None = None, readiness_prefetch: str = "",
+                 engine_block: str = "") -> str:
     today = date.today().isoformat()
     athlete_dir = BASE / "athletes" / slug
     first_name  = name.split()[0]
+    authoritative = bool(engine_block)
 
     # Injury context is athlete-scoped: only an athlete with a structured `ankle`
     # block in current-state.json has a tracked ankle injury. Never prime the model
@@ -82,11 +84,28 @@ Cycle day {cycle['day']} — {cycle['phase'].upper()} phase: {cycle['cue']}
 
     readiness_section = f"\n{readiness_prefetch}\n" if readiness_prefetch else ""
 
+    step3 = (
+        """Step 3 — Readiness is already consumed: the ENGINE PRESCRIPTION above was computed
+from it. Use the READINESS INPUTS block only when logging today's values into
+current-state.md (Step 8) — do NOT assemble a readiness dict or recompute anything."""
+        if authoritative else
+        f"""Step 3 — Assemble the readiness dict. For the fields below, COPY the values from the
+READINESS INPUTS block above verbatim — do NOT recompute them, and do NOT set hrv_trend_pct
+to 0.0 or sleep_h_last_night to null yourself. That block already carries the latest synced
+HRV trend (a trailing metric — correct even before today syncs) and the most recent synced
+sleep, so this prescription is never gated on a 05:00 sync gap:
+  atl, ctl, hrv_trend_pct, sleep_h_last_night, last_session_rpe, ankle_pain_score, ankle_quality_cleared
+  Then add:
+  temp_c: today's forecast ambient temp — use 18.0 as fallback if unavailable
+  dew_point_c: today's forecast dew point — use 10.0 as fallback if unavailable{cycle_readiness_lines}""")
+
+    engine_section = f"\n{engine_block}\n" if engine_block else ""
+
     return f"""You are running the daily session prescription for {name}'s {race_name} coaching system.
 
 {_level_block(coaching_level)}
 {cycle_block}
-{readiness_section}
+{readiness_section}{engine_section}
 
 Step 1 — Pull live data via Bash (use today's date {today} for all calculations):
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
@@ -101,17 +120,15 @@ Step 2 — Read these files:
 - {athlete_dir}/current-state.json ({state_json_note})
 - {athlete_dir}/session-log.json (most recent entry = last RPE)
 
-Step 3 — Assemble the readiness dict. For the fields below, COPY the values from the
-READINESS INPUTS block above verbatim — do NOT recompute them, and do NOT set hrv_trend_pct
-to 0.0 or sleep_h_last_night to null yourself. That block already carries the latest synced
-HRV trend (a trailing metric — correct even before today syncs) and the most recent synced
-sleep, so this prescription is never gated on a 05:00 sync gap:
-  atl, ctl, hrv_trend_pct, sleep_h_last_night, last_session_rpe, ankle_pain_score, ankle_quality_cleared
-  Then add:
-  temp_c: today's forecast ambient temp — use 18.0 as fallback if unavailable
-  dew_point_c: today's forecast dew point — use 10.0 as fallback if unavailable{cycle_readiness_lines}
+{step3}
 
-Step 4 — Identify today's planned session from the events endpoint. Map to session_type:
+{'''Step 4 — Today's session and its adjusted targets are given in the ENGINE PRESCRIPTION
+block. Cross-check the events endpoint: if it shows a materially different session than
+the engine saw (plan changed since 05:00), say so explicitly in your output and follow
+the MORE CAUTIOUS interpretation — never a harder one.
+
+Step 5 — SKIPPED: do NOT call modulate.py. The engine decision above is FINAL
+(tighten-only heat exception as stated in the block).''' if authoritative else f'''Step 4 — Identify today's planned session from the events endpoint. Map to session_type:
   Threshold/FTP intervals -> bike_threshold
   Z2 / long ride -> bike_z2
   VO2max -> bike_vo2
@@ -132,7 +149,7 @@ Also extract from the planned session event:
   total_duration_min
 
 Step 5 — Call the modulation engine:
-  python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/ironman-analysis/scripts/modulate.py '<json with planned and readiness keys>'
+  python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/ironman-analysis/scripts/modulate.py '<json with planned and readiness keys>' '''}
 
 Step 6 — If modified or swapped_to_z2: push the adjusted session to Intervals.icu via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint push_workout --payload '{{"sport":"...", "date":"{today}", "name":"...", "description":"...", "planned_training_load": N}}'
@@ -239,18 +256,43 @@ def _last_rpe(slug: str):
 
 
 def _ankle_state(slug: str):
-    """(pain_score, quality_cleared) from current-state.json's nested ankle block."""
-    p = BASE / "athletes" / slug / "current-state.json"
-    if p.exists():
-        try:
-            a = (json.loads(p.read_text()) or {}).get("ankle") or {}
-            pain = max(float(a.get("pain_during", 0) or 0),
-                       float(a.get("pain_next_morning", 0) or 0))
-            cleared = bool(a.get("four_pain_free_weeks_reached", False))
-            return int(round(pain)), cleared
-        except Exception:
-            pass
-    return 0, True   # no ankle block → not an injured athlete → unrestricted
+    """(pain_score, quality_cleared) — athlete-scoped and direction-safe.
+
+    - structured `ankle` block in current-state.json → report it verbatim
+      (missing clearance field = not cleared);
+    - no block AND profile.json lists no injuries → (0, True): not an injured
+      athlete, unrestricted. (The old code returned (0, False) whenever the file
+      existed without an ankle key, so the engine wrongly gated EVERY uninjured
+      athlete's quality runs — visible in the shadow logs for all of Jun 2026.)
+    - no block BUT profile.json lists injuries → FAIL CLOSED (0, False) and log:
+      an injured athlete without structured state must never default to cleared.
+    """
+    adir = BASE / "athletes" / slug
+    injuries = []
+    try:
+        injuries = (json.loads((adir / "profile.json").read_text()) or {}).get("injuries") or []
+    except Exception:
+        pass
+    a = None
+    try:
+        p = adir / "current-state.json"
+        if p.exists():
+            a = (json.loads(p.read_text()) or {}).get("ankle")
+    except Exception:
+        a = None
+    if a:
+        pain = max(float(a.get("pain_during", 0) or 0),
+                   float(a.get("pain_next_morning", 0) or 0))
+        cleared = bool(a.get("four_pain_free_weeks_reached", False))
+        return int(round(pain)), cleared
+    if injuries:
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[prescription:{slug}] INJURY STATE MISSING: profile lists "
+                     f"injuries {injuries} but current-state.json has no structured "
+                     "ankle block — failing CLOSED (quality not cleared). Add the "
+                     "structured state to unblock quality sessions.\n")
+        return 0, False
+    return 0, True
 
 
 _INTENSITY_BY_TYPE = {
@@ -385,18 +427,27 @@ def _readiness_prefetch(slug: str) -> str:
     return "\n".join(lines)
 
 
-def _prescription_shadow(slug: str, cfg: dict) -> None:
-    """Compute and LOG the engine's prescription for today (shadow, non-authoritative)."""
-    mode = os.environ.get("PRESCRIPTION_BACKSTOP", "shadow").strip().lower()
+def _backstop_mode() -> str:
+    """AUTHORITATIVE by default since 5 Jul 2026 (Jamie's decision, methodology
+    audit P0-4): the engine's prescription is what reaches the athlete; the LLM
+    writes the wording around it. 'shadow' retains the old observe-only mode."""
+    mode = os.environ.get("PRESCRIPTION_BACKSTOP", "authoritative").strip().lower()
     if mode in ("0", "off", "none", "false"):
-        return
+        return "off"
+    return "shadow" if mode == "shadow" else "authoritative"
+
+
+def _engine_prescription(slug: str) -> dict:
+    """Compute today's deterministic prescription. Never raises.
+    Returns {planned, readiness, rx, error} — planned None = rest day;
+    rx None with planned set = engine failure (caller falls back + alerts)."""
+    out = {"planned": None, "readiness": None, "rx": None, "error": None}
     try:
         today = date.today().isoformat()
         planned = _todays_planned(slug, today)
         if not planned:
-            with open(LOG_FILE, "a") as lf:
-                lf.write(f"[prescription:{slug}] BACKSTOP ({mode}): no planned session today — nothing to modulate.\n")
-            return
+            return out
+        out["planned"] = planned
         atl, ctl = _latest_fitness(slug)
         hrv_trend, sleep_h = _hrv_trend_and_sleep(slug)
         pain, cleared = _ankle_state(slug)
@@ -405,28 +456,84 @@ def _prescription_shadow(slug: str, cfg: dict) -> None:
             "hrv_trend_pct": hrv_trend, "sleep_h_last_night": sleep_h,
             "last_session_rpe": _last_rpe(slug),
             "ankle_pain_score": pain, "ankle_quality_cleared": cleared,
-            # temp_c / dew_point_c omitted → engine uses benign defaults (no heat fetch).
+            # temp_c / dew_point_c omitted → engine uses benign defaults. The LLM
+            # holds the heat lever, tighten-only (see _engine_block_text).
         }
         _cyc = menstrual.phase_for(slug)
         if _cyc and _cyc.get("phase"):
             readiness["cycle_phase"] = _cyc["phase"]
             readiness["cycle_day"] = _cyc["day"]
-        rx = modulate_session({k: v for k, v in planned.items() if not k.startswith("_")},
-                              readiness)
+        out["readiness"] = readiness
+        out["rx"] = modulate_session(
+            {k: v for k, v in planned.items() if not k.startswith("_")}, readiness)
+    except Exception as e:
+        out["error"] = str(e)
+    return out
+
+
+def _engine_block_text(planned: dict, rx) -> str:
+    """The BINDING prompt block for authoritative mode."""
+    lines = [
+        "## ENGINE PRESCRIPTION (deterministic — BINDING)",
+        f"Planned session: '{planned['_name']}' [{planned['session_type']}] — "
+        f"{planned['total_duration_min']} min, planned intensity {planned['target_intensity']}",
+        f"Engine decision: {rx.summary}",
+        f"Rules fired: {', '.join(rx.applied_rules) if rx.applied_rules else 'none'}",
+    ]
+    for t in rx.reasoning_trails:
+        lines.append(f"  - {t}")
+    lines.append(
+        f"Adjusted targets: go={str(rx.go).lower()}, swapped_to_z2={str(rx.swapped_to_z2).lower()}, "
+        f"modified={str(rx.modified).lower()}, intensity={rx.target_intensity}, "
+        f"intervals={rx.interval_count}x{rx.interval_duration_min}min "
+        f"(recovery {rx.recovery_min}min), duration={rx.total_duration_min}min")
+    lines.append(
+        "This decision is FINAL, computed from today's readiness (HRV, sleep, ATL/CTL, "
+        "RPE, injury state, cycle phase). Do NOT call modulate.py, do NOT recompute "
+        "readiness, do NOT override, upgrade, or un-block it. ONE permitted extra "
+        "adjustment: the engine did not see today's weather — if forecast heat/humidity "
+        "warrants, you may REDUCE intensity or duration further (say so in the card); "
+        "you may NEVER increase, restore, or un-block a session.")
+    return "\n".join(lines)
+
+
+def _log_backstop(slug: str, mode: str, engine: dict) -> None:
+    """One log entry per run, whatever happened — the audit trail for the flip."""
+    try:
         with open(LOG_FILE, "a") as lf:
+            planned, rx, err = engine.get("planned"), engine.get("rx"), engine.get("error")
+            if err:
+                lf.write(f"[prescription:{slug}] BACKSTOP ({mode}) ERROR: {err}"
+                         f"{' — fell back to LLM-mediated prescription' if mode == 'authoritative' else ''}\n")
+                return
+            if not planned:
+                lf.write(f"[prescription:{slug}] BACKSTOP ({mode}): no planned session today — nothing to modulate.\n")
+                return
+            r = engine["readiness"]
             lf.write(f"[prescription:{slug}] BACKSTOP ({mode}) — engine prescription for "
                      f"'{planned['_name']}' [{planned['session_type']}]:\n")
             lf.write(f"    {rx.summary}\n")
             if rx.applied_rules:
                 lf.write(f"    rules fired: {', '.join(rx.applied_rules)}\n")
-            lf.write(f"    inputs: atl={readiness['atl']:.0f} ctl={readiness['ctl']:.0f} "
-                     f"hrv_trend={hrv_trend}% sleep={sleep_h}h rpe={readiness['last_session_rpe']} "
-                     f"ankle_pain={pain} cleared={cleared}\n")
-            lf.write("    shadow mode — LLM's own prescription is what reached the athlete; "
-                     "compare the two before making this authoritative.\n")
-    except Exception as e:
-        with open(LOG_FILE, "a") as lf:
-            lf.write(f"[prescription:{slug}] BACKSTOP error (non-fatal): {e}\n")
+            lf.write(f"    inputs: atl={r['atl']:.0f} ctl={r['ctl']:.0f} "
+                     f"hrv_trend={r['hrv_trend_pct']}% sleep={r['sleep_h_last_night']}h "
+                     f"rpe={r['last_session_rpe']} ankle_pain={r['ankle_pain_score']} "
+                     f"cleared={r['ankle_quality_cleared']}\n")
+            if mode == "authoritative":
+                lf.write("    authoritative — this engine decision was injected as BINDING; "
+                         "the LLM wrote the delivery around it (tighten-only heat exception).\n")
+            else:
+                lf.write("    shadow mode — LLM's own prescription is what reached the athlete; "
+                         "compare the two before making this authoritative.\n")
+    except Exception:
+        pass
+
+
+def _prescription_shadow(slug: str, cfg: dict) -> None:
+    """Shadow-mode logging (observe-only), kept for PRESCRIPTION_BACKSTOP=shadow."""
+    if _backstop_mode() == "off":
+        return
+    _log_backstop(slug, "shadow", _engine_prescription(slug))
 
 
 def run_for_athlete(slug: str, cfg: dict) -> str | None:
@@ -475,8 +582,25 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     # gated on null HRV/sleep (today's wearable data has not synced that early).
     readiness_prefetch = _readiness_prefetch(slug)
 
+    # Backstop (WS E→F): in authoritative mode the engine computes today's
+    # prescription BEFORE the LLM runs and the prompt binds the LLM to it. On
+    # engine failure we fall back to the legacy LLM-mediated flow (fail-safe:
+    # the athlete still gets a session) and alert loudly.
+    mode = _backstop_mode()
+    engine, engine_block = None, ""
+    if mode == "authoritative":
+        engine = _engine_prescription(slug)
+        if engine["rx"] is not None:
+            engine_block = _engine_block_text(engine["planned"], engine["rx"])
+        elif engine["error"]:
+            ops_log.alert("daily-prescription",
+                          f"backstop engine failed ({engine['error']}) — fell back to "
+                          "LLM-mediated prescription for today",
+                          athlete=slug)
+
     prompt = build_prompt(slug, name, race_name, coaching_level=coaching_level,
-                          cycle=cycle, readiness_prefetch=readiness_prefetch)
+                          cycle=cycle, readiness_prefetch=readiness_prefetch,
+                          engine_block=engine_block)
 
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_prescription_", delete=False, suffix=".txt"
@@ -495,9 +619,12 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         if stderr:
             with open(LOG_FILE, "a") as lf:
                 lf.write(f"[prescription:{slug}] STDERR: {stderr}\n")
-        # Prescription backstop (WS E): compute + log the engine's prescription from
-        # deterministic inputs. Shadow-only — additive, does not change the LLM output.
-        _prescription_shadow(slug, cfg)
+        # Backstop audit trail: authoritative logs the binding decision that was
+        # injected; shadow recomputes and logs observe-only (legacy behaviour).
+        if mode == "authoritative" and engine is not None:
+            _log_backstop(slug, "authoritative", engine)
+        elif mode == "shadow":
+            _prescription_shadow(slug, cfg)
         # Commit any current-state.md changes Claude made
         today = date.today().isoformat()
         sync_commit_push(

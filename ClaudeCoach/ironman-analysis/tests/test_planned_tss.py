@@ -52,7 +52,8 @@ class TestPlannedSessionsBlock:
         evs = [_ev(load_target=60),
                _ev(name="note", type_="Run", category="NOTE")]
         block = planned_sessions_block(evs)
-        assert "60 TSS (from plan)" in block
+        # "Load", not "TSS" — athlete-facing wording since fc2c109
+        assert "60 Load (from plan)" in block
         assert "note" not in block
 
     def test_empty_when_rest_day(self):

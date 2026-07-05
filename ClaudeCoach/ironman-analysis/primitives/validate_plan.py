@@ -91,6 +91,11 @@ class WeekReport:
     week_start: date
     total_tss: float
     violations: list[Violation] = field(default_factory=list)
+    # Hard checks that could NOT run because a required input was missing
+    # (fail-noisy, audit P0-4: a silently disarmed check reads as a pass).
+    # Callers must surface these — they are the difference between "validated"
+    # and "not actually checked".
+    skipped: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -264,8 +269,11 @@ def validate_week(
     when its input is supplied (day_rules / weekly_tss_cap / ramp_cap), so a caller
     that has no structured day_rules yet simply gets the ramp/TSS checks.
 
-    Returns a WeekReport (total_tss + violations). The caller decides what to do
-    with hard violations (warn vs block) — this module never has side effects.
+    Returns a WeekReport (total_tss + violations + skipped). The caller decides
+    what to do with hard violations (warn vs block) — this module never has side
+    effects. A hard check whose input is missing is recorded in report.skipped
+    rather than silently passing (fail-noisy): "validated" must never be
+    conflated with "not actually checked".
     """
     rules = _normalise_day_rules(day_rules)
     week_end = week_start + timedelta(days=6)
@@ -276,6 +284,7 @@ def validate_week(
     ]
 
     violations: list[Violation] = []
+    skipped: list[str] = []
 
     # 1. Wrong-day sessions — a restricted sport scheduled on a forbidden weekday.
     for e in week_events:
@@ -298,6 +307,9 @@ def validate_week(
 
     # 2. Weekly planned-TSS cap.
     total_tss = sum(_planned_load(e) for e in week_events)
+    if weekly_tss_cap is None or weekly_tss_cap <= 0:
+        skipped.append("weekly_tss_cap check SKIPPED — no cap supplied (pass the "
+                       "blueprint hours ceiling); the week's total load is UNCHECKED")
     if weekly_tss_cap is not None and weekly_tss_cap > 0:
         ceiling = weekly_tss_cap * (1 + tss_tolerance)
         if total_tss > ceiling:
@@ -310,6 +322,10 @@ def validate_week(
             ))
 
     # 3. Implied CTL ramp cap — project this week's load forward from today's CTL.
+    if not (ctl_today is not None and ctl_today > 0 and ramp_cap is not None and ramp_cap > 0):
+        missing = "ctl_today" if (ctl_today is None or ctl_today <= 0) else "ramp_cap"
+        skipped.append(f"ctl_ramp check SKIPPED — no {missing} supplied; the week's "
+                       "ramp rate is UNCHECKED")
     if ctl_today is not None and ctl_today > 0 and ramp_cap is not None and ramp_cap > 0:
         projected = compute_projected_ctl(ctl_today, total_tss, 1)
         ramp = projected - ctl_today
@@ -344,7 +360,8 @@ def validate_week(
     #    distance and stated run/walk cycle count imply different totals.
     violations.extend(_check_distance_duration(week_events))
 
-    return WeekReport(week_start=week_start, total_tss=total_tss, violations=violations)
+    return WeekReport(week_start=week_start, total_tss=total_tss,
+                      violations=violations, skipped=skipped)
 
 
 def validate_plan(

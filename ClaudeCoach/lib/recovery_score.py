@@ -214,7 +214,10 @@ def in_taper(slug: str) -> bool:
 def _parse_wellness(rows):
     """Extract HRV baseline (7d), today's HRV, TSB, sleep from wellness list."""
     if not rows:
-        return None, None, None, None
+        # Five Nones — callers unpack 5 values (hrv_today, hrv_baseline, tsb,
+        # sleep, sleep_score); the old 4-tuple raised ValueError on empty
+        # wellness, silently disabling recovery scoring via a broad except.
+        return None, None, None, None, None
 
     # Sort by date ascending; last entry = most recent
     sorted_rows = sorted(rows, key=lambda r: r.get("date") or r.get("id") or "")
