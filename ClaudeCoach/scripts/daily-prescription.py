@@ -45,6 +45,29 @@ def build_prompt(slug: str, name: str, race_name: str, coaching_level: str = "mi
     athlete_dir = BASE / "athletes" / slug
     first_name  = name.split()[0]
 
+    # Injury context is athlete-scoped: only an athlete with a structured `ankle`
+    # block in current-state.json has a tracked ankle injury. Never prime the model
+    # with ankle instructions for anyone else — Kathryn's 2 Jul 2026 tempo run was
+    # falsely R1-blocked by exactly that cross-athlete leak.
+    has_ankle = False
+    try:
+        has_ankle = bool((json.loads((athlete_dir / "current-state.json").read_text())
+                          or {}).get("ankle"))
+    except Exception:
+        pass
+    state_json_note = (
+        "ankle block + per-location \"pain\" blocks from quick-logs — if any non-ankle "
+        "location shows recent pain ≥4 or a rising history, factor it into today's "
+        "prescription and say so in the reasoning"
+        if has_ankle else
+        "per-location \"pain\" blocks from quick-logs — if any location shows recent "
+        "pain ≥4 or a rising history, factor it into today's prescription and say so "
+        "in the reasoning. This athlete has NO tracked ankle injury: do not mention, "
+        "track, or gate on ankle status anywhere"
+    )
+    ankle_state_update = (" Also update ankle section if today's prescription was "
+                          "affected by ankle status." if has_ankle else "")
+
     cycle_block = ""
     cycle_readiness_lines = ""
     if cycle and cycle.get("phase"):
@@ -75,7 +98,7 @@ Step 1 — Pull live data via Bash (use today's date {today} for all calculation
 Step 2 — Read these files:
 - {athlete_dir}/persistent-rules.md (permanent coaching rules — zone targets, HR caps, and any [perm] rules OVERRIDE all defaults when writing event descriptions)
 - {athlete_dir}/current-state.md
-- {athlete_dir}/current-state.json (ankle block + per-location "pain" blocks from quick-logs — if any non-ankle location shows recent pain ≥4 or a rising history, factor it into today's prescription and say so in the reasoning)
+- {athlete_dir}/current-state.json ({state_json_note})
 - {athlete_dir}/session-log.json (most recent entry = last RPE)
 
 Step 3 — Assemble the readiness dict. For the fields below, COPY the values from the
@@ -137,7 +160,7 @@ Step 7 — Output the prescription card in exactly this format:
 
 If no rules fired: output "Today: [session name] — execute as planned." and the planned targets only (no reasoning trails section).
 
-Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired. Also update ankle section if today's prescription was affected by ankle status.
+Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired.{ankle_state_update}
 
 Step 9 — If the session was modified, swapped, or blocked, append this at the very end of your response:
 <telegram>[session name]: [one plain-English sentence on what changed and why]</telegram>
