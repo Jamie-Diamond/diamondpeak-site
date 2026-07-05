@@ -118,6 +118,20 @@ def sync_ftp_from_eftp(slug: str, cfg: dict | None = None, client=None,
     delta = eftp - static
     if delta <= 0:
         out["reason"] = f"eFTP {eftp} not above static {static} (raise-only — left as-is)"
+        # Downward-drift ALERT (audit P1-8): raise-only means a detraining athlete
+        # keeps stale-high zones forever with no signal. Flag — never auto-cut
+        # (no-test policy: the cut is a coaching conversation, not an automation).
+        drift_pct = (static - eftp) / static * 100 if static else 0.0
+        if drift_pct >= 7.0:
+            out["downward_drift_pct"] = round(drift_pct, 1)
+            try:
+                from ops_log import alert
+                alert("thresholds",
+                      f"eFTP {eftp}W sits {drift_pct:.0f}% below configured FTP {static}W — "
+                      f"zones may be stale-high (detraining or a long gap since hard riding). "
+                      f"Review with the athlete before any cut.", athlete=slug)
+            except Exception:
+                pass
         return out
     if delta < max(min_delta_w, static * min_pct):
         out["reason"] = f"eFTP {eftp} only +{delta}W over {static} — below {max(min_delta_w, round(static*min_pct))}W floor"
