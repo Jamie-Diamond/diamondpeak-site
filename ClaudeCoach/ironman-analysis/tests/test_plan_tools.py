@@ -142,10 +142,13 @@ _JAMIE_CFG = {
 
 
 def test_required_tss_build_phase():
-    out = pt.required_tss(_JAMIE_CFG, 82.9, today=date(2026, 6, 15))
+    # week 9 — week 8 is now a scheduled deload (every 4th week; the deload
+    # contract itself is pinned in test_deload_taper.py)
+    out = pt.required_tss(_JAMIE_CFG, 82.9, today=date(2026, 6, 22))
     assert out["phase"] == "build"
-    assert out["training_week"] == 8
+    assert out["training_week"] == 9
     assert out["phase_target_ctl"] == 95
+    assert out["week_type"] == "build"
     # recommended is capped by the +4/wk ramp, never exceeds it
     assert out["recommended_weekly_tss"] == min(
         out["required_weekly_tss"], out["ramp_capped_weekly_tss"])

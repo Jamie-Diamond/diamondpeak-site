@@ -112,6 +112,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # their highest of the last 4 weeks × 1.15 (Jamie's rule — applies to both).
     weekly_mileage_cap_km = None
     long_run_cap_min = None
+    last_week_tss = None
     try:
         from icu_api import IcuClient
         import datetime as _dt
@@ -120,21 +121,26 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         w = _c.get_wellness(days=3)
         ctl = round(float(w[-1].get("ctl") or 0), 1) if w else None
         wk_km, wk_longest = defaultdict(float), defaultdict(float)
+        wk_tss = defaultdict(float)          # ALL sports — feeds the deload miss-trigger
         for a in _c.get_training_history(days=35):
-            if (a.get("type") or "") != "Run":
-                continue
             d = _dt.date.fromisoformat((a.get("start_date_local") or "")[:10])
             iso = d.isocalendar()[:2]
+            wk_tss[iso] += float(a.get("icu_training_load") or 0)
+            if (a.get("type") or "") != "Run":
+                continue
             wk_km[iso] += (a.get("distance") or 0) / 1000
             wk_longest[iso] = max(wk_longest[iso], (a.get("moving_time") or 0) / 60)
         cur = today.isocalendar()[:2]
+        prev = (today - _dt.timedelta(days=7)).isocalendar()[:2]
+        if prev in wk_tss or wk_km or wk_longest:   # history fetch succeeded
+            last_week_tss = round(wk_tss.get(prev, 0.0), 1)
         last4 = [k for k in sorted(wk_km) if k != cur][-4:]
         if last4:
             weekly_mileage_cap_km = round(max(wk_km[k] for k in last4) * 1.15, 1)
             long_run_cap_min = round(max(wk_longest[k] for k in last4) * 1.15)
     except Exception:
         pass
-    req = pt.required_tss(cfg, ctl, today=today) if ctl else {}
+    req = pt.required_tss(cfg, ctl, today=today, last_week_tss=last_week_tss) if ctl else {}
 
     # phase menu ∩ event sports; resolve this-week progression for each quality type
     phase_cfg = lib["phases"].get(phase_name, {})
@@ -235,7 +241,16 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "event": ekey, "event_unknown": ekey is None,
         "phase": phase_name, "week_in_phase": week_in_phase,
         "weekly_tss_target": req.get("recommended_weekly_tss"),
-        "tid_low_mod_high": event.get("tid", {}).get(phase_name) or event.get("tid", {}).get("base"),
+        # deload/taper/normal — the note explains a reduced target so the Stage-1
+        # LLM shapes the week accordingly instead of quietly padding volume back.
+        "week_type": req.get("week_type") or phase_name,
+        "week_note": req.get("note"),
+        # Taper holds INTENSITY: taper row if configured, else the peak row —
+        # never the base 85/10/5 mostly-easy split (audit P0-2: reverting taper
+        # intensity to base is the opposite of taper consensus).
+        "tid_low_mod_high": (event.get("tid", {}).get(phase_name)
+                             or (event.get("tid", {}).get("peak") if phase_name == "taper" else None)
+                             or event.get("tid", {}).get("base")),
         "distribution_by_sport": ph.get("distribution"),
         "emphasis": event.get("emphasis", []),
         "brick": event.get("brick"),

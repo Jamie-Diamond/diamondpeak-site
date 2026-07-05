@@ -248,12 +248,31 @@ def cmd_project(args) -> dict:
 # ── subcommand: required-tss ───────────────────────────────────────────────────
 _PHASES = ("base", "build", "specific", "peak")
 
+# Deload (blueprint: "3 weeks load, 1 week recovery at 60-65%"; audit P0-1 —
+# the forward plan must unload, not just the reactive watchdog).
+_DELOAD_EVERY_N = 4         # every Nth training week (cfg: deload_every_n_weeks)
+_DELOAD_FACTOR = 0.62       # 60-65% of the normal prescription (cfg: deload_factor)
+_MISS_TRIGGER = 0.70        # last week < 70% executed → this week is recovery
 
-def required_tss(cfg: dict, ctl_today: float, today: date | None = None) -> dict:
+# Taper (blueprint: "70% -> 55% -> 40% of peak, maintain intensity"; audit P0-2 —
+# volume steps down by weeks-to-race, intensity is HELD by the taper TID row).
+# Pre-taper weekly load is approximated by the steady-state 7 x CTL (the load
+# that holds current fitness); CTL decays slightly through the taper so the
+# absolute numbers drift down a touch more — the safe direction.
+_TAPER_FACTORS = {3: 0.70, 2: 0.55, 1: 0.40}
+
+
+def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
+                 last_week_tss: float | None = None) -> dict:
     """Pure: weekly TSS needed to hit the current phase's CTL target on time,
-    plus the ramp-capped safe ceiling. Returns {"error": ...} if the athlete has
-    no defensible CTL basis (no fabricated targets — mirrors generate-plan.py).
-    Shared by the CLI and prefetch_context so chat and tool agree."""
+    plus the ramp-capped safe ceiling — with deload and taper branches. Returns
+    {"error": ...} if the athlete has no defensible CTL basis (no fabricated
+    targets — mirrors generate-plan.py). Shared by the CLI, the weekly brief,
+    the plan audit and prefetch_context so every path agrees.
+
+    last_week_tss (optional): last completed week's ACTUAL total load; when the
+    athlete executed under 70% of prescription, this week becomes a recovery
+    week (blueprint: "missed >30% -> next week is recovery")."""
     today = today or date.today()
     ctl_targets = cfg.get("ctl_targets") or {}
     phase_ctl = ctl_targets.get("phase_ctl") or {}
@@ -269,8 +288,32 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None) -> dict
     week_now = max(1, (today - plan_start).days // 7 + 1)
     phase = next((p for p in _PHASES if week_now <= ends[p]), "taper")
     if phase == "taper":
-        return {"phase": "taper/race", "ctl_today": ctl_today, "training_week": week_now,
-                "note": "past the last build phase — taper logic applies, no build target"}
+        # Shaped taper: stepped volume targets so the load checks stay ENGAGED
+        # in the most consequential weeks (previously no target -> every audit
+        # disengaged and volume was left to LLM discretion).
+        race_s = cfg.get("race_date")
+        if not race_s or not ctl_today:
+            missing = "race_date" if not race_s else "ctl_today"
+            return {"phase": "taper/race", "ctl_today": ctl_today, "training_week": week_now,
+                    "week_type": "taper",
+                    "note": f"taper, but no {missing} available — volume target could not "
+                            "be computed; step down toward race day, hold intensity"}
+        race = date.fromisoformat(race_s)
+        days_to_race = max(0, (race - today).days)
+        weeks_to_race = max(1, -(-days_to_race // 7))          # ceil
+        factor = _TAPER_FACTORS.get(min(weeks_to_race, 3), _TAPER_FACTORS[3])
+        pre_taper_weekly = 7.0 * float(ctl_today)
+        target = int(round(pre_taper_weekly * factor))
+        return {"phase": "taper", "week_type": "taper", "training_week": week_now,
+                "ctl_today": ctl_today, "race_date": race_s,
+                "weeks_to_race": weeks_to_race, "taper_factor": factor,
+                "required_weekly_tss": target, "recommended_weekly_tss": target,
+                "note": (f"TAPER, race in {weeks_to_race} wk: volume stepped to "
+                         f"{int(factor * 100)}% of the ~{int(round(pre_taper_weekly))} TSS "
+                         f"maintenance load (70/55/40 step-down). Hold INTENSITY — keep "
+                         f"race-pace/threshold sharpness at reduced dose, keep session "
+                         f"frequency; cut duration, never intensity. Race week: the race "
+                         f"itself is most of the load.")}
 
     # Derive phase CTL milestones from race_min when not explicitly configured
     # (mirrors generate-plan.py so athletes with a race_min but no phase_ctl — e.g.
@@ -304,18 +347,61 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None) -> dict
                              f"~{safe} TSS/wk. Prescribe ~{min(required, safe)} this week.")})
     else:
         out["recommended_weekly_tss"] = required
+
+    # Deload branch (audit P0-1): the smooth CTL-chase never unloaded — classic
+    # accumulation/overuse pattern. Every Nth training week steps down to ~62%,
+    # and a badly missed week (<70% executed) converts this week to recovery.
+    rec = out["recommended_weekly_tss"]
+    out["week_type"] = phase
+    n = int(cfg.get("deload_every_n_weeks", _DELOAD_EVERY_N) or 0)
+    factor = float(cfg.get("deload_factor", _DELOAD_FACTOR))
+    deload_why = None
+    if n and week_now % n == 0:
+        deload_why = f"scheduled deload (every {n}th training week; week {week_now})"
+    elif last_week_tss is not None and rec and float(last_week_tss) < _MISS_TRIGGER * rec:
+        deload_why = (f"recovery week: last week's executed load "
+                      f"({int(last_week_tss)} TSS) was under {int(_MISS_TRIGGER * 100)}% "
+                      f"of prescription (~{rec})")
+    if deload_why:
+        out.update({
+            "week_type": "deload",
+            "deload_reason": deload_why,
+            "full_week_tss": rec,
+            "recommended_weekly_tss": int(round(rec * factor)),
+            "note": (f"DELOAD WEEK ({deload_why}): prescribe ~{int(round(rec * factor))} TSS "
+                     f"({int(factor * 100)}% of the normal ~{rec}). Keep session frequency "
+                     f"and one short quality touch; cut volume. Adaptation happens in the "
+                     f"unload — do not chase the CTL line this week.")})
     return out
+
+
+def last_week_actual_tss(client, today: date | None = None) -> float | None:
+    """Sum of actual training load over the last COMPLETED Mon-Sun week.
+    None on fetch failure (miss-trigger then simply doesn't run); 0.0 for a
+    genuinely empty week (which correctly converts this week to recovery)."""
+    today = today or date.today()
+    monday = _monday(today)
+    lo = (monday - timedelta(days=7)).isoformat()
+    hi = (monday - timedelta(days=1)).isoformat()
+    try:
+        hist = client.get_training_history(days=(today - (monday - timedelta(days=7))).days + 1)
+        return round(sum(float(a.get("icu_training_load") or 0) for a in hist or []
+                         if lo <= (a.get("start_date_local") or "")[:10] <= hi), 1)
+    except Exception:
+        return None
 
 
 def cmd_required_tss(args) -> dict:
     cfg = _load_cfg(args.athlete)
+    client = _client(cfg)
     ctl_today = args.ctl_today
     if ctl_today is None:
-        w = _client(cfg).get_wellness(days=3)
+        w = client.get_wellness(days=3)
         if not w:
             raise SystemExit(_err("no wellness data for current CTL; pass --ctl-today"))
         ctl_today = round(float(w[-1].get("ctl") or 0), 1)
-    return {"athlete": args.athlete, **required_tss(cfg, ctl_today)}
+    return {"athlete": args.athlete,
+            **required_tss(cfg, ctl_today, last_week_tss=last_week_actual_tss(client))}
 
 
 # ── subcommand: validate ───────────────────────────────────────────────────────

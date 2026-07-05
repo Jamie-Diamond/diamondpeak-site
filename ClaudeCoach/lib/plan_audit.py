@@ -103,7 +103,11 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                   <= (ws + timedelta(days=6)).isoformat()]
         total = sum(int(e.get("icu_training_load") or e.get("load_target") or 0) for e in wk_evs)
         if ctl:
-            req = pt.required_tss(cfg, ctl, today=ws)
+            # For the CURRENT week pass last week's actual load so a miss-triggered
+            # recovery week audits against the same reduced target the generator
+            # used; future weeks can only know the deterministic cadence deloads.
+            lw = pt.last_week_actual_tss(client) if ws <= date.today() <= ws + timedelta(days=6) else None
+            req = pt.required_tss(cfg, ctl, today=ws, last_week_tss=lw)
             tgt = req.get("recommended_weekly_tss")
             if tgt and abs(total - tgt) > tgt * _LOAD_TOLERANCE:
                 fails["WEEKLY_LOAD"].append(
