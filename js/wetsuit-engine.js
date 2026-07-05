@@ -41,6 +41,9 @@
   ];
 
   var CONSTANTS = {
+    // Bump whenever the race history, climatology or model constants change
+    DATA_UPDATED: '2026-07-05',
+    DATA_UPDATED_LABEL: '5 July 2026',
     SEPT_CLIM_START: 26.0,       // Sept 1 climatological normal (1991-2020)
     SEPT_CLIM_END: 21.5,         // Sept 30 normal
     AUG_NORMAL: 25.7,            // 30-year August average
@@ -184,6 +187,7 @@
     var band = prob.ag >= 80 ? 'likely' : prob.ag >= 40 ? 'borderline' : 'unlikely';
 
     return {
+      dataUpdated: C.DATA_UPDATED,
       raceYear: raceYear, raceDayOfSept: raceDayOfSept, augustTemp: augustTemp,
       bias: { avg: avgBias, sd: biasSd, n: biases.length },
       m1: m1, m2: m2, m3: m3, m4: m4, m5: m5,

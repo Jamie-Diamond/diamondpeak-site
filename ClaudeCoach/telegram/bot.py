@@ -776,6 +776,7 @@ _REPLAN_RE   = re.compile(r'^/?replan(?:\s+week)?\s*$', re.I)
 _FTP_RE      = re.compile(r'^(?:ftp\s+(?:retest|result|update|new)|new\s+ftp)\s+([\d.]+)\s*(?:w(?:atts?)?)?\s*$', re.I)
 _WEEK_CMD_RE     = re.compile(r'^/week\s*$', re.I)
 _FORM_CMD_RE     = re.compile(r'^/form\s*$', re.I)
+_RACE_CMD_RE     = re.compile(r'^/race\s*$', re.I)
 # (chat_id, callback_data) -> last-handled timestamp, for command-callback debounce
 _RECENT_CALLBACKS = {}
 # (chat_id) -> expiry timestamp; set when replan confirmation is pending
@@ -815,6 +816,7 @@ BOT_COMMANDS = [
     ("looking", "How am I looking? (readiness)"),
     ("week",    "This week's sessions + Load"),
     ("form",    "Fitness / Fatigue / Form + race projection"),
+    ("race",    "Race predictor (Now / Race day / Target)"),
     ("fitness", "Fitness & Form charts"),
     ("load",    "Training-load chart (±8 days)"),
     ("graphs",  "All charts menu"),
@@ -971,6 +973,50 @@ def _form_stats(slug: str, athlete_cfg: dict | None = None) -> str:
             except (ValueError, TypeError):
                 pass
 
+    return "\n".join(lines)
+
+
+def _race_stats(slug: str) -> str:
+    """Python-only IM race prediction — the SHARED model in lib/race_predictor.py
+    (IF ∝ √CTL vs previous-race anchor), same numbers as the website overview
+    and plan_tools.py race-predict. No LLM call."""
+    from race_predictor import race_predictor
+    root = BASE.parent
+    prof_p = root / "athletes" / slug / "profile.json"
+    if not prof_p.exists():
+        return "No profile found — the race predictor needs prev_race + race_predictor blocks."
+    try:
+        profile = json.loads(prof_p.read_text())
+    except Exception:
+        return "Profile unreadable — race predictor unavailable."
+    ctl = None
+    td_p = root / "athletes" / slug / "training-data.json"
+    if td_p.exists():
+        try:
+            ctl = json.loads(td_p.read_text()).get("kpi", {}).get("ctl")
+        except Exception:
+            pass
+    if ctl is None:
+        return "No fitness data yet — refresh pending."
+    rp = race_predictor(profile, ctl)
+    if not rp:
+        return ("Race predictor not configured for this athlete — profile needs "
+                "prev_race (times, bike_if, bike_np_watts) and race_predictor (anchor_ctl).")
+
+    def hm(m):
+        m = int(round(m))
+        return f"{m // 60}:{m % 60:02d}"
+
+    a = rp["anchor"]
+    lines = [f"*Race predictor* — anchored to {a['name']} "
+             f"({hm(a['total_min'])} @ CTL {a['ctl']}, IF {a['if']})", ""]
+    for r in rp["rows"]:
+        lines.append(f"*{r['label']}* (CTL {r['ctl']}): *{hm(r['total_min'])}*")
+        lines.append(f"  Swim {hm(r['swim_min'])} · Bike {hm(r['bike_min'])} "
+                     f"@ {r['bike_w']}W (IF {r['if']:.2f}) · Run {hm(r['run_min'])} "
+                     f"· T1+T2 {r['t12_min']}m")
+    lines.append("")
+    lines.append("_IF ∝ √CTL, FTP held fixed, IF capped at 0.75. Fitness is the only lever._")
     return "\n".join(lines)
 
 
@@ -1523,6 +1569,9 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
 
     if _FORM_CMD_RE.match(txt):
         return _form_stats(slug, athlete_cfg)
+
+    if _RACE_CMD_RE.match(txt):
+        return _race_stats(slug)
 
     if _LOAD_CMD_RE.match(txt):
         return "__LOAD_CHART__"
@@ -2427,6 +2476,14 @@ def prefetch_context(slug: str) -> str:
                 "-> predicted official race-morning water temp, wetsuit-legal probability (AG limit 24.5C, pro 21.9C), "
                 "live Adriatic SST from Open-Meteo, and a live-anomaly method that activates inside 30 days of the race. "
                 "Web version: https://diamondpeak.uk/cycling/cervia-wetsuit.html")
+            lines.append(
+                "For RACE TIME / split predictions, NEVER invent numbers — call:  "
+                f"plan_tools.py race-predict --athlete {slug}  "
+                "-> Now / Race-day / Target scenarios from the shared IF ∝ √CTL model (same as /race and the website). "
+                "If the athlete reports a PRE/POST-SESSION WEIGH-IN (sweat test), call:  "
+                f"plan_tools.py sweat-rate --athlete {slug} --pre <kg> --post <kg> --fluid <ml> --minutes <n> --save  "
+                "-> computes sweat rate and (with --save) updates sweat_ml_hr so race-fuelling uses it automatically. "
+                "Confirm the numbers with the athlete before saving.")
             lines.append(
                 "NEVER restart the bot, run systemctl/service, reboot or kill the process while replying — it drops the "
                 "reply mid-send (this caused repeated ~25-min silences). Committed code changes apply on the next "

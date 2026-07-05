@@ -213,6 +213,24 @@ def _icu(slug: str, endpoint: str, *extra) -> object:
         return None
 
 
+def _home_latlon(slug: str) -> list | None:
+    """[lat, lon] for forecast lookups — config/athletes.json home_latlon first,
+    then profile.json. None (= no forecast, benign defaults) when unset."""
+    try:
+        cfg = json.loads(CONFIG.read_text()).get(slug, {})
+        ll = cfg.get("home_latlon")
+        if not ll:
+            prof_p = BASE / "athletes" / slug / "profile.json"
+            if prof_p.exists():
+                ll = json.loads(prof_p.read_text()).get("home_latlon")
+        if (isinstance(ll, (list, tuple)) and len(ll) == 2
+                and all(isinstance(x, (int, float)) for x in ll)):
+            return [float(ll[0]), float(ll[1])]
+    except Exception:
+        pass
+    return None
+
+
 def _latest_fitness(slug: str):
     data = _icu(slug, "fitness", "--days", "7")
     if isinstance(data, list):
@@ -456,9 +474,20 @@ def _engine_prescription(slug: str) -> dict:
             "hrv_trend_pct": hrv_trend, "sleep_h_last_night": sleep_h,
             "last_session_rpe": _last_rpe(slug),
             "ankle_pain_score": pain, "ankle_quality_cleared": cleared,
-            # temp_c / dew_point_c omitted → engine uses benign defaults. The LLM
-            # holds the heat lever, tighten-only (see _engine_block_text).
         }
+        # Live weather: forecast peak temp/dew point for today when the athlete
+        # has home_latlon configured (config/athletes.json or profile.json).
+        # Best-effort — on any failure temp_c/dew_point_c stay omitted and the
+        # engine keeps its benign defaults; the LLM heat lever (tighten-only,
+        # see _engine_block_text) is unchanged either way.
+        latlon = _home_latlon(slug)
+        if latlon:
+            import heat as _heat
+            fc_temp, fc_dew = _heat.fetch_forecast_weather(latlon[0], latlon[1], today)
+            if fc_temp is not None:
+                readiness["temp_c"] = fc_temp
+            if fc_dew is not None:
+                readiness["dew_point_c"] = fc_dew
         _cyc = menstrual.phase_for(slug)
         if _cyc and _cyc.get("phase"):
             readiness["cycle_phase"] = _cyc["phase"]

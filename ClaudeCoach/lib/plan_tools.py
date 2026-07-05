@@ -623,6 +623,88 @@ def cmd_fuel_check(args) -> dict:
             "flags": flags}
 
 
+# ── subcommand: race-predict ───────────────────────────────────────────────────
+def _fmt_hm(minutes) -> str:
+    m = int(round(minutes))
+    return f"{m // 60}:{m % 60:02d}"
+
+
+def cmd_race_predict(args) -> dict:
+    """IM race prediction (Now / Race day / Target) from the shared model in
+    lib/race_predictor.py — IF ∝ √CTL anchored to the previous race, FTP held
+    fixed, IF capped at 0.75. Same model the website overview uses. Use these
+    numbers, never invent splits."""
+    from race_predictor import race_predictor
+    prof_p = BASE / "athletes" / args.athlete / "profile.json"
+    if not prof_p.exists():
+        raise SystemExit(_err(f"no profile.json for '{args.athlete}'"))
+    profile = json.loads(prof_p.read_text())
+    ctl = getattr(args, "ctl", None)
+    if ctl is None:
+        td_p = BASE / "athletes" / args.athlete / "training-data.json"
+        if td_p.exists():
+            try:
+                ctl = json.loads(td_p.read_text()).get("kpi", {}).get("ctl")
+            except Exception:
+                ctl = None
+    if ctl is None:
+        raise SystemExit(_err("no current CTL — training-data.json missing kpi.ctl; pass --ctl"))
+    rp = race_predictor(profile, ctl)
+    if rp is None:
+        raise SystemExit(_err("race predictor inputs missing — profile needs prev_race "
+                              "(bike_if, bike_np_watts, times) and race_predictor (anchor_ctl)"))
+    for row in rp["rows"]:
+        row["total"] = _fmt_hm(row["total_min"])
+        row["bike"] = _fmt_hm(row["bike_min"])
+        row["run"] = _fmt_hm(row["run_min"])
+        row["swim"] = _fmt_hm(row["swim_min"])
+    rp["anchor"]["total"] = _fmt_hm(rp["anchor"]["total_min"])
+    rp["athlete"] = args.athlete
+    rp["current_ctl"] = round(float(ctl), 1)
+    rp["model"] = "IF ∝ √CTL vs previous-race anchor; FTP fixed; IF cap 0.75"
+    return rp
+
+
+# ── subcommand: sweat-rate ─────────────────────────────────────────────────────
+def cmd_sweat_rate(args) -> dict:
+    """Sweat rate from a pre/post weigh-in (the standard field test): total loss =
+    weight drop + fluid drunk; rate = loss / hours. With --save, writes sweat_ml_hr
+    into config/athletes.json so race-fuelling / fuel-check pick it up automatically
+    — the fuelling engine's hydration and sodium numbers are only as good as this
+    input. Same maths as the web sweat-rate calculator."""
+    cfg = _load_cfg(args.athlete)
+    pre, post = float(args.pre), float(args.post)
+    fluid_ml = float(args.fluid or 0)
+    minutes = float(args.minutes)
+    if minutes <= 0 or pre <= 0 or post <= 0:
+        raise SystemExit(_err("implausible inputs — check pre/post kg and minutes"))
+    total_loss_ml = (pre - post) * 1000 + fluid_ml
+    rate = total_loss_ml / (minutes / 60.0)
+    if rate <= 0:
+        raise SystemExit(_err("computed sweat rate <= 0 — weight gain exceeded fluid intake; check the numbers"))
+    pct_loss = (pre - post) / pre * 100
+    status = ("well hydrated" if pct_loss < 1 else
+              "mild dehydration" if pct_loss < 2 else
+              "significant dehydration — fluid plan too light" if pct_loss < 3 else
+              "serious dehydration — do not repeat this fluid plan")
+    out = {"athlete": args.athlete,
+           "sweat_rate_ml_hr": round(rate),
+           "total_loss_ml": round(total_loss_ml),
+           "body_weight_loss_pct": round(pct_loss, 1),
+           "status": status,
+           "previous_sweat_ml_hr": cfg.get("sweat_ml_hr"),
+           "drink_rec_ml_per_15min": round(rate / 4),
+           "saved": False}
+    if getattr(args, "save", False):
+        athletes = json.loads(ATHLETES_CONFIG.read_text())
+        athletes[args.athlete]["sweat_ml_hr"] = round(rate)
+        ATHLETES_CONFIG.write_text(json.dumps(athletes, indent=2) + "\n")
+        out["saved"] = True
+        out["note"] = ("sweat_ml_hr updated — race-fuelling and fuel-check now use it. "
+                       "Log conditions (temp, intensity): hot-day rates don't transfer to cool days.")
+    return out
+
+
 # ── subcommand: wetsuit ────────────────────────────────────────────────────────
 def cmd_wetsuit(args) -> dict:
     """Cervia race-day water temperature + wetsuit-legality prediction. Runs the
@@ -670,6 +752,7 @@ def cmd_wetsuit(args) -> dict:
         "note": ("Ensemble of 5 methods, bias-corrected: official race-morning readings "
                  "average ~0.6C cooler than satellite SST."),
         "web_predictor": "https://diamondpeak.uk/cycling/cervia-wetsuit.html",
+        "model_data_updated": p.get("dataUpdated"),
     }
 
 
@@ -766,6 +849,18 @@ def main():
     pfc.add_argument("--sweat-na", type=float, dest="sweat_na")
     pfc.add_argument("--gut-trained", action="store_true")
 
+    prp = sub.add_parser("race-predict", help="IM race prediction Now/Race-day/Target (IF ∝ √CTL, shared model)")
+    prp.add_argument("--athlete", required=True)
+    prp.add_argument("--ctl", type=float, help="current CTL (default: training-data.json kpi.ctl)")
+
+    psr = sub.add_parser("sweat-rate", help="sweat rate from a pre/post weigh-in; --save updates the athlete's sweat_ml_hr")
+    psr.add_argument("--athlete", required=True)
+    psr.add_argument("--pre", type=float, required=True, help="pre-session weight kg")
+    psr.add_argument("--post", type=float, required=True, help="post-session weight kg")
+    psr.add_argument("--fluid", type=float, help="fluid drunk during, ml")
+    psr.add_argument("--minutes", type=float, required=True, help="session duration")
+    psr.add_argument("--save", action="store_true", help="write result to config/athletes.json sweat_ml_hr")
+
     pws = sub.add_parser("wetsuit", help="Cervia water-temp + wetsuit-legality prediction with live SST (shared engine)")
     pws.add_argument("--year", type=int, help="race year (default: next upcoming edition)")
     pws.add_argument("--day", type=int, help="race day of September (default: known race date)")
@@ -782,7 +877,8 @@ def main():
                "required-tss": cmd_required_tss, "validate": cmd_validate,
                "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target,
                "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check,
-               "wetsuit": cmd_wetsuit, "log-strength": cmd_log_strength}[args.cmd]
+               "wetsuit": cmd_wetsuit, "race-predict": cmd_race_predict,
+               "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

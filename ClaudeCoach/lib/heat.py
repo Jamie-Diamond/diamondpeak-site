@@ -215,6 +215,38 @@ def fetch_ambient_weather(
     return temps, dews
 
 
+def fetch_forecast_weather(
+    lat: float, lon: float, date_iso: str, start_hour: int = 6, end_hour: int = 21
+) -> tuple[float | None, float | None]:
+    """Peak daytime FORECAST temp and dew point (°C) for a date from Open-Meteo.
+
+    Companion to fetch_ambient_weather (which reads the historical archive) —
+    this hits the forecast endpoint so the 05:00 daily prescription can see the
+    conditions the session will actually be ridden/run in, instead of assuming
+    benign defaults. Best-effort by design: returns (None, None) on any failure,
+    the caller keeps its fallbacks.
+    """
+    import urllib.request
+    url = (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat:.4f}&longitude={lon:.4f}"
+        "&hourly=temperature_2m,dew_point_2m"
+        f"&start_date={date_iso}&end_date={date_iso}&timezone=auto"
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read())
+        hourly = data["hourly"]
+        keep = [start_hour <= int(ts[11:13]) <= end_hour for ts in hourly["time"]]
+        temps = [v for k, v in zip(keep, hourly.get("temperature_2m") or [])
+                 if k and v is not None]
+        dews = [v for k, v in zip(keep, hourly.get("dew_point_2m") or [])
+                if k and v is not None]
+        return (max(temps) if temps else None, max(dews) if dews else None)
+    except Exception:
+        return (None, None)
+
+
 def exposure_entry(act: dict, latlng_fallback=None) -> dict | None:
     """heat-log entry for an outdoor activity with ambient ≥25°C, or None.
 
