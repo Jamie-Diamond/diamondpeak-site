@@ -585,6 +585,32 @@ def cmd_fuel_check(args) -> dict:
             "flags": flags}
 
 
+# ── subcommand: log-strength ───────────────────────────────────────────────────
+def cmd_log_strength(args) -> dict:
+    """Log a non-device training session (CrossFit / gym / kettlebells) as REAL
+    load: push a WeightTraining event for that day and mark it done, which makes
+    intervals.icu create the matching manual activity — so CTL/ATL genuinely see
+    the work (5 Jul 2026 decision: Calum's CrossFit must feed the load model).
+    TSS is deterministic from duration + RPE (est IF = 0.55 + 0.025 x RPE), never
+    an LLM guess: 60 min at RPE 7 ~ 53 TSS, matching the agreed 40-60 band."""
+    cfg = _load_cfg(args.athlete)
+    client = _client(cfg)
+    d = args.date or date.today().isoformat()
+    minutes = int(args.minutes or 60)
+    rpe = max(1, min(10, int(args.rpe if args.rpe is not None else 7)))
+    est_if = 0.55 + 0.025 * rpe
+    tss = int(round(minutes / 60.0 * 100 * est_if * est_if))
+    name = args.name or f"CrossFit ({minutes}min, RPE {rpe})"
+    act = client.create_manual_activity(
+        sport="WeightTraining", start_date_local=f"{d}T18:00:00", name=name,
+        moving_time_s=minutes * 60, training_load=tss,
+        description=f"logged via plan_tools log-strength: est IF {est_if:.2f} from RPE {rpe}")
+    return {"athlete": args.athlete, "date": d, "minutes": minutes, "rpe": rpe,
+            "est_if": round(est_if, 3), "tss": tss, "activity_id": act.get("id"),
+            "undo": f"delete_activity('{act.get('id')}')",
+            "status": "manual activity created — counts toward CTL/ATL"}
+
+
 def cmd_render_workout(args) -> dict:
     """Render time-at-intensity segments into an ICU STRUCTURED workout string.
     Push the returned `description` via icu_fetch push_workout so it syncs to the
@@ -652,11 +678,19 @@ def main():
     pfc.add_argument("--sweat-na", type=float, dest="sweat_na")
     pfc.add_argument("--gut-trained", action="store_true")
 
+    pls = sub.add_parser("log-strength", help="log CrossFit/gym as real ICU load (manual activity via mark-as-done)")
+    pls.add_argument("--athlete", required=True)
+    pls.add_argument("--minutes", type=int, default=60)
+    pls.add_argument("--rpe", type=int, help="1-10; default 7 (est IF = 0.55 + 0.025 x RPE)")
+    pls.add_argument("--date", help="YYYY-MM-DD; default today")
+    pls.add_argument("--name")
+
     args = p.parse_args()
     handler = {"tss": cmd_tss, "week-tss": cmd_week_tss, "project": cmd_project,
                "required-tss": cmd_required_tss, "validate": cmd_validate,
                "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target,
-               "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check}[args.cmd]
+               "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check,
+               "log-strength": cmd_log_strength}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:
