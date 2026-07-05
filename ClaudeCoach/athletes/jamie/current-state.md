@@ -438,6 +438,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 
 - **2026-07-04 — T4 (Tier 1):** Sleep <7h on 3 of last 7 nights: 30 Jun 5.54h, 2 Jul 6.57h, 3 Jul 6.12h. Prior T4 (Jul 3) flagged 27 Jun/30 Jun/2 Jul — 3 Jul's 6.12h is a new night not in that entry; signal materially changed. HRV recovered to 46 on 3 Jul (trend +35% over 7 days, 34 on 26 Jun → 46) — no T3 co-fire. RHR 54 on 3 Jul (within 50–54 baseline) — no corroboration. Single-signal T4 only; no intensity flags today. Prioritise sleep this week; re-evaluate if the deficit deepens or a second signal joins it.
 
+- **2026-07-05 — T2 (Tier 2):** CTL ramp +5.17/wk (CTL 90.70 on 28 Jun → 95.87 on 5 Jul; API rampRate field confirms 5.17) while ankle quality_sessions_resumed = false. Cap is +4/wk in rehab. Driven by a heavy back-to-back block: Thu 2 Jul swim+ride (177 combined Load), Fri 3 Jul long Z2 ride (223 TSS), Sat 4 Jul sweetspot ride overrun (149 Load vs 97 planned, ~210min vs 110 planned). TSB now −35 to −39, ATL 126 — heaviest point of this build block. Last T2 logged 21 Jun (ramp 4.02/wk) — 14 days ago, well outside suppression window, and value materially higher now. Today's planned long run (94 Load) will add further load on top of an already-elevated ramp. Camp #2 starts 10 Jul — a genuine easier day before departure would arrest the ramp; if not taken, flag again if ramp holds >4/wk into next week.
+
 ## Plan changes
 
 - 2026-05-30: Run session (Z2 walk-run 45 min) skipped — poor sleep + sailing race day + travel home.
