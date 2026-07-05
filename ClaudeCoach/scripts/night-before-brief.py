@@ -12,14 +12,23 @@ ATHLETES_CONFIG = BASE / "config/athletes.json"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
+sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
+from progression import long_run_cap_km as _lr_cap
 
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries):
+def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries, long_run_cap_km=None):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
+
+    long_run_cap_block = ""
+    if long_run_cap_km is not None:
+        long_run_cap_block = (
+            f"\n## Long-run cap (pre-computed — authoritative)\n"
+            f"Ceiling: {long_run_cap_km:.1f} km — do not reference or target a distance above this for tomorrow's long run.\n"
+        )
 
     # Build injury flag line
     injury_flag = ""
@@ -55,7 +64,7 @@ Step 1 — Fetch data via Bash:
 Step 2 — Read ClaudeCoach/athletes/{slug}/current-state.json (last injury pain score, if any).
 
 Step 3 — If no events tomorrow, or only events with planned Load < 30 AND duration < 40 min: output nothing. Stop.
-
+{long_run_cap_block}
 Step 4 — Output the night-before brief in Telegram Markdown (no preamble, no sign-off):
 
 *Tomorrow — [session name]*
@@ -105,7 +114,23 @@ def run_athlete(slug, athlete_cfg):
     race_name = profile.get("race_name") or athlete_cfg.get("race_name", "your race")
     injuries = profile.get("injuries", [])
 
-    prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries)
+    # Pre-compute tomorrow's long-run distance cap the same way morning-checkin
+    # does, so a long run can't be quoted past the progression ceiling here either.
+    long_run_cap = None
+    try:
+        from primitives.modulation import classify_session_type as _lr_classify
+        from icu_api import IcuClient as _Icu
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        athlete_cfg_full = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        events = _Icu(athlete_cfg_full["icu_athlete_id"], athlete_cfg_full["icu_api_key"]).get_events(tomorrow, tomorrow)
+        session_log_path = adir / "session-log.json"
+        session_log = json.loads(session_log_path.read_text()) if session_log_path.exists() else []
+        long_run_cap = _lr_cap(events, session_log, _lr_classify)
+    except Exception as exc:
+        print(f"[{slug}] long-run cap pre-compute failed: {exc}", file=sys.stderr)
+
+    prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries,
+                           long_run_cap_km=long_run_cap)
 
     with open(log_file, "a") as lf:
         result = claude_call.run_claude(
