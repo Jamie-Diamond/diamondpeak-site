@@ -215,7 +215,7 @@ def fetch_ambient_weather(
     return temps, dews
 
 
-def exposure_entry(act: dict) -> dict | None:
+def exposure_entry(act: dict, latlng_fallback=None) -> dict | None:
     """heat-log entry for an outdoor activity with ambient ≥25°C, or None.
 
     Indoor sessions are excluded even if the room reads warm-ish (trainer flag,
@@ -226,6 +226,13 @@ def exposure_entry(act: dict) -> dict | None:
     lookup using the activity's GPS coordinates.  The external peak temp then
     drives both dose eligibility and the log context.  Falls back to device temp
     if the network call fails, flagged in context.
+
+    ``start_lat_lng`` is frequently missing from the ICU activity summary/detail
+    even when the GPS track exists on the streams endpoint (lat in the latlng
+    stream's ``data``, lon in ``data2``).  ``latlng_fallback`` is an optional
+    callable(activity_id) -> [lat, lon] | None that the caller wires to the
+    streams endpoint; it is only invoked when the summary lacks coordinates AND a
+    weather lookup is actually warranted, so we never fetch streams needlessly.
     """
     temp = act.get("average_temp")
     mins = (act.get("moving_time") or 0) / 60
@@ -240,6 +247,14 @@ def exposure_entry(act: dict) -> dict | None:
     dew_point   = None
 
     latlng    = act.get("start_lat_lng")
+    # Summary often has no coordinates — recover them from the streams endpoint.
+    if (not latlng or len(latlng) != 2) and callable(latlng_fallback):
+        try:
+            fb = latlng_fallback(act.get("id"))
+        except Exception:
+            fb = None
+        if fb and len(fb) == 2:
+            latlng = fb
     start_raw = (act.get("start_date") or act.get("start_date_local") or "").replace("Z", "")
     if latlng and len(latlng) == 2 and start_raw:
         try:

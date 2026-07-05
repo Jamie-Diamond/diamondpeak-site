@@ -320,7 +320,27 @@ def _credit_heat_exposure(slug: str, activity_id: str, profile: dict) -> None:
         )
         act = next((a for a in json.loads(r.stdout)
                     if str(a.get("id")) == str(activity_id)), None)
-        entry = heat_lib.exposure_entry(act) if act else None
+
+        # Recover GPS from the streams endpoint when the summary has none — ICU
+        # stores lat in the latlng stream's `data` and lon in `data2`.
+        def _latlng_from_streams(aid):
+            try:
+                from icu_api import IcuClient
+                acfg = json.loads(ATHLETES_CONFIG.read_text())[slug]
+                cl = IcuClient(acfg["icu_athlete_id"], acfg["icu_api_key"])
+                ll = next((s for s in cl.get_activity_streams(aid)
+                           if s.get("type") == "latlng"), None)
+                if not ll:
+                    return None
+                lat, lon = ll.get("data") or [], ll.get("data2") or []
+                for i in range(min(len(lat), len(lon))):
+                    if lat[i] is not None and lon[i] is not None:
+                        return [float(lat[i]), float(lon[i])]
+            except Exception as e:
+                print(f"[heat-credit:{slug}] latlng stream fallback failed: {e}", file=sys.stderr)
+            return None
+
+        entry = heat_lib.exposure_entry(act, latlng_fallback=_latlng_from_streams) if act else None
         if not entry:
             return
         log_f = BASE / f"athletes/{slug}/heat-log.json"

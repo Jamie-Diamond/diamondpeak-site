@@ -2198,10 +2198,19 @@ def prefetch_context(slug: str) -> str:
             eftp = next((si.get("eftp") for si in sport_info if si.get("type") in ("Ride", "VirtualRide", "Cycling")), None)
             if eftp is None and sport_info:
                 eftp = sport_info[0].get("eftp")
+            # Intervals.icu keeps recomputing the latest day's CTL/ATL/Form until the
+            # row settles (its `updated` date moves past the row's own date). Live
+            # pulls quoted as final have been off ~10 points — mark it provisional.
+            _wid = (w.get("id") or "")[:10]
+            _wupd = (w.get("updated") or "")[:10]
+            _prov = not (_wid and _wupd and _wupd > _wid)
             lines.append(
                 f"Fitness {ctl}  Fatigue {atl}  Form {tsb}"
                 + (f"  FTP {ftp}W" if ftp else "")
                 + (f"  eFTP {round(eftp)}W" if eftp else "")
+                + ("  [PROVISIONAL: this is the latest day's CTL/ATL/Form, still settling on "
+                   "Intervals.icu — it can shift several points as activities finish syncing. "
+                   "Call it provisional, don't state it as final.]" if _prov else "")
             )
             # Authoritative live thresholds (eFTP-first, m/s-correct) — the model must
             # use THESE, never a hardcoded number from the system prompt.
