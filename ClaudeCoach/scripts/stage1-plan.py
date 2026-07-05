@@ -262,7 +262,12 @@ def main():
     cfg = json.loads((BASE / "config" / "athletes.json").read_text())[args.athlete]
     today = date.today()
     week_start = date.fromisoformat(args.week_start) if args.week_start else _next_monday(today)
-    brief = sl.planning_brief(args.athlete, cfg, today=today, plan_start=week_start)
+    # today=week_start, NOT the run date: the Sunday cron plans NEXT week, and
+    # phase / week_in_phase / required-tss / deload detection must all be
+    # evaluated for the week being planned. Planning with the run date briefed
+    # next week against THIS week's (lower) requirement — the 5 Jul 2026 bug
+    # that planned 581 TSS into a week needing 816.
+    brief = sl.planning_brief(args.athlete, cfg, today=week_start, plan_start=week_start)
     if brief.get("event_unknown"):
         print(json.dumps({"error": f"event unknown for {args.athlete} — cannot plan"}))
         sys.exit(1)
@@ -342,7 +347,15 @@ def main():
 
 def _week_message(brief: dict, built: dict) -> str:
     import datetime as _dt
-    lines = [f"*Week of {built['week_start']}* — {brief.get('phase','')} · {built['total_tss']} TSS"]
+    target = brief.get("weekly_tss_target")
+    header = f"*Week of {built['week_start']}* — {brief.get('phase','')} · {built['total_tss']} TSS"
+    if target:
+        header += f" (target {target})"
+    lines = [header]
+    floor = brief.get("weekly_tss_floor")
+    if floor and built["total_tss"] < floor * 0.95:
+        lines.insert(0, f"🔥 *UNDER-TRAINING WEEK*: {built['total_tss']} TSS is below the "
+                        f"{floor} floor — this week does not train you. Flagged, not hidden.")
     for s in built["sessions"]:
         wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""

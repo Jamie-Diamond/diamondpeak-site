@@ -73,6 +73,43 @@ def build_digest(entries: list[dict], athletes: dict) -> list[str]:
     return lines
 
 
+def plan_sanity(athletes: dict) -> list[str]:
+    """UNDER-TRAINING check on the week of tomorrow (Sunday evening = the freshly
+    planned next week; midweek = the live week). Compares the calendar's
+    planned+completed total against the required-tss floor for that week —
+    min(phase requirement, 7 x CTL maintenance); deload/taper floors are 0.
+    Added 5 Jul 2026 after a 581-TSS week was planned into a specific-phase
+    week needing 816 and no report flagged it."""
+    from datetime import timedelta
+    pt = str(BASE / "lib" / "plan_tools.py")
+    target_day = date.today() + timedelta(days=1)
+    monday = target_day - timedelta(days=target_day.weekday())
+    lines = []
+    for slug, cfg in athletes.items():
+        if not cfg.get("active"):
+            continue
+        try:
+            wk = json.loads(subprocess.run(
+                [sys.executable, pt, "week-tss", "--athlete", slug,
+                 "--week-start", monday.isoformat()],
+                capture_output=True, text=True, timeout=90).stdout)
+            req = json.loads(subprocess.run(
+                [sys.executable, pt, "required-tss", "--athlete", slug,
+                 "--date", monday.isoformat()],
+                capture_output=True, text=True, timeout=90).stdout)
+        except Exception:
+            continue
+        total, floor = wk.get("total_tss"), req.get("weekly_tss_floor")
+        if total is None or not floor:
+            continue
+        if total < floor * 0.95:
+            lines.append(
+                f"🔥 {slug}: week of {monday} totals {total} TSS vs floor {floor} "
+                f"(required ~{req.get('recommended_weekly_tss')}, "
+                f"{req.get('phase')}) — UNDER-TRAINING, plan needs volume")
+    return lines
+
+
 def main():
     try:
         athletes = json.loads(CONFIG.read_text())
@@ -81,6 +118,7 @@ def main():
         print(f"ops-digest: failed to load athletes config: {e}", file=sys.stderr)
 
     lines = build_digest(todays_entries(), athletes)
+    lines += plan_sanity(athletes)
     if not lines:
         print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] ops-digest: all clean", file=sys.stderr)
         return

@@ -313,6 +313,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         return {"phase": "taper", "week_type": "taper", "training_week": week_now,
                 "ctl_today": ctl_today, "race_date": race_s,
                 "weeks_to_race": weeks_to_race, "taper_factor": factor,
+                "weekly_tss_floor": 0,   # taper: unloading is the point
                 "required_weekly_tss": target, "recommended_weekly_tss": target,
                 "note": (f"TAPER, race in {weeks_to_race} wk: volume stepped to "
                          f"{int(factor * 100)}% of the ~{int(round(pre_taper_weekly))} TSS "
@@ -359,6 +360,13 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     # and a badly missed week (<70% executed) converts this week to recovery.
     rec = out["recommended_weekly_tss"]
     out["week_type"] = phase
+    # UNDER-TRAINING floor (Jamie, 5 Jul 2026): a training week must at least
+    # reach the lower of the phase requirement and maintenance (7 x CTL). Below
+    # that the week detrains the athlete and validate_week hard-fails it.
+    # Deload/taper weeks overwrite this with 0 (explicitly no floor).
+    maintenance = int(round(7 * float(ctl_today))) if ctl_today else None
+    out["maintenance_weekly_tss"] = maintenance
+    out["weekly_tss_floor"] = min(int(rec), maintenance) if (rec and maintenance) else None
     n = int(cfg.get("deload_every_n_weeks", _DELOAD_EVERY_N) or 0)
     factor = float(cfg.get("deload_factor", _DELOAD_FACTOR))
     deload_why = None
@@ -373,6 +381,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
             "week_type": "deload",
             "deload_reason": deload_why,
             "full_week_tss": rec,
+            "weekly_tss_floor": 0,   # deload: unloading is the point
             "recommended_weekly_tss": int(round(rec * factor)),
             "note": (f"DELOAD WEEK ({deload_why}): prescribe ~{int(round(rec * factor))} TSS "
                      f"({int(factor * 100)}% of the normal ~{rec}). Keep session frequency "
@@ -439,8 +448,10 @@ def cmd_required_tss(args) -> dict:
         if not w:
             raise SystemExit(_err("no wellness data for current CTL; pass --ctl-today"))
         ctl_today = round(float(w[-1].get("ctl") or 0), 1)
+    eval_day = date.fromisoformat(args.date) if getattr(args, "date", None) else None
     return {"athlete": args.athlete,
-            **required_tss(cfg, ctl_today, last_week_tss=last_week_actual_tss(client))}
+            **required_tss(cfg, ctl_today, today=eval_day,
+                           last_week_tss=last_week_actual_tss(client, today=eval_day))}
 
 
 # ── subcommand: validate ───────────────────────────────────────────────────────
@@ -491,11 +502,23 @@ def cmd_validate(args) -> dict:
             tss_cap = tss_ceiling(float(max_h), str(phase["name"]))
     except Exception:
         pass
+    # Under-training floor for the week being validated (0 = deload/taper,
+    # None = could not be computed and the check is recorded as skipped).
+    tss_floor = None
+    if ctl_today:
+        try:
+            req = required_tss(cfg, ctl_today, today=week_start,
+                               last_week_tss=last_week_actual_tss(_client(cfg), today=week_start))
+            tss_floor = req.get("weekly_tss_floor")
+        except Exception:
+            tss_floor = None
+
     caps = run_caps(_client(cfg), week_start)
     rep = validate_week(
         events, week_start,
         day_rules=day_rules, ctl_today=ctl_today,
         weekly_tss_cap=tss_cap,
+        weekly_tss_floor=tss_floor,
         run_week_min_cap=caps.get("weekly_min_cap"),
         run_long_min_cap=caps.get("long_run_min_cap"),
         ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
@@ -816,6 +839,7 @@ def main():
 
     pr = sub.add_parser("required-tss", help="weekly TSS needed for the phase CTL target")
     pr.add_argument("--athlete", required=True); pr.add_argument("--ctl-today", type=float)
+    pr.add_argument("--date", help="evaluate for this date's week (YYYY-MM-DD; default today)")
 
     pv = sub.add_parser("validate", help="hard-check a proposed week against the athlete's rules")
     pv.add_argument("--athlete", required=True); pv.add_argument("--week", required=True)

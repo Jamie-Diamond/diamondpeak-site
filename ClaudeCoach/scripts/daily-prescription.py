@@ -213,21 +213,39 @@ def _icu(slug: str, endpoint: str, *extra) -> object:
         return None
 
 
+def _valid_latlon(ll) -> list | None:
+    if (isinstance(ll, (list, tuple)) and len(ll) == 2
+            and all(isinstance(x, (int, float)) for x in ll)
+            and (ll[0] or ll[1])):
+        return [float(ll[0]), float(ll[1])]
+    return None
+
+
 def _home_latlon(slug: str) -> list | None:
-    """[lat, lon] for forecast lookups — config/athletes.json home_latlon first,
-    then profile.json. None (= no forecast, benign defaults) when unset."""
+    """[lat, lon] for forecast lookups. Athletes travel constantly (Jamie,
+    5 Jul 2026), so the PRIMARY source is where they last actually trained:
+    the most recent activity with GPS in the last 14 days. A configured
+    home_latlon (config/athletes.json or profile.json) acts as an explicit
+    OVERRIDE only. None (= no forecast, benign defaults) when neither exists."""
     try:
         cfg = json.loads(CONFIG.read_text()).get(slug, {})
-        ll = cfg.get("home_latlon")
-        if not ll:
-            prof_p = BASE / "athletes" / slug / "profile.json"
-            if prof_p.exists():
-                ll = json.loads(prof_p.read_text()).get("home_latlon")
-        if (isinstance(ll, (list, tuple)) and len(ll) == 2
-                and all(isinstance(x, (int, float)) for x in ll)):
-            return [float(ll[0]), float(ll[1])]
+        ll = _valid_latlon(cfg.get("home_latlon"))
+        if ll:
+            return ll
+        prof_p = BASE / "athletes" / slug / "profile.json"
+        if prof_p.exists():
+            ll = _valid_latlon(json.loads(prof_p.read_text()).get("home_latlon"))
+            if ll:
+                return ll
     except Exception:
         pass
+    # Where did they last train? Newest activity with start coordinates wins.
+    hist = _icu(slug, "history", "--days", "14")
+    if isinstance(hist, list):
+        for a in sorted(hist, key=lambda x: x.get("start_date_local") or "", reverse=True):
+            ll = _valid_latlon(a.get("start_lat_lng"))
+            if ll:
+                return ll
     return None
 
 

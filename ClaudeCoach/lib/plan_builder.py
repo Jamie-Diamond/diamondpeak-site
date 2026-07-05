@@ -140,11 +140,24 @@ def build_sessions(slug: str, proposal: dict) -> dict:
         _caps = _pt.run_caps(_pt._client(cfg), ws)
     except Exception:
         _caps = {"weekly_min_cap": None, "long_run_min_cap": None}
+    # Under-training floor for the week BEING PLANNED (today=ws, not run date):
+    # min(phase requirement, 7 x CTL maintenance); 0 on deload/taper. A week
+    # below it hard-fails — a plan that detrains must never push silently.
+    _floor = None
+    _ctl = _ctl_today(cfg)
+    if _ctl:
+        try:
+            _lw = _pt.last_week_actual_tss(_pt._client(cfg), today=ws)
+            _floor = _pt.required_tss(cfg, _ctl, today=ws,
+                                      last_week_tss=_lw).get("weekly_tss_floor")
+        except Exception:
+            _floor = None
     rep = validate_week(events, ws, day_rules=dr,
                         weekly_tss_cap=_weekly_tss_cap(slug, phase),
+                        weekly_tss_floor=_floor,
                         run_week_min_cap=_caps.get("weekly_min_cap"),
                         run_long_min_cap=_caps.get("long_run_min_cap"),
-                        ctl_today=_ctl_today(cfg),
+                        ctl_today=_ctl,
                         ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
                         strength_max=(dr or {}).get("strength_max"),
                         distribution=phase.get("distribution"))

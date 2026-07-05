@@ -255,6 +255,7 @@ def validate_week(
     *,
     day_rules: dict | None = None,
     weekly_tss_cap: float | None = None,
+    weekly_tss_floor: float | None = None,
     tss_tolerance: float = 0.10,
     ctl_today: float | None = None,
     ramp_cap: float | None = None,
@@ -322,6 +323,33 @@ def validate_week(
                 detail=(f"planned {total_tss:.0f} TSS in week of {week_start} "
                         f"exceeds cap {weekly_tss_cap:.0f} "
                         f"(+{tss_tolerance:.0%} tolerance = {ceiling:.0f})"),
+            ))
+
+    # 2b. Weekly planned-TSS FLOOR — an under-training week is as much a plan
+    #     failure as an over-training one: a "training coach" must plan weeks
+    #     that train the athlete (Jamie, 5 Jul 2026 — the 581-vs-816 week).
+    #     Semantics: None = caller supplied nothing (recorded as skipped, loud);
+    #     0 = explicitly no floor (deload/taper — legitimate unload weeks);
+    #     >0 = hard violation below floor (5% grace).
+    if weekly_tss_floor is None:
+        skipped.append("weekly_tss_floor check SKIPPED — no floor supplied (pass the "
+                       "required-tss floor, or 0 for deload/taper); under-training "
+                       "is UNCHECKED")
+    elif weekly_tss_floor > 0:
+        floor = weekly_tss_floor * 0.95
+        if total_tss < floor:
+            ctl_note = ""
+            if ctl_today is not None and ctl_today > 0:
+                projected = compute_projected_ctl(ctl_today, total_tss, 1)
+                ctl_note = (f"; fitness would go {ctl_today:.1f} → {projected:.1f} CTL "
+                            f"({projected - ctl_today:+.1f}) — this week DETRAINS the athlete")
+            violations.append(Violation(
+                code="weekly_tss_floor",
+                severity="hard",
+                detail=(f"UNDER-TRAINING: planned {total_tss:.0f} TSS in week of "
+                        f"{week_start} is below the floor {weekly_tss_floor:.0f} "
+                        f"(-5% grace = {floor:.0f}){ctl_note}. Add volume or "
+                        f"explicitly declare a deload/taper week"),
             ))
 
     # 3. Implied CTL ramp cap — project this week's load forward from today's CTL.

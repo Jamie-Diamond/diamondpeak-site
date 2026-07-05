@@ -243,6 +243,11 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "event": ekey, "event_unknown": ekey is None,
         "phase": phase_name, "week_in_phase": week_in_phase,
         "weekly_tss_target": req.get("recommended_weekly_tss"),
+        # HARD lower bound: min(phase requirement, 7 x CTL maintenance); 0 on
+        # deload/taper. validate_week fails the week below it — a training week
+        # must train the athlete.
+        "weekly_tss_floor": req.get("weekly_tss_floor"),
+        "maintenance_weekly_tss": req.get("maintenance_weekly_tss"),
         # deload/taper/normal — the note explains a reduced target so the Stage-1
         # LLM shapes the week accordingly instead of quietly padding volume back.
         "week_type": req.get("week_type") or phase_name,
@@ -270,7 +275,11 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                        "swim_css": thresh["swim_css_per_100m"]},
         "available_sessions": available,
         "hard_rules": hard_rules,
-        "dosing_note": ("Build to weekly_tss_target. PROTECT the long ride (~long_ride_target_min). "
+        "dosing_note": ("Build to weekly_tss_target — weekly_tss_floor is a HARD minimum "
+                        "(below it the week detrains the athlete and validation rejects it; "
+                        "only deload/taper weeks may sit under maintenance). If run caps or "
+                        "travel limit running, close the gap with BIKE volume, never by "
+                        "planning a short week. PROTECT the long ride (~long_ride_target_min). "
                         "Total run mileage must NOT exceed weekly_run_mileage_cap_km and the longest "
                         "run must NOT exceed long_run_cap_min (these are MAX ceilings, +10-15% on the "
                         "highest of the last 4 weeks). Obey run_protocol (no quality if "
