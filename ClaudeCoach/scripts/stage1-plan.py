@@ -33,6 +33,11 @@ import plan_builder as pb             # noqa: E402
 from primitives.planned_tss import segment_if  # noqa: E402
 
 _QUALITY_IF = 0.85   # a session with any segment at/above this is "quality" (fixed); else endurance
+_FLEX_IF    = 0.75   # TSS-closing lever: only TRUE Z1-Z2 volume may be stretched.
+                     # Tempo at IF 0.76-0.84 is "endurance" by the line above but
+                     # stretching it to close a TSS shortfall inflates the grey
+                     # zone (audit P2-8) — quality dose must come from the plan,
+                     # never from gap-filling arithmetic.
 
 
 def _is_endurance(sess: dict) -> bool:
@@ -101,7 +106,13 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
                         _set_total_minutes(s, lr_cap)
 
     # 3. TSS is closed with BIKE volume only (endurance rides, not the long ride, not runs).
-    flex = lambda s: (_is_endurance(s) and (s.get("sport") or "").lower() in ("bike", "ride")
+    def _all_true_z2(sess):
+        segs = sess.get("segments") or []
+        return bool(segs) and all(
+            (sg.get("if") if sg.get("if") is not None else segment_if(sess.get("sport", ""), sg.get("zone")))
+            <= _FLEX_IF for sg in segs)
+    flex = lambda s: (_is_endurance(s) and _all_true_z2(s)
+                      and (s.get("sport") or "").lower() in ("bike", "ride")
                       and not _is_long_ride(s))
     built = pb.build_sessions(athlete, proposal)
     if not target:

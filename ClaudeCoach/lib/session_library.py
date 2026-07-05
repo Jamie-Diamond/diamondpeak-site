@@ -134,10 +134,12 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         prev = (today - _dt.timedelta(days=7)).isocalendar()[:2]
         if prev in wk_tss or wk_km or wk_longest:   # history fetch succeeded
             last_week_tss = round(wk_tss.get(prev, 0.0), 1)
-        last4 = [k for k in sorted(wk_km) if k != cur][-4:]
-        if last4:
-            weekly_mileage_cap_km = round(max(wk_km[k] for k in last4) * 1.15, 1)
-            long_run_cap_min = round(max(wk_longest[k] for k in last4) * 1.15)
+        # Caps from the shared helper (plan_tools.run_caps) so the brief and the
+        # validators can never drift apart again (audit P1-9): weekly km x1.10
+        # per rules.md (25 km floor = top of the "normal" band), long run x1.15.
+        _caps = pt.run_caps(_c, today)
+        weekly_mileage_cap_km = _caps.get("weekly_km_cap")
+        long_run_cap_min = _caps.get("long_run_min_cap")
     except Exception:
         pass
     req = pt.required_tss(cfg, ctl, today=today, last_week_tss=last_week_tss) if ctl else {}

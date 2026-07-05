@@ -396,6 +396,39 @@ def last_week_actual_tss(client, today: date | None = None) -> float | None:
         return None
 
 
+def run_caps(client, today: date | None = None) -> dict:
+    """Run-volume MAX ceilings from the last 4 completed weeks. Source of truth:
+    athletes/jamie/reference/rules.md — weekly km growth <=10% w/w as a general
+    rule, applied above the 18-25 km/wk normal band (so the km floor is 25);
+    single long run keeps the established x1.15 allowance. Returns km caps (for
+    the weekly brief) AND minute caps (for validate_week, where planned events
+    carry duration but not distance). All-None on fetch failure — callers must
+    surface a skipped check, never a silent pass (audit P1-9)."""
+    today = today or date.today()
+    try:
+        wk_km, wk_min, wk_long = {}, {}, {}
+        for a in client.get_training_history(days=35) or []:
+            if (a.get("type") or "") not in ("Run", "TrailRun", "VirtualRun"):
+                continue
+            d = date.fromisoformat((a.get("start_date_local") or "")[:10])
+            iso = d.isocalendar()[:2]
+            wk_km[iso] = wk_km.get(iso, 0.0) + (a.get("distance") or 0) / 1000
+            m = (a.get("moving_time") or 0) / 60
+            wk_min[iso] = wk_min.get(iso, 0.0) + m
+            wk_long[iso] = max(wk_long.get(iso, 0.0), m)
+        cur = today.isocalendar()[:2]
+        weeks = [k for k in sorted(wk_km) if k != cur][-4:]
+        if not weeks:
+            return {"weekly_km_cap": None, "weekly_min_cap": None, "long_run_min_cap": None}
+        return {
+            "weekly_km_cap": round(max(25.0, max(wk_km[k] for k in weeks) * 1.10), 1),
+            "weekly_min_cap": round(max(150.0, max(wk_min[k] for k in weeks) * 1.10)),
+            "long_run_min_cap": round(max(wk_long[k] for k in weeks) * 1.15),
+        }
+    except Exception:
+        return {"weekly_km_cap": None, "weekly_min_cap": None, "long_run_min_cap": None}
+
+
 def cmd_required_tss(args) -> dict:
     cfg = _load_cfg(args.athlete)
     client = _client(cfg)
@@ -437,6 +470,7 @@ def cmd_validate(args) -> dict:
     # Map the lightweight input to the event shape validate_week expects.
     events = [{"start_date_local": s.get("date"), "type": s.get("sport") or s.get("type"),
                "category": "WORKOUT",
+               "moving_time": (s.get("minutes") or 0) * 60 or None,
                "load_target": s.get("tss") if s.get("tss") is not None else s.get("load_target")}
               for s in week]
     week_start = _monday(min(date.fromisoformat(e["start_date_local"][:10]) for e in events))
@@ -456,10 +490,13 @@ def cmd_validate(args) -> dict:
             tss_cap = tss_ceiling(float(max_h), str(phase["name"]))
     except Exception:
         pass
+    caps = run_caps(_client(cfg), week_start)
     rep = validate_week(
         events, week_start,
         day_rules=day_rules, ctl_today=ctl_today,
         weekly_tss_cap=tss_cap,
+        run_week_min_cap=caps.get("weekly_min_cap"),
+        run_long_min_cap=caps.get("long_run_min_cap"),
         ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
         strength_max=(day_rules or {}).get("strength_max"),
         distribution=phase.get("distribution"),
