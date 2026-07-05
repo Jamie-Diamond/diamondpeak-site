@@ -676,6 +676,84 @@ def load_chart(payload, coaching_level="mid"):
     return _render(fig)
 
 
+# ── Heat acclimation ───────────────────────────────────────────────────────────
+
+def heat_chart(payload, coaching_level="mid"):
+    """
+    payload: {"today":"MM-DD","days":[{"date":"YYYY-MM-DD","score":83.0},...],
+              "events":[{"date":"YYYY-MM-DD","dose":0.84,"method":"outdoor session (auto)"},...]}
+    Acclimation % trend (teal filled area, decays between exposures) with each
+    logged heat-dose entry marked as a dot sized by dose. Sauna/bath entries are
+    a different colour to outdoor exposure so the source of each dose is visible.
+    """
+    if not isinstance(payload, dict):
+        return None
+    days   = payload.get("days", [])
+    events = payload.get("events", [])
+    today  = payload.get("today")
+    if "level" in payload:
+        coaching_level = payload["level"]
+    if not days:
+        return None
+
+    dts   = [_parse_dt(d["date"]) for d in days]
+    mmdd  = [d["date"][5:] for d in days]
+    score = [round(d.get("score") or 0, 1) for d in days]
+    today_dt = _mmdd_to_dt(today, dts, mmdd)
+
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    _style_ax(ax)
+    ax.set_ylim(0, max(100, max(score) * 1.1))
+
+    # Guide bands: <40% building, 40-70% moderate, >70% well-acclimated.
+    ax.axhspan(70, ax.get_ylim()[1], facecolor=_CTL_COL,  alpha=0.09, zorder=0)
+    ax.axhspan(40, 70,               facecolor="#c8a03c", alpha=0.08, zorder=0)
+    ax.axhspan(0, 40,                facecolor="#c0392b", alpha=0.07, zorder=0)
+    ax.text(dts[-1], 70, " 70% acclimated", va="bottom", ha="right", fontsize=8.5,
+            color=_CTL_COL, zorder=3)
+    ax.text(dts[-1], 40, " 40% building",   va="bottom", ha="right", fontsize=8.5,
+            color="#c9871f", zorder=3)
+
+    sx, sy = _smooth_xy(dts, score)
+    ax.plot(sx, sy, color=_CTL_COL, linewidth=1.8, alpha=0.95, zorder=4)
+    ax.fill_between(sx, sy, 0, color=_CTL_COL, alpha=0.12, zorder=2)
+
+    # Dose events as markers on the trend, sized by dose, coloured by method.
+    date_set = set(mmdd)
+    for ev in events:
+        d = ev.get("date", "")[5:]
+        if d not in date_set:
+            continue
+        idx = mmdd.index(d)
+        dose = float(ev.get("dose") or 1.0)
+        method = str(ev.get("method") or "")
+        is_passive = "sauna" in method.lower() or "bath" in method.lower()
+        colour = "#c0392b" if is_passive else _CTL_COL
+        ax.scatter([dts[idx]], [score[idx]], s=60 + dose * 90, color=colour,
+                   edgecolors="white", linewidths=1.1, zorder=6, alpha=0.9)
+
+    if today_dt is not None:
+        ax.axvline(today_dt, color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=5)
+        ti = mmdd.index(today) if today in mmdd else None
+        if ti is not None:
+            ax.annotate(f"{score[ti]:.0f}%", (today_dt, score[ti]), textcoords="offset points",
+                        xytext=(0, 10), ha="center", fontsize=10, fontweight="bold",
+                        color=_CTL_COL, bbox=dict(boxstyle="round,pad=0.2", fc="white",
+                        ec="none", alpha=0.85), zorder=7)
+
+    _date_axis(ax, dts)
+    ax.set_ylabel("Acclimation %", fontsize=10.5, color=BRAND_MUTED)
+    ax.set_title("Heat acclimation", fontsize=12.5, fontweight="bold", color=BRAND_INK)
+
+    handles = [Line2D([0], [0], color=_CTL_COL, lw=1.8, label="Acclimation %"),
+               Line2D([0], [0], marker="o", color="none", markerfacecolor=_CTL_COL,
+                      markeredgecolor="white", markersize=8, label="Outdoor dose"),
+               Line2D([0], [0], marker="o", color="none", markerfacecolor="#c0392b",
+                      markeredgecolor="white", markersize=8, label="Sauna/bath dose")]
+    ax.legend(handles=handles, loc="upper left", frameon=False, fontsize=8.5)
+    return _render(fig)
+
+
 # ── Week calendar ─────────────────────────────────────────────────────────────
 
 def week_chart(events, title="Training week", week_start=None, coaching_level="mid"):

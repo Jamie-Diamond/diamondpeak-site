@@ -259,6 +259,9 @@ def validate_week(
     ctl_today: float | None = None,
     ramp_cap: float | None = None,
     strength_max: int | None = None,
+    run_week_min_cap: float | None = None,
+    run_long_min_cap: float | None = None,
+    monotony_threshold: float = 2.0,
     distribution: dict | None = None,
     dist_tolerance_pp: float = DIST_TOLERANCE_PP,
 ) -> WeekReport:
@@ -359,6 +362,51 @@ def validate_week(
     # 6. Distance/duration internal consistency — walk-run sessions whose stated
     #    distance and stated run/walk cycle count imply different totals.
     violations.extend(_check_distance_duration(week_events))
+
+    # Run-volume ceilings (audit P1-9): these previously lived only in the
+    # Stage-1 generation path, so chat-path pushes and manual edits bypassed
+    # them. Minutes-based here (planned events carry duration, not distance).
+    run_events = [e for e in week_events
+                  if str(e.get("type") or "").lower() in ("run", "trailrun", "virtualrun")]
+    if run_events:
+        mins = [float(e.get("moving_time") or 0) / 60.0 for e in run_events]
+        if any(m <= 0 for m in mins):
+            skipped.append(f"{sum(1 for m in mins if m <= 0)} run event(s) carry no "
+                           "duration — run-volume checks incomplete")
+        known = [m for m in mins if m > 0]
+        if run_week_min_cap is None and known:
+            skipped.append("run_weekly_volume check SKIPPED — no weekly run cap "
+                           "supplied; run volume growth is UNCHECKED")
+        elif run_week_min_cap and known and sum(known) > run_week_min_cap:
+            violations.append(Violation(
+                code="run_weekly_volume", severity="hard",
+                detail=(f"planned run volume {sum(known):.0f}min exceeds cap "
+                        f"{run_week_min_cap:.0f}min (<=10% w/w growth rule)")))
+        if run_long_min_cap:
+            for e, m in zip(run_events, mins):
+                if m > run_long_min_cap:
+                    violations.append(Violation(
+                        code="run_long_volume", severity="hard",
+                        detail=(f"'{e.get('name', '')}' {m:.0f}min exceeds long-run "
+                                f"cap {run_long_min_cap:.0f}min (best of last 4 wks x1.15)")))
+
+    # Foster monotony (soft): high mean/SD of daily load — same-size days with no
+    # real rest multiply strain even under an in-cap weekly total (audit P1-3).
+    if total_tss > 0 and len(week_events) >= 3:
+        daily = [0.0] * 7
+        for e in week_events:
+            daily[(_event_date(e) - week_start).days] += _planned_load(e)
+        mean = sum(daily) / 7.0
+        var = sum((x - mean) ** 2 for x in daily) / 7.0
+        sd = var ** 0.5
+        monotony = (mean / sd) if sd > 0 else float("inf")
+        if monotony > monotony_threshold:
+            violations.append(Violation(
+                code="monotony", severity="soft",
+                detail=(f"week monotony {monotony if monotony != float('inf') else 99:.1f} "
+                        f"(mean {mean:.0f}/sd {sd:.0f} daily TSS) over {monotony_threshold} — "
+                        f"vary day sizes / protect a rest day (strain "
+                        f"{total_tss * min(monotony, 99):.0f})")))
 
     return WeekReport(week_start=week_start, total_tss=total_tss,
                       violations=violations, skipped=skipped)

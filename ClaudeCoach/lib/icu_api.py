@@ -245,7 +245,8 @@ class IcuClient:
 
     def edit_workout(self, event_id: str | int, mark_as_done: bool = False,
                      **fields) -> dict:
-        """Update a planned event. mark_as_done=True creates a matching manual activity."""
+        """Update a planned event. NOTE: mark_as_done does NOT create an activity
+        (verified 5 Jul 2026) — use create_manual_activity for that."""
         payload = dict(fields)
         if mark_as_done:
             payload["mark_as_done"] = True
@@ -257,6 +258,22 @@ class IcuClient:
         r = self.session.put(url, json=fields, timeout=15)
         r.raise_for_status()
         return r.json()
+
+    def create_manual_activity(self, sport: str, start_date_local: str, name: str,
+                               moving_time_s: int, training_load: int,
+                               description: str = "") -> dict:
+        """Create a MANUAL activity (source=MANUAL, no file) so non-device
+        training (gym / CrossFit) feeds real CTL/ATL. Verified live 5 Jul 2026."""
+        return self._post("activities/manual", {
+            "type": sport, "start_date_local": start_date_local, "name": name,
+            "moving_time": int(moving_time_s), "icu_training_load": int(training_load),
+            "description": description})
+
+    def delete_activity(self, activity_id: str | int) -> None:
+        """Delete a completed activity (undo path for log-strength mistakes)."""
+        url = f"{BASE_URL}/activity/{activity_id}"
+        r = self.session.delete(url, timeout=15)
+        r.raise_for_status()
 
     def delete_workout(self, event_id: str | int) -> None:
         self._delete(f"events/{event_id}")

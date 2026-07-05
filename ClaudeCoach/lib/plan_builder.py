@@ -122,6 +122,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
                       "description": desc, "description_raw": notes})
         events.append({"start_date_local": f"{date_s}T00:00:00", "type": sport,
                        "category": "WORKOUT", "load_target": load,
+                       "moving_time": dur * 60,
                        "name": s.get("name", ""), "description_raw": notes})
 
     # Validate the whole week against the athlete's hard rules.
@@ -134,8 +135,15 @@ def build_sessions(slug: str, proposal: dict) -> dict:
     # no-ops, and without weekly_tss_cap the load check does — the validator's
     # "a breach cannot reach the athlete" guarantee was void. Both inputs are
     # sourced here; a missing one lands in rep.skipped and is surfaced loudly.
+    import plan_tools as _pt
+    try:
+        _caps = _pt.run_caps(_pt._client(cfg), ws)
+    except Exception:
+        _caps = {"weekly_min_cap": None, "long_run_min_cap": None}
     rep = validate_week(events, ws, day_rules=dr,
                         weekly_tss_cap=_weekly_tss_cap(slug, phase),
+                        run_week_min_cap=_caps.get("weekly_min_cap"),
+                        run_long_min_cap=_caps.get("long_run_min_cap"),
                         ctl_today=_ctl_today(cfg),
                         ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
                         strength_max=(dr or {}).get("strength_max"),

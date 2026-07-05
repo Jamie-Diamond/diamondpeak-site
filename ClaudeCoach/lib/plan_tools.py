@@ -248,12 +248,31 @@ def cmd_project(args) -> dict:
 # ── subcommand: required-tss ───────────────────────────────────────────────────
 _PHASES = ("base", "build", "specific", "peak")
 
+# Deload (blueprint: "3 weeks load, 1 week recovery at 60-65%"; audit P0-1 —
+# the forward plan must unload, not just the reactive watchdog).
+_DELOAD_EVERY_N = 4         # every Nth training week (cfg: deload_every_n_weeks)
+_DELOAD_FACTOR = 0.62       # 60-65% of the normal prescription (cfg: deload_factor)
+_MISS_TRIGGER = 0.70        # last week < 70% executed → this week is recovery
 
-def required_tss(cfg: dict, ctl_today: float, today: date | None = None) -> dict:
+# Taper (blueprint: "70% -> 55% -> 40% of peak, maintain intensity"; audit P0-2 —
+# volume steps down by weeks-to-race, intensity is HELD by the taper TID row).
+# Pre-taper weekly load is approximated by the steady-state 7 x CTL (the load
+# that holds current fitness); CTL decays slightly through the taper so the
+# absolute numbers drift down a touch more — the safe direction.
+_TAPER_FACTORS = {3: 0.70, 2: 0.55, 1: 0.40}
+
+
+def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
+                 last_week_tss: float | None = None) -> dict:
     """Pure: weekly TSS needed to hit the current phase's CTL target on time,
-    plus the ramp-capped safe ceiling. Returns {"error": ...} if the athlete has
-    no defensible CTL basis (no fabricated targets — mirrors generate-plan.py).
-    Shared by the CLI and prefetch_context so chat and tool agree."""
+    plus the ramp-capped safe ceiling — with deload and taper branches. Returns
+    {"error": ...} if the athlete has no defensible CTL basis (no fabricated
+    targets — mirrors generate-plan.py). Shared by the CLI, the weekly brief,
+    the plan audit and prefetch_context so every path agrees.
+
+    last_week_tss (optional): last completed week's ACTUAL total load; when the
+    athlete executed under 70% of prescription, this week becomes a recovery
+    week (blueprint: "missed >30% -> next week is recovery")."""
     today = today or date.today()
     ctl_targets = cfg.get("ctl_targets") or {}
     phase_ctl = ctl_targets.get("phase_ctl") or {}
@@ -264,13 +283,42 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None) -> dict
 
     plan_start = date.fromisoformat(cfg["plan_start"])
     ptss = cfg.get("phase_tss") or {}
-    ends = {"base": ptss.get("base_end_week", 6), "build": ptss.get("build_end_week", 10),
-            "specific": ptss.get("specific_end_week", 14), "peak": ptss.get("peak_end_week", 17)}
+    build_end = ptss.get("build_end_week", 10)
+    ends = {"base": ptss.get("base_end_week", 6), "build": build_end,
+            # No Specific phase unless configured: the old default (14) could sit
+            # ABOVE a configured peak_end_week, swallowing the taper — Calum's
+            # race week resolved to "specific" instead of taper.
+            "specific": ptss.get("specific_end_week", build_end),
+            "peak": ptss.get("peak_end_week", 17)}
     week_now = max(1, (today - plan_start).days // 7 + 1)
     phase = next((p for p in _PHASES if week_now <= ends[p]), "taper")
     if phase == "taper":
-        return {"phase": "taper/race", "ctl_today": ctl_today, "training_week": week_now,
-                "note": "past the last build phase — taper logic applies, no build target"}
+        # Shaped taper: stepped volume targets so the load checks stay ENGAGED
+        # in the most consequential weeks (previously no target -> every audit
+        # disengaged and volume was left to LLM discretion).
+        race_s = cfg.get("race_date")
+        if not race_s or not ctl_today:
+            missing = "race_date" if not race_s else "ctl_today"
+            return {"phase": "taper/race", "ctl_today": ctl_today, "training_week": week_now,
+                    "week_type": "taper",
+                    "note": f"taper, but no {missing} available — volume target could not "
+                            "be computed; step down toward race day, hold intensity"}
+        race = date.fromisoformat(race_s)
+        days_to_race = max(0, (race - today).days)
+        weeks_to_race = max(1, -(-days_to_race // 7))          # ceil
+        factor = _TAPER_FACTORS.get(min(weeks_to_race, 3), _TAPER_FACTORS[3])
+        pre_taper_weekly = 7.0 * float(ctl_today)
+        target = int(round(pre_taper_weekly * factor))
+        return {"phase": "taper", "week_type": "taper", "training_week": week_now,
+                "ctl_today": ctl_today, "race_date": race_s,
+                "weeks_to_race": weeks_to_race, "taper_factor": factor,
+                "required_weekly_tss": target, "recommended_weekly_tss": target,
+                "note": (f"TAPER, race in {weeks_to_race} wk: volume stepped to "
+                         f"{int(factor * 100)}% of the ~{int(round(pre_taper_weekly))} TSS "
+                         f"maintenance load (70/55/40 step-down). Hold INTENSITY — keep "
+                         f"race-pace/threshold sharpness at reduced dose, keep session "
+                         f"frequency; cut duration, never intensity. Race week: the race "
+                         f"itself is most of the load.")}
 
     # Derive phase CTL milestones from race_min when not explicitly configured
     # (mirrors generate-plan.py so athletes with a race_min but no phase_ctl — e.g.
@@ -304,18 +352,94 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None) -> dict
                              f"~{safe} TSS/wk. Prescribe ~{min(required, safe)} this week.")})
     else:
         out["recommended_weekly_tss"] = required
+
+    # Deload branch (audit P0-1): the smooth CTL-chase never unloaded — classic
+    # accumulation/overuse pattern. Every Nth training week steps down to ~62%,
+    # and a badly missed week (<70% executed) converts this week to recovery.
+    rec = out["recommended_weekly_tss"]
+    out["week_type"] = phase
+    n = int(cfg.get("deload_every_n_weeks", _DELOAD_EVERY_N) or 0)
+    factor = float(cfg.get("deload_factor", _DELOAD_FACTOR))
+    deload_why = None
+    if n and week_now % n == 0:
+        deload_why = f"scheduled deload (every {n}th training week; week {week_now})"
+    elif last_week_tss is not None and rec and float(last_week_tss) < _MISS_TRIGGER * rec:
+        deload_why = (f"recovery week: last week's executed load "
+                      f"({int(last_week_tss)} TSS) was under {int(_MISS_TRIGGER * 100)}% "
+                      f"of prescription (~{rec})")
+    if deload_why:
+        out.update({
+            "week_type": "deload",
+            "deload_reason": deload_why,
+            "full_week_tss": rec,
+            "recommended_weekly_tss": int(round(rec * factor)),
+            "note": (f"DELOAD WEEK ({deload_why}): prescribe ~{int(round(rec * factor))} TSS "
+                     f"({int(factor * 100)}% of the normal ~{rec}). Keep session frequency "
+                     f"and one short quality touch; cut volume. Adaptation happens in the "
+                     f"unload — do not chase the CTL line this week.")})
     return out
+
+
+def last_week_actual_tss(client, today: date | None = None) -> float | None:
+    """Sum of actual training load over the last COMPLETED Mon-Sun week.
+    None on fetch failure (miss-trigger then simply doesn't run); 0.0 for a
+    genuinely empty week (which correctly converts this week to recovery)."""
+    today = today or date.today()
+    monday = _monday(today)
+    lo = (monday - timedelta(days=7)).isoformat()
+    hi = (monday - timedelta(days=1)).isoformat()
+    try:
+        hist = client.get_training_history(days=(today - (monday - timedelta(days=7))).days + 1)
+        return round(sum(float(a.get("icu_training_load") or 0) for a in hist or []
+                         if lo <= (a.get("start_date_local") or "")[:10] <= hi), 1)
+    except Exception:
+        return None
+
+
+def run_caps(client, today: date | None = None) -> dict:
+    """Run-volume MAX ceilings from the last 4 completed weeks. Source of truth:
+    athletes/jamie/reference/rules.md — weekly km growth <=10% w/w as a general
+    rule, applied above the 18-25 km/wk normal band (so the km floor is 25);
+    single long run keeps the established x1.15 allowance. Returns km caps (for
+    the weekly brief) AND minute caps (for validate_week, where planned events
+    carry duration but not distance). All-None on fetch failure — callers must
+    surface a skipped check, never a silent pass (audit P1-9)."""
+    today = today or date.today()
+    try:
+        wk_km, wk_min, wk_long = {}, {}, {}
+        for a in client.get_training_history(days=35) or []:
+            if (a.get("type") or "") not in ("Run", "TrailRun", "VirtualRun"):
+                continue
+            d = date.fromisoformat((a.get("start_date_local") or "")[:10])
+            iso = d.isocalendar()[:2]
+            wk_km[iso] = wk_km.get(iso, 0.0) + (a.get("distance") or 0) / 1000
+            m = (a.get("moving_time") or 0) / 60
+            wk_min[iso] = wk_min.get(iso, 0.0) + m
+            wk_long[iso] = max(wk_long.get(iso, 0.0), m)
+        cur = today.isocalendar()[:2]
+        weeks = [k for k in sorted(wk_km) if k != cur][-4:]
+        if not weeks:
+            return {"weekly_km_cap": None, "weekly_min_cap": None, "long_run_min_cap": None}
+        return {
+            "weekly_km_cap": round(max(25.0, max(wk_km[k] for k in weeks) * 1.10), 1),
+            "weekly_min_cap": round(max(150.0, max(wk_min[k] for k in weeks) * 1.10)),
+            "long_run_min_cap": round(max(wk_long[k] for k in weeks) * 1.15),
+        }
+    except Exception:
+        return {"weekly_km_cap": None, "weekly_min_cap": None, "long_run_min_cap": None}
 
 
 def cmd_required_tss(args) -> dict:
     cfg = _load_cfg(args.athlete)
+    client = _client(cfg)
     ctl_today = args.ctl_today
     if ctl_today is None:
-        w = _client(cfg).get_wellness(days=3)
+        w = client.get_wellness(days=3)
         if not w:
             raise SystemExit(_err("no wellness data for current CTL; pass --ctl-today"))
         ctl_today = round(float(w[-1].get("ctl") or 0), 1)
-    return {"athlete": args.athlete, **required_tss(cfg, ctl_today)}
+    return {"athlete": args.athlete,
+            **required_tss(cfg, ctl_today, last_week_tss=last_week_actual_tss(client))}
 
 
 # ── subcommand: validate ───────────────────────────────────────────────────────
@@ -346,6 +470,7 @@ def cmd_validate(args) -> dict:
     # Map the lightweight input to the event shape validate_week expects.
     events = [{"start_date_local": s.get("date"), "type": s.get("sport") or s.get("type"),
                "category": "WORKOUT",
+               "moving_time": (s.get("minutes") or 0) * 60 or None,
                "load_target": s.get("tss") if s.get("tss") is not None else s.get("load_target")}
               for s in week]
     week_start = _monday(min(date.fromisoformat(e["start_date_local"][:10]) for e in events))
@@ -365,10 +490,13 @@ def cmd_validate(args) -> dict:
             tss_cap = tss_ceiling(float(max_h), str(phase["name"]))
     except Exception:
         pass
+    caps = run_caps(_client(cfg), week_start)
     rep = validate_week(
         events, week_start,
         day_rules=day_rules, ctl_today=ctl_today,
         weekly_tss_cap=tss_cap,
+        run_week_min_cap=caps.get("weekly_min_cap"),
+        run_long_min_cap=caps.get("long_run_min_cap"),
         ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
         strength_max=(day_rules or {}).get("strength_max"),
         distribution=phase.get("distribution"),
@@ -494,6 +622,32 @@ def cmd_fuel_check(args) -> dict:
             "flags": flags}
 
 
+# ── subcommand: log-strength ───────────────────────────────────────────────────
+def cmd_log_strength(args) -> dict:
+    """Log a non-device training session (CrossFit / gym / kettlebells) as REAL
+    load: push a WeightTraining event for that day and mark it done, which makes
+    intervals.icu create the matching manual activity — so CTL/ATL genuinely see
+    the work (5 Jul 2026 decision: Calum's CrossFit must feed the load model).
+    TSS is deterministic from duration + RPE (est IF = 0.55 + 0.025 x RPE), never
+    an LLM guess: 60 min at RPE 7 ~ 53 TSS, matching the agreed 40-60 band."""
+    cfg = _load_cfg(args.athlete)
+    client = _client(cfg)
+    d = args.date or date.today().isoformat()
+    minutes = int(args.minutes or 60)
+    rpe = max(1, min(10, int(args.rpe if args.rpe is not None else 7)))
+    est_if = 0.55 + 0.025 * rpe
+    tss = int(round(minutes / 60.0 * 100 * est_if * est_if))
+    name = args.name or f"CrossFit ({minutes}min, RPE {rpe})"
+    act = client.create_manual_activity(
+        sport="WeightTraining", start_date_local=f"{d}T18:00:00", name=name,
+        moving_time_s=minutes * 60, training_load=tss,
+        description=f"logged via plan_tools log-strength: est IF {est_if:.2f} from RPE {rpe}")
+    return {"athlete": args.athlete, "date": d, "minutes": minutes, "rpe": rpe,
+            "est_if": round(est_if, 3), "tss": tss, "activity_id": act.get("id"),
+            "undo": f"delete_activity('{act.get('id')}')",
+            "status": "manual activity created — counts toward CTL/ATL"}
+
+
 def cmd_render_workout(args) -> dict:
     """Render time-at-intensity segments into an ICU STRUCTURED workout string.
     Push the returned `description` via icu_fetch push_workout so it syncs to the
@@ -561,11 +715,19 @@ def main():
     pfc.add_argument("--sweat-na", type=float, dest="sweat_na")
     pfc.add_argument("--gut-trained", action="store_true")
 
+    pls = sub.add_parser("log-strength", help="log CrossFit/gym as real ICU load (manual activity via mark-as-done)")
+    pls.add_argument("--athlete", required=True)
+    pls.add_argument("--minutes", type=int, default=60)
+    pls.add_argument("--rpe", type=int, help="1-10; default 7 (est IF = 0.55 + 0.025 x RPE)")
+    pls.add_argument("--date", help="YYYY-MM-DD; default today")
+    pls.add_argument("--name")
+
     args = p.parse_args()
     handler = {"tss": cmd_tss, "week-tss": cmd_week_tss, "project": cmd_project,
                "required-tss": cmd_required_tss, "validate": cmd_validate,
                "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target,
-               "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check}[args.cmd]
+               "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check,
+               "log-strength": cmd_log_strength}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

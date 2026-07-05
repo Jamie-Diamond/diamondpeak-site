@@ -106,6 +106,86 @@ def run_summary(slug: str = "jamie") -> str:
     wellness_14d    = client.get_wellness(14)
     activities_7d   = client.get_training_history(7)
 
+    # Passive run-threshold estimate (audit P1-8): GAP-at-HR fit vs the configured
+    # threshold — flags placeholder/stale run thresholds before they seed race
+    # targets when quality resumes. Flag-only, never auto-applied.
+    run_thr_line = ""
+    try:
+        from thresholds import estimate_run_threshold_from_gap
+        import ops_log as _ops2
+        _est = estimate_run_threshold_from_gap(client)
+        if _est:
+            run_thr_line = (f"Passive run-threshold estimate: {_est['pace']}/km "
+                            f"(GAP-at-HR fit, {_est['n_runs']} steady runs, R2 {_est['r2']})")
+            _conf = profile.get("run_threshold_pace_per_km")
+            if _conf:
+                try:
+                    _mm, _ss = str(_conf).split(":")
+                    _conf_s = int(_mm) * 60 + int(_ss)
+                    _diff = (_est["pace_s_per_km"] - _conf_s) / _conf_s * 100
+                    run_thr_line += f" vs configured {_conf}/km ({_diff:+.0f}%)"
+                    if abs(_diff) > 8:
+                        run_thr_line += " — CONFIGURED THRESHOLD LOOKS STALE"
+                        _ops2.alert("weekly-summary",
+                                    f"run threshold drift: passive estimate {_est['pace']}/km vs "
+                                    f"configured {_conf}/km ({_diff:+.0f}%) — review before any "
+                                    f"quality-run prescriptions use it",
+                                    athlete=slug)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Realised intensity distribution (audit P1-1): what was DONE vs the phase
+    # TID — catches grey-zone drift AND a week collapsing to all-easy.
+    realised_tid_line = ""
+    try:
+        from primitives.realised_tid import realised_tid, tid_verdict
+        from primitives.blueprint import current_phase, phase_family
+        from session_library import event_key as _ekey
+        import ops_log as _ops
+        _lthr = profile.get("lthr")
+        if not _lthr:
+            try:
+                _lthr = (client.get_sport_settings("Run") or {}).get("lthr")
+            except Exception:
+                _lthr = None
+        _rt = realised_tid(activities_7d, lthr=_lthr)
+        if _rt:
+            _lib = _read_json(BASE / "config" / "session-library.json", {})
+            _ev = (_lib.get("events") or {}).get(_ekey(_cfg, profile) or "", {})
+            _bp = _read_json(adir / "reference" / "training-blueprint.json", {})
+            _ph = phase_family((current_phase(_bp, today) or {}).get("name") or "base")
+            _tid = (_ev.get("tid") or {}).get(_ph) or (_ev.get("tid") or {}).get("base")
+            if _tid:
+                _v = tid_verdict(_rt, _tid)
+                realised_tid_line = (
+                    f"Realised intensity (last 7d, session-level): "
+                    f"{_rt['low_pct']}/{_rt['moderate_pct']}/{_rt['high_pct']} low/mod/high "
+                    f"vs {_ph} target {_tid[0]}/{_tid[1]}/{_tid[2]}"
+                    + (f" — BREACH ({_v['breach'][0]}): {_v['breach'][1]}"
+                       if _v["breach"] else " — on distribution"))
+                # A deload/taper week is SUPPOSED to be mostly easy — suppress the
+                # missing-quality alarm there; excess quality stays valid any week.
+                _wk_type = None
+                try:
+                    import plan_tools as _pt
+                    _w = client.get_wellness(3)
+                    _ctl = round(float(_w[-1].get("ctl") or 0), 1) if _w else None
+                    if _ctl:
+                        _wk_type = _pt.required_tss(_cfg, _ctl).get("week_type")
+                except Exception:
+                    pass
+                if _v["breach"] and _v["breach"][0] == "missing_quality" \
+                        and _wk_type in ("deload", "taper"):
+                    realised_tid_line += f" (expected: {_wk_type} week — no alert)"
+                elif _v["breach"]:
+                    _ops.alert("weekly-summary",
+                               f"realised TID {_v['breach'][0]}: {_v['breach'][1]}",
+                               athlete=slug)
+    except Exception:
+        pass
+
     # Run aerobic efficiency (power:HR) — weekly means over the last 4 ISO weeks.
     # Higher = more watts per heartbeat = the engine improving. Runs ≥20 min with
     # power only (Garmin running power era, live since Jun 2026).
@@ -379,6 +459,8 @@ Week: {week_start} → {week_end}
 
 ## Local — Run aerobic efficiency trend (pre-computed)
 {run_efficiency_line or "Not enough run power:HR data yet."}
+{realised_tid_line or "Realised intensity: not enough classifiable activity data this week."}
+{run_thr_line or "Run threshold: no passive estimate available (needs 6+ steady runs with GAP+HR)."}
 
 ## Local — VO2max trend (block-level, pre-computed)
 {vo2max_line}

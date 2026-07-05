@@ -58,7 +58,7 @@ PROTOCOL_DOSE_14D    = 3.0   # race-proximal target once the formal block starts
 SENSOR_SUSPECT_C     = 22.0  # Garmin wrist sensors read 3–8°C high; look up external weather at or above this
 LONG_SESSION_MIN     = 90    # for long sessions report both peak and mean ambient
 
-ACCL_TAU_DAYS = 21.0   # exponential decay time constant (3-week half-life)
+ACCL_TAU_DAYS = 21.0   # exponential decay TIME CONSTANT (half-life ~14.6 days, not 3 weeks)
 ACCL_SCALE    = 10.5   # maps raw score → %; 3×/week full-dose steady-state ≈ 100%
 
 # Dose weighting — temperature multiplier (relative to 30°C reference)

@@ -453,7 +453,13 @@ def _race_predictor(profile, current_ctl):
     intensity factor scales as IF ∝ √CTL. FTP and run threshold are held FIXED — the
     only lever between "now", "race day" and "target" is CTL (→ IF). Anchored entirely
     to the athlete's previous race (real IF, CTL, power, splits); bike speed scales as
-    v ∝ NP^(1/3) (aero-dominated, same course). Returns None if inputs are missing."""
+    v ∝ NP^(1/3) (aero-dominated, same course). IF is CAPPED at 0.75 — the top of the
+    long-course sustainable band — so an ambitious CTL target can never project a
+    physiologically absurd intensity (audit P1-4). The run split is anchored to the
+    REAL previous-race run scaled by the same IF ratio, NOT derived from the
+    configured run threshold (a placeholder the athlete does not train against;
+    per his own race notes the run gain comes from aid-station discipline and heat,
+    so projecting it off run fitness overstated it). Returns None if inputs missing."""
     import math
     pr  = profile.get("prev_race") or {}
     cfg = profile.get("race_predictor") or {}
@@ -477,12 +483,16 @@ def _race_predictor(profile, current_ctl):
         ("Target",          float(cfg.get("target_ctl", anchor_ctl))),
     ]
     rows = []
+    IF_CAP = 0.75                      # long-course sustainable ceiling
     for label, ctl in scenarios:
-        IF   = anchor_if * math.sqrt(ctl / anchor_ctl)
+        IF   = min(IF_CAP, anchor_if * math.sqrt(ctl / anchor_ctl))
         npw  = round(ftp * IF)
         v    = v_ref * (npw / anchor_np) ** (1 / 3.0)
         bmin = bike_km / v * 60
-        rmin = 42.2 * (thr / IF) / 60
+        if run_anchor_min:
+            rmin = run_anchor_min * (anchor_if / IF)
+        else:
+            rmin = 42.2 * (thr / IF) / 60
         rows.append({"label": label, "ctl": round(ctl), "if": round(IF, 3),
                      "bike_w": npw, "bike_min": round(bmin), "run_min": round(rmin),
                      "swim_min": round(swim_min), "t12_min": t12,
