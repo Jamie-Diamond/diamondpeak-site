@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Race Fuelling Planner v1.4 — Diamond Peak</title>
+<title>Race Fuelling Planner v1.5 — Diamond Peak</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../style.css">
 <style>
@@ -118,18 +118,24 @@
   .race-card-items .item-carbs{font-family:'DM Mono',monospace;font-size:9px;color:var(--green);font-weight:500}
   .race-card-items .item-aid{font-size:7px;color:var(--red);font-family:'DM Mono',monospace;background:var(--red-bg);padding:1px 3px;border-radius:2px}
   .race-card-empty{font-size:10px;color:var(--muted);font-style:italic;padding:8px 0}
-  .tt-card{grid-column:1/-1;display:inline-block;background:#fff;border:3px solid var(--bike);border-radius:4px;break-inside:avoid;max-width:380px}
-  .tt-header{background:var(--bike);color:#fff;padding:6px 12px;font-family:'DM Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;text-align:center}
+  /* Top tube sticker — pro-team style: narrow strip, TIME | NUTRITION */
+  .tt-card{grid-column:1/-1;display:inline-block;background:#fff;border:2px solid #18160f;border-radius:3px;break-inside:avoid;width:200px}
+  .tt-name{border-bottom:2px solid #18160f;padding:3px 8px;background:#fff}
+  .tt-name input{border:none;outline:none;width:100%;font-family:'DM Mono',monospace;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.04em;background:transparent;color:#18160f}
   .tt-table{width:100%;border-collapse:collapse}
-  .tt-table th{padding:4px 8px;font-family:'DM Mono',monospace;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--ink);background:#f0eddf;border-bottom:2px solid var(--bike)}
-  .tt-table td{padding:6px 8px;border-bottom:1px solid #e8e4da;vertical-align:middle;font-family:'DM Mono',monospace;font-size:11px}
+  .tt-table th{padding:3px 6px;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;color:#18160f;background:#fff;border-bottom:2px solid #18160f;text-align:center}
+  .tt-table th:first-child{border-right:2px solid #18160f}
+  .tt-table td{border-bottom:1px solid #18160f;vertical-align:middle;font-family:'DM Mono',monospace}
   .tt-table tr:last-child td{border-bottom:none}
-  .tt-table .tt-time-col{font-weight:500;color:var(--ink);white-space:nowrap;min-width:50px;text-align:center}
-  .tt-table .tt-nutr-col{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-height:28px}
-  .tt-food-chip{display:inline-flex;align-items:center;gap:2px;padding:2px 6px;background:#f4f2ec;border:1px solid var(--border);border-radius:3px;font-size:12px;white-space:nowrap}
-  .tt-food-chip .tt-chip-carbs{font-size:8px;color:var(--green);font-weight:500}
-  .tt-food-chip.tt-aid-chip{border-color:var(--red);background:#fdf6f4}
-  .tt-table .tt-finish{font-weight:500;color:var(--red);text-transform:uppercase;text-align:center}
+  .tt-table .tt-time-col{font-weight:700;font-size:12px;color:#18160f;white-space:nowrap;width:52px;text-align:center;border-right:2px solid #18160f;padding:4px 6px}
+  .tt-dist{font-size:8px;color:var(--muted);font-weight:400}
+  .tt-nutr-cell{padding:3px 6px;min-height:26px}
+  .tt-item{display:inline-flex;align-items:center;gap:3px;margin:1px 6px 1px 0;font-size:20px;line-height:1.1;white-space:nowrap}
+  .tt-item .tt-portion{font-size:9px;color:var(--muted)}
+  .tt-item .tt-qty{font-size:11px;font-weight:700;color:#18160f}
+  .tt-item .tt-chip-carbs{font-size:8px;color:var(--green);font-weight:500}
+  .tt-aid-mark{font-size:8px;color:var(--red);font-family:'DM Mono',monospace;display:block;margin-bottom:1px}
+  .tt-table .tt-finish{font-weight:700;color:#fff;background:var(--red);text-transform:uppercase;text-align:center;font-size:11px;padding:5px;border-bottom:none}
   .aid-pickup-card{background:#fff;border:2px solid var(--red);border-radius:8px;padding:16px;break-inside:avoid}
   .aid-pickup-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid var(--red);font-family:'DM Mono',monospace;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--red)}
   .aid-pickup-items{list-style:none}
@@ -234,7 +240,7 @@
   <div class="dpc-header"><img src="../logo-mark.png" alt="Diamond Peak" class="dpc-logo"><span class="dpc-wordmark">Diamond Peak</span></div>
   <a href="../index.html" class="back">&larr; Back to tools</a>
   <div class="kicker">NUTRITION &amp; PHYSIOLOGY</div>
-  <h1>Race Fuelling Planner <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.4</span></h1>
+  <h1>Race Fuelling Planner <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.5</span></h1>
   <p class="intro">
     Set up your race, select foods per leg, and auto-generate a fuelling strategy that
     respects how much your gut can actually absorb. Tracks carbs, fluid, sodium and caffeine,
@@ -255,11 +261,11 @@
     <strong>Caffeine model</strong>: plasma caffeine is modelled using first-order pharmacokinetics:
     <code>ka = ln2/20 min</code> (absorption), <code>ke = ln2/480 min</code> (8 hr half-life).
     Peak plasma at ~45 min post-ingestion. Recommended race dose: <code>3&ndash;6 mg/kg</code>.<br><br>
-    <strong>Plan generation</strong>: the auto-strategy builds a <strong>repeating block</strong> that cycles through your selected foods in a predictable rhythm.
-    Solid foods are <strong>sequential</strong>: each bar or chew is finished before the next one starts, so you never have multiple items open at once.
-    Gels and drinks <strong>rotate</strong> between solid doses, keeping variety while maintaining the rhythm.
-    When a drink&rsquo;s bottle capacity runs out, it <strong>drops from the rotation</strong> and the remaining foods continue.
-    After carbs are placed, separate passes top up <strong>fluid</strong>, <strong>sodium</strong>, and <strong>caffeine</strong> to hit their targets, crediting what the carb foods already contributed.<br><br>
+    <strong>Plan generation</strong>: the auto-strategy builds <strong>one simple repeating order</strong> per leg &mdash; e.g. every 12 min: &#8531; bottle &rarr; chew &rarr; water &rarr; repeat &mdash; sized so the sequence covers both the carb and fluid targets at once (max 6 actions per hour).
+    Drink doses are <strong>&#8531; of a bottle</strong>; solids and gels are whole or half units.
+    When a bottle runs out it <strong>drops from the rotation</strong> and water takes its slot; <strong>caffeinated drinks are capped by your caffeine target</strong> so they never become the default fluid.
+    Breakfast is planned as a <strong>normal meal</strong> (porridge, toast, bagel&hellip; plus coffee), not race food.
+    Sodium and caffeine top-ups are placed as separate low-frequency doses, crediting what the carb foods already contributed.<br><br>
     <strong>Bottle management</strong>: aid station pickups are based on whether you have enough fluid to reach the <strong>end of the ride</strong>, not just the next aid.
     If you do need to stop, only the <strong>minimum bottles</strong> are refilled to cover the deficit, with no unnecessary water weight.
   </div>
@@ -268,6 +274,7 @@
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong><br>
     <strong>v1.4</strong>: Moved the physiology maths (transporter caps, target formulas, plan-check thresholds) into a shared engine so the ClaudeCoach bot runs the exact same logic and the two never disagree. No change to the numbers.<br>
     <strong>v1.3</strong>: Aligned the Absorption Graph zones to the gut model. The green/amber/red bands now track your combined transporter cap (90 g/hr default, 120 gut-trained) instead of fixed thresholds, and a dashed line marks the tighter glucose cap so a plan that looks green on combined carbs but exceeds the glucose transporter is now visible. The two carb views are consistent.<br>
+    <strong>v1.5</strong>: Simpler plans. The strategy generator now builds one repeating order per leg (e.g. every 12 min: &#8531; bottle &rarr; chew &rarr; water &rarr; repeat) covering carbs and fluid together, shown on the leg and race cards. Breakfast is a normal meal (porridge, toast, bagel + coffee) instead of race food. Caffeine target is body-weight based (4 mg/kg default) and caffeinated drinks are capped by it, so no more endless caffeine-drink sips. Added Maurten 320 CAF 100 and 1.5&times; concentrated 750 ml mixes. Bike cages have editable names. Top tube card redesigned as a pro-team-style printable sticker with your name and &times;N item counts.<br>
     <strong>v1.2</strong>: Engine upgrade. Added a gut/absorption model with separate glucose (SGLT1) and fructose (GLUT5) transporter caps and a "gut-trained" mode (90 &rarr; 120 g/hr), showing carbs actually absorbed vs unabsorbed backlog in the gut. New "Suggest targets" sets evidence-based carb, fluid, sodium and caffeine goals from race duration, body weight, sweat rate and sweat-sodium concentration. New Plan Check panel flags red flags: glucose over transporter cap, wrong glucose:fructose ratio, gut backlog, dehydration or over-drinking, under-replacing sodium, caffeine outside 3-6 mg/kg, fuelling gaps, and solids on the run.<br>
     <strong>v1.1</strong>: Usability update. Fixed a crash in "Optimise all legs" that left the loading overlay stuck. Setup now saves automatically in the browser (with Reset all / Clear plan buttons). Typing in number fields no longer loses focus; target sliders drag smoothly. Custom foods join the shortlist automatically. Schedule table scrolls horizontally on small screens. Added a step-by-step guide bar; switching preset now clears aid stations for disciplines the race no longer has.<br>
     <strong>v1.0</strong>: Initial release. Race fuelling planner with carb targets, fluid needs, and a practical fuelling schedule by duration and intensity.
@@ -339,6 +346,13 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
 
   // caf = caffeine in mg
   var FOODS = [
+    // ── Breakfast / meals (meal:true keeps them out of the race rotation) ──
+    {id:'porridge',     name:'Porridge, banana & honey',carbs:75,glucose:55,fructose:20,ml:0,  na:120,caf:0,  form:'solid', meal:true, icon:'🥣'},
+    {id:'toast-jam',    name:'Toast ×2 with jam',  carbs:50,glucose:38,fructose:12,ml:0,  na:350,caf:0,  form:'solid', meal:true, icon:'🍞'},
+    {id:'bagel-pb',     name:'Bagel with peanut butter',carbs:55,glucose:48,fructose:7, ml:0,  na:450,caf:0,  form:'solid', meal:true, icon:'🥯'},
+    {id:'rice-pud',     name:'Rice pudding pot (400g)', carbs:60,glucose:50,fructose:10,ml:0,  na:200,caf:0,  form:'solid', meal:true, icon:'🍚'},
+    {id:'oj250',        name:'Orange juice (250 ml)',   carbs:25,glucose:13,fructose:12,ml:250,na:5,  caf:0,  form:'liquid',meal:true, icon:'🍊'},
+    {id:'coffee',       name:'Coffee (mug, 250 ml)',    carbs:0, glucose:0, fructose:0, ml:250,na:0,  caf:90, form:'liquid',meal:true, icon:'☕'},
     // ── Solids ──
     {id:'pf30-chew',    name:'PF 30 Chew',              carbs:30,glucose:18,fructose:12,ml:0,  na:0,  caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
     {id:'pf60-chew',    name:'PF 60 Chew',              carbs:60,glucose:36,fructose:24,ml:0,  na:0,  caf:0,  form:'solid', icon:'\uD83C\uDF6C'},
@@ -359,6 +373,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     {id:'torq-gel',     name:'Torq Energy Gel',         carbs:28,glucose:18,fructose:10,ml:45, na:20, caf:0,  form:'gel',   icon:'\uD83C\uDF6F'},
     // ── Drinks ──
     {id:'maurten-d320', name:'Maurten Drink 320',      carbs:80,glucose:48,fructose:32,ml:500,na:230,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
+    {id:'maurten-d320caf',name:'Maurten Drink 320 CAF 100',carbs:80,glucose:48,fructose:32,ml:500,na:230,caf:100,form:'liquid',icon:'\u2615'},
+    {id:'maurten-d320-15',name:'Maurten 320 \u00D71.5 mix (750 ml)',carbs:120,glucose:72,fructose:48,ml:750,na:345,caf:0,form:'liquid',icon:'\uD83E\uDD64'},
+    {id:'maurten-d320caf-15',name:'Maurten 320 CAF \u00D71.5 mix (750 ml)',carbs:120,glucose:72,fructose:48,ml:750,na:345,caf:150,form:'liquid',icon:'\u2615'},
     {id:'sis-beta-d',   name:'SiS Beta Fuel Drink',    carbs:80,glucose:48,fructose:32,ml:500,na:250,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
     {id:'maurten-d160', name:'Maurten Drink 160',      carbs:40,glucose:24,fructose:16,ml:500,na:140,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
     {id:'sis-go-elec',  name:'SiS GO Electrolyte',     carbs:36,glucose:22,fructose:14,ml:500,na:350,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
@@ -387,15 +404,15 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       {km:125,discipline:'bike',type:'full'},
       {km:157,discipline:'bike',type:'full'}
     ], schedule:[], customFoods:[], raceType:'tri',
-    shortlist:['pf30-chew','pf60-chew','sis-beta-chew','sis-ban-bar','maurten-d320','sis-beta-d','precision-h','water','hi5-caf-hit','salt-cap'], bodyWeight: 80, gelMode:'packet', sweatRate: 1000, sweatNa: 950, gutTrained: false,
+    shortlist:['porridge','coffee','pf30-chew','pf60-chew','sis-beta-chew','sis-ban-bar','maurten-d320','maurten-d320caf','sis-beta-d','precision-h','water','salt-cap'], bodyWeight: 80, gelMode:'packet', sweatRate: 1000, sweatNa: 950, gutTrained: false,
     bikeCages:[
-      {foodId:'maurten-d320',ml:500},
-      {foodId:'hi5-caf-hit',ml:500},
-      {foodId:'precision-h',ml:600},
-      {foodId:'maurten-d320',ml:500}
+      {name:'BTA',foodId:'maurten-d320',ml:500},
+      {name:'Frame 1',foodId:'maurten-d320caf',ml:500},
+      {name:'Frame 2',foodId:'precision-h',ml:600},
+      {name:'Rear',foodId:'maurten-d320',ml:500}
     ],
     showSodium:false, showFluid:true, showAid:true, showGraph:true,
-    showPacking:true, showTopTube:true, showCaffeine:false,
+    showPacking:true, showTopTube:true, showCaffeine:true, stickerName:'',
     showEnergyGraph:true, showGutGraph:true,
     // Per-leg strategy: { legName: { foods: [foodId,...], target: g/hr } }
     strategies: {},
@@ -542,15 +559,33 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var sl=[];for(var i=0;i<state.shortlist.length;i++){var f=getFoodById(state.shortlist[i]);if(f)sl.push(f);}
     var pick=[];
     function firstOf(test){for(var j=0;j<sl.length;j++)if(test(sl[j])&&pick.indexOf(sl[j].id)<0)return sl[j].id;return null;}
-    var isCarb=function(f){return f.carbs>0;};
-    var isDrinkCarb=function(f){return f.carbs>0&&f.form==='liquid';};
-    var isSolidCarb=function(f){return f.carbs>0&&f.form==='solid';};
-    var isGelCarb=function(f){return f.carbs>0&&f.form==='gel';};
+    var isCarb=function(f){return f.carbs>0&&!f.meal;};
+    var isDrinkCarb=function(f){return f.carbs>0&&f.form==='liquid'&&!f.meal;};
+    var isSolidCarb=function(f){return f.carbs>0&&f.form==='solid'&&!f.meal;};
+    var isGelCarb=function(f){return f.carbs>0&&f.form==='gel'&&!f.meal;};
     var isWater=function(f){return f.carbs===0&&f.ml>0&&f.na<=50&&(f.caf||0)===0;};
     var isSalt=function(f){return f.carbs===0&&f.na>100;};
-    var isCaf=function(f){return (f.caf||0)>0;};
+    var isCaf=function(f){return (f.caf||0)>0&&!f.meal;};
     function add(id){if(id&&pick.indexOf(id)<0)pick.push(id);}
-    if(legName==='Breakfast'||legName==='Pre-Race'){
+    if(legName==='Breakfast'){
+      // A normal meal, not race food: prefer meal-tagged items, pulling them
+      // into the shortlist from the library if none are shortlisted yet.
+      var isMeal=function(f){return f.meal&&f.carbs>0;};
+      var isMealCaf=function(f){return f.meal&&(f.caf||0)>0&&f.carbs===0;};
+      function fromLibrary(test){
+        var all=getAllFoods();
+        for(var q=0;q<all.length;q++)if(test(all[q])){
+          if(state.shortlist.indexOf(all[q].id)<0)state.shortlist.push(all[q].id);
+          return all[q].id;
+        }
+        return null;
+      }
+      add(firstOf(isMeal)||fromLibrary(isMeal)||firstOf(isSolidCarb)||firstOf(isCarb));
+      add(firstOf(isMealCaf)||fromLibrary(isMealCaf));
+      add(firstOf(isWater));
+      return pick;
+    }
+    if(legName==='Pre-Race'){
       add(firstOf(isSolidCarb)||firstOf(isCarb));
       add(firstOf(isWater));
       return pick;
@@ -578,7 +613,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     for(var i=0;i<legs.length;i++){
       var nm=legs[i].name;
       var st=state.strategies[nm]||(state.strategies[nm]={foods:[],target:0,fluidTarget:0,sodiumTarget:0,cafTarget:0});
-      if(nm==='Breakfast'){st.target=Math.min(120,Math.round(wt*1.5/5)*5);st.fluidTarget=500;st.sodiumTarget=300;st.cafTarget=0;}
+      if(nm==='Breakfast'){st.target=Math.min(200,Math.round(wt*2/5)*5);st.fluidTarget=500;st.sodiumTarget=300;st.cafTarget=90;}
       else if(nm==='Pre-Race'){st.target=30;st.fluidTarget=300;st.sodiumTarget=200;st.cafTarget=0;}
       else if(nm==='Bike'){st.target=tg.bikeCarbGHr;st.fluidTarget=flHr;st.sodiumTarget=naHr;st.cafTarget=hasRun?Math.round(cafTotal*0.6):cafTotal;}
       else if(nm==='Run'){st.target=tg.runCarbGHr;st.fluidTarget=flHr;st.sodiumTarget=naHr;st.cafTarget=hasBike?Math.round(cafTotal*0.4):cafTotal;}
@@ -788,120 +823,6 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       lastPlacedTime=t;
       return true;
     }
-
-    // ── PHASE 1: Carbs - repeating-block rotation ──
-    // Cycle through all selected carb foods in a predictable, repeating rhythm.
-    // Drinks drop out of the rotation once their bottle capacity is exhausted.
-
-    if(carbFoods.length>0&&strat.target>0){
-      var totalCarbs=strat.target*legHrs;
-
-      function calcPortion(fd){
-        if(fd.form==='solid'){
-          // Whole or half portions only - easy to manage on race day
-          return fd.carbs*0.5>=8?0.5:1;
-        } else if(fd.form==='gel'&&state.gelMode==='bottle'){
-          var minP=fd.ml>0?Math.max(0.1,25/fd.ml):0.25;
-          var gelBP=[1,0.5,1/3,0.25],bestP2=1,bestDiff2=9999;
-          for(var pi2=0;pi2<gelBP.length;pi2++){if(gelBP[pi2]<minP-0.01)continue;var diff2=Math.abs(fd.carbs*gelBP[pi2]-15);if(diff2<bestDiff2){bestDiff2=diff2;bestP2=gelBP[pi2];}}
-          return bestP2;
-        } else if(fd.form==='gel'){
-          return fd.carbs*0.5>=6?0.5:1;
-        } else if(fd.form==='liquid'){
-          var minLP=fd.ml>0?Math.max(0.25,100/fd.ml):0.25;
-          var liqP=[1,0.5,1/3,0.25],bestP3=1,bestDiff3=9999;
-          for(var pi3=0;pi3<liqP.length;pi3++){if(liqP[pi3]<minLP-0.01)continue;var diff3=Math.abs(fd.carbs*liqP[pi3]-15);if(diff3<bestDiff3){bestDiff3=diff3;bestP3=liqP[pi3];}}
-          return bestP3;
-        }
-        return 1;
-      }
-
-      // Split carb foods: solids are sequential (finish one before starting next),
-      // gels and drinks rotate freely between solid doses.
-      var solidQ=[],nonSolidRot=[];
-      var drinkMlUsed={}; // cumulative ml consumed per drink foodId
-      var drinkMlCap={};
-      for(var dcc=0;dcc<state.bikeCages.length;dcc++){
-        var cageF=getFoodById(state.bikeCages[dcc].foodId);
-        if(cageF&&cageF.carbs>0){
-          drinkMlCap[cageF.id]=(drinkMlCap[cageF.id]||0)+state.bikeCages[dcc].ml;
-        }
-      }
-      for(var ri=0;ri<carbFoods.length;ri++){
-        var rf=carbFoods[ri],rp=calcPortion(rf);
-        var dose={food:rf,portion:rp,carbsPerDose:rf.carbs*rp};
-        if(rf.form==='solid') solidQ.push(dose);
-        else nonSolidRot.push(dose);
-        if(rf.form==='liquid') drinkMlUsed[rf.id]=0;
-      }
-
-      // Build dose list: solids are sequential, gels/drinks rotate between them.
-      // Pattern: solid, gel/drink, solid, gel/drink, ... until each solid's share is done.
-      var allDoses=[];
-      var carbsAccum=0;
-      var solidIdx=0,nsIdx=0;
-      var solidDosesLeft=0; // how many doses remain for current solid
-      var hasSolids=solidQ.length>0,hasNS=nonSolidRot.length>0;
-      // Each solid gets an equal share of the solid/gel carb budget
-      var solidShare=hasSolids?(totalCarbs*(solidQ.length/(solidQ.length+nonSolidRot.length)))/solidQ.length:0;
-
-      while(carbsAccum<totalCarbs&&allDoses.length<200){
-        var placedDose=false;
-        // Place a solid dose if one is active
-        if(hasSolids&&solidIdx<solidQ.length){
-          if(solidDosesLeft<=0){
-            // Start next solid: calculate how many doses to fill its share
-            var sd=solidQ[solidIdx];
-            solidDosesLeft=sd.carbsPerDose>0?Math.max(1,Math.round(solidShare/sd.carbsPerDose)):1;
-          }
-          allDoses.push(solidQ[solidIdx]);
-          carbsAccum+=solidQ[solidIdx].carbsPerDose;
-          solidDosesLeft--;
-          if(solidDosesLeft<=0) solidIdx++;
-          placedDose=true;
-        }
-        if(carbsAccum>=totalCarbs)break;
-        // Place a gel/drink dose (rotate), skipping exhausted drinks
-        if(hasNS){
-          var nsSkips=0;
-          while(nsSkips<nonSolidRot.length){
-            var ns=nonSolidRot[nsIdx%nonSolidRot.length];
-            if(ns.food.form==='liquid'){
-              var mlPerDose=(ns.food.ml||0)*ns.portion;
-              var cap=drinkMlCap[ns.food.id];
-              if(typeof cap!=='undefined'&&(drinkMlUsed[ns.food.id]||0)+mlPerDose>cap){
-                nsIdx++;nsSkips++;continue; // exhausted
-              }
-              drinkMlUsed[ns.food.id]=(drinkMlUsed[ns.food.id]||0)+mlPerDose;
-            }
-            allDoses.push(ns);
-            carbsAccum+=ns.carbsPerDose;
-            nsIdx++;
-            placedDose=true;
-            break;
-          }
-          if(nsSkips>=nonSolidRot.length) hasNS=false; // all drinks exhausted
-        }
-        if(!placedDose)break;
-      }
-
-      // Space all doses evenly across the leg, respecting MIN_GAP
-      var interval=allDoses.length>0?Math.max(MIN_GAP,(endT-startT)/allDoses.length):MIN_GAP;
-      var carbsPlaced=0;
-      for(var di=0;di<allDoses.length;di++){
-        if(carbsPlaced>=totalCarbs)break;
-        var dose=allDoses[di];
-        var t=startT+interval*di;
-        var cReason='Carb rotation: targeting '+strat.target+'g/hr ('+Math.round(totalCarbs)+'g total)';
-        if(dose.food.form==='solid') cReason='Solid in sequence: '+strat.target+'g/hr target';
-        else if(dose.food.form==='gel') cReason='Gel rotation: '+strat.target+'g/hr target';
-        else if(dose.food.form==='liquid') cReason='Drink sip: '+strat.target+'g/hr target, '+Math.round(dose.food.carbs*dose.portion)+'g per dose';
-        if(!addItem(dose.food.id,t,dose.portion,cReason))break;
-        carbsPlaced+=dose.carbsPerDose;
-      }
-    }
-
-    // ── Tally what phase 1 delivered for fluid/sodium/caffeine ──
     function tallyPlaced(){
       var ml=0,na=0,caf=0;
       for(var p=0;p<placed.length;p++){
@@ -912,25 +833,169 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       return{ml:ml,na:na,caf:caf};
     }
 
-    // ── PHASE 2: Fluid top-up (place at specific times, not appending) ──
-    if(fluidFoods.length>0&&strat.fluidTarget>0){
-      var tally=tallyPlaced();
-      var fluidNeeded=strat.fluidTarget*legHrs - tally.ml;
-      if(fluidNeeded>50){
-        var bestFluid=fluidFoods[0];
-        for(var ff=1;ff<fluidFoods.length;ff++) if(fluidFoods[ff].ml>bestFluid.ml) bestFluid=fluidFoods[ff];
-        // Sip size: ~150ml per drink (a comfortable mouthful every 10-15 mins)
-        var sipMl=Math.min(150,bestFluid.ml||250);
-        var sipPortion=sipMl/(bestFluid.ml||250);
-        var numDrinks=Math.ceil(fluidNeeded/sipMl);
-        var fInterval=Math.max(MIN_GAP,(endT-startT)/(numDrinks+1));
-        var fluidWhyMl=Math.round(fluidNeeded);
-        lastPlacedTime=-9999;
-        for(var fi=0;fi<numDrinks;fi++){
-          var ft=startT+fInterval*(fi+0.5);
-          addItem(bestFluid.id,ft,sipPortion,'Fluid top-up: '+fluidWhyMl+'ml deficit after carb foods (target '+strat.fluidTarget+'ml/hr)');
+    // ── BREAKFAST: a normal sit-down meal, not a race rotation ──
+    if(legName==='Breakfast'){
+      var wantC=strat.target||0,placedC=0;
+      // Meal-tagged foods first, biggest first; race food only as a fallback
+      var meals=[];
+      for(var mc=0;mc<carbFoods.length;mc++)meals.push(carbFoods[mc]);
+      meals.sort(function(a,b){return ((b.meal?1:0)-(a.meal?1:0))||(b.carbs-a.carbs);});
+      var mt=startT,mi=0,mSafety=0;
+      while(placedC<wantC-10&&mSafety<6&&meals.length>0){
+        var mf=meals[Math.min(mi,meals.length-1)];
+        var mNeed=wantC-placedC;
+        var mp=(mNeed<mf.carbs*0.6&&mf.carbs*0.5>=15)?0.5:1;
+        if(!addItem(mf.id,mt,mp,'Breakfast: ~'+Math.round(wantC)+'g carbs as a normal meal, eaten together'))break;
+        placedC+=mf.carbs*mp;mt+=12;mi++;mSafety++;
+      }
+      // Coffee (or other caffeine) alongside the meal
+      if(strat.cafTarget>0&&cafFoods.length>0){
+        var bkCaf=cafFoods[0];
+        for(var bkc=1;bkc<cafFoods.length;bkc++)if(cafFoods[bkc].meal)bkCaf=cafFoods[bkc];
+        addItem(bkCaf.id,mt,1,'Morning caffeine ('+(bkCaf.caf||0)+'mg) with breakfast');
+        mt+=12;
+      }
+      // Fluid to target
+      if(fluidFoods.length>0&&strat.fluidTarget>0){
+        var bkTly=tallyPlaced(),bkW=fluidFoods[0];
+        var bkNeed=strat.fluidTarget-bkTly.ml;
+        var bkN=Math.min(2,Math.max(0,Math.round(bkNeed/(bkW.ml||500))));
+        for(var wv=0;wv<bkN;wv++)addItem(bkW.id,mt+wv*20,1,'Fluid with breakfast (target '+strat.fluidTarget+'ml)');
+      }
+      strat.pattern='';
+      return;
+    }
+
+    // ── RACE LEGS: one simple order that repeats ──
+    // Drink doses are ⅓ of a bottle; solids and gels are whole (or half) units.
+    // The hour is split into evenly spaced slots, fluid and carbs are covered by
+    // the same sequence, and that one order repeats until the leg ends.
+    var drinkQ=[],solidQ=[];
+    for(var cq=0;cq<carbFoods.length;cq++){
+      if(carbFoods[cq].meal)continue; // meals never join the race rotation
+      if(carbFoods[cq].form==='liquid')drinkQ.push(carbFoods[cq]);else solidQ.push(carbFoods[cq]);
+    }
+    // Non-caffeinated drinks lead the rotation; caffeinated ones are capped by the caffeine target
+    drinkQ.sort(function(a,b){return (a.caf||0)-(b.caf||0);});
+
+    var drinkMlUsed={},drinkMlCap={};
+    if(legName==='Bike'){
+      for(var dcc=0;dcc<state.bikeCages.length;dcc++){
+        var cageF=getFoodById(state.bikeCages[dcc].foodId);
+        if(cageF&&cageF.carbs>0)drinkMlCap[cageF.id]=(drinkMlCap[cageF.id]||0)+state.bikeCages[dcc].ml;
+      }
+    }
+
+    var solidWhole=false;
+    function sipOf(f){var p=1/3;return{food:f,portion:p,carbs:f.carbs*p,ml:(f.ml||0)*p,caf:(f.caf||0)*p};}
+    function doseOf(f){
+      var p=1;
+      if(f.form==='solid'&&!solidWhole)p=(f.carbs*0.5>=15)?0.5:1;
+      else if(f.form==='gel'&&state.gelMode==='bottle'){
+        var minP=f.ml>0?Math.max(0.1,25/f.ml):0.25;
+        var gelBP=[1,0.5,1/3,0.25],bestP2=1,bestDiff2=9999;
+        for(var pi2=0;pi2<gelBP.length;pi2++){if(gelBP[pi2]<minP-0.01)continue;var diff2=Math.abs(f.carbs*gelBP[pi2]-15);if(diff2<bestDiff2){bestDiff2=diff2;bestP2=gelBP[pi2];}}
+        p=bestP2;
+      }
+      return{food:f,portion:p,carbs:f.carbs*p,ml:(f.ml||0)*p,caf:(f.caf||0)*p};
+    }
+
+    var C=strat.target||0,F=strat.fluidTarget||0;
+    var sip0=drinkQ.length?sipOf(drinkQ[0]):null;
+    var dose0=solidQ.length?doseOf(solidQ[0]):null;
+    var nD=0,nS=0,nW=0;
+    if(C>0){
+      if(sip0&&dose0){
+        nD=Math.max(1,Math.round((C*0.5)/sip0.carbs));
+        nS=Math.max(1,Math.round((C-nD*sip0.carbs)/dose0.carbs));
+      } else if(sip0)nD=Math.max(1,Math.round(C/sip0.carbs));
+      else if(dose0)nS=Math.max(1,Math.round(C/dose0.carbs));
+    }
+    // Fewer, bigger solid doses if the hour is getting crowded
+    if(nD+nS>5&&dose0&&dose0.portion<1){solidWhole=true;dose0=doseOf(solidQ[0]);nS=Math.max(1,Math.round((C-nD*(sip0?sip0.carbs:0))/dose0.carbs));}
+    var waterSip=150;
+    var mlFromDrinks=nD*(sip0?sip0.ml:0);
+    // Credit the fluid the sodium top-up (PH1500 etc.) will add later, so the
+    // water slots don't overshoot the hourly fluid target
+    var mlFromNa=0;
+    if(strat.sodiumTarget>0){
+      var naLiq=null;
+      for(var nlq=0;nlq<sodiumFoods.length;nlq++)if((sodiumFoods[nlq].ml||0)>0&&(sodiumFoods[nlq].na||0)>100){naLiq=sodiumFoods[nlq];break;}
+      if(naLiq){
+        var naFromCarbs=nD*(sip0?(sip0.food.na||0)/3:0)+nS*(dose0?(dose0.food.na||0)*dose0.portion:0);
+        var naDefHr=Math.max(0,strat.sodiumTarget-naFromCarbs);
+        mlFromNa=Math.min(300,naDefHr/(naLiq.na/naLiq.ml));
+      }
+    }
+    if(fluidFoods.length>0&&F>0)nW=Math.max(0,Math.round((F-mlFromDrinks-mlFromNa)/waterSip));
+    var events=nD+nS+nW;
+    if(events>6){ // keep it simple: at most 6 actions per hour
+      var maxW=Math.max(0,6-nD-nS);
+      if(nW>maxW){
+        waterSip=maxW>0?Math.min(400,Math.ceil((F-mlFromDrinks-mlFromNa)/maxW/50)*50):0;
+        nW=maxW;
+      }
+      events=nD+nS+nW;
+    }
+    if(events>0){
+      var interval=Math.max(MIN_GAP,Math.round(60/events));
+      // Evenly interleave the actions into one repeating order
+      var slots=new Array(events);
+      function scatter(type,count){
+        if(count<=0)return;
+        var step=events/count;
+        for(var k=0;k<count;k++){
+          var pos=Math.floor(k*step)%events;
+          while(slots[pos])pos=(pos+1)%events;
+          slots[pos]=type;
         }
       }
+      scatter('drink',nD);scatter('solid',nS);scatter('water',nW);
+
+      var water0=fluidFoods.length?fluidFoods[0]:null;
+      var cafBudget=strat.cafTarget||0,cafSoFar=0;
+      var di=0,si=0,slotIdx=0;
+      var t=startT;
+      while(t<=endT){
+        var kind=slots[slotIdx%events];slotIdx++;
+        if(kind==='drink'&&drinkQ.length>0){
+          var chosen=null,chosenSip=null;
+          for(var dtry=0;dtry<drinkQ.length;dtry++){
+            var cand=drinkQ[(di+dtry)%drinkQ.length],cs=sipOf(cand);
+            var cap=drinkMlCap[cand.id];
+            if(typeof cap!=='undefined'&&(drinkMlUsed[cand.id]||0)+cs.ml>cap+1)continue; // bottle finished
+            if((cand.caf||0)>0&&cafSoFar+cs.caf>cafBudget+25)continue; // over caffeine budget
+            chosen=cand;chosenSip=cs;di=(di+dtry+1)%drinkQ.length;break;
+          }
+          if(chosen){
+            drinkMlUsed[chosen.id]=(drinkMlUsed[chosen.id]||0)+chosenSip.ml;
+            cafSoFar+=chosenSip.caf;
+            addItem(chosen.id,t,chosenSip.portion,'Repeating cycle (every '+interval+' min): ⅓ bottle, '+strat.target+'g/hr target');
+          } else if(water0){
+            addItem(water0.id,t,waterSip/(water0.ml||500),'Repeating cycle: carb bottles finished, water instead');
+          }
+        } else if(kind==='solid'&&solidQ.length>0){
+          var sf2=solidQ[si%solidQ.length];si++;
+          var dd=doseOf(sf2);
+          cafSoFar+=dd.caf;
+          addItem(sf2.id,t,dd.portion,'Repeating cycle (every '+interval+' min): eat, '+strat.target+'g/hr target');
+        } else if(kind==='water'&&water0){
+          addItem(water0.id,t,waterSip/(water0.ml||500),'Repeating cycle (every '+interval+' min): '+waterSip+'ml water, '+strat.fluidTarget+'ml/hr target');
+        }
+        t+=interval;
+      }
+
+      // Human-readable pattern for the strategy panel and race cards
+      var patParts=[];
+      for(var pp=0;pp<events;pp++){
+        var pk=slots[pp];
+        if(pk==='drink')patParts.push('⅓ bottle '+(drinkQ.length===1?drinkQ[0].name:'(rotate drinks)'));
+        else if(pk==='solid'){var pNames=[];for(var pn=0;pn<solidQ.length;pn++)if(pNames.indexOf(solidQ[pn].name)<0)pNames.push(solidQ[pn].name);patParts.push((dose0&&dose0.portion===0.5?'½ ':'')+pNames.join(' / '));}
+        else if(pk==='water')patParts.push(waterSip+'ml water');
+      }
+      strat.pattern='Every '+interval+' min: '+patParts.join(' → ')+' — repeat to the end of the leg';
+    } else {
+      strat.pattern='';
     }
 
     // ── PHASE 3: Sodium top-up ──
@@ -1031,8 +1096,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     for(var cg=0;cg<state.bikeCages.length;cg++){
       var cage=state.bikeCages[cg],cgFood=getFoodById(cage.foodId);
       var cgIsCarb=cgFood&&cgFood.carbs>0;
+      var cageName=(cage.name||('Cage '+(cg+1))).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
       html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px" class="cage-row">';
-      html+='<span style="font-size:10px;font-family:\'DM Mono\',monospace;color:var(--muted);min-width:18px">'+(cg+1)+'</span>';
+      html+='<input type="text" class="cage-name" data-cage="'+cg+'" value="'+cageName+'" maxlength="12" title="Cage name (e.g. BTA, Frame, Rear)" style="width:74px;padding:4px 6px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--muted);font-family:\'DM Mono\',monospace">';
       html+='<select class="cage-drink" data-cage="'+cg+'" style="flex:1;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--ink)">';
       for(var do3=0;do3<allFoods.length;do3++){if(allFoods[do3].form==='liquid')html+='<option value="'+allFoods[do3].id+'"'+(cage.foodId===allFoods[do3].id?' selected':'')+'>'+allFoods[do3].name+'</option>';}
       html+='</select>';
@@ -1068,8 +1134,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     /* 3. FOOD LIBRARY */
     html+='<div id="foodLibrary"><div class="sec-head"><span class="sec-tag">Food Library</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Toggle foods into your shortlist, then assign them to legs in the Strategy Builder below</div>';
     // Group foods by category
-    function foodCategory(fd){if(fd.carbs===0&&(fd.caf>0||fd.na>0))return'other';return fd.form==='solid'?'solid':fd.form==='gel'?'gel':'drink';}
-    var foodGroups=[{key:'solid',label:'\uD83C\uDF6B Solids'},{key:'gel',label:'\uD83C\uDF6F Gels'},{key:'drink',label:'\uD83E\uDD64 Drinks'},{key:'other',label:'\uD83D\uDC8A Other (caffeine / salt)'}];
+    function foodCategory(fd){if(fd.meal)return'meal';if(fd.carbs===0&&(fd.caf>0||fd.na>0))return'other';return fd.form==='solid'?'solid':fd.form==='gel'?'gel':'drink';}
+    var foodGroups=[{key:'meal',label:'\uD83C\uDF73 Breakfast / meals'},{key:'solid',label:'\uD83C\uDF6B Solids'},{key:'gel',label:'\uD83C\uDF6F Gels'},{key:'drink',label:'\uD83E\uDD64 Drinks'},{key:'other',label:'\uD83D\uDC8A Other (caffeine / salt)'}];
     for(var fg=0;fg<foodGroups.length;fg++){
       var grp=foodGroups[fg],grpFoods=[];
       for(var gf=0;gf<allFoods.length;gf++){if(foodCategory(allFoods[gf])===grp.key)grpFoods.push(allFoods[gf]);}
@@ -1102,18 +1168,24 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var defCarb=sLeg.name==='Breakfast'?80:sLeg.name==='Pre-Race'?30:sLeg.name==='Bike'?95:sLeg.name==='Run'?60:sLeg.name==='T1'||sLeg.name==='T2'?0:70;
         var defFluid=sLeg.name==='Breakfast'?500:sLeg.name==='Pre-Race'?200:state.sweatRate;
         var defNa=sLeg.name==='Breakfast'?300:sLeg.name==='Pre-Race'?200:1500;
-        var defCaf=sLeg.name==='Breakfast'?0:sLeg.name==='Pre-Race'?0:sLeg.name==='Bike'?Math.round(state.bodyWeight*6*0.6):sLeg.name==='Run'?Math.round(state.bodyWeight*6*0.4):0;
+        var defCaf=sLeg.name==='Breakfast'?90:sLeg.name==='Pre-Race'?0:sLeg.name==='Bike'?Math.round(state.bodyWeight*4*0.6):sLeg.name==='Run'?Math.round(state.bodyWeight*4*0.4):0;
         state.strategies[sLeg.name]={foods:[],target:defCarb,fluidTarget:defFluid,sodiumTarget:defNa,cafTarget:defCaf};
       }
       var strat=state.strategies[sLeg.name];
       html+='<div class="strat-leg">';
       html+='<div class="strat-leg-head"><div class="strat-leg-dot" style="background:'+sLeg.color+'"></div>'+sLeg.name+' <span style="font-weight:400;color:var(--muted);font-size:9px">'+fmtHM(sLeg.dur)+'</span></div>';
       html+='<div class="strat-targets">';
-      html+='<div class="strat-target-row"><span class="strat-label">Carbs</span><input type="range" class="strat-slider" data-leg="'+sLeg.name+'" data-field="target" min="0" max="120" step="5" value="'+strat.target+'"><input type="number" class="strat-num" data-leg="'+sLeg.name+'" data-field="target" min="0" max="120" step="5" value="'+strat.target+'"><span class="strat-unit">g/hr</span></div>';
+      var isPreLeg=sLeg.name==='Breakfast'||sLeg.name==='Pre-Race';
+      var carbMax=sLeg.name==='Breakfast'?250:120,carbUnit=isPreLeg?'g total':'g/hr';
+      html+='<div class="strat-target-row"><span class="strat-label">Carbs</span><input type="range" class="strat-slider" data-leg="'+sLeg.name+'" data-field="target" min="0" max="'+carbMax+'" step="5" value="'+strat.target+'"><input type="number" class="strat-num" data-leg="'+sLeg.name+'" data-field="target" min="0" max="'+carbMax+'" step="5" value="'+strat.target+'"><span class="strat-unit">'+carbUnit+'</span></div>';
       if(state.showFluid) html+='<div class="strat-target-row"><span class="strat-label" style="color:#2980b9">Fluid</span><input type="range" class="strat-slider" data-leg="'+sLeg.name+'" data-field="fluidTarget" min="0" max="1200" step="50" value="'+strat.fluidTarget+'"><input type="number" class="strat-num" data-leg="'+sLeg.name+'" data-field="fluidTarget" min="0" max="1200" step="50" value="'+strat.fluidTarget+'"><span class="strat-unit">ml/hr</span></div>';
       if(state.showSodium) html+='<div class="strat-target-row"><span class="strat-label" style="color:#e8a838">Sodium</span><input type="range" class="strat-slider" data-leg="'+sLeg.name+'" data-field="sodiumTarget" min="0" max="1500" step="50" value="'+strat.sodiumTarget+'"><input type="number" class="strat-num" data-leg="'+sLeg.name+'" data-field="sodiumTarget" min="0" max="1500" step="50" value="'+strat.sodiumTarget+'"><span class="strat-unit">mg/hr</span></div>';
-      if(state.showCaffeine) html+='<div class="strat-target-row"><span class="strat-label" style="color:var(--caf)">Caffeine</span><input type="range" class="strat-slider" data-leg="'+sLeg.name+'" data-field="cafTarget" min="0" max="400" step="25" value="'+strat.cafTarget+'"><input type="number" class="strat-num" data-leg="'+sLeg.name+'" data-field="cafTarget" min="0" max="400" step="25" value="'+strat.cafTarget+'"><span class="strat-unit">mg total</span></div>';
+      if(state.showCaffeine){
+        html+='<div class="strat-target-row"><span class="strat-label" style="color:var(--caf)">Caffeine</span><input type="range" class="strat-slider" data-leg="'+sLeg.name+'" data-field="cafTarget" min="0" max="400" step="25" value="'+strat.cafTarget+'"><input type="number" class="strat-num" data-leg="'+sLeg.name+'" data-field="cafTarget" min="0" max="400" step="25" value="'+strat.cafTarget+'"><span class="strat-unit">mg total</span></div>';
+        if(!isPreLeg) html+='<div style="font-size:9px;color:var(--muted);font-family:\'DM Mono\',monospace;margin:1px 0 3px 60px">3–6 mg/kg body weight = '+Math.round(state.bodyWeight*3)+'–'+Math.round(state.bodyWeight*6)+'mg across the race</div>';
+      }
       html+='</div>';
+      if(strat.pattern) html+='<div style="font-size:10px;color:var(--green);font-family:\'DM Mono\',monospace;background:var(--green-bg);border:1px solid var(--green);border-radius:4px;padding:5px 8px;margin:4px 0 2px">🔁 '+strat.pattern+'</div>';
       // Only show shortlisted foods in strategy builder
       var slFoods=[];for(var sli=0;sli<state.shortlist.length;sli++){var slF=getFoodById(state.shortlist[sli]);if(slF)slFoods.push(slF);}
       html+='<div style="font-size:9px;color:var(--muted);font-family:\'DM Mono\',monospace;margin:8px 0 4px">ASSIGN FROM SHORTLIST</div>';
@@ -1231,28 +1303,46 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       for(var lci=0;lci<leg.items.length;lci++){var lf=getFoodById(leg.items[lci].foodId),lp=leg.items[lci].portion||1;if(lf){lC+=Math.round(lf.carbs*lp);lG+=Math.round(lf.glucose*lp);lF+=Math.round(lf.fructose*lp);lMl+=Math.round((lf.ml||0)*lp);lNa+=Math.round((lf.na||0)*lp);lCaf+=Math.round((lf.caf||0)*lp);}}
       var lH=leg.dur/60,lCHr=lH>0?Math.round(lC/lH):0;
 
-      // TOP TUBE CARD
+      // TOP TUBE STICKER \u2014 pro-team style strip: name, TIME | NUTRITION, finish bar
       if(isBike&&state.showTopTube&&leg.items.length>0){
         var bikeAids=[];for(var bai=0;bai<aids.length;bai++)if(aids[bai].discipline==='bike')bikeAids.push(aids[bai]);
-        html+='<div class="tt-card"><div class="tt-header">Bike \u00B7 '+(leg.dist||0)+' km \u00B7 '+fmtHM(leg.dur)+' \u00B7 '+lC+'g ('+lCHr+' g/hr)</div>';
-        html+='<table class="tt-table"><thead><tr><th>Time</th><th>Dist</th><th>Nutrition</th></tr></thead><tbody>';
-        var bEnd=leg.dur,sInt=bEnd>180?20:15;if(bEnd>300)sInt=30;
-        for(var slot=0;slot<=bEnd;slot+=sInt){
+        var ttNm=(state.stickerName||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+        html+='<div class="tt-card">';
+        html+='<div class="tt-name"><input id="ttName" type="text" value="'+ttNm+'" placeholder="Your name" maxlength="24"></div>';
+        html+='<table class="tt-table"><thead><tr><th>TIME</th><th>NUTRITION</th></tr></thead><tbody>';
+        var bEnd=leg.dur,sInt=bEnd>300?30:20;
+        for(var slot=0;slot<bEnd;slot+=sInt){
           var sStart=slot,sEnd=Math.min(slot+sInt,bEnd);
           var sAids=[],sItems=[];
           for(var sai=0;sai<bikeAids.length;sai++){var aRel=bikeAids[sai].timeMin-leg.start;if(aRel>=sStart&&aRel<sEnd)sAids.push(bikeAids[sai]);}
           for(var sli=0;sli<leg.items.length;sli++){var rT=leg.items[sli].timeMin-leg.start;if(rT>=sStart&&rT<sEnd)sItems.push(leg.items[sli]);}
-          var sDist=Math.round(state.bikeSpeed*(sStart/60));
-          html+='<tr><td class="tt-time-col">'+(sStart===0?"0'":fmtHM(sStart))+'</td><td class="tt-time-col" style="color:var(--muted);font-weight:400;font-size:9px">'+sDist+'km</td><td>';
-          for(var saij=0;saij<sAids.length;saij++)html+='<div style="font-size:8px;color:var(--red);font-family:\'DM Mono\',monospace;margin-bottom:2px">\u26F3 Aid '+sAids[saij].km+'km</div>';
-          if(sItems.length>0){html+='<div class="tt-nutr-col">';for(var sti=0;sti<sItems.length;sti++){var stF=getFoodById(sItems[sti].foodId);if(!stF)continue;var stP=sItems[sti].portion||1,stC=Math.round(stF.carbs*stP),pL=stP===1?'':stP===.5?'\u00BD':stP<.3?'\u00BC':'\u2153',chCls=sItems[sti].fromAid?' tt-aid-chip':'';var itemDist=Math.round(state.bikeSpeed*((sItems[sti].timeMin-leg.start)/60));html+='<span class="tt-food-chip'+chCls+'"><span style="font-size:16px">'+stF.icon+'</span>'+(pL?'<span style="font-size:8px;color:var(--muted)">'+pL+'</span>':'')+(stC>0?'<span class="tt-chip-carbs">'+stC+'g</span>':'')+'<span style="font-size:7px;color:var(--muted)">'+itemDist+'km</span>'+(sItems[sti].fromAid?'<span style="font-size:7px;color:var(--red)">\u26F3</span>':'')+'</span>';}html+='</div>';}
+          var sDist=Math.round(state.bikeSpeed*(sEnd/60));
+          html+='<tr><td class="tt-time-col">'+fmtHM(sEnd)+'<div class="tt-dist">'+sDist+'km</div></td><td class="tt-nutr-cell">';
+          for(var saij=0;saij<sAids.length;saij++)html+='<span class="tt-aid-mark">\u26F3 AID '+sAids[saij].km+'KM</span>';
+          // Group identical items in the slot into icon + xN, like team stickers
+          var grouped={},gOrder=[];
+          for(var sti=0;sti<sItems.length;sti++){
+            var stF=getFoodById(sItems[sti].foodId);if(!stF)continue;
+            var stP=sItems[sti].portion||1;
+            var gKey=sItems[sti].foodId+'_'+stP+'_'+(sItems[sti].fromAid?1:0);
+            if(!grouped[gKey]){grouped[gKey]={food:stF,portion:stP,qty:0,fromAid:sItems[sti].fromAid};gOrder.push(gKey);}
+            grouped[gKey].qty++;
+          }
+          for(var gk=0;gk<gOrder.length;gk++){
+            var gi2=grouped[gOrder[gk]];
+            var fluidOnly=gi2.food.carbs===0&&(gi2.food.ml||0)>0;
+            var pL=fluidOnly?Math.round(gi2.food.ml*gi2.portion)+'ml':gi2.portion===1?'':gi2.portion===.5?'\u00BD':gi2.portion<.3?'\u00BC':'\u2153';
+            var gC=Math.round(gi2.food.carbs*gi2.portion*gi2.qty);
+            html+='<span class="tt-item">'+gi2.food.icon+(pL?'<span class="tt-portion">'+pL+'</span>':'')+(gi2.qty>1?'<span class="tt-qty">'+gi2.qty+'X</span>':'')+(gC>0?'<span class="tt-chip-carbs">'+gC+'g</span>':'')+(gi2.fromAid?'<span class="tt-portion" style="color:var(--red)">\u26F3</span>':'')+'</span>';
+          }
           html+='</td></tr>';
         }
-        html+='<tr><td class="tt-finish" colspan="3">FINISH ('+fmtHM(bEnd)+') \u00B7 '+(leg.dist||0)+'km</td></tr></tbody></table></div>';
+        html+='<tr><td class="tt-finish" colspan="2">FINISH ('+fmtHM(bEnd)+')</td></tr></tbody></table></div>';
       }
 
       // STANDARD CARD
       html+='<div class="race-card"><div class="race-card-head"><div class="race-card-dot" style="background:'+(legColors[leg.name]||leg.color)+'"></div><div class="race-card-title">'+leg.name+'</div><div class="race-card-meta">'+fmtHM(leg.dur)+(leg.dist?' \u00B7 '+leg.dist+' km':'')+'</div></div>';
+      if(state.strategies[leg.name]&&state.strategies[leg.name].pattern)html+='<div style="font-size:9px;color:var(--green);font-family:\'DM Mono\',monospace;margin:-2px 0 6px;line-height:1.5">\uD83D\uDD01 '+state.strategies[leg.name].pattern+'</div>';
       var sc=4;if(state.showFluid)sc++;if(state.showSodium)sc++;if(state.showCaffeine&&lCaf>0)sc++;
       html+='<div class="race-card-stats" style="grid-template-columns:repeat('+sc+',1fr)">';
       html+='<div class="race-card-stat"><div class="race-card-stat-val">'+lC+'g</div><div class="race-card-stat-label">Carbs</div></div>';
@@ -1289,7 +1379,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var totalCageMl=0;
         for(var bc0=0;bc0<state.bikeCages.length;bc0++){
           var cage=state.bikeCages[bc0],cageFood=getFoodById(cage.foodId);
-          var lbl=cageFood?cageFood.name:'Water';
+          var lbl=(cage.name?cage.name+': ':'')+(cageFood?cageFood.name:'Water');
           // isCarb = has carbs. isSpecialty = any non-plain-water configured drink
           var isCrb=cageFood&&cageFood.carbs>0;
           var isSpec=cageFood&&(cageFood.carbs>0||(cageFood.caf||0)>0||(cageFood.na||0)>100);
@@ -1866,12 +1956,14 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     // Bike cage events
     var cageDrinks=document.querySelectorAll('.cage-drink');
     for(var cd=0;cd<cageDrinks.length;cd++)cageDrinks[cd].addEventListener('change',function(){state.bikeCages[+this.getAttribute('data-cage')].foodId=this.value;render();});
+    var cageNames=document.querySelectorAll('.cage-name');
+    for(var cn2=0;cn2<cageNames.length;cn2++)cageNames[cn2].addEventListener('change',function(){state.bikeCages[+this.getAttribute('data-cage')].name=this.value.trim();render();});
     var cageMls=document.querySelectorAll('.cage-ml');
     for(var cm2=0;cm2<cageMls.length;cm2++)cageMls[cm2].addEventListener('change',function(){state.bikeCages[+this.getAttribute('data-cage')].ml=+this.value||500;render();});
     var cageRms=document.querySelectorAll('.cage-rm');
     for(var cr=0;cr<cageRms.length;cr++)cageRms[cr].addEventListener('click',function(){state.bikeCages.splice(+this.getAttribute('data-cage'),1);render();});
     var addCageBtn=document.getElementById('addCage');
-    if(addCageBtn)addCageBtn.addEventListener('click',function(){state.bikeCages.push({foodId:'water',ml:500});render();});
+    if(addCageBtn)addCageBtn.addEventListener('click',function(){state.bikeCages.push({name:'Cage '+(state.bikeCages.length+1),foodId:'water',ml:500});render();});
 
     var aBtn=document.getElementById('addAid');
     if(aBtn)aBtn.addEventListener('click',function(){var km=+document.getElementById('aidKm').value,d=document.getElementById('aidDisc').value,t=document.getElementById('aidType').value;if(km>0){state.aidStations.push({km:km,discipline:d,type:t});state.aidStations.sort(function(a,b){return a.km-b.km;});render();}});
@@ -1883,6 +1975,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var aTs=document.querySelectorAll('.sched-aid');for(var at2=0;at2<aTs.length;at2++)aTs[at2].addEventListener('change',function(){state.schedule[+this.getAttribute('data-idx')].fromAid=this.checked;render();});
     var sRms=document.querySelectorAll('.sched-rm');for(var sr=0;sr<sRms.length;sr++)sRms[sr].addEventListener('click',function(){state.schedule.splice(+this.getAttribute('data-rm'),1);render();});
     var sTms=document.querySelectorAll('.sched-time');for(var st=0;st<sTms.length;st++)sTms[st].addEventListener('change',function(){var legSt=+(this.getAttribute('data-legstart')||0);state.schedule[+this.getAttribute('data-idx')].timeMin=legSt+(+this.value||0);render();});
+
+    var ttNameEl=document.getElementById('ttName');
+    if(ttNameEl)ttNameEl.addEventListener('change',function(){state.stickerName=this.value.trim();render();});
 
     var acBtn=document.getElementById('addCustom');
     if(acBtn)acBtn.addEventListener('click',function(){var nm=document.getElementById('cfName').value.trim();if(!nm)return;var glu=+document.getElementById('cfGlu').value||0,fru=+document.getElementById('cfFru').value||0;var cid='custom-'+Date.now();state.customFoods.push({id:cid,name:nm,carbs:glu+fru,glucose:glu,fructose:fru,ml:+document.getElementById('cfMl').value||0,na:+document.getElementById('cfNa').value||0,caf:+document.getElementById('cfCaf').value||0,form:document.getElementById('cfForm').value,icon:'\uD83C\uDF7D'});state.shortlist.push(cid);render();});
