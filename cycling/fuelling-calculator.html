@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Race Fuelling Planner v1.2 — Diamond Peak</title>
+<title>Race Fuelling Planner v1.3 — Diamond Peak</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../style.css">
 <style>
@@ -234,7 +234,7 @@
   <div class="dpc-header"><img src="../logo-mark.png" alt="Diamond Peak" class="dpc-logo"><span class="dpc-wordmark">Diamond Peak</span></div>
   <a href="../index.html" class="back">&larr; Back to tools</a>
   <div class="kicker">NUTRITION &amp; PHYSIOLOGY</div>
-  <h1>Race Fuelling Planner <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.2</span></h1>
+  <h1>Race Fuelling Planner <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.3</span></h1>
   <p class="intro">
     Set up your race, select foods per leg, and auto-generate a fuelling strategy that
     respects how much your gut can actually absorb. Tracks carbs, fluid, sodium and caffeine,
@@ -251,7 +251,7 @@
   <div id="app"></div>
   <div class="method">
     <strong>Intake model</strong>: the graph uses a <strong>rolling 60-minute window</strong>: at any point the rate shown is total grams consumed in the previous 60 minutes.
-    Colour zones: <span style="color:var(--green)">green &le;90</span>, <span style="color:var(--amber)">amber 90&ndash;120</span> (trained), <span style="color:var(--red)">red &gt;120 g/hr</span> (GI risk).<br><br>
+    Colour zones track your <strong>transporter cap</strong> (glucose + fructose): <span style="color:var(--green)">green</span> at or below the cap (fully absorbable), <span style="color:var(--amber)">amber</span> up to 30 g/hr over (needs a trained gut or expect backlog), <span style="color:var(--red)">red</span> beyond that (GI risk). Default caps are 90 g/hr (60 glucose + 30 fructose); gut-trained mode raises them to 120 (72 + 48). The dashed blue line marks the tighter <strong>glucose cap</strong> alone &ndash; the combined line can look green while glucose is already over it.<br><br>
     <strong>Caffeine model</strong>: plasma caffeine is modelled using first-order pharmacokinetics:
     <code>ka = ln2/20 min</code> (absorption), <code>ke = ln2/480 min</code> (8 hr half-life).
     Peak plasma at ~45 min post-ingestion. Recommended race dose: <code>3&ndash;6 mg/kg</code>.<br><br>
@@ -266,6 +266,7 @@
   <div class="footer-bar">&copy; 2026 Diamond Peak Consulting</div>
   <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px;">
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong><br>
+    <strong>v1.3</strong>: Aligned the Absorption Graph zones to the gut model. The green/amber/red bands now track your combined transporter cap (90 g/hr default, 120 gut-trained) instead of fixed thresholds, and a dashed line marks the tighter glucose cap so a plan that looks green on combined carbs but exceeds the glucose transporter is now visible. The two carb views are consistent.<br>
     <strong>v1.2</strong>: Engine upgrade. Added a gut/absorption model with separate glucose (SGLT1) and fructose (GLUT5) transporter caps and a "gut-trained" mode (90 &rarr; 120 g/hr), showing carbs actually absorbed vs unabsorbed backlog in the gut. New "Suggest targets" sets evidence-based carb, fluid, sodium and caffeine goals from race duration, body weight, sweat rate and sweat-sodium concentration. New Plan Check panel flags red flags: glucose over transporter cap, wrong glucose:fructose ratio, gut backlog, dehydration or over-drinking, under-replacing sodium, caffeine outside 3-6 mg/kg, fuelling gaps, and solids on the run.<br>
     <strong>v1.1</strong>: Usability update. Fixed a crash in "Optimise all legs" that left the loading overlay stuck. Setup now saves automatically in the browser (with Reset all / Clear plan buttons). Typing in number fields no longer loses focus; target sliders drag smoothly. Custom foods join the shortlist automatically. Schedule table scrolls horizontally on small screens. Added a step-by-step guide bar; switching preset now clears aid stations for disciplines the race no longer has.<br>
     <strong>v1.0</strong>: Initial release. Race fuelling planner with carb targets, fluid needs, and a practical fuelling schedule by duration and intensity.
@@ -1227,7 +1228,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
 
     /* 5. GRAPHS */
     if(state.showGutGraph){html+='<div id="gutSection"><div class="sec-head"><span class="sec-tag">Gut / Absorption Model</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Carbs actually absorbed (g/hr) vs unabsorbed backlog sitting in the gut (g)</div><div class="graph-wrap"><canvas id="gutGraph"></canvas></div><div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> Absorbed / oxidised (g/hr)</div><div class="legend-item"><div class="legend-swatch" style="background:#c0392b"></div> Gut backlog (g)</div><div class="legend-item" style="color:var(--muted)">Caps: '+gm.caps.glu+'g glucose + '+gm.caps.fru+'g fructose = '+(gm.caps.glu+gm.caps.fru)+' g/hr</div></div></div></div>';}
-    if(state.showGraph){html+='<div id="graphSection"><div class="sec-head"><span class="sec-tag">Absorption Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Rolling 60-min intake rate (g/hr)</div><div class="graph-wrap"><canvas id="absGraph"></canvas></div><div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:#2980b9"></div> Glucose</div><div class="legend-item"><div class="legend-swatch" style="background:#c0392b"></div> Fructose</div><div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> Combined</div><div class="legend-item"><div style="width:28px;height:10px;border-radius:2px;background:linear-gradient(to right,#e6f4ec,#fdf3e0,#fdeee9)"></div> \u226490 / 90\u2013120 / >120</div></div></div></div>';}
+    if(state.showGraph){var agCaps=getCaps(),agG=agCaps.glu+agCaps.fru;html+='<div id="graphSection"><div class="sec-head"><span class="sec-tag">Absorption Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Rolling 60-min intake rate (g/hr) \u2014 zones track your '+agG+' g/hr transporter cap'+(state.gutTrained?' (gut-trained)':'')+'</div><div class="graph-wrap"><canvas id="absGraph"></canvas></div><div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:#2980b9"></div> Glucose</div><div class="legend-item"><div class="legend-swatch" style="background:#c0392b"></div> Fructose</div><div class="legend-item"><div class="legend-swatch" style="background:var(--green)"></div> Combined</div><div class="legend-item"><div style="width:28px;height:10px;border-radius:2px;background:linear-gradient(to right,#e6f4ec,#fdf3e0,#fdeee9)"></div> \u2264'+agG+' / '+agG+'\u2013'+(agG+30)+' / >'+(agG+30)+' g/hr</div><div class="legend-item"><div style="width:14px;height:0;border-top:2px dashed #2980b9"></div> Glucose cap '+agCaps.glu+'</div></div></div></div>';}
     if(state.showFluid){html+='<div><div class="sec-head"><span class="sec-tag">Fluid Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Fluid intake rate (ml/hr)</div><div class="graph-wrap graph-wrap-sm"><canvas id="fluidGraph"></canvas></div></div></div>';}
     if(state.showSodium){html+='<div><div class="sec-head"><span class="sec-tag">Sodium Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Sodium intake rate (mg/hr)</div><div class="graph-wrap graph-wrap-sm"><canvas id="sodiumGraph"></canvas></div></div></div>';}
     if(state.showCaffeine){html+='<div><div class="sec-head"><span class="sec-tag">Caffeine Graph</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Plasma caffeine (mg): 8hr half-life pharmacokinetic model</div><div class="graph-wrap graph-wrap-sm"><canvas id="cafGraph"></canvas></div><div class="legend"><div class="legend-item"><div class="legend-swatch" style="background:var(--caf)"></div> Plasma caffeine (mg)</div><div class="legend-item" style="color:var(--muted)">Peak at ~45 min post-ingestion, t\u00BD = 8 hrs</div></div></div></div>';}
@@ -1656,18 +1657,24 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     mx=Math.ceil(mx/20)*20+20;if(mx<100)mx=100;
     function xAt(m){return pL+((m+tOff)/totMin)*gW;}function yAt(v){return pT+gH-(v/mx)*gH;}
     ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
-    // Zones
-    ctx.fillStyle='rgba(29,104,64,.04)';ctx.fillRect(pL,yAt(90),gW,yAt(0)-yAt(90));
-    ctx.fillStyle='rgba(184,124,32,.06)';ctx.fillRect(pL,yAt(120),gW,yAt(90)-yAt(120));
-    if(mx>120){ctx.fillStyle='rgba(181,58,30,.06)';ctx.fillRect(pL,pT,gW,yAt(120)-pT);}
+    // Zones \u2014 derived from the current transporter caps (combined = glucose + fructose).
+    // Untrained 60+30=90; gut-trained 72+48=120. Amber allows +30 over the cap.
+    var caps=getCaps(),zGreen=caps.glu+caps.fru,zAmber=zGreen+30;
+    ctx.fillStyle='rgba(29,104,64,.04)';ctx.fillRect(pL,yAt(zGreen),gW,yAt(0)-yAt(zGreen));
+    ctx.fillStyle='rgba(184,124,32,.06)';ctx.fillRect(pL,yAt(zAmber),gW,yAt(zGreen)-yAt(zAmber));
+    if(mx>zAmber){ctx.fillStyle='rgba(181,58,30,.06)';ctx.fillRect(pL,pT,gW,yAt(zAmber)-pT);}
     ctx.setLineDash([4,4]);ctx.lineWidth=1;
-    ctx.strokeStyle='rgba(29,104,64,.4)';ctx.beginPath();ctx.moveTo(pL,yAt(90));ctx.lineTo(W-pR,yAt(90));ctx.stroke();
-    ctx.strokeStyle='rgba(184,124,32,.5)';ctx.beginPath();ctx.moveTo(pL,yAt(120));ctx.lineTo(W-pR,yAt(120));ctx.stroke();
+    ctx.strokeStyle='rgba(29,104,64,.4)';ctx.beginPath();ctx.moveTo(pL,yAt(zGreen));ctx.lineTo(W-pR,yAt(zGreen));ctx.stroke();
+    ctx.strokeStyle='rgba(184,124,32,.5)';ctx.beginPath();ctx.moveTo(pL,yAt(zAmber));ctx.lineTo(W-pR,yAt(zAmber));ctx.stroke();
     ctx.setLineDash([]);
     ctx.font='8px "DM Mono",monospace';ctx.textAlign='left';
-    ctx.fillStyle='rgba(29,104,64,.6)';ctx.fillText('\u226490 optimal',pL+4,yAt(90)+11);
-    ctx.fillStyle='rgba(184,124,32,.7)';ctx.fillText('90\u2013120 trained',pL+4,yAt(120)+11);
-    if(mx>120){ctx.fillStyle='rgba(181,58,30,.7)';ctx.fillText('\u26A0 >120 GI risk',pL+4,yAt(120)-4);}
+    ctx.fillStyle='rgba(29,104,64,.6)';ctx.fillText('\u2264'+zGreen+' absorbable'+(state.gutTrained?' (gut-trained)':''),pL+4,yAt(zGreen)+11);
+    ctx.fillStyle='rgba(184,124,32,.7)';ctx.fillText(zGreen+'\u2013'+zAmber+' over cap',pL+4,yAt(zAmber)+11);
+    if(mx>zAmber){ctx.fillStyle='rgba(181,58,30,.7)';ctx.fillText('\u26A0 >'+zAmber+' GI risk',pL+4,yAt(zAmber)-4);}
+    // Glucose transporter cap (SGLT1) \u2014 the tighter limit; the combined line can
+    // sit in the green zone while glucose alone is already over this line.
+    ctx.setLineDash([2,3]);ctx.strokeStyle='rgba(41,128,185,.45)';ctx.beginPath();ctx.moveTo(pL,yAt(caps.glu));ctx.lineTo(W-pR,yAt(caps.glu));ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='rgba(41,128,185,.7)';ctx.textAlign='right';ctx.fillText('glucose cap '+caps.glu,W-pR-2,yAt(caps.glu)-3);ctx.textAlign='left';
     // Segments
     for(var s=0;s<race.segs.length;s++){var sg=race.segs[s];if(sg.dur/totMin>.05){ctx.fillStyle=sg.name==='Swim'?'rgba(41,128,185,.5)':sg.name==='Bike'?'rgba(39,174,96,.5)':sg.name==='Run'?'rgba(230,126,34,.5)':'rgba(127,140,141,.5)';ctx.font='500 9px "DM Mono",monospace';ctx.textAlign='center';ctx.fillText(sg.name,(xAt(sg.start)+xAt(sg.start+sg.dur))/2,pT+12);}}
     // Grid
