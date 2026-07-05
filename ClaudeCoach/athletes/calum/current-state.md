@@ -1,8 +1,9 @@
 # Calum Healey -- Current State
 
-Last updated: 2026-07-04
+Last updated: 2026-07-05
 
 ## Recent context (auto-summary)
+- **2026-07-05 (Sun)**: Long ride (195 min, comfortable/steady effort, HR cap ~153 bpm) prescribed GO as-planned — no modulation rules fired. HRV trend 0.0% (insufficient HRV history — no signal, not a sync gap); sleep: no data available (no wearable). ATL 42 / CTL 14 (ratio elevated by Fri 3 Jul Gravel ride, 213 load) — engine still cleared GO. Last session RPE 7 (Geneva Road, 29 Jun).
 - **2026-07-04 (Sat)**: Rest day. Watchdog tone softened vs prior weeks — "a few sessions have slipped over the last couple of weeks, no pressure, let's just focus on resetting today and building back up gradually" (no explicit warning framing this time)
 - **2026-07-04 evening**: "Tomorrow" message sent for Sun 5 Jul Long ride — NP target 163W (IF 0.65), HR cap 153 bpm, 70 g/hr carbs + 600ml/hr fluid; message states Form -16.7 (Heavy) — conflicts with Watchdog Log Jul 3 entry (Form +2.7 below); discrepancy unresolved, verify before quoting either figure
 - **2026-07-03 (Fri)**: Unplanned Geneva Gravel/Unpaved ride — huge effort, 5+ hrs, 60.5km, 1,156m climbed, avg HR 137 bpm; steady/controlled despite serious climbing; first substantial ride since Mon 29 Jun. Quick-logged; still not reflected in Watchdog CTL/ATL figures below as of Jul 4 morning.
@@ -35,6 +36,7 @@ Weight: **93 kg**
 No
 
 ## Off-plan in last 7 days
+- 2026-07-05: Long ride 195 min — prescribed GO as-planned, no rules fired (not yet confirmed completed in IcuSync as of prescription time)
 - 2026-06-27: Long ride 195 min — NOT completed (IcuSync activities array empty; wellness CTL 5.7/ATL 0.3 confirms no load)
 - 2026-06-28: Rest day — no session planned (Sunday; weekday-only cycling rule)
 - 2026-06-30: Endurance 50 min — NOT completed (history endpoint empty; atlLoad=35 was planned-event projection)
@@ -78,3 +80,4 @@ No
 | 2026-07-01 | 6.9 | 8.2 | −1.3 | Rest day — no session planned in calendar (Wed; build plan: Tue/Thu/Sun). T5: 2 missed sessions in rolling 7d — 2026-06-27 Long ride 195 min, 2026-06-30 Endurance 50 min. Jun 30 miss is new vs prior T5 (2026-06-28). No HRV or sleep data. |
 | 2026-07-02 | 8.0 | 14.1 | −6.1 | Sweetspot 2×25 85 min — GO as-planned. No modulation rules fired. ATL 14 / CTL 8 reflects planned load included in projection. Last session RPE 7 (Geneva 29 Jun, felt terrible / lack of sleep). No HRV or sleep data. |
 | 2026-07-03 | 5.8 | 3.1 | +2.7 | T5: 3 missed sessions in rolling 7d — 2026-06-27 Long ride 195min, 2026-06-30 Endurance 50min, 2026-07-02 Sweetspot 2×25 85min. Jul 2 miss is new vs prior T5 (2026-07-01); corrects prior "GO as-planned" projection — actual IcuSync confirms ctlLoad=0/atlLoad=0 on Jul 2, no activity recorded. No HRV or sleep data. |
+| 2026-07-05 | 13.6 | 42.0 | n/a | Long ride 195 min — GO as-planned, no modulation rules fired. ATL/CTL ratio elevated by unplanned Fri 3 Jul Gravel ride (213 load, 5h13m); engine cleared GO regardless. Last session RPE 7 (Geneva Road, 29 Jun). HRV trend 0.0% (insufficient history, no signal). No sleep data (no wearable). |
