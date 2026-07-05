@@ -132,9 +132,17 @@
   .tt-nutr-cell{padding:3px 6px;min-height:26px}
   .tt-item{display:inline-flex;align-items:center;gap:3px;margin:1px 6px 1px 0;font-size:20px;line-height:1.1;white-space:nowrap}
   .tt-item .tt-portion{font-size:9px;color:var(--muted)}
-  .tt-item .tt-qty{font-size:11px;font-weight:700;color:#18160f}
+  .tt-item .tt-qty{font-size:11px;font-weight:700;color:var(--red)}
   .tt-item .tt-chip-carbs{font-size:8px;color:var(--green);font-weight:500}
   .tt-aid-mark{font-size:8px;color:var(--red);font-family:'DM Mono',monospace;display:block;margin-bottom:1px}
+  /* Block cell: the block's kit shown once, red arrow = spread across the window */
+  .tt-block{position:relative;vertical-align:top;padding:6px 6px 18px;border-bottom:2px solid #18160f!important}
+  .tt-block-items{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center;position:relative;z-index:1}
+  .tt-block-total{font-size:8px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px;position:relative;z-index:1}
+  .tt-arrow{position:absolute;left:50%;top:56px;bottom:14px;width:2px;background:var(--red);z-index:0}
+  .tt-arrow:after{content:'';position:absolute;bottom:-7px;left:-4px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid var(--red)}
+  .tt-pick{position:absolute;left:8px;font-size:15px;line-height:1;z-index:1}
+  .tt-pick span{font-size:7px;color:var(--red);font-family:'DM Mono',monospace;display:block}
   .tt-table .tt-finish{font-weight:700;color:#fff;background:var(--red);text-transform:uppercase;text-align:center;font-size:11px;padding:5px;border-bottom:none}
   .aid-pickup-card{background:#fff;border:2px solid var(--red);border-radius:8px;padding:16px;break-inside:avoid}
   .aid-pickup-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid var(--red);font-family:'DM Mono',monospace;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--red)}
@@ -274,7 +282,7 @@
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong><br>
     <strong>v1.4</strong>: Moved the physiology maths (transporter caps, target formulas, plan-check thresholds) into a shared engine so the ClaudeCoach bot runs the exact same logic and the two never disagree. No change to the numbers.<br>
     <strong>v1.3</strong>: Aligned the Absorption Graph zones to the gut model. The green/amber/red bands now track your combined transporter cap (90 g/hr default, 120 gut-trained) instead of fixed thresholds, and a dashed line marks the tighter glucose cap so a plan that looks green on combined carbs but exceeds the glucose transporter is now visible. The two carb views are consistent.<br>
-    <strong>v1.7</strong>: The optimiser now passes its own Plan Check. Sodium and caffeine live on the same repeating grid as carbs and fluid (no more scattered top-up sips); dose sizes are searched against carb, fluid AND bottle-capacity constraints; carbs ease off in the last stretch of the bike and start 10 minutes into the run; doses are modelled as swallowed over ~5 minutes rather than instant boluses. Bike bottles are drunk <strong>one at a time</strong> in cage order &mdash; swappable/refillable bottles (new &#9851; flag per cage) first, so cages empty in time for aid-station pickups; fixed aero bottles and concentrated mixes marked non-swappable are never replaced. Salt capsules take over when the electrolyte bottle runs out. Bike fluid target now includes recovering the swim&rsquo;s sweat loss.<br>
+    <strong>v1.7</strong>: The optimiser now passes its own Plan Check. Sodium and caffeine live on the same repeating grid as carbs and fluid (no more scattered top-up sips); dose sizes are searched against carb, fluid AND bottle-capacity constraints; carbs ease off in the last stretch of the bike and start 10 minutes into the run; doses are modelled as swallowed over ~5 minutes rather than instant boluses. Bike bottles are drunk <strong>one at a time</strong> in cage order &mdash; swappable/refillable bottles (new &#9851; flag per cage) first, so cages empty in time for aid-station pickups; fixed aero bottles and concentrated mixes marked non-swappable are never replaced. Salt capsules take over when the electrolyte bottle runs out. Bike fluid target now includes recovering the swim&rsquo;s sweat loss. Top tube sticker redesigned to the pro block format: the ride splits into one block per bottle, each showing its total kit once (&times;N counts, block totals) with a red arrow meaning &ldquo;spread across this window&rdquo;.<br>
     <strong>v1.6</strong>: Race start and wake-up time inputs. The breakfast window is now wake-up &rarr; 1h before the gun, with real clock times shown on the plan; the meal size scales with digestion time (1&ndash;2 g/kg), and if you are awake less than 1h30 before the start the breakfast leg disappears and carbs + coffee move to the final hour instead. Bike cage setup only shows when the race has a bike leg.<br>
     <strong>v1.5</strong>: Simpler plans. The strategy generator now builds one repeating order per leg (e.g. every 12 min: &#8531; bottle &rarr; chew &rarr; water &rarr; repeat) covering carbs and fluid together, shown on the leg and race cards. Breakfast is a normal meal (porridge, toast, bagel + coffee) instead of race food. Caffeine target is body-weight based (4 mg/kg default) and caffeinated drinks are capped by it, so no more endless caffeine-drink sips. Added Maurten 320 CAF 100 and 1.5&times; concentrated 750 ml mixes. Bike cages have editable names. Top tube card redesigned as a pro-team-style printable sticker with your name and &times;N item counts.<br>
     <strong>v1.2</strong>: Engine upgrade. Added a gut/absorption model with separate glucose (SGLT1) and fructose (GLUT5) transporter caps and a "gut-trained" mode (90 &rarr; 120 g/hr), showing carbs actually absorbed vs unabsorbed backlog in the gut. New "Suggest targets" sets evidence-based carb, fluid, sodium and caffeine goals from race duration, body weight, sweat rate and sweat-sodium concentration. New Plan Check panel flags red flags: glucose over transporter cap, wrong glucose:fructose ratio, gut backlog, dehydration or over-drinking, under-replacing sodium, caffeine outside 3-6 mg/kg, fuelling gaps, and solids on the run.<br>
@@ -383,8 +391,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     {id:'sis-go-elec',  name:'SiS GO Electrolyte',     carbs:36,glucose:22,fructose:14,ml:500,na:350,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
     {id:'hi5-caf-hit',  name:'HIGH5 Caffeine Hit',     carbs:26,glucose:16,fructose:10,ml:500,na:30, caf:200,form:'liquid',icon:'\u2615'},
     {id:'cola250',      name:'Cola (250 ml)',           carbs:27,glucose:13,fructose:14,ml:250,na:5,  caf:25, form:'liquid',icon:'\uD83E\uDD64'},
-    {id:'precision-h',  name:'Precision Fuel 1500',     carbs:0, glucose:0, fructose:0, ml:500,na:1500,caf:0, form:'liquid',icon:'\uD83E\uDD64'},
-    {id:'precision-l',  name:'Precision Fuel 500',      carbs:0, glucose:0, fructose:0, ml:500,na:500,caf:0,  form:'liquid',icon:'\uD83E\uDD64'},
+    {id:'precision-h',  name:'Precision Fuel 1500',     carbs:0, glucose:0, fructose:0, ml:500,na:1500,caf:0, form:'liquid',icon:'\uD83E\uDDC2'},
+    {id:'precision-l',  name:'Precision Fuel 500',      carbs:0, glucose:0, fructose:0, ml:500,na:500,caf:0,  form:'liquid',icon:'\uD83E\uDDC2'},
     {id:'water',        name:'Water (500 ml)',          carbs:0, glucose:0, fructose:0, ml:500,na:0,  caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
     {id:'water250',     name:'Water (250 ml)',          carbs:0, glucose:0, fructose:0, ml:250,na:0,  caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
     {id:'electrolyte',  name:'Electrolyte tab (500ml)', carbs:4, glucose:4, fructose:0, ml:500,na:360,caf:0,  form:'liquid',icon:'\uD83D\uDCA7'},
@@ -476,7 +484,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   function getAllFoods(){return FOODS.concat(state.customFoods);}
   function getFoodById(id){var a=getAllFoods();for(var i=0;i<a.length;i++)if(a[i].id===id)return a[i];return null;}
   function fmtTime(m){if(m<0)m=0;var h=Math.floor(m/60),mi=Math.floor(m%60),s=Math.round((m-Math.floor(m))*60);return h>0?h+':'+String(mi).padStart(2,'0')+':'+String(s).padStart(2,'0'):mi+':'+String(s).padStart(2,'0');}
-  function fmtHM(m){var h=Math.floor(m/60),mi=Math.round(m%60);if(h>0&&mi>0)return h+'h'+String(mi).padStart(2,'0');if(h>0)return h+'h';return mi+"'";}
+  function fmtHM(m){var h=Math.floor(m/60),mi=Math.round(m%60);if(mi===60){h++;mi=0;}if(h>0&&mi>0)return h+'h'+String(mi).padStart(2,'0');if(h>0)return h+'h';return mi+"'";}
 
   // Pre-race window is wake-up → start gun, derived from the two time inputs.
   // Breakfast leg = wake-up → 1h before start (needs ≥90 min awake to exist).
@@ -1420,31 +1428,82 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         html+='<div class="tt-name"><input id="ttName" type="text" value="'+ttNm+'" placeholder="Your name" maxlength="24"></div>';
         html+='<table class="tt-table"><thead><tr><th>TIME</th><th>NUTRITION</th></tr></thead><tbody>';
         var bEnd=leg.dur,sInt=bEnd>300?30:20;
-        for(var slot=0;slot<bEnd;slot+=sInt){
-          var sStart=slot,sEnd=Math.min(slot+sInt,bEnd);
-          var sAids=[],sItems=[];
-          for(var sai=0;sai<bikeAids.length;sai++){var aRel=bikeAids[sai].timeMin-leg.start;if(aRel>=sStart&&aRel<sEnd)sAids.push(bikeAids[sai]);}
-          for(var sli=0;sli<leg.items.length;sli++){var rT=leg.items[sli].timeMin-leg.start;if(rT>=sStart&&rT<sEnd)sItems.push(leg.items[sli]);}
-          var sDist=Math.round(state.bikeSpeed*(sEnd/60));
-          html+='<tr><td class="tt-time-col">'+fmtHM(sEnd)+'<div class="tt-dist">'+sDist+'km</div></td><td class="tt-nutr-cell">';
-          for(var saij=0;saij<sAids.length;saij++)html+='<span class="tt-aid-mark">\u26F3 AID '+sAids[saij].km+'KM</span>';
-          // Group identical items in the slot into icon + xN, like team stickers
-          var grouped={},gOrder=[];
-          for(var sti=0;sti<sItems.length;sti++){
-            var stF=getFoodById(sItems[sti].foodId);if(!stF)continue;
-            var stP=sItems[sti].portion||1;
-            var gKey=sItems[sti].foodId+'_'+stP+'_'+(sItems[sti].fromAid?1:0);
-            if(!grouped[gKey]){grouped[gKey]={food:stF,portion:stP,qty:0,fromAid:sItems[sti].fromAid};gOrder.push(gKey);}
-            grouped[gKey].qty++;
+        // \u2500\u2500 Split the ride into BLOCKS (one per bottle) like team stickers:
+        // the block's kit is shown once with \u00D7N counts and a red arrow
+        // meaning "spread this across the window". The generator marks each
+        // bottle-finishing sip in its reason; fall back to 2h blocks.
+        var sorted3=leg.items.slice().sort(function(a,b){return a.timeMin-b.timeMin;});
+        var ttBlocks=[],curB={start:0,items:[]};
+        for(var tbi=0;tbi<sorted3.length;tbi++){
+          var tIt=sorted3[tbi],tRel=tIt.timeMin-leg.start;
+          curB.items.push(tIt);
+          if(tIt.reason&&tIt.reason.indexOf('bottle finished')>=0){
+            curB.end=Math.min(bEnd,tRel+1);ttBlocks.push(curB);curB={start:curB.end,items:[]};
           }
-          for(var gk=0;gk<gOrder.length;gk++){
-            var gi2=grouped[gOrder[gk]];
-            var fluidOnly=gi2.food.carbs===0&&(gi2.food.ml||0)>0;
-            var pL=fluidOnly?Math.round(gi2.food.ml*gi2.portion)+'ml':gi2.portion===1?'':gi2.portion===.5?'\u00BD':gi2.portion<.3?'\u00BC':'\u2153';
-            var gC=Math.round(gi2.food.carbs*gi2.portion*gi2.qty);
-            html+='<span class="tt-item">'+gi2.food.icon+(pL?'<span class="tt-portion">'+pL+'</span>':'')+(gi2.qty>1?'<span class="tt-qty">'+gi2.qty+'X</span>':'')+(gC>0?'<span class="tt-chip-carbs">'+gC+'g</span>':'')+(gi2.fromAid?'<span class="tt-portion" style="color:var(--red)">\u26F3</span>':'')+'</span>';
+        }
+        curB.end=bEnd;if(curB.items.length>0||ttBlocks.length===0)ttBlocks.push(curB);
+        if(ttBlocks.length===1&&bEnd>150){ // no bottle markers: split every 2h
+          var fb=[],fbT=0;
+          while(fbT<bEnd){var fbEnd=Math.min(bEnd,fbT+120);fb.push({start:fbT,end:fbEnd,items:sorted3.filter(function(e){var r=e.timeMin-leg.start;return r>=fbT&&r<fbEnd;})});fbT=fbEnd;}
+          ttBlocks=fb;
+        }
+        // Merge a tiny trailing block into the previous one
+        if(ttBlocks.length>1&&ttBlocks[ttBlocks.length-1].end-ttBlocks[ttBlocks.length-1].start<30){
+          var lastB=ttBlocks.pop();
+          ttBlocks[ttBlocks.length-1].end=lastB.end;
+          ttBlocks[ttBlocks.length-1].items=ttBlocks[ttBlocks.length-1].items.concat(lastB.items);
+        }
+        // Assign each tick row to the block containing its midpoint
+        var nRows3=Math.ceil(bEnd/sInt),rowBlock=[];
+        for(var rr=0;rr<nRows3;rr++){
+          var midT=(rr+0.5)*sInt,rbi=ttBlocks.length-1;
+          for(var fbk=0;fbk<ttBlocks.length;fbk++)if(midT>=ttBlocks[fbk].start&&midT<ttBlocks[fbk].end){rbi=fbk;break;}
+          rowBlock.push(rbi);
+        }
+        function qtyLabel(q){var r=Math.round(q*2)/2;if(r<=1)return '';return '\u00D7'+(r%1?Math.floor(r)+'\u00BD':r);}
+        for(var rr2=0;rr2<nRows3;rr2++){
+          var rEnd=Math.min(bEnd,(rr2+1)*sInt),rDist=Math.round(state.bikeSpeed*(rEnd/60));
+          var newBlock=(rr2===0||rowBlock[rr2]!==rowBlock[rr2-1]);
+          // Aid flags live in the time column so the block cell stays clean
+          var rAids='';
+          for(var sai=0;sai<bikeAids.length;sai++){var aRel=bikeAids[sai].timeMin-leg.start;if(aRel>=rr2*sInt&&aRel<rEnd)rAids+='<span class="tt-dist" style="color:var(--red);display:inline-block;margin-left:3px">\u26F3'+bikeAids[sai].km+'k</span>';}
+          html+='<tr><td class="tt-time-col"'+(rowBlock[rr2]!==(rowBlock[rr2+1]!==undefined?rowBlock[rr2+1]:-1)?' style="border-bottom:2px solid #18160f"':'')+'>'+fmtHM(rEnd)+'<div class="tt-dist">'+rDist+'km</div>'+rAids+'</td>';
+          if(newBlock){
+            var blk=ttBlocks[rowBlock[rr2]],rowSpan=0;
+            for(var rs=rr2;rs<nRows3&&rowBlock[rs]===rowBlock[rr2];rs++)rowSpan++;
+            // Aggregate the block's kit: one entry per food, \u00D7N in whole units
+            var bAgg={},bOrder=[],bWaterMl=0,bC=0,bMl=0;
+            for(var bag=0;bag<blk.items.length;bag++){
+              var bF3=getFoodById(blk.items[bag].foodId);if(!bF3)continue;
+              var bP3=blk.items[bag].portion||1;
+              bC+=bF3.carbs*bP3;bMl+=(bF3.ml||0)*bP3;
+              if(bF3.carbs===0&&(bF3.ml||0)>0&&(bF3.na||0)<=50){bWaterMl+=bF3.ml*bP3;continue;}
+              if(!bAgg[bF3.id]){bAgg[bF3.id]={food:bF3,qty:0};bOrder.push(bF3.id);}
+              bAgg[bF3.id].qty+=bP3;
+            }
+            html+='<td class="tt-block" rowspan="'+rowSpan+'">';
+            html+='<div class="tt-block-items">';
+            for(var bo=0;bo<bOrder.length;bo++){
+              var bg=bAgg[bOrder[bo]],bQ=qtyLabel(bg.qty);
+              var bTotC=Math.round(bg.food.carbs*bg.qty);
+              // Carb-less drinks (electrolyte) read better as volume than count
+              var bVol=(bg.food.carbs===0&&(bg.food.ml||0)>0)?(Math.round(bg.food.ml*bg.qty/100)/10)+'l':'';
+              html+='<span class="tt-item">'+bg.food.icon+(bVol?'<span class="tt-portion">'+bVol+'</span>':(bQ?'<span class="tt-qty">'+bQ+'</span>':''))+(bTotC>0?'<span class="tt-chip-carbs">'+bTotC+'g</span>':'')+'</span>';
+            }
+            if(bWaterMl>50)html+='<span class="tt-item">\uD83D\uDCA7<span class="tt-portion">'+(Math.round(bWaterMl/100)/10)+'l</span></span>';
+            html+='</div>';
+            html+='<div class="tt-block-total">'+Math.round(bC)+'g \u00B7 '+(Math.round(bMl/100)/10)+'l over '+fmtHM(blk.end-blk.start)+'</div>';
+            if(rowSpan>1)html+='<div class="tt-arrow"></div>';
+            // Aid pickups drawn at their proportional height inside the block
+            for(var bpk=0;bpk<blk.items.length;bpk++){
+              if(!blk.items[bpk].fromAid)continue;
+              var pkRel=(blk.items[bpk].timeMin-leg.start-blk.start)/(blk.end-blk.start);
+              var pkF=getFoodById(blk.items[bpk].foodId);if(!pkF)continue;
+              html+='<div class="tt-pick" style="top:'+Math.round(20+pkRel*70)+'%">'+pkF.icon+'<span>\u26F3</span></div>';
+            }
+            html+='</td>';
           }
-          html+='</td></tr>';
+          html+='</tr>';
         }
         html+='<tr><td class="tt-finish" colspan="2">FINISH ('+fmtHM(bEnd)+')</td></tr></tbody></table></div>';
       }
