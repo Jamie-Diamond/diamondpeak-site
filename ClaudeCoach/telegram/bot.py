@@ -799,6 +799,36 @@ _MENU_MAP = {
     "📈 graphs":         "__GRAPHS__",
     "🔄 replan week":    "__REPLAN__",
     "🔍 check activity": "__ACTIVITY_CHECK__",
+    # Slash aliases so the same actions work from the Telegram command menu
+    # (the always-visible menu button) as well as the reply-keyboard buttons.
+    "/graphs":           "__GRAPHS__",
+    "/replan":           "__REPLAN__",
+    "/check":            "__ACTIVITY_CHECK__",
+}
+
+# The command menu shown by Telegram's menu button (setMyCommands). Registered at
+# startup so the actions are reachable without clearing the text input / hunting
+# the reply keyboard. Each maps to an existing handler (slash command, _MENU_MAP
+# alias, or a natural-language question via _SLASH_QUESTION).
+BOT_COMMANDS = [
+    ("today",   "What's today's session?"),
+    ("looking", "How am I looking? (readiness)"),
+    ("week",    "This week's sessions + Load"),
+    ("form",    "Fitness / Fatigue / Form + race projection"),
+    ("fitness", "Fitness & Form charts"),
+    ("load",    "Training-load chart (±8 days)"),
+    ("graphs",  "All charts menu"),
+    ("replan",  "Rebuild this week's plan"),
+    ("check",   "Check a recent activity"),
+    ("voice",   "Toggle spoken replies on/off"),
+    ("help",    "Commands & how to use"),
+]
+
+# Slash commands that are shortcuts for a natural-language question routed to the
+# coach (no dedicated handler — translated to text before routing).
+_SLASH_QUESTION = {
+    "/today":   "What's today's session?",
+    "/looking": "How am I looking?",
 }
 _STRENGTH_RE     = re.compile(
     r'^(?:strength(?:\s+session)?|gym(?:\s+session)?|lift(?:ing)?|'
@@ -3260,6 +3290,10 @@ def _route_text(token, chat_id, text, athletes, config):
              reply_markup=build_keyboard(slug))
         return
 
+    # Command-menu shortcuts that map to a natural-language question.
+    if text.strip().lower() in _SLASH_QUESTION:
+        text = _SLASH_QUESTION[text.strip().lower()]
+
     log(f"[{slug}] In: {text[:80]}")
 
     fast = fast_path(text, slug=slug, athlete_cfg=athlete)
@@ -3426,6 +3460,16 @@ def main():
     token = config["bot_token"]
     athletes = load_athletes()
     log(f"ClaudeCoach bot started. claude={CLAUDE_BIN}. Registered athletes: {[a['name'] for a in athletes.values()]}")
+
+    # Populate Telegram's command menu (the always-visible menu button next to the
+    # text input) so actions are reachable without clearing typed text / hunting
+    # the reply keyboard. Best-effort; a failure here must never stop the bot.
+    try:
+        tg_post(token, "setMyCommands", {"commands": [
+            {"command": c, "description": d} for c, d in BOT_COMMANDS]})
+        tg_post(token, "setChatMenuButton", {"menu_button": {"type": "commands"}})
+    except Exception as _e:
+        log(f"setMyCommands (non-fatal): {_e}")
     if not shutil.which(CLAUDE_BIN) and not os.path.isfile(CLAUDE_BIN):
         log(f"CRITICAL: claude binary not found at '{CLAUDE_BIN}' — all AI responses will fail")
         send(token, config.get("chat_id", ""), f"⚠️ Bot started but claude binary not found at `{CLAUDE_BIN}` — fix config.json")
