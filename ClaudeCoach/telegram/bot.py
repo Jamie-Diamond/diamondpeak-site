@@ -222,7 +222,7 @@ def _spoken_rewrite(reply_text: str) -> str:
     try:
         result = subprocess.run(
             [CLAUDE_BIN, "-p", prompt, "--model", MODEL_HAIKU],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=25,
         )
         out = (result.stdout or "").strip()
         if out:
@@ -2996,15 +2996,19 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             clean = _verify_logged_reply(slug, before_ts, clean)
             clean = _strip_model_countdown(clean, athlete)
             final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
-            ogg = None
+            # Send the text reply FIRST so the athlete sees the answer immediately —
+            # then do the (slower) spoken rewrite + TTS and send the voice note after.
+            # Previously the text waited on the rewrite/TTS, adding up to ~25s+ and,
+            # when the rewrite hung, blocking the reply entirely.
             if clean:
-                spoken = _clean_for_speech(_spoken_rewrite(clean))
-                ogg = synthesize_voice(spoken) if spoken else None
-            if ogg:
-                send_voice(token, chat_id, ogg)
                 send(token, chat_id, final, reply_markup=_reply_inline(slug))
-            elif clean:
-                send(token, chat_id, final, reply_markup=_reply_inline(slug))
+                try:
+                    spoken = _clean_for_speech(_spoken_rewrite(clean))
+                    ogg = synthesize_voice(spoken) if spoken else None
+                    if ogg:
+                        send_voice(token, chat_id, ogg)
+                except Exception as _ve:
+                    log(f"[{slug}] voice synth failed (text already sent): {_ve}")
             log(f"[{slug}] Out (voice): {clean[:80]}")
             history.append(_hist_entry(text, clean))
             save_history(history, files["history"])
