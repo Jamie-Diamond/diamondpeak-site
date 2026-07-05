@@ -12,7 +12,7 @@
 
 ---
 
-## Last updated: 2026-07-04
+## Last updated: 2026-07-05
 
 ## Recent context (auto-summary)
 
@@ -135,6 +135,8 @@ Self-tests and symptom mapping performed in detailed conversation, 14 weeks post
 - [Location]: [pain 1–10] / [trend: stable / improving / worsening] / [action]
 
 ## Off-plan in last 7 days
+
+- **2026-07-05 GO** — Long Run 82 min / 16.9km (run_long): no rules fired, execute as planned. CTL 96 (Fitness), ATL 126 (Fatigue), TSB −30 (Form) — heavily fatigued after Sat's 149-Load sweetspot overrun. HRV trend +5.9% (latest 43 on 4 Jul; today not synced at 05:00 — trailing trend, correct); sleep 8.03h carried (4 Jul, most recent synced) — well rested. Last RPE 8. Ankle 2/10, quality_cleared false — within physio tolerance, not a run-blocking signal at this level. Structure: 10m build-in (78–88% pace) → 67m Z2 (80–86% pace, GAP ~4:41–4:57/km) → 5m build-down (78–88% pace). ICU event 119142487, no push needed (unmodified).
 
 - **2026-07-04 MODIFIED** — Sweetspot Ride 110 min (bike_threshold): R4 + R5 + R6-single fired. CTL 93 (Fitness), ATL 115 (Fatigue), TSB −22 (Form). HRV trend +14.3% (latest 46 on 3 Jul; today not synced at 05:00 — trailing trend, correct); sleep 6.12h carried (3 Jul, most recent synced). Last RPE 8. Ankle 2/10, quality_cleared false — not relevant for bike. R4 load-management cap (ATL−CTL gap +22, moderate zone): intensity capped 95%, intervals −1. R5 prior-RPE (8/10 ≥8): intensity −5%. R6 partial (sleep <7h, single signal, HRV not corroborating): intervals −1 only, no full Z2 swap. Net: 91%→86% FTP (255W eFTP 297), 4×15min→2×15min SS blocks, recovery unchanged 5min, total duration unchanged 110min (extra volume absorbed into WU/CD Z2). ICU event 119134677 (original) deleted, 120433893 (modified) pushed.
 
