@@ -273,6 +273,16 @@ def main():
         sys.exit(1)
 
     target = brief["weekly_tss_target"]
+    # The CTL requirement can exceed the athlete's own hours ceiling (kathryn,
+    # 5 Jul 2026: required 640 vs cap 509+10% — every attempt hard-failed and no
+    # clean week EXISTS). Aim at the biggest legal week instead and tell the
+    # athlete about the conflict; silently failing forever helps nobody.
+    tss_cap = pb._weekly_tss_cap(args.athlete, {"name": brief.get("phase")})
+    if target and tss_cap and target > tss_cap:
+        brief["weekly_tss_target_required"] = target
+        brief["target_capped_by_hours"] = round(tss_cap)
+        target = int(tss_cap)
+        brief["weekly_tss_target"] = target
     override_path = Path(args.override_json) if args.override_json else None
     if override_path and override_path.exists():
         proposal = json.loads(override_path.read_text())
@@ -359,6 +369,11 @@ def _week_message(brief: dict, built: dict) -> str:
     if floor and built["total_tss"] < floor * 0.95:
         lines.insert(0, f"🔥 *UNDER-TRAINING WEEK*: {built['total_tss']} TSS is below the "
                         f"{floor} floor — this week does not train you. Flagged, not hidden.")
+    req = brief.get("weekly_tss_target_required")
+    if req:
+        lines.append(f"⚠️ _Phase requires ~{req} TSS but your weekly-hours ceiling caps the "
+                     f"plan at ~{brief.get('target_capped_by_hours')}. Fitness will build "
+                     f"slower than the blueprint — raise max_hours_per_week to close the gap._")
     for s in built["sessions"]:
         wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""
