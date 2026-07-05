@@ -141,3 +141,19 @@ class TestTaperTidRows:
     def test_volume_factor_is_gone(self):
         lib = json.loads((REPO / "config" / "session-library.json").read_text())
         assert "volume_factor" not in lib["phases"]["taper"]
+
+
+class TestPhaseResolutionWithoutSpecific:
+    def test_unconfigured_specific_does_not_swallow_taper(self):
+        # Calum-shaped config: peak ends week 11, race week 12, NO specific phase.
+        cfg = _cfg(plan_start="2026-06-08", race_date="2026-08-29",
+                   phase_tss={"base_end_week": 3, "build_end_week": 8,
+                              "peak_end_week": 11},
+                   ctl_targets={"race_min": 40, "race_max": 48})
+        r = pt.required_tss(cfg, 100.0, today=date(2026, 8, 25))   # race week
+        assert r["phase"] == "taper"
+        assert r["taper_factor"] == 0.40
+        mid = pt.required_tss(cfg, 30.0, today=date(2026, 7, 21))  # week 7 = build
+        assert mid["phase"] == "build"
+        peak = pt.required_tss(cfg, 40.0, today=date(2026, 8, 11)) # week 10 = peak
+        assert peak["phase"] == "peak"

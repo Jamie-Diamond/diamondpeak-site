@@ -283,8 +283,13 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
 
     plan_start = date.fromisoformat(cfg["plan_start"])
     ptss = cfg.get("phase_tss") or {}
-    ends = {"base": ptss.get("base_end_week", 6), "build": ptss.get("build_end_week", 10),
-            "specific": ptss.get("specific_end_week", 14), "peak": ptss.get("peak_end_week", 17)}
+    build_end = ptss.get("build_end_week", 10)
+    ends = {"base": ptss.get("base_end_week", 6), "build": build_end,
+            # No Specific phase unless configured: the old default (14) could sit
+            # ABOVE a configured peak_end_week, swallowing the taper — Calum's
+            # race week resolved to "specific" instead of taper.
+            "specific": ptss.get("specific_end_week", build_end),
+            "peak": ptss.get("peak_end_week", 17)}
     week_now = max(1, (today - plan_start).days // 7 + 1)
     phase = next((p for p in _PHASES if week_now <= ends[p]), "taper")
     if phase == "taper":
