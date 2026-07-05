@@ -456,12 +456,6 @@
     }
 
     // Normalize so total time is exact
-    var weightedSum = 0;
-    for (i = 0; i < n; i++) {
-      weightedSum += multipliers[i] * splitDistances[i];
-    }
-    var scaleFactor = totalSec / (weightedSum * avgPace / distKm * distKm);
-    // Simpler: we want sum of (multiplier[i] * splitDist[i] * avgPace) normalized to totalSec
     var rawTotalTime = 0;
     for (i = 0; i < n; i++) {
       rawTotalTime += multipliers[i] * splitDistances[i] * avgPace;
