@@ -3,21 +3,19 @@
 Last updated: 2026-07-05
 
 ## Recent context (auto-summary)
-- **2026-07-05 (Sun)**: Long ride (195 min, comfortable/steady effort, HR cap ~153 bpm) prescribed GO as-planned — no modulation rules fired. HRV trend 0.0% (insufficient HRV history — no signal, not a sync gap); sleep: no data available (no wearable). ATL 42 / CTL 14 (ratio elevated by Fri 3 Jul Gravel ride, 213 load) — engine still cleared GO. Last session RPE 7 (Geneva Road, 29 Jun).
-- **2026-07-04 (Sat)**: Rest day. Watchdog tone softened vs prior weeks — "a few sessions have slipped over the last couple of weeks, no pressure, let's just focus on resetting today and building back up gradually" (no explicit warning framing this time)
-- **2026-07-04 evening**: "Tomorrow" message sent for Sun 5 Jul Long ride — NP target 163W (IF 0.65), HR cap 153 bpm, 70 g/hr carbs + 600ml/hr fluid; message states Form -16.7 (Heavy) — conflicts with Watchdog Log Jul 3 entry (Form +2.7 below); discrepancy unresolved, verify before quoting either figure
-- **2026-07-03 (Fri)**: Unplanned Geneva Gravel/Unpaved ride — huge effort, 5+ hrs, 60.5km, 1,156m climbed, avg HR 137 bpm; steady/controlled despite serious climbing; first substantial ride since Mon 29 Jun. Quick-logged; still not reflected in Watchdog CTL/ATL figures below as of Jul 4 morning.
+- **2026-07-05 (Sun)**: Long ride (195 min, comfortable/steady effort, HR cap ~153 bpm) prescribed GO as-planned — no modulation rules fired. Nutrition target 60 g/hr (progressing to 90 g/hr race target). Not yet confirmed complete via IcuSync. Last known RPE still 7 (Geneva Road, 29 Jun) — no RPE reported since.
+- **2026-07-04 (Sat)**: Rest day. Watchdog tone softened vs prior weeks — "a few sessions have slipped over the last couple of weeks, no pressure, let's just focus on resetting today and building back up gradually."
+- **2026-07-04 evening "Tomorrow" message** (for Sun 5 Jul) stated Form -16.7 (Heavy), conflicting with Watchdog Log Jul 3 entry (Form +2.7) — discrepancy unresolved, verify before quoting either figure.
+- **2026-07-03 (Fri)**: Unplanned Geneva Gravel/Unpaved ride — huge effort, 5h13m, 60.5km, 1,156m climbed, avg HR 137 bpm; steady/controlled despite serious climbing; first substantial ride since Mon 29 Jun. Quick-logged.
 - **Build phase week 1 (w/c 29 Jun) fully missed on-plan**: 0/3 planned sessions completed (Sat 27 Jun long ride, Tue 30 Jun endurance 50min, Thu 2 Jul sweetspot 2×25) — only unplanned rides done (Mon 29 Jun Geneva Road, Fri 3 Jul Geneva Gravel)
 - **2026-06-29 (Mon)**: Geneva Road Cycling (unplanned) — avg HR 124 bpm, max 159 bpm; RPE 7 ("felt terrible, probably due to lack of sleep"); did not know what "RPE" meant — now covered by [perm] plain-language rule
 - **Recurring pattern**: watchdog's same-day "GO as-planned" projections have repeatedly needed correcting to "NOT completed" once actual IcuSync data lands (Jun 27, Jun 30, Jul 2 all corrected) — always verify against IcuSync before confirming a session happened
-- **CTL 5.8 / ATL 3.1 / Form +2.7** as of 2026-07-03 per Watchdog Log (pre-Gravel-ride sync; see conflicting Form figure above)
-- **Tour de Stations / Marmottes**: 56 days out as of 2026-07-04 (race day 2026-08-29); building from near-zero fitness; ~6–8 hr mountain effort
+- **CTL 13.6 / ATL 42.0** as of 2026-07-05 per Watchdog Log; ratio elevated by unplanned Fri 3 Jul Gravel ride (213 load) — engine still cleared GO
+- **Tour de Stations / Marmottes**: 55 days out as of 2026-07-05 (race day 2026-08-29); building from near-zero fitness; ~6–8 hr mountain effort
 - **Compliance**: T3 Underload fired every week since Jun 7; T5 (missed sessions) firing most days
-- **Weight**: 93 kg last confirmed; zero replies to daily weight prompts through Sat 4 Jul (7+ weeks running)
-- **Fuelling**: 0 g/hr current habit; target 60 g/hr (short-term) → 90 g/hr (race day); Jul 5 long ride prescribed at 70 g/hr
+- **Weight**: 93 kg last confirmed; zero replies to daily weight prompts through Sun 5 Jul (7+ weeks running)
 - **No injury reported**; no HRV/sleep wearable
 - **Open action**: delete/correct erroneous "Z3 Ride 10h" event in Intervals.icu
-- **Sleep**: Jun 29 Geneva ride RPE 7 attributed by Calum to lack of sleep — no further data points since; monitor if pattern continues
 
 ## Training Availability
 Max weekly training: **5 hours/week** (cycling)
