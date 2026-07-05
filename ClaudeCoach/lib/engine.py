@@ -53,6 +53,15 @@ def _resolve_claude_bin() -> str:
 
 CLAUDE_BIN = _resolve_claude_bin()
 TOOLS = "Read,Write,Edit,Bash"
+# Commands the chat model must never run mid-reply. Restarting the service (or
+# killing the process) drops the in-flight reply — the cause of the 5 self-
+# restarts + ~25-min silences on 2026-07-05. Code edits/pushes stay allowed
+# (intended self-improvement); they just take effect on the next natural restart.
+DISALLOWED_TOOLS = (
+    "Bash(systemctl *) Bash(sudo *) Bash(service *) "
+    "Bash(reboot *) Bash(reboot) Bash(shutdown *) Bash(halt) "
+    "Bash(kill *) Bash(pkill *)"
+)
 MODEL_SONNET = "claude-sonnet-5"
 MODEL_OPUS   = "claude-opus-4-8"
 MODEL_HAIKU  = "claude-haiku-4-5-20251001"
@@ -156,7 +165,8 @@ def build_prompt(user_message, history, system_prompt, athlete_name, context,
 
 
 def claude_cmd(prompt, model, extra_args=None):
-    cmd = [CLAUDE_BIN, "-p", prompt, "--allowedTools", TOOLS, "--model", model]
+    cmd = [CLAUDE_BIN, "-p", prompt, "--allowedTools", TOOLS,
+           "--disallowedTools", DISALLOWED_TOOLS, "--model", model]
     if extra_args:
         cmd.extend(extra_args)
     return cmd

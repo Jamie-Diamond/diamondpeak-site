@@ -2354,6 +2354,11 @@ def prefetch_context(slug: str) -> str:
                 "-> red-flags a plan the athlete describes (glucose over the ~60 g/hr SGLT1 cap, wrong glucose:fructose "
                 "ratio, dehydration, low sodium, caffeine outside 3-6 mg/kg). For the interactive per-leg schedule with "
                 "the gut-backlog graph, point them to https://diamondpeak.uk/cycling/fuelling-calculator.html")
+            lines.append(
+                "NEVER restart the bot, run systemctl/service, reboot or kill the process while replying — it drops the "
+                "reply mid-send (this caused repeated ~25-min silences). Committed code changes apply on the next "
+                "natural restart; say 'live on next restart' and move on. To show a chart, emit a <<<CHART:TYPE:JSON>>> "
+                "marker (types include heat) — never write code to build a chart.")
         except Exception as _e:
             log(f"prefetch planning numbers (non-fatal): {_e}")
 
