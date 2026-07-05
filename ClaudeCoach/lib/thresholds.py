@@ -174,3 +174,53 @@ if __name__ == "__main__":
                                     "--chat-id", str(cid), msg], check=False)
     else:
         print(json.dumps([get_thresholds(s, athletes[s]) for s in slugs], indent=1))
+
+
+def estimate_run_threshold_from_gap(client, lthr: float | None = None,
+                                    days: int = 90) -> dict | None:
+    """Passive run-threshold estimate (audit P1-8, no-test regime): linear fit of
+    grade-adjusted speed (ICU `gap`, m/s) against average HR over steady runs,
+    extrapolated to LTHR. FLAG-ONLY — the configured threshold is never changed
+    automatically. Returns None when the data cannot support an estimate
+    (needs >=6 steady runs >=30 min with GAP+HR, >=15 bpm HR spread, R^2 >= 0.5,
+    positive slope)."""
+    pts = []
+    for a in client.get_training_history(days=days) or []:
+        if (a.get("type") or "") not in ("Run", "TrailRun", "VirtualRun"):
+            continue
+        if (a.get("moving_time") or 0) < 1800:
+            continue
+        gap, hr, dec = a.get("gap"), a.get("average_heartrate"), a.get("decoupling")
+        if not gap or not hr:
+            continue
+        if dec is not None and abs(float(dec)) > 8:      # drifting runs poison the fit
+            continue
+        if not lthr:
+            lthr = a.get("lthr")
+        pts.append((float(hr), float(gap)))
+    if len(pts) < 6 or not lthr:
+        return None
+    hs, vs = [h for h, _ in pts], [v for _, v in pts]
+    if max(hs) - min(hs) < 15:
+        return None                                       # extrapolation unstable
+    n = len(pts)
+    mh, mv = sum(hs) / n, sum(vs) / n
+    sxx = sum((h - mh) ** 2 for h in hs)
+    sxy = sum((h - mh) * (v - mv) for h, v in pts)
+    if sxx == 0:
+        return None
+    b = sxy / sxx
+    a0 = mv - b * mh
+    ss_res = sum((v - (a0 + b * h)) ** 2 for h, v in pts)
+    ss_tot = sum((v - mv) ** 2 for v in vs)
+    r2 = 1 - ss_res / ss_tot if ss_tot else 0.0
+    if r2 < 0.5 or b <= 0:
+        return None
+    v_thr = a0 + b * float(lthr)
+    if v_thr <= 0:
+        return None
+    sec_km = 1000.0 / v_thr
+    return {"pace_s_per_km": round(sec_km),
+            "pace": f"{int(sec_km // 60)}:{int(sec_km % 60):02d}",
+            "n_runs": n, "r2": round(r2, 2), "lthr_used": round(float(lthr)),
+            "hr_range": [round(min(hs)), round(max(hs))]}

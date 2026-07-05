@@ -106,6 +106,36 @@ def run_summary(slug: str = "jamie") -> str:
     wellness_14d    = client.get_wellness(14)
     activities_7d   = client.get_training_history(7)
 
+    # Passive run-threshold estimate (audit P1-8): GAP-at-HR fit vs the configured
+    # threshold — flags placeholder/stale run thresholds before they seed race
+    # targets when quality resumes. Flag-only, never auto-applied.
+    run_thr_line = ""
+    try:
+        from thresholds import estimate_run_threshold_from_gap
+        import ops_log as _ops2
+        _est = estimate_run_threshold_from_gap(client)
+        if _est:
+            run_thr_line = (f"Passive run-threshold estimate: {_est['pace']}/km "
+                            f"(GAP-at-HR fit, {_est['n_runs']} steady runs, R2 {_est['r2']})")
+            _conf = profile.get("run_threshold_pace_per_km")
+            if _conf:
+                try:
+                    _mm, _ss = str(_conf).split(":")
+                    _conf_s = int(_mm) * 60 + int(_ss)
+                    _diff = (_est["pace_s_per_km"] - _conf_s) / _conf_s * 100
+                    run_thr_line += f" vs configured {_conf}/km ({_diff:+.0f}%)"
+                    if abs(_diff) > 8:
+                        run_thr_line += " — CONFIGURED THRESHOLD LOOKS STALE"
+                        _ops2.alert("weekly-summary",
+                                    f"run threshold drift: passive estimate {_est['pace']}/km vs "
+                                    f"configured {_conf}/km ({_diff:+.0f}%) — review before any "
+                                    f"quality-run prescriptions use it",
+                                    athlete=slug)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
     # Realised intensity distribution (audit P1-1): what was DONE vs the phase
     # TID — catches grey-zone drift AND a week collapsing to all-easy.
     realised_tid_line = ""
@@ -430,6 +460,7 @@ Week: {week_start} → {week_end}
 ## Local — Run aerobic efficiency trend (pre-computed)
 {run_efficiency_line or "Not enough run power:HR data yet."}
 {realised_tid_line or "Realised intensity: not enough classifiable activity data this week."}
+{run_thr_line or "Run threshold: no passive estimate available (needs 6+ steady runs with GAP+HR)."}
 
 ## Local — VO2max trend (block-level, pre-computed)
 {vo2max_line}

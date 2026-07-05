@@ -646,6 +646,16 @@ ATHLETE_STAGGER_S = int(os.environ.get("ATHLETE_STAGGER_S", "90"))
 
 
 def main():
+    # Refresh each athlete's AUTO-SYNC prompt block from live config first
+    # (audit P1-10: hand-maintained prompt numbers drift from config). Runs
+    # here rather than as its own cron entry so the refresh always lands just
+    # before the prompts' heaviest consumer.
+    try:
+        subprocess.run(["python3", str(BASE / "scripts" / "refresh-athlete-prompts.py")],
+                       capture_output=True, timeout=120)
+    except Exception:
+        pass
+
     athletes = json.loads(CONFIG.read_text())
     processed = False
     for slug, cfg in athletes.items():
