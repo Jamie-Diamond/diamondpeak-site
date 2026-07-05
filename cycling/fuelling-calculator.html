@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Race Fuelling Planner v1.5 — Diamond Peak</title>
+<title>Race Fuelling Planner v1.6 — Diamond Peak</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../style.css">
 <style>
@@ -240,7 +240,7 @@
   <div class="dpc-header"><img src="../logo-mark.png" alt="Diamond Peak" class="dpc-logo"><span class="dpc-wordmark">Diamond Peak</span></div>
   <a href="../index.html" class="back">&larr; Back to tools</a>
   <div class="kicker">NUTRITION &amp; PHYSIOLOGY</div>
-  <h1>Race Fuelling Planner <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.5</span></h1>
+  <h1>Race Fuelling Planner <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.6</span></h1>
   <p class="intro">
     Set up your race, select foods per leg, and auto-generate a fuelling strategy that
     respects how much your gut can actually absorb. Tracks carbs, fluid, sodium and caffeine,
@@ -274,6 +274,7 @@
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong><br>
     <strong>v1.4</strong>: Moved the physiology maths (transporter caps, target formulas, plan-check thresholds) into a shared engine so the ClaudeCoach bot runs the exact same logic and the two never disagree. No change to the numbers.<br>
     <strong>v1.3</strong>: Aligned the Absorption Graph zones to the gut model. The green/amber/red bands now track your combined transporter cap (90 g/hr default, 120 gut-trained) instead of fixed thresholds, and a dashed line marks the tighter glucose cap so a plan that looks green on combined carbs but exceeds the glucose transporter is now visible. The two carb views are consistent.<br>
+    <strong>v1.6</strong>: Race start and wake-up time inputs. The breakfast window is now wake-up &rarr; 1h before the gun, with real clock times shown on the plan; the meal size scales with digestion time (1&ndash;2 g/kg), and if you are awake less than 1h30 before the start the breakfast leg disappears and carbs + coffee move to the final hour instead. Bike cage setup only shows when the race has a bike leg.<br>
     <strong>v1.5</strong>: Simpler plans. The strategy generator now builds one repeating order per leg (e.g. every 12 min: &#8531; bottle &rarr; chew &rarr; water &rarr; repeat) covering carbs and fluid together, shown on the leg and race cards. Breakfast is a normal meal (porridge, toast, bagel + coffee) instead of race food. Caffeine target is body-weight based (4 mg/kg default) and caffeinated drinks are capped by it, so no more endless caffeine-drink sips. Added Maurten 320 CAF 100 and 1.5&times; concentrated 750 ml mixes. Bike cages have editable names. Top tube card redesigned as a pro-team-style printable sticker with your name and &times;N item counts.<br>
     <strong>v1.2</strong>: Engine upgrade. Added a gut/absorption model with separate glucose (SGLT1) and fructose (GLUT5) transporter caps and a "gut-trained" mode (90 &rarr; 120 g/hr), showing carbs actually absorbed vs unabsorbed backlog in the gut. New "Suggest targets" sets evidence-based carb, fluid, sodium and caffeine goals from race duration, body weight, sweat rate and sweat-sodium concentration. New Plan Check panel flags red flags: glucose over transporter cap, wrong glucose:fructose ratio, gut backlog, dehydration or over-drinking, under-replacing sodium, caffeine outside 3-6 mg/kg, fuelling gaps, and solids on the run.<br>
     <strong>v1.1</strong>: Usability update. Fixed a crash in "Optimise all legs" that left the loading overlay stuck. Setup now saves automatically in the browser (with Reset all / Clear plan buttons). Typing in number fields no longer loses focus; target sliders drag smoothly. Custom foods join the shortlist automatically. Schedule table scrolls horizontally on small screens. Added a step-by-step guide bar; switching preset now clears aid stations for disciplines the race no longer has.<br>
@@ -396,6 +397,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   var state = {
     preset:'Ironman', swimDist:3.8, bikeDist:180, runDist:42.2,
     swimPaceMin:1, swimPaceSec:44, bikeSpeed:34, runPace:5,
+    startTime:'07:00', wakeTime:'04:45',
     t1:3, t2:2, aidStations:[
       {km:30,discipline:'bike',type:'water'},
       {km:60,discipline:'bike',type:'electrolyte'},
@@ -460,7 +462,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     return segs.length>0?segs[segs.length-1].name:'';
   }
   function getLegStart(segs,t){
-    if(t<-60)return -120;
+    if(t<-60)return -PRE_RACE_OFFSET;
     if(t<0)return -60;
     for(var i=0;i<segs.length;i++) if(t>=segs[i].start&&t<segs[i].start+segs[i].dur) return segs[i].start;
     return segs.length>0?segs[segs.length-1].start:0;
@@ -475,7 +477,24 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   function fmtTime(m){if(m<0)m=0;var h=Math.floor(m/60),mi=Math.floor(m%60),s=Math.round((m-Math.floor(m))*60);return h>0?h+':'+String(mi).padStart(2,'0')+':'+String(s).padStart(2,'0'):mi+':'+String(s).padStart(2,'0');}
   function fmtHM(m){var h=Math.floor(m/60),mi=Math.round(m%60);if(h>0&&mi>0)return h+'h'+String(mi).padStart(2,'0');if(h>0)return h+'h';return mi+"'";}
 
-  var PRE_RACE_OFFSET=120; // supports breakfast at -2hrs
+  // Pre-race window is wake-up → start gun, derived from the two time inputs.
+  // Breakfast leg = wake-up → 1h before start (needs ≥90 min awake to exist).
+  var PRE_RACE_OFFSET=120;
+  function parseHM(s){var m=/^(\d{1,2}):(\d{2})/.exec(s||'');if(!m)return null;return (+m[1]%24)*60+(+m[2]%60);}
+  function wakeOffsetMin(){
+    var st=parseHM(state.startTime),wk=parseHM(state.wakeTime);
+    if(st===null||wk===null)return 120;
+    var d=st-wk;if(d<=0)d+=1440; // wake before midnight
+    return Math.max(60,Math.min(300,d));
+  }
+  function updatePreRaceOffset(){PRE_RACE_OFFSET=wakeOffsetMin();}
+  function hasBreakfastWindow(){return PRE_RACE_OFFSET>=90;}
+  function fmtClock(relMin){
+    var st=parseHM(state.startTime);if(st===null)return '';
+    var t=((st+Math.round(relMin))%1440+1440)%1440;
+    var h=Math.floor(t/60),mi=t%60;
+    return (h<10?'0':'')+h+':'+(mi<10?'0':'')+mi;
+  }
 
   // Rolling 60-min window for carbs
   function calcAbsorption(totalMin){
@@ -567,19 +586,19 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var isSalt=function(f){return f.carbs===0&&f.na>100;};
     var isCaf=function(f){return (f.caf||0)>0&&!f.meal;};
     function add(id){if(id&&pick.indexOf(id)<0)pick.push(id);}
+    var isMeal=function(f){return f.meal&&f.carbs>0;};
+    var isMealCaf=function(f){return f.meal&&(f.caf||0)>0&&f.carbs===0;};
+    function fromLibrary(test){
+      var all=getAllFoods();
+      for(var q=0;q<all.length;q++)if(test(all[q])){
+        if(state.shortlist.indexOf(all[q].id)<0)state.shortlist.push(all[q].id);
+        return all[q].id;
+      }
+      return null;
+    }
     if(legName==='Breakfast'){
       // A normal meal, not race food: prefer meal-tagged items, pulling them
       // into the shortlist from the library if none are shortlisted yet.
-      var isMeal=function(f){return f.meal&&f.carbs>0;};
-      var isMealCaf=function(f){return f.meal&&(f.caf||0)>0&&f.carbs===0;};
-      function fromLibrary(test){
-        var all=getAllFoods();
-        for(var q=0;q<all.length;q++)if(test(all[q])){
-          if(state.shortlist.indexOf(all[q].id)<0)state.shortlist.push(all[q].id);
-          return all[q].id;
-        }
-        return null;
-      }
       add(firstOf(isMeal)||fromLibrary(isMeal)||firstOf(isSolidCarb)||firstOf(isCarb));
       add(firstOf(isMealCaf)||fromLibrary(isMealCaf));
       add(firstOf(isWater));
@@ -587,6 +606,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     }
     if(legName==='Pre-Race'){
       add(firstOf(isSolidCarb)||firstOf(isCarb));
+      // No breakfast window (late wake-up): coffee moves to the final hour
+      if(!hasBreakfastWindow())add(firstOf(isMealCaf)||fromLibrary(isMealCaf));
       add(firstOf(isWater));
       return pick;
     }
@@ -613,8 +634,10 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     for(var i=0;i<legs.length;i++){
       var nm=legs[i].name;
       var st=state.strategies[nm]||(state.strategies[nm]={foods:[],target:0,fluidTarget:0,sodiumTarget:0,cafTarget:0});
-      if(nm==='Breakfast'){st.target=Math.min(200,Math.round(wt*2/5)*5);st.fluidTarget=500;st.sodiumTarget=300;st.cafTarget=90;}
-      else if(nm==='Pre-Race'){st.target=30;st.fluidTarget=300;st.sodiumTarget=200;st.cafTarget=0;}
+      // Breakfast size scales with how long before the gun it is eaten
+      // (~1 g/kg per hour of digestion time, capped at 2 g/kg)
+      if(nm==='Breakfast'){var bfHrs=PRE_RACE_OFFSET/60;var gkg=bfHrs>=2.5?2:bfHrs>=2?1.5:1;st.target=Math.min(200,Math.round(wt*gkg/5)*5);st.fluidTarget=500;st.sodiumTarget=300;st.cafTarget=90;}
+      else if(nm==='Pre-Race'){st.target=hasBreakfastWindow()?30:Math.min(90,Math.round(wt*0.75/5)*5);st.fluidTarget=300;st.sodiumTarget=200;st.cafTarget=hasBreakfastWindow()?0:90;}
       else if(nm==='Bike'){st.target=tg.bikeCarbGHr;st.fluidTarget=flHr;st.sodiumTarget=naHr;st.cafTarget=hasRun?Math.round(cafTotal*0.6):cafTotal;}
       else if(nm==='Run'){st.target=tg.runCarbGHr;st.fluidTarget=flHr;st.sodiumTarget=naHr;st.cafTarget=hasBike?Math.round(cafTotal*0.4):cafTotal;}
       // Seed default foods only if none chosen yet, so we don't clobber user picks
@@ -766,8 +789,12 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   function generateStrategy(legName,legStart,legDur,strat){
     // Remove existing items for this leg
     state.schedule = state.schedule.filter(function(e){
-      if(legName==='Pre-Race') return !(e.timeMin >= -60 && e.timeMin < 0);
-      if(legName==='Breakfast') return !(e.timeMin >= -120 && e.timeMin < -60);
+      if(legName==='Pre-Race'){
+        // With no breakfast window, Pre-Race owns any stale pre--60 items too
+        if(!hasBreakfastWindow()&&e.timeMin<-60)return false;
+        return !(e.timeMin >= -60 && e.timeMin < 0);
+      }
+      if(legName==='Breakfast') return !(e.timeMin < -60);
       return !(e.timeMin >= legStart && e.timeMin < legStart + legDur);
     });
     if(legDur<=0)return;
@@ -1043,7 +1070,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   // Get available legs for strategy builder
   function getStratLegs(race){
     var legs=[];
-    legs.push({name:'Breakfast',start:-120,dur:60,color:'#b8860b'});
+    if(hasBreakfastWindow())legs.push({name:'Breakfast',start:-PRE_RACE_OFFSET,dur:PRE_RACE_OFFSET-60,color:'#b8860b'});
     legs.push({name:'Pre-Race',start:-60,dur:60,color:'#7f8c8d'});
     for(var i=0;i<race.segs.length;i++){
       var s=race.segs[i];
@@ -1058,6 +1085,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
      ══════════════════════════════════════ */
 
   function render(){
+    updatePreRaceOffset();
     var race=calcRace(),abs=calcAbsorption(race.total),fl=calcFluidTimeline(race.total),caf=calcCaffeine(race.total),energy=calcEnergyBalance(race),gm=calcGutModel(race.total);
     var aids=aidStationTimes(race),allFoods=getAllFoods(),stratLegs=getStratLegs(race);
     var html='';
@@ -1086,8 +1114,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>Body weight (kg)</label><input type="number" id="bodyWt" min="30" max="150" step="1" value="'+state.bodyWeight+'"></div><div class="field"><label>Sweat rate (ml/hr)</label><input type="number" id="sweatRate" min="200" max="3000" step="50" value="'+state.sweatRate+'"></div><div class="field"><label>Sweat sodium (mg/L)</label><input type="number" id="sweatNa" min="200" max="2000" step="50" value="'+state.sweatNa+'"></div>';
     if(state.showCaffeine) html+='<div class="field"><label>&nbsp;</label><div style="font-size:10px;color:var(--caf);font-family:\'DM Mono\',monospace">Caffeine: '+Math.round(state.bodyWeight*3)+'\u2013'+Math.round(state.bodyWeight*6)+' mg</div></div>';
     html+='</div>';
+    // Race start + wake-up: sets how much of a breakfast window is realistic
+    html+='<div class="field-row" style="margin-top:8px"><div class="field"><label>Race start</label><input type="time" id="startTime" value="'+state.startTime+'"></div><div class="field"><label>Wake up</label><input type="time" id="wakeTime" value="'+state.wakeTime+'"></div><div class="field"><label>&nbsp;</label><div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;line-height:1.5">'+(hasBreakfastWindow()?'Breakfast '+fmtClock(-PRE_RACE_OFFSET)+'&ndash;'+fmtClock(-60)+' ('+fmtHM(PRE_RACE_OFFSET-60)+' window)':'&lt;1h30 awake before the gun &mdash; no breakfast leg, carbs+coffee move to the final hour')+'</div></div></div>';
     html+='<label class="toggle-item" style="margin-top:6px"><input type="checkbox" id="gutTrained"'+(state.gutTrained?' checked':'')+'><span class="toggle-track"></span>Gut-trained: raises absorption caps from 90 to 120 g/hr (glucose 60&rarr;72, fructose 30&rarr;48)</label>';
-    // Bike cage configurator
+    // Bike cage configurator — only when the race has a bike leg
+    if(state.bikeDist>0){
     var totalBikeMl=0;for(var tbm=0;tbm<state.bikeCages.length;tbm++)totalBikeMl+=state.bikeCages[tbm].ml;
     html+='<div style="margin-top:10px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px">';
     html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-family:\'DM Mono\',monospace">\uD83D\uDEB4 Bike Cages ('+state.bikeCages.length+' bottles \u00B7 '+totalBikeMl+'ml)</div><button class="btn-sm" id="addCage">+ Cage</button></div>';
@@ -1109,6 +1140,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       html+='</div>';
     }
     html+='</div>';
+    } // end bike-cage configurator (bike legs only)
     html+='</div>';
 
     // Summary
@@ -1173,7 +1205,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       }
       var strat=state.strategies[sLeg.name];
       html+='<div class="strat-leg">';
-      html+='<div class="strat-leg-head"><div class="strat-leg-dot" style="background:'+sLeg.color+'"></div>'+sLeg.name+' <span style="font-weight:400;color:var(--muted);font-size:9px">'+fmtHM(sLeg.dur)+'</span></div>';
+      var legClock=(sLeg.name==='Breakfast'||sLeg.name==='Pre-Race')?' · '+fmtClock(sLeg.start)+'–'+fmtClock(sLeg.start+sLeg.dur):'';
+      html+='<div class="strat-leg-head"><div class="strat-leg-dot" style="background:'+sLeg.color+'"></div>'+sLeg.name+' <span style="font-weight:400;color:var(--muted);font-size:9px">'+fmtHM(sLeg.dur)+legClock+'</span></div>';
       html+='<div class="strat-targets">';
       var isPreLeg=sLeg.name==='Breakfast'||sLeg.name==='Pre-Race';
       var carbMax=sLeg.name==='Breakfast'?250:120,carbUnit=isPreLeg?'g total':'g/hr';
@@ -1246,7 +1279,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var eC=Math.round(food.carbs*p2),eG=Math.round(food.glucose*p2),eF=Math.round(food.fructose*p2),eMl=Math.round((food.ml||0)*p2),eNa=Math.round((food.na||0)*p2),eCaf=Math.round((food.caf||0)*p2);
         var isAid=entry.fromAid?true:false;
         var legSt=getLegStart(race.segs,entry.timeMin),legT=Math.round(entry.timeMin-legSt);
-        html+='<tr><td><input type="number" class="time-input-sm sched-time" data-idx="'+idx+'" data-legstart="'+legSt+'" value="'+legT+'" min="0" max="999"> min</td>';
+        html+='<tr><td><input type="number" class="time-input-sm sched-time" data-idx="'+idx+'" data-legstart="'+legSt+'" value="'+legT+'" min="0" max="999"> min'+(entry.timeMin<0?'<div style="font-size:8px;color:var(--muted);font-family:\'DM Mono\',monospace">@ '+fmtClock(entry.timeMin)+'</div>':'')+'</td>';
         html+='<td><span class="sched-disc disc-'+dCls+'">'+disc+'</span></td>';
         html+='<td>'+food.icon+' '+food.name+(entry.reason?'<div style="font-size:8px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-top:1px;font-style:italic">'+entry.reason+'</div>':'')+'</td>';
         html+='<td><select class="sched-portion" data-idx="'+idx+'" style="width:52px;height:26px;border:1px solid var(--border);border-radius:3px;font-family:\'DM Mono\',monospace;font-size:11px;text-align:center;outline:none;background:#fff">';
@@ -1292,7 +1325,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var legColors={'Breakfast':'#b8860b','Pre-Race':'#7f8c8d','Swim':'#2980b9','T1':'#7f8c8d','Bike':'#27ae60','T2':'#7f8c8d','Run':'#e67e22'};
     var legs=[],sortedAll=state.schedule.slice().sort(function(a,b){return a.timeMin-b.timeMin;});
     var bfItems=[],preItems=[];for(var pr2=0;pr2<sortedAll.length;pr2++){if(sortedAll[pr2].timeMin<-60)bfItems.push(sortedAll[pr2]);else if(sortedAll[pr2].timeMin<0)preItems.push(sortedAll[pr2]);}
-    if(bfItems.length>0)legs.push({name:'Breakfast',dur:60,start:-120,items:bfItems,color:'#b8860b',dist:0});
+    if(bfItems.length>0)legs.push({name:'Breakfast',dur:Math.max(30,PRE_RACE_OFFSET-60),start:-PRE_RACE_OFFSET,items:bfItems,color:'#b8860b',dist:0});
     if(preItems.length>0)legs.push({name:'Pre-Race',dur:60,start:-60,items:preItems,color:'#7f8c8d',dist:0});
     for(var lg=0;lg<race.segs.length;lg++){var s2=race.segs[lg],li2=[];for(var li=0;li<sortedAll.length;li++){var t2=sortedAll[li].timeMin;if(t2>=0&&t2>=s2.start&&t2<s2.start+s2.dur)li2.push(sortedAll[li]);}legs.push({name:s2.name,dur:s2.dur,start:s2.start,dist:s2.dist,items:li2,color:s2.color});}
 
@@ -1355,7 +1388,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       html+='</div>';
 
       if(leg.items.length===0)html+='<div class="race-card-empty">No fuelling scheduled</div>';
-      else{html+='<ul class="race-card-items">';for(var ri=0;ri<leg.items.length;ri++){var rI=leg.items[ri],rF=getFoodById(rI.foodId);if(!rF)continue;var rP=rI.portion||1,relTm=rI.timeMin-leg.start;var tL=(leg.name==='Pre-Race'||leg.name==='Breakfast')?(Math.round(rI.timeMin)+"'"):fmtHM(relTm)+' in';var pL2=rP===1?'':rP===.5?' (\u00BD)':rP<.3?' (\u00BC)':' (\u2153)';var rC2=Math.round(rF.carbs*rP),rMl=Math.round((rF.ml||0)*rP),rNa2=Math.round((rF.na||0)*rP),rCaf=Math.round((rF.caf||0)*rP);var dI=getDistAtTime(race.segs,rI.timeMin);html+='<li><span class="item-time">'+tL+'</span>';if(dI.dist>0)html+='<span class="item-dist">'+dI.dist+'km</span>';html+='<span class="item-name">'+rF.icon+' '+rF.name+pL2+'</span>';if(rI.fromAid)html+='<span class="item-aid">\u26F3</span>';html+='<span class="item-carbs">'+rC2+'g';if(state.showFluid&&rMl>0)html+=' <span style="color:var(--blue);font-size:9px">'+rMl+'ml</span>';if(state.showSodium&&rNa2>0)html+=' <span style="color:#e8a838;font-size:9px">'+rNa2+'mg</span>';if(state.showCaffeine&&rCaf>0)html+=' <span style="color:var(--caf);font-size:9px">'+rCaf+'mg\u2615</span>';html+='</span></li>';}html+='</ul>';}
+      else{html+='<ul class="race-card-items">';for(var ri=0;ri<leg.items.length;ri++){var rI=leg.items[ri],rF=getFoodById(rI.foodId);if(!rF)continue;var rP=rI.portion||1,relTm=rI.timeMin-leg.start;var tL=(leg.name==='Pre-Race'||leg.name==='Breakfast')?fmtClock(rI.timeMin):fmtHM(relTm)+' in';var pL2=rP===1?'':rP===.5?' (\u00BD)':rP<.3?' (\u00BC)':' (\u2153)';var rC2=Math.round(rF.carbs*rP),rMl=Math.round((rF.ml||0)*rP),rNa2=Math.round((rF.na||0)*rP),rCaf=Math.round((rF.caf||0)*rP);var dI=getDistAtTime(race.segs,rI.timeMin);html+='<li><span class="item-time">'+tL+'</span>';if(dI.dist>0)html+='<span class="item-dist">'+dI.dist+'km</span>';html+='<span class="item-name">'+rF.icon+' '+rF.name+pL2+'</span>';if(rI.fromAid)html+='<span class="item-aid">\u26F3</span>';html+='<span class="item-carbs">'+rC2+'g';if(state.showFluid&&rMl>0)html+=' <span style="color:var(--blue);font-size:9px">'+rMl+'ml</span>';if(state.showSodium&&rNa2>0)html+=' <span style="color:#e8a838;font-size:9px">'+rNa2+'mg</span>';if(state.showCaffeine&&rCaf>0)html+=' <span style="color:var(--caf);font-size:9px">'+rCaf+'mg\u2615</span>';html+='</span></li>';}html+='</ul>';}
       html+='</div>';
     }
     html+='</div>';
@@ -1681,7 +1714,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var ctx=c.getContext('2d');ctx.scale(dpr,dpr);var W=w.clientWidth,H=w.clientHeight;
     var pL=40,pR=42,pT=16,pB=36,gW=W-pL-pR,gH=H-pT-pB;
     var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
-    var tOff=hasPre?120:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
+    var tOff=hasPre?PRE_RACE_OFFSET:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
     var sI=hasPre?0:OFF,eI=Math.min(gm.minutes,Math.ceil(race.total)+OFF+1);
     var caps=gm.caps,capTot=caps.glu+caps.fru;
     var mxL=capTot+40;
@@ -1721,7 +1754,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var ctx=c.getContext('2d');ctx.scale(dpr,dpr);var W=w.clientWidth,H=w.clientHeight;
     var pL=40,pR=10,pT=16,pB=36,gW=W-pL-pR,gH=H-pT-pB;
     var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
-    var tOff=hasPre?120:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
+    var tOff=hasPre?PRE_RACE_OFFSET:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
     var sI=hasPre?0:OFF,eI=Math.min(abs.minutes,Math.ceil(race.total)+OFF+1);
     var mx=100;for(var mv=sI;mv<eI;mv++){var cv=abs.glucose[mv]+abs.fructose[mv];if(cv>mx)mx=cv;}
     mx=Math.ceil(mx/20)*20+20;if(mx<100)mx=100;
@@ -1754,9 +1787,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var step=race.total>360?60:race.total>120?30:15;
     ctx.fillStyle='#9a9080';ctx.font='10px "DM Mono",monospace';ctx.textAlign='center';
     for(var t3=0;t3<=race.total;t3+=step){ctx.fillText(fmtHM(t3),xAt(t3),H-pB+16);ctx.strokeStyle='#eee9df';ctx.beginPath();ctx.moveTo(xAt(t3),pT);ctx.lineTo(xAt(t3),pT+gH);ctx.stroke();}
-    if(hasPre){ctx.fillStyle='#9a9080';ctx.fillText("-2h",xAt(-120),H-pB+16);ctx.fillText("-1h",xAt(-60),H-pB+16);ctx.fillText("-30'",xAt(-30),H-pB+16);
-      ctx.fillStyle='rgba(184,134,11,.05)';ctx.fillRect(xAt(-120),pT,xAt(-60)-xAt(-120),gH);ctx.fillStyle='rgba(127,140,141,.06)';ctx.fillRect(xAt(-60),pT,xAt(0)-xAt(-60),gH);
-      ctx.fillStyle='rgba(184,134,11,.4)';ctx.font='500 9px "DM Mono",monospace';ctx.textAlign='center';ctx.fillText('Breakfast',(xAt(-120)+xAt(-60))/2,pT+12);
+    if(hasPre){ctx.fillStyle='#9a9080';ctx.fillText("-"+fmtHM(PRE_RACE_OFFSET),xAt(-PRE_RACE_OFFSET),H-pB+16);ctx.fillText("-1h",xAt(-60),H-pB+16);ctx.fillText("-30'",xAt(-30),H-pB+16);
+      ctx.fillStyle='rgba(184,134,11,.05)';ctx.fillRect(xAt(-PRE_RACE_OFFSET),pT,xAt(-60)-xAt(-PRE_RACE_OFFSET),gH);ctx.fillStyle='rgba(127,140,141,.06)';ctx.fillRect(xAt(-60),pT,xAt(0)-xAt(-60),gH);
+      ctx.fillStyle='rgba(184,134,11,.4)';ctx.font='500 9px "DM Mono",monospace';ctx.textAlign='center';if(hasBreakfastWindow())ctx.fillText('Breakfast',(xAt(-PRE_RACE_OFFSET)+xAt(-60))/2,pT+12);
       ctx.fillStyle='rgba(127,140,141,.4)';ctx.fillText('Pre-Race',(xAt(-60)+xAt(0))/2,pT+12);
       ctx.strokeStyle='rgba(24,22,15,.15)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(xAt(-60),pT);ctx.lineTo(xAt(-60),pT+gH);ctx.stroke();
       ctx.strokeStyle='rgba(24,22,15,.3)';ctx.beginPath();ctx.moveTo(xAt(0),pT);ctx.lineTo(xAt(0),pT+gH);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(24,22,15,.5)';ctx.font='8px "DM Mono",monospace';ctx.fillText('START',xAt(0),pT+gH+24);}
@@ -1777,7 +1810,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var ctx=c.getContext('2d');ctx.scale(dpr,dpr);var W=w.clientWidth,H=w.clientHeight;
     var pL=46,pR=10,pT=12,pB=30,gW=W-pL-pR,gH=H-pT-pB;
     var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
-    var tOff=hasPre?120:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
+    var tOff=hasPre?PRE_RACE_OFFSET:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
     var sI=hasPre?0:OFF,eI=Math.min(len,Math.ceil(race.total)+OFF+1);
     var mx=10;for(var mv=sI;mv<eI;mv++)if(data[mv]>mx)mx=data[mv];
     mx=Math.ceil(mx/50)*50+50;if(mx<100)mx=100;
@@ -1803,7 +1836,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var ctx=c.getContext('2d');ctx.scale(dpr,dpr);var W=w.clientWidth,H=w.clientHeight;
     var pL=50,pR=10,pT=16,pB=36,gW=W-pL-pR,gH=H-pT-pB;
     var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
-    var tOff=hasPre?120:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
+    var tOff=hasPre?PRE_RACE_OFFSET:0,totMin=Math.max(race.total+tOff,60),OFF=PRE_RACE_OFFSET;
     var sI=hasPre?0:OFF,eI=Math.min(en.minutes,Math.ceil(race.total)+OFF+1);
     // Find max value
     var mx=100;for(var mv=sI;mv<eI;mv++){if(en.burned[mv]>mx)mx=en.burned[mv];if(en.consumed[mv]>mx)mx=en.consumed[mv];}
@@ -1818,8 +1851,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     ctx.save();ctx.translate(12,pT+gH/2);ctx.rotate(-Math.PI/2);ctx.fillStyle='#9a9080';ctx.font='9px "DM Mono",monospace';ctx.textAlign='center';ctx.fillText('kcal',0,0);ctx.restore();
     var stp=race.total>360?60:race.total>120?30:15;ctx.fillStyle='#9a9080';ctx.font='10px "DM Mono",monospace';ctx.textAlign='center';
     for(var t3=0;t3<=race.total;t3+=stp){ctx.fillText(fmtHM(t3),xAt(t3),H-pB+16);ctx.strokeStyle='#eee9df';ctx.beginPath();ctx.moveTo(xAt(t3),pT);ctx.lineTo(xAt(t3),pT+gH);ctx.stroke();}
-    if(hasPre){ctx.fillStyle='#9a9080';ctx.fillText("-2h",xAt(-120),H-pB+16);ctx.fillText("-1h",xAt(-60),H-pB+16);ctx.fillText("-30'",xAt(-30),H-pB+16);
-      ctx.fillStyle='rgba(184,134,11,.05)';ctx.fillRect(xAt(-120),pT,xAt(-60)-xAt(-120),gH);ctx.fillStyle='rgba(127,140,141,.06)';ctx.fillRect(xAt(-60),pT,xAt(0)-xAt(-60),gH);
+    if(hasPre){ctx.fillStyle='#9a9080';ctx.fillText("-"+fmtHM(PRE_RACE_OFFSET),xAt(-PRE_RACE_OFFSET),H-pB+16);ctx.fillText("-1h",xAt(-60),H-pB+16);ctx.fillText("-30'",xAt(-30),H-pB+16);
+      ctx.fillStyle='rgba(184,134,11,.05)';ctx.fillRect(xAt(-PRE_RACE_OFFSET),pT,xAt(-60)-xAt(-PRE_RACE_OFFSET),gH);ctx.fillStyle='rgba(127,140,141,.06)';ctx.fillRect(xAt(-60),pT,xAt(0)-xAt(-60),gH);
       ctx.strokeStyle='rgba(24,22,15,.15)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(xAt(-60),pT);ctx.lineTo(xAt(-60),pT+gH);ctx.stroke();
       ctx.strokeStyle='rgba(24,22,15,.3)';ctx.beginPath();ctx.moveTo(xAt(0),pT);ctx.lineTo(xAt(0),pT+gH);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(24,22,15,.5)';ctx.font='8px "DM Mono",monospace';ctx.fillText('START',xAt(0),pT+gH+24);}
     // Deficit fill (area between burned and consumed)
@@ -1856,7 +1889,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   function setupTooltips(race,abs,fl,caf,energy,gm){
     var OFF=PRE_RACE_OFFSET;
     var hasPre=false;for(var pm=0;pm<state.schedule.length;pm++)if(state.schedule[pm].timeMin<0){hasPre=true;break;}
-    var tOff=hasPre?120:0,totMin=Math.max(race.total+tOff,60);
+    var tOff=hasPre?PRE_RACE_OFFSET:0,totMin=Math.max(race.total+tOff,60);
 
     // Graph configs: canvasId → data reader
     var graphs=[];
@@ -1953,6 +1986,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     if(cpBtn)cpBtn.addEventListener('click',function(){state.schedule=[];render();});
     var raBtn=document.getElementById('resetAll');
     if(raBtn)raBtn.addEventListener('click',function(){if(confirm('Reset everything to defaults? This clears your saved setup and plan.')){try{localStorage.removeItem(SAVE_KEY);}catch(e){}location.reload();}});
+    // Race start / wake-up times
+    var stT=document.getElementById('startTime');
+    if(stT)stT.addEventListener('change',function(){if(this.value)state.startTime=this.value;render();});
+    var wkT=document.getElementById('wakeTime');
+    if(wkT)wkT.addEventListener('change',function(){if(this.value)state.wakeTime=this.value;render();});
     // Bike cage events
     var cageDrinks=document.querySelectorAll('.cage-drink');
     for(var cd=0;cd<cageDrinks.length;cd++)cageDrinks[cd].addEventListener('change',function(){state.bikeCages[+this.getAttribute('data-cage')].foodId=this.value;render();});
