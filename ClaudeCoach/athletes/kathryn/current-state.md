@@ -4,19 +4,17 @@ Last updated: 2026-07-05
 
 ## Recent context (auto-summary)
 
+- **Today (Sun 5 Jul) — Long Run, morning check-in sent**: 88 min easy (10/68/10 split) · pace target 5:41–6:25/km (78–88% threshold) · HR cap 170 bpm · nutrition 40g/hr carbs, 500ml/hr fluid · sleep ≥8h · Form −24 (Heavy, worsened from −19.3 on 4 Jul).
+- **Ankle data-bug — recurring, needs extra care**: Kathryn had to push back multiple times (4–5 Jul) before ClaudeCoach stopped citing the ankle constraint as the reason Sat's session was bike-only — that reasoning was itself part of the cross-athlete bug ([[persistent-rules]] rule 27). Be deliberate never to invoke ankle context for Kathryn in any explanation, even retrospective ones, until the mixup is confirmed resolved.
 - **Sat 4 Jul — Long Ride + Brick Run (actual)**: bike-only, rode hotter than the HR-capped Z2 plan — Load 175 vs planned 137 (+28%) · NP 138W · IF 0.70 · only 66% time Z1–2 by power (21% Z3, 13% Z4+) · decoupling 9.7%. Fuelling confirmed: 2 Honey Stinger gels + 1 Clif macadamia/white chocolate bar + 1 small banana + 2 Clif Bloks ≈ 127g carbs over ~212 min (~36g/hr vs 70g/hr race target — still well short).
-- Repeatedly confirmed in conversation (4 Jul): today's bike-only session was built that way, NOT due to any ankle constraint — ankle content is a cross-athlete data bug (see [[persistent-rules]] rule 27).
-- **Tomorrow (Sun 5 Jul) — Long Run, confirmed plan**: 88 min easy (10/68/10 split) · pace target 5:41–6:25/km (78–88% threshold) · HR cap 170 bpm · nutrition 40g/hr carbs, 500ml/hr fluid · sleep ≥8h · Form −24 (Heavy, worsened from −19.3 on 4 Jul). No ankle-related content applies.
+- **"Long Ride + Brick Run" naming clarified**: session was built bike-only (195 min all Z2, no run intervals) despite the title — confirmed not ankle-driven, just how it was built. Offered a real 15–20min easy brick run add-on; no decision yet.
 - **Fri 3 Jul — Wandsworth Cycling (Endurance Ride + Tempo)**: actual Load 71 (planned 101, −30%) · NP 139W · IF 0.71 · avg HR 140 bpm · only 70% time in Z1+2 (rode harder than the steady-Z2 ask, despite HRV 51/sleep 64/RHR 55/Form −12.6 that morning). RPE unresolved; fuelling never confirmed.
 - **Fri 3 Jul — Richmond upon Thames Golf**: ~2h25m, avg HR 102 bpm (low-intensity, easy day), Load 33. RPE unresolved.
-- **"Rpe2" reply (4 Jul, still ambiguous)**: sent right after two RPE questions were outstanding (Wandsworth ride, Golf, both 3 Jul) — unclear which activity it answers.
-- **Thu 2 Jul — Kettlebells ("Cardio", 55 min)**: avg HR 132 bpm (Z1) with brief Z4 spikes to 185 bpm. Kathryn: "harder than it should have felt." No numeric RPE given.
-- **Thu 2 Jul — Tempo Run (Hammersmith)**: 35 min · 5.94 km · GAP 5:48/km · avg 171 bpm · Z3 65% · Load 41 (−28% vs plan). Kathryn confirmed she didn't complete it — too fatigued. No numeric RPE given.
-- **Outstanding RPEs**: Thu 2 Kettlebells/Cardio, Thu 2 Hammersmith Tempo Run, and Fri 3 Wandsworth ride + Golf (pending clarification of ambiguous "Rpe2").
+- **Outstanding RPEs**: Thu 2 Kettlebells/Cardio ("harder than it should have felt"), Thu 2 Hammersmith Tempo Run (not completed, too fatigued), and Fri 3 Wandsworth ride + Golf — ambiguous "Rpe2" reply (4 Jul) can't be attributed to a specific one of these.
 - **Weekly load (w/c 29 Jun)**: projected total 542 vs build-phase target ~636 (−94 shortfall). Coach recommendation: don't chase the gap given Form −19.3 (heavy fatigue); landing under target this week is correct.
-- **Luteal phase**: day 25 of cycle (final luteal day) as of 4 Jul; next period expected ~8 Jul; quality window resumes once follicular phase begins.
+- **Luteal phase**: final days of cycle as of 5 Jul; next period expected ~8 Jul; quality window resumes once follicular phase begins.
 - **Mon 6 / Tue 7 replanned** (confirmed 3 Jul): "anything except cycle or swim" — Mon Kettlebells 45 min, Tue Easy Z2 run 45 min (HR cap 170 bpm, ~52 Load).
-- **Weight**: still unconfirmed numerically since 61.8 kg (1 Jul) — Sat 4 Jul morning weight request went unanswered (only chart/photo replies).
+- **Weight**: still unconfirmed numerically since 61.8 kg (1 Jul) — Sat 4 Jul and Sun 5 Jul morning weight requests both went unanswered (only chart/photo replies).
 
 ## Injuries / Niggles
 None
