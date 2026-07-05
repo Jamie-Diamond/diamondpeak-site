@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Cervia Ironman Wetsuit Predictor v1.0 — Diamond Peak</title>
+<title>Cervia Ironman Wetsuit Predictor v1.1 — Diamond Peak</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@400;500;600&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../style.css">
@@ -86,7 +86,7 @@
   <a href="../index.html" class="back">&larr; Back to tools</a>
 
   <div class="kicker">Triathlon</div>
-  <h1>Cervia Ironman<br>Wetsuit Predictor <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.0</span></h1>
+  <h1>Cervia Ironman<br>Wetsuit Predictor <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.1</span></h1>
   <p class="intro">
     Will it be a wetsuit or non-wetsuit swim at IRONMAN Italy Emilia-Romagna?
     This tool uses five independent prediction methods &mdash; empirical, model-based, and
@@ -100,6 +100,7 @@
 
   <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px;">
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong>
+    <strong>v1.1</strong> &ndash; Defaults now target the next upcoming race (2026: Saturday 19 September). Added the 2025 race to the history (satellite SST 25.2&deg;C; official reading not found, flagged as estimated). Estimated years excluded from the measurement-bias calculation. Fixed a variable-ordering bug in the August SST fallback.<br>
     <strong>v1.0</strong> &mdash; Initial release. Five prediction methods for Adriatic water temperature at IRONMAN Italy Cervia — wetsuit or non-wetsuit swim decision.
   </div>
 
@@ -129,15 +130,23 @@
   // waterTemp = reported by IRONMAN on race morning (official measurement at swim start, 60cm depth)
   // onlineSST = satellite/coastal station SST for same date from seatemperature.info / seatemperature.net
   // bias = waterTemp - onlineSST (negative = IRONMAN reads cooler than satellite)
+  // estimated = no official reading found; waterTemp inferred from satellite SST — excluded from bias stats
   const RACE_HISTORY = [
-    { year: 2017, date: 'Sep 23', dayOfSept: 23, waterTemp: 22.0, onlineSST: 23.0, wetsuit: 'Yes (AG)', source: 'Estimated from satellite SST', onlineSource: 'seatemperature.net (2022–25 archive)' },
+    { year: 2017, date: 'Sep 23', dayOfSept: 23, waterTemp: 22.0, onlineSST: 23.0, wetsuit: 'Yes (AG)', source: 'Estimated from satellite SST', onlineSource: 'seatemperature.net (2022–25 archive)', estimated: true },
     { year: 2018, date: 'Sep 22', dayOfSept: 22, waterTemp: 24.8, onlineSST: 25.5, wetsuit: 'No (too warm)', source: 'Race reports — European heatwave year', onlineSource: 'seatemperature.info satellite' },
     { year: 2019, date: 'Sep 21', dayOfSept: 21, waterTemp: 24.6, onlineSST: 25.2, wetsuit: 'Yes (jellyfish exception)', source: 'Race reports — above limit, exception granted', onlineSource: 'seatemperature.info satellite' },
     { year: 2021, date: 'Sep 18', dayOfSept: 18, waterTemp: 24.0, onlineSST: 24.5, wetsuit: 'Yes (AG)', source: 'Satellite SST data', onlineSource: 'seatemperature.info satellite' },
     { year: 2022, date: 'Sep 18', dayOfSept: 18, waterTemp: 25.0, onlineSST: 25.0, wetsuit: 'Borderline / No', source: 'Satellite SST — race delayed by storm', onlineSource: 'seatemperature.net' },
     { year: 2023, date: 'Sep 16', dayOfSept: 16, waterTemp: 22.0, onlineSST: 24.0, wetsuit: 'Yes (AG)', source: 'Race reports confirmed', onlineSource: 'seatemperature.info: 23.5°C' },
     { year: 2024, date: 'Sep 21', dayOfSept: 21, waterTemp: 21.5, onlineSST: 21.5, wetsuit: 'Yes (mandatory)', source: 'Race reports — mandatory wetsuits', onlineSource: 'seatemperature.info: 21.5°C' },
+    { year: 2025, date: 'Sep 20', dayOfSept: 20, waterTemp: 24.6, onlineSST: 25.2, wetsuit: 'Unknown (borderline)', source: 'Official reading not found — estimated as satellite SST minus avg bias', onlineSource: 'Open-Meteo Marine archive: 25.2°C', estimated: true },
   ];
+
+  /* Default race: next upcoming edition (Sept), so the tool never goes stale */
+  const _now = new Date();
+  const DEFAULT_RACE_YEAR = _now.getMonth() > 8 ? _now.getFullYear() + 1 : _now.getFullYear();
+  const RACE_DATES = { 2026: 19 }; // known race days-of-September by year
+  const DEFAULT_RACE_DAY = RACE_DATES[DEFAULT_RACE_YEAR] || 20;
 
   /* ── Climatological Normals (1991–2020 baseline) ── */
   /* Daily SST for Cervia/Adriatic in September, interpolated from monthly data */
@@ -169,10 +178,9 @@
   /* ── App ──────────────────────────────────── */
 
   function App() {
-    const [raceYear, setRaceYear]       = useState(2025);
-    const [raceDayOfSept, setRaceDayOfSept] = useState(20);
+    const [raceYear, setRaceYear]       = useState(DEFAULT_RACE_YEAR);
+    const [raceDayOfSept, setRaceDayOfSept] = useState(DEFAULT_RACE_DAY);
     const [augustTempManual, setAugustTempManual] = useState(null);
-    const augustTemp = augustTempManual !== null ? augustTempManual : (liveAugAvg || 26.2);
     const [showInputs, setShowInputs]   = useState(false);
 
     // Live SST data from Open-Meteo Marine API
@@ -181,6 +189,9 @@
     const [liveDate, setLiveDate]       = useState(null);
     const [liveAugAvg, setLiveAugAvg]   = useState(null);
     const [liveHistory, setLiveHistory] = useState([]); // last 30 days of SST
+
+    // Must come after the live-state declarations above (liveAugAvg is read here)
+    const augustTemp = augustTempManual !== null ? augustTempManual : (liveAugAvg || 26.2);
 
     useEffect(() => {
       const fmtD = d => d.toISOString().slice(0, 10);
@@ -248,7 +259,8 @@
        Simple empirical mean of past race-day temps
        ═══════════════════════════════════════════ */
     // Measurement bias: IRONMAN official vs online satellite SST
-    const biases = RACE_HISTORY.map(r => r.waterTemp - r.onlineSST);
+    // Only years with a genuine official reading — estimated rows would feed the bias back into itself
+    const biases = RACE_HISTORY.filter(r => !r.estimated).map(r => r.waterTemp - r.onlineSST);
     const avgBias = biases.reduce((a,b) => a+b, 0) / biases.length;
     const biasSd = Math.sqrt(biases.reduce((a,b) => a + (b - avgBias)**2, 0) / (biases.length - 1));
 
@@ -507,7 +519,7 @@
                   <label>Race Day (day of September)</label>
                   <input type="number" value={raceDayOfSept} min={1} max={30} step={1}
                     onChange={e => setRaceDayOfSept(+e.target.value)} />
-                  <div className="hint">2025 race: September 20</div>
+                  <div className="hint">2026 race: Saturday 19 September</div>
                 </div>
                 <div className="field">
                   <label>August Avg SST (°C) {liveAugAvg ? '— auto from API' : ''}</label>
@@ -535,7 +547,7 @@
           <h4>Historical Race Day Average</h4>
           <p className="desc">
             Simple mean of all recorded water temperatures from previous Cervia Ironman races
-            (2017–2024, n={histTemps.length}). No adjustments — purely what has been measured on past race days.
+            (2017–2025, n={histTemps.length}). No adjustments — purely what has been measured on past race days.
           </p>
           <div className="formula">
             mean = ({histTemps.map(t => t).join(' + ')}) ÷ {histTemps.length}<br/>
@@ -731,17 +743,17 @@
                   <tr key={r.year}>
                     <td>{r.year}</td>
                     <td>{r.date}</td>
-                    <td className="temp-cell">{fmt(r.waterTemp)}°C</td>
+                    <td className="temp-cell">{fmt(r.waterTemp)}°C{r.estimated ? '*' : ''}</td>
                     <td className="temp-cell">{fmt(r.onlineSST)}°C</td>
-                    <td className="temp-cell" style={{color: bias < -0.3 ? 'var(--blue)' : bias > 0.3 ? 'var(--red)' : 'var(--muted)'}}>
-                      {bias >= 0 ? '+' : ''}{fmt(bias)}°C
+                    <td className="temp-cell" style={{color: r.estimated ? 'var(--muted)' : bias < -0.3 ? 'var(--blue)' : bias > 0.3 ? 'var(--red)' : 'var(--muted)'}}>
+                      {r.estimated ? 'est.' : `${bias >= 0 ? '+' : ''}${fmt(bias)}°C`}
                     </td>
                     <td>{r.wetsuit}</td>
                   </tr>
                 );
               })}
               <tr style={{background:'var(--warm)', fontWeight:500}}>
-                <td colSpan={4} style={{textAlign:'right'}}>Average bias</td>
+                <td colSpan={4} style={{textAlign:'right'}}>Average bias (measured years only)</td>
                 <td className="temp-cell" style={{color: avgBias < -0.3 ? 'var(--blue)' : 'var(--muted)'}}>
                   {avgBias >= 0 ? '+' : ''}{fmt(avgBias)}°C
                 </td>
@@ -749,6 +761,10 @@
               </tr>
             </tbody>
           </table>
+          <p style={{fontSize:10, color:'var(--muted)', marginTop:6}}>
+            * No official race-morning reading found — estimated from satellite SST minus the average bias.
+            Estimated years are excluded from the bias calculation.
+          </p>
 
           {/* Bias Analysis */}
           <div style={{marginTop:16, padding:14, background:'var(--card-alt)', borderRadius:6, border:'1px solid var(--border)'}}>
