@@ -7,6 +7,7 @@ __pycache__/
 *.pyc
 ClaudeCoach/.*.lock
 ClaudeCoach/.bot_heartbeat
+ClaudeCoach/.reply_watchdog_state.json
 ClaudeCoach/athletes/jamie/last_activity_state.json
 ClaudeCoach/config/athletes.json
 ClaudeCoach/config/pending.json
