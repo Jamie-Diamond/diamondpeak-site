@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Race Fuelling Planner v1.6 — Diamond Peak</title>
+<title>Race Fuelling Planner v1.7 — Diamond Peak</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../style.css">
 <style>
@@ -240,7 +240,7 @@
   <div class="dpc-header"><img src="../logo-mark.png" alt="Diamond Peak" class="dpc-logo"><span class="dpc-wordmark">Diamond Peak</span></div>
   <a href="../index.html" class="back">&larr; Back to tools</a>
   <div class="kicker">NUTRITION &amp; PHYSIOLOGY</div>
-  <h1>Race Fuelling Planner <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.6</span></h1>
+  <h1>Race Fuelling Planner <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.7</span></h1>
   <p class="intro">
     Set up your race, select foods per leg, and auto-generate a fuelling strategy that
     respects how much your gut can actually absorb. Tracks carbs, fluid, sodium and caffeine,
@@ -274,6 +274,7 @@
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong><br>
     <strong>v1.4</strong>: Moved the physiology maths (transporter caps, target formulas, plan-check thresholds) into a shared engine so the ClaudeCoach bot runs the exact same logic and the two never disagree. No change to the numbers.<br>
     <strong>v1.3</strong>: Aligned the Absorption Graph zones to the gut model. The green/amber/red bands now track your combined transporter cap (90 g/hr default, 120 gut-trained) instead of fixed thresholds, and a dashed line marks the tighter glucose cap so a plan that looks green on combined carbs but exceeds the glucose transporter is now visible. The two carb views are consistent.<br>
+    <strong>v1.7</strong>: The optimiser now passes its own Plan Check. Sodium and caffeine live on the same repeating grid as carbs and fluid (no more scattered top-up sips); dose sizes are searched against carb, fluid AND bottle-capacity constraints; carbs ease off in the last stretch of the bike and start 10 minutes into the run; doses are modelled as swallowed over ~5 minutes rather than instant boluses. Bike bottles are drunk <strong>one at a time</strong> in cage order &mdash; swappable/refillable bottles (new &#9851; flag per cage) first, so cages empty in time for aid-station pickups; fixed aero bottles and concentrated mixes marked non-swappable are never replaced. Salt capsules take over when the electrolyte bottle runs out. Bike fluid target now includes recovering the swim&rsquo;s sweat loss.<br>
     <strong>v1.6</strong>: Race start and wake-up time inputs. The breakfast window is now wake-up &rarr; 1h before the gun, with real clock times shown on the plan; the meal size scales with digestion time (1&ndash;2 g/kg), and if you are awake less than 1h30 before the start the breakfast leg disappears and carbs + coffee move to the final hour instead. Bike cage setup only shows when the race has a bike leg.<br>
     <strong>v1.5</strong>: Simpler plans. The strategy generator now builds one repeating order per leg (e.g. every 12 min: &#8531; bottle &rarr; chew &rarr; water &rarr; repeat) covering carbs and fluid together, shown on the leg and race cards. Breakfast is a normal meal (porridge, toast, bagel + coffee) instead of race food. Caffeine target is body-weight based (4 mg/kg default) and caffeinated drinks are capped by it, so no more endless caffeine-drink sips. Added Maurten 320 CAF 100 and 1.5&times; concentrated 750 ml mixes. Bike cages have editable names. Top tube card redesigned as a pro-team-style printable sticker with your name and &times;N item counts.<br>
     <strong>v1.2</strong>: Engine upgrade. Added a gut/absorption model with separate glucose (SGLT1) and fructose (GLUT5) transporter caps and a "gut-trained" mode (90 &rarr; 120 g/hr), showing carbs actually absorbed vs unabsorbed backlog in the gut. New "Suggest targets" sets evidence-based carb, fluid, sodium and caffeine goals from race duration, body weight, sweat rate and sweat-sodium concentration. New Plan Check panel flags red flags: glucose over transporter cap, wrong glucose:fructose ratio, gut backlog, dehydration or over-drinking, under-replacing sodium, caffeine outside 3-6 mg/kg, fuelling gaps, and solids on the run.<br>
@@ -408,10 +409,10 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     ], schedule:[], customFoods:[], raceType:'tri',
     shortlist:['porridge','coffee','pf30-chew','pf60-chew','sis-beta-chew','sis-ban-bar','maurten-d320','maurten-d320caf','sis-beta-d','precision-h','water','salt-cap'], bodyWeight: 80, gelMode:'packet', sweatRate: 1000, sweatNa: 950, gutTrained: false,
     bikeCages:[
-      {name:'BTA',foodId:'maurten-d320',ml:500},
-      {name:'Frame 1',foodId:'maurten-d320caf',ml:500},
-      {name:'Frame 2',foodId:'precision-h',ml:600},
-      {name:'Rear',foodId:'maurten-d320',ml:500}
+      {name:'BTA',foodId:'maurten-d320',ml:500,swap:false},
+      {name:'Frame 1',foodId:'maurten-d320caf',ml:500,swap:true},
+      {name:'Frame 2',foodId:'precision-h',ml:600,swap:true},
+      {name:'Rear',foodId:'maurten-d320',ml:500,swap:true}
     ],
     showSodium:false, showFluid:true, showAid:true, showGraph:true,
     showPacking:true, showTopTube:true, showCaffeine:true, stickerName:'',
@@ -558,7 +559,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       var e=state.schedule[s],f=getFoodById(e.foodId);
       if(!f||f.carbs===0)continue;
       var p=e.portion||1,m0=Math.round(e.timeMin)+PRE_RACE_OFFSET;
-      if(m0>=0&&m0<n){inG[m0]+=f.glucose*p;inF[m0]+=f.fructose*p;}
+      // A dose is swallowed over ~5 minutes (sipping a bottle, chewing), not
+      // as an instant bolus — spread it so the backlog model reflects that
+      for(var sp5=0;sp5<5;sp5++){var mi5=m0+sp5;if(mi5>=0&&mi5<n){inG[mi5]+=f.glucose*p/5;inF[mi5]+=f.fructose*p/5;}}
     }
     var oxi=new Float32Array(n),backlog=new Float32Array(n);
     var gutG=0,gutF=0;
@@ -617,6 +620,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     if(pick.length===0)add(firstOf(isCarb));
     add(firstOf(isWater));
     add(firstOf(isSalt));
+    // Salt capsules as pocket backup for when the electrolyte bottle runs out
+    add(firstOf(function(f){return f.carbs===0&&f.na>100&&(f.ml||0)===0;}));
     add(firstOf(isCaf));
     return pick;
   }
@@ -638,7 +643,11 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       // (~1 g/kg per hour of digestion time, capped at 2 g/kg)
       if(nm==='Breakfast'){var bfHrs=PRE_RACE_OFFSET/60;var gkg=bfHrs>=2.5?2:bfHrs>=2?1.5:1;st.target=Math.min(200,Math.round(wt*gkg/5)*5);st.fluidTarget=500;st.sodiumTarget=300;st.cafTarget=90;}
       else if(nm==='Pre-Race'){st.target=hasBreakfastWindow()?30:Math.min(90,Math.round(wt*0.75/5)*5);st.fluidTarget=300;st.sodiumTarget=200;st.cafTarget=hasBreakfastWindow()?0:90;}
-      else if(nm==='Bike'){st.target=tg.bikeCarbGHr;st.fluidTarget=flHr;st.sodiumTarget=naHr;st.cafTarget=hasRun?Math.round(cafTotal*0.6):cafTotal;}
+      else if(nm==='Bike'){
+        // Recover the swim's sweat loss on the bike (you cannot drink in the water)
+        var bikeHrs=race.bikeMin/60,swimRecovMlHr=(race.swimMin>0&&bikeHrs>0)?Math.min(300,Math.round((race.swimMin/60)*state.sweatRate/bikeHrs/50)*50):0;
+        st.target=tg.bikeCarbGHr;st.fluidTarget=Math.min(1200,flHr+swimRecovMlHr);st.sodiumTarget=naHr;st.cafTarget=hasRun?Math.round(cafTotal*0.6):cafTotal;
+      }
       else if(nm==='Run'){st.target=tg.runCarbGHr;st.fluidTarget=flHr;st.sodiumTarget=naHr;st.cafTarget=hasBike?Math.round(cafTotal*0.4):cafTotal;}
       // Seed default foods only if none chosen yet, so we don't clobber user picks
       if(nm==='Breakfast'||nm==='Pre-Race'||nm==='Bike'||nm==='Run'){
@@ -700,7 +709,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       var worstGap=times[0]-seg.start,gapAt=seg.start;
       for(var g3=1;g3<times.length;g3++)if(times[g3]-times[g3-1]>worstGap){worstGap=times[g3]-times[g3-1];gapAt=times[g3-1];}
       if(seg.dur-(times[times.length-1]-seg.start)>worstGap){worstGap=seg.dur-(times[times.length-1]-seg.start);gapAt=times[times.length-1];}
-      if(worstGap>35)out.push({level:'warn',text:seg.name+' has a '+Math.round(worstGap)+'-minute stretch with no carbs (from '+fmtHM(Math.max(0,gapAt-seg.start))+' into the leg). Keep doses every 15-25 minutes.'});
+      if(worstGap>40)out.push({level:'warn',text:seg.name+' has a '+Math.round(worstGap)+'-minute stretch with no carbs (from '+fmtHM(Math.max(0,gapAt-seg.start))+' into the leg). Keep doses every 20-30 minutes.'});
     }
     // 4. Heavy solids on the run (bars / whole food). Chews and blocks are
     // fine running; bars and whole foods are hard to stomach at run intensity.
@@ -894,176 +903,242 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     }
 
     // ── RACE LEGS: one simple order that repeats ──
-    // Drink doses are ⅓ of a bottle; solids and gels are whole (or half) units.
-    // The hour is split into evenly spaced slots, fluid and carbs are covered by
-    // the same sequence, and that one order repeats until the leg ends.
+    // EVERYTHING — carb drink, food, electrolyte, water — lives on one evenly
+    // spaced grid (max 6 actions/hr). No separate top-up passes, so the plan
+    // is exactly the repeating order it prints. Dose sizes (⅓ vs ½ bottle,
+    // half vs whole food) are searched so the hour lands on target without
+    // overshooting into gut-backlog territory.
     var drinkQ=[],solidQ=[];
     for(var cq=0;cq<carbFoods.length;cq++){
       if(carbFoods[cq].meal)continue; // meals never join the race rotation
       if(carbFoods[cq].form==='liquid')drinkQ.push(carbFoods[cq]);else solidQ.push(carbFoods[cq]);
     }
-    // Non-caffeinated drinks lead the rotation; caffeinated ones are capped by the caffeine target
-    drinkQ.sort(function(a,b){return (a.caf||0)-(b.caf||0);});
+    // Caffeinated drinks lead the rotation (the caffeine budget below caps
+    // them), so the caffeine target is met from bottles, front-loaded
+    drinkQ.sort(function(a,b){return (b.caf||0)-(a.caf||0);});
+    var water0=null;
+    for(var w0=0;w0<fluidFoods.length;w0++)if((fluidFoods[w0].na||0)<=50){water0=fluidFoods[w0];break;}
+    var naDrink=null,saltCap=null;
+    for(var nlq=0;nlq<sodiumFoods.length;nlq++){
+      if((sodiumFoods[nlq].ml||0)>0&&!naDrink)naDrink=sodiumFoods[nlq];
+      if((sodiumFoods[nlq].ml||0)===0&&!saltCap)saltCap=sodiumFoods[nlq];
+    }
 
     var drinkMlUsed={},drinkMlCap={};
+    // On the bike, carb bottles are drunk ONE AT A TIME in cage order —
+    // swappable/refillable bottles first, so cages free up for aid pickups.
+    // (Sipping every bottle in parallel means none ever empties.)
+    var cageSeq=null;
     if(legName==='Bike'){
       for(var dcc=0;dcc<state.bikeCages.length;dcc++){
         var cageF=getFoodById(state.bikeCages[dcc].foodId);
-        if(cageF&&cageF.carbs>0)drinkMlCap[cageF.id]=(drinkMlCap[cageF.id]||0)+state.bikeCages[dcc].ml;
+        if(cageF&&(cageF.na||0)>100&&cageF.carbs===0)drinkMlCap[cageF.id]=(drinkMlCap[cageF.id]||0)+state.bikeCages[dcc].ml;
+      }
+      cageSeq=[];
+      var cOrd=[];
+      for(var co=0;co<state.bikeCages.length;co++)cOrd.push({c:state.bikeCages[co],i:co});
+      cOrd.sort(function(a,b){return ((b.c.swap===false?0:1)-(a.c.swap===false?0:1))||(a.i-b.i);});
+      for(var cs=0;cs<cOrd.length;cs++){
+        var csF=getFoodById(cOrd[cs].c.foodId);
+        if(csF&&csF.carbs>0)cageSeq.push({food:csF,mlLeft:cOrd[cs].c.ml,name:cOrd[cs].c.name||('Cage '+(cOrd[cs].i+1))});
       }
     }
 
-    var solidWhole=false;
-    function sipOf(f){var p=1/3;return{food:f,portion:p,carbs:f.carbs*p,ml:(f.ml||0)*p,caf:(f.caf||0)*p};}
-    function doseOf(f){
-      var p=1;
-      if(f.form==='solid'&&!solidWhole)p=(f.carbs*0.5>=15)?0.5:1;
-      else if(f.form==='gel'&&state.gelMode==='bottle'){
-        var minP=f.ml>0?Math.max(0.1,25/f.ml):0.25;
-        var gelBP=[1,0.5,1/3,0.25],bestP2=1,bestDiff2=9999;
-        for(var pi2=0;pi2<gelBP.length;pi2++){if(gelBP[pi2]<minP-0.01)continue;var diff2=Math.abs(f.carbs*gelBP[pi2]-15);if(diff2<bestDiff2){bestDiff2=diff2;bestP2=gelBP[pi2];}}
-        p=bestP2;
-      }
-      return{food:f,portion:p,carbs:f.carbs*p,ml:(f.ml||0)*p,caf:(f.caf||0)*p};
+    function gelPortion(f){
+      if(state.gelMode!=='bottle')return 1;
+      var minP=f.ml>0?Math.max(0.1,25/f.ml):0.25;
+      var gelBP=[1,0.5,1/3,0.25],bestP2=1,bestDiff2=9999;
+      for(var pi2=0;pi2<gelBP.length;pi2++){if(gelBP[pi2]<minP-0.01)continue;var diff2=Math.abs(f.carbs*gelBP[pi2]-15);if(diff2<bestDiff2){bestDiff2=diff2;bestP2=gelBP[pi2];}}
+      return bestP2;
+    }
+    function mkDose(f,p){return{food:f,portion:p,carbs:f.carbs*p,ml:(f.ml||0)*p,na:(f.na||0)*p,caf:(f.caf||0)*p};}
+
+    var C=strat.target||0,F=strat.fluidTarget||0,NA=strat.sodiumTarget||0;
+    var drink0=drinkQ.length?drinkQ[0]:null,solid0=solidQ.length?solidQ[0]:null;
+
+    // Search sip size / dose size / counts for the combo closest to the carb
+    // target: prefer landing just under rather than over (gut backlog), fewer
+    // actions per hour, doses small enough to absorb, and a drink rate the
+    // bottles actually carried can sustain
+    var availDrinkCarbs=null; // bike only: total carbs in the cages
+    if(cageSeq){availDrinkCarbs=0;for(var adc=0;adc<cageSeq.length;adc++)availDrinkCarbs+=cageSeq[adc].food.carbs*(cageSeq[adc].mlLeft/(cageSeq[adc].food.ml||500));}
+    var sipP=1/3,doseP=1,nD=0,nS=0;
+    if(C>0&&(drink0||solid0)){
+      var sipOpts=drink0?[1/3,0.5]:[0];
+      var doseOpts=solid0?(solid0.form==='gel'?[gelPortion(solid0)]:(solid0.carbs*0.5>=12?[1,0.5]:[1])):[0];
+      var best=null;
+      for(var so=0;so<sipOpts.length;so++)for(var po=0;po<doseOpts.length;po++)
+        for(var ndT=(drink0?1:0);ndT<=(drink0?3:0);ndT++)for(var nsT=0;nsT<=(solid0?4:0);nsT++){
+          if(ndT+nsT===0)continue;
+          var sipC=drink0?drink0.carbs*sipOpts[so]:0,doseC=solid0?solid0.carbs*doseOpts[po]:0;
+          var tot=ndT*sipC+nsT*doseC;
+          var err=tot-C;
+          var maxDose=Math.max(ndT>0?sipC:0,nsT>0?doseC:0);
+          var score=Math.abs(err)+(err>6?6:0)+(ndT+nsT)*0.9+Math.max(0,maxDose-35)*0.5;
+          if(availDrinkCarbs!==null&&legHrs>0){
+            score+=Math.max(0,ndT*sipC*legHrs-availDrinkCarbs)/legHrs;        // carbs the bottles can't supply
+            score+=Math.max(0,availDrinkCarbs-ndT*sipC*legHrs)/legHrs*0.25;   // mixed bottles left undrunk
+          }
+          // Fluid feasibility: with ≤6 actions/hr, can drinks + electrolyte +
+          // full water bottles in the remaining slots still reach the target?
+          if(F>0&&water0){
+            var sipMlT=drink0?(drink0.ml||500)*sipOpts[so]:0;
+            var naEstN=(NA>0&&naDrink)?1:0;
+            var wSlots=Math.max(0,6-ndT-nsT-naEstN);
+            score+=Math.max(0,F-(ndT*sipMlT+naEstN*167+wSlots*(water0.ml||500)))/50;
+          }
+          if(!best||score<best.score)best={score:score,sipP:sipOpts[so],doseP:doseOpts[po],nD:ndT,nS:nsT};
+        }
+      if(best){sipP=best.sipP;doseP=best.doseP;nD=best.nD;nS=best.nS;}
+    }
+    var sip0=drink0?mkDose(drink0,sipP):null;
+    var dose0=solid0?mkDose(solid0,doseP):null;
+
+    // Sodium: the electrolyte bottle joins the same rotation (⅓ bottle per
+    // slot); salt capsules are the fallback when there is no such bottle
+    var nNa=0,useSalt=false;
+    var naFromFood=nD*(sip0?sip0.na:0)+nS*(dose0?dose0.na:0);
+    var naSip=naDrink?mkDose(naDrink,1/3):null;
+    if(NA>0&&NA-naFromFood>150){
+      if(naSip)nNa=Math.min(2,Math.max(1,Math.round((NA-naFromFood)/naSip.na)));
+      else if(saltCap){useSalt=true;nNa=Math.min(2,Math.max(1,Math.round((NA-naFromFood)/(saltCap.na||250))));}
     }
 
-    var C=strat.target||0,F=strat.fluidTarget||0;
-    var sip0=drinkQ.length?sipOf(drinkQ[0]):null;
-    var dose0=solidQ.length?doseOf(solidQ[0]):null;
-    var nD=0,nS=0,nW=0;
-    if(C>0){
-      if(sip0&&dose0){
-        nD=Math.max(1,Math.round((C*0.5)/sip0.carbs));
-        nS=Math.max(1,Math.round((C-nD*sip0.carbs)/dose0.carbs));
-      } else if(sip0)nD=Math.max(1,Math.round(C/sip0.carbs));
-      else if(dose0)nS=Math.max(1,Math.round(C/dose0.carbs));
-    }
-    // Fewer, bigger solid doses if the hour is getting crowded
-    if(nD+nS>5&&dose0&&dose0.portion<1){solidWhole=true;dose0=doseOf(solidQ[0]);nS=Math.max(1,Math.round((C-nD*(sip0?sip0.carbs:0))/dose0.carbs));}
-    var waterSip=150;
-    var mlFromDrinks=nD*(sip0?sip0.ml:0);
-    // Credit the fluid the sodium top-up (PH1500 etc.) will add later, so the
-    // water slots don't overshoot the hourly fluid target
-    var mlFromNa=0;
-    if(strat.sodiumTarget>0){
-      var naLiq=null;
-      for(var nlq=0;nlq<sodiumFoods.length;nlq++)if((sodiumFoods[nlq].ml||0)>0&&(sodiumFoods[nlq].na||0)>100){naLiq=sodiumFoods[nlq];break;}
-      if(naLiq){
-        var naFromCarbs=nD*(sip0?(sip0.food.na||0)/3:0)+nS*(dose0?(dose0.food.na||0)*dose0.portion:0);
-        var naDefHr=Math.max(0,strat.sodiumTarget-naFromCarbs);
-        mlFromNa=Math.min(300,naDefHr/(naLiq.na/naLiq.ml));
+    // Water fills the remaining fluid in ½- or full-bottle doses
+    var nW=0,waterP=0.5;
+    var mlSoFar=nD*(sip0?sip0.ml:0)+(naSip&&!useSalt?nNa*naSip.ml:0);
+    if(water0&&F>0){
+      var wNeed=F-mlSoFar;
+      var maxW=Math.max(0,6-nD-nS-nNa);
+      if(wNeed>100&&maxW>0){
+        var wMl=water0.ml||500;
+        nW=Math.min(maxW,Math.max(1,Math.ceil(wNeed/(wMl*0.5)-0.2)));
+        waterP=Math.abs(wNeed/nW-wMl)<Math.abs(wNeed/nW-wMl*0.5)?1:0.5; // snap to ½ or full bottle
       }
     }
-    if(fluidFoods.length>0&&F>0)nW=Math.max(0,Math.round((F-mlFromDrinks-mlFromNa)/waterSip));
-    var events=nD+nS+nW;
-    if(events>6){ // keep it simple: at most 6 actions per hour
-      var maxW=Math.max(0,6-nD-nS);
-      if(nW>maxW){
-        waterSip=maxW>0?Math.min(400,Math.ceil((F-mlFromDrinks-mlFromNa)/maxW/50)*50):0;
-        nW=maxW;
-      }
-      events=nD+nS+nW;
-    }
+    var waterSip=water0?Math.round((water0.ml||500)*waterP):0;
+    var events=nD+nS+nNa+nW;
+
     if(events>0){
       var interval=Math.max(MIN_GAP,Math.round(60/events));
-      // Evenly interleave the actions into one repeating order
-      var slots=new Array(events);
-      function scatter(type,count){
-        if(count<=0)return;
-        var step=events/count;
-        for(var k=0;k<count;k++){
-          var pos=Math.floor(k*step)%events;
-          while(slots[pos])pos=(pos+1)%events;
-          slots[pos]=type;
-        }
+      // Interleave carb actions evenly between the non-carb ones, so the hour
+      // never bunches its carbs (no long fuelling gaps)
+      var carbList=[],otherList=[];
+      var dLeft=nD,sLeft=nS;
+      while(dLeft>0||sLeft>0){if(dLeft>0){carbList.push('drink');dLeft--;}if(sLeft>0){carbList.push('solid');sLeft--;}}
+      for(var oNa=0;oNa<nNa;oNa++)otherList.push('na');
+      for(var oW=0;oW<nW;oW++)otherList.push('water');
+      var slots=[],ci=0,oi=0;
+      for(var s2=0;s2<events;s2++){
+        if(ci<carbList.length&&(oi>=otherList.length||ci*otherList.length<=oi*carbList.length))slots.push(carbList[ci++]);
+        else slots.push(otherList[oi++]);
       }
-      scatter('drink',nD);scatter('solid',nS);scatter('water',nW);
 
-      var water0=fluidFoods.length?fluidFoods[0]:null;
       var cafBudget=strat.cafTarget||0,cafSoFar=0;
       var di=0,si=0,slotIdx=0;
-      var t=startT;
+      // Ease into the run: gut blood flow is lowest right off the bike
+      var t=legName==='Run'?legStart+10:startT;
+      // Ease off carbs in the final stretch of the bike (they'd hit the gut on the run)
+      var carbEndT=legName==='Bike'?endT-12:endT;
       while(t<=endT){
         var kind=slots[slotIdx%events];slotIdx++;
-        if(kind==='drink'&&drinkQ.length>0){
-          var chosen=null,chosenSip=null;
-          for(var dtry=0;dtry<drinkQ.length;dtry++){
-            var cand=drinkQ[(di+dtry)%drinkQ.length],cs=sipOf(cand);
-            var cap=drinkMlCap[cand.id];
-            if(typeof cap!=='undefined'&&(drinkMlUsed[cand.id]||0)+cs.ml>cap+1)continue; // bottle finished
-            if((cand.caf||0)>0&&cafSoFar+cs.caf>cafBudget+25)continue; // over caffeine budget
-            chosen=cand;chosenSip=cs;di=(di+dtry+1)%drinkQ.length;break;
-          }
-          if(chosen){
-            drinkMlUsed[chosen.id]=(drinkMlUsed[chosen.id]||0)+chosenSip.ml;
-            cafSoFar+=chosenSip.caf;
-            addItem(chosen.id,t,chosenSip.portion,'Repeating cycle (every '+interval+' min): ⅓ bottle, '+strat.target+'g/hr target');
-          } else if(water0){
-            addItem(water0.id,t,waterSip/(water0.ml||500),'Repeating cycle: carb bottles finished, water instead');
+        if((kind==='drink'||kind==='solid')&&t>carbEndT)kind='water';
+        if(kind==='drink'&&(drinkQ.length>0||(cageSeq&&cageSeq.length))){
+          if(cageSeq){
+            // Bike: drink through the bottles one at a time, in cage order
+            var curCage=null;
+            for(var cgi=0;cgi<cageSeq.length;cgi++){
+              if(cageSeq[cgi].mlLeft<15)continue; // finished
+              var cgCaf=(cageSeq[cgi].food.caf||0);
+              if(cgCaf>0&&cafSoFar+cgCaf*sipP>cafBudget+25)continue; // over caffeine budget
+              curCage=cageSeq[cgi];break;
+            }
+            if(curCage){
+              var sipMl=(curCage.food.ml||500)*sipP;
+              // Close to the bottom? Finish the bottle so the cage frees up
+              if(curCage.mlLeft<sipMl*1.5)sipMl=curCage.mlLeft;
+              var cgPortion=sipMl/(curCage.food.ml||500);
+              curCage.mlLeft-=sipMl;
+              cafSoFar+=(curCage.food.caf||0)*cgPortion;
+              addItem(curCage.food.id,t,cgPortion,'Repeating cycle (every '+interval+' min): drink from '+curCage.name+(curCage.mlLeft<15?' — bottle finished, cage free':''));
+            } else if(water0){
+              addItem(water0.id,t,waterSip/(water0.ml||500),'Repeating cycle: carb bottles finished, water instead');
+            }
+          } else {
+            var chosen=null,chosenSip=null;
+            for(var dtry=0;dtry<drinkQ.length;dtry++){
+              var cand=drinkQ[(di+dtry)%drinkQ.length],cs=mkDose(cand,sipP);
+              if((cand.caf||0)>0&&cafSoFar+cs.caf>cafBudget+25)continue; // over caffeine budget
+              chosen=cand;chosenSip=cs;di=(di+dtry+1)%drinkQ.length;break;
+            }
+            if(chosen){
+              cafSoFar+=chosenSip.caf;
+              addItem(chosen.id,t,chosenSip.portion,'Repeating cycle (every '+interval+' min): '+(sipP===0.5?'½':'⅓')+' bottle, '+strat.target+'g/hr target');
+            } else if(water0){
+              addItem(water0.id,t,waterSip/(water0.ml||500),'Repeating cycle: water');
+            }
           }
         } else if(kind==='solid'&&solidQ.length>0){
           var sf2=solidQ[si%solidQ.length];si++;
-          var dd=doseOf(sf2);
+          var dd=mkDose(sf2,sf2.form==='gel'?gelPortion(sf2):doseP);
           cafSoFar+=dd.caf;
           addItem(sf2.id,t,dd.portion,'Repeating cycle (every '+interval+' min): eat, '+strat.target+'g/hr target');
+        } else if(kind==='na'){
+          if(useSalt){
+            addItem(saltCap.id,t,1,'Repeating cycle: salt capsule ('+NA+'mg/hr sodium target)');
+          } else if(naSip){
+            var naCap=drinkMlCap[naDrink.id];
+            if(typeof naCap!=='undefined'&&(drinkMlUsed[naDrink.id]||0)+naSip.ml>naCap+1){
+              if(saltCap)addItem(saltCap.id,t,1,'Electrolyte bottle finished: salt capsule instead');
+              else if(water0)addItem(water0.id,t,waterSip/(water0.ml||500),'Electrolyte bottle finished: water instead');
+            } else {
+              drinkMlUsed[naDrink.id]=(drinkMlUsed[naDrink.id]||0)+naSip.ml;
+              addItem(naDrink.id,t,naSip.portion,'Repeating cycle (every '+interval+' min): ⅓ electrolyte bottle, '+NA+'mg/hr sodium target');
+            }
+          }
         } else if(kind==='water'&&water0){
-          addItem(water0.id,t,waterSip/(water0.ml||500),'Repeating cycle (every '+interval+' min): '+waterSip+'ml water, '+strat.fluidTarget+'ml/hr target');
+          addItem(water0.id,t,waterP,'Repeating cycle (every '+interval+' min): '+waterSip+'ml water, '+strat.fluidTarget+'ml/hr target');
         }
         t+=interval;
       }
 
+      // Caffeine top-up (tabs / caf gels) only if the bottles cannot cover the
+      // budget: one dose per hour on the half-slot, so the grid stays intact
+      if(cafBudget>0&&cafFoods.length>0){
+        var legCafFromRotation=cafSoFar;
+        var cafNeed=cafBudget-legCafFromRotation;
+        if(cafNeed>25){
+          var bestCaf=cafFoods[0];
+          for(var cf=1;cf<cafFoods.length;cf++)if((cafFoods[cf].caf||0)>(bestCaf.caf||0))bestCaf=cafFoods[cf];
+          var numCaf=Math.min(3,Math.ceil(cafNeed/(bestCaf.caf||100)));
+          for(var cci=0;cci<numCaf;cci++){
+            var ct=Math.round(startT+interval*0.5+cci*Math.max(60,(endT-startT)/numCaf));
+            if(ct>endT)break;
+            var cItem={foodId:bestCaf.id,timeMin:ct,portion:1,fromAid:false,reason:'Caffeine dose: bottles cover '+Math.round(legCafFromRotation)+'mg of the '+cafBudget+'mg leg target'};
+            state.schedule.push(cItem);placed.push(cItem);
+          }
+        }
+      }
+
       // Human-readable pattern for the strategy panel and race cards
-      var patParts=[];
+      var patParts=[],cageOrderShown=false;
+      var cageOrderTxt='';
+      if(cageSeq&&cageSeq.length){var cgN=[];for(var cgn=0;cgn<cageSeq.length;cgn++)cgN.push(cageSeq[cgn].name);cageOrderTxt=' (one bottle at a time: '+cgN.join(' then ')+')';}
       for(var pp=0;pp<events;pp++){
         var pk=slots[pp];
-        if(pk==='drink')patParts.push('⅓ bottle '+(drinkQ.length===1?drinkQ[0].name:'(rotate drinks)'));
-        else if(pk==='solid'){var pNames=[];for(var pn=0;pn<solidQ.length;pn++)if(pNames.indexOf(solidQ[pn].name)<0)pNames.push(solidQ[pn].name);patParts.push((dose0&&dose0.portion===0.5?'½ ':'')+pNames.join(' / '));}
+        if(pk==='drink'){
+          var dLbl=(sipP===0.5?'½':'⅓')+' bottle';
+          if(cageOrderTxt&&!cageOrderShown){dLbl+=cageOrderTxt;cageOrderShown=true;}
+          else if(!cageOrderTxt)dLbl+=' '+(drinkQ.length===1?drinkQ[0].name:'(rotate drinks)');
+          patParts.push(dLbl);
+        }
+        else if(pk==='solid'){var pNames=[];for(var pn=0;pn<solidQ.length;pn++)if(pNames.indexOf(solidQ[pn].name)<0)pNames.push(solidQ[pn].name);patParts.push((doseP===0.5?'½ ':'')+pNames.join(' / '));}
+        else if(pk==='na')patParts.push(useSalt?'salt cap':'⅓ '+naDrink.name);
         else if(pk==='water')patParts.push(waterSip+'ml water');
       }
       strat.pattern='Every '+interval+' min: '+patParts.join(' → ')+' — repeat to the end of the leg';
     } else {
       strat.pattern='';
-    }
-
-    // ── PHASE 3: Sodium top-up ──
-    if(sodiumFoods.length>0&&strat.sodiumTarget>0){
-      var tally2=tallyPlaced();
-      var naNeeded=strat.sodiumTarget*legHrs - tally2.na;
-      if(naNeeded>30){
-        var bestNa=sodiumFoods[0];
-        for(var ns2=1;ns2<sodiumFoods.length;ns2++) if((sodiumFoods[ns2].na||0)>(bestNa.na||0)) bestNa=sodiumFoods[ns2];
-        // For liquid sodium (PH1500 etc): sip ~150ml. For capsules: full dose.
-        var naSipMl=bestNa.ml>0?Math.min(150,bestNa.ml):0;
-        var naPortion=bestNa.ml>0?naSipMl/bestNa.ml:1;
-        var naPer=(bestNa.na||250)*naPortion;
-        var numNa=Math.ceil(naNeeded/naPer);
-        var nInterval=Math.max(MIN_GAP,(endT-startT)/(numNa+1));
-        var naWhyMg=Math.round(naNeeded);
-        lastPlacedTime=-9999;
-        for(var nai=0;nai<numNa;nai++){
-          var nt=startT+nInterval*(nai+1);
-          addItem(bestNa.id,nt,naPortion,'Sodium top-up: '+naWhyMg+'mg deficit after carb foods (target '+strat.sodiumTarget+'mg/hr)');
-        }
-      }
-    }
-
-    // ── PHASE 4: Caffeine top-up ──
-    if(cafFoods.length>0&&strat.cafTarget>0){
-      var tally3=tallyPlaced();
-      var cafNeeded=strat.cafTarget - tally3.caf;
-      if(cafNeeded>10){
-        var bestCaf=cafFoods[0];
-        for(var cf=1;cf<cafFoods.length;cf++) if((cafFoods[cf].caf||0)>(bestCaf.caf||0)) bestCaf=cafFoods[cf];
-        var cafPer=bestCaf.caf||100;
-        var numCaf=Math.ceil(cafNeeded/cafPer);
-        var cInterval=Math.max(30,(endT-startT)/(numCaf+1));
-        var cafWhyMg=Math.round(cafNeeded);
-        lastPlacedTime=-9999;
-        for(var cci=0;cci<numCaf;cci++){
-          var ct=startT+cInterval*cci;
-          addItem(bestCaf.id,ct,undefined,'Caffeine dose: '+cafWhyMg+'mg remaining to hit '+strat.cafTarget+'mg target');
-        }
-      }
     }
   }
 
@@ -1136,6 +1211,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       html+='<input type="number" class="cage-ml" data-cage="'+cg+'" min="250" max="1000" step="50" value="'+cage.ml+'" style="width:70px;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--ink);font-family:\'DM Mono\',monospace">';
       html+='<span style="font-size:9px;color:var(--muted)">ml</span>';
       if(cgFood)html+='<span style="font-size:9px;font-family:\'DM Mono\',monospace;color:'+(cgIsCarb?'var(--green)':'var(--blue)')+'">'+cgFood.carbs+'g '+(cgIsCarb?'\u26A1':'\uD83D\uDCA7')+'</span>';
+      html+='<label style="display:flex;align-items:center;gap:2px;font-size:9px;color:var(--muted);cursor:pointer" title="Swappable/refillable: can be replaced with a fresh bottle at aid stations. Untick for fixed aero bottles or concentrated mixes you keep."><input type="checkbox" class="cage-swap" data-cage="'+cg+'"'+(cage.swap===false?'':' checked')+'>\u267B</label>';
       html+='<button class="cage-rm btn-sm" data-cage="'+cg+'" style="padding:2px 6px;font-size:11px">\u00D7</button>';
       html+='</div>';
     }
@@ -1251,8 +1327,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var avgTarget=targetHrs>0?Math.round(targetCarbHr/targetHrs):0;
     var carbGap=Math.round(cHr)-avgTarget;
     var carbGapAbs=Math.abs(carbGap);
-    var carbGapColor=carbGap>=0?'var(--green)':'#e74c3c';
-    var carbGapLabel=carbGap>=0?(carbGap===0?'on target':'+'+carbGapAbs+' g/hr over'):'-'+carbGapAbs+' g/hr short';
+    var carbGapColor=carbGap>=-5?'var(--green)':'#e74c3c';
+    var carbGapLabel=carbGapAbs<=5?'on target':carbGap>0?'+'+carbGapAbs+' g/hr over':'-'+carbGapAbs+' g/hr short';
 
     var hc=4;if(state.showFluid)hc++;if(state.showSodium)hc++;if(state.showCaffeine)hc++;if(state.showEnergyGraph)hc+=2;
     html+='<div class="headline" style="padding:16px 20px"><div class="hl-grid" style="grid-template-columns:repeat('+Math.min(hc,8)+',1fr)">';
@@ -1416,13 +1492,13 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
           // isCarb = has carbs. isSpecialty = any non-plain-water configured drink
           var isCrb=cageFood&&cageFood.carbs>0;
           var isSpec=cageFood&&(cageFood.carbs>0||(cageFood.caf||0)>0||(cageFood.na||0)>100);
-          bottles.push({label:lbl,ml:cage.ml,maxMl:cage.ml,isCarb:isCrb,isSpecialty:isSpec,foodId:cage.foodId});
+          bottles.push({label:lbl,ml:cage.ml,maxMl:cage.ml,isCarb:isCrb,isSpecialty:isSpec,foodId:cage.foodId,swap:cage.swap!==false});
           totalCageMl+=cage.ml;
         }
 
         // Track bottle state over time for Gantt chart
         var bSnaps=[];
-        function snapBottles(t){var lvs=[],lbs=[];for(var si=0;si<bottles.length;si++){lvs.push(bottles[si].ml);lbs.push(bottles[si].label+(bottles[si].isCarb?' \u26A1':''));}bSnaps.push({time:t,levels:lvs.slice(),labels:lbs.slice()});}
+        function snapBottles(t){var lvs=[],lbs=[];for(var si=0;si<bottles.length;si++){lvs.push(bottles[si].ml);lbs.push(bottles[si].label+(bottles[si].isCarb?' \u26A1':'')+(bottles[si].swap?'':' \uD83D\uDD12'));}bSnaps.push({time:t,levels:lvs.slice(),labels:lbs.slice()});}
 
         var bottleEvents=[],mlUsed=0;
         snapBottles(bikeSeg.start);
@@ -1445,15 +1521,18 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
             var totalFluid=0;for(var tf=0;tf<bottles.length;tf++)totalFluid+=bottles[tf].ml;
             var deficit=fluidNeeded-totalFluid;
             if(deficit>0){
-              // Only refill enough non-carb bottles to cover the deficit
+              // Swap only the minimum swappable bottles to cover the deficit.
+              // Emptied carb bottles count once drained; non-swappable bottles
+              // (fixed aero / concentrated mixes) are never replaced.
               var refilled=[],mlAdded=0;
               for(var es=0;es<bottles.length&&mlAdded<deficit;es++){
-                if(bottles[es].isCarb)continue; // never swap out carb bottles
+                if(!bottles[es].swap)continue;
+                if(bottles[es].isCarb&&bottles[es].ml>25)continue; // don't ditch an unfinished carb bottle
                 var canAdd=bottles[es].maxMl-bottles[es].ml;
                 if(canAdd>0){
                   var pickupLabel=aidT.type==='water'?'Water':'PH1500';
                   var pickupId=aidT.type==='water'?'water':'precision-h';
-                  bottles[es]={label:pickupLabel,ml:bottles[es].maxMl,maxMl:bottles[es].maxMl,isCarb:false,foodId:pickupId};
+                  bottles[es]={label:pickupLabel,ml:bottles[es].maxMl,maxMl:bottles[es].maxMl,isCarb:false,foodId:pickupId,swap:true};
                   mlAdded+=canAdd;
                   refilled.push('cage '+(es+1));
                 }
@@ -1475,8 +1554,10 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
             mlUsed+=bMl;
             var isItemCarb=bF.carbs>0;
             var drainOrder=[];
-            // 1. Exact foodId match
+            // 1. Exact foodId match — swappable bottles drain first, matching
+            // the generator's cage order, so cages free up for pickups
             for(var d1=0;d1<bottles.length;d1++){if(bottles[d1].foodId===bF.id&&bottles[d1].ml>0)drainOrder.push(d1);}
+            drainOrder.sort(function(a,b){return ((bottles[b].swap?1:0)-(bottles[a].swap?1:0))||(a-b);});
             // 2. For non-carb items only: any non-carb bottle (water from PH1500 etc)
             if(drainOrder.length===0&&!isItemCarb){
               for(var d2=0;d2<bottles.length;d2++){if(!bottles[d2].isCarb&&bottles[d2].ml>0)drainOrder.push(d2);}
@@ -1511,15 +1592,16 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
           var totalFluid2=0;for(var tf2=0;tf2<bottles.length;tf2++)totalFluid2+=bottles[tf2].ml;
           var deficit2=fluidNeeded2-totalFluid2;
           if(deficit2>0){
-            // Only refill enough non-carb bottles to cover the deficit
+            // Swap only the minimum swappable bottles to cover the deficit
             var refilled2=[],mlAdded2=0;
             for(var es3=0;es3<bottles.length&&mlAdded2<deficit2;es3++){
-              if(bottles[es3].isCarb)continue;
+              if(!bottles[es3].swap)continue;
+              if(bottles[es3].isCarb&&bottles[es3].ml>25)continue;
               var canAdd2=bottles[es3].maxMl-bottles[es3].ml;
               if(canAdd2>0){
                 var pickupLabel2=aidT2.type==='water'?'Water':'PH1500';
                 var pickupId2=aidT2.type==='water'?'water':'precision-h';
-                bottles[es3]={label:pickupLabel2,ml:bottles[es3].maxMl,maxMl:bottles[es3].maxMl,isCarb:false,foodId:pickupId2};
+                bottles[es3]={label:pickupLabel2,ml:bottles[es3].maxMl,maxMl:bottles[es3].maxMl,isCarb:false,foodId:pickupId2,swap:true};
                 mlAdded2+=canAdd2;
                 refilled2.push('cage '+(es3+1));
               }
@@ -1996,12 +2078,14 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     for(var cd=0;cd<cageDrinks.length;cd++)cageDrinks[cd].addEventListener('change',function(){state.bikeCages[+this.getAttribute('data-cage')].foodId=this.value;render();});
     var cageNames=document.querySelectorAll('.cage-name');
     for(var cn2=0;cn2<cageNames.length;cn2++)cageNames[cn2].addEventListener('change',function(){state.bikeCages[+this.getAttribute('data-cage')].name=this.value.trim();render();});
+    var cageSwaps=document.querySelectorAll('.cage-swap');
+    for(var cw=0;cw<cageSwaps.length;cw++)cageSwaps[cw].addEventListener('change',function(){state.bikeCages[+this.getAttribute('data-cage')].swap=this.checked;render();});
     var cageMls=document.querySelectorAll('.cage-ml');
     for(var cm2=0;cm2<cageMls.length;cm2++)cageMls[cm2].addEventListener('change',function(){state.bikeCages[+this.getAttribute('data-cage')].ml=+this.value||500;render();});
     var cageRms=document.querySelectorAll('.cage-rm');
     for(var cr=0;cr<cageRms.length;cr++)cageRms[cr].addEventListener('click',function(){state.bikeCages.splice(+this.getAttribute('data-cage'),1);render();});
     var addCageBtn=document.getElementById('addCage');
-    if(addCageBtn)addCageBtn.addEventListener('click',function(){state.bikeCages.push({name:'Cage '+(state.bikeCages.length+1),foodId:'water',ml:500});render();});
+    if(addCageBtn)addCageBtn.addEventListener('click',function(){state.bikeCages.push({name:'Cage '+(state.bikeCages.length+1),foodId:'water',ml:500,swap:true});render();});
 
     var aBtn=document.getElementById('addAid');
     if(aBtn)aBtn.addEventListener('click',function(){var km=+document.getElementById('aidKm').value,d=document.getElementById('aidDisc').value,t=document.getElementById('aidType').value;if(km>0){state.aidStations.push({km:km,discipline:d,type:t});state.aidStations.sort(function(a,b){return a.km-b.km;});render();}});
