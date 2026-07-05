@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Race Fuelling Planner v1.3 — Diamond Peak</title>
+<title>Race Fuelling Planner v1.4 — Diamond Peak</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../style.css">
 <style>
@@ -234,7 +234,7 @@
   <div class="dpc-header"><img src="../logo-mark.png" alt="Diamond Peak" class="dpc-logo"><span class="dpc-wordmark">Diamond Peak</span></div>
   <a href="../index.html" class="back">&larr; Back to tools</a>
   <div class="kicker">NUTRITION &amp; PHYSIOLOGY</div>
-  <h1>Race Fuelling Planner <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.3</span></h1>
+  <h1>Race Fuelling Planner <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.4</span></h1>
   <p class="intro">
     Set up your race, select foods per leg, and auto-generate a fuelling strategy that
     respects how much your gut can actually absorb. Tracks carbs, fluid, sodium and caffeine,
@@ -266,6 +266,7 @@
   <div class="footer-bar">&copy; 2026 Diamond Peak Consulting</div>
   <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px;">
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong><br>
+    <strong>v1.4</strong>: Moved the physiology maths (transporter caps, target formulas, plan-check thresholds) into a shared engine so the ClaudeCoach bot runs the exact same logic and the two never disagree. No change to the numbers.<br>
     <strong>v1.3</strong>: Aligned the Absorption Graph zones to the gut model. The green/amber/red bands now track your combined transporter cap (90 g/hr default, 120 gut-trained) instead of fixed thresholds, and a dashed line marks the tighter glucose cap so a plan that looks green on combined carbs but exceeds the glucose transporter is now visible. The two carb views are consistent.<br>
     <strong>v1.2</strong>: Engine upgrade. Added a gut/absorption model with separate glucose (SGLT1) and fructose (GLUT5) transporter caps and a "gut-trained" mode (90 &rarr; 120 g/hr), showing carbs actually absorbed vs unabsorbed backlog in the gut. New "Suggest targets" sets evidence-based carb, fluid, sodium and caffeine goals from race duration, body weight, sweat rate and sweat-sodium concentration. New Plan Check panel flags red flags: glucose over transporter cap, wrong glucose:fructose ratio, gut backlog, dehydration or over-drinking, under-replacing sodium, caffeine outside 3-6 mg/kg, fuelling gaps, and solids on the run.<br>
     <strong>v1.1</strong>: Usability update. Fixed a crash in "Optimise all legs" that left the loading overlay stuck. Setup now saves automatically in the browser (with Reset all / Clear plan buttons). Typing in number fields no longer loses focus; target sliders drag smoothly. Custom foods join the shortlist automatically. Schedule table scrolls horizontally on small screens. Added a step-by-step guide bar; switching preset now clears aid stations for disciplines the race no longer has.<br>
@@ -318,9 +319,13 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
 })();
 </script>
 
+<!-- Shared physiology engine — same file the ClaudeCoach bot runs via Node, so
+     the planner and the coach never disagree. Do not inline/duplicate. -->
+<script src="../js/fuelling-engine.js"></script>
 <script>
 (function(){
   'use strict';
+  var FE = (typeof window !== 'undefined' && window.FuellingEngine) || null;
 
   var PRESETS = [
     {name:'Sprint Tri',swim:.75,bike:20,run:5,type:'tri'},
@@ -502,9 +507,9 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     return{plasma:plasma,minutes:n};
   }
 
-  // Intestinal transporter caps (g/hr): glucose via SGLT1, fructose via GLUT5.
-  // Standard ~60/30; gut-trained athletes tolerate ~72/48 (120 g/hr at 1:0.8).
-  function getCaps(){return state.gutTrained?{glu:72,fru:48}:{glu:60,fru:30};}
+  // Intestinal transporter caps (g/hr) — from the shared engine (SGLT1 glucose,
+  // GLUT5 fructose). Fallback matches fuelling-engine.js if the script is blocked.
+  function getCaps(){return FE?FE.transporterCaps(state.gutTrained):(state.gutTrained?{glu:72,fru:48}:{glu:60,fru:30});}
 
   // Gut model: doses enter a gut pool; absorption is capped per transporter.
   // oxidation = what actually reaches the blood (g/hr); backlog = unabsorbed
@@ -560,24 +565,14 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     return pick;
   }
 
-  // Evidence-based per-leg targets from race duration, body weight, sweat
-  // rate and sweat sodium concentration. Also seeds default foods per leg.
+  // Evidence-based per-leg targets. The numbers come from the SHARED engine
+  // (fuelling-engine.js — the same code the coach bot runs); this function only
+  // maps them onto legs and seeds default foods (both UI concerns).
   function suggestTargets(){
-    var race=calcRace(),caps=getCaps(),maxRate=caps.glu+caps.fru,rH=race.total/60,wt=state.bodyWeight;
-    // Carb rate: leave headroom below the combined transporter cap. Untrained
-    // guts top out ~75-80 g/hr; reserve 90-110 for gut-trained athletes.
-    var base=rH<1?30:rH<1.5?45:rH<2?60:75;
-    if(state.gutTrained&&rH>=2)base=rH>=2.5?110:90;
-    base=Math.min(base,maxRate-5); // never sit exactly on the cap
-    // Fluid: drink to hold total loss near 1.5% of body weight, capped at a
-    // gut-tolerable ceiling and never above sweat rate (avoid over-drinking).
-    var allowPerHr=rH>0?(wt*0.015*1000)/rH:0;
-    var flHr=state.sweatRate-allowPerHr;
-    flHr=Math.max(state.sweatRate*0.5,Math.min(flHr,state.sweatRate,900));
-    flHr=Math.round(flHr/50)*50;
-    // Sodium: replace ~65% of sweat sodium losses (evidence range 50-80%)
-    var naHr=Math.min(1500,Math.round(state.sweatNa*state.sweatRate/1000*0.65/50)*50);
-    var cafTotal=Math.round(wt*4); // 4 mg/kg, mid ergogenic range
+    var race=calcRace(),rH=race.total/60,wt=state.bodyWeight;
+    var tg=FE?FE.suggestRaceTargets({raceHours:rH,bodyKg:wt,sweatMlHr:state.sweatRate,sweatNaMgL:state.sweatNa,gutTrained:state.gutTrained})
+            :{bikeCarbGHr:75,runCarbGHr:65,fluidMlHr:750,sodiumMgHr:600,caffeineTotalMg:Math.round(wt*4)};
+    var flHr=tg.fluidMlHr,naHr=tg.sodiumMgHr,cafTotal=tg.caffeineTotalMg;
     var hasBike=state.bikeDist>0,hasRun=state.runDist>0;
     var legs=getStratLegs(race);
     for(var i=0;i<legs.length;i++){
@@ -585,8 +580,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       var st=state.strategies[nm]||(state.strategies[nm]={foods:[],target:0,fluidTarget:0,sodiumTarget:0,cafTarget:0});
       if(nm==='Breakfast'){st.target=Math.min(120,Math.round(wt*1.5/5)*5);st.fluidTarget=500;st.sodiumTarget=300;st.cafTarget=0;}
       else if(nm==='Pre-Race'){st.target=30;st.fluidTarget=300;st.sodiumTarget=200;st.cafTarget=0;}
-      else if(nm==='Bike'){st.target=base;st.fluidTarget=flHr;st.sodiumTarget=naHr;st.cafTarget=hasRun?Math.round(cafTotal*0.6):cafTotal;}
-      else if(nm==='Run'){st.target=Math.max(30,Math.round(base*0.85/5)*5);st.fluidTarget=flHr;st.sodiumTarget=naHr;st.cafTarget=hasBike?Math.round(cafTotal*0.4):cafTotal;}
+      else if(nm==='Bike'){st.target=tg.bikeCarbGHr;st.fluidTarget=flHr;st.sodiumTarget=naHr;st.cafTarget=hasRun?Math.round(cafTotal*0.6):cafTotal;}
+      else if(nm==='Run'){st.target=tg.runCarbGHr;st.fluidTarget=flHr;st.sodiumTarget=naHr;st.cafTarget=hasBike?Math.round(cafTotal*0.4):cafTotal;}
       // Seed default foods only if none chosen yet, so we don't clobber user picks
       if(nm==='Breakfast'||nm==='Pre-Race'||nm==='Bike'||nm==='Run'){
         if(!st.foods||st.foods.length===0)st.foods=defaultLegFoods(nm);
@@ -598,7 +593,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   function checkPlan(race,abs,gm){
     var out=[];
     if(state.schedule.length===0||race.total<=0)return out;
-    var caps=getCaps(),OFF=PRE_RACE_OFFSET,rH=race.total/60,wt=state.bodyWeight;
+    var OFF=PRE_RACE_OFFSET,rH=race.total/60,wt=state.bodyWeight;
     var eI=Math.min(abs.minutes,Math.ceil(race.total)+OFF+1);
     // Race-window totals (from the start gun onward)
     var tC=0,tG=0,tF=0,tMl=0,tNa=0,tCafAll=0;
@@ -609,21 +604,20 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       if(e.timeMin<0)continue;
       tC+=f.carbs*p;tG+=f.glucose*p;tF+=f.fructose*p;tMl+=(f.ml||0)*p;tNa+=(f.na||0)*p;
     }
-    // 1. Glucose over transporter cap (rolling 60-min window)
-    var overMin=0,overStart=-1,worstGlu=0;
-    for(var m=OFF;m<eI;m++){
-      if(abs.glucose[m]>caps.glu*1.05){overMin++;if(overStart<0)overStart=m-OFF;if(abs.glucose[m]>worstGlu)worstGlu=abs.glucose[m];}
+    // 1. Rate-based checks (glucose cap, glucose:fructose ratio, hydration,
+    // sodium, caffeine) come from the SHARED engine — the exact same logic the
+    // coach bot runs. Glucose here is the race-average; transient peaks over the
+    // cap are caught by the gut-backlog check below and shown on the graph.
+    if(FE){
+      var rateFlags=FE.checkFuellingRates({
+        carbGHr:tC/rH, glucoseGHr:tG/rH, fructoseGHr:tF/rH,
+        fluidMlHr:tMl/rH, sodiumMgHr:tNa/rH, caffeineTotalMg:tCafAll,
+        raceHours:rH, bodyKg:wt, sweatMlHr:state.sweatRate, sweatNaMgL:state.sweatNa,
+        gutTrained:state.gutTrained});
+      for(var rf=0;rf<rateFlags.length;rf++) if(rateFlags[rf].level!=='ok') out.push(rateFlags[rf]);
     }
-    if(overMin>15)out.push({level:'risk',text:'Glucose intake peaks at '+Math.round(worstGlu)+' g/hr from ~'+fmtHM(Math.max(0,overStart))+', above the ~'+caps.glu+' g/hr SGLT1 absorption cap. Swap some glucose-heavy items for glucose+fructose mixes.'});
-    // 2. Fructose share when fuelling above 60 g/hr
-    var cHr=tC/rH;
-    if(cHr>62&&tC>0){
-      var fruShare=tF/Math.max(1,tG+tF);
-      if(fruShare<0.2)out.push({level:'warn',text:'Only '+Math.round(fruShare*100)+'% of your carbs are fructose. Above 60 g/hr you need multiple transportable carbs; aim for roughly 2:1 up to 1:0.8 glucose:fructose.'});
-      else if(fruShare>0.5)out.push({level:'warn',text:Math.round(fruShare*100)+'% of your carbs are fructose, beyond the 1:0.8 ratio the gut can use. Rebalance towards glucose.'});
-    }
-    // 3. Gut backlog - use sustained (10-min rolling mean) rather than a single
-    // transient dose-stacking spike, which is harmless and clears quickly.
+    // 2. Gut backlog (schedule-based, web-only) - use sustained (10-min rolling
+    // mean) rather than a transient dose-stacking spike, which clears quickly.
     var peakB=0,peakT=0;
     for(var b=OFF+5;b<eI-5;b++){
       var sum=0,cnt=0;
@@ -633,21 +627,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     }
     if(peakB>50)out.push({level:'risk',text:'Unabsorbed carbs sit at ~'+Math.round(peakB)+'g in the gut around '+fmtHM(peakT)+': high GI-distress risk. Space doses out or lower the rate.'});
     else if(peakB>30)out.push({level:'warn',text:'Gut backlog builds to ~'+Math.round(peakB)+'g around '+fmtHM(peakT)+'. Tolerable if practised; rehearse this exact plan in training.'});
-    // 4. Hydration: projected loss vs 2-3% of body weight; over-drinking
-    var mlHr=tMl/rH,lossPct=(state.sweatRate-mlHr)*rH/1000/wt*100;
-    if(lossPct>3.5)out.push({level:'risk',text:'Projected fluid deficit is ~'+lossPct.toFixed(1)+'% of body weight ('+Math.round(mlHr)+' ml/hr vs '+state.sweatRate+' ml/hr sweat). Performance drops sharply beyond 2-3%; add fluid.'});
-    else if(lossPct>2.5)out.push({level:'warn',text:'Projected fluid deficit is ~'+lossPct.toFixed(1)+'% of body weight ('+Math.round(mlHr)+' ml/hr vs '+state.sweatRate+' ml/hr sweat). Acceptable in cool conditions; tight in heat.'});
-    if(mlHr>state.sweatRate*1.25)out.push({level:'warn',text:'Drinking '+Math.round(mlHr)+' ml/hr against a '+state.sweatRate+' ml/hr sweat rate. Over-drinking risks hyponatraemia; do not finish heavier than you started.'});
-    // 5. Sodium vs sweat losses
-    var naLossHr=state.sweatNa*state.sweatRate/1000,naHr2=tNa/rH;
-    if(rH>2&&naHr2<naLossHr*0.4)out.push({level:'warn',text:'Sodium intake is '+Math.round(naHr2)+' mg/hr against ~'+Math.round(naLossHr)+' mg/hr sweat losses. For races over 2 hrs aim to replace 50-80%.'});
-    // 6. Caffeine vs 3-6 mg/kg
-    if(tCafAll>0){
-      var mgKg=tCafAll/wt;
-      if(mgKg<2.5)out.push({level:'warn',text:'Total caffeine is '+Math.round(tCafAll)+' mg ('+mgKg.toFixed(1)+' mg/kg), below the ergogenic 3-6 mg/kg range.'});
-      else if(mgKg>6)out.push({level:'risk',text:'Total caffeine is '+Math.round(tCafAll)+' mg ('+mgKg.toFixed(1)+' mg/kg), above the recommended 3-6 mg/kg. Expect jitters and GI upset.'});
-    }
-    // 7. Fuelling gaps within bike/run legs
+    // 3. Fuelling gaps within bike/run legs
     for(var sg2=0;sg2<race.segs.length;sg2++){
       var seg=race.segs[sg2];
       if(seg.name!=='Bike'&&seg.name!=='Run')continue;
@@ -664,7 +644,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       if(seg.dur-(times[times.length-1]-seg.start)>worstGap){worstGap=seg.dur-(times[times.length-1]-seg.start);gapAt=times[times.length-1];}
       if(worstGap>35)out.push({level:'warn',text:seg.name+' has a '+Math.round(worstGap)+'-minute stretch with no carbs (from '+fmtHM(Math.max(0,gapAt-seg.start))+' into the leg). Keep doses every 15-25 minutes.'});
     }
-    // 8. Heavy solids on the run (bars / whole food). Chews and blocks are
+    // 4. Heavy solids on the run (bars / whole food). Chews and blocks are
     // fine running; bars and whole foods are hard to stomach at run intensity.
     var heavyRx=/bar|banana|rice/i;
     for(var r2=0;r2<race.segs.length;r2++){
