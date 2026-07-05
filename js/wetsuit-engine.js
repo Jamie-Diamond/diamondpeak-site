@@ -37,7 +37,7 @@
     { year: 2022, date: 'Sep 18', dayOfSept: 18, waterTemp: 25.0, onlineSST: 25.0, wetsuit: 'Borderline / No', source: 'Satellite SST — race delayed by storm', onlineSource: 'seatemperature.net' },
     { year: 2023, date: 'Sep 16', dayOfSept: 16, waterTemp: 22.0, onlineSST: 24.0, wetsuit: 'Yes (AG)', source: 'Race reports confirmed', onlineSource: 'seatemperature.info: 23.5°C' },
     { year: 2024, date: 'Sep 21', dayOfSept: 21, waterTemp: 21.5, onlineSST: 21.5, wetsuit: 'Yes (mandatory)', source: 'Race reports — mandatory wetsuits', onlineSource: 'seatemperature.info: 21.5°C' },
-    { year: 2025, date: 'Sep 20', dayOfSept: 20, waterTemp: 24.6, onlineSST: 25.2, wetsuit: 'Unknown (borderline)', source: 'Official reading not found — estimated as satellite SST minus avg bias', onlineSource: 'Open-Meteo Marine archive: 25.2°C', estimated: true }
+    { year: 2025, date: 'Sep 20', dayOfSept: 20, waterTemp: 24.5, onlineSST: 25.2, wetsuit: 'Yes (AG)', source: 'Athlete raced it — wetsuit-legal, so official reading ≤24.5; exact value unknown', onlineSource: 'Open-Meteo Marine archive: 25.2°C', estimated: true }
   ];
 
   var CONSTANTS = {
