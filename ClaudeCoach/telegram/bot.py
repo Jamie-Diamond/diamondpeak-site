@@ -2334,6 +2334,17 @@ def prefetch_context(slug: str) -> str:
                 f"plan_tools.py project --athlete {slug} --daily '<json>'  |  "
                 f"plan_tools.py required-tss --athlete {slug}  |  "
                 f"plan_tools.py validate --athlete {slug} --week '<json>' (hard-check sport-day rules + ramp before proposing a week)")
+            lines.append(
+                "For race-day FUELLING (carbs, fluid, sodium, caffeine, gut/transporter limits) NEVER work out the "
+                "numbers yourself — call the shared fuelling engine (same one behind the Diamond Peak web planner):  "
+                f"plan_tools.py race-fuelling --athlete {slug} [--gut-trained] "
+                "-> evidence-based bike/run carb g/hr, fluid ml/hr, sodium mg/hr and total caffeine from race duration, "
+                "body weight and sweat data.  |  "
+                f"plan_tools.py fuel-check --athlete {slug} --carb <g/hr> [--glucose <g/hr> --fructose <g/hr>] "
+                "--fluid <ml/hr> --sodium <mg/hr> --caffeine <mg total> "
+                "-> red-flags a plan the athlete describes (glucose over the ~60 g/hr SGLT1 cap, wrong glucose:fructose "
+                "ratio, dehydration, low sodium, caffeine outside 3-6 mg/kg). For the interactive per-leg schedule with "
+                "the gut-backlog graph, point them to https://diamondpeak.uk/cycling/fuelling-calculator.html")
         except Exception as _e:
             log(f"prefetch planning numbers (non-fatal): {_e}")
 

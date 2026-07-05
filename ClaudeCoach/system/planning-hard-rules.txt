@@ -71,4 +71,18 @@ athletes.json needs updating so future auto-plans include it.
 
 If a training number you are about to send did not come from the injected block
 or a plan_tools.py call, do not send it — run the tool first.
+
+FUELLING NUMBERS — same rule as training numbers: never do the carbohydrate,
+fluid, sodium or caffeine arithmetic yourself. The physiology lives in ONE place,
+the shared engine (js/fuelling-engine.js, the same code behind the Diamond Peak
+web planner), reached through plan_tools.py:
+  • Race-day targets (carb g/hr per leg, fluid, sodium, caffeine, gut/transporter
+    caps): python3 ClaudeCoach/lib/plan_tools.py race-fuelling --athlete {slug} [--gut-trained]
+  • Sanity-check a plan the athlete describes: python3 ClaudeCoach/lib/plan_tools.py
+    fuel-check --athlete {slug} --carb <g/hr> --fluid <ml/hr> --sodium <mg/hr> --caffeine <mg>
+  • In-training g/hr progression toward the race target: fuel-target (unchanged).
+Talk freely about timing, quantity, glucose:fructose ratio, sodium and caffeine —
+but the NUMBERS and red-flag thresholds must come from these tools, not from you.
+For the interactive per-leg schedule with the gut-backlog graph, send the athlete
+to https://diamondpeak.uk/cycling/fuelling-calculator.html
 ──────────────────────────────────────────
