@@ -40,6 +40,7 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent          # ClaudeCoach/
 FUELLING_CLI = BASE.parent / "js" / "fuelling-cli.js"  # shared JS engine bridge
+WETSUIT_CLI = BASE.parent / "js" / "wetsuit-cli.js"    # shared JS engine bridge
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
@@ -622,6 +623,56 @@ def cmd_fuel_check(args) -> dict:
             "flags": flags}
 
 
+# ── subcommand: wetsuit ────────────────────────────────────────────────────────
+def cmd_wetsuit(args) -> dict:
+    """Cervia race-day water temperature + wetsuit-legality prediction. Runs the
+    SHARED JS engine (js/wetsuit-engine.js — the exact code behind the web
+    predictor) via js/wetsuit-cli.js, which also fetches live Adriatic SST from
+    the Open-Meteo Marine API. Use these numbers, never guess water temps."""
+    if not WETSUIT_CLI.exists():
+        raise SystemExit(_err(f"wetsuit engine not found at {WETSUIT_CLI}"))
+    params = {}
+    if getattr(args, "year", None):
+        params["raceYear"] = args.year
+    if getattr(args, "day", None):
+        params["raceDayOfSept"] = args.day
+    try:
+        proc = subprocess.run(
+            ["node", str(WETSUIT_CLI), "live", json.dumps(params)],
+            capture_output=True, text=True, timeout=30)
+    except FileNotFoundError:
+        raise SystemExit(_err("node is not installed — the wetsuit engine needs Node.js"))
+    except subprocess.TimeoutExpired:
+        raise SystemExit(_err("wetsuit engine timed out (Open-Meteo fetch)"))
+    out = (proc.stdout or "").strip()
+    if not out:
+        raise SystemExit(_err(f"wetsuit engine returned nothing (stderr: {proc.stderr.strip()[:200]})"))
+    data = json.loads(out)
+    if isinstance(data, dict) and data.get("error"):
+        raise SystemExit(_err(f"wetsuit engine: {data['error']}"))
+    p = data["prediction"]
+    m5 = p.get("m5")
+    return {
+        "race": f"IRONMAN Italy Cervia — {p['raceDayOfSept']} Sep {p['raceYear']}",
+        "predicted_official_water_temp_c": round(p["ensemble"]["temp"], 1),
+        "range_c": [round(p["ensemble"]["lo"], 1), round(p["ensemble"]["hi"], 1)],
+        "prob_ag_wetsuit_pct": round(p["prob"]["ag"]),
+        "prob_pro_wetsuit_pct": round(p["prob"]["pro"]),
+        "verdict": p["verdict"],
+        "thresholds_c": {"ag": 24.5, "pro": 21.9},
+        "live_sst": data.get("live"),
+        "live_anomaly_method_active": m5 is not None,
+        "live_anomaly": ({"days_until_race": m5["daysUntilRace"],
+                          "confidence": m5["confidence"],
+                          "anomaly_c": round(m5["liveAnomaly"], 2)} if m5 else
+                         "inactive — activates within 30 days of the race"),
+        "methods": [{"name": m["name"], "temp_c": round(m["temp"], 1)} for m in p["methods"]],
+        "note": ("Ensemble of 5 methods, bias-corrected: official race-morning readings "
+                 "average ~0.6C cooler than satellite SST."),
+        "web_predictor": "https://diamondpeak.uk/cycling/cervia-wetsuit.html",
+    }
+
+
 # ── subcommand: log-strength ───────────────────────────────────────────────────
 def cmd_log_strength(args) -> dict:
     """Log a non-device training session (CrossFit / gym / kettlebells) as REAL
@@ -715,6 +766,10 @@ def main():
     pfc.add_argument("--sweat-na", type=float, dest="sweat_na")
     pfc.add_argument("--gut-trained", action="store_true")
 
+    pws = sub.add_parser("wetsuit", help="Cervia water-temp + wetsuit-legality prediction with live SST (shared engine)")
+    pws.add_argument("--year", type=int, help="race year (default: next upcoming edition)")
+    pws.add_argument("--day", type=int, help="race day of September (default: known race date)")
+
     pls = sub.add_parser("log-strength", help="log CrossFit/gym as real ICU load (manual activity via mark-as-done)")
     pls.add_argument("--athlete", required=True)
     pls.add_argument("--minutes", type=int, default=60)
@@ -727,7 +782,7 @@ def main():
                "required-tss": cmd_required_tss, "validate": cmd_validate,
                "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target,
                "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check,
-               "log-strength": cmd_log_strength}[args.cmd]
+               "wetsuit": cmd_wetsuit, "log-strength": cmd_log_strength}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:

@@ -100,13 +100,16 @@
 
   <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px;">
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong>
-    <strong>v1.1</strong> &ndash; Defaults now target the next upcoming race (2026: Saturday 19 September). Added the 2025 race to the history (satellite SST 25.2&deg;C; official reading not found, flagged as estimated). Estimated years excluded from the measurement-bias calculation. Fixed a variable-ordering bug in the August SST fallback.<br>
+    <strong>v1.1</strong> &ndash; Defaults now target the next upcoming race (2026: Saturday 19 September). Added the 2025 race to the history (satellite SST 25.2&deg;C; official reading not found, flagged as estimated). Estimated years excluded from the measurement-bias calculation. Fixed a variable-ordering bug in the August SST fallback. Prediction maths extracted to a shared engine (js/wetsuit-engine.js) used identically by this page and the ClaudeCoach bot.<br>
     <strong>v1.0</strong> &mdash; Initial release. Five prediction methods for Adriatic water temperature at IRONMAN Italy Cervia — wetsuit or non-wetsuit swim decision.
   </div>
 
 </div>
 
 <div class="footer">&copy; 2026 Diamond Peak</div>
+
+<!-- Shared prediction engine (same maths as the ClaudeCoach bot) -->
+<script src="../js/wetsuit-engine.js"></script>
 
 <!-- React + Recharts CDN -->
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -125,61 +128,21 @@
     ReferenceLine, ResponsiveContainer, Legend, Scatter, Bar
   } = Recharts;
 
-  /* ── Historical Race Data ─────────────────── */
-
-  // waterTemp = reported by IRONMAN on race morning (official measurement at swim start, 60cm depth)
-  // onlineSST = satellite/coastal station SST for same date from seatemperature.info / seatemperature.net
-  // bias = waterTemp - onlineSST (negative = IRONMAN reads cooler than satellite)
-  // estimated = no official reading found; waterTemp inferred from satellite SST — excluded from bias stats
-  const RACE_HISTORY = [
-    { year: 2017, date: 'Sep 23', dayOfSept: 23, waterTemp: 22.0, onlineSST: 23.0, wetsuit: 'Yes (AG)', source: 'Estimated from satellite SST', onlineSource: 'seatemperature.net (2022–25 archive)', estimated: true },
-    { year: 2018, date: 'Sep 22', dayOfSept: 22, waterTemp: 24.8, onlineSST: 25.5, wetsuit: 'No (too warm)', source: 'Race reports — European heatwave year', onlineSource: 'seatemperature.info satellite' },
-    { year: 2019, date: 'Sep 21', dayOfSept: 21, waterTemp: 24.6, onlineSST: 25.2, wetsuit: 'Yes (jellyfish exception)', source: 'Race reports — above limit, exception granted', onlineSource: 'seatemperature.info satellite' },
-    { year: 2021, date: 'Sep 18', dayOfSept: 18, waterTemp: 24.0, onlineSST: 24.5, wetsuit: 'Yes (AG)', source: 'Satellite SST data', onlineSource: 'seatemperature.info satellite' },
-    { year: 2022, date: 'Sep 18', dayOfSept: 18, waterTemp: 25.0, onlineSST: 25.0, wetsuit: 'Borderline / No', source: 'Satellite SST — race delayed by storm', onlineSource: 'seatemperature.net' },
-    { year: 2023, date: 'Sep 16', dayOfSept: 16, waterTemp: 22.0, onlineSST: 24.0, wetsuit: 'Yes (AG)', source: 'Race reports confirmed', onlineSource: 'seatemperature.info: 23.5°C' },
-    { year: 2024, date: 'Sep 21', dayOfSept: 21, waterTemp: 21.5, onlineSST: 21.5, wetsuit: 'Yes (mandatory)', source: 'Race reports — mandatory wetsuits', onlineSource: 'seatemperature.info: 21.5°C' },
-    { year: 2025, date: 'Sep 20', dayOfSept: 20, waterTemp: 24.6, onlineSST: 25.2, wetsuit: 'Unknown (borderline)', source: 'Official reading not found — estimated as satellite SST minus avg bias', onlineSource: 'Open-Meteo Marine archive: 25.2°C', estimated: true },
-  ];
-
-  /* Default race: next upcoming edition (Sept), so the tool never goes stale */
-  const _now = new Date();
-  const DEFAULT_RACE_YEAR = _now.getMonth() > 8 ? _now.getFullYear() + 1 : _now.getFullYear();
-  const RACE_DATES = { 2026: 19 }; // known race days-of-September by year
-  const DEFAULT_RACE_DAY = RACE_DATES[DEFAULT_RACE_YEAR] || 20;
-
-  /* ── Climatological Normals (1991–2020 baseline) ── */
-  /* Daily SST for Cervia/Adriatic in September, interpolated from monthly data */
-  const SEPT_CLIM_START = 26.0;   // Sept 1 normal
-  const SEPT_CLIM_END   = 21.5;   // Sept 30 normal
-  const SEPT_COOLING_RATE = (SEPT_CLIM_START - SEPT_CLIM_END) / 29; // ~0.155°C/day
-
-  const AUG_NORMAL = 25.7;  // 30-year Aug average
-
-  /* Warming trend: +0.04°C/year relative to 2010 baseline */
-  const TREND_RATE = 0.04;
-  const TREND_BASE_YEAR = 2010;
-
-  /* Wetsuit thresholds */
-  const PRO_THRESHOLD = 21.9;
-  const AG_THRESHOLD  = 24.5;
+  /* ── Shared engine — js/wetsuit-engine.js is the single source of truth
+        for the race history, constants and all five prediction methods.
+        The ClaudeCoach bot runs the SAME engine via js/wetsuit-cli.js. ── */
+  const WE = window.WetsuitEngine;
+  const { RACE_HISTORY } = WE;
+  const { SEPT_CLIM_START, SEPT_COOLING_RATE, PRO_THRESHOLD, AG_THRESHOLD } = WE.CONSTANTS;
+  const DEFAULT_RACE = WE.defaultRace(new Date());
 
   const fmt = (v, d=1) => v.toFixed(d);
-
-  /* ── Normal distribution helpers for probability ── */
-  function normalCDF(z) {
-    const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
-    const sign = z < 0 ? -1 : 1;
-    const t = 1 / (1 + p * Math.abs(z));
-    const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-z*z/2);
-    return 0.5 * (1 + sign * y);
-  }
 
   /* ── App ──────────────────────────────────── */
 
   function App() {
-    const [raceYear, setRaceYear]       = useState(DEFAULT_RACE_YEAR);
-    const [raceDayOfSept, setRaceDayOfSept] = useState(DEFAULT_RACE_DAY);
+    const [raceYear, setRaceYear]       = useState(DEFAULT_RACE.year);
+    const [raceDayOfSept, setRaceDayOfSept] = useState(DEFAULT_RACE.dayOfSept);
     const [augustTempManual, setAugustTempManual] = useState(null);
     const [showInputs, setShowInputs]   = useState(false);
 
@@ -189,9 +152,6 @@
     const [liveDate, setLiveDate]       = useState(null);
     const [liveAugAvg, setLiveAugAvg]   = useState(null);
     const [liveHistory, setLiveHistory] = useState([]); // last 30 days of SST
-
-    // Must come after the live-state declarations above (liveAugAvg is read here)
-    const augustTemp = augustTempManual !== null ? augustTempManual : (liveAugAvg || 26.2);
 
     useEffect(() => {
       const fmtD = d => d.toISOString().slice(0, 10);
@@ -242,142 +202,59 @@
         .catch(() => setLiveStatus('error'));
     }, []);
 
-    // Use live data when available
-    // Compute days between live observation and race day
+    // Days between live observation and race day (for status messaging only —
+    // the engine applies its own 0-30 day gate for Method 5)
     const raceDate = new Date(raceYear, 8, raceDayOfSept); // month 8 = September
     const obsDate = liveDate || new Date();
     const daysBetween = Math.round((raceDate - obsDate) / (1000 * 60 * 60 * 24));
 
-    // Only activate Method 5 if observation is within 30 days of race and before race
-    const hasObservation = liveStatus === 'ok' && liveTemp !== null && liveDate !== null && daysBetween >= 0 && daysBetween <= 30;
-    const obsTemp = liveTemp || 25.0;
-    const obsDayOfSept = liveDate && liveDate.getMonth() === 8 ? liveDate.getDate() : 1;
-    const daysUntilRace = hasObservation ? daysBetween : 15; // fallback
-
     /* ═══════════════════════════════════════════
-       METHOD 1: Historical Race Day Average
-       Simple empirical mean of past race-day temps
+       ALL MODEL MATHS — shared engine call.
+       Methods 1-5, ensemble, bias correction and
+       probabilities live in js/wetsuit-engine.js.
        ═══════════════════════════════════════════ */
-    // Measurement bias: IRONMAN official vs online satellite SST
-    // Only years with a genuine official reading — estimated rows would feed the bias back into itself
-    const biases = RACE_HISTORY.filter(r => !r.estimated).map(r => r.waterTemp - r.onlineSST);
-    const avgBias = biases.reduce((a,b) => a+b, 0) / biases.length;
-    const biasSd = Math.sqrt(biases.reduce((a,b) => a + (b - avgBias)**2, 0) / (biases.length - 1));
+    const R = WE.predictWater({
+      raceYear, raceDayOfSept,
+      augustAvgSST: augustTempManual !== null ? augustTempManual : liveAugAvg,
+      liveTemp: liveStatus === 'ok' ? liveTemp : null,
+      liveDateISO: liveStatus === 'ok' && liveDate ? liveDate.toISOString() : null,
+    });
 
-    const histTemps = RACE_HISTORY.map(r => r.waterTemp);
-    const m1_mean = histTemps.reduce((a,b) => a+b, 0) / histTemps.length;
-    const m1_sd = Math.sqrt(histTemps.reduce((a,t) => a + (t - m1_mean)**2, 0) / (histTemps.length - 1));
-    const m1_lo = m1_mean - m1_sd;
-    const m1_hi = m1_mean + m1_sd;
+    // Aliases for rendering
+    const augustTemp = R.augustTemp;
+    const avgBias = R.bias.avg, biasSd = R.bias.sd;
+    const histTemps = R.histTemps;
+    const m1_mean = R.m1.mean, m1_sd = R.m1.sd, m1_lo = R.m1.lo, m1_hi = R.m1.hi;
+    const m2_baseline = R.m2.baseline, m2_trend = R.m2.trend, m2_temp = R.m2.temp,
+          m2_sd = R.m2.sd, m2_lo = R.m2.lo, m2_hi = R.m2.hi;
+    const m3_temp = R.m3.temp, m3_sd = R.m3.sd, m3_lo = R.m3.lo, m3_hi = R.m3.hi;
+    const m4_base = R.m4.base, m4_temp = R.m4.temp, m4_sd = R.m4.sd, m4_lo = R.m4.lo, m4_hi = R.m4.hi;
+    const augAnomaly = R.m4.anomaly, persistence = WE.CONSTANTS.PERSISTENCE;
 
-    /* ═══════════════════════════════════════════
-       METHOD 2: Climatological Normal + Warming Trend
-       30-year baseline for the specific date, adjusted
-       for observed Mediterranean warming
-       ═══════════════════════════════════════════ */
-    const m2_baseline = SEPT_CLIM_START - SEPT_COOLING_RATE * (raceDayOfSept - 1);
-    const m2_trend = TREND_RATE * (raceYear - TREND_BASE_YEAR);
-    const m2_temp = m2_baseline + m2_trend;
-    const m2_sd = 1.5; // typical interannual variability
-    const m2_lo = m2_temp - m2_sd;
-    const m2_hi = m2_temp + m2_sd;
-
-    /* ═══════════════════════════════════════════
-       METHOD 3: Seasonal Cooling Curve
-       Exponential decay from August peak to autumn,
-       calibrated against historical September SST
-       ═══════════════════════════════════════════ */
-    // T(d) = T_winter + (T_summer - T_winter) × exp(-λ × d)
-    // Calibrated: T_summer = Aug peak, T_winter asymptote = 14°C, λ tuned to match Sept normals
-    const T_winter = 14.0;
-    const T_summer = augustTemp;
-    // Days since Aug 15 peak (approx)
-    const daysSincePeak = (raceDayOfSept + 16); // days from Aug 15
-    // λ calibrated so that day 36 (Sept 20) gives ~23.5°C with normal Aug of 25.7
-    const lambda = 0.0085;
-    const m3_temp = T_winter + (T_summer - T_winter) * Math.exp(-lambda * daysSincePeak);
-    const m3_sd = 1.2;
-    const m3_lo = m3_temp - m3_sd;
-    const m3_hi = m3_temp + m3_sd;
-
-    /* ═══════════════════════════════════════════
-       METHOD 4: August Anomaly Propagation
-       If August ran hot/cold, September partially
-       inherits that anomaly. Persistence factor ~0.65
-       ═══════════════════════════════════════════ */
-    const augAnomaly = augustTemp - AUG_NORMAL;
-    const persistence = 0.65;
-    const m4_base = SEPT_CLIM_START - SEPT_COOLING_RATE * (raceDayOfSept - 1);
-    const m4_temp = m4_base + m2_trend + (persistence * augAnomaly);
-    const m4_sd = 1.1;
-    const m4_lo = m4_temp - m4_sd;
-    const m4_hi = m4_temp + m4_sd;
-
-    /* ═══════════════════════════════════════════
-       METHOD 5: Live Anomaly + Observed Cooling Rate
-       Compares observation to today's climatological
-       normal to get a live anomaly, then projects that
-       anomaly forward with decay. Much more robust than
-       naive linear extrapolation.
-       ═══════════════════════════════════════════ */
-    // Climatological normal for the observation day
-    const obsClim = hasObservation ? SEPT_CLIM_START - SEPT_COOLING_RATE * (obsDayOfSept - 1) + m2_trend : null;
-    // Live anomaly: how far off normal is the sea right now?
-    const liveAnomaly = hasObservation ? obsTemp - obsClim : null;
-    // Anomaly decay: anomalies shrink over time — ~5% per day regression to normal
-    const anomalyDecayRate = 0.05; // per day
-    const anomalyAtRace = hasObservation ? liveAnomaly * Math.exp(-anomalyDecayRate * daysUntilRace) : null;
-    // Race-day climatological normal (already computed as m2_temp)
-    const m5_temp = hasObservation ? m2_temp + anomalyAtRace : null;
-    // Uncertainty: base 0.3°C (measurement) + grows with days out, but slower than naive extrap
-    const m5_sd = hasObservation ? 0.3 + (daysUntilRace * 0.04) : null;
-    const m5_lo = m5_temp !== null ? m5_temp - m5_sd : null;
-    const m5_hi = m5_temp !== null ? m5_temp + m5_sd : null;
-    // Confidence rating based on days out
-    const m5_confidence = hasObservation ? (
-      daysUntilRace <= 3 ? 'HIGH' : daysUntilRace <= 7 ? 'MEDIUM' : daysUntilRace <= 14 ? 'LOW' : 'VERY LOW'
-    ) : null;
+    const hasObservation = R.m5 !== null;
+    const obsTemp = hasObservation ? R.m5.obsTemp : (liveTemp || 25.0);
+    const obsDayOfSept = hasObservation ? R.m5.obsDayOfSept : 1;
+    const daysUntilRace = hasObservation ? R.m5.daysUntilRace : 15;
+    const obsClim = hasObservation ? R.m5.obsClim : null;
+    const liveAnomaly = hasObservation ? R.m5.liveAnomaly : null;
+    const anomalyAtRace = hasObservation ? R.m5.anomalyAtRace : null;
+    const m5_temp = hasObservation ? R.m5.temp : null;
+    const m5_sd = hasObservation ? R.m5.sd : null;
+    const m5_lo = hasObservation ? R.m5.lo : null;
+    const m5_hi = hasObservation ? R.m5.hi : null;
+    const m5_confidence = hasObservation ? R.m5.confidence : null;
     const m5_confColor = hasObservation ? (
       daysUntilRace <= 3 ? 'var(--green)' : daysUntilRace <= 7 ? 'var(--blue)' : daysUntilRace <= 14 ? '#f57f17' : 'var(--red)'
     ) : null;
 
-    /* ═══════════════════════════════════════════
-       ENSEMBLE: Weighted average of all methods
-       ═══════════════════════════════════════════ */
-    const methods = [
-      { name: 'Historical Average', temp: m1_mean, sd: m1_sd, weight: 1.0 },
-      { name: 'Climatological Normal', temp: m2_temp, sd: m2_sd, weight: 1.2 },
-      { name: 'Cooling Curve', temp: m3_temp, sd: m3_sd, weight: 1.3 },
-      { name: 'August Anomaly', temp: m4_temp, sd: m4_sd, weight: 1.4 },
-    ];
-    if (m5_temp !== null) {
-      // Weight scales with proximity: high weight when close, fades when far out
-      const m5_weight = daysUntilRace <= 3 ? 3.0 : daysUntilRace <= 7 ? 2.0 : daysUntilRace <= 14 ? 1.0 : 0.5;
-      methods.push({ name: 'Live Anomaly', temp: m5_temp, sd: m5_sd, weight: m5_weight });
-    }
+    const methods = R.methods;
+    const ensemble_temp = R.ensemble.temp, ensemble_sd = R.ensemble.sd,
+          ensemble_lo = R.ensemble.lo, ensemble_hi = R.ensemble.hi;
+    const probAGWetsuit = R.prob.ag, probProWetsuit = R.prob.pro;
 
-    const totalWeight = methods.reduce((a, m) => a + m.weight, 0);
-    const ensemble_raw = methods.reduce((a, m) => a + m.temp * m.weight, 0) / totalWeight;
-    // Combined uncertainty (inverse-variance weighting)
-    const ensemble_var = 1 / methods.reduce((a, m) => a + m.weight / (m.sd * m.sd), 0);
-    const ensemble_sd = Math.sqrt(ensemble_var + biasSd * biasSd); // include bias uncertainty
-
-    // Apply measurement bias: official IRONMAN reading = model prediction + avg bias
-    // (avgBias is typically negative — official reads cooler than satellite/models)
-    const ensemble_temp = ensemble_raw + avgBias;
-    const ensemble_lo = ensemble_temp - 1.5 * ensemble_sd;
-    const ensemble_hi = ensemble_temp + 1.5 * ensemble_sd;
-
-    /* Wetsuit probabilities (P(temp ≤ threshold)) — based on bias-corrected official reading */
-    const probAGWetsuit = normalCDF((AG_THRESHOLD - ensemble_temp) / ensemble_sd) * 100;
-    const probProWetsuit = normalCDF((PRO_THRESHOLD - ensemble_temp) / ensemble_sd) * 100;
-
-    /* Verdict */
-    const verdictAG = probAGWetsuit >= 80 ? 'Likely wetsuit-legal' :
-                      probAGWetsuit >= 40 ? 'Borderline — could go either way' :
-                      'Likely non-wetsuit';
-    const verdictColor = probAGWetsuit >= 80 ? 'var(--green)' :
-                         probAGWetsuit >= 40 ? '#f57f17' : 'var(--red)';
+    const verdictAG = R.verdict;
+    const verdictColor = R.band === 'likely' ? 'var(--green)' :
+                         R.band === 'borderline' ? '#f57f17' : 'var(--red)';
 
     /* Tag helper */
     const tempTag = (t) => {

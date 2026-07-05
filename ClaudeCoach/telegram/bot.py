@@ -2421,6 +2421,13 @@ def prefetch_context(slug: str) -> str:
                 "ratio, dehydration, low sodium, caffeine outside 3-6 mg/kg). For the interactive per-leg schedule with "
                 "the gut-backlog graph, point them to https://diamondpeak.uk/cycling/fuelling-calculator.html")
             lines.append(
+                "For WETSUIT / water-temperature questions about the Cervia race, NEVER guess — call the shared "
+                "prediction engine (same one behind the Diamond Peak web predictor):  "
+                "plan_tools.py wetsuit  "
+                "-> predicted official race-morning water temp, wetsuit-legal probability (AG limit 24.5C, pro 21.9C), "
+                "live Adriatic SST from Open-Meteo, and a live-anomaly method that activates inside 30 days of the race. "
+                "Web version: https://diamondpeak.uk/cycling/cervia-wetsuit.html")
+            lines.append(
                 "NEVER restart the bot, run systemctl/service, reboot or kill the process while replying — it drops the "
                 "reply mid-send (this caused repeated ~25-min silences). Committed code changes apply on the next "
                 "natural restart; say 'live on next restart' and move on. To show a chart, emit a <<<CHART:TYPE:JSON>>> "
