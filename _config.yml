@@ -1,12 +1,32 @@
+# Jekyll excludes — what must NEVER reach the published site.
+# The public ClaudeCoach surface is ONLY the top-level dashboard files:
+#   index/coach/overview/athlete-*.html, training-visualiser.html,
+#   site-data.json, training-data*.json.
+# Every ClaudeCoach SUBDIRECTORY is excluded (athlete state, engine code, docs
+# with health data). If you add a new ClaudeCoach subdirectory, add it here —
+# and remember .gitignore is the real guard: what never enters the repo can
+# never be published.
 exclude:
+  - ClaudeCoach/athletes/
+  - ClaudeCoach/blueprints/
+  - ClaudeCoach/config/
+  - ClaudeCoach/docs/
+  - ClaudeCoach/docs-private/
   - ClaudeCoach/ironman-analysis/
+  - ClaudeCoach/lib/
+  - ClaudeCoach/logs/
+  - ClaudeCoach/onboarding/
   - ClaudeCoach/reference/
+  - ClaudeCoach/scripts/
+  - ClaudeCoach/system/
+  - ClaudeCoach/telegram/
   - ClaudeCoach/templates/
   - ClaudeCoach/README.md
   - ClaudeCoach/training-plan-2026-04-27_to_2026-05-17.md
   - ClaudeCoach/session-log.json
   - ClaudeCoach/heat-log.json
-  - ClaudeCoach/scripts/
+  - ClaudeCoach/last_activity_state.json
+  - ClaudeCoach/cc-gitpull.sh
   - CLAUDE.md
   - DESIGN.md
   - DESIGN_SETUP.md

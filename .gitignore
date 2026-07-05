@@ -14,7 +14,10 @@ ClaudeCoach/config/onboarding_state.json
 ClaudeCoach/config/backup.key
 
 # Athlete personal data — never commit to public repo
+# (current-state.md files were accidentally force-added 16 May–5 Jul 2026 and
+#  publicly served; untracked 5 Jul. Do not re-add athlete files while public.)
 ClaudeCoach/athletes/
 ClaudeCoach/ironman-analysis/fixtures/
+ClaudeCoach/docs-private/
 .DS_Store
 ClaudeCoach/.bug-reviews.json
