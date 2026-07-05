@@ -719,6 +719,15 @@ def process_charts(token, chat_id, response, slug=None):
                     data.get("efforts", []),
                     ftp=data.get("ftp", 316),
                 )
+            elif chart_type == "heat":
+                # Always re-fetch live: acclimation_score() + heat-log.json, never the
+                # model's JSON (same reasoning as the load chart).
+                if slug:
+                    try:
+                        data = _build_heat_payload(slug)
+                    except Exception as _fe:
+                        log(f"heat chart live re-fetch failed, falling back to model data: {_fe}")
+                png = _charts.heat_chart(data, coaching_level=coaching_level)
             if png:
                 send_photo(token, chat_id, png)
                 sent_types.add(chart_type)
@@ -1026,6 +1035,33 @@ def _build_load_payload(slug: str) -> dict:
         "seed_atl": seed_atl,
         "days": days,
     }
+
+
+def _build_heat_payload(slug: str, window_days: int = 45) -> dict:
+    """Build the heat_chart payload from heat.py's acclimation_score() + the
+    athlete's heat-log.json. Always re-fetched live, same reasoning as load chart."""
+    sys.path.insert(0, str(BASE.parent / "lib"))
+    import heat as heat_lib
+
+    today = date.today()
+    days = []
+    for i in range(window_days, -1, -1):
+        d = today - timedelta(days=i)
+        days.append({"date": d.isoformat(), "score": round(heat_lib.acclimation_score(slug, d), 1)})
+
+    log_file = BASE.parent / "athletes" / slug / "heat-log.json"
+    try:
+        entries = json.loads(log_file.read_text())
+    except Exception:
+        entries = []
+    cutoff = (today - timedelta(days=window_days)).isoformat()
+    events = [
+        {"date": str(e.get("date") or "")[:10], "dose": e.get("dose") or 1.0,
+         "method": e.get("method") or ""}
+        for e in entries if str(e.get("date") or "")[:10] >= cutoff
+    ]
+
+    return {"today": today.strftime("%m-%d"), "days": days, "events": events}
 
 
 def _load_chart_quick(token, chat_id, slug):
