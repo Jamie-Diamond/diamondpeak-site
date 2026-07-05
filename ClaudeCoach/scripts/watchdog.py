@@ -77,6 +77,23 @@ def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: 
                 f"T8 (Tier 2): Most recent date in heat-log.json is >7 days ago (or the log is missing/empty).\n"
             )
 
+    # Injury triggers are athlete-scoped: only an athlete with a structured `ankle`
+    # block in current-state.json is in ankle rehab. Unconditional T2 text made the
+    # watchdog narrate "ankle still in rehab" for Kathryn, who has no ankle injury.
+    has_ankle = False
+    try:
+        has_ankle = bool((json.loads((athlete_dir / "current-state.json").read_text())
+                          or {}).get("ankle"))
+    except Exception:
+        pass
+    t2 = ("T2 (Tier 2): CTL ramp >4/wk while ankle still in rehab (check current-state.md "
+          "ankle quality-sessions-resumed field)"
+          if has_ankle else
+          "T2: skip — this athlete has NO tracked injury rehab; never mention ankle or "
+          "rehab status for them")
+    t10_ankle = ("  - Also cross-check current-state.json ankle.weekly_run_km_this_week vs "
+                 "ankle.weekly_run_km_last_week (if fields exist)\n" if has_ankle else "")
+
     t11 = ""
     if strength_target:
         t11 = (
@@ -106,7 +123,7 @@ Pull live data via Bash (use today's date {today} for all calculations):
 
 Evaluate these triggers in order (skip any whose required data files are missing):
 T1 (Tier 2): ATL > CTL + 25 for 3+ consecutive days
-T2 (Tier 2): CTL ramp >4/wk while ankle still in rehab (check current-state.md ankle quality-sessions-resumed field)
+{t2}
 T3 (Tier 1): HRV trend down >7% over last 7 days
 T4 (Tier 1): Sleep <7h for 3+ days in last 7 (skip if no sleep data available)
 T5 (Tier 1): Missed planned sessions >=2 in last rolling 7 days
@@ -123,8 +140,7 @@ T6 (Tier 1): Aerobic decoupling >5% on any Z2 ride in last 7 days (check via act
 T10 (Tier 2): Run weekly km increase >10% week-on-week
   - Sum run distance (km) from history endpoint for Mon–today (current week)
   - Sum run distance for the 7 days prior (last week)
-  - Also cross-check current-state.json ankle.weekly_run_km_this_week vs ankle.weekly_run_km_last_week (if fields exist)
-  - Fire if this_week_km > last_week_km * 1.10 AND last_week_km > 0
+{t10_ankle}  - Fire if this_week_km > last_week_km * 1.10 AND last_week_km > 0
   - Fire message: "warning T10: run km +X% week-on-week ([this]km vs [last]km) — 10% cap applies"
 {t11}
 If NO triggers fire: output nothing. Silent run.
