@@ -87,7 +87,18 @@ def render_history(history, athlete_name):
                 stamp = datetime.fromisoformat(ts).strftime("[%a %H:%M] ")
             except Exception:
                 stamp = ""
-        lines.append(f"{stamp}{athlete_name}: {h['user']}")
+        # Image entries render as an explicit marker, never as bare text - a
+        # captionless photo used to be stored as the literal string "[image]",
+        # indistinguishable from a real text message that happened to be missing
+        # (the swim-splits misdiagnosis, where the bot mistook a dropped text
+        # reply for an unreadable photo).
+        if h.get("kind") == "image":
+            caption = h.get("user", "")
+            user_line = (f'[sent a photo, caption: "{caption}"]' if caption
+                         else "[sent a photo, no caption]")
+        else:
+            user_line = h["user"]
+        lines.append(f"{stamp}{athlete_name}: {user_line}")
         lines.append(f"ClaudeCoach: {h['assistant']}")
     return lines
 
