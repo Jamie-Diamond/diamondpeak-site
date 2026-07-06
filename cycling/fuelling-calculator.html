@@ -282,7 +282,7 @@
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong><br>
     <strong>v1.4</strong>: Moved the physiology maths (transporter caps, target formulas, plan-check thresholds) into a shared engine so the ClaudeCoach bot runs the exact same logic and the two never disagree. No change to the numbers.<br>
     <strong>v1.3</strong>: Aligned the Absorption Graph zones to the gut model. The green/amber/red bands now track your combined transporter cap (90 g/hr default, 120 gut-trained) instead of fixed thresholds, and a dashed line marks the tighter glucose cap so a plan that looks green on combined carbs but exceeds the glucose transporter is now visible. The two carb views are consistent.<br>
-    <strong>v1.8</strong>: Stale-plan protection. Plans saved by older versions are detected and flagged in Plan Check (their old targets — e.g. 6 mg/kg caffeine defaults — were causing failing reviews), with a prompt to rebuild. Optimise now hard-caps total caffeine at 6 mg/kg however the targets are set, never rotates bars or whole food on the run, always includes aid-station water even if none is picked for the leg, and upgrades water doses to full bottles (noting any remainder in the pattern) rather than silently missing the fluid target.<br>
+    <strong>v1.8</strong>: Stale-plan protection. Plans saved by older versions are detected and flagged in Plan Check (their old targets — e.g. 6 mg/kg caffeine defaults — were causing failing reviews), with a prompt to rebuild. Optimise now hard-caps total caffeine at 6 mg/kg however the targets are set, always includes aid-station water even if none is picked for the leg, and upgrades water doses to full bottles (noting any remainder in the pattern) rather than silently missing the fluid target. Bars and bananas picked for the run DO rotate — that stays the athlete&rsquo;s call, with only the soft plan-check warning.<br>
     <strong>v1.7</strong>: The optimiser now passes its own Plan Check. Sodium and caffeine live on the same repeating grid as carbs and fluid (no more scattered top-up sips); dose sizes are searched against carb, fluid AND bottle-capacity constraints; carbs ease off in the last stretch of the bike and start 10 minutes into the run; doses are modelled as swallowed over ~5 minutes rather than instant boluses. Bike bottles are drunk <strong>one at a time</strong> in cage order &mdash; swappable/refillable bottles (new &#9851; flag per cage) first, so cages empty in time for aid-station pickups; fixed aero bottles and concentrated mixes marked non-swappable are never replaced. Salt capsules take over when the electrolyte bottle runs out. Bike fluid target now includes recovering the swim&rsquo;s sweat loss. Top tube sticker redesigned to the pro block format: the ride splits into one block per bottle, each showing its total kit once (&times;N counts, block totals) with a red arrow meaning &ldquo;spread across this window&rdquo;.<br>
     <strong>v1.6</strong>: Race start and wake-up time inputs. The breakfast window is now wake-up &rarr; 1h before the gun, with real clock times shown on the plan; the meal size scales with digestion time (1&ndash;2 g/kg), and if you are awake less than 1h30 before the start the breakfast leg disappears and carbs + coffee move to the final hour instead. Bike cage setup only shows when the race has a bike leg.<br>
     <strong>v1.5</strong>: Simpler plans. The strategy generator now builds one repeating order per leg (e.g. every 12 min: &#8531; bottle &rarr; chew &rarr; water &rarr; repeat) covering carbs and fluid together, shown on the leg and race cards. Breakfast is a normal meal (porridge, toast, bagel + coffee) instead of race food. Caffeine target is body-weight based (4 mg/kg default) and caffeinated drinks are capped by it, so no more endless caffeine-drink sips. Added Maurten 320 CAF 100 and 1.5&times; concentrated 750 ml mixes. Bike cages have editable names. Top tube card redesigned as a pro-team-style printable sticker with your name and &times;N item counts.<br>
@@ -928,14 +928,8 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
       if(carbFoods[cq].meal)continue; // meals never join the race rotation
       if(carbFoods[cq].form==='liquid')drinkQ.push(carbFoods[cq]);else solidQ.push(carbFoods[cq]);
     }
-    // Never rotate bars / whole food on the run (the plan check would rightly
-    // flag it) — unless there is no other carb source at all
-    if(legName==='Run'){
-      var heavyRx2=/bar|banana|rice/i;
-      var lightQ=[];
-      for(var lq=0;lq<solidQ.length;lq++)if(!(solidQ[lq].form==='solid'&&heavyRx2.test(solidQ[lq].name)))lightQ.push(solidQ[lq]);
-      if(lightQ.length>0||drinkQ.length>0)solidQ=lightQ;
-    }
+    // Bars / whole food on the run are the athlete's call — they rotate if
+    // picked; the plan check raises its soft warning, nothing more
     // Caffeinated drinks lead the rotation (the caffeine budget below caps
     // them), so the caffeine target is met from bottles, front-loaded
     drinkQ.sort(function(a,b){return (b.caf||0)-(a.caf||0);});
