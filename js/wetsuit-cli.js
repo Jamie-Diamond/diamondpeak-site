@@ -68,13 +68,27 @@ function runLive(params) {
   var fcUrl = daysToRace >= 0 && daysToRace <= 9 ? MARINE_BASE + '&forecast_days=10' : null;
   var windUrl = daysToRace >= 0 && daysToRace <= 15 ? WEATHER_BASE + '&forecast_days=16' : null;
 
+  // Seasonal-anomaly baseline: the same ~30-day window in up to 3 prior years
+  // (the marine archive starts 2023). Only relevant when the race is beyond
+  // Method 5's 30-day window — inside it the live anomaly supersedes.
+  var baseUrls = [];
+  if (daysToRace > 30) {
+    var winStart = new Date(today.getTime() - 30 * 86400000);
+    for (var by = today.getUTCFullYear() - 1; by >= Math.max(2023, today.getUTCFullYear() - 3); by--) {
+      var s = isoDay(winStart).replace(/^\d{4}/, String(by));
+      var e = todayISO.replace(/^\d{4}/, String(by));
+      baseUrls.push(MARINE_BASE + '&start_date=' + s + '&end_date=' + e);
+    }
+  }
+
   return Promise.all([
     getJSON(recentUrl),
     getJSON(augUrl).catch(function () { return null; }),
     fcUrl ? getJSON(fcUrl).catch(function () { return null; }) : Promise.resolve(null),
-    windUrl ? getJSON(windUrl).catch(function () { return null; }) : Promise.resolve(null)
+    windUrl ? getJSON(windUrl).catch(function () { return null; }) : Promise.resolve(null),
+    Promise.all(baseUrls.map(function (u) { return getJSON(u).catch(function () { return null; }); }))
   ]).then(function (results) {
-    var recent = results[0], aug = results[1], fc = results[2], wf = results[3];
+    var recent = results[0], aug = results[1], fc = results[2], wf = results[3], baseline = results[4];
     var times = recent.daily.time, temps = recent.daily.sea_surface_temperature_max;
     var lastIdx = temps.length - 1;
     while (lastIdx >= 0 && temps[lastIdx] == null) lastIdx--;
@@ -101,6 +115,21 @@ function runLive(params) {
       });
     }
 
+    // Current-summer anomaly: mean of the last ~30 observed days minus the
+    // mean of the same window across the baseline years.
+    var summerAnomalyC = null, summerBaselineYears = 0;
+    var recent30 = temps.slice(Math.max(0, lastIdx - 29), lastIdx + 1).filter(function (t) { return t != null; });
+    var baseMeans = (baseline || []).filter(Boolean).map(function (b) {
+      var vals = ((b.daily || {}).sea_surface_temperature_max || []).filter(function (t) { return t != null; });
+      return vals.length ? vals.reduce(function (a, x) { return a + x; }, 0) / vals.length : null;
+    }).filter(function (v) { return v != null; });
+    if (recent30.length >= 15 && baseMeans.length) {
+      var recentMean = recent30.reduce(function (a, x) { return a + x; }, 0) / recent30.length;
+      var baseMean = baseMeans.reduce(function (a, x) { return a + x; }, 0) / baseMeans.length;
+      summerAnomalyC = recentMean - baseMean;
+      summerBaselineYears = baseMeans.length;
+    }
+
     var prediction = WE.predictWater({
       raceYear: raceYear,
       raceDayOfSept: raceDayOfSept,
@@ -108,11 +137,15 @@ function runLive(params) {
       liveTemp: temps[lastIdx],
       liveDateISO: times[lastIdx],
       forecastSeries: forecastSeries,
-      windDays: windDays
+      windDays: windDays,
+      summerAnomalyC: summerAnomalyC,
+      summerLeadDays: summerAnomalyC != null ? daysToRace : null,
+      summerBaseline: summerAnomalyC != null ?
+        'same 30-day window, mean of ' + summerBaselineYears + ' archive year(s)' : null
     });
     return {
       live: { temp: temps[lastIdx], date: times[lastIdx], augAvg: augAvg, augYear: augYear,
-              daysToRace: daysToRace,
+              daysToRace: daysToRace, summerAnomalyC: summerAnomalyC,
               forecastFetched: !!forecastSeries, windFetched: !!windDays,
               source: 'Open-Meteo Marine + Forecast APIs' },
       prediction: prediction

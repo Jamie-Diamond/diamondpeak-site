@@ -771,6 +771,10 @@ def cmd_wetsuit(args) -> dict:
                           "confidence": m5["confidence"],
                           "anomaly_c": round(m5["liveAnomaly"], 2)} if m5 else
                          "inactive — activates within 30 days of the race"),
+        "summer_anomaly": ({"anomaly_now_c": round(p["m7"]["anomalyNow"], 2),
+                            "retained_at_race_c": round(p["m7"]["anomalyAtRace"], 2),
+                            "note": "sea vs same dates 2023-25; seasonal persistence e-folding ~65d"}
+                           if p.get("m7") else "inactive (race <30 days: live anomaly supersedes)"),
         "forecast_method_active": p.get("m6") is not None,
         "forecast_method": ({"race_day_forecast_c": round(p["m6"]["temp"], 1),
                              "gap_days": p["m6"]["gapDays"]} if p.get("m6") else

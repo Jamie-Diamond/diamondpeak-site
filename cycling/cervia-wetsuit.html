@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Cervia Ironman Wetsuit Predictor v1.2 — Diamond Peak</title>
+<title>Cervia Ironman Wetsuit Predictor v1.3 — Diamond Peak</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@400;500;600&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../style.css">
@@ -86,7 +86,7 @@
   <a href="../index.html" class="back">&larr; Back to tools</a>
 
   <div class="kicker">Triathlon</div>
-  <h1>Cervia Ironman<br>Wetsuit Predictor <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.2</span></h1>
+  <h1>Cervia Ironman<br>Wetsuit Predictor <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:400;color:var(--muted);vertical-align:middle;">v1.3</span></h1>
   <p class="intro">
     Will it be a wetsuit or non-wetsuit swim at IRONMAN Italy Emilia-Romagna?
     This tool uses five independent prediction methods &mdash; empirical, model-based, and
@@ -100,6 +100,7 @@
 
   <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px;">
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong>
+    <strong>v1.3</strong> &ndash; Method 7: current-summer anomaly with seasonal persistence (e-folding ~65 days) &ndash; the far-out forecast now reacts to how hot the sea is running TODAY vs the 2023&ndash;25 same-window baseline, instead of ignoring pre-August observations.<br>
     <strong>v1.2</strong> &ndash; Method 6: physical ocean-model forecast SST (highest weight in race week). Leave-one-out backtest panel; ensemble uncertainty floored at the measured historical error (MAE ~2.2&deg;C weeks out &ndash; the probability is now honest about it). Bora/NE-wind cold-tail adjustment via split-normal (a late Bora is how 2024 went mandatory-wetsuit). Per-year August SST from the marine archive (2023&ndash;25).<br>
     <strong>v1.1</strong> &ndash; Defaults now target the next upcoming race (2026: Saturday 19 September). Added the 2025 race to the history (satellite SST 25.2&deg;C; official reading not found, flagged as estimated). Estimated years excluded from the measurement-bias calculation. Fixed a variable-ordering bug in the August SST fallback. Prediction maths extracted to a shared engine (js/wetsuit-engine.js) used identically by this page and the ClaudeCoach bot.<br>
     <strong>v1.0</strong> &mdash; Initial release. Five prediction methods for Adriatic water temperature at IRONMAN Italy Cervia — wetsuit or non-wetsuit swim decision.
@@ -155,6 +156,7 @@
     const [liveHistory, setLiveHistory] = useState([]); // last 30 days of SST
     const [forecastSeries, setForecastSeries] = useState(null); // ocean-model SST forecast (~8 days)
     const [windDays, setWindDays]       = useState(null);       // daily max wind forecast (~16 days)
+    const [summerAnomaly, setSummerAnomaly] = useState(null);   // {anomalyC, years} vs 2023-25 same-window baseline
 
     useEffect(() => {
       const fmtD = d => d.toISOString().slice(0, 10);
@@ -178,13 +180,22 @@
       const windUrl = 'https://api.open-meteo.com/v1/forecast?latitude=44.26&longitude=12.35'
         + '&daily=wind_speed_10m_max,wind_direction_10m_dominant&timezone=Europe/Rome&forecast_days=16';
 
+      // Same ~30-day window in the archive years (2023+) — baseline for the
+      // current-summer anomaly method (seasonal persistence, active >30 days out)
+      const win30 = new Date(); win30.setDate(win30.getDate() - 30);
+      const baseUrls = [];
+      for (let by = end.getFullYear() - 1; by >= Math.max(2023, end.getFullYear() - 3); by--) {
+        baseUrls.push(`${BASE}&start_date=${String(by) + fmtD(win30).slice(4)}&end_date=${String(by) + fmtD(end).slice(4)}`);
+      }
+
       Promise.all([
         fetch(recentUrl).then(r => r.json()),
         fetch(augUrl).then(r => r.json()).catch(() => null),
         fetch(fcUrl).then(r => r.json()).catch(() => null),
         fetch(windUrl).then(r => r.json()).catch(() => null),
+        Promise.all(baseUrls.map(u => fetch(u).then(r => r.json()).catch(() => null))),
       ])
-        .then(([recent, aug, fc, wf]) => {
+        .then(([recent, aug, fc, wf, baseline]) => {
           if (fc && fc.daily) {
             setForecastSeries(fc.daily.time.map((t, i) => ({
               date: t, temp: fc.daily.sea_surface_temperature_max[i] })));
@@ -193,6 +204,18 @@
             setWindDays(wf.daily.time.map((t, i) => ({
               date: t, speedKmh: wf.daily.wind_speed_10m_max[i],
               dirDeg: wf.daily.wind_direction_10m_dominant[i] })));
+          }
+          // Current-summer anomaly vs the baseline years' same window
+          const recent30 = (recent.daily.sea_surface_temperature_max || [])
+            .slice(-30).filter(t => t != null);
+          const baseMeans = (baseline || []).filter(Boolean).map(b => {
+            const vals = ((b.daily || {}).sea_surface_temperature_max || []).filter(t => t != null);
+            return vals.length ? vals.reduce((a, x) => a + x, 0) / vals.length : null;
+          }).filter(v => v != null);
+          if (recent30.length >= 15 && baseMeans.length) {
+            const rMean = recent30.reduce((a, x) => a + x, 0) / recent30.length;
+            const bMean = baseMeans.reduce((a, x) => a + x, 0) / baseMeans.length;
+            setSummerAnomaly({ anomalyC: rMean - bMean, years: baseMeans.length });
           }
           const times = recent.daily.time;
           const temps = recent.daily.sea_surface_temperature_max;
@@ -241,6 +264,9 @@
       liveTemp: liveStatus === 'ok' ? liveTemp : null,
       liveDateISO: liveStatus === 'ok' && liveDate ? liveDate.toISOString() : null,
       forecastSeries, windDays,
+      summerAnomalyC: summerAnomaly ? summerAnomaly.anomalyC : null,
+      summerLeadDays: summerAnomaly ? daysBetween : null,
+      summerBaseline: summerAnomaly ? `same 30-day window, mean of ${summerAnomaly.years} archive year(s)` : null,
     });
 
     // Aliases for rendering
@@ -601,6 +627,40 @@
           ) : (
             <div className="formula" style={{color:'var(--muted)'}}>
               Race day is beyond the ~8-day forecast horizon — method inactive
+            </div>
+          )}
+        </div>
+
+        {/* Method 7 */}
+        <div className="method" style={{opacity: R.m7 ? 1 : 0.4}}>
+          <div className="method-num">7</div>
+          <div className="method-type model">Model-Based</div>
+          <h4>Current-Summer Anomaly (Seasonal Persistence)</h4>
+          <p className="desc">
+            How hot is the sea running <em>right now</em> vs the same dates in recent years?
+            Marine-heatwave anomalies persist for months (e-folding ~65 days — standard
+            Mediterranean oceanography, not fitted here), so today's anomaly still carries
+            signal to race day even far out. Active only beyond 30 days from the race —
+            inside that window the Live Anomaly method supersedes it. Baseline is the
+            2023–25 marine archive (recent, warm-leaning years), so the anomaly — and this
+            method's pull — is conservative.
+          </p>
+          {R.m7 ? (
+            <>
+              <div className="formula">
+                anomaly now = <strong>{R.m7.anomalyNow >= 0 ? '+' : ''}{fmt(R.m7.anomalyNow, 2)}°C</strong> vs {R.m7.baseline}<br/>
+                retained over {R.m7.leadDays} days = e<sup>−{R.m7.leadDays}/65</sup> = {fmt(R.m7.retained * 100, 0)}%<br/>
+                prediction = {fmt(m2_temp)} (clim + trend) {R.m7.anomalyAtRace >= 0 ? '+' : ''}{fmt(R.m7.anomalyAtRace, 2)} = <strong>{fmt(R.m7.temp)}°C</strong>
+              </div>
+              <div className="result">
+                <span className="result-temp" style={{color:'var(--green)'}}>{fmt(R.m7.temp)}°C</span>
+                <span className="result-range">± {fmt(R.m7.sd)}°C ({fmt(R.m7.lo)} – {fmt(R.m7.hi)})</span>
+                {tempTag(R.m7.temp)}
+              </div>
+            </>
+          ) : (
+            <div className="formula" style={{color:'var(--muted)'}}>
+              Inactive — race within 30 days (Live Anomaly takes over) or no baseline data
             </div>
           )}
         </div>

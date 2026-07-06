@@ -65,6 +65,11 @@
     LAMBDA: 0.0085,              // cooling-curve decay constant
     PERSISTENCE: 0.65,           // Aug→Sept anomaly persistence factor
     ANOMALY_DECAY: 0.05,         // live-anomaly regression to normal, per day
+    // Seasonal (marine-heatwave scale) anomaly persistence — much slower than
+    // the day-scale ANOMALY_DECAY above. E-folding ~65 days is typical for
+    // Mediterranean summer SST anomalies (standard oceanography, not fitted
+    // to this dataset — the marine archive is too short to fit it).
+    SEASONAL_EFOLD_DAYS: 65,
     PRO_THRESHOLD: 21.9,         // wetsuit limits (°C)
     AG_THRESHOLD: 24.5,
     DEFAULT_AUG_SST: 26.2,
@@ -289,6 +294,30 @@
       }
     }
 
+    /* Method 7 — CURRENT-summer anomaly with seasonal persistence. The sea's
+       temperature TODAY vs the same dates in recent years carries real signal
+       months ahead (marine heatwaves persist), which methods 4/5 ignore until
+       August / race month. Active only OUTSIDE Method 5's window (>30 days
+       out) — inside it the live anomaly supersedes this. summerAnomalyC is
+       computed by the caller: mean(last ~30 days SST) minus the same-dates
+       mean of the baseline years (2023-25 archive), so it is an anomaly vs
+       RECENT climate — warm-biased baseline, hence conservative. */
+    var m7 = null;
+    if (params.summerAnomalyC != null && params.summerLeadDays != null && params.summerLeadDays > 30) {
+      var retained = Math.exp(-params.summerLeadDays / C.SEASONAL_EFOLD_DAYS);
+      m7 = {
+        anomalyNow: params.summerAnomalyC,
+        leadDays: params.summerLeadDays,
+        retained: retained,
+        anomalyAtRace: params.summerAnomalyC * retained,
+        baseline: params.summerBaseline || 'same dates, 2023-25 marine archive'
+      };
+      m7.temp = m2.temp + m7.anomalyAtRace;
+      m7.sd = 1.4;   // wide by construction — seasonal persistence is a weak signal
+      m7.lo = m7.temp - m7.sd; m7.hi = m7.temp + m7.sd;
+      m7.weight = 1.0;
+    }
+
     /* Bora / NE-wind cold-tail adjustment (heuristic — see CONSTANTS). Only
        wind days inside the window before the race count. */
     var wind = null;
@@ -323,6 +352,7 @@
     ];
     if (m5) methods.push({ key: 'm5', name: 'Live Anomaly', temp: m5.temp, sd: m5.sd, weight: m5.weight });
     if (m6) methods.push({ key: 'm6', name: 'Ocean-Model Forecast', temp: m6.temp, sd: m6.sd, weight: m6.weight });
+    if (m7) methods.push({ key: 'm7', name: 'Summer Anomaly (seasonal)', temp: m7.temp, sd: m7.sd, weight: m7.weight });
 
     var bt = backtest();
     var blend = _blend(methods, avgBias, biasSd);
@@ -357,7 +387,7 @@
       dataUpdated: C.DATA_UPDATED,
       raceYear: raceYear, raceDayOfSept: raceDayOfSept, augustTemp: augustTemp,
       bias: { avg: avgBias, sd: biasSd, n: biases.length },
-      m1: m1, m2: m2, m3: m3, m4: m4, m5: m5, m6: m6,
+      m1: m1, m2: m2, m3: m3, m4: m4, m5: m5, m6: m6, m7: m7,
       wind: wind,
       methods: methods,
       ensemble: ensemble,
