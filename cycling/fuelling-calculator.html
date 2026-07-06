@@ -1405,7 +1405,7 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
     var checks=checkPlan(race,abs,gm);
     if(checks.length>0){
       html+='<div id="checkSection"><div class="sec-head"><span class="sec-tag">Plan Check</span><div class="sec-rule"></div></div><div class="panel"><div class="panel-title">Evidence-based review of your plan</div>';
-      if(legacyPlan)html+='<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;margin-bottom:6px;background:var(--amber-bg);border-left:3px solid var(--amber);border-radius:4px"><span style="font-size:13px;flex-shrink:0">🔄</span><span style="font-size:12px;color:var(--ink2);line-height:1.5"><strong>This plan was built by an older version</strong> — its saved targets (e.g. caffeine defaults) and schedule predate the current engine, so the flags below mostly reflect stale inputs. Press <strong>Suggest targets</strong> then <strong>Optimise all legs</strong> to rebuild it.</span></div>';
+      if(legacyPlan)html+='<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;margin-bottom:6px;background:var(--amber-bg);border-left:3px solid var(--amber);border-radius:4px"><span style="font-size:13px;flex-shrink:0">🔄</span><span style="font-size:12px;color:var(--ink2);line-height:1.5"><strong>Your saved plan was built by an older version and has been rebuilt automatically</strong> — food picks kept, targets refreshed to current evidence, schedule regenerated. The old plan is backed up in this browser. Review the plan and the flags below.</span></div>';
       for(var ck=0;ck<checks.length;ck++){
         var chk=checks[ck];
         var cCol=chk.level==='risk'?'var(--red)':chk.level==='warn'?'var(--amber)':'var(--green)';
@@ -2277,6 +2277,23 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
   }
 
   loadState();
+  if(legacyPlan){
+    // A pre-v1.8 saved plan carries stale targets (old caffeine defaults) and
+    // an old-engine schedule. Rebuild it automatically — food picks are kept,
+    // targets refresh to current evidence, legs regenerate. The old plan is
+    // backed up in the browser first.
+    try{localStorage.setItem(SAVE_KEY+'-backup',localStorage.getItem(SAVE_KEY));}catch(e){}
+    updatePreRaceOffset();
+    suggestTargets();
+    var mRace=calcRace(),mLegs=getStratLegs(mRace);
+    for(var mi=0;mi<mLegs.length;mi++){
+      var mSt=state.strategies[mLegs[mi].name];
+      if(mSt&&mSt.foods&&mSt.foods.length>0){
+        try{generateStrategy(mLegs[mi].name,mLegs[mi].start,mLegs[mi].dur,mSt);}catch(e){}
+      }
+    }
+    saveState();
+  }
   render();
   var rT;window.addEventListener('resize',function(){clearTimeout(rT);rT=setTimeout(function(){var r=calcRace(),a=calcAbsorption(r.total),f=calcFluidTimeline(r.total),cf=calcCaffeine(r.total),en=calcEnergyBalance(r),g=calcGutModel(r.total),ai=aidStationTimes(r);if(state.showGutGraph)drawGutGraph(r,g);if(state.showGraph)drawAbsGraph(r,a,ai);if(state.showFluid)drawLineGraph('fluidGraph',r,f.ml,f.minutes,'#2980b9','ml/hr');if(state.showSodium)drawLineGraph('sodiumGraph',r,f.na,f.minutes,'#e8a838','mg/hr');if(state.showCaffeine)drawLineGraph('cafGraph',r,cf.plasma,cf.minutes,'#8b5cf6','mg');if(state.showEnergyGraph)drawEnergyGraph(r,en);},150);});
 })();
