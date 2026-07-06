@@ -119,12 +119,12 @@
   .race-card-items .item-aid{font-size:7px;color:var(--red);font-family:'DM Mono',monospace;background:var(--red-bg);padding:1px 3px;border-radius:2px}
   .race-card-empty{font-size:10px;color:var(--muted);font-style:italic;padding:8px 0}
   /* Top tube sticker — pro-team style: narrow strip, TIME | NUTRITION */
-  .tt-card{grid-column:1/-1;display:inline-block;background:#fff;border:2px solid #18160f;border-radius:3px;break-inside:avoid;width:200px}
+  .tt-card{grid-column:1/-1;display:inline-block;background:#fff;border:2px solid #18160f;border-radius:3px;break-inside:avoid;width:238px}
   .tt-name{border-bottom:2px solid #18160f;padding:3px 8px;background:#fff}
   .tt-name input{border:none;outline:none;width:100%;font-family:'DM Mono',monospace;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.04em;background:transparent;color:#18160f}
   .tt-table{width:100%;border-collapse:collapse}
-  .tt-table th{padding:3px 6px;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;color:#18160f;background:#fff;border-bottom:2px solid #18160f;text-align:center}
-  .tt-table th:first-child{border-right:2px solid #18160f}
+  .tt-table th{padding:3px 4px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;color:#18160f;background:#fff;border-bottom:2px solid #18160f;border-right:2px solid #18160f;text-align:center}
+  .tt-table th:last-child{border-right:none}
   .tt-table td{border-bottom:1px solid #18160f;vertical-align:middle;font-family:'DM Mono',monospace}
   .tt-table tr:last-child td{border-bottom:none}
   .tt-table .tt-time-col{font-weight:700;font-size:12px;color:#18160f;white-space:nowrap;width:52px;text-align:center;border-right:2px solid #18160f;padding:4px 6px}
@@ -135,14 +135,15 @@
   .tt-item .tt-qty{font-size:11px;font-weight:700;color:var(--red)}
   .tt-item .tt-chip-carbs{font-size:8px;color:var(--green);font-weight:500}
   .tt-aid-mark{font-size:8px;color:var(--red);font-family:'DM Mono',monospace;display:block;margin-bottom:1px}
-  /* Block cell: the block's kit shown once, red arrow = spread across the window */
-  .tt-block{position:relative;vertical-align:top;padding:6px 6px 18px;border-bottom:2px solid #18160f!important}
-  .tt-block-items{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center;position:relative;z-index:1}
-  .tt-block-total{font-size:8px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px;position:relative;z-index:1}
+  /* Bottle bar: one carb bottle spanning the rows it is drunk over */
+  .tt-bottle{position:relative;vertical-align:top;text-align:center;padding:5px 2px 16px;border-bottom:2px solid #18160f!important;border-right:2px solid #18160f;font-size:18px;width:62px}
+  .tt-bottle-name{font-size:8px;font-weight:700;font-family:'DM Mono',monospace;text-transform:uppercase;line-height:1.2;position:relative;z-index:1}
+  .tt-bottle .tt-chip-carbs{position:relative;z-index:1;display:block}
+  .tt-empty{border-right:2px solid #18160f}
+  .tt-wcell{font-family:'DM Mono',monospace;font-size:8px;text-align:center;border-right:2px solid #18160f;padding:2px;width:44px;color:var(--blue)}
+  .tt-fcell{padding:2px 4px;text-align:center}
   .tt-arrow{position:absolute;left:50%;top:56px;bottom:14px;width:2px;background:var(--red);z-index:0}
   .tt-arrow:after{content:'';position:absolute;bottom:-7px;left:-4px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid var(--red)}
-  .tt-pick{position:absolute;left:8px;font-size:15px;line-height:1;z-index:1}
-  .tt-pick span{font-size:7px;color:var(--red);font-family:'DM Mono',monospace;display:block}
   .tt-table .tt-finish{font-weight:700;color:#fff;background:var(--red);text-transform:uppercase;text-align:center;font-size:11px;padding:5px;border-bottom:none}
   .aid-pickup-card{background:#fff;border:2px solid var(--red);border-radius:8px;padding:16px;break-inside:avoid}
   .aid-pickup-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid var(--red);font-family:'DM Mono',monospace;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--red)}
@@ -1448,86 +1449,77 @@ function topoNoise(x,y){return _smooth(x,y)*.45+_smooth(x*2.03,y*2.03)*.3+_smoot
         var ttNm=(state.stickerName||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
         html+='<div class="tt-card">';
         html+='<div class="tt-name"><input id="ttName" type="text" value="'+ttNm+'" placeholder="Your name" maxlength="24"></div>';
-        html+='<table class="tt-table"><thead><tr><th>TIME</th><th>NUTRITION</th></tr></thead><tbody>';
+        html+='<table class="tt-table"><thead><tr><th>TIME</th><th>DRINK</th><th>H\u2082O</th><th>FOOD</th></tr></thead><tbody>';
         var bEnd=leg.dur,sInt=bEnd>300?30:20;
-        // \u2500\u2500 Split the ride into BLOCKS (one per bottle) like team stickers:
-        // the block's kit is shown once with \u00D7N counts and a red arrow
-        // meaning "spread this across the window". The generator marks each
-        // bottle-finishing sip in its reason; fall back to 2h blocks.
         var sorted3=leg.items.slice().sort(function(a,b){return a.timeMin-b.timeMin;});
-        var ttBlocks=[],curB={start:0,items:[]};
+        var nRows3=Math.ceil(bEnd/sInt);
+        // One column per action type: carb bottles | water & electrolyte | food.
+        // Salt caps, pills, gels and solids all live in FOOD.
+        function ttCol(f){if(f.carbs>0&&f.form==='liquid')return 'drink';if(f.carbs===0&&(f.ml||0)>0)return 'water';return 'food';}
+        // Carb bottles draw as vertical bars spanning the window they are
+        // drunk over. The generator names the cage in each sip's reason and
+        // marks the finishing sip, so consecutive bottles split cleanly.
+        var bottles3=[],curBt=null;
         for(var tbi=0;tbi<sorted3.length;tbi++){
-          var tIt=sorted3[tbi],tRel=tIt.timeMin-leg.start;
-          curB.items.push(tIt);
-          if(tIt.reason&&tIt.reason.indexOf('bottle finished')>=0){
-            curB.end=Math.min(bEnd,tRel+1);ttBlocks.push(curB);curB={start:curB.end,items:[]};
+          var tIt=sorted3[tbi],tF=getFoodById(tIt.foodId);if(!tF)continue;
+          if(ttCol(tF)!=='drink')continue;
+          var tRel=tIt.timeMin-leg.start,tP=tIt.portion||1;
+          if(!curBt||curBt.foodId!==tF.id||curBt.closed){
+            var cgM=/drink from ([^\u2014]+?)(\s+\u2014|$)/.exec(tIt.reason||'');
+            curBt={foodId:tF.id,food:tF,label:cgM?cgM[1].trim():tF.name,start:tRel,end:tRel,carbs:0,closed:false};
+            bottles3.push(curBt);
           }
+          curBt.end=tRel;curBt.carbs+=tF.carbs*tP;
+          if(tIt.reason&&tIt.reason.indexOf('bottle finished')>=0)curBt.closed=true;
         }
-        curB.end=bEnd;if(curB.items.length>0||ttBlocks.length===0)ttBlocks.push(curB);
-        if(ttBlocks.length===1&&bEnd>150){ // no bottle markers: split every 2h
-          var fb=[],fbT=0;
-          while(fbT<bEnd){var fbEnd=Math.min(bEnd,fbT+120);fb.push({start:fbT,end:fbEnd,items:sorted3.filter(function(e){var r=e.timeMin-leg.start;return r>=fbT&&r<fbEnd;})});fbT=fbEnd;}
-          ttBlocks=fb;
-        }
-        // Merge a tiny trailing block into the previous one
-        if(ttBlocks.length>1&&ttBlocks[ttBlocks.length-1].end-ttBlocks[ttBlocks.length-1].start<30){
-          var lastB=ttBlocks.pop();
-          ttBlocks[ttBlocks.length-1].end=lastB.end;
-          ttBlocks[ttBlocks.length-1].items=ttBlocks[ttBlocks.length-1].items.concat(lastB.items);
-        }
-        // Assign each tick row to the block containing its midpoint
-        var nRows3=Math.ceil(bEnd/sInt),rowBlock=[];
-        for(var rr=0;rr<nRows3;rr++){
-          var midT=(rr+0.5)*sInt,rbi=ttBlocks.length-1;
-          for(var fbk=0;fbk<ttBlocks.length;fbk++)if(midT>=ttBlocks[fbk].start&&midT<ttBlocks[fbk].end){rbi=fbk;break;}
-          rowBlock.push(rbi);
+        // Row ranges per bottle (sequential, never overlapping)
+        var prevR=-1;
+        for(var bt=0;bt<bottles3.length;bt++){
+          var b3=bottles3[bt];
+          b3.r0=Math.max(prevR+1,Math.floor(b3.start/sInt));
+          b3.r1=Math.max(b3.r0,Math.min(nRows3-1,Math.floor(b3.end/sInt)));
+          prevR=b3.r1;
         }
         function qtyLabel(q){var r=Math.round(q*2)/2;if(r<=1)return '';return '\u00D7'+(r%1?Math.floor(r)+'\u00BD':r);}
+        var btIdx=0;
         for(var rr2=0;rr2<nRows3;rr2++){
-          var rEnd=Math.min(bEnd,(rr2+1)*sInt),rDist=Math.round(state.bikeSpeed*(rEnd/60));
-          var newBlock=(rr2===0||rowBlock[rr2]!==rowBlock[rr2-1]);
-          // Aid flags live in the time column so the block cell stays clean
+          var rStart=rr2*sInt,rEnd=Math.min(bEnd,(rr2+1)*sInt),rDist=Math.round(state.bikeSpeed*(rEnd/60));
           var rAids='';
-          for(var sai=0;sai<bikeAids.length;sai++){var aRel=bikeAids[sai].timeMin-leg.start;if(aRel>=rr2*sInt&&aRel<rEnd)rAids+='<span class="tt-dist" style="color:var(--red);display:inline-block;margin-left:3px">\u26F3'+bikeAids[sai].km+'k</span>';}
-          html+='<tr><td class="tt-time-col"'+(rowBlock[rr2]!==(rowBlock[rr2+1]!==undefined?rowBlock[rr2+1]:-1)?' style="border-bottom:2px solid #18160f"':'')+'>'+fmtHM(rEnd)+'<div class="tt-dist">'+rDist+'km</div>'+rAids+'</td>';
-          if(newBlock){
-            var blk=ttBlocks[rowBlock[rr2]],rowSpan=0;
-            for(var rs=rr2;rs<nRows3&&rowBlock[rs]===rowBlock[rr2];rs++)rowSpan++;
-            // Aggregate the block's kit: one entry per food, \u00D7N in whole units
-            var bAgg={},bOrder=[],bWaterMl=0,bC=0,bMl=0;
-            for(var bag=0;bag<blk.items.length;bag++){
-              var bF3=getFoodById(blk.items[bag].foodId);if(!bF3)continue;
-              var bP3=blk.items[bag].portion||1;
-              bC+=bF3.carbs*bP3;bMl+=(bF3.ml||0)*bP3;
-              if(bF3.carbs===0&&(bF3.ml||0)>0&&(bF3.na||0)<=50){bWaterMl+=bF3.ml*bP3;continue;}
-              if(!bAgg[bF3.id]){bAgg[bF3.id]={food:bF3,qty:0};bOrder.push(bF3.id);}
-              bAgg[bF3.id].qty+=bP3;
-            }
-            html+='<td class="tt-block" rowspan="'+rowSpan+'">';
-            html+='<div class="tt-block-items">';
-            for(var bo=0;bo<bOrder.length;bo++){
-              var bg=bAgg[bOrder[bo]],bQ=qtyLabel(bg.qty);
-              var bTotC=Math.round(bg.food.carbs*bg.qty);
-              // Carb-less drinks (electrolyte) read better as volume than count
-              var bVol=(bg.food.carbs===0&&(bg.food.ml||0)>0)?(Math.round(bg.food.ml*bg.qty/100)/10)+'l':'';
-              html+='<span class="tt-item">'+bg.food.icon+(bVol?'<span class="tt-portion">'+bVol+'</span>':(bQ?'<span class="tt-qty">'+bQ+'</span>':''))+(bTotC>0?'<span class="tt-chip-carbs">'+bTotC+'g</span>':'')+'</span>';
-            }
-            if(bWaterMl>50)html+='<span class="tt-item">\uD83D\uDCA7<span class="tt-portion">'+(Math.round(bWaterMl/100)/10)+'l</span></span>';
-            html+='</div>';
-            html+='<div class="tt-block-total">'+Math.round(bC)+'g \u00B7 '+(Math.round(bMl/100)/10)+'l over '+fmtHM(blk.end-blk.start)+'</div>';
-            if(rowSpan>1)html+='<div class="tt-arrow"></div>';
-            // Aid pickups drawn at their proportional height inside the block
-            for(var bpk=0;bpk<blk.items.length;bpk++){
-              if(!blk.items[bpk].fromAid)continue;
-              var pkRel=(blk.items[bpk].timeMin-leg.start-blk.start)/(blk.end-blk.start);
-              var pkF=getFoodById(blk.items[bpk].foodId);if(!pkF)continue;
-              html+='<div class="tt-pick" style="top:'+Math.round(20+pkRel*70)+'%">'+pkF.icon+'<span>\u26F3</span></div>';
-            }
-            html+='</td>';
+          for(var sai=0;sai<bikeAids.length;sai++){var aRel=bikeAids[sai].timeMin-leg.start;if(aRel>=rStart&&aRel<rEnd)rAids+='<span class="tt-dist" style="color:var(--red);display:inline-block;margin-left:3px">\u26F3'+bikeAids[sai].km+'k</span>';}
+          html+='<tr><td class="tt-time-col">'+fmtHM(rEnd)+'<div class="tt-dist">'+rDist+'km</div>'+rAids+'</td>';
+          // DRINK: bottle bar starts here, or row is inside a bar, or empty
+          if(btIdx<bottles3.length&&bottles3[btIdx].r0===rr2){
+            var bb=bottles3[btIdx];
+            html+='<td class="tt-bottle" rowspan="'+(bb.r1-bb.r0+1)+'">'+bb.food.icon+'<div class="tt-bottle-name">'+bb.label+'</div><span class="tt-chip-carbs">'+Math.round(bb.carbs)+'g</span>'+(bb.r1>bb.r0?'<div class="tt-arrow"></div>':'')+'</td>';
+            btIdx++;
+          } else {
+            var inSpan=false;
+            for(var chk=0;chk<bottles3.length;chk++)if(rr2>bottles3[chk].r0&&rr2<=bottles3[chk].r1)inSpan=true;
+            if(!inSpan)html+='<td class="tt-empty"></td>';
           }
+          // WATER: ml to drink this window (water \uD83D\uDCA7, electrolyte \uD83E\uDDC2)
+          var wMl=0,naMl=0,fAgg={},fOrder=[];
+          for(var si3=0;si3<sorted3.length;si3++){
+            var e3=sorted3[si3],rel3=e3.timeMin-leg.start;
+            if(rel3<rStart||rel3>=rEnd)continue;
+            var f3=getFoodById(e3.foodId);if(!f3)continue;
+            var p3=e3.portion||1,c3=ttCol(f3);
+            if(c3==='water'){if((f3.na||0)>100)naMl+=f3.ml*p3;else wMl+=f3.ml*p3;}
+            else if(c3==='food'){if(!fAgg[f3.id]){fAgg[f3.id]={food:f3,qty:0};fOrder.push(f3.id);}fAgg[f3.id].qty+=p3;}
+          }
+          html+='<td class="tt-wcell">'+(wMl>0?'\uD83D\uDCA7'+Math.round(wMl):'')+(naMl>0?'<div style="color:#e8a838">\uD83E\uDDC2'+Math.round(naMl)+'</div>':'')+'</td>';
+          // FOOD: solids, gels, salt caps, pills at their row, grouped \u00D7N
+          html+='<td class="tt-fcell">';
+          for(var fo=0;fo<fOrder.length;fo++){
+            var fg2=fAgg[fOrder[fo]],fQ=qtyLabel(fg2.qty);
+            var halfQ=(!fQ&&Math.round(fg2.qty*2)/2===0.5)?'\u00BD':'';
+            var fC2=Math.round(fg2.food.carbs*fg2.qty);
+            html+='<span class="tt-item" style="font-size:16px">'+fg2.food.icon+(halfQ?'<span class="tt-portion">'+halfQ+'</span>':'')+(fQ?'<span class="tt-qty">'+fQ+'</span>':'')+(fC2>0?'<span class="tt-chip-carbs">'+fC2+'g</span>':'')+'</span>';
+          }
+          html+='</td>';
           html+='</tr>';
         }
-        html+='<tr><td class="tt-finish" colspan="2">FINISH ('+fmtHM(bEnd)+')</td></tr></tbody></table></div>';
+        html+='<tr><td class="tt-finish" colspan="4">FINISH ('+fmtHM(bEnd)+')</td></tr></tbody></table></div>';
       }
 
       // STANDARD CARD
