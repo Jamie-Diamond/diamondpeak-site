@@ -46,8 +46,8 @@
     { year: 2018, date: 'Sep 22', dayOfSept: 22, waterTemp: 24.8, onlineSST: 25.5, augSST: null, wetsuit: 'No (too warm)', source: 'Race reports — European heatwave year', onlineSource: 'seatemperature.info satellite' },
     { year: 2019, date: 'Sep 21', dayOfSept: 21, waterTemp: 24.6, onlineSST: 25.2, augSST: null, wetsuit: 'Yes (jellyfish exception)', source: 'Race reports — above limit, exception granted', onlineSource: 'seatemperature.info satellite' },
     { year: 2021, date: 'Sep 18', dayOfSept: 18, waterTemp: 24.0, onlineSST: 24.5, augSST: null, wetsuit: 'Yes (AG)', source: 'Satellite SST data', onlineSource: 'seatemperature.info satellite' },
-    { year: 2022, date: 'Sep 18', dayOfSept: 18, waterTemp: 25.0, onlineSST: 25.0, augSST: null, wetsuit: 'Borderline / No', source: 'Satellite SST — race delayed by storm', onlineSource: 'seatemperature.net' },
-    { year: 2023, date: 'Sep 16', dayOfSept: 16, waterTemp: 22.0, onlineSST: 24.0, augSST: 27.77, wetsuit: 'Yes (AG)', source: 'Race reports confirmed', onlineSource: 'seatemperature.info: 23.5°C' },
+    { year: 2022, date: 'Sep 18', dayOfSept: 18, waterTemp: 21.0, onlineSST: null, augSST: null, wetsuit: 'Yes (AG — wetsuit swim)', source: 'Athlete-reported ~21°C (research 6 Jul 2026). Race storm-delayed 17→18 Sep; the previous 25.0 was satellite for the PRE-storm window — a wind cold-drop like 2024', onlineSource: 'no same-day satellite (archive starts 2023)', reported: true },
+    { year: 2023, date: 'Sep 16', dayOfSept: 16, waterTemp: 22.0, onlineSST: 23.5, augSST: 27.77, wetsuit: 'Yes (AG)', source: 'Race reports confirmed', onlineSource: 'seatemperature.info: 23.5°C (field previously 24.0 — corrected to match source)' },
     { year: 2024, date: 'Sep 21', dayOfSept: 21, waterTemp: 21.5, onlineSST: 21.5, augSST: 29.75, wetsuit: 'Yes (mandatory)', source: 'Race reports — mandatory wetsuits (Bora-type cold drop)', onlineSource: 'seatemperature.info: 21.5°C' },
     { year: 2025, date: 'Sep 20', dayOfSept: 20, waterTemp: 24.5, onlineSST: 25.2, augSST: 27.44, wetsuit: 'Yes (AG)', source: 'Athlete raced it — wetsuit-legal, so official reading ≤24.5; exact value unknown', onlineSource: 'Open-Meteo Marine archive: 25.2°C', estimated: true }
   ];
@@ -185,7 +185,7 @@
     var rows = [], errs = [], calls = 0;
     for (var i = 0; i < real.length; i++) {
       var y = real[i];
-      var others = real.filter(function (r) { return r.year !== y.year; });
+      var others = real.filter(function (r) { return r.year !== y.year && r.onlineSST != null; });
       var biases = others.map(function (r) { return r.waterTemp - r.onlineSST; });
       var avgBias = _mean(biases), biasSd = _sd(biases);
       // m1 history: everything except the held-out year (estimated rows allowed
@@ -237,8 +237,10 @@
     var raceDate = new Date(Date.UTC(raceYear, 8, raceDayOfSept));
     var raceISO = raceDate.toISOString().slice(0, 10);
 
-    /* Measurement bias — genuine official readings only */
-    var biasRows = RACE_HISTORY.filter(function (r) { return !r.estimated; });
+    /* Measurement bias — genuine official readings with same-day satellite only
+       (2022 is athlete-reported with no valid same-day satellite: in the mean
+       and backtest, but not the bias stats) */
+    var biasRows = RACE_HISTORY.filter(function (r) { return !r.estimated && r.onlineSST != null; });
     var biases = biasRows.map(function (r) { return r.waterTemp - r.onlineSST; });
     var avgBias = _mean(biases);
     var biasSd = _sd(biases);

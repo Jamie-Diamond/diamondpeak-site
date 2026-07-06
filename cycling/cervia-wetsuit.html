@@ -100,7 +100,7 @@
 
   <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px;">
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong>
-    <strong>v1.3</strong> &ndash; Method 7: current-summer anomaly with seasonal persistence (e-folding ~65 days) &ndash; the far-out forecast now reacts to how hot the sea is running TODAY vs the 2023&ndash;25 same-window baseline, instead of ignoring pre-August observations.<br>
+    <strong>v1.3</strong> &ndash; Method 7: current-summer anomaly with seasonal persistence (e-folding ~65 days) &ndash; the far-out forecast now reacts to how hot the sea is running TODAY vs the 2023&ndash;25 same-window baseline, instead of ignoring pre-August observations. Data revision from a source sweep of all Cervia editions (full + 70.3): 2022 corrected to an athlete-reported 21&deg;C wetsuit swim (the race was storm-delayed a day; the old 25.0 was pre-storm satellite &ndash; the same wind cold-drop as 2024, whose 21.5 reading the satellite archive confirms against media reports of 23). 2023 satellite value aligned with its cited source. No official 70.3 readings survive online; a 2019 athlete report (21&ndash;22&deg;C) conflicts with the previous day's official 24.6 and is excluded pending resolution.<br>
     <strong>v1.2</strong> &ndash; Method 6: physical ocean-model forecast SST (highest weight in race week). Leave-one-out backtest panel; ensemble uncertainty floored at the measured historical error (MAE ~2.2&deg;C weeks out &ndash; the probability is now honest about it). Bora/NE-wind cold-tail adjustment via split-normal (a late Bora is how 2024 went mandatory-wetsuit). Per-year August SST from the marine archive (2023&ndash;25).<br>
     <strong>v1.1</strong> &ndash; Defaults now target the next upcoming race (2026: Saturday 19 September). Added the 2025 race to the history (satellite SST 25.2&deg;C; official reading not found, flagged as estimated). Estimated years excluded from the measurement-bias calculation. Fixed a variable-ordering bug in the August SST fallback. Prediction maths extracted to a shared engine (js/wetsuit-engine.js) used identically by this page and the ClaudeCoach bot.<br>
     <strong>v1.0</strong> &mdash; Initial release. Five prediction methods for Adriatic water temperature at IRONMAN Italy Cervia — wetsuit or non-wetsuit swim decision.
@@ -789,15 +789,15 @@
             </thead>
             <tbody>
               {RACE_HISTORY.map(r => {
-                const bias = r.waterTemp - r.onlineSST;
+                const bias = r.onlineSST != null ? r.waterTemp - r.onlineSST : null;
                 return (
                   <tr key={r.year}>
                     <td>{r.year}</td>
                     <td>{r.date}</td>
-                    <td className="temp-cell">{fmt(r.waterTemp)}°C{r.estimated ? '*' : ''}</td>
-                    <td className="temp-cell">{fmt(r.onlineSST)}°C</td>
-                    <td className="temp-cell" style={{color: r.estimated ? 'var(--muted)' : bias < -0.3 ? 'var(--blue)' : bias > 0.3 ? 'var(--red)' : 'var(--muted)'}}>
-                      {r.estimated ? 'est.' : `${bias >= 0 ? '+' : ''}${fmt(bias)}°C`}
+                    <td className="temp-cell">{fmt(r.waterTemp)}°C{r.estimated ? '*' : r.reported ? '†' : ''}</td>
+                    <td className="temp-cell">{r.onlineSST != null ? `${fmt(r.onlineSST)}°C` : 'n/a'}</td>
+                    <td className="temp-cell" style={{color: (r.estimated || bias == null) ? 'var(--muted)' : bias < -0.3 ? 'var(--blue)' : bias > 0.3 ? 'var(--red)' : 'var(--muted)'}}>
+                      {r.estimated ? 'est.' : bias == null ? 'n/a' : `${bias >= 0 ? '+' : ''}${fmt(bias)}°C`}
                     </td>
                     <td>{r.wetsuit}</td>
                   </tr>
@@ -814,7 +814,9 @@
           </table>
           <p style={{fontSize:10, color:'var(--muted)', marginTop:6}}>
             * No official race-morning reading found — estimated from satellite SST minus the average bias.
-            Estimated years are excluded from the bias calculation.
+            &nbsp;† Athlete-reported, not an official announcement (2022: storm-delayed race, wetsuit swim at ~21°C —
+            the pre-storm satellite said 25). Estimated years and years without same-day satellite are excluded
+            from the bias calculation.
           </p>
 
           {/* Bias Analysis */}
