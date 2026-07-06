@@ -771,9 +771,29 @@ def cmd_wetsuit(args) -> dict:
                           "confidence": m5["confidence"],
                           "anomaly_c": round(m5["liveAnomaly"], 2)} if m5 else
                          "inactive — activates within 30 days of the race"),
+        "forecast_method_active": p.get("m6") is not None,
+        "forecast_method": ({"race_day_forecast_c": round(p["m6"]["temp"], 1),
+                             "gap_days": p["m6"]["gapDays"]} if p.get("m6") else
+                            "inactive — activates within ~8 days of the race (physical ocean model; "
+                            "highest-weight method when live)"),
+        "bora_wind": (({"ne_wind_days": p["wind"]["boraDays"],
+                        "mean_shift_c": p["wind"]["shift"],
+                        "note": p["wind"]["note"]} if p["wind"]["boraDays"] else
+                       "no significant NE wind in the pre-race window")
+                      if p.get("wind") else "wind forecast not yet in range (~15 days)"),
+        "model_skill_backtest": {
+            "mae_c": round(p["backtest"]["mae"], 2),
+            "wetsuit_call_accuracy_pct": round(p["backtest"]["callAccuracy"] * 100),
+            "n_years": p["backtest"]["n"],
+            "sd_floored_to_backtest": p["ensemble"]["calibration"]["sdFloorApplied"],
+            "meaning": ("Weeks out, the model's real error is ~2C and the quoted probability is "
+                        "calibrated to that — treat far-out verdicts as genuinely uncertain. "
+                        "Race-week forecast + live anomaly are what settle the answer."),
+        },
         "methods": [{"name": m["name"], "temp_c": round(m["temp"], 1)} for m in p["methods"]],
-        "note": ("Ensemble of 5 methods, bias-corrected: official race-morning readings "
-                 "average ~0.6C cooler than satellite SST."),
+        "note": ("Ensemble of up to 6 methods, bias-corrected (official race-morning readings "
+                 "average ~0.6C cooler than satellite SST), uncertainty floored at backtested "
+                 "error, Bora cold-tail adjustment in race week."),
         "web_predictor": "https://diamondpeak.uk/cycling/cervia-wetsuit.html",
         "model_data_updated": p.get("dataUpdated"),
     }
