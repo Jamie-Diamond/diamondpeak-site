@@ -2477,6 +2477,19 @@ def prefetch_context(slug: str) -> str:
                 "live Adriatic SST from Open-Meteo, and a live-anomaly method that activates inside 30 days of the race. "
                 "Web version: https://diamondpeak.uk/cycling/cervia-wetsuit.html")
             lines.append(
+                "WEEK-EDIT FLOOR RULE (HARD — Jamie, 6 Jul 2026): if you create, edit, move or delete "
+                "planned events (icu_fetch push_workout/edit_workout/delete_workout or plan_tools "
+                "render-workout pushes) for the current or next week, you MUST then run  "
+                f"plan_tools.py week-tss --athlete {slug} --week-start <monday>  and  "
+                f"plan_tools.py required-tss --athlete {slug} --date <monday>  and compare total_tss "
+                "against weekly_tss_floor. If the week lands below the floor and week_type is not "
+                "deload/taper, you MUST say so in the SAME reply with a 🔥 UNDER-TRAINING line stating "
+                "the shortfall and CTL cost, and propose exactly where to add the volume (bike first). "
+                "NEVER present an under-floor week as acceptable, NEVER defend a fitness drop in a "
+                "build/specific week as fine — the athlete's structural constraints (travel, no bricks, "
+                "session placement) are to be honoured by ADDING duration to allowed sessions, not by "
+                "shrinking the week.")
+            lines.append(
                 "For RACE TIME / split predictions, NEVER invent numbers — call:  "
                 f"plan_tools.py race-predict --athlete {slug}  "
                 "-> Now / Race-day / Target scenarios from the shared IF ∝ √CTL model (same as /race and the website). "
