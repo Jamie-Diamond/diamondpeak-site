@@ -622,6 +622,13 @@ def load_chart(payload, coaching_level="mid"):
         bottom += np.array(tss_vals)
         present.append(sport)
 
+    # Rolling 7-day average load/day (trailing window over total daily TSS),
+    # plotted on the primary axis since it shares TSS units with the bars.
+    _WIN = 7
+    roll_vals = [float(np.mean(bottom[max(0, i - _WIN + 1):i + 1])) for i in range(n)]
+    roll_line, = ax.plot(x, roll_vals, color=_col(BRAND_INK, 0.6), linewidth=1.6,
+                         linestyle="--", zorder=3)
+
     # TSB line on the right twin, with coloured zone bands behind it.
     if seed_ctl is not None and seed_atl is not None:
         tsb_vals = _project_tsb(days, seed_ctl, seed_atl)
@@ -671,6 +678,8 @@ def load_chart(payload, coaching_level="mid"):
     handles.append(Line2D([0], [0], color=_col(BRAND_SECOND, 0.7), lw=1.4,
                           marker="o", markerfacecolor="#c9871f", markeredgecolor="white",
                           markersize=7, label=L["load_tsb"]))
+    handles.append(Line2D([0], [0], color=_col(BRAND_INK, 0.6), lw=1.6,
+                          linestyle="--", label="7d avg load/day"))
     ax.legend(handles=handles, loc="upper left", frameon=False, fontsize=8.5,
               ncol=min(len(handles), 4), columnspacing=1.0, handletextpad=0.4)
     return _render(fig)
