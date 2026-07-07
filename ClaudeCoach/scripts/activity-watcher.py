@@ -223,6 +223,7 @@ RUN:
 {run_injury_ask}
 Running power: if icu_average_watts is not null in activity_detail (Garmin running power configured), add one line after the HR line: "Running power: Xw avg · pace-power check: [brief note if pace and power effort level diverge — e.g. power high vs easy pace = headwind/elevation]". Skip entirely if icu_average_watts is null.
 Easy/Z2 verdict: When characterising run intensity use icu_average_hr (from activity_detail), Z2 ceiling = {run_hr_cap} bpm, zone time breakdown (icu_zone_times or extended_metrics), and total_ascent_m (from activity_detail). Apply deterministically: a run is EASY if avg_hr < {run_hr_cap} bpm AND (Z1+Z2 time) >= 75% of total run time. Do NOT flip to NOT EASY solely because Z3 exceeded 20% when avg_hr < {run_hr_cap} bpm AND total_ascent_m > 40m — terrain-driven HR spikes on climbs are expected in hilly sub-ceiling easy runs.
+Elevation source: total_elevation_gain / total_elevation_loss / total_ascent_m for a session ALWAYS come from the activity_detail root fields (whole-activity totals). NEVER read elevation from extended_metrics or icu_intervals entries — those are per-segment/per-interval values (often single-digit metres) and will misstate the session's actual terrain by an order of magnitude if quoted as the whole-activity gain.
 
 SWIM:
 - Pool with Strava laps (fetched above): rep durations/paces come from the STRAVA LAPS — they are
