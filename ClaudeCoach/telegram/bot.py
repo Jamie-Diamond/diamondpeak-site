@@ -2426,6 +2426,48 @@ def prefetch_context(slug: str) -> str:
             except Exception:
                 pass
 
+        # Same "already answered" treatment for today's RPE/nutrition (from
+        # session-log.json), and for whether the most recent activity has already
+        # been debriefed (from last_activity_state.json) — without these, a
+        # follow-up message that just adds a data point (e.g. "carbs were 60g/hr")
+        # gets treated as new information to build a full debrief around, instead
+        # of being appended to the debrief that already went out.
+        try:
+            sl_path = BASE.parent / "athletes" / slug / "session-log.json"
+            if sl_path.exists():
+                sl = json.loads(sl_path.read_text())
+                today_str = today.isoformat()
+                today_answered = []
+                for s in sl:
+                    if s.get("date") != today_str:
+                        continue
+                    sport = s.get("sport", "session")
+                    if s.get("rpe") is not None:
+                        today_answered.append(f"RPE for today's {sport} logged: {s['rpe']} — do not ask again")
+                    if s.get("nutrition_g_carb") is not None:
+                        today_answered.append(
+                            f"Nutrition for today's {sport} logged: {s['nutrition_g_carb']}g/hr carbs — do not ask again")
+                if today_answered:
+                    lines.append("Already answered today: " + "  |  ".join(today_answered))
+        except Exception:
+            pass
+
+        try:
+            last_act_state_path = BASE.parent / "athletes" / slug / "last_activity_state.json"
+            if last_act_state_path.exists():
+                last_state = json.loads(last_act_state_path.read_text())
+                notified_at = last_state.get("notified_at")
+                last_id = last_state.get("last_id")
+                if notified_at and last_id:
+                    age_s = (datetime.now() - datetime.fromisoformat(notified_at)).total_seconds()
+                    if age_s < 10800:  # 3h — matches build_keyboard's post-session window
+                        lines.append(
+                            f"Activity {last_id} was already debriefed {int(age_s // 60)}min ago. If the athlete's "
+                            "next message just adds a data point for it (RPE, nutrition, notes), acknowledge that "
+                            "point only — do NOT regenerate the full debrief.")
+        except Exception:
+            pass
+
         # Deterministic planning numbers — computed here so the model never does
         # TSS/CTL arithmetic by hand (the 14 Jun planning failure). Reuses data
         # already fetched above; no extra network. See lib/plan_tools.py.
