@@ -127,9 +127,16 @@ def render_workout(sport: str, segments: list) -> dict:
     lines, flat = [], []
 
     def _line(seg):
-        """Return the structured-text line for a segment, or None; never mutates flat."""
-        mins = int(round(float(seg.get("minutes") or seg.get("min") or 0)))
-        if mins <= 0:
+        """Return the structured-text line for a segment, or None; never mutates flat.
+
+        Sub-minute segments (e.g. a 15-20s swim rest) used to round to 0 minutes
+        and silently vanish from the pushed workout, leaving no rest cue on the
+        watch (confirmed 2026-07-09). Durations under 60s now render in seconds —
+        ICU's structured-text format accepts "Ns" steps same as "Nm".
+        """
+        raw_min = float(seg.get("minutes") or seg.get("min") or 0)
+        secs = int(round(raw_min * 60))
+        if secs <= 0:
             return None, 0
         zone = seg.get("zone")
         lo, hi = (_band(sport, zone, float(seg["if"])) if seg.get("if") is not None
@@ -137,6 +144,9 @@ def render_workout(sport: str, segments: list) -> dict:
         # NO trailing zone label: a token like "Z2" makes ICU parse the step as power
         # ZONE 2 and discard the explicit %-range target (-> empty chart). The %-range
         # IS the target; the human zone name lives in description_raw.
+        if secs < 60:
+            return f"- {secs}s {lo}-{hi}%{suffix}", secs / 60.0
+        mins = int(round(secs / 60.0))
         return f"- {mins}m {lo}-{hi}%{suffix}", mins
 
     def _flat(seg, mins):
