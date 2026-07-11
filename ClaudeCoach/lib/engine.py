@@ -387,8 +387,28 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
         return f"Error calling claude: {e}"
 
 
+def _tool_input_summary(inp):
+    """Short, plain-text hint at what a tool_use block is doing, for the live
+    status line (Phase 3). Prefers the fields that identify the action - a Bash
+    command, a file path - and truncates hard. Never raises; returns ''."""
+    try:
+        if not isinstance(inp, dict):
+            return ""
+        for key in ("command", "file_path", "path", "file", "query", "pattern"):
+            val = inp.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()[:80]
+        for val in inp.values():
+            if isinstance(val, str) and val.strip():
+                return val.strip()[:80]
+    except Exception:
+        pass
+    return ""
+
+
 def _stream_once(prompt, model, extra_args, cwd):
-    """One streaming claude invocation. Yields ('chunk', snapshot). Returns
+    """One streaming claude invocation. Yields ('chunk', snapshot) and, when a
+    tool_use block appears, ('status', tool_name, input_summary). Returns
     (final, streamed, session_id, returncode, t_init, t_first). Never raises —
     errors are logged and reported through the return tuple."""
     streamed = ""
@@ -424,8 +444,17 @@ def _stream_once(prompt, model, extra_args, cwd):
             elif ev_type == "assistant":
                 snapshot = ""
                 for block in (ev.get("message") or {}).get("content", []):
-                    if block.get("type") == "text":
+                    btype = block.get("type")
+                    if btype == "text":
                         snapshot = block.get("text", "")
+                    elif btype == "tool_use":
+                        # Surface tool activity so the transport can show a live
+                        # status line (Phase 3). Text blocks still drive the reply;
+                        # this only ADDS status events - the ('chunk'|'final')
+                        # contract stays intact, so downstream consumers that only
+                        # know 'chunk'/'final' keep working.
+                        yield ("status", block.get("name", ""),
+                               _tool_input_summary(block.get("input") or {}))
                 if snapshot:
                     streamed = snapshot
             elif ev_type == "content_block_delta":
@@ -447,9 +476,12 @@ def _stream_once(prompt, model, extra_args, cwd):
 
 def stream_claude(user_message, config, history, model=MODEL_OPUS,
                   system_prompt_file=None, athlete_name="Jamie", context=""):
-    """Generator over a streaming Claude run. Yields (kind, text):
-      ('chunk', snapshot) — growing reply to display live (transport throttles edits)
-      ('final', full)     — authoritative full reply, emitted exactly once at the end
+    """Generator over a streaming Claude run. Yields:
+      ('chunk', snapshot)                 — growing reply to display live (transport throttles edits)
+      ('status', tool_name, input_hint)   — a tool_use block appeared; transport may show a status line
+      ('final', full)                     — authoritative full reply, emitted exactly once at the end
+    Only ('chunk',...) and ('final',...) carry reply text; ('status',...) is purely
+    for the live UI and must never be logged or treated as the reply.
     assistant events are full snapshots (replace); content_block_delta events are
     incremental (append); result replaces all. Transport-agnostic by design."""
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
