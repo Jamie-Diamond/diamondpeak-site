@@ -1501,6 +1501,67 @@ def _verify_logged_reply(slug: str, before_ts: float, clean: str) -> str:
     log(f"[{slug}] WARN: Claude replied 'Logged.' but no log file was updated — possible silent write failure")
     return "⚠️ Something went wrong saving that — please try again."
 
+
+_SESSION_REF_RE = re.compile(
+    r"\b(today'?s|tomorrow'?s|this (morning|afternoon|evening)'?s)?\s*"
+    r"(session|ride|run|swim|workout|race|set|interval)\b", re.IGNORECASE)
+_TARGET_LANG_RE = re.compile(
+    r"\b(pace|power|watts?|w/kg|threshold|ftp|zone\s?\d|heart rate|hr|bpm|target|effort)\b",
+    re.IGNORECASE)
+_DURATION_RE = re.compile(
+    r"\b\d+(\.\d+)?\s*(min|mins|minute|minutes|hour|hours|hr|hrs)\b", re.IGNORECASE)
+_DISTANCE_RE = re.compile(
+    r"\b\d+(\.\d+)?\s*(km|kilometre|kilometer|kilometres|kilometers|mile|miles|mi)\b",
+    re.IGNORECASE)
+
+
+def _preview_missing_duration(clean: str) -> bool:
+    """True if the reply discusses an upcoming/in-progress session in pace/power/
+    HR/target language but states no duration or distance figure anywhere."""
+    return bool(
+        _SESSION_REF_RE.search(clean)
+        and _TARGET_LANG_RE.search(clean)
+        and not _DURATION_RE.search(clean)
+        and not _DISTANCE_RE.search(clean)
+    )
+
+
+def _verify_session_preview(slug: str, clean: str) -> str:
+    """Deterministic backstop for the 'always state duration/distance in session
+    previews' rule (persistent-rules.md) — prose-only compliance kept slipping
+    (re-violated 2026-07-10), so this checks the actual reply text rather than
+    relying on the model re-reading the rules file. If a duration/distance figure
+    is missing, try to resolve it from the athlete's upcoming ICU events (same
+    source used for the /today context) and append it; if it can't be resolved,
+    flag the reply instead of sending it bare."""
+    if not _preview_missing_duration(clean):
+        return clean
+    try:
+        sys.path.insert(0, str(BASE.parent / "lib"))
+        from icu_api import IcuClient
+        athletes = json.loads(ATHLETES_CONFIG.read_text())
+        a = athletes[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+        today = date.today()
+        events = client.get_events(today.isoformat(), (today + timedelta(days=2)).isoformat())
+        ev = next((e for e in (events or []) if e.get("moving_time") or e.get("distance")), None)
+        if ev:
+            bits = []
+            dur = round((ev.get("moving_time") or 0) / 60)
+            if dur:
+                bits.append(f"{dur}min")
+            dist = ev.get("distance") or 0
+            if dist:
+                bits.append(f"{dist / 1000:.1f}km")
+            if bits:
+                return clean.rstrip() + f"\n\n({' / '.join(bits)})"
+    except Exception as e:
+        log(f"[{slug}] session preview duration lookup failed: {e}")
+    log(f"[{slug}] WARN: reply states pace/power/HR targets with no duration/distance "
+        "and none could be resolved from events")
+    return clean.rstrip() + "\n\n⚠️ Duration/distance not confirmed above — check before starting."
+
+
 def _load_profile(slug: str) -> dict:
     f = _athlete_dir(slug) / "profile.json"
     try:
@@ -3191,6 +3252,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             )
             clean = process_charts(token, chat_id, response, slug=slug)
             clean = _verify_logged_reply(slug, before_ts, clean)
+            clean = _verify_session_preview(slug, clean)
             clean = _strip_model_countdown(clean, athlete)
             final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
             # Send the text reply FIRST so the athlete sees the answer immediately —
@@ -3232,6 +3294,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
 
         clean = process_charts(token, chat_id, response, slug=slug)
         clean = _verify_logged_reply(slug, before_ts, clean)
+        clean = _verify_session_preview(slug, clean)
         clean = _strip_model_countdown(clean, athlete)
         final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
         if placeholder_id:
