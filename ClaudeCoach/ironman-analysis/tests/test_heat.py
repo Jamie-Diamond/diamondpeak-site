@@ -24,13 +24,13 @@ class TestExposureEntry:
     def test_long_hot_outdoor_ride_full_base_dose(self):
         e = heat.exposure_entry(_act(temp=28.5, mins=95))
         assert e is not None
-        assert e["base_dose"] == 1.0
+        assert e["base_dose"] == heat.base_dose(95)
         assert e["temperature_c"] == 28.5
         assert e["date"] == "2026-07-01"
 
     def test_short_hot_session_half_base_dose(self):
         e = heat.exposure_entry(_act(mins=40))
-        assert e["base_dose"] == 0.5
+        assert e["base_dose"] == heat.base_dose(40)
 
     def test_hotter_session_scores_higher(self):
         cool = heat.exposure_entry(_act(temp=26.0, mins=90))
@@ -48,7 +48,7 @@ class TestExposureEntry:
         assert e["temp_mult"] == 1.0
         assert e["hr_strain_mult"] == 1.0
         assert e["humidity_mult"] == 1.0
-        assert e["dose"] == 1.0
+        assert e["dose"] == heat.base_dose(90)
 
     def test_missing_hr_and_tss_neutral_strain(self):
         e = heat.exposure_entry(_act(temp=30.0, mins=90, tss=None, avg_hr=None))
@@ -168,3 +168,13 @@ class TestState:
         # opt-in means nothing if heat itself is inactive
         self._write(athlete, False, None)
         assert heat.state("x", {"heat_maintenance": True})["maintenance"] is False
+
+
+class TestBaseDose:
+    # Calibration anchors: the saturating base curve is tuned to hit these
+    # two points exactly (base_dose(30)=0.5, base_dose(60)=1.0).
+    def test_anchor_30min_is_half_dose(self):
+        assert heat.base_dose(30) == 0.5
+
+    def test_anchor_60min_is_full_dose(self):
+        assert heat.base_dose(60) == 1.0
