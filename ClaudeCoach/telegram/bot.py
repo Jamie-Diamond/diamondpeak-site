@@ -3457,18 +3457,21 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     """Telegram wrapper over engine.stream_claude implementing the Phase 3 two-
     message UX. All generation lives in lib/engine.py; this only does transport.
 
-    msg1 (the placeholder) becomes a LIVE STATUS line rewritten ~1/sec by a
-    background ticker while tools run. When the reply first becomes visible we
-    STOP editing msg1, send a NEW msg2, and stream the reply into it (the same
-    1.5s throttle + skip-unchanged guard as before). At the end msg1 is collapsed
-    to a one-line summary above the reply. If the reply beats the ~1.5s grace
-    period (e.g. a resumed session answering instantly), no status is ever shown
-    and the placeholder is streamed into directly - exactly the old behaviour.
+    msg1 (the placeholder) is SILENT (disable_notification set by the caller) and
+    becomes a LIVE STATUS line rewritten ~1/sec by a background ticker while tools
+    run. When the reply first becomes visible we ALWAYS STOP editing msg1, send a
+    NEW notifying msg2, and stream the reply into it (the same 1.5s throttle +
+    skip-unchanged guard as before) - so the athlete gets exactly one push per
+    turn and it lands on the ANSWER, never on the thinking message (Phase 3b).
+    At the end msg1 is tidied: collapsed to a one-line summary if a status line
+    was actually shown, otherwise deleted (it only ever held "…"), so no stale
+    silent bubble lingers above the reply.
 
     Returns (response, reply_id): `reply_id` is the message the caller must edit
-    with the fully-processed final reply (msg2 when two-message, else the
-    placeholder). Only ('chunk'|'final') text is ever returned/logged; ('status')
-    events drive msg1 alone and never reach history or the capture-verify path."""
+    with the fully-processed final reply (normally msg2; the placeholder only in
+    the rare msg2-send-failure degradation). Only ('chunk'|'final') text is ever
+    returned/logged; ('status') events drive msg1 alone and never reach history
+    or the capture-verify path."""
     t_start = time.time()
     not_before = t_start + 1.5
     ticker = None
@@ -3476,6 +3479,7 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     reply_started = False
     msg2_id = None
     reply_id = placeholder_id
+    status_shown = False     # did msg1 ever display a real live-status line?
     last_edit = 0.0
     last_sent = ""
     final = None
@@ -3509,24 +3513,25 @@ def call_claude_streaming(token, chat_id, placeholder_id,
                 continue
             if not reply_started:
                 reply_started = True
-                if ticker is not None and ticker.shown:
-                    # Status was displayed -> the reply goes to a fresh msg2. Stop
-                    # msg1 edits FIRST so Telegram cannot interleave msg1 and msg2.
+                # Stop msg1 edits FIRST so Telegram cannot interleave msg1 and msg2,
+                # and note whether a live-status line was actually shown (drives the
+                # end-of-stream tidy: collapse-to-summary vs delete).
+                if ticker is not None:
+                    status_shown = ticker.shown
                     ticker.stop()
-                    r = tg_post(token, "sendMessage",
-                                {"chat_id": chat_id, "text": "…", "parse_mode": "Markdown"})
-                    msg2_id = (r.get("result") or {}).get("message_id")
-                    if msg2_id:
-                        reply_id = msg2_id
-                    else:
-                        # msg2 send failed: degrade to reusing the status message as
-                        # the reply target and skip the collapse.
-                        reply_id = placeholder_id
+                # The reply ALWAYS lands in a FRESH, NOTIFYING msg2 (no
+                # disable_notification) - on BOTH paths (tools shown, or the reply
+                # beating the ~1.5s grace). msg1 stayed silent, so this fresh send is
+                # the single push per turn and it fires the moment the answer starts
+                # appearing (Phase 3b). Streaming then edits msg2 in place (no re-ping).
+                r = tg_post(token, "sendMessage",
+                            {"chat_id": chat_id, "text": "…", "parse_mode": "Markdown"})
+                msg2_id = (r.get("result") or {}).get("message_id")
+                if msg2_id:
+                    reply_id = msg2_id
                 else:
-                    # Reply beat the grace period (or no tools ran) -> single-message
-                    # flow: stream straight into the placeholder, as before Phase 3.
-                    if ticker is not None:
-                        ticker.stop()
+                    # msg2 send failed (rare API error): degrade to reusing the
+                    # placeholder as the reply target and skip the collapse/delete.
                     reply_id = placeholder_id
 
             now = time.time()
@@ -3543,15 +3548,22 @@ def call_claude_streaming(token, chat_id, placeholder_id,
         if ticker is not None:
             ticker.stop()
 
-    # Collapse msg1 to a one-line summary ONLY when a separate msg2 exists; if the
-    # reply reused the placeholder, its final edit (in the caller) turns it into
-    # the reply, so there is nothing to collapse.
+    # Tidy msg1 once the reply has its own msg2 (skip the degraded path where the
+    # reply reused the placeholder). If a live-status line was actually shown,
+    # collapse msg1 to a one-line past-tense summary of what ran (kept above the
+    # reply; editMessageText never pings). Otherwise msg1 only ever held "…" (the
+    # reply beat the grace, or no tools ran) - delete it so no stale silent bubble
+    # lingers above the answer.
     if msg2_id is not None:
-        pasts = [p for _, p in tools_seen] or ["done"]
-        summary = ", ".join(pasts)
-        summary = summary[0].upper() + summary[1:]
-        tg_post(token, "editMessageText",
-                {"chat_id": chat_id, "message_id": placeholder_id, "text": summary})
+        if status_shown:
+            pasts = [p for _, p in tools_seen] or ["done"]
+            summary = ", ".join(pasts)
+            summary = summary[0].upper() + summary[1:]
+            tg_post(token, "editMessageText",
+                    {"chat_id": chat_id, "message_id": placeholder_id, "text": summary})
+        else:
+            tg_post(token, "deleteMessage",
+                    {"chat_id": chat_id, "message_id": placeholder_id})
 
     return (final if final is not None else "(no response)", reply_id)
 
@@ -3604,9 +3616,13 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             return
 
         typing(token, chat_id)
-        # Send a placeholder and stream chunks into it
+        # Send a placeholder and stream chunks into it. SILENT (disable_notification):
+        # this is the thinking/status message, never the answer. The athlete must get
+        # exactly one push per turn and it must land on the REPLY (a fresh notifying
+        # msg2 sent by call_claude_streaming), never on this "…" / live-status message.
         placeholder = tg_post(token, "sendMessage", {
             "chat_id": chat_id, "text": "…", "parse_mode": "Markdown",
+            "disable_notification": True,
         })
         placeholder_id = (placeholder.get("result") or {}).get("message_id")
 
