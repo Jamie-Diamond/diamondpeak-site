@@ -50,6 +50,14 @@ TOOLS   = "Read,Write,Edit"
 # pile stays over ceiling (a card is already pending / a human just dismissed one).
 CONSOLIDATE_MIN_INTERVAL = 24 * 3600
 
+# bug-fixer's --fix builds worktrees/branches/review-ids keyed on the DATE + group index, not
+# the athlete (rid = "<today>-<idx>"), so two concurrent --fix processes would collide on the
+# same worktree path and clobber .bug-reviews.json. session-sync walks athletes sequentially and
+# could otherwise launch one detached --fix each, so we serialise: at most ONE consolidation is
+# launched per session-sync run. Reset at the top of main(); the per-athlete 24h marker then
+# round-robins which athlete triggers on subsequent hourly runs.
+_LAUNCH_STATE = {"fired": False}
+
 sys.path.insert(0, str(BASE / "lib"))
 import claude_call
 
@@ -251,8 +259,11 @@ def _has_awaiting_prune(reviews: dict, slug: str) -> bool:
 
 def _marker_age_ok(marker: Path, now: float, min_interval: int = CONSOLIDATE_MIN_INTERVAL) -> bool:
     """True if the reviewed consolidation has NOT been kicked off for this athlete within
-    min_interval (or never). Closes the detached-fire race and the dismiss-then-refire loop
-    that an awaiting-review check alone would leave open."""
+    min_interval (or never). Closes the detached-fire race (the marker is set the moment we
+    launch, so we cannot re-fire the next hour before the card lands) and BOUNDS the
+    dismiss-then-refire loop to at most once per 24h — a dismissed card for a still-eligible
+    pile will re-surface after the window rather than every hour, which the awaiting-review
+    check alone would not prevent."""
     try:
         return (now - marker.stat().st_mtime) >= min_interval
     except FileNotFoundError:
@@ -465,13 +476,18 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
     marker         = LOG_DIR / f".consolidate-trigger-{slug}"
     fire, reason   = _should_trigger(final_count, contradictions, reviews,
                                      slug, marker, time.time())
-    if fire:
+    if fire and _LAUNCH_STATE["fired"]:
+        # Another athlete's --fix already launched this run; serialise to avoid a colliding
+        # concurrent worktree/review-id. This athlete triggers on a later hourly run.
+        _log(f"consolidation needed ({reason}) but a --fix already launched this run — deferring")
+    elif fire:
         try:
             subprocess.Popen(
                 ["python3", str(BUGFIXER), "--fix", "--athlete", slug],
                 cwd=PROJECT_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
+            _LAUNCH_STATE["fired"] = True
             marker.write_text(datetime.now().isoformat())
             _log(f"auto-triggered reviewed consolidation ({reason}); bug-fixer --fix launched")
         except Exception as e:
@@ -485,6 +501,7 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
 def main() -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] session-sync starting", file=sys.stderr)
+    _LAUNCH_STATE["fired"] = False   # at most one reviewed consolidation launched per run
 
     try:
         athletes = json.loads(ATHLETES_CONFIG.read_text())
