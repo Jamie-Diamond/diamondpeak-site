@@ -3428,9 +3428,9 @@ class _StatusTicker:
         if not text:
             return None
         elapsed = time.time() - since
-        # Only surface a running counter once a single step has waited a while,
-        # so quick tool calls stay clean.
-        return f"{text} ({int(elapsed)}s)" if elapsed >= 5 else text
+        # Surface a live running counter after ~1s so "Thinking... (Ns)" and long
+        # tool steps read as live; sub-second flashes stay clean.
+        return f"{text} ({int(elapsed)}s)" if elapsed >= 1 else text
 
     def _edit(self, text):
         if text is None or text == self._last_sent:
@@ -3465,9 +3465,10 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     only does transport.
 
     msg1 (the placeholder) is SILENT (disable_notification set by the caller) and
-    becomes a LIVE STATUS line rewritten ~1/sec by a background ticker while tools
-    run ("Checking intervals.icu...", "Building the session...", with an elapsed
-    timer on long steps). It reports what the bot is doing; it is NEVER the answer.
+    becomes a LIVE STATUS line rewritten ~1/sec by a background ticker. It ALWAYS
+    shows activity (Phase 3d): "Thinking... (Ns)" from the off, replaced by tool
+    lines when tools run ("Checking intervals.icu...", "Building the session...").
+    It reports what the bot is doing; it is NEVER the answer.
 
     This function DOES NOT send or stream the reply. It consumes the stream purely
     to (a) drive the status ticker and (b) accumulate the final response text. The
@@ -3476,19 +3477,23 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     answer and its preview reads as the real reply, never a placeholder. Phase 3c
     removes the old born-as-placeholder streamed reply that pushed early as "...".
 
-    Returns (response, status_shown, summary):
-      response     - the final assistant text (post-processing happens in the caller);
-      status_shown - True if a live-status line was actually shown on msg1, so the
-                     caller collapses msg1 to a summary rather than deleting it;
-      summary      - the one-line past-tense collapse text (e.g. "Checked
-                     intervals.icu, built the session") when status_shown, else None.
+    Returns (response, summary):
+      response - the final assistant text (post-processing happens in the caller);
+      summary  - the one-line collapse text the caller ALWAYS writes onto msg1
+                 (Phase 3d: a tool summary like "Checked intervals.icu, built the
+                 session" if any tool ran, else "Thought for Ns"). msg1 is never
+                 deleted, so a thinking message is a consistent part of every turn.
     No reply message is sent here: the caller owns reply delivery."""
     t_start = time.time()
     not_before = t_start + 1.5
-    ticker = None
     tools_seen = []          # ordered, deduped (key, past) for the collapse line
-    status_shown = False     # did msg1 ever display a real live-status line?
     final = None
+
+    # msg1 ALWAYS shows a live status (Phase 3d): start the ticker up front on
+    # "Thinking..." so a tool-free turn still gets a live "Thinking... (Ns)" line,
+    # not a bare "…". Tool events replace the text with the specific step below.
+    ticker = _StatusTicker(token, chat_id, placeholder_id, not_before)
+    ticker.set_status("Thinking...")
 
     # try/finally guarantees the background ticker is always torn down - an
     # orphaned ticker thread would keep editing msg1 every second forever.
@@ -3508,8 +3513,6 @@ def call_claude_streaming(token, chat_id, placeholder_id,
                 key, live, past = _classify_tool(name, hint)
                 if all(k != key for k, _ in tools_seen):
                     tools_seen.append((key, past))
-                if ticker is None:
-                    ticker = _StatusTicker(token, chat_id, placeholder_id, not_before)
                 ticker.set_status(live)
                 continue
 
@@ -3518,18 +3521,19 @@ def call_claude_streaming(token, chat_id, placeholder_id,
             # The complete reply is sent once, by the caller, after generation ends.
             continue
     finally:
-        if ticker is not None:
-            status_shown = ticker.shown
-            ticker.stop()
+        ticker.stop()
 
-    # Build the collapse summary the caller uses when a status line was shown.
-    summary = None
-    if status_shown:
-        pasts = [p for _, p in tools_seen] or ["done"]
+    # Build the one-line collapse summary the caller ALWAYS writes onto msg1
+    # (Phase 3d: never deleted). If tools ran, summarise them; otherwise report the
+    # thinking time so the collapsed message still says something useful.
+    if tools_seen:
+        pasts = [p for _, p in tools_seen]
         summary = ", ".join(pasts)
         summary = summary[0].upper() + summary[1:]
+    else:
+        summary = f"Thought for {max(1, int(round(time.time() - t_start)))}s"
 
-    return (final if final is not None else "(no response)", status_shown, summary)
+    return (final if final is not None else "(no response)", summary)
 
 
 def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slug, text):
@@ -3591,10 +3595,9 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         })
         placeholder_id = (placeholder.get("result") or {}).get("message_id")
 
-        status_shown = False
         summary = None
         if placeholder_id:
-            response, status_shown, summary = call_claude_streaming(
+            response, summary = call_claude_streaming(
                 token, chat_id, placeholder_id,
                 text, config, history, model=model,
                 system_prompt_file=files["system_prompt"],
@@ -3626,18 +3629,16 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         if clean:
             msg2_id = send(token, chat_id, final, reply_markup=_reply_inline(slug))
 
-        # Tidy msg1 AFTER the reply is sent: collapse to a one-line past-tense summary
-        # if a live-status line was shown, else delete the bare "…". editMessageText /
-        # deleteMessage never ping, so this adds no second notification.
+        # Tidy msg1 AFTER the reply is sent: ALWAYS collapse it to the one-line summary
+        # (tool summary if tools ran, else "Thought for Ns"); NEVER delete it, so a
+        # thinking message is a consistent part of every turn (Phase 3d). It stays
+        # silent - editMessageText never pings - so the reply is still the only push.
         if placeholder_id:
-            if status_shown and summary:
-                tg_post(token, "editMessageText",
-                        {"chat_id": chat_id, "message_id": placeholder_id, "text": summary})
-            else:
-                tg_post(token, "deleteMessage",
-                        {"chat_id": chat_id, "message_id": placeholder_id})
+            tg_post(token, "editMessageText",
+                    {"chat_id": chat_id, "message_id": placeholder_id,
+                     "text": summary or "Done"})
 
-        log(f"[{slug}] reply delivered: status_shown={status_shown} "
+        log(f"[{slug}] reply delivered: msg1_summary={summary!r} "
             f"msg2_id={msg2_id} chars={len(clean)}")
         log(f"[{slug}] Out: {clean[:80]}")
 
