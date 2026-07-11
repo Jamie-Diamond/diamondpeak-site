@@ -565,6 +565,33 @@ def tg_post(token, method, payload):
         # success so we neither fire the bogus plain-text retry nor trip the caller fallback.
         if _code == 400 and "not modified" in _body:
             return {"ok": True, "result": {}}
+        # Telegram flood control: HTTP 429 carries parameters.retry_after (seconds).
+        # The Phase 3 two-message UX roughly doubles edit traffic (a status line
+        # rewritten ~1/sec plus the streamed reply), so honour the back-off ONCE
+        # rather than dropping the call. Cap the wait so a worker can never hang on
+        # a long back-off.
+        if _code == 429:
+            retry_after = 1.0
+            try:
+                _j = json.loads(_body) if _body else {}
+                retry_after = float((_j.get("parameters") or {}).get("retry_after", 0)) or 0.0
+            except Exception:
+                retry_after = 0.0
+            if not retry_after:
+                _m = re.search(r"retry after (\d+)", _body)
+                retry_after = float(_m.group(1)) if _m else 1.0
+            retry_after = min(max(retry_after, 0.5), 5.0)
+            log(f"tg_post {method} 429 - backing off {retry_after:.1f}s then retrying once")
+            time.sleep(retry_after)
+            try:
+                req429 = urllib.request.Request(
+                    url, data=data, headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req429, timeout=10, context=SSL_CONTEXT) as r:
+                    return json.loads(r.read())
+            except Exception as e429:
+                _b429 = (e429.read().decode("utf-8", "replace")[:300] if hasattr(e429, "read") else "")
+                log(f"tg_post {method} 429 retry failed: {e429}; body: {_b429}")
+                return {}
         # Genuine legacy-Markdown parse failure -> retry ONCE as plain text so the reply is
         # never dropped. Skip MESSAGE_TOO_LONG: a plain-text edit cannot shorten it; the
         # caller send() fallback chunks it instead.
@@ -3312,35 +3339,198 @@ def _telegram_visible(text):
     return text[i + len("<telegram>"):].split("</telegram>")[0]
 
 
+# --- Phase 3: live two-message status UX -------------------------------------
+# Deterministic map from a tool_use event (name + a short input hint from the
+# engine) to a friendly present-tense status line (shown live in msg1) and a
+# past-tense fragment (used to collapse msg1 to one line once the reply lands).
+# Pure string matching on the tool metadata - no second model call.
+
+def _classify_tool(name, hint):
+    """Return (key, live, past) for a tool_use event. `key` dedupes the collapse
+    summary; `live` shows while the tool runs; `past` is the collapsed fragment."""
+    n = (name or "").lower()
+    h = (hint or "").lower()
+    blob = n + " " + h
+    if "icu" in blob or "intervals" in blob or "wellness" in blob or "fitness" in blob:
+        return ("icu", "Checking intervals.icu...", "checked intervals.icu")
+    if "race" in blob:
+        return ("race", "Building your race plan...", "built your race plan")
+    if ("plan_tools" in blob or "stage1" in blob or "generate-plan" in blob
+            or "session_library" in blob or "session" in blob or "plan" in blob):
+        return ("session", "Building the session...", "built the session")
+    if n == "read" or "current" in h or "state" in h or "athlete" in h:
+        return ("state", "Checking your current state...", "checked your data")
+    return ("work", "Working...", "crunched the numbers")
+
+
+class _StatusTicker:
+    """Owns msg1 (the status message). A single background thread performs ALL
+    edits of msg1, so the main stream loop and the elapsed-time counter never
+    race. The first edit is deliberately delayed until `not_before` (~1.5s after
+    the stream starts): if the reply arrives before then, `shown` stays False and
+    the caller reuses the placeholder as the reply target (pre-Phase-3 single-
+    message behaviour) - no pointless status flash on an instant/resumed answer.
+    While one tool runs with no new events, the thread appends an elapsed-time
+    suffix so a long wait (e.g. a race-plan subprocess) does not look frozen."""
+
+    def __init__(self, token, chat_id, msg_id, not_before):
+        self.token = token
+        self.chat_id = chat_id
+        self.msg_id = msg_id
+        self.not_before = not_before
+        self._text = ""
+        self._text_since = time.time()
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._last_sent = None
+        self.shown = False
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def set_status(self, text):
+        with self._lock:
+            if text and text != self._text:
+                self._text = text
+                self._text_since = time.time()
+
+    def _render(self):
+        with self._lock:
+            text, since = self._text, self._text_since
+        if not text:
+            return None
+        elapsed = time.time() - since
+        # Only surface a running counter once a single step has waited a while,
+        # so quick tool calls stay clean.
+        return f"{text} ({int(elapsed)}s)" if elapsed >= 5 else text
+
+    def _edit(self, text):
+        if text is None or text == self._last_sent:
+            return
+        self._last_sent = text
+        self.shown = True
+        # Plain text: status lines never carry Markdown, so no parse_mode.
+        tg_post(self.token, "editMessageText", {
+            "chat_id": self.chat_id, "message_id": self.msg_id, "text": text,
+        })
+
+    def _run(self):
+        # Wait out the grace period; bail immediately if the reply already started.
+        while time.time() < self.not_before and not self._stop.is_set():
+            self._stop.wait(0.1)
+        while not self._stop.is_set():
+            self._edit(self._render())
+            self._stop.wait(1.0)
+
+    def stop(self):
+        """Halt msg1 edits and wait for any in-flight edit to finish, so the
+        caller can send msg2 without Telegram interleaving the two messages."""
+        self._stop.set()
+        self._thread.join(timeout=3)
+
+
 def call_claude_streaming(token, chat_id, placeholder_id,
                           user_message, config, history, model=MODEL_OPUS,
                           system_prompt_file=None, athlete_name="Jamie", context=""):
-    """Thin Telegram wrapper over engine.stream_claude: edits the placeholder as
-    chunks arrive. All generation lives in lib/engine.py; this only does transport
-    (the 1.5s throttle + skip-unchanged guard that avoids "not modified" 400s).
-    Only the <telegram> content is shown live — preamble/tool-narration never leaks."""
+    """Telegram wrapper over engine.stream_claude implementing the Phase 3 two-
+    message UX. All generation lives in lib/engine.py; this only does transport.
+
+    msg1 (the placeholder) becomes a LIVE STATUS line rewritten ~1/sec by a
+    background ticker while tools run. When the reply first becomes visible we
+    STOP editing msg1, send a NEW msg2, and stream the reply into it (the same
+    1.5s throttle + skip-unchanged guard as before). At the end msg1 is collapsed
+    to a one-line summary above the reply. If the reply beats the ~1.5s grace
+    period (e.g. a resumed session answering instantly), no status is ever shown
+    and the placeholder is streamed into directly - exactly the old behaviour.
+
+    Returns (response, reply_id): `reply_id` is the message the caller must edit
+    with the fully-processed final reply (msg2 when two-message, else the
+    placeholder). Only ('chunk'|'final') text is ever returned/logged; ('status')
+    events drive msg1 alone and never reach history or the capture-verify path."""
+    t_start = time.time()
+    not_before = t_start + 1.5
+    ticker = None
+    tools_seen = []          # ordered, deduped (key, past) for the collapse line
+    reply_started = False
+    msg2_id = None
+    reply_id = placeholder_id
     last_edit = 0.0
     last_sent = ""
     final = None
-    for kind, chunk in stream_claude(
-        user_message, config, history, model=model,
-        system_prompt_file=system_prompt_file, athlete_name=athlete_name, context=context,
-    ):
-        if kind == "final":
-            final = chunk
-            break
-        now = time.time()
-        disp = _telegram_visible(chunk)
-        if now - last_edit >= 1.5 and disp.strip() and disp != last_sent:
-            tg_post(token, "editMessageText", {
-                "chat_id": chat_id,
-                "message_id": placeholder_id,
-                "text": disp + " ▍",
-                "parse_mode": "Markdown",
-            })
-            last_edit = now
-            last_sent = disp
-    return final if final is not None else "(no response)"
+
+    # try/finally guarantees the background ticker is always torn down - an
+    # orphaned ticker thread would keep editing msg1 every second forever.
+    try:
+        for event in stream_claude(
+            user_message, config, history, model=model,
+            system_prompt_file=system_prompt_file, athlete_name=athlete_name, context=context,
+        ):
+            kind = event[0]
+            if kind == "final":
+                final = event[1]
+                break
+
+            if kind == "status":
+                # A tool_use block appeared - update msg1 (never logged, never a reply).
+                name, hint = event[1], event[2]
+                key, live, past = _classify_tool(name, hint)
+                if all(k != key for k, _ in tools_seen):
+                    tools_seen.append((key, past))
+                if ticker is None:
+                    ticker = _StatusTicker(token, chat_id, placeholder_id, not_before)
+                ticker.set_status(live)
+                continue
+
+            # kind == "chunk": growing reply snapshot.
+            disp = _telegram_visible(event[1])
+            if not disp.strip():
+                continue
+            if not reply_started:
+                reply_started = True
+                if ticker is not None and ticker.shown:
+                    # Status was displayed -> the reply goes to a fresh msg2. Stop
+                    # msg1 edits FIRST so Telegram cannot interleave msg1 and msg2.
+                    ticker.stop()
+                    r = tg_post(token, "sendMessage",
+                                {"chat_id": chat_id, "text": "…", "parse_mode": "Markdown"})
+                    msg2_id = (r.get("result") or {}).get("message_id")
+                    if msg2_id:
+                        reply_id = msg2_id
+                    else:
+                        # msg2 send failed: degrade to reusing the status message as
+                        # the reply target and skip the collapse.
+                        reply_id = placeholder_id
+                else:
+                    # Reply beat the grace period (or no tools ran) -> single-message
+                    # flow: stream straight into the placeholder, as before Phase 3.
+                    if ticker is not None:
+                        ticker.stop()
+                    reply_id = placeholder_id
+
+            now = time.time()
+            if now - last_edit >= 1.5 and disp != last_sent:
+                tg_post(token, "editMessageText", {
+                    "chat_id": chat_id,
+                    "message_id": reply_id,
+                    "text": disp + " ▍",
+                    "parse_mode": "Markdown",
+                })
+                last_edit = now
+                last_sent = disp
+    finally:
+        if ticker is not None:
+            ticker.stop()
+
+    # Collapse msg1 to a one-line summary ONLY when a separate msg2 exists; if the
+    # reply reused the placeholder, its final edit (in the caller) turns it into
+    # the reply, so there is nothing to collapse.
+    if msg2_id is not None:
+        pasts = [p for _, p in tools_seen] or ["done"]
+        summary = ", ".join(pasts)
+        summary = summary[0].upper() + summary[1:]
+        tg_post(token, "editMessageText",
+                {"chat_id": chat_id, "message_id": placeholder_id, "text": summary})
+
+    return (final if final is not None else "(no response)", reply_id)
 
 
 def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slug, text):
@@ -3397,8 +3587,12 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         })
         placeholder_id = (placeholder.get("result") or {}).get("message_id")
 
+        # reply_id is the message that carries the final reply: the placeholder in
+        # the single-message flow, or a separate msg2 when a live status line was
+        # shown (Phase 3). call_claude_streaming decides and returns it.
+        reply_id = placeholder_id
         if placeholder_id:
-            response = call_claude_streaming(
+            response, reply_id = call_claude_streaming(
                 token, chat_id, placeholder_id,
                 text, config, history, model=model,
                 system_prompt_file=files["system_prompt"],
@@ -3417,20 +3611,20 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         clean = _verify_session_preview(slug, clean)
         clean = _strip_model_countdown(clean, athlete)
         final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
-        if placeholder_id:
+        if reply_id:
             res = tg_post(token, "editMessageText", {
-                "chat_id": chat_id, "message_id": placeholder_id,
+                "chat_id": chat_id, "message_id": reply_id,
                 "text": final, "parse_mode": "Markdown",
                 "reply_markup": _reply_inline(slug),
             })
             # Last-resort guard: if the edit failed entirely (even the plain-text retry,
             # e.g. MESSAGE_TOO_LONG), send the reply as a fresh message so it is NEVER
-            # silently lost to a stuck "…". Delete the placeholder first so the dead "…"
+            # silently lost to a stuck "…". Delete the reply message first so the dead "…"
             # (or partial stream) does not linger above the real reply.
             if not (res or {}).get("ok") and clean:
                 log("editMessageText final delivery failed - sending fresh message")
                 tg_post(token, "deleteMessage", {
-                    "chat_id": chat_id, "message_id": placeholder_id,
+                    "chat_id": chat_id, "message_id": reply_id,
                 })
                 send(token, chat_id, final, reply_markup=_reply_inline(slug))
         elif clean:
