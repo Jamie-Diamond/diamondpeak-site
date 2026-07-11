@@ -1603,9 +1603,13 @@ def _verify_logged_reply(slug: str, before_ts: float, clean: str,
 
 _SESSION_REF_RE = re.compile(
     r"\b(today'?s|tomorrow'?s|this (morning|afternoon|evening)'?s)?\s*"
-    r"(session|ride|run|swim|workout|race|set|interval)\b", re.IGNORECASE)
+    r"(session|ride|run|swim|workout|brick|race|set|interval)\b", re.IGNORECASE)
+# Target language now includes Load/TSS (Phase 1, 11 Jul): a session prescribed
+# purely by Load with no duration/distance ("Sunday's ride: 220 Load, Z2") is the
+# exact "lead with duration/distance" miss this backstop exists to catch, but the
+# old pattern only matched pace/power/HR language.
 _TARGET_LANG_RE = re.compile(
-    r"\b(pace|power|watts?|w/kg|threshold|ftp|zone\s?\d|heart rate|hr|bpm|target|effort)\b",
+    r"\b(pace|power|watts?|w/kg|threshold|ftp|zone\s?\d|heart rate|hr|bpm|target|effort|load|tss)\b",
     re.IGNORECASE)
 _DURATION_RE = re.compile(
     r"\b\d+(\.\d+)?\s*(min|mins|minute|minutes|hour|hours|hr|hrs)\b", re.IGNORECASE)
@@ -1614,14 +1618,25 @@ _DISTANCE_RE = re.compile(
     re.IGNORECASE)
 
 
+# Retrospective markers — a reply reviewing a COMPLETED session should not have an
+# upcoming session's duration appended. Guards the broadened Load/TSS trigger below
+# against firing on backward-looking comments ("nice run yesterday, load's climbing").
+_RETRO_RE = re.compile(
+    r"\b(yesterday|last (night|week|session)|earlier|this morning'?s? (was|felt)|"
+    r"completed|logged|you (did|ran|rode|swam|nailed|smashed)|that was|well done|great (work|session))\b",
+    re.IGNORECASE)
+
+
 def _preview_missing_duration(clean: str) -> bool:
-    """True if the reply discusses an upcoming/in-progress session in pace/power/
-    HR/target language but states no duration or distance figure anywhere."""
+    """True if the reply PRESCRIBES an upcoming/in-progress session in pace/power/
+    HR/Load/target language but states no duration or distance figure anywhere.
+    Skipped for clearly retrospective replies (a completed-session review)."""
     return bool(
         _SESSION_REF_RE.search(clean)
         and _TARGET_LANG_RE.search(clean)
         and not _DURATION_RE.search(clean)
         and not _DISTANCE_RE.search(clean)
+        and not _RETRO_RE.search(clean)
     )
 
 

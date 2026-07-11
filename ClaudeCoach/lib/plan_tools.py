@@ -45,7 +45,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.planned_tss import (                            # noqa: E402
-    planned_session_tss, tss_from_segments, render_workout,
+    planned_session_tss, tss_from_segments, render_workout, segment_if,
 )
 from primitives.load import (                                   # noqa: E402
     compute_required_tss,
@@ -125,6 +125,105 @@ def cmd_tss(args) -> dict:
                     "tss": r["tss"],
                     "source": r["source"]})
     return {"sessions": out, "total_tss": total}
+
+
+# ── subcommand: session-for-load ───────────────────────────────────────────────
+# Endurance-zone defaults used when the caller names no intensity. Deliberately
+# conservative (steady aerobic) and ALWAYS echoed back, so the assumption is
+# never silent.
+_DEFAULT_ZONE = {"swim": "aerobic", "run": "easy", "bike": "z2", "brick": "brick"}
+
+
+def cmd_session_for_load(args) -> dict:
+    """Derive a session DURATION from a Load/TSS target, holding Load fixed.
+
+    The inverse of `tss`: given a Load the athlete wants (e.g. "target 220
+    Load"), compute how long the session must be at a chosen intensity —
+    duration_min = load / (100 x IF^2) x 60 — so a value labelled TSS/Load can
+    NEVER be silently written as minutes. Returns ready-to-render segments whose
+    computed TSS ~= the target (whole-minute rounding aside); ICU recomputes its
+    own load on push. This is the ONLY correct way to turn a Load target into a
+    session — never hand-convert TSS to minutes."""
+    from primitives.planned_tss import _norm_sport  # primitives already on path
+    sport = args.sport
+    load = args.load_target
+    if load is None or load <= 0:
+        raise SystemExit(_err("--load-target must be a positive number (the TSS/Load to hit)"))
+    use_if = args.if_ is not None and not args.zone
+    if use_if:
+        intensity = float(args.if_)
+        src = "explicit --if"
+    else:
+        zone = args.zone or _DEFAULT_ZONE.get(_norm_sport(sport))
+        if not zone:
+            raise SystemExit(_err("provide --if or --zone (no endurance default for this sport)"))
+        intensity = segment_if(sport, zone)
+        src = f"zone '{zone}'" + ("" if args.zone else " (default endurance zone)")
+    if intensity <= 0:
+        raise SystemExit(_err("intensity resolved to 0 — pass a valid --zone or --if"))
+    duration_min = int(round((load / (100.0 * intensity ** 2) * 60.0) / 5.0) * 5)
+    duration_min = max(15, duration_min)
+    seg = ({"minutes": duration_min, "if": round(intensity, 3)} if use_if
+           else {"minutes": duration_min, "zone": (args.zone or _DEFAULT_ZONE.get(_norm_sport(sport)))})
+    check = tss_from_segments(sport, [seg])
+    return {
+        "sport": sport,
+        "load_target": int(round(load)),
+        "assumed_if": round(intensity, 3),
+        "intensity_source": src,
+        "duration_min": duration_min,
+        "segments": [seg],
+        "computed_tss": check["tss"],
+        "note": (f"Duration DERIVED from the {int(round(load))} Load target (held fixed) at "
+                 f"IF {round(intensity, 3)}: {duration_min} min. A Load target is NEVER minutes. "
+                 f"To push: render-workout --sport {sport} --segments '<segments above>', then "
+                 f"push_workout with that structured description (ICU recomputes the load)."),
+    }
+
+
+# ── subcommand: session-load ───────────────────────────────────────────────────
+def cmd_session_load(args) -> dict:
+    """The ONE authoritative Load for a planned session — icu_training_load,
+    else load_target, else the deterministic calculation. There is exactly one
+    Load per session; quote THIS number and never a second, self-computed one
+    (the 183-vs-202 contradiction, 11 Jul)."""
+    if args.event:
+        try:
+            ev = json.loads(args.event)
+        except json.JSONDecodeError as e:
+            raise SystemExit(_err(f"--event is not valid JSON: {e}"))
+    elif args.athlete and args.date:
+        cfg = _load_cfg(args.athlete)
+        evs = _client(cfg).get_events(args.date, args.date) or []
+        evs = [e for e in evs if (e.get("category") or "WORKOUT").upper() == "WORKOUT"]
+        if args.sport:
+            evs = [e for e in evs if (e.get("type") or "").lower() == args.sport.lower()]
+        if not evs:
+            return {"error": f"no planned workout on {args.date}"
+                    + (f" for sport {args.sport}" if args.sport else "")}
+        ev = evs[0]
+    else:
+        raise SystemExit(_err("provide --event <json> OR --athlete and --date"))
+    r = planned_session_tss(ev)
+    return {"name": r["name"], "sport": ev.get("type") or "",
+            "date": (ev.get("start_date_local") or "")[:10] or args.date,
+            "load": r["tss"], "load_source": r["source"], "duration_min": r["duration_min"],
+            "note": "Single authoritative Load. Do not state any other Load figure for this session."}
+
+
+# ── subcommand: sum ─────────────────────────────────────────────────────────────
+def cmd_sum(args) -> dict:
+    """Deterministic addition — never sum training numbers by hand (the 10 Jul
+    '~120 each' that did not add to 815). Sums a JSON list of numbers."""
+    try:
+        vals = json.loads(args.values)
+    except json.JSONDecodeError as e:
+        raise SystemExit(_err(f"--values is not valid JSON: {e}"))
+    if not isinstance(vals, list) or not vals or not all(isinstance(v, (int, float)) for v in vals):
+        raise SystemExit(_err("--values must be a non-empty JSON list of numbers"))
+    total = sum(vals)
+    return {"values": vals, "count": len(vals),
+            "total": round(total, 2) if any(isinstance(v, float) for v in vals) else total}
 
 
 # ── subcommand: week-tss ───────────────────────────────────────────────────────
@@ -854,6 +953,21 @@ def main():
     pt.add_argument("--minutes", type=int); pt.add_argument("--name")
     pt.add_argument("--segments", help='JSON list of {"minutes":N,"zone":"css"} or {"minutes":N,"if":F}')
 
+    psl = sub.add_parser("session-for-load",
+                         help="derive a session DURATION from a Load/TSS target (Load held fixed)")
+    psl.add_argument("--sport", required=True)
+    psl.add_argument("--load-target", type=float, required=True, dest="load_target")
+    psl.add_argument("--if", type=float, dest="if_", help="session-average intensity factor")
+    psl.add_argument("--zone", help="named zone (e.g. z2, css, threshold); default endurance zone if omitted")
+    psl.add_argument("--name")
+
+    psd = sub.add_parser("session-load", help="the ONE authoritative Load for a planned session")
+    psd.add_argument("--athlete"); psd.add_argument("--date", help="YYYY-MM-DD")
+    psd.add_argument("--sport"); psd.add_argument("--event", help="event JSON (alternative to --athlete/--date)")
+
+    psm = sub.add_parser("sum", help="deterministic addition of a JSON list of numbers")
+    psm.add_argument("--values", required=True, help='JSON list of numbers, e.g. [120,118,95]')
+
     pw = sub.add_parser("week-tss", help="deterministic weekly roll-up from the calendar")
     pw.add_argument("--athlete", required=True); pw.add_argument("--week-start")
 
@@ -921,7 +1035,9 @@ def main():
     pls.add_argument("--name")
 
     args = p.parse_args()
-    handler = {"tss": cmd_tss, "week-tss": cmd_week_tss, "project": cmd_project,
+    handler = {"tss": cmd_tss, "session-for-load": cmd_session_for_load,
+               "session-load": cmd_session_load, "sum": cmd_sum,
+               "week-tss": cmd_week_tss, "project": cmd_project,
                "required-tss": cmd_required_tss, "validate": cmd_validate,
                "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target,
                "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check,

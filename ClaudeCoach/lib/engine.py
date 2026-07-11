@@ -147,6 +147,28 @@ _FEEDBACK_LOG_RULE = (
 )
 
 
+# Accuracy hard-rails (Phase 1, 11 Jul 2026). Injected in code for EVERY athlete
+# so the rule has one source of truth, not three drifting prompt copies. Targets
+# the 11 Jul incidents: "220 TSS" built as 220 minutes; two Load figures for one
+# session (183 vs 202); hand-summed totals that did not add up; wrong trip pulled
+# from memory. The determinism lives in the tools these lines point at — this is
+# only the routing rule the model cannot infer.
+_ACCURACY_RULE = (
+    "TRAINING-NUMBER ACCURACY — HARD RULES: "
+    "(1) UNITS: a value the athlete labels TSS or Load is NEVER minutes. To turn a Load "
+    "target into a session, run `python3 ClaudeCoach/lib/plan_tools.py session-for-load "
+    "--sport <S> --load-target <N> [--zone <z>|--if <f>]` — it holds the Load fixed and "
+    "DERIVES the duration. Never hand-convert a TSS/Load figure into minutes. "
+    "(2) SINGLE LOAD: there is exactly one Load per session — ICU's icu_training_load, else "
+    "load_target — obtained via `plan_tools.py session-load`. Never state a second, self-"
+    "computed Load for the same session, and never derive a Load in free text. "
+    "(3) NO MENTAL MATHS: any total or sum of Loads comes from a tool (`plan_tools.py sum` "
+    "or `plan_tools.py tss --sessions`), never added by hand; any past trip/block is looked "
+    "up by DATE RANGE via icu_fetch (history / training_summary / events), never recalled "
+    "from memory."
+)
+
+
 def build_prompt(user_message, history, system_prompt, athlete_name, context,
                  persistent_rules=""):
     parts = [system_prompt, ""]
@@ -155,6 +177,8 @@ def build_prompt(user_message, history, system_prompt, athlete_name, context,
         parts.append(persistent_rules)
         parts.append("")
     parts.append(_FEEDBACK_LOG_RULE)
+    parts.append("")
+    parts.append(_ACCURACY_RULE)
     parts.append("")
     if context:
         parts.append(context)
@@ -473,6 +497,8 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
         parts.append("## Standing rules — always apply (athlete-agreed, session-derived)")
         parts.append(persistent_rules)
         parts.append("")
+    parts.append(_ACCURACY_RULE)
+    parts.append("")
     if context:
         parts.append(context)
         parts.append("")
