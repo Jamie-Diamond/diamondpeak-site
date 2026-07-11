@@ -138,9 +138,12 @@ def system_prompt_with_level(sp_file) -> str:
 
 
 _FEEDBACK_LOG_RULE = (
-    "HARD RULE — feedback acknowledgement: When the athlete logs feedback, corrections, "
-    "or session data in a single message, reply with exactly one word: Logged. "
-    "Do not echo, summarise, or acknowledge the content."
+    "CAPTURE: When the athlete logs a rule, correction, constraint, or session data, you MUST "
+    "actually write it to the correct file with the Write or Edit tool BEFORE confirming, and "
+    "never say it is saved unless that write completed in this reply. Then confirm in one short "
+    "line naming what you saved (e.g. 'Logged: no cycling Thu/Fri added to your rules.'). Do not "
+    "reply with the bare word 'Logged.' on its own. If the message reports a genuine fault in the "
+    "coaching system, record it as a bug in feedback-log.json."
 )
 
 

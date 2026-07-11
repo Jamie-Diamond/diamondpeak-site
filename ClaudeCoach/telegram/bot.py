@@ -1485,21 +1485,115 @@ def _save_state_json(slug: str, state):
     _invalidate_prefetch(slug)  # freshly-logged values must show in the next reply's context
 
 
-def _verify_logged_reply(slug: str, before_ts: float, clean: str) -> str:
-    """Return clean unchanged if it isn't 'Logged.' or if a log file was written
-    since before_ts.  Otherwise log a warning and return a failure notice."""
-    if clean.strip().lower() != "logged.":
-        return clean
+# Files a capture/log could plausibly write to. Deliberately EXCLUDES the
+# cron-churned artefacts (fitness-*-cache.json, current-state.md, system_prompt.txt,
+# *_state.json) so an unrelated refresh landing mid-reply cannot be mistaken for a
+# successful capture write. current-state.json carries pain/weight/menstrual state.
+_CAPTURE_TARGET_FILES = (
+    "feedback-log.json", "session-log.json", "persistent-rules.md",
+    "current-state.json", "heat-log.json", "swim-log.json",
+    "decoupling-log.json", "run-durability-log.json", "pending-captures.json",
+)
+
+# A reply that ASSERTS something was persisted. Kept tight (log/save verbs only,
+# short reply) so plan-edit confirmations such as "Updated your Sunday ride" — which
+# write to intervals.icu, not a local file — are not mistaken for a local capture.
+_CAPTURE_CONFIRM_RE = re.compile(
+    r"^\W*(logged|saved|noted|recorded|captured)\b", re.IGNORECASE)
+
+
+def _capture_written_since(slug: str, before_ts: float) -> bool:
+    """True if any athlete capture-target file was written since before_ts."""
     adir = _athlete_dir(slug)
-    for fname in ("feedback-log.json", "session-log.json"):
+    for fname in _CAPTURE_TARGET_FILES:
         f = adir / fname
         try:
             if f.exists() and f.stat().st_mtime >= before_ts:
-                return clean
+                return True
         except Exception:
             pass
-    log(f"[{slug}] WARN: Claude replied 'Logged.' but no log file was updated — possible silent write failure")
-    return "⚠️ Something went wrong saving that — please try again."
+    return False
+
+
+def _stash_pending_capture(slug: str, text: str, reply: str) -> None:
+    """No-loss deterministic fallback: when the model claimed a save but wrote
+    nothing (even after a retry), persist the athlete's raw message so it is never
+    lost and stays visible/recoverable in git."""
+    if not text:
+        return
+    try:
+        pf = _athlete_dir(slug) / "pending-captures.json"
+        try:
+            entries = json.loads(pf.read_text()) if pf.exists() else []
+        except Exception:
+            entries = []
+        entries.append({
+            "logged_at": datetime.now().isoformat(timespec="seconds"),
+            "message": text,
+            "model_reply": (reply or "")[:200],
+            "note": "auto-stashed after a silent write failure — needs filing",
+        })
+        pf.parent.mkdir(parents=True, exist_ok=True)
+        pf.write_text(json.dumps(entries, indent=2))
+        _git_commit(f"auto: stash unfiled capture {slug} {date.today().isoformat()}")
+    except Exception as e:
+        log(f"[{slug}] pending-capture stash failed: {e}")
+
+
+def _make_capture_retry(text, config, history, model, files, athlete_name, context):
+    """Build a no-arg callable that re-asks the model to actually perform a write
+    it claimed to have done. Only invoked by _verify_logged_reply on a detected
+    silent write failure, so it adds no latency on the happy path."""
+    def _retry():
+        retry_msg = (
+            "SYSTEM CHECK: your previous reply said something was logged or saved, but no "
+            "file was actually written. Perform the pending file write NOW using the Write "
+            "or Edit tool for my most recent message, then reply with one short line naming "
+            f"what you saved. My message was: {text!r}"
+        )
+        return call_claude(retry_msg, config, history, model=model,
+                           system_prompt_file=files["system_prompt"],
+                           athlete_name=athlete_name, context=context)
+    return _retry
+
+
+def _verify_logged_reply(slug: str, before_ts: float, clean: str,
+                         text: str = None, retry=None) -> str:
+    """Guard against silent write failures: never tell the athlete something was
+    saved unless a capture file was actually written.
+
+    If the reply asserts a save but nothing was written, retry the write once (via
+    `retry`, a no-arg callable returning the new reply text); if that still writes
+    nothing, deterministically stash the raw message so it is never lost and return
+    an honest confirmation rather than a false success."""
+    stripped = clean.strip()
+    if not _CAPTURE_CONFIRM_RE.match(stripped) or len(stripped) > 140:
+        return clean
+    if _capture_written_since(slug, before_ts):
+        return clean  # write confirmed — genuine success
+    log(f"[{slug}] WARN: reply claimed a save but no capture file was updated — retrying write")
+    if retry is not None:
+        # Small backward grace so the retry's own write is never missed to mtime/
+        # float precision. Safe: the retry model call takes seconds, far longer than
+        # this margin, so it cannot re-count a pre-retry write.
+        retry_ts = time.time() - 2
+        try:
+            retry_reply = retry()
+        except Exception as e:
+            log(f"[{slug}] capture retry errored: {e}")
+            retry_reply = ""
+        if _capture_written_since(slug, retry_ts):
+            log(f"[{slug}] capture retry succeeded")
+            rr = (retry_reply or "").strip()
+            if (rr and _CAPTURE_CONFIRM_RE.match(rr)
+                    and len(rr) <= 200 and rr.lower() != "logged."):
+                return rr
+            return "Saved that to your file."
+    # Retry failed or unavailable — never lose the data, never fake success.
+    _stash_pending_capture(slug, text, clean)
+    log(f"[{slug}] WARN: silent write failure — stashed raw message to pending-captures.json")
+    return ("I couldn't file that automatically, so I've saved your note so nothing is lost "
+            "and flagged it for a fix. No need to resend.")
 
 
 _SESSION_REF_RE = re.compile(
@@ -3251,7 +3345,10 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 context=context,
             )
             clean = process_charts(token, chat_id, response, slug=slug)
-            clean = _verify_logged_reply(slug, before_ts, clean)
+            clean = _verify_logged_reply(
+                slug, before_ts, clean, text=text,
+                retry=_make_capture_retry(text, config, history, model, files,
+                                          athlete_name, context))
             clean = _verify_session_preview(slug, clean)
             clean = _strip_model_countdown(clean, athlete)
             final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
@@ -3293,7 +3390,10 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                                    athlete_name=athlete_name, context=context)
 
         clean = process_charts(token, chat_id, response, slug=slug)
-        clean = _verify_logged_reply(slug, before_ts, clean)
+        clean = _verify_logged_reply(
+            slug, before_ts, clean, text=text,
+            retry=_make_capture_retry(text, config, history, model, files,
+                                      athlete_name, context))
         clean = _verify_session_preview(slug, clean)
         clean = _strip_model_countdown(clean, athlete)
         final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
