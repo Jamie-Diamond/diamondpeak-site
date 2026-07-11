@@ -331,7 +331,7 @@ def _run_once(prompt, model, extra_args, cwd, timeout=300):
     return text or (r.stderr or "").strip(), session_id, r.returncode
 
 
-def call_claude(user_message, config, history, model=MODEL_SONNET,
+def call_claude(user_message, config, history, model=MODEL_OPUS,
                 system_prompt_file=None, athlete_name="Jamie", context=""):
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
     extra, prompt, mode, st = _plan_session(user_message, config, history,
@@ -345,12 +345,13 @@ def call_claude(user_message, config, history, model=MODEL_SONNET,
             extra, prompt, mode, st = _plan_session(user_message, config, history,
                                                     sp_file, athlete_name, context)
             text, sid, rc = _run_once(prompt, model, extra, config["project_dir"])
-        if _is_limit_message(text) and model != MODEL_OPUS:
-            # Chat quality first: a capped Sonnet bucket must not surface a
-            # rate-limit notice to the athlete while Opus still has headroom.
-            log(f"[limit] {model} capped — retrying on {MODEL_OPUS}")
-            text, sid, rc = _run_once(prompt, MODEL_OPUS, extra, config["project_dir"])
-            model = MODEL_OPUS
+        if _is_limit_message(text) and model != MODEL_SONNET:
+            # Opus is primary now: a capped bucket must not surface a rate-limit
+            # notice to the athlete while Sonnet 5 still has headroom, so fall
+            # DOWN to Sonnet so the bot still answers.
+            log(f"[limit] {model} capped - retrying on {MODEL_SONNET}")
+            text, sid, rc = _run_once(prompt, MODEL_SONNET, extra, config["project_dir"])
+            model = MODEL_SONNET
         if rc == 0 and text:
             _finish_session(sp_file, mode, st, sid)
         _log_timing("call", model, mode, t0, None, None)
@@ -420,7 +421,7 @@ def _stream_once(prompt, model, extra_args, cwd):
     return (final, streamed, session_id, rc, t_init, t_first)
 
 
-def stream_claude(user_message, config, history, model=MODEL_SONNET,
+def stream_claude(user_message, config, history, model=MODEL_OPUS,
                   system_prompt_file=None, athlete_name="Jamie", context=""):
     """Generator over a streaming Claude run. Yields (kind, text):
       ('chunk', snapshot) — growing reply to display live (transport throttles edits)
@@ -444,12 +445,14 @@ def stream_claude(user_message, config, history, model=MODEL_SONNET,
             prompt, model, extra, config["project_dir"])
 
     text = (final if final is not None else streamed).strip()
-    if _is_limit_message(text) and model != MODEL_OPUS:
-        log(f"[limit] {model} capped — retrying on {MODEL_OPUS}")
+    if _is_limit_message(text) and model != MODEL_SONNET:
+        # Opus is primary now: fall DOWN to Sonnet 5 on a cap so the athlete
+        # still gets an answer rather than a rate-limit notice.
+        log(f"[limit] {model} capped - retrying on {MODEL_SONNET}")
         final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
-            prompt, MODEL_OPUS, extra, config["project_dir"])
+            prompt, MODEL_SONNET, extra, config["project_dir"])
         text = (final if final is not None else streamed).strip()
-        model = MODEL_OPUS
+        model = MODEL_SONNET
 
     if rc == 0 and text:
         _finish_session(sp_file, mode, st, sid)
@@ -457,7 +460,7 @@ def stream_claude(user_message, config, history, model=MODEL_SONNET,
     yield ("final", text or "(no response)")
 
 
-def call_claude_with_image(img_path, caption, config, history, model=MODEL_SONNET,
+def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
                            system_prompt_file=None, athlete_name="Jamie", context=""):
     # Image analysis stays on throwaway sessions: it needs the file-read tools
     # anyway and the exchange reaches the athlete's session via the history

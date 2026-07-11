@@ -328,48 +328,53 @@ def _strip_model_countdown(text: str, athlete_cfg: dict | None) -> str:
     )
     return re.sub(r'\n{3,}', '\n\n', pattern.sub('', text)).strip()
 
-# Model selection (updated 2 Jul: Sonnet 5 trial — Jamie's approval).
+# Model selection (Jamie's directive 15 Jun: Sonnet for simple, Opus for hard).
+# Reverted 11 Jul (Phase 4): the 2 Jul Sonnet-5 default is rolled back - Opus is
+# the safe default again for everyday interactive chat and the ask-anything path.
+# The Sonnet-5 trial routed ~70% of chat to the weaker model and quality regressed.
 #
-# History: 15 Jun directive was "Sonnet for simple, Opus for hard" with Opus as
-# the safe default, because Sonnet 4.6 made too many mistakes (the 14 Jun
-# planning mess). Sonnet 5 (Claude 5 family) reaches near-Opus quality on
-# agentic work at much higher speed, so the default flips: Sonnet 5 for
-# everything except clearly-hard planning topics, which stay on Opus 4.8 via
-# _HARD_RE. Stickiness is unchanged — once a planning thread is open, short
-# follow-ups ("make Saturday shorter") stay on Opus. Revert = flip the final
-# return back to MODEL_OPUS.
+# Design: Opus is the SAFE DEFAULT. Mis-routing a substantive question to a
+# weaker model is the expensive error (it caused the 14 Jun planning mess), so
+# anything not clearly trivial goes to Opus. Two reasons not to key "hard" off a
+# narrow regex: (1) trivia is a small, closed set, so match THAT and default
+# everything else up; (2) stickiness - once a substantive thread is open, a short
+# follow-up ("make Saturday shorter") needs the same brain as the message before
+# it, so the thread stays on Opus.
+
+# Clearly trivial: greetings, acknowledgements, short pain logs, bare values.
+_TRIVIAL_RE = re.compile(
+    r"^(hi|hey|hello|yo|good\s+(morning|evening|afternoon)|"
+    r"thanks?|thank\s+you|cheers|ta|"
+    r"ok(ay)?|kk|got\s+it|noted|perfect|great|nice|cool|good|awesome|"
+    r"yes|yep|yup|yeah|no|nope|nah|sure|done)\b[\s!.]{0,3}$"
+    r"|^(ankle|niggle|pain|knee|achilles|calf|hamstring)\s+\d{1,2}\b.{0,30}$"
+    r"|^\d{1,3}(\.\d)?\s*(kg|km|k|mi|miles?|min|minutes?|hrs?|hours?|w|watts?|bpm)?\s*$",
+    re.IGNORECASE,
+)
 
 # Topics that always warrant Opus AND make the surrounding thread sticky to Opus.
-# Tightened 2 Jul from a review of 907 real messages (8 May-2 Jul): the old list
-# included everyday words (week/session/why/tss/fitness...) that routed 73% of
-# traffic to Opus once stickiness was counted, so the Sonnet 5 default barely
-# fired. This list = genuine planning/strategy topics + schedule-editing signals
-# (move/swap/busy/can't-make/add-drop a session/long run placement), which the
-# review showed are the real replan-class messages. Routes ~30% to Opus.
 _HARD_RE = re.compile(
-    r"\b(plan|planning|replan|taper|periodi[sz]e|phase|build|block|ramp|"
-    r"projec|forecast|race|pacing|strateg|fuell?ing|nutrition|"
-    r"move|swap|shift|reschedul\w*|"
-    r"long\s+(run|ride)|"
-    r"(increase|decrease|reduce|drop)\s+(the\s+|my\s+|training\s+)*load)\b"
-    r"|\bcan['’]?t\s+(do|make|train|swim|run|ride)\b"
-    r"|\bbusy\b"
-    r"|\b(add|drop|skip|squeeze)\b.{0,25}\b(session|swim|run|ride|rest\s+day)\b",
+    r"\b(plan|planning|tss|ctl|atl|tsb|form|fitness|build|taper|phase|periodi[sz]e|"
+    r"week|weekly|block|ramp|load|projec|forecast|fuell?ing|nutrition|race|pacing|"
+    r"strateg|why|analy|compare|should\s+i|how\s+(do|should|much|many|far)|workout|"
+    r"session|brick|threshold|interval|zone|recovery|fatigue|overreach|long\s+run)\b",
     re.IGNORECASE,
 )
 
 
 def select_model(text: str, history=None) -> str:
-    """Sonnet 5 by default, Opus 4.8 for planning-adjacent topics (_HARD_RE).
-    Sticky: stays on Opus through a planning thread. Stickiness keys on the
-    ATHLETE's recent messages only — the assistant's coaching replies are full of
+    """Opus for anything substantive or planning-adjacent, Sonnet for clear trivia.
+    Sticky: stays on Opus through a substantive thread. Stickiness keys on the
+    ATHLETE's recent messages only - the assistant's coaching replies are full of
     'week/session/load/recovery' and would otherwise pin everything to Opus,
-    defeating the Sonnet path."""
+    defeating the Sonnet path for genuine trivia."""
     t = text.strip()
     recent = " ".join(h.get("user", "") for h in (history or [])[-3:])
     if _HARD_RE.search(t) or _HARD_RE.search(recent):
         return MODEL_OPUS
-    return MODEL_SONNET  # Sonnet 5 trial default (2 Jul) — was MODEL_OPUS
+    if _TRIVIAL_RE.match(t):
+        return MODEL_SONNET
+    return MODEL_OPUS  # safe default - never silently downgrade the unknown
 
 
 # Persistent reply keyboard (expense-bot style) — always pinned at the bottom of the
@@ -2350,12 +2355,12 @@ def _handle_drill(token, chat_id, data, message_id, athletes, config):
     history = load_history(files["history"])
     context = prefetch_context(slug)
     athlete_name = athlete.get("name", slug).split()[0]
-    response = call_claude(question, config, history, model=MODEL_SONNET,
+    response = call_claude(question, config, history, model=MODEL_OPUS,
                            system_prompt_file=files["system_prompt"],
                            athlete_name=athlete_name, context=context)
     clean = process_charts(token, chat_id, response, slug=slug)
     if clean:
-        send(token, chat_id, clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athlete))
+        send(token, chat_id, clean + response_footer(MODEL_OPUS, slug=slug, athlete_cfg=athlete))
     history.append(_hist_entry(question, clean))
     save_history(history, files["history"])
     return True
@@ -3293,7 +3298,7 @@ def _telegram_visible(text):
 
 
 def call_claude_streaming(token, chat_id, placeholder_id,
-                          user_message, config, history, model=MODEL_SONNET,
+                          user_message, config, history, model=MODEL_OPUS,
                           system_prompt_file=None, athlete_name="Jamie", context=""):
     """Thin Telegram wrapper over engine.stream_claude: edits the placeholder as
     chunks arrive. All generation lives in lib/engine.py; this only does transport
@@ -3458,7 +3463,7 @@ def _image_reply_worker(token, chat_id, file_id, caption, athlete_entry, config)
         clean = _strip_model_countdown(clean, athlete_entry)
         if clean:
             send(token, chat_id,
-                 clean + response_footer(MODEL_SONNET, slug=slug, athlete_cfg=athlete_entry),
+                 clean + response_footer(MODEL_OPUS, slug=slug, athlete_cfg=athlete_entry),
                  reply_markup=build_keyboard(slug))
         log(f"[{slug}] Out (image): {clean[:80]}")
         # Caption stored bare (never the "[image]" placeholder) and tagged kind=image,
