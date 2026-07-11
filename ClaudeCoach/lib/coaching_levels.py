@@ -24,15 +24,24 @@ _BLOCKS = {
     ),
     "pro": (
         "Coaching level: PRO. "
-        "Show plain-English labels with acronyms in parentheses on first use per reply: "
-        '"Fitness (CTL)", "Fatigue (ATL)", "Load (TSS)", "Form (TSB)". '
-        "After first use in a reply you may use either form. "
-        "Include full technical detail: zone watts and pace, decoupling %, NP, IF, VI, "
-        "W' estimates where relevant. Be terse and data-dense — skip soft framing, lead with numbers."
+        "These rules override any sport-specific format instructions in this prompt. "
+        "Lead with a short narrative verdict, then a single session-appropriate key-numbers line. "
+        "Surface only the few metrics that matter for this session, not a full stat dump. "
+        "Use plain-English labels with the acronym in parentheses on first use per reply "
+        '("Fitness (CTL)", "Fatigue (ATL)", "Load (TSS)", "Form (TSB)"); either form after that. '
+        "Give the full technical detail (zone watts and pace, decoupling %, NP, IF, VI, W' estimates) "
+        "only when the athlete asks for it. "
+        "Tone: direct and matter-of-fact, lightly technical, never gushing."
     ),
 }
+
+# Applies to every coaching level and every surface (chat, debrief, scheduled cards).
+_UNIVERSAL = (
+    " Give the number and a one-line plain-English driver; "
+    "never print derivation formulas unless the athlete asks for them."
+)
 
 
 def level_block(level: str) -> str:
     """Return the instruction paragraph for injection into Claude prompts."""
-    return _BLOCKS.get(level, _BLOCKS[DEFAULT])
+    return _BLOCKS.get(level, _BLOCKS[DEFAULT]) + _UNIVERSAL
