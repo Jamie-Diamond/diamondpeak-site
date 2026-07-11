@@ -206,7 +206,14 @@ Interval source: prefer Strava laps when they give a cleaner breakdown than ICU 
 
 Rules for ANALYSIS — each logical line must be a separate output line (no semicolons to merge lines):
 
-Lead with a one-sentence verdict (e.g. "Solid Z2. Form held to the end."). Then at most 2–3 supporting data points. Total under 200 characters. No headers, no bullet lists.
+Always lead with a one-sentence narrative verdict (e.g. "Solid Z2. Form held to the end.").
+
+Then choose the metric set BY SESSION TYPE and surface only what matters for THIS session, not a fixed block every time:
+- Easy / steady / recovery: the verdict plus at most 1-2 key numbers (e.g. avg HR and HR drift). Keep it short (well under 200 characters), no headers, no per-rep lines.
+- Long endurance ride or run (roughly 90 min or more, steady): duration, IF, aerobic decoupling, and the fuelling prompt. A few lines, no per-rep breakdown.
+- Intervals / reps (structured): the per-rep splits and target adherence in the sport format below. This per-rep detail IS the point for these sessions, so show it by default.
+- Brick (bike and run in one activity, or bike then run back-to-back): ALWAYS report the bike and run legs separately, splitting time and Load per leg.
+This selection is authoritative and governs the per-sport RIDE / RUN / SWIM formats below: use a format's full header and per-rep breakdown ONLY when the session is intervals/structured, or when the athlete has asked for the full breakdown. For easy/steady/recovery and long-endurance sessions, stay with the verdict plus the few relevant numbers above. Where these rules conflict with the per-sport format instructions below, these rules win.
 
 Drift / decoupling: when computing HR drift or HR:power decoupling, exclude laps that fall within icu_warmup_time seconds from the start and icu_cooldown_time seconds from the end (both fields in activity_detail; if absent or zero, use all laps).
 
