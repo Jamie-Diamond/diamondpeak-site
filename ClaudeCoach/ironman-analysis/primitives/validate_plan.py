@@ -173,6 +173,77 @@ def _check_distribution(week_events: list[dict], week_start: date,
     return out
 
 
+# -- Minimum-quality floor (Phase 5c) ------------------------------------------
+# _check_distribution above flags EXCESS quality (easy share below the phase Z1-2
+# target). This is its complement: a week that is too EASY. It is deliberately a
+# SEPARATE, opt-in function so callers arm it with the per-athlete limiter context
+# the phase table alone cannot carry (which sports may be asked for quality, and
+# which sport MUST carry some). The intensity summary is supplied by the caller
+# (measured from the proposal's own segment IFs), so the coarse name classifier is
+# not on this path. Swim is never passed in (name/zone intensity is unreliable).
+
+QUALITY_FLOOR_PP = 8.0            # quality may sit this far under the TID top-end
+QUALITY_FLOOR_MIN_MINUTES = 90    # skip a sport with under 1.5h planned (low-volume)
+
+
+def _quality_target_pct(dist_row) -> float | None:
+    """Top-end (Z3+) share implied by a row like '70% Z1-2 / 18% Z3 / 12% Z4-5':
+    the complement of the leading Z1-2 share."""
+    easy = _easy_target_pct(dist_row)
+    return None if easy is None else max(0.0, 100.0 - easy)
+
+
+def check_quality_floor(sport_summary: dict, distribution: dict, *,
+                        floor_sports: set | None = None,
+                        require_quality_sports: set | None = None,
+                        floor_pp: float = QUALITY_FLOOR_PP,
+                        min_minutes: float = QUALITY_FLOOR_MIN_MINUTES) -> list["Violation"]:
+    """Minimum-quality floor. sport_summary maps a sport key ('Bike'/'Run', matching
+    the distribution table) to {'easy': minutes, 'quality': minutes}. Two OPT-IN checks:
+
+      - require_quality_sports: sports that MUST carry SOME quality (0 quality minutes
+        is a violation) - stops an athlete cleared for quality (quality_allowed=true)
+        drifting to 100% easy in that sport (Kathryn's runs).
+      - floor_sports: sports whose quality share must not fall more than floor_pp below
+        the phase TID top-end. Route to NON-LIMITED sports only; never list a
+        run-limited athlete's run here (their floor must be satisfiable elsewhere, e.g.
+        the bike - preserving the ankle hard-stop).
+
+    Low-volume sports (< min_minutes planned) are skipped so a ~4h/week athlete is not
+    over-constrained. All checks are soft (they drive the generator's iterate-to-clean
+    loop; they do not by themselves justify blocking a push)."""
+    floor_sports = floor_sports or set()
+    require_quality_sports = require_quality_sports or set()
+    out: list[Violation] = []
+    for sport, agg in (sport_summary or {}).items():
+        easy = float((agg or {}).get("easy", 0) or 0)
+        quality = float((agg or {}).get("quality", 0) or 0)
+        total = easy + quality
+        if total < min_minutes:
+            continue
+        q_pct = quality / total * 100 if total else 0.0
+        if sport in require_quality_sports and quality <= 0:
+            out.append(Violation(
+                code="quality_required",
+                severity="soft",
+                detail=(f"{sport}: 0 min quality planned but quality is allowed for this "
+                        f"athlete - include the phase's prescribed {sport.lower()} quality "
+                        f"dose (the week is 100% easy in {sport.lower()})"),
+            ))
+            continue
+        if sport in floor_sports:
+            target_q = _quality_target_pct((distribution or {}).get(sport))
+            if target_q is not None and q_pct < target_q - floor_pp:
+                out.append(Violation(
+                    code="quality_floor",
+                    severity="soft",
+                    detail=(f"{sport}: only {q_pct:.0f}% of planned time is quality vs the "
+                            f"phase target ~{target_q:.0f}% Z3+ (floor -{floor_pp:.0f}pp) - "
+                            f"too much easy volume, add the prescribed quality"),
+                ))
+    return out
+
+
 # -- Distance/duration internal consistency (walk-run sessions) ----------------
 # A run session whose NAME states a distance ("5k") and whose walk-run cycle
 # count implies a different one ("50 min 5x9:1 walk-run" ~ 8.5km) reached an

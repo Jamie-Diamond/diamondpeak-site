@@ -79,8 +79,51 @@ def _resolve_progression(stype: dict, eff_week: int) -> dict | None:
     return prog[min(max(eff_week, 1) - 1, len(prog) - 1)]
 
 
+def reconcile_day_rules(default_rules: dict | None, availability: dict | None,
+                        *, run_limited: bool = False) -> dict | None:
+    """Reconcile the athlete's DEFAULT weekly day-shape against THIS week's
+    availability (Phase 5a). The defaults are a sensible starting shape; the Sunday
+    plan flexes them to the days actually available, and they stay ad-hoc adjustable
+    (drop/update athletes/<slug>/this-week-availability.json any time).
+
+    availability keys (all optional): swim_days / bike_days / run_days (replace the
+    default day list for that sport this week) and unavailable_days (weekday abbrevs
+    removed from every sport). For a RUN-LIMITED athlete the rehab structure is a
+    FLOOR: swim_focus days are always kept, and run frequency is never increased
+    beyond the default - reconciliation may relieve, never override, the spacing.
+
+    NOTE: the deterministic validator (plan_builder -> validate_week) reads day_rules
+    from athletes.json directly, so availability that only NARROWS/REMOVES days is
+    validator-safe today; MOVING a sport to a new day is honoured by the proposer but
+    would need plan_builder to consume the reconciled rules to also pass validation.
+    """
+    import json as _json
+    dr = _json.loads(_json.dumps(default_rules or {}))
+    if not availability:
+        return default_rules
+    for key in ("swim_days", "bike_days", "run_days"):
+        v = availability.get(key)
+        if isinstance(v, list):
+            dr[key] = list(v)
+    for d in (availability.get("unavailable_days") or []):
+        for key in ("swim_days", "bike_days", "run_days"):
+            if isinstance(dr.get(key), list):
+                dr[key] = [x for x in dr[key] if str(x).lower() != str(d).lower()]
+    if run_limited:
+        base = default_rules or {}
+        sf = base.get("swim_focus") or {}
+        if sf and isinstance(dr.get("swim_days"), list):
+            for wd in sf:
+                if wd not in dr["swim_days"]:
+                    dr["swim_days"].append(wd)
+        if isinstance(base.get("run_days"), list) and isinstance(dr.get("run_days"), list):
+            if len(dr["run_days"]) > len(base["run_days"]):
+                dr["run_days"] = dr["run_days"][:len(base["run_days"])]
+    return dr
+
+
 def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None,
-                   plan_start: date | None = None) -> dict:
+                   plan_start: date | None = None, availability: dict | None = None) -> dict:
     today = today or date.today()
     plan_start = plan_start or today
     if cfg is None:
@@ -111,6 +154,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # Run CAPS (max, not target): weekly mileage and longest single run each capped at
     # their highest of the last 4 weeks × 1.15 (Jamie's rule — applies to both).
     weekly_mileage_cap_km = None
+    weekly_run_min_cap = None
     long_run_cap_min = None
     last_week_tss = None
     try:
@@ -139,6 +183,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         # per rules.md (25 km floor = top of the "normal" band), long run x1.15.
         _caps = pt.run_caps(_c, today)
         weekly_mileage_cap_km = _caps.get("weekly_km_cap")
+        weekly_run_min_cap = _caps.get("weekly_min_cap")
         long_run_cap_min = _caps.get("long_run_min_cap")
     except Exception:
         pass
@@ -176,6 +221,37 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         available[sport] = rows
 
     rp = cfg.get("run_protocol") or {}
+    # --- Phase 5: per-athlete limiter signal (single-source) ------------------
+    # Two limiter signals that ALREADY exist in the athlete's config/profile drive
+    # every sport/intensity accommodation downstream (close_to_target's TSS-closing
+    # lever, the minimum-quality floor, the availability reconciliation): an athlete
+    # is "run-limited" if they carry an injury OR their protocol forbids run quality
+    # (Jamie's ankle rehab). Single-sport athletes (Calum) always fall through to
+    # bike-only closure regardless. NEVER a new global flag.
+    injuries = profile.get("injuries") or []
+    run_limited = bool(injuries) or (rp.get("quality_allowed") is False)
+    single_sport = len(available) <= 1
+    day_rules_effective = reconcile_day_rules(cfg.get("day_rules"), availability,
+                                              run_limited=run_limited)
+    # Conditional TSS-closing guidance for the Stage-1 proposer (Phase 5b): a limited
+    # or single-sport athlete closes gaps with BIKE volume; everyone else spreads the
+    # closure across sports and MUST carry the phase quality share, not easy bike alone.
+    if run_limited or single_sport:
+        _closure = ("If run caps or travel limit running, close any weekly-TSS gap with "
+                    "BIKE volume, never by planning a short week. ")
+    else:
+        _closure = ("Close any weekly-TSS gap with a BALANCED spread across the available "
+                    "sports (bike AND run endurance) and by carrying the phase's QUALITY "
+                    "share; do NOT fill the week with easy Z2 bike alone. Run quality is "
+                    "REQUIRED when quality_allowed=true. ")
+    dosing_note = ("Build to weekly_tss_target - weekly_tss_floor is a HARD minimum (below "
+                   "it the week detrains the athlete and validation rejects it; only "
+                   "deload/taper weeks may sit under maintenance). " + _closure +
+                   "PROTECT the long ride (~long_ride_target_min). Total run mileage must "
+                   "NOT exceed weekly_run_mileage_cap_km and the longest run must NOT exceed "
+                   "long_run_cap_min (these are MAX ceilings, +10-15% on the highest of the "
+                   "last 4 weeks). Obey run_protocol (no quality if quality_allowed=false) "
+                   "and hard_rules. No type outside available_sessions.")
     # Long-ride target (the protected key session): event bike demand × factor, capped.
     bike_min = (cfg.get("race_target_splits") or {}).get("bike_min")
     lr_factor = event.get("long_ride_factor", 0.9)
@@ -261,9 +337,15 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "distribution_by_sport": ph.get("distribution"),
         "emphasis": event.get("emphasis", []),
         "brick": event.get("brick"),
-        "day_rules": cfg.get("day_rules"),
+        "day_rules": day_rules_effective,
+        "day_rules_default": cfg.get("day_rules"),
+        "availability_applied": bool(availability),
+        "injuries": injuries,
+        "run_limited": run_limited,
+        "single_sport": single_sport,
         "run_protocol": rp,
         "weekly_run_mileage_cap_km": weekly_mileage_cap_km,   # MAX (highest of last 4 wks ×1.15)
+        "weekly_run_min_cap": weekly_run_min_cap,             # MAX weekly run MINUTES (validate_week cap)
         "long_run_cap_min": long_run_cap_min,                 # MAX single long run (×1.15)
         "long_ride_target_min": long_ride_min,
         "long_swim_target_m": event.get("long_swim_m"),  # OVERDISTANCE weekly long swim (70.3 ~3000, IM ~4500)
@@ -275,15 +357,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                        "swim_css": thresh["swim_css_per_100m"]},
         "available_sessions": available,
         "hard_rules": hard_rules,
-        "dosing_note": ("Build to weekly_tss_target — weekly_tss_floor is a HARD minimum "
-                        "(below it the week detrains the athlete and validation rejects it; "
-                        "only deload/taper weeks may sit under maintenance). If run caps or "
-                        "travel limit running, close the gap with BIKE volume, never by "
-                        "planning a short week. PROTECT the long ride (~long_ride_target_min). "
-                        "Total run mileage must NOT exceed weekly_run_mileage_cap_km and the longest "
-                        "run must NOT exceed long_run_cap_min (these are MAX ceilings, +10-15% on the "
-                        "highest of the last 4 weeks). Obey run_protocol (no quality if "
-                        "quality_allowed=false) and hard_rules. No type outside available_sessions."),
+        "dosing_note": dosing_note,
     }
 
 

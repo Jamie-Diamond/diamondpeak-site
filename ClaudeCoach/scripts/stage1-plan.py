@@ -69,6 +69,30 @@ def _is_long_ride(s):
     return (s.get("sport") or "").lower() in ("ride", "bike", "brick") and "long" in (s.get("name") or "").lower()
 
 
+def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: float, run_min_cap=None):
+    """Scale ALL runs down so weekly run MINUTES stay under the ceiling (never up -
+    mileage is a MAX), then re-clamp the long run to its own cap. Prefers the explicit
+    minute cap (what validate_week enforces) over km x pace, so the closure lever and
+    the validator can never drift (the km and minute caps use different implied paces)."""
+    run_sessions = [s for s in proposal["sessions"] if (s.get("sport") or "").lower() == "run"]
+    cur_min = sum(sum(seg.get("minutes", 0) for seg in s.get("segments", [])) for s in run_sessions)
+    # Clamp to the STRICTER of the minute cap (validate_week) and the km cap turned
+    # into minutes at the same pace audit_built uses (run_min/pace <= cap_km); their
+    # floors diverge at low volume, so honouring only one can still breach the other.
+    _caps = [c for c in (run_min_cap, (mileage_cap_km * pace) if mileage_cap_km else None) if c]
+    cap_min = min(_caps) if _caps else None
+    if cap_min and cur_min > cap_min and cur_min > 0:
+        f = cap_min / cur_min
+        for s in run_sessions:
+            for seg in s.get("segments", []):
+                seg["minutes"] = max(15, round(seg["minutes"] * f))
+    for s in run_sessions:
+        if _is_long_run(s) and lr_cap:
+            cur = sum(seg.get("minutes", 0) for seg in s.get("segments", []))
+            if cur > lr_cap:
+                _set_total_minutes(s, lr_cap)
+
+
 def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06, max_iter=5):
     """Reliable TSS — but PROTECT key sessions. The long run and long ride are CLAMPED to
     their targets (never used to absorb TSS); quality is fixed by dose; only the OTHER easy
@@ -76,6 +100,7 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
     lr_cap = brief.get("long_run_cap_min")            # MAX long run
     lrd_min = brief.get("long_ride_target_min")
     mileage_cap_km = brief.get("weekly_run_mileage_cap_km")  # MAX weekly run km
+    run_min_cap = brief.get("weekly_run_min_cap")     # MAX weekly run MINUTES (validate_week's cap)
     PACE = 5.3  # ~easy min/km (matches the audit's km estimate)
 
     # 1. Long ride clamped to its target; long run CLAMPED DOWN to its cap (never up).
@@ -88,32 +113,34 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
                 _set_total_minutes(s, lr_cap)
 
     # 2. Total run mileage is a CEILING: if over the weekly cap, scale ALL runs down to it.
-    #    (Never scale runs UP — mileage is a max, not a target.)
+    #    (Never scale runs UP - mileage is a max, not a target.)
     if mileage_cap_km:
-        run_sessions = [s for s in proposal["sessions"] if (s.get("sport") or "").lower() == "run"]
-        cur_min = sum(sum(seg.get("minutes", 0) for seg in s.get("segments", [])) for s in run_sessions)
-        cap_min = mileage_cap_km * PACE
-        if cur_min > cap_min and cur_min > 0:
-            f = cap_min / cur_min
-            for s in run_sessions:
-                for seg in s.get("segments", []):
-                    seg["minutes"] = max(15, round(seg["minutes"] * f))
-            # re-clamp the long run in case scaling pushed it (it won't, but safe)
-            for s in run_sessions:
-                if _is_long_run(s) and lr_cap:
-                    cur = sum(seg.get("minutes", 0) for seg in s.get("segments", []))
-                    if cur > lr_cap:
-                        _set_total_minutes(s, lr_cap)
+        _clamp_runs_to_cap(proposal, mileage_cap_km, lr_cap, PACE, run_min_cap)
 
-    # 3. TSS is closed with BIKE volume only (endurance rides, not the long ride, not runs).
+    # 3. Close the weekly TSS gap. WHICH sessions absorb it is athlete-conditional
+    #    (Phase 5b): a run-limited athlete (injury / no run quality, e.g. Jamie's ankle
+    #    rehab) or a single-sport athlete (e.g. Calum) closes with BIKE volume only and a
+    #    protected long ride; everyone else spreads the closure across BOTH bike and run
+    #    easy endurance so the week is not ballooned with easy bike alone (Kathryn's skew).
+    bike_only_closure = bool(brief.get("run_limited")) or bool(brief.get("single_sport"))
     def _all_true_z2(sess):
         segs = sess.get("segments") or []
         return bool(segs) and all(
             (sg.get("if") if sg.get("if") is not None else segment_if(sess.get("sport", ""), sg.get("zone")))
             <= _FLEX_IF for sg in segs)
-    flex = lambda s: (_is_endurance(s) and _all_true_z2(s)
-                      and (s.get("sport") or "").lower() in ("bike", "ride")
-                      and not _is_long_ride(s))
+    def flex(s):
+        sport = (s.get("sport") or "").lower()
+        if sport in ("bike", "ride"):
+            # bike lever stays TRUE Z2 only (never stretch bike tempo into the grey zone
+            # to fake TSS - audit P2-8); the long ride is protected.
+            return _is_endurance(s) and _all_true_z2(s) and not _is_long_ride(s)
+        if sport == "run" and not bike_only_closure:
+            # non-limited athletes ALSO close with easy-run endurance so the gap is spread
+            # across sports, not dumped onto easy bike alone; the long run is capped, never
+            # used to absorb TSS, and run minutes are re-clamped to the mileage cap each
+            # iteration below so this can never breach the ceiling.
+            return _is_endurance(s) and not _is_long_run(s)
+        return False
     built = pb.build_sessions(athlete, proposal)
     if not target:
         return built
@@ -129,6 +156,11 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
             if flex(s):
                 for seg in s.get("segments", []):
                     seg["minutes"] = max(15, round(seg["minutes"] * factor))
+        # When runs share the closure, keep them under the weekly mileage ceiling each
+        # iteration (mileage is a MAX) so distributing the gap can never breach the run
+        # cap; the uncapped bike absorbs any remainder on the next pass.
+        if not bike_only_closure and mileage_cap_km:
+            _clamp_runs_to_cap(proposal, mileage_cap_km, lr_cap, PACE, run_min_cap)
         built = pb.build_sessions(athlete, proposal)
     return built
 
@@ -188,6 +220,37 @@ def audit_built(brief: dict, built: dict, target, proposal: dict) -> list:
     if lrt and (not rides or max(s["duration_min"] for s in rides) < lrt * 0.85):
         have = max((s["duration_min"] for s in rides), default=0)
         issues.append(f"no protected long ride — longest ride {have}min < target ~{lrt}min")
+
+    # ── MINIMUM-QUALITY FLOOR (Phase 5c) ──────────────────────────────────────
+    # Complement of the run-quality hard-stop above: that rejects EXCESS quality for a
+    # run-limited athlete; this rejects a week that is too EASY. Quality is measured from
+    # the proposal's own segment intensities (authoritative), summed per sport, and checked
+    # by validate_plan.check_quality_floor against the phase TID top-end. Routed to
+    # NON-limited sports only: run quality is REQUIRED when quality_allowed=true (Kathryn's
+    # 100%-easy runs) but NEVER demanded of a run-limited athlete (Jamie - his floor lands
+    # on the bike). Swim is excluded (name/zone intensity unreliable for swims).
+    _sport_key = {"bike": "Bike", "ride": "Bike", "run": "Run"}
+    q_summary: dict = {}
+    for s in proposal.get("sessions", []):
+        key = _sport_key.get((s.get("sport") or "").lower())
+        if not key:
+            continue
+        agg = q_summary.setdefault(key, {"easy": 0.0, "quality": 0.0})
+        for seg in (s.get("segments") or []):
+            mins = seg.get("minutes", 0) or 0
+            iff = seg.get("if") if seg.get("if") is not None else segment_if(s.get("sport", ""), seg.get("zone"))
+            agg["quality" if (iff or 0) >= _QUALITY_IF else "easy"] += mins
+    run_can_do_quality = (rp.get("quality_allowed") is True) and not brief.get("run_limited")
+    _floor_sports = {"Bike"} | ({"Run"} if run_can_do_quality else set())
+    _require_quality = {"Run"} if run_can_do_quality else set()
+    try:
+        from primitives.validate_plan import check_quality_floor
+        for v in check_quality_floor(q_summary, brief.get("distribution_by_sport") or {},
+                                     floor_sports=_floor_sports,
+                                     require_quality_sports=_require_quality):
+            issues.append(f"rule(quality): {v.detail}")
+    except Exception:
+        pass
     return issues
 
 
@@ -257,6 +320,9 @@ def main():
     ap.add_argument("--max-attempts", type=int, default=3)
     ap.add_argument("--override-json", metavar="PATH",
                     help="skip LLM generation; use this JSON file as the session proposal")
+    ap.add_argument("--availability", metavar="PATH",
+                    help="this week's availability JSON to flex day_rules (Phase 5a); "
+                         "defaults to athletes/<slug>/this-week-availability.json if present")
     args = ap.parse_args()
 
     cfg = json.loads((BASE / "config" / "athletes.json").read_text())[args.athlete]
@@ -267,7 +333,19 @@ def main():
     # evaluated for the week being planned. Planning with the run date briefed
     # next week against THIS week's (lower) requirement — the 5 Jul 2026 bug
     # that planned 581 TSS into a week needing 816.
-    brief = sl.planning_brief(args.athlete, cfg, today=week_start, plan_start=week_start)
+    # Per-week availability (Phase 5a): flex the default day_rules to this week if the
+    # athlete has told us their availability. Ad-hoc adjustable: an explicit --availability
+    # file, else a standing athletes/<slug>/this-week-availability.json (chat can write it).
+    _avail = None
+    _avail_path = (Path(args.availability) if args.availability
+                   else BASE / "athletes" / args.athlete / "this-week-availability.json")
+    if _avail_path.exists():
+        try:
+            _avail = json.loads(_avail_path.read_text())
+        except Exception:
+            _avail = None
+    brief = sl.planning_brief(args.athlete, cfg, today=week_start, plan_start=week_start,
+                              availability=_avail)
     if brief.get("event_unknown"):
         print(json.dumps({"error": f"event unknown for {args.athlete} — cannot plan"}))
         sys.exit(1)
