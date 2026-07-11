@@ -2245,6 +2245,29 @@ def _handle_bugfix(token, chat_id, data, athletes, config):
         return True
 
     if action == "yes":
+        # Rule-pile consolidations (prune / merge / add_rule) live outside git -
+        # the bug-fixer rewrites the gitignored persistent-rules.md directly (with
+        # a backup + stale-SHA guard), so they are applied via --apply-prune, not a
+        # git merge. Code fixes fall through to the merge path below unchanged.
+        if rv.get("kind") == "prune":
+            pslug = rv.get("slug", slug)
+            r = subprocess.run(
+                ["python3", str(_BUGFIXER), "--apply-prune", rid],
+                cwd=config.get("project_dir"), capture_output=True, text=True)
+            note = (((r.stderr or "") + (r.stdout or "")).strip().splitlines() or [""])[-1]
+            # apply_prune flips the review status to "applied" only on success; every
+            # failure path (stale SHA, rules file missing, already applied, no such
+            # proposal) leaves the status untouched and explains itself on stderr, so
+            # re-read the review to tell a real apply from a graceful no-op.
+            if _bug_reviews().get(rid, {}).get("status") == "applied":
+                # The live rules changed; drop the athlete's cached chat session so
+                # the consolidated rules take effect on their next message.
+                engine._clear_session(str(athlete_files(pslug)["system_prompt"]))
+                send(token, chat_id, f"✅ Rules consolidated: {title}\n_{rv.get('stat', '')}_")
+            else:
+                send(token, chat_id,
+                     f"⚠️ Couldn't apply *{title}*: {note or 'no change made'}")
+            return True
         if _g(["rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip() != "main":
             _g(["checkout", "main"])
         m = _g(["merge", "--no-ff", "-m", f"bugfix {rid}: {title}", branch])
