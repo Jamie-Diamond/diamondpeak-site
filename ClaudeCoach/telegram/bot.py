@@ -623,13 +623,19 @@ def tg_get(token, method, params):
         return {"result": []}
 
 
-def send(token, chat_id, text, parse_mode="Markdown", reply_markup=None):
+def send(token, chat_id, text, parse_mode="Markdown", reply_markup=None,
+         disable_notification=False):
     chunks = [text[i:i+4096] for i in range(0, len(text), 4096)]
+    last_id = None
     for i, chunk in enumerate(chunks):
         payload = {"chat_id": chat_id, "text": chunk, "parse_mode": parse_mode}
+        if disable_notification:
+            payload["disable_notification"] = True
         if reply_markup and i == len(chunks) - 1:
             payload["reply_markup"] = reply_markup
-        tg_post(token, "sendMessage", payload)
+        r = tg_post(token, "sendMessage", payload)
+        last_id = ((r or {}).get("result") or {}).get("message_id") or last_id
+    return last_id
 
 
 def typing(token, chat_id):
@@ -3454,34 +3460,34 @@ class _StatusTicker:
 def call_claude_streaming(token, chat_id, placeholder_id,
                           user_message, config, history, model=MODEL_OPUS,
                           system_prompt_file=None, athlete_name="Jamie", context=""):
-    """Telegram wrapper over engine.stream_claude implementing the Phase 3 two-
-    message UX. All generation lives in lib/engine.py; this only does transport.
+    """Telegram wrapper over engine.stream_claude driving ONLY msg1, the silent
+    live-status message (Phase 3c). All generation lives in lib/engine.py; this
+    only does transport.
 
     msg1 (the placeholder) is SILENT (disable_notification set by the caller) and
     becomes a LIVE STATUS line rewritten ~1/sec by a background ticker while tools
-    run. When the reply first becomes visible we ALWAYS STOP editing msg1, send a
-    NEW notifying msg2, and stream the reply into it (the same 1.5s throttle +
-    skip-unchanged guard as before) - so the athlete gets exactly one push per
-    turn and it lands on the ANSWER, never on the thinking message (Phase 3b).
-    At the end msg1 is tidied: collapsed to a one-line summary if a status line
-    was actually shown, otherwise deleted (it only ever held "…"), so no stale
-    silent bubble lingers above the reply.
+    run ("Checking intervals.icu...", "Building the session...", with an elapsed
+    timer on long steps). It reports what the bot is doing; it is NEVER the answer.
 
-    Returns (response, reply_id): `reply_id` is the message the caller must edit
-    with the fully-processed final reply (normally msg2; the placeholder only in
-    the rare msg2-send-failure degradation). Only ('chunk'|'final') text is ever
-    returned/logged; ('status') events drive msg1 alone and never reach history
-    or the capture-verify path."""
+    This function DOES NOT send or stream the reply. It consumes the stream purely
+    to (a) drive the status ticker and (b) accumulate the final response text. The
+    caller sends the fully-processed reply ONCE, as a NEW notifying message, only
+    after generation finishes - so the single Telegram push lands on the complete
+    answer and its preview reads as the real reply, never a placeholder. Phase 3c
+    removes the old born-as-placeholder streamed reply that pushed early as "...".
+
+    Returns (response, status_shown, summary):
+      response     - the final assistant text (post-processing happens in the caller);
+      status_shown - True if a live-status line was actually shown on msg1, so the
+                     caller collapses msg1 to a summary rather than deleting it;
+      summary      - the one-line past-tense collapse text (e.g. "Checked
+                     intervals.icu, built the session") when status_shown, else None.
+    No reply message is sent here: the caller owns reply delivery."""
     t_start = time.time()
     not_before = t_start + 1.5
     ticker = None
     tools_seen = []          # ordered, deduped (key, past) for the collapse line
-    reply_started = False
-    msg2_id = None
-    reply_id = placeholder_id
     status_shown = False     # did msg1 ever display a real live-status line?
-    last_edit = 0.0
-    last_sent = ""
     final = None
 
     # try/finally guarantees the background ticker is always torn down - an
@@ -3507,65 +3513,23 @@ def call_claude_streaming(token, chat_id, placeholder_id,
                 ticker.set_status(live)
                 continue
 
-            # kind == "chunk": growing reply snapshot.
-            disp = _telegram_visible(event[1])
-            if not disp.strip():
-                continue
-            if not reply_started:
-                reply_started = True
-                # Stop msg1 edits FIRST so Telegram cannot interleave msg1 and msg2,
-                # and note whether a live-status line was actually shown (drives the
-                # end-of-stream tidy: collapse-to-summary vs delete).
-                if ticker is not None:
-                    status_shown = ticker.shown
-                    ticker.stop()
-                # The reply ALWAYS lands in a FRESH, NOTIFYING msg2 (no
-                # disable_notification) - on BOTH paths (tools shown, or the reply
-                # beating the ~1.5s grace). msg1 stayed silent, so this fresh send is
-                # the single push per turn and it fires the moment the answer starts
-                # appearing (Phase 3b). Streaming then edits msg2 in place (no re-ping).
-                r = tg_post(token, "sendMessage",
-                            {"chat_id": chat_id, "text": "…", "parse_mode": "Markdown"})
-                msg2_id = (r.get("result") or {}).get("message_id")
-                if msg2_id:
-                    reply_id = msg2_id
-                else:
-                    # msg2 send failed (rare API error): degrade to reusing the
-                    # placeholder as the reply target and skip the collapse/delete.
-                    reply_id = placeholder_id
-
-            now = time.time()
-            if now - last_edit >= 1.5 and disp != last_sent:
-                tg_post(token, "editMessageText", {
-                    "chat_id": chat_id,
-                    "message_id": reply_id,
-                    "text": disp + " ▍",
-                    "parse_mode": "Markdown",
-                })
-                last_edit = now
-                last_sent = disp
+            # kind == "chunk": partial reply snapshots. Consumed only to keep the
+            # stream draining; we NO LONGER render partial reply text to Telegram.
+            # The complete reply is sent once, by the caller, after generation ends.
+            continue
     finally:
         if ticker is not None:
+            status_shown = ticker.shown
             ticker.stop()
 
-    # Tidy msg1 once the reply has its own msg2 (skip the degraded path where the
-    # reply reused the placeholder). If a live-status line was actually shown,
-    # collapse msg1 to a one-line past-tense summary of what ran (kept above the
-    # reply; editMessageText never pings). Otherwise msg1 only ever held "…" (the
-    # reply beat the grace, or no tools ran) - delete it so no stale silent bubble
-    # lingers above the answer.
-    if msg2_id is not None:
-        if status_shown:
-            pasts = [p for _, p in tools_seen] or ["done"]
-            summary = ", ".join(pasts)
-            summary = summary[0].upper() + summary[1:]
-            tg_post(token, "editMessageText",
-                    {"chat_id": chat_id, "message_id": placeholder_id, "text": summary})
-        else:
-            tg_post(token, "deleteMessage",
-                    {"chat_id": chat_id, "message_id": placeholder_id})
+    # Build the collapse summary the caller uses when a status line was shown.
+    summary = None
+    if status_shown:
+        pasts = [p for _, p in tools_seen] or ["done"]
+        summary = ", ".join(pasts)
+        summary = summary[0].upper() + summary[1:]
 
-    return (final if final is not None else "(no response)", reply_id)
+    return (final if final is not None else "(no response)", status_shown, summary)
 
 
 def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slug, text):
@@ -3616,28 +3580,29 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             return
 
         typing(token, chat_id)
-        # Send a placeholder and stream chunks into it. SILENT (disable_notification):
-        # this is the thinking/status message, never the answer. The athlete must get
-        # exactly one push per turn and it must land on the REPLY (a fresh notifying
-        # msg2 sent by call_claude_streaming), never on this "…" / live-status message.
+        # msg1: the SILENT (disable_notification) live-status / "thinking" placeholder.
+        # It reports what the bot is doing and must NEVER fire a push - the single push
+        # per turn lands on the complete reply (msg2) sent below, once generation has
+        # finished. call_claude_streaming drives this message and returns the final
+        # text; it no longer sends or streams any reply (Phase 3c).
         placeholder = tg_post(token, "sendMessage", {
             "chat_id": chat_id, "text": "…", "parse_mode": "Markdown",
             "disable_notification": True,
         })
         placeholder_id = (placeholder.get("result") or {}).get("message_id")
 
-        # reply_id is the message that carries the final reply: the placeholder in
-        # the single-message flow, or a separate msg2 when a live status line was
-        # shown (Phase 3). call_claude_streaming decides and returns it.
-        reply_id = placeholder_id
+        status_shown = False
+        summary = None
         if placeholder_id:
-            response, reply_id = call_claude_streaming(
+            response, status_shown, summary = call_claude_streaming(
                 token, chat_id, placeholder_id,
                 text, config, history, model=model,
                 system_prompt_file=files["system_prompt"],
                 athlete_name=athlete_name, context=context,
             )
         else:
+            # msg1 send failed (rare API error): fall back to a non-streaming call so
+            # the reply is still produced and delivered below.
             response = call_claude(text, config, history, model=model,
                                    system_prompt_file=files["system_prompt"],
                                    athlete_name=athlete_name, context=context)
@@ -3650,24 +3615,30 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         clean = _verify_session_preview(slug, clean)
         clean = _strip_model_countdown(clean, athlete)
         final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
-        if reply_id:
-            res = tg_post(token, "editMessageText", {
-                "chat_id": chat_id, "message_id": reply_id,
-                "text": final, "parse_mode": "Markdown",
-                "reply_markup": _reply_inline(slug),
-            })
-            # Last-resort guard: if the edit failed entirely (even the plain-text retry,
-            # e.g. MESSAGE_TOO_LONG), send the reply as a fresh message so it is NEVER
-            # silently lost to a stuck "…". Delete the reply message first so the dead "…"
-            # (or partial stream) does not linger above the real reply.
-            if not (res or {}).get("ok") and clean:
-                log("editMessageText final delivery failed - sending fresh message")
-                tg_post(token, "deleteMessage", {
-                    "chat_id": chat_id, "message_id": reply_id,
-                })
-                send(token, chat_id, final, reply_markup=_reply_inline(slug))
-        elif clean:
-            send(token, chat_id, final, reply_markup=_reply_inline(slug))
+
+        # msg2: the FINAL, COMPLETE reply, sent ONCE as a NEW NOTIFYING message only
+        # now that generation is done. send() notifies by default and handles >4096
+        # chunking + Markdown->plain fallback + the reply keyboard. Because it is sent
+        # complete, the Telegram push preview shows the real answer and the push fires
+        # when the answer is ready - the whole point of Phase 3c. A charts-only reply
+        # (clean == "") sends no msg2; the charts already went out as their own messages.
+        msg2_id = None
+        if clean:
+            msg2_id = send(token, chat_id, final, reply_markup=_reply_inline(slug))
+
+        # Tidy msg1 AFTER the reply is sent: collapse to a one-line past-tense summary
+        # if a live-status line was shown, else delete the bare "…". editMessageText /
+        # deleteMessage never ping, so this adds no second notification.
+        if placeholder_id:
+            if status_shown and summary:
+                tg_post(token, "editMessageText",
+                        {"chat_id": chat_id, "message_id": placeholder_id, "text": summary})
+            else:
+                tg_post(token, "deleteMessage",
+                        {"chat_id": chat_id, "message_id": placeholder_id})
+
+        log(f"[{slug}] reply delivered: status_shown={status_shown} "
+            f"msg2_id={msg2_id} chars={len(clean)}")
         log(f"[{slug}] Out: {clean[:80]}")
 
         history.append(_hist_entry(text, clean))
@@ -3696,7 +3667,9 @@ def _image_reply_worker(token, chat_id, file_id, caption, athlete_entry, config)
         tf.write(raw)
         img_path = tf.name
     try:
-        send(token, chat_id, "_On it..._")
+        # Silent status (Phase 3c): the "On it" note must not ping; the single push
+        # lands on the final image reply below (sent notifying by default).
+        send(token, chat_id, "_On it..._", disable_notification=True)
         slug = athlete_entry["slug"]
         files = athlete_files(slug)
         athlete_name = athlete_entry.get("name", slug).split()[0]
@@ -3989,7 +3962,9 @@ def _voice_reply_worker(token, chat_id, file_id, athletes, config):
     text = transcribe_voice(raw) or ""
     if not text:
         return
-    send(token, chat_id, f"_Heard: {text}_")
+    # Silent transcription echo (Phase 3c): confirming what was heard must not ping;
+    # the single push lands on the answer produced by _route_text below.
+    send(token, chat_id, f"_Heard: {text}_", disable_notification=True)
     _route_text(token, chat_id, text, athletes, config)
 
 
