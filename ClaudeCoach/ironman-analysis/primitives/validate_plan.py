@@ -284,8 +284,8 @@ def check_bike_tid(bike_bands: dict, tid_row, *, slack_pp: float = 6.0,
         out.append(Violation(
             code="bike_tid_floor", severity="soft",
             detail=(f"Bike: {q_pct:.0f}% quality (Z3+Z4-5) vs blueprint TID ~{q_target:.0f}% "
-                    f"({mod_t:.0f}% Z3 + {high_t:.0f}% Z4-5) - the run is limited, so convert "
-                    f"easy bike minutes to tempo/threshold/VO2 within the same total (no added volume)"),
+                    f"({mod_t:.0f}% Z3 + {high_t:.0f}% Z4-5) - convert easy bike minutes to "
+                    f"tempo/threshold/VO2 to reach the bike TID (shape within the same total)"),
         ))
     if high_t > 0 and high <= 0:
         out.append(Violation(

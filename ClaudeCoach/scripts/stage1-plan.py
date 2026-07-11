@@ -75,12 +75,17 @@ def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: floa
     minute cap (what validate_week enforces) over km x pace, so the closure lever and
     the validator can never drift (the km and minute caps use different implied paces)."""
     run_sessions = [s for s in proposal["sessions"] if (s.get("sport") or "").lower() == "run"]
-    cur_min = sum(sum(seg.get("minutes", 0) for seg in s.get("segments", [])) for s in run_sessions)
+    if not run_sessions:
+        return
+    def _tot():
+        return sum(sum(sg.get("minutes", 0) for sg in s.get("segments", [])) for s in run_sessions)
     # Clamp to the STRICTER of the minute cap (validate_week) and the km cap turned
     # into minutes at the same pace audit_built uses (run_min/pace <= cap_km); their
     # floors diverge at low volume, so honouring only one can still breach the other.
+    # int() floors it so the ceiling holds after rounding.
     _caps = [c for c in (run_min_cap, (mileage_cap_km * pace) if mileage_cap_km else None) if c]
-    cap_min = min(_caps) if _caps else None
+    cap_min = int(min(_caps)) if _caps else None
+    cur_min = _tot()
     if cap_min and cur_min > cap_min and cur_min > 0:
         f = cap_min / cur_min
         for s in run_sessions:
@@ -91,6 +96,22 @@ def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: floa
             cur = sum(seg.get("minutes", 0) for seg in s.get("segments", []))
             if cur > lr_cap:
                 _set_total_minutes(s, lr_cap)
+    # Final trim: rounding and the 15-min floor can leave a few minutes over the ceiling;
+    # shave the overage off the largest non-long run so the cap ALWAYS holds (caps win).
+    if cap_min:
+        guard = 0
+        while _tot() > cap_min and guard < 100:
+            guard += 1
+            cand = [s for s in run_sessions if not _is_long_run(s)
+                    and sum(sg.get("minutes", 0) for sg in s.get("segments", [])) > 15]
+            if not cand:
+                break
+            s = max(cand, key=lambda s: sum(sg.get("minutes", 0) for sg in s.get("segments", [])))
+            segs = [sg for sg in s.get("segments", []) if sg.get("minutes", 0) > 15]
+            if not segs:
+                break
+            sg = max(segs, key=lambda x: x.get("minutes", 0))
+            sg["minutes"] = max(15, sg["minutes"] - max(1, _tot() - cap_min))
 
 
 def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06, max_iter=5):
@@ -215,18 +236,31 @@ def _bike_bands(proposal: dict) -> dict:
     return {"low": low, "mod": mod, "high": high}
 
 
-def audit_built(brief: dict, built: dict, target, proposal: dict) -> list:
-    """Everything the week must satisfy before it's offered. Returns issue strings
-    (empty = clean). Drives the iterate-until-clean loop."""
+def audit_built(brief: dict, built: dict, target, proposal: dict):
+    """Audit the built week. Returns (blocking, advisory).
+
+    BLOCKING = safety ceilings + hard rules + key structure (mileage/long-run/CTL-ramp/
+    TSS caps, wrong-day rules, the ankle run-quality hard-stop, a missing long ride) -
+    these prevent a push. ADVISORY = quality/shape/monotony nudges - they drive the
+    iterate-to-clean loop as feedback but NEVER block the push (checks advise; only
+    safety ceilings block). Both lists are surfaced and fed back to the proposer."""
     import datetime as _dt
-    issues = []
+    blocking, advisory = [], []
+
+    # Weekly TSS vs target: advisory (main gates load_on_target +/-12% and the hard weekly
+    # TSS cap/floor separately) - here it only nudges the proposer toward the number.
     if target and abs(built["total_tss"] - target) > 0.08 * target:
         d = built["total_tss"] - target
-        issues.append(f"week TSS {built['total_tss']} vs target {target} ({d:+}) — "
-                      f"{'add' if d < 0 else 'cut'} endurance volume")
-    issues += [f"rule(hard): {v['msg']}" for v in built.get("hard", [])]
-    issues += [f"rule(dist): {v['msg']}" for v in built.get("soft", [])]
-    # swim_focus: the swim on a focus day must match the allowed type(s)
+        advisory.append(f"week TSS {built['total_tss']} vs target {target} ({d:+}) - "
+                        f"{'add' if d < 0 else 'cut'} endurance volume")
+
+    # Hard validate_week rules (wrong-day, TSS cap/floor, CTL ramp, run-volume caps,
+    # distance/duration mismatch) are safety ceilings -> BLOCK. Soft ones (monotony,
+    # intensity-distribution, strength cap) ADVISE.
+    blocking += [f"rule(hard): {v['msg']}" for v in built.get("hard", [])]
+    advisory += [f"rule(soft): {v['msg']}" for v in built.get("soft", [])]
+
+    # swim_focus type on a focus day: advisory (a preference, not a safety ceiling).
     sf = (brief.get("day_rules") or {}).get("swim_focus") or {}
     if sf:
         for s in proposal.get("sessions", []):
@@ -236,77 +270,65 @@ def audit_built(brief: dict, built: dict, target, proposal: dict) -> list:
             allowed = sf.get(wd)
             nm = (s.get("name") or "").lower()
             if allowed and not any(a in nm or a.replace("technique", "drill")[:4] in nm for a in allowed):
-                issues.append(f"{wd} swim must be {allowed} (got '{s.get('name')}')")
+                advisory.append(f"{wd} swim should be {allowed} (got '{s.get('name')}')")
 
-    # ── RUN PROTOCOL (the gaps that produced the 22k run / illegal threshold run) ──
+    # ── RUN volume ceilings + ankle hard-stop (SAFETY -> BLOCK) ──
     runs = [s for s in built["sessions"] if s["sport"] == "Run"]
     run_min = sum(s["duration_min"] for s in runs)
     run_km = round(run_min / 5.3, 1)   # ~easy pace 5.3 min/km
-    cap_km = brief.get("weekly_run_mileage_cap_km")   # MAX (highest of last 4 wks ×1.15)
+    cap_km = brief.get("weekly_run_mileage_cap_km")   # MAX weekly run km ceiling
     if cap_km and run_km > cap_km:
-        issues.append(f"run mileage ~{run_km}km EXCEEDS cap {cap_km}km (+10-15% max) — cut run durations")
+        blocking.append(f"run mileage ~{run_km}km EXCEEDS cap {cap_km}km (+10-15% max) - cut run durations")
     rp = brief.get("run_protocol") or {}
     if rp.get("quality_allowed") is False:
         for s in proposal.get("sessions", []):
             if (s.get("sport") or "").lower() != "run":
                 continue
-            if any((seg.get("if") if seg.get("if") is not None else segment_if("run", seg.get("zone"))) >= 0.85
-                   for seg in (s.get("segments") or [])):
-                issues.append(f"run '{s.get('name')}' has quality intensity but run quality is NOT allowed (ankle)")
-    lrc = brief.get("long_run_cap_min")   # MAX single long run (×1.15)
+            if any((_seg_if("run", seg) or 0) >= _QUALITY_IF for seg in (s.get("segments") or [])):
+                blocking.append(f"run '{s.get('name')}' has quality intensity but run quality is NOT allowed (ankle)")
+    lrc = brief.get("long_run_cap_min")   # MAX single long run
     if lrc and runs and max(s["duration_min"] for s in runs) > lrc:
-        issues.append(f"long run {max(s['duration_min'] for s in runs)}min EXCEEDS cap {lrc}min (+10-15% max)")
+        blocking.append(f"long run {max(s['duration_min'] for s in runs)}min EXCEEDS cap {lrc}min (+10-15% max)")
 
-    # ── LONG RIDE must be present and protected ──
+    # ── LONG RIDE must be present (key session -> BLOCK) ──
     lrt = brief.get("long_ride_target_min")
     rides = [s for s in built["sessions"] if s["sport"] in ("Ride", "Bike", "Brick")]
     if lrt and (not rides or max(s["duration_min"] for s in rides) < lrt * 0.85):
         have = max((s["duration_min"] for s in rides), default=0)
-        issues.append(f"no protected long ride — longest ride {have}min < target ~{lrt}min")
+        blocking.append(f"no protected long ride - longest ride {have}min < target ~{lrt}min")
 
-    # ── MINIMUM-QUALITY FLOOR (Phase 5c) ──────────────────────────────────────
-    # Complement of the run-quality hard-stop above: that rejects EXCESS quality for a
-    # run-limited athlete; this rejects a week that is too EASY. Two athlete-conditional
-    # regimes, gated on limiter signals that already exist (run_limited / quality_allowed):
-    #   - RUN-LIMITED (Jamie's ankle): the bike carries the quality the run cannot, so target
-    #     the full blueprint bike TID (Z3 + Z4-5); runs stay easy, never a run-quality demand.
-    #   - otherwise: bike (and run when quality_allowed) must carry SOME quality vs the phase
-    #     top-end; require run quality when quality_allowed=true. Swim excluded (unreliable).
-    if brief.get("run_limited"):
-        # RUN-LIMITED (e.g. Jamie's ankle): the bike carries the quality the run cannot.
-        # Target the full blueprint bike TID (Z3 + Z4-5). Runs stay EASY - no run floor,
-        # no run-quality demand (the ankle hard-stop above already rejects any run quality).
-        try:
-            from primitives.validate_plan import check_bike_tid
-            for v in check_bike_tid(_bike_bands(proposal),
-                                    (brief.get("distribution_by_sport") or {}).get("Bike")):
-                issues.append(f"rule(quality): {v.detail}")
-        except Exception:
-            pass
-    else:
-        _sport_key = {"bike": "Bike", "ride": "Bike", "run": "Run"}
-        q_summary: dict = {}
-        for s in proposal.get("sessions", []):
-            key = _sport_key.get((s.get("sport") or "").lower())
-            if not key:
-                continue
-            agg = q_summary.setdefault(key, {"easy": 0.0, "quality": 0.0})
-            for seg in (s.get("segments") or []):
-                mins = seg.get("minutes", 0) or 0
-                iff = _seg_if(s.get("sport", ""), seg)
-                agg["quality" if (iff or 0) >= _QUALITY_IF else "easy"] += mins
-        run_can_do_quality = rp.get("quality_allowed") is True
-        _floor_sports = {"Bike"} | ({"Run"} if run_can_do_quality else set())
-        _require_quality = {"Run"} if run_can_do_quality else set()
-        try:
-            from primitives.validate_plan import check_quality_floor
-            for v in check_quality_floor(q_summary, brief.get("distribution_by_sport") or {},
-                                         floor_sports=_floor_sports,
-                                         require_quality_sports=_require_quality):
-                issues.append(f"rule(quality): {v.detail}")
-        except Exception:
-            pass
-    return issues
+    # ── QUALITY (ADVISORY: drives the loop, never blocks) ──
+    # Bike quality target = the BLUEPRINT bike TID (Z3 + Z4-5), counting Z3/tempo/sweetspot
+    # as MOD (not easy) so an on-blueprint bike (e.g. 70/18/12) PASSES. Same check for every
+    # athlete; run-limited athletes rely on this to carry the quality the run cannot.
+    try:
+        from primitives.validate_plan import check_bike_tid
+        for v in check_bike_tid(_bike_bands(proposal),
+                                (brief.get("distribution_by_sport") or {}).get("Bike")):
+            advisory.append(f"rule(quality): {v.detail}")
+    except Exception:
+        pass
+    # Run quality: only for a NON-limited athlete cleared for it, and only by SHAPING existing
+    # capped run minutes (convert part of an easy run to a short tempo/threshold), never adding
+    # minutes. If no easy run is big enough to host a quality block within the caps, yield
+    # gracefully (advisory). Run-limited athletes get NO run quality (ankle hard-stop governs).
+    if (not brief.get("run_limited")) and rp.get("quality_allowed") is True:
+        run_props = [s for s in proposal.get("sessions", []) if (s.get("sport") or "").lower() == "run"]
+        def _rmin(s):
+            return sum(seg.get("minutes", 0) or 0 for seg in (s.get("segments") or []))
+        has_q = any((_seg_if("run", seg) or 0) >= _QUALITY_IF
+                    for s in run_props for seg in (s.get("segments") or []))
+        if run_props and not has_q:
+            hosts = [s for s in run_props if not _is_long_run(s) and _rmin(s) >= 35]
+            if hosts:
+                advisory.append("rule(quality): runs are 100% easy - SHAPE run quality WITHIN the "
+                                "mileage cap (convert part of an easy run to a short tempo/threshold; "
+                                "do NOT add run minutes or exceed the caps)")
+            else:
+                advisory.append("advisory: run quality not feasible within the current mileage/long-run "
+                                "cap - runs left easy (caps win)")
+
+    return blocking, advisory
 
 
 def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -> str:
@@ -420,10 +442,10 @@ def main():
     if override_path and override_path.exists():
         proposal = json.loads(override_path.read_text())
         built = close_to_target(args.athlete, proposal, target, brief)
-        issues = audit_built(brief, built, target, proposal)
-        n_issues = len(issues)
-        attempts = [f"override: {n_issues} issue(s)" + (f" — {issues}" if issues else " — CLEAN")]
-        best = (built, n_issues, proposal)
+        blocking, advisory = audit_built(brief, built, target, proposal)
+        attempts = [f"override: {len(blocking)} blocking / {len(advisory)} advisory"
+                    + (f" - {blocking + advisory}" if (blocking or advisory) else " - CLEAN")]
+        best = (built, blocking, advisory, proposal)
     else:
         # ITERATE UNTIL CLEAN (iterative planning is fine — Jamie 15 Jun): propose → load-close
         # → audit; if issues, feed them back and re-propose. Keep the best attempt.
@@ -442,22 +464,27 @@ def main():
                 attempts.append(f"attempt {attempt+1}: parse error {e}")
                 continue
             built = close_to_target(args.athlete, proposal, target, brief)
-            issues = audit_built(brief, built, target, proposal)
-            attempts.append(f"attempt {attempt+1}: {len(issues)} issue(s)" + (f" — {issues}" if issues else " — CLEAN"))
-            if best is None or len(issues) < best[1]:
-                best = (built, len(issues), proposal)
-            if not issues:
+            blocking, advisory = audit_built(brief, built, target, proposal)
+            all_issues = blocking + advisory
+            attempts.append(f"attempt {attempt+1}: {len(blocking)} blocking / {len(advisory)} advisory"
+                            + (f" - {all_issues}" if all_issues else " - CLEAN"))
+            if best is None or (len(blocking), len(all_issues)) < (len(best[1]), len(best[1]) + len(best[2])):
+                best = (built, blocking, advisory, proposal)
+            if not all_issues:
                 break
-            feedback = ("\nPREVIOUS ATTEMPT FAILED THESE CHECKS — fix them this time:\n- "
-                        + "\n- ".join(issues) + "\n")
+            # Feed BOTH back: the proposer must CLEAR blocking (safety ceilings/rules) and
+            # should improve advisory (quality/shape) - advisory never blocks the push.
+            feedback = ("\nPREVIOUS ATTEMPT - CLEAR the blocking checks and improve the advisory "
+                        "ones:\n- " + "\n- ".join(all_issues) + "\n")
         if best is None:
             print(json.dumps({"error": "no parseable proposal after retries", "attempts": attempts}))
             sys.exit(1)
-    built, n_issues, proposal = best
+    built, blocking, advisory, proposal = best
+    n_blocking = len(blocking)
 
     load_pct_off = (round((built["total_tss"] - target) / target * 100, 1) if target else None)
     load_on_target = (target is None) or abs(load_pct_off) <= 12
-    overall_ok = built["ok"] and load_on_target and n_issues == 0
+    overall_ok = built["ok"] and load_on_target and n_blocking == 0
     summary = {
         "attempts": attempts,
         "athlete": args.athlete, "week_start": built["week_start"],
@@ -466,6 +493,7 @@ def main():
         "load_pct_off_target": load_pct_off, "load_on_target": load_on_target,
         "fuel_g_hr": built["fuel_g_hr"], "rules_ok": built["ok"], "ready_to_push": overall_ok,
         "hard": built["hard"], "soft": built["soft"],
+        "blocking_issues": blocking, "advisories": advisory,
         "sessions": [{"date": s["date"], "sport": s["sport"], "name": s["name"],
                       "load": s["load_target"], "min": s["duration_min"],
                       "structured": bool(s["description"])} for s in built["sessions"]],
@@ -477,7 +505,8 @@ def main():
             if args.notify and cfg.get("chat_id"):
                 # hard entries are {code, msg} dicts — joining them raw crashed here
                 # (masked every clean-week failure until 5 Jul 2026)
-                why = built["hard"][0]["msg"] if built.get("hard") else "audit failed"
+                why = (blocking[0] if blocking
+                       else (f"load {load_pct_off}% off target" if not load_on_target else "audit failed"))
                 _notify(cfg["chat_id"], f"⚠️ Couldn't generate a clean week ({why}). Your existing plan is unchanged.")
         else:
             summary["push_result"] = pb.push(args.athlete, built)
