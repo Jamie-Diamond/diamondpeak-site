@@ -11,10 +11,19 @@ The protocol has three layers:
 Dose model (standard heat-acclimation guidance — adaptations decay over days,
 roughly one exposure per 4–5 days maintains; confirm values with the coach):
   sauna / hot bath entry                       = 1.0 (entries without a dose field)
-  outdoor session ≥60 min at ≥25°C ambient     = 1.0 base
-  outdoor session 30–60 min at ≥25°C ambient   = 0.5 base
+  outdoor session ≥30 min at ≥25°C ambient     = base_dose(mins), a saturating
+                                                 curve of exposure duration
 
-The base dose (duration gate) is then weighted by three bounded multipliers so a
+The base dose scales with exposure duration on a saturating (Michaelis–Menten)
+curve rather than a flat step, because the adaptive stimulus is cumulative
+thermal impulse — a 3.5-hour ride in the heat is a larger stimulus than a
+bang-on 60-minute one, with diminishing returns as core temperature plateaus
+(McDonald 2025 per-15-min dose-response; Tyler & Notley 2024). The curve is
+tuned to preserve the historical calibration exactly at base(30)=0.5 and
+base(60)=1.0, so short and standard sessions score as before and only longer
+exposures earn more; it asymptotes to base ≤ 2.0 (see base_dose / HEAT_DOSE_*).
+
+The base dose is then weighted by three bounded multipliers so a
 brutal hot/humid/hard day scores higher than a mild easy one — heat adaptation
 tracks thermal strain, which rises with cardiovascular load (measured via HR
 reserve fraction), environmental heat, and humidity (which suppresses evaporative
@@ -51,15 +60,25 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent   # ClaudeCoach/
 
 HEAT_AMBIENT_C       = 25.0  # blueprint: outdoor heat sessions = peak ambient ≥ 25°C
-HEAT_FULL_DOSE_MIN   = 60    # ≥60 min at temperature = full dose
-HEAT_HALF_DOSE_MIN   = 30    # 30–60 min = half dose
+HEAT_HALF_DOSE_MIN   = 30    # eligibility floor: sessions shorter than this are not logged
+HEAT_FULL_DOSE_MIN   = 60    # calibration anchor: base_dose(60) == 1.0 (no longer a gate)
 MAINTENANCE_DOSE_14D = 2.0   # pre-`starts` floor that keeps the ambient-exposure pause honest
 PROTOCOL_DOSE_14D    = 3.0   # race-proximal target once the formal block starts
 SENSOR_SUSPECT_C     = 22.0  # Garmin wrist sensors read 3–8°C high; look up external weather at or above this
 LONG_SESSION_MIN     = 90    # for long sessions report both peak and mean ambient
 
 ACCL_TAU_DAYS = 21.0   # exponential decay TIME CONSTANT (half-life ~14.6 days, not 3 weeks)
-ACCL_SCALE    = 10.5   # maps raw score → %; 3×/week full-dose steady-state ≈ 100%
+ACCL_SCALE    = 8.2    # maps raw score → %; retuned for the saturating base curve so a
+                       # strong real heat block tops out ~100%, keeping resolution across
+                       # the normal range (recomputed on live athlete data; was 10.5)
+
+# Base-dose duration curve (saturating Michaelis–Menten). base(mins) rewards
+# longer exposures with diminishing returns, tuned to preserve the two historical
+# calibration anchors exactly: base(30)=0.5 and base(60)=1.0. See base_dose().
+HEAT_DOSE_ONSET_MIN   = 15.0  # T0: core temp needs ~10–20 min to reach the ~38.5°C zone
+HEAT_DOSE_HALFSAT_MIN = 45.0  # K: half-saturation constant, sets how fast the curve rises
+HEAT_DOSE_MAX         = 2.0   # D_MAX: asymptotic ceiling — a session is worth at most 2× a
+                              # 60-min one, however long (bounds ultra-length exposures)
 
 # Dose weighting — temperature multiplier (relative to 30°C reference)
 DOSE_TEMP_REF_C   = 30.0    # ambient at which temp_mult == 1.0
@@ -96,6 +115,24 @@ DOSE_DP_MAX    = 1.25   # ceiling (tropical / saturated air)
 
 def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
+
+
+def base_dose(mins: float) -> float:
+    """Duration-responsive base dose on a saturating Michaelis–Menten curve.
+
+        base(mins) = HEAT_DOSE_MAX * (mins - T0) / ((mins - T0) + K)   for mins > T0
+                   = 0                                                 otherwise
+
+    Monotonically increasing with diminishing returns; asymptotes to
+    HEAT_DOSE_MAX. Parameters (T0=15, K=45, D_MAX=2.0) are chosen to preserve
+    the historical calibration exactly: base(30)==0.5 and base(60)==1.0, so
+    short and standard sessions score as before and only longer exposures earn
+    more (90 min≈1.25, 120≈1.40, 210≈1.63).
+    """
+    t = float(mins) - HEAT_DOSE_ONSET_MIN
+    if t <= 0:
+        return 0.0
+    return round(HEAT_DOSE_MAX * t / (t + HEAT_DOSE_HALFSAT_MIN), 3)
 
 
 def dose_multipliers(
@@ -311,12 +348,12 @@ def exposure_entry(act: dict, latlng_fallback=None) -> dict | None:
     if temp < HEAT_AMBIENT_C:
         return None
 
-    base_dose = 1.0 if mins >= HEAT_FULL_DOSE_MIN else 0.5
+    base = base_dose(mins)
     avg_hr = act.get("average_heartrate")
     tss = act.get("icu_training_load")
     temp_mult, strain_mult, humidity_mult = dose_multipliers(
         temp, avg_hr=avg_hr, tss=tss, mins=mins, dew_point_c=dew_point)
-    dose = round(base_dose * temp_mult * strain_mult * humidity_mult, 2)
+    dose = round(base * temp_mult * strain_mult * humidity_mult, 2)
 
     ctx = f"{act.get('type', '')} — ambient {round(temp, 1)}°C ({temp_source})"
     if mins >= LONG_SESSION_MIN and temp_peak is not None and temp_mean is not None:
@@ -324,7 +361,7 @@ def exposure_entry(act: dict, latlng_fallback=None) -> dict | None:
     if dew_point is not None:
         ctx += f"; dew {dew_point}°C"
     strain_label = f"HR{int(avg_hr)}" if avg_hr else "TSS"
-    ctx += (f"; dose {base_dose}×T{temp_mult}×S{strain_mult}×H{humidity_mult}"
+    ctx += (f"; dose {base}×T{temp_mult}×S{strain_mult}×H{humidity_mult}"
             f"={dose} ({strain_label})")
 
     entry = {
@@ -333,7 +370,7 @@ def exposure_entry(act: dict, latlng_fallback=None) -> dict | None:
         "activity_id": str(act.get("id") or ""),
         "duration_min": round(mins),
         "temperature_c": round(temp, 1),
-        "base_dose": base_dose,
+        "base_dose": base,
         "temp_mult": temp_mult,
         "hr_strain_mult": strain_mult,
         "humidity_mult": humidity_mult,
@@ -352,8 +389,8 @@ def acclimation_score(slug: str, ref_date: date | None = None) -> float:
     """0–100 heat acclimation percentage with a 21-day exponential decay.
 
     Each heat-log entry contributes its dose × exp(−days_since/21) to a raw
-    total; ACCL_SCALE maps the raw total so sustained 3×/week full-dose
-    exposure saturates at ~100%.  Mirrors the Garmin heat-acclimation model.
+    total; ACCL_SCALE maps the raw total so a strong sustained heat block tops
+    out near 100% (the ceiling).  Mirrors the Garmin heat-acclimation model.
     """
     if ref_date is None:
         ref_date = date.today()
