@@ -15,18 +15,20 @@ degradation. It now closes the loop in three tiers:
      pushes the pile over the ceiling. This pass never removes a pre-existing rule.
 
   B. AUTO-CLEAR (per-run, whole file): trivially-safe redundancy is removed deterministically,
-     after backing the file up to a timestamped .bak and logging every removal — exact/token-
-     identical duplicate [perm] lines (keep the longest), already-expired [expires:] lines, and
-     [perm] lines that are a token-exact restatement of a rule the engine already injects for
-     everyone. These are low-risk, reversible removals; nothing judgement-based is auto-deleted.
+     after backing the file up to a timestamped .bak and logging every removal — duplicate
+     [perm] lines with identical normalised content (keep the fullest), already-expired
+     [expires:] lines, and [perm] lines whose normalised content is identical to a rule the
+     engine already injects for everyone. Content is matched case/whitespace/punctuation-
+     insensitive with digits preserved (never token-sets, which would merge 'rule 5' with
+     'rule 6'). These are low-risk, reversible removals; nothing judgement-based is auto-deleted.
 
   C. AUTO-TRIGGER REVIEW (debounced): judgement work — semantic merges, contradictions, or a
      pile still at/over the ceiling after auto-clear — is NEVER auto-deleted here. Instead
      session-sync kicks off the human-reviewed bug-fixer prune flow (bug-fixer.py --fix) so it
      posts the existing yes/no/edit card and applies via the backed-up --apply-prune path.
 
-When in doubt, tier B routes to tier C rather than deleting: only exact-dup / expired /
-token-exact engine-restatement lines are ever auto-cleared. Everything else stays.
+When in doubt, tier B routes to tier C rather than deleting: only exact-content duplicate /
+expired / engine-restatement lines are ever auto-cleared. Everything else stays.
 """
 import importlib.util
 import json, re, subprocess, sys, time
