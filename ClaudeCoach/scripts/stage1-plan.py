@@ -172,6 +172,49 @@ def _next_monday(today: date) -> date:
     return today + timedelta(days=(7 - today.weekday()) % 7 or 7)
 
 
+# Robust per-segment IF: the proposal may carry an explicit "if", a semantic zone
+# (tempo/threshold/vo2 - handled by segment_if), or a bare TID band label (Z3/Z4/Z5,
+# which segment_if does NOT map and would score as the sport default). The band-label
+# fallback keeps quality from being misread as easy regardless of how the LLM encoded it.
+_ZLABEL_IF = {
+    "bike": {"z1": 0.55, "z2": 0.65, "z3": 0.80, "z4": 0.95, "z5": 1.05},
+    "run":  {"z1": 0.60, "z2": 0.83, "z3": 0.83, "z4": 0.97, "z5": 1.06},
+    "swim": {"z1": 0.60, "z2": 0.72, "z3": 0.85, "z4": 1.00, "z5": 1.08},
+}
+
+
+def _seg_if(sport: str, seg: dict) -> float:
+    if seg.get("if") is not None:
+        return seg["if"]
+    sp = ("bike" if any(k in (sport or "").lower() for k in ("bike", "ride", "brick"))
+          else "run" if "run" in (sport or "").lower()
+          else "swim" if "swim" in (sport or "").lower() else "")
+    z = (seg.get("zone") or "").lower().strip()
+    if sp and z in _ZLABEL_IF[sp]:
+        return _ZLABEL_IF[sp][z]
+    return segment_if(sport, seg.get("zone"))
+
+
+def _bike_bands(proposal: dict) -> dict:
+    """Bike minutes bucketed by TID band: low Z1-2 (<0.76), mod Z3 (0.76-0.93),
+    high Z4-5 (>=0.93). Cutoffs match the bike session library (endurance 0.65,
+    tempo/sweetspot/race 0.78-0.90, threshold 0.95, vo2 1.05)."""
+    low = mod = high = 0.0
+    for s in proposal.get("sessions", []):
+        if (s.get("sport") or "").lower() not in ("bike", "ride"):
+            continue
+        for seg in (s.get("segments") or []):
+            m = seg.get("minutes", 0) or 0
+            iff = _seg_if(s.get("sport", ""), seg) or 0
+            if iff < 0.76:
+                low += m
+            elif iff < 0.93:
+                mod += m
+            else:
+                high += m
+    return {"low": low, "mod": mod, "high": high}
+
+
 def audit_built(brief: dict, built: dict, target, proposal: dict) -> list:
     """Everything the week must satisfy before it's offered. Returns issue strings
     (empty = clean). Drives the iterate-until-clean loop."""
@@ -223,34 +266,46 @@ def audit_built(brief: dict, built: dict, target, proposal: dict) -> list:
 
     # ── MINIMUM-QUALITY FLOOR (Phase 5c) ──────────────────────────────────────
     # Complement of the run-quality hard-stop above: that rejects EXCESS quality for a
-    # run-limited athlete; this rejects a week that is too EASY. Quality is measured from
-    # the proposal's own segment intensities (authoritative), summed per sport, and checked
-    # by validate_plan.check_quality_floor against the phase TID top-end. Routed to
-    # NON-limited sports only: run quality is REQUIRED when quality_allowed=true (Kathryn's
-    # 100%-easy runs) but NEVER demanded of a run-limited athlete (Jamie - his floor lands
-    # on the bike). Swim is excluded (name/zone intensity unreliable for swims).
-    _sport_key = {"bike": "Bike", "ride": "Bike", "run": "Run"}
-    q_summary: dict = {}
-    for s in proposal.get("sessions", []):
-        key = _sport_key.get((s.get("sport") or "").lower())
-        if not key:
-            continue
-        agg = q_summary.setdefault(key, {"easy": 0.0, "quality": 0.0})
-        for seg in (s.get("segments") or []):
-            mins = seg.get("minutes", 0) or 0
-            iff = seg.get("if") if seg.get("if") is not None else segment_if(s.get("sport", ""), seg.get("zone"))
-            agg["quality" if (iff or 0) >= _QUALITY_IF else "easy"] += mins
-    run_can_do_quality = (rp.get("quality_allowed") is True) and not brief.get("run_limited")
-    _floor_sports = {"Bike"} | ({"Run"} if run_can_do_quality else set())
-    _require_quality = {"Run"} if run_can_do_quality else set()
-    try:
-        from primitives.validate_plan import check_quality_floor
-        for v in check_quality_floor(q_summary, brief.get("distribution_by_sport") or {},
-                                     floor_sports=_floor_sports,
-                                     require_quality_sports=_require_quality):
-            issues.append(f"rule(quality): {v.detail}")
-    except Exception:
-        pass
+    # run-limited athlete; this rejects a week that is too EASY. Two athlete-conditional
+    # regimes, gated on limiter signals that already exist (run_limited / quality_allowed):
+    #   - RUN-LIMITED (Jamie's ankle): the bike carries the quality the run cannot, so target
+    #     the full blueprint bike TID (Z3 + Z4-5); runs stay easy, never a run-quality demand.
+    #   - otherwise: bike (and run when quality_allowed) must carry SOME quality vs the phase
+    #     top-end; require run quality when quality_allowed=true. Swim excluded (unreliable).
+    if brief.get("run_limited"):
+        # RUN-LIMITED (e.g. Jamie's ankle): the bike carries the quality the run cannot.
+        # Target the full blueprint bike TID (Z3 + Z4-5). Runs stay EASY - no run floor,
+        # no run-quality demand (the ankle hard-stop above already rejects any run quality).
+        try:
+            from primitives.validate_plan import check_bike_tid
+            for v in check_bike_tid(_bike_bands(proposal),
+                                    (brief.get("distribution_by_sport") or {}).get("Bike")):
+                issues.append(f"rule(quality): {v.detail}")
+        except Exception:
+            pass
+    else:
+        _sport_key = {"bike": "Bike", "ride": "Bike", "run": "Run"}
+        q_summary: dict = {}
+        for s in proposal.get("sessions", []):
+            key = _sport_key.get((s.get("sport") or "").lower())
+            if not key:
+                continue
+            agg = q_summary.setdefault(key, {"easy": 0.0, "quality": 0.0})
+            for seg in (s.get("segments") or []):
+                mins = seg.get("minutes", 0) or 0
+                iff = _seg_if(s.get("sport", ""), seg)
+                agg["quality" if (iff or 0) >= _QUALITY_IF else "easy"] += mins
+        run_can_do_quality = rp.get("quality_allowed") is True
+        _floor_sports = {"Bike"} | ({"Run"} if run_can_do_quality else set())
+        _require_quality = {"Run"} if run_can_do_quality else set()
+        try:
+            from primitives.validate_plan import check_quality_floor
+            for v in check_quality_floor(q_summary, brief.get("distribution_by_sport") or {},
+                                         floor_sports=_floor_sports,
+                                         require_quality_sports=_require_quality):
+                issues.append(f"rule(quality): {v.detail}")
+        except Exception:
+            pass
     return issues
 
 

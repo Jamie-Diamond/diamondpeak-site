@@ -236,9 +236,14 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # Conditional TSS-closing guidance for the Stage-1 proposer (Phase 5b): a limited
     # or single-sport athlete closes gaps with BIKE volume; everyone else spreads the
     # closure across sports and MUST carry the phase quality share, not easy bike alone.
-    if run_limited or single_sport:
-        _closure = ("If run caps or travel limit running, close any weekly-TSS gap with "
-                    "BIKE volume, never by planning a short week. ")
+    if run_limited:
+        _closure = ("Close any weekly-TSS gap with BIKE volume, never by planning a short week; "
+                    "runs stay EASY (no run quality). Because the run is limited, the BIKE must "
+                    "carry the quality: SHAPE the bike to this phase's blueprint bike TID (its Z3 "
+                    "tempo/threshold and Z4-5 VO2 shares) by converting EASY bike minutes to those "
+                    "sessions WITHIN THE SAME total load - do not add volume to add intensity. ")
+    elif single_sport:
+        _closure = ("Close any weekly-TSS gap with BIKE volume, never by planning a short week. ")
     else:
         _closure = ("Close any weekly-TSS gap with a BALANCED spread across the available "
                     "sports (bike AND run endurance) and by carrying the phase's QUALITY "

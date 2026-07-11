@@ -244,6 +244,63 @@ def check_quality_floor(sport_summary: dict, distribution: dict, *,
     return out
 
 
+# -- Bike TID floor for run-limited athletes (Phase 5 refinement) --------------
+# A run-limited athlete (injury / no run quality) cannot take intensity running, so
+# the BIKE must carry the quality: target the blueprint bike TID for the phase rather
+# than a token floor. The caller supplies bike minutes already bucketed low/mod/high
+# (Z1-2 / Z3 / Z4-5) from the proposal's own intensities. Checks (soft, drive the
+# generator's iterate-to-clean loop): combined Z3+Z4-5 must reach the TID within slack,
+# AND both the Z3 and Z4-5 bands must be PRESENT (so the week is shaped to the full
+# distribution - tempo/threshold plus VO2 - not one spike or all easy). This shapes the
+# capped bike load; total volume/TSS is bounded by the weekly cap and ramp cap elsewhere.
+
+_TID_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*Z1.*?(\d+(?:\.\d+)?)\s*%\s*Z3.*?(\d+(?:\.\d+)?)\s*%\s*Z4")
+
+
+def _parse_tid(row) -> tuple | None:
+    """(low, mod, high) percentages from '72% Z1-2 / 20% Z3 / 8% Z4-5'."""
+    m = _TID_RE.search(str(row or ""))
+    return (float(m.group(1)), float(m.group(2)), float(m.group(3))) if m else None
+
+
+def check_bike_tid(bike_bands: dict, tid_row, *, slack_pp: float = 6.0,
+                   min_minutes: float = 120) -> list["Violation"]:
+    """bike_bands: {'low': min, 'mod': min, 'high': min}. Returns soft violations when
+    the bike does not reach its phase TID top-end. Skipped under min_minutes of bike."""
+    tid = _parse_tid(tid_row)
+    if not tid:
+        return []
+    low_t, mod_t, high_t = tid
+    low = float(bike_bands.get("low", 0) or 0)
+    mod = float(bike_bands.get("mod", 0) or 0)
+    high = float(bike_bands.get("high", 0) or 0)
+    total = low + mod + high
+    if total < min_minutes:
+        return []
+    q_pct = (mod + high) / total * 100
+    q_target = mod_t + high_t
+    out: list[Violation] = []
+    if q_pct < q_target - slack_pp:
+        out.append(Violation(
+            code="bike_tid_floor", severity="soft",
+            detail=(f"Bike: {q_pct:.0f}% quality (Z3+Z4-5) vs blueprint TID ~{q_target:.0f}% "
+                    f"({mod_t:.0f}% Z3 + {high_t:.0f}% Z4-5) - the run is limited, so convert "
+                    f"easy bike minutes to tempo/threshold/VO2 within the same total (no added volume)"),
+        ))
+    if high_t > 0 and high <= 0:
+        out.append(Violation(
+            code="bike_tid_high_missing", severity="soft",
+            detail=(f"Bike: no Z4-5 (threshold/VO2) planned - the bike must carry the top-end "
+                    f"the run cannot (~{high_t:.0f}% high target)"),
+        ))
+    if mod_t > 0 and mod <= 0:
+        out.append(Violation(
+            code="bike_tid_mod_missing", severity="soft",
+            detail=f"Bike: no Z3 (tempo/sweetspot) planned vs ~{mod_t:.0f}% Z3 target",
+        ))
+    return out
+
+
 # -- Distance/duration internal consistency (walk-run sessions) ----------------
 # A run session whose NAME states a distance ("5k") and whose walk-run cycle
 # count implies a different one ("50 min 5x9:1 walk-run" ~ 8.5km) reached an
