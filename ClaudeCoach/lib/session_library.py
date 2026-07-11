@@ -247,8 +247,10 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     else:
         _closure = ("Close any weekly-TSS gap with a BALANCED spread across the available "
                     "sports (bike AND run endurance) and by carrying the phase's QUALITY "
-                    "share; do NOT fill the week with easy Z2 bike alone. Run quality is "
-                    "REQUIRED when quality_allowed=true. ")
+                    "share; do NOT fill the week with easy Z2 bike alone. When quality_allowed "
+                    "is true, run quality must be SHAPED within the mileage/long-run caps - "
+                    "convert part of an EASY run into a short tempo/threshold block; NEVER add "
+                    "run minutes or exceed the caps (they are hard ceilings that win). ")
     dosing_note = ("Build to weekly_tss_target - weekly_tss_floor is a HARD minimum (below "
                    "it the week detrains the athlete and validation rejects it; only "
                    "deload/taper weeks may sit under maintenance). " + _closure +
