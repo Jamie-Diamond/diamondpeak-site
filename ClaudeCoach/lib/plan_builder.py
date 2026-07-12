@@ -137,7 +137,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
     # sourced here; a missing one lands in rep.skipped and is surfaced loudly.
     import plan_tools as _pt
     try:
-        _caps = _pt.run_caps(_pt._client(cfg), ws)
+        _caps = _pt.run_caps(_pt._client(cfg), ws, run_protocol=cfg.get("run_protocol"))
     except Exception:
         _caps = {"weekly_min_cap": None, "long_run_min_cap": None}
     # Under-training floor for the week BEING PLANNED (today=ws, not run date):
