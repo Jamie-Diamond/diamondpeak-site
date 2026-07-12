@@ -235,6 +235,40 @@ def _seg_if(sport: str, seg: dict) -> float:
     return segment_if(sport, seg.get("zone"))
 
 
+def _overall_z3plus(proposal: dict):
+    """(Z3+ minutes, total minutes) across ALL sports, using each sport's own Z2/Z3
+    boundary (bike/brick Z3 starts ~0.76; run and swim ~0.85)."""
+    z3 = tot = 0.0
+    for s in proposal.get("sessions", []):
+        cut = 0.76 if (s.get("sport") or "").lower() in ("bike", "ride", "brick") else 0.85
+        for seg in (s.get("segments") or []):
+            m = seg.get("minutes", 0) or 0
+            tot += m
+            if (_seg_if(s.get("sport", ""), seg) or 0) >= cut:
+                z3 += m
+    return z3, tot
+
+
+def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
+    """Tie-breakers among equally-(un)blocked attempts (lower is better): smallest overall
+    intensity-budget deviation |week Z3+ - phase budget|, then lowest Foster monotony, then
+    closest-to-target TSS. This makes the overall intensity budget drive SELECTION, not just
+    the advisory string (else the picker keeps the first 0-blocking attempt even if it is
+    well over/under budget)."""
+    tid = brief.get("tid_low_mod_high")
+    budget = (float(tid[1]) + float(tid[2])) if tid and len(tid) >= 3 else None
+    z3, tot = _overall_z3plus(proposal)
+    z3_pct = (z3 / tot * 100) if tot else 0.0
+    budget_dev = abs(z3_pct - budget) if budget is not None else 0.0
+    mono = 0.0
+    for v in built.get("soft", []):
+        m = re.search(r"monotony\s+([\d.]+)", v.get("msg", ""))
+        if m:
+            mono = max(mono, float(m.group(1)))
+    tss_off = abs(built["total_tss"] - target) if target else 0.0
+    return (round(budget_dev, 1), round(mono, 2), round(tss_off, 1))
+
+
 def audit_built(brief: dict, built: dict, target, proposal: dict):
     """Audit the built week. Returns (blocking, advisory).
 
@@ -312,14 +346,7 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     # boundary (bike Z3/tempo starts ~0.76; run and swim Z3 start ~0.85). A share a sport
     # cannot carry (run-limited / run-capped / single-sport) simply shifts onto the capable
     # sports; the total still governs. The ankle run-quality hard-stop above still BLOCKS.
-    z3_min = tot_min = 0.0
-    for s in proposal.get("sessions", []):
-        cut = 0.76 if (s.get("sport") or "").lower() in ("bike", "ride", "brick") else 0.85
-        for seg in (s.get("segments") or []):
-            m = seg.get("minutes", 0) or 0
-            tot_min += m
-            if (_seg_if(s.get("sport", ""), seg) or 0) >= cut:
-                z3_min += m
+    z3_min, tot_min = _overall_z3plus(proposal)
     try:
         from primitives.validate_plan import check_intensity_budget
         for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high")):
@@ -452,6 +479,7 @@ def main():
         # → audit; if issues, feed them back and re-propose. Keep the best attempt.
         feedback = ""
         best = None
+        best_rank = None
         attempts = []
         for attempt in range(args.max_attempts):
             prompt = build_prompt(args.athlete, brief, week_start, feedback)
@@ -467,10 +495,17 @@ def main():
             built = close_to_target(args.athlete, proposal, target, brief)
             blocking, advisory = audit_built(brief, built, target, proposal)
             all_issues = blocking + advisory
-            attempts.append(f"attempt {attempt+1}: {len(blocking)} blocking / {len(advisory)} advisory"
-                            + (f" - {all_issues}" if all_issues else " - CLEAN"))
-            if best is None or (len(blocking), len(all_issues)) < (len(best[1]), len(best[1]) + len(best[2])):
-                best = (built, blocking, advisory, proposal)
+            _z3, _tot = _overall_z3plus(proposal)
+            _z3pct = round(_z3 / _tot * 100) if _tot else 0
+            attempts.append(f"attempt {attempt+1}: {len(blocking)} blocking / {len(advisory)} advisory "
+                            f"/ {_z3pct}% Z3+" + (f" - {all_issues}" if all_issues else " - CLEAN"))
+            # SELECTION: fewest blocking first, then the overall intensity budget DRIVES it -
+            # smallest |week Z3+ - phase budget|, then lowest monotony, then closest-to-target
+            # TSS - so an in-budget attempt beats an over-budget one when both are equally
+            # (un)blocked, instead of just keeping the first 0-blocking attempt.
+            rank = (len(blocking),) + _attempt_rank(brief, built, target, proposal)
+            if best is None or rank < best_rank:
+                best, best_rank = (built, blocking, advisory, proposal), rank
             if not all_issues:
                 break
             # Feed BOTH back: the proposer must CLEAR blocking (safety ceilings/rules) and
