@@ -56,6 +56,8 @@ def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries
     return f"""\
 You are generating the night-before session brief for {first_name}.
 
+Apply the GLOBAL coaching rules in ClaudeCoach/athletes/_shared/persistent-rules.md (read them first).
+
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {tomorrow} --end {tomorrow}

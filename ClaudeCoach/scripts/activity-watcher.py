@@ -149,6 +149,7 @@ Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
 Step 2 — Read:
+- ClaudeCoach/athletes/_shared/persistent-rules.md (GLOBAL coaching rules - apply to every athlete; these govern debriefs and Strava descriptions)
 - ClaudeCoach/athletes/{slug}/persistent-rules.md (permanent coaching rules — these override defaults)
 - ClaudeCoach/athletes/{slug}/session-log.json — note all existing activity_id values.
 

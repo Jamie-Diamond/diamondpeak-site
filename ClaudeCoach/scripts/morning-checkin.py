@@ -136,6 +136,7 @@ Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
 Step 2 — Read:
+- ClaudeCoach/athletes/_shared/persistent-rules.md (GLOBAL coaching rules - apply to every athlete)
 - ClaudeCoach/athletes/{slug}/persistent-rules.md (permanent coaching rules — these override defaults and MUST be followed)
 - ClaudeCoach/athletes/{slug}/current-state.md (open actions, watchdog flags — only surface flags dated within the last 3 days)
 - ClaudeCoach/athletes/{slug}/daily-prescription-latest.md — the 05:00 prescription check (no longer messaged directly). Use it ONLY if its date line is today. Key points to carry into the card: whether today's session is GO as planned or was modified/swapped (and the one-line reason). Ignore it if dated earlier than today.

@@ -121,6 +121,16 @@ def load_persistent_rules(sp_file) -> str:
     return ""
 
 
+def load_global_rules(sp_file) -> str:
+    """Shared cross-athlete coaching rules from athletes/_shared/persistent-rules.md, or ''.
+    sp_file is athletes/<name>/system_prompt.txt, so the shared file is one level up."""
+    gf = Path(sp_file).parent.parent / "_shared" / "persistent-rules.md"
+    if gf.exists():
+        text = gf.read_text().strip()
+        return text if text else ""
+    return ""
+
+
 def system_prompt_with_level(sp_file) -> str:
     """Read system_prompt.txt and append the athlete's coaching-level block."""
     sp_file = Path(sp_file)
@@ -170,8 +180,12 @@ _ACCURACY_RULE = (
 
 
 def build_prompt(user_message, history, system_prompt, athlete_name, context,
-                 persistent_rules=""):
+                 persistent_rules="", global_rules=""):
     parts = [system_prompt, ""]
+    if global_rules:
+        parts.append("## Global coaching rules - apply to every athlete")
+        parts.append(global_rules)
+        parts.append("")
     if persistent_rules:
         parts.append("## Standing rules — always apply (athlete-agreed, session-derived)")
         parts.append(persistent_rules)
@@ -205,6 +219,7 @@ def _assemble(user_message, history, system_prompt_file, athlete_name, context):
         user_message, history,
         system_prompt_with_level(sp_file), athlete_name, context,
         persistent_rules=load_persistent_rules(sp_file),
+        global_rules=load_global_rules(sp_file),
     )
 
 
@@ -223,7 +238,9 @@ def _prompt_fingerprint(sp_file) -> str:
     rotate rather than coach on the old rules."""
     sp_file = Path(sp_file)
     try:
-        blob = system_prompt_with_level(sp_file) + "\n" + load_persistent_rules(sp_file)
+        blob = (system_prompt_with_level(sp_file) + "\n"
+                + load_global_rules(sp_file) + "\n"
+                + load_persistent_rules(sp_file))
     except Exception:
         return ""
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
@@ -524,6 +541,11 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
     system_prompt = system_prompt_with_level(sp_file)
     parts = [system_prompt, ""]
+    global_rules = load_global_rules(sp_file)
+    if global_rules:
+        parts.append("## Global coaching rules - apply to every athlete")
+        parts.append(global_rules)
+        parts.append("")
     persistent_rules = load_persistent_rules(sp_file)
     if persistent_rules:
         parts.append("## Standing rules — always apply (athlete-agreed, session-derived)")

@@ -115,6 +115,7 @@ Step 1 — Pull live data via Bash (use today's date {today} for all calculation
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
 Step 2 — Read these files:
+- ClaudeCoach/athletes/_shared/persistent-rules.md (GLOBAL coaching rules - apply to every athlete when writing event descriptions)
 - {athlete_dir}/persistent-rules.md (permanent coaching rules — zone targets, HR caps, and any [perm] rules OVERRIDE all defaults when writing event descriptions)
 - {athlete_dir}/current-state.md
 - {athlete_dir}/current-state.json ({state_json_note})
