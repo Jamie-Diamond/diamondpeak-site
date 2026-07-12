@@ -4004,6 +4004,8 @@ def main():
         if not slug_dir.is_dir():
             continue
         slug = slug_dir.name
+        if slug.startswith("_"):
+            continue  # not an athlete (e.g. _shared global-rules store)
         entry = athletes_raw.get(slug, {})
         if not entry.get("chat_id") and entry.get("active", True):
             log(f"CONFIG WARNING: athlete '{slug}' has no chat_id in athletes.json — they cannot receive messages")
