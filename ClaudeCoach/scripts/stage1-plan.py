@@ -216,26 +216,6 @@ def _seg_if(sport: str, seg: dict) -> float:
     return segment_if(sport, seg.get("zone"))
 
 
-def _bike_bands(proposal: dict) -> dict:
-    """Bike minutes bucketed by TID band: low Z1-2 (<0.76), mod Z3 (0.76-0.93),
-    high Z4-5 (>=0.93). Cutoffs match the bike session library (endurance 0.65,
-    tempo/sweetspot/race 0.78-0.90, threshold 0.95, vo2 1.05)."""
-    low = mod = high = 0.0
-    for s in proposal.get("sessions", []):
-        if (s.get("sport") or "").lower() not in ("bike", "ride"):
-            continue
-        for seg in (s.get("segments") or []):
-            m = seg.get("minutes", 0) or 0
-            iff = _seg_if(s.get("sport", ""), seg) or 0
-            if iff < 0.76:
-                low += m
-            elif iff < 0.93:
-                mod += m
-            else:
-                high += m
-    return {"low": low, "mod": mod, "high": high}
-
-
 def audit_built(brief: dict, built: dict, target, proposal: dict):
     """Audit the built week. Returns (blocking, advisory).
 
@@ -297,36 +277,30 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
         have = max((s["duration_min"] for s in rides), default=0)
         blocking.append(f"no protected long ride - longest ride {have}min < target ~{lrt}min")
 
-    # ── QUALITY (ADVISORY: drives the loop, never blocks) ──
-    # Bike quality target = the BLUEPRINT bike TID (Z3 + Z4-5), counting Z3/tempo/sweetspot
-    # as MOD (not easy) so an on-blueprint bike (e.g. 70/18/12) PASSES. Same check for every
-    # athlete; run-limited athletes rely on this to carry the quality the run cannot.
+    # ── INTENSITY BUDGET (ADVISORY: drives the loop, never blocks) ──
+    # The athlete's OVERALL phase TID (brief.tid_low_mod_high) is the intensity budget: the
+    # week's TOTAL Z3+ share must land within a band of it. The per-sport TIDs are only a
+    # soft preference for HOW to spend the budget and are FUNGIBLE across sports (see the
+    # dosing_note), so we check the TOTAL and never independently max each per-sport TID
+    # (which double-counted and blew the total, e.g. bike 30% + swim 35% + run 22% -> 37%
+    # overall vs a 20% intent). Z3+ is measured per sport with that sport's own Z2/Z3
+    # boundary (bike Z3/tempo starts ~0.76; run and swim Z3 start ~0.85). A share a sport
+    # cannot carry (run-limited / run-capped / single-sport) simply shifts onto the capable
+    # sports; the total still governs. The ankle run-quality hard-stop above still BLOCKS.
+    z3_min = tot_min = 0.0
+    for s in proposal.get("sessions", []):
+        cut = 0.76 if (s.get("sport") or "").lower() in ("bike", "ride", "brick") else 0.85
+        for seg in (s.get("segments") or []):
+            m = seg.get("minutes", 0) or 0
+            tot_min += m
+            if (_seg_if(s.get("sport", ""), seg) or 0) >= cut:
+                z3_min += m
     try:
-        from primitives.validate_plan import check_bike_tid
-        for v in check_bike_tid(_bike_bands(proposal),
-                                (brief.get("distribution_by_sport") or {}).get("Bike")):
+        from primitives.validate_plan import check_intensity_budget
+        for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high")):
             advisory.append(f"rule(quality): {v.detail}")
     except Exception:
         pass
-    # Run quality: only for a NON-limited athlete cleared for it, and only by SHAPING existing
-    # capped run minutes (convert part of an easy run to a short tempo/threshold), never adding
-    # minutes. If no easy run is big enough to host a quality block within the caps, yield
-    # gracefully (advisory). Run-limited athletes get NO run quality (ankle hard-stop governs).
-    if (not brief.get("run_limited")) and rp.get("quality_allowed") is True:
-        run_props = [s for s in proposal.get("sessions", []) if (s.get("sport") or "").lower() == "run"]
-        def _rmin(s):
-            return sum(seg.get("minutes", 0) or 0 for seg in (s.get("segments") or []))
-        has_q = any((_seg_if("run", seg) or 0) >= _QUALITY_IF
-                    for s in run_props for seg in (s.get("segments") or []))
-        if run_props and not has_q:
-            hosts = [s for s in run_props if not _is_long_run(s) and _rmin(s) >= 35]
-            if hosts:
-                advisory.append("rule(quality): runs are 100% easy - SHAPE run quality WITHIN the "
-                                "mileage cap (convert part of an easy run to a short tempo/threshold; "
-                                "do NOT add run minutes or exceed the caps)")
-            else:
-                advisory.append("advisory: run quality not feasible within the current mileage/long-run "
-                                "cap - runs left easy (caps win)")
 
     return blocking, advisory
 
