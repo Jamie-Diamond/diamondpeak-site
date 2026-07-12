@@ -69,7 +69,7 @@ def _is_long_ride(s):
     return (s.get("sport") or "").lower() in ("ride", "bike", "brick") and "long" in (s.get("name") or "").lower()
 
 
-def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: float, run_min_cap=None):
+def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: float, run_min_cap=None, protect_long=False):
     """Scale ALL runs down so weekly run MINUTES stay under the ceiling (never up -
     mileage is a MAX), then re-clamp the long run to its own cap. Prefers the explicit
     minute cap (what validate_week enforces) over km x pace, so the closure lever and
@@ -87,10 +87,22 @@ def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: floa
     cap_min = int(min(_caps)) if _caps else None
     cur_min = _tot()
     if cap_min and cur_min > cap_min and cur_min > 0:
-        f = cap_min / cur_min
-        for s in run_sessions:
-            for seg in s.get("segments", []):
-                seg["minutes"] = max(15, round(seg["minutes"] * f))
+        long_min = sum(sum(sg.get("minutes", 0) for sg in s.get("segments", []))
+                       for s in run_sessions if _is_long_run(s))
+        nonlong = [s for s in run_sessions if not _is_long_run(s)]
+        nonlong_min = sum(sum(sg.get("minutes", 0) for sg in s.get("segments", [])) for s in nonlong)
+        room = cap_min - long_min
+        if protect_long and room >= 0 and nonlong_min > room and nonlong_min > 0:
+            # protect a PROGRESSING long run: shrink only the easy runs to fit the ceiling
+            f = room / nonlong_min
+            for s in nonlong:
+                for seg in s.get("segments", []):
+                    seg["minutes"] = max(15, round(seg["minutes"] * f))
+        else:
+            f = cap_min / cur_min
+            for s in run_sessions:
+                for seg in s.get("segments", []):
+                    seg["minutes"] = max(15, round(seg["minutes"] * f))
     for s in run_sessions:
         if _is_long_run(s) and lr_cap:
             cur = sum(seg.get("minutes", 0) for seg in s.get("segments", []))
@@ -119,24 +131,31 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
     their targets (never used to absorb TSS); quality is fixed by dose; only the OTHER easy
     endurance (easy runs, 2nd/easy rides) is scaled to land the week on target."""
     lr_cap = brief.get("long_run_cap_min")            # MAX long run
+    lr_target = brief.get("long_run_target_min")      # PROGRESSING long-run target (near cap) or None
     lrd_min = brief.get("long_ride_target_min")
     mileage_cap_km = brief.get("weekly_run_mileage_cap_km")  # MAX weekly run km
     run_min_cap = brief.get("weekly_run_min_cap")     # MAX weekly run MINUTES (validate_week's cap)
     PACE = 5.3  # ~easy min/km (matches the audit's km estimate)
 
-    # 1. Long ride clamped to its target; long run CLAMPED DOWN to its cap (never up).
+    # 1. Long ride clamped to its target. Long run: if the athlete has a PROGRESSING target
+    #    (configured long-run floor) build it TO that target (up or down, bounded by the cap)
+    #    so it CLIMBS instead of plateauing short; otherwise just clamp DOWN to the cap
+    #    (never up) - unchanged for athletes without a target.
     for s in proposal["sessions"]:
         if _is_long_ride(s) and lrd_min:
             _set_total_minutes(s, lrd_min)
-        elif _is_long_run(s) and lr_cap:
+        elif _is_long_run(s):
             cur = sum(seg.get("minutes", 0) for seg in s.get("segments", []))
-            if cur > lr_cap:
+            if lr_target:
+                _set_total_minutes(s, min(lr_target, lr_cap) if lr_cap else lr_target)
+            elif lr_cap and cur > lr_cap:
                 _set_total_minutes(s, lr_cap)
 
-    # 2. Total run mileage is a CEILING: if over the weekly cap, scale ALL runs down to it.
-    #    (Never scale runs UP - mileage is a max, not a target.)
+    # 2. Total run mileage is a CEILING: if over the weekly cap, scale runs down to it
+    #    (protecting a progressing long run - shrink the easy runs first).
     if mileage_cap_km:
-        _clamp_runs_to_cap(proposal, mileage_cap_km, lr_cap, PACE, run_min_cap)
+        _clamp_runs_to_cap(proposal, mileage_cap_km, lr_cap, PACE, run_min_cap,
+                           protect_long=bool(lr_target))
 
     # 3. Close the weekly TSS gap. WHICH sessions absorb it is athlete-conditional
     #    (Phase 5b): a run-limited athlete (injury / no run quality, e.g. Jamie's ankle
@@ -269,6 +288,12 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     lrc = brief.get("long_run_cap_min")   # MAX single long run
     if lrc and runs and max(s["duration_min"] for s in runs) > lrc:
         blocking.append(f"long run {max(s['duration_min'] for s in runs)}min EXCEEDS cap {lrc}min (+10-15% max)")
+    lrt_run = brief.get("long_run_target_min")   # PROGRESSING target (configured athletes)
+    if lrt_run and runs:
+        _longest = max(s["duration_min"] for s in runs)
+        if _longest < lrt_run * 0.85:
+            advisory.append(f"long run {_longest}min is under the progressing target ~{lrt_run}min - "
+                            f"build the long run toward its climbing cap (do not plateau short)")
 
     # ── LONG RIDE must be present (key session -> BLOCK) ──
     lrt = brief.get("long_ride_target_min")
@@ -328,7 +353,9 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
 - PROTECT THE LONG RIDE: include one Ride of ~long_ride_target_min as the week's KEY session.
 - RUNS: total run mileage must NOT exceed weekly_run_mileage_cap_km (≈ minutes/5.3 km) and the
   longest run must NOT exceed long_run_cap_min — these are MAX ceilings (+10-15% on the highest of
-  the last 4 weeks). Plan at or under them. If run_protocol.quality_allowed is false, EVERY run is
+  the last 4 weeks). Plan at or under them. If long_run_target_min is set, make the weekly LONG RUN a
+  PROGRESSING session built toward it (climbing week-on-week), not a static short run - near the target,
+  within the caps. If run_protocol.quality_allowed is false, EVERY run is
   easy Z2 — NO tempo/threshold/interval/vo2 run (ankle gate). Honour run_protocol format.
 - OBEY hard_rules (the athlete's protocol) absolutely — they override anything else here.
 - Swim sets: express in minutes (not metres). Strength: omit segments.

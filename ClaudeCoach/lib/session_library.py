@@ -181,13 +181,19 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         # Caps from the shared helper (plan_tools.run_caps) so the brief and the
         # validators can never drift apart again (audit P1-9): weekly km x1.10
         # per rules.md (25 km floor = top of the "normal" band), long run x1.15.
-        _caps = pt.run_caps(_c, today)
+        _caps = pt.run_caps(_c, today, run_protocol=cfg.get("run_protocol"))
         weekly_mileage_cap_km = _caps.get("weekly_km_cap")
         weekly_run_min_cap = _caps.get("weekly_min_cap")
         long_run_cap_min = _caps.get("long_run_min_cap")
     except Exception:
         pass
     req = pt.required_tss(cfg, ctl, today=today, last_week_tss=last_week_tss) if ctl else {}
+    # Long run is a PROGRESSING target for athletes with a configured long-run floor
+    # (Kathryn): schedule it NEAR its climbing cap, not a static short run. Athletes
+    # without a floor keep cap-only behaviour (no forced target) - unchanged.
+    _lr_floor_cfg = (cfg.get("run_protocol") or {}).get("long_run_km_floor")
+    long_run_target_min = (round(long_run_cap_min * 0.9)
+                           if (long_run_cap_min and _lr_floor_cfg is not None) else None)
 
     # phase menu ∩ event sports; resolve this-week progression for each quality type
     phase_cfg = lib["phases"].get(phase_name, {})
@@ -261,7 +267,9 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                    "PROTECT the long ride (~long_ride_target_min). Total run mileage must "
                    "NOT exceed weekly_run_mileage_cap_km and the longest run must NOT exceed "
                    "long_run_cap_min (these are MAX ceilings, +10-15% on the highest of the "
-                   "last 4 weeks). The OVERALL phase TID (tid_low_mod_high) is the authoritative "
+                   "last 4 weeks). Where long_run_target_min is set, the LONG RUN is a PROGRESSING "
+                   "target - schedule it NEAR that (climbing) target, not a static short run (still "
+                   "within the caps). The OVERALL phase TID (tid_low_mod_high) is the authoritative "
                    "intensity budget; the per-sport distribution_by_sport rows are a soft preference "
                    "for spending it and may be reallocated across sports under caps/limits. Obey "
                    "run_protocol (no quality if quality_allowed=false) and hard_rules. No type outside "
@@ -361,6 +369,7 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "weekly_run_mileage_cap_km": weekly_mileage_cap_km,   # MAX (highest of last 4 wks ×1.15)
         "weekly_run_min_cap": weekly_run_min_cap,             # MAX weekly run MINUTES (validate_week cap)
         "long_run_cap_min": long_run_cap_min,                 # MAX single long run (×1.15)
+        "long_run_target_min": long_run_target_min,           # PROGRESSING target near cap (configured athletes)
         "long_ride_target_min": long_ride_min,
         "long_swim_target_m": event.get("long_swim_m"),  # OVERDISTANCE weekly long swim (70.3 ~3000, IM ~4500)
         "race_sim_m": event.get("swim_m"),               # EXACT race distance — race-sim rehearsal (70.3 1900, IM 3800)

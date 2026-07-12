@@ -505,15 +505,27 @@ def last_week_actual_tss(client, today: date | None = None) -> float | None:
         return None
 
 
-def run_caps(client, today: date | None = None) -> dict:
-    """Run-volume MAX ceilings from the last 4 completed weeks. Source of truth:
-    athletes/jamie/reference/rules.md — weekly km growth <=10% w/w as a general
-    rule, applied above the 18-25 km/wk normal band (so the km floor is 25);
-    single long run keeps the established x1.15 allowance. Returns km caps (for
-    the weekly brief) AND minute caps (for validate_week, where planned events
-    carry duration but not distance). All-None on fetch failure — callers must
-    surface a skipped check, never a silent pass (audit P1-9)."""
+_RUN_CAP_PACE_MIN_PER_KM = 5.3  # convert a km floor to a minute floor (matches stage1 PACE)
+
+
+def run_caps(client, today: date | None = None, run_protocol: dict | None = None) -> dict:
+    """Run-volume MAX ceilings from the last 4 completed weeks. Floors + ramp are
+    PER-ATHLETE from run_protocol (defaults preserve prior behaviour): weekly_km_floor
+    (default 25), long_run_km_floor (default none), increase_pct (default +10% weekly /
+    +15% long run). The floor is a BASE that gets ramped - cap = max(recent-4wk-max,
+    floor) x (1 + increase_pct) - so a big week ageing out of the window cannot make the
+    cap sag below the athlete's established base (Kathryn's 31 km). Minute floors are
+    derived from the km floor via one pace, so the km and minute caps cannot diverge.
+    Returns km caps (weekly brief) AND minute caps (validate_week). All-None on fetch
+    failure - callers must surface a skipped check, never a silent pass (audit P1-9)."""
     today = today or date.today()
+    rp = run_protocol or {}
+    wk_km_floor = float(rp.get("weekly_km_floor", 25.0))
+    _lr_km_floor = rp.get("long_run_km_floor")
+    lr_min_floor = float(_lr_km_floor) * _RUN_CAP_PACE_MIN_PER_KM if _lr_km_floor is not None else 0.0
+    _inc = rp.get("increase_pct")
+    wk_mult = (1 + float(_inc) / 100) if _inc is not None else 1.10
+    lr_mult = (1 + float(_inc) / 100) if _inc is not None else 1.15
     try:
         wk_km, wk_min, wk_long = {}, {}, {}
         for a in client.get_training_history(days=35) or []:
@@ -529,10 +541,15 @@ def run_caps(client, today: date | None = None) -> dict:
         weeks = [k for k in sorted(wk_km) if k != cur][-4:]
         if not weeks:
             return {"weekly_km_cap": None, "weekly_min_cap": None, "long_run_min_cap": None}
+        rmax_km = max(wk_km[k] for k in weeks)
+        rmax_min = max(wk_min[k] for k in weeks)
+        rmax_long = max(wk_long[k] for k in weeks)
         return {
-            "weekly_km_cap": round(max(25.0, max(wk_km[k] for k in weeks) * 1.10), 1),
-            "weekly_min_cap": round(max(150.0, max(wk_min[k] for k in weeks) * 1.10)),
-            "long_run_min_cap": round(max(wk_long[k] for k in weeks) * 1.15),
+            # floor is a BASE that gets ramped (max(recent, floor) x mult), not a floor on
+            # the result - so an aged-out big week cannot sag the cap below the base.
+            "weekly_km_cap": round(max(rmax_km, wk_km_floor) * wk_mult, 1),
+            "weekly_min_cap": round(max(rmax_min, wk_km_floor * _RUN_CAP_PACE_MIN_PER_KM) * wk_mult),
+            "long_run_min_cap": round(max(rmax_long, lr_min_floor) * lr_mult),
         }
     except Exception:
         return {"weekly_km_cap": None, "weekly_min_cap": None, "long_run_min_cap": None}
@@ -612,7 +629,7 @@ def cmd_validate(args) -> dict:
         except Exception:
             tss_floor = None
 
-    caps = run_caps(_client(cfg), week_start)
+    caps = run_caps(_client(cfg), week_start, run_protocol=cfg.get("run_protocol"))
     rep = validate_week(
         events, week_start,
         day_rules=day_rules, ctl_today=ctl_today,
