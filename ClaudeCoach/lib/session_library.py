@@ -237,28 +237,35 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # or single-sport athlete closes gaps with BIKE volume; everyone else spreads the
     # closure across sports and MUST carry the phase quality share, not easy bike alone.
     if run_limited:
-        _closure = ("Close any weekly-TSS gap with BIKE volume, never by planning a short week; "
-                    "runs stay EASY (no run quality). Because the run is limited, the BIKE must "
-                    "carry the quality: SHAPE the bike to this phase's blueprint bike TID (its Z3 "
-                    "tempo/threshold and Z4-5 VO2 shares) by converting EASY bike minutes to those "
-                    "sessions WITHIN THE SAME total load - do not add volume to add intensity. ")
+        _closure = ("Close any weekly-TSS gap with BIKE volume, never a short week; runs stay EASY "
+                    "(no run quality - ankle). Hit the OVERALL phase Z3+ budget (tid_low_mod_high) by "
+                    "putting the quality the run cannot take onto the BIKE (and swim): SHAPE easy bike "
+                    "minutes into tempo/threshold/VO2 WITHIN the same total load - do not add volume "
+                    "to add intensity. ")
     elif single_sport:
-        _closure = ("Close any weekly-TSS gap with BIKE volume, never by planning a short week. ")
+        _closure = ("Close any weekly-TSS gap with BIKE volume, never a short week. Hit the OVERALL "
+                    "phase Z3+ budget (tid_low_mod_high) on the bike by shaping easy minutes into "
+                    "quality within the same total - the OVERALL budget governs, not the per-sport "
+                    "bike row. ")
     else:
-        _closure = ("Close any weekly-TSS gap with a BALANCED spread across the available "
-                    "sports (bike AND run endurance) and by carrying the phase's QUALITY "
-                    "share; do NOT fill the week with easy Z2 bike alone. When quality_allowed "
-                    "is true, run quality must be SHAPED within the mileage/long-run caps - "
-                    "convert part of an EASY run into a short tempo/threshold block; NEVER add "
-                    "run minutes or exceed the caps (they are hard ceilings that win). ")
+        _closure = ("Close any weekly-TSS gap with a BALANCED spread across the available sports. Hit "
+                    "the OVERALL phase Z3+ budget (tid_low_mod_high) across the WEEK; the per-sport "
+                    "TIDs are a SOFT preference for how to distribute it, NOT additive targets to sum. "
+                    "When quality_allowed is true, SHAPE run quality within the mileage/long-run caps "
+                    "(convert part of an EASY run to a short tempo/threshold; never add run minutes or "
+                    "exceed the caps). If a sport cannot carry its share (caps/limits), move that "
+                    "quality to the other capable sports so the OVERALL budget is still met. ")
     dosing_note = ("Build to weekly_tss_target - weekly_tss_floor is a HARD minimum (below "
                    "it the week detrains the athlete and validation rejects it; only "
                    "deload/taper weeks may sit under maintenance). " + _closure +
                    "PROTECT the long ride (~long_ride_target_min). Total run mileage must "
                    "NOT exceed weekly_run_mileage_cap_km and the longest run must NOT exceed "
                    "long_run_cap_min (these are MAX ceilings, +10-15% on the highest of the "
-                   "last 4 weeks). Obey run_protocol (no quality if quality_allowed=false) "
-                   "and hard_rules. No type outside available_sessions.")
+                   "last 4 weeks). The OVERALL phase TID (tid_low_mod_high) is the authoritative "
+                   "intensity budget; the per-sport distribution_by_sport rows are a soft preference "
+                   "for spending it and may be reallocated across sports under caps/limits. Obey "
+                   "run_protocol (no quality if quality_allowed=false) and hard_rules. No type outside "
+                   "available_sessions.")
     # Long-ride target (the protected key session): event bike demand × factor, capped.
     bike_min = (cfg.get("race_target_splits") or {}).get("bike_min")
     lr_factor = event.get("long_ride_factor", 0.9)

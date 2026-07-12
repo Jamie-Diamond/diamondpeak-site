@@ -173,132 +173,39 @@ def _check_distribution(week_events: list[dict], week_start: date,
     return out
 
 
-# -- Minimum-quality floor (Phase 5c) ------------------------------------------
-# _check_distribution above flags EXCESS quality (easy share below the phase Z1-2
-# target). This is its complement: a week that is too EASY. It is deliberately a
-# SEPARATE, opt-in function so callers arm it with the per-athlete limiter context
-# the phase table alone cannot carry (which sports may be asked for quality, and
-# which sport MUST carry some). The intensity summary is supplied by the caller
-# (measured from the proposal's own segment IFs), so the coarse name classifier is
-# not on this path. Swim is never passed in (name/zone intensity is unreliable).
+# -- Overall intensity budget (Phase 5 redesign) ------------------------------
+# The blueprint carries BOTH an overall phase TID (e.g. build [80,11,9] = 20% Z3+) and
+# per-sport TIDs (Bike 30% / Swim 35% / Run 22% Z3+) that cannot average to the overall.
+# RECONCILIATION: the OVERALL TID is authoritative - it is the hard intensity budget for
+# the week's TOTAL time-at-intensity. The per-sport TIDs are only a soft preference for HOW
+# to spend that budget and are FUNGIBLE across sports (a share a sport cannot carry -
+# run-limited, run-capped, single-sport - moves to the capable sports). So we check the
+# TOTAL Z3+ share against the overall budget and NEVER independently max each per-sport TID
+# (which double-counts and blows the total). Advisory: it drives the iterate loop, never
+# blocks the push (only safety ceilings block).
 
-QUALITY_FLOOR_PP = 8.0            # quality may sit this far under the TID top-end
-QUALITY_FLOOR_MIN_MINUTES = 90    # skip a sport with under 1.5h planned (low-volume)
-
-
-def _quality_target_pct(dist_row) -> float | None:
-    """Top-end (Z3+) share implied by a row like '70% Z1-2 / 18% Z3 / 12% Z4-5':
-    the complement of the leading Z1-2 share."""
-    easy = _easy_target_pct(dist_row)
-    return None if easy is None else max(0.0, 100.0 - easy)
-
-
-def check_quality_floor(sport_summary: dict, distribution: dict, *,
-                        floor_sports: set | None = None,
-                        require_quality_sports: set | None = None,
-                        floor_pp: float = QUALITY_FLOOR_PP,
-                        min_minutes: float = QUALITY_FLOOR_MIN_MINUTES) -> list["Violation"]:
-    """Minimum-quality floor. sport_summary maps a sport key ('Bike'/'Run', matching
-    the distribution table) to {'easy': minutes, 'quality': minutes}. Two OPT-IN checks:
-
-      - require_quality_sports: sports that MUST carry SOME quality (0 quality minutes
-        is a violation) - stops an athlete cleared for quality (quality_allowed=true)
-        drifting to 100% easy in that sport (Kathryn's runs).
-      - floor_sports: sports whose quality share must not fall more than floor_pp below
-        the phase TID top-end. Route to NON-LIMITED sports only; never list a
-        run-limited athlete's run here (their floor must be satisfiable elsewhere, e.g.
-        the bike - preserving the ankle hard-stop).
-
-    Low-volume sports (< min_minutes planned) are skipped so a ~4h/week athlete is not
-    over-constrained. All checks are soft (they drive the generator's iterate-to-clean
-    loop; they do not by themselves justify blocking a push)."""
-    floor_sports = floor_sports or set()
-    require_quality_sports = require_quality_sports or set()
-    out: list[Violation] = []
-    for sport, agg in (sport_summary or {}).items():
-        easy = float((agg or {}).get("easy", 0) or 0)
-        quality = float((agg or {}).get("quality", 0) or 0)
-        total = easy + quality
-        if total < min_minutes:
-            continue
-        q_pct = quality / total * 100 if total else 0.0
-        if sport in require_quality_sports and quality <= 0:
-            out.append(Violation(
-                code="quality_required",
-                severity="soft",
-                detail=(f"{sport}: 0 min quality planned but quality is allowed for this "
-                        f"athlete - include the phase's prescribed {sport.lower()} quality "
-                        f"dose (the week is 100% easy in {sport.lower()})"),
-            ))
-            continue
-        if sport in floor_sports:
-            target_q = _quality_target_pct((distribution or {}).get(sport))
-            if target_q is not None and q_pct < target_q - floor_pp:
-                out.append(Violation(
-                    code="quality_floor",
-                    severity="soft",
-                    detail=(f"{sport}: only {q_pct:.0f}% of planned time is quality vs the "
-                            f"phase target ~{target_q:.0f}% Z3+ (floor -{floor_pp:.0f}pp) - "
-                            f"too much easy volume, add the prescribed quality"),
-                ))
-    return out
-
-
-# -- Bike TID floor for run-limited athletes (Phase 5 refinement) --------------
-# A run-limited athlete (injury / no run quality) cannot take intensity running, so
-# the BIKE must carry the quality: target the blueprint bike TID for the phase rather
-# than a token floor. The caller supplies bike minutes already bucketed low/mod/high
-# (Z1-2 / Z3 / Z4-5) from the proposal's own intensities. Checks (soft, drive the
-# generator's iterate-to-clean loop): combined Z3+Z4-5 must reach the TID within slack,
-# AND both the Z3 and Z4-5 bands must be PRESENT (so the week is shaped to the full
-# distribution - tempo/threshold plus VO2 - not one spike or all easy). This shapes the
-# capped bike load; total volume/TSS is bounded by the weekly cap and ramp cap elsewhere.
-
-_TID_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*Z1.*?(\d+(?:\.\d+)?)\s*%\s*Z3.*?(\d+(?:\.\d+)?)\s*%\s*Z4")
-
-
-def _parse_tid(row) -> tuple | None:
-    """(low, mod, high) percentages from '72% Z1-2 / 20% Z3 / 8% Z4-5'."""
-    m = _TID_RE.search(str(row or ""))
-    return (float(m.group(1)), float(m.group(2)), float(m.group(3))) if m else None
-
-
-def check_bike_tid(bike_bands: dict, tid_row, *, slack_pp: float = 6.0,
-                   min_minutes: float = 120) -> list["Violation"]:
-    """bike_bands: {'low': min, 'mod': min, 'high': min}. Returns soft violations when
-    the bike does not reach its phase TID top-end. Skipped under min_minutes of bike."""
-    tid = _parse_tid(tid_row)
-    if not tid:
+def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
+                           *, band_pp: float = 4.0, min_minutes: float = 180) -> list["Violation"]:
+    """The week's total Z3+ (Z3 + Z4-5) share must land within band_pp of the overall
+    phase TID's mod+high. Too far under -> add quality; too far over -> trim it. overall_tid
+    is [low, mod, high] percentages (brief.tid_low_mod_high). Skipped under min_minutes."""
+    if not overall_tid or len(overall_tid) < 3 or not total_min or total_min < min_minutes:
         return []
-    low_t, mod_t, high_t = tid
-    low = float(bike_bands.get("low", 0) or 0)
-    mod = float(bike_bands.get("mod", 0) or 0)
-    high = float(bike_bands.get("high", 0) or 0)
-    total = low + mod + high
-    if total < min_minutes:
-        return []
-    q_pct = (mod + high) / total * 100
-    q_target = mod_t + high_t
-    out: list[Violation] = []
-    if q_pct < q_target - slack_pp:
-        out.append(Violation(
-            code="bike_tid_floor", severity="soft",
-            detail=(f"Bike: {q_pct:.0f}% quality (Z3+Z4-5) vs blueprint TID ~{q_target:.0f}% "
-                    f"({mod_t:.0f}% Z3 + {high_t:.0f}% Z4-5) - convert easy bike minutes to "
-                    f"tempo/threshold/VO2 to reach the bike TID (shape within the same total)"),
-        ))
-    if high_t > 0 and high <= 0:
-        out.append(Violation(
-            code="bike_tid_high_missing", severity="soft",
-            detail=(f"Bike: no Z4-5 (threshold/VO2) planned - the bike must carry the top-end "
-                    f"the run cannot (~{high_t:.0f}% high target)"),
-        ))
-    if mod_t > 0 and mod <= 0:
-        out.append(Violation(
-            code="bike_tid_mod_missing", severity="soft",
-            detail=f"Bike: no Z3 (tempo/sweetspot) planned vs ~{mod_t:.0f}% Z3 target",
-        ))
-    return out
+    target = float(overall_tid[1]) + float(overall_tid[2])   # mod + high = Z3+
+    pct = z3plus_min / total_min * 100
+    if pct < target - band_pp:
+        return [Violation(
+            code="intensity_budget_low", severity="soft",
+            detail=(f"week is {pct:.0f}% Z3+ vs the phase budget ~{target:.0f}% - ADD quality; put it "
+                    f"in the sports that can carry it (the OVERALL budget governs; per-sport TIDs are "
+                    f"a soft, reallocatable preference)"))]
+    if pct > target + band_pp:
+        return [Violation(
+            code="intensity_budget_high", severity="soft",
+            detail=(f"week is {pct:.0f}% Z3+ vs the phase budget ~{target:.0f}% - TRIM quality back "
+                    f"toward the overall budget (per-sport TIDs are a soft preference, NOT additive "
+                    f"maxes to be summed)"))]
+    return []
 
 
 # -- Distance/duration internal consistency (walk-run sessions) ----------------
