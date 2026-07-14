@@ -17,6 +17,43 @@ import ops_log
 
 TOOLS = "Read,Bash"
 
+# Case-A messages acknowledge a COMPLETED activity ("... done.") and then ask a
+# capture question. Per Step 2 of the prompt, an activity already present in
+# session-log.json for today is ACCOUNTED FOR, so Case A must not fire for it.
+# Haiku occasionally emits Case A anyway, re-asking for data already captured
+# (e.g. injury pain re-asked on 2026-07-14 for a run already logged 0/10). This
+# deterministic backstop suppresses that. Keyed on SPORT rather than activity_id
+# because the emitted message never carries the id. Case B ("Did the ... happen
+# today?") contains no "done" and is never matched, so a legitimate did-it-happen
+# prompt is always preserved.
+_CASE_A_SPORTS = ("run", "ride", "swim", "strength")
+
+
+def _completed_sport_ack(content):
+    """Return the sport if `content` is a Case-A '... done' acknowledgement, else None."""
+    c = content.lower()
+    if "done" not in c:
+        return None
+    for sport in _CASE_A_SPORTS:
+        if sport in c:
+            return sport
+    return None
+
+
+def _sports_logged_today(adir):
+    """Set of lowercased sports with a session-log.json entry dated today."""
+    logged = set()
+    sl_path = adir / "session-log.json"
+    if sl_path.exists():
+        today = date.today().isoformat()
+        try:
+            for e in json.loads(sl_path.read_text()):
+                if str(e.get("date")) == today and e.get("sport"):
+                    logged.add(str(e.get("sport")).lower())
+        except Exception:
+            pass
+    return logged
+
 
 def _build_prompt(slug, first_name, injuries, pain_next_morning=0, coaching_level="mid"):
     today = date.today().isoformat()
@@ -126,9 +163,16 @@ def run_athlete(slug, athlete_cfg):
     m = re.search(r'<notify>(.*?)</notify>', output, re.DOTALL | re.IGNORECASE)
     if m:
         content = m.group(1).strip()
+        ack_sport = _completed_sport_ack(content)
         if content.upper() == "SKIP":
             # Cases C/D — model confirmed nothing to send
             ops_log.record_run("evening-checkin", athlete=slug, ok=True, detail="silent")
+        elif ack_sport and ack_sport in _sports_logged_today(adir):
+            # Deterministic backstop: the completed activity is already in
+            # session-log.json for today, so it is accounted for and this Case-A
+            # acknowledgement is a duplicate re-ask. Suppress it.
+            ops_log.record_run("evening-checkin", athlete=slug, ok=True,
+                                detail=f"suppressed-dup:{ack_sport}")
         elif notify(content, chat_id, slug=slug):
             ops_log.record_run("evening-checkin", athlete=slug, ok=True, detail="sent")
     else:
