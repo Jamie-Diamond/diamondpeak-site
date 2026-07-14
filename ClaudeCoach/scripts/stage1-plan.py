@@ -249,6 +249,60 @@ def _overall_z3plus(proposal: dict):
     return z3, tot
 
 
+# High-zone (Z4-5 / VO2) tolerance, shared by advisory and picker so both flag/deprioritise
+# the SAME attempts. Z4-5 boundary is IF >= 0.90 (debrief Z4 = 0.90-1.05), unified across
+# sports and identical to the target-banding used for the per-sport rows.
+_HIGH_BAND_PP = 3.0
+
+
+def _overall_high(proposal: dict):
+    """(Z4-5 / VO2 minutes, total minutes) across ALL sports (cut IF >= 0.90). The high-zone
+    half of the Z3+ lump: the low-VO2 shape needs the split, not just the Z3+ total."""
+    high = tot = 0.0
+    for s in proposal.get("sessions", []):
+        for seg in (s.get("segments") or []):
+            m = seg.get("minutes", 0) or 0
+            tot += m
+            if (_seg_if(s.get("sport", ""), seg) or 0) >= 0.90:
+                high += m
+    return high, tot
+
+
+def _sport_bucket(sport: str):
+    s = (sport or "").lower()
+    if s in ("bike", "ride", "brick", "virtualride", "gravelride"):
+        return "Bike"       # bricks bucket to Bike (mixed; matches _overall_z3plus cut)
+    if "run" in s:
+        return "Run"
+    if "swim" in s:
+        return "Swim"
+    return None
+
+
+def _zone_by_sport(proposal: dict) -> dict:
+    """{sport: {"z3_pct","high_pct","min"}} realised this week. Z3 = the sport's Z2/Z3
+    boundary (bike 0.76, run/swim 0.85) up to 0.90; Z4-5 = IF >= 0.90. Segment-level - the
+    only place per-zone granularity exists (calendar events are whole-session)."""
+    agg: dict = {}
+    for s in proposal.get("sessions", []):
+        b = _sport_bucket(s.get("sport"))
+        if not b:
+            continue
+        cut = 0.76 if b == "Bike" else 0.85
+        d = agg.setdefault(b, {"z3": 0.0, "high": 0.0, "total": 0.0})
+        for seg in (s.get("segments") or []):
+            m = seg.get("minutes", 0) or 0
+            d["total"] += m
+            if_ = _seg_if(s.get("sport", ""), seg) or 0
+            if if_ >= 0.90:
+                d["high"] += m
+            elif if_ >= cut:
+                d["z3"] += m
+    return {sp: {"z3_pct": (d["z3"] / d["total"] * 100) if d["total"] else 0.0,
+                 "high_pct": (d["high"] / d["total"] * 100) if d["total"] else 0.0,
+                 "min": d["total"]} for sp, d in agg.items()}
+
+
 def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
     """Tie-breakers among equally-(un)blocked attempts (lower is better): smallest overall
     intensity-budget deviation |week Z3+ - phase budget|, then lowest Foster monotony, then
@@ -257,16 +311,22 @@ def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
     well over/under budget)."""
     tid = brief.get("tid_low_mod_high")
     budget = (float(tid[1]) + float(tid[2])) if tid and len(tid) >= 3 else None
+    high_target = float(tid[2]) if tid and len(tid) >= 3 else None
     z3, tot = _overall_z3plus(proposal)
     z3_pct = (z3 / tot * 100) if tot else 0.0
     budget_dev = abs(z3_pct - budget) if budget is not None else 0.0
+    # VO2/Z4-5 over the derived ceiling: among equal-budget attempts prefer the sweetspot-
+    # weighted week over the VO2-heavy one (the Z3+ lump alone cannot tell them apart).
+    high, _ = _overall_high(proposal)
+    high_pct = (high / tot * 100) if tot else 0.0
+    high_over = max(0.0, high_pct - (high_target + _HIGH_BAND_PP)) if high_target is not None else 0.0
     mono = 0.0
     for v in built.get("soft", []):
         m = re.search(r"monotony\s+([\d.]+)", v.get("msg", ""))
         if m:
             mono = max(mono, float(m.group(1)))
     tss_off = abs(built["total_tss"] - target) if target else 0.0
-    return (round(budget_dev, 1), round(mono, 2), round(tss_off, 1))
+    return (round(budget_dev, 1), round(high_over, 1), round(mono, 2), round(tss_off, 1))
 
 
 def audit_built(brief: dict, built: dict, target, proposal: dict):
@@ -347,9 +407,13 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     # cannot carry (run-limited / run-capped / single-sport) simply shifts onto the capable
     # sports; the total still governs. The ankle run-quality hard-stop above still BLOCKS.
     z3_min, tot_min = _overall_z3plus(proposal)
+    high_min, _ = _overall_high(proposal)
+    per_sport = _zone_by_sport(proposal)
     try:
         from primitives.validate_plan import check_intensity_budget
-        for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high")):
+        for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high"),
+                                        high_min=high_min, per_sport=per_sport,
+                                        per_sport_targets=brief.get("distribution_targets")):
             advisory.append(f"rule(quality): {v.detail}")
     except Exception:
         pass

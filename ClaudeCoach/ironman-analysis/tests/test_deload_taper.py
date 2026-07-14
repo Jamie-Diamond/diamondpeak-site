@@ -127,16 +127,22 @@ class TestShapedTaper:
         assert r["week_type"] == r2["week_type"] == "taper"
 
 
-class TestTaperTidRows:
-    def test_every_event_has_a_taper_row_holding_intensity(self):
-        lib = json.loads((REPO / "config" / "session-library.json").read_text())
-        for name, ev in lib["events"].items():
-            tid = ev.get("tid") or {}
-            if not tid:
-                continue
-            assert "taper" in tid, f"{name} missing taper TID row"
-            src = tid.get("peak") or tid.get("specific") or tid.get("build") or tid.get("base")
-            assert tid["taper"] == src, f"{name} taper TID must hold the sharpest configured row"
+class TestTaperHoldsIntensity:
+    # Phase 5.3: the overall TID is DERIVED from the per-sport rows; taper carries no
+    # rows of its own, so the derivation must fall back to PEAK (hold intensity), never
+    # the base mostly-easy split. Synthetic blueprint - blueprints are gitignored.
+    def test_taper_derivation_falls_back_to_peak(self):
+        import sys as _sys
+        _sys.path.insert(0, str(REPO / "lib"))
+        from session_library import derive_overall_tid, _phase_distribution
+        bp = {"phases": [
+            {"name": "Peak", "distribution": {"Bike": "70% Z1\u20132 / 22% Z3 / 8% Z4\u20135"}},
+            {"name": "Taper", "distribution": {}},
+        ]}
+        peak = derive_overall_tid(_phase_distribution(bp, "peak"), "ironman")
+        assert peak == [70, 22, 8]
+        # a taper brief (empty rows) must resolve to the peak derivation, not base
+        assert _phase_distribution(bp, "taper") == {}
 
     def test_volume_factor_is_gone(self):
         lib = json.loads((REPO / "config" / "session-library.json").read_text())

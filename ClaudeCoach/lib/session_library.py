@@ -36,6 +36,79 @@ def load_library() -> dict:
     return json.loads(LIBRARY.read_text())
 
 
+# -- Per-sport / per-zone intensity model (Phase 5.3) -------------------------
+# The per-sport rows (blueprint distribution, now harmonised to [Z1-2 / Z3 / Z4-5]
+# for every sport) are AUTHORITATIVE. The overall phase TID is DERIVED as the
+# volume-weighted sum of those rows, so overall and per-sport can never contradict
+# (the Phase-5.2 bug where a hand-set scalar sat below its own per-sport rows).
+# The overall is INFORMATIONAL / a cross-check; the per-sport Z3 and Z4-5 bands are
+# what the planner enforces (stage1 + check_intensity_budget), never a lump.
+
+import re as _re
+
+# Expected sport-time split per event — the ONLY place volume weights live. Used
+# solely to fold the per-sport rows into one informational overall; NOT a gate.
+# Events not listed (single-sport / bike-only) fall back to equal weight over the
+# sports actually present, so a bike-only athlete's overall == the bike row.
+_SPORT_TIME_WEIGHTS = {
+    "ironman": {"Swim": 0.15, "Bike": 0.57, "Run": 0.28},
+    "70_3":    {"Swim": 0.20, "Bike": 0.50, "Run": 0.30},
+}
+
+
+def _parse_zone_row(row):
+    """'62% Z1-2 / 15% Z3 / 23% Z4-5' -> [low, mod, high] ints; None if unparseable.
+    Positional: first three percentages are low/mod/high (bands harmonised upstream)."""
+    nums = [int(x) for x in _re.findall(r"(\d+)\s*%", str(row or ""))]
+    if len(nums) >= 3:
+        return nums[:3]
+    if len(nums) == 2:
+        return [nums[0], 0, nums[1]]
+    return None
+
+
+def parse_distribution_targets(distribution):
+    """{sport: '...'} -> {sport: [low, mod, high]} (only parseable rows)."""
+    out = {}
+    for sport, row in (distribution or {}).items():
+        z = _parse_zone_row(row)
+        if z:
+            out[sport] = z
+    return out
+
+
+def intensity_weights(distribution, ekey):
+    """Volume weights actually used for the present sports (renormalised)."""
+    targets = parse_distribution_targets(distribution)
+    w = {s: v for s, v in (_SPORT_TIME_WEIGHTS.get(ekey or "") or {}).items() if s in targets}
+    if not w:                                   # single-sport / unlisted event
+        w = {s: 1.0 for s in targets}
+    tot = sum(w.values()) or 1.0
+    return {s: v / tot for s, v in w.items()}
+
+
+def derive_overall_tid(distribution, ekey):
+    """Volume-weighted [low, mod, high] over the per-sport rows, or None."""
+    targets = parse_distribution_targets(distribution)
+    if not targets:
+        return None
+    w = intensity_weights(distribution, ekey)
+    acc = [0.0, 0.0, 0.0]
+    for sport, z in targets.items():
+        wt = w.get(sport, 0.0)
+        for i in range(3):
+            acc[i] += wt * z[i]
+    return [round(x) for x in acc]
+
+
+def _phase_distribution(bp, phase_name):
+    """The distribution dict for a named phase in a blueprint (taper fallback)."""
+    for p in (bp.get("phases") or []):
+        if (p.get("name") or "").lower() == (phase_name or "").lower():
+            return p.get("distribution") or {}
+    return {}
+
+
 def event_key(cfg: dict, profile: dict | None = None) -> str | None:
     """Map an athlete's race to a library event key from race_distance/race_name."""
     s = " ".join(str(x or "").lower() for x in (
@@ -244,23 +317,23 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # closure across sports and MUST carry the phase quality share, not easy bike alone.
     if run_limited:
         _closure = ("Close any weekly-TSS gap with BIKE volume, never a short week; runs stay EASY "
-                    "(no run quality - ankle). Hit the OVERALL phase Z3+ budget (tid_low_mod_high) by "
-                    "putting the quality the run cannot take onto the BIKE (and swim): SHAPE easy bike "
-                    "minutes into tempo/threshold/VO2 WITHIN the same total load - do not add volume "
-                    "to add intensity. ")
+                    "(run quality off). Carry the quality the run cannot take on the BIKE (and swim) "
+                    "by shaping easy minutes into SWEETSPOT/tempo (Z3) WITHIN the same total load - do "
+                    "NOT convert it to VO2 to hit a number: the run's missing share moves to bike Z3, "
+                    "never bike Z4-5 (keep VO2 within its low ceiling). No added volume for intensity. ")
     elif single_sport:
-        _closure = ("Close any weekly-TSS gap with BIKE volume, never a short week. Hit the OVERALL "
-                    "phase Z3+ budget (tid_low_mod_high) on the bike by shaping easy minutes into "
-                    "quality within the same total - the OVERALL budget governs, not the per-sport "
-                    "bike row. ")
+        _closure = ("Close any weekly-TSS gap with BIKE volume, never a short week. Hit the bike's "
+                    "per-sport [Z1-2 / Z3 / Z4-5] targets by shaping easy minutes into quality within "
+                    "the same total; keep Z4-5 (VO2) within its ceiling - the rest is Z3 sweetspot. "
+                    "For a single-sport athlete the bike row IS the overall. ")
     else:
         _closure = ("Close any weekly-TSS gap with a BALANCED spread across the available sports. Hit "
-                    "the OVERALL phase Z3+ budget (tid_low_mod_high) across the WEEK; the per-sport "
-                    "TIDs are a SOFT preference for how to distribute it, NOT additive targets to sum. "
-                    "When quality_allowed is true, SHAPE run quality within the mileage/long-run caps "
-                    "(convert part of an EASY run to a short tempo/threshold; never add run minutes or "
-                    "exceed the caps). If a sport cannot carry its share (caps/limits), move that "
-                    "quality to the other capable sports so the OVERALL budget is still met. ")
+                    "each sport's per-sport [Z1-2 / Z3 / Z4-5] targets - Z3 (sweetspot/tempo) AND Z4-5 "
+                    "(VO2/threshold) SEPARATELY; never fill the VO2 band to reach a Z3+ total. When "
+                    "quality_allowed is true, SHAPE run quality within the mileage/long-run caps "
+                    "(convert part of an EASY run to a short tempo; keep run VO2 LOWEST - impact; never "
+                    "add run minutes or exceed caps). If a sport cannot carry its share, move it to "
+                    "another sport's SAME zone (Z3->Z3, VO2->VO2), never easy->VO2. ")
     dosing_note = ("Build to weekly_tss_target - weekly_tss_floor is a HARD minimum (below "
                    "it the week detrains the athlete and validation rejects it; only "
                    "deload/taper weeks may sit under maintenance). " + _closure +
@@ -269,9 +342,11 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                    "long_run_cap_min (these are MAX ceilings, +10-15% on the highest of the "
                    "last 4 weeks). Where long_run_target_min is set, the LONG RUN is a PROGRESSING "
                    "target - schedule it NEAR that (climbing) target, not a static short run (still "
-                   "within the caps). The OVERALL phase TID (tid_low_mod_high) is the authoritative "
-                   "intensity budget; the per-sport distribution_by_sport rows are a soft preference "
-                   "for spending it and may be reallocated across sports under caps/limits. Obey "
+                   "within the caps). The per-sport distribution_by_sport rows [Z1-2 / Z3 / Z4-5] "
+                   "are the AUTHORITATIVE intensity targets - hit each sport's Z3 and Z4-5 bands "
+                   "SEPARATELY (Z4-5/VO2 is a low, sport-specific ceiling; run lowest). The overall "
+                   "tid_low_mod_high is a DERIVED cross-check, NOT a lump to fill. Reallocate a sport's "
+                   "unspendable share to another sport's SAME zone under caps/limits. Obey "
                    "run_protocol (no quality if quality_allowed=false) and hard_rules. No type outside "
                    "available_sessions.")
     # Long-ride target (the protected key session): event bike demand × factor, capped.
@@ -353,10 +428,21 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         # Taper holds INTENSITY: taper row if configured, else the peak row —
         # never the base 85/10/5 mostly-easy split (audit P0-2: reverting taper
         # intensity to base is the opposite of taper consensus).
-        "tid_low_mod_high": (event.get("tid", {}).get(phase_name)
-                             or (event.get("tid", {}).get("peak") if phase_name == "taper" else None)
-                             or event.get("tid", {}).get("base")),
-        "distribution_by_sport": ph.get("distribution"),
+        # DERIVED overall (Phase 5.3): volume-weighted sum of the per-sport rows,
+        # NOT a hand-set scalar. Taper carries no rows of its own -> fall back to the
+        # peak phase's rows (taper holds intensity; never the base mostly-easy split).
+        "tid_low_mod_high": (derive_overall_tid(ph.get("distribution"), ekey)
+                             or derive_overall_tid(_phase_distribution(bp, "peak"), ekey)
+                             or derive_overall_tid(_phase_distribution(bp, "base"), ekey)),
+        "distribution_by_sport": (ph.get("distribution")
+                                  or _phase_distribution(bp, "peak")),
+        # Parsed per-sport [Z1-2 / Z3 / Z4-5] targets — the AUTHORITATIVE bands the
+        # planner enforces (Z3 and Z4-5 separately), and the weights used to derive
+        # the overall (so the split is inspectable, not implied).
+        "distribution_targets": parse_distribution_targets(
+            ph.get("distribution") or _phase_distribution(bp, "peak")),
+        "intensity_weights": intensity_weights(
+            ph.get("distribution") or _phase_distribution(bp, "peak"), ekey),
         "emphasis": event.get("emphasis", []),
         "brick": event.get("brick"),
         "day_rules": day_rules_effective,
