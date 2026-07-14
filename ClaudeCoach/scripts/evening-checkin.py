@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Evening check-in — runs via VM crontab at 21:00 daily. Loops over all active athletes."""
-import json, os, subprocess, sys, time
+import json, os, re, subprocess, sys, time
 from datetime import date, datetime
 from pathlib import Path
 
@@ -29,10 +29,22 @@ TOOLS = "Read,Bash"
 _CASE_A_SPORTS = ("run", "ride", "swim", "strength")
 
 
+# Markers that a message is a Case-A completion acknowledgement + capture question,
+# rather than free chat. Covers every Case-A question tail (injury / RPE / nutrition
+# / strength) and is deliberately broad so a Haiku paraphrase of the template (which
+# may drop the literal word "done") is still caught.
+_CASE_A_MARKERS = ("done", "0-10", "0\u201310", "rpe", "nutrition", "carbs",
+                   "how did it feel", "how did it go", "main focus", "pain")
+
+
 def _completed_sport_ack(content):
-    """Return the sport if `content` is a Case-A '... done' acknowledgement, else None."""
+    """Return the sport if `content` is a Case-A completion acknowledgement, else None."""
     c = content.lower()
-    if "done" not in c:
+    # Case B ("Did the ... happen today?") asks about a MISSING session and may name
+    # a sport ("Did the run happen today?") — never treat it as a completion ack.
+    if re.search(r"\bdid\b.*\bhappen\b", c):
+        return None
+    if not any(mk in c for mk in _CASE_A_MARKERS):
         return None
     for sport in _CASE_A_SPORTS:
         if sport in c:
