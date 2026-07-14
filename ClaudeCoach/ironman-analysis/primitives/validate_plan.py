@@ -187,7 +187,7 @@ def _check_distribution(week_events: list[dict], week_start: date,
 def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
                            *, band_pp: float = 4.0, high_min: float | None = None,
                            high_band_pp: float = 3.0, per_sport: dict | None = None,
-                           per_sport_targets: dict | None = None,
+                           per_sport_targets: dict | None = None, deload: bool = False,
                            min_minutes: float = 180) -> list["Violation"]:
     """Phase 5.3 per-sport / per-zone advisory (soft; only safety ceilings block).
 
@@ -206,7 +206,7 @@ def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
     if overall_tid and len(overall_tid) >= 3 and total_min and total_min >= min_minutes:
         target = float(overall_tid[1]) + float(overall_tid[2])
         pct = z3plus_min / total_min * 100
-        if pct < target - band_pp:
+        if pct < target - band_pp and not deload:
             out.append(Violation(code="intensity_budget_low", severity="soft",
                 detail=(f"week is {pct:.0f}% Z3+ vs the derived phase overall ~{target:.0f}% - ADD "
                         f"quality in the sports that can carry it (per-sport zone targets govern)")))
@@ -232,7 +232,7 @@ def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
                 detail=(f"{sport} Z4-5 is {hi_p:.0f}% vs target {hi_t:.0f}% - over the VO2 ceiling "
                         f"for this sport; convert the excess to Z3 sweetspot in the same sport, or "
                         f"move it to a sport that can carry it (preserve zone TYPE)")))
-        if z3_t >= 8 and z3_p < z3_t - band_pp:   # sweetspot landed as VO2 instead
+        if z3_t >= 8 and z3_p < z3_t - band_pp and not deload:   # sweetspot as VO2 (skip on deload)
             out.append(Violation(code=f"sweetspot_low_{sport.lower()}", severity="soft",
                 detail=(f"{sport} Z3 sweetspot is {z3_p:.0f}% vs target {z3_t:.0f}% - add tempo/"
                         f"sweetspot (the race-specific band for long-course); don't leave it as VO2")))

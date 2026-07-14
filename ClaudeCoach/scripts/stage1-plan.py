@@ -303,30 +303,44 @@ def _zone_by_sport(proposal: dict) -> dict:
                  "min": d["total"]} for sp, d in agg.items()}
 
 
+# Load-on-target tolerance (%) - a week within this of target is PUSHABLE (mirrors the
+# load_on_target gate used on the final pick). Kept in sync with that gate.
+_LOAD_TOL_PCT = 12.0
+
+
 def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
-    """Tie-breakers among equally-(un)blocked attempts (lower is better): smallest overall
-    intensity-budget deviation |week Z3+ - phase budget|, then lowest Foster monotony, then
-    closest-to-target TSS. This makes the overall intensity budget drive SELECTION, not just
-    the advisory string (else the picker keeps the first 0-blocking attempt even if it is
-    well over/under budget)."""
-    tid = brief.get("tid_low_mod_high")
-    budget = (float(tid[1]) + float(tid[2])) if tid and len(tid) >= 3 else None
-    high_target = float(tid[2]) if tid and len(tid) >= 3 else None
-    z3, tot = _overall_z3plus(proposal)
-    z3_pct = (z3 / tot * 100) if tot else 0.0
-    budget_dev = abs(z3_pct - budget) if budget is not None else 0.0
-    # VO2/Z4-5 over the derived ceiling: among equal-budget attempts prefer the sweetspot-
-    # weighted week over the VO2-heavy one (the Z3+ lump alone cannot tell them apart).
-    high, _ = _overall_high(proposal)
-    high_pct = (high / tot * 100) if tot else 0.0
-    high_over = max(0.0, high_pct - (high_target + _HIGH_BAND_PP)) if high_target is not None else 0.0
+    """Phase 5.3 tie-breakers among equally-blocked attempts (lower better), AFTER
+    n_blocking (prepended by the caller):
+      1) LOAD-ON-TARGET (pushability): 0 if |week TSS - target| within tolerance, else 1.
+         A hard load gate must outrank the SOFT intensity bands - a pushable on-load week
+         always beats an over/under-load one; intensity decides only AMONG pushable weeks
+         (fixes the picker choosing a +27% over-load week because a soft budget outranked load).
+      2) PER-SPORT intensity band deviation (Z4-5 over the sport ceiling + Z3 under target),
+         summed - the soft gate. RELAXED to 0 on deload/taper: a recovery week is not a
+         quality-hunting week.
+      3) Foster monotony; 4) tss_off fine tie-break."""
+    load_off = 0
+    if target:
+        load_off = 0 if abs(built["total_tss"] - target) / target * 100 <= _LOAD_TOL_PCT else 1
+    deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
+    band_dev = 0.0
+    if not deload:
+        per_sport = _zone_by_sport(proposal)
+        for sport, tgt in (brief.get("distribution_targets") or {}).items():
+            r = per_sport.get(sport)
+            if not r or len(tgt) < 3 or (r.get("min") or 0) < 90:
+                continue
+            hi_t, z3_t = float(tgt[2]), float(tgt[1])
+            band_dev += max(0.0, r["high_pct"] - (hi_t + _HIGH_BAND_PP))    # VO2 over ceiling
+            if z3_t >= 8:                                                    # sweetspot missing
+                band_dev += max(0.0, (z3_t - 4.0) - r["z3_pct"])
     mono = 0.0
     for v in built.get("soft", []):
         m = re.search(r"monotony\s+([\d.]+)", v.get("msg", ""))
         if m:
             mono = max(mono, float(m.group(1)))
     tss_off = abs(built["total_tss"] - target) if target else 0.0
-    return (round(budget_dev, 1), round(high_over, 1), round(mono, 2), round(tss_off, 1))
+    return (load_off, round(band_dev, 1), round(mono, 2), round(tss_off, 1))
 
 
 def audit_built(brief: dict, built: dict, target, proposal: dict):
@@ -409,11 +423,13 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     z3_min, tot_min = _overall_z3plus(proposal)
     high_min, _ = _overall_high(proposal)
     per_sport = _zone_by_sport(proposal)
+    _deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
     try:
         from primitives.validate_plan import check_intensity_budget
         for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high"),
                                         high_min=high_min, per_sport=per_sport,
-                                        per_sport_targets=brief.get("distribution_targets")):
+                                        per_sport_targets=brief.get("distribution_targets"),
+                                        deload=_deload):
             advisory.append(f"rule(quality): {v.detail}")
     except Exception:
         pass
