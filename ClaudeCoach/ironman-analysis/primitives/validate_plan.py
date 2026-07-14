@@ -185,27 +185,45 @@ def _check_distribution(week_events: list[dict], week_start: date,
 # blocks the push (only safety ceilings block).
 
 def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
-                           *, band_pp: float = 4.0, min_minutes: float = 180) -> list["Violation"]:
+                           *, band_pp: float = 4.0, high_min: float | None = None,
+                           high_band_pp: float = 3.0, min_minutes: float = 180) -> list["Violation"]:
     """The week's total Z3+ (Z3 + Z4-5) share must land within band_pp of the overall
     phase TID's mod+high. Too far under -> add quality; too far over -> trim it. overall_tid
-    is [low, mod, high] percentages (brief.tid_low_mod_high). Skipped under min_minutes."""
+    is [low, mod, high] percentages (brief.tid_low_mod_high). Skipped under min_minutes.
+
+    HIGH-ZONE SUB-CEILING: the lumped Z3+ budget says nothing about the split INSIDE it, so a
+    week can pass the overall budget while stacking VO2/Z4-5 at the expense of sweetspot/tempo
+    (Z3) - which breaks the low-VO2 IM shape (build/spec = 8% high). When high_min (Z4-5
+    minutes) is supplied, the week's high-zone share must also stay within high_band_pp of the
+    phase TID's HIGH value; over that emits a separate advisory. Soft only - consistent with
+    the gating (checks advise; only safety ceilings block)."""
     if not overall_tid or len(overall_tid) < 3 or not total_min or total_min < min_minutes:
         return []
+    out: list["Violation"] = []
     target = float(overall_tid[1]) + float(overall_tid[2])   # mod + high = Z3+
     pct = z3plus_min / total_min * 100
     if pct < target - band_pp:
-        return [Violation(
+        out.append(Violation(
             code="intensity_budget_low", severity="soft",
             detail=(f"week is {pct:.0f}% Z3+ vs the phase budget ~{target:.0f}% - ADD quality; put it "
                     f"in the sports that can carry it (the OVERALL budget governs; per-sport TIDs are "
-                    f"a soft, reallocatable preference)"))]
-    if pct > target + band_pp:
-        return [Violation(
+                    f"a soft, reallocatable preference)")))
+    elif pct > target + band_pp:
+        out.append(Violation(
             code="intensity_budget_high", severity="soft",
             detail=(f"week is {pct:.0f}% Z3+ vs the phase budget ~{target:.0f}% - TRIM quality back "
                     f"toward the overall budget (per-sport TIDs are a soft preference, NOT additive "
-                    f"maxes to be summed)"))]
-    return []
+                    f"maxes to be summed)")))
+    if high_min is not None:
+        high_target = float(overall_tid[2])   # high = Z4-5 / VO2
+        high_pct = high_min / total_min * 100
+        if high_pct > high_target + high_band_pp:
+            out.append(Violation(
+                code="intensity_vo2_high", severity="soft",
+                detail=(f"week VO2/Z4-5 is {high_pct:.0f}% vs the phase ceiling ~{high_target:.0f}% - "
+                        f"shift quality to sweetspot/tempo (Z3); the low-VO2 shape is deliberate "
+                        f"(the overall Z3+ budget can pass while VO2 is stacked)")))
+    return out
 
 
 # -- Distance/duration internal consistency (walk-run sessions) ----------------

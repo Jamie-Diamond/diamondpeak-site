@@ -249,24 +249,50 @@ def _overall_z3plus(proposal: dict):
     return z3, tot
 
 
+# High-zone (Z4-5 / VO2) sub-ceiling tolerance, shared by the advisory and the picker so
+# both flag/deprioritise the SAME attempts. Mirrors validate_plan.check_intensity_budget.
+_HIGH_BAND_PP = 3.0
+
+
+def _overall_high(proposal: dict):
+    """(Z4-5 / VO2 minutes, total minutes) across ALL sports, using the canonical Z3/Z4
+    boundary IF >= 0.90 (debrief.py Z4 = 0.90-1.05; unified across sports). This is the
+    high-zone half of the Z3+ lump: protecting the low-VO2 IM shape needs the split inside
+    Z3+, not just the total (see the high-zone sub-ceiling in check_intensity_budget)."""
+    high = tot = 0.0
+    for s in proposal.get("sessions", []):
+        for seg in (s.get("segments") or []):
+            m = seg.get("minutes", 0) or 0
+            tot += m
+            if (_seg_if(s.get("sport", ""), seg) or 0) >= 0.90:
+                high += m
+    return high, tot
+
+
 def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
     """Tie-breakers among equally-(un)blocked attempts (lower is better): smallest overall
-    intensity-budget deviation |week Z3+ - phase budget|, then lowest Foster monotony, then
-    closest-to-target TSS. This makes the overall intensity budget drive SELECTION, not just
-    the advisory string (else the picker keeps the first 0-blocking attempt even if it is
-    well over/under budget)."""
+    intensity-budget deviation |week Z3+ - phase budget|, then high-zone (Z4-5 / VO2) excess
+    over the phase ceiling, then lowest Foster monotony, then closest-to-target TSS. The
+    overall budget drives SELECTION and the VO2 term stops a VO2-heavy week being chosen over
+    a sweetspot week when BOTH hit the overall budget (the lump alone cannot tell them apart)."""
     tid = brief.get("tid_low_mod_high")
     budget = (float(tid[1]) + float(tid[2])) if tid and len(tid) >= 3 else None
+    high_target = float(tid[2]) if tid and len(tid) >= 3 else None
     z3, tot = _overall_z3plus(proposal)
     z3_pct = (z3 / tot * 100) if tot else 0.0
     budget_dev = abs(z3_pct - budget) if budget is not None else 0.0
+    high, _ = _overall_high(proposal)
+    high_pct = (high / tot * 100) if tot else 0.0
+    # excess over the SAME ceiling the advisory triggers on (phase high + tolerance): among
+    # equal-budget attempts this prefers the sweetspot-weighted week over the VO2-heavy one.
+    high_over = max(0.0, high_pct - (high_target + _HIGH_BAND_PP)) if high_target is not None else 0.0
     mono = 0.0
     for v in built.get("soft", []):
         m = re.search(r"monotony\s+([\d.]+)", v.get("msg", ""))
         if m:
             mono = max(mono, float(m.group(1)))
     tss_off = abs(built["total_tss"] - target) if target else 0.0
-    return (round(budget_dev, 1), round(mono, 2), round(tss_off, 1))
+    return (round(budget_dev, 1), round(high_over, 1), round(mono, 2), round(tss_off, 1))
 
 
 def audit_built(brief: dict, built: dict, target, proposal: dict):
@@ -347,9 +373,11 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     # cannot carry (run-limited / run-capped / single-sport) simply shifts onto the capable
     # sports; the total still governs. The ankle run-quality hard-stop above still BLOCKS.
     z3_min, tot_min = _overall_z3plus(proposal)
+    high_min, _ = _overall_high(proposal)
     try:
         from primitives.validate_plan import check_intensity_budget
-        for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high")):
+        for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high"),
+                                        high_min=high_min):
             advisory.append(f"rule(quality): {v.detail}")
     except Exception:
         pass
