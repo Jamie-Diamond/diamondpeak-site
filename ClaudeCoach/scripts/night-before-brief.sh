@@ -30,7 +30,7 @@ Step 4 — Output the night-before brief in Telegram Markdown (no preamble, no s
 
 [Specific targets — 2-4 bullets based on sport:]
 Ride: • NP target [X W] (IF [X.XX]) • HR cap [X bpm] • [interval structure if structured]
-Run: • Target GAP [X:XX/km] • HR cap [X bpm] (9:1 walk-run — ankle protocol)
+Run: • Target GAP [X:XX/km] • HR cap [X bpm] • Ankle: pain-guided (≤5/10 ok if resolved by next morning)
 Swim: • Target pace [X:XX/100m] vs CSS 1:39 • Main set structure
 Strength: • Main focus • Key movements
 
@@ -41,8 +41,8 @@ Strength: • Main focus • Key movements
 [If ankle.pain_during >= 3 in current-state.json AND a run is planned: add one line "⚠️ Ankle check before starting — note score after."]
 
 Rules:
-- Jamie: FTP 316 W, run threshold 4:02/km, swim CSS 1:39/100m.
-- Ankle still in rehab — runs are 9:1 walk-run only. No quality run sessions yet.
+- Jamie: use the live CURRENT THRESHOLDS injected above (FTP eFTP, run threshold, swim CSS) — never a hardcoded number.
+- Ankle: partial ATFL+CFL tear, still in rehab, BUT Jamie runs CONTINUOUSLY (physio-cleared since 9 Jun) — NOT 9:1 walk-run. Never call a run "walk-run". Pain ≤5/10 during is fine if resolved within 4h/next morning.
 - Keep the entire brief under 120 words.
 - Never ask questions. Brief only.
 PROMPT_END
