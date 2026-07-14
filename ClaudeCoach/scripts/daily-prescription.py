@@ -494,6 +494,15 @@ def _engine_prescription(slug: str) -> dict:
             "last_session_rpe": _last_rpe(slug),
             "ankle_pain_score": pain, "ankle_quality_cleared": cleared,
         }
+        # Per-athlete ankle pain-gate threshold (config run_protocol): modulation R1
+        # EASES the run at/above this pain score. Defaults to 5 in modulation if unset.
+        try:
+            _thr = ((json.loads(CONFIG.read_text()).get(slug, {})
+                     .get("run_protocol") or {}).get("ankle_pain_ease_threshold"))
+            if _thr is not None:
+                readiness["ankle_pain_ease_threshold"] = _thr
+        except Exception:
+            pass
         # Live weather: forecast peak temp/dew point for today when the athlete
         # has home_latlon configured (config/athletes.json or profile.json).
         # Best-effort — on any failure temp_c/dew_point_c stay omitted and the

@@ -107,42 +107,59 @@ class TestNoModification:
 # R1 — Ankle hard stop
 # ---------------------------------------------------------------------------
 
-class TestR1Ankle:
-    def test_pain_above_cap_blocks_run_quality(self):
-        r = fresh_readiness({"ankle_pain_score": 3})
-        p = modulate_session(planned_run_quality(), r)
-        assert not p.go
-        assert "R1" in p.applied_rules
-        assert "3/10" in p.reasoning_trails[0]
-
-    def test_pain_at_cap_does_not_block(self):
-        r = fresh_readiness({"ankle_pain_score": 2})
+class TestR1AnklePainGate:
+    # R1 is a physio-cleared PAIN GATE: run quality/distance is allowed; only pain
+    # at/above the ease threshold (default 5/10) eases the run — it never blocks.
+    def test_pain_below_threshold_does_not_gate(self):
+        r = fresh_readiness({"ankle_pain_score": 4})
         p = modulate_session(planned_run_quality(), r)
         assert p.go
         assert "R1" not in p.applied_rules
 
-    def test_ankle_not_cleared_blocks_run_quality(self):
+    def test_pain_at_threshold_eases_not_blocks(self):
+        r = fresh_readiness({"ankle_pain_score": 5})
+        p = modulate_session(planned_run_quality(), r)
+        assert p.go                       # eased, NOT blocked
+        assert p.swapped_to_z2
+        assert p.session_type == "run_easy"
+        assert "R1" in p.applied_rules
+        assert "5/10" in p.reasoning_trails[0]
+
+    def test_ease_reduces_volume(self):
+        planned = planned_run_quality()
+        r = fresh_readiness({"ankle_pain_score": 6})
+        p = modulate_session(planned, r)
+        assert p.total_duration_min < planned["total_duration_min"]
+
+    def test_not_cleared_no_longer_blocks_quality(self):
+        # The old blanket not-cleared block is gone (physio-cleared to run).
         r = fresh_readiness({"ankle_pain_score": 0, "ankle_quality_cleared": False})
         p = modulate_session(planned_run_quality(), r)
-        assert not p.go
-        assert "R1" in p.applied_rules
+        assert "R1" not in p.applied_rules
 
-    def test_ankle_not_cleared_does_not_block_bike(self):
-        r = fresh_readiness({"ankle_pain_score": 0, "ankle_quality_cleared": False})
+    def test_ankle_gate_does_not_touch_bike(self):
+        r = fresh_readiness({"ankle_pain_score": 6})
         p = modulate_session(planned_threshold(), r)
-        assert p.go
         assert "R1" not in p.applied_rules
 
-    def test_r1_blocks_brick(self):
+    def test_configurable_ease_threshold(self):
+        # A stricter per-athlete threshold gates earlier.
+        r = fresh_readiness({"ankle_pain_score": 3, "ankle_pain_ease_threshold": 3})
+        p = modulate_session(planned_run_quality(), r)
+        assert "R1" in p.applied_rules
+        assert p.swapped_to_z2
+
+    def test_r1_eases_brick(self):
         planned = {
             "session_type": "brick",
             "target_intensity": 0.71,
             "interval_count": None,
             "total_duration_min": 120,
         }
-        r = fresh_readiness({"ankle_pain_score": 4})
+        r = fresh_readiness({"ankle_pain_score": 5})
         p = modulate_session(planned, r)
-        assert not p.go
+        assert p.go
+        assert p.swapped_to_z2
         assert "R1" in p.applied_rules
 
 
@@ -361,8 +378,8 @@ class TestStacking:
         assert "R7" in p_stacked.applied_rules
         assert p_stacked.target_intensity < p_fresh.target_intensity
 
-    def test_r1_blocks_all_other_rules(self):
-        """When R1 fires, no other rules should appear (early return)."""
+    def test_r1_preempts_all_other_rules(self):
+        """When R1 fires it early-returns, so no other rules stack (eased, not blocked)."""
         r = fresh_readiness({
             "ankle_pain_score": 5,
             "hrv_trend_pct": -10.0,
@@ -370,7 +387,8 @@ class TestStacking:
         })
         p = modulate_session(planned_run_quality(), r)
         assert p.applied_rules == ["R1"]
-        assert not p.go
+        assert p.go
+        assert p.swapped_to_z2
 
     def test_r2_blocks_soft_rules(self):
         """When R2 fires (ATL swap), soft rules do not further reduce."""

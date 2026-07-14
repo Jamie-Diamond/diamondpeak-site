@@ -5,7 +5,7 @@ applies modulation rules in priority order, returns an adjusted prescription
 with L2 reasoning trails.
 
 Rule inventory (applied in order; hard rules fire first):
-    R1  Ankle hard stop       — run quality blocked if pain >2/10 or not cleared
+    R1  Ankle pain gate       — ease run (Z2 + reduced volume) if pain >= ease threshold (default 5/10); physio-cleared, no blanket block
     R2  ATL swap to Z2        — (ATL − CTL) > 25 → quality → Z2
     R3  HRV intensity drop    — 7d HRV trend < −7% → −5% intensity, −1 interval
     R4  ATL moderate cap      — 15 < (ATL − CTL) ≤ 25 → cap 95% FTP, −1 interval
@@ -39,7 +39,8 @@ _HRV_TREND_SOFT: float = -5.0     # % (7d) below this → contributes to two-sig
 _RPE_REDUCTION_THRESHOLD: int = 8  # prior RPE ≥ this → R5 fires
 _SLEEP_SWAP_H: float = 6.0        # hours below this → two-signal swap candidate (R6)
 _SLEEP_REDUCE_H: float = 7.0      # hours below this → single-signal reduce (checked in R6)
-_ANKLE_PAIN_RUN_CAP: int = 2       # pain > this → no run quality
+_ANKLE_PAIN_EASE_THRESHOLD: int = 5   # pain >= this → EASE run (Z2 + reduced volume), not a block
+_ANKLE_EASE_VOLUME_FACTOR: float = 0.75  # eased run volume as fraction of planned duration
 _INTENSITY_STEP: float = 0.05      # standard reduction increment
 _LUTEAL_TEMP_C: float = 20.0       # luteal + ambient above this → R8 fires
 _LUTEAL_INTENSITY: float = 0.85    # luteal + planned intensity at/above this → R8 fires
@@ -151,29 +152,25 @@ def _fmt_gap(atl: float, ctl: float) -> str:
 # Rule functions — each returns a RuleResult
 # ---------------------------------------------------------------------------
 
-def _r1_ankle_hard_stop(
+def _r1_ankle_pain_gate(
     planned: dict, readiness: dict
 ) -> RuleResult:
-    """R1: Ankle pain >2/10 OR not cleared → no run quality."""
+    """R1: Ankle PAIN GATE (physio-cleared to run). Run quality AND distance are
+    allowed - this is NOT a blanket block any more. Only when day-of ankle pain
+    is at or above the ease threshold (default 5/10, override via
+    readiness['ankle_pain_ease_threshold']) do we EASE the run: swap to easy Z2 and
+    hold/reduce volume, and flag recovery. Below the threshold R1 does not fire."""
     if not _is_run(planned["session_type"]):
         return RuleResult("R1", False, "")
 
     pain = readiness.get("ankle_pain_score", 0)
-    cleared = readiness.get("ankle_quality_cleared", False)
+    threshold = readiness.get("ankle_pain_ease_threshold", _ANKLE_PAIN_EASE_THRESHOLD)
 
-    if pain > _ANKLE_PAIN_RUN_CAP:
+    if pain >= threshold:
         trail = (
-            f"Ankle pain {pain}/10 (>{_ANKLE_PAIN_RUN_CAP}/10 hard cap, rules.md) "
-            f"→ R1 hard stop → no run quality today "
-            f"→ swap to easy or rest; re-assess tomorrow"
-        )
-        return RuleResult("R1", True, trail)
-
-    if not cleared and _is_quality(planned["session_type"]):
-        trail = (
-            f"Ankle quality not yet cleared (4 consecutive pain-free weeks not reached, rules.md) "
-            f"→ R1 hard stop → run quality blocked "
-            f"→ continue return-to-run protocol; no intervals until cleared"
+            f"Ankle pain {pain}/10 (>={threshold}/10 ease threshold, rules.md) "
+            f"→ R1 pain gate → ease run: easy Z2, hold/reduce volume "
+            f"→ prioritise recovery; re-assess tomorrow (run quality NOT blocked outright)"
         )
         return RuleResult("R1", True, trail)
 
@@ -408,25 +405,31 @@ def modulate_session(
     go = True
     swapped = False
 
-    # --- R1: ankle hard stop (must be first) ---
-    r1 = _r1_ankle_hard_stop(planned, readiness)
+    # --- R1: ankle pain gate (must be first) ---
+    # Physio-cleared: run quality/distance is allowed. If day-of ankle pain is at
+    # or above the ease threshold we EASE the run (swap to easy Z2 + reduce volume)
+    # and flag recovery — we do NOT block run quality outright any more.
+    r1 = _r1_ankle_pain_gate(planned, readiness)
     if r1.fired:
         applied.append(r1.code)
         trails.append(r1.reasoning_trail)
-        go = False
+        eased_duration = max(20, int(round(duration * _ANKLE_EASE_VOLUME_FACTOR)))
         return SessionPrescription(
-            session_type=stype,
-            go=False,
-            swapped_to_z2=False,
+            session_type="run_easy",
+            go=True,
+            swapped_to_z2=True,
             modified=True,
-            target_intensity=intensity,
-            interval_count=interval_count,
-            interval_duration_min=interval_duration,
-            recovery_min=recovery,
-            total_duration_min=duration,
+            target_intensity=0.65,
+            interval_count=None,
+            interval_duration_min=None,
+            recovery_min=None,
+            total_duration_min=eased_duration,
             applied_rules=applied,
             reasoning_trails=trails,
-            summary="BLOCKED by R1 (ankle). Swap to easy or rest.",
+            summary=(
+                f"EASED by R1 (ankle pain {readiness.get('ankle_pain_score', 0)}/10) "
+                f"→ easy Z2, {eased_duration} min, prioritise recovery."
+            ),
         )
 
     # --- R2 and R6: swap triggers (mutually exclusive; R2 fires first if both) ---
