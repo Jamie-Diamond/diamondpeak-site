@@ -187,7 +187,9 @@ def _check_distribution(week_events: list[dict], week_start: date,
 def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
                            *, band_pp: float = 4.0, high_min: float | None = None,
                            high_band_pp: float = 3.0, per_sport: dict | None = None,
-                           per_sport_targets: dict | None = None, deload: bool = False,
+                           per_sport_targets: dict | None = None,
+                           per_sport_week: dict | None = None, rolling: bool = False,
+                           spike_pp: float = 8.0, deload: bool = False,
                            min_minutes: float = 180) -> list["Violation"]:
     """Phase 5.3 per-sport / per-zone advisory (soft; only safety ceilings block).
 
@@ -220,22 +222,37 @@ def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
                 out.append(Violation(code="intensity_vo2_high", severity="soft",
                     detail=(f"week Z4-5 is {hi_p:.0f}% vs the derived overall ~{hi_t:.0f}% - shift "
                             f"quality to Z3 sweetspot; the low-VO2 shape is deliberate")))
-    # -- per-sport Z3 and Z4-5 bands: THE GATE, checked separately (never lumped) --
+    # -- per-sport Z3 and Z4-5 bands: THE GATE, separate (never lumped). Phase 5.4: per_sport
+    #    is the TRAILING 2-WEEK aggregate when rolling; a single week may deviate in-window. --
+    _win = "2-week avg" if rolling else "this week"
     for sport, tgt in (per_sport_targets or {}).items():
         r = (per_sport or {}).get(sport)
         if not r or not tgt or len(tgt) < 3 or (r.get("min") or 0) < min_minutes / 2:
             continue
         z3_t, hi_t = float(tgt[1]), float(tgt[2])
         z3_p, hi_p = float(r.get("z3_pct") or 0), float(r.get("high_pct") or 0)
-        if hi_p > hi_t + high_band_pp:      # Z4-5 over the sport's VO2 ceiling
+        if hi_p > hi_t + high_band_pp:      # Z4-5 over the sport's VO2 ceiling (over the window)
             out.append(Violation(code=f"vo2_high_{sport.lower()}", severity="soft",
-                detail=(f"{sport} Z4-5 is {hi_p:.0f}% vs target {hi_t:.0f}% - over the VO2 ceiling "
-                        f"for this sport; convert the excess to Z3 sweetspot in the same sport, or "
-                        f"move it to a sport that can carry it (preserve zone TYPE)")))
+                detail=(f"{sport} Z4-5 is {hi_p:.0f}% ({_win}) vs target {hi_t:.0f}% - over the VO2 "
+                        f"ceiling; convert the excess to Z3 sweetspot in the same sport, or move it "
+                        f"to a sport that can carry it (preserve zone TYPE)")))
         if z3_t >= 8 and z3_p < z3_t - band_pp and not deload:   # sweetspot as VO2 (skip on deload)
             out.append(Violation(code=f"sweetspot_low_{sport.lower()}", severity="soft",
-                detail=(f"{sport} Z3 sweetspot is {z3_p:.0f}% vs target {z3_t:.0f}% - add tempo/"
-                        f"sweetspot (the race-specific band for long-course); don't leave it as VO2")))
+                detail=(f"{sport} Z3 sweetspot is {z3_p:.0f}% ({_win}) vs target {z3_t:.0f}% - add "
+                        f"tempo/sweetspot (the race-specific band for long-course); not VO2")))
+    # -- single-week VO2 SPIKE ceiling (Phase 5.4): even if the 2-week average is in-cap, one
+    #    week dumping a big VO2 block is a hard/injury spike. Soft; skipped on deload. --
+    if per_sport_week and not deload:
+        for sport, tgt in (per_sport_targets or {}).items():
+            r = per_sport_week.get(sport)
+            if not r or len(tgt) < 3 or (r.get("min") or 0) < min_minutes / 2:
+                continue
+            hi_t, hi_p = float(tgt[2]), float(r.get("high_pct") or 0)
+            if hi_p > hi_t + spike_pp:
+                out.append(Violation(code=f"vo2_spike_{sport.lower()}", severity="soft",
+                    detail=(f"{sport} Z4-5 is {hi_p:.0f}% THIS week vs ceiling {hi_t:.0f}% - a single-"
+                            f"week VO2 spike (>+{spike_pp:.0f}pp); spread the quality across the "
+                            f"block even if the 2-week average is fine")))
     return out
 
 

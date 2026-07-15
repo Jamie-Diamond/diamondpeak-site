@@ -298,9 +298,73 @@ def _zone_by_sport(proposal: dict) -> dict:
                 d["high"] += m
             elif if_ >= cut:
                 d["z3"] += m
-    return {sp: {"z3_pct": (d["z3"] / d["total"] * 100) if d["total"] else 0.0,
+    return {sp: {"z3_min": d["z3"], "high_min": d["high"], "total": d["total"],
+                 "z3_pct": (d["z3"] / d["total"] * 100) if d["total"] else 0.0,
                  "high_pct": (d["high"] / d["total"] * 100) if d["total"] else 0.0,
                  "min": d["total"]} for sp, d in agg.items()}
+
+
+# -- Trailing 2-week rolling window (Phase 5.4) -------------------------------
+# The VO2/intensity bands are impossible to hit every single week; judge them over a
+# trailing ~14-day window instead. Both halves are classified by the SAME 0.90 segment
+# cut (_zone_by_sport) - realised whole-session IF would undercount 'high' and defeat it.
+# Source: a per-athlete sidecar banking each PUSHED week's per-sport zone minutes; the
+# prior week is read back next run. No prior week -> single-week fallback.
+
+def _intensity_history_path(slug: str):
+    return BASE / "athletes" / slug / "intensity-history.json"
+
+
+def _load_prior_zones(slug: str, week_start):
+    """Per-sport zone minutes of the most recent BANKED week before week_start, or None."""
+    f = _intensity_history_path(slug)
+    if not f.exists():
+        return None
+    try:
+        hist = json.loads(f.read_text())
+    except Exception:
+        return None
+    wk = str(week_start)
+    prior = sorted(k for k in hist if k < wk)
+    return hist[prior[-1]] if prior else None
+
+
+def _write_prior_zones(slug: str, week_start, proposal: dict):
+    """Bank the pushed week's per-sport zone minutes for next week's rolling window."""
+    f = _intensity_history_path(slug)
+    try:
+        hist = json.loads(f.read_text()) if f.exists() else {}
+    except Exception:
+        hist = {}
+    z = _zone_by_sport(proposal)
+    hist[str(week_start)] = {sp: {"z3_min": round(d["z3_min"], 1),
+                                  "high_min": round(d["high_min"], 1),
+                                  "total": round(d["total"], 1)} for sp, d in z.items()}
+    for k in sorted(hist)[:-6]:      # keep ~6 weeks
+        hist.pop(k, None)
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(hist, indent=1))
+    except Exception:
+        pass
+
+
+def _two_week_per_sport(proposal: dict, prior_zones):
+    """(aggregate {sport: {z3_pct, high_pct, min}}, rolling_bool). Merges this week's
+    per-sport zone minutes with the prior banked week; prior None -> this week only."""
+    cur = _zone_by_sport(proposal)
+    if not prior_zones:
+        return cur, False
+    out = {}
+    for sp in set(cur) | set(prior_zones):
+        c, p = cur.get(sp, {}), prior_zones.get(sp, {})
+        z3 = (c.get("z3_min") or 0) + (p.get("z3_min") or 0)
+        hi = (c.get("high_min") or 0) + (p.get("high_min") or 0)
+        tot = (c.get("total") or 0) + (p.get("total") or 0)
+        out[sp] = {"z3_min": z3, "high_min": hi, "total": tot,
+                   "z3_pct": (z3 / tot * 100) if tot else 0.0,
+                   "high_pct": (hi / tot * 100) if tot else 0.0, "min": tot}
+    return out, True
 
 
 # Load-on-target tolerance (%) - a week within this of target is PUSHABLE (mirrors the
@@ -325,14 +389,17 @@ def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
     deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
     band_dev = 0.0
     if not deload:
-        per_sport = _zone_by_sport(proposal)
+        # Phase 5.4: judge the bands over the TRAILING 2-WEEK aggregate (prior banked week +
+        # this proposal), not this week alone - a single week may deviate if the 2-week lands
+        # in-cap. Falls back to single-week when no prior week is banked.
+        per_sport, _ = _two_week_per_sport(proposal, brief.get("_prior_zones"))
         for sport, tgt in (brief.get("distribution_targets") or {}).items():
             r = per_sport.get(sport)
             if not r or len(tgt) < 3 or (r.get("min") or 0) < 90:
                 continue
             hi_t, z3_t = float(tgt[2]), float(tgt[1])
-            band_dev += max(0.0, r["high_pct"] - (hi_t + _HIGH_BAND_PP))    # VO2 over ceiling
-            if z3_t >= 8:                                                    # sweetspot missing
+            band_dev += max(0.0, r["high_pct"] - (hi_t + _HIGH_BAND_PP))    # VO2 over ceiling (2wk)
+            if z3_t >= 8:                                                    # sweetspot missing (2wk)
                 band_dev += max(0.0, (z3_t - 4.0) - r["z3_pct"])
     mono = 0.0
     for v in built.get("soft", []):
@@ -422,13 +489,15 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     # sports; the total still governs. The ankle run-quality hard-stop above still BLOCKS.
     z3_min, tot_min = _overall_z3plus(proposal)
     high_min, _ = _overall_high(proposal)
-    per_sport = _zone_by_sport(proposal)
+    per_sport_2wk, rolling = _two_week_per_sport(proposal, brief.get("_prior_zones"))
+    per_sport_wk = _zone_by_sport(proposal)
     _deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
     try:
         from primitives.validate_plan import check_intensity_budget
         for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high"),
-                                        high_min=high_min, per_sport=per_sport,
+                                        high_min=high_min, per_sport=per_sport_2wk,
                                         per_sport_targets=brief.get("distribution_targets"),
+                                        per_sport_week=per_sport_wk, rolling=rolling,
                                         deload=_deload):
             advisory.append(f"rule(quality): {v.detail}")
     except Exception:
@@ -440,6 +509,22 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
 def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -> str:
     grid = "\n".join(f"  {(week_start + timedelta(days=i)).isoformat()} = "
                      f"{(week_start + timedelta(days=i)).strftime('%A')}" for i in range(7))
+    roll = ""
+    _pz = brief.get("_prior_zones")
+    if _pz:
+        _tgt = brief.get("distribution_targets") or {}
+        _parts = []
+        for sp, d in _pz.items():
+            tot = d.get("total") or 0
+            if tot:
+                _parts.append(f"{sp} {(d.get('high_min',0)/tot*100):.0f}% "
+                              f"(ceiling ~{(_tgt.get(sp) or [0,0,0])[2]}%)")
+        if _parts:
+            roll = ("\nROLLING 2-WEEK BALANCE (Phase 5.4): last week's planned VO2/Z4-5 was "
+                    + "; ".join(_parts) + ". The VO2/Z4-5 bands are judged over the 2-WEEK "
+                    "average, NOT this week alone - if a sport ran HIGH last week, go LOWER this "
+                    "week (and vice versa) so the 2-week mean sits near each sport's ceiling. "
+                    "IM bike quality is SWEETSPOT/race-pace (Z3), never VO2 intervals.\n")
     return f"""You are proposing {slug}'s training week starting Monday {week_start.isoformat()}.
 
 Output ONLY a JSON object, no prose, no markdown fence:
@@ -482,9 +567,9 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
 
 DATE GRID:
 {grid}
-{feedback}
+{roll}{feedback}
 PLANNING BRIEF (authoritative, deterministic):
-{json.dumps(brief, indent=1)}
+{json.dumps({k: v for k, v in brief.items() if not k.startswith("_")}, indent=1)}
 """
 
 
@@ -531,6 +616,7 @@ def main():
             _avail = None
     brief = sl.planning_brief(args.athlete, cfg, today=week_start, plan_start=week_start,
                               availability=_avail)
+    brief["_prior_zones"] = _load_prior_zones(args.athlete, week_start)   # Phase 5.4 rolling window
     if brief.get("event_unknown"):
         print(json.dumps({"error": f"event unknown for {args.athlete} — cannot plan"}))
         sys.exit(1)
@@ -626,6 +712,7 @@ def main():
                 _notify(cfg["chat_id"], f"⚠️ Couldn't generate a clean week ({why}). Your existing plan is unchanged.")
         else:
             summary["push_result"] = pb.push(args.athlete, built)
+            _write_prior_zones(args.athlete, week_start, proposal)   # Phase 5.4: bank for next week
             if override_path and override_path.exists():
                 try:
                     override_path.unlink()
