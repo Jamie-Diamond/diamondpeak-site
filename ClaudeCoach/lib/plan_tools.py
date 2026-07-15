@@ -467,6 +467,31 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     maintenance = int(round(7 * float(ctl_today))) if ctl_today else None
     out["maintenance_weekly_tss"] = maintenance
     out["weekly_tss_floor"] = min(int(rec), maintenance) if (rec and maintenance) else None
+    # Manual easy-week override (B-race taper etc.): a hand-declared week that the
+    # mechanical every-Nth-week cadence doesn't know about. Keyed on the Monday of
+    # the week `today` falls in, so it survives regardless of training-week drift.
+    # Takes precedence over the scheduled-deload/recovery logic below. Semantics =
+    # taper (hold intensity, cut volume, no floor), not accumulation deload.
+    week_monday = (today - timedelta(days=today.weekday())).isoformat()
+    for ew in (cfg.get("manual_easy_weeks") or []):
+        if isinstance(ew, str):
+            ew = {"week_start": ew}
+        if ew.get("week_start") == week_monday:
+            ef = float(ew.get("factor", 0.6))
+            reason = ew.get("reason", "manually declared easy week")
+            out.update({
+                "week_type": "taper",
+                "easy_week_reason": reason,
+                "full_week_tss": rec,
+                "weekly_tss_floor": 0,   # easy week: unloading is the point
+                "recommended_weekly_tss": int(round(rec * ef)),
+                "required_weekly_tss": int(round(rec * ef)),
+                "note": (f"EASY WEEK ({reason}): prescribe ~{int(round(rec * ef))} TSS "
+                         f"({int(ef * 100)}% of the normal ~{rec}). Hold intensity, cut "
+                         f"volume; keep session frequency. This is a planned down-week, "
+                         f"not under-training — no floor applies.")})
+            return out
+
     n = int(cfg.get("deload_every_n_weeks", _DELOAD_EVERY_N) or 0)
     factor = float(cfg.get("deload_factor", _DELOAD_FACTOR))
     deload_why = None
