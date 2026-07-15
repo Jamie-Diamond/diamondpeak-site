@@ -26,7 +26,7 @@ Pull from IcuSync: get_athlete_profile first (for today's date), then get_fitnes
 
 Evaluate these triggers in order:
 T1 (Tier 2): ATL > CTL + 25 for 3+ consecutive days
-T2 (Tier 2): CTL ramp >4/wk while ankle still in rehab (check current-state.md ankle quality-sessions-resumed field)
+T2 (Tier 2): CTL ramp >4/wk while ankle still recovering (check current-state.md ankle quality-sessions-resumed field)
 T3 (Tier 1): HRV trend down >7% over last 7 days
 T4 (Tier 1): Sleep <7h for 3+ days in last 7 (skip if no sleep data available)
 T5 (Tier 1): Missed planned sessions >=2 in last rolling 7 days
@@ -42,7 +42,7 @@ T10 (Tier 2): Run weekly km increase >10% week-on-week
   - Sum run distance for the 7 days prior (last week)
   - Also cross-check current-state.json ankle.weekly_run_km_this_week vs ankle.weekly_run_km_last_week
   - Fire if this_week_km > last_week_km * 1.10 AND last_week_km > 0
-  - Fire message: "warning T10: run km +X% week-on-week ([this]km vs [last]km) — 10% cap applies while ankle in rehab"
+  - Fire message: "warning T10: run km +X% week-on-week ([this]km vs [last]km) — 10% cap applies while ankle still recovering"
 
 If NO triggers fire: output nothing. Do not call PushNotification. Silent run.
 

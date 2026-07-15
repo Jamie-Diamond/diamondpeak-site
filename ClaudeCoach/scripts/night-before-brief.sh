@@ -42,7 +42,7 @@ Strength: • Main focus • Key movements
 
 Rules:
 - Jamie: use the live CURRENT THRESHOLDS injected above (FTP eFTP, run threshold, swim CSS) — never a hardcoded number.
-- Ankle: partial ATFL+CFL tear, still in rehab, BUT Jamie runs CONTINUOUSLY (physio-cleared since 9 Jun) — NOT 9:1 walk-run. Never call a run "walk-run". Pain ≤5/10 during is fine if resolved within 4h/next morning.
+- Ankle: partial ATFL+CFL tear, still recovering, BUT Jamie runs CONTINUOUSLY (physio-cleared since 9 Jun) — NOT 9:1 walk-run. Never call a run "walk-run". Pain ≤5/10 during is fine if resolved within 4h/next morning.
 - Keep the entire brief under 120 words.
 - Never ask questions. Brief only.
 PROMPT_END
