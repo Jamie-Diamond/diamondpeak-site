@@ -303,12 +303,15 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     # --- Phase 5: per-athlete limiter signal (single-source) ------------------
     # Two limiter signals that ALREADY exist in the athlete's config/profile drive
     # every sport/intensity accommodation downstream (close_to_target's TSS-closing
-    # lever, the minimum-quality floor, the availability reconciliation): an athlete
-    # is "run-limited" if they carry an injury OR their protocol forbids run quality
-    # (Jamie's ankle rehab). Single-sport athletes (Calum) always fall through to
-    # bike-only closure regardless. NEVER a new global flag.
+    # lever, the minimum-quality floor, the availability reconciliation): an athlete is
+    # "run-limited" ONLY when their run_protocol explicitly forbids run quality
+    # (quality_allowed is False). A recovering-but-CLEARED injury entry must NOT force
+    # runs easy - a cleared athlete (quality_allowed true + pain gate) carries cautious
+    # run quality; the pain<5 gate + run caps protect them (stage1). bool(injuries) is
+    # deliberately NOT used (an injury ENTRY can persist through recovery). Single-sport
+    # athletes (Calum) always fall through to bike-only closure. NEVER a new global flag.
     injuries = profile.get("injuries") or []
-    run_limited = bool(injuries) or (rp.get("quality_allowed") is False)
+    run_limited = (rp.get("quality_allowed") is False)
     single_sport = len(available) <= 1
     day_rules_effective = reconcile_day_rules(cfg.get("day_rules"), availability,
                                               run_limited=run_limited)
