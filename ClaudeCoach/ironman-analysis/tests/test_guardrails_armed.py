@@ -62,7 +62,7 @@ class TestArmedChecksFire:
 
     def test_compliant_week_is_clean_and_unskipped(self):
         rep = validate_week(_week(300), WS, weekly_tss_cap=500.0,
-                            ctl_today=60.0, ramp_cap=5.0)
+                            ctl_today=60.0, ramp_cap=5.0, weekly_tss_floor=200.0)
         assert rep.ok
         assert rep.skipped == []
 

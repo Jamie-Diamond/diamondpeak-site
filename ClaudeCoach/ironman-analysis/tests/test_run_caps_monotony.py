@@ -86,7 +86,7 @@ class TestRunCapsHelper:
         assert caps["weekly_km_cap"] == 33.0            # 30 x 1.10
         assert caps["weekly_min_cap"] == round(30 * 6 * 1.10)
         caps2 = pt.run_caps(self._Client(self._hist([10, 12])), today=date(2026, 7, 6))
-        assert caps2["weekly_km_cap"] == 25.0           # floor: normal band top
+        assert caps2["weekly_km_cap"] == 27.5           # floor 25 x 1.10 ramp
 
     def test_failure_returns_none_not_silence(self):
         class Boom:
