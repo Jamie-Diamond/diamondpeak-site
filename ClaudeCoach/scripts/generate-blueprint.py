@@ -426,6 +426,20 @@ def dist_table(event: str, phases: list[dict]) -> list[str]:
 
 # -- Main blueprint renderer ---------------------------------------------------
 
+# When an athlete removes their weekly-hours cap (max_hours_per_week = null), the
+# hours-based TSS ceiling is undefined and tss_ceiling(None) crashes. Their real
+# limiter is the CTL-ramp / required_tss framework, not weekly hours, so derive a
+# GENEROUS, non-binding ceiling from CTL: ~7*CTL is maintenance, 2x that sits well
+# above any ramp-capped weekly prescription (~7*(CTL+ramp)), so the cap never binds
+# the build. Back-solved through tss_ceiling's build IF^2 so the existing per-phase
+# IF^2 shaping still applies. NOT a hardcoded low cap (which would re-crush her).
+def _ceiling_hours(max_hours, current_ctl):
+    if max_hours is not None:
+        return max_hours
+    basis = 2.0 * 7 * current_ctl if current_ctl else 1400.0   # generous weekly TSS at build
+    return round(basis / (100 * IF_TARGETS["build"] ** 2), 1)
+
+
 def render_blueprint(slug: str, profile: dict, phases: list[dict],
                      current_ctl: float | None, fitness_note: str | None,
                      choice: str | None) -> str:
@@ -433,7 +447,8 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     race_date_str = profile.get("race_date", "")
     race_name = profile.get("race_name", "Race")
     event = profile.get("race_distance", "Full Ironman")
-    max_hours = profile.get("max_hours_per_week", 10)
+    max_hours = profile.get("max_hours_per_week", 10)   # None if the athlete removed their cap
+    ceil_hours = _ceiling_hours(max_hours, current_ctl)
     ftp = profile.get("ftp_watts", 0)
     css = profile.get("swim_css_per_100m")
     a_goal = profile.get("a_goal", "—")
@@ -461,7 +476,8 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     if css_s:
         m, s = divmod(css_s, 60)
         lines.append(f"- **CSS:** {m}:{s:02d}/100m")
-    lines.append(f"- **Max training hours/week:** {max_hours}")
+    lines.append(f"- **Max training hours/week:** "
+                 f"{max_hours if max_hours is not None else 'no fixed cap (CTL-limited)'}")
     ctl_str = f"{current_ctl:.0f}" if current_ctl is not None else "unknown"
     lines.append(f"- **Current CTL:** {ctl_str}")
     if injuries:
@@ -484,7 +500,7 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     lines.append("| Phase | Start | End | Weeks | TSS ceiling |")
     lines.append("|---|---|---|---|---|")
     for p in phases:
-        ceil = tss_ceiling(max_hours, p["name"])
+        ceil = tss_ceiling(ceil_hours, p["name"])
         ceil_str = f"{int(ceil)}" if ceil else "steps 70→55→40% of peak"
         lines.append(
             f"| {p['name']} | {p['start'].isoformat()} | {p['end'].isoformat()} "
@@ -498,11 +514,12 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
         if fam == "taper":
             lines.append(f"- **{p['name']}:** volume steps down ~70 → 55 → 40% of the preceding peak week. Intensity touches maintained.")
         else:
-            ceil = tss_ceiling(max_hours, p["name"])
+            ceil = tss_ceiling(ceil_hours, p["name"])
             IF = IF_TARGETS.get(content_family(fam), 0.65)
             lines.append(
                 f"- **{p['name']}:** Target up to {int(ceil)} TSS/week "
-                f"(IF {IF:.2f}, {max_hours} hr ceiling). "
+                f"(IF {IF:.2f}, "
+                f"{str(max_hours) + ' hr' if max_hours is not None else 'CTL-derived'} ceiling). "
                 f"Ramp +10%/week max; 3-week load + 1-week recovery."
             )
     lines.append("")
@@ -586,7 +603,8 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
     function does not re-derive them.
     """
     event = profile.get("race_distance", "Full Ironman")
-    max_hours = profile.get("max_hours_per_week", 10)
+    max_hours = profile.get("max_hours_per_week", 10)   # None if the athlete removed their cap
+    ceil_hours = _ceiling_hours(max_hours, current_ctl)
     race_date_str = profile.get("race_date", "")
     try:
         race_dt: date | None = date.fromisoformat(race_date_str)
@@ -603,7 +621,7 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
     for p in phases:
         fam = phase_family(p["name"])
         cfam = content_family(fam)          # specific -> build for content tables
-        ceil = tss_ceiling(max_hours, p["name"])
+        ceil = tss_ceiling(ceil_hours, p["name"])
         entry = ctl_range(event, p["name"])
         phase_objs.append({
             "name": p["name"],
