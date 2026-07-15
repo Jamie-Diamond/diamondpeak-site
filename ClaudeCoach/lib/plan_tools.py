@@ -456,7 +456,8 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
 
     # Deload branch (audit P0-1): the smooth CTL-chase never unloaded — classic
     # accumulation/overuse pattern. Every Nth training week steps down to ~62%,
-    # and a badly missed week (<70% executed) converts this week to recovery.
+    # and a genuinely missed week (< 70% of MAINTENANCE executed) converts this
+    # week to recovery.
     rec = out["recommended_weekly_tss"]
     out["week_type"] = phase
     # UNDER-TRAINING floor (Jamie, 5 Jul 2026): a training week must at least
@@ -471,10 +472,19 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     deload_why = None
     if n and week_now % n == 0:
         deload_why = f"scheduled deload (every {n}th training week; week {week_now})"
-    elif last_week_tss is not None and rec and float(last_week_tss) < _MISS_TRIGGER * rec:
+    # Genuine-miss recovery (fix, 15 Jul 2026): reference the athlete's SUSTAINABLE
+    # maintenance load (~7×CTL), NOT 70% of this week's aspirational ramp-capped target.
+    # Realistic execution routinely lands under the ramp-capped target, and a PLANNED
+    # deload week (prescribed ~62%) sits under it by design — referencing the target made
+    # both read as 'missed', firing spurious recovery weeks and cascading a 2nd deload off
+    # every scheduled deload (downward ratchet). Also never fire off a prior scheduled-
+    # deload week. Only a true collapse (< 70% of maintenance) now recovers.
+    elif (last_week_tss is not None and maintenance
+          and not (n and (week_now - 1) % n == 0)
+          and float(last_week_tss) < _MISS_TRIGGER * maintenance):
         deload_why = (f"recovery week: last week's executed load "
                       f"({int(last_week_tss)} TSS) was under {int(_MISS_TRIGGER * 100)}% "
-                      f"of prescription (~{rec})")
+                      f"of maintenance (~{int(_MISS_TRIGGER * maintenance)})")
     if deload_why:
         out.update({
             "week_type": "deload",
