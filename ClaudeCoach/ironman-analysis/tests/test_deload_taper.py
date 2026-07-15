@@ -64,13 +64,23 @@ class TestDeloadCadence:
 
 class TestMissTrigger:
     def test_badly_missed_week_becomes_recovery(self):
-        # week 5 (not a cadence deload); last week executed at ~half prescription
-        normal = pt.required_tss(_cfg(), 80.0, today=date(2026, 5, 25))
-        rec = normal["recommended_weekly_tss"]
-        r = pt.required_tss(_cfg(), 80.0, today=date(2026, 5, 25),
-                            last_week_tss=rec * 0.5)
+        # week 6 (build; not a cadence deload, nor the week after one) — last week
+        # executed WAY under prescription (200 << the ~392 genuine-miss trigger =
+        # 70% of the 7xCTL=560 maintenance load).
+        r = pt.required_tss(_cfg(), 80.0, today=date(2026, 6, 1),
+                            last_week_tss=200)
         assert r["week_type"] == "deload"
         assert "recovery week" in r["deload_reason"]
+
+    def test_no_recovery_off_prior_deload(self):
+        # week 5 immediately follows the week-4 scheduled deload; a badly-missed week
+        # here must NOT re-fire recovery. A deload executed to its reduced prescription
+        # reads as a 'miss' against the full target — that cascade is exactly what the
+        # 'never fire recovery off a prior scheduled-deload week' guard kills.
+        r = pt.required_tss(_cfg(), 80.0, today=date(2026, 5, 25),
+                            last_week_tss=200)
+        assert r["week_type"] != "deload"
+        assert not r.get("deload_reason")
 
     def test_executed_week_stays_normal(self):
         normal = pt.required_tss(_cfg(), 80.0, today=date(2026, 5, 25))
