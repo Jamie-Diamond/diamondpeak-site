@@ -193,17 +193,15 @@ def _check_distribution(week_events: list[dict], week_start: date,
 _ZONE_BANDS = {"z3": (5.0, 5.0), "high": (3.0, 3.0)}
 _ZONE_TGT_IDX = {"z3": 1, "high": 2}
 _ZONE_PCT_KEY = {"z3": "z3_pct", "high": "high_pct"}
-# Ankle-safe: never emit a "too little VO2" floor for the RUN (impact); the bike carries the
-# top-end. Run Z4-5 CEILING still applies. (sport, zone) pairs whose FLOOR is suppressed.
-_FLOOR_SUPPRESSED = {("Run", "high")}
 
 
 def zone_band_deviations(per_sport, per_sport_targets, *, deload=False,
                         injury_bands=None, min_minutes=180):
     """Symmetric per-sport per-zone deviations vs [floor_edge, ceil_edge] (default
     [t - tol_lo, t + tol_hi] from _ZONE_BANDS). Returns [{sport, zone, kind, actual, target,
-    dev}] (dev >= 0). Floors dropped on deload (ceilings stay); run Z4-5 floor suppressed;
-    Z1-2 not banded. Single source for the advisory (validate) and the picker (stage1).
+    dev}] (dev >= 0). Floors dropped on deload (ceilings stay). The run Z4-5 floor is
+    GENERIC (healthy runners are nudged toward their run-VO2 target like the bike); it is
+    suppressed only per-athlete via an injury physio_cap of 0 (below). Z1-2 not banded.
     Phase 5.6: injury_bands {sport:{zone:{floor,ceiling,cap,hard}}} overrides the edges for an
     injured athlete's affected zones; a HARD (cap 0, not physio-cleared) zone emits NO soft
     deviation here - stage1 hard-gates it (blocking)."""
@@ -225,7 +223,7 @@ def zone_band_deviations(per_sport, per_sport_targets, *, deload=False,
                 out.append({"sport": sport, "zone": zone, "kind": "ceiling",
                             "actual": actual, "target": target, "dev": actual - ceil_edge})
             elif actual < floor_edge:
-                if deload or (sport, zone) in _FLOOR_SUPPRESSED:
+                if deload:
                     continue
                 out.append({"sport": sport, "zone": zone, "kind": "floor",
                             "actual": actual, "target": target, "dev": floor_edge - actual})

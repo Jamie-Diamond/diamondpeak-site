@@ -29,9 +29,16 @@ class TestSymmetricBands:
                        for d in zone_band_deviations(ps(Bike=(22, 0)), TGT, deload=True))
         assert _has(zone_band_deviations(ps(Bike=(22, 15)), TGT, deload=True), "Bike", "high", "ceiling")
 
-    def test_run_vo2_floor_suppressed_ankle_safe(self):
-        # run high 0% vs target 5% -> NO floor (never nudge run VO2 up), even off-deload
-        assert not _has(zone_band_deviations(ps(Run=(17, 0)), TGT), "Run", "high", "floor")
+    def test_run_vo2_floor_fires_generic(self):
+        # Phase 5.6 flip: run Z4-5 floor is GENERIC now — a healthy runner (no injury_bands)
+        # at 0% vs target 5% IS nudged toward its run-VO2 target, like the bike.
+        assert _has(zone_band_deviations(ps(Run=(17, 0)), TGT), "Run", "high", "floor")
+
+    def test_run_vo2_floor_suppressed_by_injury_cap0(self):
+        # an injured athlete with a physio cap of 0 (hard) gets NO run-VO2 floor (and no soft dev)
+        ib = {"Run": {"high": {"floor": 0.0, "ceiling": 0.0, "cap": 0.0, "hard": True}}}
+        devs = zone_band_deviations(ps(Run=(17, 0)), TGT, injury_bands=ib)
+        assert not any(d["sport"] == "Run" and d["zone"] == "high" for d in devs)
 
     def test_run_vo2_ceiling_still_applies(self):
         assert _has(zone_band_deviations(ps(Run=(17, 20)), TGT), "Run", "high", "ceiling")
