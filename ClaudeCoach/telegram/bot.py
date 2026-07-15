@@ -3376,21 +3376,145 @@ def _telegram_visible(text):
 
 def _classify_tool(name, hint):
     """Return (key, live, past) for a tool_use event. `key` dedupes the collapse
-    summary; `live` shows while the tool runs; `past` is the collapsed fragment."""
+    summary; `live` is the present-tense line shown in msg1 while the tool runs;
+    `past` is the past-tense fragment used to collapse msg1 to one line once the
+    reply lands. Pure string matching on the tool name + a short input hint (a
+    Bash command, a file path) - no second model call.
+
+    The hint lets each line name WHAT is happening (which script/subcommand, which
+    intervals.icu endpoint, which of the athlete's files) rather than just the
+    tool category. Note the input hint carries the command / file path only - it
+    does NOT carry the activity date or sport (those live in the response), so the
+    data-pull lines name the endpoint, not "Sunday's ride". Lines stay short
+    (<~45 chars), plain-English and athlete-facing - no paths, IDs or raw shell
+    leak. An unmapped tool falls through to a safe generic line - never raw JSON,
+    never a crash."""
     n = (name or "").lower()
     h = (hint or "").lower()
     blob = n + " " + h
-    if "icu" in blob or "intervals" in blob or "wellness" in blob or "fitness" in blob:
-        return ("icu", "Checking intervals.icu...", "checked intervals.icu")
-    if "race" in blob:
-        return ("race", "Building your race plan...", "built your race plan")
-    if ("plan_tools" in blob or "stage1" in blob or "generate-plan" in blob
-            or "session_library" in blob or "session" in blob or "plan" in blob):
-        return ("session", "Building the session...", "built the session")
-    if n == "read" or "current" in h or "state" in h or "athlete" in h:
-        return ("state", "Checking your current state...", "checked your data")
-    return ("work", "Working...", "crunched the numbers")
 
+    def has(*subs):
+        return any(s in blob for s in subs)
+
+    # --- Plan / session maths (plan_tools.py subcommands, run via Bash) ---------
+    # Checked first: these commands don't carry "icu" in the hint, and they are
+    # the load/plan calculations, not a raw data pull or a file read.
+    if "plan_tools" in blob:
+        if "session-for-load" in blob:
+            return ("session", "Building the session to your Load target",
+                    "built the session")
+        if "session-load" in blob:
+            return ("load", "Reading the session's Load from intervals.icu",
+                    "read the session Load")
+        if "week-tss" in blob or "plan_tools.py sum" in blob:
+            return ("weekload", "Adding up your week's load",
+                    "added up your week")
+        if "required-tss" in blob:
+            return ("target", "Working out your weekly Load target",
+                    "worked out your Load target")
+        if "project" in blob:
+            return ("project", "Projecting your fitness & form",
+                    "projected your fitness")
+        if "validate" in blob:
+            return ("validate", "Sense-checking the week against your rules",
+                    "sense-checked the week")
+        if "render-workout" in blob:
+            return ("render", "Writing the workout to intervals.icu",
+                    "wrote the workout")
+        if "race-predict" in blob:
+            return ("racepred", "Predicting your race day", "predicted your race")
+        if has("race-fuelling", "fuel-target", "fuel-check"):
+            return ("fuel", "Working out your fuelling", "worked out your fuelling")
+        if "sweat-rate" in blob:
+            return ("sweat", "Working out your sweat rate",
+                    "worked out your sweat rate")
+        if "wetsuit" in blob:
+            return ("wetsuit", "Checking the water temp & wetsuit call",
+                    "checked the wetsuit call")
+        if "log-strength" in blob:
+            return ("logstrength", "Logging your strength session",
+                    "logged your strength work")
+        if "tss" in blob:
+            return ("tss", "Working out the session Load", "worked out the Load")
+        return ("session", "Crunching your plan numbers", "crunched your plan")
+
+    # --- Named scripts (run via Bash) ------------------------------------------
+    if "heat_accl" in blob:
+        return ("heat", "Checking today's heat dose", "checked your heat dose")
+    if "generate-race-plan" in blob:
+        return ("raceplan", "Building your race plan", "built your race plan")
+    if has("stage1-plan", "generate-plan", "generate-blueprint"):
+        return ("plan", "Rebuilding your plan", "rebuilt your plan")
+    if "session-sync" in blob:
+        return ("sync", "Syncing your training log", "synced your log")
+    if has("strava-update", "strava_update"):
+        return ("strava", "Updating the activity on Strava",
+                "updated it on Strava")
+
+    # --- Live data pulls from intervals.icu (icu_fetch.py --endpoint …, or the
+    # icusync MCP tools / a workout push) ---------------------------------------
+    if has("icu_fetch", "icusync", "intervals"):
+        if has("wellness", "get_wellness"):
+            return ("icu-wellness", "Checking your fitness & wellness",
+                    "checked your wellness")
+        if has("get_fitness", "endpoint fitness"):
+            return ("icu-fitness", "Reading your fitness (CTL & form)",
+                    "read your fitness")
+        if has("activity_detail", "extended_metrics", "streams",
+               "get_activity", "get_extended", "power_curve", "best_effort"):
+            return ("icu-activity", "Reading the session in detail",
+                    "read the session detail")
+        if has("history", "events", "get_events", "training_history",
+               "get_training"):
+            return ("icu-history", "Looking up your recent activities",
+                    "checked your activities")
+        if has("push_workout", "edit_workout", "update_activity", "delete_workout"):
+            return ("icu-write", "Updating your workout on intervals.icu",
+                    "updated intervals.icu")
+        return ("icu", "Checking intervals.icu", "checked intervals.icu")
+    if has("push_workout", "edit_workout", "update_activity", "delete_workout"):
+        return ("icu-write", "Updating your workout on intervals.icu",
+                "updated intervals.icu")
+    if has("wellness", "get_fitness"):
+        return ("icu-wellness", "Checking your fitness & wellness",
+                "checked your wellness")
+
+    # --- Reading the athlete's own files (name-gated: every Bash command also
+    # carries "--athlete jamie", so match the tool name, not the hint) ----------
+    if n in ("read", "grep", "glob"):
+        if "current-state" in blob:
+            return ("state", "Checking your recent training & wellness",
+                    "checked your recent training")
+        if has("session-log", "swim-log", "run-durability", "decoupling"):
+            return ("log", "Checking your session history",
+                    "checked your session log")
+        if "blueprint" in blob:
+            return ("bp", "Reading your season blueprint", "read your blueprint")
+        if "heat-log" in blob:
+            return ("heat", "Checking your heat history", "checked your heat log")
+        if has("persistent-rules", "feedback-log", "system_prompt", "rules",
+               "reference"):
+            return ("rules", "Checking your coaching notes", "checked your notes")
+        if "plan" in blob:
+            return ("planread", "Reading your current plan", "read your plan")
+        return ("state", "Checking your training data", "checked your data")
+
+    # --- Writing the athlete's own files ---------------------------------------
+    if n in ("write", "edit", "multiedit"):
+        if has("session-log", "current-state", "swim-log", "run-durability",
+               "decoupling"):
+            return ("logwrite", "Updating your session log",
+                    "updated your session log")
+        if has("feedback-log", "persistent-rules", "system_prompt", "rules"):
+            return ("save", "Saving that to your coaching notes",
+                    "saved your preference")
+        if has("blueprint", "plan"):
+            return ("planwrite", "Updating your plan", "updated your plan")
+        if "heat-log" in blob:
+            return ("heat", "Logging your heat dose", "logged your heat dose")
+        return ("save", "Saving your data", "saved your data")
+
+    return ("work", "Working on it", "crunched the numbers")
 
 class _StatusTicker:
     """Owns msg1 (the status message). A single background thread performs ALL
