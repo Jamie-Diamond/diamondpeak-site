@@ -152,11 +152,15 @@ def run_summary(slug: str = "jamie") -> str:
                 _lthr = None
         _rt = realised_tid(activities_7d, lthr=_lthr)
         if _rt:
-            _lib = _read_json(BASE / "config" / "session-library.json", {})
-            _ev = (_lib.get("events") or {}).get(_ekey(_cfg, profile) or "", {})
+            _ekeyv = _ekey(_cfg, profile)
             _bp = _read_json(adir / "reference" / "training-blueprint.json", {})
-            _ph = phase_family((current_phase(_bp, today) or {}).get("name") or "base")
-            _tid = (_ev.get("tid") or {}).get(_ph) or (_ev.get("tid") or {}).get("base")
+            _phase = current_phase(_bp, today) or {}
+            _ph = phase_family(_phase.get("name") or "base")
+            # DERIVED overall TID (Phase 5.3): volume-weighted sum of the phase's per-sport
+            # rows (taper carries none -> fall back to peak), same helper the planner uses.
+            from session_library import derive_overall_tid, _phase_distribution
+            _dist = _phase.get("distribution") or _phase_distribution(_bp, "peak")
+            _tid = derive_overall_tid(_dist, _ekeyv)
             if _tid:
                 _v = tid_verdict(_rt, _tid)
                 realised_tid_line = (

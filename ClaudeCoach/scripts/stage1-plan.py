@@ -249,24 +249,98 @@ def _overall_z3plus(proposal: dict):
     return z3, tot
 
 
+# High-zone (Z4-5 / VO2) tolerance, shared by advisory and picker so both flag/deprioritise
+# the SAME attempts. Z4-5 boundary is IF >= 0.90 (debrief Z4 = 0.90-1.05), unified across
+# sports and identical to the target-banding used for the per-sport rows.
+_HIGH_BAND_PP = 3.0
+
+
+def _overall_high(proposal: dict):
+    """(Z4-5 / VO2 minutes, total minutes) across ALL sports (cut IF >= 0.90). The high-zone
+    half of the Z3+ lump: the low-VO2 shape needs the split, not just the Z3+ total."""
+    high = tot = 0.0
+    for s in proposal.get("sessions", []):
+        for seg in (s.get("segments") or []):
+            m = seg.get("minutes", 0) or 0
+            tot += m
+            if (_seg_if(s.get("sport", ""), seg) or 0) >= 0.90:
+                high += m
+    return high, tot
+
+
+def _sport_bucket(sport: str):
+    s = (sport or "").lower()
+    if s in ("bike", "ride", "brick", "virtualride", "gravelride"):
+        return "Bike"       # bricks bucket to Bike (mixed; matches _overall_z3plus cut)
+    if "run" in s:
+        return "Run"
+    if "swim" in s:
+        return "Swim"
+    return None
+
+
+def _zone_by_sport(proposal: dict) -> dict:
+    """{sport: {"z3_pct","high_pct","min"}} realised this week. Z3 = the sport's Z2/Z3
+    boundary (bike 0.76, run/swim 0.85) up to 0.90; Z4-5 = IF >= 0.90. Segment-level - the
+    only place per-zone granularity exists (calendar events are whole-session)."""
+    agg: dict = {}
+    for s in proposal.get("sessions", []):
+        b = _sport_bucket(s.get("sport"))
+        if not b:
+            continue
+        cut = 0.76 if b == "Bike" else 0.85
+        d = agg.setdefault(b, {"z3": 0.0, "high": 0.0, "total": 0.0})
+        for seg in (s.get("segments") or []):
+            m = seg.get("minutes", 0) or 0
+            d["total"] += m
+            if_ = _seg_if(s.get("sport", ""), seg) or 0
+            if if_ >= 0.90:
+                d["high"] += m
+            elif if_ >= cut:
+                d["z3"] += m
+    return {sp: {"z3_pct": (d["z3"] / d["total"] * 100) if d["total"] else 0.0,
+                 "high_pct": (d["high"] / d["total"] * 100) if d["total"] else 0.0,
+                 "min": d["total"]} for sp, d in agg.items()}
+
+
+# Load-on-target tolerance (%) - a week within this of target is PUSHABLE (mirrors the
+# load_on_target gate used on the final pick). Kept in sync with that gate.
+_LOAD_TOL_PCT = 12.0
+
+
 def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
-    """Tie-breakers among equally-(un)blocked attempts (lower is better): smallest overall
-    intensity-budget deviation |week Z3+ - phase budget|, then lowest Foster monotony, then
-    closest-to-target TSS. This makes the overall intensity budget drive SELECTION, not just
-    the advisory string (else the picker keeps the first 0-blocking attempt even if it is
-    well over/under budget)."""
-    tid = brief.get("tid_low_mod_high")
-    budget = (float(tid[1]) + float(tid[2])) if tid and len(tid) >= 3 else None
-    z3, tot = _overall_z3plus(proposal)
-    z3_pct = (z3 / tot * 100) if tot else 0.0
-    budget_dev = abs(z3_pct - budget) if budget is not None else 0.0
+    """Phase 5.3 tie-breakers among equally-blocked attempts (lower better), AFTER
+    n_blocking (prepended by the caller):
+      1) LOAD-ON-TARGET (pushability): 0 if |week TSS - target| within tolerance, else 1.
+         A hard load gate must outrank the SOFT intensity bands - a pushable on-load week
+         always beats an over/under-load one; intensity decides only AMONG pushable weeks
+         (fixes the picker choosing a +27% over-load week because a soft budget outranked load).
+      2) PER-SPORT intensity band deviation (Z4-5 over the sport ceiling + Z3 under target),
+         summed - the soft gate. RELAXED to 0 on deload/taper: a recovery week is not a
+         quality-hunting week.
+      3) Foster monotony; 4) tss_off fine tie-break."""
+    load_off = 0
+    if target:
+        load_off = 0 if abs(built["total_tss"] - target) / target * 100 <= _LOAD_TOL_PCT else 1
+    deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
+    band_dev = 0.0
+    if not deload:
+        per_sport = _zone_by_sport(proposal)
+        for sport, tgt in (brief.get("distribution_targets") or {}).items():
+            r = per_sport.get(sport)
+            if not r or len(tgt) < 3 or (r.get("min") or 0) < 90:
+                continue
+            hi_t, z3_t = float(tgt[2]), float(tgt[1])
+            band_dev += max(0.0, r["high_pct"] - (hi_t + _HIGH_BAND_PP))    # VO2 over ceiling
+            if z3_t >= 8:                                                    # sweetspot missing
+                band_dev += max(0.0, (z3_t - 4.0) - r["z3_pct"])
     mono = 0.0
     for v in built.get("soft", []):
         m = re.search(r"monotony\s+([\d.]+)", v.get("msg", ""))
         if m:
             mono = max(mono, float(m.group(1)))
     tss_off = abs(built["total_tss"] - target) if target else 0.0
-    return (round(budget_dev, 1), round(mono, 2), round(tss_off, 1))
+    return (load_off, round(band_dev, 1), round(mono, 2), round(tss_off, 1))
 
 
 def audit_built(brief: dict, built: dict, target, proposal: dict):
@@ -347,9 +421,15 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     # cannot carry (run-limited / run-capped / single-sport) simply shifts onto the capable
     # sports; the total still governs. The ankle run-quality hard-stop above still BLOCKS.
     z3_min, tot_min = _overall_z3plus(proposal)
+    high_min, _ = _overall_high(proposal)
+    per_sport = _zone_by_sport(proposal)
+    _deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
     try:
         from primitives.validate_plan import check_intensity_budget
-        for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high")):
+        for v in check_intensity_budget(z3_min, tot_min, brief.get("tid_low_mod_high"),
+                                        high_min=high_min, per_sport=per_sport,
+                                        per_sport_targets=brief.get("distribution_targets"),
+                                        deload=_deload):
             advisory.append(f"rule(quality): {v.detail}")
     except Exception:
         pass

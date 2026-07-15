@@ -614,33 +614,6 @@
         "bike",
         "run"
       ],
-      "tid": {
-        "base": [
-          85,
-          10,
-          5
-        ],
-        "build": [
-          80,
-          12,
-          8
-        ],
-        "specific": [
-          78,
-          13,
-          9
-        ],
-        "peak": [
-          78,
-          12,
-          10
-        ],
-        "taper": [
-          78,
-          12,
-          10
-        ]
-      },
       "emphasis": [
         "endurance",
         "long",
@@ -660,33 +633,6 @@
         "bike",
         "run"
       ],
-      "tid": {
-        "base": [
-          83,
-          12,
-          5
-        ],
-        "build": [
-          80,
-          11,
-          9
-        ],
-        "specific": [
-          80,
-          11,
-          9
-        ],
-        "peak": [
-          76,
-          12,
-          12
-        ],
-        "taper": [
-          76,
-          12,
-          12
-        ]
-      },
       "emphasis": [
         "threshold",
         "race_pace_long",
@@ -705,33 +651,6 @@
         "bike",
         "run"
       ],
-      "tid": {
-        "base": [
-          80,
-          12,
-          8
-        ],
-        "build": [
-          76,
-          12,
-          12
-        ],
-        "specific": [
-          74,
-          11,
-          15
-        ],
-        "peak": [
-          72,
-          10,
-          18
-        ],
-        "taper": [
-          72,
-          10,
-          18
-        ]
-      },
       "emphasis": [
         "threshold",
         "vo2",
@@ -747,33 +666,6 @@
       "sports": [
         "run"
       ],
-      "tid": {
-        "base": [
-          85,
-          12,
-          3
-        ],
-        "build": [
-          82,
-          9,
-          9
-        ],
-        "specific": [
-          80,
-          8,
-          12
-        ],
-        "peak": [
-          80,
-          8,
-          12
-        ],
-        "taper": [
-          80,
-          8,
-          12
-        ]
-      },
       "emphasis": [
         "long",
         "threshold",
@@ -785,33 +677,6 @@
       "sports": [
         "run"
       ],
-      "tid": {
-        "base": [
-          82,
-          13,
-          5
-        ],
-        "build": [
-          80,
-          10,
-          10
-        ],
-        "specific": [
-          78,
-          10,
-          12
-        ],
-        "peak": [
-          76,
-          10,
-          14
-        ],
-        "taper": [
-          76,
-          10,
-          14
-        ]
-      },
       "emphasis": [
         "threshold",
         "vo2",
@@ -823,33 +688,6 @@
       "sports": [
         "run"
       ],
-      "tid": {
-        "base": [
-          80,
-          12,
-          8
-        ],
-        "build": [
-          77,
-          10,
-          13
-        ],
-        "specific": [
-          75,
-          8,
-          17
-        ],
-        "peak": [
-          74,
-          8,
-          18
-        ],
-        "taper": [
-          74,
-          8,
-          18
-        ]
-      },
       "emphasis": [
         "vo2",
         "threshold",
@@ -860,33 +698,6 @@
       "sports": [
         "run"
       ],
-      "tid": {
-        "base": [
-          80,
-          10,
-          10
-        ],
-        "build": [
-          76,
-          9,
-          15
-        ],
-        "specific": [
-          72,
-          8,
-          20
-        ],
-        "peak": [
-          72,
-          8,
-          20
-        ],
-        "taper": [
-          72,
-          8,
-          20
-        ]
-      },
       "emphasis": [
         "vo2",
         "reps",
@@ -897,33 +708,6 @@
       "sports": [
         "bike"
       ],
-      "tid": {
-        "base": [
-          82,
-          13,
-          5
-        ],
-        "build": [
-          80,
-          15,
-          5
-        ],
-        "specific": [
-          78,
-          15,
-          7
-        ],
-        "peak": [
-          78,
-          15,
-          7
-        ],
-        "taper": [
-          78,
-          15,
-          7
-        ]
-      },
       "emphasis": [
         "long",
         "sweetspot",
@@ -937,33 +721,6 @@
       "sports": [
         "swim"
       ],
-      "tid": {
-        "base": [
-          83,
-          12,
-          5
-        ],
-        "build": [
-          80,
-          12,
-          8
-        ],
-        "specific": [
-          78,
-          12,
-          10
-        ],
-        "peak": [
-          78,
-          12,
-          10
-        ],
-        "taper": [
-          78,
-          12,
-          10
-        ]
-      },
       "emphasis": [
         "aerobic",
         "css",

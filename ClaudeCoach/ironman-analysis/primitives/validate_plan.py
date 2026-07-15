@@ -185,27 +185,58 @@ def _check_distribution(week_events: list[dict], week_start: date,
 # blocks the push (only safety ceilings block).
 
 def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
-                           *, band_pp: float = 4.0, min_minutes: float = 180) -> list["Violation"]:
-    """The week's total Z3+ (Z3 + Z4-5) share must land within band_pp of the overall
-    phase TID's mod+high. Too far under -> add quality; too far over -> trim it. overall_tid
-    is [low, mod, high] percentages (brief.tid_low_mod_high). Skipped under min_minutes."""
-    if not overall_tid or len(overall_tid) < 3 or not total_min or total_min < min_minutes:
-        return []
-    target = float(overall_tid[1]) + float(overall_tid[2])   # mod + high = Z3+
-    pct = z3plus_min / total_min * 100
-    if pct < target - band_pp:
-        return [Violation(
-            code="intensity_budget_low", severity="soft",
-            detail=(f"week is {pct:.0f}% Z3+ vs the phase budget ~{target:.0f}% - ADD quality; put it "
-                    f"in the sports that can carry it (the OVERALL budget governs; per-sport TIDs are "
-                    f"a soft, reallocatable preference)"))]
-    if pct > target + band_pp:
-        return [Violation(
-            code="intensity_budget_high", severity="soft",
-            detail=(f"week is {pct:.0f}% Z3+ vs the phase budget ~{target:.0f}% - TRIM quality back "
-                    f"toward the overall budget (per-sport TIDs are a soft preference, NOT additive "
-                    f"maxes to be summed)"))]
-    return []
+                           *, band_pp: float = 4.0, high_min: float | None = None,
+                           high_band_pp: float = 3.0, per_sport: dict | None = None,
+                           per_sport_targets: dict | None = None, deload: bool = False,
+                           min_minutes: float = 180) -> list["Violation"]:
+    """Phase 5.3 per-sport / per-zone advisory (soft; only safety ceilings block).
+
+    The overall phase TID is DERIVED (volume-weighted sum of the per-sport rows), so it is
+    a CROSS-CHECK here, not the gate. The GATE is per-sport: Z3 (sweetspot/tempo) and Z4-5
+    (VO2/threshold) are checked SEPARATELY per sport against distribution_targets - a week
+    can no longer pass the overall while stacking VO2 where sweetspot was wanted (the lump
+    bug). VO2 is the capped lever and is EVENT- and SPORT-specific: the impact sports
+    (bike/run) carry the low IM ceiling; swim floats (its 'high' is CSS/threshold).
+
+    z3plus_min/high_min = overall Z3+/Z4-5 minutes; overall_tid = derived [low, mod, high].
+    per_sport = {sport: {"z3_pct","high_pct","min"}} realised; per_sport_targets =
+    {sport: [low, mod, high]} from the brief."""
+    out: list["Violation"] = []
+    # -- overall Z3+ cross-check (informational; per-sport bands govern) --
+    if overall_tid and len(overall_tid) >= 3 and total_min and total_min >= min_minutes:
+        target = float(overall_tid[1]) + float(overall_tid[2])
+        pct = z3plus_min / total_min * 100
+        if pct < target - band_pp and not deload:
+            out.append(Violation(code="intensity_budget_low", severity="soft",
+                detail=(f"week is {pct:.0f}% Z3+ vs the derived phase overall ~{target:.0f}% - ADD "
+                        f"quality in the sports that can carry it (per-sport zone targets govern)")))
+        elif pct > target + band_pp:
+            out.append(Violation(code="intensity_budget_high", severity="soft",
+                detail=(f"week is {pct:.0f}% Z3+ vs the derived phase overall ~{target:.0f}% - trim "
+                        f"quality back toward the per-sport zone targets")))
+        if high_min is not None:
+            hi_t = float(overall_tid[2]); hi_p = high_min / total_min * 100
+            if hi_p > hi_t + high_band_pp:
+                out.append(Violation(code="intensity_vo2_high", severity="soft",
+                    detail=(f"week Z4-5 is {hi_p:.0f}% vs the derived overall ~{hi_t:.0f}% - shift "
+                            f"quality to Z3 sweetspot; the low-VO2 shape is deliberate")))
+    # -- per-sport Z3 and Z4-5 bands: THE GATE, checked separately (never lumped) --
+    for sport, tgt in (per_sport_targets or {}).items():
+        r = (per_sport or {}).get(sport)
+        if not r or not tgt or len(tgt) < 3 or (r.get("min") or 0) < min_minutes / 2:
+            continue
+        z3_t, hi_t = float(tgt[1]), float(tgt[2])
+        z3_p, hi_p = float(r.get("z3_pct") or 0), float(r.get("high_pct") or 0)
+        if hi_p > hi_t + high_band_pp:      # Z4-5 over the sport's VO2 ceiling
+            out.append(Violation(code=f"vo2_high_{sport.lower()}", severity="soft",
+                detail=(f"{sport} Z4-5 is {hi_p:.0f}% vs target {hi_t:.0f}% - over the VO2 ceiling "
+                        f"for this sport; convert the excess to Z3 sweetspot in the same sport, or "
+                        f"move it to a sport that can carry it (preserve zone TYPE)")))
+        if z3_t >= 8 and z3_p < z3_t - band_pp and not deload:   # sweetspot as VO2 (skip on deload)
+            out.append(Violation(code=f"sweetspot_low_{sport.lower()}", severity="soft",
+                detail=(f"{sport} Z3 sweetspot is {z3_p:.0f}% vs target {z3_t:.0f}% - add tempo/"
+                        f"sweetspot (the race-specific band for long-course); don't leave it as VO2")))
+    return out
 
 
 # -- Distance/duration internal consistency (walk-run sessions) ----------------
