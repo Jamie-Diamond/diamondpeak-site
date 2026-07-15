@@ -394,7 +394,8 @@ def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
     from primitives.validate_plan import zone_band_deviations
     per_sport, _ = _two_week_per_sport(proposal, brief.get("_prior_zones"))
     band_dev = sum(d["dev"] for d in zone_band_deviations(
-        per_sport, brief.get("distribution_targets"), deload=deload))
+        per_sport, brief.get("distribution_targets"), deload=deload,
+        injury_bands=brief.get("injury_bands")))
     mono = 0.0
     for v in built.get("soft", []):
         m = re.search(r"monotony\s+([\d.]+)", v.get("msg", ""))
@@ -485,6 +486,17 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     high_min, _ = _overall_high(proposal)
     per_sport_2wk, rolling = _two_week_per_sport(proposal, brief.get("_prior_zones"))
     per_sport_wk = _zone_by_sport(proposal)
+    # Phase 5.6: a physio-NOT-cleared zone (injury cap 0) is a MEDICAL hard-gate - quality
+    # present there BLOCKS (quality_allowed is now true, so this is the backstop for e.g.
+    # run speed until the physio clears it).
+    _pk = {"z3": "z3_pct", "high": "high_pct"}
+    for _sp, _zs in (brief.get("injury_bands") or {}).items():
+        _rw = per_sport_wk.get(_sp) or {}
+        for _zn, _bd in _zs.items():
+            if _bd.get("hard") and float(_rw.get(_pk.get(_zn, ""), 0) or 0) > 0.5:
+                blocking.append(f"{_sp} {'Z4-5/VO2' if _zn=='high' else 'Z3'} quality present "
+                                f"but NOT physio-cleared (injury cap 0) - keep that zone empty "
+                                f"until the physio raises the allowance")
     _deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
     try:
         from primitives.validate_plan import check_intensity_budget
@@ -492,7 +504,7 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
                                         high_min=high_min, per_sport=per_sport_2wk,
                                         per_sport_targets=brief.get("distribution_targets"),
                                         per_sport_week=per_sport_wk, rolling=rolling,
-                                        deload=_deload):
+                                        deload=_deload, injury_bands=brief.get("injury_bands")):
             advisory.append(f"rule(quality): {v.detail}")
     except Exception:
         pass
@@ -710,6 +722,7 @@ def main():
         else:
             summary["push_result"] = pb.push(args.athlete, built)
             _write_prior_zones(args.athlete, week_start, proposal)   # Phase 5.4: bank for next week
+            _advance_injury_ramp(args.athlete, week_start, brief.get("distribution_targets"))  # Phase 5.6
             if override_path and override_path.exists():
                 try:
                     override_path.unlink()
@@ -749,6 +762,30 @@ def _week_message(brief: dict, built: dict) -> str:
                      "(full gym / dumbbells-kettlebells / bodyweight only). "
                      "Reply and I'll tailor the sessions.")
     return "\n".join(lines)
+
+
+def _advance_injury_ramp(slug, week_start, targets):
+    """Phase 5.6 (ON PUSH ONLY): advance the injury ramp_state from recent logged pain and
+    persist profile.json (backup first). Positive low-pain evidence ramps interim up; pain
+    steps it back; no evidence HOLDS. Never runs on a dry/no-push plan."""
+    try:
+        import injury as _inj, shutil, datetime as _dt
+        from primitives.validate_plan import _ZONE_BANDS
+        pf = BASE / "athletes" / slug / "profile.json"
+        if not pf.exists():
+            return
+        profile = json.loads(pf.read_text())
+        if not _inj.active_injuries(profile):
+            return
+        slog_f = BASE / "athletes" / slug / "session-log.json"
+        slog = json.loads(slog_f.read_text()) if slog_f.exists() else []
+        notes = _inj.advance_ramp(profile, slog, week_start, targets=targets or {},
+                                  zone_bands=_ZONE_BANDS)
+        if notes:
+            shutil.copy2(pf, pf.with_suffix(f".json.bak-{_dt.date.today().isoformat()}"))
+            pf.write_text(json.dumps(profile, indent=1, ensure_ascii=False))
+    except Exception:
+        pass
 
 
 def _notify(chat_id, text):

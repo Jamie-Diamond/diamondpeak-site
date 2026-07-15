@@ -198,27 +198,37 @@ _ZONE_PCT_KEY = {"z3": "z3_pct", "high": "high_pct"}
 _FLOOR_SUPPRESSED = {("Run", "high")}
 
 
-def zone_band_deviations(per_sport, per_sport_targets, *, deload=False, min_minutes=180):
-    """Symmetric per-sport per-zone deviations vs [t - tol_lo, t + tol_hi] from _ZONE_BANDS.
-    Returns [{sport, zone, kind: 'floor'|'ceiling', actual, target, dev}] (dev = pp outside the
-    band, always >= 0). Floors dropped on deload (ceilings stay); run Z4-5 floor suppressed;
-    Z1-2 not banded. Single source for the advisory (validate) and the picker (stage1)."""
+def zone_band_deviations(per_sport, per_sport_targets, *, deload=False,
+                        injury_bands=None, min_minutes=180):
+    """Symmetric per-sport per-zone deviations vs [floor_edge, ceil_edge] (default
+    [t - tol_lo, t + tol_hi] from _ZONE_BANDS). Returns [{sport, zone, kind, actual, target,
+    dev}] (dev >= 0). Floors dropped on deload (ceilings stay); run Z4-5 floor suppressed;
+    Z1-2 not banded. Single source for the advisory (validate) and the picker (stage1).
+    Phase 5.6: injury_bands {sport:{zone:{floor,ceiling,cap,hard}}} overrides the edges for an
+    injured athlete's affected zones; a HARD (cap 0, not physio-cleared) zone emits NO soft
+    deviation here - stage1 hard-gates it (blocking)."""
     out = []
+    inj = injury_bands or {}
     for sport, tgt in (per_sport_targets or {}).items():
         r = (per_sport or {}).get(sport)
         if not r or not tgt or len(tgt) < 3 or (r.get("min") or 0) < min_minutes / 2:
             continue
         for zone, (tol_lo, tol_hi) in _ZONE_BANDS.items():
+            band = (inj.get(sport) or {}).get(zone)
+            if band and band.get("hard"):
+                continue                                   # not cleared -> hard-gated in stage1
             actual = float(r.get(_ZONE_PCT_KEY[zone]) or 0)
             target = float(tgt[_ZONE_TGT_IDX[zone]])
-            if actual > target + tol_hi:
+            ceil_edge = band["ceiling"] if band else target + tol_hi
+            floor_edge = band["floor"] if band else target - tol_lo
+            if actual > ceil_edge:
                 out.append({"sport": sport, "zone": zone, "kind": "ceiling",
-                            "actual": actual, "target": target, "dev": actual - (target + tol_hi)})
-            elif actual < target - tol_lo:
+                            "actual": actual, "target": target, "dev": actual - ceil_edge})
+            elif actual < floor_edge:
                 if deload or (sport, zone) in _FLOOR_SUPPRESSED:
                     continue
                 out.append({"sport": sport, "zone": zone, "kind": "floor",
-                            "actual": actual, "target": target, "dev": (target - tol_lo) - actual})
+                            "actual": actual, "target": target, "dev": floor_edge - actual})
     return out
 
 
@@ -228,6 +238,7 @@ def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
                            per_sport_targets: dict | None = None,
                            per_sport_week: dict | None = None, rolling: bool = False,
                            spike_pp: float = 8.0, deload: bool = False,
+                           injury_bands: dict | None = None,
                            min_minutes: float = 180) -> list["Violation"]:
     """Phase 5.3 per-sport / per-zone advisory (soft; only safety ceilings block).
 
@@ -267,7 +278,8 @@ def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
     _lbl = {"z3": "Z3 sweetspot", "high": "Z4-5 VO2"}
     _code = {("z3", "ceiling"): "sweetspot_high", ("z3", "floor"): "sweetspot_low",
              ("high", "ceiling"): "vo2_high", ("high", "floor"): "vo2_low"}
-    for d in zone_band_deviations(per_sport, per_sport_targets, deload=deload, min_minutes=min_minutes):
+    for d in zone_band_deviations(per_sport, per_sport_targets, deload=deload,
+                                  injury_bands=injury_bands, min_minutes=min_minutes):
         sp, zone, kind = d["sport"], d["zone"], d["kind"]
         code = f"{_code[(zone, kind)]}_{sp.lower()}"
         if kind == "ceiling":

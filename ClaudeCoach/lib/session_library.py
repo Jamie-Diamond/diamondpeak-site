@@ -24,7 +24,9 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.blueprint import current_phase            # noqa: E402
+from primitives.validate_plan import _ZONE_BANDS          # noqa: E402  (Phase 5.6)
 import plan_tools as pt                                    # noqa: E402
+import injury as _injury                                   # noqa: E402  (Phase 5.6)
 import thresholds as th                                    # noqa: E402
 
 LIBRARY = BASE / "config" / "session-library.json"
@@ -449,6 +451,12 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         # the overall (so the split is inspectable, not implied).
         "distribution_targets": parse_distribution_targets(
             ph.get("distribution") or _phase_distribution(bp, "peak")),
+        # Phase 5.6: injury-adjusted effective floors/ceilings for an athlete with an ACTIVE
+        # physio protocol (PURE - reads stored ramp_state only; the ramp advances on push).
+        "injury_bands": _injury.effective_bands(
+            profile,
+            parse_distribution_targets(ph.get("distribution") or _phase_distribution(bp, "peak")),
+            _ZONE_BANDS),
         "intensity_weights": intensity_weights(
             ph.get("distribution") or _phase_distribution(bp, "peak"), ekey),
         "emphasis": event.get("emphasis", []),
