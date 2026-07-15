@@ -387,20 +387,14 @@ def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
     if target:
         load_off = 0 if abs(built["total_tss"] - target) / target * 100 <= _LOAD_TOL_PCT else 1
     deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
-    band_dev = 0.0
-    if not deload:
-        # Phase 5.4: judge the bands over the TRAILING 2-WEEK aggregate (prior banked week +
-        # this proposal), not this week alone - a single week may deviate if the 2-week lands
-        # in-cap. Falls back to single-week when no prior week is banked.
-        per_sport, _ = _two_week_per_sport(proposal, brief.get("_prior_zones"))
-        for sport, tgt in (brief.get("distribution_targets") or {}).items():
-            r = per_sport.get(sport)
-            if not r or len(tgt) < 3 or (r.get("min") or 0) < 90:
-                continue
-            hi_t, z3_t = float(tgt[2]), float(tgt[1])
-            band_dev += max(0.0, r["high_pct"] - (hi_t + _HIGH_BAND_PP))    # VO2 over ceiling (2wk)
-            if z3_t >= 8:                                                    # sweetspot missing (2wk)
-                band_dev += max(0.0, (z3_t - 4.0) - r["z3_pct"])
+    # Phase 5.5: symmetric per-sport per-zone deviation (floor + ceiling) over the TRAILING
+    # 2-WEEK rolling aggregate, from the SAME _ZONE_BANDS source the validator uses. Floors drop
+    # on deload (ceilings stay); run Z4-5 floor suppressed (ankle-safe). This pulls a normal week
+    # TOWARD each zone's target (e.g. bike ~6% VO2, not 0%) instead of only under a ceiling.
+    from primitives.validate_plan import zone_band_deviations
+    per_sport, _ = _two_week_per_sport(proposal, brief.get("_prior_zones"))
+    band_dev = sum(d["dev"] for d in zone_band_deviations(
+        per_sport, brief.get("distribution_targets"), deload=deload))
     mono = 0.0
     for v in built.get("soft", []):
         m = re.search(r"monotony\s+([\d.]+)", v.get("msg", ""))
@@ -518,13 +512,16 @@ def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -
             tot = d.get("total") or 0
             if tot:
                 _parts.append(f"{sp} {(d.get('high_min',0)/tot*100):.0f}% "
-                              f"(ceiling ~{(_tgt.get(sp) or [0,0,0])[2]}%)")
+                              f"(target ~{(_tgt.get(sp) or [0,0,0])[2]}%)")
         if _parts:
             roll = ("\nROLLING 2-WEEK BALANCE (Phase 5.4): last week's planned VO2/Z4-5 was "
                     + "; ".join(_parts) + ". The VO2/Z4-5 bands are judged over the 2-WEEK "
                     "average, NOT this week alone - if a sport ran HIGH last week, go LOWER this "
-                    "week (and vice versa) so the 2-week mean sits near each sport's ceiling. "
-                    "IM bike quality is SWEETSPOT/race-pace (Z3), never VO2 intervals.\n")
+                    "week (and vice versa) so the 2-week mean sits near each sport's TARGET "
+                    "(the bands have a FLOOR and a ceiling). IM bike quality is predominantly "
+                    "sweetspot (Z3) with a SMALL VO2 touch to hit ~6% Z4-5: if the 2-week bike VO2 "
+                    "is UNDER target add one short VO2 set this week, if OVER drop it. Run stays "
+                    "easy - never add run VO2.\n")
     return f"""You are proposing {slug}'s training week starting Monday {week_start.isoformat()}.
 
 Output ONLY a JSON object, no prose, no markdown fence:

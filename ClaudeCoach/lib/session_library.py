@@ -353,9 +353,10 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                    "run_protocol (no quality if quality_allowed=false) and hard_rules. No type outside "
                    "available_sessions.")
     if ekey == "ironman":
-        dosing_note += (" IM BIKE QUALITY = SWEETSPOT / race-pace (Z3, ~88-94% FTP) and long aerobic "
-                        "endurance, NOT VO2 intervals - an IM is raced sub-threshold; keep bike Z4-5 "
-                        "minimal and put the bike's quality share in Z3 sweetspot.")
+        dosing_note += (" IM BIKE QUALITY = PREDOMINANTLY sweetspot / race-pace (Z3, ~88-94% FTP) + "
+                        "long aerobic endurance, PLUS one short VO2/Z4-5 touch (~a single set) to MEET "
+                        "the low bike Z4-5 target (~6%) - present but minimal, do NOT exceed it (an IM "
+                        "is raced sub-threshold). The rest of the bike's quality stays Z3 sweetspot.")
     # Long-ride target (the protected key session): event bike demand × factor, capped.
     bike_min = (cfg.get("race_target_splits") or {}).get("bike_min")
     lr_factor = event.get("long_ride_factor", 0.9)
