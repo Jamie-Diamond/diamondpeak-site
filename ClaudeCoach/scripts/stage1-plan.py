@@ -738,6 +738,20 @@ def main():
             print(json.dumps({"error": "no parseable proposal after retries", "attempts": attempts}))
             sys.exit(1)
     built, blocking, advisory, proposal = best
+    # Phase 5.7: DETERMINISTIC quality injection on the winning proposal (no LLM). Brings each
+    # sport's per-zone distribution toward its target midpoint (2-week rolling, injury-aware),
+    # conservatively placed; re-runs close_to_target (holds TSS, protects long sessions) + audit.
+    # inject_quality never keeps a step that adds a NEW block (backs off), so it only improves.
+    try:
+        import quality_inject as _qi
+        proposal, _inj = _qi.inject_quality(proposal, brief, args.athlete, target,
+                                            build_fn=close_to_target, audit_fn=audit_built, seg_if_fn=_seg_if)
+        if _inj:
+            built = close_to_target(args.athlete, proposal, target, brief)
+            blocking, advisory = audit_built(brief, built, target, proposal)
+            attempts.append('quality-injection: ' + '; '.join(_inj))
+    except Exception as _e:
+        attempts.append(f'quality-injection skipped ({_e!r})')
     n_blocking = len(blocking)
 
     load_pct_off = (round((built["total_tss"] - target) / target * 100, 1) if target else None)
