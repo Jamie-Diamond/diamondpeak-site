@@ -24,7 +24,9 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.blueprint import current_phase            # noqa: E402
+from primitives.validate_plan import _ZONE_BANDS          # noqa: E402  (Phase 5.6)
 import plan_tools as pt                                    # noqa: E402
+import injury as _injury                                   # noqa: E402  (Phase 5.6)
 import thresholds as th                                    # noqa: E402
 
 LIBRARY = BASE / "config" / "session-library.json"
@@ -353,9 +355,10 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
                    "run_protocol (no quality if quality_allowed=false) and hard_rules. No type outside "
                    "available_sessions.")
     if ekey == "ironman":
-        dosing_note += (" IM BIKE QUALITY = SWEETSPOT / race-pace (Z3, ~88-94% FTP) and long aerobic "
-                        "endurance, NOT VO2 intervals - an IM is raced sub-threshold; keep bike Z4-5 "
-                        "minimal and put the bike's quality share in Z3 sweetspot.")
+        dosing_note += (" IM BIKE QUALITY = PREDOMINANTLY sweetspot / race-pace (Z3, ~88-94% FTP) + "
+                        "long aerobic endurance, PLUS one short VO2/Z4-5 touch (~a single set) to MEET "
+                        "the low bike Z4-5 target (~6%) - present but minimal, do NOT exceed it (an IM "
+                        "is raced sub-threshold). The rest of the bike's quality stays Z3 sweetspot.")
     # Long-ride target (the protected key session): event bike demand × factor, capped.
     bike_min = (cfg.get("race_target_splits") or {}).get("bike_min")
     lr_factor = event.get("long_ride_factor", 0.9)
@@ -448,6 +451,12 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         # the overall (so the split is inspectable, not implied).
         "distribution_targets": parse_distribution_targets(
             ph.get("distribution") or _phase_distribution(bp, "peak")),
+        # Phase 5.6: injury-adjusted effective floors/ceilings for an athlete with an ACTIVE
+        # physio protocol (PURE - reads stored ramp_state only; the ramp advances on push).
+        "injury_bands": _injury.effective_bands(
+            profile,
+            parse_distribution_targets(ph.get("distribution") or _phase_distribution(bp, "peak")),
+            _ZONE_BANDS),
         "intensity_weights": intensity_weights(
             ph.get("distribution") or _phase_distribution(bp, "peak"), ekey),
         "emphasis": event.get("emphasis", []),

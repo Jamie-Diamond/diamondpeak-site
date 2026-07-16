@@ -2495,7 +2495,7 @@ def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
     if message_id:
         edit_keyboard_confirm(token, chat_id, message_id, "✅ Replan confirmed — rebuilding week…")
     try:
-        cmd = ["timeout", "1800", "python3", str(STAGE1_PLAN_SCRIPT),
+        cmd = ["timeout", "2700", "python3", str(STAGE1_PLAN_SCRIPT),
                "--athlete", slug, "--push", "--notify"]
         override = _extract_plan_override(slug)
         if override:
@@ -3967,7 +3967,7 @@ def _route_text(token, chat_id, text, athletes, config):
             # linger forever. Do NOT echo stdout (caused duplicate messages).
             # Two-stage engine (gated --push, --notify messages the athlete on
             # completion). Replaces the old generate-plan for replan/generate.
-            cmd = ["timeout", "1800", "python3", str(STAGE1_PLAN_SCRIPT),
+            cmd = ["timeout", "2700", "python3", str(STAGE1_PLAN_SCRIPT),
                    "--athlete", slug, "--push", "--notify"]
             override = _extract_plan_override(slug)
             if override:

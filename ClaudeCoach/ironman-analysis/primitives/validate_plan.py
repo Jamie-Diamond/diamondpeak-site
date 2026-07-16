@@ -184,12 +184,59 @@ def _check_distribution(week_events: list[dict], week_start: date,
 # (which double-counts and blows the total). Advisory: it drives the iterate loop, never
 # blocks the push (only safety ceilings block).
 
+# -- Per-sport per-zone symmetric bands (Phase 5.5) ---------------------------
+# One tolerance source (pp) per zone: (floor_tol, ceiling_tol). Z1-2 is the residual and is
+# deliberately NOT banded - a Z1-2 ceiling means "too much easy, cut it", which we reject
+# (extra easy volume is never a safety problem). Sanity vs the per-sport targets (e.g. IM bike
+# 72/22/6): Z3 band 17-27% (target 22), Z4-5 band 3-9% (target 6) - a normal specific week
+# sits mid-band. All soft/advisory; only pre-existing safety ceilings ever hard-block.
+_ZONE_BANDS = {"z3": (5.0, 5.0), "high": (3.0, 3.0)}
+_ZONE_TGT_IDX = {"z3": 1, "high": 2}
+_ZONE_PCT_KEY = {"z3": "z3_pct", "high": "high_pct"}
+
+
+def zone_band_deviations(per_sport, per_sport_targets, *, deload=False,
+                        injury_bands=None, min_minutes=180):
+    """Symmetric per-sport per-zone deviations vs [floor_edge, ceil_edge] (default
+    [t - tol_lo, t + tol_hi] from _ZONE_BANDS). Returns [{sport, zone, kind, actual, target,
+    dev}] (dev >= 0). Floors dropped on deload (ceilings stay). The run Z4-5 floor is
+    GENERIC (healthy runners are nudged toward their run-VO2 target like the bike); it is
+    suppressed only per-athlete via an injury physio_cap of 0 (below). Z1-2 not banded.
+    Phase 5.6: injury_bands {sport:{zone:{floor,ceiling,cap,hard}}} overrides the edges for an
+    injured athlete's affected zones; a HARD (cap 0, not physio-cleared) zone emits NO soft
+    deviation here - stage1 hard-gates it (blocking)."""
+    out = []
+    inj = injury_bands or {}
+    for sport, tgt in (per_sport_targets or {}).items():
+        r = (per_sport or {}).get(sport)
+        if not r or not tgt or len(tgt) < 3 or (r.get("min") or 0) < min_minutes / 2:
+            continue
+        for zone, (tol_lo, tol_hi) in _ZONE_BANDS.items():
+            band = (inj.get(sport) or {}).get(zone)
+            if band and band.get("hard"):
+                continue                                   # not cleared -> hard-gated in stage1
+            actual = float(r.get(_ZONE_PCT_KEY[zone]) or 0)
+            target = float(tgt[_ZONE_TGT_IDX[zone]])
+            ceil_edge = band["ceiling"] if band else target + tol_hi
+            floor_edge = band["floor"] if band else target - tol_lo
+            if actual > ceil_edge:
+                out.append({"sport": sport, "zone": zone, "kind": "ceiling",
+                            "actual": actual, "target": target, "dev": actual - ceil_edge})
+            elif actual < floor_edge:
+                if deload:
+                    continue
+                out.append({"sport": sport, "zone": zone, "kind": "floor",
+                            "actual": actual, "target": target, "dev": floor_edge - actual})
+    return out
+
+
 def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
                            *, band_pp: float = 4.0, high_min: float | None = None,
                            high_band_pp: float = 3.0, per_sport: dict | None = None,
                            per_sport_targets: dict | None = None,
                            per_sport_week: dict | None = None, rolling: bool = False,
                            spike_pp: float = 8.0, deload: bool = False,
+                           injury_bands: dict | None = None,
                            min_minutes: float = 180) -> list["Violation"]:
     """Phase 5.3 per-sport / per-zone advisory (soft; only safety ceilings block).
 
@@ -222,24 +269,26 @@ def check_intensity_budget(z3plus_min: float, total_min: float, overall_tid,
                 out.append(Violation(code="intensity_vo2_high", severity="soft",
                     detail=(f"week Z4-5 is {hi_p:.0f}% vs the derived overall ~{hi_t:.0f}% - shift "
                             f"quality to Z3 sweetspot; the low-VO2 shape is deliberate")))
-    # -- per-sport Z3 and Z4-5 bands: THE GATE, separate (never lumped). Phase 5.4: per_sport
-    #    is the TRAILING 2-WEEK aggregate when rolling; a single week may deviate in-window. --
+    # -- per-sport per-zone SYMMETRIC bands (Phase 5.5): THE GATE, separate per zone (never
+    #    lumped). Floor AND ceiling from _ZONE_BANDS; floors off on deload; run Z4-5 floor
+    #    suppressed (ankle-safe); Z1-2 residual. per_sport is the 2-week rolling aggregate. --
     _win = "2-week avg" if rolling else "this week"
-    for sport, tgt in (per_sport_targets or {}).items():
-        r = (per_sport or {}).get(sport)
-        if not r or not tgt or len(tgt) < 3 or (r.get("min") or 0) < min_minutes / 2:
-            continue
-        z3_t, hi_t = float(tgt[1]), float(tgt[2])
-        z3_p, hi_p = float(r.get("z3_pct") or 0), float(r.get("high_pct") or 0)
-        if hi_p > hi_t + high_band_pp:      # Z4-5 over the sport's VO2 ceiling (over the window)
-            out.append(Violation(code=f"vo2_high_{sport.lower()}", severity="soft",
-                detail=(f"{sport} Z4-5 is {hi_p:.0f}% ({_win}) vs target {hi_t:.0f}% - over the VO2 "
-                        f"ceiling; convert the excess to Z3 sweetspot in the same sport, or move it "
-                        f"to a sport that can carry it (preserve zone TYPE)")))
-        if z3_t >= 8 and z3_p < z3_t - band_pp and not deload:   # sweetspot as VO2 (skip on deload)
-            out.append(Violation(code=f"sweetspot_low_{sport.lower()}", severity="soft",
-                detail=(f"{sport} Z3 sweetspot is {z3_p:.0f}% ({_win}) vs target {z3_t:.0f}% - add "
-                        f"tempo/sweetspot (the race-specific band for long-course); not VO2")))
+    _lbl = {"z3": "Z3 sweetspot", "high": "Z4-5 VO2"}
+    _code = {("z3", "ceiling"): "sweetspot_high", ("z3", "floor"): "sweetspot_low",
+             ("high", "ceiling"): "vo2_high", ("high", "floor"): "vo2_low"}
+    for d in zone_band_deviations(per_sport, per_sport_targets, deload=deload,
+                                  injury_bands=injury_bands, min_minutes=min_minutes):
+        sp, zone, kind = d["sport"], d["zone"], d["kind"]
+        code = f"{_code[(zone, kind)]}_{sp.lower()}"
+        if kind == "ceiling":
+            detail = (f"{sp} {_lbl[zone]} is {d['actual']:.0f}% ({_win}) vs target {d['target']:.0f}% "
+                      f"- over the ceiling; move the excess to a lower zone in the same sport, or to "
+                      f"a sport that can carry it (preserve zone TYPE)")
+        else:
+            detail = (f"{sp} {_lbl[zone]} is {d['actual']:.0f}% ({_win}) vs target {d['target']:.0f}% "
+                      f"- under the floor; add a small {_lbl[zone]} touch in this sport (within caps) "
+                      f"toward its target")
+        out.append(Violation(code=code, severity="soft", detail=detail))
     # -- single-week VO2 SPIKE ceiling (Phase 5.4): even if the 2-week average is in-cap, one
     #    week dumping a big VO2 block is a hard/injury spike. Soft; skipped on deload. --
     if per_sport_week and not deload:

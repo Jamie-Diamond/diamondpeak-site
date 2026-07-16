@@ -15,7 +15,7 @@ echo "--- FTP sync $(date) ---" >> "$LOG"
 timeout 300 python3 "$R/lib/thresholds.py" --all --sync-ftp --apply --notify >> "$LOG" 2>&1
 for A in jamie kathryn calum; do
   echo "--- $A $(date) ---" >> "$LOG"
-  timeout 1800 python3 "$R/scripts/stage1-plan.py" --athlete "$A" --push --notify --max-attempts 3 >> "$LOG" 2>&1
+  timeout 2700 python3 "$R/scripts/stage1-plan.py" --athlete "$A" --push --notify --max-attempts 3 >> "$LOG" 2>&1
   echo "--- $A rc=$? ---" >> "$LOG"
 done
 echo "=== done $(date) ===" >> "$LOG"

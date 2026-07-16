@@ -17,6 +17,8 @@ fallback=[OPUS] and fall Sonnet -> Opus instead.
 """
 import re
 import subprocess
+import sys
+import time
 
 CLAUDE = "/usr/bin/claude"
 
@@ -108,6 +110,7 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
         if extra_args:
             cmd += list(extra_args)
 
+        _t0 = time.monotonic()
         try:
             r = subprocess.run(
                 cmd,
@@ -119,8 +122,15 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
             out = r.stdout or ""
             err = r.stderr or ""
             rc = r.returncode
+            # PER-ATTEMPT ELAPSED (timeout diagnosis): stage1 & co. previously logged nothing,
+            # so per-attempt gen times were invisible. Emit to THIS process's stderr (captured
+            # by every caller's cron/log redirect); size plan-gen timeouts from this, not guesses.
+            print(f"[{label or '?'}] {m} finished in {time.monotonic() - _t0:.0f}s (rc={rc})",
+                  file=sys.stderr, flush=True)
         except subprocess.TimeoutExpired:
             # A timeout is not a limit — surface it immediately, don't burn the chain.
+            print(f"[{label or '?'}] {m} timed out at {time.monotonic() - _t0:.0f}s (limit {timeout}s)",
+                  file=sys.stderr, flush=True)
             return ClaudeResult("", "timeout", -1, m, i > 0, False)
         except Exception as exc:
             last = ClaudeResult("", str(exc), 1, m, i > 0, False)

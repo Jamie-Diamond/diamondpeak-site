@@ -218,7 +218,7 @@ def _next_monday(today: date) -> date:
 # fallback keeps quality from being misread as easy regardless of how the LLM encoded it.
 _ZLABEL_IF = {
     "bike": {"z1": 0.55, "z2": 0.65, "z3": 0.80, "z4": 0.95, "z5": 1.05},
-    "run":  {"z1": 0.60, "z2": 0.83, "z3": 0.83, "z4": 0.97, "z5": 1.06},
+    "run":  {"z1": 0.60, "z2": 0.83, "z3": 0.88, "z4": 0.97, "z5": 1.06},  # z3 0.83->0.88: run tempo (menu if=0.88) must clear the 0.85 Z3 cut, else a tempo run mis-bins as Z1-2
     "swim": {"z1": 0.60, "z2": 0.72, "z3": 0.85, "z4": 1.00, "z5": 1.08},
 }
 
@@ -387,20 +387,15 @@ def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
     if target:
         load_off = 0 if abs(built["total_tss"] - target) / target * 100 <= _LOAD_TOL_PCT else 1
     deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
-    band_dev = 0.0
-    if not deload:
-        # Phase 5.4: judge the bands over the TRAILING 2-WEEK aggregate (prior banked week +
-        # this proposal), not this week alone - a single week may deviate if the 2-week lands
-        # in-cap. Falls back to single-week when no prior week is banked.
-        per_sport, _ = _two_week_per_sport(proposal, brief.get("_prior_zones"))
-        for sport, tgt in (brief.get("distribution_targets") or {}).items():
-            r = per_sport.get(sport)
-            if not r or len(tgt) < 3 or (r.get("min") or 0) < 90:
-                continue
-            hi_t, z3_t = float(tgt[2]), float(tgt[1])
-            band_dev += max(0.0, r["high_pct"] - (hi_t + _HIGH_BAND_PP))    # VO2 over ceiling (2wk)
-            if z3_t >= 8:                                                    # sweetspot missing (2wk)
-                band_dev += max(0.0, (z3_t - 4.0) - r["z3_pct"])
+    # Phase 5.5: symmetric per-sport per-zone deviation (floor + ceiling) over the TRAILING
+    # 2-WEEK rolling aggregate, from the SAME _ZONE_BANDS source the validator uses. Floors drop
+    # on deload (ceilings stay); run Z4-5 floor suppressed (ankle-safe). This pulls a normal week
+    # TOWARD each zone's target (e.g. bike ~6% VO2, not 0%) instead of only under a ceiling.
+    from primitives.validate_plan import zone_band_deviations
+    per_sport, _ = _two_week_per_sport(proposal, brief.get("_prior_zones"))
+    band_dev = sum(d["dev"] for d in zone_band_deviations(
+        per_sport, brief.get("distribution_targets"), deload=deload,
+        injury_bands=brief.get("injury_bands")))
     mono = 0.0
     for v in built.get("soft", []):
         m = re.search(r"monotony\s+([\d.]+)", v.get("msg", ""))
@@ -491,6 +486,23 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     high_min, _ = _overall_high(proposal)
     per_sport_2wk, rolling = _two_week_per_sport(proposal, brief.get("_prior_zones"))
     per_sport_wk = _zone_by_sport(proposal)
+    # ── Phase 5.6: physio-NOT-cleared zone (injury physio_cap == 0) → MEDICAL HARD-GATE ──
+    # DELIBERATE, USER-APPROVED exception. This is the ONE sanctioned place where an intensity
+    # band BLOCKS rather than advises — the general rule ("floors/bands are soft; only safety
+    # ceilings block", feedback_warnings_not_hard_rules) does NOT apply here. A physio_cap of 0
+    # means the physio has NOT cleared that zone: quality there is a medical contraindication on
+    # a recovering injury, not a preference. Jamie signed this off (2026-07-15) after the 5.4
+    # "advisory fired but soft let it through" miss. It is the backstop for e.g. run speed now
+    # that quality_allowed is true (#23). DO NOT soften this to advisory "for consistency" — that
+    # would put not-cleared intensity onto a recovering injury. Floors/ceilings elsewhere stay soft.
+    _pk = {"z3": "z3_pct", "high": "high_pct"}
+    for _sp, _zs in (brief.get("injury_bands") or {}).items():
+        _rw = per_sport_wk.get(_sp) or {}
+        for _zn, _bd in _zs.items():
+            if _bd.get("hard") and float(_rw.get(_pk.get(_zn, ""), 0) or 0) > 0.5:
+                blocking.append(f"{_sp} {'Z4-5/VO2' if _zn=='high' else 'Z3'} quality present "
+                                f"but NOT physio-cleared (injury cap 0) - keep that zone empty "
+                                f"until the physio raises the allowance")
     _deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
     try:
         from primitives.validate_plan import check_intensity_budget
@@ -498,7 +510,7 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
                                         high_min=high_min, per_sport=per_sport_2wk,
                                         per_sport_targets=brief.get("distribution_targets"),
                                         per_sport_week=per_sport_wk, rolling=rolling,
-                                        deload=_deload):
+                                        deload=_deload, injury_bands=brief.get("injury_bands")):
             advisory.append(f"rule(quality): {v.detail}")
     except Exception:
         pass
@@ -518,13 +530,57 @@ def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -
             tot = d.get("total") or 0
             if tot:
                 _parts.append(f"{sp} {(d.get('high_min',0)/tot*100):.0f}% "
-                              f"(ceiling ~{(_tgt.get(sp) or [0,0,0])[2]}%)")
+                              f"(target ~{(_tgt.get(sp) or [0,0,0])[2]}%)")
         if _parts:
             roll = ("\nROLLING 2-WEEK BALANCE (Phase 5.4): last week's planned VO2/Z4-5 was "
                     + "; ".join(_parts) + ". The VO2/Z4-5 bands are judged over the 2-WEEK "
                     "average, NOT this week alone - if a sport ran HIGH last week, go LOWER this "
-                    "week (and vice versa) so the 2-week mean sits near each sport's ceiling. "
-                    "IM bike quality is SWEETSPOT/race-pace (Z3), never VO2 intervals.\n")
+                    "week (and vice versa) so the 2-week mean sits near each sport's TARGET "
+                    "(the bands have a FLOOR and a ceiling). IM bike quality is predominantly "
+                    "sweetspot (Z3) with a SMALL VO2 touch to hit ~6% Z4-5: if the 2-week bike VO2 "
+                    "is UNDER target add one short VO2 set this week, if OVER drop it. Run stays "
+                    "easy - never add run VO2.\n")
+    # QUALITY PRESCRIPTION (proposer fix): build/specific/peak weeks MUST carry quality toward
+    # each sport's per-zone target - the LLM otherwise hits TSS with easy volume and hands back
+    # an all-easy week. Off on deload/taper (unloading is the point). Honours injury_bands:
+    # a hard-gated zone stays EMPTY; an injury-capped zone is cautious toward its effective band.
+    quality = ""
+    _wt = (brief.get("week_type") or "").lower()
+    if _wt not in ("deload", "taper"):
+        _tgt = brief.get("distribution_targets") or {}
+        _ib = brief.get("injury_bands") or {}
+        _ex = {"Bike": "PREDOMINANTLY Z2 endurance + SWEETSPOT as the MAIN quality (toward the Z3%); add only ONE short VO2/threshold set toward the Z4-5% - a single touch, do NOT stack VO2 across rides (sweetspot dominates, VO2 is small)",
+               "Run":  "easy Z2 + tempo sized to the Z3% + short faster reps sized to the Z4-5%",
+               "Swim": "aerobic + CSS/threshold sized to the Z4-5% + a little speed"}
+        _lines = []
+        for sp in ("Bike", "Run", "Swim"):
+            z = _tgt.get(sp)
+            if not z:
+                continue
+            ib = _ib.get(sp) or {}
+            notes = []
+            for zone, idx, lbl in (("z3", 1, "Z3"), ("high", 2, "Z4-5")):
+                b = ib.get(zone)
+                if b and b.get("hard"):
+                    notes.append(f"{lbl}=EMPTY (not physio-cleared)")
+                elif b:
+                    notes.append(f"{lbl} cautious: ~{b.get('floor', 0):.0f}% required now, "
+                                 f"up to {b.get('ceiling', z[idx]):.0f}% (injury ramp)")
+            _lines.append(f"  {sp}: aim ~{z[0]}% Z1-2 / {z[1]}% Z3 / {z[2]}% Z4-5"
+                          + (f"  [INJURY: {'; '.join(notes)}]" if notes else "")
+                          + f"  — build from: {_ex[sp]}")
+        if _lines:
+            quality = ("\nQUALITY PRESCRIPTION — this is a " + _wt.upper() + " week, so it MUST "
+                       "carry quality. Prescribe toward each sport's per-zone target below (% of "
+                       "that sport's time), aiming NEAR the target — the per-zone ceiling still "
+                       "applies, do NOT spike. An all-easy week is correct ONLY on a deload/taper, "
+                       "which this is NOT — a build/specific week at ~0% quality FAILS its purpose. The per-zone "
+                       "targets already encode THIS athlete's level (Jamie pro / Kathryn mid / Calum "
+                       "beginner) — hit the target numbers, do not add extra:\n"
+                       + "\n".join(_lines)
+                       + "\nBuild the quality from the AVAILABLE SESSIONS doses (do not invent). "
+                       "Where an INJURY note says EMPTY, keep that zone at 0; where it says "
+                       "cautious, stay within the stated ramp.\n")
     return f"""You are proposing {slug}'s training week starting Monday {week_start.isoformat()}.
 
 Output ONLY a JSON object, no prose, no markdown fence:
@@ -541,7 +597,7 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   weekday to allowed session type(s), that day's session of that sport MUST be one of those
   types — e.g. swim_focus {{"Tue":["technique","speed"],"Thu":["css"]}} means Tue swim is a
   skills/speed session and Thu swim is the CSS set, never the reverse.
-- Aim the week near the WEEKLY TSS TARGET and follow the intensity split (TID = low/mod/high %).
+- Aim the week near the WEEKLY TSS TARGET **and actively deliver the QUALITY PRESCRIPTION below** — hit each sport's per-zone target (Z3 + Z4-5), not just the overall TSS/TID. A week that only hits TSS with easy volume is WRONG on a build/specific week.
 - PROTECT THE LONG RIDE: include one Ride of ~long_ride_target_min as the week's KEY session.
 - RUNS: total run mileage must NOT exceed weekly_run_mileage_cap_km (≈ minutes/5.3 km) and the
   longest run must NOT exceed long_run_cap_min — these are MAX ceilings (+10-15% on the highest of
@@ -567,7 +623,7 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
 
 DATE GRID:
 {grid}
-{roll}{feedback}
+{roll}{quality}{feedback}
 PLANNING BRIEF (authoritative, deterministic):
 {json.dumps({k: v for k, v in brief.items() if not k.startswith("_")}, indent=1)}
 """
@@ -651,7 +707,7 @@ def main():
             prompt = build_prompt(args.athlete, brief, week_start, feedback)
             proc = claude_call.run_claude(
                 prompt, model=args.model, fallback=[claude_call.OPUS],
-                cwd=PROJECT_DIR, timeout=540, label=args.athlete,
+                cwd=PROJECT_DIR, timeout=840, label=args.athlete,
             )
             try:
                 proposal = extract_json(proc.stdout.strip())
@@ -682,6 +738,20 @@ def main():
             print(json.dumps({"error": "no parseable proposal after retries", "attempts": attempts}))
             sys.exit(1)
     built, blocking, advisory, proposal = best
+    # Phase 5.7: DETERMINISTIC quality injection on the winning proposal (no LLM). Brings each
+    # sport's per-zone distribution toward its target midpoint (2-week rolling, injury-aware),
+    # conservatively placed; re-runs close_to_target (holds TSS, protects long sessions) + audit.
+    # inject_quality never keeps a step that adds a NEW block (backs off), so it only improves.
+    try:
+        import quality_inject as _qi
+        proposal, _inj = _qi.inject_quality(proposal, brief, args.athlete, target,
+                                            build_fn=close_to_target, audit_fn=audit_built, seg_if_fn=_seg_if)
+        if _inj:
+            built = close_to_target(args.athlete, proposal, target, brief)
+            blocking, advisory = audit_built(brief, built, target, proposal)
+            attempts.append('quality-injection: ' + '; '.join(_inj))
+    except Exception as _e:
+        attempts.append(f'quality-injection skipped ({_e!r})')
     n_blocking = len(blocking)
 
     load_pct_off = (round((built["total_tss"] - target) / target * 100, 1) if target else None)
@@ -713,6 +783,7 @@ def main():
         else:
             summary["push_result"] = pb.push(args.athlete, built)
             _write_prior_zones(args.athlete, week_start, proposal)   # Phase 5.4: bank for next week
+            _advance_injury_ramp(args.athlete, week_start, brief.get("distribution_targets"))  # Phase 5.6
             if override_path and override_path.exists():
                 try:
                     override_path.unlink()
@@ -752,6 +823,30 @@ def _week_message(brief: dict, built: dict) -> str:
                      "(full gym / dumbbells-kettlebells / bodyweight only). "
                      "Reply and I'll tailor the sessions.")
     return "\n".join(lines)
+
+
+def _advance_injury_ramp(slug, week_start, targets):
+    """Phase 5.6 (ON PUSH ONLY): advance the injury ramp_state from recent logged pain and
+    persist profile.json (backup first). Positive low-pain evidence ramps interim up; pain
+    steps it back; no evidence HOLDS. Never runs on a dry/no-push plan."""
+    try:
+        import injury as _inj, shutil, datetime as _dt
+        from primitives.validate_plan import _ZONE_BANDS
+        pf = BASE / "athletes" / slug / "profile.json"
+        if not pf.exists():
+            return
+        profile = json.loads(pf.read_text())
+        if not _inj.active_injuries(profile):
+            return
+        slog_f = BASE / "athletes" / slug / "session-log.json"
+        slog = json.loads(slog_f.read_text()) if slog_f.exists() else []
+        notes = _inj.advance_ramp(profile, slog, week_start, targets=targets or {},
+                                  zone_bands=_ZONE_BANDS)
+        if notes:
+            shutil.copy2(pf, pf.with_suffix(f".json.bak-{_dt.date.today().isoformat()}"))
+            pf.write_text(json.dumps(profile, indent=1, ensure_ascii=False))
+    except Exception:
+        pass
 
 
 def _notify(chat_id, text):
