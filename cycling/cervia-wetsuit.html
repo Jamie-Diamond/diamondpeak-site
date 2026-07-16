@@ -100,6 +100,7 @@
 
   <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:12px;">
     <strong style="color:var(--ink2);font-weight:500;">Changelog:</strong>
+    <strong>16 Jul 2026 (data review)</strong> &ndash; Historical data re-verified against the Open-Meteo marine archive: the August mean SST for 2023 (27.8&deg;C), 2024 (29.8&deg;C) and 2025 (27.4&deg;C) all still match source to the decimal, and no race-day reading changed. The API-failure fallback for August SST was refreshed from 26.2&deg;C to 28.3&deg;C (the 2023&ndash;25 archive mean) so a dropped live fetch no longer defaults cold &ndash; this only affects predictions when the live marine API is unavailable. For context, the current summer is running hot (~29&ndash;30&deg;C in mid-July, well above the 2023&ndash;25 baseline); the far-out prediction reads this live via Method 7.<br>
     <strong>v1.3</strong> &ndash; Method 7: current-summer anomaly with seasonal persistence (e-folding ~65 days) &ndash; the far-out forecast now reacts to how hot the sea is running TODAY vs the 2023&ndash;25 same-window baseline, instead of ignoring pre-August observations. Data revision from a source sweep of all Cervia editions (full + 70.3): 2022 corrected to an athlete-reported 21&deg;C wetsuit swim (the race was storm-delayed a day; the old 25.0 was pre-storm satellite &ndash; the same wind cold-drop as 2024, whose 21.5 reading the satellite archive confirms against media reports of 23). 2023 satellite value aligned with its cited source. No official 70.3 readings survive online; a 2019 athlete report (21&ndash;22&deg;C) conflicts with the previous day's official 24.6 and is excluded pending resolution.<br>
     <strong>v1.2</strong> &ndash; Method 6: physical ocean-model forecast SST (highest weight in race week). Leave-one-out backtest panel; ensemble uncertainty floored at the measured historical error (MAE ~2.2&deg;C weeks out &ndash; the probability is now honest about it). Bora/NE-wind cold-tail adjustment via split-normal (a late Bora is how 2024 went mandatory-wetsuit). Per-year August SST from the marine archive (2023&ndash;25).<br>
     <strong>v1.1</strong> &ndash; Defaults now target the next upcoming race (2026: Saturday 19 September). Added the 2025 race to the history (satellite SST 25.2&deg;C; official reading not found, flagged as estimated). Estimated years excluded from the measurement-bias calculation. Fixed a variable-ordering bug in the August SST fallback. Prediction maths extracted to a shared engine (js/wetsuit-engine.js) used identically by this page and the ClaudeCoach bot.<br>
@@ -356,7 +357,7 @@
               Includes {fmt(avgBias)}°C measurement bias correction — official IRONMAN readings average {fmt(Math.abs(avgBias))}°C cooler than online SST
             </div>
             <div className="hint" style={{marginTop:4, fontWeight:500}}>
-              Model &amp; historical data last updated: {WE.CONSTANTS.DATA_UPDATED_LABEL} &nbsp;|&nbsp; Live SST refreshes automatically on load
+              Model &amp; historical data last updated: {WE.CONSTANTS.DATA_UPDATED_LABEL} &nbsp;|&nbsp; last reviewed: {WE.CONSTANTS.DATA_REVIEWED_LABEL} &nbsp;|&nbsp; Live SST refreshes automatically on load
             </div>
           </div>
 
@@ -454,7 +455,7 @@
                   <label>August Avg SST (°C) {liveAugAvg ? '— auto from API' : ''}</label>
                   <input type="number" value={fmt(augustTemp, 1)} min={20} max={32} step={0.1}
                     onChange={e => setAugustTempManual(+e.target.value)} />
-                  <div className="hint">{liveAugAvg ? `Live from Open-Meteo: ${fmt(liveAugAvg)}°C` : 'Default: 26.2°C'} — Normal: 25.7°C</div>
+                  <div className="hint">{liveAugAvg ? `Live from Open-Meteo: ${fmt(liveAugAvg)}°C` : `Default: ${fmt(WE.CONSTANTS.DEFAULT_AUG_SST)}°C`} — Normal: 25.7°C</div>
                 </div>
               </div>
               <div className="hint" style={{marginTop:8, padding:'8px 0', borderTop:'1px solid var(--border)'}}>

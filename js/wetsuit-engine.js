@@ -53,9 +53,13 @@
   ];
 
   var CONSTANTS = {
-    // Bump whenever the race history, climatology or model constants change
-    DATA_UPDATED: '2026-07-06',
-    DATA_UPDATED_LABEL: '6 July 2026',
+    // DATA_UPDATED: bump only when the race history, climatology or model
+    // constants actually change. DATA_REVIEWED: bump on a re-verification pass
+    // even when nothing moved, so "updated" never falsely implies new data.
+    DATA_UPDATED: '2026-07-16',
+    DATA_UPDATED_LABEL: '16 July 2026',
+    DATA_REVIEWED: '2026-07-16',
+    DATA_REVIEWED_LABEL: '16 July 2026',
     SEPT_CLIM_START: 26.0,       // Sept 1 climatological normal (1991-2020)
     SEPT_CLIM_END: 21.5,         // Sept 30 normal
     AUG_NORMAL: 25.7,            // 30-year August average
@@ -72,7 +76,7 @@
     SEASONAL_EFOLD_DAYS: 65,
     PRO_THRESHOLD: 21.9,         // wetsuit limits (°C)
     AG_THRESHOLD: 24.5,
-    DEFAULT_AUG_SST: 26.2,
+    DEFAULT_AUG_SST: 28.3,       // API-failure fallback: 2023-25 August archive mean (27.77/29.75/27.44)
     // Bora heuristic (flagged as judgement, not fitted — n is far too small):
     // a day counts when dominant direction is NE-ish and daily max wind is
     // strong; each such day within 5 days of the race pulls the mean down and
