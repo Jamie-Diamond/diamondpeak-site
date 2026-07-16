@@ -218,7 +218,7 @@ def _next_monday(today: date) -> date:
 # fallback keeps quality from being misread as easy regardless of how the LLM encoded it.
 _ZLABEL_IF = {
     "bike": {"z1": 0.55, "z2": 0.65, "z3": 0.80, "z4": 0.95, "z5": 1.05},
-    "run":  {"z1": 0.60, "z2": 0.83, "z3": 0.83, "z4": 0.97, "z5": 1.06},
+    "run":  {"z1": 0.60, "z2": 0.83, "z3": 0.88, "z4": 0.97, "z5": 1.06},  # z3 0.83->0.88: run tempo (menu if=0.88) must clear the 0.85 Z3 cut, else a tempo run mis-bins as Z1-2
     "swim": {"z1": 0.60, "z2": 0.72, "z3": 0.85, "z4": 1.00, "z5": 1.08},
 }
 
@@ -540,6 +540,47 @@ def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -
                     "sweetspot (Z3) with a SMALL VO2 touch to hit ~6% Z4-5: if the 2-week bike VO2 "
                     "is UNDER target add one short VO2 set this week, if OVER drop it. Run stays "
                     "easy - never add run VO2.\n")
+    # QUALITY PRESCRIPTION (proposer fix): build/specific/peak weeks MUST carry quality toward
+    # each sport's per-zone target - the LLM otherwise hits TSS with easy volume and hands back
+    # an all-easy week. Off on deload/taper (unloading is the point). Honours injury_bands:
+    # a hard-gated zone stays EMPTY; an injury-capped zone is cautious toward its effective band.
+    quality = ""
+    _wt = (brief.get("week_type") or "").lower()
+    if _wt not in ("deload", "taper"):
+        _tgt = brief.get("distribution_targets") or {}
+        _ib = brief.get("injury_bands") or {}
+        _ex = {"Bike": "PREDOMINANTLY Z2 endurance + SWEETSPOT as the MAIN quality (toward the Z3%); add only ONE short VO2/threshold set toward the Z4-5% - a single touch, do NOT stack VO2 across rides (sweetspot dominates, VO2 is small)",
+               "Run":  "easy Z2 + tempo sized to the Z3% + short faster reps sized to the Z4-5%",
+               "Swim": "aerobic + CSS/threshold sized to the Z4-5% + a little speed"}
+        _lines = []
+        for sp in ("Bike", "Run", "Swim"):
+            z = _tgt.get(sp)
+            if not z:
+                continue
+            ib = _ib.get(sp) or {}
+            notes = []
+            for zone, idx, lbl in (("z3", 1, "Z3"), ("high", 2, "Z4-5")):
+                b = ib.get(zone)
+                if b and b.get("hard"):
+                    notes.append(f"{lbl}=EMPTY (not physio-cleared)")
+                elif b:
+                    notes.append(f"{lbl} cautious: ~{b.get('floor', 0):.0f}% required now, "
+                                 f"up to {b.get('ceiling', z[idx]):.0f}% (injury ramp)")
+            _lines.append(f"  {sp}: aim ~{z[0]}% Z1-2 / {z[1]}% Z3 / {z[2]}% Z4-5"
+                          + (f"  [INJURY: {'; '.join(notes)}]" if notes else "")
+                          + f"  — build from: {_ex[sp]}")
+        if _lines:
+            quality = ("\nQUALITY PRESCRIPTION — this is a " + _wt.upper() + " week, so it MUST "
+                       "carry quality. Prescribe toward each sport's per-zone target below (% of "
+                       "that sport's time), aiming NEAR the target — the per-zone ceiling still "
+                       "applies, do NOT spike. An all-easy week is correct ONLY on a deload/taper, "
+                       "which this is NOT — a build/specific week at ~0% quality FAILS its purpose. The per-zone "
+                       "targets already encode THIS athlete's level (Jamie pro / Kathryn mid / Calum "
+                       "beginner) — hit the target numbers, do not add extra:\n"
+                       + "\n".join(_lines)
+                       + "\nBuild the quality from the AVAILABLE SESSIONS doses (do not invent). "
+                       "Where an INJURY note says EMPTY, keep that zone at 0; where it says "
+                       "cautious, stay within the stated ramp.\n")
     return f"""You are proposing {slug}'s training week starting Monday {week_start.isoformat()}.
 
 Output ONLY a JSON object, no prose, no markdown fence:
@@ -556,7 +597,7 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   weekday to allowed session type(s), that day's session of that sport MUST be one of those
   types — e.g. swim_focus {{"Tue":["technique","speed"],"Thu":["css"]}} means Tue swim is a
   skills/speed session and Thu swim is the CSS set, never the reverse.
-- Aim the week near the WEEKLY TSS TARGET and follow the intensity split (TID = low/mod/high %).
+- Aim the week near the WEEKLY TSS TARGET **and actively deliver the QUALITY PRESCRIPTION below** — hit each sport's per-zone target (Z3 + Z4-5), not just the overall TSS/TID. A week that only hits TSS with easy volume is WRONG on a build/specific week.
 - PROTECT THE LONG RIDE: include one Ride of ~long_ride_target_min as the week's KEY session.
 - RUNS: total run mileage must NOT exceed weekly_run_mileage_cap_km (≈ minutes/5.3 km) and the
   longest run must NOT exceed long_run_cap_min — these are MAX ceilings (+10-15% on the highest of
@@ -582,7 +623,7 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
 
 DATE GRID:
 {grid}
-{roll}{feedback}
+{roll}{quality}{feedback}
 PLANNING BRIEF (authoritative, deterministic):
 {json.dumps({k: v for k, v in brief.items() if not k.startswith("_")}, indent=1)}
 """
