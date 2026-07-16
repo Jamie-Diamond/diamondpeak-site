@@ -495,7 +495,12 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     n = int(cfg.get("deload_every_n_weeks", _DELOAD_EVERY_N) or 0)
     factor = float(cfg.get("deload_factor", _DELOAD_FACTOR))
     deload_why = None
-    if n and week_now % n == 0:
+    # Athlete override (Jamie, 16 Jul 2026): the mechanical every-Nth-week cadence
+    # doesn't know the actual periodisation. A week whose Monday is listed in
+    # deload_skip_weeks is NOT a scheduled deload regardless of week_now — the real
+    # unload sits elsewhere (e.g. next week's B-race taper via manual_easy_weeks).
+    _skip_weeks = set(cfg.get("deload_skip_weeks") or [])
+    if n and week_now % n == 0 and week_monday not in _skip_weeks:
         deload_why = f"scheduled deload (every {n}th training week; week {week_now})"
     # Genuine-miss recovery (fix, 15 Jul 2026): reference the athlete's SUSTAINABLE
     # maintenance load (~7×CTL), NOT 70% of this week's aspirational ramp-capped target.
