@@ -502,14 +502,23 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     # Realistic execution routinely lands under the ramp-capped target, and a PLANNED
     # deload week (prescribed ~62%) sits under it by design — referencing the target made
     # both read as 'missed', firing spurious recovery weeks and cascading a 2nd deload off
-    # every scheduled deload (downward ratchet). Also never fire off a prior scheduled-
-    # deload week. Only a true collapse (< 70% of maintenance) now recovers.
+    # every scheduled deload (downward ratchet). Only a true collapse (< 70% of
+    # maintenance) recovers — and NEVER off a prior INTRINSIC planned down-week.
     elif (last_week_tss is not None and maintenance
-          and not (n and (week_now - 1) % n == 0)
           and float(last_week_tss) < _MISS_TRIGGER * maintenance):
-        deload_why = (f"recovery week: last week's executed load "
-                      f"({int(last_week_tss)} TSS) was under {int(_MISS_TRIGGER * 100)}% "
-                      f"of maintenance (~{int(_MISS_TRIGGER * maintenance)})")
+        # A scheduled deload, a B-race taper (manual_easy_weeks) or a race week is
+        # prescribed light BY DESIGN, so its reduced load must not read as a 'miss' and
+        # cascade a spurious recovery the next week (scheduled-deload cascade: 15 Jul;
+        # Jamie's Dorney B-race taper tripped this at specific-phase CTL 105: 16 Jul).
+        # Classify the prior week by recomputing it — required_tss is pure and the inner
+        # call passes last_week_tss=None, so it skips THIS branch (bounded recursion).
+        # This also subsumes the old scheduled-deload arithmetic guard (prev type=deload).
+        _prev_type = required_tss(cfg, ctl_today, today=today - timedelta(days=7),
+                                  last_week_tss=None).get("week_type")
+        if _prev_type not in ("deload", "taper", "race"):
+            deload_why = (f"recovery week: last week's executed load "
+                          f"({int(last_week_tss)} TSS) was under {int(_MISS_TRIGGER * 100)}% "
+                          f"of maintenance (~{int(_MISS_TRIGGER * maintenance)})")
     if deload_why:
         out.update({
             "week_type": "deload",

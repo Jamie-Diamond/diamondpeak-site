@@ -82,6 +82,19 @@ class TestMissTrigger:
         assert r["week_type"] != "deload"
         assert not r.get("deload_reason")
 
+    def test_no_recovery_off_prior_taper(self):
+        # week 14 (specific) follows a PLANNED B-race taper week (manual_easy_weeks,
+        # Monday 2026-07-20). Jamie's Dorney taper executed ~511 TSS lands just under
+        # 70% of maintenance (514 at CTL 105) — a planned down-week, NOT a miss, so it
+        # must not fire a spurious recovery the next week.
+        cfg = _cfg(manual_easy_weeks=[{"week_start": "2026-07-20",
+                                       "reason": "B-race taper", "factor": 0.6}])
+        # sanity: the prior week really is classified taper
+        assert pt.required_tss(cfg, 105.0, today=date(2026, 7, 21))["week_type"] == "taper"
+        r = pt.required_tss(cfg, 105.0, today=date(2026, 7, 28), last_week_tss=511)
+        assert r["week_type"] == "specific"
+        assert not r.get("deload_reason")
+
     def test_executed_week_stays_normal(self):
         normal = pt.required_tss(_cfg(), 80.0, today=date(2026, 5, 25))
         r = pt.required_tss(_cfg(), 80.0, today=date(2026, 5, 25),
