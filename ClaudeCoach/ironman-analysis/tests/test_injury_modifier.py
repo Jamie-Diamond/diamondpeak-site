@@ -27,6 +27,9 @@ class TestEffectiveBands:
         assert injury.effective_bands(prof(z3_interim=20), TGT, ZB)["Run"]["z3"]["floor"] == 12    # generic floor binds
 
     def test_run_high_cap0_is_hard_and_ceiling_zero(self):
+        # physio_cap 0 => NOT cleared => hard=True. This drives stage1's MEDICAL HARD-GATE
+        # (run quality in this zone BLOCKS) - a DELIBERATE, user-approved (2026-07-15) exception
+        # to "bands are soft". Do not relax this test / soften the gate "for consistency".
         b = injury.effective_bands(prof(), TGT, ZB)["Run"]["high"]
         assert b["hard"] is True and b["ceiling"] == 0
 

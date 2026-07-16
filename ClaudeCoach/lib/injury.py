@@ -65,7 +65,9 @@ def effective_bands(profile: dict, targets: dict, zone_bands: dict) -> dict:
                     "floor": min(target - tol_lo, cap, interim),
                     "ceiling": min(target + tol_hi, cap),
                     "cap": cap,
-                    "hard": cap <= 0.0,          # NOT physio-cleared → hard-gate this zone
+                    # cap 0 = physio has NOT cleared this zone → MEDICAL hard-gate in stage1
+                    # (the one sanctioned "block, not advise" exception; user-approved 2026-07-15).
+                    "hard": cap <= 0.0,
                 }
     return out
 

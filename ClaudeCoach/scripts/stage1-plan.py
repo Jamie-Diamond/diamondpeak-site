@@ -486,9 +486,15 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     high_min, _ = _overall_high(proposal)
     per_sport_2wk, rolling = _two_week_per_sport(proposal, brief.get("_prior_zones"))
     per_sport_wk = _zone_by_sport(proposal)
-    # Phase 5.6: a physio-NOT-cleared zone (injury cap 0) is a MEDICAL hard-gate - quality
-    # present there BLOCKS (quality_allowed is now true, so this is the backstop for e.g.
-    # run speed until the physio clears it).
+    # ── Phase 5.6: physio-NOT-cleared zone (injury physio_cap == 0) → MEDICAL HARD-GATE ──
+    # DELIBERATE, USER-APPROVED exception. This is the ONE sanctioned place where an intensity
+    # band BLOCKS rather than advises — the general rule ("floors/bands are soft; only safety
+    # ceilings block", feedback_warnings_not_hard_rules) does NOT apply here. A physio_cap of 0
+    # means the physio has NOT cleared that zone: quality there is a medical contraindication on
+    # a recovering injury, not a preference. Jamie signed this off (2026-07-15) after the 5.4
+    # "advisory fired but soft let it through" miss. It is the backstop for e.g. run speed now
+    # that quality_allowed is true (#23). DO NOT soften this to advisory "for consistency" — that
+    # would put not-cleared intensity onto a recovering injury. Floors/ceilings elsewhere stay soft.
     _pk = {"z3": "z3_pct", "high": "high_pct"}
     for _sp, _zs in (brief.get("injury_bands") or {}).items():
         _rw = per_sport_wk.get(_sp) or {}
