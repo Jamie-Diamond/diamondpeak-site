@@ -666,7 +666,7 @@ def main():
             prompt = build_prompt(args.athlete, brief, week_start, feedback)
             proc = claude_call.run_claude(
                 prompt, model=args.model, fallback=[claude_call.OPUS],
-                cwd=PROJECT_DIR, timeout=540, label=args.athlete,
+                cwd=PROJECT_DIR, timeout=840, label=args.athlete,
             )
             try:
                 proposal = extract_json(proc.stdout.strip())
