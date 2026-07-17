@@ -27,7 +27,7 @@ import menstrual as menstrual_lib
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -92,6 +92,10 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
             f"Signals: {', '.join(parts) if parts else 'no data'}.\n"
             f"Use this to modulate session prescription: GREEN = train as planned; "
             f"AMBER = note and monitor; ORANGE = reduce intensity or volume; RED = flag for easy day.\n"
+            + ("Today's Form is still recalculating on Intervals.icu and can shift several "
+               "points as activities finish syncing — treat any Form-based flag as provisional, "
+               "don't state today's Fitness/Fatigue/Form as final.\n"
+               if tsb_v is not None and not wellness_finalized else "")
         )
 
     wellness_block = (
@@ -386,6 +390,7 @@ def run_athlete(slug, athlete_cfg):
     recovery = None
     wellness_line = None
     wellness_rows = []
+    wellness_finalized = True  # False = today's CTL/ATL/Form still recalculating on ICU
     has_sleep_device = False  # True if athlete has ever had sleep data
     try:
         from icu_api import IcuClient
@@ -395,6 +400,10 @@ def run_athlete(slug, athlete_cfg):
         client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
         wellness_rows = client.get_wellness(8)
         has_sleep_device = any(r.get("sleepSecs") is not None for r in wellness_rows)
+        for row in wellness_rows:
+            if (row.get("id") or "")[:10] == today_str:
+                wellness_finalized = row.get("wellness_finalized", True)
+                break
         # ICU/Garmin stores last night's sleep under the WAKING day = today's date
         sleep_date = date.today().isoformat()
         print(f"[{slug}] querying sleep data for {sleep_date}", file=sys.stderr)
@@ -495,7 +504,8 @@ def run_athlete(slug, athlete_cfg):
                            fuel_target_g_hr=_fuel_target_g_hr,
                            nutrition_race=int(athlete_cfg.get("nutrition_target_g_hr") or 90),
                            heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend,
-                           long_run_cap_km=_long_run_cap_km)
+                           long_run_cap_km=_long_run_cap_km,
+                           wellness_finalized=wellness_finalized)
 
     with open(log_file, "a") as lf:
         result = claude_call.run_claude(

@@ -24,6 +24,17 @@ _SUMMARY_COLS = ",".join([
 ])
 
 
+def _wellness_row_finalized(row: dict) -> bool:
+    """True once Intervals.icu has stopped recomputing this day's CTL/ATL/Form —
+    i.e. the row's `updated` timestamp has moved to a later date than the row's
+    own date. Until then CTL/ATL/Form/TSB on this row can still shift as that
+    day's activities finish syncing, independent of whether any single activity
+    already carries a Load figure."""
+    row_date = (row.get("id") or "")[:10]
+    updated = (row.get("updated") or "")[:10]
+    return bool(row_date and updated and updated > row_date)
+
+
 class IcuClient:
     def __init__(self, athlete_id: str, api_key: str):
         self.athlete_id = athlete_id
@@ -79,13 +90,19 @@ class IcuClient:
 
     def get_wellness(self, days: int = 7, newest: str = None) -> list:
         """Daily CTL/ATL/TSB plus HRV, sleep, weight, restingHR, subjective scores.
-        Pass newest='YYYY-MM-DD' for a future or past end date."""
+        Pass newest='YYYY-MM-DD' for a future or past end date.
+        Each row is annotated with `wellness_finalized` — False means this day's
+        CTL/ATL/Form is still recalculating on Intervals.icu and must not be
+        quoted as final (see _wellness_row_finalized)."""
         anchor = date.fromisoformat(newest) if newest else date.today()
         oldest = (anchor - timedelta(days=days)).isoformat()
         params = {"oldest": oldest}
         if newest:
             params["newest"] = newest
-        return self._get("wellness", params)
+        rows = self._get("wellness", params)
+        for row in rows:
+            row["wellness_finalized"] = _wellness_row_finalized(row)
+        return rows
 
     def get_training_history(self, days: int = 30, sport: str = None) -> list:
         """Completed activities. sport filters e.g. 'Ride', 'Run', 'Swim'."""
