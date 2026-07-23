@@ -2732,11 +2732,55 @@ def prefetch_context(slug: str) -> str:
             if dr:
                 lines.append(f"Day rules (HARD — which sports go on which days): {json.dumps(dr)}")
             try:
-                ph = _pt.current_phase(_pt._load_blueprint(slug), wk_start) or {}
+                bp = _pt._load_blueprint(slug)
+                ph = _pt.current_phase(bp, wk_start) or {}
                 if ph.get("distribution"):
                     lines.append(f"Phase intensity distribution (easy vs quality per sport): {json.dumps(ph['distribution'])}")
-            except Exception:
-                pass
+                # ── FORWARD WEEK ──────────────────────────────────────────────
+                # Forward-planning questions ("what does next week look like",
+                # "how do we hit X next week") must be answered from the
+                # deterministic engine's week, NEVER improvised from prose (the
+                # 22 Jul failure). Phase + distribution here are read from config
+                # for NEXT week specifically — do not narrate the phase from
+                # memory, and do not carry THIS week's phase across a boundary.
+                # If next week is on the calendar, answer from those sessions; if
+                # not, it has not been generated yet — give the blueprint target,
+                # do not invent sessions.
+                next_wk = wk_start + _td(days=7)
+                nph = _pt.current_phase(bp, next_wk) or {}
+                nx = [e for e in events
+                      if (e.get("category") or "WORKOUT") == "WORKOUT"
+                      and next_wk.isoformat() <= (e.get("start_date_local") or "")[:10]
+                      <= (next_wk + _td(days=6)).isoformat()]
+                fwd = [f"\n=== FORWARD WEEK (Mon {next_wk.isoformat()}) — answer forward-planning "
+                       "questions from THIS, never improvise from prose ==="]
+                if nph.get("name"):
+                    fwd.append(f"Phase (from config): {nph['name']}")
+                if nph.get("distribution"):
+                    fwd.append(f"Blueprint distribution = THE SPEC (per sport): {json.dumps(nph['distribution'])}")
+                if nx:
+                    fwd.append("Engine-built sessions already on the calendar (answer from these):")
+                    from datetime import date as _date
+                    for e in sorted(nx, key=lambda x: (x.get("start_date_local") or "")):
+                        d = (e.get("start_date_local") or "")[:10]
+                        wd = _date.fromisoformat(d).strftime("%a") if d else "?"
+                        dur = round((e.get("moving_time") or 0) / 60)
+                        fwd.append(f"  {wd} {d}  {e.get('type','?'):<10} {e.get('name','')}  {dur}min")
+                else:
+                    fwd.append("NOT GENERATED YET — next week has no sessions on the calendar. Do "
+                               "NOT invent a session-by-session week. State the phase + blueprint "
+                               "split above and the weekly-load target, and offer to build it "
+                               "(the athlete can say 'generate plan'). The weekly engine builds it "
+                               "Sunday; it can also be built on request.")
+                fwd.append("Before telling the athlete a stated week is 'on spec', check it BOTH "
+                           "ways (enough Z4–5/Z3, not too much quality): express the week as zoned "
+                           "segments and run  python3 ClaudeCoach/lib/plan_distribution.py "
+                           f"--athlete {slug} --week-start {next_wk.isoformat()} --sessions '<json>'. "
+                           "A non-zero exit / any OFF-SPEC finding means do NOT claim compliance — "
+                           "correct the week or state the gap.")
+                lines.append("\n".join(fwd))
+            except Exception as _e:
+                log(f"prefetch forward-week (non-fatal): {_e}")
             lines.append(
                 "For per-session Load or a projection of a proposed week, call: "
                 f"plan_tools.py tss --sport <s> --segments '<time-at-intensity json>'  |  "
