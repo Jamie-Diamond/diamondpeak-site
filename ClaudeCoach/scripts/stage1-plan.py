@@ -69,6 +69,29 @@ def _is_long_ride(s):
     return (s.get("sport") or "").lower() in ("ride", "bike", "brick") and "long" in (s.get("name") or "").lower()
 
 
+_RUN_FLOOR_MIN = 40  # rule 6: a run below this isn't a meaningful session - DROP it
+                     # rather than shrink it further; freed load is picked up by
+                     # close_to_target's TSS-closure step (bike/other-run reallocation).
+
+
+def _scale_or_drop_runs(proposal: dict, run_sessions: list, targets: list, f: float):
+    """Scale each session in `targets` (a subset of run_sessions) by factor f. A
+    session whose scaled total would fall below _RUN_FLOOR_MIN is removed from the
+    week entirely instead of being clamped to a token duration (rule 6)."""
+    for s in list(targets):
+        segs = s.get("segments", [])
+        cur = sum(sg.get("minutes", 0) for sg in segs)
+        if cur <= 0:
+            continue
+        if cur * f < _RUN_FLOOR_MIN:
+            proposal["sessions"].remove(s)
+            run_sessions.remove(s)
+            targets.remove(s)
+            continue
+        for sg in segs:
+            sg["minutes"] = max(1, round(sg["minutes"] * f))
+
+
 def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: float, run_min_cap=None, protect_long=False):
     """Scale ALL runs down so weekly run MINUTES stay under the ceiling (never up -
     mileage is a MAX), then re-clamp the long run to its own cap. Prefers the explicit
@@ -95,35 +118,40 @@ def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: floa
         if protect_long and room >= 0 and nonlong_min > room and nonlong_min > 0:
             # protect a PROGRESSING long run: shrink only the easy runs to fit the ceiling
             f = room / nonlong_min
-            for s in nonlong:
-                for seg in s.get("segments", []):
-                    seg["minutes"] = max(15, round(seg["minutes"] * f))
+            _scale_or_drop_runs(proposal, run_sessions, nonlong, f)
         else:
             f = cap_min / cur_min
-            for s in run_sessions:
-                for seg in s.get("segments", []):
-                    seg["minutes"] = max(15, round(seg["minutes"] * f))
+            _scale_or_drop_runs(proposal, run_sessions, list(run_sessions), f)
     for s in run_sessions:
         if _is_long_run(s) and lr_cap:
             cur = sum(seg.get("minutes", 0) for seg in s.get("segments", []))
             if cur > lr_cap:
                 _set_total_minutes(s, lr_cap)
-    # Final trim: rounding and the 15-min floor can leave a few minutes over the ceiling;
-    # shave the overage off the largest non-long run so the cap ALWAYS holds (caps win).
+    # Final trim: rounding can leave a few minutes over the ceiling; shave the overage
+    # off the largest non-long run so the cap ALWAYS holds (caps win) - or drop it
+    # outright if shaving would take it below the meaningful-duration floor.
     if cap_min:
         guard = 0
         while _tot() > cap_min and guard < 100:
             guard += 1
             cand = [s for s in run_sessions if not _is_long_run(s)
-                    and sum(sg.get("minutes", 0) for sg in s.get("segments", [])) > 15]
+                    and sum(sg.get("minutes", 0) for sg in s.get("segments", [])) > 0]
             if not cand:
                 break
             s = max(cand, key=lambda s: sum(sg.get("minutes", 0) for sg in s.get("segments", [])))
-            segs = [sg for sg in s.get("segments", []) if sg.get("minutes", 0) > 15]
+            s_total = sum(sg.get("minutes", 0) for sg in s.get("segments", []))
+            overage = max(1, _tot() - cap_min)
+            if s_total - overage < _RUN_FLOOR_MIN:
+                proposal["sessions"].remove(s)
+                run_sessions.remove(s)
+                continue
+            segs = [sg for sg in s.get("segments", []) if sg.get("minutes", 0) > 1]
             if not segs:
-                break
+                proposal["sessions"].remove(s)
+                run_sessions.remove(s)
+                continue
             sg = max(segs, key=lambda x: x.get("minutes", 0))
-            sg["minutes"] = max(15, sg["minutes"] - max(1, _tot() - cap_min))
+            sg["minutes"] = sg["minutes"] - overage
 
 
 def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06, max_iter=5):
