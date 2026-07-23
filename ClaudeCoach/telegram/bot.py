@@ -2559,9 +2559,7 @@ def prefetch_context(slug: str) -> str:
             # Intervals.icu keeps recomputing the latest day's CTL/ATL/Form until the
             # row settles (its `updated` date moves past the row's own date). Live
             # pulls quoted as final have been off ~10 points — mark it provisional.
-            _wid = (w.get("id") or "")[:10]
-            _wupd = (w.get("updated") or "")[:10]
-            _prov = not (_wid and _wupd and _wupd > _wid)
+            _prov = not w.get("wellness_finalized", False)
             lines.append(
                 f"Fitness {ctl}  Fatigue {atl}  Form {tsb}"
                 + (f"  FTP {ftp}W" if ftp else "")
