@@ -40,6 +40,8 @@ BASE = Path(__file__).parent.parent          # ClaudeCoach/
 PROJECT_DIR = str(BASE.parent)               # diamondpeak-site/
 sys.path.insert(0, str(BASE / "lib"))
 import claude_call
+import ops_log
+import rules_lint
 
 # Read-only tools - the planner must NOT modify anything.
 TOOLS = "Read,Bash"
@@ -844,6 +846,51 @@ def refix(rid, feedback):
         _git(["worktree", "remove", "--force", wt])
 
 
+def rules_lint_report(dry_run: bool = False):
+    """Deterministic stale-rules guard: flag any prose coaching rule that WITHHOLDS a
+    blueprint-required intensity slice (lib/rules_lint.py). Runs every nightly bug-fixer
+    pass across ALL athletes so a methodology change can never silently leave a stale
+    rule behind. Findings are LOUD - ops_log.alert (surfaces in the 21:30 coach ops
+    digest) + a one-off coach Telegram when the finding set changes - and are surfaced
+    in this report. Human review only: it never auto-edits a rule. A rule confirmed
+    intentional is accepted in the athlete rules-lint-accepted.json (hash-keyed) and
+    then stays quiet until its text changes."""
+    import hashlib
+    try:
+        findings = rules_lint.lint_all(BASE)
+    except Exception as e:
+        print(f"[rules-lint] error: {e}", file=sys.stderr)
+        return
+    flat = [f for fs in findings.values() for f in fs]
+    if not flat:
+        print("[rules-lint] clean - no rule withholds a blueprint-required slice")
+        return
+    print(f"[rules-lint] {len(flat)} finding(s) across {len(findings)} athlete(s):")
+    for f in flat:
+        print(f"  WITHHOLD {f['slug']}/{f.get('file')}: {f['reason']} :: {f['rule'][:160]}")
+        ops_log.alert("rules-lint", f"{f['reason']} :: {f['rule'][:160]}", athlete=f.get("slug", ""))
+    state_p = Path.home() / "Library/Logs/ClaudeCoach" / "rules-lint-state.json"
+    cur_sig = hashlib.sha256("|".join(sorted(f.get("hash", "") for f in flat)).encode()).hexdigest()
+    try:
+        prev = json.loads(state_p.read_text()).get("sig")
+    except Exception:
+        prev = None
+    if cur_sig != prev and not dry_run:
+        msg = (f"RULES-LINT: {len(flat)} rule(s) may withhold a blueprint-required intensity "
+               "slice. Review, then either accept in the athlete rules-lint-accepted.json or "
+               "time-box the rule with [expires:YYYY-MM-DD]:\n"
+               + "\n".join(f"- {f['slug']}: {f['rule'][:120]}" for f in flat[:8]))
+        try:
+            subprocess.run([sys.executable, str(BASE / "telegram/notify.py"), "--no-history", msg], timeout=30)
+        except Exception as e:
+            print(f"[rules-lint] telegram send failed: {e}", file=sys.stderr)
+        try:
+            state_p.parent.mkdir(parents=True, exist_ok=True)
+            state_p.write_text(json.dumps({"sig": cur_sig, "when": date.today().isoformat()}))
+        except Exception:
+            pass
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--athlete", default="jamie")
@@ -866,6 +913,7 @@ def main():
     elif args.reconcile:
         reconcile(args.athlete)
     elif args.fix:
+        rules_lint_report(args.dry_run)
         run_fix(args.athlete, args.dry_run)
     else:
         p = plan(args.athlete)
