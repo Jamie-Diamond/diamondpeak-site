@@ -27,7 +27,7 @@ import menstrual as menstrual_lib
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -52,15 +52,22 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
                 "'period started yesterday') so cycle-aware planning stays accurate.\"\n"
             )
 
+    morning_pain_question = ""
+    if injuries and ask_morning_pain:
+        morning_pain_question = (
+            "- FIRST PRIORITY (overrides the questions below): ask \"Ankle score this morning? (0-10)\" "
+            "— record the answer as injury_pain_next_morning on yesterday's run in session-log.json.\n"
+        )
     injury_question = ""
-    if injuries:
+    if injuries and not ask_morning_pain:
+        # Suppressed when the morning-score question fires: at most ONE ankle question per card.
         injury_question = (
             "- If a run is planned today AND ankle.pain_next_morning in current-state.json is >0 "
             "(do NOT use pain_during — that is a run-specific score, not a morning score): "
             "ask \"Injury pain score before heading out? (0-10)\"\n"
         )
     injury_question += "- Else if no weight reading in the last 3 days: ask \"Weight this morning?\""
-    injury_question = cycle_question + injury_question
+    injury_question = cycle_question + morning_pain_question + injury_question
 
     injuries_note = (
         "; ".join(
@@ -450,6 +457,26 @@ def run_athlete(slug, athlete_cfg):
     except Exception:
         pass  # score is optional — morning card still sends without it
 
+    # Does yesterday's run stub still need the next-morning pain score?
+    needs_morning_pain_ask = False
+    if injuries:
+        yesterday_str = (date.today() - timedelta(days=1)).isoformat()
+        try:
+            cs_f = adir / "current-state.json"
+            cs_data = json.loads(cs_f.read_text()) if cs_f.exists() else {}
+            already_asked = cs_data.get("ankle", {}).get("pain_next_morning_asked_date") == today_str
+            if not already_asked:
+                sl_f = adir / "session-log.json"
+                if sl_f.exists():
+                    for e in json.loads(sl_f.read_text()):
+                        if (e.get("date") == yesterday_str
+                                and e.get("sport") in ("Run", "TrailRun", "VirtualRun")
+                                and e.get("injury_pain_next_morning") is None):
+                            needs_morning_pain_ask = True
+                            break
+        except Exception:
+            pass
+
     # Wait for Garmin sync only if the athlete has a sleep device and it hasn't synced yet.
     # Athletes with no sleep device (sleepSecs always null) send immediately.
     if wellness_line is None and has_sleep_device and datetime.now().hour < 9:
@@ -503,6 +530,7 @@ def run_athlete(slug, athlete_cfg):
                            cycle=cycle,
                            fuel_target_g_hr=_fuel_target_g_hr,
                            nutrition_race=int(athlete_cfg.get("nutrition_target_g_hr") or 90),
+                           ask_morning_pain=needs_morning_pain_ask,
                            heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend,
                            long_run_cap_km=_long_run_cap_km,
                            wellness_finalized=wellness_finalized)
