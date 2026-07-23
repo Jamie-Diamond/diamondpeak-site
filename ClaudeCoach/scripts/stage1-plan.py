@@ -532,14 +532,26 @@ def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -
                 _parts.append(f"{sp} {(d.get('high_min',0)/tot*100):.0f}% "
                               f"(target ~{(_tgt.get(sp) or [0,0,0])[2]}%)")
         if _parts:
+            # Run VO2 in the 2-week balance is INJURY-CONDITIONAL, not blanket-off. Only suppress
+            # it when the run protocol medically forbids run quality (quality_allowed is False -
+            # same gate as run_limited in session_library and the audit at :452). For a cleared
+            # athlete the run carries a small VO2 touch toward its blueprint Z4-5 target like any
+            # other sport; hard-coding "never add run VO2" here contradicted the QUALITY
+            # PRESCRIPTION and left the run VO2 floor unmeetable by the proposer (only patched
+            # afterwards by quality_inject) - the 22 Jul prose-zeroes-a-blueprint-slice class.
+            if (brief.get("run_protocol") or {}).get("quality_allowed") is False:
+                _run_roll = "Run stays easy - never add run VO2 (run quality is medically gated off)."
+            else:
+                _run_roll = ("Run VO2 follows the SAME 2-week rule: if the 2-week run VO2 is UNDER "
+                             "its target add ONE small, cautious VO2 touch this week (keep run VO2 "
+                             "LOWEST - impact - and within the mileage / long-run caps), if OVER drop it.")
             roll = ("\nROLLING 2-WEEK BALANCE (Phase 5.4): last week's planned VO2/Z4-5 was "
                     + "; ".join(_parts) + ". The VO2/Z4-5 bands are judged over the 2-WEEK "
                     "average, NOT this week alone - if a sport ran HIGH last week, go LOWER this "
                     "week (and vice versa) so the 2-week mean sits near each sport's TARGET "
                     "(the bands have a FLOOR and a ceiling). IM bike quality is predominantly "
                     "sweetspot (Z3) with a SMALL VO2 touch to hit ~6% Z4-5: if the 2-week bike VO2 "
-                    "is UNDER target add one short VO2 set this week, if OVER drop it. Run stays "
-                    "easy - never add run VO2.\n")
+                    "is UNDER target add one short VO2 set this week, if OVER drop it. " + _run_roll + "\n")
     # QUALITY PRESCRIPTION (proposer fix): build/specific/peak weeks MUST carry quality toward
     # each sport's per-zone target - the LLM otherwise hits TSS with easy volume and hands back
     # an all-easy week. Off on deload/taper (unloading is the point). Honours injury_bands:
