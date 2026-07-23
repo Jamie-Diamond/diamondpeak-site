@@ -70,6 +70,9 @@ _SKIP_CUES = tuple(re.compile(p) for p in (
     r"do not escalate", r"harder than planned",                    # about not OVER-doing
     r"walk[- ]?(?:run|interval|break)", r"run-walk",               # run-walk format, not quality intervals
     r"achievable at easy", r"execute on time",                     # session-rescue conditional, not a distribution withhold
+    r"unconfirmed", r"not field-tested", r"validated threshold",    # provenance caveat on a metric, not a training withhold
+    r"working estimate", r"derived/provisional",
+    r"\bdescriptions?:", r"rep format", r"table row",              # description-FORMAT rules, not training withholds
 ))
 
 
@@ -205,6 +208,37 @@ def lint_athlete(slug: str, base_dir, include_accepted: bool = False) -> list[di
     return findings
 
 
+def lint_shared(base_dir, slugs: list[str]) -> list[dict]:
+    """Scan the shared rules file (athletes/_shared/persistent-rules.md), which has no
+    blueprint of its own but applies to EVERY athlete. A withholding rule here would hit
+    all of them, so it is checked against the UNION of every athlete's required slices."""
+    base = Path(base_dir)
+    p = base / "athletes" / "_shared" / "persistent-rules.md"
+    if not p.exists():
+        return []
+    union: dict = {}
+    for slug in slugs:
+        bp = base / "athletes" / slug / "reference" / "training-blueprint.json"
+        if not bp.exists():
+            continue
+        try:
+            for sport, sl in required_slices(json.loads(bp.read_text(encoding="utf-8"))).items():
+                union.setdefault(sport, set()).update(sl)
+        except Exception:
+            continue
+    if not union:
+        return []
+    accepted = _accepted("_shared", base)
+    out: list[dict] = []
+    for f in lint_rules_text(p.read_text(encoding="utf-8"), union):
+        h = rule_hash("_shared", "persistent-rules.md", f["rule"])
+        if h in accepted:
+            continue
+        f.update({"file": "_shared/persistent-rules.md", "slug": "_shared", "hash": h})
+        out.append(f)
+    return out
+
+
 def lint_all(base_dir, slugs: list[str] | None = None) -> dict:
     base = Path(base_dir)
     if slugs is None:
@@ -212,7 +246,11 @@ def lint_all(base_dir, slugs: list[str] | None = None) -> dict:
             slugs = list(json.loads((base / "config" / "athletes.json").read_text()).keys())
         except Exception:
             slugs = []
-    return {s: f for s in slugs if (f := lint_athlete(s, base))}
+    result = {s: f for s in slugs if (f := lint_athlete(s, base))}
+    shared = lint_shared(base, slugs)
+    if shared:
+        result["_shared"] = shared
+    return result
 
 
 if __name__ == "__main__":
