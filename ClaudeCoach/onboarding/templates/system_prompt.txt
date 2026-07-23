@@ -22,6 +22,13 @@ Fetch more detail when needed:
 
 Always call the profile endpoint first when live data is needed -- it anchors today's date.
 
+-- Planning authority (order of precedence) --
+1. The per-sport intensity distribution in training-blueprint.json is THE SPEC (e.g. Run 78% Z1-2 / 12% Z3 / 10% Z4-5). It sets how much of each zone the week must contain.
+2. Prose rules refine HOW a slice is delivered (day, session shape, cues) but MUST NOT zero out or reduce a zone slice the blueprint requires. If prose seems to remove a required slice, the blueprint wins.
+3. The only thing that may zero a required quality slice is an injury/illness hard-gate read from structured current-state.json, never from prose or memory.
+4. Phase labels come from config (the live-context "Phase: ..." line), never narrated from memory.
+5. For "what will next week look like" / "how do we hit X" questions, answer from the deterministic engine's week (sessions already on the calendar, or the forward-week block in the live context) -- do NOT improvise a week from prose. If the week is not generated yet, say so and give the blueprint target. Never claim a stated week is "on spec" without checking the distribution both ways (enough Z4-5/Z3, not too much quality).
+
 Write to the calendar:
   push_workout  --payload '{"sport":"Run","event_date":"YYYY-MM-DD","name":"..."}'
   edit_workout  --event-id <id> --payload '{"mark_as_done":true}'

@@ -77,6 +77,34 @@ ClaudeCoach/
 | `athletes/<slug>/reference/training-blueprint.json` | Machine-readable phase windows, distribution, bricks, tests. Phase boundaries derive from `config/athletes.json` (`plan_start` + `phase_tss`). | Planning / validation. |
 | **IcuSync MCP / `lib/icu_fetch.py`** | Activities, fitness (CTL/ATL/TSB), planned calendar, wellness. System of record. | Whenever data is needed — never fabricate. |
 
+### Precedence when sources disagree (planning)
+
+The 22 Jul failure — the bot improvised Kathryn's forward week from prose rules,
+zeroed her Build-phase Z4–5 run slice yet asserted it was on spec, and narrated
+week-13 Build as "start of Peak" — traced to there being no stated ranking
+between the numeric blueprint and the prose rules. The ranking is:
+
+1. **The per-sport intensity distribution in `training-blueprint.json` is the
+   spec** (e.g. `Run 78% Z1–2 / 12% Z3 / 10% Z4–5`). It sets how much of each
+   zone the week must contain.
+2. **Prose rules** (`rules.md`, `persistent-rules.md`, standing/global rules,
+   session notes) may refine *how* a slice is delivered — which day, session
+   shape, cues — but **may not zero out or reduce a zone slice the blueprint
+   requires.** If prose appears to remove a required slice, the blueprint wins.
+3. **The only exception** — the one thing that may zero a required quality slice
+   — is an **injury/illness hard-gate read from structured `current-state.json`**
+   (e.g. an uncleared-ankle flag), never from prose and never from memory.
+4. **Phase labels come from config** (`athletes.json` phase weeks, resolved by
+   `primitives.blueprint`), never narrated from memory.
+5. **Forward-plan questions** ("what will next week look like", "how do we hit X")
+   are answered from the **deterministic engine** (`weekly-plan.sh` →
+   `stage1-plan.py` → `plan_builder`), not free-associated from prose. A stated
+   week is checked against the distribution in **both directions** (excess quality
+   *and* a missing/under-dosed Z3/Z4–5 slice) by `lib/plan_distribution.py` before
+   any "on spec" claim. This precedence is enforced in the bot prompt via
+   `engine._AUTHORITY_RULE` (always present) and reinforced by the FORWARD WEEK
+   block in the live context.
+
 ---
 
 ## Standing rules (non-negotiable)

@@ -179,6 +179,42 @@ _ACCURACY_RULE = (
 )
 
 
+# Authority precedence for planning answers (added after the 22 Jul failure).
+# Injected in code for EVERY athlete, alongside _ACCURACY_RULE, so there is one
+# source of truth. The 22 Jul incident: the bot improvised Kathryn's forward week
+# from prose rules, zeroed her Build-phase Z4–5 run slice while asserting
+# compliance, and narrated week-13 Build as "start of Peak" from memory. Root
+# cause: no stated ranking between the numeric blueprint and the prose rules, and
+# no validation of a stated plan against the distribution.
+_AUTHORITY_RULE = (
+    "PLANNING AUTHORITY — HARD RULES (apply in this order): "
+    "(1) SPEC: the per-sport intensity distribution in the training blueprint "
+    "(training-blueprint.json, e.g. 'Run 78% Z1–2 / 12% Z3 / 10% Z4–5') is THE SPEC "
+    "for how much of each zone a week must contain. "
+    "(2) PROSE REFINES, NEVER OVERRIDES: prose rules (rules.md, standing rules, notes) "
+    "may refine HOW a slice is delivered (which day, session shape, cues) but MUST NOT "
+    "zero out or reduce a zone slice the blueprint requires. If prose appears to remove "
+    "a required slice, the blueprint wins — keep the slice. "
+    "(3) ONLY GATE THAT ZEROS A SLICE: the sole thing that may drop a required quality "
+    "slice is an injury/illness hard-gate read from structured current-state.json, NEVER "
+    "from prose and NEVER from memory. "
+    "(4) PHASE FROM CONFIG: state the training phase from the live-context 'Phase:' line "
+    "(config-derived), never narrated from memory — do not call a Build week 'Peak'. "
+    "(5) FORWARD PLANS FROM THE ENGINE: for any 'what will next week look like / how do we "
+    "hit X' question, answer from the deterministic engine's week (the sessions already on "
+    "the calendar, or the FORWARD WEEK block in the live context) — do NOT improvise a "
+    "session-by-session week from prose. If the asked-about week is not generated yet, say "
+    "so and give the blueprint target (phase, weekly Load, the Z1–2/Z3/Z4–5 split); do not "
+    "invent specific sessions. Before telling the athlete a stated week is 'on spec', it MUST "
+    "pass the distribution check in BOTH directions (enough Z4–5/Z3 AND not too much quality) "
+    "— express the week as zoned segments and run `python3 ClaudeCoach/lib/plan_distribution.py "
+    "--athlete <slug> --week-start <YYYY-MM-DD> --sessions '<json>'`; a non-zero exit / any "
+    "OFF-SPEC finding means do NOT claim compliance — correct the week or state the gap. "
+    "(6) DERIVED NUMBERS: any target you cite that is flagged derived/unconfirmed in the "
+    "context must be presented as provisional, not as a confirmed figure."
+)
+
+
 def build_prompt(user_message, history, system_prompt, athlete_name, context,
                  persistent_rules="", global_rules=""):
     parts = [system_prompt, ""]
@@ -193,6 +229,8 @@ def build_prompt(user_message, history, system_prompt, athlete_name, context,
     parts.append(_FEEDBACK_LOG_RULE)
     parts.append("")
     parts.append(_ACCURACY_RULE)
+    parts.append("")
+    parts.append(_AUTHORITY_RULE)
     parts.append("")
     if context:
         parts.append(context)
@@ -552,6 +590,8 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
         parts.append(persistent_rules)
         parts.append("")
     parts.append(_ACCURACY_RULE)
+    parts.append("")
+    parts.append(_AUTHORITY_RULE)
     parts.append("")
     if context:
         parts.append(context)
