@@ -14,6 +14,7 @@ import claude_call
 from coaching_levels import level_block as _level_block
 import menstrual
 import ops_log
+import injury_scope
 from git_sync import sync_commit_push
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 from primitives.modulation import (  # noqa: E402
@@ -57,6 +58,16 @@ def build_prompt(slug: str, name: str, race_name: str, coaching_level: str = "mi
                           or {}).get("ankle"))
     except Exception:
         pass
+    # Cross-athlete contamination guard: a tracked ankle block MUST be backed by a
+    # matching injury on THIS athlete profile (lib/injury_scope.py). If it is not,
+    # that is the 2026-07-04 contamination signature (Jamie ankle leaked into
+    # Kathryn current-state) - alert loudly and fail SAFE to no-injury rather than
+    # prime the model with another athlete ankle protocol.
+    if has_ankle:
+        _scope_viol = injury_scope.check_injury_scope(slug, BASE)
+        if _scope_viol:
+            ops_log.alert("daily-prescription", "; ".join(_scope_viol), athlete=slug)
+            has_ankle = False
     state_json_note = (
         "ankle block + per-location \"pain\" blocks from quick-logs — if any non-ankle "
         "location shows recent pain ≥4 or a rising history, factor it into today's "
