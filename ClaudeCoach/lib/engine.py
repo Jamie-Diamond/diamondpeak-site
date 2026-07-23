@@ -276,9 +276,15 @@ def _prompt_fingerprint(sp_file) -> str:
     rotate rather than coach on the old rules."""
     sp_file = Path(sp_file)
     try:
+        # Include the build_prompt rule constants: they are baked into a session
+        # at start but are NOT files, so a change to them (e.g. _AUTHORITY_RULE,
+        # added 22 Jul) must also rotate running sessions — otherwise a chat that
+        # started under the old prompt keeps coaching without the new rule until
+        # it expires (the resume path never re-injects them).
         blob = (system_prompt_with_level(sp_file) + "\n"
                 + load_global_rules(sp_file) + "\n"
-                + load_persistent_rules(sp_file))
+                + load_persistent_rules(sp_file) + "\n"
+                + _FEEDBACK_LOG_RULE + "\n" + _ACCURACY_RULE + "\n" + _AUTHORITY_RULE)
     except Exception:
         return ""
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
