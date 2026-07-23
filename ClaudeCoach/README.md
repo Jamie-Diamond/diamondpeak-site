@@ -36,6 +36,7 @@ ClaudeCoach/
 │                              #   ctl_targets, api keys  (GITIGNORED)
 ├── athletes/<slug>/           # per-athlete (GITIGNORED — data, not code)
 │   ├── profile.json           #   FTP, CSS, threshold, race, coaching_level …
+│   │                          #   AUTHORITATIVE source for athlete targets
 │   ├── current-state.md/.json #   subjective layer + ankle/weight (IcuSync can't see)
 │   ├── reference/             #   rules.md, decision-points.md,
 │   │                          #   training-blueprint.md + training-blueprint.json (sidecar)
@@ -85,6 +86,21 @@ ClaudeCoach/
 - **Pull data via IcuSync — never fabricate.** If it's down, say so and ask for a manual paste.
 - **Multi-signal corroboration before any load reduction.** HRV alone is never the trigger.
 - Per-athlete hard rules (ankle gating, fuel aversions, heat protocol, etc.) live in each athlete's `rules.md` / `persistent-rules.md` and the project instructions.
+
+---
+
+## Athlete targets — one authoritative source
+
+`athletes/<slug>/profile.json` is the **authoritative** record of an athlete’s
+race targets (goal paces, split times, thresholds). Every other place a target is
+stored — `config/athletes.json` (`race_target_splits`, engine-read), `reference/rules.md`,
+`system_prompt.txt` (injected into the bot), `current-state.md` — is a **mirror**.
+
+Never hand-edit one copy. Write targets through `lib/athlete_targets.py`
+(`set_run_pace_target`), which updates every location together, atomically, and
+**fails loudly** if any copy cannot be written or a stale value would survive. This
+exists because a partial hand-edit on 22 Jul 2026 left Kathryn’s goal run pace stale
+in the bot’s injected prompt while other files were corrected.
 
 ---
 
