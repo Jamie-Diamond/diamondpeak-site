@@ -44,6 +44,19 @@ _LIMIT_RE = re.compile(
     re.I,
 )
 
+# Substrings that mean the CLI could not AUTHENTICATE (dead/expired/absent
+# CLAUDE_CODE_OAUTH_TOKEN). NOT a rate limit, so is_limit_message misses it
+# and no fallback helps - every model shares this auth. Phrases only, never a
+# bare "401": a plan JSON with "load": 401 (a legit TSS value) must not be
+# read as an auth failure. The CLI always prefixes real auth errors with
+# "Failed to authenticate", so phrases catch expired + invalid-credential cases.
+_AUTH_RE = re.compile(
+    r"failed to authenticate|authentication_error|"
+    r"invalid authentication credentials|oauth access token has expired|"
+    r"re-authenticate|not authenticated",
+    re.I,
+)
+
 # Soft dependency: ops_log lives in the same lib/ dir. Importable whenever a
 # caller has already put lib/ on sys.path (every script does). Optional so the
 # helper has zero hard deps.
@@ -65,19 +78,34 @@ def is_limit_message(text: str) -> bool:
     return bool(_LIMIT_RE.search(t))
 
 
+def is_auth_failure(text: str) -> bool:
+    """True if `text` looks like an authentication failure (dead/expired/
+    absent CLAUDE_CODE_OAUTH_TOKEN) rather than a real answer. Short-output
+    guard (< 600 chars) so a long genuine answer mentioning these words is
+    never misclassified."""
+    if not text:
+        return False
+    t = text.strip()
+    if len(t) > 600:
+        return False
+    return bool(_AUTH_RE.search(t))
+
+
 class ClaudeResult:
     """Result of run_claude(). Mimics the bits of subprocess.CompletedProcess
     callers use (.stdout/.stderr/.returncode) plus fallback metadata."""
 
-    __slots__ = ("stdout", "stderr", "returncode", "model", "fell_back", "limited")
+    __slots__ = ("stdout", "stderr", "returncode", "model", "fell_back", "limited", "auth_failed")
 
-    def __init__(self, stdout, stderr, returncode, model, fell_back, limited):
+    def __init__(self, stdout, stderr, returncode, model, fell_back, limited,
+                 auth_failed=False):
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
         self.model = model          # model that actually produced this result
         self.fell_back = fell_back  # True if a non-primary model was used
         self.limited = limited      # True if EVERY model in the chain was capped
+        self.auth_failed = auth_failed  # True if the CLI could not authenticate
 
 
 def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
@@ -138,6 +166,24 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
 
         limited = is_limit_message(out) or (rc != 0 and is_limit_message(err))
         res = ClaudeResult(out, err, rc, m, i > 0, limited)
+
+        # AUTH FAILURE takes precedence over the limit/fallback logic: an
+        # expired/invalid token fails identically on EVERY model, so falling
+        # back is pointless and returning empty is dangerous (the caller reads
+        # it as "model produced nothing" and silently skips the work). Make it
+        # LOUD - ops_log alert (alert log + ops digest) and a stderr marker.
+        if is_auth_failure(out) or is_auth_failure(err):
+            res.auth_failed = True
+            msg = (f"CLI authentication FAILED on {m} (token expired/invalid) -"
+                   f" no fallback possible; every model shares this auth. Refresh"
+                   f" CLAUDE_CODE_OAUTH_TOKEN (/root/.claude/cc.env).")
+            print(f"[{label or '?'}] AUTH-FAIL: {msg}", file=sys.stderr, flush=True)
+            if _ops_log:
+                try:
+                    _ops_log.alert("claude_call", msg, athlete=label)
+                except Exception:
+                    pass
+            return res
 
         if limited and i < len(chain) - 1:
             nxt = chain[i + 1]
