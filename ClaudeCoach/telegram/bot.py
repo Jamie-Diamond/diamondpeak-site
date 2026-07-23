@@ -1673,16 +1673,79 @@ def _preview_missing_duration(clean: str) -> bool:
     )
 
 
+_SPORT_FAMILIES = {
+    "Run":   ("run", "runs", "running", "jog", "jogging", "tempo run", "long run"),
+    "Ride":  ("ride", "rides", "bike", "biking", "cycle", "cycling", "turbo", "spin"),
+    "Swim":  ("swim", "swims", "swimming", "pool", "open water"),
+}
+# ICU event types that count as each family.
+_SPORT_TYPES = {
+    "Run":  {"Run"},
+    "Ride": {"Ride", "VirtualRide"},
+    "Swim": {"Swim", "OpenWaterSwim"},
+}
+_WEEKDAYS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+             "friday": 4, "saturday": 5, "sunday": 6}
+
+
+def _preview_sport_types(clean: str):
+    """The set of ICU event types the reply is about, ONLY if it references exactly
+    one sport family (run / ride / swim). Returns None if zero or more-than-one family
+    is mentioned (ambiguous — e.g. race-strategy chat naming both bike and run), or if
+    a multi-sport 'brick' is mentioned. None means: do not try to append a duration."""
+    low = clean.lower()
+    if re.search(r"\bbrick\b", low):
+        return None
+    fams = [fam for fam, words in _SPORT_FAMILIES.items()
+            if any(re.search(r"\b" + re.escape(w) + r"\b", low) for w in words)]
+    if len(fams) != 1:
+        return None
+    return _SPORT_TYPES[fams[0]]
+
+
+def _preview_target_date(clean: str):
+    """The single calendar date the reply prescribes, ONLY if it names exactly one
+    (today / tomorrow / tonight / this morning|afternoon|evening, or one weekday).
+    Returns None if zero or more-than-one distinct day is referenced — we only append
+    a duration when we can tie it to one specific session."""
+    low = clean.lower()
+    today = date.today()
+    cands = set()
+    if re.search(r"\b(today'?s?|this (morning|afternoon|evening)|tonight)\b", low):
+        cands.add(today)
+    if re.search(r"\btomorrow'?s?\b", low):
+        cands.add(today + timedelta(days=1))
+    for name, wd in _WEEKDAYS.items():
+        if re.search(r"\b" + name + r"'?s?\b", low):
+            ahead = (wd - today.weekday()) % 7
+            ahead = ahead or 7  # a named weekday means the NEXT one, not today
+            cands.add(today + timedelta(days=ahead))
+    return next(iter(cands)) if len(cands) == 1 else None
+
+
 def _verify_session_preview(slug: str, clean: str) -> str:
     """Deterministic backstop for the 'always state duration/distance in session
-    previews' rule (persistent-rules.md) — prose-only compliance kept slipping
-    (re-violated 2026-07-10), so this checks the actual reply text rather than
-    relying on the model re-reading the rules file. If a duration/distance figure
-    is missing, try to resolve it from the athlete's upcoming ICU events (same
-    source used for the /today context) and append it; if it can't be resolved,
-    flag the reply instead of sending it bare."""
+    previews' rule (persistent-rules.md). Only fires when the reply PROVABLY prescribes
+    one specific near-term session: it must name a single day (today / tomorrow / a
+    weekday) AND a single sport, and that (day, sport) must resolve to exactly ONE
+    upcoming ICU event. Only then is THAT event's own duration/distance appended.
+
+    If the reference is ambiguous or cannot be matched to a unique event, nothing is
+    appended and the miss is logged for a human. The bot never appends a duration it
+    cannot tie to the session in the reply, and never shows the athlete an internal
+    'not confirmed' warning — both previously leaked arbitrary/irrelevant durations
+    (e.g. the 4h long ride's 240min tacked onto a 10k pace discussion) and scary
+    internal text into athlete-visible replies (misfires 2026-07-22/23)."""
     if not _preview_missing_duration(clean):
         return clean
+
+    target = _preview_target_date(clean)
+    sport_types = _preview_sport_types(clean)
+    if target is None or sport_types is None:
+        log(f"[{slug}] session preview: no single day+sport in reply "
+            "(ambiguous or strategy chat) — no append")
+        return clean
+
     try:
         sys.path.insert(0, str(BASE.parent / "lib"))
         from icu_api import IcuClient
@@ -1690,23 +1753,40 @@ def _verify_session_preview(slug: str, clean: str) -> str:
         a = athletes[slug]
         client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
         today = date.today()
-        events = client.get_events(today.isoformat(), (today + timedelta(days=2)).isoformat())
-        ev = next((e for e in (events or []) if e.get("moving_time") or e.get("distance")), None)
-        if ev:
-            bits = []
-            dur = round((ev.get("moving_time") or 0) / 60)
-            if dur:
-                bits.append(f"{dur}min")
-            dist = ev.get("distance") or 0
-            if dist:
-                bits.append(f"{dist / 1000:.1f}km")
-            if bits:
-                return clean.rstrip() + f"\n\n({' / '.join(bits)})"
+        events = client.get_events(today.isoformat(), (today + timedelta(days=8)).isoformat())
+        # A session PREVIEW is one not yet done. If the target sport is already
+        # completed on the target date, the reply is a retrospective review
+        # (e.g. analysing this morning's finished ride) — never append a preview
+        # duration to it (misfires 2026-07-23: the completed 4h ride's duration
+        # was tacked onto post-ride analysis replies).
+        hist = client.get_training_history(days=3)
+        if any((h.get("start_date_local") or "")[:10] == target.isoformat()
+               and (h.get("type") or "") in sport_types for h in (hist or [])):
+            log(f"[{slug}] session preview: {target.isoformat()} {sorted(sport_types)} "
+                "already completed — retrospective, no append")
+            return clean
+        matches = [e for e in (events or [])
+                   if (e.get("start_date_local") or "")[:10] == target.isoformat()
+                   and (e.get("type") or "") in sport_types
+                   and (e.get("moving_time") or e.get("distance"))]
+        if len(matches) != 1:
+            log(f"[{slug}] session preview: {len(matches)} events match "
+                f"{target.isoformat()}/{sorted(sport_types)} — no append (need exactly 1)")
+            return clean
+        ev = matches[0]
+        bits = []
+        dur = round((ev.get("moving_time") or 0) / 60)
+        if dur:
+            bits.append(f"{dur}min")
+        dist = ev.get("distance") or 0
+        if dist:
+            bits.append(f"{dist / 1000:.1f}km")
+        if bits:
+            return clean.rstrip() + f"\n\n({' / '.join(bits)})"
     except Exception as e:
         log(f"[{slug}] session preview duration lookup failed: {e}")
-    log(f"[{slug}] WARN: reply states pace/power/HR targets with no duration/distance "
-        "and none could be resolved from events")
-    return clean.rstrip() + "\n\n⚠️ Duration/distance not confirmed above — check before starting."
+    return clean
+
 
 
 def _load_profile(slug: str) -> dict:
