@@ -1717,8 +1717,7 @@ def _preview_target_date(clean: str):
         cands.add(today + timedelta(days=1))
     for name, wd in _WEEKDAYS.items():
         if re.search(r"\b" + name + r"'?s?\b", low):
-            ahead = (wd - today.weekday()) % 7
-            ahead = ahead or 7  # a named weekday means the NEXT one, not today
+            ahead = (wd - today.weekday()) % 7  # weekday name == today => today
             cands.add(today + timedelta(days=ahead))
     return next(iter(cands)) if len(cands) == 1 else None
 
