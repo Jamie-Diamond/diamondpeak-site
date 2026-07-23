@@ -21,6 +21,7 @@
 #
 # Restore any athlete file:  git -C /root/dpc_private_repo show <sha>:<path>
 set -uo pipefail
+source "/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/lib_git_alert.sh"
 
 LIVE="/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach"
 PRIV="/root/dpc_private_repo"
@@ -31,11 +32,11 @@ TS="$(date '+%Y-%m-%d %H:%M:%S')"
 REMOTE="$(git -C "$PRIV" remote get-url origin 2>/dev/null || echo none)"
 case "$REMOTE" in
   *dpc_private*) : ;;
-  *) echo "[sync-private] ABORT $TS: origin is not dpc_private ($REMOTE)"; exit 1 ;;
+  *) git_sync_fail "sync-private" "origin is not dpc_private ($REMOTE)"; exit 1 ;;
 esac
 
 if [ ! -d "$LIVE/athletes" ]; then
-  echo "[sync-private] ABORT $TS: live athlete data not found under $LIVE"; exit 1
+  git_sync_fail "sync-private" "live athlete data not found under $LIVE"; exit 1
 fi
 
 # Start from last night's pushed state so the working tree is deterministic.
@@ -63,14 +64,20 @@ git -C "$PRIV" rm --cached --quiet config/athletes.json 2>/dev/null || true
 git -C "$PRIV" add -A athletes .gitignore
 if git -C "$PRIV" diff --cached --quiet; then
   echo "[sync-private] no changes $TS"
+  git_sync_ok
   exit 0
 fi
 
-# Safety net: refuse to push if any staged file smells like a credential
+# Safety net: refuse to push if any ADDED line smells like a credential
 # (intervals.icu API keys, tokens, bearer strings). Nothing under athletes/
 # should contain these; if one ever does, stop rather than leak it.
-if git -C "$PRIV" diff --cached -U0 | grep -nEi '(api[_-]?key|bearer|secret|"?token"?\s*[:=]|icu_[a-z0-9]{20,})' | grep -v '^-'; then
-  echo "[sync-private] ABORT $TS: possible credential in staged athlete files (see match above) - not pushing"
+# NOTE: we scan ADDED lines only (^+ content, excluding the +++ file header).
+# The old form piped through `grep -nEi ... | grep -v '^-'`, but `-n` prefixes a
+# line number so deletion lines read `123:-...` and slipped past the `^-`
+# filter - which made the untracking of config/athletes.json (a deletion of
+# its icu_api_key lines) trip a FALSE credential abort every single night.
+if git -C "$PRIV" diff --cached -U0 | grep -E '^\+[^+]' | grep -Ei '(api[_-]?key|bearer|secret|"?token"?[[:space:]]*[:=]|icu_[a-z0-9]{20,})'; then
+  git_sync_fail "sync-private" "possible credential in ADDED athlete lines (see match above) - not pushing"
   git -C "$PRIV" reset -q
   exit 1
 fi
@@ -79,6 +86,7 @@ git -C "$PRIV" commit -q -m "athlete-data sync $(date +%Y-%m-%d)"
 # local branch is 'master', remote deploy branch is 'main' - push HEAD explicitly.
 if git -C "$PRIV" push -q origin HEAD:main; then
   echo "[sync-private] pushed $TS ($(git -C "$PRIV" rev-parse --short HEAD))"
+  git_sync_ok
 else
-  echo "[sync-private] PUSH FAILED $TS - committed locally, will retry next run"
+  git_sync_fail "sync-private" "push to dpc_private failed - committed locally, will retry next run"
 fi
