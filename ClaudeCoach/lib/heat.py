@@ -80,10 +80,17 @@ HEAT_DOSE_HALFSAT_MIN = 45.0  # K: half-saturation constant, sets how fast the c
 HEAT_DOSE_MAX         = 2.0   # D_MAX: asymptotic ceiling — a session is worth at most 2× a
                               # 60-min one, however long (bounds ultra-length exposures)
 
-# Dose weighting — temperature multiplier (relative to 30°C reference)
+# Dose weighting — temperature multiplier (relative to 30°C reference).
+# At/above the 25°C heat-eligibility threshold the multiplier follows the
+# reference line (1.0 at DOSE_TEMP_REF_C, capped at DOSE_TEMP_MAX). BELOW 25°C
+# there is little heat-adaptation stimulus, so the multiplier ramps to zero at
+# DOSE_TEMP_ONSET_C instead of sitting on a floor. This fixes the defect where a
+# flat 0.70 floor credited every session ≤24°C identically (a 21°C and a 12°C
+# ride scored the same 0.70), letting cool/cold sessions bank phantom heat dose.
 DOSE_TEMP_REF_C   = 30.0    # ambient at which temp_mult == 1.0
-DOSE_TEMP_SLOPE   = 0.05    # per °C above/below the reference
-DOSE_TEMP_MIN     = 0.7     # floor (a 25°C session still counts, just less)
+DOSE_TEMP_SLOPE   = 0.05    # per °C above the reference
+DOSE_TEMP_ONSET_C = 20.0    # below this, no heat-adaptation stimulus → temp_mult == 0
+DOSE_TEMP_MIN     = 0.0     # floor (cool/cold sessions earn no environmental credit)
 DOSE_TEMP_MAX     = 1.6     # ceiling (≥42°C is brutal but capped)
 
 # Dose weighting — HR-based strain multiplier (fraction of HR reserve, Karvonen)
@@ -161,8 +168,21 @@ def dose_multipliers(
     strain for the same dry-bulb temperature. Default 1.0 when dew-point is
     unavailable (device-temp fallback, no external weather).
     """
-    temp_mult = _clamp(1 + (float(temp_c) - DOSE_TEMP_REF_C) * DOSE_TEMP_SLOPE,
-                       DOSE_TEMP_MIN, DOSE_TEMP_MAX)
+    t = float(temp_c)
+    if t <= DOSE_TEMP_ONSET_C:
+        temp_mult = 0.0
+    elif t < HEAT_AMBIENT_C:
+        # Sub-eligibility band (onset..25°C): ramp linearly from 0 up to the
+        # value the reference line takes at the 25°C threshold, so a cool ride
+        # earns proportionately little — and a cold ride ~nothing — rather than
+        # the old flat 0.70 floor that made every temperature below 24°C equal.
+        edge = 1 + (HEAT_AMBIENT_C - DOSE_TEMP_REF_C) * DOSE_TEMP_SLOPE
+        temp_mult = edge * (t - DOSE_TEMP_ONSET_C) / (HEAT_AMBIENT_C - DOSE_TEMP_ONSET_C)
+    else:
+        # ≥25°C: unchanged reference-line behaviour (this is the validated range;
+        # every logged exposure sits here, so historical doses are untouched).
+        temp_mult = _clamp(1 + (t - DOSE_TEMP_REF_C) * DOSE_TEMP_SLOPE,
+                           DOSE_TEMP_MIN, DOSE_TEMP_MAX)
 
     hr_reserve = max_hr - rhr
     if avg_hr is not None and hr_reserve > 0:

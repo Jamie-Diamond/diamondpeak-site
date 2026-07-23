@@ -90,6 +90,23 @@ class TestDoseMultipliers:
         assert heat.dose_multipliers(60.0)[0] == heat.DOSE_TEMP_MAX
         assert heat.dose_multipliers(0.0)[0] == heat.DOSE_TEMP_MIN
 
+    def test_cool_sessions_earn_no_phantom_heat_credit(self):
+        # Regression: the old flat 0.70 temp floor credited every session ≤24°C
+        # identically, so a 12°C and a 21.5°C ride banked the same "heat" dose.
+        # A cold ride must now score ~0, and a cool ride must be distinguishable
+        # from a cold one while still scoring well below the 25°C threshold value.
+        assert heat.dose_multipliers(12.0)[0] == 0.0        # cold → no credit
+        assert heat.dose_multipliers(18.0)[0] == 0.0        # below onset → no credit
+        assert heat.dose_multipliers(21.5)[0] > 0.0
+        assert heat.dose_multipliers(21.5)[0] != heat.dose_multipliers(12.0)[0]
+        assert heat.dose_multipliers(24.0)[0] < heat.dose_multipliers(25.0)[0]
+
+    def test_eligible_range_unchanged_by_floor_fix(self):
+        # The ≥25°C branch (every logged exposure lives here) is bit-identical to
+        # the pre-fix reference line: 0.75 at 25°C, 1.0 at the 30°C reference.
+        assert heat.dose_multipliers(25.0)[0] == 0.75
+        assert heat.dose_multipliers(30.0)[0] == 1.0
+
     def test_hr_strain_above_reference_boosts(self):
         assert heat.dose_multipliers(30.0, avg_hr=160)[1] > 1.0
 
