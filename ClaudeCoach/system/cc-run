@@ -1,0 +1,8 @@
+#!/bin/bash
+# cc-run: inject ClaudeCoach OAuth token (and any cc.env vars) into a command
+# environment, then exec it. Used by root cron so the token is not stored
+# inline in the crontab. Companion file: /root/.claude/cc.env (chmod 600).
+set -a
+[ -r /root/.claude/cc.env ] && . /root/.claude/cc.env
+set +a
+exec "$@"

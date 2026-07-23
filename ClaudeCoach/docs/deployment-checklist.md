@@ -102,3 +102,30 @@ sleep 2
 nohup python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/bot.py \
   >> /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/bot.log 2>&1 &
 ```
+
+---
+
+## 7. Secrets — Claude OAuth token (do not inline in cron)
+
+The `CLAUDE_CODE_OAUTH_TOKEN` must never be stored inline in the root crontab or
+committed to the repo. It lives only in `/root/.claude/cc.env` (chmod 600,
+root:root) — the same `EnvironmentFile` the `claudecoach-bot` and `expense-bot`
+systemd units read.
+
+Cron jobs get the token via the wrapper `/root/.claude/cc-run` (reference copy:
+`ClaudeCoach/system/cc-run`), which sources `cc.env` and `exec`s the job. Every
+crontab entry is prefixed with it — see `ClaudeCoach/system/crontab.template`.
+
+Rotating the token (interactive; only Jamie can mint one):
+
+```bash
+# 1. mint a new token (opens browser / device login)
+claude setup-token
+# 2. paste the new sk-ant-oat01-... into cc.env ONLY (replace the one line)
+nano /root/.claude/cc.env          # chmod stays 600 root:root
+# 3. restart the two bots so they pick up the new token (cron picks it up
+#    automatically on next run — it sources cc.env each time)
+systemctl restart claudecoach-bot expense-bot
+# 4. revoke the OLD token in the Anthropic console (rotation is not complete
+#    until the old token is revoked)
+```
