@@ -69,7 +69,7 @@ def _is_long_ride(s):
     return (s.get("sport") or "").lower() in ("ride", "bike", "brick") and "long" in (s.get("name") or "").lower()
 
 
-_RUN_FLOOR_MIN = 40  # rule 6: a run below this isn't a meaningful session - DROP it
+_RUN_FLOOR_MIN = 20  # rule 6: a run below this isn't a meaningful session - DROP it
                      # rather than shrink it further; freed load is picked up by
                      # close_to_target's TSS-closure step (bike/other-run reallocation).
 
