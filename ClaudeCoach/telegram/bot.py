@@ -51,6 +51,7 @@ sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE.parent / "lib"))
 import claude_call
 import engine
+import rules_capture
 from engine import call_claude, call_claude_with_image, stream_claude
 HEARTBEAT_FILE = BASE.parent / ".bot_heartbeat"  # touched each poll loop; watched by bot-watchdog.py
 try:
@@ -1593,6 +1594,47 @@ def _make_capture_retry(text, config, history, model, files, athlete_name, conte
                            system_prompt_file=files["system_prompt"],
                            athlete_name=athlete_name, context=context)
     return _retry
+
+
+def _rules_file(slug: str) -> Path:
+    return _athlete_dir(slug) / "persistent-rules.md"
+
+
+def _snapshot_rules_text(slug: str) -> str:
+    """persistent-rules.md's current content, for a before/after fold-guard diff."""
+    f = _rules_file(slug)
+    return f.read_text() if f.exists() else ""
+
+
+def _apply_rule_capture_guard(slug: str, before_text: str) -> None:
+    """TIER A capture guard for the LIVE chat path — the same fold-on-write invariant
+    session-sync.py applies hourly, via the shared lib/rules_capture.enforce_rule_guards
+    (see that module's docstring for the full invariant). Runs once per turn, after the
+    model has had its turn to Edit/Write persistent-rules.md live during generation.
+
+    A loss-free FOLD (an existing rule edited in place to absorb a refinement, keeping
+    every fact) is left as-is. An appended rule that conflicts with a confirmed
+    preference, exactly duplicates an existing line, or breaches the standing-rule
+    ceiling is reverted — as is any LOSSY fold (a dropped fact, a silently changed
+    figure, a touched confirmed preference), where the whole write reverts to
+    `before_text`. Reverting here never permanently loses the athlete's message:
+    session-sync re-scans history.json hourly and will re-capture a genuine
+    refinement the guard had to revert."""
+    f = _rules_file(slug)
+    after_text = f.read_text() if f.exists() else ""
+    if after_text == before_text:
+        return
+    try:
+        prefs = rules_capture.confirmed_preferences(slug)
+        guarded, drops = rules_capture.enforce_rule_guards(before_text, after_text, prefs)
+    except Exception as e:
+        log(f"[{slug}] rule capture guard errored (leaving file as the model wrote it): {e}")
+        return
+    if drops:
+        if guarded != after_text:
+            f.write_text(guarded)
+        for reason, dline in drops:
+            log(f"[{slug}] rule capture guard dropped — {reason}: {dline}")
 
 
 def _verify_logged_reply(slug: str, before_ts: float, clean: str,
@@ -3789,6 +3831,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         context = prefetch_context(slug)
         model = select_model(text, history)
         before_ts = time.time()
+        before_rules_text = _snapshot_rules_text(slug)
 
         if _voice_mode_on(slug):
             # Sticky voice mode: the TEXT stays the normal rich style (as it used
@@ -3802,6 +3845,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 system_prompt_file=files["system_prompt"], athlete_name=athlete_name,
                 context=context,
             )
+            _apply_rule_capture_guard(slug, before_rules_text)
             clean = process_charts(token, chat_id, response, slug=slug)
             clean = _verify_logged_reply(
                 slug, before_ts, clean, text=text,
@@ -3855,6 +3899,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                                    system_prompt_file=files["system_prompt"],
                                    athlete_name=athlete_name, context=context)
 
+        _apply_rule_capture_guard(slug, before_rules_text)
         clean = process_charts(token, chat_id, response, slug=slug)
         clean = _verify_logged_reply(
             slug, before_ts, clean, text=text,
