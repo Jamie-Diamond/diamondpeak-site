@@ -41,7 +41,11 @@ def todays_entries() -> list[dict]:
 
 
 def build_digest(entries: list[dict], athletes: dict) -> list[str]:
-    """Failure + gap lines for today; empty list = all clean."""
+    """Failure + gap lines for today, PLUS informational auto-apply lines; empty
+    list = all clean. Auto-applied bug-fixer rule merges/prunes (guard-validated,
+    loss-free, no human review needed) are not a failure, but Jamie should still see
+    what changed unattended overnight — one line each, from lib/ops_log's
+    'bug-fixer-automerge' run-status entries."""
     lines = []
 
     for e in entries:
@@ -49,6 +53,10 @@ def build_digest(entries: list[dict], athletes: dict) -> list[str]:
             who = f" ({e['athlete']})" if e.get("athlete") else ""
             ts = str(e.get("ts", ""))[11:16]
             lines.append(f"✗ {ts} {e.get('script', '?')}{who}: {e.get('detail', '')}")
+        elif e.get("script") == "bug-fixer-automerge":
+            who = f" ({e['athlete']})" if e.get("athlete") else ""
+            ts = str(e.get("ts", ""))[11:16]
+            lines.append(f"✓ {ts} auto-applied{who}: {e.get('detail', '')}")
 
     def _ran(script, athlete=None, detail=None):
         return any(

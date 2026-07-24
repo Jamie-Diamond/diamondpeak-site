@@ -217,3 +217,81 @@ def confirmed_preferences(slug: str) -> list:
     """Thin pass-through to bug_fixer._confirmed_preferences, so callers don't need
     their own importlib load of bug-fixer.py just to get this one list."""
     return bug_fixer._confirmed_preferences(slug)
+
+
+def is_multi_rule_merge(before_text: str, after_text: str) -> bool:
+    """True if some line in `after_text` newly absorbs the content of TWO OR MORE
+    distinct pre-existing [perm] lines from `before_text` — a semantic merge of
+    independently-worded rules into one new sentence. This is the over-merge risk
+    class the fold-on-write guard deliberately does NOT auto-approve:
+    `enforce_rule_guards` only proves no rule's content is LOST, not that combining
+    several differently-worded existing rules into new prose was itself a safe
+    judgement call — that is exactly what session-sync's fold-on-write fix left to
+    human review rather than trying to auto-approve.
+
+    Distinguishing this from a safe FOLD (one existing rule extended with a new
+    fact) or a safe DEDUP (several near-identical lines collapsed to the fullest
+    existing wording, i.e. the surviving line already existed verbatim) needs one
+    more check beyond the loss invariant: per NEW line (one that did not exist
+    verbatim in `before_text`), count how many DISTINCT removed rules' significant
+    tokens it absorbs. A fold or dedup absorbs at most one; a merge of
+    independently-worded rules absorbs two or more."""
+    before_perm = [l for l in before_text.splitlines(keepends=True) if _PERM_RE.match(l)]
+    after_lines = after_text.splitlines(keepends=True)
+    perm_idx    = [i for i, l in enumerate(after_lines) if _PERM_RE.match(l)]
+
+    before_norm = Counter(_norm(l) for l in before_perm)
+    after_norm  = Counter(_norm(after_lines[i]) for i in perm_idx)
+    appended    = after_norm - before_norm            # NEW [perm] lines (not verbatim before)
+    removed     = set(before_norm - after_norm)        # pre-existing [perm] lines now gone
+    if not removed or not appended:
+        return False
+
+    raw_by_norm = {}
+    for l in before_perm:
+        raw_by_norm.setdefault(_norm(l), l)
+    removed_sig = {n: _sig_tokens(raw_by_norm.get(n, "")) for n in removed}
+
+    # Attribute appended copies to the TAIL-most physical lines, mirroring
+    # enforce_rule_guards' own attribution so the two funcs agree on which lines
+    # are "new".
+    budget       = dict(appended)
+    appended_idx = []
+    for i in reversed(perm_idx):
+        n = _norm(after_lines[i])
+        if budget.get(n, 0) > 0:
+            appended_idx.append(i)
+            budget[n] -= 1
+
+    for i in appended_idx:
+        new_sig  = _sig_tokens(after_lines[i])
+        absorbed = sum(1 for rtoks in removed_sig.values() if rtoks and rtoks <= new_sig)
+        if absorbed >= 2:
+            return True
+    return False
+
+
+def classify_merge_proposal(before_text: str, after_text: str, prefs: list):
+    """Classify a prune/merge PROPOSAL (bug-fixer's nightly rule-consolidation drafts)
+    for auto-apply eligibility. Runs the SAME fold-on-write guard used by
+    session-sync.py and telegram/bot.py — this module is the single arbiter across
+    all three writers — plus one extra check specific to a *proposed* consolidation:
+    whether it merges two or more independently-worded PRE-EXISTING rules into one
+    new sentence (see `is_multi_rule_merge`). That is a semantic judgement call the
+    loss-free guard alone does not make, and it is exactly the risk class
+    session-sync's fold-on-write fix deliberately left to human review.
+
+    Returns (verdict, guarded_text, drops):
+      'auto_apply' — loss-free AND at most one pre-existing rule folded per new
+                     line; safe to write straight to the live file, no review card.
+      'escalate'   — either the guard rejected the edit (drops non-empty;
+                     guarded_text is `before_text`, unchanged) or it merges two or
+                     more independently-worded pre-existing rules into one line
+                     (guard accepted the edit as loss-free, but it still routes to
+                     a human review card)."""
+    guarded, drops = enforce_rule_guards(before_text, after_text, prefs)
+    if drops:
+        return "escalate", guarded, drops
+    if is_multi_rule_merge(before_text, after_text):
+        return "escalate", guarded, []
+    return "auto_apply", guarded, []

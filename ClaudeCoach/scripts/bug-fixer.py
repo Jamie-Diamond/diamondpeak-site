@@ -42,6 +42,7 @@ sys.path.insert(0, str(BASE / "lib"))
 import claude_call
 import ops_log
 import rules_lint
+import rules_capture
 
 # Read-only tools - the planner must NOT modify anything.
 TOOLS = "Read,Bash"
@@ -630,12 +631,23 @@ def _fix_group(group, idx, slug, dry_run):
             _git(["branch", "-D", branch])
 
 
-def _prune_group(group, idx, slug, dry_run):
+def _prune_group(group, idx, slug, dry_run, prefs):
     """Draft a persistent-rules.md consolidation (prune / merge / add_rule) on a PRIVATE temp
-    copy, validate it against the guardrails, and record the proposal for review. The live
-    rules file is NEVER touched here - apply_prune() writes it only after an explicit Yes.
-    Rules live outside git (athletes/ is gitignored and the repo is public), so this path
-    uses no git branch/merge; the full proposed content is carried in the review record.
+    copy, validate it against the guardrails, and either AUTO-APPLY it (prune/merge only, when
+    trivial and loss-free) or record it for human review. Rules live outside git (athletes/ is
+    gitignored and the repo is public), so this path uses no git branch/merge; the full
+    proposed content is carried in the review record either way.
+
+    Auto-apply vs review (prune/merge only; add_rule always goes to review — it is adding
+    brand-new content, a bigger judgement call): lib/rules_capture.classify_merge_proposal
+    is the single arbiter shared with session-sync.py and telegram/bot.py's live capture
+    guard. 'auto_apply' (loss-free, and at most one pre-existing rule folded per new line)
+    writes straight to the live file overnight with no review card, backed up first exactly
+    like an approved apply_prune, and logs one line to the ops digest. 'escalate' — either
+    the guard rejected the edit (lossy / conflicts a confirmed preference) or it merges two
+    or more independently-worded pre-existing rules into one new sentence, the over-merge
+    risk class the fold-on-write fix deliberately left to a human — posts the existing
+    yes/no/edit Telegram card, unchanged.
     Returns review id or None."""
     import tempfile, hashlib
     rid    = f"{date.today().isoformat()}-{idx}"
@@ -686,15 +698,50 @@ def _prune_group(group, idx, slug, dry_run):
         original.splitlines(True), proposed.splitlines(True),
         fromfile="persistent-rules.md (current)", tofile="persistent-rules.md (proposed)", n=1))[:4000]
     stat = f"standing rules {old_count} -> {new_count} ({action})"
+
+    # Auto-apply/escalate decision (prune/merge only; add_rule is always reviewed - it
+    # adds brand-new content, a bigger judgement call than reorganising what's already
+    # confirmed). rules_capture.classify_merge_proposal is the single shared arbiter.
+    verdict = "escalate"
+    if action in ("prune", "merge"):
+        verdict, _guarded, guard_drops = rules_capture.classify_merge_proposal(
+            original, proposed, prefs)
+        if verdict == "escalate" and guard_drops:
+            print(f"[bug-fixer] {rid}: guard rejected the {action} - routing to review: "
+                  f"{guard_drops[0][0]}", file=sys.stderr)
+        elif verdict == "escalate":
+            print(f"[bug-fixer] {rid}: {action} combines >=2 independently-worded rules "
+                  f"- over-merge risk, routing to review", file=sys.stderr)
+
     review = {"id": rid, "branch": "", "slug": slug, "kind": "prune", "action": action,
               "title": group.get("title", ""), "entries": group.get("entries", []),
               "summary": summary, "stat": stat, "files": [str(rules_p)],
               "proposal": proposed, "base_sha": hashlib.sha256(original.encode()).hexdigest(),
               "old_count": old_count, "new_count": new_count,
               "status": "awaiting", "created": date.today().isoformat()}
+
     if dry_run:
-        print(f"\n--- WOULD POST (PRUNE) [{rid}] {review['title']} ---\n{summary}\n{stat}\n{diff}")
+        tag = " [WOULD AUTO-APPLY]" if verdict == "auto_apply" else ""
+        print(f"\n--- WOULD POST (PRUNE){tag} [{rid}] {review['title']} ---\n{summary}\n{stat}\n{diff}")
         return rid
+
+    if verdict == "auto_apply":
+        # Same write shape as an approved apply_prune (backup first) - just no Yes
+        # needed and no Telegram card, because the shared guard already proved this
+        # specific edit loses nothing and isn't a risky multi-rule merge.
+        backup = rules_p.with_suffix(f".bak-auto-{rid}.md")
+        backup.write_text(original)
+        rules_p.write_text(proposed)
+        review["status"] = "auto_applied"
+        reviews = _load_reviews(); reviews[rid] = review; _save_reviews(reviews)
+        _bug_mark_feedback(slug, group.get("entries", []), "resolved",
+                           commit_hash=f"auto-{action}:{rid}")
+        detail = f"{action}: {old_count}->{new_count} rules - {summary}"
+        ops_log.record_run("bug-fixer-automerge", athlete=slug, ok=True, detail=detail)
+        print(f"[bug-fixer] {rid}: AUTO-APPLIED {action} ({old_count}->{new_count}); "
+              f"backup at {backup.name}")
+        return rid
+
     reviews = _load_reviews(); reviews[rid] = review; _save_reviews(reviews)
     chat_id = json.loads((BASE / "config/athletes.json").read_text())[slug].get("chat_id", "")
     if chat_id:
@@ -779,7 +826,7 @@ def run_fix(slug, dry_run):
     for i, g in enumerate(groups):
         action = (g.get("action") or "code_fix").lower()
         if action in ("prune", "merge", "add_rule"):
-            rid = _prune_group(g, i, slug, dry_run)
+            rid = _prune_group(g, i, slug, dry_run, prefs)
         else:
             rid = _fix_group(g, i, slug, dry_run)
         print(f"  {g.get('title')}: {'review ' + rid if rid else 'no change / discarded'}")

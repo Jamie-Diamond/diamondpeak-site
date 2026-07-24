@@ -142,5 +142,72 @@ class AppendGuardTests(unittest.TestCase):
         self.assertIn("ceiling", drops[0][0])
 
 
+class MergeClassificationTests(unittest.TestCase):
+    """classify_merge_proposal — the auto-apply/escalate decision bug-fixer.py's
+    nightly prune/merge cards now use. Same shared guard as the fold tests above,
+    plus the extra over-merge check that keeps a semantic merge of two
+    independently-worded rules routed to a human, even when it is loss-free."""
+
+    def test_trivial_dedup_is_auto_applied(self):
+        """Two case/whitespace-variant copies of the SAME rule collapsing to the
+        fuller existing wording is a pure duplicate removal — safe to auto-apply."""
+        before = _lines(
+            "[perm] Runs Tuesday/Thursday/Saturday",
+            "[perm] runs tuesday/thursday/saturday",
+        )
+        after = _lines("[perm] Runs Tuesday/Thursday/Saturday")
+        verdict, guarded, drops = rc.classify_merge_proposal(before, after, [])
+        self.assertEqual(verdict, "auto_apply")
+        self.assertEqual(drops, [])
+        self.assertEqual(guarded, after)
+
+    def test_loss_free_single_rule_fold_is_auto_applied(self):
+        """A refinement folded into the one rule it extends (as in the fold tests
+        above) is exactly the trivial case bug-fixer should no longer bother Jamie
+        with — it should auto-apply, not just be guard-accepted."""
+        before = _lines("[perm] Takes 750mg magnesium before bed")
+        after = _lines("[perm] Takes 750mg magnesium before bed, plus 500mg zinc on rest days")
+        verdict, guarded, drops = rc.classify_merge_proposal(before, after, [])
+        self.assertEqual(verdict, "auto_apply")
+        self.assertEqual(drops, [])
+
+    def test_lossy_merge_escalates_via_guard_rejection(self):
+        """A merge that drops a fact must escalate — the guard itself refuses it,
+        same as the plain fold-invariant tests, and classify must surface that."""
+        before = _lines(
+            "[perm] Long run progression: +10% weekly, cap at 22 miles",
+            "[perm] Wears compression socks on long travel days",
+        )
+        after = _lines(
+            "[perm] Long run progression: +10% weekly",   # cap fact dropped
+            "[perm] Wears compression socks on long travel days",
+        )
+        verdict, guarded, drops = rc.classify_merge_proposal(before, after, [])
+        self.assertEqual(verdict, "escalate")
+        self.assertEqual(guarded, before)   # reverted
+        self.assertTrue(drops)
+        self.assertTrue(drops[0][0].startswith("ABORT"))
+
+    def test_merge_of_two_independently_worded_rules_escalates(self):
+        """Combining TWO distinct, independently-worded pre-existing rules into one
+        new sentence is loss-free (every fact from both survives) but is exactly the
+        over-merge judgement call that must still go to a human review card."""
+        before = _lines(
+            "[perm] Eats porridge before every long run",
+            "[perm] Drinks 500ml water before every long run",
+        )
+        after = _lines(
+            "[perm] Eats porridge and drinks 500ml water before every long run",
+        )
+        # Sanity: the plain guard alone considers this loss-free (nothing dropped).
+        _guarded, guard_drops = rc.enforce_rule_guards(before, after, [])
+        self.assertEqual(guard_drops, [])
+        self.assertTrue(rc.is_multi_rule_merge(before, after))
+
+        verdict, guarded, drops = rc.classify_merge_proposal(before, after, [])
+        self.assertEqual(verdict, "escalate")
+        self.assertEqual(drops, [])   # guard itself didn't object — the merge check did
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
