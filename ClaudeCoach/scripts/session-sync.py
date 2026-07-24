@@ -10,9 +10,12 @@ Rule-pile self-maintenance (11 Jul 2026). The sync used to only ever ADD [perm] 
 never remove them, so the standing-rule pile grew without bound — the root cause of the coach
 degradation. It now closes the loop in three tiers:
 
-  A. APPEND GUARD (per-run, on newly-appended lines only): a [perm] line the model appends is
-     reverted if it contradicts a confirmed preference, exactly duplicates an existing rule, or
-     pushes the pile over the ceiling. This pass never removes a pre-existing rule.
+  A. CAPTURE GUARD (per-run): a [perm] line the model appends is reverted if it contradicts a
+     confirmed preference, exactly duplicates an existing rule, or pushes the pile over the
+     ceiling. The model may ALSO fold a refinement into the existing rule it extends (edit in
+     place) instead of appending a near-duplicate — the churn fix. Such an edit is permitted only
+     when loss-free (every removed rule's content survives, numbers included, in a rule still on
+     file); any lossy edit fails the invariant and the whole write is refused (file untouched).
 
   B. AUTO-CLEAR (per-run, whole file): trivially-safe redundancy is removed deterministically,
      after backing the file up to a timestamped .bak and logging every removal — duplicate
@@ -97,6 +100,16 @@ def _content_key(line: str) -> str:
     return s.strip(".,;:!?-–— ")
 
 
+def _sig_tokens(line: str) -> set:
+    """Significant tokens of a rule's CONTENT, with NUMBERS PRESERVED. Tag stripped, lower-cased,
+    split on non-alphanumerics; single-letter noise dropped, pure digits kept. Used only by the
+    fold invariant below: a removed rule is loss-free ONLY if this token set survives inside a
+    rule still on file. Keeping digits means a silently-changed figure (e.g. 750mg -> 700mg) drops
+    the '750' token and so FAILS the invariant — the guard refuses rather than let a number drift."""
+    s = _TAG_RE.sub("", line).lower()
+    return {t for t in re.findall(r"[a-z0-9]+", s) if len(t) >= 2 or t.isdigit()}
+
+
 def _line_conflicts(line: str, prefs: list) -> str:
     """Return the confirmed preference a [perm] line contradicts, else ''. Mirrors
     bug-fixer._rule_conflict's deterministic backstop: a line that ASSERTS terms a confirmed
@@ -119,25 +132,70 @@ def _line_conflicts(line: str, prefs: list) -> str:
 
 
 def _enforce_rule_guards(before_text: str, after_text: str, prefs: list):
-    """TIER A — append guard. Run AFTER the model has edited persistent-rules.md; reverts ONLY
-    newly-appended [perm] lines that (a) contradict a confirmed preference, (b) exactly
-    duplicate an existing [perm] line, or (c) push the standing-rule count above the ceiling.
-    This pass NEVER removes a pre-existing rule (the resulting [perm] multiset still contains
-    every pre-run [perm] line at least as many times) — that is asserted below. Returns
-    (new_text, drops) where drops is a list of (reason, text); a drops entry whose reason
-    starts 'ABORT' means the guard refused to write anything."""
+    """TIER A — capture-time guard. Runs AFTER the model has edited persistent-rules.md.
+
+    Two edit shapes are allowed:
+      * APPEND a new standing rule for a genuinely new topic.
+      * FOLD a refinement into the existing rule it extends, by editing that rule in place. This
+        is the fix for the near-duplicate churn: append-only capture used to force every
+        refinement (a new nutrition item, a long-run progression nuance) to land as a separate
+        near-duplicate line, which the nightly bug-fixer then had to merge — one review card per
+        refinement, night after night. Folding on write means there is nothing left to merge.
+
+    The guard is deterministic and conservative:
+      * a NEWLY-APPENDED [perm] line is reverted if it contradicts a confirmed preference, exactly
+        duplicates an existing line, or pushes the pile over the ceiling (unchanged behaviour);
+      * an in-place edit that removes/rewrites an existing rule is PERMITTED only when it is a
+        loss-free FOLD — every removed rule's significant tokens (numbers included) survive inside
+        some [perm] line still on file. Any edit that drops a rule's content, silently changes a
+        figure, or removes a confirmed preference fails the invariant and the ENTIRE write is
+        refused (file left untouched), routing that judgement to the human-reviewed merge.
+
+    Returns (new_text, drops); a drops entry whose reason starts 'ABORT' means nothing written.
+    """
+    before_perm = [l for l in before_text.splitlines(keepends=True) if _PERM_RE.match(l)]
     after_lines = after_text.splitlines(keepends=True)
     perm_idx    = [i for i, l in enumerate(after_lines) if _PERM_RE.match(l)]
 
-    before_norm = Counter(_norm(l) for l in before_text.splitlines() if _PERM_RE.match(l))
+    before_norm = Counter(_norm(l) for l in before_perm)
     after_norm  = Counter(_norm(after_lines[i]) for i in perm_idx)
-    appended    = after_norm - before_norm            # multiset of NEW [perm] lines
+    appended    = after_norm - before_norm            # NEW [perm] lines (incl. any fold result)
+    removed     = set(before_norm - after_norm)       # pre-existing [perm] lines now gone
 
-    if not appended:
+    if not appended and not removed:
         return after_text, []
 
-    # Attribute the appended copies to the TAIL-most physical lines, so we only ever touch
-    # newly-added lines and never an identical pre-existing one earlier in the file.
+    confirmed   = {_norm(p) for p in prefs}
+    raw_by_norm = {}
+    for l in before_perm:
+        raw_by_norm.setdefault(_norm(l), l)
+    removed_sig = [_sig_tokens(raw_by_norm.get(n, "")) for n in removed]
+
+    def _fold_ok(perm_lines) -> str:
+        """'' if every removed rule survives (folded) in perm_lines and no confirmed preference
+        was removed; else an ABORT reason. perm_lines is the list of [perm] lines to check."""
+        surviving = [_sig_tokens(l) for l in perm_lines]
+        for n in removed:
+            if n in confirmed:
+                return ("ABORT: edit would remove/alter a confirmed preference; "
+                        "reverted the model's edit")
+            rtoks = _sig_tokens(raw_by_norm.get(n, ""))
+            if rtoks and not any(rtoks <= s for s in surviving):
+                return ("ABORT: edit removed rule content not folded into any surviving rule; "
+                        "reverted the model's edit")
+        return ""
+
+    # Validate folds against the model's full output BEFORE gating appends.
+    if removed:
+        reason = _fold_ok([after_lines[i] for i in perm_idx])
+        if reason:
+            bad = next((raw_by_norm.get(n, "") for n in removed
+                        if n in confirmed or not any(
+                            _sig_tokens(raw_by_norm.get(n, "")) <= _sig_tokens(after_lines[i])
+                            for i in perm_idx)), "")
+            return before_text, [(reason, bad.strip())]
+
+    # Attribute appended copies to the TAIL-most physical lines (never an identical earlier one).
     budget       = dict(appended)
     appended_idx = []
     for i in reversed(perm_idx):
@@ -147,9 +205,16 @@ def _enforce_rule_guards(before_text: str, after_text: str, prefs: list):
             budget[n] -= 1
     appended_idx.sort()
 
-    dropped = {}                                      # idx -> reason
+    # A fold-result line (the survivor a removed rule folded into) must never be dropped, or the
+    # fold loses data; it is count-neutral so it cannot breach the ceiling either.
+    def _is_fold_result(i):
+        s = _sig_tokens(after_lines[i])
+        return any(rt and rt <= s for rt in removed_sig)
 
+    dropped = {}                                      # idx -> reason
     for i in appended_idx:
+        if _is_fold_result(i):
+            continue
         line = after_lines[i]
         pref = _line_conflicts(line, prefs)
         if pref:
@@ -162,7 +227,8 @@ def _enforce_rule_guards(before_text: str, after_text: str, prefs: list):
         kept = [l for j, l in enumerate(after_lines) if j not in dropped]
         return bug_fixer._count_rules("".join(kept))
 
-    for i in sorted((j for j in appended_idx if j not in dropped), reverse=True):
+    for i in sorted((j for j in appended_idx
+                     if j not in dropped and not _is_fold_result(j)), reverse=True):
         if _standing_count() <= CEILING:
             break
         dropped[i] = f"append would exceed the standing-rule ceiling ({CEILING})"
@@ -172,12 +238,12 @@ def _enforce_rule_guards(before_text: str, after_text: str, prefs: list):
 
     new_text = "".join(l for j, l in enumerate(after_lines) if j not in dropped)
 
-    # Invariant: tier A never shrinks the pile below its pre-run state. If a removal would have
-    # taken out a pre-existing rule, refuse to write anything and surface it.
-    final_norm = Counter(_norm(l) for l in new_text.splitlines() if _PERM_RE.match(l))
-    for n, c in before_norm.items():
-        if final_norm.get(n, 0) < c:
-            return after_text, [("ABORT: guard would shrink pre-existing rules; left file untouched", "")]
+    # Re-verify the fold invariant after dropping bad appends (dropping a pure-new line cannot
+    # orphan a folded rule, since fold results are exempt above — but assert it, cheaply).
+    if removed:
+        reason = _fold_ok([l for l in new_text.splitlines() if _PERM_RE.match(l)])
+        if reason:
+            return before_text, [(reason.replace("edit", "guard drop"), "")]
 
     drops = [(reason, after_lines[i].strip()) for i, reason in sorted(dropped.items())]
     return new_text, drops
@@ -316,9 +382,10 @@ def _build_prompt(slug: str, first_name: str, history: list, today: str,
     if over_ceiling:
         ceiling_note = (
             f"   ** The standing-rule pile is AT/OVER its ceiling ({rule_count} of {CEILING}). "
-            f"Do NOT append ANY new [perm] rule this run. **\n"
-            f"   Skip the rest of task 1 and do tasks 2-4 only (prune expired [expires:] lines and\n"
-            f"   maintain state). Shrinking an over-ceiling pile is handled separately by the\n"
+            f"Do NOT APPEND any new standalone [perm] rule this run. **\n"
+            f"   You MAY still FOLD a refinement into an existing rule it extends (task 1b below) —\n"
+            f"   that is count-neutral and keeps the pile tidy. Otherwise skip appends and do tasks\n"
+            f"   2-4 only. Shrinking an over-ceiling pile is handled separately by the\n"
             f"   human-reviewed bug-fixer — not here.")
     else:
         ceiling_note = (
@@ -345,21 +412,33 @@ correctly, showing units, and preview-before-write. Also:
 == TASKS ==
 
 1. SCAN for new rules or preferences {first_name} stated or ClaudeCoach agreed to.
-   Read {rules_file} first to avoid duplicates.
+   Read {rules_file} FIRST, in full, so you know what each existing rule already covers.
 {ceiling_note}
-   For each genuinely new rule (subject to the gates below): append one line to {rules_file}
-   using the Edit tool.
-   Format: [perm] <rule text>                    — permanent, no expiry
-       OR: [expires:YYYY-MM-DD] <rule text>      — event/block specific; use event end date
-   Append only — never rewrite or remove existing lines.
-   GATES — do NOT append a rule if ANY of these hold:
+
+   For each thing worth capturing, decide APPEND vs FOLD:
+
+   1a. APPEND — only for a GENUINELY NEW topic no existing rule covers. Add one line with Edit:
+       Format: [perm] <rule text>                — permanent, no expiry
+           OR: [expires:YYYY-MM-DD] <rule text>  — event/block specific; use event end date
+
+   1b. FOLD — if the new detail REFINES or EXTENDS a topic an existing rule already covers (e.g.
+       a new nutrition item for the nutrition-item glossary rule, a new nuance on the long-run
+       progression rule), do NOT append a second near-duplicate line. Instead EDIT that existing
+       rule in place to incorporate the detail, KEEPING every fact already in it (every number,
+       product name and clause) and adding the new detail. This is the correct home for a
+       refinement — a separate near-paraphrase line only gets merged away later.
+       Loss-free only: never drop or change an existing figure/fact while folding; if you cannot
+       fold without losing something, leave the rule alone and append instead.
+
+   GATES — do NOT append/fold a rule if ANY of these hold:
      - CONFLICT: it contradicts a confirmed preference above (e.g. it tells the coach to do
        something a preference says never to do). Skip it entirely.
-     - DUPLICATE: {rules_file} already captures it, even in different wording or as a near-
-       paraphrase. Skip it.
+     - EXACT RESTATEMENT: an existing rule already says the same thing in the same way. Skip it
+       (nothing to add). If it says a RELATED but not identical thing, FOLD (1b), don't append.
      - ALREADY ENFORCED: it merely restates something in the ENFORCED-IN-CODE list. Skip it —
        do not re-add as prose what code already guarantees.
-     - OVER CEILING: the pile is at/over {CEILING} (see the note above). Append nothing.
+     - OVER CEILING: the pile is at/over {CEILING} (see the note above). Do not APPEND; folding
+       (1b) is still allowed.
 
 2. PRUNE expired entries from {rules_file}.
    Remove any line where [expires:YYYY-MM-DD] date is strictly before today ({today}).
@@ -448,7 +527,8 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
     if output:
         _log(f"unexpected output: {output[:200]}")
 
-    # TIER A — append guard: revert any [perm] line the model appended that breaks a gate.
+    # TIER A — capture guard: revert any appended [perm] line that breaks a gate; permit a
+    # loss-free in-place fold of a refinement into the rule it extends; refuse any lossy edit.
     text = rules_file.read_text() if rules_file.exists() else ""
     if text != before_text:
         guarded, drops = _enforce_rule_guards(before_text, text, prefs)
