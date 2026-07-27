@@ -36,6 +36,9 @@ def alerts(monkeypatch):
     captured = []
     monkeypatch.setattr(git_sync, "alert",
                         lambda script, msg, athlete="": captured.append(msg))
+    # Keep the suite hermetic: loud_fail's flag file and Telegram are real side
+    # effects. The ops alert itself still runs and is what the tests assert on.
+    monkeypatch.setattr(git_sync, "_side_channels", lambda script, msg: None)
     return captured
 
 
@@ -100,3 +103,65 @@ class TestSyncCommitPush:
         assert git_sync.sync_commit_push(
             ["a.json"], "msg", script="test", run=explode) is False
         assert any("git sync error" in a for a in alerts)
+
+
+class TestPushRaceRetry:
+    """One bounded retry absorbs a push lost to a concurrent pusher — the
+    "cannot lock ref 'refs/heads/main'" rejection seen 6 times 24-27 Jul 2026."""
+
+    def test_rejected_push_retries_once_and_succeeds(self, alerts):
+        class RaceGit(FakeGit):
+            """First push is rejected (someone else won the race), second wins."""
+            def __call__(self, args, timeout):
+                self.calls.append(args)
+                rc = 0
+                if args[1] == "diff":
+                    rc = 1
+                elif args[1] == "push":
+                    rc = 1 if len([c for c in self.calls if c[1] == "push"]) == 1 else 0
+                return SimpleNamespace(returncode=rc, stdout="", stderr="cannot lock ref")
+
+        fake = RaceGit()
+        assert _sync(fake) is True
+        assert fake.subcommands() == ["add", "diff", "commit", "fetch", "rebase",
+                                      "push", "fetch", "rebase", "push"]
+        assert alerts == []          # a race absorbed by the retry must be SILENT
+
+    def test_retry_never_stages_or_commits(self, alerts):
+        """The retry must not be able to sweep unrelated dirty files (config/*.enc
+        bot churn) into the pushed commit: it runs no add and no commit."""
+        fake = FakeGit({"diff": 1, "push": 1})
+        _sync(fake)
+        after_first_push = fake.calls[fake.subcommands().index("push") + 1:]
+        assert [c[1] for c in after_first_push] == ["fetch", "rebase", "push"]
+
+    def test_push_failing_twice_is_loud(self, alerts):
+        fake = FakeGit({"diff": 1, "push": 1})
+        assert _sync(fake) is False
+        assert any("after one retry" in a for a in alerts)
+
+
+class TestRepoLock:
+    """The flock that fixes the .git/index.lock class (two local git processes in
+    the same tree, 26 Jul 2026). A lock we cannot get is a SKIP, not a failure."""
+
+    def test_busy_lock_skips_without_touching_git(self, alerts, monkeypatch):
+        class Busy:
+            held = False
+            def __enter__(self): return self
+            def __exit__(self, *exc): return False
+        monkeypatch.setattr(git_sync, "_RepoLock", Busy)
+        fake = FakeGit({"diff": 1})
+        assert _sync(fake) is True          # skip is not a failure
+        assert fake.calls == []             # no git ran at all
+        assert any("skipped" in a for a in alerts)
+
+    def test_lock_is_released_even_when_a_step_fails(self, alerts, tmp_path,
+                                                     monkeypatch):
+        """A failed sync must not leave the repo lock held, or every later job
+        would wait it out and skip."""
+        monkeypatch.setattr(git_sync, "LOCK_PATH", str(tmp_path / "dp-git.lock"))
+        fake = FakeGit({"diff": 1, "commit": 1})
+        assert _sync(fake) is False
+        with git_sync._RepoLock() as lock:
+            assert lock.held is True

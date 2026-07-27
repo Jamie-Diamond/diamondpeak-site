@@ -7,7 +7,6 @@ to GitHub Pages.
 Crontab (VM): 0 * * * * python3 /path/to/ClaudeCoach/scripts/refresh-public-data.py
 """
 import json
-import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -73,40 +72,22 @@ def build_athlete_entry(slug: str, cfg: dict, td: dict) -> dict:
 
 
 def git_push():
-    def run(cmd):
-        r = subprocess.run(cmd, cwd=str(BASE), capture_output=True, text=True)
-        return r.returncode, r.stdout + r.stderr
+    """Commit + push site-data.json through the shared git helper.
 
-    for cmd in [
-        ["git", "add", "ClaudeCoach/site-data.json"],
-        ["git", "commit", "-m", f"data: refresh public site-data {date.today()}"],
-        # Fetch using origin/main ref directly — avoids FETCH_HEAD race condition
-        # with cc-gitpull.sh (both start at :00) which runs git fetch origin
-        # (all branches) and overwrites FETCH_HEAD before rebase can read it.
-        ["git", "fetch", "origin", "main"],
-    ]:
-        rc, out = run(cmd)
-        if rc != 0 and "nothing to commit" not in out:
-            log(f"git error ({' '.join(cmd[:2])}): {out.strip()}")
-            return False
-
-    # Stash any unstaged script edits so rebase can proceed
-    _, stash_out = run(["git", "stash"])
-    did_stash = "No local changes to save" not in stash_out
-
-    rc, out = run(["git", "rebase", "origin/main"])
-    if did_stash:
-        run(["git", "stash", "pop"])
-    if rc != 0:
-        log(f"git error (git rebase): {out.strip()}")
-        return False
-
-    rc, out = run(["git", "push", "origin", "main"])
-    if rc != 0:
-        log(f"git error (git push): {out.strip()}")
-        return False
-
-    return True
+    Was a bespoke add/commit/fetch/stash/rebase/push block whose only failure
+    signal was "Git push failed" in public-data.log — which is exactly how the
+    06:00 and 08:00 push failures on 27 Jul 2026 escaped alerting altogether.
+    lib/git_sync.py is the same path activity-watcher.py and daily-prescription.py
+    already use, and brings the repo-wide lock, one bounded push retry (so a
+    lost race self-heals silently) and a LOUD failure — standing flag file, ops
+    digest entry and an immediate Telegram — when a push really is broken."""
+    sys.path.insert(0, str(BASE / "ClaudeCoach/lib"))
+    from git_sync import sync_commit_push
+    return sync_commit_push(
+        ["ClaudeCoach/site-data.json"],
+        f"data: refresh public site-data {date.today()}",
+        script="refresh-public-data",
+    )
 
 
 def main():

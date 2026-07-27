@@ -35,3 +35,84 @@ PY
 git_sync_ok() {
   rm -f "$GA_FLAG_FILE" 2>/dev/null || true
 }
+
+# ---------------------------------------------------------------------------
+# Serialisation + one bounded retry for the cron jobs that share the ONE
+# diamondpeak-site working tree.
+#
+# Why (24-27 Jul 2026): four-plus cron jobs each ran their own add/commit/push
+# in the same tree and most were scheduled on the hour. Two pushing in the same
+# second made GitHub reject the loser - "cannot lock ref 'refs/heads/main': is
+# at X but expected Y", 6 occurrences, every one exactly on the hour - and two
+# running local git at once produced ".git/index.lock: File exists" (26 Jul).
+# Staggering the schedule alone cannot fix the index.lock class, so the git
+# block is serialised with flock and a lost push race is absorbed by a single
+# retry instead of alerting. lib/git_sync.py gives the Python jobs the same two
+# behaviours against the SAME lock path - keep the two in step.
+GA_LOCK="${GA_LOCK:-/var/lock/dp-git.lock}"
+GA_LOCK_WAIT="${GA_LOCK_WAIT:-120}"
+
+# git_lock <job> - take the repo-wide git lock on fd 9. Returns 1 if another job
+# still holds it after GA_LOCK_WAIT seconds, and the caller should then SKIP
+# quietly (exit 0): the next tick redoes the work, so waiting out a busy lock is
+# not a failure and must not fire git_sync_fail. Wrap ONLY the git block - never
+# a long API pull - or a slow job starves the */5 and */30 pushers.
+git_lock() {
+  local job="$1"
+  exec 9>"$GA_LOCK" 2>/dev/null || {
+    echo "[$job] WARN: cannot open $GA_LOCK - proceeding unlocked"
+    return 0
+  }
+  if ! flock -w "$GA_LOCK_WAIT" 9; then
+    echo "[$job] SKIP: another git job held $GA_LOCK for >${GA_LOCK_WAIT}s - next tick will retry"
+    return 1
+  fi
+  return 0
+}
+
+git_unlock() {
+  flock -u 9 2>/dev/null || true
+  exec 9>&- 2>/dev/null || true
+}
+
+# git_push_retry <job> [rebase|merge] - push origin main; on a REJECTED push do
+# ONE bounded fetch + integrate + push, then give up. Returns 0 on success. The
+# integration mode defaults to rebase and should match the caller's own policy
+# (cc-gitpull.sh merges, so it passes "merge").
+#
+# Safety - the retry cannot commit anything the caller did not already stage:
+# it runs no `git add` and no `git commit`, and by the time it is reached the
+# caller has already committed. --autostash only shelves and restores
+# UNCOMMITTED worktree files (the routine config/*.enc bot churn); it cannot
+# promote them into the commit being pushed. If the automatic restore conflicts
+# the stash count grows, and we fail loudly rather than leave someone's dirty
+# work silently parked in a stash.
+git_push_retry() {
+  local job="$1" mode="${2:-rebase}" stash_before stash_after
+  if git push origin main; then return 0; fi
+  echo "[$job] push rejected - one bounded retry (fetch + $mode + push)"
+  if ! git fetch origin; then
+    echo "[$job] retry fetch failed"
+    return 1
+  fi
+  if [ "$mode" = "merge" ]; then
+    if ! git merge origin/main --no-edit; then
+      git merge --abort 2>/dev/null || true
+      echo "[$job] retry merge failed (conflict) - aborted"
+      return 1
+    fi
+  else
+    stash_before="$(git stash list | wc -l)"
+    if ! git rebase --autostash origin/main; then
+      git rebase --abort 2>/dev/null || true
+      echo "[$job] retry rebase failed (conflict) - aborted"
+      return 1
+    fi
+    stash_after="$(git stash list | wc -l)"
+    if [ "$stash_after" -gt "$stash_before" ]; then
+      echo "[$job] retry autostash could NOT be restored - uncommitted work is parked in git stash"
+      return 1
+    fi
+  fi
+  git push origin main
+}

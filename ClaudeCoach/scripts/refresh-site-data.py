@@ -1139,18 +1139,16 @@ def main():
             if s != "jamie" and v.get("active", True)
             and (BASE / f"training-data-{s}.json").exists()
         ]
-        for cmd in [
-            ["git", "add"] + pub_files,
-            ["git", "commit", "-m", f"data: refresh training data {today_str}"],
-            ["git", "fetch", "origin"],
-            ["git", "rebase", "--autostash", "origin/main"],
-            ["git", "push", "origin", "main"],
-        ]:
-            r = subprocess.run(cmd, cwd=PROJECT_DIR, capture_output=True, text=True)
-            if r.returncode != 0 and "nothing to commit" not in r.stdout + r.stderr:
-                log(f"git error ({' '.join(cmd[:2])}): {r.stderr[:120]}")
-                break
-            log(f"git {cmd[1]}: ok")
+        # Shared git helper (lib/git_sync.py) rather than a bespoke command list:
+        # it serialises against the other cron pushers on the repo-wide lock,
+        # retries a push once when a concurrent job wins the race, and makes a
+        # genuine failure loud instead of a line in a log nobody reads.
+        from git_sync import sync_commit_push
+        if sync_commit_push(pub_files, f"data: refresh training data {today_str}",
+                            script="refresh-site-data"):
+            log("git sync: ok")
+        else:
+            log("git sync: FAILED - training data committed locally only")
 
         log("Done.")
 
