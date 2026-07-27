@@ -401,7 +401,24 @@ def _todays_planned(slug: str, today: str):
     data = _icu(slug, "events", "--start", today, "--end", today)
     workouts = [e for e in (data or []) if e.get("category") == "WORKOUT"]
     if not workouts:
-        return None
+        # A RACE-category event is a real day of load, not an empty day. Every consumer
+        # of the ICU `category` field filtered to WORKOUT, so the one field that marks a
+        # race was discarded system-wide and race day read as "no session planned"
+        # (docs/tone-of-voice-guide.md §8.7). This is a READ, so widening it is safe;
+        # note that the WORKOUT filters in plan_builder.py:198 (which builds the DELETE
+        # list for a plan push), validate_plan.py, plan_audit.py and progression.py are
+        # deliberately left alone — they want training sessions only, and broadening the
+        # first of those would let a plan push delete an athlete's race off their calendar.
+        races = [e for e in (data or []) if (e.get("category") or "").upper() == "RACE"]
+        if not races:
+            return None
+        race = max(races, key=lambda e: float(e.get("icu_training_load")
+                                              or e.get("load_target") or 0))
+        return {"session_type": "race", "is_race": True,
+                "name": race.get("name") or "race",
+                "duration_min": int(float(race.get("moving_time") or 0) / 60) or None,
+                "load_target": float(race.get("icu_training_load")
+                                     or race.get("load_target") or 0) or None}
     # Primary = highest planned load (so a strength add-on doesn't mask the key session).
     primary = max(workouts, key=lambda e: float(e.get("icu_training_load") or e.get("load_target") or 0))
     st = classify_session_type(primary.get("type", ""), primary.get("name", ""))

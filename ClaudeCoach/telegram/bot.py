@@ -49,6 +49,7 @@ SSL_CONTEXT = ssl.create_default_context(cafile=_cafile)
 BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE.parent / "lib"))
+import races as races_lib
 import claude_call
 import engine
 import rules_capture
@@ -2601,6 +2602,115 @@ def _handle_test_confirm(token, chat_id, data, message_id, athletes):
     return True
 
 
+# Race capture. chat_id -> {"parsed": {...}, "expiry": epoch}. In-memory like
+# _PENDING_REPLAN and _PENDING_BUG_EDIT above: a dropped capture on a bot restart just
+# means the athlete says it again, whereas a half-written race on disk is a wrong race.
+_PENDING_RACE: dict[str, dict] = {}
+_RACE_CAPTURE_TTL = 900          # 15 min to answer the priority question
+
+
+def _handle_race_capture(token, chat_id, text, athletes):
+    """Turn "I'm racing X on Saturday" into a registry entry. Returns True if handled.
+
+    Mirrors the existing ask-and-confirm shape (_handle_test_confirm /
+    _handle_replan_confirm): parse, ask with an inline keyboard, write only on the
+    callback. It ASKS rather than assumes on the field that matters most — priority. An
+    athlete who says "I'm racing Dorney on Saturday" has not said how much it matters,
+    and an A/B/C guess would change how the whole plan tapers around it. The resolved
+    ABSOLUTE date is echoed back in the question, because a misread weekday is otherwise
+    invisible to the athlete."""
+    athlete = athletes.get(chat_id)
+    if not athlete:
+        return False
+    if not races_lib.looks_like_race_statement(text):
+        return False
+    parsed = races_lib.parse_race_message(text)
+    if not parsed["name"] or not parsed["date"]:
+        return False
+
+    when = date.fromisoformat(parsed["date"]).strftime("%a %-d %b %Y")
+    if parsed["priority"]:
+        _before = _a_race_date(athlete["slug"])
+        race = races_lib.add_race(athlete["slug"], parsed["name"], parsed["date"],
+                                  priority=parsed["priority"], source="told me in chat")
+        _after = _a_race_date(athlete["slug"])
+        send(token, chat_id,
+             _race_confirmation(race, when, _after if _after != _before else ""),
+             reply_markup=build_keyboard(athlete["slug"])) 
+        return True
+
+    _PENDING_RACE[chat_id] = {"parsed": parsed, "expiry": time.time() + _RACE_CAPTURE_TTL}
+    send(token, chat_id,
+         f"Got it — *{parsed['name']}*, {when}.\n\n"
+         "How does it rank? A is the one everything is built around, B is a tune-up you "
+         "want to go well, C is a training day with a number on. I won't guess this one.",
+         reply_markup={"inline_keyboard": [[
+             {"text": "A", "callback_data": "__RACE_PRI_A__"},
+             {"text": "B", "callback_data": "__RACE_PRI_B__"},
+             {"text": "C", "callback_data": "__RACE_PRI_C__"},
+             {"text": "Not sure yet", "callback_data": "__RACE_PRI_SKIP__"},
+         ]]})
+    return True
+
+
+def _a_race_date(slug):
+    """The athlete's current legacy race_date — the field the taper maths, the blueprint
+    and the countdown all key off."""
+    try:
+        return json.loads(ATHLETES_CONFIG.read_text()).get(slug, {}).get("race_date", "")
+    except Exception:
+        return ""
+
+
+def _race_confirmation(race, when, a_race_moved_to=""):
+    """Read the stored race back. Confirming what was WRITTEN, not what was parsed, so a
+    normalisation surprise shows up here rather than weeks later.
+
+    `a_race_moved_to` is spelled out loudly when set: naming a new A-race in chat
+    repoints `race_date`, and that is the field the taper maths and the whole plan are
+    built on. A change that big must never be a silent side effect of one message."""
+    pri = f"{race['priority']}-race" if race["priority"] else "priority still open"
+    msg = (f"Recorded: *{race['name']}* — {when}, {pri}.\n\n"
+           "Say the word if any of that is wrong.")
+    if a_race_moved_to:
+        msg += ("\n\n⚠️ That also made it your *A-race*, so the plan now counts down to "
+                f"{a_race_moved_to} instead. Tell me if that is not what you meant.")
+    return msg
+
+
+def _handle_race_priority(token, chat_id, data, message_id, athletes):
+    """The A/B/C answer to the question above. Returns True if handled."""
+    if not data.startswith("__RACE_PRI_"):
+        return False
+    athlete = athletes.get(chat_id)
+    pending = _PENDING_RACE.pop(chat_id, None)
+    if not athlete or not pending or time.time() > pending["expiry"]:
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id,
+                                  "That one timed out — tell me about the race again.")
+        return True
+    parsed = pending["parsed"]
+    pri = None if data == "__RACE_PRI_SKIP__" else data[len("__RACE_PRI_"):-2]
+    _before = _a_race_date(athlete["slug"])
+    try:
+        race = races_lib.add_race(athlete["slug"], parsed["name"], parsed["date"],
+                                  priority=pri, source="told me in chat")
+    except Exception as e:
+        log(f"[{athlete['slug']}] race capture failed: {e}")
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id,
+                                  "Couldn't save that race — nothing written.")
+        return True
+    when = date.fromisoformat(race["date"]).strftime("%a %-d %b %Y")
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id,
+                              f"Race saved — {race['priority'] or 'priority open'}")
+    _after = _a_race_date(athlete["slug"])
+    send(token, chat_id, _race_confirmation(race, when, _after if _after != _before else ""),
+         reply_markup=build_keyboard(athlete["slug"]))
+    return True
+
+
 def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
     """Handle replan confirmation/cancel callbacks. Returns True if handled."""
     if data not in ("__REPLAN_CONFIRM__", "__REPLAN_CANCEL__"):
@@ -4047,6 +4157,12 @@ def _route_text(token, chat_id, text, athletes, config):
                          cwd=config.get("project_dir"), start_new_session=True)
         return
 
+    # Race capture: "I'm racing X on Saturday" becomes structured data rather than
+    # prose in current-state.md. Placed before the generative reply so the athlete gets a
+    # deterministic confirmation of what was recorded, not a model's paraphrase of it.
+    if _handle_race_capture(token, chat_id, text, athletes):
+        return
+
     # Sticky voice-reply toggle: /voice [on|off] or the 🎙 menu button.
     _vt = text.strip().lower()
     if _vt == "/voice" or _vt.startswith("/voice ") or _vt == "🎙 voice":
@@ -4347,6 +4463,8 @@ def main():
                 if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
+                    continue
+                if _handle_race_priority(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_drill(token, chat_id, text, msg_id, athletes, config):
                     continue

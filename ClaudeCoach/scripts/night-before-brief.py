@@ -15,8 +15,23 @@ sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
 from progression import long_run_cap_km as _lr_cap
+import races as races_lib
 
 TOOLS = "Read,Bash"
+
+
+def _block_fact(athlete_cfg, today):
+    """One true fact about the work behind the race (§8.6 "name the work behind it").
+    Mirrors morning-checkin._block_fact; weeks since plan_start is the only such fact
+    available for every athlete without inventing one."""
+    ps = athlete_cfg.get("plan_start")
+    if not ps:
+        return ""
+    try:
+        weeks = (today - date.fromisoformat(ps)).days // 7
+    except Exception:
+        return ""
+    return f"You have {weeks} weeks of work behind you for this" if weeks >= 2 else ""
 
 
 def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries, long_run_cap_km=None):
@@ -130,6 +145,19 @@ def run_athlete(slug, athlete_cfg):
         long_run_cap = _lr_cap(events, session_log, _lr_classify)
     except Exception as exc:
         print(f"[{slug}] long-run cap pre-compute failed: {exc}", file=sys.stderr)
+
+    # Race eve. This is the surface §8.6 cares about most: "the night before is for
+    # confidence, not optimisation", and the single most important rule is to introduce
+    # NOTHING new. A generated brief cannot be held to that reliably, so on race eve the
+    # brief is replaced by a deterministic message. Every other night is untouched.
+    _races = races_lib.load_races(slug, {slug: athlete_cfg})
+    _phase = races_lib.race_phase(_races, date.today())
+    if _phase["phase"] == "race_eve":
+        notify(races_lib.render_pre_race(
+            _phase["race"], first_name, phase="race_eve",
+            block_fact=_block_fact(athlete_cfg, date.today()),
+            focus=profile.get("race_focus") or []), chat_id)
+        return
 
     prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries,
                            long_run_cap_km=long_run_cap)

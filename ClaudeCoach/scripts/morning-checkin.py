@@ -23,11 +23,12 @@ from primitives.nutrition import fuel_target, recent_avg_g_hr
 import ops_log
 import heat as heat_lib
 import menstrual as menstrual_lib
+import races as races_lib
 
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block=""):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -142,7 +143,7 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
 You are generating the morning briefing for {first_name}'s training day.
 
 {_level_block(coaching_level)}
-{recovery_block}{wellness_block}{cycle_block}{planned_section}{long_run_cap_block}{heat_block}
+{recovery_block}{wellness_block}{cycle_block}{planned_section}{race_block}{long_run_cap_block}{heat_block}
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
 
@@ -343,6 +344,22 @@ def _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level="mid")
         print(f"[morning chart] {e}", file=sys.stderr)
 
 
+def _block_fact(athlete_cfg, today):
+    """One true, already-computed fact about the work behind the race (§8.6 "name the
+    work behind it"). Weeks since plan_start is the only such fact available for every
+    athlete without inventing anything; no plan_start means no claim is made."""
+    ps = athlete_cfg.get("plan_start")
+    if not ps:
+        return ""
+    try:
+        weeks = (today - date.fromisoformat(ps)).days // 7
+    except Exception:
+        return ""
+    if weeks < 2:
+        return ""
+    return f"You have {weeks} weeks of work behind you for this"
+
+
 def run_athlete(slug, athlete_cfg):
     adir = BASE / f"athletes/{slug}"
     chat_id = athlete_cfg.get("chat_id", "")
@@ -386,6 +403,48 @@ def run_athlete(slug, athlete_cfg):
                 heat_accl_trend = " ↑" if _delta > 0 else " ↓"
         except Exception:
             pass
+
+    # Race-aware branch. Until now `race_date` was structured data that nothing
+    # branched on: on race morning this function rendered the ordinary training card
+    # with a 0 in the countdown (docs/tone-of-voice-guide.md §8.6/§8.7). On race day
+    # and the days just after, the card is REPLACED by a deterministic message rather
+    # than generated — §8.6's first rule is "do not introduce anything new", and a
+    # generative prompt on race morning is precisely how a new pacing target arrives
+    # at 06:30. Race-week and race-eve stay generative and only get a prompt block,
+    # because those days still carry a real session.
+    _races = races_lib.load_races(slug, {slug: athlete_cfg})
+    _phase = races_lib.race_phase(_races, date.today())
+    if _phase["phase"] in ("race_day", "race_completed"):
+        if _phase["phase"] == "race_day":
+            msg = races_lib.render_pre_race(
+                _phase["race"], first_name, phase="race_day",
+                block_fact=_block_fact(athlete_cfg, date.today()),
+                # Focus points must already be in the agreed race plan (§8.6: "every one
+                # must be something already trained and already agreed"), so they are
+                # READ from the profile and never generated. No athlete has this key yet,
+                # so nothing renders until someone curates it.
+                focus=profile.get("race_focus") or [])
+        else:
+            # good_day is left unknown on purpose: nothing in the system yet tells us
+            # whether the race went well, and §8.6 splits the good day from the bad one
+            # before writing a word. Unknown means ASK, not assume.
+            msg = races_lib.render_post_race(_phase["race"], first_name, good_day=None)
+        if notify(msg, chat_id, slug=slug):
+            sentinel.touch()
+            if _phase["phase"] == "race_completed":
+                # Mark AFTER a successful send so a failed send retries next run, and so
+                # the question is asked once rather than every morning in the window.
+                try:
+                    races_lib.mark_post_race_sent(slug, _phase["race"]["date"])
+                except Exception as exc:
+                    print(f"[{slug}] could not mark post-race sent: {exc}", file=sys.stderr)
+            ops_log.record_run("morning-checkin", athlete=slug, ok=True,
+                               detail=f"{_phase['phase']} message sent")
+            try:
+                _log_to_history(slug, msg)
+            except Exception:
+                pass
+        return
 
     try:
         rd = date.fromisoformat(race_date_str) if race_date_str else None
@@ -527,6 +586,7 @@ def run_athlete(slug, athlete_cfg):
     prompt = _build_prompt(slug, first_name, race_name, race_date_str, days_to_race, injuries, recovery,
                            wellness_line=wellness_line, heat_protocol=heat_protocol,
                            coaching_level=coaching_level, planned_block=planned_block,
+                           race_block=races_lib.prompt_block(_races, date.today()),
                            cycle=cycle,
                            fuel_target_g_hr=_fuel_target_g_hr,
                            nutrition_race=int(athlete_cfg.get("nutrition_target_g_hr") or 90),
