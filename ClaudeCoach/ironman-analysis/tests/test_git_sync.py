@@ -146,6 +146,10 @@ class TestRepoLock:
     the same tree, 26 Jul 2026). A lock we cannot get is a SKIP, not a failure."""
 
     def test_busy_lock_skips_without_touching_git(self, alerts, monkeypatch):
+        runs = []
+        monkeypatch.setattr(git_sync, "record_run",
+                            lambda script, athlete="", ok=True, detail="": runs.append((ok, detail)))
+
         class Busy:
             held = False
             def __enter__(self): return self
@@ -154,7 +158,11 @@ class TestRepoLock:
         fake = FakeGit({"diff": 1})
         assert _sync(fake) is True          # skip is not a failure
         assert fake.calls == []             # no git ran at all
-        assert any("skipped" in a for a in alerts)
+        # A wait-out must NOT be alerted: ops_log.alert writes an ok=False
+        # run-status entry and the 21:30 digest would report routine lock
+        # contention as a failure — the same noise class this work removes.
+        assert alerts == []
+        assert runs and runs[0][0] is True and "skipped" in runs[0][1]
 
     def test_lock_is_released_even_when_a_step_fails(self, alerts, tmp_path,
                                                      monkeypatch):

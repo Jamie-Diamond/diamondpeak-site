@@ -92,6 +92,12 @@ FOLD_PROSE_COVERAGE = 0.80
 # long rule the ratio always binds first, so this floor loosens nothing where the words
 # are plentiful.
 FOLD_PROSE_MIN_ALLOWANCE = 2
+# ...and only for rules long enough that the ratio alone is unreasonably strict. On a
+# SHORT rule the floor would be a hole, not a kindness: "Swim Tuesday and Thursday
+# mornings" -> "Swim Tuesday mornings" loses one content word out of four, which is a
+# dropped training day, not a rewording. Below this many content words the ratio binds
+# alone, so such a rule must be folded essentially word-complete.
+FOLD_PROSE_FLOOR_MIN_TOKENS = 6
 
 _DIGITS_RE = re.compile(r"\d+")
 
@@ -130,7 +136,8 @@ def _absorbs(removed_line: str, surviving_line: str) -> bool:
         rewording, and this is the half of the guard that stops figures moving; and
       * enough of the removed rule's content words appear in the survivor - at least
         FOLD_PROSE_COVERAGE of them, with a floor of FOLD_PROSE_MIN_ALLOWANCE words'
-        slack so short rules can still be reworded - so deleting a genuine fact fails.
+        slack once a rule has FOLD_PROSE_FLOOR_MIN_TOKENS content words - so deleting a
+        genuine fact fails, and a short rule must be folded essentially word-complete.
     A rule with no content words (a bare figure) has nothing to reword, so it falls back
     to the strict test."""
     r_sig = _sig_tokens(removed_line)
@@ -144,8 +151,9 @@ def _absorbs(removed_line: str, surviving_line: str) -> bool:
     if not r_content:
         return False
     missing = len(r_content - _content_tokens(surviving_line))
-    allowed = max(FOLD_PROSE_MIN_ALLOWANCE,
-                  int(len(r_content) * (1.0 - FOLD_PROSE_COVERAGE)))
+    allowed = int(len(r_content) * (1.0 - FOLD_PROSE_COVERAGE))
+    if len(r_content) >= FOLD_PROSE_FLOOR_MIN_TOKENS:
+        allowed = max(FOLD_PROSE_MIN_ALLOWANCE, allowed)
     return missing <= allowed
 
 

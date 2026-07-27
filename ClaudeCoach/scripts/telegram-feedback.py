@@ -197,17 +197,15 @@ def apply_feedback(entries: list, idx: int, parsed: dict, raw_text: str) -> dict
 
 
 def commit_and_push(session_log: Path):
+    """Commit + push via the shared helper so this pusher serialises with the
+    cron jobs on the repo-wide lock and gets the same one-shot push retry."""
+    from git_sync import sync_commit_push
     rel_path = str(session_log.relative_to(Path(PROJECT_DIR)))
-    for cmd in [
-        ["git", "add", rel_path],
-        ["git", "commit", "-m", f"feedback: Telegram reply {datetime.now().strftime('%Y-%m-%d')}"],
-        ["git", "fetch", "origin"],
-        ["git", "rebase", "--autostash", "origin/main"],
-        ["git", "push", "origin", "main"],
-    ]:
-        r = subprocess.run(cmd, cwd=PROJECT_DIR, capture_output=True, text=True)
-        if r.returncode != 0 and "nothing to commit" not in (r.stdout + r.stderr):
-            break
+    sync_commit_push(
+        [rel_path],
+        f"feedback: Telegram reply {datetime.now().strftime('%Y-%m-%d')}",
+        script="telegram-feedback",
+    )
 
 
 def confirmation_msg(stub: dict, parsed: dict) -> str:

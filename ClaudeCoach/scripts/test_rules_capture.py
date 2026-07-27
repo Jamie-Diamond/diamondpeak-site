@@ -194,6 +194,18 @@ class RewordedFoldTests(unittest.TestCase):
         self.assertEqual(new_text, before)
         self.assertTrue(drops[0][0].startswith("ABORT"))
 
+    def test_short_rule_losing_one_content_word_still_aborts(self):
+        """The relaxation must not become a hole on SHORT rules. Dropping "Thursday"
+        from a four-content-word rule is a lost training day, not a rewording, and the
+        two-word slack that makes medium rules foldable is gated off below
+        FOLD_PROSE_FLOOR_MIN_TOKENS so the ratio binds alone here."""
+        before = _lines("[perm] Swim Tuesday and Thursday mornings")
+        after = _lines("[perm] Swim Tuesday mornings")
+        self.assertFalse(rc._absorbs(before.strip(), after.strip()))
+        new_text, drops = rc.enforce_rule_guards(before, after, [])
+        self.assertEqual(new_text, before)
+        self.assertTrue(drops[0][0].startswith("ABORT"))
+
     def test_reworded_two_rule_merge_still_escalates(self):
         """The trap in relaxing the loss check: `is_multi_rule_merge` shares the same
         absorption predicate, so it must be relaxed in step. If only the fold invariant

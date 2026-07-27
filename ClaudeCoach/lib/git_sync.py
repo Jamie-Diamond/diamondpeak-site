@@ -29,7 +29,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from ops_log import alert
+from ops_log import alert, record_run
 
 PROJECT_DIR = str(Path(__file__).resolve().parent.parent.parent)  # diamondpeak-site/
 
@@ -152,8 +152,12 @@ def sync_commit_push(paths, message, script, athlete="", run=None) -> bool:
     try:
         with _RepoLock() as lock:
             if not lock.held:
-                alert(script, f"git sync skipped — another job held {LOCK_PATH} "
-                              f"for >{LOCK_WAIT}s; next run will retry", athlete=athlete)
+                # A wait-out is a SKIP, not a failure: the next tick redoes the work.
+                # Deliberately NOT `alert` — that writes an ok=False run-status entry,
+                # which the 21:30 ops digest reports as a failure, and lock contention
+                # between the */5 and hourly pushers would then be its own noise source.
+                record_run(script, athlete=athlete, ok=True,
+                           detail=f"git sync skipped — {LOCK_PATH} busy >{LOCK_WAIT}s")
                 return True
 
             # Stage individually — a missing pathspec (e.g. an athlete with no

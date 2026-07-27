@@ -1495,17 +1495,16 @@ def _power_curve_quick(token, chat_id, slug):
 
 
 def _git_commit(msg):
+    """Commit + push via the shared helper (lib/git_sync.py).
+
+    The bot is a persistent service, so this ran concurrently with every cron
+    tick in the SAME working tree - a pusher outside the repo-wide lock is
+    exactly what produces ".git/index.lock: File exists". sync_commit_push takes
+    that lock, retries a push lost to a race once, and is loud when a push is
+    genuinely broken (this path used to swallow every failure silently)."""
     try:
-        subprocess.run(["git", "add", "ClaudeCoach/"],
-                       cwd=str(PROJECT_DIR), capture_output=True)
-        r = subprocess.run(["git", "commit", "-m", msg],
-                           cwd=str(PROJECT_DIR), capture_output=True)
-        if r.returncode != 0:
-            return  # nothing to commit — skip push
-        subprocess.run(["git", "pull", "--rebase", "origin", "main"],
-                       cwd=str(PROJECT_DIR), capture_output=True)
-        subprocess.run(["git", "push", "origin", "main"],
-                       cwd=str(PROJECT_DIR), capture_output=True)
+        from git_sync import sync_commit_push
+        sync_commit_push(["ClaudeCoach/"], msg, script="telegram-bot")
     except Exception as e:
         log(f"git commit error: {e}")
 
