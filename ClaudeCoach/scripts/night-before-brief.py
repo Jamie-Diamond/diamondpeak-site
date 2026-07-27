@@ -15,9 +15,32 @@ sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
 from progression import long_run_cap_km as _lr_cap
+from primitives.nutrition import recent_avg_g_hr
 import races as races_lib
 
 TOOLS = "Read,Bash"
+
+
+def _race_focus(slug, profile, athlete_cfg):
+    """Focus points for the pre-race message: a curated profile.json race_focus list if
+    there is one, otherwise derived from the athlete's own standing rules and logged
+    fuelling (lib/races.py derive_focus). Every failure mode degrades to NO focus points
+    rather than to a guess — an empty list simply drops that sentence from the message."""
+    try:
+        rules_f = BASE / f"athletes/{slug}/persistent-rules.md"
+        rules = rules_f.read_text() if rules_f.exists() else ""
+        avg = None
+        try:
+            log_f = BASE / f"athletes/{slug}/session-log.json"
+            if log_f.exists():
+                avg = recent_avg_g_hr(json.loads(log_f.read_text()))
+        except Exception:
+            pass
+        return races_lib.focus_for(profile, rules, avg,
+                                   athlete_cfg.get("nutrition_target_g_hr"))
+    except Exception as exc:
+        print(f"[{slug}] race focus derivation failed: {exc}", file=sys.stderr)
+        return []
 
 
 def _block_fact(athlete_cfg, today):
@@ -156,7 +179,7 @@ def run_athlete(slug, athlete_cfg):
         notify(races_lib.render_pre_race(
             _phase["race"], first_name, phase="race_eve",
             block_fact=_block_fact(athlete_cfg, date.today()),
-            focus=profile.get("race_focus") or []), chat_id)
+            focus=_race_focus(slug, profile, athlete_cfg)), chat_id)
         return
     if _phase["phase"] == "race_day":
         # 20:30 on the EVENING OF the race. Nothing is sent: a generated session brief

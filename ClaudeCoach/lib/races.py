@@ -439,6 +439,188 @@ def icu_race_events(client, start: str, end: str) -> list:
     return out
 
 
+# -- Deriving the pre-race focus points ---------------------------------------
+# §8.6 allows at most three things to focus on, and "every one must be something already
+# trained and already agreed". Jamie asked for these to be worked out from his training and
+# nutrition history rather than curated by hand.
+#
+# HOW THIS CANNOT INVENT A NUMBER, in three layers:
+#
+# 1. Nothing is generated at runtime. The focus lines are a FIXED CATALOGUE of pre-authored
+#    sentences. The only decision made at run time is which of them the athlete's own data
+#    supports. There is no Claude call on this path — a generative step at 20:30 on race eve
+#    is precisely the failure §8.6 warns about, and selection from a fixed set gives the same
+#    relevance with none of the exposure.
+# 2. Every line is QUALITATIVE and contains no figures at all. §8.6 also says "no numbers
+#    unless the athlete asks for them", so the right reading of "derive it from the fuelling
+#    rate" is that the rate decides WHICH reminder is relevant, not that the rate gets
+#    printed. A measured g/hr is a training fact, not a race-eve instruction.
+# 3. `_FOCUS_DIGIT_RE` re-checks every selected line and DROPS any that contains a digit,
+#    recording it as suppressed. Layer 3 is redundant while layer 1 holds, which is the
+#    point: it is what stops a future edit to the catalogue from quietly reintroducing a
+#    figure. It is asserted directly in the tests.
+#
+# Each candidate carries its provenance, and suppressed candidates are returned WITH the
+# reason, so "why did this point appear" is answerable without re-deriving it by hand.
+
+_FOCUS_DIGIT_RE = re.compile(r"\d")
+
+# (id, rank, text, why-template). Lower rank = offered first. Ranking is by what the
+# athlete's own history says the thing has COST them, not by topic tidiness.
+FOCUS_CATALOGUE = [
+    ("pace_first_half", 10,
+     "hold the first stretch back — last time the time went late, not early",
+     "past race notes record a late fade"),
+    ("run_patience", 20,
+     "start the run slower than it feels you should",
+     "past race notes record the run coming apart in the back half"),
+    ("fuel_front_load", 30,
+     "first feed early, then something regularly from the start — not saved for the climbs",
+     "a standing rule of the athlete's own sets front-loaded fuelling as the agreed fix"),
+    ("fuel_take_it_on", 35,
+     "take fuel on steadily from the start — it is what your rides have been short of",
+     "a standing rule asks for race-nutrition risk to be flagged, and logged rides run low"),
+    ("run_fuel", 40,
+     "keep taking carbs on the run, not only on the bike",
+     "a standing rule names run fuelling as the open focus"),
+    ("caffeine_spread", 50,
+     "spread the caffeine rather than stacking it before the swim",
+     "a standing rule set after the last race asks for spread dosing"),
+    ("electrolyte_every_bottle", 55,
+     "a tab in every bottle, not just some",
+     "a standing rule set after a confirmed cramping episode"),
+    ("hr_anchor", 60,
+     "let the power be whatever it is at your race heart rate",
+     "a standing rule anchors race pacing to heart rate rather than a power figure"),
+    ("transitions", 70,
+     "transitions calm, in the order you have drilled",
+     "past race transitions ran slower than the agreed plan"),
+    ("ride_to_feel", 80,
+     "ride to feel, not to the numbers",
+     "a standing rule makes ride-to-feel the default for this event"),
+]
+
+
+def _mmss_seconds(v):
+    """Seconds from a loose time string: 'm:ss' ('~10:00', '≤5:30') or bare minutes
+    ('~5 min'). None if it does not look like either.
+
+    Both forms are needed because the two fields being compared are written differently by
+    hand: one athlete's target transition time is "≤5:30" and another's is "~5 min". Reading
+    only the colon form silently returned None for the second and dropped a valid focus
+    point. Used only to COMPARE a past race with the agreed target — never rendered."""
+    if not isinstance(v, str):
+        return None
+    m = re.search(r"(\d{1,2}):(\d{2})", v)
+    if m:
+        return int(m.group(1)) * 60 + int(m.group(2))
+    m = re.search(r"(\d{1,3})\s*(?:min|mins|minutes)\b", v, re.I)
+    if m:
+        return int(m.group(1)) * 60
+    return None
+
+
+def derive_focus(profile: dict, rules_text: str = "", avg_g_hr=None,
+                 race_target_g_hr=None) -> tuple:
+    """Up to three already-practised things to focus on, derived from the athlete's own
+    history and standing rules. Returns (selected, suppressed).
+
+    PURE: takes data in and reads nothing from disk, imports nothing outside the stdlib.
+    The caller supplies `avg_g_hr` (from primitives.nutrition.recent_avg_g_hr) because
+    importing that here would make `lib/races.py` unimportable without the
+    ironman-analysis path on sys.path.
+
+    `selected` is [{"id", "text", "why"}], ranked. `suppressed` is [{"id", "reason"}] and
+    exists so the decision is auditable — a point NOT offered is as interesting as one that
+    is, particularly when a standing rule is what silenced it."""
+    prof = profile or {}
+    rules = (rules_text or "").lower()
+    prev = prof.get("prev_race") or {}
+    prev_notes = (prev.get("notes") or "").lower()
+    targets = prof.get("race_targets") or {}
+    bike_how = (targets.get("bike_how") or "").lower()
+
+    def has(*needles):
+        return any(n in rules for n in needles)
+
+    fired, suppressed = {}, []
+
+    # A standing rule may forbid the very comparison a candidate rests on. Jamie's fuelling
+    # rule is the live case: the 90 g/hr race target is explicitly "NOT a training minimum -
+    # do not flag or compare easy/Z2 nutrition to it", and his bike capacity is separately
+    # recorded as proven. So an under-fuelling nudge built from his Z2 training average
+    # would be both rule-breaking and wrong on the merits.
+    fuel_compare_blocked = has("not a training minimum", "do not flag or compare")
+
+    # -- pacing / execution, from the PAST RACE's own notes -----------------------------
+    if any(w in prev_notes for w in ("fade", "decoupl")) or "first 90 min" in bike_how:
+        fired["pace_first_half"] = "prev_race.notes / race_targets.bike_how"
+    if any(w in prev_notes for w in ("walk-break", "walk break", "walk breaks")):
+        fired["run_patience"] = "prev_race.notes"
+
+    # -- fuelling ----------------------------------------------------------------------
+    if has("front-load carbs", "front-load the carbs", "front-loading"):
+        fired["fuel_front_load"] = "persistent-rules.md (front-loaded fuelling rule)"
+    if has("flag race-day nutrition risk"):
+        if fuel_compare_blocked:
+            suppressed.append({"id": "fuel_take_it_on",
+                               "reason": "a standing rule forbids comparing training "
+                                         "nutrition to the race target"})
+        elif avg_g_hr is not None and race_target_g_hr and avg_g_hr < float(race_target_g_hr) * 0.85:
+            fired["fuel_take_it_on"] = ("persistent-rules.md (flag nutrition risk) + "
+                                        "logged fuelling below the race rate")
+    if has("open focus is run fuelling", "the open focus is run"):
+        fired["run_fuel"] = "persistent-rules.md (run fuelling is the open focus)"
+
+    # -- habits the athlete has already agreed with themselves -------------------------
+    if "caffeine" in rules and has("do not front-load all caffeine", "front-load all caffeine",
+                                   "spread any remaining caffeine"):
+        fired["caffeine_spread"] = "persistent-rules.md (race-day caffeine dosing rule)"
+    if "electrolyte" in rules and has("every bottle"):
+        fired["electrolyte_every_bottle"] = "persistent-rules.md (electrolyte rule)"
+    if has("anchor race-day bike pacing", "rather than to %ftp", "anchor race-day bike"):
+        fired["hr_anchor"] = "persistent-rules.md (HR-anchored race pacing rule)"
+    if has("ride-to-feel", "ride to feel"):
+        fired["ride_to_feel"] = "persistent-rules.md (ride-to-feel default)"
+
+    # -- transitions: only when the PAST race was slower than the AGREED target ---------
+    prev_t = _mmss_seconds(prev.get("t1t2_time"))
+    targ_t = _mmss_seconds(targets.get("t1t2_time"))
+    if prev_t and targ_t and prev_t > targ_t:
+        fired["transitions"] = "prev_race.t1t2_time slower than race_targets.t1t2_time"
+    elif any(w in prev_notes for w in ("transition", "race number")):
+        fired["transitions"] = "prev_race.notes record trouble in transition"
+
+    selected = []
+    for cid, _rank, text, why in sorted(FOCUS_CATALOGUE, key=lambda c: c[1]):
+        if cid not in fired:
+            continue
+        # Layer 3 of the no-new-numbers guarantee. Redundant while the catalogue stays
+        # qualitative — which is exactly why it is here: it fails closed if that changes.
+        if _FOCUS_DIGIT_RE.search(text):
+            suppressed.append({"id": cid,
+                               "reason": "focus text contains a figure; a pre-race focus "
+                                         "point must carry no numbers (§8.6)"})
+            continue
+        if len(selected) >= 3:
+            suppressed.append({"id": cid, "reason": "over the three-point cap (§8.6)"})
+            continue
+        selected.append({"id": cid, "text": text, "why": f"{why} — {fired[cid]}"})
+    return selected, suppressed
+
+
+def focus_for(profile: dict, rules_text: str = "", avg_g_hr=None,
+              race_target_g_hr=None) -> list:
+    """The focus STRINGS for `render_pre_race`. A curated `race_focus` list in profile.json
+    wins outright — a human who has written the points down has said what matters better
+    than any derivation will, and the override is the documented way to say so."""
+    curated = [str(f) for f in (profile or {}).get("race_focus") or [] if str(f).strip()]
+    if curated:
+        return curated[:3]
+    selected, _ = derive_focus(profile, rules_text, avg_g_hr, race_target_g_hr)
+    return [f["text"] for f in selected]
+
+
 # -- Athlete-facing wording ---------------------------------------------------
 # docs/tone-of-voice-guide.md §8.6 is the specification these two render. The rules that
 # shape the code, not just the prose: pre-race introduces NOTHING new and carries no
@@ -454,8 +636,12 @@ def render_pre_race(race: dict, first_name: str, phase: str = "race_eve",
 
     `block_fact` is one specific already-true fact about the work behind the race (§8.6
     "name the work behind it"). `focus` is up to three reminders, and every one must
-    already be in the agreed race plan — the caller passes them in precisely so this
-    function cannot invent one."""
+    already be in the agreed race plan — see `derive_focus` for how they are produced
+    without inventing anything, or pass a curated list.
+
+    A focus point carrying a DIGIT is dropped here as well as in `derive_focus`. This is
+    the boundary a curated `profile.json` race_focus list also comes through, and a
+    hand-written "hold 250 W" would be a race-eve number the athlete did not ask for."""
     name = race.get("name") or "your race"
     lines = []
     if phase == "race_day":
@@ -464,10 +650,13 @@ def render_pre_race(race: dict, first_name: str, phase: str = "race_eve",
         lines.append(f"{name} tomorrow, {first_name}.")
     if block_fact:
         lines.append(block_fact.strip().rstrip(".") + ".")
-    picked = [f.strip().rstrip(".") for f in (focus or []) if f and f.strip()][:3]
+    picked = [f.strip().rstrip(".") for f in (focus or [])
+              if f and f.strip() and not _FOCUS_DIGIT_RE.search(f)][:3]
     if picked:
-        lines.append("Three things, all of them things you've already done: "
-                     + "; ".join(picked) + ".")
+        lead = {1: "One thing, already done before:",
+                2: "Two things, both already done before:",
+                3: "Three things, all already done before:"}[len(picked)]
+        lines.append(lead + " " + "; ".join(picked) + ".")
     lines.append("Nothing new today — the plan is the plan. Good luck.")
     return "\n\n".join(lines)
 

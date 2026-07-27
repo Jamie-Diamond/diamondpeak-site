@@ -344,6 +344,28 @@ def _send_morning_load_chart(chat_id, slug, wellness_rows, coaching_level="mid")
         print(f"[morning chart] {e}", file=sys.stderr)
 
 
+def _race_focus(slug, profile, athlete_cfg):
+    """Focus points for the pre-race message: a curated profile.json race_focus list if
+    there is one, otherwise derived from the athlete's own standing rules and logged
+    fuelling (lib/races.py derive_focus). Every failure mode degrades to NO focus points
+    rather than to a guess — an empty list simply drops that sentence from the message."""
+    try:
+        rules_f = BASE / f"athletes/{slug}/persistent-rules.md"
+        rules = rules_f.read_text() if rules_f.exists() else ""
+        avg = None
+        try:
+            log_f = BASE / f"athletes/{slug}/session-log.json"
+            if log_f.exists():
+                avg = recent_avg_g_hr(json.loads(log_f.read_text()))
+        except Exception:
+            pass
+        return races_lib.focus_for(profile, rules, avg,
+                                   athlete_cfg.get("nutrition_target_g_hr"))
+    except Exception as exc:
+        print(f"[{slug}] race focus derivation failed: {exc}", file=sys.stderr)
+        return []
+
+
 def _block_fact(athlete_cfg, today):
     """One true, already-computed fact about the work behind the race (§8.6 "name the
     work behind it"). Weeks since plan_start is the only such fact available for every
@@ -423,7 +445,7 @@ def run_athlete(slug, athlete_cfg):
                 # must be something already trained and already agreed"), so they are
                 # READ from the profile and never generated. No athlete has this key yet,
                 # so nothing renders until someone curates it.
-                focus=profile.get("race_focus") or [])
+                focus=_race_focus(slug, profile, athlete_cfg))
         else:
             # good_day is left unknown on purpose: nothing in the system yet tells us
             # whether the race went well, and §8.6 splits the good day from the bad one

@@ -251,9 +251,21 @@ class TestWording:
         assert "Good luck" in m
         assert len(m.split()) < 80
 
-    def test_pre_race_introduces_no_numbers(self):
+    def test_pre_race_body_carries_no_numbers_of_its_own(self):
+        # Named precisely: the TEMPLATE contributes no figures. block_fact is excluded
+        # deliberately — §8.6's own worked example for "name the work behind it" is
+        # "You've done sixteen weeks and four rides over four hours for this", so the
+        # week count is sanctioned there. The focus points are held to digit-free
+        # separately (TestDerivedFocusCannotInventANumber).
         m = races.render_pre_race(races.normalise(A_RACE), "Jamie")
         assert not any(ch.isdigit() for ch in m)
+
+    def test_focus_sentence_adapts_to_one_two_or_three_points(self):
+        r = races.normalise(A_RACE)
+        assert "One thing" in races.render_pre_race(r, "Jamie", focus=["a b"])
+        assert "Two things" in races.render_pre_race(r, "Jamie", focus=["a b", "c d"])
+        assert "Three things" in races.render_pre_race(r, "Jamie",
+                                                      focus=["a b", "c d", "e f"])
 
     def test_pre_race_caps_focus_at_three_and_invents_none(self):
         m = races.render_pre_race(races.normalise(A_RACE), "Jamie",
@@ -346,3 +358,118 @@ class TestQuestionsAreNotRaceAnnouncements:
 
     def test_a_real_announcement_still_works(self):
         assert races.looks_like_race_statement("I'm racing Dorney on Saturday", self.MON)
+
+
+class TestDerivedFocusCannotInventANumber:
+    """The hard constraint. Three independent layers, each asserted separately, so the
+    guarantee does not rest on any one of them holding."""
+
+    def test_layer1_every_catalogue_line_is_digit_free(self):
+        # Nothing is generated at run time: the lines are a fixed catalogue. If a future
+        # edit puts a figure in one, this fails before it can ever reach an athlete.
+        for cid, _rank, text, _why in races.FOCUS_CATALOGUE:
+            assert not any(c.isdigit() for c in text), f"{cid} carries a figure: {text!r}"
+
+    def test_layer1_catalogue_ids_and_ranks_are_unique(self):
+        ids = [c[0] for c in races.FOCUS_CATALOGUE]
+        ranks = [c[1] for c in races.FOCUS_CATALOGUE]
+        assert len(set(ids)) == len(ids)
+        assert len(set(ranks)) == len(ranks)      # ranking must be total, not arbitrary
+
+    def test_layer3_a_catalogue_line_with_a_figure_is_dropped_not_shipped(self, monkeypatch):
+        # Simulate the future regression layer 3 exists to catch.
+        poisoned = [("pace_first_half", 10, "hold 250 W for the first hour", "why")]
+        monkeypatch.setattr(races, "FOCUS_CATALOGUE", poisoned)
+        prof = {"prev_race": {"notes": "Lap 2 fade, decoupling 14.5%"}}
+        sel, sup = races.derive_focus(prof, "")
+        assert sel == []
+        assert any(s["id"] == "pace_first_half" and "no numbers" in s["reason"]
+                   for s in sup)
+
+    def test_layer3_render_drops_a_curated_focus_point_carrying_a_figure(self):
+        # The override path: a hand-written race_focus list comes through render, so the
+        # guard has to sit there too.
+        m = races.render_pre_race(races.normalise(A_RACE), "Jamie",
+                                  focus=["hold 250 W on the climb", "stay calm"])
+        assert "250" not in m
+        assert "stay calm" in m
+
+    def test_no_derived_message_contains_a_digit_in_its_focus_sentence(self):
+        prof = {"prev_race": {"notes": "fade, walk-breaks from km 13",
+                              "t1t2_time": "~10:00"},
+                "race_targets": {"t1t2_time": "5:30"}}
+        sel, _ = races.derive_focus(prof, "", avg_g_hr=30, race_target_g_hr=90)
+        for f in sel:
+            assert not any(c.isdigit() for c in f["text"])
+
+
+class TestFocusEvidenceGating:
+    def test_no_evidence_means_no_points_rather_than_padding(self):
+        sel, _ = races.derive_focus({}, "")
+        assert sel == []
+
+    def test_a_standing_rule_can_suppress_a_fuel_point(self):
+        # Jamie's live case: his race target is explicitly not a training minimum, and his
+        # bike capacity is separately recorded as proven, so an under-fuelling nudge built
+        # from a Z2 training average must not fire.
+        rules = ("[perm] Race fuelling = 90 g/hr race-day target (NOT a training minimum - "
+                 "do not flag or compare easy/Z2 nutrition to it). "
+                 "[perm] Fuelling habit: flag race-day nutrition risk when relevant.")
+        sel, sup = races.derive_focus({}, rules, avg_g_hr=40, race_target_g_hr=90)
+        assert all(f["id"] != "fuel_take_it_on" for f in sel)
+        assert any(s["id"] == "fuel_take_it_on" and "standing rule forbids" in s["reason"]
+                   for s in sup)
+
+    def test_the_same_fuel_point_fires_when_no_rule_forbids_it(self):
+        rules = "[perm] Fuelling habit: 0 g carbs/hour on rides - flag race-day nutrition risk when relevant."
+        sel, _ = races.derive_focus({}, rules, avg_g_hr=10, race_target_g_hr=70)
+        assert any(f["id"] == "fuel_take_it_on" for f in sel)
+
+    def test_fuel_point_does_not_fire_when_intake_is_already_near_target(self):
+        rules = "[perm] flag race-day nutrition risk when relevant."
+        sel, _ = races.derive_focus({}, rules, avg_g_hr=68, race_target_g_hr=70)
+        assert all(f["id"] != "fuel_take_it_on" for f in sel)
+
+    def test_capped_at_three_with_the_overflow_recorded(self):
+        prof = {"prev_race": {"notes": "fade; walk-breaks; lost the race number in transition",
+                              "t1t2_time": "10:00"},
+                "race_targets": {"t1t2_time": "5:30"}}
+        rules = ("[perm] do not front-load all caffeine before the swim. "
+                 "[perm] anchor race-day bike pacing to a HR ceiling. "
+                 "[perm] the open focus is run fuelling.")
+        sel, sup = races.derive_focus(prof, rules)
+        assert len(sel) == 3
+        assert any("three-point cap" in s["reason"] for s in sup)
+
+    def test_ranked_by_what_it_cost_not_by_catalogue_order(self):
+        prof = {"prev_race": {"notes": "fade", "t1t2_time": "10:00"},
+                "race_targets": {"t1t2_time": "5:30"}}
+        sel, _ = races.derive_focus(prof, "")
+        assert [f["id"] for f in sel] == ["pace_first_half", "transitions"]
+
+    def test_transition_target_written_as_bare_minutes_is_read(self):
+        # "~5 min" vs "≤5:30": the two athletes write this field differently by hand.
+        assert races._mmss_seconds("~5 min") == 300
+        assert races._mmss_seconds("≤5:30") == 330
+        assert races._mmss_seconds("no idea") is None
+
+    def test_transitions_does_not_fire_when_the_past_race_beat_the_target(self):
+        prof = {"prev_race": {"t1t2_time": "4:00"}, "race_targets": {"t1t2_time": "5:30"}}
+        sel, _ = races.derive_focus(prof, "")
+        assert all(f["id"] != "transitions" for f in sel)
+
+
+class TestCuratedOverride:
+    def test_curated_race_focus_wins_over_derivation(self):
+        prof = {"race_focus": ["swim straight", "eat early"],
+                "prev_race": {"notes": "fade"}}
+        assert races.focus_for(prof, "") == ["swim straight", "eat early"]
+
+    def test_derivation_used_when_nothing_is_curated(self):
+        prof = {"prev_race": {"notes": "fade"}}
+        assert races.focus_for(prof, "") == [
+            "hold the first stretch back — last time the time went late, not early"]
+
+    def test_curated_list_is_also_capped_at_three(self):
+        prof = {"race_focus": ["a", "b", "c", "d"]}
+        assert len(races.focus_for(prof, "")) == 3
