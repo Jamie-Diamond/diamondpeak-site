@@ -62,10 +62,35 @@ RULE_COUNT_CEILING = 90
 # A standing-rule line in persistent-rules.md: "[perm] ..." or "[expires:YYYY-MM-DD] ...".
 _RULE_LINE_RE = re.compile(r"^\s*\[(perm|expires:[^\]]*)\]", re.I)
 
-# Markers on a [perm] rule that mean Jamie has explicitly locked the preference in - a
-# proposed rule must never contradict one of these.
+# Markers on a [perm] rule that mean the athlete has explicitly locked the preference in -
+# a proposed rule must never contradict one of these, and the capture guard must never let
+# one be rewritten away.
 _CONFIRMED_MARKERS = ("reconfirm", "explicitly reject", "rejects", "do not stop asking",
                       "do not suppress", "never regress", "jamie said")
+
+# ...plus the form the rules files ACTUALLY use, which none of the literals above matched.
+# "reconfirm" appears ZERO times across all 144 standing rules, so _confirmed_preferences
+# returned an effectively empty list and BOTH protections built on it - the capture guard's
+# "never rewrite a confirmed preference" branch and the append-time contradiction check -
+# were vacuous in production. What the rules really carry is a provenance clause:
+# "Confirmed 21 Jul 2026", "Confirmed by Jamie 12 Jul 2026", "(confirmed 19 Jul 2026)",
+# "Kathryn confirmed 11 Jul 2026".
+#
+# Anchored to a DATE on purpose. A bare "confirm" substring would be badly wrong: it also
+# appears in ordinary rule prose ("confirm actual intake directly with Kathryn", "then
+# confirm in one short line", "the athlete has not confirmed"), in an instruction not to
+# act ("Confirm with Jamie before deleting anything"), and - worst - inside UNCONFIRMED,
+# which would lock a rule that explicitly says its figure is NOT confirmed. Requiring the
+# word immediately before a date excludes all 16 such lines and keeps the 20 real ones.
+_CONFIRMED_DATE_RE = re.compile(
+    r"\bconfirmed\b(?:\s+by\s+[A-Za-z]+)?\s*[,:]?\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}", re.I)
+
+
+def _is_confirmed_rule(line: str) -> bool:
+    """True if a standing-rule line carries an explicit lock-in marker. Split out from
+    _confirmed_preferences so it can be unit-tested without an athlete file on disk."""
+    low = line.lower()
+    return any(m in low for m in _CONFIRMED_MARKERS) or bool(_CONFIRMED_DATE_RE.search(line))
 
 # Negation cues that start a prohibition inside a confirmed preference ("do not X",
 # "never X"). The deterministic conflict backstop treats the content words that FOLLOW
@@ -142,16 +167,18 @@ def _load_rule_surface(slug: str) -> dict:
 
 
 def _confirmed_preferences(slug: str) -> list:
-    """The [perm] rules Jamie has explicitly locked in (RECONFIRMED / 'explicitly rejects'
-    / 'do not suppress' / equivalents). A proposed rule must not contradict these - this is
-    what the 'Logged.' rule violated (it fought his stated preference to keep asking)."""
+    """The [perm] rules the athlete has explicitly locked in - either a literal marker
+    ('explicitly rejects' / 'do not suppress' / equivalents) or, far more commonly, a dated
+    confirmation clause ('Confirmed by Jamie 12 Jul 2026'). A proposed rule must not
+    contradict these - this is what the 'Logged.' rule violated (it fought his stated
+    preference to keep asking) - and the capture guard must not rewrite one away."""
     p = _rules_path(slug)
     if not p.exists():
         return []
     out = []
     for ln in p.read_text().splitlines():
         s = ln.strip()
-        if _RULE_LINE_RE.match(s) and any(m in s.lower() for m in _CONFIRMED_MARKERS):
+        if _RULE_LINE_RE.match(s) and _is_confirmed_rule(s):
             out.append(s)
     return out
 

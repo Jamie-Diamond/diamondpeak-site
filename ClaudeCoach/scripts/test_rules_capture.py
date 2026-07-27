@@ -228,6 +228,65 @@ class RewordedFoldTests(unittest.TestCase):
         self.assertEqual(drops, [])
 
 
+class ConfirmedMarkerTests(unittest.TestCase):
+    """Which standing rules count as explicitly locked in.
+
+    This was silently broken: _CONFIRMED_MARKERS looked for "reconfirm", which appears
+    ZERO times across the real rules, so _confirmed_preferences returned an empty list and
+    BOTH protections built on it - the capture guard's "never rewrite a confirmed
+    preference" branch and the append-time contradiction check - were vacuous in
+    production. The real form is a dated confirmation clause.
+
+    Fixtures are synthetic (this repo is public and athletes/ is gitignored), but each
+    mirrors a shape that occurs in the live files."""
+
+    def _confirmed(self, line):
+        return rc.bug_fixer._is_confirmed_rule(line)
+
+    def test_dated_confirmation_clauses_are_locks(self):
+        for line in [
+            "[perm] Report Form as final once synced. Confirmed 21 Jul 2026.",
+            "[perm] Descents are ridden however is safe. Confirmed by Jamie 12 Jul 2026.",
+            "[perm] Ride to HR, not %FTP (confirmed 19 Jul 2026).",
+            "[perm] Never blend the two figures (Kathryn confirmed 11 Jul 2026 after confusion).",
+        ]:
+            self.assertTrue(self._confirmed(line), line)
+
+    def test_incidental_uses_of_confirm_are_not_locks(self):
+        """The reason the marker is anchored to a date. Each of these occurs in the live
+        rules and must NOT lock the rule."""
+        for line in [
+            # an instruction to seek confirmation, not a record of one
+            "[perm] Confirm with Jamie before deleting anything, since deletes are irreversible.",
+            "[perm] Confirm actual intake directly with Kathryn before including it.",
+            # ordinary prose about data being confirmed
+            "[perm] Once the day's only activity is confirmed synced, state the figures directly.",
+            "[perm] Never guess kit the athlete has not confirmed - leave it blank or ask.",
+            "[perm] Include any athlete-confirmed nutrition data (carbs g + g/hr).",
+            # the dangerous one: a substring match would lock a rule that says the OPPOSITE
+            "[perm] Run threshold pace is an UNCONFIRMED working estimate of 5:00/km, "
+            "given by Kathryn 22 Jul 2026, NOT field-tested.",
+        ]:
+            self.assertFalse(self._confirmed(line), line)
+
+    def test_literal_markers_still_match(self):
+        """The pre-existing literals stay - dropping them would silently unprotect the one
+        live rule that matches on 'do not suppress'."""
+        self.assertTrue(self._confirmed("[perm] Do not suppress the appetite prompt"))
+        self.assertTrue(self._confirmed("[perm] RECONFIRMED: keep asking about sleep"))
+
+    def test_a_dated_confirmed_rule_is_now_protected_end_to_end(self):
+        """The point of the fix: with the marker matching, rewriting a confirmed
+        preference aborts the whole write instead of sailing through."""
+        rule = "[perm] Only flag Form when it is outside the normal range. Confirmed 21 Jul 2026."
+        before = _lines(rule)
+        after = _lines("[perm] Flag Form whenever it is negative. Confirmed 21 Jul 2026.")
+        new_text, drops = rc.enforce_rule_guards(before, after, [rule])
+        self.assertEqual(new_text, before)
+        self.assertTrue(drops[0][0].startswith("ABORT"))
+        self.assertIn("confirmed preference", drops[0][0])
+
+
 class AppendGuardTests(unittest.TestCase):
     """Pre-existing (unchanged) append-only guard behaviour: conflict / dup / ceiling."""
 
