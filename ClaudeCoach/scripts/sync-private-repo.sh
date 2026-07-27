@@ -64,7 +64,7 @@ git -C "$PRIV" rm --cached --quiet config/athletes.json 2>/dev/null || true
 git -C "$PRIV" add -A athletes .gitignore
 if git -C "$PRIV" diff --cached --quiet; then
   echo "[sync-private] no changes $TS"
-  git_sync_ok
+  git_sync_ok "sync-private"
   exit 0
 fi
 
@@ -86,7 +86,7 @@ git -C "$PRIV" commit -q -m "athlete-data sync $(date +%Y-%m-%d)"
 # local branch is 'master', remote deploy branch is 'main' - push HEAD explicitly.
 if git -C "$PRIV" push -q origin HEAD:main; then
   echo "[sync-private] pushed $TS ($(git -C "$PRIV" rev-parse --short HEAD))"
-  git_sync_ok
+  git_sync_ok "sync-private"
 else
   git_sync_fail "sync-private" "push to dpc_private failed - committed locally, will retry next run"
 fi

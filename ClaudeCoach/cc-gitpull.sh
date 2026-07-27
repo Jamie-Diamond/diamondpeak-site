@@ -45,7 +45,7 @@ if ! git merge origin/main --no-edit; then
   exit 1
 fi
 if git_push_retry "cc-gitpull" merge; then
-  git_sync_ok
+  git_sync_ok "cc-gitpull"
 else
   git_sync_fail "cc-gitpull" "push to origin/main failed after one retry - commits accumulating locally"
   exit 1

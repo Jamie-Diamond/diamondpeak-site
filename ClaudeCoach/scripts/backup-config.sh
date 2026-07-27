@@ -41,7 +41,7 @@ trap git_unlock EXIT
 git add -- ClaudeCoach/config/athletes.json.enc
 if git diff --cached --quiet -- ClaudeCoach/config/athletes.json.enc; then
   echo "[backup-config] athletes.json.enc unchanged - nothing to commit"
-  git_sync_ok
+  git_sync_ok "backup-config"
   echo "[backup-config] done $(date)"
   exit 0
 fi
@@ -60,7 +60,7 @@ if ! git rebase --autostash origin/main; then
   exit 1
 fi
 if git_push_retry "backup-config"; then
-  git_sync_ok
+  git_sync_ok "backup-config"
 else
   git_sync_fail "backup-config" "push to origin/main failed after one retry - .enc backup committed locally only"
   exit 1

@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
-Evening ops digest — coach-only. Runs via VM crontab at 21:30 daily.
+Evening ops digest — LOG-ONLY. Runs via VM crontab at 21:30 daily.
 
 Reads run-status.jsonl (written by the cron scripts via lib/ops_log.py) for
-today's entries and messages the coach ONLY if something failed or a daily
+today's entries and records a digest ONLY if something failed or a daily
 deliverable is missing — a missed morning card, a missed prescription, or a
 watchdog that never ran. Silent when everything ran clean.
 
-Sends to the default chat in telegram/config.json (the coach), never athletes.
+Changed 27 Jul 2026 (Jamie's call): this used to Telegram the coach's own
+coaching thread, which mixed engineering chatter into a personal thread and put
+up to 24 raw log lines in it at a time. The digest now writes its full rendered
+text to ops-alerts.log via ops_log.log_outbound — the same words, on the VM,
+where he or an agent can go and read them when there is a reason to. Repeated
+(script, athlete, detail) lines are folded into one line with a count, because
+the same warning eight times is one fact, not eight.
+
 Safe to run manually: python3 ClaudeCoach/scripts/ops-digest.py
 """
 import json, subprocess, sys
@@ -15,13 +22,11 @@ from datetime import date, datetime
 from pathlib import Path
 
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
-PROJECT_DIR = str(BASE.parent)
-NOTIFY      = BASE / "telegram/notify.py"
 CONFIG      = BASE / "config/athletes.json"
 sys.path.insert(0, str(BASE / "lib"))
 import ops_log
 
-MAX_LINES = 15  # cap the Telegram message — full detail stays in the logs
+MAX_LINES = 40  # cap the logged digest — the raw entries stay in run-status.jsonl
 
 
 def todays_entries() -> list[dict]:
@@ -48,15 +53,30 @@ def build_digest(entries: list[dict], athletes: dict) -> list[str]:
     'bug-fixer-automerge' run-status entries."""
     lines = []
 
+    # Fold repeats: plan_builder logged the SAME weekly_tss_cap warning 8 times in
+    # 90 seconds on 26 Jul and all 8 went into the digest. Key on what makes the
+    # line unique, keep the earliest timestamp, count the rest. Deduplication
+    # happens HERE and never at write time — run-status.jsonl is also the
+    # heartbeat source for the _ran() gap checks below, so dropping entries there
+    # would break "did the morning card go out for kathryn".
+    folded: dict = {}
     for e in entries:
-        if not e.get("ok"):
+        ok = bool(e.get("ok"))
+        if ok and e.get("script") != "bug-fixer-automerge":
+            continue
+        key = (ok, e.get("script", "?"), e.get("athlete", ""), e.get("detail", ""))
+        if key in folded:
+            folded[key] += 1
+        else:
+            folded[key] = 1
             who = f" ({e['athlete']})" if e.get("athlete") else ""
             ts = str(e.get("ts", ""))[11:16]
-            lines.append(f"✗ {ts} {e.get('script', '?')}{who}: {e.get('detail', '')}")
-        elif e.get("script") == "bug-fixer-automerge":
-            who = f" ({e['athlete']})" if e.get("athlete") else ""
-            ts = str(e.get("ts", ""))[11:16]
-            lines.append(f"✓ {ts} auto-applied{who}: {e.get('detail', '')}")
+            mark = "✓" if ok else "✗"
+            what = "auto-applied" if ok else e.get("script", "?")
+            lines.append((key, f"{mark} {ts} {what}{who}: {e.get('detail', '')}"))
+
+    lines = [text + (f" (x{folded[key]})" if folded[key] > 1 else "")
+             for key, text in lines]
 
     def _ran(script, athlete=None, detail=None):
         return any(
@@ -133,15 +153,10 @@ def main():
 
     shown = lines[:MAX_LINES]
     if len(lines) > MAX_LINES:
-        shown.append(f"…and {len(lines) - MAX_LINES} more — see ops-alerts.log")
-    msg = "🛠 *ClaudeCoach ops digest*\n" + "\n".join(shown)
-    # --no-history: ops chatter must not pollute the coach's athlete history
-    r = subprocess.run(
-        ["python3", str(NOTIFY), "--no-history", msg],
-        cwd=PROJECT_DIR, timeout=20,
-    )
-    if r.returncode != 0:
-        print("ops-digest: Telegram send failed", file=sys.stderr)
+        shown.append(f"…and {len(lines) - MAX_LINES} more — see run-status.jsonl")
+    msg = "🛠 ClaudeCoach ops digest\n" + "\n".join(shown)
+    ops_log.log_outbound("ops-digest", msg, sent=False)
+    print(msg, file=sys.stderr)
 
 
 if __name__ == "__main__":

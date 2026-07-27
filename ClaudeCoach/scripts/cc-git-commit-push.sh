@@ -58,7 +58,7 @@ if ! git rebase --autostash origin/main; then
   exit 1
 fi
 if git_push_retry "$JOB"; then
-  git_sync_ok
+  git_sync_ok "$JOB"
   echo "[$JOB] pushed: $MSG"
 else
   git_sync_fail "$JOB" "push failed after one retry - committed locally only"

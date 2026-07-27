@@ -20,8 +20,13 @@ expected Y", 6 times 24-27 Jul 2026) and two touching the index at once gave
     the next tick redoes the work;
   * a rejected push gets ONE bounded fetch + rebase --autostash + push retry
     before it counts as a failure;
-  * a push that fails even after the retry is LOUD (flag file + ops alert +
-    Telegram), matching lib_git_alert.sh's git_sync_fail.
+  * a push that fails even after the retry is recorded (flag file + ops alert),
+    matching lib_git_alert.sh's git_sync_fail.
+
+Log-only from 27 Jul 2026: git failures no longer Telegram the coach. Both this
+module and lib_git_alert.sh hand the failure to ops_log.sync_failure, which owns
+the single decision about how loud it should be — first failure logged as
+transient, later ones in the evening digest, Telegram only for a stuck sync.
 """
 import fcntl
 import os
@@ -29,7 +34,8 @@ import subprocess
 import time
 from pathlib import Path
 
-from ops_log import alert, record_run
+import ops_log
+from ops_log import record_run, sync_ok
 
 PROJECT_DIR = str(Path(__file__).resolve().parent.parent.parent)  # diamondpeak-site/
 
@@ -37,7 +43,6 @@ PROJECT_DIR = str(Path(__file__).resolve().parent.parent.parent)  # diamondpeak-
 LOCK_PATH = os.environ.get("DP_GIT_LOCK", "/var/lock/dp-git.lock")
 LOCK_WAIT = int(os.environ.get("DP_GIT_LOCK_WAIT", "120"))
 FLAG_FILE = Path.home() / "Library/Logs/ClaudeCoach/git-sync-FAILED.flag"
-NOTIFY    = Path(PROJECT_DIR) / "ClaudeCoach/telegram/notify.py"
 
 
 def _run(args, timeout):
@@ -86,28 +91,34 @@ class _RepoLock:
         return False
 
 
+def alert(script: str, message: str, athlete: str = "") -> None:
+    """Record a git failure through the shared consecutive-failure gate.
+
+    Deliberately NOT ops_log.alert: that writes an unconditional ok=False entry,
+    and a first failure that heals on the next tick is not worth reporting. The
+    counter is keyed on `script`, so pass a stable one."""
+    who = f"[{athlete}] " if athlete else ""
+    ops_log.sync_failure(script, f"{who}{message}")
+
+
 def _side_channels(script: str, message: str) -> None:
-    """The out-of-process half of loud_fail (standing flag file + immediate
-    Telegram). Separate so tests can no-op it and stay hermetic — the ops alert
-    itself still goes through `alert` and is asserted on."""
+    """The out-of-process half of loud_fail (the standing flag file). Separate
+    so tests can no-op it and stay hermetic — the ops record itself still goes
+    through `alert` and is asserted on. The Telegram send that used to live here
+    is gone; escalation of a genuinely stuck sync is ops_log.sync_failure's job
+    now, so it happens once per episode instead of once per tick."""
     try:
         FLAG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(FLAG_FILE, "a") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {script}: {message}\n")
     except Exception:
         pass
-    try:
-        subprocess.run(["python3", str(NOTIFY), "--no-history",
-                        f"git-sync FAILED - {script}: {message} (see {FLAG_FILE})"],
-                       capture_output=True, timeout=30)
-    except Exception:
-        pass
 
 
 def loud_fail(script: str, message: str, athlete: str = "") -> None:
-    """A failure a human must see: ops alert (evening digest) + a standing flag
-    file + an immediate Telegram. Mirrors lib_git_alert.sh's git_sync_fail so a
-    Python job's git failure is exactly as visible as a shell job's."""
+    """A failure worth a record: ops alert (evening digest) + a standing flag
+    file. Mirrors lib_git_alert.sh's git_sync_fail so a Python job's git failure
+    is exactly as visible as a shell job's."""
     alert(script, message, athlete=athlete)
     _side_channels(script, message)
 
@@ -122,6 +133,7 @@ def _push_with_retry(run, script, athlete) -> bool:
     being pushed."""
     r = run(["git", "push", "origin", "main"], 30)
     if r.returncode == 0:
+        sync_ok(script)
         return True
 
     r = run(["git", "fetch", "origin"], 30)
@@ -140,6 +152,7 @@ def _push_with_retry(run, script, athlete) -> bool:
         loud_fail(script, f"git push failed after one retry — commit is local only: "
                           f"{_stderr(r)}", athlete=athlete)
         return False
+    sync_ok(script)
     return True
 
 
@@ -167,6 +180,7 @@ def sync_commit_push(paths, message, script, athlete="", run=None) -> bool:
 
             staged = run(["git", "diff", "--cached", "--quiet"], 15)
             if staged.returncode == 0:
+                sync_ok(script)
                 return True  # nothing to commit
 
             r = run(["git", "commit", "-m", message], 15)

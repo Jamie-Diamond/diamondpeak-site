@@ -7,11 +7,21 @@
 # log nobody read. That let the nightly private-repo sync abort every night from
 # 5 Jul 2026 with no one noticing (stale athlete-data history off-box).
 #
-# git_sync_fail "<job>" "<reason>" makes a failure LOUD three ways:
+# git_sync_fail "<job>" "<reason>" records a failure two ways:
 #   1. appends to a persistent flag file (a human/watchdog sees a standing signal)
-#   2. records an ops_log failure entry -> surfaces in the 21:30 coach ops digest
-#   3. sends an immediate Telegram alert to the coach (default chat)
-# git_sync_ok clears the flag on a clean run so it does not nag forever.
+#   2. hands it to ops_log.sync_failure, which decides how loud it should be
+# git_sync_ok "<job>" clears both on a clean run so they do not nag forever.
+#
+# LOG-ONLY from 27 Jul 2026 (Jamie's call): this used to fire an instant Telegram
+# to the coach on every failure. Across 23-27 Jul that produced a dozen messages
+# and not one needed action - every failure healed itself on the next tick. The
+# loudness decision now lives in ONE place, lib/ops_log.py's sync_failure, so the
+# shell jobs and the Python jobs (lib/git_sync.py) cannot drift apart: first
+# failure is logged as transient, the second and beyond reach the evening digest,
+# and only a sync stuck for ESCALATE_AFTER runs still breaks through to Telegram.
+#
+# The job label is what keys the consecutive-failure counter, so pass a STABLE
+# one - five jobs share this helper and each counts separately.
 CC_BASE="/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach"
 GA_LOG_DIR="$HOME/Library/Logs/ClaudeCoach"
 GA_FLAG_FILE="$GA_LOG_DIR/git-sync-FAILED.flag"
@@ -21,19 +31,25 @@ git_sync_fail() {
   ts="$(date "+%Y-%m-%d %H:%M:%S")"
   mkdir -p "$GA_LOG_DIR"
   printf "[%s] %s: %s\n" "$ts" "$job" "$reason" >> "$GA_FLAG_FILE"
-  echo "[$job] LOUD-FAIL $ts: $reason" >&2
+  echo "[$job] FAIL $ts: $reason" >&2
   python3 - "$job" "$reason" <<"PY" 2>/dev/null || true
 import sys
 sys.path.insert(0, "/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/lib")
 import ops_log
-ops_log.alert(sys.argv[1], sys.argv[2])
+ops_log.sync_failure(sys.argv[1], sys.argv[2])
 PY
-  python3 "$CC_BASE/telegram/notify.py" --no-history \
-    "git-sync FAILED - $job: $reason (see $GA_FLAG_FILE)" >/dev/null 2>&1 || true
 }
 
 git_sync_ok() {
+  local job="${1:-}"
   rm -f "$GA_FLAG_FILE" 2>/dev/null || true
+  [ -n "$job" ] || return 0
+  python3 - "$job" <<"PY" 2>/dev/null || true
+import sys
+sys.path.insert(0, "/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/lib")
+import ops_log
+ops_log.sync_ok(sys.argv[1])
+PY
 }
 
 # ---------------------------------------------------------------------------
