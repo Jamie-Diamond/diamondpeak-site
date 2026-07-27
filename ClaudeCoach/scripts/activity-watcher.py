@@ -756,8 +756,9 @@ Total under 300 characters. Output nothing else."""
     except Exception:
         pass
 
-    # Fallback: plain analysis + sign-off
-    return f"{clean_analysis}\n\nClaudeCoach"
+    # Fallback: deterministic factual-only summary — never derived from clean_analysis,
+    # which may contain private coaching content (RPE, pain, questions).
+    return f"{sport_line}.\n\nClaudeCoach"
 
 
 def _derive_activity_name(slug: str, activity_date: str, sport: str, icu_id: str) -> str:
