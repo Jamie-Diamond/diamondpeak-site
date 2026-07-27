@@ -74,6 +74,57 @@ def _read_json(path: Path, default=None):
         return default if default is not None else []
 
 
+def drift_message(realised: dict, verdict: dict, target) -> str:
+    """Plain-English coaching note for a training-distribution breach, or "".
+
+    This finding used to go out as an ops alert — it reached Jamie inside the
+    21:30 engineering digest, worded as "realised TID excess_quality: realised
+    easy share 46% vs target 72% - grey-zone drift". It is coaching content, not
+    engineering, and he could not read it. Pure function on purpose: the caller
+    sends, so the wording can be rendered and checked without messaging anyone.
+    """
+    if not verdict or not verdict.get("breach"):
+        return ""
+    kind = verdict["breach"][0]
+    if kind == "excess_quality":
+        easy = realised.get("low_pct")
+        want = target[0]
+        return (f"*Your easy sessions are being run too hard*\n\n"
+                f"Only {easy}% of last week's training time was genuinely easy — it should be "
+                f"around {want}%. The rest sat in the middle: hard enough to cost you recovery, "
+                f"not hard enough to make you faster.\n\n"
+                f"This week, on easy days hold the effort down to where you could talk in full "
+                f"sentences. Save the effort for the sessions that are meant to be hard.")
+    if kind == "missing_quality":
+        want = target[1] + target[2]
+        return (f"*Last week had no hard work in it*\n\n"
+                f"Every session came out easy. Around {want}% of your time should be at a "
+                f"properly hard effort — that is what lifts your top end, and easy volume on its "
+                f"own will not.\n\n"
+                f"This week, make sure the interval or tempo sessions actually get done at the "
+                f"effort they are prescribed at.")
+    return ""
+
+
+def _send_coaching_note(chat_id: str, slug: str, text: str) -> None:
+    """Send a standalone coaching message to the athlete's own thread.
+
+    Via notify.py, NOT _tg_send: notify.py appends to the athlete's
+    telegram/history.json, so the bot has the note as context when they reply
+    "what do you mean, too hard?". Logged verbatim either way."""
+    try:
+        import ops_log as _o
+        _o.log_outbound("weekly-summary-drift", text, sent=True, athlete=slug)
+    except Exception:
+        pass
+    try:
+        subprocess.run([sys.executable, str(BASE / "telegram" / "notify.py"),
+                        "--chat-id", str(chat_id), text],
+                       cwd=PROJECT_DIR, timeout=30, capture_output=True)
+    except Exception as e:
+        print(f"[weekly-summary:{slug}] drift note send failed: {e}", file=sys.stderr)
+
+
 def run_summary(slug: str = "jamie") -> str:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_file = LOG_DIR / "weekly-summary.log"
@@ -139,6 +190,7 @@ def run_summary(slug: str = "jamie") -> str:
     # Realised intensity distribution (audit P1-1): what was DONE vs the phase
     # TID — catches grey-zone drift AND a week collapsing to all-easy.
     realised_tid_line = ""
+    drift_note = ""
     try:
         from primitives.realised_tid import realised_tid, tid_verdict
         from primitives.blueprint import current_phase, phase_family
@@ -184,9 +236,13 @@ def run_summary(slug: str = "jamie") -> str:
                         and _wk_type in ("deload", "taper"):
                     realised_tid_line += f" (expected: {_wk_type} week — no alert)"
                 elif _v["breach"]:
-                    _ops.alert("weekly-summary",
-                               f"realised TID {_v['breach'][0]}: {_v['breach'][1]}",
-                               athlete=slug)
+                    # Coaching, not engineering (27 Jul 2026): this goes to the
+                    # athlete's OWN thread as a plain-English note after their
+                    # weekly card, instead of into the coach's ops digest.
+                    drift_note = drift_message(_rt, _v, _tid)
+                    _ops.record_run("weekly-summary", athlete=slug, ok=True,
+                                    detail=f"training-drift note queued "
+                                           f"({_v['breach'][0]}): {_v['breach'][1]}")
     except Exception:
         pass
 
@@ -639,6 +695,10 @@ Wrap your entire output in <telegram> and </telegram> tags. Output nothing outsi
     output = m.group(1).strip() if m else ""
     if output:
         _tg_send(chat_id, output)
+
+    # After the card, so it reads as a follow-up rather than interrupting it.
+    if drift_note:
+        _send_coaching_note(chat_id, slug, drift_note)
 
     # Regenerate trend aggregates in the background (feeds dashboard chart)
     try:
