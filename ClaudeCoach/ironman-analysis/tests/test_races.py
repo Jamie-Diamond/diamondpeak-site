@@ -316,3 +316,33 @@ class TestPostRaceFiresOnce:
         p = tmp_path / "athletes.json"
         p.write_text(json.dumps({"jamie": {"races": []}}))
         assert races.mark_post_race_sent("jamie", "2026-07-26", path=p) is False
+
+
+class TestQuestionsAreNotRaceAnnouncements:
+    """Asking about a race is not announcing one. These forms clear both the racing-verb
+    and the date test, and the name-strip chain reduces them to a bare "?" — which was
+    written as a race called "?" before the two guards below existed."""
+
+    MON = date(2026, 7, 27)
+
+    QUESTIONS = [
+        "Am I racing on Saturday?",
+        "Am I racing tomorrow?",
+        "Should I be racing on Saturday?",
+        "is my race on Saturday?",
+        "when is my next race, Saturday?",
+    ]
+
+    def test_questions_are_not_captured(self):
+        for q in self.QUESTIONS:
+            assert not races.looks_like_race_statement(q, self.MON), q
+
+    def test_punctuation_only_name_is_rejected_even_without_the_question_guard(self):
+        # Belt and braces: if a question form ever slips past the '?' check, the parser
+        # must still refuse to name a race after leftover punctuation.
+        p = races.parse_race_message("Am I racing on Saturday?", self.MON)
+        assert p["name"] is None
+        assert "name" in p["missing"]
+
+    def test_a_real_announcement_still_works(self):
+        assert races.looks_like_race_statement("I'm racing Dorney on Saturday", self.MON)

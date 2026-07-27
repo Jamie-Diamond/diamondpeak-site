@@ -158,6 +158,13 @@ def run_athlete(slug, athlete_cfg):
             block_fact=_block_fact(athlete_cfg, date.today()),
             focus=profile.get("race_focus") or []), chat_id)
         return
+    if _phase["phase"] == "race_day":
+        # 20:30 on the EVENING OF the race. Nothing is sent: a generated session brief
+        # here would be a training message hours after a race, and §8.6 is explicit that
+        # on a bad day the analysis "does not come the same day at all". The
+        # acknowledgement is the morning-after card's job, not this surface's.
+        print(f"[{slug}] race day — no night-before brief sent", file=sys.stderr)
+        return
 
     prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries,
                            long_run_cap_km=long_run_cap)

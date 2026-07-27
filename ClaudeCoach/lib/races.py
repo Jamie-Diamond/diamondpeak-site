@@ -350,12 +350,21 @@ _RACE_TRIGGER_RE = re.compile(
 def looks_like_race_statement(text: str, today=None) -> bool:
     """True only for a message that is plainly telling us about a race AND names a date.
     Both halves matter: without the date there is nothing to record, and without the verb
-    an ordinary training message gets treated as a race announcement."""
-    if not (text or "").strip():
+    an ordinary training message gets treated as a race announcement.
+
+    A QUESTION is never a statement of fact. "Am I racing on Saturday?" clears both the
+    verb and the date test, and the name-stripping below then reduces it to a bare "?" —
+    which is how the athlete ends up being asked to assign a priority to a race called
+    "?". Asking about a race is not announcing one, so a trailing question mark is a
+    hard no."""
+    t = (text or "").strip()
+    if not t:
         return False
-    if not _RACE_TRIGGER_RE.search(text):
+    if t.endswith("?"):
         return False
-    return resolve_date(text, today) is not None
+    if not _RACE_TRIGGER_RE.search(t):
+        return False
+    return resolve_date(t, today) is not None
 
 
 def parse_race_message(text: str, today=None) -> dict:
@@ -391,7 +400,10 @@ def parse_race_message(text: str, today=None) -> dict:
         name = re.sub(r"\b" + wd + r"\b", " ", name, flags=re.I)
     name = re.sub(r"[,\.]+", " ", name)
     name = re.sub(r"\s+", " ", name).strip(" -–—")
-    out["name"] = name or None
+    # A "name" with no letters in it is punctuation left over from stripping, not a race.
+    # Without this, "Am I racing on Saturday?" yields the name "?" — the strip chain above
+    # removes the words but not the question mark — and a race called "?" gets written.
+    out["name"] = name if re.search(r"[A-Za-z]{2}", name or "") else None
 
     for k in ("name", "date", "priority"):
         if not out[k]:
