@@ -72,7 +72,8 @@ def run_athlete(slug, athlete_cfg):
 
     with open(log_file, "a") as lf:
         result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--allowedTools", TOOLS, "--model", "claude-haiku-4-5-20251001"],
+            [CLAUDE, "-p", "--allowedTools", TOOLS, "--model", "claude-haiku-4-5-20251001"],
+            input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             stdout=subprocess.PIPE, stderr=lf, text=True,
             cwd=PROJECT_DIR, timeout=120,
         )

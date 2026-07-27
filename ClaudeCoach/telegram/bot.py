@@ -222,7 +222,8 @@ def _spoken_rewrite(reply_text: str) -> str:
     )
     try:
         result = subprocess.run(
-            [CLAUDE_BIN, "-p", prompt, "--model", MODEL_HAIKU],
+            [CLAUDE_BIN, "-p", "--model", MODEL_HAIKU],
+            input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             capture_output=True, text=True, timeout=25,
         )
         out = (result.stdout or "").strip()

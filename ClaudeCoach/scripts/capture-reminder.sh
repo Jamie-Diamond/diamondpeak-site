@@ -28,7 +28,8 @@ PROMPT_END
 
 TOOLS="Read,mcp__claude_ai_icusync__get_athlete_profile,mcp__claude_ai_icusync__get_training_history,PushNotification"
 
-OUTPUT=$(/usr/bin/claude -p "$(cat "$PROMPT_FILE")" --allowedTools "$TOOLS" 2>>"$HOME/Library/Logs/ClaudeCoach/capture-reminder.log")
+# Prompt on stdin, not argv: argv elements are capped at 128 KiB (MAX_ARG_STRLEN).
+OUTPUT=$(/usr/bin/claude -p --allowedTools "$TOOLS" <"$PROMPT_FILE" 2>>"$HOME/Library/Logs/ClaudeCoach/capture-reminder.log")
 echo "$OUTPUT"
 if [ -n "$OUTPUT" ]; then
     echo "$OUTPUT" | python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/notify.py

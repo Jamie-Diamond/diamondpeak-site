@@ -113,7 +113,7 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
                no_session_persistence=True, stderr=None, label=""):
     """Run `claude -p`, retrying down the fallback chain on a limit/overload.
 
-    prompt              : the -p prompt string
+    prompt              : the prompt, piped to the CLI on stdin (not argv)
     model               : starting model id
     fallback            : list of model ids to try after `model`; None => DEFAULT_FALLBACK
     allowed_tools       : value for --allowedTools (omit flag if None)
@@ -130,7 +130,7 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
     last = None
 
     for i, m in enumerate(chain):
-        cmd = [CLAUDE, "-p", prompt, "--model", m]
+        cmd = [CLAUDE, "-p", "--model", m]
         if no_session_persistence:
             cmd.append("--no-session-persistence")
         if allowed_tools is not None:
@@ -140,11 +140,15 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
 
         _t0 = time.monotonic()
         try:
+            # The prompt goes on stdin, never argv: a single argv element is
+            # capped at MAX_ARG_STRLEN (128 KiB on Linux) and exec() fails
+            # outright with E2BIG once a generated prompt crosses it. stdin has
+            # no such limit.
             r = subprocess.run(
                 cmd,
+                input=prompt,
                 stdout=subprocess.PIPE,
                 stderr=(stderr if stderr is not None else subprocess.PIPE),
-                stdin=subprocess.DEVNULL,  # `claude -p` reads piped stdin as prompt input
                 text=True, cwd=cwd, timeout=timeout,
             )
             out = r.stdout or ""

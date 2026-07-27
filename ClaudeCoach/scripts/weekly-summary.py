@@ -683,9 +683,12 @@ Then using Bash, run EXACTLY this one command and nothing else:
 Wrap your entire output in <telegram> and </telegram> tags. Output nothing outside those tags — no preamble, no reasoning, no tool commentary.
 """
 
+    # timeout 900s: a measured Sunday-window run for the largest athlete took
+    # 448s against the old 600s ceiling, and the prompt grows every week as
+    # history accumulates. A timeout returns no card at all, so keep headroom.
     result = claude_call.run_claude(
         prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
-        cwd=PROJECT_DIR, timeout=600, label=slug,
+        cwd=PROJECT_DIR, timeout=900, label=slug,
     )
 
     if result.stderr:

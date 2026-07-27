@@ -746,7 +746,8 @@ Total under 300 characters. Output nothing else."""
 
     try:
         result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--model", "claude-haiku-4-5-20251001"],
+            [CLAUDE, "-p", "--model", "claude-haiku-4-5-20251001"],
+            input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
         )
         text = (result.stdout or "").strip()
@@ -781,7 +782,8 @@ Output only the name or "ask". Nothing else."""
 
     try:
         result = subprocess.run(
-            [CLAUDE, "-p", prompt, "--model", "claude-haiku-4-5-20251001"],
+            [CLAUDE, "-p", "--model", "claude-haiku-4-5-20251001"],
+            input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
         )
         name = (result.stdout or "").strip()

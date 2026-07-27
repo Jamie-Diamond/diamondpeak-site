@@ -20,7 +20,7 @@ and are invalidated when the system prompt / persistent rules change
 the worst case is exactly the old behaviour. Disable with "session_resume":
 false in config.json.
 """
-import hashlib, json, subprocess, sys, time, shutil, os
+import hashlib, json, subprocess, sys, threading, time, shutil, os
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -243,8 +243,23 @@ def build_prompt(user_message, history, system_prompt, athlete_name, context,
     return "\n".join(parts)
 
 
-def claude_cmd(prompt, model, extra_args=None):
-    cmd = [CLAUDE_BIN, "-p", prompt, "--allowedTools", TOOLS,
+def _feed_stdin(proc, prompt):
+    """Write `prompt` to proc.stdin and close it, on a daemon thread so a prompt
+    larger than the pipe buffer cannot block the reader before it drains."""
+    def _w():
+        try:
+            proc.stdin.write(prompt)
+            proc.stdin.close()
+        except Exception:
+            pass
+    threading.Thread(target=_w, daemon=True).start()
+
+
+def claude_cmd(model, extra_args=None):
+    """Build the CLI argv. The prompt is NOT included: it must be fed on stdin
+    by the caller. A single argv element is capped at MAX_ARG_STRLEN (128 KiB
+    on Linux) and exec() fails with E2BIG once a built prompt crosses it."""
+    cmd = [CLAUDE_BIN, "-p", "--allowedTools", TOOLS,
            "--disallowedTools", DISALLOWED_TOOLS, "--model", model]
     if extra_args:
         cmd.extend(extra_args)
@@ -399,12 +414,10 @@ def _log_timing(path, model, mode, t0, t_init, t_first):
 def _run_once(prompt, model, extra_args, cwd, timeout=300):
     """One non-streaming claude invocation with JSON output so the session id
     is capturable. Returns (text, session_id, returncode)."""
-    # stdin=DEVNULL: `claude -p` treats piped stdin as extra prompt input, so an
-    # inherited descriptor can leak parent-process content into the conversation.
     r = subprocess.run(
-        claude_cmd(prompt, model, ["--output-format", "json"] + extra_args),
+        claude_cmd(model, ["--output-format", "json"] + extra_args),
+        input=prompt,
         capture_output=True, text=True, cwd=cwd, timeout=timeout,
-        stdin=subprocess.DEVNULL,
     )
     text, session_id = "", None
     try:
@@ -479,11 +492,12 @@ def _stream_once(prompt, model, extra_args, cwd):
     rc = -1
     try:
         proc = subprocess.Popen(
-            claude_cmd(prompt, model,
+            claude_cmd(model,
                        ["--output-format", "stream-json", "--verbose"] + extra_args),
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL, text=True, cwd=cwd,
+            stdin=subprocess.PIPE, text=True, cwd=cwd,
         )
+        _feed_stdin(proc, prompt)
         for raw_line in proc.stdout:
             raw_line = raw_line.strip()
             if not raw_line:
@@ -613,10 +627,10 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
     t0 = time.time()
     try:
         result = subprocess.run(
-            claude_cmd(full_prompt, model, ["--no-session-persistence"]),
+            claude_cmd(model, ["--no-session-persistence"]),
+            input=full_prompt,
             capture_output=True, text=True,
             cwd=config["project_dir"], timeout=300,
-            stdin=subprocess.DEVNULL,
         )
         _log_timing("image", model, "stateless", t0, None, None)
         return result.stdout.strip() or result.stderr.strip() or "(no response)"
