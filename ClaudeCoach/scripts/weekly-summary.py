@@ -729,8 +729,11 @@ counts as not done. Flag each one:
 - Due value is free text naming a month or a period that is already gone by — "end May", "before
   June", "mid Jul", "June", or a training phase that has already ended (check the phase dates in the
   Training Blueprint above): 🔴 OVERDUE as well. Quote the due value as written and say it has
-  passed ("due end May — past"). Do not invent a precise date for it, and do not downgrade it to
-  "date unclear": a two-month-late action is late, not ambiguous
+  passed ("due end May — past"). Never convert free text into a specific calendar date — "due build
+  phase" is reported as "due build phase (ended 5 Jul)", never as "due 2026-07-31". Do not downgrade
+  it to "date unclear" either: a two-month-late action is late, not ambiguous. And an action stays
+  OVERDUE even where the data suggests it has since been satisfied — say it looks done and needs its
+  status updating, but do not soften the flag on the athlete's behalf
 - Due date ≤ 14 days from today ({today}): ⚠️ DUE SOON
 - Due value is genuinely open-ended — "pre-race", "recurring", "when quality resumes" — or there is
   no due value at all: 📋 STALE. Say so plainly rather than guessing a date, and never leave the
