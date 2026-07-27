@@ -248,7 +248,10 @@ def run_summary(slug: str = "jamie") -> str:
                     drift_note = drift_message(_rt, _v, _tid)
                     _ops.record_run(
                         "weekly-summary", athlete=slug, ok=True,
-                        detail=(f"training-balance note folded into the card "
+                        # "ready", not "sent in the card": this fires before the
+                        # card is known to have rendered, and the log must not
+                        # claim a delivery path that was not taken.
+                        detail=(f"training-balance note ready "
                                 f"({_v['breach'][0]}): {_v['breach'][1]}") if drift_note else
                                (f"training-drift breach with no coaching wording "
                                 f"({_v['breach'][0]}): {_v['breach'][1]}"))
@@ -503,7 +506,8 @@ voice the coaching level asks for everywhere else in this card.
 2. OPEN ACTIONS. Step 4 lists EVERY action in the current-state.md "Open actions" table whose status
    is not explicitly done — one line each, no sampling, no summarising, no truncating, however long
    the list runs. An action whose due date is free text ("end May", "before June", "pre-race",
-   "build phase", "recurring") is listed too; it is never dropped for being hard to date.
+   "recurring") is listed too; it is never dropped for being hard to date, and free text that names
+   a month or a phase already gone by is OVERDUE, not "unclear".
 3. TRAINING-BALANCE NOTE. If one is supplied below, it goes into the card verbatim, as written.
 {recovery_block}
 ---
@@ -634,7 +638,9 @@ counts exactly as given, never recount them, and say it in plain words ("five da
 as prescribed, one the rules pulled back"). If that block lists a breach, add ONE short sentence
 naming what breached which rule and nothing further — no fix, no lecture, the Monday focus already
 carries the action. A clean week is that one line and stops: no table, no day-by-day list, no
-restating the days that were fine. If the block says to omit the line, omit this whole row.]
+restating the days that were fine. Do NOT re-state sessions already named in **Missed:** — this row
+is about rule-following, and naming the same misses twice in one card is piling on. If the block says
+to omit the line, omit this whole row.]
 
 **Key finding:** [one sentence — most important thing from this week]
 
@@ -711,10 +717,15 @@ List EVERY action in the "Open actions" table in current-state.md whose status i
 "done" — a status cell still holding its template placeholder (e.g. "[pending / booked / done]")
 counts as not done. Flag each one:
 - Due date has already passed: 🔴 OVERDUE
+- Due value is free text naming a month or a period that is already gone by — "end May", "before
+  June", "mid Jul", "June", or a training phase that has already ended (check the phase dates in the
+  Training Blueprint above): 🔴 OVERDUE as well. Quote the due value as written and say it has
+  passed ("due end May — past"). Do not invent a precise date for it, and do not downgrade it to
+  "date unclear": a two-month-late action is late, not ambiguous
 - Due date ≤ 14 days from today ({today}): ⚠️ DUE SOON
-- Due date is free text and cannot be resolved to a date ("end May", "before June", "pre-race",
-  "build phase", "recurring"), or there is no due date at all: 📋 STALE — say the due date is not a
-  date rather than guessing one, and never leave the action out on that basis
+- Due value is genuinely open-ended — "pre-race", "recurring", "when quality resumes" — or there is
+  no due value at all: 📋 STALE. Say so plainly rather than guessing a date, and never leave the
+  action out on that basis
 
 Format (append after the decision triggers, before the sign-off):
 
