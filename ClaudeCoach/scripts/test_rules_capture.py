@@ -100,6 +100,122 @@ class FoldInvariantTests(unittest.TestCase):
         self.assertTrue(drops[0][0].startswith("ABORT"))
 
 
+class RewordedFoldTests(unittest.TestCase):
+    """The 27 Jul 2026 relaxation. The invariant used to require a removed rule's FULL
+    significant-token set to be a subset of a survivor, so ANY rewording during a fold
+    dropped a token and aborted the whole write — the intended in-place fold silently
+    downgraded to a human review card, which is the churn fold-on-write existed to remove.
+    Prose may now be reworded; every NUMBER must still survive and most content words must
+    carry over.
+
+    Fixtures here are synthetic on purpose. The real cases these were calibrated against
+    are Jamie's live persistent-rules.md, and diamondpeak-site is a PUBLIC repo (athletes/
+    is gitignored for exactly that reason), so the real text is replayed out-of-tree and
+    only its token/digit profile is reproduced below."""
+
+    def test_reworded_fold_keeping_every_number_is_permitted(self):
+        """The case that used to abort: a fold that rewrites the sentence, keeps every
+        figure, adds a new fact, and loses only a couple of content words."""
+        before = _lines(
+            "[perm] Takes 750mg magnesium and 500mg zinc before bed on hard training "
+            "days, always with food, never on an empty stomach; started 12 Jun 2026 "
+            "after cramping."
+        )
+        after = _lines(
+            "[perm] Evening supplements: 750mg magnesium and 500mg zinc before bed on "
+            "hard training days, taken with food and never on an empty stomach - plus "
+            "200mg theanine on race eve. Started 12 Jun 2026 after cramping."
+        )
+        b = before.strip()
+        a = after.strip()
+        # It must be the RELAXED path doing the work, not the old strict subset.
+        self.assertFalse(rc._sig_tokens(b) <= rc._sig_tokens(a))
+        self.assertTrue(rc._absorbs(b, a))
+
+        new_text, drops = rc.enforce_rule_guards(before, after, [])
+        self.assertEqual(new_text, after)
+        self.assertEqual(drops, [])
+        # And it is a single-rule fold, so it auto-applies — no review card.
+        verdict, _guarded, _d = rc.classify_merge_proposal(before, after, [])
+        self.assertEqual(verdict, "auto_apply")
+
+    def test_respacing_a_figure_is_not_a_figure_change(self):
+        """"PF 30 CHEW" -> "PF30 CHEW" drops the bare token '30' while the figure is
+        plainly still there. Digit RUNS survive that rewrite; whole tokens did not, and
+        that alone was enough to abort an otherwise clean merge."""
+        before = _lines("[perm] PF 30 CHEW is 30g of carbs and Jamie's regular product")
+        after = _lines("[perm] PF30 CHEW is 30g of carbs, Jamie's regular product, never a gel")
+        new_text, drops = rc.enforce_rule_guards(before, after, [])
+        self.assertEqual(new_text, after)
+        self.assertEqual(drops, [])
+
+    def test_reword_that_drops_a_figure_still_aborts(self):
+        """Rewording is not a licence to move numbers: the sentence may change, the
+        figures may not. This is the half of the guard that is earning its keep."""
+        before = _lines(
+            "[perm] Takes 750mg magnesium and 500mg zinc before bed on hard training "
+            "days, always with food, never on an empty stomach; started 12 Jun 2026."
+        )
+        after = _lines(
+            "[perm] Evening supplements: 700mg magnesium and 500mg zinc before bed on "
+            "hard training days, taken with food and never on an empty stomach. "
+            "Started 12 Jun 2026."
+        )
+        new_text, drops = rc.enforce_rule_guards(before, after, [])
+        self.assertEqual(new_text, before)
+        self.assertTrue(drops[0][0].startswith("ABORT"))
+
+    def test_numbers_kept_but_prose_gutted_still_aborts(self):
+        """Preserving every figure is necessary, not sufficient. A rule stripped back to
+        its numbers has lost its meaning, and the content-word floor must catch it —
+        otherwise the relaxation would be a rubber stamp."""
+        before = _lines(
+            "[perm] Takes 750mg magnesium and 500mg zinc before bed on hard training "
+            "days, always with food, never on an empty stomach; started 12 Jun 2026."
+        )
+        after = _lines("[perm] 750mg 500mg 12 2026")
+        new_text, drops = rc.enforce_rule_guards(before, after, [])
+        self.assertEqual(new_text, before)
+        self.assertTrue(drops[0][0].startswith("ABORT"))
+
+    def test_content_moved_off_the_perm_line_aborts(self):
+        """A merge that replaces detailed rules with a bare heading and moves the
+        substance onto non-[perm] continuation lines is a real loss of standing-rule
+        surface, not a rewording. (This is the shape of the 2026-07-27-1 proposal, which
+        the guard rejected and Jamie declined — the abort was correct.)"""
+        before = _lines(
+            "[perm] Report Form as final once the session has synced, with no provisional hedge",
+            "[perm] Only flag Form below -25 for Jamie mid-build; -10 to -20 is background noise",
+        )
+        after = ("[perm] Fitness/Fatigue/Form reporting:\n"
+                 "  - report as final once synced, no hedge\n"
+                 "  - only flag below -25; -10 to -20 is noise\n")
+        new_text, drops = rc.enforce_rule_guards(before, after, [])
+        self.assertEqual(new_text, before)
+        self.assertTrue(drops[0][0].startswith("ABORT"))
+
+    def test_reworded_two_rule_merge_still_escalates(self):
+        """The trap in relaxing the loss check: `is_multi_rule_merge` shares the same
+        absorption predicate, so it must be relaxed in step. If only the fold invariant
+        were relaxed, a two-rule semantic merge would stop aborting AND stop registering
+        as a multi-rule merge, and would silently auto-apply — strictly worse than the
+        churn being fixed."""
+        before = _lines(
+            "[perm] Eats 80g porridge before every long run, prepared the night before",
+            "[perm] Drinks 500ml of water before every long run, sipped over 20 minutes",
+        )
+        after = _lines(
+            "[perm] Long-run prep: 80g porridge prepared the night before, and 500ml "
+            "water sipped across 20 minutes, before every long run",
+        )
+        _guarded, guard_drops = rc.enforce_rule_guards(before, after, [])
+        self.assertEqual(guard_drops, [])          # relaxed guard accepts it as loss-free
+        self.assertTrue(rc.is_multi_rule_merge(before, after))
+        verdict, guarded, drops = rc.classify_merge_proposal(before, after, [])
+        self.assertEqual(verdict, "escalate")      # ...but a human still sees it
+        self.assertEqual(drops, [])
+
+
 class AppendGuardTests(unittest.TestCase):
     """Pre-existing (unchanged) append-only guard behaviour: conflict / dup / ceiling."""
 

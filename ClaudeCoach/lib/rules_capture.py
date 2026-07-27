@@ -11,9 +11,10 @@ duplicate [perm] line, which then needed a nightly human-reviewed merge — one 
 refinement. The fix lets the model FOLD a refinement into the rule it extends (edit in
 place, keeping every fact) instead of appending a near-dup. `enforce_rule_guards` is the
 backstop that makes folding safe: an in-place edit that removes or rewrites an existing
-[perm] line is permitted ONLY when every removed rule's significant tokens (numbers
-included, so a silently-changed figure like 750mg->700mg fails) survive inside some
-[perm] line still on file, and no confirmed preference is touched. Any lossy edit fails
+[perm] line is permitted ONLY when every removed rule is ABSORBED by some [perm] line
+still on file (see `_absorbs`: every number preserved, and most content words carried
+over, so a silently-changed figure like 750mg->700mg fails), and no confirmed preference
+is touched. Any lossy edit fails
 the invariant and the WHOLE write is refused — the caller gets `before_text` back,
 untouched. A newly-appended [perm] line is still reverted if it contradicts a confirmed
 preference, exactly duplicates an existing line, or would push the pile over the
@@ -74,6 +75,80 @@ def _sig_tokens(line: str) -> set:
     return {t for t in re.findall(r"[a-z0-9]+", s) if len(t) >= 2 or t.isdigit()}
 
 
+# Fold relaxation, 27 Jul 2026. The invariant used to demand that a removed rule's FULL
+# significant-token set (numbers included) be a subset of some surviving rule. Any
+# rewording during a fold or merge drops a token, so the guard aborted and the intended
+# in-place fold silently downgraded to a human review card - exactly the churn the July
+# fold-on-write work (f841fb8, cd47f9a, 87fefaf) existed to remove. Relaxed deliberately,
+# not deleted: NUMBERS must still all survive (that check is earning its keep - it stops
+# figures drifting), while PROSE may be reworded so long as most of the removed rule's
+# content words still appear in the rule that absorbed it.
+# At most this fraction of a removed rule's content words may be reworded away...
+FOLD_PROSE_COVERAGE = 0.80
+# ...but always allow this many, so SHORT rules are not held to an unreachable standard.
+# A nine-content-word rule reworded from "Drinks 500ml of water before every long run"
+# to "500ml water sipped..." loses two low-information words and lands at 0.78 - a
+# faithful reword that a flat ratio would abort, which is the churn being fixed. On a
+# long rule the ratio always binds first, so this floor loosens nothing where the words
+# are plentiful.
+FOLD_PROSE_MIN_ALLOWANCE = 2
+
+_DIGITS_RE = re.compile(r"\d+")
+
+
+def _digit_runs(line: str) -> set:
+    """Every run of digits in a rule's CONTENT: '750mg ... PF 30 CHEW' -> {'750', '30'}.
+
+    Digit RUNS rather than _sig_tokens' whole tokens, because the token splitter makes
+    figure-preservation depend on spelling: re-spacing "PF 30 CHEW" to "PF30 CHEW" drops
+    the bare token '30' though the figure is plainly still there, and that alone was enough
+    to abort a good merge. Runs survive that rewrite. Runs also avoid the substring trap a
+    raw-text scan would fall into - '20' must NOT count as present merely because the line
+    contains '2026'."""
+    return set(_DIGITS_RE.findall(_TAG_RE.sub("", line)))
+
+
+def _content_tokens(line: str) -> set:
+    """A rule's content words (bug_fixer._tokens: 4+ chars, stop words dropped) - the
+    tokens whose disappearance means a FACT went missing rather than a phrase being
+    reworded. Reuses bug-fixer's stop list so the codebase has one such vocabulary."""
+    return bug_fixer._tokens(_TAG_RE.sub("", line))
+
+
+def _absorbs(removed_line: str, surviving_line: str) -> bool:
+    """True if `surviving_line` carries `removed_line`'s content.
+
+    The single "was this rule folded in, or lost?" predicate. The fold invariant, the
+    fold-result exemption and the multi-rule-merge check all go through it, so all three
+    agree on what absorption means - relaxing one without the others would let a
+    two-rule semantic merge slip past `is_multi_rule_merge` into auto-apply.
+
+    An edit that is loss-free by the strict original test (every significant token
+    survives) is still accepted outright. Otherwise a REWORDED fold is accepted only when
+    both hold:
+      * every number survives. A dropped or drifted figure (750mg -> 700mg) is never a
+        rewording, and this is the half of the guard that stops figures moving; and
+      * enough of the removed rule's content words appear in the survivor - at least
+        FOLD_PROSE_COVERAGE of them, with a floor of FOLD_PROSE_MIN_ALLOWANCE words'
+        slack so short rules can still be reworded - so deleting a genuine fact fails.
+    A rule with no content words (a bare figure) has nothing to reword, so it falls back
+    to the strict test."""
+    r_sig = _sig_tokens(removed_line)
+    if not r_sig:
+        return True
+    if r_sig <= _sig_tokens(surviving_line):
+        return True
+    if not _digit_runs(removed_line) <= _digit_runs(surviving_line):
+        return False
+    r_content = _content_tokens(removed_line)
+    if not r_content:
+        return False
+    missing = len(r_content - _content_tokens(surviving_line))
+    allowed = max(FOLD_PROSE_MIN_ALLOWANCE,
+                  int(len(r_content) * (1.0 - FOLD_PROSE_COVERAGE)))
+    return missing <= allowed
+
+
 def _line_conflicts(line: str, prefs: list) -> str:
     """Return the confirmed preference a [perm] line contradicts, else ''. Mirrors
     bug-fixer._rule_conflict's deterministic backstop: a line that ASSERTS terms a confirmed
@@ -109,11 +184,13 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list):
     The guard is deterministic and conservative:
       * a NEWLY-APPENDED [perm] line is reverted if it contradicts a confirmed preference, exactly
         duplicates an existing line, or pushes the pile over the ceiling (unchanged behaviour);
-      * an in-place edit that removes/rewrites an existing rule is PERMITTED only when it is a
-        loss-free FOLD — every removed rule's significant tokens (numbers included) survive inside
-        some [perm] line still on file. Any edit that drops a rule's content, silently changes a
-        figure, or removes a confirmed preference fails the invariant and the ENTIRE write is
-        refused (file left untouched), routing that judgement to the human-reviewed merge.
+      * an in-place edit that removes/rewrites an existing rule is PERMITTED only when every
+        removed rule is absorbed by some [perm] line still on file (`_absorbs`). Rewording is
+        allowed — it has to be, or every fold aborts on a dropped stop word — but every number
+        must survive and most of the removed rule's content words must carry over. Any edit that
+        drops a fact, silently changes a figure, or removes a confirmed preference fails the
+        invariant and the ENTIRE write is refused (file left untouched), routing that judgement
+        to the human-reviewed merge.
 
     Returns (new_text, drops); a drops entry whose reason starts 'ABORT' means nothing written
     (new_text == before_text)."""
@@ -133,18 +210,17 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list):
     raw_by_norm = {}
     for l in before_perm:
         raw_by_norm.setdefault(_norm(l), l)
-    removed_sig = [_sig_tokens(raw_by_norm.get(n, "")) for n in removed]
+    removed_raw = [raw_by_norm.get(n, "") for n in removed]
 
     def _fold_ok(perm_lines) -> str:
         """'' if every removed rule survives (folded) in perm_lines and no confirmed preference
         was removed; else an ABORT reason. perm_lines is the list of [perm] lines to check."""
-        surviving = [_sig_tokens(l) for l in perm_lines]
         for n in removed:
             if n in confirmed:
                 return ("ABORT: edit would remove/alter a confirmed preference; "
                         "reverted the model's edit")
-            rtoks = _sig_tokens(raw_by_norm.get(n, ""))
-            if rtoks and not any(rtoks <= s for s in surviving):
+            rline = raw_by_norm.get(n, "")
+            if not any(_absorbs(rline, l) for l in perm_lines):
                 return ("ABORT: edit removed rule content not folded into any surviving rule; "
                         "reverted the model's edit")
         return ""
@@ -155,7 +231,7 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list):
         if reason:
             bad = next((raw_by_norm.get(n, "") for n in removed
                         if n in confirmed or not any(
-                            _sig_tokens(raw_by_norm.get(n, "")) <= _sig_tokens(after_lines[i])
+                            _absorbs(raw_by_norm.get(n, ""), after_lines[i])
                             for i in perm_idx)), "")
             return before_text, [(reason, bad.strip())]
 
@@ -172,8 +248,7 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list):
     # A fold-result line (the survivor a removed rule folded into) must never be dropped, or the
     # fold loses data; it is count-neutral so it cannot breach the ceiling either.
     def _is_fold_result(i):
-        s = _sig_tokens(after_lines[i])
-        return any(rt and rt <= s for rt in removed_sig)
+        return any(_sig_tokens(rl) and _absorbs(rl, after_lines[i]) for rl in removed_raw)
 
     dropped = {}                                      # idx -> reason
     for i in appended_idx:
@@ -250,7 +325,7 @@ def is_multi_rule_merge(before_text: str, after_text: str) -> bool:
     raw_by_norm = {}
     for l in before_perm:
         raw_by_norm.setdefault(_norm(l), l)
-    removed_sig = {n: _sig_tokens(raw_by_norm.get(n, "")) for n in removed}
+    removed_raw = {n: raw_by_norm.get(n, "") for n in removed}
 
     # Attribute appended copies to the TAIL-most physical lines, mirroring
     # enforce_rule_guards' own attribution so the two funcs agree on which lines
@@ -264,8 +339,8 @@ def is_multi_rule_merge(before_text: str, after_text: str) -> bool:
             budget[n] -= 1
 
     for i in appended_idx:
-        new_sig  = _sig_tokens(after_lines[i])
-        absorbed = sum(1 for rtoks in removed_sig.values() if rtoks and rtoks <= new_sig)
+        absorbed = sum(1 for rl in removed_raw.values()
+                       if _sig_tokens(rl) and _absorbs(rl, after_lines[i]))
         if absorbed >= 2:
             return True
     return False
