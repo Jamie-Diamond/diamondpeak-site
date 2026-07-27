@@ -240,9 +240,12 @@ def run_summary(slug: str = "jamie") -> str:
                     # athlete's OWN thread as a plain-English note after their
                     # weekly card, instead of into the coach's ops digest.
                     drift_note = drift_message(_rt, _v, _tid)
-                    _ops.record_run("weekly-summary", athlete=slug, ok=True,
-                                    detail=f"training-drift note queued "
-                                           f"({_v['breach'][0]}): {_v['breach'][1]}")
+                    _ops.record_run(
+                        "weekly-summary", athlete=slug, ok=True,
+                        detail=(f"training-drift note queued ({_v['breach'][0]}): "
+                                f"{_v['breach'][1]}") if drift_note else
+                               (f"training-drift breach with no coaching wording "
+                                f"({_v['breach'][0]}): {_v['breach'][1]}"))
     except Exception:
         pass
 
