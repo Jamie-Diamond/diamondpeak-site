@@ -612,8 +612,12 @@ Using the Write tool, update ClaudeCoach/athletes/{slug}/current-state.md:
 - If heat sessions this week > 0: append a row to "Heat acclimation log" table
 - If any body weight readings in wellness data: note the latest weight
 
-Then using Bash:
-  cd {PROJECT_DIR} && git add ClaudeCoach/athletes/{slug}/current-state.md && git commit -m "weekly: state update week ending {week_end}" && git pull --rebase origin main && git push origin main
+Then using Bash, run EXACTLY this one command and nothing else:
+  /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/cc-git-commit-push.sh "weekly: state update week ending {week_end}" ClaudeCoach/athletes/{slug}/current-state.md
+  Do NOT run git add, git commit, git push, git pull or git rebase yourself, and do not
+  add any other git command before or after this one. This wrapper takes the repo-wide
+  lock and retries a push that loses a race; raw git bypasses both and collides with the
+  other jobs that write this same repository every few minutes.
 
 ## Output
 

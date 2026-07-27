@@ -49,7 +49,12 @@ If NO triggers fire: output nothing. Do not call PushNotification. Silent run.
 If ANY trigger fires:
 1. Call PushNotification once, under 200 characters: "warning [trigger]: [action]" (Tier 2) or "info [trigger]: [note]" (Tier 1). Multiple triggers: list names, lead with highest tier.
 2. Update current-state.md — append to the relevant section (ankle, niggles, off-plan, or add a "## Watchdog flags" section if needed) with today's date and the trigger name + signal value. Do not rewrite sections that don't need updating.
-3. Run: git add ClaudeCoach/athletes/jamie/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "watchdog: [trigger list] [date]" && git push origin main
+3. Commit it by running EXACTLY this one command and nothing else:
+   /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/cc-git-commit-push.sh "watchdog: [trigger list] [date]" ClaudeCoach/athletes/jamie/current-state.md
+   Do NOT run git add, git commit, git push, git pull or git rebase yourself, and do not
+   add any other git command before or after this one. This wrapper takes the repo-wide
+   lock and retries a push that loses a race; raw git bypasses both and collides with the
+   other jobs that write this same repository every few minutes.
 4. Output one L2 reasoning trail per trigger to stdout (written to log):
    [signal with real number] -> [rule: T1-T9] -> [suggested adjustment] -> [expected effect]
    Example: "ATL 148 vs CTL 121 for 4 days -> T1 (ATL > CTL +25) -> insert recovery day, drop Thursday quality to Z2 -> TSB recovers ~8 pts by weekend"

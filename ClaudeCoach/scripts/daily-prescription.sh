@@ -84,7 +84,12 @@ Step 7 — Output the prescription card in exactly this format:
 
 If no rules fired: output "Today: [session name] — execute as planned." and the planned targets only (no reasoning trails section).
 
-Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired. Also update ankle section if today's prescription was affected by ankle status. Run: git add ClaudeCoach/athletes/jamie/current-state.md && git pull --rebase origin main && git commit -m "prescription: [date] [status]" && git push origin main
+Step 8 — Update current-state.md: in the "Off-plan in last 7 days" section, note today's prescribed session status (modified/swapped/blocked) and the reason if any rule fired. Also update ankle section if today's prescription was affected by ankle status. Commit it by running EXACTLY this one command and nothing else:
+   /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/cc-git-commit-push.sh "prescription: [date] [status]" ClaudeCoach/athletes/jamie/current-state.md
+   Do NOT run git add, git commit, git push, git pull or git rebase yourself, and do not
+   add any other git command before or after this one. This wrapper takes the repo-wide
+   lock and retries a push that loses a race; raw git bypasses both and collides with the
+   other jobs that write this same repository every few minutes.
 
 Step 9 — Call PushNotification if session was modified, swapped, or blocked. Message under 200 characters:
   "[session name]: [one-line summary of change]"

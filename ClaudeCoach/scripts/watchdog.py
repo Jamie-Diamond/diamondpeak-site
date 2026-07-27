@@ -157,7 +157,12 @@ If ANY trigger fires:
    the athlete being reminded of the same unfinished thing every single morning.
 2. For genuinely new/changed triggers only: update current-state.md — append to the relevant
    section with today's date and trigger name + signal value. Do not rewrite untouched sections.
-3. If you appended anything, run: git add ClaudeCoach/athletes/{slug}/current-state.md && git fetch origin && git rebase --autostash origin/main && git commit -m "watchdog: [trigger list] {today}" && git push origin main
+3. If you appended anything, commit it by running EXACTLY this one command and nothing else:
+   /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/cc-git-commit-push.sh "watchdog: [trigger list] {today}" ClaudeCoach/athletes/{slug}/current-state.md
+   Do NOT run git add, git commit, git push, git pull or git rebase yourself, and do not
+   add any other git command before or after this one. This wrapper takes the repo-wide
+   lock and retries a push that loses a race; raw git bypasses both and collides with the
+   other jobs that write this same repository every few minutes.
 4. Output one L2 reasoning trail per trigger to stdout (this goes to the coaching log only — NOT to athletes):
    [signal with real number] -> [rule: T1-T10] -> [suggested adjustment] -> [expected effect]
    Example: "ATL 148 vs CTL 121 for 4 days -> T1 (ATL > CTL +25) -> insert recovery day -> TSB recovers ~8 pts by weekend"
