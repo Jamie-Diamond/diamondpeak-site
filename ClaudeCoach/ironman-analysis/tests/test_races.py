@@ -260,18 +260,43 @@ class TestWording:
         m = races.render_pre_race(races.normalise(A_RACE), "Jamie")
         assert not any(ch.isdigit() for ch in m)
 
-    def test_focus_sentence_adapts_to_one_two_or_three_points(self):
+    def test_focus_points_are_separate_sentences_not_a_welded_list(self):
+        # Jamie read the first version - "Three things, all already done before: a; b; c" -
+        # and said it did not make sense. It was a template talking. Points are now spoken
+        # sentences, and no counted lead-in or semicolon welding may come back.
         r = races.normalise(A_RACE)
-        assert "One thing" in races.render_pre_race(r, "Jamie", focus=["a b"])
-        assert "Two things" in races.render_pre_race(r, "Jamie", focus=["a b", "c d"])
-        assert "Three things" in races.render_pre_race(r, "Jamie",
-                                                      focus=["a b", "c d", "e f"])
+        m = races.render_pre_race(r, "Jamie", focus=["go easy early", "let it come to you",
+                                                    "keep eating"])
+        assert ";" not in m
+        for banned in ("Three things", "Two things", "One thing", "already done before"):
+            assert banned not in m
+        assert "Go easy early." in m
+        assert "Let it come to you." in m
+        assert "And keep eating." in m          # a spoken list closes with "and"
+
+    def test_a_single_focus_point_gets_no_stray_and(self):
+        m = races.render_pre_race(races.normalise(A_RACE), "Jamie", focus=["go easy early"])
+        assert "Go easy early." in m
+        assert "And" not in m
+
+    def test_good_luck_leads_rather_than_signs_off(self):
+        # It is the one thing the message exists to say; it used to be the last line.
+        m = races.render_pre_race(races.normalise(A_RACE), "Jamie", focus=["go easy early"])
+        assert m.splitlines()[0].endswith("Good luck.")
+
+    def test_the_work_behind_it_closes_the_message(self):
+        m = races.render_pre_race(races.normalise(A_RACE), "Jamie", focus=["go easy early"],
+                                  block_fact="You have twenty weeks behind you for this one")
+        assert m.rstrip().endswith("You have twenty weeks behind you for this one.")
 
     def test_pre_race_caps_focus_at_three_and_invents_none(self):
+        # Labels deliberately free of number words — "bravo two" would be dropped by the
+        # quantity guard, which is correct behaviour but tests the wrong thing here.
         m = races.render_pre_race(races.normalise(A_RACE), "Jamie",
-                                  focus=["a", "b", "c", "d"])
-        assert "d" not in m.split(": ")[-1].split("; ")
-        assert m.count(";") == 2
+                                  focus=["swim steady", "ride patient", "run relaxed",
+                                         "smile lots"])
+        assert "Swim steady." in m and "Ride patient." in m and "And run relaxed." in m
+        assert "smile" not in m.lower()          # the fourth point is dropped, not folded
 
     def test_post_race_leads_on_the_result_not_the_analysis(self):
         m = races.render_post_race(races.normalise(B_RACE), "Jamie", good_day=True)
@@ -370,6 +395,19 @@ class TestDerivedFocusCannotInventANumber:
         for cid, _rank, text, _why in races.FOCUS_CATALOGUE:
             assert not any(c.isdigit() for c in text), f"{cid} carries a figure: {text!r}"
 
+    def test_layer1_no_catalogue_line_states_a_quantity_in_words_either(self):
+        for cid, _rank, text, _why in races.FOCUS_CATALOGUE:
+            assert not races._carries_a_figure(text), f"{cid} states a quantity: {text!r}"
+
+    def test_layer1_catalogue_lines_are_composable_clauses(self):
+        # They get capitalised and joined into sentences, so a leading capital or an
+        # internal em-dash (the shape that produced the garbled first version) would show
+        # up mid-message as broken punctuation.
+        for cid, _rank, text, _why in races.FOCUS_CATALOGUE:
+            assert text[0].islower(), f"{cid} should not be pre-capitalised: {text!r}"
+            assert "—" not in text, f"{cid} carries an internal em-dash: {text!r}"
+            assert not text.endswith("."), f"{cid} should not be pre-punctuated: {text!r}"
+
     def test_layer1_catalogue_ids_and_ranks_are_unique(self):
         ids = [c[0] for c in races.FOCUS_CATALOGUE]
         ranks = [c[1] for c in races.FOCUS_CATALOGUE]
@@ -392,7 +430,14 @@ class TestDerivedFocusCannotInventANumber:
         m = races.render_pre_race(races.normalise(A_RACE), "Jamie",
                                   focus=["hold 250 W on the climb", "stay calm"])
         assert "250" not in m
-        assert "stay calm" in m
+        assert "Stay calm." in m                 # composed as a sentence, so capitalised
+
+    def test_layer3_render_also_drops_a_figure_written_as_a_word(self):
+        # A digit check alone would let "two hundred and fifty watts" straight through.
+        m = races.render_pre_race(races.normalise(A_RACE), "Jamie",
+                                  focus=["hold two hundred and fifty watts", "stay calm"])
+        assert "hundred" not in m and "fifty" not in m
+        assert "Stay calm." in m
 
     def test_no_derived_message_contains_a_digit_in_its_focus_sentence(self):
         prof = {"prev_race": {"notes": "fade, walk-breaks from km 13",
@@ -467,8 +512,7 @@ class TestCuratedOverride:
 
     def test_derivation_used_when_nothing_is_curated(self):
         prof = {"prev_race": {"notes": "fade"}}
-        assert races.focus_for(prof, "") == [
-            "hold the first stretch back — last time the time went late, not early"]
+        assert races.focus_for(prof, "") == ["go out easier on the bike than feels right"]
 
     def test_curated_list_is_also_capped_at_three(self):
         prof = {"race_focus": ["a", "b", "c", "d"]}

@@ -464,39 +464,71 @@ def icu_race_events(client, start: str, end: str) -> list:
 # reason, so "why did this point appear" is answerable without re-deriving it by hand.
 
 _FOCUS_DIGIT_RE = re.compile(r"\d")
+# Cardinal number WORDS are guarded too, or "hold two hundred and fifty watts" walks
+# straight past a digit check. "one" is excluded deliberately — it is a pronoun far more
+# often than a quantity here ("the one you practised"), and guarding it would block natural
+# prose without closing any real hole. Ordinals ("first", "second") are not quantities and
+# are left alone.
+_FOCUS_NUMWORD_RE = re.compile(
+    r"\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|"
+    r"forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)\b", re.I)
+
+
+def _carries_a_figure(text: str) -> bool:
+    """True if a focus line states a quantity, as a digit or as a number word."""
+    return bool(_FOCUS_DIGIT_RE.search(text or "")
+                or _FOCUS_NUMWORD_RE.search(text or ""))
+
 
 # (id, rank, text, why-template). Lower rank = offered first. Ranking is by what the
 # athlete's own history says the thing has COST them, not by topic tidiness.
+#
+# WORDING RULES for anything added here, learned the hard way after Jamie read the first
+# version and said "this doesn't really make sense does it?":
+#
+# * Each line is a plain IMPERATIVE CLAUSE a coach would actually say out loud, and it must
+#   survive being read aloud without the athlete having to reparse it. The first attempt
+#   compressed the insight AND its justification into one clause — "hold the first stretch
+#   back — last time the time went late, not early" — and the result was close to
+#   meaningless. Cryptic compression is the failure mode; length is not the enemy.
+# * NO JUSTIFICATION in the athlete-facing text. That was the root cause of the garbling,
+#   and it is also what §8.6 asks for: race eve is not the place for analysis, and the
+#   guide's own worked example (Pair 5) attaches no reasoning to its points — "swim steady,
+#   ride the first ten minutes easier than feels right, and let the run come to you". The
+#   reasoning lives in the `why` field and the provenance, where it is auditable without
+#   being dumped on someone the night before their race.
+# * No internal em-dash and no leading capital: these get composed into sentences.
+# * No figures, digits or number words (`_carries_a_figure`).
 FOCUS_CATALOGUE = [
     ("pace_first_half", 10,
-     "hold the first stretch back — last time the time went late, not early",
+     "go out easier on the bike than feels right",
      "past race notes record a late fade"),
     ("run_patience", 20,
-     "start the run slower than it feels you should",
+     "let the run come to you",
      "past race notes record the run coming apart in the back half"),
     ("fuel_front_load", 30,
-     "first feed early, then something regularly from the start — not saved for the climbs",
+     "start the fuelling early, then keep it regular",
      "a standing rule of the athlete's own sets front-loaded fuelling as the agreed fix"),
     ("fuel_take_it_on", 35,
-     "take fuel on steadily from the start — it is what your rides have been short of",
+     "eat and drink steadily from the start",
      "a standing rule asks for race-nutrition risk to be flagged, and logged rides run low"),
     ("run_fuel", 40,
-     "keep taking carbs on the run, not only on the bike",
+     "keep the fuel going on the run, not just the bike",
      "a standing rule names run fuelling as the open focus"),
     ("caffeine_spread", 50,
-     "spread the caffeine rather than stacking it before the swim",
+     "spread the caffeine out rather than stacking it before the swim",
      "a standing rule set after the last race asks for spread dosing"),
     ("electrolyte_every_bottle", 55,
-     "a tab in every bottle, not just some",
+     "put a tab in every bottle",
      "a standing rule set after a confirmed cramping episode"),
     ("hr_anchor", 60,
-     "let the power be whatever it is at your race heart rate",
+     "ride to your heart rate and let the power sit where it lands",
      "a standing rule anchors race pacing to heart rate rather than a power figure"),
     ("transitions", 70,
-     "transitions calm, in the order you have drilled",
+     "take the transitions calmly, in the order you practised",
      "past race transitions ran slower than the agreed plan"),
     ("ride_to_feel", 80,
-     "ride to feel, not to the numbers",
+     "ride on feel rather than chasing numbers",
      "a standing rule makes ride-to-feel the default for this event"),
 ]
 
@@ -597,9 +629,9 @@ def derive_focus(profile: dict, rules_text: str = "", avg_g_hr=None,
             continue
         # Layer 3 of the no-new-numbers guarantee. Redundant while the catalogue stays
         # qualitative — which is exactly why it is here: it fails closed if that changes.
-        if _FOCUS_DIGIT_RE.search(text):
+        if _carries_a_figure(text):
             suppressed.append({"id": cid,
-                               "reason": "focus text contains a figure; a pre-race focus "
+                               "reason": "focus text states a quantity; a pre-race focus "
                                          "point must carry no numbers (§8.6)"})
             continue
         if len(selected) >= 3:
@@ -644,20 +676,37 @@ def render_pre_race(race: dict, first_name: str, phase: str = "race_eve",
     hand-written "hold 250 W" would be a race-eve number the athlete did not ask for."""
     name = race.get("name") or "your race"
     lines = []
+    # "Good luck" goes at the TOP, plainly and undecorated, as §8.6 asks and as the guide's
+    # own worked example does ("Dorney tomorrow. Good luck."). It used to be the sign-off,
+    # which buried the one thing the message exists to say.
     if phase == "race_day":
-        lines.append(f"Race day, {first_name}. {name}.")
+        lines.append(f"Race day, {first_name}. {name}. Good luck.")
     else:
-        lines.append(f"{name} tomorrow, {first_name}.")
+        lines.append(f"{name} tomorrow, {first_name}. Good luck.")
+
+    picked = [f.strip().rstrip(".") for f in (focus or [])
+              if f and f.strip() and not _carries_a_figure(f)][:3]
+    if picked:
+        # Composed as SEPARATE SENTENCES, not a semicolon-welded list under a counted
+        # lead-in. The first version read "Three things, all already done before: a; b; c"
+        # and Jamie's verdict was that it did not make sense — that is a template talking,
+        # not a person. Sentences also sidestep the comma-and-"and" collisions that folding
+        # several clauses into one sentence produces, and they read the same at one point or
+        # at three.
+        body = ["Nothing new to think about."]
+        for i, item in enumerate(picked):
+            sentence = item[0].upper() + item[1:]
+            if i == len(picked) - 1 and len(picked) > 1:
+                sentence = "And " + item                 # a spoken list closes with "and"
+            body.append(sentence.rstrip(".") + ".")
+        lines.append(" ".join(body))
+    else:
+        lines.append("Nothing new to think about — the plan is the plan.")
+
+    # The work behind it goes LAST, the way the guide's example closes on "You've done
+    # sixteen weeks for this one".
     if block_fact:
         lines.append(block_fact.strip().rstrip(".") + ".")
-    picked = [f.strip().rstrip(".") for f in (focus or [])
-              if f and f.strip() and not _FOCUS_DIGIT_RE.search(f)][:3]
-    if picked:
-        lead = {1: "One thing, already done before:",
-                2: "Two things, both already done before:",
-                3: "Three things, all already done before:"}[len(picked)]
-        lines.append(lead + " " + "; ".join(picked) + ".")
-    lines.append("Nothing new today — the plan is the plan. Good luck.")
     return "\n\n".join(lines)
 
 

@@ -54,7 +54,7 @@ def _block_fact(athlete_cfg, today):
         weeks = (today - date.fromisoformat(ps)).days // 7
     except Exception:
         return ""
-    return f"You have {weeks} weeks of work behind you for this" if weeks >= 2 else ""
+    return f"You have {weeks} weeks of work behind you for this one" if weeks >= 2 else ""
 
 
 def _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries, long_run_cap_km=None):

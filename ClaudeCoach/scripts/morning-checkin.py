@@ -379,7 +379,7 @@ def _block_fact(athlete_cfg, today):
         return ""
     if weeks < 2:
         return ""
-    return f"You have {weeks} weeks of work behind you for this"
+    return f"You have {weeks} weeks of work behind you for this one"
 
 
 def run_athlete(slug, athlete_cfg):
