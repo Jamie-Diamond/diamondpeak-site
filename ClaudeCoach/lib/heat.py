@@ -442,6 +442,9 @@ def acclimation_score(slug: str, ref_date: date | None = None) -> float:
 
 ACCL_SERIES_MIN_DAYS = 90   # shortest window the chart shows, even with no log
 ACCL_SERIES_LEAD_DAYS = 7   # zero-baseline days plotted before the first exposure
+                            # (the series otherwise starts at 1 Jan, so the athlete
+                            # pages' season view is full-width rather than a line
+                            # that stops a third of the way across)
 
 
 def acclimation_series(slug: str, end: date | None = None,
@@ -463,6 +466,7 @@ def acclimation_series(slug: str, end: date | None = None,
     if start is None:
         earliest = min((d for d, _, _ in doses), default=end)
         start = min(earliest - timedelta(days=ACCL_SERIES_LEAD_DAYS),
+                    date(end.year, 1, 1),
                     end - timedelta(days=ACCL_SERIES_MIN_DAYS))
 
     daily, peak, peak_date = [], 0.0, None
