@@ -373,6 +373,22 @@ def log(msg):
     print(f"{datetime.now().strftime('%H:%M:%S')} {msg}")
 
 
+def _heat_accl_series(slug):
+    """Daily heat-acclimation series for the athlete page chart, or None.
+
+    Recomputed from heat-log.json by lib/heat.acclimation_series on every run —
+    the score is never stored, so the chart cannot drift from the model the
+    prescription and watchdog use.
+    """
+    try:
+        sys.path.insert(0, str(BASE / "lib"))
+        import heat as heat_lib
+        return heat_lib.acclimation_series(slug)
+    except Exception as e:
+        log(f"[{slug}] heatAccl series skipped: {e}")
+        return None
+
+
 def _ctl_project(start_ctl, daily_tss_fn, days):
     """Project CTL forward using exponential decay: CTL_new = CTL + (TSS - CTL) / 42."""
     ctl = start_ctl
@@ -468,6 +484,9 @@ def post_process(data):
         "target_min": 14,
         "target_max": 20,
     }
+    accl = _heat_accl_series("jamie")
+    if accl:
+        data["heatAccl"] = accl
 
     # Last-season CTL overlay (cached once — 2025 data never changes)
     if FITNESS_PREV_CACHE.exists():
@@ -928,6 +947,10 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "sessionLog":   session_log,
         "swimLog":      swim_log,
     }
+
+    accl = _heat_accl_series(slug)
+    if accl:
+        data["heatAccl"] = accl
 
     # Previous season CTL overlay (if cache exists for this athlete)
     prev_cache = BASE / f"athletes/{slug}/fitness-prev-cache.json"

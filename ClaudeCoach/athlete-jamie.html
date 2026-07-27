@@ -299,6 +299,23 @@
     </div>
   </div>
 
+  <!-- HEAT ACCLIMATISATION -->
+  <div class="panel" id="heat-accl-panel" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <h2 style="margin:0">Heat acclimatisation</h2>
+      <div style="display:flex;gap:6px">
+        <button onclick="zoomHeatAccl(60)" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">60d</button>
+        <button onclick="zoomHeatAccl(0)"  style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">Season</button>
+      </div>
+    </div>
+    <div class="small" id="heat-accl-sub" style="margin-bottom:10px">Daily acclimation score · dots = logged heat exposures</div>
+    <div class="chart-wrap"><canvas id="chartHeatAccl"></canvas></div>
+    <div class="legend" style="margin-top:10px">
+      <span><span class="swatch" style="background:#c0392b"></span>Acclimation score</span>
+      <span><span class="swatch" style="background:#e67e22"></span>Heat exposure — dot size = dose</span>
+    </div>
+  </div>
+
   <!-- PLAN VS ACTUAL TSS -->
   <div class="panel" style="margin-bottom:14px">
     <h2>Plan vs actual TSS — last 6 weeks</h2>
@@ -573,6 +590,105 @@ function zoomFitness(days) {
     }
   }
   ch.update();
+}
+
+// ── HEAT ACCLIMATISATION CHART ───────────────────────────────────────────────
+// Score, dose curve and 21-day decay all come from ClaudeCoach/lib/heat.py —
+// refresh-site-data recomputes the daily series from heat-log.json on every run,
+// so nothing here may re-derive it. Y is fixed 0–100: the model caps at 100%, so
+// a flat top is a full ceiling, not missing data.
+window.chartHeatAccl = null;
+(function(){
+  const el = document.getElementById("chartHeatAccl");
+  if (!el) return;
+  window.chartHeatAccl = new Chart(el.getContext("2d"), {
+    type:"line",
+    data:{
+      datasets:[
+        {
+          label:"Acclimation",
+          data:[],
+          borderColor:"#c0392b",
+          backgroundColor:"rgba(192,57,43,0.08)",
+          pointRadius:0,
+          tension:0.2,
+          borderWidth:2.2,
+          fill:true
+        },
+        {
+          label:"Heat exposure",
+          data:[],
+          borderColor:"rgba(230,126,34,0)",
+          backgroundColor:"rgba(230,126,34,0)",
+          borderWidth:0,
+          showLine:false,
+          pointRadius:c=>Math.max(3,Math.min(9,2.5+(c.raw&&c.raw.dose||0)*2.5)),
+          pointBackgroundColor:"rgba(230,126,34,0.9)",
+          tension:0,
+          fill:false
+        }
+      ]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{mode:"nearest",intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            label:it=>it.datasetIndex===0
+              ? "Acclimation "+it.raw.y.toFixed(0)+"%"
+              : (it.raw.date||""),
+            afterBody:(items)=>{
+              const ev = (window.chartHeatAccl.data.datasets[1].data||[])
+                .find(p=>p.x===items[0].raw?.x);
+              return ev ? "  "+ev.label+" · dose "+ev.dose.toFixed(2) : "";
+            }
+          }
+        }
+      },
+      scales:{
+        x:{type:"linear",min:-285,max:14,
+           ticks:{callback:v=>"T"+v,maxTicksLimit:10},
+           grid:{color:"#e8e3da"}},
+        y:{title:{display:true,text:"Acclimation %"},min:0,max:100,grid:{color:"#e8e3da"}}
+      }
+    }
+  });
+})();
+
+function zoomHeatAccl(days) {
+  if (!window.chartHeatAccl) return;
+  const sc = window.chartHeatAccl.options.scales.x;
+  if (days === 0) {
+    sc.min = -285; sc.max = 14;
+  } else {
+    const todayTX = toTX(new Date().toISOString().slice(0,10));
+    sc.min = todayTX - days; sc.max = todayTX + 21;
+  }
+  window.chartHeatAccl.update();
+}
+
+function renderHeatAccl(h) {
+  const ch = window.chartHeatAccl;
+  if (!ch || !h || !h.daily) return;
+  ch.data.datasets[0].data = h.daily.map(([dt,v])=>({x:toTX(dt),y:v}));
+  ch.data.datasets[1].data = (h.events||[]).map(([dt,dose,pct,label])=>
+    ({x:toTX(dt),y:pct,dose:dose,label:label,date:dt}));
+  const sub = document.getElementById("heat-accl-sub");
+  if (sub) {
+    if (!h.entries) {
+      sub.textContent = "No heat exposures logged — score sits at 0%. Only sessions of 30+ min at 25°C or hotter are eligible.";
+    } else {
+      let t = "Now "+Math.round(h.current)+"% · peak "+Math.round(h.peak)+"%"
+            + " · "+h.entries+" exposures logged · decays with a "+h.tau_days+"-day"
+            + " time constant between them · dots = exposures, size = dose";
+      if (h.peak >= 100) t += " · the score is capped at 100%, so a flat top is a full ceiling, not a data gap";
+      sub.textContent = t;
+    }
+  }
+  zoomHeatAccl(60);
 }
 
 // ── LOAD CHART ───────────────────────────────────────────────────────────────
@@ -1467,6 +1583,7 @@ fetch('training-data.json?v='+Date.now())
       }
     }
     if (d.loadChart && d.loadChart.length)      renderLoadChart(d.loadChart);
+    if (d.heatAccl)                              renderHeatAccl(d.heatAccl);
     if (d.weekCalendar && d.weekCalendar.length) renderLiveCalendar(d.weekCalendar);
     if (d.recent)                                renderRecentTable(d.recent);
     if (d.planVsActual)                          renderPlanActual(d.planVsActual);

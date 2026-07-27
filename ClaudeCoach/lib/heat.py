@@ -405,6 +405,23 @@ def exposure_entry(act: dict, latlng_fallback=None) -> dict | None:
     return entry
 
 
+def _dated_doses(slug: str) -> list[tuple[date, float, dict]]:
+    """[(date, dose, entry)] from an athlete's heat-log, undated entries dropped."""
+    log_file = BASE / "athletes" / slug / "heat-log.json"
+    try:
+        entries = json.loads(log_file.read_text())
+    except Exception:
+        return []
+    out = []
+    for entry in entries:
+        try:
+            d = date.fromisoformat(str(entry.get("date") or "")[:10])
+        except (ValueError, TypeError):
+            continue
+        out.append((d, float(entry.get("dose") or 1.0), entry))
+    return out
+
+
 def acclimation_score(slug: str, ref_date: date | None = None) -> float:
     """0–100 heat acclimation percentage with a 21-day exponential decay.
 
@@ -414,19 +431,73 @@ def acclimation_score(slug: str, ref_date: date | None = None) -> float:
     """
     if ref_date is None:
         ref_date = date.today()
-    log_file = BASE / "athletes" / slug / "heat-log.json"
-    try:
-        entries = json.loads(log_file.read_text())
-    except Exception:
-        return 0.0
     raw = 0.0
-    for entry in entries:
-        try:
-            d = date.fromisoformat(str(entry.get("date") or "")[:10])
-        except (ValueError, TypeError):
-            continue
+    for d, dose, _ in _dated_doses(slug):
         days_since = (ref_date - d).days
         if days_since < 0:
             continue
-        raw += float(entry.get("dose") or 1.0) * math.exp(-days_since / ACCL_TAU_DAYS)
+        raw += dose * math.exp(-days_since / ACCL_TAU_DAYS)
     return min(100.0, raw * ACCL_SCALE)
+
+
+ACCL_SERIES_MIN_DAYS = 90   # shortest window the chart shows, even with no log
+ACCL_SERIES_LEAD_DAYS = 7   # zero-baseline days plotted before the first exposure
+
+
+def acclimation_series(slug: str, end: date | None = None,
+                       start: date | None = None) -> dict:
+    """Daily acclimation score + dose events for the athlete heat chart.
+
+    {"daily": [[iso_date, pct], ...], "events": [[iso_date, dose, pct, label], ...],
+     "current": pct, "peak": pct, "peak_date": iso_date, "entries": n}
+
+    Recomputed from heat-log.json on every call — there is no separate store, so
+    the chart can never drift from acclimation_score(). Each daily value is the
+    same decayed-dose sum that acclimation_score returns for that date; events
+    are one marker per logged day (doses on the same date summed), placed on the
+    line so the step up at an exposure and the decay after it both read off.
+    Athletes with no logged exposures get a flat zero series, not an empty one.
+    """
+    end = end or date.today()
+    doses = [(d, dose, e) for d, dose, e in _dated_doses(slug) if d <= end]
+    if start is None:
+        earliest = min((d for d, _, _ in doses), default=end)
+        start = min(earliest - timedelta(days=ACCL_SERIES_LEAD_DAYS),
+                    end - timedelta(days=ACCL_SERIES_MIN_DAYS))
+
+    daily, peak, peak_date = [], 0.0, None
+    by_date = {}
+    cur = start
+    while cur <= end:
+        raw = sum(dose * math.exp(-(cur - d).days / ACCL_TAU_DAYS)
+                  for d, dose, _ in doses if d <= cur)
+        pct = round(min(100.0, raw * ACCL_SCALE), 1)
+        iso = cur.isoformat()
+        daily.append([iso, pct])
+        by_date[iso] = pct
+        if pct > peak:
+            peak, peak_date = pct, iso
+        cur += timedelta(days=1)
+
+    grouped: dict[str, list] = {}
+    for d, dose, entry in doses:
+        if d < start:
+            continue
+        g = grouped.setdefault(d.isoformat(), [0.0, []])
+        g[0] += dose
+        g[1].append(entry.get("method") or "heat session")
+    events = []
+    for iso in sorted(grouped):
+        total, methods = grouped[iso]
+        label = methods[0] if len(methods) == 1 else f"{len(methods)}× exposure"
+        events.append([iso, round(total, 2), by_date.get(iso, 0.0), label])
+
+    return {
+        "daily": daily,
+        "events": events,
+        "current": round(min(100.0, acclimation_score(slug, end)), 1),
+        "peak": round(peak, 1),
+        "peak_date": peak_date,
+        "entries": len(doses),
+        "tau_days": ACCL_TAU_DAYS,
+    }
