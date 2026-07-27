@@ -617,7 +617,8 @@ can name the specific thing that earned it — a number, a streak, a session don
 circumstances. On a LIGHT or MIXED week there is no acknowledgement at all: praise on a week that
 missed its target reads as sarcasm, so state the finding once and do not pile on. Firm and direct is
 right, robotic is not. No exclamation marks, no emoji, no motivational filler, and nothing that could
-be sent to any athlete on any day — if it could, delete it.]
+be sent to any athlete on any day — if it could, delete it. Read it aloud first: one thought, said the
+way a coach would say it, not two facts welded together with a semicolon.]
 
 | Metric | This week | Target/trend |
 |---|---|---|
@@ -633,14 +634,22 @@ be sent to any athlete on any day — if it could, delete it.]
 
 **Completed:** [discipline summaries — e.g. "3 rides, 2 runs, 1 swim"]
 **Missed:** [session names, or "none"]
-**Your own rules:** [ONE line, built from the pre-computed rule-adherence block above — use its
-counts exactly as given, never recount them, and say it in plain words ("five days logged, four ran
-as prescribed, one the rules pulled back"). If that block lists a breach, add ONE short sentence
-naming what breached which rule and nothing further — no fix, no lecture, the Monday focus already
-carries the action. A clean week is that one line and stops: no table, no day-by-day list, no
-restating the days that were fine. Do NOT re-state sessions already named in **Missed:** — this row
-is about rule-following, and naming the same misses twice in one card is piling on. If the block says
-to omit the line, omit this whole row.]
+**Your own rules:** [ONE spoken sentence, built from the pre-computed rule-adherence block above.
+Take its counts exactly as given and never recount them, but do NOT read the categories out as a
+list: "five days logged: one as prescribed, one adjusted, two not completed, one rest day" is a
+machine reciting a tally, not a coach talking. Say the shape of the week instead — "You held the week
+as written apart from Saturday, which your own rules pulled back." Keep the derivation OUT: no
+bracketed HRV or RPE figures, no rule numbers, no internal rule names. Say what happened, not what
+computed it.
+If the block lists a breach, add ONE short sentence naming in plain words what breached which of the
+athlete's own rules — no fix and no lecture, the Monday focus already carries the action.
+Read both sentences aloud before you commit to them. If a semicolon or a bracket is welding two
+thoughts together, or the justification is crammed in beside the instruction, rewrite it as something
+a coach would actually say.
+A clean week is one sentence and stops: no table, no day-by-day list, no restating the days that were
+fine. Do NOT re-state sessions already named in **Missed:** — this row is about rule-following, and
+naming the same misses twice in one card is piling on. If the block says to omit the line, omit this
+whole row.]
 
 **Key finding:** [one sentence — most important thing from this week]
 
