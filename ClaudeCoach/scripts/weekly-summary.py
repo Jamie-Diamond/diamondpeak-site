@@ -607,6 +607,14 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 ---
 **Week ending {week_end} — [STRONG / SOLID / LIGHT / MIXED]**
 
+[Acknowledgement — one sentence, here, before the table, never after: a "well done" appended under a
+list of flags reads as an afterthought. Include it ONLY on a STRONG or SOLID week, and only if you
+can name the specific thing that earned it — a number, a streak, a session done in difficult
+circumstances. On a LIGHT or MIXED week there is no acknowledgement at all: praise on a week that
+missed its target reads as sarcasm, so state the finding once and do not pile on. Firm and direct is
+right, robotic is not. No exclamation marks, no emoji, no motivational filler, and nothing that could
+be sent to any athlete on any day — if it could, delete it.]
+
 | Metric | This week | Target/trend |
 |---|---|---|
 | Load | X (planned Y) | — |
