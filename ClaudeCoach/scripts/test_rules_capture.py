@@ -287,6 +287,78 @@ class ConfirmedMarkerTests(unittest.TestCase):
         self.assertIn("confirmed preference", drops[0][0])
 
 
+class ConfirmedExtensionTests(unittest.TestCase):
+    """A confirmed preference may be EXTENDED in place, but not reworded away.
+
+    The blanket "any alteration of a confirmed rule aborts" rule made the live ankle
+    rule (rule 12) permanently review-card-only the moment it gained a "Confirmed 27 Jul
+    2026" clause — its own successful fold locked it against every future refinement.
+    Jamie's call: allow extension, keep everything else strict. Note the bar here is the
+    STRICT token-subset test, deliberately NOT the reworded-prose budget `_absorbs`
+    grants ordinary rules — see test_reworded_confirmed_rule_aborts_even_though_absorbs
+    below, which is the test that stops this becoming a general relaxation.
+
+    Fixtures are synthetic; the real rule-12 cases are replayed out-of-tree because
+    athletes/ is gitignored and this repo is public."""
+
+    RULE = ("[perm] Include at least one dedicated mobility and ankle strength session "
+            "every week, and do not let it drop out even in travel weeks. "
+            "Confirmed 27 Jul 2026.")
+
+    def test_extending_a_confirmed_rule_in_place_is_permitted(self):
+        """Every original token kept, a new fact appended — the rule-12 shape."""
+        before = _lines(self.RULE)
+        after = _lines(self.RULE.rstrip() + " Format is 3x15 min, placeable on any day.")
+        new_text, drops = rc.enforce_rule_guards(before, after, [self.RULE])
+        self.assertEqual(new_text, after)
+        self.assertEqual(drops, [])
+
+    def test_reworded_confirmed_rule_aborts_even_though_absorbs_allows_it(self):
+        """The guard rail on the relaxation. This rewording is inside `_absorbs`' prose
+        budget, so an ordinary rule could be edited this way — a confirmed one may not."""
+        reworded = (self.RULE.replace("Include at least one dedicated", "Do at least one")
+                             .replace("do not let it drop out", "keep it in"))
+        self.assertNotEqual(reworded, self.RULE)
+        # Prove the ordinary-rule test would have accepted it...
+        self.assertTrue(rc._absorbs(self.RULE, reworded))
+        # ...and that being confirmed is what blocks it.
+        new_text, drops = rc.enforce_rule_guards(
+            _lines(self.RULE), _lines(reworded), [self.RULE])
+        self.assertEqual(new_text, _lines(self.RULE))
+        self.assertTrue(drops[0][0].startswith("ABORT"))
+        self.assertIn("confirmed preference", drops[0][0])
+
+    def test_confirmed_rule_losing_a_number_aborts(self):
+        rule = self.RULE.rstrip() + " Format is 3x15 min."
+        after = rule.replace("3x15", "3x10")
+        new_text, drops = rc.enforce_rule_guards(_lines(rule), _lines(after), [rule])
+        self.assertEqual(new_text, _lines(rule))
+        self.assertTrue(drops[0][0].startswith("ABORT"))
+
+    def test_deleting_a_confirmed_rule_aborts(self):
+        before = _lines(self.RULE, "[perm] Wears compression socks on long travel days")
+        after = _lines("[perm] Wears compression socks on long travel days")
+        new_text, drops = rc.enforce_rule_guards(before, after, [self.RULE])
+        self.assertEqual(new_text, before)
+        self.assertTrue(drops[0][0].startswith("ABORT"))
+        self.assertIn("confirmed preference", drops[0][0])
+
+    def test_an_ordinary_rule_alongside_a_confirmed_one_may_still_be_reworded(self):
+        """The two standards coexist: the confirmed rule is extended, the ordinary one
+        beside it is reworded, and both land in the same write."""
+        other = ("[perm] Takes 750mg magnesium and 500mg zinc before bed on hard training "
+                 "days, always with food, never on an empty stomach.")
+        before = _lines(self.RULE, other)
+        after = _lines(
+            self.RULE.rstrip() + " Format is 3x15 min.",
+            "[perm] Evening supplements: 750mg magnesium and 500mg zinc before bed on hard "
+            "training days, taken with food and never on an empty stomach.",
+        )
+        new_text, drops = rc.enforce_rule_guards(before, after, [self.RULE])
+        self.assertEqual(new_text, after)
+        self.assertEqual(drops, [])
+
+
 class AppendGuardTests(unittest.TestCase):
     """Pre-existing (unchanged) append-only guard behaviour: conflict / dup / ceiling."""
 

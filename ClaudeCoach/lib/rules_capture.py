@@ -13,8 +13,9 @@ place, keeping every fact) instead of appending a near-dup. `enforce_rule_guards
 backstop that makes folding safe: an in-place edit that removes or rewrites an existing
 [perm] line is permitted ONLY when every removed rule is ABSORBED by some [perm] line
 still on file (see `_absorbs`: every number preserved, and most content words carried
-over, so a silently-changed figure like 750mg->700mg fails), and no confirmed preference
-is touched. Any lossy edit fails
+over, so a silently-changed figure like 750mg->700mg fails). A rule the athlete has
+CONFIRMED is held to a stricter bar again - it may be extended in place but never
+reworded away. Any lossy edit fails
 the invariant and the WHOLE write is refused — the caller gets `before_text` back,
 untouched. A newly-appended [perm] line is still reverted if it contradicts a confirmed
 preference, exactly duplicates an existing line, or would push the pile over the
@@ -83,8 +84,11 @@ def _sig_tokens(line: str) -> set:
 # not deleted: NUMBERS must still all survive (that check is earning its keep - it stops
 # figures drifting), while PROSE may be reworded so long as most of the removed rule's
 # content words still appear in the rule that absorbed it.
-# At most this fraction of a removed rule's content words may be reworded away...
-FOLD_PROSE_COVERAGE = 0.80
+# At most this PERCENTAGE of a removed rule's content words may be reworded away...
+# Integer percent, not a 0.80 float: `int(15 * (1.0 - 0.80))` is 2, not 3, because
+# 1.0 - 0.80 == 0.19999999999999996, so a float budget came out a word tighter than
+# documented at every size where the product lands just under a whole number.
+FOLD_PROSE_LOSS_PCT = 20
 # ...but always allow this many, so SHORT rules are not held to an unreachable standard.
 # A nine-content-word rule reworded from "Drinks 500ml of water before every long run"
 # to "500ml water sipped..." loses two low-information words and lands at 0.78 - a
@@ -134,10 +138,11 @@ def _absorbs(removed_line: str, surviving_line: str) -> bool:
     both hold:
       * every number survives. A dropped or drifted figure (750mg -> 700mg) is never a
         rewording, and this is the half of the guard that stops figures moving; and
-      * enough of the removed rule's content words appear in the survivor - at least
-        FOLD_PROSE_COVERAGE of them, with a floor of FOLD_PROSE_MIN_ALLOWANCE words'
-        slack once a rule has FOLD_PROSE_FLOOR_MIN_TOKENS content words - so deleting a
-        genuine fact fails, and a short rule must be folded essentially word-complete.
+      * enough of the removed rule's content words appear in the survivor - at most
+        FOLD_PROSE_LOSS_PCT per cent of them may go, with a floor of
+        FOLD_PROSE_MIN_ALLOWANCE words' slack once a rule has FOLD_PROSE_FLOOR_MIN_TOKENS
+        content words - so deleting a genuine fact fails, and a short rule must be folded
+        essentially word-complete.
     A rule with no content words (a bare figure) has nothing to reword, so it falls back
     to the strict test."""
     r_sig = _sig_tokens(removed_line)
@@ -151,7 +156,7 @@ def _absorbs(removed_line: str, surviving_line: str) -> bool:
     if not r_content:
         return False
     missing = len(r_content - _content_tokens(surviving_line))
-    allowed = int(len(r_content) * (1.0 - FOLD_PROSE_COVERAGE))
+    allowed = len(r_content) * FOLD_PROSE_LOSS_PCT // 100
     if len(r_content) >= FOLD_PROSE_FLOOR_MIN_TOKENS:
         allowed = max(FOLD_PROSE_MIN_ALLOWANCE, allowed)
     return missing <= allowed
@@ -195,10 +200,12 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list):
       * an in-place edit that removes/rewrites an existing rule is PERMITTED only when every
         removed rule is absorbed by some [perm] line still on file (`_absorbs`). Rewording is
         allowed — it has to be, or every fold aborts on a dropped stop word — but every number
-        must survive and most of the removed rule's content words must carry over. Any edit that
-        drops a fact, silently changes a figure, or removes a confirmed preference fails the
-        invariant and the ENTIRE write is refused (file left untouched), routing that judgement
-        to the human-reviewed merge.
+        must survive and most of the removed rule's content words must carry over. A CONFIRMED
+        preference is held to the stricter original bar (see `_survives`): it may be EXTENDED in
+        place, keeping every significant token, but rewording, weakening or deleting one still
+        fails. Any edit that drops a fact, silently changes a figure, or rewrites a confirmed
+        preference fails the invariant and the ENTIRE write is refused (file left untouched),
+        routing that judgement to the human-reviewed merge.
 
     Returns (new_text, drops); a drops entry whose reason starts 'ABORT' means nothing written
     (new_text == before_text)."""
@@ -220,27 +227,43 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list):
         raw_by_norm.setdefault(_norm(l), l)
     removed_raw = [raw_by_norm.get(n, "") for n in removed]
 
+    def _survives(n, perm_lines) -> bool:
+        """Did the pre-existing rule `n` survive this edit, given the [perm] lines still on
+        file? Two standards, by design:
+
+        * A CONFIRMED preference may only be EXTENDED in place - some survivor must keep
+          every one of its significant tokens, numbers included, and may add to them.
+          Deliberately the STRICT subset test, not the reworded-prose budget `_absorbs`
+          allows ordinary rules: for a preference the athlete has explicitly locked in,
+          "most of the wording survived" is not good enough, so any rewording, weakening
+          or deletion still aborts to a human review card.
+        * Any other rule may also be REWORDED, within `_absorbs`' budget."""
+        rline = raw_by_norm.get(n, "")
+        if n in confirmed:
+            rtoks = _sig_tokens(rline)
+            return not rtoks or any(rtoks <= _sig_tokens(l) for l in perm_lines)
+        return any(_absorbs(rline, l) for l in perm_lines)
+
     def _fold_ok(perm_lines) -> str:
-        """'' if every removed rule survives (folded) in perm_lines and no confirmed preference
-        was removed; else an ABORT reason. perm_lines is the list of [perm] lines to check."""
+        """'' if every removed rule survives in perm_lines; else an ABORT reason.
+        perm_lines is the list of [perm] lines to check."""
         for n in removed:
+            if _survives(n, perm_lines):
+                continue
             if n in confirmed:
-                return ("ABORT: edit would remove/alter a confirmed preference; "
-                        "reverted the model's edit")
-            rline = raw_by_norm.get(n, "")
-            if not any(_absorbs(rline, l) for l in perm_lines):
-                return ("ABORT: edit removed rule content not folded into any surviving rule; "
-                        "reverted the model's edit")
+                return ("ABORT: edit would reword, weaken or remove a confirmed preference "
+                        "(it may only be extended in place); reverted the model's edit")
+            return ("ABORT: edit removed rule content not folded into any surviving rule; "
+                    "reverted the model's edit")
         return ""
 
     # Validate folds against the model's full output BEFORE gating appends.
     if removed:
         reason = _fold_ok([after_lines[i] for i in perm_idx])
         if reason:
+            _after_perm = [after_lines[i] for i in perm_idx]
             bad = next((raw_by_norm.get(n, "") for n in removed
-                        if n in confirmed or not any(
-                            _absorbs(raw_by_norm.get(n, ""), after_lines[i])
-                            for i in perm_idx)), "")
+                        if not _survives(n, _after_perm)), "")
             return before_text, [(reason, bad.strip())]
 
     # Attribute appended copies to the TAIL-most physical lines (never an identical earlier one).
