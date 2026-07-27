@@ -82,6 +82,11 @@ def drift_message(realised: dict, verdict: dict, target) -> str:
     easy share 46% vs target 72% - grey-zone drift". It is coaching content, not
     engineering, and he could not read it. Pure function on purpose: the caller
     sends, so the wording can be rendered and checked without messaging anyone.
+
+    Now that the weekly card sends again, this text is a SECTION of the card
+    (prompt Step 2) rather than a message of its own — one weekly message, not
+    two. The standalone send survives only for the card-failed path. The wording
+    is unchanged from the version written for the standalone note.
     """
     if not verdict or not verdict.get("breach"):
         return ""
@@ -107,7 +112,7 @@ def drift_message(realised: dict, verdict: dict, target) -> str:
 
 
 def _send_coaching_note(chat_id: str, slug: str, text: str) -> None:
-    """Send a standalone coaching message to the athlete's own thread.
+    """Send the training-balance note on its own — ONLY when the card failed.
 
     Via notify.py, NOT _tg_send: notify.py appends to the athlete's
     telegram/history.json, so the bot has the note as context when they reply
@@ -236,14 +241,14 @@ def run_summary(slug: str = "jamie") -> str:
                         and _wk_type in ("deload", "taper"):
                     realised_tid_line += f" (expected: {_wk_type} week — no alert)"
                 elif _v["breach"]:
-                    # Coaching, not engineering (27 Jul 2026): this goes to the
-                    # athlete's OWN thread as a plain-English note after their
-                    # weekly card, instead of into the coach's ops digest.
+                    # Coaching, not engineering (27 Jul 2026): plain English in
+                    # the athlete's own weekly card, not a line in the coach's
+                    # ops digest.
                     drift_note = drift_message(_rt, _v, _tid)
                     _ops.record_run(
                         "weekly-summary", athlete=slug, ok=True,
-                        detail=(f"training-drift note queued ({_v['breach'][0]}): "
-                                f"{_v['breach'][1]}") if drift_note else
+                        detail=(f"training-balance note folded into the card "
+                                f"({_v['breach'][0]}): {_v['breach'][1]}") if drift_note else
                                (f"training-drift breach with no coaching wording "
                                 f"({_v['breach'][0]}): {_v['breach'][1]}"))
     except Exception:
@@ -490,6 +495,7 @@ voice the coaching level asks for everywhere else in this card.
    is not explicitly done — one line each, no sampling, no summarising, no truncating, however long
    the list runs. An action whose due date is free text ("end May", "before June", "pre-race",
    "build phase", "recurring") is listed too; it is never dropped for being hard to date.
+3. TRAINING-BALANCE NOTE. If one is supplied below, it goes into the card verbatim, as written.
 {recovery_block}
 ---
 
@@ -551,6 +557,9 @@ Week: {week_start} → {week_end}
 ## Local — Run durability log (last 4 weeks: per-run decoupling / cadence fade / cost fade)
 {json.dumps(run_durability_4wk, indent=2)}
 
+## Local — Training-balance note (pre-written, athlete-facing — reproduce VERBATIM if present)
+{drift_note or "(none this week — omit that section from the card)"}
+
 ---
 
 ## Step 1 — Compute week metrics
@@ -601,6 +610,11 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 **Key finding:** [one sentence — most important thing from this week]
 
 **Monday focus:** [one sentence — single most important thing for next week's first session]
+
+[Training-balance note: if the "Training-balance note" block above carries text, reproduce it here
+verbatim — same words, same emphasis, same paragraph breaks, no heading of your own, no rewording
+and no shortening. It is already written for the athlete. If that block says "(none this week)",
+omit this section entirely and leave no trace of it.]
 
 ---
 
@@ -723,8 +737,12 @@ Wrap your entire output in <telegram> and </telegram> tags. Output nothing outsi
     if output:
         _tg_send(chat_id, output)
 
-    # After the card, so it reads as a follow-up rather than interrupting it.
-    if drift_note:
+    # FALLBACK ONLY. The note is folded into the card (Step 2), so sending it
+    # here as well would be the duplicate messaging it was moved out of the ops
+    # digest to avoid. It still goes out on its own if the card never rendered —
+    # the weekly summary sent nothing at all for three weeks, and a coaching
+    # finding with a one-week shelf life should not die with the card.
+    if drift_note and not output:
         _send_coaching_note(chat_id, slug, drift_note)
 
     # Regenerate trend aggregates in the background (feeds dashboard chart)
