@@ -63,7 +63,7 @@ DISALLOWED_TOOLS = (
     "Bash(kill *) Bash(pkill *)"
 )
 MODEL_SONNET = "claude-sonnet-5"
-MODEL_OPUS   = "claude-opus-4-8"
+MODEL_OPUS   = "claude-opus-5"
 MODEL_HAIKU  = "claude-haiku-4-5-20251001"
 SYSTEM_PROMPT_FILE = BASE / "athletes/jamie/system_prompt.txt"
 

@@ -683,8 +683,8 @@ def main():
     ap.add_argument("--notify", action="store_true", help="message the athlete on completion")
     ap.add_argument("--week-start", help="Monday YYYY-MM-DD to plan (default: next Monday)")
     # Planning engine runs on Fable 5 (most capable; long-horizon plan reasoning).
-    # run_claude falls Fable -> Opus 4.8 on a cap (fallback=[OPUS] at the call site).
-    # The conversational Telegram bot stays on Opus 4.8 (engine.py / bot.py).
+    # run_claude falls Fable -> Opus 5 on a cap (fallback=[OPUS] at the call site).
+    # The conversational Telegram bot stays on Opus 5 (engine.py / bot.py).
     ap.add_argument("--model", default="claude-fable-5")
     ap.add_argument("--max-attempts", type=int, default=3)
     ap.add_argument("--override-json", metavar="PATH",

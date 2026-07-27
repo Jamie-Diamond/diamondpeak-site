@@ -23,7 +23,7 @@ import time
 CLAUDE = "/usr/bin/claude"
 
 # Model ids (keep in step with telegram/bot.py)
-OPUS   = "claude-opus-4-8"
+OPUS   = "claude-opus-5"
 SONNET = "claude-sonnet-5"
 HAIKU  = "claude-haiku-4-5-20251001"
 
