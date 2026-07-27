@@ -460,6 +460,12 @@ def run_summary(slug: str = "jamie") -> str:
     coaching_level = profile.get("coaching_level", "mid")
 
     # -- Build prompt ----------------------------------------------------------
+    # The MANDATORY block below sits directly under the coaching-level block on
+    # purpose: PRO asserts that its rules override the format instructions in this
+    # prompt, and on a verified render that cost Jamie 3 of his 6 overdue actions
+    # and turned the Compliance row into a bare "Load (TSS) 119% of plan" line.
+    # Narrow exemption, not a demotion — the terse PRO voice is wanted everywhere
+    # else in the card.
     prompt = f"""You are generating the weekly training summary for {first_name}'s {race_name} coaching system.
 All IcuSync data has been fetched and is embedded below. Do NOT call any fetch commands — work only from the data provided. Use Write and Bash only for the state-file update and git commit at the end.
 
@@ -473,6 +479,17 @@ If IcuSync current_date_local disagrees with {today}, flag it — do not silentl
 
 
 {_level_block(coaching_level)}
+## MANDATORY — EXEMPT FROM THE COACHING-LEVEL RULES ABOVE
+The items below are NOT subject to anything above about compressing, surfacing "only the metrics
+that matter", or avoiding a full stat dump. They appear in full at every coaching level. Keep the
+voice the coaching level asks for everywhere else in this card.
+1. COMPLIANCE. The compliance figure gets its own row in the summary table, labelled "Compliance",
+   carrying the percentage from the pre-computed Week TSS accounting block. Never fold it into the
+   Load row, never substitute a Load percentage for it, never drop the label.
+2. OPEN ACTIONS. Step 4 lists EVERY action in the current-state.md "Open actions" table whose status
+   is not explicitly done — one line each, no sampling, no summarising, no truncating, however long
+   the list runs. An action whose due date is free text ("end May", "before June", "pre-race",
+   "build phase", "recurring") is listed too; it is never dropped for being hard to date.
 {recovery_block}
 ---
 
@@ -647,19 +664,23 @@ If no triggers fire:
 
 ## Step 4 — Open actions review
 
-From the "Open actions" table in current-state.md, list any actions where status is NOT "done" and:
-- Due date ≤ 14 days from today ({today}): flag as ⚠️ DUE SOON
-- Due date has already passed: flag as 🔴 OVERDUE
-- No due date but status is "pending" for 3+ weeks: flag as 📋 STALE
+List EVERY action in the "Open actions" table in current-state.md whose status is NOT explicitly
+"done" — a status cell still holding its template placeholder (e.g. "[pending / booked / done]")
+counts as not done. Flag each one:
+- Due date has already passed: 🔴 OVERDUE
+- Due date ≤ 14 days from today ({today}): ⚠️ DUE SOON
+- Due date is free text and cannot be resolved to a date ("end May", "before June", "pre-race",
+  "build phase", "recurring"), or there is no due date at all: 📋 STALE — say the due date is not a
+  date rather than guessing one, and never leave the action out on that basis
 
 Format (append after the decision triggers, before the sign-off):
 
 ---
 **Open actions**
-[For each flagged item:]
-[⚠️/🔴/📋] *[Action name]* — due [date] ([N days]) — [one-line nudge if overdue]
+[One line for every not-done action — none omitted, none merged:]
+[⚠️/🔴/📋] *[Action name]* — due [date or the free text as written] ([N days, if it is a date]) — [one-line nudge if overdue]
 
-If no flagged actions: omit this section entirely.
+Only omit this section if the table holds no not-done actions at all.
 
 ---
 
