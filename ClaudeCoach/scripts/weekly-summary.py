@@ -13,6 +13,7 @@ BASE = Path(__file__).parent.parent
 sys.path.insert(0, str(BASE / "lib"))
 
 import claude_call
+import offplan_log
 from icu_api import IcuClient
 import recovery_score as rs
 sys.path.insert(0, str(BASE / "ironman-analysis"))
@@ -400,6 +401,14 @@ def run_summary(slug: str = "jamie") -> str:
         f"Compliance: {f'{compliance_pct}%' if compliance_pct is not None else 'n/a (no planned events)'}\n"
         "Per planned session:\n" + ("\n".join(planned_rows) or "  (none)"))
 
+    # Rule adherence: the "Off-plan in last 7 days" log is written daily and never
+    # read back. Counts computed here, never by the model, same rule as the TSS
+    # accounting above. None => the window holds no entries, and the card omits
+    # the line rather than telling the athlete "0 days logged".
+    adherence = offplan_log.week_rollup(
+        current_state, week_start.isoformat(), week_end.isoformat())
+    adherence_block = offplan_log.prompt_block(adherence)
+
     race_date    = date.fromisoformat(profile.get("race_date", "2026-09-19"))
     days_to_race = (race_date - today).days
     race_name    = profile.get("race_name", "race")
@@ -557,6 +566,9 @@ Week: {week_start} → {week_end}
 ## Local — Run durability log (last 4 weeks: per-run decoupling / cadence fade / cost fade)
 {json.dumps(run_durability_4wk, indent=2)}
 
+## Local — Rule adherence this week (pre-computed from the Off-plan log — authoritative)
+{adherence_block}
+
 ## Local — Training-balance note (pre-written, athlete-facing — reproduce VERBATIM if present)
 {drift_note or "(none this week — omit that section from the card)"}
 
@@ -582,6 +594,9 @@ From the data above, extract:
   - Trend direction: compare most recent 3 sessions vs previous 3 — improving / declining / flat
   - Gap to race target: {nutrition_target} − this_week_avg (g/hr)
 - Injury pain: ankle_pain_during scores from session-log this week
+- Rule adherence: take the counts from the pre-computed "Rule adherence this week" block VERBATIM —
+  do not recount the Off-plan log yourself, and do not judge a day the log did not judge. The only
+  breaches you may name are the ones that block already names
 - Run engine + durability: quote the pre-computed run aerobic efficiency trend line if present; from the run durability log, note any run this week with flags (decoupling >5%, cadence fade, rising cost) and whether long-run durability is trending better or worse across the 4 weeks
 - VO2max + body composition: quote the pre-computed VO2max trend and body-composition lines verbatim. If either carries a ⚠️ flag (VO2max falling while Fitness climbs, or weight down without body fat falling), surface it in the Key finding or as a 📌 line — these are the signals the athlete cannot see elsewhere
 
@@ -606,6 +621,12 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 
 **Completed:** [discipline summaries — e.g. "3 rides, 2 runs, 1 swim"]
 **Missed:** [session names, or "none"]
+**Your own rules:** [ONE line, built from the pre-computed rule-adherence block above — use its
+counts exactly as given, never recount them, and say it in plain words ("five days logged, four ran
+as prescribed, one the rules pulled back"). If that block lists a breach, add ONE short sentence
+naming what breached which rule and nothing further — no fix, no lecture, the Monday focus already
+carries the action. A clean week is that one line and stops: no table, no day-by-day list, no
+restating the days that were fine. If the block says to omit the line, omit this whole row.]
 
 **Key finding:** [one sentence — most important thing from this week]
 
