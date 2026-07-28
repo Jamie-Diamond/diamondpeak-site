@@ -1,21 +1,24 @@
 {
- "_note": "Accepted plan_audit failure counts per category. A run at or below its athlete's accepted counts logs a success; a new category or a higher count alerts. Shrink these as the defects in docs/plan-audit-status.md are fixed (or regenerate with plan_audit.py --all --write-baseline); an empty map for an athlete means every hard fail alerts.",
+ "_note": "Accepted plan_audit failure counts per category. A run at or below its athlete's accepted counts logs a success; a new category or a higher count alerts. Shrink these as the defects in docs/plan-audit-status.md are fixed (or regenerate with plan_audit.py --all --write-baseline); an empty map for an athlete means every hard fail alerts. SKIPPED is a category like any other, so it MUST be listed even at 0 \u2014 omitting it made get(cat,-1) reject every run and alerted all three athletes daily from the moment the category was added (28 Jul 2026). RULES now includes the three checks armed on 28 Jul (weekly_tss_cap / weekly_tss_floor / run_weekly_volume), which is why the counts went UP while SKIPPED went to ~0: those failures were always there, they were just never being checked.",
  "written": "2026-07-28",
  "athletes": {
   "jamie": {
    "FUELLING": 3,
-   "RULES": 6,
+   "RULES": 7,
+   "SKIPPED": 0,
    "WEEKLY_LOAD": 1
   },
   "kathryn": {
    "FUELLING": 3,
-   "RULES": 2,
+   "RULES": 4,
+   "SKIPPED": 1,
    "STRUCTURE": 1,
    "WEEKLY_LOAD": 2
   },
   "calum": {
    "FUELLING": 1,
    "RULES": 1,
+   "SKIPPED": 0,
    "WEEKLY_LOAD": 1
   }
  }

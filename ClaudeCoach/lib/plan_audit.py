@@ -37,6 +37,7 @@ from primitives.validate_plan import validate_week, escalate_repeats  # noqa: E4
 from primitives.blueprint import current_phase                # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 import plan_tools as pt                                        # noqa: E402
+from plan_builder import _weekly_tss_cap                       # noqa: E402
 import ops_log                                                 # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
@@ -149,6 +150,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
         wk_evs = [e for e in events if ws.isoformat() <= (e.get("start_date_local") or "")[:10]
                   <= (ws + timedelta(days=6)).isoformat()]
         total = sum(int(e.get("icu_training_load") or e.get("load_target") or 0) for e in wk_evs)
+        req = None
         if ctl:
             # For the CURRENT week pass last week's actual load so a miss-triggered
             # recovery week audits against the same reduced target the generator
@@ -161,7 +163,37 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                     f"week {ws}: {total} TSS vs target ~{tgt} (>{int(_LOAD_TOLERANCE*100)}% off)")
         dr = cfg.get("day_rules")
         phase = current_phase(pt._load_blueprint(slug), ws) or {}
+        # ARM the three hard checks that were never given an input (28 Jul 2026).
+        # weekly_tss_cap / weekly_tss_floor / run_weekly_volume were reported SKIPPED
+        # on every run for every athlete since this file was written, i.e. Layer 4 has
+        # never once checked a week's total load or its run volume. Each input comes
+        # from the SAME function the generation path uses (plan_builder.build_week /
+        # plan_tools.cmd_validate), so the audit can never disagree with the generator
+        # about where the limit is:
+        #   cap   — plan_builder._weekly_tss_cap: the athlete's hours ceiling, else the
+        #           blueprint phase's tss_ceiling. None on a taper (neither source
+        #           carries one) — a legitimate skip, still reported as skipped.
+        #   floor — required_tss()['weekly_tss_floor'], the same key the builder uses.
+        #           That function returns 0 for a deload / taper / manual easy week, so
+        #           an INTENTIONAL down-week scores no violation; it must not be
+        #           replaced with recommended_weekly_tss, which would call every deload
+        #           under-training. None (no CTL, or a branch that omits the key) skips.
+        #   run   — plan_tools.run_caps()['weekly_min_cap']: max(recent 4-week max,
+        #           the run_protocol floor) x the protocol ramp. All-None on a history
+        #           fetch failure, which the validator reports as skipped.
+        # run_long_min_cap is deliberately NOT passed: arming run_long_volume is a
+        # separate check and validate_week emits no skip line for it, so it would go
+        # from invisible to hard-failing with no before-state to compare against.
+        tss_floor = req.get("weekly_tss_floor") if req else None
+        try:
+            run_cap = pt.run_caps(client, ws,
+                                  run_protocol=cfg.get("run_protocol")).get("weekly_min_cap")
+        except Exception:
+            run_cap = None
         rep = validate_week(wk_evs, ws, day_rules=dr, ctl_today=ctl,
+                            weekly_tss_cap=_weekly_tss_cap(slug, phase),
+                            weekly_tss_floor=tss_floor,
+                            run_week_min_cap=run_cap,
                             ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
                             strength_max=(dr or {}).get("strength_max"),
                             distribution=phase.get("distribution"))
