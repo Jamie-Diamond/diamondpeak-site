@@ -79,15 +79,41 @@ def _trim(path: Path) -> None:
         pass
 
 
-def record_run(script: str, athlete: str = "", ok: bool = True, detail: str = "") -> None:
-    """One structured heartbeat line per script run (or per-athlete outcome)."""
-    _append(RUN_STATUS, json.dumps({
+# `ok` is OVERLOADED, and that is a bug we cannot fix by renaming it (a dozen
+# call sites across files owned by other work, plus 6 weeks of history already on
+# disk). ok=False has always meant BOTH "this run failed" and "this run succeeded
+# and found something worth telling you". The two need opposite handling: the
+# first is a missed deliverable and may interrupt the coach, the second is a
+# working script doing its job and must never alarm.
+#
+# `outcome` is the un-overloaded field. It is OPTIONAL and additive: when a call
+# site knows which kind it is, it says so and that wins. When it is absent — every
+# existing call site, and every line already in run-status.jsonl — the per-script
+# default in coach_alert.OUTCOME_CLASS decides. Resolution lives there, not here,
+# because it is a routing decision and coach_alert is the one file that answers
+# "what can reach Jamie".
+FAILURE = "failure"   # the run did not do its job
+FINDING = "finding"   # the run DID its job, and what it found is not good news
+
+
+def record_run(script: str, athlete: str = "", ok: bool = True, detail: str = "",
+               outcome: str = None) -> None:
+    """One structured heartbeat line per script run (or per-athlete outcome).
+
+    `outcome` (FAILURE / FINDING) disambiguates ok=False for callers that know
+    which they mean — see the note above. Omitted keeps the line byte-identical
+    to every one already written, so nothing has to be migrated.
+    """
+    rec = {
         "ts": datetime.now().isoformat(timespec="seconds"),
         "script": script,
         "athlete": athlete,
         "ok": bool(ok),
         "detail": detail,
-    }, separators=(",", ":")))
+    }
+    if outcome:
+        rec["outcome"] = outcome
+    _append(RUN_STATUS, json.dumps(rec, separators=(",", ":")))
 
 
 def alert(script: str, message: str, athlete: str = "") -> None:
@@ -208,8 +234,17 @@ def sync_ok(job: str, now: datetime = None) -> None:
     """Clean run for this job — reset the CONSECUTIVE counter, and keep the
     windowed failure history, which is what makes an intermittent fault
     visible. Once the window has aged empty the state file goes entirely, which
-    also re-arms escalation for the next episode."""
+    also re-arms escalation for the next episode.
+
+    Also records a run-status heartbeat (28 Jul 2026): sync_failure() already
+    calls record_run() on both its branches, so a job that only ever fails
+    shows up fine — but a job that always succeeds never touched RUN_STATUS at
+    all, which is invisible to coach_alert.DELIVERABLES' gap check (it reads
+    run-status.jsonl, not the sync-state counters here). Without this, adding a
+    git-sync job like backup-config as a monitored daily deliverable would
+    report it missing EVERY night regardless of whether it actually ran clean."""
     now = now or datetime.now()
+    record_run(job, ok=True, detail="sync ok")
     state = _read_sync_state(job)
     fails = _recent_failures(state, now)
     if not fails:

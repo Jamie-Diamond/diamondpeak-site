@@ -8,7 +8,7 @@ there is no second route to read.
 
 Jamie's decision, 28 Jul 2026: exactly TWO conditions may interrupt him.
 
-  1. DELIVERABLE_MISSING — a named DAILY deliverable did not happen.
+  1. DELIVERABLE_MISSING — a named deliverable (daily OR weekly) did not happen.
   2. CLAUDE_AUTH_FAILED  — the Claude CLI could not authenticate in production.
 
 Deliberately NOT here, and log-only as a result:
@@ -16,10 +16,18 @@ Deliberately NOT here, and log-only as a result:
     Telegram path; it is removed because it is not one of the two. The 24-27 Jul
     push failures now surface as a digest ✗ line via the new failures-in-window
     rule in ops_log, not as a message. Flipping it back is one REASONS entry.
-  - the WEEKLY deliverables (weekly summary, weekly plan). They are registered in
-    DELIVERABLES with telegram=False because Jamie said "daily". The three-week
-    silent weekly-summary crash would still be caught only in the log. One
-    boolean flips it.
+
+Changed 28 Jul 2026: the WEEKLY deliverables (weekly summary, weekly plan) are
+now routed to Telegram too — the owner approved this after a weekly-summary
+build crashed silently for three weeks with nothing but a log line to show for
+it. Both now carry telegram=True below. Because the weekly gap check reads a
+7-day window, a single Sunday miss stays "missing" for up to a week; routing it
+through the same per-day key as the daily check would Telegram every evening
+until it is fixed (up to 7 messages). ops-digest.py's weekly_alerts() sends
+these separately from the daily path, on a stable per-script key with a cooldown
+that spans the whole window, and explicitly clears that cooldown the moment the
+deliverable is seen again — so one miss is one message, and the FOLLOWING
+week's occurrence isn't silenced by a leftover cooldown.
 
 Environment:
   CC_COACH_CHAT_ID  — where coach alerts go. Unset = notify.py's config default.
@@ -28,6 +36,7 @@ Environment:
                       This is how the alert path is exercised without messaging
                       a real Telegram thread.
 """
+
 import json
 import os
 import subprocess
@@ -71,13 +80,131 @@ DELIVERABLES = [
      "per_athlete": True,  "telegram": False},
     {"script": "watchdog",           "label": "watchdog",           "window": "daily",
      "per_athlete": False, "telegram": False},
-    # Sunday jobs. Checked over 7 days, so a Sunday miss shows up that evening
-    # and every evening after until it runs.
+    # 28 Jul 2026: the only backup of config/athletes.json (intervals.icu API
+    # keys), nightly at 23:50 via lib_git_alert.sh's git_sync_ok/git_sync_fail —
+    # the job label there IS "backup-config" (checked in backup-config.sh, not
+    # assumed). Heartbeat comes from ops_log.sync_ok/sync_failure, not a direct
+    # record_run() call in the script itself; sync_ok now also writes the
+    # success heartbeat (see its docstring) so a clean run doesn't read as a gap.
+    #
+    # detail="sync ok" is LOAD-BEARING, not decoration. sync_failure's FIRST
+    # consecutive failure records ok=True with detail "transient git-sync failure
+    # (1st): ..." on the reasoning that the next tick will heal it. For the five
+    # jobs that tick every 15-30 minutes that is sound; for a job that runs ONCE
+    # at 23:50 the next tick is 24 hours away, so that ok=True would report a
+    # night with NO backup as a clean run and make this whole registration
+    # cosmetic. Pinning the detail to the exact string sync_ok writes (and only
+    # sync_ok writes) means only a genuine success satisfies the check. Narrowing
+    # here rather than changing sync_failure keeps the blast radius to this one
+    # job instead of all five that share the helper.
+    {"script": "backup-config",      "label": "config backup",      "window": "daily",
+     "per_athlete": False, "telegram": True, "detail": "sync ok"},
+    # Sunday jobs. Checked over 7 days. telegram=True since 28 Jul 2026, but NOT
+    # via this per-day cooldown — ops-digest.py's weekly_alerts() sends these on
+    # its own occurrence-based key so one miss is one message, not one per evening.
     {"script": "weekly-summary",     "label": "weekly summary",     "window": "weekly",
-     "per_athlete": True,  "telegram": False},
+     "per_athlete": True,  "telegram": True},
     {"script": "stage1-plan",        "label": "weekly plan",        "window": "weekly",
-     "per_athlete": True,  "telegram": False},
+     "per_athlete": True,  "telegram": True},
 ]
+
+# --- is an ok=False heartbeat a FAILURE or a FINDING? ------------------------
+#
+# THE PROBLEM. ops-digest's gap check used to count ANY heartbeat as "it ran", so
+# a job that failed and dutifully logged the failure produced no gap and no
+# alert. Only a job that died before reaching ops_log tripped the alarm — the
+# quiet failures stayed quiet, which is the whole class this alarm exists to kill.
+#
+# WHY IT IS NOT A ONE-LINE FIX. `ok=False` does not mean "failed". It means
+# either "I failed" or "I ran fine and found something": weekly-summary wrote 8
+# ok=False lines reading "realised TID excess_quality: realised easy share 46% vs
+# target" — that is the script SUCCESSFULLY detecting training drift. Treat
+# ok=False as failure naively and the new alarm fires on week one from a working
+# script, which is how a new alarm gets ignored on week one.
+#
+# WHY A TABLE AND NOT A FIX AT THE CALL SITES. Two reasons, both hard:
+#   1. The benign call site is ALREADY corrected. weekly-summary.py:250 records
+#      ok=True ("training-balance note ready") as of 27 Jul 2026. The 8 ok=False
+#      lines in run-status.jsonl are STALE DATA written by code that no longer
+#      exists — and the 26 Jul pair is still inside the 7-day weekly window, so
+#      history alone would fire this alarm on day one.
+#   2. Every remaining benign ok=False producer lives in a file owned by other
+#      concurrent work (plan_builder.py, weekly-summary.py, capture-reminder.py).
+#      Correcting them here is not available.
+# A read-side classification is therefore the only route, and it has the
+# advantage of also classifying the six weeks of history correctly.
+#
+# WHY NOT A POSITIVE DELIVERY CHECK INSTEAD (the obvious alternative — extend the
+# existing `"detail": "card sent"` mechanism to every deliverable): impossible for
+# weekly-summary, which writes NO delivery heartbeat at all. Its only record_run
+# is the drift note, so requiring a delivery detail would report it missing every
+# single week. That gap is owned by another ticket; until it is closed, the
+# absence of a failure is the only signal available for that script.
+#
+# THREE STATES, and what each does:
+#   FAILURE       -> does NOT count as "it ran". Produces a gap line, and a
+#                    Telegram if the deliverable is telegram=True.
+#   FINDING       -> DOES count as "it ran". Digest ✗ line only, never alarms.
+#   unclassified  -> does NOT alarm, and is NOT swallowed: ops-digest emits a
+#                    loud "UNCLASSIFIED" digest line naming the script so the
+#                    omission is visible, and test_ops_digest asserts every
+#                    DELIVERABLES script is classified, so adding a monitored
+#                    deliverable without classifying it fails the build.
+#
+# A NEW BENIGN CASE ADDED LATER. Two ways it stays safe. If it is added to a
+# FINDING-class script it is benign by default. If it is added to a FAILURE-class
+# script — the only genuinely dangerous case — the call site passes
+# outcome=ops_log.FINDING and that wins over this table. That per-record override
+# is why the table is a DEFAULT and not a verdict. A new script nobody classifies
+# lands in `unclassified`: silent on Telegram, loud in the digest.
+FAILURE = ops_log.FAILURE
+FINDING = ops_log.FINDING
+
+OUTCOME_CLASS = {
+    # --- FAILURE: an ok=False line from these means the job did not do its job.
+    # Every one verified against its call sites: the ok=False paths are Telegram
+    # sends that failed after retry, unhandled exceptions, and claude CLI
+    # non-zero exits (which is how a dead auth token hides).
+    "morning-checkin":    FAILURE,
+    "daily-prescription": FAILURE,
+    "night-before-brief": FAILURE,   # "no <telegram> block in model output"
+    "evening-checkin":    FAILURE,
+    "capture-reminder":   FAILURE,   # "claude CLI exited N with no <notify> block"
+    "session-sync":       FAILURE,
+    "watchdog":           FAILURE,
+    "backup-config":      FAILURE,   # via ops_log.sync_failure's non-transient branch
+    "stage1-plan":        FAILURE,
+    "bot-watchdog":       FAILURE,   # the bot stopped answering
+    "claude_call":        FAILURE,   # auth expired in production
+    "cc-gitpull":         FAILURE,
+    "coach-alert":        FAILURE,   # the alarm itself failing to send
+    # --- FINDING: an ok=False line from these is the script working correctly and
+    # reporting something about the TRAINING or the CONFIG, not about itself.
+    # None of these is a missed deliverable; all of them are already a digest line.
+    "weekly-summary":     FINDING,   # realised-TID drift; run-threshold staleness
+    "plan_builder":       FINDING,   # 316 of the 411 historical ok=False lines:
+                                     # "weekly_tss_cap check SKIPPED — no cap supplied"
+    "plan_audit":         FINDING,   # plan invariant broke, already baseline-gated
+    "rules-lint":         FINDING,   # "rule may withhold Swim high work"
+    "thresholds":         FINDING,   # "zones may be stale-high"
+    "selftest":           FINDING,   # "loud-path verification (not a real failure)"
+}
+
+
+def classify(entry: dict) -> str:
+    """FAILURE / FINDING / "unclassified" for one run-status entry.
+
+    ok=True is never either — it is a clean run. Precedence: the record's own
+    `outcome` field (a call site that knows), then OUTCOME_CLASS (this file's
+    default per script), then "unclassified".
+    """
+    if entry.get("ok"):
+        return ""
+    stamped = entry.get("outcome")
+    if stamped in (FAILURE, FINDING):
+        return stamped
+    return OUTCOME_CLASS.get(entry.get("script"), "unclassified")
+
 
 STATE = ops_log.LOG_DIR / "coach-alert-state.json"
 
@@ -101,8 +228,8 @@ def _write_state(state: dict) -> None:
         pass
 
 
-def _cooling_down(reason: str, key: str, now: datetime) -> bool:
-    hours = REASONS[reason]["cooldown_h"]
+def _cooling_down(reason: str, key: str, now: datetime, cooldown_h: float = None) -> bool:
+    hours = REASONS[reason]["cooldown_h"] if cooldown_h is None else cooldown_h
     last = _read_state().get(f"{reason}|{key}")
     if not last:
         return False
@@ -112,8 +239,23 @@ def _cooling_down(reason: str, key: str, now: datetime) -> bool:
         return False
 
 
-def send(reason: str, text: str, key: str = "") -> str:
+def clear_cooldown(reason: str, key: str) -> None:
+    """Forget a past send for this key. Used when an occurrence resolves (the
+    deliverable is seen again), so the NEXT genuinely new occurrence of the same
+    key alerts immediately instead of waiting out a cooldown banked for a miss
+    that has since been fixed."""
+    state = _read_state()
+    if state.pop(f"{reason}|{key}", None) is not None:
+        _write_state(state)
+
+
+def send(reason: str, text: str, key: str = "", cooldown_h: float = None) -> str:
     """Interrupt the coach — if and only if `reason` is one of the two approved.
+
+    `cooldown_h` overrides REASONS[reason]["cooldown_h"] for this call only —
+    used by ops-digest.py's weekly_alerts() to bank a cooldown that spans the
+    whole 7-day weekly window, rather than the shorter default tuned for the
+    daily/auth-failure cases.
 
     Returns the action taken: "sent", "dry-run", "cooldown", "send-failed", or
     "refused" (an unlisted reason: logged loudly and NOT sent, so a future caller
@@ -124,7 +266,7 @@ def send(reason: str, text: str, key: str = "") -> str:
         ops_log.alert("coach-alert", f"REFUSED to Telegram an unapproved reason "
                                      f"{reason!r} — log-only. Text: {text}")
         return "refused"
-    if _cooling_down(reason, key, now):
+    if _cooling_down(reason, key, now, cooldown_h):
         ops_log.log_outbound(f"coach-alert:{reason}", text, sent=False)
         return "cooldown"
 
