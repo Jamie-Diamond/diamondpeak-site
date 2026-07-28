@@ -157,19 +157,19 @@
           <td>Fetches HRV, sleep, and wellness from Intervals.icu; sends personalised daily readiness note and today's session preview</td>
         </tr>
         <tr>
-          <td class="mono">Daily 20:00</td>
-          <td class="mono">evening-checkin.py</td>
-          <td>End-of-day check-in; prompts for post-session notes if any activities occurred; reminds of tomorrow's session</td>
+          <td class="mono">Daily 05:00</td>
+          <td class="mono">daily-prescription.py</td>
+          <td>Daily session prescription for each active athlete — confirms or adjusts today's prescribed session against readiness and plan state</td>
         </tr>
         <tr>
-          <td class="mono">Sunday 20:00</td>
-          <td class="mono">weekly-summary.py</td>
-          <td>Fetches week's training data directly from Intervals.icu; generates compliance card with TSS, CTL change, sleep, fuelling; evaluates 8 decision triggers (recovery, overreach, phase transitions, injury, nutrition, HRV); sends to Telegram</td>
+          <td class="mono">Daily 05:30</td>
+          <td class="mono">watchdog.py</td>
+          <td>Daily watchdog — fires a Telegram alert only if a trigger trips (overreach, missed sessions, etc.); silent otherwise</td>
         </tr>
         <tr>
-          <td class="mono">Hourly</td>
+          <td class="mono">Daily 06:20</td>
           <td class="mono">refresh-site-data.py</td>
-          <td>Fetches live training metrics from Intervals.icu; writes training-data.json powering the athlete dashboard</td>
+          <td>Fetches live training metrics from Intervals.icu; writes the full private training-data.json and an allow-list sanitised public variant (via lib/public_sanitise.py)</td>
         </tr>
         <tr>
           <td class="mono">Daily 06:25</td>
@@ -177,9 +177,59 @@
           <td>Layer 4 self-check — asserts STRUCTURE/FUELLING/LONG_RIDE/WEEKLY_LOAD/RULES invariants against each athlete's live Intervals.icu calendar; read-only, hard-fail logs to ops-alerts.log (no Telegram)</td>
         </tr>
         <tr>
-          <td class="mono">Hourly</td>
+          <td class="mono">Every 2h · 07–22 (:40)</td>
+          <td class="mono">session-sync.py</td>
+          <td>Reads recent chat history and extracts any new coaching rules or preferences the athlete has stated, syncing them into the rule surface</td>
+        </tr>
+        <tr>
+          <td class="mono">Hourly (:09)</td>
           <td class="mono">refresh-public-data.py</td>
-          <td>Extracts public-safe fields (CTL trend, race countdown) from training-data.json; writes site-data.json and pushes to GitHub Pages</td>
+          <td>Extracts public-safe fields (fitness trend, race countdown) from training-data.json; writes public/site-data.json — an allow-list sanitised copy enforced by lib/public_sanitise.SITE_DATA_SPEC. Does not push itself; cc-gitpull.sh commits and pushes it to GitHub Pages within 30 min</td>
+        </tr>
+        <tr>
+          <td class="mono">Every 30 min (:05, :35)</td>
+          <td class="mono">cc-gitpull.sh</td>
+          <td>Auto-commits and pulls/merges/pushes the public diamondpeak-site repo — the actual publish step for every public JSON file above; logs and raises a loud-failure alert on any fetch/merge/push error</td>
+        </tr>
+        <tr>
+          <td class="mono">Daily 20:30</td>
+          <td class="mono">night-before-brief.py</td>
+          <td>Sends each active athlete a brief on tomorrow's prescribed session</td>
+        </tr>
+        <tr>
+          <td class="mono">Daily 21:00</td>
+          <td class="mono">evening-checkin.py</td>
+          <td>The one evening question — as of 28 Jul 2026 this replaced the old capture-reminder cron (20:10) and absorbed its job (chasing an unlogged key session up to 36h old) into this single 21:00 ask, alongside its existing post-session-notes and tomorrow's-session reminder</td>
+        </tr>
+        <tr>
+          <td class="mono">Daily 21:30</td>
+          <td class="mono">ops-digest.py</td>
+          <td>Evening ops digest — reads the day's run-status log and reports failures or anomalies across all cron jobs</td>
+        </tr>
+        <tr>
+          <td class="mono">Sunday 18:00</td>
+          <td class="mono">weekly-plan.sh</td>
+          <td>Two-stage weekly plan engine (stage1-plan.py); replaced the old Sunday plan generator. Gated — only pushes a week that passes the protocol audit, so a non-clean week leaves the athlete's existing plan untouched</td>
+        </tr>
+        <tr>
+          <td class="mono">Sunday 20:00</td>
+          <td class="mono">weekly-summary.py</td>
+          <td>Fetches week's training data directly from Intervals.icu; generates compliance card with TSS, fitness change, sleep, fuelling; evaluates 8 decision triggers (recovery, overreach, phase transitions, injury, nutrition, HRV); sends to Telegram</td>
+        </tr>
+        <tr>
+          <td class="mono">Daily 23:20</td>
+          <td class="mono">sync-private-repo.sh</td>
+          <td>Mirrors live athlete data (excluding secrets) into the private dpc_private repo, giving it real version history</td>
+        </tr>
+        <tr>
+          <td class="mono">Daily 23:50</td>
+          <td class="mono">backup-config.sh</td>
+          <td>Encrypts athletes.json and commits the ciphertext to the private repo as a backup</td>
+        </tr>
+        <tr>
+          <td class="mono">Daily 00:00</td>
+          <td class="mono">bug-fixer.py --fix</td>
+          <td>Nightly bug-fixer — two-stage pipeline reviewing the feedback/bug log against the whole rule surface and applying fixes</td>
         </tr>
         <tr>
           <td class="mono">On demand</td>
@@ -193,6 +243,7 @@
         </tr>
       </tbody>
     </table>
+    <p style="padding:10px 14px;margin:0;font-size:11px;color:var(--muted);border-top:1px solid var(--line)">This table lists the ClaudeCoach entries in the VM crontab only. A separate, unrelated cron entry (Monday 09:00, expense-bot's backup_staleness_alert.sh) also runs on this box and is out of scope here.</p>
   </div>
 
   <h2>Athlete data &amp; privacy</h2>
