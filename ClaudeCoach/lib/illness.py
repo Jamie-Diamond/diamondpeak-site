@@ -359,11 +359,15 @@ def clear_illness(slug: str, today: date | None = None) -> bool:
 _ILLNESS_TERMS = (
     "ill", "unwell", "sick", "poorly", "flu", "man flu", "cold", "chest infection",
     "sinus", "tonsillitis", "throat infection", "sore throat", "covid", "norovirus",
-    "stomach bug", "food poisoning", "d&v", "fever", "temperature", "antibiotics",
+    "stomach bug", "food poisoning", "d&v", "fever", "high temperature", "antibiotics",
     "infection", "virus", "bronchitis", "laryngitis", "shingles", "glandular fever",
 )
+# First person only, and NOT bare "been"/"got": "it has been a cold week" is not an
+# illness report, and a false positive here writes a flag that silently softens the
+# coaching. A false negative costs one clarifying exchange.
 _FIRST_PERSON = re.compile(
-    r"\b(i(?:'m| am| have| ve|'ve)|i\b|my|me|been|got|down with|coming down)\b", re.I)
+    r"\b(i(?:'m| am| have| ve|'ve)|i\b|my|myself|me|i've (?:been|got)|"
+    r"(?:i|i've|ive) (?:am |have )?down with|coming down with)\b", re.I)
 _RECOVERING = re.compile(r"\b(recover\w*|on the mend|getting better|tail end|almost better)\b", re.I)
 _RESOLVED   = re.compile(r"\b(all better|fully better|back to normal|over it|"
                          r"cleared up|all clear|fine now)\b", re.I)

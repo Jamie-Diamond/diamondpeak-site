@@ -62,6 +62,7 @@ integrated heat-stress measure without needing a globe thermometer.
 """
 import json
 import math
+import sys as _sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -235,6 +236,13 @@ def state(slug: str, profile: dict | None = None) -> dict:
     enough". Without it, nothing nags before `starts`.
     """
     profile = profile or {}
+    # A misspelled key would be a silent no-op, and this flag exists to stop prompts
+    # an athlete filed as a bug — a silent no-op surfaces as that bug returning, months
+    # later. Say so loudly instead. Cheap: only fires when a near-miss key is present.
+    for near in ("heat-silent", "heat_silence", "heatsilent", "heat_quiet"):
+        if near in profile:
+            print(f'[heat:{slug}] profile has {near!r} - the flag is heat_silent; '
+                  f'the misspelled key does NOTHING', file=_sys.stderr)
     silent = bool(profile.get("heat_silent"))
     if profile.get("heat_protocol") is False:
         return {"active": False, "starts": None, "in_protocol_window": False,

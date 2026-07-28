@@ -193,6 +193,10 @@ class TestConversationalCapture:
         "not ill, just tired",
         "the weather was cold",
         "planning the run",
+        # a false positive writes a flag that silently softens the coaching, so the
+        # first-person test excludes bare been/got
+        "it has been a cold week",
+        "the temperature was 30 and I got dropped",
         "",
     ])
     def test_does_not_fire_on_non_statements(self, text):
@@ -286,6 +290,11 @@ class TestHeatSurfacingGate:
         st = heat.state("k", {"heat_protocol": False})
         assert st == {"active": False, "starts": None, "in_protocol_window": False,
                       "maintenance": False, "silent": False, "surface": False}
+
+    def test_a_misspelled_flag_is_loud_not_silent(self, blueprint, capsys):
+        """The 23 Aug deadline must not hinge on typing a key name correctly."""
+        assert heat.state("k", {"heat-silent": True})["silent"] is False
+        assert "does NOTHING" in capsys.readouterr().err
 
     def test_maintenance_key_is_unaffected_by_silence(self, blueprint):
         assert heat.state("k", {"heat_maintenance": True, "heat_silent": True})[

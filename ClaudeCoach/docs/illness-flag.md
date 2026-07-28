@@ -128,7 +128,10 @@ atomically and touches only its own key plus `last_updated`. `clear` marks the f
 `resolved` (keeping the record) rather than deleting it.
 
 `illness.looks_like_illness_statement()` / `parse_illness_message()` mirror
-`lib/races.py`, so a Telegram ask-and-confirm hook is a small addition when wanted:
+`lib/races.py` but are **latent — nothing calls them yet, and the term list and
+first-person test want more tightening before they are wired**, because a false
+positive writes a flag that silently softens the coaching. With them, a Telegram
+ask-and-confirm hook is a small addition when wanted:
 mirror `_handle_race_capture` (parse → inline keyboard → write on the callback), asking
 the one field a message rarely states, `training_gate`. No bot change is needed for the
 flag to *work* — only for that UX.
@@ -163,7 +166,18 @@ of those is *proactive surfacing*.
 exposure off `active`, so silencing that way would starve the dose log and change the
 model by data starvation.
 
-Setting it is a runtime action (edit the athlete's `profile.json`), not a code change.
+Setting it is a runtime action (edit the athlete's `profile.json`), not a code change:
+
+```bash
+python3 -c "import json,pathlib; p=pathlib.Path('ClaudeCoach/athletes/kathryn/profile.json'); d=json.loads(p.read_text()); d['heat_silent']=True; p.write_text(json.dumps(d,indent=2))"
+
+# then confirm - must print False:
+python3 -c "import sys,json; sys.path.insert(0,'ClaudeCoach/lib'); import heat; print(heat.state('kathryn', json.load(open('ClaudeCoach/athletes/kathryn/profile.json')))['surface'])"
+```
+
+`heat.state()` prints a loud stderr warning if it finds a near-miss key
+(`heat-silent`, `heat_silence`, `heatsilent`, `heat_quiet`), because a misspelled key
+would otherwise be a silent no-op whose only symptom is the returning bug.
 
 ## Tests
 
