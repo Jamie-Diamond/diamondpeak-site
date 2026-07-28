@@ -426,6 +426,66 @@ class TestCoachAlertRouting:
                              "backup-config"}
         assert weekly_tg == {"weekly-summary", "stage1-plan"}
 
+    def test_a_test_can_never_execute_the_real_notify(self, logs, monkeypatch):
+        """The regression lock for 28 Jul 2026, when the test below this class's
+        cousin — test_a_weekly_deliverable_with_no_cron_entry_neither_alerts_nor_
+        clears — reached send() with no dry-run env and no subprocess stub and
+        delivered a real Telegram message to the coach. TWICE.
+
+        This is that exact shape: CC_ALERT_DRY_RUN=0, real subprocess, an approved
+        reason so nothing else short-circuits first. It must RAISE, not return
+        "dry-run": a send that was suppressed and a send that was never warranted
+        have to stay distinguishable, or a real routing bug passes the suite.
+        """
+        import coach_alert as ca
+        monkeypatch.setenv("CC_ALERT_DRY_RUN", "0")
+        monkeypatch.setattr(ca, "STATE", logs / "coach-alert-state.json")
+        monkeypatch.setattr(ops_log, "ALERT_LOG", logs / "ops-alerts.log")
+        with pytest.raises(ca.TelegramSendBlocked):
+            ca.send(ca.DELIVERABLE_MISSING, "would have messaged the coach", key="k")
+        # Blocked is not the same as unrecorded: the text is in the audit trail.
+        assert "would have messaged the coach" in ops_log.ALERT_LOG.read_text()
+        # And no cooldown was banked, so a genuine send is not silenced by the block.
+        assert ca._read_state() == {}
+
+    def test_a_stubbed_subprocess_is_still_allowed_the_real_path(self, logs, monkeypatch):
+        """The other half of the discriminator. A test that has replaced
+        coach_alert.subprocess cannot reach the network, so it must still be able to
+        exercise the real send path — otherwise the guard would break the four
+        cooldown-banking tests it has to coexist with."""
+        import coach_alert as ca
+        monkeypatch.setenv("CC_ALERT_DRY_RUN", "0")
+        monkeypatch.setattr(ca, "STATE", logs / "coach-alert-state.json")
+        monkeypatch.setattr(ops_log, "ALERT_LOG", logs / "ops-alerts.log")
+        result = type("R", (), {"returncode": 0, "stderr": b""})
+        monkeypatch.setattr(ca, "subprocess",
+                            type("S", (), {"run": staticmethod(lambda *a, **k: result)}))
+        assert ca.send(ca.DELIVERABLE_MISSING, "stubbed", key="k") == "sent"
+
+    def test_the_suite_defaults_to_dry_run(self):
+        """The belt to the guard's braces: conftest forces CC_ALERT_DRY_RUN for the
+        whole session, so a test that never thinks about Telegram is safe anyway."""
+        import coach_alert as ca
+        assert ca.dry_run() is True
+
+    def test_a_successful_send_is_recorded_verbatim(self, logs, monkeypatch):
+        """The success path must log too, not just the dry-run and failure paths.
+        Without it there is no record of what the coach was actually told and no way
+        to establish after the fact whether a message really went out — which is
+        precisely the question that could not be answered about the 28 Jul incident,
+        because the only record went to a monkeypatched tmp log."""
+        import coach_alert as ca
+        monkeypatch.setenv("CC_ALERT_DRY_RUN", "0")
+        monkeypatch.setattr(ca, "STATE", logs / "coach-alert-state.json")
+        monkeypatch.setattr(ops_log, "ALERT_LOG", logs / "ops-alerts.log")
+        result = type("R", (), {"returncode": 0, "stderr": b""})
+        monkeypatch.setattr(ca, "subprocess",
+                            type("S", (), {"run": staticmethod(lambda *a, **k: result)}))
+        ca.send(ca.CLAUDE_AUTH_FAILED, "the exact words", key="k")
+        log = ops_log.ALERT_LOG.read_text()
+        assert "SENT — rendered text follows" in log
+        assert "the exact words" in log
+
     def test_ops_log_cannot_send(self):
         import ast
         src = (REPO / "lib" / "ops_log.py").read_text()
@@ -1094,15 +1154,44 @@ class TestCronDerivedRegistry:
             self, digest, logs, monkeypatch):
         """A cooldown banked for a real, still-unfixed weekly miss must survive a
         cycle that was not actually checked — otherwise deleting a cron entry would
-        silently re-arm the alarm and re-Telegram an incident already sent."""
+        silently re-arm the alarm and re-Telegram an incident already sent.
+
+        THE BEHAVIOUR THIS ASSERTS, decided 28 Jul 2026: a weekly deliverable whose
+        crontab entry is gone stays SILENT on Telegram and is reported as a loud CRON
+        AUDIT line instead. A job that is not scheduled cannot run, so the absence of
+        a heartbeat says nothing about the job and everything about the registry —
+        alarming would name the wrong fault ("ClaudeCoach did not deliver the weekly
+        plan" when the truth is "nobody scheduled it"). The direction is not silent:
+        _registry_problems emits the audit line every run until somebody restores the
+        entry, deregisters it, or annotates no_cron. Same call as the daily case in
+        test_a_deliverable_with_no_cron_entry_is_NOT_judged, and the code already
+        implements it (ops-digest.weekly_alerts skips anything not DUE).
+
+        FIXED 28 Jul 2026 — the setup, not the assertion. This test used to pass
+        `[]` as the week's entries, which starves BOTH weekly deliverables: it drops
+        weekly-summary.sh from the crontab, but stage1-plan is still scheduled, still
+        telegram=True and now has no heartbeat either, so weekly_alerts correctly
+        alerted about the weekly plan and the `== []` expectation failed. Worse, it
+        failed by taking the real send path: that assertion error is the line that
+        Telegrammed the coach for real, twice. The empty list conflated "nothing about
+        the deliverable I unscheduled" with "nothing at all". stage1-plan is given
+        its heartbeats so weekly-summary is the only candidate left and `== []` is a
+        true statement about the thing the test is named after.
+        """
         import coach_alert as ca
         monkeypatch.setattr(ca, "STATE", logs / "coach-alert-state.json")
         monkeypatch.setattr(ops_log, "ALERT_LOG", logs / "ops-alerts.log")
         key = f"{ca.DELIVERABLE_MISSING}|weekly:weekly-summary"
         ca._write_state({key: "2026-08-02T21:30:00"})
         a = self.audit(drop=("weekly-summary.sh",))
-        assert digest.weekly_alerts([], ATHLETES, now=NOW, audit=a) == []
+        # stage1-plan IS scheduled and is not what this test is about: give it its
+        # heartbeats so the only unsatisfied weekly deliverable is the unscheduled one.
+        week = TestWeeklyAlerts()._week(missing={("weekly-summary", "jamie"),
+                                                ("weekly-summary", "kathryn")})
+        assert digest.weekly_alerts(week, ATHLETES, now=NOW, audit=a) == []
         assert key in ca._read_state()
+        # Silent on Telegram, but never silent: the registry fault is reported.
+        assert [p for p in a.problems if "weekly-summary.sh has NO live crontab entry" in p]
 
     # --- DIRECTION 2: scheduled, but nobody watches it ----------------------
     def test_a_scheduled_job_nobody_watches_is_reported(self):

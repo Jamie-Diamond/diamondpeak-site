@@ -34,7 +34,11 @@ Environment:
   CC_ALERT_DRY_RUN  — set to 1 and nothing is sent; the rendered text is written
                       to ops-alerts.log via log_outbound(sent=False) instead.
                       This is how the alert path is exercised without messaging
-                      a real Telegram thread.
+                      a real Telegram thread. The test suite forces it on for the
+                      whole session (ironman-analysis/conftest.py) AND send() has an
+                      independent under-test guard that raises rather than shelling
+                      out to notify.py — belt and braces, because on 28 Jul 2026 a
+                      single mechanism let a unit test message the coach for real.
 """
 
 import json
@@ -45,6 +49,12 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 
 import ops_log
+
+# The real stdlib module, captured before any test can rebind the `subprocess`
+# global on this module. The under-test guard below compares the two: a test that
+# has substituted its own stub is PROVABLY unable to reach Telegram and is allowed
+# through; an unstubbed test is not.
+_REAL_SUBPROCESS = subprocess
 
 # --- the routing table -------------------------------------------------------
 
@@ -817,6 +827,24 @@ def dry_run() -> bool:
     return os.environ.get("CC_ALERT_DRY_RUN", "") not in ("", "0", "false", "False")
 
 
+class TelegramSendBlocked(RuntimeError):
+    """A test reached the real send path. Raised, never swallowed — see under_test."""
+
+
+def under_test() -> bool:
+    """Is pytest in this process?
+
+    Two independent signals because each covers a hole in the other:
+      PYTEST_CURRENT_TEST — set by pytest per test item, so it is true even if
+        coach_alert was imported long before pytest was (a plugin, a conftest).
+      "pytest" in sys.modules — true during collection and inside session/module
+        fixtures, where PYTEST_CURRENT_TEST is NOT set. A module-scope fixture that
+        called send() would slip past the env var alone.
+    Either is enough. Both are cheap.
+    """
+    return "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules
+
+
 def _read_state() -> dict:
     try:
         return json.loads(STATE.read_text())
@@ -877,6 +905,42 @@ def send(reason: str, text: str, key: str = "", cooldown_h: float = None) -> str
     if dry_run():
         ops_log.log_outbound(f"coach-alert:{reason}", text, sent=False)
         return "dry-run"
+
+    # --- THE GUARD: a test may never execute the real notify.py ---------------
+    #
+    # WHY IT EXISTS ALONGSIDE the CC_ALERT_DRY_RUN fixture in ironman-analysis/
+    # conftest.py: on 28 Jul 2026 test_a_weekly_deliverable_with_no_cron_entry_
+    # neither_alerts_nor_clears got here with no dry-run env and no subprocess stub
+    # and delivered a real "ClaudeCoach did not deliver: weekly plan" message to the
+    # coach, twice. A fixture only protects tests that inherit it; it cannot protect
+    # a test that deliberately sets CC_ALERT_DRY_RUN=0 (several do, correctly), a
+    # helper called from a session fixture, or a file added later under a different
+    # conftest. This guard sits on the one line that can actually reach Telegram, so
+    # it holds regardless of how the caller got here.
+    #
+    # WHY IT IS NOT A NO-OP. Returning "dry-run" here would make a suppressed send
+    # indistinguishable from a send that was never warranted — the exact confusion
+    # that would let a real routing bug pass the suite. It raises instead: the test
+    # that would have messaged the coach FAILS, loudly, naming the reason. The
+    # rendered text is written to the alert log first so the audit trail records what
+    # would have gone out, and the same line goes to stderr, which survives a test
+    # that has monkeypatched ALERT_LOG to a tmp_path (as that one had).
+    #
+    # WHY A STUBBED subprocess IS ALLOWED THROUGH. The cooldown-banking tests must
+    # see send() take its real path and return "sent"/"send-failed"; they do it by
+    # replacing this module's `subprocess` with a fake whose run() returns a chosen
+    # returncode. That shape cannot reach the network by construction, so the
+    # discriminator is "is the subprocess module still the real one", not "are we in
+    # a test".
+    if under_test() and subprocess is _REAL_SUBPROCESS:
+        why = (f"coach_alert.send({reason!r}) was called under pytest with the real "
+               f"subprocess module and CC_ALERT_DRY_RUN unset — this would have sent "
+               f"a Telegram message to the coach. BLOCKED. Fix the test: set "
+               f"CC_ALERT_DRY_RUN=1, or stub coach_alert.subprocess if it needs the "
+               f"real send path. Text withheld: {text!r}")
+        ops_log.log_outbound(f"coach-alert:{reason}", text, sent=False)
+        print(f"BLOCKED SEND UNDER TEST: {why}", file=sys.stderr)
+        raise TelegramSendBlocked(why)
 
     # Send FIRST, and only bank the cooldown if it actually went. Writing the
     # cooldown before the send would mean a Telegram API error silently burned the
