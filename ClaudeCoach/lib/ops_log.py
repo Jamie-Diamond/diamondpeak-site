@@ -208,8 +208,17 @@ def sync_ok(job: str, now: datetime = None) -> None:
     """Clean run for this job — reset the CONSECUTIVE counter, and keep the
     windowed failure history, which is what makes an intermittent fault
     visible. Once the window has aged empty the state file goes entirely, which
-    also re-arms escalation for the next episode."""
+    also re-arms escalation for the next episode.
+
+    Also records a run-status heartbeat (28 Jul 2026): sync_failure() already
+    calls record_run() on both its branches, so a job that only ever fails
+    shows up fine — but a job that always succeeds never touched RUN_STATUS at
+    all, which is invisible to coach_alert.DELIVERABLES' gap check (it reads
+    run-status.jsonl, not the sync-state counters here). Without this, adding a
+    git-sync job like backup-config as a monitored daily deliverable would
+    report it missing EVERY night regardless of whether it actually ran clean."""
     now = now or datetime.now()
+    record_run(job, ok=True, detail="sync ok")
     state = _read_sync_state(job)
     fails = _recent_failures(state, now)
     if not fails:

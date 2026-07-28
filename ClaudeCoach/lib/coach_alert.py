@@ -80,6 +80,14 @@ DELIVERABLES = [
      "per_athlete": True,  "telegram": False},
     {"script": "watchdog",           "label": "watchdog",           "window": "daily",
      "per_athlete": False, "telegram": False},
+    # 28 Jul 2026: the only backup of config/athletes.json (intervals.icu API
+    # keys), nightly at 23:50 via lib_git_alert.sh's git_sync_ok/git_sync_fail —
+    # the job label there IS "backup-config" (checked in backup-config.sh, not
+    # assumed). Heartbeat comes from ops_log.sync_ok/sync_failure, not a direct
+    # record_run() call in the script itself; sync_ok now also writes the
+    # success heartbeat (see its docstring) so a clean run doesn't read as a gap.
+    {"script": "backup-config",      "label": "config backup",      "window": "daily",
+     "per_athlete": False, "telegram": True},
     # Sunday jobs. Checked over 7 days. telegram=True since 28 Jul 2026, but NOT
     # via this per-day cooldown — ops-digest.py's weekly_alerts() sends these on
     # its own occurrence-based key so one miss is one message, not one per evening.

@@ -58,6 +58,18 @@ class TestOpsLog:
         rows = [json.loads(l) for l in ops_log.RUN_STATUS.read_text().splitlines()]
         assert rows[-1]["ok"] is False
 
+    def test_sync_ok_writes_a_run_status_heartbeat(self, logs, monkeypatch):
+        # 28 Jul 2026: sync_failure() already wrote a heartbeat on both its
+        # branches, but a clean sync_ok() run wrote nothing to RUN_STATUS —
+        # only sync_failure's counters. A gap check that reads run-status.jsonl
+        # (coach_alert.DELIVERABLES' backup-config entry) would see a job that
+        # always succeeds as ALWAYS missing without this.
+        monkeypatch.setattr(ops_log, "SYNC_STATE", logs / "git-sync-state")
+        ops_log.sync_ok("backup-config")
+        rows = [json.loads(l) for l in ops_log.RUN_STATUS.read_text().splitlines()]
+        assert rows[-1]["script"] == "backup-config"
+        assert rows[-1]["ok"] is True
+
 
 class TestBuildDigest:
     def all_clean_entries(self):
@@ -96,7 +108,8 @@ class TestGapLines:
     coach_alert.DELIVERABLES rather than hard-coded here."""
 
     def today(self, drop=(), fail=()):
-        out = [_e("watchdog", "jamie", detail="silent")]
+        out = [_e("watchdog", "jamie", detail="silent"),
+               _e("backup-config", detail="sync ok")]
         for slug in ("jamie", "kathryn"):
             out.append(_e("morning-checkin", slug, detail="card sent"))
             for script, detail in DAILY_SILENT.items():
@@ -130,6 +143,13 @@ class TestGapLines:
         gaps, tg = self.call(digest, drop={("morning-checkin", "kathryn")})
         assert any("morning card" in l and "kathryn" in l for l in gaps)
         assert tg == ["morning card for kathryn"]
+
+    def test_missing_backup_config_flagged_and_telegrammed(self, digest):
+        # 28 Jul 2026: config/athletes.json.enc is the only backup of the
+        # intervals.icu keys — a missing nightly heartbeat is condition 1.
+        gaps, tg = self.call(digest, drop={("backup-config", "")})
+        assert any("config backup" in l for l in gaps)
+        assert tg == ["config backup"]
 
     def test_missing_watchdog_flagged_but_not_telegrammed(self, digest):
         gaps, tg = self.call(digest, drop={("watchdog", "jamie")})
@@ -195,7 +215,8 @@ class TestCoachAlertRouting:
         weekly_tg = {d["script"] for d in coach_alert.DELIVERABLES
                      if d["telegram"] and d["window"] == "weekly"}
         assert daily_tg == {"morning-checkin", "daily-prescription",
-                             "night-before-brief", "evening-checkin"}
+                             "night-before-brief", "evening-checkin",
+                             "backup-config"}
         assert weekly_tg == {"weekly-summary", "stage1-plan"}
 
     def test_ops_log_cannot_send(self):
