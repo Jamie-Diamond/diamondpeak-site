@@ -79,6 +79,20 @@ def test_ceiling_infeasible_when_phase_target_exceeds_hours_ceiling():
     assert all(w["buildable_tss"] <= round(w["phase_tss_ceiling"] * 1.1) for w in bad)
 
 
+def test_ceiling_infeasible_block_reports_the_strict_ceiling_trajectory():
+    """On a ceiling-infeasible block the headline CTL is only reached by building
+    every week ABOVE cap (weeks the audit hard-fails). The projection must also
+    report where the block lands with the tolerance UNSPENT, or the coach reads
+    'CTL fine' and 'over ceiling' as contradictory."""
+    rep = mp.project_block(_cfg(), _bp(), ctl_now=96.6, today=date(2026, 8, 3))
+    assert rep["ctl_at_race_week_start_at_ceiling"] < rep["ctl_at_race_week_start"]
+    assert rep["ctl_at_taper_start_at_ceiling"] < rep["ctl_at_taper_start"]
+    detail = next(f["detail"] for f in rep["flags"] if f["code"] == "ceiling_infeasible")
+    assert str(rep["ctl_at_race_week_start_at_ceiling"]) in detail
+    # per-week: the strict figure never exceeds the tolerated one
+    assert all(w["buildable_at_ceiling_tss"] <= w["buildable_tss"] for w in rep["weeks"])
+
+
 def test_ceiling_infeasible_clears_when_the_ceiling_is_raised():
     """Same block, more hours available — the flag must disappear. Proves the flag
     tracks the ceiling and is not an artefact of the phase target alone."""

@@ -171,6 +171,16 @@ restated, so the macro layer can never flag a week the builder would accept. A
 projected shortfall is therefore a *lower bound* on the problem: it already assumes
 every week is built to the maximum the validator tolerates.
 
+Which is exactly why it reports **two trajectories**. The headline CTL spends that
+tolerance every week; on a ceiling-infeasible block that means it is reached only
+by building weeks the plan audit hard-fails. So the projection also reports the
+same block held **strictly at the ceiling** (`ctl_at_*_at_ceiling`). Without this,
+an athlete can show `ceiling_infeasible` *and* an apparently healthy projected CTL
+and the two read as contradictory, when in fact the second is conditional on the
+first. A week landing exactly on ceiling × (1 + tolerance) is deliberately **not**
+flagged infeasible — that is what the validator tolerates — but the strict line
+shows the cost of living there.
+
 Flags:
 
 | Code | Severity | Means |

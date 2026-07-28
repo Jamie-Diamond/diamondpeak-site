@@ -125,15 +125,25 @@ def project_block(
     tol = _cap_tolerance()
 
     ctl = float(ctl_now)
+    # Second, STRICT trajectory: the same weeks with every load capped at the
+    # ceiling itself rather than the ceiling plus validate_week's tolerance. The
+    # tolerant line is what the builder can legally push, so it is the right basis
+    # for "will he get there"; but on a ceiling-infeasible block the tolerant line
+    # only arrives because every week is built ABOVE cap — weeks the audit
+    # hard-fails. Reporting both stops the projection reading "CTL is fine" when
+    # the CTL is conditional on weeks that should never ship.
+    ctl_strict = float(ctl_now)
     weeks: list[dict] = []
     w = _monday(today)
     race_monday = _monday(race)
     ctl_at_race_week_start = None
+    ctl_strict_at_race_week_start = None
     skipped: list[str] = []
 
     while w <= race_monday:
         if w == race_monday:
             ctl_at_race_week_start = round(ctl, 1)
+            ctl_strict_at_race_week_start = round(ctl_strict, 1)
         r = required_fn(cfg, round(ctl, 1), today=w,
                         last_week_tss=(last_week_tss if not weeks else None))
         if r.get("error"):
@@ -149,6 +159,7 @@ def project_block(
             break
         rec = int(rec)
         allowed = int(min(rec, round(ceiling * (1 + tol)))) if ceiling else rec
+        at_ceiling = int(min(rec, round(ceiling))) if ceiling else rec
         req_uncapped = r.get("required_weekly_tss")
         ramp_capped = r.get("ramp_capped_weekly_tss")
         ramp_limited = bool(req_uncapped and ramp_capped and req_uncapped > ramp_capped)
@@ -162,12 +173,19 @@ def project_block(
             "ramp_limited": ramp_limited,
             "phase_tss_ceiling": ceiling,
             "buildable_tss": allowed,
+            "buildable_at_ceiling_tss": at_ceiling,
+            # Strictly greater: a week landing exactly ON ceiling x (1 + tolerance)
+            # is what the validator tolerates, so it is not reported infeasible —
+            # but it IS at the absolute limit, and the strict trajectory below
+            # shows what the block reaches without spending that tolerance.
             "ceiling_infeasible": bool(ceiling and rec > round(ceiling * (1 + tol))),
             "phase_target_ctl": r.get("phase_target_ctl"),
             "ctl_start": round(ctl, 1),
         })
         ctl = compute_projected_ctl(ctl, allowed, 1)
+        ctl_strict = compute_projected_ctl(ctl_strict, at_ceiling, 1)
         weeks[-1]["ctl_end"] = round(ctl, 1)
+        weeks[-1]["ctl_end_at_ceiling"] = round(ctl_strict, 1)
         w += timedelta(days=7)
 
     if not weeks:
@@ -177,6 +195,7 @@ def project_block(
     down = [k for k in weeks if k["week_type"] in ("deload", "taper")]
     pre_taper = [k for k in weeks if k["week_type"] != "taper"]
     ctl_pre_taper = pre_taper[-1]["ctl_end"] if pre_taper else None
+    ctl_pre_taper_strict = pre_taper[-1]["ctl_end_at_ceiling"] if pre_taper else None
     race_min = (cfg.get("ctl_targets") or {}).get("race_min")
 
     flags: list[dict] = []
@@ -195,6 +214,18 @@ def project_block(
     infeasible = [k for k in weeks if k["ceiling_infeasible"]]
     if infeasible:
         worst = max(infeasible, key=lambda k: k["engine_target_tss"] - k["phase_tss_ceiling"])
+        strict_note = ""
+        if ctl_strict_at_race_week_start is not None:
+            strict_note = (f" The projected CTL above spends the +{tol:.0%} tolerance every "
+                           f"week, i.e. it assumes weeks the plan audit hard-fails; held "
+                           f"strictly at the ceiling the block reaches "
+                           f"{ctl_strict_at_race_week_start} at race week")
+            if race_min:
+                sgap = round(float(race_min) - ctl_strict_at_race_week_start, 1)
+                strict_note += (f", {sgap} below race_min {race_min}." if sgap > 0
+                                else f", still at or above race_min {race_min}.")
+            else:
+                strict_note += "."
         flags.append({
             "code": "ceiling_infeasible", "severity": "hard",
             "detail": (f"{len(infeasible)} week(s) ask for more load than the phase "
@@ -203,7 +234,8 @@ def project_block(
                        f"vs ceiling {worst['phase_tss_ceiling']:.0f} "
                        f"(+{tol:.0%} = {worst['phase_tss_ceiling'] * (1 + tol):.0f}). The "
                        f"phase CTL target is unreachable inside the athlete's hours; the "
-                       f"weekly generator can only overshoot the cap or miss the target."),
+                       f"weekly generator can only overshoot the cap or miss the target."
+                       + strict_note),
             "weeks": [k["week_start"] for k in infeasible]})
 
     if loading and all(k["ramp_limited"] for k in loading):
@@ -257,6 +289,9 @@ def project_block(
         "loading_weeks_remaining": len(loading),
         "ctl_at_taper_start": ctl_pre_taper,
         "ctl_at_race_week_start": ctl_at_race_week_start,
+        # same trajectory with no ceiling tolerance spent — see the note above
+        "ctl_at_taper_start_at_ceiling": ctl_pre_taper_strict,
+        "ctl_at_race_week_start_at_ceiling": ctl_strict_at_race_week_start,
         "cap_tolerance": tol,
         "weeks": weeks,
         "skipped": skipped,
@@ -323,6 +358,11 @@ def _render(rep: dict) -> str:
     L.append(f"projected CTL: taper start {rep['ctl_at_taper_start']} · race week "
              f"{rep['ctl_at_race_week_start']} · loading weeks left "
              f"{rep['loading_weeks_remaining']}")
+    if rep["ctl_at_race_week_start_at_ceiling"] != rep["ctl_at_race_week_start"]:
+        L.append(f"  ...that spends the +{rep['cap_tolerance']:.0%} cap tolerance every "
+                 f"week; held strictly at the ceiling: taper start "
+                 f"{rep['ctl_at_taper_start_at_ceiling']} · race week "
+                 f"{rep['ctl_at_race_week_start_at_ceiling']}")
     for s in rep.get("skipped") or []:
         L.append(f"  SKIPPED {s}")
     for f in rep["flags"]:
