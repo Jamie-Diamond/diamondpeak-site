@@ -33,9 +33,9 @@ Flags it raises
                      cap and quietly miss the CTL target.
   no_slack           every remaining loading week is already pinned to the ramp
                      cap, so any missed or reduced week is unrecoverable.
-  deload_placement   informational: where the mechanical every-Nth-week deload
-                     cadence has put the down-weeks, and whether one of them is
-                     consuming a late loading week.
+  deload_placement   informational: where the down-weeks fall, and whether one
+                     is still consuming a late loading week after
+                     plan_tools.block_deload_weeks has placed them.
   heat_overlay       the sauna block (from lib/heat.py, injected) overlays weeks
                      that are already at or near the load ceiling.
 
@@ -59,6 +59,11 @@ sys.path.insert(0, str(BASE / "lib"))
 from primitives.blueprint import current_phase                 # noqa: E402
 from primitives.load import compute_projected_ctl              # noqa: E402
 from primitives.validate_plan import validate_week             # noqa: E402
+# The late-loading window this flag reports on must be the SAME one plan_tools
+# places deloads by, or the flag would keep firing on a block the engine has
+# already repaired (or go quiet on one it has not). Same anti-drift pattern as
+# _cap_tolerance() reading validate_week's own signature.
+from plan_tools import LATE_LOADING_WINDOW                    # noqa: E402
 
 ATHLETES_CONFIG = BASE / "config" / "athletes.json"
 
@@ -247,14 +252,16 @@ def project_block(
 
     if down:
         late = [k for k in down if k["week_type"] == "deload"
-                and len([x for x in loading if x["week_start"] > k["week_start"]]) <= 2]
+                and len([x for x in loading if x["week_start"] > k["week_start"]])
+                <= LATE_LOADING_WINDOW]
         flags.append({
             "code": "deload_placement", "severity": "info",
             "detail": (f"down-weeks fall at: "
                        + ", ".join(f"{k['week_start']} ({k['week_type']})" for k in down)
-                       + (f" — {len(late)} deload(s) sit inside the last two loading weeks, "
-                          f"chosen by the every-Nth-week cadence, not by the block"
-                          if late else "")),
+                       + (f" — {len(late)} deload(s) sit inside the last "
+                          f"{LATE_LOADING_WINDOW} loading weeks, which "
+                          f"plan_tools.block_deload_weeks could not repair (no free "
+                          f"earlier week in the block)" if late else "")),
             "weeks": [k["week_start"] for k in down]})
 
     if heat_start:

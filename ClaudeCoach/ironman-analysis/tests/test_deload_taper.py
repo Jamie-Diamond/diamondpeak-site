@@ -186,3 +186,106 @@ class TestPhaseResolutionWithoutSpecific:
         assert mid["phase"] == "build"
         peak = pt.required_tss(cfg, 40.0, today=date(2026, 8, 11)) # week 10 = peak
         assert peak["phase"] == "peak"
+
+
+class TestBlockDeloadPlacement:
+    """Placement is a BLOCK decision, not a counter (27 Jul 2026). The cadence
+    proposes; block_deload_weeks decides. It may only MOVE a down-week, never
+    delete one — recovery is not optional, its position is."""
+
+    def _kathryn(self, **over):
+        # Kathryn's real shape: plan_start 4 May, peak ends week 18, taper 7 Sep.
+        # The every-4th cadence lands a deload on week 16 of 18 — only two loading
+        # weeks between the unload and the taper, while she projects short of race_min.
+        return _cfg(plan_start="2026-05-04", race_date="2026-09-20",
+                    phase_tss={"base_end_week": 8, "build_end_week": 14,
+                               "peak_end_week": 18},
+                    ctl_targets={"race_min": 76, "race_max": 80},
+                    max_ctl_ramp_per_week=6.0, **over)
+
+    def test_deload_abutting_the_taper_moves_earlier(self):
+        p = pt.block_deload_weeks(self._kathryn())
+        assert p["cadence"] == [4, 8, 12, 16]
+        assert sorted(p["weeks"]) == [4, 8, 12, 15]      # 16 -> 15
+        assert p["moves"] == [{"from": 16, "to": 15}]
+        assert p["unmoved_late"] == []
+
+    def test_the_count_of_down_weeks_is_preserved(self):
+        p = pt.block_deload_weeks(self._kathryn())
+        # never trade recovery for CTL: as many deloads out as the cadence put in
+        assert len(p["weeks"]) == len(p["cadence"])
+
+    def test_required_tss_agrees_with_the_placement(self):
+        cfg = self._kathryn()
+        moved = pt.required_tss(cfg, 74.0, today=date(2026, 8, 10))    # week 15
+        vacated = pt.required_tss(cfg, 74.0, today=date(2026, 8, 17))  # week 16
+        assert moved["week_type"] == "deload"
+        assert moved["deload_moved_from_week"] == 16
+        assert moved["deload_reason"].startswith("scheduled deload")
+        assert "moved earlier from cadence week 16" in moved["deload_reason"]
+        assert vacated["week_type"] == "peak"
+        assert "deload_reason" not in vacated
+
+    def test_moving_a_deload_does_not_breach_the_ramp_cap(self):
+        # the vacated week's target is still min(required, ramp-capped)
+        r = pt.required_tss(self._kathryn(), 74.0, today=date(2026, 8, 17))
+        assert r["recommended_weekly_tss"] <= r["ramp_capped_weekly_tss"]
+
+    def test_an_early_cadence_deload_is_left_alone(self):
+        # Jamie's shape: the week-16 deload has three loading weeks after it, so the
+        # block has no complaint and placement must not fidget with it.
+        cfg = _cfg(phase_tss={"base_end_week": 5, "build_end_week": 10,
+                              "specific_end_week": 14, "peak_end_week": 19},
+                   deload_skip_weeks=["2026-07-13"])
+        p = pt.block_deload_weeks(cfg)
+        assert p["cadence"] == [4, 8, 16]        # week 12 skipped by config
+        assert sorted(p["weeks"]) == [4, 8, 16]
+        assert p["moves"] == []
+
+    def test_a_skip_week_is_never_chosen_as_the_destination(self):
+        p = pt.block_deload_weeks(self._kathryn(deload_skip_weeks=["2026-08-10"]))
+        assert 15 not in p["weeks"]              # week 15 = Mon 10 Aug, skipped
+        assert p["moves"] == [{"from": 16, "to": 14}]
+
+    def test_a_late_deload_beside_a_declared_easy_week_is_reported_not_deleted(self):
+        # A manual easy week already unloads week 15, so the late cadence deload on
+        # 16 cannot move earlier without landing on or beside a down-week. It is kept
+        # and reported: dropping it may well be right here, but that is a per-athlete
+        # judgement for deload_skip_weeks, not a rule that deletes recovery.
+        p = pt.block_deload_weeks(self._kathryn(
+            manual_easy_weeks=[{"week_start": "2026-08-10", "reason": "B-race",
+                                "factor": 0.6}]))
+        assert sorted(p["weeks"]) == [4, 8, 12, 16]
+        assert p["unmoved_late"] == [16]
+        assert p["moves"] == []
+
+    def test_a_deload_is_never_dragged_beyond_one_cadence_period(self):
+        # Over-constrained block: the only free earlier weeks are more than n weeks
+        # back. Keep the deload where it is and say so, rather than oscillate.
+        cfg = self._kathryn(deload_skip_weeks=["2026-08-10", "2026-08-03"])  # wk 15, 14
+        p = pt.block_deload_weeks(cfg)
+        assert sorted(p["weeks"]) == [4, 8, 12, 16]     # unchanged
+        assert p["unmoved_late"] == [16]
+        assert p["moves"] == []
+
+    def test_an_unrepairable_block_keeps_its_deload_and_says_so(self):
+        # A block with no room to move: every earlier week is also inside the window.
+        p = pt.block_deload_weeks(_cfg(phase_tss={"base_end_week": 2,
+                                                  "build_end_week": 4,
+                                                  "peak_end_week": 4}))
+        assert sorted(p["weeks"]) == [4]         # kept, not deleted
+        assert p["unmoved_late"] == [4]
+        assert p["moves"] == []
+
+    def test_placement_does_not_depend_on_today(self):
+        # Static from cfg: a week reads the same way in the Sunday build, the audit,
+        # the projection and required_tss's own today-7 lookback.
+        import inspect
+        assert "today" not in inspect.signature(pt.block_deload_weeks).parameters
+        cfg = self._kathryn()
+        for day in (date(2026, 7, 28), date(2026, 8, 10), date(2026, 8, 17)):
+            assert sorted(pt.block_deload_weeks(cfg)["weeks"]) == [4, 8, 12, 15], day
+
+    def test_cadence_off_places_nothing(self):
+        p = pt.block_deload_weeks(self._kathryn(deload_every_n_weeks=0))
+        assert p["weeks"] == {} and p["cadence"] == []

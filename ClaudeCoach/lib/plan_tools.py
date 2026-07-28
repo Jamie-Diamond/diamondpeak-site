@@ -362,6 +362,128 @@ _MISS_TRIGGER = 0.70        # last week < 70% executed → this week is recovery
 _TAPER_FACTORS = {3: 0.70, 2: 0.55, 1: 0.40}
 
 
+# Down-week placement is a BLOCK decision, not a counter (macro projection, 27 Jul
+# 2026: Kathryn's cadence deload landed on week 16 of 18, leaving only two loading
+# weeks between the unload and the taper while she was projected 1.6 CTL short of
+# race_min). A deload abutting the taper unloads twice into race day: the taper IS
+# the unload. So a deload must leave MORE than this many loading weeks before the
+# taper; one that does not is shifted EARLIER. The count is preserved — recovery is
+# not optional, only its position is negotiable.
+# macro_projection imports this constant rather than restating 2, so the flag and
+# the placement rule cannot drift apart.
+LATE_LOADING_WINDOW = 2
+
+
+def _phase_ends(cfg: dict) -> dict:
+    """Last training week of each phase, from cfg. Shared by required_tss and
+    block_deload_weeks so phase boundaries have one definition."""
+    ptss = cfg.get("phase_tss") or {}
+    build_end = ptss.get("build_end_week", 10)
+    return {"base": ptss.get("base_end_week", 6), "build": build_end,
+            # No Specific phase unless configured: the old default (14) could sit
+            # ABOVE a configured peak_end_week, swallowing the taper — Calum's
+            # race week resolved to "specific" instead of taper.
+            "specific": ptss.get("specific_end_week", build_end),
+            "peak": ptss.get("peak_end_week", 17)}
+
+
+def _week_monday(plan_start: date, week: int) -> date:
+    """Monday of training week `week` (weeks are counted from plan_start in 7-day
+    strides, exactly as required_tss counts them, then snapped to that week's
+    Monday so it keys the same way as deload_skip_weeks / manual_easy_weeks)."""
+    return _monday(plan_start + timedelta(days=7 * (week - 1)))
+
+
+def block_deload_weeks(cfg: dict) -> dict:
+    """Pure: block-aware deload placement for the WHOLE plan, from cfg alone.
+
+    Returns {"n": int, "window": int, "cadence": [wk], "weeks": {wk: reason},
+             "moves": [{"from": wk, "to": wk}], "unmoved_late": [wk]}.
+
+    Starts from the every-Nth-week cadence (`deload_every_n_weeks`, honouring
+    `deload_skip_weeks`), then REPOSITIONS — never deletes — any deload sitting
+    inside the final LATE_LOADING_WINDOW loading weeks before the taper. The
+    destination is the latest earlier week that is free (not another down-week,
+    not a skip week, not a manual easy week), not adjacent to another down-week,
+    far enough from the taper itself, and WITHIN ONE CADENCE PERIOD of the week it
+    came from — a deload dragged further than that stops being the same block's
+    recovery and starts oscillating load/recover week about. If no such week
+    exists the deload stays put and is reported in `unmoved_late`: a block that
+    cannot be repaired is reported, not silently stripped of its recovery.
+
+    NOTHING here removes a down-week. Where a late deload cannot be relocated —
+    including the case where the week beside it is already a declared
+    `manual_easy_weeks` down-week, so the block would unload for a fortnight — it
+    stays and is reported. Dropping it might well be the right call there (it is
+    what Jamie's hand-written `deload_skip_weeks` did on 16 Jul 2026), but that is a
+    coaching judgement to make per athlete through that same override, not a rule
+    that quietly deletes recovery.
+
+    Depends on cfg ONLY (never on `today`), so a week's classification is stable
+    for the whole block: the same week reads the same way in the Sunday build, in
+    the audit, in the projection, and in required_tss's own `today - 7` lookback.
+    """
+    n = int(cfg.get("deload_every_n_weeks", _DELOAD_EVERY_N) or 0)
+    out = {"n": n, "window": LATE_LOADING_WINDOW, "cadence": [], "weeks": {},
+           "moves": [], "unmoved_late": []}
+    if not n or not cfg.get("plan_start"):
+        return out
+    plan_start = date.fromisoformat(cfg["plan_start"])
+    last = int(_phase_ends(cfg)["peak"])            # final training week; taper follows
+    skips = set(cfg.get("deload_skip_weeks") or [])
+    easy = set()
+    for ew in (cfg.get("manual_easy_weeks") or []):
+        easy.add(ew if isinstance(ew, str) else ew.get("week_start"))
+
+    def monday(w: int) -> str:
+        return _week_monday(plan_start, w).isoformat()
+
+    # Manual easy weeks are down-weeks too: they must not be counted as loading
+    # weeks before the taper, and must not be chosen as a deload destination.
+    easy_wks = {w for w in range(1, last + 1) if monday(w) in easy}
+    cadence = [w for w in range(1, last + 1)
+               if w % n == 0 and monday(w) not in skips]
+    out["cadence"] = list(cadence)
+
+    def loading_after(w: int, downs: set) -> int:
+        return len([x for x in range(w + 1, last + 1)
+                    if x not in downs and x not in easy_wks])
+
+    downs = set(cadence)
+    for d in sorted(cadence, reverse=True):
+        if d not in downs or loading_after(d, downs) > LATE_LOADING_WINDOW:
+            continue
+        dest = None
+        # never drag a deload further than one cadence period from its own block
+        for e in range(d - 1, max(1, d - n), -1):   # week 1 is never a deload
+            if e in downs or e in easy_wks or monday(e) in skips:
+                continue
+            others = (downs - {d}) | easy_wks
+            if (e - 1) in others or (e + 1) in others:
+                continue                            # no back-to-back down-weeks
+            if loading_after(e, (downs - {d}) | {e}) <= LATE_LOADING_WINDOW:
+                continue                            # still too close to the taper
+            dest = e
+            break
+        if dest is None:
+            out["unmoved_late"].append(d)
+            continue
+        downs = (downs - {d}) | {dest}
+        out["moves"].append({"from": d, "to": dest})
+
+    moved_to = {m["to"]: m["from"] for m in out["moves"]}
+    for w in sorted(downs):
+        if w in moved_to:
+            out["weeks"][w] = (
+                f"scheduled deload (block-placed week {w}, moved earlier from cadence "
+                f"week {moved_to[w]}: a deload there would leave only "
+                f"{LATE_LOADING_WINDOW} loading week(s) before the taper, unloading "
+                f"twice into race day)")
+        else:
+            out["weeks"][w] = f"scheduled deload (every {n}th training week; week {w})"
+    return out
+
+
 def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
                  last_week_tss: float | None = None) -> dict:
     """Pure: weekly TSS needed to hit the current phase's CTL target on time,
@@ -382,14 +504,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         return {"error": "no plan_start configured"}
 
     plan_start = date.fromisoformat(cfg["plan_start"])
-    ptss = cfg.get("phase_tss") or {}
-    build_end = ptss.get("build_end_week", 10)
-    ends = {"base": ptss.get("base_end_week", 6), "build": build_end,
-            # No Specific phase unless configured: the old default (14) could sit
-            # ABOVE a configured peak_end_week, swallowing the taper — Calum's
-            # race week resolved to "specific" instead of taper.
-            "specific": ptss.get("specific_end_week", build_end),
-            "peak": ptss.get("peak_end_week", 17)}
+    ends = _phase_ends(cfg)
     week_now = max(1, (today - plan_start).days // 7 + 1)
     phase = next((p for p in _PHASES if week_now <= ends[p]), "taper")
     if phase == "taper":
@@ -492,16 +607,19 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
                          f"not under-training — no floor applies.")})
             return out
 
-    n = int(cfg.get("deload_every_n_weeks", _DELOAD_EVERY_N) or 0)
     factor = float(cfg.get("deload_factor", _DELOAD_FACTOR))
     deload_why = None
-    # Athlete override (Jamie, 16 Jul 2026): the mechanical every-Nth-week cadence
-    # doesn't know the actual periodisation. A week whose Monday is listed in
-    # deload_skip_weeks is NOT a scheduled deload regardless of week_now — the real
-    # unload sits elsewhere (e.g. next week's B-race taper via manual_easy_weeks).
-    _skip_weeks = set(cfg.get("deload_skip_weeks") or [])
-    if n and week_now % n == 0 and week_monday not in _skip_weeks:
-        deload_why = f"scheduled deload (every {n}th training week; week {week_now})"
+    # Placement is delegated to block_deload_weeks: the cadence proposes, the block
+    # decides (28 Jul 2026). The raw `week_now % n` test no longer lives here, and
+    # nor does the deload_skip_weeks set — that athlete override (Jamie, 16 Jul
+    # 2026: "the cadence doesn't know the actual periodisation") is applied inside
+    # the placement function, along with the late-loading-window repair.
+    _placement = block_deload_weeks(cfg)
+    if week_now in _placement["weeks"]:
+        deload_why = _placement["weeks"][week_now]
+        _from = next((m["from"] for m in _placement["moves"] if m["to"] == week_now), None)
+        if _from is not None:
+            out["deload_moved_from_week"] = _from
     # Genuine-miss recovery (fix, 15 Jul 2026): reference the athlete's SUSTAINABLE
     # maintenance load (~7×CTL), NOT 70% of this week's aspirational ramp-capped target.
     # Realistic execution routinely lands under the ramp-capped target, and a PLANNED

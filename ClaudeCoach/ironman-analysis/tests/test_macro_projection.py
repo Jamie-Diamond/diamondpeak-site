@@ -241,3 +241,44 @@ def test_errors_are_explicit_not_silent():
     # a week the engine cannot target must abort, never be given an invented load
     out = mp.project_block(_cfg(plan_start=None), _bp(), 96.6, today=date(2026, 8, 3))
     assert "error" in out
+
+
+def test_late_loading_window_is_shared_with_plan_tools():
+    """If the placement rule's window moves, the flag that reports on it moves too."""
+    assert mp.LATE_LOADING_WINDOW == pt.LATE_LOADING_WINDOW
+
+
+def test_block_placement_moves_a_late_deload_and_closes_the_shortfall(monkeypatch):
+    """Kathryn, 28 Jul 2026: the every-4th-week cadence put a deload on week 16 of 18
+    and the block arrived 1.6 CTL short of race_min 76. Block-aware placement moves
+    that same deload to week 15 — same number of down-weeks, one week earlier — and
+    the block reaches the target. Counterfactual: window 0 restores pure cadence."""
+    cfg = _cfg(name="Kathryn", plan_start="2026-05-04", race_date="2026-09-20",
+               phase_tss={"base_end_week": 8, "build_end_week": 14,
+                          "peak_end_week": 18},
+               ctl_targets={"race_min": 76, "race_max": 80},
+               max_ctl_ramp_per_week=6.0, deload_every_n_weeks=4)
+    bp = {"phases": [
+        {"name": "Build", "family": "build", "start": "2026-06-29",
+         "end": "2026-08-02", "weeks": 5, "tss_ceiling": 966},
+        {"name": "Peak", "family": "peak", "start": "2026-08-03",
+         "end": "2026-09-06", "weeks": 5, "tss_ceiling": 1083},
+        {"name": "Taper", "family": "taper", "start": "2026-09-07",
+         "end": "2026-09-20", "weeks": 2, "tss_ceiling": None},
+    ]}
+    after = mp.project_block(cfg, bp, ctl_now=67.7, today=date(2026, 7, 28))
+    monkeypatch.setattr(pt, "LATE_LOADING_WINDOW", 0)      # pure cadence again
+    before = mp.project_block(cfg, bp, ctl_now=67.7, today=date(2026, 7, 28))
+
+    def deloads(rep):
+        return [w["week_start"] for w in rep["weeks"] if w["week_type"] == "deload"]
+
+    assert deloads(before) == ["2026-08-17"]
+    assert deloads(after) == ["2026-08-10"]
+    assert len(deloads(after)) == len(deloads(before))     # moved, not removed
+    assert "ctl_shortfall" in _codes(before)
+    assert "ctl_shortfall" not in _codes(after)
+    assert after["ctl_at_race_week_start"] > before["ctl_at_race_week_start"]
+    assert after["ctl_at_race_week_start"] >= 76
+    # and no week was pushed past the athlete's ramp cap to get there
+    assert not any(w["ramp_limited"] for w in after["weeks"])

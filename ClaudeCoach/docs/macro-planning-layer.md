@@ -17,8 +17,11 @@ block:
 
 - Which week of a five-week Peak carries the long race-simulation brick.
 - Which week the long-run peak lands in, and at what distance.
-- Which weeks unload. Today this is `deload_every_n_weeks` counting from
+- Which weeks unload. This *was* `deload_every_n_weeks` counting from
   `plan_start` — a modulo, with no reference to how much CTL is left to find.
+  Partly closed on 28 Jul 2026: `plan_tools.block_deload_weeks` now places the
+  cadence's down-weeks by the block (§3a). The remaining improvisation is which
+  week carries which key session, not which week unloads.
 - How an environmental block (sauna) overlays the load weeks it lands on.
 - Whether the weeks that remain can reach the CTL the race needs *at all*.
 
@@ -33,7 +36,12 @@ Three live consequences, all verified on 28 Jul 2026:
    In one case the deciding factor is a single cadence deload landing on one of
    the last loading weeks: with the cadence deload the block misses the target,
    without it the block just reaches it. A placement decision nothing owns is
-   deciding whether the block is feasible.
+   deciding whether the block is feasible. **Fixed 28 Jul 2026** for that case by
+   §3a: Kathryn's week-16-of-18 deload moves to week 15, and her projected
+   race-week CTL goes 74.4 -> 76.3 against `race_min` 76. The other athlete
+   (Calum, 2.0 short) is NOT a placement problem — his only remaining deload is
+   already the earliest week available, and moving it later would push it into the
+   window §3a exists to keep clear. His gap is a target/ramp-cap question.
 3. The plan audit reports a `0 TSS vs target` failure for the week after next for
    every athlete, every day — an artefact of the six-day horizon, not a real
    defect (§7).
@@ -102,6 +110,52 @@ mechanism. It writes the two override channels that already exist and that
 `required_tss` already honours (`deload_skip_weeks` to move a cadence deload off
 a week, `manual_easy_weeks` to declare one). The engine stays the only thing that
 turns "this week unloads" into a number.
+
+## 3a. Block-aware deload placement (landed 28 Jul 2026)
+
+The cadence proposes; the block decides. `plan_tools.block_deload_weeks(cfg)` is
+pure, depends on `cfg` alone (never on `today`, so a week reads the same in the
+Sunday build, the audit, the projection and `required_tss`'s own `today - 7`
+lookback), and returns the deload weeks for the WHOLE plan. `required_tss` asks it
+instead of testing `week_now % n == 0`, so there is still exactly one source of the
+weekly target and one source of a week's type.
+
+The rule, in one line: **a deload must leave more than `LATE_LOADING_WINDOW` (2)
+loading weeks between itself and the taper.** The taper *is* the unload; a deload
+abutting it unloads twice into race day, and it spends the last week in which
+fitness can still be added. A deload that breaks the rule is moved EARLIER:
+
+- destination = the latest earlier week that is free (not another down-week, not
+  in `deload_skip_weeks`, not a `manual_easy_weeks` week), not adjacent to another
+  down-week, far enough from the taper itself, and **within one cadence period**
+  of where it came from — dragged further, a deload stops being that block's
+  recovery and starts oscillating load/recover week about;
+- the **count of down-weeks is preserved**. Nothing here deletes recovery to chase
+  CTL: a small fitness gap is a far cheaper failure than an overtrained athlete.
+  Only the position is negotiable;
+- if no legal destination exists, the deload **stays put** and is reported in
+  `unmoved_late`. An unrepairable block is reported, not silently stripped of its
+  recovery — and `macro_projection`'s `deload_placement` flag then still fires.
+  That includes the case where the week beside the offending deload is already a
+  declared `manual_easy_weeks` down-week, so the block would unload for a
+  fortnight. Dropping the cadence deload is very likely right there — it is what
+  Jamie's hand-written `deload_skip_weeks` did on 16 Jul 2026 — but that stays a
+  per-athlete judgement made through that override, not a rule.
+
+Taper weeks are not deloads and are never touched: the taper branch of
+`required_tss` returns before placement is consulted.
+
+The ramp cap needs no special handling — a vacated week's target is still
+`min(required, ramp_capped)`, so moving a deload cannot create a week that
+breaches `max_ctl_ramp_per_week`. `test_macro_projection` asserts no week becomes
+ramp-limited by the move, and `macro_projection` imports `LATE_LOADING_WINDOW`
+from `plan_tools` rather than restating 2, so the rule and the flag reporting on
+it cannot drift apart.
+
+Live effect on 28 Jul 2026 (all three athletes, `macro_projection --all`): one
+week changes. Kathryn 17 Aug -> 10 Aug, `ctl_shortfall` closes (74.4 -> 76.3 vs
+`race_min` 76). Jamie's placement `{4, 8, 16}` and Calum's `{4, 8}` are untouched,
+and their projections are byte-identical before and after.
 
 ## 4. The key question: prescribe, or constrain?
 
@@ -188,7 +242,7 @@ Flags:
 | `ctl_shortfall` | hard | projected CTL at race-week start is below `ctl_targets.race_min` |
 | `ceiling_infeasible` | hard | the engine target exceeds the phase load ceiling — the CTL target is unreachable inside the athlete's hours |
 | `no_slack` | warn | every remaining loading week is pinned to the ramp cap; any missed week is unrecoverable |
-| `deload_placement` | info | where the cadence has put the down-weeks, and whether one sits in the last two loading weeks |
+| `deload_placement` | info | where the down-weeks fall, and whether one still sits inside the last `LATE_LOADING_WINDOW` loading weeks after `block_deload_weeks` has placed them (i.e. a block it could not repair) |
 | `heat_overlay` | warn | the sauna block overlays weeks already at ≥90% of the load ceiling |
 | `no_macro_plan` | info | no skeleton exists, so placement is still improvised |
 
