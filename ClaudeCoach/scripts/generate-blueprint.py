@@ -154,6 +154,27 @@ def course_note(course_type: str) -> str:
     return COURSE_NOTES.get(course_type.lower(), "Standard distribution applies.")
 
 
+def resolve_course_type(profile: dict, slug: str = "") -> str:
+    """Course type from the profile - warning LOUDLY when the key is absent.
+
+    A missing key silently defaulted to "flat", so Calum's Tour de Stations
+    (134 km / 4,700 m) generated as a flat course and lost its climbing guidance
+    altogether (found 2026-07-28). The default stays - the other profiles rely on
+    it - but it can no longer pass unremarked, and a typo is now visible too.
+    """
+    ct = profile.get("course_type")
+    who = slug or profile.get("slug") or "athlete"
+    if not ct:
+        print(f"Warning: {who} profile.json has no course_type - defaulting to "
+              f"'flat', so no climbing guidance is emitted. Set one of "
+              f"{sorted(COURSE_NOTES)} if the course is not flat.", file=sys.stderr)
+        return "flat"
+    if ct.lower() not in COURSE_NOTES:
+        print(f"Warning: {who} profile.json course_type {ct!r} is not one of "
+              f"{sorted(COURSE_NOTES)} - treated as flat.", file=sys.stderr)
+    return ct
+
+
 # -- Heat protocol ------------------------------------------------------------
 
 def heat_note(race_conditions: str, race_dt: date) -> str:
@@ -452,7 +473,7 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
     ftp = profile.get("ftp_watts", 0)
     css = profile.get("swim_css_per_100m")
     a_goal = profile.get("a_goal", "—")
-    course_type = profile.get("course_type", "flat")
+    course_type = resolve_course_type(profile, slug)
     race_conditions = profile.get("race_conditions", "temperate")
     injuries = profile.get("injuries", [])
 
@@ -644,7 +665,7 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
     if race_conditions == "hot" and race_dt:
         heat = {"active": True, "starts": (race_dt - timedelta(weeks=4)).isoformat()}
     altitude = profile.get("altitude_m", 0) or 0
-    course_type = profile.get("course_type", "flat")
+    course_type = resolve_course_type(profile, slug)
 
     return {
         "schema_version": SCHEMA_VERSION,
