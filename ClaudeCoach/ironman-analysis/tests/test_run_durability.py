@@ -74,10 +74,39 @@ class TestFadeLine:
         m = {"decoupling_pct": 6.1, "cadence_fade_pct": -3.4, "cost_fade_pct": 5.2,
              "flags": ["decoupling 6.1% > 5.0%", "cadence fade -3.4%", "running cost +5.2%"]}
         line = fade_line(m)
-        assert line.startswith("Your form came apart")
+        assert line.startswith("Your form drifted")
         assert "6.1%" in line
         assert "cadence" in line and "energy" in line
         assert not any(b in line for b in self._BANNED)
+
+    def test_cadence_only_does_not_quote_an_efficiency_that_held(self):
+        """Form broke but decoupling did not: the efficiency clause must not print a
+        number that means nothing (R5), and must not claim a fade that never happened."""
+        m = {"decoupling_pct": 1.2, "cadence_fade_pct": -4.0, "cost_fade_pct": 0.5,
+             "flags": ["cadence fade -4.0%"]}
+        line = fade_line(m)
+        assert line.startswith("Your form drifted")
+        assert "your cadence dropped away" in line
+        assert "held steady" in line
+        assert "1.2%" not in line and "faded" not in line
+        assert not any(b in line for b in self._BANNED)
+
+    def test_negative_decoupling_reads_as_an_improvement(self):
+        """dec < 0 means efficiency improved. "faded -2.4%" is unreadable."""
+        m = {"decoupling_pct": -2.4, "cadence_fade_pct": 0.2, "cost_fade_pct": -1.0,
+             "flags": []}
+        line = fade_line(m)
+        assert "actually improved 2.4%" in line and "the opposite of fatigue" in line
+        assert "-2.4%" not in line and "faded" not in line
+        assert not any(b in line for b in self._BANNED)
+
+    def test_negative_decoupling_alongside_broken_form(self):
+        m = {"decoupling_pct": -2.4, "cadence_fade_pct": -4.0, "cost_fade_pct": 0.0,
+             "flags": ["cadence fade -4.0%"]}
+        line = fade_line(m)
+        assert line.startswith("Your form drifted")
+        assert "actually improved 2.4%" in line
+        assert "-2.4%" not in line
 
     def test_decoupling_only_names_it_as_the_weak_point(self):
         m = {"decoupling_pct": 6.1, "cadence_fade_pct": -0.4, "cost_fade_pct": 1.0,
@@ -91,7 +120,7 @@ class TestFadeLine:
         m = {"decoupling_pct": 1.2, "cadence_fade_pct": 0.3, "cost_fade_pct": -0.5, "flags": []}
         line = fade_line(m)
         assert line.startswith("Durability held up")
-        assert "1.2%" in line
+        assert "1.2%" in line and "faded 1.2%" in line
         assert not any(b in line for b in self._BANNED)
 
     def test_missing_cadence_does_not_crash(self):

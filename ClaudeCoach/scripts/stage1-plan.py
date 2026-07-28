@@ -725,10 +725,25 @@ def main():
     # 5 Jul 2026: required 640 vs cap 509+10% — every attempt hard-failed and no
     # clean week EXISTS). Aim at the biggest legal week instead and tell the
     # athlete about the conflict; silently failing forever helps nobody.
-    tss_cap = pb._weekly_tss_cap(args.athlete, {"name": brief.get("phase")})
+    # Pass the REAL phase dict, not just its name: _weekly_tss_cap falls back to the
+    # phase's own tss_ceiling when the athlete has no hours ceiling, and that fallback
+    # needs the whole dict. Without this, kathryn's cap armed the validator (plan_builder
+    # sources the full phase) while this reconciliation still saw None — so the planner
+    # aimed at an uncapped target that the validator would then hard-fail, which is the
+    # 5 Jul failure mode above. week_start, not the run date, per the comment further up.
+    _phase = pb.current_phase(pb._blueprint(args.athlete), week_start) or {"name": brief.get("phase")}
+    tss_cap = pb._weekly_tss_cap(args.athlete, _phase)
     if target and tss_cap and target > tss_cap:
         brief["weekly_tss_target_required"] = target
         brief["target_capped_by_hours"] = round(tss_cap)
+        # Which bound bit decides what we can honestly ask for: hours the athlete could
+        # give us, or a phase load ceiling that more hours would not move.
+        try:
+            _hrs = json.loads((BASE / "athletes" / args.athlete / "profile.json")
+                              .read_text()).get("max_hours_per_week")
+        except Exception:
+            _hrs = None
+        brief["target_cap_source"] = "hours" if _hrs else "phase"
         target = int(tss_cap)
         brief["weekly_tss_target"] = target
     override_path = Path(args.override_json) if args.override_json else None
@@ -850,10 +865,19 @@ def _week_message(brief: dict, built: dict) -> str:
                         f"{built['total_tss']} Load against the {floor} it needs.")
     req = brief.get("weekly_tss_target_required")
     if req:
-        lines.append(f"⚠️ _This week wants about {req} Load and only "
-                     f"{brief.get('target_capped_by_hours')} fits in the hours you've given me, "
-                     f"so fitness will climb a little slower than it could. If you can find "
-                     f"another couple of hours a week, tell me and I'll rebuild it._")
+        cap = brief.get("target_capped_by_hours")
+        if brief.get("target_cap_source") == "phase":
+            # No hours ceiling to lift, so do not ask for time that would change nothing
+            # (R2: if there is nothing to do, stop after the why).
+            lines.append(f"⚠️ _This week wants about {req} Load, and {cap} is as much as I "
+                         f"will safely put in front of you at this stage, so fitness will "
+                         f"climb a little slower than the plan assumes. Nothing for you to "
+                         f"do — I am holding the week at that ceiling._")
+        else:
+            lines.append(f"⚠️ _This week wants about {req} Load and only {cap} fits in the "
+                         f"hours you've given me, so fitness will climb a little slower than "
+                         f"it could. If you can find another couple of hours a week, tell me "
+                         f"and I'll rebuild it._")
     for s in built["sessions"]:
         wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""

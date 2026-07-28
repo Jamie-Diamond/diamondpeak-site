@@ -166,9 +166,13 @@ def _escalate(job: str, n: int, message: str) -> None:
     ts = datetime.now().isoformat(timespec="seconds")
     _append(ALERT_LOG, f"[{ts}] [{job}] ESCALATED after {n} consecutive "
                        f"failures; underlying error: {message}")
-    text = (f"⚠️ Git sync has been failing for {n} runs in a row ({job}). "
-            f"Changes are saved on the VM but are not reaching GitHub, so they are "
-            "not backed up.")
+    # notify.py with no --chat-id sends to the config default, which IS jamie's own
+    # athlete thread — so this is an athlete surface and §4c applies: no job label, no
+    # VM, no GitHub. State what did not happen and whether he must act (§6.9). The job
+    # label and the underlying error are in the log line above.
+    text = (f"⚠️ Your training data has not been backed up for the last {n} attempts. "
+            f"Nothing you have logged is lost — it is all still here — but it is only "
+            f"in one place until this clears. Worth a look when you have a minute.")
     log_outbound(f"{job}-escalation", text, sent=True)
     try:
         notify = Path(__file__).resolve().parent.parent / "telegram" / "notify.py"
