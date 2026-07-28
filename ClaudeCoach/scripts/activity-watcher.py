@@ -1032,10 +1032,17 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
             # Log-only, deliberately: a stalled watcher is an engineering fact and
             # the athlete has nothing to do about it (tone guide R4 / §4c). The
             # ops log is where this belongs; ops-digest renders it sent=False.
+            # detail= is echoed verbatim into the ops digest, so it stays free of the
+            # timeout value and the activity id (§4a/§4c) even though that digest is
+            # log-only today (ops-digest.py:158 logs it sent=False and calls no notify).
+            # The mechanism the developer actually needs goes to stderr, which the cron
+            # log captures, so nothing diagnostic is lost.
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] activity analysis timed "
+                  f"out {state['timeout_count']}x consecutive (300s each), stuck at "
+                  f"activity {stuck_at or 'unknown'}", file=sys.stderr)
             ops_log.alert(
                 "activity-watcher",
-                f"analysis timed out {state['timeout_count']}x consecutive "
-                f"(300s each), stuck at activity {stuck_at or 'unknown'}",
+                f"activity analysis timed out {state['timeout_count']}x in a row",
                 athlete=slug,
             )
         else:

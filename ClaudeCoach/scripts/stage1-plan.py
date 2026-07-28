@@ -743,7 +743,7 @@ def main():
                               .read_text()).get("max_hours_per_week")
         except Exception:
             _hrs = None
-        brief["target_cap_source"] = "hours" if _hrs else "phase"
+        brief["_target_cap_source"] = "hours" if _hrs else "phase"
         target = int(tss_cap)
         brief["weekly_tss_target"] = target
     override_path = Path(args.override_json) if args.override_json else None
@@ -866,18 +866,19 @@ def _week_message(brief: dict, built: dict) -> str:
     req = brief.get("weekly_tss_target_required")
     if req:
         cap = brief.get("target_capped_by_hours")
-        if brief.get("target_cap_source") == "phase":
-            # No hours ceiling to lift, so do not ask for time that would change nothing
-            # (R2: if there is nothing to do, stop after the why).
-            lines.append(f"⚠️ _This week wants about {req} Load, and {cap} is as much as I "
-                         f"will safely put in front of you at this stage, so fitness will "
-                         f"climb a little slower than the plan assumes. Nothing for you to "
-                         f"do — I am holding the week at that ceiling._")
-        else:
+        if brief.get("_target_cap_source") == "hours":
             lines.append(f"⚠️ _This week wants about {req} Load and only {cap} fits in the "
                          f"hours you've given me, so fitness will climb a little slower than "
                          f"it could. If you can find another couple of hours a week, tell me "
                          f"and I'll rebuild it._")
+        else:
+            # Default, because it is true whichever ceiling bit: only claim the cap is
+            # hours the athlete gave us when we know it is. Where the bound is a phase
+            # load ceiling there is no hours ask to make, so state the why and stop (R2).
+            lines.append(f"⚠️ _This week wants about {req} Load, and {cap} is as much as I "
+                         f"will safely put in front of you at this stage, so fitness will "
+                         f"climb a little slower than the plan assumes. Nothing for you to "
+                         f"do — I am holding the week at that ceiling._")
     for s in built["sessions"]:
         wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""
