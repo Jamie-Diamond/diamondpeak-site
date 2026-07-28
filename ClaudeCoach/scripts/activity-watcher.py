@@ -1440,6 +1440,24 @@ def main():
     finally:
         release_lock()
 
+    # 28 Jul 2026: one unconditional heartbeat per cron cycle, AFTER the lock is
+    # released and every athlete has been attempted. Every existing ops_log call
+    # in this file is conditional (heat-credit success, send failure, stuck
+    # timeout), so a fully quiet cycle -- no new activity for anyone, the common
+    # case -- wrote NOTHING to run-status.jsonl. That made this, the busiest
+    # athlete-facing sender (12 ticks/hour), invisible to coach_alert's gap check:
+    # there was no positive signal to look for "did it run" against, only failure
+    # signals for "did it send", and a dead process leaves no failure either.
+    # One per invocation, not per athlete (12/hour * 288/day is already the
+    # right order of magnitude for run-status.jsonl's 6000-line cap against a
+    # 7-day window; per-athlete would multiply that by the athlete count for no
+    # gain, since a shared cron process either completes this line or it does not).
+    # Placed outside the try/finally on purpose: an unhandled exception inside the
+    # loop is already caught per-athlete, but if something escapes that (or the
+    # process is killed) this line is never reached, and its absence IS the "did
+    # not run" signal coach_alert.DELIVERABLES' rolling window is built to catch.
+    ops_log.record_run("activity-watcher", ok=True, detail="cycle complete")
+
 
 if __name__ == "__main__":
     main()

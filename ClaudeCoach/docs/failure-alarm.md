@@ -14,7 +14,8 @@ log-only, in `~/Library/Logs/ClaudeCoach/ops-alerts.log` and
 1. **A named deliverable did not happen** — no *successful* heartbeat for the
    morning card, the daily prescription, the night-before brief, the evening
    check-in (which since 28 Jul also carries the capture ask), the nightly config
-   backup, the weekly summary or the weekly plan.
+   backup, the private-repo athlete-data backup, the weekly summary or the
+   weekly plan.
    Which ones qualify, and which may Telegram, is declared once in
    `coach_alert.DELIVERABLES`.
 2. **The Claude CLI could not authenticate in production** — a
@@ -345,21 +346,47 @@ the coach), `bug-fixer.py` (everything it does is already a digest line by
 construction) and `plan_audit.py` (`FINDING`-class, baseline-gated, its whole
 output *is* digest lines).
 
-**Open finding, 28 Jul 2026.** Two live jobs are neither registered nor exempt,
-and the audit reports both every night until somebody decides:
+**Closed, 28 Jul 2026 (follow-up ticket).** The two live jobs the audit found
+unregistered and unexempt on its first run are now both `coach_alert.
+DELIVERABLES` entries:
 
 - **`sync-private-repo.sh` (23:20 daily)** — the sharp one. It calls
-  `lib_git_alert.sh`'s `git_sync_ok "sync-private"`, so it *does* write a
-  heartbeat, and **nothing reads it**. That is the weekly-report shape exactly:
-  a job with a heartbeat and no watcher. It also sits twenty minutes before
-  `backup-config.sh`, which is registered precisely because it is the only
-  off-box copy of credentials and health data.
-- **`activity-watcher.py` (every 5 min)** — writes per-athlete `record_run`
-  heartbeats. It is the ingest everything downstream depends on.
+  `lib_git_alert.sh`'s `git_sync_ok "sync-private"`, which already wrote a
+  heartbeat that nothing read — the weekly-report shape exactly: a job with a
+  heartbeat and no watcher. Registered exactly like `backup-config` (`script:
+  "sync-private"`, the job label the helper actually passes — NOT the script
+  filename, which is `cron_cmd` instead), `telegram: True` for the same reason
+  (the only versioned backup of `athletes/` now that the public repo was
+  cleaned), judged on the previous cycle because 23:20 is after the 21:30
+  digest.
+- **`activity-watcher.py` (every 5 min, `2-57/5 * * * *`)** — the busiest
+  athlete-facing sender in the system, and the hardest of the two, because
+  every existing `ops_log` call in the script was **conditional** (a
+  heat-credit success, a Telegram send failure, a stuck-timeout escalation).
+  The common case — no new activity for anyone, most ticks — wrote **nothing**
+  to `run-status.jsonl`, so there was no positive "it ran" signal to check
+  against, only failure signals for "it tried to send". Fixed at the source:
+  one unconditional `ops_log.record_run("activity-watcher", ok=True,
+  detail="cycle complete")` per cron invocation, added at the end of `main()`
+  in `activity-watcher.py` itself, after the shared lock is released. One per
+  invocation, not per athlete — 12 ticks/hour is already the right order of
+  magnitude against the 6000-line retention cap over the 7-day window (see
+  Retention, below); per-athlete would multiply it for no gain.
 
-Neither was registered here on purpose: adding a deliverable needs a `since`
-instrumentation date and would change the alarm's blast radius, which is a
-decision for the owner, not a side effect of wiring up the audit.
+  Registered with a new **`window: "rolling"`** shape rather than `"daily"`:
+  "ran at least once today" is far too lax for a 5-minute job (a watcher dead
+  since 00:05 would still pass that check at 21:30). `gap_lines()` instead
+  looks back over a declared `window_minutes` (60 — tolerating the
+  `LOCK_FILE` staleness margin of 20 min plus a slow cycle or two) from the
+  7-day `week_entries` superset. `telegram: False` — a rough hour for the
+  watcher is neither of Jamie's two approved conditions; a genuinely dead
+  process is caught by this entry, but "the coach should hear about it"
+  belongs to a missed named deliverable or dead auth, not to plumbing.
+
+Both `since` values are placeholders as of the branch this was written on
+(`fix/register-watched-jobs`) and must be corrected to the actual commit
+timestamp when merged to `main` — see the 83bb541 lesson above: `since` is
+merge time on the runtime branch, not commit time.
 
 ### Fail safe
 
@@ -377,6 +404,40 @@ understand — cron nicknames, short lines, unparseable specs — into a problem
 line, and `cron_audit()` has a belt-and-braces `except` around the whole thing,
 because an exception at 21:30 would take the digest down and the alarm would go
 quiet: the exact failure mode this file exists to prevent.
+
+## The two directions of drift are different facts, not one severity scale
+(28 Jul 2026, follow-up ticket)
+
+Revisited rather than assumed, because the intuition that a vanished cron
+entry is worse than a stale registry entry is reasonable on its face — and
+wrong for this system, checked against what actually happened:
+
+- **Direction 2 — a live cron entry with no registry entry** is the
+  historical incident. `coach_alert.py`'s own note on the registry ties the
+  three-week silent weekly-report failure to exactly this shape: a job that
+  *was running*, unwatched. It is silent by construction if left unfixed, and
+  is why `_registry_problems()` treats it as the direction that matters most.
+- **Direction 1 — a registry entry with no live cron entry** (`capture-
+  reminder`'s fault, and the shape this section is about) is a *different*
+  fact: the job cannot physically run. Reported loud, every digest run,
+  forever, via the `⚠ CRON AUDIT` line — never silent — but deliberately
+  **never Telegram**, even for a `telegram: True` deliverable like the weekly
+  plan. Alarming would misname the fault: *"ClaudeCoach did not deliver the
+  weekly plan"* when the truth is *"nobody scheduled it"*. Misattributing a
+  scheduling fact as a delivery failure is worse than leaving it as a loud log
+  line that is already visible on every single run.
+
+**Decision: keep the existing behaviour.** A vanished registered job is loud
+in the log/digest on every run and silent on Telegram; the cooldown for any
+real, already-alerted incident is preserved across the cycles it is not
+judged, and cleared the moment the job runs again — see
+`test_a_weekly_deliverable_with_no_cron_entry_neither_alerts_nor_clears`'s
+docstring for the full reasoning, now including this reconsideration.
+
+The two directions are asymmetric on purpose, not an oversight: Direction 2
+gets escalation (registration, in this ticket) because it was genuinely
+invisible; Direction 1 gets loud-forever-log-only because Telegramming it
+would be loud about the wrong thing.
 
 ## Weekly deliverables: one miss, one message
 
@@ -417,6 +478,15 @@ The weekly window reads `run-status.jsonl`, which is trimmed by line count.
 ~30 entries/day (session-sync alone is 8 runs × 3 athletes) on top of the
 observed 12-40, so 6000 is >30 days at the new rate and >20 days on the worst
 observed spike day.
+
+**28 Jul 2026 follow-up (activity-watcher).** One new heartbeat every 5 min is
+~288 entries/day at worst (a tick can legitimately produce zero, if the shared
+lock is still held) — checked before writing it, not assumed: observed volume
+on 28 Jul was ~270 entries for the day across every job combined, so headroom
+against the 6000-line cap is still comfortably >7 days even with activity-
+watcher's ~288/day added on top. Watch this if daily volume climbs — the
+rolling-window check only needs the last hour of history, but the weekly
+deliverables still need the full 7 days present.
 
 ## plan_audit baseline gating
 

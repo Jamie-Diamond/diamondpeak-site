@@ -238,7 +238,9 @@ def gap_lines(today_entries, week_entries, athletes, now=None, audit=None) -> tu
     What counts as a deliverable, its window, and whether it may Telegram all
     come from coach_alert.DELIVERABLES. WEEKLY telegram routing is deliberately
     NOT done here — see weekly_alerts() below for why it needs a different
-    cooldown key.
+    cooldown key. window="rolling" (activity-watcher, added 28 Jul 2026) is a
+    third shape: a short lookback (window_minutes) instead of "today"/"7 days",
+    for a job whose cadence (5 min) makes "ran at least once today" useless.
 
     Changed 28 Jul 2026 — NOTHING IS JUDGED BEFORE IT IS DUE. A deliverable is
     only checked once coach_alert.due_status() says its scheduled time has passed
@@ -283,6 +285,17 @@ def gap_lines(today_entries, week_entries, athletes, now=None, audit=None) -> tu
             continue
         if d["window"] == "weekly":
             entries, when = week_entries, f"in {WEEKLY_WINDOW_DAYS} days"
+        elif d["window"] == "rolling":
+            # A 5-minute-cadence job (activity-watcher). "Ran at least once
+            # today" is far too lax here — a watcher dead since 00:05 would
+            # still pass that check at 21:30 — so this looks back over a
+            # short rolling window instead of "today"/"7 days". week_entries
+            # is a superset (7 days) sliced down to window_minutes.
+            mins = d["window_minutes"]
+            cutoff = now - timedelta(minutes=mins)
+            entries = [e for e in week_entries
+                       if str(e.get("ts", "")) >= cutoff.isoformat(timespec="seconds")]
+            when = f"in the last {mins} min"
         elif due >= day_start:
             entries, when = today_entries, "today"
         else:

@@ -199,6 +199,80 @@ DELIVERABLES = [
      "per_athlete": False, "telegram": True, "detail": "sync ok",
      "cron": "50 23 * * *",      "cron_cmd": "backup-config.sh",
      "since": "2026-07-28T13:00:37"},   # 5eaae85
+    # 28 Jul 2026 — the two live jobs the cron-derived audit itself found on its
+    # first run, closing the CRON AUDIT finding logged in docs/failure-alarm.md
+    # ("Open finding" section). Both use `detail: "sync ok"` for the same reason
+    # as backup-config above: sync_failure's first consecutive failure records
+    # ok=True ("transient ... usually self-heals"), which is sound for a job
+    # ticking every few minutes but would mask a genuinely missed once-nightly
+    # run if the check accepted ANY heartbeat as success.
+    #
+    # sync-private-repo.sh (23:20 nightly) is the only versioned backup of
+    # athletes/ now that the public repo was cleaned (2 Jul 2026) — the same
+    # class of "only copy of something" as backup-config, twenty minutes
+    # earlier in the crontab. Registered exactly like backup-config: telegram
+    # eligible (a dead nightly mirror is condition 1, a missed named
+    # deliverable), judged on the PREVIOUS cycle because 23:20 is after the
+    # 21:30 digest. `script` here is "sync-private" — the job label
+    # lib_git_alert.sh's git_sync_ok/git_sync_fail actually pass to
+    # ops_log — NOT the script filename; get that wrong and this is a false
+    # registration that can never see a heartbeat.
+    {"script": "sync-private",        "label": "private repo sync",  "window": "daily",
+     "per_athlete": False, "telegram": True, "detail": "sync ok",
+     "cron": "20 23 * * *",      "cron_cmd": "sync-private-repo.sh",
+     "since": "2026-07-28T13:00:37"},   # 5eaae85 — same commit gave sync_ok
+                                        # its heartbeat write, for every job
+                                        # that calls it, not just backup-config.
+    # activity-watcher.py (every 5 min, "2-57/5 * * * *") is the busiest
+    # athlete-facing sender in the system — every activity debrief, chart
+    # photo, segment PB, fuelling check and test-due nudge goes through it. If
+    # it dies, athletes simply hear nothing; that silence is invisible without
+    # this entry.
+    #
+    # Its heartbeats do NOT fit the daily/weekly shape the other entries use.
+    # Every existing ops_log call in the script is CONDITIONAL — a heat-credit
+    # success, a Telegram send failure, a stuck-timeout escalation — so the
+    # common case (12 ticks/hour, no new activity for anyone) wrote NOTHING to
+    # run-status.jsonl at all. There was no positive "it ran" signal to check,
+    # only failure signals for "it tried to send", and a dead process leaves no
+    # failure either. Fixed at the source (28 Jul 2026): one unconditional
+    # `ops_log.record_run("activity-watcher", ok=True, detail="cycle
+    # complete")` per cron invocation, added at the end of main() in
+    # activity-watcher.py, AFTER the shared lock is released — see that
+    # script's own comment. One per invocation, not per athlete: 12/hour is
+    # already the right order of magnitude against run-status.jsonl's 6000-
+    # line cap over the 7-day weekly window (see docs/failure-alarm.md
+    # "Retention"); per-athlete would multiply it for no gain, since a shared
+    # cron process either reaches that line or it does not.
+    #
+    # `window: "rolling"` + `window_minutes` (not "daily") because "did it run
+    # at least once TODAY" is far too lax for a 5-min job — a watcher dead
+    # since 00:05 would still pass a check phrased that way at 21:30. Instead
+    # gap_lines() checks for a "cycle complete" heartbeat within the last
+    # `window_minutes`. 60 minutes tolerates the LOCK_FILE staleness margin
+    # (20 min — another cycle can legitimately still be running) plus a slow
+    # cycle or two (multiple athletes each up to a 300s Claude timeout), while
+    # still catching a genuinely dead watcher within the hour rather than
+    # within a whole day.
+    #
+    # telegram: False — this is plumbing, not a named deliverable to an
+    # athlete or the coach; Jamie's two approved conditions are a missed named
+    # deliverable and dead Claude auth, and "the watcher had a rough hour" is
+    # neither. A stalled watcher already escalates its OWN loud failure
+    # separately (2 consecutive Claude timeouts -> ops_log.alert), which IS
+    # classified below; this entry exists only to catch the death that
+    # produces no failure at all.
+    {"script": "activity-watcher",    "label": "activity watcher heartbeat",
+     "window": "rolling", "window_minutes": 60,
+     "per_athlete": False, "telegram": False, "detail": "cycle complete",
+     "cron": "2-57/5 * * * *",  "cron_cmd": "activity-watcher.py",
+     # Placeholder — this is the moment the heartbeat write landed on THIS
+     # BRANCH (fix/register-watched-jobs), not yet on prod main. Per the
+     # convention above (83bb541's lesson: since = merge time, not commit
+     # time), correct this to the actual merge-to-main commit's timestamp when
+     # this is promoted, or every occurrence between now and the real merge is
+     # wrongly judged PRE_INSTRUMENTATION-only-until-then instead of DUE.
+     "since": "2026-07-28T15:53:34"},
     # Sunday jobs. Checked over 7 days. telegram=True since 28 Jul 2026, but NOT
     # via this per-day cooldown — ops-digest.py's weekly_alerts() sends these on
     # its own occurrence-based key so one miss is one message, not one per evening.
@@ -783,6 +857,9 @@ OUTCOME_CLASS = {
     "session-sync":       FAILURE,
     "watchdog":           FAILURE,
     "backup-config":      FAILURE,   # via ops_log.sync_failure's non-transient branch
+    "sync-private":       FAILURE,   # same helper, non-transient branch
+    "activity-watcher":   FAILURE,   # "Telegram send failed after retry" /
+                                     # "activity analysis timed out Nx in a row"
     "stage1-plan":        FAILURE,
     "bot-watchdog":       FAILURE,   # the bot stopped answering
     "claude_call":        FAILURE,   # auth expired in production
