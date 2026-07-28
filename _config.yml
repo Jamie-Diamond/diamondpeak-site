@@ -1,11 +1,20 @@
 # Jekyll excludes — what must NEVER reach the published site.
-# The public ClaudeCoach surface is ONLY the top-level dashboard files:
-#   index/coach/overview/athlete-*.html, training-visualiser.html,
-#   site-data.json, training-data*.json.
-# Every ClaudeCoach SUBDIRECTORY is excluded (athlete state, engine code, docs
-# with health data). If you add a new ClaudeCoach subdirectory, add it here —
-# and remember .gitignore is the real guard: what never enters the repo can
+# The public ClaudeCoach surface is:
+#   index/coach/overview/athlete-*.html, training-visualiser.html, and
+#   ClaudeCoach/public/*.json (the sanitised data feed).
+# Every OTHER ClaudeCoach subdirectory is excluded (athlete state, engine code,
+# docs with health data). If you add a new ClaudeCoach subdirectory, add it here
+# — and remember .gitignore is the real guard: what never enters the repo can
 # never be published.
+#
+# ClaudeCoach/public/ is the one deliberate exception to the "exclude every
+# subdirectory" rule: the dashboards fetch it over HTTP, so it has to be served.
+# Its contents come only from lib/public_sanitise.py, which allow-lists fields
+# and refuses to write if a forbidden key is present. Do NOT add it below.
+#
+# The old top-level site-data.json / training-data*.json are gone from the public
+# surface: those paths now hold the PRIVATE full-fat files and are gitignored, so
+# they never enter the repo and Jekyll never sees them.
 exclude:
   - ClaudeCoach/athletes/
   - ClaudeCoach/blueprints/

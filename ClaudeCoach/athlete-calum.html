@@ -186,27 +186,15 @@
       <div style="margin-bottom:8px">
         <div class="target-row">
           <span class="target-label">Goal</span>
-          <span class="target-val" id="rp-agoal">Complete it</span>
+          <span class="target-val" id="rp-agoal">&mdash;</span>
         </div>
         <div class="target-row">
           <span class="target-label">Bike FTP</span>
-          <span class="target-val" id="rp-ftp">250 W</span>
-        </div>
-        <div class="target-row">
-          <span class="target-label">LTHR</span>
-          <span class="target-val">172 bpm</span>
+          <span class="target-val" id="rp-ftp">&mdash;</span>
         </div>
         <div class="target-row">
           <span class="target-label">Max weekly hours</span>
           <span class="target-val">4 h</span>
-        </div>
-        <div class="target-row">
-          <span class="target-label">Weight</span>
-          <span class="target-val" id="rp-weight">93 kg</span>
-        </div>
-        <div class="target-row">
-          <span class="target-label">W/kg</span>
-          <span class="target-val" id="rp-wpkg">—</span>
         </div>
       </div>
     </div>
@@ -903,7 +891,6 @@ function renderSessionLog(entries) {
       <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:left">Session</th>
       <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:right">TSS</th>
       <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:right">RPE</th>
-      <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:left">Notes</th>
     </tr></thead><tbody>${sorted.map(e=>{
       const dt = new Date(e.date+"T00:00:00");
       const label = dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
@@ -914,7 +901,6 @@ function renderSessionLog(entries) {
         <td style="padding:5px 8px;border-bottom:1px solid var(--line);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.name||"—"}</td>
         <td style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace">${e.tss||"—"}</td>
         <td style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:right">${e.rpe!=null?e.rpe+"/10":"—"}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid var(--line);font-size:11px;color:var(--ink2)">${(e.feel||"").slice(0,50)||"—"}</td>
       </tr>`;
     }).join("")}</tbody></table>`;
 }
@@ -995,8 +981,8 @@ function renderZones(p, fitnessCtl) {
     return null;
   }
   let html = "";
-  const wpkg = p.weight_kg ? (ftp/p.weight_kg).toFixed(2) : null;
-  html += `<h3 style="margin-bottom:8px">Bike &middot; FTP ${ftp} W${wpkg?" &middot; "+wpkg+" W/kg":""}</h3>`;
+  // W/kg removed 28 Jul 2026: it is body weight, published as a ratio.
+  html += `<h3 style="margin-bottom:8px">Bike &middot; FTP ${ftp} W</h3>`;
   [["Z2 Endurance",0.55,0.75],["Sweet Spot",0.88,0.93],["Threshold",0.95,1.05]].forEach(([l,lo,hi]) => {
     html += `<div class="target-row"><span class="target-label">${l}</span><span class="target-val">${Math.round(ftp*lo)}&ndash;${Math.round(ftp*hi)} W</span></div>`;
   });
@@ -1213,10 +1199,60 @@ function renderZones(p, fitnessCtl) {
   if (el) el.innerHTML = html;
 }
 
+
+// ── DATA AVAILABILITY / WITHHELD FIELDS ──────────────────────────────────────
+// Both fetches used to end in a catch with an empty body, so a 404 or a parse
+// error left the page's hard-coded placeholders on screen: FTP 316 W against a
+// real 294 W, and a whole race plan that looked live and was not. Those
+// placeholders are gone and every failure now says so on the page, using the
+// same wording as coach.html.
+function dataUnavailable(what, err) {
+  const msg = (err && err.message) ? err.message : String(err);
+  let bar = document.getElementById("data-status");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "data-status";
+    bar.style.cssText = "margin:0 0 14px;padding:10px 12px;border:1px solid #e8c9c4;"
+      + "background:#fdf3f1;color:#8a3226;font-size:12px;border-radius:6px";
+    document.body.insertBefore(bar, document.body.firstChild);
+  }
+  bar.insertAdjacentHTML("beforeend",
+    "<div>Data unavailable &mdash; " + what + ": " + msg + "</div>");
+  console.error("[data]", what, err);
+}
+
+// Fields the public feed deliberately withholds (see ClaudeCoach/lib/
+// public_sanitise.py). Without this the panels that plotted them render blank,
+// which reads as "nothing logged" rather than "not published".
+const WITHHELD_PANELS = [
+  ["live-flags-content", "Watchdog flags"],
+  ["open-actions-content", "Open actions"]
+];
+function markWithheld() {
+  WITHHELD_PANELS.forEach(function (pair) {
+    const el = document.getElementById(pair[0]);
+    if (!el) return;
+    const host = (el.tagName === "CANVAS") ? el.parentElement : el;
+    if (!host || !host.parentNode || host.dataset.withheld) return;
+    host.dataset.withheld = "1";
+    // Hide, never replace the contents. heat-accl-panel holds a live Chart.js
+    // canvas and the zoomHeatAccl buttons; wiping it would leave Chart.js
+    // driving a detached canvas and the handlers pointing at nothing.
+    host.style.display = "none";
+    const note = document.createElement("p");
+    note.style.cssText = "margin:0;padding:10px 0;font-size:11px;"
+      + "color:var(--muted);font-style:italic";
+    note.innerHTML = pair[1]
+      + " withheld &mdash; health-related field, not published to the public site.";
+    host.parentNode.insertBefore(note, host.nextSibling);
+  });
+}
+markWithheld();
+
 // ── DATA LOADING ─────────────────────────────────────────────────────────────
 
-fetch('site-data.json?v='+Date.now())
-  .then(r=>r.json())
+fetch('public/site-data.json?v='+Date.now())
+  .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(d=>{
     const a = d.athletes && d.athletes.calum;
     if (!a) return;
@@ -1232,10 +1268,10 @@ fetch('site-data.json?v='+Date.now())
       document.getElementById("footer-generated").textContent = "Last updated "+d.updated+" · Source: Intervals.icu";
     }
   })
-  .catch(()=>{});
+  .catch(e=>dataUnavailable('summary data', e));
 
-fetch('training-data-calum.json?v='+Date.now())
-  .then(r=>r.json())
+fetch('public/training-data-calum.json?v='+Date.now())
+  .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(d=>{
     window._td = d;   // expose for the fitness sport selector (setFitnessSport)
     if (d.fitnessThis && window.chartFitness) {
@@ -1279,14 +1315,7 @@ fetch('training-data-calum.json?v='+Date.now())
     if (d.profile) {
       const p = d.profile;
       if (p.a_goal) document.getElementById("rp-agoal").textContent = p.a_goal;
-      if (p.ftp_watts) {
-        document.getElementById("rp-ftp").textContent = p.ftp_watts + " W";
-        if (p.weight_kg) {
-          const wpkg = (p.ftp_watts / p.weight_kg).toFixed(2);
-          document.getElementById("rp-wpkg").textContent = wpkg + " W/kg";
-        }
-      }
-      if (p.weight_kg) document.getElementById("rp-weight").textContent = p.weight_kg + " kg";
+      if (p.ftp_watts) document.getElementById("rp-ftp").textContent = p.ftp_watts + " W";
       const fitnessCtl={};
       if(d.kpi){fitnessCtl.currentCtl=d.kpi.ctl;fitnessCtl.currentTsb=d.kpi.tsb;}
       if(d.ctlProjection&&d.ctlProjection.planned_build&&d.ctlProjection.planned_build.length)
@@ -1303,7 +1332,8 @@ fetch('training-data-calum.json?v='+Date.now())
       document.getElementById("footer-generated").textContent = "Last updated "+d.generated+" · Source: Intervals.icu";
     }
   })
-  .catch(()=>{});
+  .catch(e=>dataUnavailable('training data', e))
+  .finally(markWithheld);
 </script>
 </body>
 </html>
