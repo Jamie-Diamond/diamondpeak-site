@@ -192,8 +192,7 @@
 
   <h2>Athlete data &amp; privacy</h2>
   <div class="panel">
-    <p style="margin:0 0 10px;font-size:13px">All personal athlete data (session logs, injury notes, health metrics, training analysis) is stored exclusively on the VM. The <code style="font-family:'DM Mono',monospace;font-size:11px">ClaudeCoach/athletes/</code> directory is gitignored — nothing personal is ever pushed to the public GitHub repository.</p>
-    <p style="margin:0;font-size:13px">The public site receives only a minimal, anonymised summary (race countdown, CTL fitness trend) via <code style="font-family:'DM Mono',monospace;font-size:11px">site-data.json</code>, which contains no health data, weight, injury details, or identifying performance metrics.</p>
+    <p style="margin:0;font-size:13px">Athlete data (session logs, health metrics, training history) is stored on the VM and mirrored to a private repository. The athlete data files the refresh scripts produce are gitignored and are no longer pushed to the public repository. As a result, the public athlete and coach dashboards currently have no live data source.</p>
   </div>
 
   <h2>Onboarding</h2>

@@ -1131,25 +1131,22 @@ def main():
             except Exception as e:
                 log(f"athletes.json load error: {e}")
 
-        # Commit and push — include all training-data*.json files
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        pub_files = ["ClaudeCoach/training-data.json"] + [
-            f"ClaudeCoach/training-data-{s}.json"
-            for s, v in (json.loads(ATHLETES_CONFIG.read_text()).items() if ATHLETES_CONFIG.exists() else [])
-            if s != "jamie" and v.get("active", True)
-            and (BASE / f"training-data-{s}.json").exists()
-        ]
-        # Shared git helper (lib/git_sync.py) rather than a bespoke command list:
-        # it serialises against the other cron pushers on the repo-wide lock,
-        # retries a push once when a concurrent job wins the race, and makes a
-        # genuine failure loud instead of a line in a log nobody reads.
-        from git_sync import sync_commit_push
-        if sync_commit_push(pub_files, f"data: refresh training data {today_str}",
-                            script="refresh-site-data"):
-            log("git sync: ok")
-        else:
-            log("git sync: FAILED - training data committed locally only")
-
+        # No git commit/push. training-data.json and training-data-{slug}.json
+        # carry body weight, HRV, resting HR, threshold power/pace and 120 days of
+        # fitness history. They were staged and pushed here from 8 May 2026 into a
+        # repository that is public, and GitHub Pages served them at
+        # diamondpeak.uk/ClaudeCoach/training-data*.json. They are now gitignored,
+        # so `git add` would refuse them anyway; removing the staging call as well
+        # means the publish intent is gone from the source, not just blocked by one
+        # line of .gitignore.
+        #
+        # The files are still written to disk above, which is what the private
+        # nightly mirror (scripts/sync-private-repo.sh) picks up. The consequence
+        # is that the athlete and coach dashboards have no data source over HTTP:
+        # they fetch these files as same-origin relative paths, and the only web
+        # server in front of them is GitHub Pages built from this public repo.
+        # Restoring them needs a hosting decision (serve from a non-public origin)
+        # that is deliberately not taken here.
         log("Done.")
 
     finally:
