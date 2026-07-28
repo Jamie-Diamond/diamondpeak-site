@@ -18,6 +18,7 @@ Stage 2 (HERE): for each session deterministically
   - render_workout(segments)         -> ICU structured steps (sync to Garmin)
   - tss from the render               -> load_target (ICU recomputes its own too)
   - fuel_target for >90-min rides     -> correct g/hr appended to the notes
+  - run_fuel_target for >=60-min runs -> run-specific g/hr appended to the notes
 then validate_week() the whole proposal and only push if it passes (hard rules).
 
 Usage:
@@ -37,12 +38,20 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.planned_tss import render_workout, planned_session_tss  # noqa: E402
-from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
+from primitives.nutrition import (fuel_target, recent_avg_g_hr,          # noqa: E402
+                                  recent_run_avg_g_hr, run_fuel_target,
+                                  RUN_TARGET_G_HR, LONG_RUN_MIN)
 from primitives.validate_plan import validate_week             # noqa: E402
 from primitives.blueprint import current_phase, tss_ceiling    # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
+# Rides (Brick counts as a ride: its fuelling is bike fuelling carried into a run).
 _LONG_FUEL_SPORTS = {"Ride", "GravelRide", "VirtualRide", "Brick"}
+# Runs get their own set, threshold and target. They were previously excluded from
+# the fuel note altogether, so the ONE sport Jamie's persistent rule names as the
+# open fuelling focus ("prioritise run-fuelling data and nudge run carbs toward ~60
+# g/hr") was the one sport that never received a fuelling instruction.
+_LONG_RUN_FUEL_SPORTS = {"Run", "TrailRun", "VirtualRun"}
 
 
 def _cfg(slug):
@@ -58,9 +67,15 @@ def _blueprint(slug):
 
 
 def _fuel_for(slug, cfg):
+    """(ride_g_hr, run_g_hr). Two numbers because the two sports are at different
+    places: the bike ramps toward the athlete's race target off a LONG-ride window,
+    the run ramps toward RUN_TARGET_G_HR off its own run window. Blending them would
+    let a low run average drag the bike prescription (and vice versa)."""
     sl = BASE / "athletes" / slug / "session-log.json"
     log = json.loads(sl.read_text()) if sl.exists() else []
-    return fuel_target(recent_avg_g_hr(log), int(cfg.get("nutrition_target_g_hr") or 90))
+    ride = fuel_target(recent_avg_g_hr(log), int(cfg.get("nutrition_target_g_hr") or 90))
+    run = run_fuel_target(recent_run_avg_g_hr(log), cfg.get("nutrition_run_target_g_hr"))
+    return ride, run
 
 
 def _ctl_today(cfg) -> float | None:
@@ -110,7 +125,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
     """Turn a Stage-1 proposal into push-ready, validated sessions. Pure except
     for reading athlete config/session-log; never pushes."""
     cfg = _cfg(slug)
-    fuel = _fuel_for(slug, cfg)
+    fuel, run_fuel = _fuel_for(slug, cfg)
     built, events = [], []
     for s in proposal.get("sessions", []):
         sport = s.get("sport", "")
@@ -133,6 +148,14 @@ def build_sessions(slug: str, proposal: dict) -> dict:
             notes = (notes + f"\nFuel {fuel} g CHO/hr (progress toward "
                      f"{int(cfg.get('nutrition_target_g_hr') or 90)} race target); "
                      "eat from 15 min, every 25 min.").strip()
+        # fuel note for long runs — deliberately makes NO reference to the race-day
+        # figure. Jamie's rule states the 90 g/hr target is "NOT a training minimum -
+        # do not flag or compare easy/Z2 nutrition to it", so the run note cites the
+        # run target only.
+        elif sport in _LONG_RUN_FUEL_SPORTS and dur >= LONG_RUN_MIN:
+            notes = (notes + f"\nFuel {run_fuel} g CHO/hr on this run (run-fuelling "
+                     f"target {int(cfg.get('nutrition_run_target_g_hr') or RUN_TARGET_G_HR)} "
+                     "g/hr); start by 20 min, then every 20-25 min. Log what you took.").strip()
         built.append({"date": date_s, "sport": sport, "name": s.get("name", ""),
                       "duration_min": dur, "load_target": load,
                       "description": desc, "description_raw": notes})

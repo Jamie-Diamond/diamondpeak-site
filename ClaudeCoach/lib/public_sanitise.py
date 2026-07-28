@@ -177,6 +177,9 @@ TRAINING_DATA_SPEC = {
     }),
     "planVsActual": Records({
         "week_num": S, "week_start": S, "planned_tss": S, "actual_tss": S,
+        # week_type ("build"/"specific"/"deload"/"taper"/"race") and in_progress are
+        # both plan metadata, not physiology — no wellness field is added here.
+        "week_type": S, "in_progress": S,
     }),
     "powerCurve": Records({"t": S, "label": S, "w": S, "wPrev": S}),
     "racePredictor": {
