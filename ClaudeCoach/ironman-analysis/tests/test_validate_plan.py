@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date
 
 from primitives.validate_plan import (
-    validate_week, validate_plan, Violation, WeekReport,
+    validate_week, validate_plan, Violation, WeekReport, escalate_repeats,
 )
 
 WEEK = date(2026, 6, 15)   # a Monday
@@ -269,3 +269,153 @@ class TestDistributionDrift:
         ]
         r = validate_week(evs, WEEK, distribution=DIST)
         assert not [v for v in r.violations if v.code == "intensity_distribution"]
+
+# -- Segment-minute intensity distribution (2026-07-28 rewrite) ----------------
+# The old check bucketed WHOLE SESSIONS by name, so "Easy run + 10min tempo" counted
+# 40 quality minutes instead of 10. These fix the behaviour in place: the classes above
+# deliberately use events with NO workout_doc, which is the name-based fallback path, so
+# they still assert the legacy behaviour where the legacy evidence is all there is.
+
+def _step(mins, lo, hi, kind="pace"):
+    return {kind: {"start": lo, "end": hi, "units": "%pace" if kind == "pace" else "%ftp"},
+            "duration": int(mins * 60)}
+
+
+def _structured(day_iso, sport, name, steps):
+    mins = sum(s["duration"] for s in steps) / 60
+    e = _named(day_iso, sport, name, mins)
+    e["workout_doc"] = {"steps": steps}
+    return e
+
+
+# planned_tss._ZONE_BAND tuples, spelled out so a change to that table breaks these
+# tests loudly rather than silently re-bucketing real athletes' weeks.
+RUN_EASY, RUN_Z3, RUN_THR = (78, 88), (80, 86), (95, 101)
+BIKE_Z2, BIKE_Z3, BIKE_SS, BIKE_VO2 = (60, 70), (76, 84), (88, 94), (105, 118)
+
+
+class TestSegmentDistribution:
+    def test_mostly_easy_session_with_a_short_quality_block_is_not_all_quality(self):
+        """THE false positive: Jamie's real week of 2026-07-27 read 60% easy and flagged;
+        by segment minutes it is 87% easy and on spec."""
+        evs = [
+            _structured("2026-06-15", "Run", "Long run", [_step(130, *RUN_EASY)]),
+            _structured("2026-06-16", "Run", "Easy run + 10min tempo",
+                        [_step(15, *RUN_EASY), _step(10, *RUN_Z3), _step(15, *RUN_EASY)]),
+            _structured("2026-06-17", "Run", "Easy run + sweetspot",
+                        [_step(27, *RUN_EASY), _step(18, *RUN_Z3)]),
+        ]
+        r = validate_week(evs, WEEK, distribution=DIST)
+        assert not [v for v in r.violations if v.code.startswith("intensity_distribution")]
+
+    def test_the_same_week_flags_under_the_old_name_based_path(self):
+        """Strip the steps and the identical week flags — proving the fix is the
+        measurement, not a loosened threshold."""
+        evs = [_named("2026-06-15", "Run", "Long run", 130),
+               _named("2026-06-16", "Run", "Easy run + 10min tempo", 40),
+               _named("2026-06-17", "Run", "Easy run + sweetspot", 45)]
+        r = validate_week(evs, WEEK, distribution=DIST)
+        assert [v for v in r.violations if v.code == "intensity_distribution"]
+
+    def test_genuine_excess_quality_still_flags_by_segment(self):
+        """NEGATIVE CONTROL — the fix must not make a real excess-quality week clean."""
+        evs = [
+            _structured("2026-06-15", "Ride", "Sweetspot 4x20",
+                        [_step(15, *BIKE_Z2, kind="power"), _step(80, *BIKE_SS, kind="power"),
+                         _step(10, *BIKE_Z2, kind="power")]),
+            _structured("2026-06-16", "Ride", "VO2 5x5",
+                        [_step(15, *BIKE_Z2, kind="power"), _step(25, *BIKE_VO2, kind="power"),
+                         _step(20, *BIKE_Z3, kind="power")]),
+        ]
+        r = validate_week(evs, WEEK, distribution=DIST)
+        hits = [v for v in r.violations if v.code == "intensity_distribution"]
+        assert len(hits) == 1 and "segment minutes" in hits[0].detail
+
+    def test_vo2_swapped_for_z3_keeps_the_easy_share_but_trips_the_zone_ceiling(self):
+        """The hole the easy-share check alone leaves: identical easy minutes, quality
+        moved from Z3 into Z4-5. Caught by the per-zone ceiling limb."""
+        evs = [
+            _structured("2026-06-15", "Ride", "Endurance", [_step(150, *BIKE_Z2, kind="power")]),
+            _structured("2026-06-16", "Ride", "VO2 block",
+                        [_step(30, *BIKE_Z2, kind="power"), _step(30, *BIKE_VO2, kind="power")]),
+        ]
+        r = validate_week(evs, WEEK, distribution=DIST)
+        assert [v for v in r.violations if v.code == "intensity_distribution_vo2_high"]
+        # easy share is 180/210 = 86% — the easy-share limb alone would say nothing.
+        assert not [v for v in r.violations if v.code == "intensity_distribution"]
+
+    def test_partially_stepped_session_falls_back_rather_than_shrinking_the_denominator(self):
+        """Steps covering only the main set must not be trusted: 20 min of stated steps on
+        a 90-min event would otherwise read 100% quality of a 20-min week."""
+        from primitives.validate_plan import step_bucket_minutes
+        e = _structured("2026-06-15", "Ride", "Threshold 2x10",
+                        [_step(20, *BIKE_SS, kind="power")])
+        e["moving_time"] = 90 * 60          # stated duration, steps cover 20 min
+        assert step_bucket_minutes("Ride", e) is None
+
+    def test_unstructured_session_keeps_the_loose_tolerance_and_says_so(self):
+        """Kathryn's real "Sweetspot 3x15" carries no steps at all. That sport stays on the
+        legacy measurement AND the report records why it was judged loosely."""
+        evs = [
+            _named("2026-06-15", "Ride", "Sweetspot 3x15", 90),
+            _structured("2026-06-16", "Ride", "Long ride",
+                        [_step(150, *BIKE_Z2, kind="power"), _step(30, *BIKE_Z3, kind="power")]),
+        ]
+        r = validate_week(evs, WEEK, distribution=DIST)
+        assert any("measured loosely" in s and "no usable structured steps" in s
+                   for s in r.skipped)
+        assert not [v for v in r.violations
+                    if v.code.startswith("intensity_distribution_")]   # no per-zone limb
+
+    def test_bricks_still_excluded_even_when_structured(self):
+        evs = [
+            _structured("2026-06-15", "Run", "Brick run — tempo off the bike",
+                        [_step(25, *RUN_EASY), _step(25, *RUN_Z3)]),
+            _structured("2026-06-16", "Run", "Easy run", [_step(50, *RUN_EASY)]),
+            _structured("2026-06-17", "Run", "Long run", [_step(100, *RUN_EASY)]),
+        ]
+        r = validate_week(evs, WEEK, distribution=DIST)
+        assert not [v for v in r.violations if v.code.startswith("intensity_distribution")]
+
+    def test_step_band_reverse_index_separates_run_easy_from_run_z3(self):
+        """The two bands OVERLAP (78-88 vs 80-86) and share a midpoint of 83, so only the
+        exact tuple can tell them apart. This is the whole basis of the fix."""
+        from primitives.validate_plan import bucket_for_step
+        assert bucket_for_step("Run", _step(10, *RUN_EASY)) == "easy"
+        assert bucket_for_step("Run", _step(10, *RUN_Z3)) == "z3"
+        assert bucket_for_step("Run", _step(10, *RUN_THR)) == "z45"
+
+    def test_off_table_band_is_counted_as_guessed_not_measured(self):
+        """Calum's real "VO2 touch" renders 64-72% FTP — the planner's intensity fallback,
+        absent from _ZONE_BAND. It must be flagged as a guess, not silently trusted."""
+        from primitives.validate_plan import step_bucket_minutes
+        e = _structured("2026-06-15", "Ride", "VO2 touch",
+                        [_step(15, 60, 70, kind="power"), _step(12, 64, 72, kind="power")])
+        got = step_bucket_minutes("Ride", e)
+        assert got["guessed_min"] == 12 and got["easy"] == 27
+
+
+class TestEscalateRepeats:
+    def _v(self, code="intensity_distribution"):
+        return Violation(code=code, severity="soft", detail="x")
+
+    def test_first_occurrence_does_not_escalate(self):
+        out, streaks = escalate_repeats([self._v()], {})
+        assert len(out) == 1 and streaks == {"intensity_distribution": 1}
+
+    def test_third_consecutive_run_escalates(self):
+        out, streaks = escalate_repeats([self._v()], {"intensity_distribution": 2})
+        codes = [v.code for v in out]
+        assert "intensity_distribution_persistent" in codes
+        assert streaks == {"intensity_distribution": 3}
+        # loud, never blocking
+        assert all(v.severity == "soft" for v in out)
+
+    def test_a_clean_run_breaks_the_streak(self):
+        out, streaks = escalate_repeats([], {"intensity_distribution": 5})
+        assert out == [] and streaks == {}
+
+    def test_hard_violations_are_not_streak_tracked(self):
+        out, streaks = escalate_repeats(
+            [Violation(code="wrong_day", severity="hard", detail="x")], {})
+        assert streaks == {} and len(out) == 1

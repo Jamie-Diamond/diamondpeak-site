@@ -16,16 +16,33 @@ distribution in BOTH directions:
                 line 71). It is NEW arithmetic, deliberately kept out of the shared
                 gated generator modules so concurrent promotion stays byte-safe.
 
-WHY A SEPARATE MODULE (not an edit to validate_plan._check_distribution):
-  - that check is session-level, one-directional (excess only), and feeds the
-    gated generation/push path. This one is zone-minute level and two-directional,
-    and is consumed by the chat path. Keeping it separate means plan_audit.py /
-    plan_builder.py / stage1-plan.py stay unchanged.
+WHY THIS MODULE STILL EXISTS (2026-07-28 consolidation):
+  the original reason - "validate_plan._check_distribution is session-level and
+  one-directional" - is GONE: that check is now segment-minute level too. What is
+  left that is genuinely only here is the INSUFFICIENT direction (a required quality
+  slice missing/under-dosed), which the audit path deliberately does not assert
+  because it cannot tell a deload week from a normal one. So this is no longer a
+  second classifier: the zone-name -> bucket taxonomy is IMPORTED from
+  primitives.validate_plan (DIST_ZONE_BUCKET / bucket_for_zone_name) and the
+  tolerance matches SEGMENT_TOLERANCE_PP. One taxonomy, one set of tolerances, two
+  surfaces - a generation/audit surface reading calendar step bands, and this chat
+  surface reading engine-proposal zone names.
 
-SCOPE — Run and Bike only, matching the generator-side validator: name-based zone
-detection is unreliable for swims (a "CSS" swim is a threshold set but the whole
-session integrates low) and bricks are mixed by definition. Swim/Brick sessions
-are ignored, not mis-bucketed.
+  KNOWN GAP, NOT FIXED HERE: this module's only non-test callers are PROMPT STRINGS
+  telling the model to shell out to its CLI (lib/engine.py:234, telegram/bot.py:3007).
+  A gate whose invocation depends on a model choosing to run a command is not a gate.
+  Both files are out of scope for this commit; the follow-up is to call
+  audit_distribution() directly from the engine's plan path.
+
+SCOPE — Run and Bike only, matching the generator-side validator: zone detection is
+unreliable for swims (a "CSS" swim is a threshold set but the whole session
+integrates low) and bricks are mixed by definition. Swim/Brick sessions are ignored,
+not mis-bucketed.
+
+ONE TAXONOMY NOTE: run "steady" now buckets to Z3, not easy. It used to be easy here
+only — planned_tss gives run steady and run z3 the SAME band (80-86% pace) and the
+same IF, so calling it easy here while the planner rendered it as Z3 was the drift
+this consolidation removes.
 
 INPUT FORM — the deterministic engine's proposal shape:
     [{"sport": "Run", "segments": [{"minutes": 40, "zone": "z2"}, ...]}, ...]
@@ -39,27 +56,21 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# Zone-name → distribution bucket, per sport. Keys are lowercased, punctuation
-# stripped (see _norm_zone). Covers the engine's zone vocabulary (primitives.
-# planned_tss._ZONE_IF) plus explicit Coggan-style Z1..Z5 tokens.
-_ZONE_BUCKET = {
-    "run": {
-        "recovery": "easy", "easy": "easy", "z1": "easy", "z2": "easy",
-        "warmup": "easy", "cooldown": "easy", "steady": "easy", "aerobic": "easy",
-        "long": "easy", "endurance": "easy",
-        "z3": "z3", "tempo": "z3",
-        "z4": "z45", "z5": "z45", "threshold": "z45", "css": "z45",
-        "interval": "z45", "vo2": "z45", "hill": "z45", "sprint": "z45",
-        "speed": "z45", "race": "z45",
-    },
-    "bike": {
-        "recovery": "easy", "easy": "easy", "z1": "easy", "z2": "easy",
-        "warmup": "easy", "cooldown": "easy", "endurance": "easy", "aerobic": "easy",
-        "z3": "z3", "tempo": "z3", "sweetspot": "z3", "ss": "z3", "race": "z3",
-        "z4": "z45", "z5": "z45", "threshold": "z45", "ftp": "z45",
-        "vo2": "z45", "anaerobic": "z45", "sprint": "z45",
-    },
-}
+# Zone-name -> distribution bucket, per sport: IMPORTED, never redefined. This module
+# used to carry its own near-identical copy, which is how the estate ended up with
+# three intensity classifiers giving three answers. The canonical table lives with the
+# gated validator so the audit path and this path cannot drift apart.
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                os.pardir, "ironman-analysis"))
+from primitives.validate_plan import (           # noqa: E402
+    DIST_ZONE_BUCKET as _ZONE_BUCKET,
+    SEGMENT_TOLERANCE_PP,
+    bucket_for_zone_name,
+    norm_zone_name as _norm_zone,
+)
 
 # intervals.icu / proposal sport → the bucket key above.
 _SPORT_KEY = {
@@ -67,19 +78,8 @@ _SPORT_KEY = {
     "bike": "bike", "ride": "bike", "virtualride": "bike", "gravelride": "bike",
 }
 
-DEFAULT_TOL_PP = 8.0        # percentage-point tolerance either side of a target
+DEFAULT_TOL_PP = SEGMENT_TOLERANCE_PP   # shared with the audit path, not a local number
 MIN_MINUTES = 90            # don't judge a sport on under 1.5h of planned work
-
-
-def _norm_zone(zone: str) -> str:
-    """'Z1-2' -> 'z1', 'Z4/5' -> 'z4', 'VO2 max' -> 'vo2' — take the leading token."""
-    z = re.sub(r"[^a-z0-9]", " ", str(zone or "").lower()).strip()
-    if not z:
-        return ""
-    first = z.split()[0]
-    # 'z1' from 'z1-2' style already handled by the split on non-alnum above; a
-    # compound like 'z12' (rare) is left as-is and will fall through to unknown.
-    return first
 
 
 def parse_distribution(row) -> dict | None:
@@ -119,14 +119,13 @@ def _bucket_minutes(sessions: list[dict]) -> dict[str, dict]:
         sport = _SPORT_KEY.get(str(s.get("sport") or "").strip().lower())
         if not sport:
             continue
-        table = _ZONE_BUCKET[sport]
         b = out.setdefault(sport, {"easy": 0.0, "z3": 0.0, "z45": 0.0,
                                    "unknown": 0.0, "total": 0.0})
         for seg in s.get("segments") or []:
             mins = float(seg.get("minutes") or 0)
             if mins <= 0:
                 continue
-            bucket = table.get(_norm_zone(seg.get("zone")))
+            bucket = bucket_for_zone_name(sport, seg.get("zone"))
             b["total"] += mins
             b[bucket if bucket else "unknown"] += mins
     return out
@@ -201,13 +200,19 @@ def any_offspec(findings: list[SportFinding]) -> bool:
 
 
 # -- Blueprint lookup + CLI ----------------------------------------------------
-# The gate's reliable input is the deterministic engine's PROPOSAL form (named
-# zoned segments) — the same shape stage1-plan.py builds and the bot uses when it
-# generates/replans/describes a week in zone terms. Zone NAMES are unambiguous;
-# reverse-mapping intervals.icu %FTP/%pace step bands is deliberately NOT done here
-# because the run bands overlap (easy 78–88% vs z3 80–86%), so a calendar-derived
-# Z3-vs-easy split would be unreliable. To check a live week, express it as zoned
-# segments and pass --sessions.
+# This module's input is the deterministic engine's PROPOSAL form (named zoned
+# segments) — the same shape stage1-plan.py builds and the bot uses when it
+# generates/replans/describes a week in zone terms. To check a proposed week, express
+# it as zoned segments and pass --sessions.
+#
+# CORRECTED 2026-07-28: this comment used to claim that reverse-mapping intervals.icu
+# %FTP/%pace step bands was unsafe "because the run bands overlap (easy 78–88% vs z3
+# 80–86%)". The overlap is real but the conclusion was wrong: the RANGES overlap and
+# the midpoints are identical (both 83), yet the TUPLES are distinct, and the planner
+# renders every step from one table (planned_tss._ZONE_BAND). Inverting that table on
+# the exact tuple is therefore exact, not a heuristic — which is what
+# validate_plan.bucket_for_step now does, so a LIVE calendar week can be measured by
+# segment minutes without being re-expressed by hand.
 
 def load_phase_distribution(slug: str, week_start):
     """Blueprint per-sport distribution for the phase containing week_start.

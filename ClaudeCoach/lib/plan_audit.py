@@ -33,7 +33,7 @@ BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
-from primitives.validate_plan import validate_week            # noqa: E402
+from primitives.validate_plan import validate_week, escalate_repeats  # noqa: E402
 from primitives.blueprint import current_phase                # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 import plan_tools as pt                                        # noqa: E402
@@ -50,6 +50,35 @@ ATHLETES = BASE / "config" / "athletes.json"
 # that DIFFERS is still a real alert. New breakage is still visible; the known
 # backlog is not re-reported daily.
 BASELINE = BASE / "config" / "plan-audit-baseline.json"
+# Consecutive-run counters for recurring SOFT advisories, so a flag pushed past every
+# week escalates instead of sitting inside the count-keyed baseline forever (see
+# validate_plan.escalate_repeats). Deliberately NOT under athletes/ - stage1-plan.py
+# owns that directory's sidecars. Best-effort: a missing/corrupt file just means no
+# streaks yet, never a failed audit.
+STREAKS = BASE / "config" / "plan-audit-streaks.json"
+
+
+def _load_streaks(slug: str) -> dict:
+    try:
+        return (json.loads(STREAKS.read_text()).get("athletes", {}).get(slug) or {})
+    except Exception:
+        return {}
+
+
+def _save_streaks(slug: str, streaks: dict) -> None:
+    try:
+        blob = json.loads(STREAKS.read_text()) if STREAKS.exists() else {}
+    except Exception:
+        blob = {}
+    blob.setdefault("_note", "Consecutive-run counts per soft violation code, per "
+                             "athlete. Written by plan_audit; read by "
+                             "validate_plan.escalate_repeats to escalate a flag that "
+                             "recurs. A clean run drops the code and breaks the streak.")
+    blob.setdefault("athletes", {})[slug] = streaks
+    try:
+        STREAKS.write_text(json.dumps(blob, indent=1, sort_keys=True) + "\n")
+    except Exception:
+        pass
 _STRUCTURED_SPORTS = {"Swim", "Run", "Ride", "GravelRide", "VirtualRide", "Brick"}
 _FUEL_SPORTS = {"Ride", "GravelRide", "VirtualRide", "Brick"}
 _LOAD_TOLERANCE = 0.15
@@ -130,8 +159,17 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                             ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
                             strength_max=(dr or {}).get("strength_max"),
                             distribution=phase.get("distribution"))
-        for v in rep.violations:
-            if v.severity == "hard" or v.code == "intensity_distribution":
+        # Escalate soft advisories that keep recurring. Only the CURRENT week updates the
+        # streak store: the next-week audit re-runs against the same plan a week later and
+        # would otherwise double-count a single occurrence.
+        viols = rep.violations
+        if wk == 0:
+            viols, new_streaks = escalate_repeats(rep.violations, _load_streaks(slug))
+            _save_streaks(slug, new_streaks)
+        for v in viols:
+            # Prefix match: the distribution check now emits per-zone ceiling codes and a
+            # "_persistent" escalation alongside plain intensity_distribution.
+            if v.severity == "hard" or v.code.startswith("intensity_distribution"):
                 fails["RULES"].append(f"week {ws}: {v}")
 
     hard = any(fails[k] for k in ("STRUCTURE", "LONG_RIDE", "RULES"))  # fuelling/load = warn
