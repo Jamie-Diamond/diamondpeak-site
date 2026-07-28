@@ -39,6 +39,16 @@ discounts FAILURE-class heartbeats. It is not a one-line change because ok=False
 means both "I failed" and "I found something" — the classification, and the full
 reasoning, live in lib/coach_alert.py above OUTCOME_CLASS.
 
+Changed 28 Jul 2026 — NOTHING IS JUDGED BEFORE IT COULD HAVE HAPPENED. The gap
+check asked "is there a heartbeat in this window" and never "could there be one
+yet", so it produced two false alarms on its first night from jobs that were
+working: backup-config runs at 23:50 and was checked at 21:30, and stage1-plan's
+7-day window reached back before its own heartbeat existed. Each deliverable now
+declares its crontab schedule and the moment its instrumentation went live, and
+coach_alert.due_status() gates the check on both. A deliverable scheduled after
+this digest is judged on its PREVIOUS cycle rather than skipped. Full reasoning:
+docs/failure-alarm.md, "Nothing is judged before it could have happened".
+
 Safe to run manually: python3 ClaudeCoach/scripts/ops-digest.py
   CC_ALERT_DRY_RUN=1 python3 .../ops-digest.py   # never sends; logs what it would
 
@@ -46,7 +56,7 @@ Exercising it by hand is safe on the send side either way — coach_alert's
 cooldown means a hand-run cannot double-message.
 """
 import json, subprocess, sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
@@ -181,7 +191,24 @@ def unclassified_lines(entries) -> list[str]:
     return out
 
 
-def gap_lines(today_entries, week_entries, athletes) -> tuple[list[str], list[str]]:
+def not_due_line(d: dict, due, state: str) -> str:
+    """The digest line for a deliverable that is NOT judged this run.
+
+    This exists so "not judged" can never be confused with "checked and fine".
+    A deliverable in either non-DUE state produces no gap and no Telegram, which
+    is the fix for the false alarm — but silence about it would mean a mis-timed
+    or never-instrumented deliverable could sit unchecked for ever with nothing
+    to show. The line names the reason and the moment it starts being judged.
+    """
+    if state == coach_alert.PRE_INSTRUMENTATION:
+        return (f"ℹ {d['label']} not judged yet — its last scheduled run "
+                f"({due:%a %d %b %H:%M}) predates the heartbeat instrumentation "
+                f"added {d['since'][:10]}; judged from its next run onwards")
+    return (f"ℹ {d['label']} not judged yet — no scheduled run has passed "
+            f"(cron {d['cron']})")
+
+
+def gap_lines(today_entries, week_entries, athletes, now=None) -> tuple[list[str], list[str]]:
     """(all gap lines, the subset of DAILY misses that may interrupt the coach).
 
     Gap lines report the absence of a SUCCESSFUL heartbeat — either nothing was
@@ -194,7 +221,23 @@ def gap_lines(today_entries, week_entries, athletes) -> tuple[list[str], list[st
     come from coach_alert.DELIVERABLES. WEEKLY telegram routing is deliberately
     NOT done here — see weekly_alerts() below for why it needs a different
     cooldown key.
+
+    Changed 28 Jul 2026 — NOTHING IS JUDGED BEFORE IT IS DUE. A deliverable is
+    only checked once coach_alert.due_status() says its scheduled time has passed
+    AND that occurrence is after its instrumentation date. backup-config runs at
+    23:50 and this digest runs at 21:30, so registering it as "must appear today"
+    made it report missing every single night for ever; stage1-plan's 7-day window
+    reached back to a Sunday two days before its heartbeat existed. Both were
+    false alarms from working jobs on the alarm's first night. The gate is
+    derived, not special-cased, so any future deliverable at any hour gets it.
+
+    A deliverable whose due moment falls BEFORE today (i.e. it is scheduled after
+    this digest runs) is judged over the window since that moment rather than
+    "today" — so last night's 23:50 backup is checked tonight, giving real 24-hour
+    detection instead of the alternative of never checking it at all.
     """
+    now = now or datetime.now()
+    day_start = datetime.combine(now.date(), time.min)
     lines, telegram = [], []
     active = {s: c for s, c in athletes.items() if c.get("active")}
 
@@ -210,8 +253,19 @@ def gap_lines(today_entries, week_entries, athletes) -> tuple[list[str], list[st
     # "exit -1" (FAILURE-class, so both functions agree), and daily-prescription
     # has never recorded ok=False at all.
     for d in coach_alert.DELIVERABLES:
-        entries = week_entries if d["window"] == "weekly" else today_entries
-        when = (f"in {WEEKLY_WINDOW_DAYS} days" if d["window"] == "weekly" else "today")
+        due, state = coach_alert.due_status(d, now)
+        if state != coach_alert.DUE:
+            lines.append(not_due_line(d, due, state))
+            continue
+        if d["window"] == "weekly":
+            entries, when = week_entries, f"in {WEEKLY_WINDOW_DAYS} days"
+        elif due >= day_start:
+            entries, when = today_entries, "today"
+        else:
+            # Scheduled after the digest: judge the cycle that HAS happened.
+            entries = [e for e in week_entries
+                       if str(e.get("ts", "")) >= due.isoformat(timespec="seconds")]
+            when = f"since the {due:%H:%M} run on {due:%a %d %b}"
         targets = list(active) if d["per_athlete"] else [None]
         for slug in targets:
             # morning-checkin's own opt-out flag, unchanged.
@@ -229,7 +283,7 @@ def gap_lines(today_entries, week_entries, athletes) -> tuple[list[str], list[st
     return lines, telegram
 
 
-def weekly_alerts(week_entries, athletes) -> list[str]:
+def weekly_alerts(week_entries, athletes, now=None) -> list[str]:
     """Telegram condition 1 for WEEKLY deliverables — split out from gap_lines()
     because it needs occurrence-based alerting, not the daily per-day key.
 
@@ -245,10 +299,20 @@ def weekly_alerts(week_entries, athletes) -> list[str]:
 
     Returns the labels actually alerted this run (sent or dry-run), for logging.
     """
+    now = now or datetime.now()
     active = {s: c for s, c in athletes.items() if c.get("active")}
     alerted = []
     for d in coach_alert.DELIVERABLES:
         if d["window"] != "weekly" or not d["telegram"]:
+            continue
+        # Same due gate as gap_lines. stage1-plan was instrumented on 28 Jul and
+        # its 7-day window reached back to the Sunday 26 Jul run — two days before
+        # any heartbeat could exist — so it alarmed on night one about a job that
+        # had never had the chance to report. NOT expected yet means neither send
+        # NOR clear_cooldown: clearing on a cycle we did not actually check would
+        # discard a cooldown banked for a real, still-unfixed miss. The first cycle
+        # that is genuinely checked does the clearing.
+        if coach_alert.due_status(d, now)[1] != coach_alert.DUE:
             continue
         targets = list(active) if d["per_athlete"] else [None]
         missing = [slug for slug in targets
@@ -313,12 +377,15 @@ def main():
         athletes = {}
         print(f"ops-digest: failed to load athletes config: {e}", file=sys.stderr)
 
+    now     = datetime.now()
     entries = all_entries()
     today   = todays_entries(entries)
     week    = since(entries, WEEKLY_WINDOW_DAYS)
 
     lines = build_digest(today, athletes)
-    gaps, missing_deliverables = gap_lines(today, week, athletes)
+    # One `now` for the whole run: gap_lines and weekly_alerts must agree on what
+    # is due, and two datetime.now() calls either side of midnight would not.
+    gaps, missing_deliverables = gap_lines(today, week, athletes, now=now)
     lines += gaps
     lines += unclassified_lines(today)
     lines += plan_sanity(athletes)
@@ -337,7 +404,7 @@ def main():
             key=date.today().isoformat())
         print(f"coach-alert deliverable_missing: {action} ({what})", file=sys.stderr)
 
-    weekly_alerts(week, athletes)
+    weekly_alerts(week, athletes, now=now)
 
     if not lines:
         print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] ops-digest: all clean", file=sys.stderr)
