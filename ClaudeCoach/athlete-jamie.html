@@ -1093,7 +1093,8 @@ function renderSwimProgression(entries, cssPaceSecs) {
       {label:"Pace (s/100m)", data:sorted.map(e=>({x:e.date,y:e.pace_per_100m})),
        borderColor:"#1a5276", backgroundColor:"rgba(26,82,118,0.1)",
        pointRadius:4, pointBackgroundColor:"#1a5276", tension:0.3, fill:true},
-      {label:"CSS target", data:[{x:d0,y:cssPaceSecs||99},{x:d1,y:cssPaceSecs||99}],
+      {label: cssPaceSecs != null ? "CSS target" : "CSS target (unavailable)",
+       data: cssPaceSecs != null ? [{x:d0,y:cssPaceSecs},{x:d1,y:cssPaceSecs}] : [],
        borderColor:"rgba(192,57,43,0.6)", borderDash:[5,3], pointRadius:0, borderWidth:1.5},
     ]},
     options:{responsive:true, maintainAspectRatio:false,
@@ -1666,17 +1667,26 @@ fetch('public/training-data-jamie.json?v='+Date.now())
         const [cm, cs] = p.swim_css_per_100m.split(":").map(Number);
         const paceS = cm*60 + cs + 3;
         const pace = Math.floor(paceS/60)+":"+(paceS%60).toString().padStart(2,"0");
-        const tStr = rt.swim_time || "~1:07";
-        document.getElementById("rp-swim").textContent = `${tStr} · ${pace}/100m`;
+        // No fallback split. `rt.swim_time || "~1:07"` published a target time
+        // that was never in the data.
+        document.getElementById("rp-swim").textContent = rt.swim_time
+          ? `${rt.swim_time} · ${pace}/100m`
+          : `${pace}/100m`;
       } else if (rt.swim_time) {
         document.getElementById("rp-swim").textContent = rt.swim_time;
       }
       // 2026 bike: stored target time + live FTP-derived NP
       if (p.ftp_watts) {
-        const np = Math.round(p.ftp_watts * (rt.bike_np_watts_target_if || 0.71));
         document.getElementById("rp-ftp").textContent = p.ftp_watts + " W";
-        const bTime = rt.bike_time || "4:44";
-        document.getElementById("rp-bike").textContent = `${bTime} · ${np}W NP · IF 71%`;
+        // Was `(rt.bike_np_watts_target_if || 0.71)` and `rt.bike_time || "4:44"`,
+        // and the IF was printed as a hard-coded "71%" even when the real target
+        // differed. All three are now derived or the row stays at its em-dash.
+        const ifTarget = rt.bike_np_watts_target_if;
+        if (ifTarget != null && rt.bike_time) {
+          const np = Math.round(p.ftp_watts * ifTarget);
+          document.getElementById("rp-bike").textContent =
+            `${rt.bike_time} · ${np}W NP · IF ${Math.round(ifTarget * 100)}%`;
+        }
       }
       // 2026 run: stored empirical target (not formula-derived)
       if (rt.run_time && rt.run_pace)
@@ -1696,8 +1706,10 @@ fetch('public/training-data-jamie.json?v='+Date.now())
         if(best!=null) fitnessCtl.ctl2025=best;
       }
     }
-    if (d.currentState && d.currentState.bike_ftp)
-      document.getElementById("rp-ftp").textContent = d.currentState.bike_ftp+" W";
+    // The currentState.bike_ftp override is gone: currentState is withheld from
+    // the public feed, so this could only ever be dead code - or a live read of
+    // a withheld field if the spec were ever relaxed. profile.ftp_watts is the
+    // published source for this figure.
     if (d.generated) {
       document.getElementById("snapshot-date").textContent = "Live · updated "+d.generated;
       document.getElementById("footer-generated").textContent = "Last updated "+d.generated+" · Source: Intervals.icu";
@@ -1705,13 +1717,19 @@ fetch('public/training-data-jamie.json?v='+Date.now())
     // Progress charts
     if (d.progressData) {
       const pd = d.progressData;
-      const ftp = pd.ftp || 316;
+      // No fallback FTP. This was `pd.ftp || 316` against a real 294 W, so a
+      // partial payload drew the cycling chart's FTP reference line 22 W high
+      // and never tripped the error state. Absent FTP now means no line.
+      const ftp = (pd.ftp != null) ? pd.ftp : null;
       if (window.chartCycling && pd.rides && pd.rides.length) {
         const dates = pd.rides.map(r=>r.date);
         const d0 = dates[0], d1 = dates[dates.length-1];
         window.chartCycling.data.datasets[0].data = pd.rides.map(r=>({x:r.date,y:r.np}));
         window.chartCycling.data.datasets[1].data = pd.rides.map(r=>({x:r.date,y:r.ef}));
-        window.chartCycling.data.datasets[2].data = [{x:d0,y:ftp},{x:d1,y:ftp}];
+        window.chartCycling.data.datasets[2].data =
+          (ftp != null) ? [{x:d0,y:ftp},{x:d1,y:ftp}] : [];
+        window.chartCycling.data.datasets[2].label =
+          (ftp != null) ? "FTP" : "FTP (unavailable)";
         window.chartCycling.update();
       }
       if (window.chartRunning && pd.runs && pd.runs.length) {

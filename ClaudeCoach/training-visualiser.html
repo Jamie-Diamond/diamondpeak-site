@@ -1423,8 +1423,13 @@ function renderHeatPanel(h) {
   const el = document.getElementById("heat-content");
   if (!el || !h) return;
   const done      = h.sessions_cumulative || 0;
-  const tgt       = h.target_min || 14;
-  const pct       = Math.min(100, Math.round((done / tgt) * 100));
+  // Was `h.target_min || 14` and `h.target_max || 20` below - a fabricated
+  // target band, and a completion percentage computed against it.
+  const tgt       = (h.target_min != null) ? h.target_min : null;
+  const tgtMax    = (h.target_max != null) ? h.target_max : null;
+  const tgtStr    = (tgt != null && tgtMax != null) ? `${tgt}–${tgtMax}`
+                  : (tgt != null) ? `${tgt}+` : "—";
+  const pct       = tgt ? Math.min(100, Math.round((done / tgt) * 100)) : 0;
   const started   = new Date() >= new Date(h.protocol_start_date + "T00:00:00");
   const lastDate  = h.last_session_date;
   const daysSince = lastDate
@@ -1434,10 +1439,10 @@ function renderHeatPanel(h) {
   el.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
       <div style="font-size:28px;font-weight:700;font-family:'DM Mono',monospace">${done}</div>
-      <div style="font-size:12px;color:var(--muted)">of ${tgt}–${h.target_max||20} sessions<br>${started?"active":"starts "+h.protocol_start_date}</div>
+      <div style="font-size:12px;color:var(--muted)">of ${tgtStr} sessions<br>${started?"active":"starts "+h.protocol_start_date}</div>
     </div>
     <div style="background:var(--line);border-radius:4px;height:8px;margin-bottom:10px;overflow:hidden">
-      <div style="background:${done>=tgt?"var(--good)":"var(--warn)"};height:100%;width:${pct}%;border-radius:4px;transition:width .4s"></div>
+      <div style="background:${(tgt != null && done>=tgt)?"var(--good)":"var(--warn)"};height:100%;width:${pct}%;border-radius:4px;transition:width .4s"></div>
     </div>
     <div style="font-size:12px;color:${warn?"var(--bad)":"var(--muted)"}">
       ${!started ? "Protocol not yet started" :
@@ -1491,10 +1496,14 @@ function renderCtlProjection(proj) {
       label: { display: true, content: "Race day", position: "start",
                backgroundColor: "rgba(255,255,255,0.9)", color: "#c0392b", font: { size: 10 } },
     };
-    anns.targetBand = {
-      type: "box", yMin: proj.target_ctl_min || 100, yMax: proj.target_ctl_max || 115,
-      backgroundColor: "rgba(29,104,64,0.06)", borderWidth: 0, drawTime: "beforeDatasetsDraw",
-    };
+    // Was `proj.target_ctl_min || 100` / `|| 115` - a fabricated CTL target band
+    // drawn on the fitness chart as though it came from the plan.
+    if (proj.target_ctl_min != null && proj.target_ctl_max != null) {
+      anns.targetBand = {
+        type: "box", yMin: proj.target_ctl_min, yMax: proj.target_ctl_max,
+        backgroundColor: "rgba(29,104,64,0.06)", borderWidth: 0, drawTime: "beforeDatasetsDraw",
+      };
+    }
     window.chartFitness.options.plugins.annotation.annotations = anns;
   }
   window.chartFitness.update();

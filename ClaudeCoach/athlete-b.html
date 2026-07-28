@@ -967,7 +967,8 @@ function renderSwimProgression(entries, cssPaceSecs) {
       {label:"Pace (s/100m)", data:sorted.map(e=>e.pace_per_100m),
        borderColor:"#1a5276", backgroundColor:"rgba(26,82,118,0.1)",
        pointRadius:4, pointBackgroundColor:"#1a5276", tension:0.3, fill:true},
-      {label:"CSS target", data:labels.map(()=>cssPaceSecs||99),
+      {label: cssPaceSecs != null ? "CSS target" : "CSS target (unavailable)",
+       data: cssPaceSecs != null ? labels.map(()=>cssPaceSecs) : [],
        borderColor:"rgba(192,57,43,0.6)", borderDash:[5,3], pointRadius:0, borderWidth:1.5},
     ]},
     options:{responsive:true, maintainAspectRatio:false,
@@ -1425,16 +1426,19 @@ fetch('public/training-data-kathryn.json?v='+Date.now())
 
       // Bike
       if (rt.bike_time) {
-        const ftp = p.ftp_watts || 0;
-        const ifVal = rt.bike_np_watts_target_if || 0.79;
-        const ifPct = Math.round(ifVal * 100);
-        const np = ftp ? Math.round(ftp * ifVal) : null;
+        // Was `p.ftp_watts || 0` and `rt.bike_np_watts_target_if || 0.79`. The
+        // 0.79 fabricated a target intensity and printed it as a percentage in
+        // two places; the `|| 0` rendered "0 W" and zeroed the derived NP.
+        const ftp = (p.ftp_watts != null) ? p.ftp_watts : null;
+        const ifVal = rt.bike_np_watts_target_if;
+        const ifPct = (ifVal != null) ? Math.round(ifVal * 100) : null;
+        const np = (ftp != null && ifVal != null) ? Math.round(ftp * ifVal) : null;
         const bikeLabel = document.getElementById("rp-bike-label");
-        if (bikeLabel) bikeLabel.textContent = `Bike 90 km · IF ${ifPct}%`;
+        if (bikeLabel && ifPct != null) bikeLabel.textContent = `Bike 90 km · IF ${ifPct}%`;
         document.getElementById("rp-bike").textContent = np
           ? `${rt.bike_time} · ${np}W NP · IF ${ifPct}%`
           : rt.bike_time;
-        if (ftp) document.getElementById("rp-ftp").textContent = ftp + " W";
+        if (ftp != null) document.getElementById("rp-ftp").textContent = ftp + " W";
       } else if (p.ftp_watts) {
         const ftp = p.ftp_watts;
         document.getElementById("rp-ftp").textContent = ftp + " W";
@@ -1467,8 +1471,8 @@ fetch('public/training-data-kathryn.json?v='+Date.now())
       }
       renderZones(p,fitnessCtl);
     }
-    if (d.currentState && d.currentState.bike_ftp)
-      document.getElementById("rp-ftp").textContent = d.currentState.bike_ftp+" W";
+    // currentState.bike_ftp override removed - currentState is withheld from the
+    // public feed. profile.ftp_watts is the published source for this figure.
     if (d.generated) {
       document.getElementById("snapshot-date").textContent = "Live · updated "+d.generated;
       document.getElementById("footer-generated").textContent = "Last updated "+d.generated+" · Source: Intervals.icu";
