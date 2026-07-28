@@ -1062,8 +1062,8 @@ function renderZones(p, fitnessCtl) {
     return null;
   }
   let html = "";
-  const wpkg = p.weight_kg ? (ftp/p.weight_kg).toFixed(2) : null;
-  html += `<h3 style="margin-bottom:8px">Bike &middot; FTP ${ftp} W${wpkg?" &middot; "+wpkg+" W/kg":""}</h3>`;
+  // W/kg removed 28 Jul 2026: it is body weight, published as a ratio.
+  html += `<h3 style="margin-bottom:8px">Bike &middot; FTP ${ftp} W</h3>`;
   [["Z2 Endurance",0.55,0.75],["Sweet Spot",0.88,0.93],["Threshold",0.95,1.05]].forEach(([l,lo,hi]) => {
     html += `<div class="target-row"><span class="target-label">${l}</span><span class="target-val">${Math.round(ftp*lo)}&ndash;${Math.round(ftp*hi)} W</span></div>`;
   });
@@ -1280,11 +1280,62 @@ function renderZones(p, fitnessCtl) {
   if (el) el.innerHTML = html;
 }
 
+
+// ── DATA AVAILABILITY / WITHHELD FIELDS ──────────────────────────────────────
+// Both fetches used to end in a catch with an empty body, so a 404 or a parse
+// error left the page's hard-coded placeholders on screen: FTP 316 W against a
+// real 294 W, and a whole race plan that looked live and was not. Those
+// placeholders are gone and every failure now says so on the page, using the
+// same wording as coach.html.
+function dataUnavailable(what, err) {
+  const msg = (err && err.message) ? err.message : String(err);
+  let bar = document.getElementById("data-status");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "data-status";
+    bar.style.cssText = "margin:0 0 14px;padding:10px 12px;border:1px solid #e8c9c4;"
+      + "background:#fdf3f1;color:#8a3226;font-size:12px;border-radius:6px";
+    document.body.insertBefore(bar, document.body.firstChild);
+  }
+  bar.insertAdjacentHTML("beforeend",
+    "<div>Data unavailable &mdash; " + what + ": " + msg + "</div>");
+  console.error("[data]", what, err);
+}
+
+// Fields the public feed deliberately withholds (see ClaudeCoach/lib/
+// public_sanitise.py). Without this the panels that plotted them render blank,
+// which reads as "nothing logged" rather than "not published".
+const WITHHELD_PANELS = [
+  ["heat-accl-panel", "Heat acclimation"],
+  ["live-flags-content", "Watchdog flags"],
+  ["open-actions-content", "Open actions"]
+];
+function markWithheld() {
+  WITHHELD_PANELS.forEach(function (pair) {
+    const el = document.getElementById(pair[0]);
+    if (!el) return;
+    const host = (el.tagName === "CANVAS") ? el.parentElement : el;
+    if (!host || !host.parentNode || host.dataset.withheld) return;
+    host.dataset.withheld = "1";
+    // Hide, never replace the contents. heat-accl-panel holds a live Chart.js
+    // canvas and the zoomHeatAccl buttons; wiping it would leave Chart.js
+    // driving a detached canvas and the handlers pointing at nothing.
+    host.style.display = "none";
+    const note = document.createElement("p");
+    note.style.cssText = "margin:0;padding:10px 0;font-size:11px;"
+      + "color:var(--muted);font-style:italic";
+    note.innerHTML = pair[1]
+      + " withheld &mdash; health-related field, not published to the public site.";
+    host.parentNode.insertBefore(note, host.nextSibling);
+  });
+}
+markWithheld();
+
 // ── DATA LOADING ─────────────────────────────────────────────────────────────
 
 // Basics from site-data.json
-fetch('site-data.json?v='+Date.now())
-  .then(r=>r.json())
+fetch('public/site-data.json?v='+Date.now())
+  .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(d=>{
     const a = d.athletes && d.athletes.kathryn;
     if (!a) return;
@@ -1305,11 +1356,11 @@ fetch('site-data.json?v='+Date.now())
       document.getElementById("footer-generated").textContent = "Last updated "+d.updated+" · Source: Intervals.icu";
     }
   })
-  .catch(()=>{});
+  .catch(e=>dataUnavailable('summary data', e));
 
 // Full data from training-data-kathryn.json
-fetch('training-data-kathryn.json?v='+Date.now())
-  .then(r=>r.json())
+fetch('public/training-data-kathryn.json?v='+Date.now())
+  .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
   .then(d=>{
     window._td = d;   // expose for the fitness sport selector (setFitnessSport)
     if (d.fitnessThis && window.chartFitness) {
@@ -1426,7 +1477,8 @@ fetch('training-data-kathryn.json?v='+Date.now())
       document.getElementById("footer-generated").textContent = "Last updated "+d.generated+" · Source: Intervals.icu";
     }
   })
-  .catch(()=>{});
+  .catch(e=>dataUnavailable('training data', e))
+  .finally(markWithheld);
 </script>
 </body>
 </html>

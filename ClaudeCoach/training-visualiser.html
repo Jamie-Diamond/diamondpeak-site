@@ -166,7 +166,10 @@
       <div class="stat good"><div class="l">CTL (fitness)</div><div class="v" id="kpi-ctl">76.7</div><div class="d">+3.3 in 10d · target 85 by end-May</div></div>
       <div class="stat warn"><div class="l">TSB (form)</div><div class="v" id="kpi-tsb">−10.5</div><div class="d">Yesterday's 130k ride digesting</div></div>
       <div class="stat good"><div class="l">7d ramp</div><div class="v" id="kpi-ramp">+2.7</div><div class="d">Within +4 cap (ankle)</div></div>
-      <div class="stat"><div class="l">HRV / RHR</div><div class="v" id="kpi-hrv">39 / 56</div><div class="d">HRV stable; RHR slight uptick</div></div>
+      <!-- HRV / RHR tile removed 28 Jul 2026. It carried a hard-coded pair of
+           readings, so it published a resting HR and an HRV value straight from
+           tracked HTML, independently of the data feed. Neither is ever
+           published, so this tile could only be a leak or a blank. -->
     </div>
     <div style="margin-top:14px">
       <h3 id="phase-label">21-week build</h3>
@@ -1673,7 +1676,7 @@ function zoomFitness(days) {
 }
 
 // Live data — fetch training-data.json (written by refresh-site-data.py) and update page
-fetch('./training-data.json')
+fetch('./public/training-data-jamie.json')
   .then(r => r.json())
   .then(d => {
     // KPI bar
@@ -1683,7 +1686,6 @@ fetch('./training-data.json')
       if (g("kpi-ctl"))  g("kpi-ctl").textContent  = k.ctl.toFixed(1);
       if (g("kpi-tsb"))  g("kpi-tsb").textContent  = (k.tsb >= 0 ? "+" : "") + k.tsb.toFixed(1);
       if (g("kpi-ramp")) g("kpi-ramp").textContent = (k.ramp7d >= 0 ? "+" : "") + k.ramp7d.toFixed(1);
-      if (g("kpi-hrv") && k.hrv != null) g("kpi-hrv").textContent = k.hrv + " / " + k.rhr;
     }
     // Fitness chart — update CTL this-season (index 1) and last-season overlay (index 0)
     if (window.chartFitness) {

@@ -35,5 +35,24 @@ ClaudeCoach/telegram/history.json
 # and telegram/bot.py also keep a copy at the ClaudeCoach/ root, which matched
 # nothing and was tracked from 8 May 2026.
 ClaudeCoach/last_activity_state.json
+
+# ClaudeCoach/public/ is the ONLY athlete-derived directory that is deliberately
+# tracked and published. Everything in it is written by lib/public_sanitise.py,
+# which copies across an explicit allow-list of fields and refuses the write if a
+# forbidden key (weight_kg, hrv, rhr, lthr, injury/pain, notes, ...) appears.
+# It is NOT ignored, on purpose: diamondpeak.uk is GitHub Pages built from this
+# repo, so anything the dashboards fetch has to be committed here.
+#
+# Do NOT add a rule for it, and do NOT relax the rules above it. The private
+# full-fat files (ClaudeCoach/training-data*.json, ClaudeCoach/site-data.json,
+# ClaudeCoach/athletes/**) stay ignored and carry deliberately DIFFERENT
+# filenames from their public counterparts, so the two can never be confused:
+#   private  ClaudeCoach/training-data-calum.json      (ignored)
+#   public   ClaudeCoach/public/training-data-calum.json (tracked, sanitised)
+
+# Untracked 28 Jul 2026 - it was tracked in this PUBLIC repo. The directory rule
+# ClaudeCoach/docs-private/ above did not apply because the file was already
+# tracked, and a tracked file beats .gitignore.
+ClaudeCoach/docs-private/review-checklist.md
 .DS_Store
 ClaudeCoach/.bug-reviews.json

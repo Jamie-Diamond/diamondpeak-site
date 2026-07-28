@@ -113,7 +113,7 @@ const ATHLETES = [
   {
     slug:     "jamie",
     name:     "Jamie",
-    dataFile: "training-data.json",
+    dataFile: "public/training-data-jamie.json",
     dashUrl:  "athlete-jamie.html",
     race:     "IM Cervia",
     raceDate: "2026-09-19",
@@ -121,7 +121,7 @@ const ATHLETES = [
   {
     slug:     "kathryn",
     name:     "Kathryn",
-    dataFile: "training-data-kathryn.json",
+    dataFile: "public/training-data-kathryn.json",
     dashUrl:  "athlete-b.html",
     race:     "70.3 Emilia Romagna",
     raceDate: "2026-09-20",
@@ -129,7 +129,7 @@ const ATHLETES = [
   {
     slug:     "calum",
     name:     "Calum",
-    dataFile: "training-data-calum.json",
+    dataFile: "public/training-data-calum.json",
     dashUrl:  "athlete-calum.html",
     race:     "Tour de Stations / Marmottes",
     raceDate: "2026-08-29",
@@ -280,20 +280,23 @@ function renderCard(cfg, data) {
         <div class="val" style="font-size:14px;padding-top:4px"><span class="badge ${rec.cls}">${rec.label}</span></div>
         <div class="sub">TSB + ramp</div>
       </div>
-      ${kpi.hrv != null ? `<div class="kpi">
-        <div class="label">HRV</div>
-        <div class="val">${kpi.hrv}</div>
-        <div class="sub">Latest</div>
-      </div>` : ""}
+      <!-- HRV tile removed 28 Jul 2026. HRV is never published to the public
+           feed, so this tile could only ever have been blank or a leak. -->
     </div>
 
+    <!-- Watchdog flags and open actions are withheld from the public feed
+         (free text that can carry illness / injury detail), so currentState is
+         absent and these panels would silently vanish. Say so instead. -->
     ${flagHtml ? `<div class="flags">${flagHtml}</div>` : ""}
-
     ${actionHtml ? `
     <div style="margin-top:12px">
       <div class="kicker" style="margin-bottom:6px">Open actions</div>
       <div class="actions">${actionHtml}</div>
-    </div>` : ""}
+    </div>` : `
+    <div style="margin-top:12px">
+      <div class="kicker" style="margin-bottom:6px">Flags &amp; open actions</div>
+      <p class="no-data">Withheld &mdash; health-related free text, not published to the public site.</p>
+    </div>`}
 
     <div style="margin-top:12px">
       <div class="kicker" style="margin-bottom:6px">Next 7 days</div>

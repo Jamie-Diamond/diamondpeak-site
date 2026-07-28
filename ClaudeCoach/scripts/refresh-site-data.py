@@ -1,6 +1,23 @@
 #!/usr/bin/env python3
 """
-Pull live data from Intervals.icu and update training-data.json, then push to GitHub.
+Pull live data from Intervals.icu, write the FULL PRIVATE training data to disk,
+then write and publish an ALLOW-LIST SANITISED public variant to GitHub Pages.
+
+Two output tiers, and the distinction matters:
+
+  PRIVATE (gitignored, never published)
+    athletes/jamie/training-data.json        full payload, incl. weight/HRV/RHR
+    training-data-{slug}.json                full payload per other athlete
+
+  PUBLIC (tracked, served at diamondpeak.uk)
+    public/training-data-{slug}.json         allow-list subset only
+
+The public variant is built by lib/public_sanitise.py, which copies across ONLY
+the fields named in its spec. It replaced a deny-list (_strip_private) that
+published everything it had not been told to pop; that is how body weight, HRV
+and resting HR were served publicly from 8 May to 28 Jul 2026. The filenames are
+deliberately different so a private file can never be mistaken for a public one.
+
 Run daily (e.g. 06:00 via launchd/cron). Requires git push credentials (SSH key or keychain).
 """
 import json, subprocess, sys, time, math
@@ -10,7 +27,11 @@ from collections import defaultdict
 
 BASE             = Path(__file__).parent.parent          # ClaudeCoach/
 OUT_FILE         = BASE / "athletes/jamie/training-data.json"  # full private copy (gitignored)
-PUB_FILE         = BASE / "training-data.json"                 # public subset (committed to GitHub Pages)
+PUBLIC_DIR       = BASE / "public"                             # sanitised, tracked, published
+GIT_PUSH         = BASE / "scripts/cc-git-commit-push.sh"
+
+sys.path.insert(0, str(BASE / "lib"))
+from public_sanitise import sanitise_training_data, write_public_json
 PROJECT_DIR      = str(BASE.parent)                        # diamondpeak-site/
 LOCK_FILE        = BASE / ".refresh_site_data.lock"
 CLAUDE           = "/usr/bin/claude"
@@ -355,18 +376,25 @@ def _build_jamie_data(client) -> dict:
     }
 
 
-def _strip_private(data):
-    """Remove personal health data before writing to the public file."""
-    pub = {k: v for k, v in data.items()}
-    pub.pop("sessionLog", None)
-    pub.pop("weightTrend", None)
-    if "currentState" in pub:
-        cs = {k: v for k, v in pub["currentState"].items()}
-        cs.pop("ankle_pain_during", None)
-        cs.pop("ankle_pain_next_morning", None)
-        cs.pop("weight_readings", None)
-        pub["currentState"] = cs
-    return pub
+def write_public_variant(data, slug):
+    """Write the ALLOW-LIST sanitised public file for one athlete.
+
+    Returns the repo-relative path on success, or None (having logged) on
+    failure. Never raises: a sanitiser refusal must not lose the private write
+    that has already happened, and must not publish a partial payload either.
+
+    This replaced _strip_private(), a deny-list that popped four known-bad keys
+    and published the rest. See lib/public_sanitise.py for why an allow-list is
+    the only safe shape here.
+    """
+    out = PUBLIC_DIR / ("training-data-%s.json" % slug)
+    try:
+        write_public_json(sanitise_training_data(data), out)
+    except Exception as exc:
+        log("[%s] PUBLIC WRITE REFUSED - %s" % (slug, exc))
+        return None
+    log("[%s] wrote %s (%d bytes, allow-listed)" % (slug, out.name, out.stat().st_size))
+    return "ClaudeCoach/public/training-data-%s.json" % slug
 
 
 def log(msg):
@@ -1065,6 +1093,20 @@ def _build_athlete_training_data(slug, athlete_cfg):
     out.write_text(json.dumps(data, separators=(",", ":")))
     log(f"[{slug}] training-data-{slug}.json: CTL {kpi.get('ctl')}, {len(recent)} activities")
 
+    # Sanitised public variant. This path had NO stripping of any kind before
+    # 28 Jul 2026 - _strip_private() was only ever applied to jamie - so these
+    # files were published complete with sessionLog (injury/pain, notes,
+    # hydration, nutrition), kpi.hrv, kpi.rhr, profile.weight_kg and
+    # profile.lthr. Every athlete now goes through the same allow-list.
+    pub_rel = write_public_variant(data, slug)
+    if pub_rel:
+        _PUBLISHED.append(pub_rel)
+
+
+# Repo-relative paths of the sanitised public files written this run. Only these
+# are ever staged; it is populated exclusively by write_public_variant().
+_PUBLISHED = []
+
 
 def acquire_lock():
     if LOCK_FILE.exists() and time.time() - LOCK_FILE.stat().st_mtime < 600:
@@ -1110,12 +1152,15 @@ def main():
             log(f"Post-processing warning: {e} — continuing without extra fields")
         OUT_FILE.write_text(json.dumps(data, separators=(",", ":")))
 
-        # Write public version (strips personal health data) to ClaudeCoach/ for GitHub Pages
-        try:
-            PUB_FILE.write_text(json.dumps(_strip_private(data), separators=(",", ":")))
-            log(f"Wrote public training-data.json (sessionLog + health fields stripped)")
-        except Exception as e:
-            log(f"Public file write warning: {e}")
+        # Sanitised public variant for GitHub Pages. The old root-level
+        # ClaudeCoach/training-data.json write is gone: it was a deny-list
+        # output living at a path whose name implied it was safe, which is
+        # exactly the confusion that kept the leak invisible for 11 weeks.
+        # Nothing on the box reads it (only HTTP did, and the dashboards now
+        # fetch public/ instead). The stale file is left on disk untouched.
+        pub_rel = write_public_variant(data, "jamie")
+        if pub_rel:
+            _PUBLISHED.append(pub_rel)
 
         # Refresh per-athlete training data for other athletes (using IcuClient directly)
         if ATHLETES_CONFIG.exists():
@@ -1131,22 +1176,27 @@ def main():
             except Exception as e:
                 log(f"athletes.json load error: {e}")
 
-        # No git commit/push. training-data.json and training-data-{slug}.json
-        # carry body weight, HRV, resting HR, threshold power/pace and 120 days of
-        # fitness history. They were staged and pushed here from 8 May 2026 into a
-        # repository that is public, and GitHub Pages served them at
-        # diamondpeak.uk/ClaudeCoach/training-data*.json. They are now gitignored,
-        # so `git add` would refuse them anyway; removing the staging call as well
-        # means the publish intent is gone from the source, not just blocked by one
-        # line of .gitignore.
+        # Publish ONLY the sanitised public files. Every path staged here comes
+        # from write_public_variant(), so it is a public/ path that passed the
+        # allow-list and the forbidden-key tripwire. The private files remain
+        # gitignored, and cc-git-commit-push.sh stages by explicit path only
+        # (never `git add -A`), so an untracked private file cannot be swept in.
         #
-        # The files are still written to disk above, which is what the private
-        # nightly mirror (scripts/sync-private-repo.sh) picks up. The consequence
-        # is that the athlete and coach dashboards have no data source over HTTP:
-        # they fetch these files as same-origin relative paths, and the only web
-        # server in front of them is GitHub Pages built from this public repo.
-        # Restoring them needs a hosting decision (serve from a non-public origin)
-        # that is deliberately not taken here.
+        # There is no private-origin option: diamondpeak.uk IS this public repo
+        # via GitHub Pages, so anything the dashboards fetch must be committed
+        # here. Publication is therefore gated on the sanitiser, not on hosting.
+        if _PUBLISHED:
+            try:
+                r = subprocess.run(
+                    [str(GIT_PUSH), "refresh: sanitised public training data"] + _PUBLISHED,
+                    cwd=PROJECT_DIR, capture_output=True, text=True, timeout=300)
+                log(f"publish rc={r.returncode} {(r.stdout or '').strip()[-300:]}")
+                if r.returncode != 0:
+                    log(f"publish stderr: {(r.stderr or '').strip()[-300:]}")
+            except Exception as e:
+                log(f"publish failed (non-fatal): {e}")
+        else:
+            log("Nothing sanitised successfully - published nothing.")
         log("Done.")
 
     finally:
