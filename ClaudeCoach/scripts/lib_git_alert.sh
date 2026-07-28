@@ -109,15 +109,18 @@ git_unlock() {
 # reaches origin through this function, so this is the one place that makes the
 # deny-list load-bearing. Fail CLOSED: a missing/failing gate script blocks the
 # push. The gate never prints a secret value.
+# Reported on STDOUT, not stderr: git_lock below does `exec 9>... 2>/dev/null`,
+# which silences stderr for the rest of the shell, and callers lock before they
+# push - a >&2 message here would never reach the log.
 git_push_retry() {
   local job="$1" mode="${2:-rebase}" stash_before stash_after
   local gate="$CC_BASE/scripts/check-no-public-secrets.sh"
   if [ ! -x "$gate" ]; then
-    echo "[$job] BLOCKED: secret gate missing or not executable at $gate" >&2
+    echo "[$job] BLOCKED: secret gate missing or not executable at $gate"
     return 1
   fi
   if ! "$gate" tree; then
-    echo "[$job] BLOCKED by secret gate - refusing to push (see [secret-gate] lines above)" >&2
+    echo "[$job] BLOCKED by secret gate - refusing to push (see [secret-gate] lines above)"
     return 1
   fi
   if git push origin main; then return 0; fi

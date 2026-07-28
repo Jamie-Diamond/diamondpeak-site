@@ -20,6 +20,12 @@
 # pattern NAME only. sync-private-repo.sh's scan echoes the matching line into
 # sync-private.log, which is a credential-to-logfile pipe; do not copy that half.
 #
+# EVERYTHING IS REPORTED ON STDOUT, NOT STDERR, on purpose: lib_git_alert.sh's
+# git_lock runs `exec 9>"$GA_LOCK" 2>/dev/null`, which permanently redirects
+# stderr for the rest of the calling shell, and callers take that lock BEFORE
+# they push. Anything written to stderr from here would vanish, leaving a blocked
+# push with no stated reason. Cron logs stdout, so stdout is visible and safe.
+#
 # Usage:
 #   check-no-public-secrets.sh tree     # default - scan the committed HEAD tree
 #   check-no-public-secrets.sh staged   # scan the index (pre-commit hook)
@@ -29,7 +35,7 @@ set -uo pipefail
 MODE="${1:-tree}"
 
 if ! REPO="$(git rev-parse --show-toplevel 2>/dev/null)"; then
-  echo "[secret-gate] BLOCK: not inside a git repo" >&2
+  echo "[secret-gate] BLOCK: not inside a git repo"
   exit 1
 fi
 
@@ -74,7 +80,7 @@ while IFS= read -r path; do
   [ -n "$path" ] || continue
   for d in "${DENY_EXACT[@]}"; do
     if [ "$path" = "$d" ]; then
-      echo "[secret-gate] BLOCK: deny-listed path present ($MODE): $path" >&2
+      echo "[secret-gate] BLOCK: deny-listed path present ($MODE): $path"
       FAIL=1
     fi
   done
@@ -82,7 +88,7 @@ while IFS= read -r path; do
     # shellcheck disable=SC2254
     case "$path" in
       $g)
-        echo "[secret-gate] BLOCK: deny-listed pattern '$g' matched ($MODE): $path" >&2
+        echo "[secret-gate] BLOCK: deny-listed pattern '$g' matched ($MODE): $path"
         FAIL=1
         ;;
     esac
@@ -124,16 +130,16 @@ while IFS= read -r path; do
     name="${entry%%|*}"
     re="${entry#*|}"
     if printf '%s' "$content" | grep -Eq "$re"; then
-      echo "[secret-gate] BLOCK: '$name' shape found in $path (value not printed)" >&2
+      echo "[secret-gate] BLOCK: '$name' shape found in $path (value not printed)"
       FAIL=1
     fi
   done
 done <<< "$(scan_paths)"
 
 if [ "$FAIL" -ne 0 ]; then
-  echo "[secret-gate] REFUSING to proceed against $REMOTE." >&2
-  echo "[secret-gate] Untrack the file (git rm --cached <path>), keep it on disk," >&2
-  echo "[secret-gate] and add a matching .gitignore rule. Never 'git add -f' it." >&2
+  echo "[secret-gate] REFUSING to proceed against $REMOTE."
+  echo "[secret-gate] Untrack the file (git rm --cached <path>), keep it on disk,"
+  echo "[secret-gate] and add a matching .gitignore rule. Never 'git add -f' it."
   exit 1
 fi
 
