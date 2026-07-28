@@ -30,5 +30,10 @@ ClaudeCoach/training-data.json
 ClaudeCoach/training-data-*.json
 ClaudeCoach/site-data.json
 ClaudeCoach/telegram/history.json
+# Same root-vs-subtree gap: the rule above this block is
+# ClaudeCoach/athletes/jamie/last_activity_state.json, but activity-watcher.py
+# and telegram/bot.py also keep a copy at the ClaudeCoach/ root, which matched
+# nothing and was tracked from 8 May 2026.
+ClaudeCoach/last_activity_state.json
 .DS_Store
 ClaudeCoach/.bug-reviews.json

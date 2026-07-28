@@ -71,23 +71,18 @@ def build_athlete_entry(slug: str, cfg: dict, td: dict) -> dict:
     }
 
 
-def git_push():
-    """Commit + push site-data.json through the shared git helper.
-
-    Was a bespoke add/commit/fetch/stash/rebase/push block whose only failure
-    signal was "Git push failed" in public-data.log — which is exactly how the
-    06:00 and 08:00 push failures on 27 Jul 2026 escaped alerting altogether.
-    lib/git_sync.py is the same path activity-watcher.py and daily-prescription.py
-    already use, and brings the repo-wide lock, one bounded push retry (so a
-    lost race self-heals silently) and a LOUD failure — standing flag file, ops
-    digest entry and an immediate Telegram — when a push really is broken."""
-    sys.path.insert(0, str(BASE / "ClaudeCoach/lib"))
-    from git_sync import sync_commit_push
-    return sync_commit_push(
-        ["ClaudeCoach/site-data.json"],
-        f"data: refresh public site-data {date.today()}",
-        script="refresh-public-data",
-    )
+# The commit + push of site-data.json was removed on 28 Jul 2026. It was never a
+# safe public payload: it keys on athlete slug and carries first name, race name,
+# race date, current ctl/atl/tsb and a rolling 120-day ctl history per athlete —
+# named individuals with dated fitness data, which is exactly the "identifying
+# performance metrics" overview.html used to promise it did not contain. It was
+# pushed here from 11 May 2026 and served publicly by GitHub Pages.
+#
+# site-data.json is still written to disk below; nothing is published from it.
+# The three athlete dashboards fetch it as a same-origin relative path, so they
+# lose their countdown/CTL panel until the data is served from a non-public
+# origin. The public homepage (index.html) does not read it, so diamondpeak.uk
+# itself is unaffected.
 
 
 def main():
@@ -114,11 +109,7 @@ def main():
     }
     PUBLIC.write_text(json.dumps(pub, separators=(",", ":")))
     log(f"Wrote {PUBLIC} with {len(athletes_out)} athlete(s): {list(athletes_out)}")
-
-    if git_push():
-        log("Pushed site-data.json to GitHub Pages")
-    else:
-        log("Git push failed — site-data.json updated locally only")
+    log("Not published — site-data.json is gitignored and no longer pushed (see note above)")
 
 
 if __name__ == "__main__":
