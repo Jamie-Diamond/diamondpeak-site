@@ -148,3 +148,55 @@ class TestReadOnly:
         base = _rules(tmp_path, "a", LONG_RUN_WED, LONG_RUN_WED)
         out = rcf.check_athlete("a", base, events=[_ev(1, "Run", "Long run")])
         assert len(out) == 1
+
+
+CALUM_WEEKDAY_ONLY = "[perm] All cycling training on weekdays only - no weekend rides."
+CALUM_SAT_EXCEPTION = ("[expires:2026-09-05] Saturday long rides permitted as part of the "
+                       "Tour de Stations build - exception to the weekday-only rule for the "
+                       "weekly long Z2 endurance session.")
+
+
+class TestAxisAConfigExpiry:
+    """The CONFIG side of the [expires:] mechanism. Calum's dated Saturday exception had
+    been encoded by widening bike_days with nothing to revert it, so the exception was
+    permanent and the weekday-only rule was silently lost."""
+
+    WIDENED = {"bike_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]}
+    TAGGED = dict(WIDENED, bike_days_expires={"Sat": "2026-09-05"})
+
+    def _out(self, tmp_path, day_rules, today=date(2026, 7, 28)):
+        base = _rules(tmp_path, "calum", CALUM_WEEKDAY_ONLY, CALUM_SAT_EXCEPTION)
+        claims = rcf.day_claims((base / "athletes" / "calum" /
+                                 "persistent-rules.md").read_text())
+        return rcf.check_config(claims, day_rules, today=today)
+
+    def test_an_undated_config_day_for_a_dated_rule_is_hard(self, tmp_path):
+        codes = [f["code"] for f in self._out(tmp_path, self.WIDENED)]
+        assert "config_undated_exception" in codes
+        f = next(f for f in self._out(tmp_path, self.WIDENED)
+                 if f["code"] == "config_undated_exception")
+        assert f["severity"] == "hard"
+        assert "bike_days_expires" in f["detail"]      # tells the coach what to write
+        assert "2026-09-05" in f["detail"]
+
+    def test_tagging_it_clears_both_axis_a_findings(self, tmp_path):
+        # …including config_wider: a day held open by a LIVE sidecar is the mechanism
+        # working, and reporting it would punish correct use.
+        assert self._out(tmp_path, self.TAGGED) == []
+
+    def test_a_date_mismatch_is_soft(self, tmp_path):
+        dr = dict(self.WIDENED, bike_days_expires={"Sat": "2026-10-01"})
+        out = self._out(tmp_path, dr)
+        assert [(f["code"], f["severity"]) for f in out] == \
+               [("config_exception_date_mismatch", "soft")]
+
+    def test_a_stale_sidecar_is_reported_only_after_it_expires(self, tmp_path):
+        # Before the date: silent. After it: a soft "delete this" — so the finding can
+        # never be permanently red.
+        assert not any(f["code"] == "config_exception_expired"
+                       for f in self._out(tmp_path, self.TAGGED))
+        late = self._out(tmp_path, self.TAGGED, today=date(2026, 9, 6))
+        # One line, not two: config_wider would say the same thing less precisely.
+        assert [f["code"] for f in late] == ["config_exception_expired"]
+        assert "delete it" in late[0]["detail"]
+

@@ -39,6 +39,7 @@ from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 import plan_tools as pt                                        # noqa: E402
 from plan_builder import _weekly_tss_cap                       # noqa: E402
 import ops_log                                                 # noqa: E402
+import day_overrides                                           # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
 # Known-baseline signatures (committed, athlete-slug keyed). This check currently
@@ -124,8 +125,16 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
     # so "not checked" never reads as "checked and passed". Never counts toward
     # hard_fail — a skip is not a failure — but IS counted in `ok`, same as the
     # other soft/warn categories below: a run with only skips is visibly not clean.
+    # DIRECTED is a fourth non-failure category, alongside SKIPPED: a day_rules
+    # deviation the COACH ASKED FOR (athletes/<slug>/reference/day-rules-overrides.json).
+    # Reported, never hard — day_rules describe the normal pattern and the coach
+    # overrides them conversationally. An UNDIRECTED deviation is still a hard RULES
+    # failure, and DRIFT_THRESHOLD directed hits on one weekday raise a hard
+    # day_rules_drifted. Counted in `ok`, so a run carrying overrides is visibly not
+    # clean, and listed in plan-audit-baseline.json (a populated category with no
+    # baseline entry alerts every run — the 28 Jul SKIPPED bug).
     fails = {"STRUCTURE": [], "FUELLING": [], "LONG_RIDE": [], "WEEKLY_LOAD": [], "RULES": [],
-             "SKIPPED": []}
+             "SKIPPED": [], "DIRECTED": []}
 
     for e in events:
         sport = e.get("type") or ""
@@ -190,7 +199,8 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                                   run_protocol=cfg.get("run_protocol")).get("weekly_min_cap")
         except Exception:
             run_cap = None
-        rep = validate_week(wk_evs, ws, day_rules=dr, ctl_today=ctl,
+        rep = validate_week(wk_evs, ws, day_rules=dr,
+                            day_overrides=day_overrides.load(slug, BASE), ctl_today=ctl,
                             weekly_tss_cap=_weekly_tss_cap(slug, phase),
                             weekly_tss_floor=tss_floor,
                             run_week_min_cap=run_cap,
@@ -207,7 +217,9 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
         for v in viols:
             # Prefix match: the distribution check now emits per-zone ceiling codes and a
             # "_persistent" escalation alongside plain intensity_distribution.
-            if v.severity == "hard" or v.code.startswith("intensity_distribution"):
+            if v.code.endswith("_directed_day"):
+                fails["DIRECTED"].append(f"week {ws}: {v}")
+            elif v.severity == "hard" or v.code.startswith("intensity_distribution"):
                 fails["RULES"].append(f"week {ws}: {v}")
         # rep.skipped covers EVERY hard check validate_week couldn't run this week
         # (weekly_tss_cap/floor, ctl_ramp, run_weekly_volume, intensity_distribution

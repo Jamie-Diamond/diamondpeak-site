@@ -23,6 +23,18 @@ Five axes, each independently reportable:
   E expiry_conflict   a dated [expires:] exception contradicting a [perm] rule in the same
                       file — the two are both live, and only one can be true.
 
+Axis A also polices the CONFIG side of the [expires:] mechanism (28 Jul 2026). Calum's
+[perm] rule says all cycling on weekdays only; an [expires:2026-09-05] rule permits
+Saturday long rides for the Tour de Stations build; his day_rules.bike_days was widened
+to include Sat with nothing to revert it, so the dated exception had silently become
+permanent and the general rule was lost. day_rules now carries a `<key>_expires` sidecar
+({"bike_days_expires": {"Sat": "2026-09-05"}}) that validate_plan honours per event date,
+and axis A reports the two ways it can rot: a dated prose exception whose config day has
+NO expiry (config_undated_exception, hard — the exception is now permanent), and a
+sidecar whose date has PASSED so the day is inert and should be deleted
+(config_exception_expired, soft). Neither can be permanently red: the first clears when
+the sidecar is added, the second only starts firing after the expiry date.
+
 CLI (read-only):
   python3 lib/rule_conflicts.py --base-dir <dir> --all              # live calendar read
   python3 lib/rule_conflicts.py --base-dir <dir> --slug jamie --no-calendar
@@ -186,8 +198,25 @@ def _finding(axis, code, severity, detail, rule="", cue=""):
 
 
 # ---------------------------------------------------------------- axis A ----
-def check_config(claims: list, day_rules: dict | None) -> list:
+def _sidecar(day_rules: dict | None, key: str) -> dict:
+    """{weekday_index: expiry date} from a `<key>_expires` sidecar. Unparseable
+    entries are dropped, which leaves the day permanently permitted — the same
+    reading validate_plan._dated_day_rules takes, so the two cannot disagree."""
+    out = {}
+    for name, until in ((day_rules or {}).get(f"{key}_expires") or {}).items():
+        idx = _DAY_CANON.get(str(name)[:3].lower())
+        if idx is None:
+            continue
+        try:
+            out[idx] = date.fromisoformat(str(until)[:10])
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def check_config(claims: list, day_rules: dict | None, today: date | None = None) -> list:
     out = []
+    today = today or date.today()
     for c in claims:
         if c["expires"]:
             continue
@@ -215,11 +244,56 @@ def check_config(claims: list, day_rules: dict | None) -> list:
         if c["exclusive"]:
             extra = allowed_idx - c["days"] if c["days"] else \
                     allowed_idx & {5, 6} if c["weekday_only"] else set()
+            # A day held open by a dated sidecar is not a config gap — while the date
+            # is live it is the mechanism working (reporting it would punish the coach
+            # for using the tag), and once it has passed `config_exception_expired`
+            # below says so more precisely. One line per problem, either way.
+            extra = extra - set(_sidecar(day_rules, key))
             if extra and c["weekday_only"]:
                 out.append(_finding("A", "config_wider", "soft",
                                     f"prose limits {c['sport']} to weekdays; day_rules.{key} "
                                     f"permits {sorted(_dayname(d) for d in extra)}",
                                     c["rule"]))
+
+    # The CONFIG side of the [expires:] mechanism.
+    for c in claims:
+        if not c["expires"]:
+            continue
+        key = SPORTS[c["sport"]][0]
+        allowed = (day_rules or {}).get(key)
+        if not allowed:
+            continue
+        allowed_idx = {_DAY_CANON[d[:3].lower()] for d in allowed
+                       if d[:3].lower() in _DAY_CANON}
+        sc = _sidecar(day_rules, key)
+        for d in sorted(c["days"] & allowed_idx):
+            if d not in sc:
+                out.append(_finding(
+                    "A", "config_undated_exception", "hard",
+                    f"prose permits {_dayname(d)} for {c['sport']} only until "
+                    f"{c['expires']}, but day_rules.{key} carries it with no "
+                    f"{key}_expires entry — the time-boxed exception is now PERMANENT "
+                    f"and the general rule is silently lost. Add "
+                    f'"{key}_expires": {{"{_dayname(d)}": "{c["expires"]}"}}',
+                    c["rule"]))
+            elif sc[d].isoformat() != c["expires"]:
+                out.append(_finding(
+                    "A", "config_exception_date_mismatch", "soft",
+                    f"day_rules.{key}_expires ends {_dayname(d)} for {c['sport']} on "
+                    f"{sc[d].isoformat()} but the prose rule expires {c['expires']}",
+                    c["rule"]))
+
+    # An expired sidecar: validate_plan already ignores the day, so nothing is
+    # over-permitted — but a stale line in the config is how the next one gets
+    # forgotten. Fires only AFTER the date, so it can never be permanently red.
+    for key in (k for s_ in SPORTS.values() for k in (s_[0],)):
+        for d, until in sorted(_sidecar(day_rules, key).items()):
+            if until < today:
+                out.append(_finding(
+                    "A", "config_exception_expired", "soft",
+                    f"day_rules.{key}_expires: {_dayname(d)} expired {until.isoformat()} "
+                    f"— the day is already inert in validate_plan; delete it from "
+                    f"{key} and drop the sidecar entry"))
     return out
 
 

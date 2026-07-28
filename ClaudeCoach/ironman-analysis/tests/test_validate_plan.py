@@ -419,3 +419,119 @@ class TestEscalateRepeats:
         out, streaks = escalate_repeats(
             [Violation(code="wrong_day", severity="hard", detail="x")], {})
         assert streaks == {} and len(out) == 1
+
+
+class TestDirectedDeviations:
+    """day_rules are GUIDELINES: a coach-DIRECTED off-pattern session is a soft
+    advisory, an UNDIRECTED one is still a hard breach, and overrides cannot be used
+    to move the pattern by stealth."""
+
+    WED_SWIM = [_ev("2026-06-17", "Swim", 35)]                 # Wed, not in swim_days
+    DIRECTED = {"swim:2026-06-17": "Coach-directed in Telegram, 2026-06-15."}
+
+    def test_undirected_deviation_is_still_hard(self):
+        r = validate_week(self.WED_SWIM, WEEK, day_rules=DAY_RULES)
+        assert [(v.code, v.severity) for v in r.violations] == [("swim_forbidden_day", "hard")]
+
+    def test_directed_deviation_downgrades_but_stays_visible(self):
+        r = validate_week(self.WED_SWIM, WEEK, day_rules=DAY_RULES,
+                          day_overrides=self.DIRECTED)
+        assert [(v.code, v.severity) for v in r.violations] == [("swim_directed_day", "soft")]
+        # the reason it was allowed must be ON the finding, not just in a register
+        assert "COACH-DIRECTED" in r.violations[0].detail
+        assert "Telegram" in r.violations[0].detail
+
+    def test_an_override_is_dated_so_it_cannot_excuse_another_day(self):
+        # Same sport, a different Wednesday: the register entry must not travel.
+        r = validate_week([_ev("2026-06-24", "Swim", 35)], date(2026, 6, 22),
+                          day_rules=DAY_RULES, day_overrides=self.DIRECTED)
+        assert [v.code for v in r.violations] == ["swim_forbidden_day"]
+
+    def test_an_override_does_not_excuse_a_different_sport_that_day(self):
+        r = validate_week(self.WED_SWIM + [_ev("2026-06-17", "Ride", 90)], WEEK,
+                          day_rules=DAY_RULES, day_overrides=self.DIRECTED)
+        assert sorted(v.code for v in r.violations) == ["ride_forbidden_day",
+                                                       "swim_directed_day"]
+
+    def test_ride_family_shares_one_override_key(self):
+        # bike_days covers Ride/VirtualRide/GravelRide, so the register family is "bike".
+        r = validate_week([_ev("2026-06-17", "GravelRide", 90)], WEEK, day_rules=DAY_RULES,
+                          day_overrides={"bike:2026-06-17": "Coach-directed."})
+        assert [v.code for v in r.violations] == ["gravelride_directed_day"]
+
+    def test_a_malformed_register_grants_nothing(self):
+        # Fails CLOSED: no key can be silenced by a broken or empty entry.
+        for bad in ({"swim:2026-06-17": ""}, {"swim:2026-06-17": True},
+                    {"swim-2026-06-17": "x"}, {"badsport:2026-06-17": "x"},
+                    {"swim:17/06/2026": "x"}, None):
+            r = validate_week(self.WED_SWIM, WEEK, day_rules=DAY_RULES, day_overrides=bad)
+            assert [v.code for v in r.violations] == ["swim_forbidden_day"], bad
+
+    def test_repeated_overrides_on_one_weekday_hard_fail_as_drift(self):
+        # Three directed Wednesday swims inside the window is the PATTERN, not an
+        # exception — the audit must not be able to go quiet on the whole category.
+        reg = {f"swim:{d}": "Coach-directed."
+               for d in ("2026-06-03", "2026-06-10", "2026-06-17")}
+        r = validate_week(self.WED_SWIM, WEEK, day_rules=DAY_RULES, day_overrides=reg)
+        drift = [v for v in r.violations if v.code == "day_rules_drifted"]
+        assert len(drift) == 1 and drift[0].severity == "hard"
+        assert "swim_days" in drift[0].detail          # names the remedy
+        assert "Wed" in drift[0].detail
+
+    def test_two_overrides_is_not_yet_drift(self):
+        reg = {f"swim:{d}": "Coach-directed." for d in ("2026-06-10", "2026-06-17")}
+        r = validate_week(self.WED_SWIM, WEEK, day_rules=DAY_RULES, day_overrides=reg)
+        assert not any(v.code == "day_rules_drifted" for v in r.violations)
+
+    def test_drift_ages_out_of_the_window(self):
+        # Same three, but long enough ago that the streak has lapsed.
+        reg = {f"swim:{d}": "Coach-directed."
+               for d in ("2026-04-01", "2026-04-08", "2026-04-15")}
+        r = validate_week(self.WED_SWIM, WEEK, day_rules=DAY_RULES, day_overrides=reg)
+        assert not any(v.code == "day_rules_drifted" for v in r.violations)
+
+
+class TestDatedDayRuleExceptions:
+    """`<key>_expires` — a time-boxed day permission that reverts on its own."""
+
+    CALUM = {"bike_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+             "bike_days_expires": {"Sat": "2026-09-05"}}
+    SAT_RIDE = [_ev("2026-06-20", "Ride", 120)]                # Sat inside the window
+
+    def test_a_live_dated_exception_permits_the_day(self):
+        r = validate_week(self.SAT_RIDE, WEEK, day_rules=self.CALUM)
+        assert not any("_day" in v.code for v in r.violations)
+
+    def test_it_reverts_by_itself_once_the_date_passes(self):
+        dr = dict(self.CALUM, bike_days_expires={"Sat": "2026-06-19"})
+        r = validate_week(self.SAT_RIDE, WEEK, day_rules=dr)
+        assert [(v.code, v.severity) for v in r.violations] == [("ride_forbidden_day", "hard")]
+        # the message must name the mechanism, not claim Sat was never permitted
+        assert "bike_days_expires" in r.violations[0].detail
+        assert "EXPIRED" in r.violations[0].detail
+
+    def test_expiry_is_judged_per_event_date_not_per_run_date(self):
+        # A week that starts before the expiry and ends after it: only the late
+        # session breaches, so future weeks audit correctly.
+        dr = dict(self.CALUM, bike_days_expires={"Sat": "2026-06-20"})
+        r = validate_week([_ev("2026-06-20", "Ride", 90), _ev("2026-06-27", "Ride", 90)],
+                          WEEK, day_rules=dr)
+        assert [v.code for v in r.violations] == []           # 27th is outside the week
+        r2 = validate_week([_ev("2026-06-27", "Ride", 90)], date(2026, 6, 22), day_rules=dr)
+        assert [v.code for v in r2.violations] == ["ride_forbidden_day"]
+
+    def test_the_sidecar_is_inert_for_a_parser_that_ignores_it(self):
+        # config/athletes.json is hand-edited on the live box and is NOT deployed with
+        # the code, so the encoding had to be a no-op for the running parser: a
+        # dict-valued key is skipped by _normalise_day_rules.
+        from primitives.validate_plan import _normalise_day_rules
+        assert _normalise_day_rules(self.CALUM) == {"bike_days": {0, 1, 2, 3, 4, 5}}
+
+    def test_a_garbled_expiry_leaves_the_day_permitted(self):
+        # Never invent a NEW failure out of a typo: drop the entry, keep today's
+        # behaviour.
+        for bad in ({"Sat": "not-a-date"}, {"Sat": None}, {"Caturday": "2026-09-05"}, []):
+            dr = dict(self.CALUM, bike_days_expires=bad)
+            r = validate_week(self.SAT_RIDE, WEEK, day_rules=dr)
+            assert not any("_day" in v.code for v in r.violations), bad
+

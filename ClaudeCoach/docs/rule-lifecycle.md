@@ -65,7 +65,11 @@ invalid plan, the rule is a wish. **At least 24 of the 43 auto-classified constr
 enforcing code path** - a lower bound, for the reason below. The enforceable surface today is
 small and entirely known:
 
-* `day_rules.{swim,bike,run}_days` -> `validate_plan:{sport}_forbidden_day`
+* `day_rules.{swim,bike,run}_days` -> `validate_plan:{sport}_forbidden_day` (hard) or
+  `validate_plan:{sport}_directed_day` (soft, when the deviation is in the athlete's
+  override register — see *Day rules are guidelines* below)
+* `day_rules.{swim,bike,run}_days_expires` -> the same two checks, per event date
+* the override register -> `validate_plan:day_rules_drifted`
 * `day_rules.strength_max` -> `validate_plan:strength_over_cap`
 * `max_ctl_ramp_per_week` -> `validate_plan:ctl_ramp`
 * blueprint `tss_ceiling` / `required_tss` -> `validate_plan:weekly_tss_cap|weekly_tss_floor`
@@ -90,6 +94,117 @@ cap check strictly weaker than the rule mapped to it, so treat 24 as the floor.
 it cannot, it is either retyped as philosophy (honest: guidance the model may miss) or it
 arrives with the config key and check that would enforce it. No third option, or the count of
 unenforceable constraints only grows.
+
+## Day rules are guidelines: overrides and dated exceptions (28 Jul 2026)
+
+The coach's ruling, verbatim: **"I told it this week to swim on wed, so we swim on wed,
+rules are guidelines."** `day_rules` describe an athlete's normal weekly pattern and the
+coach overrides them conversationally, so a `constraint` typed off `day_rules` is not an
+invariant. Two mechanisms make that true in code without giving up the signal — a
+generator that drifts off the pattern with nobody asking is a genuine defect, and
+`day_rules` are what catch it.
+
+### 1. Per-session override register
+
+`athletes/<slug>/reference/day-rules-overrides.json`, modelled on the reviewed-exception
+register `rules-lint-accepted.json` that sits beside it: a flat map of stable id -> prose
+recording what was accepted and when. **It is under `athletes/`, which is gitignored, so
+it never appears in a diff** — this schema is its documentation.
+
+```json
+{
+  "swim:2026-07-29": "Coach-directed: the coach instructed a Wednesday swim for the week
+                      of 27 Jul 2026 (\"rules are guidelines\"). day_rules.swim_days stays
+                      [Tue, Thu] because that is what the athlete actually does — Tue x7,
+                      Thu x7, Wed x0 since 1 Jun. Recorded 2026-07-28."
+}
+```
+
+* Key = `<family>:<YYYY-MM-DD>`; family in `{swim, bike, run}` (the `day_rules` key minus
+  `_days`, so Ride/VirtualRide/GravelRide share one). Value = free prose naming who
+  directed it and when.
+* A matching deviation becomes a SOFT `{sport}_directed_day` carrying the note in its
+  detail, in `plan_audit`'s `DIRECTED` category. No match = HARD `{sport}_forbidden_day`,
+  exactly as before.
+* Fails CLOSED. A missing, corrupt, mistyped or empty-note entry grants nothing, so no
+  check can be silenced by a broken file.
+* **Granularity is per session, deliberately.** Per WEEK lets a second, undirected move
+  hide behind the directed one. A STANDING amendment with no end date is precisely how
+  Calum's Saturday exception became permanent — it recreates the problem. A dated key is
+  also self-expiring: an entry for a past date can never excuse a future deviation.
+* **Anti-drift.** `DRIFT_THRESHOLD` (3) directed hits on the same sport+weekday inside
+  `DRIFT_WINDOW_DAYS` (28) raise a HARD `day_rules_drifted` naming
+  `day_rules.<family>_days` as the remedy. So the register cannot be used to move the
+  pattern by stealth, and the audit cannot go quiet on the whole category. It ages out on
+  its own, so it can never be permanently red.
+
+**Writers.** `lib/day_overrides.record()` is the whole write surface, plus a CLI:
+
+```
+python3 lib/day_overrides.py --base-dir ClaudeCoach --slug jamie --list
+python3 lib/day_overrides.py --base-dir ClaudeCoach --slug jamie \
+    --sport swim --date 2026-07-29 --note "Coach-directed in Telegram, 27 Jul 2026."
+```
+
+**FOLLOW-UP OWED — the bot side.** The instructions arrive in Telegram, and today the
+register is filled in by hand, so an override that is never typed up still reads as a
+breach. `telegram/bot.py` needs: when a coach message re-days a session (the same
+intent that already triggers a replan/move), call
+`day_overrides.record(slug, BASE, sport, session_date, note)` with the verbatim
+instruction and the message date as the note, before pushing the moved event. One call
+site, no new format, no schema decision left open. Until then the coach runs the CLI, or
+edits the JSON.
+
+### 2. Dated exceptions in config: `<key>_expires`
+
+The `[expires:DATE]` tag already time-boxes a RULE; nothing time-boxed a CONFIG day, so
+Calum's `[expires:2026-09-05]` Saturday-long-ride exception was encoded by adding `Sat`
+to `bike_days` with nothing to revert it. The dated exception became permanent and the
+`[perm]` "all cycling on weekdays only" rule was silently lost.
+
+```json
+"bike_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+"bike_days_expires": { "Sat": "2026-09-05" }
+```
+
+* `validate_plan` permits the day for sessions **up to and including** that date, judged
+  per EVENT date — so the module stays pure and future weeks audit correctly.
+* **A sidecar is a dict, and `_normalise_day_rules` skips non-list values, so this
+  encoding is a NO-OP for any code path that has not been taught it.** That was the
+  deciding constraint: `config/athletes.json` is hand-edited on the live box and is not
+  deployed with the code, so an inline `"Sat [expires:...]"` tag would have been parsed by
+  the running validator as an unknown day, dropped Saturday entirely, and hard-failed
+  Calum's long ride the moment the config was saved. Verified on live data: the audit
+  signature for all three athletes is byte-identical before and after the config edit
+  under unmodified code.
+* It **reverts on its own** (the day goes back to forbidden, with a detail naming
+  `<key>_expires` and saying the exception EXPIRED — not a false claim that the day was
+  never permitted).
+* It is **visible while live** in the config the coach edits, and it **cannot be
+  forgotten**: `rule_conflicts` axis A raises `config_undated_exception` (hard) when a
+  dated prose rule's day sits in `day_rules` with no sidecar, and
+  `config_exception_expired` (soft, "delete it") once a sidecar's date has passed. Both
+  are self-clearing, so neither can be permanently red.
+* A garbled date or day name is dropped, leaving the day permitted — a typo must never
+  invent a new failure.
+* **The day must ALSO be listed in `<key>_days`.** The sidecar NARROWS an existing
+  permission; it never grants one. That is exactly what makes the encoding inert for code
+  that has not been taught about it. A sidecar naming a day the list omits is a silent
+  no-op, and axis A cannot see it either.
+
+### Known rough edges (documented, not fixed)
+
+* `_drift_violations` runs once per audited WEEK, and `plan_audit` audits two, so the run
+  on which a third directed hit lands emits `day_rules_drifted` TWICE and `RULES` jumps by
+  two. The alert is correct; the duplication is not. The natural fix is the `if wk == 0`
+  gate `plan_audit` already uses for the streak store — deliberately not applied here
+  because `lib/plan_audit.py` was contended at the time of writing and the edit was kept
+  to four lines.
+* `escalate_repeats` sees `{sport}_directed_day` (it is soft) and will eventually append
+  `{sport}_directed_day_persistent`, which `plan_audit`'s routing catches by neither
+  suffix nor severity, so it is silently dropped. Harmless — `day_rules_drifted` carries
+  the real signal on a tighter window — but a counter accumulates in
+  `config/plan-audit-streaks.json` for a code nobody reads.
 
 ## Identity: immutable IDs in a sidecar, not in the rule line
 

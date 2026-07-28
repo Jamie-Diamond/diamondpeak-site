@@ -11,6 +11,23 @@ unambiguously decidable from structured data:
   - wrong-day sessions (a sport scheduled on a day the athlete's day_rules forbid)
   - weekly planned-TSS over a cap
   - implied CTL ramp over a cap
+DAY RULES ARE GUIDELINES, NOT INVARIANTS (28 Jul 2026). `*_days` describe an
+athlete's normal weekly pattern, and the coach overrides them conversationally
+("I told it this week to swim on wed, so we swim on wed"). Two mechanisms keep the
+day checks honest without making them permanently red:
+  - a DIRECTED deviation (recorded per session in the athlete's
+    day-rules-overrides register, passed in as `day_overrides`) becomes a SOFT
+    `{sport}_directed_day` advisory that still appears in the report;
+  - an UNDIRECTED deviation stays a HARD `{sport}_forbidden_day` — a generator
+    drifting off the pattern with nobody asking is a real defect;
+  - overrides cannot move the pattern by stealth: DRIFT_THRESHOLD directed hits on
+    the same sport+weekday inside DRIFT_WINDOW_DAYS raise a HARD
+    `day_rules_drifted` telling the coach to amend the config instead.
+A day may also be permitted only UNTIL a date, via a `<key>_expires` sidecar
+(`bike_days_expires: {"Sat": "2026-09-05"}`): the same `[expires:DATE]` idea the
+prose rules already have, closing the gap in CONFIG. It expires per EVENT DATE, so
+this module stays pure and future weeks audit correctly.
+
 It deliberately does NOT attempt to model the prose judgment in rules.md (fuelling,
 pacing, KPIs, "quality run while ankle uncleared" — which needs reliable session
 classification we don't have). Those remain the LLM's job. Adding a check here
@@ -44,6 +61,19 @@ _SPORT_RULE = {
     "ride": "bike_days", "virtualride": "bike_days", "gravelride": "bike_days",
     "run": "run_days",
 }
+
+# ICU event type -> override-register family (the day_rules key minus `_days`), so
+# Ride/VirtualRide/GravelRide share one family. Mirrors lib/day_overrides.FAMILIES.
+_SPORT_FAMILY = {sport: key[:-len("_days")] for sport, key in _SPORT_RULE.items()}
+
+# Anti-drift: an "exception" the coach directs again and again is not an exception,
+# it is the pattern. Count directed overrides per sport+weekday over a rolling
+# window and hard-fail once the same weekday has been directed this often, so
+# day_rules cannot be moved by stealth and the audit cannot go quiet on the whole
+# category. Self-clearing: entries age out of the window.
+DRIFT_WINDOW_DAYS = 28
+DRIFT_THRESHOLD = 3
+_OVERRIDE_KEY_RE = re.compile(r"^(swim|bike|run):(\d{4}-\d{2}-\d{2})$")
 
 
 def _to_weekday(name) -> int | None:
@@ -712,11 +742,81 @@ def _normalise_day_rules(day_rules: dict | None) -> dict[str, set[int]]:
     return out
 
 
+def _dated_day_rules(day_rules: dict | None) -> dict[str, dict[int, date]]:
+    """Parse the `<key>_expires` sidecars: {'bike_days': {5: date(2026, 9, 5)}}.
+
+    A sidecar is a DICT, and `_normalise_day_rules` skips non-list values, so this
+    encoding is a no-op for any code path that has not been taught about it — which
+    matters, because config/athletes.json is hand-edited on the live box and is not
+    deployed with the code. Unparseable day names or dates are dropped; a dropped
+    entry means the day stays permanently permitted, i.e. exactly today's
+    behaviour, never a new failure."""
+    out: dict[str, dict[int, date]] = {}
+    for key, val in (day_rules or {}).items():
+        if not (isinstance(key, str) and key.endswith("_expires") and isinstance(val, dict)):
+            continue
+        base = key[: -len("_expires")]
+        days: dict[int, date] = {}
+        for name, until in val.items():
+            wd = _to_weekday(name)
+            if wd is None:
+                continue
+            try:
+                days[wd] = date.fromisoformat(str(until)[:10])
+            except (TypeError, ValueError):
+                continue
+        if days:
+            out[base] = days
+    return out
+
+
+def _normalise_overrides(day_overrides: dict | None) -> dict[str, str]:
+    """Keep only well-formed `family:YYYY-MM-DD` -> non-empty-prose entries.
+
+    Fails CLOSED, like lib/day_overrides.load: a malformed register grants nothing,
+    so a check can never be silenced by a broken file."""
+    out = {}
+    for k, v in (day_overrides or {}).items():
+        if _OVERRIDE_KEY_RE.match(str(k)) and isinstance(v, str) and v.strip():
+            out[str(k)] = v.strip()
+    return out
+
+
+def _drift_violations(overrides: dict[str, str], week_end: date) -> list["Violation"]:
+    """HARD when the same sport+weekday has been DIRECTED DRIFT_THRESHOLD times in
+    the DRIFT_WINDOW_DAYS ending at `week_end`. The remedy named in the detail is to
+    amend day_rules — the config should describe what the athlete actually does."""
+    win_start = week_end - timedelta(days=DRIFT_WINDOW_DAYS - 1)
+    tally: dict[tuple[str, int], list[date]] = {}
+    for k in overrides:
+        fam, iso = k.split(":", 1)
+        try:
+            d = date.fromisoformat(iso)
+        except ValueError:
+            continue
+        if win_start <= d <= week_end:
+            tally.setdefault((fam, d.weekday()), []).append(d)
+    out = []
+    for (fam, wd), dates in sorted(tally.items()):
+        if len(dates) < DRIFT_THRESHOLD:
+            continue
+        dow = (win_start + timedelta(days=(wd - win_start.weekday()) % 7)).strftime("%a")
+        out.append(Violation(
+            code="day_rules_drifted", severity="hard",
+            detail=(f"{fam} has been coach-directed onto {dow} {len(dates)} times in the "
+                    f"last {DRIFT_WINDOW_DAYS} days ({', '.join(d.isoformat() for d in sorted(dates))}) "
+                    f"— that is the pattern, not an exception. Amend "
+                    f"day_rules.{fam}_days (or add a dated {fam}_days_expires entry) "
+                    f"instead of overriding it every week")))
+    return out
+
+
 def validate_week(
     events: list[dict],
     week_start: date,
     *,
     day_rules: dict | None = None,
+    day_overrides: dict | None = None,
     weekly_tss_cap: float | None = None,
     weekly_tss_floor: float | None = None,
     tss_tolerance: float = 0.10,
@@ -743,6 +843,8 @@ def validate_week(
     conflated with "not actually checked".
     """
     rules = _normalise_day_rules(day_rules)
+    dated = _dated_day_rules(day_rules)
+    overrides = _normalise_overrides(day_overrides)
     week_end = week_start + timedelta(days=6)
     week_events = [
         e for e in events
@@ -753,7 +855,9 @@ def validate_week(
     violations: list[Violation] = []
     skipped: list[str] = []
 
-    # 1. Wrong-day sessions — a restricted sport scheduled on a forbidden weekday.
+    # 1. Off-pattern sessions — a restricted sport scheduled on a day the athlete's
+    #    day_rules do not (or no longer) permit. HARD when nobody asked for it;
+    #    SOFT and still reported when the coach directed it (see module docstring).
     for e in week_events:
         sport = str(e.get("type") or "").strip().lower()
         rule_key = _SPORT_RULE.get(sport)
@@ -763,14 +867,35 @@ def validate_week(
         if not allowed:
             continue
         d = _event_date(e)
-        if d.weekday() not in allowed:
+        until = (dated.get(rule_key) or {}).get(d.weekday())
+        if d.weekday() in allowed and (until is None or d <= until):
+            continue
+        if d.weekday() in allowed:
+            # The day IS listed, but only as a time-boxed exception that has now run
+            # out. Say so explicitly — "allowed days only: [...]" would be a lie
+            # about a config the coach can read.
+            reason = (f"day_rules.{rule_key} permits {d.strftime('%a')} only until "
+                      f"{until.isoformat()} ({rule_key}_expires) and that dated "
+                      f"exception has EXPIRED")
+        else:
+            reason = f"allowed days only: {sorted(allowed)} (Mon=0)"
+        where = (f"{e.get('type')} on {d.isoformat()} ({d.strftime('%a')}) — "
+                 f"'{e.get('name', '')}'")
+        note = overrides.get(f"{_SPORT_FAMILY[sport]}:{d.isoformat()}")
+        if note:
+            violations.append(Violation(
+                code=f"{sport}_directed_day",
+                severity="soft",
+                detail=f"{where}; off-pattern ({reason}) but COACH-DIRECTED: {note[:200]}",
+            ))
+        else:
             violations.append(Violation(
                 code=f"{sport}_forbidden_day",
                 severity="hard",
-                detail=(f"{e.get('type')} on {d.isoformat()} ({d.strftime('%a')}) — "
-                        f"'{e.get('name', '')}'; allowed days only: "
-                        f"{sorted(allowed)} (Mon=0)"),
+                detail=f"{where}; {reason}",
             ))
+
+    violations.extend(_drift_violations(overrides, week_end))
 
     # 2. Weekly planned-TSS cap.
     total_tss = sum(_planned_load(e) for e in week_events)
