@@ -220,7 +220,7 @@ DELIVERABLES = [
     {"script": "sync-private",        "label": "private repo sync",  "window": "daily",
      "per_athlete": False, "telegram": True, "detail": "sync ok",
      "cron": "20 23 * * *",      "cron_cmd": "sync-private-repo.sh",
-     "since": "2026-07-28T13:00:37"},   # 5eaae85 — same commit gave sync_ok
+     "since": "2026-07-28T16:21:45"},   # merged to main (was 5eaae85 commit time)
                                         # its heartbeat write, for every job
                                         # that calls it, not just backup-config.
     # activity-watcher.py (every 5 min, "2-57/5 * * * *") is the busiest
@@ -272,7 +272,7 @@ DELIVERABLES = [
      # time), correct this to the actual merge-to-main commit's timestamp when
      # this is promoted, or every occurrence between now and the real merge is
      # wrongly judged PRE_INSTRUMENTATION-only-until-then instead of DUE.
-     "since": "2026-07-28T15:53:34"},
+     "since": "2026-07-28T16:21:45"},
     # Sunday jobs. Checked over 7 days. telegram=True since 28 Jul 2026, but NOT
     # via this per-day cooldown — ops-digest.py's weekly_alerts() sends these on
     # its own occurrence-based key so one miss is one message, not one per evening.
