@@ -506,6 +506,94 @@ def release_lock():
     LOCK_FILE.unlink(missing_ok=True)
 
 
+# --- deferring the evening ask into the 21:00 check-in -------------------------------
+# A session finished at 18:30 used to produce a debrief ending in a question at ~18:35 and
+# a follow-up nudge at ~20:35, on top of the 20:30 brief and the 21:00 check-in. Inside
+# this window the question is not sent here at all: it is queued for evening-checkin.py,
+# which is now the only evening surface that asks anything. The quick-log keyboard still
+# goes out with the debrief, so the one-tap capture route is unaffected — this defers the
+# TEXT question only.
+_EVENING_WINDOW_START = 18   # ~3h before the check-in
+_EVENING_CHECKIN_HOUR = 21
+QUEUE_FILE = ".evening-ask.json"
+
+
+def _in_evening_window(now=None):
+    now = now or datetime.now()
+    return _EVENING_WINDOW_START <= now.hour < _EVENING_CHECKIN_HOUR
+
+
+def _queue_evening_ask(slug, activity_id, sport, name, question, state=None,
+                       state_file=None):
+    """Append one question to the athlete's evening-ask queue and suppress the follow-up
+    nudge for that activity, so the deferral does not simply reappear 2h later as its own
+    push. evening-checkin consumes the queue (and drops entries whose data has since been
+    captured)."""
+    qpath = BASE / "athletes" / slug / QUEUE_FILE
+    try:
+        entries = json.loads(qpath.read_text()) if qpath.exists() else []
+        if not isinstance(entries, list):
+            entries = []
+    except Exception:
+        entries = []
+    aid = str(activity_id or "")
+    entries = [e for e in entries if str(e.get("activity_id", "")) != aid]
+    entries.append({
+        "activity_id": aid,
+        "sport": sport or "",
+        "name": name or "",
+        "question": question.strip(),
+        "ts": datetime.now().isoformat(timespec="seconds"),
+    })
+    try:
+        qpath.parent.mkdir(parents=True, exist_ok=True)
+        qpath.write_text(json.dumps(entries[-20:], indent=1))
+    except Exception:
+        return False
+    if state is not None and aid:
+        nudged = set(state.get("nudged_ids") or [])
+        nudged.add(aid)
+        state["nudged_ids"] = list(nudged)
+        if state_file:
+            save_state(state, state_file)
+    return True
+
+
+def _defer_trailing_question(analysis, slug, activity_id, sport, name, state=None,
+                             state_file=None, now=None):
+    """Strip the debrief's trailing question line(s) inside the evening window and queue
+    them for the 21:00 check-in. Returns the analysis to send.
+
+    Deterministic rather than a prompt instruction: every per-sport format in the prompt
+    above ends its block with a question line, and a model told to sometimes omit it
+    reformats the rest. Only the trailing block is touched: the scan stops at the first
+    line from the bottom that carries no '?'."""
+    if not analysis or not _in_evening_window(now):
+        return analysis
+    lines = analysis.rstrip().split("\n")
+    stripped = []
+    # `contains ?`, not `ends with ?`: the real question lines carry a trailing
+    # parenthetical — "Injury pain score during and this morning? (0-10)",
+    # "Nutrition — g carbs/hr and bottles? (recent avg: 54g/hr · race target 70g/hr)".
+    # Scanning from the bottom and stopping at the first non-question line keeps this
+    # confined to the trailing block.
+    while lines and (not lines[-1].strip() or "?" in lines[-1]):
+        line = lines.pop()
+        if line.strip():
+            stripped.insert(0, line.strip())
+    if not stripped:
+        return analysis
+    if not lines:
+        # The whole message was the question — there is no debrief to send without it.
+        # Queue it and send nothing; the check-in asks at 21:00.
+        _queue_evening_ask(slug, activity_id, sport, name, " ".join(stripped),
+                           state, state_file)
+        return ""
+    _queue_evening_ask(slug, activity_id, sport, name, " ".join(stripped),
+                       state, state_file)
+    return "\n".join(lines).rstrip()
+
+
 def _chat_has_recent_feedback(slug, lookback_minutes=30):
     """True if the athlete's Telegram messages in the last 30 minutes contain session
     feedback (RPE / how-it-felt / pain) — so the follow-up nudge doesn't re-ask
@@ -596,6 +684,12 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
                     msg = f"RPE for the {name or 'ride'}? (1–10)"
             else:
                 msg = f"RPE for {name or 'last session'}? (1–10)"
+            if slug and _in_evening_window():
+                # Inside the evening window this nudge is exactly the push being merged
+                # away: it would land between the 20:30 brief and the 21:00 check-in. Queue
+                # it for the check-in instead. _queue_evening_ask marks it nudged.
+                _queue_evening_ask(slug, aid, sport, name, msg, state, state_file)
+                break
             _notify(msg, chat_id, slug=slug)
             nudged_ids.add(aid)
             state["nudged_ids"] = list(nudged_ids)
@@ -1193,6 +1287,25 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
 
     analysis = "\n".join(analysis_lines).strip()
     already_discussed = analysis.lower().startswith("discussed")
+    if not already_discussed and analysis and analysis != "none":
+        # Evening window: the trailing question moves to the 21:00 check-in.
+        _sport_now = ""
+        try:
+            for _e in json.loads(session_log_f.read_text()):
+                if str(_e.get("activity_id", "")) == activity_id:
+                    _sport_now = _e.get("sport", "") or ""
+                    _name_now = _e.get("name", "") or ""
+                    break
+            else:
+                _name_now = ""
+        except Exception:
+            _name_now = ""
+        analysis = _defer_trailing_question(analysis, slug, activity_id, _sport_now,
+                                            _name_now, state=state, state_file=state_file)
+        if not analysis:
+            # The debrief was nothing but the question. Don't push a bare plan-delta line
+            # in its place — the check-in carries it at 21:00.
+            plan_delta_note = ""
     if plan_delta_note and not already_discussed:
         analysis = f"{analysis}\n_{plan_delta_note}_" if analysis else plan_delta_note
     if already_discussed:
