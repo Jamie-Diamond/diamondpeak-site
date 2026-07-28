@@ -14,6 +14,7 @@ sys.path.insert(0, str(BASE / "lib"))
 import claude_call
 import ops_log
 import heat as heat_lib
+import open_actions as oa_lib   # T9: single store, arithmetic in Python
 CLAUDE      = "/usr/bin/claude"
 NOTIFY      = BASE / "telegram/notify.py"
 CONFIG      = BASE / "config/athletes.json"
@@ -270,6 +271,12 @@ def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: 
     t10_ankle = ("  - Also cross-check current-state.json ankle.weekly_run_km_this_week vs "
                  "ankle.weekly_run_km_last_week (if fields exist)\n" if has_ankle else "")
 
+    # T9 is decided in Python, off the single store, by the same call the weekly card
+    # makes (lib/open_actions.py). Previously the prompt told the model to cross-check
+    # current-state.json open_actions[] itself while the weekly card read a hand-kept
+    # markdown table, and the two surfaces silently disagreed for three months.
+    t9 = oa_lib.watchdog_block(slug, date.fromisoformat(today))
+
     t11 = ""
     if strength_target:
         t11 = (
@@ -309,11 +316,7 @@ T6 (Tier 1): Aerobic decoupling >5% on any Z2 ride in last 7 days (check via act
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint activity_detail --activity-id ID
   Suppression: before sending Telegram, check current-state.md for the most recent T6 entry.
   If T6 fired in the last 3 days and all flagged rides are already logged there (same activity dates), do NOT send a Telegram message — log to current-state.md only. Only send Telegram if there is a new Z2 ride with decoupling >5% not present in the prior T6 entry.
-{heat_triggers}T9 (Tier 2): Decision-point action due within 7 days and not marked done in current-state.json open_actions[].status
-  - Read {athlete_dir}/reference/decision-points.md for dated items (skip if file missing)
-  - Cross-check against open_actions in current-state.json; fire for any item whose due date <= today+7 and status does not start with "done" and status is not "dropped" and status is not "noted"
-  - Example fire: "FTP retest due 2026-05-31 — not yet done"
-T12: ALREADY EVALUATED in Python before this prompt ran (realised week-on-week
+{heat_triggers}{t9}T12: ALREADY EVALUATED in Python before this prompt ran (realised week-on-week
   CTL ramp vs the athlete\'s max_ctl_ramp_per_week, off the intervals.icu fitness endpoint).
   Any breach is already written to current-state.json watchdog_flags. Do NOT recompute it
   and do NOT invent one; if watchdog_flags contains a T12 entry dated today, log it in the
