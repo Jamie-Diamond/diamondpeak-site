@@ -124,8 +124,9 @@ between the numeric blueprint and the prose rules. The ranking is:
 
 `athletes/<slug>/profile.json` is the **authoritative** record of an athlete’s
 race targets (goal paces, split times, thresholds). Every other place a target is
-stored — `config/athletes.json` (`race_target_splits`, engine-read), `reference/rules.md`,
-`system_prompt.txt` (injected into the bot), `current-state.md` — is a **mirror**.
+stored — `config/athletes.json` (`race_target_splits`, engine-read),
+`athletes/<slug>/reference/rules.md`, `athletes/<slug>/system_prompt.txt` (injected into
+the bot), `athletes/<slug>/current-state.md` — is a **mirror**.
 
 Never hand-edit one copy. Write targets through `lib/athlete_targets.py`
 (`set_run_pace_target`), which updates every location together, atomically, and
