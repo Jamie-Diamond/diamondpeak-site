@@ -79,6 +79,18 @@ REASONS = {
 #   declared schedule against the real one, so a WRONG declaration fails the
 #   build rather than quietly mis-timing the check for ever.
 #
+#   As of the cron-derived audit below, `cron` is only the FALLBACK. At run time
+#   the due time is derived from the live `crontab -l` line matched on `cron_cmd`,
+#   and a declaration that disagrees with reality is reported loudly while
+#   reality is used. The declaration survives for one reason: if the crontab
+#   cannot be read at all, the alarm keeps working off it rather than going quiet.
+#
+# `no_cron` (optional) — "this deliverable legitimately has no crontab entry, and
+#   here is why". The ONLY way to register something unscheduled without the
+#   audit reporting it, so the exemption is a reviewed decision in the diff rather
+#   than a silent gap. Nothing uses it today; it exists so that a deliverable
+#   triggered by some other mechanism does not have to be smuggled past the audit.
+#
 # `since` — when this deliverable's heartbeat instrumentation went live (the
 #   moment it landed on prod `main`, which IS the runtime here — NOT the moment
 #   it was committed on a branch. The distinction is load-bearing: 83bb541 was
@@ -200,6 +212,356 @@ DELIVERABLES = [
 DIGEST_CRON = "30 21 * * *"
 
 
+# --- the registry is DERIVED from the crontab, not trusted --------------------
+#
+# WHY THIS EXISTS. DELIVERABLES above was hand-maintained and drifted TWICE in one
+# day, in both possible directions:
+#
+#   1. backup-config was registered as a daily deliverable with a hand-declared
+#      time, checked by a digest that runs 2h20m earlier than the job — it could
+#      never have run when checked, and would have alarmed every night for ever.
+#   2. capture-reminder stayed registered after its cron entry was deleted, so it
+#      would have printed a false gap line every night for ever.
+#
+# Both were caught by eye. A third would not be. From 28 Jul 2026 the crontab is
+# read at ALARM-RUN time and diffed against this registry, keyed on the script
+# filename, and any mismatch is reported loudly into ops-alerts.log.
+#
+# THE DIRECTION THAT MATTERS MOST is the one nobody thought of: a cron entry with
+# NO registry entry. That is a scheduled job nobody watches, which is how the
+# weekly report vanished for three weeks with nothing but a log line to show for
+# it. Registry->cron drift produces a noisy false alarm; cron->registry drift
+# produces SILENCE, which is worse. Both are checked here.
+#
+# AUTHORITATIVE SOURCE: `crontab -l` for root, the actual thing cron executes.
+# NOT ClaudeCoach/system/crontab.template — that is a sanitised rebuild reference
+# and is itself demonstrably stale (28 Jul 2026: it still lists capture-reminder,
+# has five wrong times and is missing plan_audit.py entirely). Diffing against
+# the template would have "verified" the registry against another hand-maintained
+# file, i.e. reproduced the bug one layer down.
+
+CRON_SOURCE = ["crontab", "-l"]
+
+# A crontab line is ClaudeCoach's if the script it runs lives under one of these.
+# Path-based rather than name-based on purpose: it catches lib/plan_audit.py
+# (which a `/scripts/` rule would miss), catches cc-gitpull.sh (which lives in
+# /usr/local/bin, not the repo), and excludes the expense-bot entry — a different
+# product sharing the same crontab — without naming it.
+CC_PATH_MARKERS = ("/ClaudeCoach/", "/usr/local/bin/cc-")
+
+# Tokens to step over when working out WHICH script a cron line runs. `cc-run` is
+# the token-injecting wrapper every entry goes through (/root/.claude/cc-run).
+_CRON_WRAPPERS = {"cc-run"}
+_CRON_INTERPRETERS = {"bash", "sh", "python", "python3", "env"}
+
+# --- WHICH SCHEDULED JOBS LEGITIMATELY NEED NO DELIVERABLE -------------------
+#
+# This table is the whole point of requirement 3: the alternative to it is an
+# implicit rule in someone's head about which jobs are "just plumbing", which is
+# how a job stops being watched without anyone deciding that it should. A cron
+# entry that is neither registered in DELIVERABLES nor listed here is reported
+# loudly every night until somebody makes a decision about it.
+#
+# The reason strings are checkable against the code, not vibes — each says why
+# there is nothing for the gap check to watch, and each was verified by grepping
+# the script for ops_log usage on 28 Jul 2026.
+#
+# A name here that has NO live cron entry is also reported: a stale exemption is
+# the same class of drift as a stale registration.
+CRON_EXEMPT = {
+    "ops-digest.py":
+        "this alarm itself. Its schedule is declared as DIGEST_CRON and "
+        "cross-checked against the live crontab by cron_audit() — a deliverable "
+        "entry would ask the digest to detect its own absence, which it cannot.",
+    "cc-gitpull.sh":
+        "git plumbing, every 30 min. Its failures already reach the digest via "
+        "ops_log.sync_failure's escalation counter (OUTCOME_CLASS: cc-gitpull), "
+        "and a single missed pull is self-healing on the next tick.",
+    "bot-watchdog.py":
+        "the watchdog OF the Telegram bots, every 5 min. It only speaks when "
+        "something is wrong (ops_log.alert, no record_run heartbeat at all), so "
+        "there is no success heartbeat for a gap check to look for.",
+    "refresh-public-data.py":
+        "regenerates the public site JSON hourly. No ops_log instrumentation and "
+        "no coach-facing output: a failure degrades the public dashboard, not the "
+        "coaching, and shows up as stale data on the page itself.",
+    "refresh-site-data.py":
+        "same class as refresh-public-data — site data regeneration, no ops_log "
+        "instrumentation, nothing delivered to an athlete or the coach.",
+    "bug-fixer.py":
+        "unattended overnight rule maintenance. Everything it does is ALREADY a "
+        "digest line by construction: bug-fixer-automerge run-status entries are "
+        "printed by build_digest even when ok=True, and its findings go out as "
+        "rules-lint alerts (FINDING-class).",
+    "plan_audit.py":
+        "plan invariant checking, FINDING-class and baseline-gated. Its whole "
+        "output is digest lines; a missed run means one day without an audit, "
+        "not a missed deliverable to an athlete.",
+}
+
+UNVERIFIED = ("\u26a0 CRON AUDIT: could not read `crontab -l` \u2014 the deliverable "
+              "registry was NOT verified against the live schedule this run. The gap "
+              "check is still running off the static registry in coach_alert.py, so "
+              "nothing is silently switched off, but a drifted registry would not be "
+              "caught until this is fixed.")
+
+
+class CronAudit:
+    """The result of diffing DELIVERABLES against the live crontab.
+
+    `verified`  — False only when the crontab could not be read at all. False
+                  means "judge off the static registry and say so loudly",
+                  NEVER "disable the alarm" and never "alarm on everything".
+    `schedules` — script filename -> live cron spec, for ClaudeCoach entries with
+                  a spec this parser can read. This is what due times are DERIVED
+                  from, so a hand-declared time cannot mis-time the check.
+    `present`   — every ClaudeCoach script filename seen in the crontab, including
+                  ones whose spec was unreadable or duplicated. Kept separate from
+                  `schedules` so "scheduled, spec unusable" (fall back to the
+                  declared time and keep checking) is distinguishable from "not
+                  scheduled at all" (do not check; it cannot run).
+    `problems`  — loud lines for ops-alerts.log and the digest. NEVER Telegram:
+                  registry drift is an engineering fault, not one of the two
+                  conditions Jamie approved for interrupting him.
+    """
+
+    def __init__(self, verified: bool, schedules: dict, present: set, problems: list):
+        self.verified = verified
+        self.schedules = schedules
+        self.present = present
+        self.problems = problems
+
+
+def _cron_command_tokens(command: str) -> list:
+    """Command tokens up to the first shell redirection or pipe.
+
+    Stops at `>>`, `>`, `2>&1` and `|` so the log path in `... >> ~/Library/Logs/
+    ClaudeCoach/backup.log 2>&1` is never mistaken for the script being run.
+    """
+    out = []
+    for tok in command.split():
+        if ">" in tok or tok.startswith(("|", "&", "<")):
+            break
+        out.append(tok)
+    return out
+
+
+def cron_job_name(command: str):
+    """(script path, script filename) for one cron command, or (None, None).
+
+    Steps over the cc-run wrapper, known interpreters, `VAR=value` prefixes and
+    `-flags` to find the script. Returns the filename because that is the only
+    stable key shared by the crontab and the registry — and because keying on the
+    basename means `watchdog.py` and `bot-watchdog.py` cannot be confused, which a
+    substring match over the raw line can.
+    """
+    for tok in _cron_command_tokens(command):
+        base = tok.rsplit("/", 1)[-1]
+        if base in _CRON_WRAPPERS or base in _CRON_INTERPRETERS:
+            continue
+        if tok.startswith("-") or "=" in base:
+            continue
+        return tok, base
+    return None, None
+
+
+def _cc_owned(path: str) -> bool:
+    return bool(path) and any(m in path for m in CC_PATH_MARKERS)
+
+
+def parse_crontab(text: str) -> tuple:
+    """(schedules, present, problems) for the ClaudeCoach entries in `text`.
+
+    Robust by requirement, because this crontab contains all of it: comment
+    banners, a commented-OUT job (`# 0 5 * * 1 tar -zcf ...`), a foreign
+    entry (expense-bot), the cc-run wrapper, `bash script.sh` and
+    `python3 script.py --flag` forms, and shell redirections. Nothing here raises;
+    anything it cannot understand becomes a loud problem line instead, because an
+    exception in the audit would take the whole 21:30 digest down with it and the
+    alarm would go quiet — the failure mode this file exists to prevent.
+    """
+    seen, present, problems = {}, set(), []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue                      # comments AND commented-out jobs
+        fields = line.split()
+        # crontab furniture: MAILTO="", PATH=/usr/bin, SHELL=/bin/bash
+        if "=" in fields[0] and not fields[0].startswith("*"):
+            continue
+        if line.startswith("@"):          # @daily / @reboot nicknames
+            path, name = cron_job_name(" ".join(fields[1:]))
+            if _cc_owned(path):
+                present.add(name)
+                problems.append(
+                    f"\u26a0 CRON AUDIT: {name} is scheduled with the cron nickname "
+                    f"{fields[0]!r}, which this parser cannot turn into a due time. "
+                    f"Give it an explicit 5-field schedule.")
+            continue
+        if len(fields) < 6:
+            if any(m in line for m in CC_PATH_MARKERS):
+                problems.append(f"\u26a0 CRON AUDIT: unreadable ClaudeCoach crontab "
+                                f"line: {line[:120]!r}")
+            continue
+        path, name = cron_job_name(" ".join(fields[5:]))
+        if not _cc_owned(path):
+            continue                      # expense-bot, system jobs: not ours
+        present.add(name)
+        spec = " ".join(fields[:5])
+        try:
+            parse_cron(spec)
+        except ValueError as exc:
+            problems.append(f"\u26a0 CRON AUDIT: cannot read {name}'s live schedule "
+                            f"{spec!r}: {exc}. Falling back to its declared time.")
+            continue
+        seen.setdefault(name, []).append(spec)
+
+    schedules = {}
+    for name, specs in sorted(seen.items()):
+        schedules[name] = specs[0]
+        if len(specs) > 1:
+            # Keep the first so the check keeps working rather than going quiet,
+            # and say so: the union of two schedules is the real answer and this
+            # is only an approximation of it.
+            problems.append(
+                f"\u26a0 CRON AUDIT: {name} has {len(specs)} live crontab entries "
+                f"({'; '.join(specs)}). Due times are derived from the first only, "
+                f"so the check may be mis-timed — give the job one schedule.")
+    return schedules, present, problems
+
+
+def _registry_problems(schedules: dict, present: set) -> list:
+    """Both directions of the DELIVERABLES <-> crontab diff."""
+    problems = []
+    registered = {}
+    for d in DELIVERABLES:
+        registered[d["cron_cmd"]] = d
+        live, why = schedules.get(d["cron_cmd"]), d.get("no_cron")
+        scheduled = d["cron_cmd"] in present
+        if not scheduled:
+            if not why:
+                # Direction 1: capture-reminder's fault. The deliverable is NOT
+                # judged (see due_status) because a job with no cron entry cannot
+                # run, and alarming that it did not is a false alarm about a
+                # registry bug.
+                problems.append(
+                    f"\u26a0 CRON AUDIT: {d['label']} ({d['script']}) is registered as a "
+                    f"deliverable but {d['cron_cmd']} has NO live crontab entry. It "
+                    f"cannot run, so it is not being checked. Restore the cron entry, "
+                    f"deregister it, or annotate it no_cron=\"why\".")
+            continue
+        if why:
+            problems.append(
+                f"\u26a0 CRON AUDIT: {d['script']} is annotated no_cron ({why!r}) but "
+                f"{d['cron_cmd']} IS in the live crontab ({live or 'schedule unreadable'}). "
+                f"The annotation is stale — remove it so the real schedule is used.")
+            continue
+        if live:
+            try:
+                same = parse_cron(live) == parse_cron(d["cron"])
+            except ValueError:
+                same = False
+            if not same:
+                problems.append(
+                    f"\u26a0 CRON AUDIT: {d['script']} declares cron {d['cron']!r} but the "
+                    f"crontab says {live!r}. The LIVE schedule is being used for the due "
+                    f"time; fix the declaration.")
+
+    # Direction 2 — the one that matters. A scheduled job with no registry entry
+    # and no exemption is a job nobody watches.
+    for name, spec in sorted(schedules.items()):
+        if name in registered or name in CRON_EXEMPT:
+            continue
+        problems.append(
+            f"\u26a0 CRON AUDIT: {name} runs on the live crontab ({spec}) but NOTHING "
+            f"watches it \u2014 no coach_alert.DELIVERABLES entry and no CRON_EXEMPT "
+            f"reason. Either register it as a deliverable or record why it needs no "
+            f"deliverable.")
+
+    for name, reason in sorted(CRON_EXEMPT.items()):
+        if name not in present:
+            problems.append(
+                f"\u26a0 CRON AUDIT: {name} is listed in CRON_EXEMPT ({reason[:60]}...) "
+                f"but has no live crontab entry. Remove the stale exemption.")
+
+    # The mechanism's own timing assumption, verified rather than assumed.
+    digest_live = schedules.get("ops-digest.py")
+    if digest_live:
+        try:
+            if parse_cron(digest_live) != parse_cron(DIGEST_CRON):
+                problems.append(
+                    f"\u26a0 CRON AUDIT: this digest declares DIGEST_CRON {DIGEST_CRON!r} "
+                    f"but runs at {digest_live!r} on the live crontab. Every due-time "
+                    f"margin in this file is reasoned against the declared value.")
+        except ValueError:
+            pass
+    return problems
+
+
+def read_crontab():
+    """Raw `crontab -l` text, or None if it cannot be read.
+
+    None is the fail-SAFE signal, not an error: cron_audit() turns it into a loud
+    "not verified" line and the gap check carries on off the static registry.
+    """
+    try:
+        r = subprocess.run(CRON_SOURCE, capture_output=True, text=True, timeout=20)
+    except Exception:
+        return None
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    return r.stdout
+
+
+def cron_audit(text=None) -> CronAudit:
+    """Diff DELIVERABLES against the live crontab. Never raises, never Telegrams.
+
+    Pass `text` to audit a crontab you already have (the tests do; it keeps them
+    hermetic). Omit it and the live crontab is read. The read is deliberately NOT
+    a function default anywhere else in this file: due_status() with no audit
+    means "use the declared schedule", which is both the test path and the
+    fail-safe path.
+    """
+    if text is None:
+        text = read_crontab()
+    if text is None:
+        return CronAudit(False, {}, set(), [UNVERIFIED])
+    try:
+        schedules, present, problems = parse_crontab(text)
+        if not present:
+            # A readable crontab with not one ClaudeCoach job in it is not a
+            # crontab where every deliverable has been deregistered — it is a
+            # crontab we are looking at from the wrong account. Trusting it would
+            # mark all ten deliverables NO_CRON_ENTRY and silence the alarm
+            # completely for that run. Treated as unverified instead, which keeps
+            # every deliverable judged on its declared schedule.
+            return CronAudit(False, {}, set(),
+                             [UNVERIFIED + " (`crontab -l` was readable but "
+                              "contained no ClaudeCoach jobs at all.)"])
+        problems = problems + _registry_problems(schedules, present)
+    except Exception as exc:              # belt and braces: never take the digest down
+        return CronAudit(False, {}, set(),
+                         [f"\u26a0 CRON AUDIT: the audit itself failed ({exc!r}) \u2014 the "
+                          f"registry was NOT verified; running off the static registry."])
+    return CronAudit(True, schedules, present, problems)
+
+
+def effective_cron(d: dict, audit: CronAudit = None) -> str:
+    """The schedule a deliverable is judged against.
+
+    The LIVE crontab line when there is one, the declared `cron` otherwise. This
+    is requirement 4: the expected time is derived from what cron will actually
+    do, so the backup-config class of bug (a hand-declared time the digest can
+    never see satisfied) cannot recur \u2014 and if the declaration and reality
+    disagree, reality wins and the declaration is reported.
+    """
+    if audit is not None:
+        live = audit.schedules.get(d["cron_cmd"])
+        if live:
+            return live
+    return d["cron"]
+
+
 # --- when was a deliverable last DUE? ----------------------------------------
 #
 # THE FAULT THIS KILLS. The gap check asked "is there a heartbeat in this
@@ -303,9 +665,10 @@ def last_due(spec: str, now: datetime):
 DUE                 = "due"
 NOT_SCHEDULED_YET   = "not-scheduled-yet"
 PRE_INSTRUMENTATION = "pre-instrumentation"
+NO_CRON_ENTRY       = "no-cron-entry"
 
 
-def due_status(d: dict, now: datetime = None) -> tuple:
+def due_status(d: dict, now: datetime = None, audit: CronAudit = None) -> tuple:
     """(due_moment, state) for one deliverable — may it be judged right now?
 
     Only DUE may produce a gap line or a Telegram. The other two states mean the
@@ -319,9 +682,26 @@ def due_status(d: dict, now: datetime = None) -> tuple:
                             trail. It is visible while it lasts — ops-digest
                             prints an "ℹ not judged yet" line naming the reason,
                             so a deliverable is never silently unchecked.
+      NO_CRON_ENTRY       — we READ the crontab and this deliverable has no entry
+                            in it. A job that is not scheduled cannot run, so
+                            "no heartbeat" says nothing about the job and
+                            everything about the registry: that is exactly the
+                            capture-reminder false gap line. Reported loudly by
+                            cron_audit() as a registry fault instead. Note the
+                            asymmetry with an UNREADABLE crontab, which is not
+                            this state — there we cannot tell, so we keep judging
+                            off the declared schedule (fail safe) rather than
+                            silently un-checking every deliverable at once.
+
+    `audit` — the CronAudit from cron_audit(). Supplied, the due time is DERIVED
+    from the live crontab. Omitted, the declared `cron` is used: that is both the
+    hermetic test path and the fail-safe path when `crontab -l` is unreadable.
     """
     now = now or datetime.now()
-    due = last_due(d["cron"], now)
+    if (audit is not None and audit.verified
+            and d["cron_cmd"] not in audit.present and not d.get("no_cron")):
+        return None, NO_CRON_ENTRY
+    due = last_due(effective_cron(d, audit), now)
     if due is None:
         return None, NOT_SCHEDULED_YET
     if due < datetime.fromisoformat(d["since"]):
@@ -398,6 +778,10 @@ OUTCOME_CLASS = {
     "claude_call":        FAILURE,   # auth expired in production
     "cc-gitpull":         FAILURE,
     "coach-alert":        FAILURE,   # the alarm itself failing to send
+    # Registry drift is deliberately NOT filed under "coach-alert": that name
+    # means "the alarm could not reach Jamie", and overloading it would make a
+    # config fault indistinguishable from a delivery fault in the same log.
+    "cron-audit":         FAILURE,   # DELIVERABLES has drifted from the crontab
     # --- FINDING: an ok=False line from these is the script working correctly and
     # reporting something about the TRAINING or the CONFIG, not about itself.
     # None of these is a missed deliverable; all of them are already a digest line.
