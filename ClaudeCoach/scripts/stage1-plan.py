@@ -28,6 +28,7 @@ sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 
 import claude_call                    # noqa: E402
+import ops_log                        # noqa: E402
 import session_library as sl          # noqa: E402
 import plan_builder as pb             # noqa: E402
 from primitives.planned_tss import segment_if  # noqa: E402
@@ -694,6 +695,15 @@ def main():
                          "defaults to athletes/<slug>/this-week-availability.json if present")
     args = ap.parse_args()
 
+    # HEARTBEAT, gated on --push. This script is also run by hand for dry-runs, and a
+    # dry-run must NOT satisfy the weekly gap check — otherwise a Wednesday experiment
+    # would mask the Sunday cron never running, which is the exact blindness being
+    # fixed. weekly-plan.sh (the Sunday cron) always passes --push, so the heartbeat
+    # tracks the real deliverable and nothing else.
+    def _beat(ok: bool, detail: str) -> None:
+        if args.push:
+            ops_log.record_run("stage1-plan", athlete=args.athlete, ok=ok, detail=detail)
+
     cfg = json.loads((BASE / "config" / "athletes.json").read_text())[args.athlete]
     today = date.today()
     week_start = date.fromisoformat(args.week_start) if args.week_start else _next_monday(today)
@@ -718,6 +728,7 @@ def main():
     brief["_prior_zones"] = _load_prior_zones(args.athlete, week_start)   # Phase 5.4 rolling window
     if brief.get("event_unknown"):
         print(json.dumps({"error": f"event unknown for {args.athlete} — cannot plan"}))
+        _beat(False, "event unknown — cannot plan")
         sys.exit(1)
 
     target = brief["weekly_tss_target"]
@@ -794,6 +805,7 @@ def main():
                         "ones:\n- " + "\n- ".join(all_issues) + "\n")
         if best is None:
             print(json.dumps({"error": "no parseable proposal after retries", "attempts": attempts}))
+            _beat(False, f"no parseable proposal after {args.max_attempts} attempts")
             sys.exit(1)
     built, blocking, advisory, proposal = best
     # Phase 5.7: DETERMINISTIC quality injection on the winning proposal (no LLM). Brings each
@@ -838,6 +850,10 @@ def main():
                 why = (blocking[0] if blocking
                        else (f"load {load_pct_off}% off target" if not load_on_target else "audit failed"))
                 _notify(cfg["chat_id"], f"⚠️ Couldn't generate a clean week ({why}). Your existing plan is unchanged.")
+            # A real deliverable failure, not silence-by-design: the athlete's week was
+            # not replaced. Recorded ok=False so it shows as a digest ✗ — and because an
+            # entry EXISTS, the gap check stays quiet and it is reported once, not twice.
+            _beat(False, f"no clean week pushed ({why})")
         else:
             summary["push_result"] = pb.push(args.athlete, built)
             _write_prior_zones(args.athlete, week_start, proposal)   # Phase 5.4: bank for next week
@@ -849,6 +865,7 @@ def main():
                     pass
             if args.notify and cfg.get("chat_id"):
                 _notify(cfg["chat_id"], _week_message(brief, built))
+            _beat(True, f"pushed week of {built['week_start']} ({built['total_tss']} TSS)")
     print(json.dumps(summary, indent=1, ensure_ascii=False))
 
 

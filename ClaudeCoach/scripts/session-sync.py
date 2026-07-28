@@ -64,6 +64,7 @@ _LAUNCH_STATE = {"fired": False}
 
 sys.path.insert(0, str(BASE / "lib"))
 import claude_call
+import ops_log
 
 # Reuse the Phase 7 rule-hygiene helpers rather than re-implementing them: the bug-fixer
 # is the single source of truth for the ceiling, the confirmed-preference scan, the engine
@@ -323,17 +324,27 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
         with open(log_file, "a") as lf:
             lf.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] [{slug}] {msg}\n")
 
+    # HEARTBEATS on the three early exits. An athlete who has never chatted has no
+    # history file, and one who cleared it has an empty one — both are "ran, nothing to
+    # sync", i.e. SUCCESS. Left uninstrumented these would show as a permanent daily gap
+    # for that athlete and the alarm would be crying wolf from day one. An UNREADABLE
+    # history is different: that is corruption, and it records a failure.
     history_file = adir / "telegram/history.json"
     if not history_file.exists():
+        ops_log.record_run("session-sync", athlete=slug, ok=True,
+                           detail="silent (no history file yet)")
         return
 
     try:
         history = json.loads(history_file.read_text())
     except Exception as e:
         print(f"[{slug}] Failed to read history: {e}", file=sys.stderr)
+        ops_log.alert("session-sync", f"history.json unreadable: {e}", athlete=slug)
         return
 
     if not history:
+        ops_log.record_run("session-sync", athlete=slug, ok=True,
+                           detail="silent (empty history)")
         return
 
     profile = {}
@@ -422,6 +433,12 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
         _log(f"OVER-CEILING/contradiction ({final_count}/{CEILING}, "
              f"{len(contradictions)} contradiction(s)) — not triggering: {why}")
 
+    # Completed the whole pass for this athlete. The sync is silent by design (the
+    # prompt forbids output), so there is no "sent" to record — the heartbeat IS the
+    # only evidence it ran, which is why its absence had to become detectable.
+    ops_log.record_run("session-sync", athlete=slug, ok=True,
+                       detail=f"synced (rules {rule_count}->{final_count})")
+
 
 def main() -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -442,6 +459,7 @@ def main() -> None:
         except Exception as exc:
             print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] session-sync error: {exc}",
                   file=sys.stderr)
+            ops_log.alert("session-sync", f"exception: {exc}", athlete=slug)
 
 
 if __name__ == "__main__":

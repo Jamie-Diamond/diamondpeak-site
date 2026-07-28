@@ -1,0 +1,22 @@
+{
+ "_note": "Accepted plan_audit failure counts per category. A run at or below its athlete's accepted counts logs a success; a new category or a higher count alerts. Shrink these as the defects in docs/plan-audit-status.md are fixed (or regenerate with plan_audit.py --all --write-baseline); an empty map for an athlete means every hard fail alerts.",
+ "written": "2026-07-28",
+ "athletes": {
+  "jamie": {
+   "FUELLING": 3,
+   "RULES": 6,
+   "WEEKLY_LOAD": 1
+  },
+  "kathryn": {
+   "FUELLING": 3,
+   "RULES": 2,
+   "STRUCTURE": 1,
+   "WEEKLY_LOAD": 2
+  },
+  "calum": {
+   "FUELLING": 1,
+   "RULES": 1,
+   "WEEKLY_LOAD": 1
+  }
+ }
+}
