@@ -816,15 +816,13 @@ class TestDueWindows:
         Each must be silent about every cycle before its own instrumentation."""
         import coach_alert as ca
         new = [d for d in ca.DELIVERABLES if d["since"].startswith("2026-07-28")]
+        # capture-reminder was the fifth; it is deregistered (see coach_alert).
         assert {d["script"] for d in new} == {
-            "night-before-brief", "capture-reminder", "session-sync",
-            "backup-config", "stage1-plan"}
+            "night-before-brief", "session-sync", "backup-config", "stage1-plan"}
         for d in new:
             since = datetime.fromisoformat(d["since"])
             due, state = ca.due_status(d, since - timedelta(minutes=1))
-            # capture-reminder is NOT_SCHEDULED (see its comment); either way the
-            # point holds — it is not judged over a cycle predating its heartbeat.
-            assert state in (ca.PRE_INSTRUMENTATION, ca.NOT_SCHEDULED), d["script"]
+            assert state == ca.PRE_INSTRUMENTATION, d["script"]
 
     def test_pre_instrumentation_is_visible_not_silent(self, digest):
         """Not judged must never be confusable with checked and fine, or a
@@ -884,56 +882,47 @@ class TestDueWindows:
             assert len(hits) == 1, f"{cmd_fragment}: {len(hits)} crontab lines"
             return " ".join(hits[0].split()[:5])
         for d in ca.DELIVERABLES:
-            if not d.get("enabled", True):
-                continue
             live = schedule_of(d["cron_cmd"])
             assert ca.parse_cron(live) == ca.parse_cron(d["cron"]), \
                 f"{d['script']}: declared {d['cron']!r}, crontab says {live!r}"
         assert ca.parse_cron(schedule_of("ops-digest.py")) == ca.parse_cron(ca.DIGEST_CRON)
 
-    def test_disabled_deliverables_are_really_unscheduled(self):
-        """`enabled: False` may only mean "there is no crontab entry".
+    def test_a_retired_job_is_deregistered_not_left_to_gap(self, digest):
+        """capture-reminder: retired 28 Jul 2026 (commit 2ba93c0), cron entry gone,
+        main() a no-op, its ask folded into the 21:00 check-in as Case A2.
 
-        capture-reminder's cron line was removed by concurrent work at ~13:00 on
-        28 Jul 2026 while this fix was being written. Disabling it stops a nightly
-        false gap line for a job that is not scheduled — but it must not become a
-        way for a scheduled deliverable to sit unmonitored. If the entry comes
-        back, this FAILS and forces the registration back to enabled.
+        Left registered it would have gapped every night for ever. Deregistered,
+        its work is still monitored — by evening-checkin, on the same 21:00
+        schedule and at telegram=True where capture-reminder was False.
         """
         import coach_alert as ca
-        disabled = [d for d in ca.DELIVERABLES if not d.get("enabled", True)]
-        assert {d["script"] for d in disabled} == {"capture-reminder"}
-        try:
-            out = subprocess.run(["crontab", "-l"], capture_output=True, text=True,
-                                 timeout=20)
-        except Exception as exc:                                   # pragma: no cover
-            pytest.skip(f"no crontab available: {exc}")
-        if out.returncode != 0:                                    # pragma: no cover
-            pytest.skip("crontab -l unavailable")
-        live = [l for l in out.stdout.splitlines()
-                if l.strip() and not l.lstrip().startswith("#")]
-        for d in disabled:
-            assert not [l for l in live if "/" + d["cron_cmd"] in l], \
-                f"{d['script']} IS scheduled again — re-enable it in DELIVERABLES"
-
-    def test_a_disabled_deliverable_is_reported_not_dropped(self, digest):
-        import coach_alert as ca
-        d = next(x for x in ca.DELIVERABLES if x["script"] == "capture-reminder")
-        assert ca.due_status(d, NOW) == (None, ca.NOT_SCHEDULED)
-        line = digest.not_due_line(d, None, ca.NOT_SCHEDULED)
-        assert line.startswith("ℹ") and "no crontab entry" in line
+        assert "capture-reminder" not in {d["script"] for d in ca.DELIVERABLES}
+        # the vestigial heartbeat evening-checkin still writes must stay classified,
+        # or an ok=False one would surface as a loud UNCLASSIFIED digest line
+        assert ca.OUTCOME_CLASS["capture-reminder"] == ca.FAILURE
+        assert digest.unclassified_lines(
+            [_e("capture-reminder", "jamie", ok=False, detail="x")]) == []
+        # the capture ask is now covered by a deliverable on the same schedule
+        ec = next(d for d in ca.DELIVERABLES if d["script"] == "evening-checkin")
+        assert ec["cron"] == "0 21 * * *" and ec["telegram"] is True
         gaps, tg = digest.gap_lines(self.today(), self.today() + self.week(),
                                     ATHLETES, now=NOW)
-        assert not any("capture reminder" in l and l.startswith("⚠") for l in gaps)
-        assert any("capture reminder" in l and l.startswith("ℹ") for l in gaps)
+        assert not any("capture reminder" in l for l in gaps)
+
+    def test_no_deliverable_is_registered_without_a_live_cron_entry(self):
+        """The generalisation of the capture-reminder case: a retired job must be
+        removed from DELIVERABLES, never left registered and unscheduled. This is
+        the same assertion as test_declared_schedules_match_the_live_crontab, named
+        separately because it is the property that matters operationally — a
+        deliverable with no cron entry can only ever produce a false gap line."""
+        self.test_declared_schedules_match_the_live_crontab()
 
     def test_a_deliverable_registered_with_no_crontab_entry_is_caught(self):
         """The remaining hole in the cross-check above — registering something that
         is not scheduled at all — closes because zero matching lines is a failure,
         not a pass."""
         import coach_alert as ca
-        d = dict(ca.DELIVERABLES[0], script="ghost", cron_cmd="no-such-job.py",
-                 enabled=True)
+        d = dict(ca.DELIVERABLES[0], script="ghost", cron_cmd="no-such-job.py")
         with pytest.raises(AssertionError):
             saved, ca.DELIVERABLES = ca.DELIVERABLES, [d]
             try:

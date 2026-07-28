@@ -13,7 +13,8 @@ log-only, in `~/Library/Logs/ClaudeCoach/ops-alerts.log` and
 
 1. **A named deliverable did not happen** — no *successful* heartbeat for the
    morning card, the daily prescription, the night-before brief, the evening
-   check-in, the nightly config backup, the weekly summary or the weekly plan.
+   check-in (which since 28 Jul also carries the capture ask), the nightly config
+   backup, the weekly summary or the weekly plan.
    Which ones qualify, and which may Telegram, is declared once in
    `coach_alert.DELIVERABLES`.
 2. **The Claude CLI could not authenticate in production** — a
@@ -30,7 +31,7 @@ and `lib/ops_log.py` has no notify path at all any more.
 | Condition | Why not Telegram |
 |---|---|
 | git sync stuck / flapping | Not one of the two. Now detected properly (see below) and loud in the digest, but silent on Telegram. **This is the 24-27 Jul incident: it would still not reach him.** One `REASONS` entry flips it. |
-| session-sync, watchdog gaps | Internal plumbing and nudges, not deliverables. (`capture-reminder` was descheduled on 28 Jul and is no longer monitored — see below.) |
+| session-sync, watchdog gaps | Internal plumbing and nudges, not deliverables. (`capture-reminder` was retired on 28 Jul and deregistered — its work is now covered by `evening-checkin`, see below.) |
 | `plan_audit` hard fails, under-training, everything else | Digest lines. |
 
 ## Heartbeats: silence vs absence
@@ -176,7 +177,6 @@ Every entry in `coach_alert.DELIVERABLES` now carries two more fields:
 | `due` | the last scheduled occurrence has passed, and is after `since` | ⚠ if missing | if `telegram: True` |
 | `pre-instrumentation` | the last occurrence predates `since` | ℹ, naming when it starts being judged | never |
 | `not-scheduled-yet` | no occurrence lies behind us at all | ℹ | never |
-| `not-scheduled` | `enabled: False` — no crontab entry | ℹ | never |
 
 Two properties matter more than the mechanism:
 
@@ -204,14 +204,32 @@ Three defences, in increasing strength:
    so declaring 05:00 for a job that really runs at 23:50 fails the build, and
    so does registering a deliverable with *no* crontab entry at all.
 
-Defence 3 earned itself immediately: it caught that `capture-reminder`'s cron
-line (`10 20 * * *`) had been **removed from the live crontab** by concurrent
-work at ~13:00 on 28 Jul — it was present at 12:00 and gone by 13:20. A
-registered deliverable that is not scheduled cannot be missing, so it is marked
-`enabled: False`, and `test_disabled_deliverables_are_really_unscheduled`
-asserts its crontab entry is *still* absent — if it is rescheduled the build
-fails and forces the registration back on, rather than leaving it quietly
-unmonitored.
+Defence 3 earned itself immediately. It caught that `capture-reminder`'s cron
+line (`10 20 * * *`) had been **removed from the live crontab** while this was
+being written — present at 12:00, gone by 13:20 — by commit `2ba93c0` ("one
+evening message"), which retired the 20:10 push and folded its ask into the
+21:00 check-in as Case A2.
+
+`capture-reminder` is therefore **deregistered**, not kept and disabled. Its
+script's `main()` is now a deliberate no-op and it has no cron entry, so left
+registered it would have produced `⚠ no successful capture reminder for
+<athlete> today` every night for ever.
+
+Nothing is lost by removing it rather than re-pointing it at the 21:00 slot:
+`evening-checkin` is *already* a deliverable on that exact schedule, and it is
+`telegram: True` where `capture-reminder` was `telegram: False` — so the capture
+chase is monitored **more** strictly than before, not less. Re-pointing would
+instead create two deliverables that can only ever succeed or fail together: one
+root cause, two digest lines, the anti-pattern argued against under
+`per_athlete` below. `evening-checkin._record()` still writes a vestigial
+`capture-reminder` heartbeat; nothing reads it, and `capture-reminder` stays in
+`OUTCOME_CLASS` so an `ok=False` one is classified rather than surfacing as an
+`UNCLASSIFIED` digest line.
+
+The general rule this settles: **a retired job is removed from `DELIVERABLES`,
+never left registered and unscheduled.** A deliverable with no cron entry can
+only ever produce a false gap line, and
+`test_no_deliverable_is_registered_without_a_live_cron_entry` enforces it.
 
 ### What was NOT done
 
@@ -233,7 +251,7 @@ Every entry verified against the live crontab, digest at 21:30:
 | daily prescription | `0 5 * * *` | 05:00 today | yes |
 | night-before brief | `30 20 * * *` | 20:30 today | yes |
 | evening check-in | `0 21 * * *` | 21:00 today | yes — tightest margin (30 min; historically finishes in ~2 min, and `GRACE_MIN` keeps a still-running job from counting) |
-| capture reminder | *(entry removed 28 Jul)* | — | no — `enabled: False` |
+| ~~capture reminder~~ | *(retired 28 Jul, `2ba93c0`)* | — | **deregistered** — folded into the 21:00 check-in, which is itself monitored |
 | session sync | `40 7-22/2 * * *` | 19:40 today | yes — its *last* daily occurrence (21:40) is after the digest, which looks like the `backup-config` fault and is not: earlier occurrences the same day are already behind us |
 | watchdog | `30 5 * * *` | 05:30 today | yes |
 | config backup | `50 23 * * *` | **23:50 yesterday** | yes, on the previous cycle |

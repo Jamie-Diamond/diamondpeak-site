@@ -116,20 +116,26 @@ DELIVERABLES = [
      "cron": "0 21 * * *",       "cron_cmd": "evening-checkin.py",
      "since": "2026-06-10T00:00:00"},
     # Internal plumbing and nudges — a gap is worth a digest line, not a message.
-    # DISABLED 28 Jul 2026, ~13:00: its crontab line (`10 20 * * *`) was removed
-    # from the live crontab by concurrent work while this fix was being written —
-    # it was present at 12:00 and gone by 13:20. A deliverable that is not
-    # scheduled cannot be missing, and leaving it registered would have produced a
-    # "no successful capture reminder" line every night from 20:10 tomorrow: a new
-    # permanent false alarm of exactly the kind this change exists to remove.
-    # Registration is kept rather than deleted so the reason is on the record, and
-    # test_disabled_deliverables_are_really_unscheduled asserts the crontab entry
-    # is still absent — so if capture-reminder is rescheduled, the build FAILS and
-    # forces this back to enabled instead of quietly staying unmonitored.
-    {"script": "capture-reminder",   "label": "capture reminder",   "window": "daily",
-     "per_athlete": True,  "telegram": False,  "enabled": False,
-     "cron": "10 20 * * *",      "cron_cmd": "capture-reminder.py",
-     "since": "2026-07-28T11:44:37"},   # ff6fba3
+    # capture-reminder was DEREGISTERED here on 28 Jul 2026 (commit 2ba93c0, "one
+    # evening message"). Its 20:10 cron entry is gone, capture-reminder.py's main()
+    # is now a deliberate no-op, and the capture ask is Case A2 of the 21:00
+    # evening-checkin. Left registered it would have produced "⚠ no successful
+    # capture reminder for <athlete> today" every night for ever — a permanent
+    # false gap line, which is the same defect this change exists to remove.
+    #
+    # Nothing is lost by removing it rather than re-pointing it at
+    # evening-checkin's 21:00 slot: evening-checkin is ALREADY a deliverable on
+    # that exact schedule, and it is telegram=True where capture-reminder was
+    # telegram=False — so the work is monitored more strictly than before, not
+    # less. Re-pointing would instead create two deliverables that can only ever
+    # succeed or fail together: one root cause, two digest lines, which is the
+    # anti-pattern argued against on stage1-plan's per_athlete note above.
+    #
+    # evening-checkin's _record() still writes a vestigial "capture-reminder"
+    # heartbeat (it was added so this registry entry would not gap before it could
+    # be removed). Nothing reads it now, and it is harmless: capture-reminder stays
+    # in OUTCOME_CLASS below, so if one ever arrives ok=False it is classified as a
+    # FAILURE rather than surfacing as an UNCLASSIFIED digest line.
     # session-sync's LAST occurrence of the day (21:40) is after the digest, which
     # looks like backup-config's fault and is not: earlier occurrences the same day
     # (07:40 onwards) are already behind us at 21:30, so last_due() finds 19:40 and
@@ -296,7 +302,6 @@ def last_due(spec: str, now: datetime):
 
 DUE                 = "due"
 NOT_SCHEDULED_YET   = "not-scheduled-yet"
-NOT_SCHEDULED       = "not-scheduled"
 PRE_INSTRUMENTATION = "pre-instrumentation"
 
 
@@ -306,10 +311,6 @@ def due_status(d: dict, now: datetime = None) -> tuple:
     Only DUE may produce a gap line or a Telegram. The other two states mean the
     absence of a heartbeat is EXPECTED, not a failure:
 
-      NOT_SCHEDULED       — `enabled: False`: the job has no crontab entry, so
-                            there is nothing to expect. Still reported as an
-                            "ℹ not judged" digest line rather than dropped, and a
-                            test proves the crontab entry really is absent.
       NOT_SCHEDULED_YET   — no occurrence of this schedule lies behind us at all.
       PRE_INSTRUMENTATION — the last occurrence predates `since`, so no heartbeat
                             could exist for it. This ages out by itself: the
@@ -320,8 +321,6 @@ def due_status(d: dict, now: datetime = None) -> tuple:
                             so a deliverable is never silently unchecked.
     """
     now = now or datetime.now()
-    if not d.get("enabled", True):
-        return None, NOT_SCHEDULED
     due = last_due(d["cron"], now)
     if due is None:
         return None, NOT_SCHEDULED_YET

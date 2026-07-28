@@ -200,9 +200,6 @@ def not_due_line(d: dict, due, state: str) -> str:
     or never-instrumented deliverable could sit unchecked for ever with nothing
     to show. The line names the reason and the moment it starts being judged.
     """
-    if state == coach_alert.NOT_SCHEDULED:
-        return (f"ℹ {d['label']} not judged — no crontab entry (was {d['cron']}); "
-                f"registered but unscheduled, so it cannot be missing")
     if state == coach_alert.PRE_INSTRUMENTATION:
         return (f"ℹ {d['label']} not judged yet — its last scheduled run "
                 f"({due:%a %d %b %H:%M}) predates the heartbeat instrumentation "
