@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -33,6 +35,16 @@ def logs(monkeypatch, tmp_path):
     return tmp_path
 
 
+# Gap detection is time-dependent as of 28 Jul 2026 — a deliverable is judged only
+# once its scheduled time has passed (coach_alert.due_status). Every gap/weekly test
+# therefore injects an explicit `now` instead of inheriting the wall clock, which
+# would make the suite pass or fail depending on the hour it is run at.
+#
+# NOW is a Wednesday evening after the 21:30 digest slot, and after every `since`
+# in DELIVERABLES, so all ten deliverables are DUE and the tests exercise the gap
+# logic rather than the due gate. The due gate has its own class below.
+NOW = datetime(2026, 8, 5, 21, 30)
+
 ATHLETES = {
     "jamie":   {"active": True},
     "kathryn": {"active": True, "daily_prescription": False},
@@ -41,7 +53,7 @@ ATHLETES = {
 
 
 def _e(script, athlete="", ok=True, detail="", outcome=None):
-    e = {"ts": "2026-06-09T07:00:00", "script": script,
+    e = {"ts": "2026-08-05T07:00:00", "script": script,
          "athlete": athlete, "ok": ok, "detail": detail}
     if outcome:
         e["outcome"] = outcome
@@ -130,8 +142,13 @@ class TestGapLines:
                 for slug in ("jamie", "kathryn")]
 
     def call(self, digest, **kw):
+        """Gaps only. gap_lines also returns informational "ℹ not judged" lines
+        (a deliverable whose scheduled time has not passed, or that has no crontab
+        entry) — those are the OPPOSITE of a gap and are asserted in
+        TestDueWindows, so they are filtered out here."""
         today = self.today(**kw)
-        return digest.gap_lines(today, today + self.week(), ATHLETES)
+        gaps, tg = digest.gap_lines(today, today + self.week(), ATHLETES, now=NOW)
+        return [l for l in gaps if l.startswith("⚠")], tg
 
     def test_all_present_no_gap_no_telegram(self, digest):
         assert self.call(digest) == ([], [])
@@ -193,14 +210,14 @@ class TestGapLines:
     def test_weekly_gap_is_log_only(self, digest):
         today = self.today()
         week = today + [e for e in self.week() if e["script"] != "weekly-summary"]
-        gaps, tg = digest.gap_lines(today, week, ATHLETES)
+        gaps, tg = digest.gap_lines(today, week, ATHLETES, now=NOW)
         assert any("weekly summary" in l for l in gaps)
         assert tg == []
 
     def test_weekly_plan_gap_is_log_only(self, digest):
         today = self.today()
         week = today + [e for e in self.week() if e["script"] != "stage1-plan"]
-        gaps, tg = digest.gap_lines(today, week, ATHLETES)
+        gaps, tg = digest.gap_lines(today, week, ATHLETES, now=NOW)
         assert any("weekly plan" in l for l in gaps)
         assert tg == []
 
@@ -304,7 +321,7 @@ class TestBenignFindingDoesNotAlarm:
         # as ok=False. It is not a missed weekly summary.
         week += [_e("weekly-summary", slug, ok=False,
                     detail=TestOkFalseSemantics.BENIGN) for slug in ("jamie", "kathryn")]
-        gaps, tg = digest.gap_lines(today, week, ATHLETES)
+        gaps, tg = digest.gap_lines(today, week, ATHLETES, now=NOW)
         assert not any("weekly summary" in l for l in gaps)
         assert tg == []
 
@@ -313,12 +330,12 @@ class TestBenignFindingDoesNotAlarm:
         week = [e for e in today + self.week() if e["script"] != "weekly-summary"]
         week += [_e("weekly-summary", slug, ok=False, detail="crashed",
                     outcome=ops_log.FAILURE) for slug in ("jamie", "kathryn")]
-        gaps, _ = digest.gap_lines(today, week, ATHLETES)
+        gaps, _ = digest.gap_lines(today, week, ATHLETES, now=NOW)
         assert any("weekly summary" in l for l in gaps)
 
     def test_unclassified_failure_is_loud_but_never_alarms(self, digest):
         today = self.today() + [_e("brand-new-job", ok=False, detail="who knows")]
-        gaps, tg = digest.gap_lines(today, today + self.week(), ATHLETES)
+        gaps, tg = digest.gap_lines(today, today + self.week(), ATHLETES, now=NOW)
         assert tg == []          # cannot interrupt the coach
         lines = digest.unclassified_lines(today)
         assert len(lines) == 1 and "brand-new-job" in lines[0]
@@ -366,7 +383,8 @@ class TestBackupConfigHeartbeat:
         ops_log.sync_failure("backup-config", "push to dpc_private failed")
         row = json.loads(ops_log.RUN_STATUS.read_text().splitlines()[-1])
         assert row["ok"] is True and "transient" in row["detail"]   # the trap
-        gaps, tg = digest.gap_lines([row], [row], {})
+        row["ts"] = "2026-08-05T07:00:00"   # inside NOW's window — see NOW above
+        gaps, tg = digest.gap_lines([row], [row], {}, now=NOW)
         assert any("config backup" in l for l in gaps)
         assert "config backup" in tg
 
@@ -374,7 +392,7 @@ class TestBackupConfigHeartbeat:
         # sync_ok records athlete="" while per_athlete=False checks athlete=None
         # ("any"). A mismatch here would gap every night with the job running fine.
         row = _e("backup-config", athlete="", detail="sync ok")
-        gaps, tg = digest.gap_lines([row], [row], {})
+        gaps, tg = digest.gap_lines([row], [row], {}, now=NOW)
         assert not any("config backup" in l for l in gaps) and tg == []
 
 
@@ -537,7 +555,7 @@ class TestWeeklyAlerts:
         monkeypatch.setenv("CC_ALERT_DRY_RUN", "1")
         monkeypatch.setattr(coach_alert, "STATE", logs / "coach-alert-state.json")
         week = self._week(missing={("weekly-summary", "jamie"), ("weekly-summary", "kathryn")})
-        alerted = digest.weekly_alerts(week, ATHLETES)
+        alerted = digest.weekly_alerts(week, ATHLETES, now=NOW)
         assert len(alerted) == 1
         assert "weekly summary" in alerted[0]
         assert "jamie" in alerted[0] and "kathryn" in alerted[0]
@@ -550,10 +568,10 @@ class TestWeeklyAlerts:
         monkeypatch.setattr(coach_alert, "subprocess",
                             type("S", (), {"run": staticmethod(lambda *a, **k: result)}))
         week = self._week(missing={("weekly-summary", "jamie"), ("weekly-summary", "kathryn")})
-        first = digest.weekly_alerts(week, ATHLETES)
+        first = digest.weekly_alerts(week, ATHLETES, now=NOW)
         # A later run (e.g. the next evening's digest) with the SAME miss still
         # unresolved must not send a second message.
-        second = digest.weekly_alerts(week, ATHLETES)
+        second = digest.weekly_alerts(week, ATHLETES, now=NOW)
         assert len(first) == 1
         assert second == []
 
@@ -584,7 +602,7 @@ class TestWeeklyAlerts:
         # per-date key that would be SEVEN Telegrams for one incident.
         ca = self._stub_sender(monkeypatch, logs)
         week = self._week(missing={("weekly-summary", "jamie"), ("weekly-summary", "kathryn")})
-        sent = [digest.weekly_alerts(week, ATHLETES) for _ in range(7)]
+        sent = [digest.weekly_alerts(week, ATHLETES, now=NOW) for _ in range(7)]
         assert len(sent[0]) == 1
         assert all(s == [] for s in sent[1:]), f"re-alerted on a later evening: {sent}"
         assert list(json.loads(ca.STATE.read_text())) == [
@@ -594,14 +612,14 @@ class TestWeeklyAlerts:
         ca = self._stub_sender(monkeypatch, logs)
         missing_week = self._week(missing={("weekly-summary", "jamie"), ("weekly-summary", "kathryn")})
         present_week = self._week()
-        assert len(digest.weekly_alerts(missing_week, ATHLETES)) == 1
+        assert len(digest.weekly_alerts(missing_week, ATHLETES, now=NOW)) == 1
         assert json.loads(ca.STATE.read_text())    # cooldown really was banked
         # Resolved: no alert, and the cooldown for this key is cleared.
-        assert digest.weekly_alerts(present_week, ATHLETES) == []
+        assert digest.weekly_alerts(present_week, ATHLETES, now=NOW) == []
         assert json.loads(ca.STATE.read_text()) == {}   # ...cleared, not just unread
         # A brand new occurrence (e.g. next Sunday) alerts again immediately,
         # rather than being silenced by the leftover 168h cooldown.
-        assert len(digest.weekly_alerts(missing_week, ATHLETES)) == 1
+        assert len(digest.weekly_alerts(missing_week, ATHLETES, now=NOW)) == 1
 
     def test_without_recovery_the_cooldown_would_silence_next_week(self, digest, logs, monkeypatch):
         # The negative control for the test above: with clear_cooldown() stubbed
@@ -610,9 +628,9 @@ class TestWeeklyAlerts:
         ca = self._stub_sender(monkeypatch, logs)
         monkeypatch.setattr(ca, "clear_cooldown", lambda *a, **k: None)
         missing_week = self._week(missing={("weekly-summary", "jamie"), ("weekly-summary", "kathryn")})
-        assert len(digest.weekly_alerts(missing_week, ATHLETES)) == 1
-        digest.weekly_alerts(self._week(), ATHLETES)
-        assert digest.weekly_alerts(missing_week, ATHLETES) == []   # silenced — the bug
+        assert len(digest.weekly_alerts(missing_week, ATHLETES, now=NOW)) == 1
+        digest.weekly_alerts(self._week(), ATHLETES, now=NOW)
+        assert digest.weekly_alerts(missing_week, ATHLETES, now=NOW) == []   # silenced — the bug
 
     def test_stage1_plan_failing_for_all_athletes_is_one_message(self, digest, logs, monkeypatch):
         # Same root cause (one crashed Sunday plan build) affecting every
@@ -621,7 +639,7 @@ class TestWeeklyAlerts:
         monkeypatch.setenv("CC_ALERT_DRY_RUN", "1")
         monkeypatch.setattr(coach_alert, "STATE", logs / "coach-alert-state.json")
         week = self._week(missing={("stage1-plan", "jamie"), ("stage1-plan", "kathryn")})
-        alerted = digest.weekly_alerts(week, ATHLETES)
+        alerted = digest.weekly_alerts(week, ATHLETES, now=NOW)
         assert len(alerted) == 1
         assert "weekly plan" in alerted[0]
 
@@ -663,3 +681,262 @@ class TestStage1PlanHeartbeat:
     def test_dry_run_records_nothing(self, logs, monkeypatch):
         assert self._run(monkeypatch, logs,
                          ["stage1-plan.py", "--athlete", "testa"]) == []
+
+
+class TestDueWindows:
+    """A deliverable may only be judged once it could actually have happened.
+
+    Both false alarms the 28 Jul alarm shipped with were this one fault seen from
+    two angles: backup-config runs at 23:50 and was checked at 21:30 (2h20m too
+    early, every night, for ever), and stage1-plan's 7-day weekly window reached
+    back to a Sunday two days before its heartbeat instrumentation existed. Neither
+    job was broken. Both would have Telegrammed on night one.
+    """
+
+    today = staticmethod(lambda **kw: TestGapLines().today(**kw))
+    week = staticmethod(lambda: TestGapLines().week())
+
+    DIGEST = 21, 30   # the crontab slot this whole mechanism is timed against
+
+    # --- the schedule parser ------------------------------------------------
+    def test_field_forms_used_by_the_real_crontab(self):
+        import coach_alert as ca
+        assert ca._cron_field("*/30", 0, 59) == {0, 30}
+        assert ca._cron_field("7-22/2", 0, 23) == {7, 9, 11, 13, 15, 17, 19, 21}
+        assert ca._cron_field("6-9", 0, 23) == {6, 7, 8, 9}
+        assert ca._cron_field("0", 0, 7) == {0}
+        assert ca._cron_field("1,3,5", 0, 7) == {1, 3, 5}
+
+    @pytest.mark.parametrize("spec", ["", "0 5 * *", "0 5 * * * *", "0 5 1 * *",
+                                      "0 5 * 3 *", "banana 5 * * *", "0 5-x * * *",
+                                      "0 */0 * * *", "99 5 * * *", "0 5 * * 9"])
+    def test_an_unreadable_or_unsupported_spec_raises(self, spec):
+        """It must RAISE, not guess.
+
+        This is half the answer to "a deliverable added later with a bad time must
+        not silently produce a nightly false alarm": a schedule this parser cannot
+        read cannot produce a wrong due time, because it fails
+        test_every_deliverable_declares_a_parseable_schedule below instead.
+        """
+        import coach_alert as ca
+        with pytest.raises(ValueError):
+            ca.parse_cron(spec)
+
+    def test_sunday_is_both_0_and_7(self):
+        import coach_alert as ca
+        assert ca.parse_cron("0 18 * * 0")["dow"] == ca.parse_cron("0 18 * * 7")["dow"]
+
+    def test_last_due_walks_back_past_days_the_job_does_not_run(self):
+        import coach_alert as ca
+        # Wednesday evening -> the previous Sunday's 18:00 weekly-plan slot.
+        assert ca.last_due("0 18 * * 0", NOW) == datetime(2026, 8, 2, 18, 0)
+
+    def test_last_due_skips_an_occurrence_that_may_still_be_running(self):
+        import coach_alert as ca
+        # evening-checkin at 21:00 has the tightest real margin to the 21:30 digest.
+        # Asked AT 21:00 the run has not finished, so the answer is yesterday's.
+        assert ca.last_due("0 21 * * *", datetime(2026, 8, 5, 21, 0)) \
+            == datetime(2026, 8, 4, 21, 0)
+        assert ca.last_due("0 21 * * *", NOW) == datetime(2026, 8, 5, 21, 0)
+
+    # --- FAULT 1: judged before it could have run ---------------------------
+    def test_a_job_scheduled_after_the_digest_is_not_judged_on_the_current_day(self):
+        import coach_alert as ca
+        d = next(x for x in ca.DELIVERABLES if x["script"] == "backup-config")
+        due, state = ca.due_status(d, NOW)
+        assert d["cron"] == "50 23 * * *"          # after the 21:30 digest
+        assert state == ca.DUE                      # ...but still checked
+        assert due == datetime(2026, 8, 4, 23, 50)  # on YESTERDAY's cycle
+
+    def test_the_original_false_alarm_is_gone(self, digest):
+        """21:30 on 28 Jul 2026 — the night the alarm would have cried wolf.
+
+        Everything present that the evening's jobs would have written by 21:30;
+        backup-config (23:50) and stage1-plan (Sunday, instrumented 28 Jul 11:44)
+        cannot have. Neither may reach Telegram.
+        """
+        import coach_alert as ca
+        night = datetime(2026, 7, 28, 21, 30)
+        today = [e for e in self.today() if e["script"] != "backup-config"]
+        # weekly-summary ran on Sunday 26 Jul, inside the 7-day window — its own
+        # gap is a separate (real) concern and would drown out what this asserts.
+        today += [_e("weekly-summary", slug, detail="sent")
+                  for slug in ("jamie", "kathryn", "calum")]
+        for e in today:
+            e["ts"] = "2026-07-28T20:35:00"
+        gaps, tg = digest.gap_lines(today, today, ATHLETES, now=night)
+        assert tg == [], f"would have Telegrammed: {tg}"
+        assert not any("config backup" in l and l.startswith("⚠") for l in gaps)
+        assert any("config backup" in l and l.startswith("ℹ") for l in gaps)
+        assert digest.weekly_alerts(today, ATHLETES, now=night) == []
+
+    def test_a_genuine_backup_failure_the_following_night_DOES_alert(self, digest):
+        """The other half: the gate must not have turned the check off.
+
+        29 Jul 21:30. backup-config's 28 Jul 23:50 slot is now both past and after
+        its instrumentation, so a night with no successful backup is a real miss
+        and reaches Telegram — 24-hour detection, where the alternative was never.
+        """
+        night = datetime(2026, 7, 29, 21, 30)
+        today = [e for e in self.today() if e["script"] != "backup-config"]
+        today += [_e("weekly-summary", slug, detail="sent")
+                  for slug in ("jamie", "kathryn", "calum")]
+        for e in today:
+            e["ts"] = "2026-07-29T20:35:00"
+        gaps, tg = digest.gap_lines(today, today, ATHLETES, now=night)
+        assert "config backup" in tg
+        assert any("config backup" in l and "23:50" in l for l in gaps)
+
+    def test_a_failed_backup_is_judged_on_the_previous_cycles_window(self, digest):
+        """A "sync ok" from BEFORE the 23:50 slot must not satisfy it — otherwise
+        the previous-cycle window would accept yesterday's success for ever."""
+        night = datetime(2026, 7, 29, 21, 30)
+        stale = _e("backup-config", detail="sync ok")
+        stale["ts"] = "2026-07-28T09:00:00"      # before the 28 Jul 23:50 run
+        fresh = dict(stale, ts="2026-07-29T00:01:00")   # after it
+        assert "config backup" in digest.gap_lines([stale], [stale], {}, now=night)[1]
+        assert "config backup" not in digest.gap_lines([fresh], [fresh], {}, now=night)[1]
+
+    # --- FAULT 2: judged over a window predating its own instrumentation ----
+    def test_a_newly_instrumented_deliverable_is_not_judged_on_earlier_cycles(self):
+        import coach_alert as ca
+        d = next(x for x in ca.DELIVERABLES if x["script"] == "stage1-plan")
+        # The night the alarm shipped: last Sunday slot was 26 Jul 18:00, two days
+        # before the heartbeat existed.
+        due, state = ca.due_status(d, datetime(2026, 7, 28, 21, 30))
+        assert (due, state) == (datetime(2026, 7, 26, 18, 0), ca.PRE_INSTRUMENTATION)
+        # It ages out on its own — no seeded heartbeats, no edit to the audit trail.
+        due, state = ca.due_status(d, datetime(2026, 8, 2, 21, 30))
+        assert (due, state) == (datetime(2026, 8, 2, 18, 0), ca.DUE)
+
+    def test_every_newly_instrumented_deliverable_got_the_grace(self):
+        """FIVE deliverables were instrumented on 28 Jul, not the one that was
+        spotted: night-before-brief, capture-reminder, session-sync, backup-config
+        and stage1-plan had zero entries between them in 1075 lines of history.
+        Each must be silent about every cycle before its own instrumentation."""
+        import coach_alert as ca
+        new = [d for d in ca.DELIVERABLES if d["since"].startswith("2026-07-28")]
+        assert {d["script"] for d in new} == {
+            "night-before-brief", "capture-reminder", "session-sync",
+            "backup-config", "stage1-plan"}
+        for d in new:
+            since = datetime.fromisoformat(d["since"])
+            due, state = ca.due_status(d, since - timedelta(minutes=1))
+            # capture-reminder is NOT_SCHEDULED (see its comment); either way the
+            # point holds — it is not judged over a cycle predating its heartbeat.
+            assert state in (ca.PRE_INSTRUMENTATION, ca.NOT_SCHEDULED), d["script"]
+
+    def test_pre_instrumentation_is_visible_not_silent(self, digest):
+        """Not judged must never be confusable with checked and fine, or a
+        mis-declared deliverable could sit unchecked for ever."""
+        import coach_alert as ca
+        d = next(x for x in ca.DELIVERABLES if x["script"] == "stage1-plan")
+        line = digest.not_due_line(d, datetime(2026, 7, 26, 18, 0),
+                                   ca.PRE_INSTRUMENTATION)
+        assert line.startswith("ℹ") and "not judged yet" in line
+        assert "weekly plan" in line and "2026-07-28" in line
+
+    def test_not_expected_never_clears_a_banked_cooldown(self, digest, logs, monkeypatch):
+        """A cooldown banked for a real, still-unfixed miss must survive a cycle we
+        did not actually check — otherwise the gate would silently re-arm and
+        re-Telegram the same incident."""
+        import coach_alert as ca
+        monkeypatch.setattr(ca, "STATE", logs / "coach-alert-state.json")
+        monkeypatch.setattr(ops_log, "ALERT_LOG", logs / "ops-alerts.log")
+        ca._write_state({f"{ca.DELIVERABLE_MISSING}|weekly:stage1-plan": "2026-07-28T21:30:00"})
+        # 28 Jul: stage1-plan is pre-instrumentation, so it is not checked at all.
+        week = [_e("weekly-summary", slug, detail="sent") for slug in ATHLETES]
+        assert digest.weekly_alerts(week, ATHLETES, now=datetime(2026, 7, 28, 21, 30)) == []
+        assert f"{ca.DELIVERABLE_MISSING}|weekly:stage1-plan" in ca._read_state()
+
+    # --- the declarations must match reality --------------------------------
+    def test_every_deliverable_declares_a_parseable_schedule_and_a_since(self):
+        import coach_alert as ca
+        for d in ca.DELIVERABLES:
+            assert d["cron"] and d["cron_cmd"], d["script"]
+            ca.parse_cron(d["cron"])                      # raises if unreadable
+            datetime.fromisoformat(d["since"])            # raises if malformed
+            assert ca.last_due(d["cron"], NOW) is not None, d["script"]
+        ca.parse_cron(ca.DIGEST_CRON)
+
+    def test_declared_schedules_match_the_live_crontab(self):
+        """The other half of "a bad time cannot silently false-alarm": declaring
+        05:00 for a job that really runs at 23:50 fails HERE rather than mis-timing
+        the gap check for ever. Compared as parsed value sets, so `*/30` and
+        `0,30` are the same schedule.
+
+        Skips only where there is no crontab to read (a dev machine). On the VM,
+        where the digest actually runs, it executes.
+        """
+        import coach_alert as ca
+        try:
+            out = subprocess.run(["crontab", "-l"], capture_output=True, text=True,
+                                 timeout=20)
+        except Exception as exc:                                   # pragma: no cover
+            pytest.skip(f"no crontab available: {exc}")
+        if out.returncode != 0:                                    # pragma: no cover
+            pytest.skip("crontab -l unavailable")
+        lines = [l for l in out.stdout.splitlines()
+                 if l.strip() and not l.lstrip().startswith("#")]
+        def schedule_of(cmd_fragment):
+            # Leading "/" so `watchdog.py` does not also match `bot-watchdog.py`.
+            hits = [l for l in lines if "/" + cmd_fragment in l]
+            assert len(hits) == 1, f"{cmd_fragment}: {len(hits)} crontab lines"
+            return " ".join(hits[0].split()[:5])
+        for d in ca.DELIVERABLES:
+            if not d.get("enabled", True):
+                continue
+            live = schedule_of(d["cron_cmd"])
+            assert ca.parse_cron(live) == ca.parse_cron(d["cron"]), \
+                f"{d['script']}: declared {d['cron']!r}, crontab says {live!r}"
+        assert ca.parse_cron(schedule_of("ops-digest.py")) == ca.parse_cron(ca.DIGEST_CRON)
+
+    def test_disabled_deliverables_are_really_unscheduled(self):
+        """`enabled: False` may only mean "there is no crontab entry".
+
+        capture-reminder's cron line was removed by concurrent work at ~13:00 on
+        28 Jul 2026 while this fix was being written. Disabling it stops a nightly
+        false gap line for a job that is not scheduled — but it must not become a
+        way for a scheduled deliverable to sit unmonitored. If the entry comes
+        back, this FAILS and forces the registration back to enabled.
+        """
+        import coach_alert as ca
+        disabled = [d for d in ca.DELIVERABLES if not d.get("enabled", True)]
+        assert {d["script"] for d in disabled} == {"capture-reminder"}
+        try:
+            out = subprocess.run(["crontab", "-l"], capture_output=True, text=True,
+                                 timeout=20)
+        except Exception as exc:                                   # pragma: no cover
+            pytest.skip(f"no crontab available: {exc}")
+        if out.returncode != 0:                                    # pragma: no cover
+            pytest.skip("crontab -l unavailable")
+        live = [l for l in out.stdout.splitlines()
+                if l.strip() and not l.lstrip().startswith("#")]
+        for d in disabled:
+            assert not [l for l in live if "/" + d["cron_cmd"] in l], \
+                f"{d['script']} IS scheduled again — re-enable it in DELIVERABLES"
+
+    def test_a_disabled_deliverable_is_reported_not_dropped(self, digest):
+        import coach_alert as ca
+        d = next(x for x in ca.DELIVERABLES if x["script"] == "capture-reminder")
+        assert ca.due_status(d, NOW) == (None, ca.NOT_SCHEDULED)
+        line = digest.not_due_line(d, None, ca.NOT_SCHEDULED)
+        assert line.startswith("ℹ") and "no crontab entry" in line
+        gaps, tg = digest.gap_lines(self.today(), self.today() + self.week(),
+                                    ATHLETES, now=NOW)
+        assert not any("capture reminder" in l and l.startswith("⚠") for l in gaps)
+        assert any("capture reminder" in l and l.startswith("ℹ") for l in gaps)
+
+    def test_a_deliverable_registered_with_no_crontab_entry_is_caught(self):
+        """The remaining hole in the cross-check above — registering something that
+        is not scheduled at all — closes because zero matching lines is a failure,
+        not a pass."""
+        import coach_alert as ca
+        d = dict(ca.DELIVERABLES[0], script="ghost", cron_cmd="no-such-job.py",
+                 enabled=True)
+        with pytest.raises(AssertionError):
+            saved, ca.DELIVERABLES = ca.DELIVERABLES, [d]
+            try:
+                self.test_declared_schedules_match_the_live_crontab()
+            finally:
+                ca.DELIVERABLES = saved

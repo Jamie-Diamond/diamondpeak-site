@@ -30,7 +30,7 @@ and `lib/ops_log.py` has no notify path at all any more.
 | Condition | Why not Telegram |
 |---|---|
 | git sync stuck / flapping | Not one of the two. Now detected properly (see below) and loud in the digest, but silent on Telegram. **This is the 24-27 Jul incident: it would still not reach him.** One `REASONS` entry flips it. |
-| session-sync, watchdog, capture-reminder gaps | Internal plumbing and nudges, not deliverables. |
+| session-sync, watchdog gaps | Internal plumbing and nudges, not deliverables. (`capture-reminder` was descheduled on 28 Jul and is no longer monitored — see below.) |
 | `plan_audit` hard fails, under-training, everything else | Digest lines. |
 
 ## Heartbeats: silence vs absence
@@ -139,6 +139,114 @@ backup** as a clean run and make the registration cosmetic. Pinning the detail
 to the exact string only `sync_ok` writes means only a genuine success satisfies
 the check. Narrowing here rather than changing `sync_failure` keeps the blast
 radius to this one job instead of all five sharing the helper.
+
+## Nothing is judged before it could have happened (28 Jul 2026)
+
+The alarm shipped with two false alarms that would both have fired on its first
+night, from jobs that were working perfectly. They are the same fault seen from
+two angles: **the gap check asked "is there a heartbeat in this window?" and
+never "could there be one yet?"**
+
+| The false alarm | Why it fired |
+|---|---|
+| `⚠ no successful config backup today` | `backup-config` runs at **23:50**. The digest runs at **21:30** — 2h20m *before* it. Registered as "must appear today", it reported missing every night, in perpetuity. |
+| `⚠ no successful weekly plan for jamie/kathryn/calum in 7 days` | `stage1-plan`'s heartbeat was added at 11:44 on 28 Jul. Its 7-day window reached back to the Sunday 26 Jul run — two days before any heartbeat could exist. |
+
+It was not two deliverables but **five**: `night-before-brief`,
+`capture-reminder`, `session-sync`, `backup-config` and `stage1-plan` were all
+instrumented on 28 Jul and had zero entries between them in 1075 lines of
+`run-status.jsonl` history.
+
+### The fix: a declared schedule and a declared instrumentation date
+
+Every entry in `coach_alert.DELIVERABLES` now carries two more fields:
+
+- **`cron`** — its real crontab schedule (plus `cron_cmd`, the command that
+  identifies its crontab line).
+- **`since`** — when its heartbeat instrumentation went **live on prod `main`**,
+  which is the runtime here. Not the commit time: `83bb541` was committed at
+  11:37 and merged at 11:44, and the `session-sync` cron launched at 11:40 in
+  between on the old uninstrumented code. A `since` of 11:37 would have called
+  that a genuine gap.
+
+`coach_alert.due_status()` then answers *may this be judged right now?*
+
+| State | Meaning | Gap line | Telegram |
+|---|---|---|---|
+| `due` | the last scheduled occurrence has passed, and is after `since` | ⚠ if missing | if `telegram: True` |
+| `pre-instrumentation` | the last occurrence predates `since` | ℹ, naming when it starts being judged | never |
+| `not-scheduled-yet` | no occurrence lies behind us at all | ℹ | never |
+| `not-scheduled` | `enabled: False` — no crontab entry | ℹ | never |
+
+Two properties matter more than the mechanism:
+
+**A job scheduled after the digest is judged on its PREVIOUS cycle, not
+skipped.** At 21:30, `backup-config`'s last due moment is *last night's* 23:50,
+so the window checked is "since the 23:50 run on <date>" and a genuinely failed
+backup is caught within 24 hours. Skipping it would have made the whole
+registration cosmetic — and this is the only backup of the intervals.icu keys.
+
+**Not judged is never silent.** Every non-`due` state still prints an
+`ℹ … not judged` digest line naming the reason, so a deliverable cannot sit
+unchecked with nothing to show for it.
+
+### Why a deliverable added later with a bad time cannot repeat this
+
+Three defences, in increasing strength:
+
+1. **Expectation is derived, not assumed.** Any schedule — 23:50, 03:00,
+   Sunday-only — goes through the same code path. There is no "correct" time to
+   get wrong.
+2. **`parse_cron` raises rather than guesses.** A spec it cannot read fails
+   `test_every_deliverable_declares_a_parseable_schedule_and_a_since`.
+3. **The declared schedule is cross-checked against the live crontab.**
+   `test_declared_schedules_match_the_live_crontab` compares parsed value sets,
+   so declaring 05:00 for a job that really runs at 23:50 fails the build, and
+   so does registering a deliverable with *no* crontab entry at all.
+
+Defence 3 earned itself immediately: it caught that `capture-reminder`'s cron
+line (`10 20 * * *`) had been **removed from the live crontab** by concurrent
+work at ~13:00 on 28 Jul — it was present at 12:00 and gone by 13:20. A
+registered deliverable that is not scheduled cannot be missing, so it is marked
+`enabled: False`, and `test_disabled_deliverables_are_really_unscheduled`
+asserts its crontab entry is *still* absent — if it is rescheduled the build
+fails and forces the registration back on, rather than leaving it quietly
+unmonitored.
+
+### What was NOT done
+
+- **The crontab was not changed.** Moving `backup-config` before 21:30 is the
+  special case, not the fix: it edits a script owned by other work and the next
+  late deliverable reintroduces the bug.
+- **No heartbeats were seeded into `run-status.jsonl`.** That file is the audit
+  trail. Writing runs into it that never happened corrupts the only record of
+  what the system actually did, to silence an alarm about a period that should
+  simply not be judged. `since` ages out by itself on the next occurrence.
+
+### The deliverable/cron/digest table
+
+Every entry verified against the live crontab, digest at 21:30:
+
+| Deliverable | cron | last due at 21:30 | judgeable |
+|---|---|---|---|
+| morning card | `*/30 6-9 * * *` | 09:30 today | yes |
+| daily prescription | `0 5 * * *` | 05:00 today | yes |
+| night-before brief | `30 20 * * *` | 20:30 today | yes |
+| evening check-in | `0 21 * * *` | 21:00 today | yes — tightest margin (30 min; historically finishes in ~2 min, and `GRACE_MIN` keeps a still-running job from counting) |
+| capture reminder | *(entry removed 28 Jul)* | — | no — `enabled: False` |
+| session sync | `40 7-22/2 * * *` | 19:40 today | yes — its *last* daily occurrence (21:40) is after the digest, which looks like the `backup-config` fault and is not: earlier occurrences the same day are already behind us |
+| watchdog | `30 5 * * *` | 05:30 today | yes |
+| config backup | `50 23 * * *` | **23:50 yesterday** | yes, on the previous cycle |
+| weekly summary | `0 20 * * 0` | Sunday 20:00 | yes |
+| weekly plan | `0 18 * * 0` | Sunday 18:00 | yes, from Sunday 2 Aug (instrumented 28 Jul) |
+
+### `per_athlete` on a single-root-cause job
+
+`stage1-plan` keeps `per_athlete: True`. `weekly_alerts()` already collapses a
+whole-job failure into **one** message that *names* the affected athletes, so
+the cost is a more useful message body rather than three messages — and
+`weekly-plan.sh` invokes `stage1-plan.py` once per athlete, so a single-athlete
+failure is a real shape that `per_athlete: False` would hide.
 
 ## Weekly deliverables: one miss, one message
 

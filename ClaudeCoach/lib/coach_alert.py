@@ -41,7 +41,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 import ops_log
@@ -64,28 +64,98 @@ REASONS = {
 # and lives here rather than in ops-digest so one file answers "what can reach
 # Jamie". `window`: daily = must appear today; weekly = must appear in 7 days.
 # `detail` (optional) narrows what counts as the heartbeat.
+#
+# Added 28 Jul 2026 — `cron` and `since`, the two fields that stop this table
+# alarming about something that could not possibly have happened yet.
+#
+# `cron` — the deliverable's REAL crontab schedule. The gap check now asks "when
+#   was this last DUE?" and judges the deliverable only once that moment has
+#   passed. Without it, backup-config (23:50) was registered as "must appear
+#   today" and checked by a digest that runs at 21:30 — 2h20m too early — so it
+#   reported missing every night, in perpetuity. Declaring the schedule fixes
+#   that for every deliverable at once instead of special-casing this one, and a
+#   deliverable added later with an awkward time gets the same treatment free.
+#   `cron_cmd` identifies its line in the live crontab: a test cross-checks the
+#   declared schedule against the real one, so a WRONG declaration fails the
+#   build rather than quietly mis-timing the check for ever.
+#
+# `since` — when this deliverable's heartbeat instrumentation went live (the
+#   moment it landed on prod `main`, which IS the runtime here — NOT the moment
+#   it was committed on a branch. The distinction is load-bearing: 83bb541 was
+#   committed 11:37 and merged 11:44, and the session-sync cron launched at 11:40
+#   in between, so it ran the OLD uninstrumented code and left no heartbeat. A
+#   `since` of 11:37 called that a genuine gap; 11:44 correctly calls it
+#   pre-instrumentation. For the older deliverables it is the first heartbeat on
+#   disk). An
+#   occurrence scheduled BEFORE that moment cannot have left a heartbeat, so it
+#   is not judged. Without it stage1-plan — instrumented 28 Jul 11:44 — was
+#   measured over a 7-day window reaching back to its Sunday 26 Jul run, two days
+#   before any heartbeat could exist, and alarmed about a job that never had the
+#   chance to report. FIVE of the ten deliverables below were instrumented on
+#   28 Jul and every one of them had this fault (night-before-brief,
+#   capture-reminder, session-sync, backup-config, stage1-plan — zero entries
+#   between them in 1075 lines of run-status history), not just the one spotted.
+#   The alternative fix — seeding heartbeats into run-status.jsonl — was rejected:
+#   that file is the audit trail, and writing runs into it that never happened
+#   corrupts the only record of what the system actually did.
 DELIVERABLES = [
     {"script": "morning-checkin",    "label": "morning card",       "window": "daily",
-     "per_athlete": True,  "telegram": True,  "detail": "card sent"},
+     "per_athlete": True,  "telegram": True,  "detail": "card sent",
+     "cron": "*/30 6-9 * * *",   "cron_cmd": "morning-checkin.py",
+     "since": "2026-06-10T00:00:00"},
     {"script": "daily-prescription", "label": "daily prescription", "window": "daily",
-     "per_athlete": True,  "telegram": True},
+     "per_athlete": True,  "telegram": True,
+     "cron": "0 5 * * *",        "cron_cmd": "daily-prescription.py",
+     "since": "2026-06-10T00:00:00"},
     {"script": "night-before-brief", "label": "night-before brief", "window": "daily",
-     "per_athlete": True,  "telegram": True},
+     "per_athlete": True,  "telegram": True,
+     "cron": "30 20 * * *",      "cron_cmd": "night-before-brief.py",
+     "since": "2026-07-28T11:44:37"},   # ff6fba3
     {"script": "evening-checkin",    "label": "evening check-in",   "window": "daily",
-     "per_athlete": True,  "telegram": True},
+     "per_athlete": True,  "telegram": True,
+     "cron": "0 21 * * *",       "cron_cmd": "evening-checkin.py",
+     "since": "2026-06-10T00:00:00"},
     # Internal plumbing and nudges — a gap is worth a digest line, not a message.
+    # DISABLED 28 Jul 2026, ~13:00: its crontab line (`10 20 * * *`) was removed
+    # from the live crontab by concurrent work while this fix was being written —
+    # it was present at 12:00 and gone by 13:20. A deliverable that is not
+    # scheduled cannot be missing, and leaving it registered would have produced a
+    # "no successful capture reminder" line every night from 20:10 tomorrow: a new
+    # permanent false alarm of exactly the kind this change exists to remove.
+    # Registration is kept rather than deleted so the reason is on the record, and
+    # test_disabled_deliverables_are_really_unscheduled asserts the crontab entry
+    # is still absent — so if capture-reminder is rescheduled, the build FAILS and
+    # forces this back to enabled instead of quietly staying unmonitored.
     {"script": "capture-reminder",   "label": "capture reminder",   "window": "daily",
-     "per_athlete": True,  "telegram": False},
+     "per_athlete": True,  "telegram": False,  "enabled": False,
+     "cron": "10 20 * * *",      "cron_cmd": "capture-reminder.py",
+     "since": "2026-07-28T11:44:37"},   # ff6fba3
+    # session-sync's LAST occurrence of the day (21:40) is after the digest, which
+    # looks like backup-config's fault and is not: earlier occurrences the same day
+    # (07:40 onwards) are already behind us at 21:30, so last_due() finds 19:40 and
+    # the day's heartbeat is genuinely expected. Only a job whose FIRST occurrence
+    # of the cycle is still ahead is un-judgeable.
     {"script": "session-sync",       "label": "session sync",       "window": "daily",
-     "per_athlete": True,  "telegram": False},
+     "per_athlete": True,  "telegram": False,
+     "cron": "40 7-22/2 * * *",   "cron_cmd": "session-sync.py",
+     "since": "2026-07-28T11:44:37"},   # ff6fba3
     {"script": "watchdog",           "label": "watchdog",           "window": "daily",
-     "per_athlete": False, "telegram": False},
+     "per_athlete": False, "telegram": False,
+     "cron": "30 5 * * *",       "cron_cmd": "watchdog.py",
+     "since": "2026-06-10T00:00:00"},
     # 28 Jul 2026: the only backup of config/athletes.json (intervals.icu API
     # keys), nightly at 23:50 via lib_git_alert.sh's git_sync_ok/git_sync_fail —
     # the job label there IS "backup-config" (checked in backup-config.sh, not
     # assumed). Heartbeat comes from ops_log.sync_ok/sync_failure, not a direct
     # record_run() call in the script itself; sync_ok now also writes the
     # success heartbeat (see its docstring) so a clean run doesn't read as a gap.
+    #
+    # 23:50 is AFTER the 21:30 digest, so this is the deliverable that proved the
+    # gap check needed a due time at all. It is now judged on its PREVIOUS cycle:
+    # at 21:30 the last due moment is last night's 23:50, so a genuinely failed
+    # backup is caught within 24 hours rather than never. Not rescheduled: moving
+    # the cron entry is the special case, would edit a script owned by other work,
+    # and the next late deliverable would reintroduce the bug.
     #
     # detail="sync ok" is LOAD-BEARING, not decoration. sync_failure's FIRST
     # consecutive failure records ok=True with detail "transient git-sync failure
@@ -98,15 +168,166 @@ DELIVERABLES = [
     # here rather than changing sync_failure keeps the blast radius to this one
     # job instead of all five that share the helper.
     {"script": "backup-config",      "label": "config backup",      "window": "daily",
-     "per_athlete": False, "telegram": True, "detail": "sync ok"},
+     "per_athlete": False, "telegram": True, "detail": "sync ok",
+     "cron": "50 23 * * *",      "cron_cmd": "backup-config.sh",
+     "since": "2026-07-28T13:00:37"},   # 5eaae85
     # Sunday jobs. Checked over 7 days. telegram=True since 28 Jul 2026, but NOT
     # via this per-day cooldown — ops-digest.py's weekly_alerts() sends these on
     # its own occurrence-based key so one miss is one message, not one per evening.
     {"script": "weekly-summary",     "label": "weekly summary",     "window": "weekly",
-     "per_athlete": True,  "telegram": True},
+     "per_athlete": True,  "telegram": True,
+     "cron": "0 20 * * 0",       "cron_cmd": "weekly-summary.sh",
+     "since": "2026-07-12T00:00:00"},
+    # per_athlete stays True even though one crashed Sunday build is one root
+    # cause: weekly_alerts() already collapses it to ONE message that NAMES the
+    # affected athletes, so the cost is a more useful message body, not three
+    # messages. weekly-plan.sh invokes stage1-plan.py once per athlete, so a
+    # single-athlete failure is a real shape that per_athlete=False would hide.
     {"script": "stage1-plan",        "label": "weekly plan",        "window": "weekly",
-     "per_athlete": True,  "telegram": True},
+     "per_athlete": True,  "telegram": True,
+     "cron": "0 18 * * 0",       "cron_cmd": "weekly-plan.sh",
+     "since": "2026-07-28T11:44:37"},   # ff6fba3
 ]
+
+# The digest's own schedule. Declared so the crontab cross-check can prove what
+# this whole mechanism assumes: that "now" when the check runs is 21:30.
+DIGEST_CRON = "30 21 * * *"
+
+
+# --- when was a deliverable last DUE? ----------------------------------------
+#
+# THE FAULT THIS KILLS. The gap check asked "is there a heartbeat in this
+# window" and never "could there be one yet". A deliverable whose scheduled time
+# falls after the digest's answers no structurally, for ever, so a brand-new
+# alarm cried wolf on night one about a job that was working fine.
+#
+# HOW A BAD TIME ADDED LATER CANNOT REPEAT IT. Three things, in order of
+# strength. (1) Expectation is DERIVED from the declared schedule, so any time —
+# 23:50, 03:00, Sunday-only — is handled by the same code path; there is no
+# "correct" time to get wrong. (2) parse_cron RAISES on a spec it cannot read
+# rather than guessing, and a test parses every entry, so an unreadable schedule
+# fails the build. (3) A test cross-checks each declared `cron` against the LIVE
+# crontab, so declaring 05:00 for a job that actually runs at 23:50 also fails
+# the build. The remaining hole — registering a deliverable with no crontab entry
+# at all — is closed by (3) too: no matching crontab line is a failure.
+
+GRACE_MIN = 10   # an occurrence younger than this may still be running
+
+
+def _cron_field(spec: str, lo: int, hi: int) -> set:
+    """One cron field -> the set of values it matches.
+
+    Supports `*`, `n`, `a-b`, `*/n`, `a-b/n` and comma lists of those — which
+    covers every entry in this crontab. Anything else RAISES rather than
+    guessing: a schedule this cannot read must fail the test suite, not silently
+    produce a wrong due time and a nightly false alarm.
+    """
+    out = set()
+    for part in str(spec).split(","):
+        body, step = part, 1
+        if "/" in part:
+            body, _, s = part.partition("/")
+            if not s.isdigit() or int(s) < 1:
+                raise ValueError(f"unsupported cron step {part!r}")
+            step = int(s)
+        if body == "*":
+            start, end = lo, hi
+        elif "-" in body:
+            a, _, b = body.partition("-")
+            if not (a.isdigit() and b.isdigit()):
+                raise ValueError(f"unsupported cron range {part!r}")
+            start, end = int(a), int(b)
+        elif body.isdigit():
+            start = int(body)
+            end = hi if step > 1 else start   # vixie: `5/2` means `5-max/2`
+        else:
+            raise ValueError(f"unsupported cron field {part!r}")
+        if not (lo <= start <= end <= hi):
+            raise ValueError(f"cron field {part!r} outside {lo}-{hi}")
+        out.update(range(start, end + 1, step))
+    if not out:
+        raise ValueError(f"cron field {spec!r} matches nothing")
+    return out
+
+
+def parse_cron(spec: str) -> dict:
+    """{"minute", "hour", "dow"} as value sets.
+
+    Raises on day-of-month / month restrictions: nothing here uses them and they
+    would need a different last-occurrence walk, so accepting them silently would
+    be the same class of bug this file is fixing.
+    """
+    fields = str(spec).split()
+    if len(fields) != 5:
+        raise ValueError(f"cron spec needs 5 fields, got {spec!r}")
+    minute, hour, dom, month, dow = fields
+    if (dom, month) != ("*", "*"):
+        raise ValueError(f"day-of-month/month restrictions unsupported: {spec!r}")
+    return {"minute": _cron_field(minute, 0, 59),
+            "hour": _cron_field(hour, 0, 23),
+            # cron allows both 0 and 7 for Sunday; normalise to 0.
+            "dow": {0 if d == 7 else d for d in _cron_field(dow, 0, 7)}}
+
+
+def last_due(spec: str, now: datetime):
+    """The most recent scheduled occurrence at or before `now - GRACE_MIN`.
+
+    The grace margin means a job scheduled a few minutes before the digest and
+    still running is not reported missing — evening-checkin at 21:00 has the
+    tightest real margin (30 min) and historically finishes in ~2 min, but the
+    margin should not depend on that. None if nothing is scheduled in the
+    preceding 8 days, which covers the weekly jobs.
+    """
+    cal = parse_cron(spec)
+    cutoff = now - timedelta(minutes=GRACE_MIN)
+    hours = sorted(cal["hour"], reverse=True)
+    minutes = sorted(cal["minute"], reverse=True)
+    for back in range(8):
+        day = (cutoff - timedelta(days=back)).date()
+        if (day.weekday() + 1) % 7 not in cal["dow"]:   # python Mon=0, cron Sun=0
+            continue
+        for h in hours:
+            for m in minutes:
+                moment = datetime.combine(day, time(h, m))
+                if moment <= cutoff:
+                    return moment
+    return None
+
+
+DUE                 = "due"
+NOT_SCHEDULED_YET   = "not-scheduled-yet"
+NOT_SCHEDULED       = "not-scheduled"
+PRE_INSTRUMENTATION = "pre-instrumentation"
+
+
+def due_status(d: dict, now: datetime = None) -> tuple:
+    """(due_moment, state) for one deliverable — may it be judged right now?
+
+    Only DUE may produce a gap line or a Telegram. The other two states mean the
+    absence of a heartbeat is EXPECTED, not a failure:
+
+      NOT_SCHEDULED       — `enabled: False`: the job has no crontab entry, so
+                            there is nothing to expect. Still reported as an
+                            "ℹ not judged" digest line rather than dropped, and a
+                            test proves the crontab entry really is absent.
+      NOT_SCHEDULED_YET   — no occurrence of this schedule lies behind us at all.
+      PRE_INSTRUMENTATION — the last occurrence predates `since`, so no heartbeat
+                            could exist for it. This ages out by itself: the
+                            first occurrence after `since` is judged normally,
+                            with no seeded heartbeats and no edit to the audit
+                            trail. It is visible while it lasts — ops-digest
+                            prints an "ℹ not judged yet" line naming the reason,
+                            so a deliverable is never silently unchecked.
+    """
+    now = now or datetime.now()
+    if not d.get("enabled", True):
+        return None, NOT_SCHEDULED
+    due = last_due(d["cron"], now)
+    if due is None:
+        return None, NOT_SCHEDULED_YET
+    if due < datetime.fromisoformat(d["since"]):
+        return due, PRE_INSTRUMENTATION
+    return due, DUE
 
 # --- is an ok=False heartbeat a FAILURE or a FINDING? ------------------------
 #
