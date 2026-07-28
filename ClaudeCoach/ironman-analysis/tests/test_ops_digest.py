@@ -52,8 +52,9 @@ ATHLETES = {
 }
 
 
-def _e(script, athlete="", ok=True, detail="", outcome=None):
-    e = {"ts": "2026-08-05T07:00:00", "script": script,
+def _e(script, athlete="", ok=True, detail="", outcome=None,
+       ts="2026-08-05T07:00:00"):
+    e = {"ts": ts, "script": script,
          "athlete": athlete, "ok": ok, "detail": detail}
     if outcome:
         e["outcome"] = outcome
@@ -124,7 +125,14 @@ class TestGapLines:
 
     def today(self, drop=(), fail=()):
         out = [_e("watchdog", "jamie", detail="silent"),
-               _e("backup-config", detail="sync ok")]
+               _e("backup-config", detail="sync ok"),
+               _e("sync-private", detail="sync ok"),
+               # activity-watcher is window="rolling" (last 60 min of NOW,
+               # 21:30) — the default _e() ts (07:00) is far outside that, so
+               # this needs its own recent timestamp or every TestGapLines
+               # test would see it as a permanent gap.
+               _e("activity-watcher", detail="cycle complete",
+                  ts="2026-08-05T21:15:00")]
         for slug in ("jamie", "kathryn"):
             out.append(_e("morning-checkin", slug, detail="card sent"))
             for script, detail in DAILY_SILENT.items():
@@ -170,6 +178,20 @@ class TestGapLines:
         gaps, tg = self.call(digest, drop={("backup-config", "")})
         assert any("config backup" in l for l in gaps)
         assert tg == ["config backup"]
+
+    def test_missing_sync_private_flagged_and_telegrammed(self, digest):
+        # 28 Jul 2026 (this ticket): the only versioned backup of athletes/,
+        # now that the public repo was cleaned — same class as backup-config.
+        gaps, tg = self.call(digest, drop={("sync-private", "")})
+        assert any("private repo sync" in l for l in gaps)
+        assert tg == ["private repo sync"]
+
+    def test_missing_activity_watcher_flagged_but_not_telegrammed(self, digest):
+        # Plumbing, not a named deliverable — see coach_alert.DELIVERABLES'
+        # comment on telegram=False for this entry.
+        gaps, tg = self.call(digest, drop={("activity-watcher", "")})
+        assert any("activity watcher" in l for l in gaps)
+        assert tg == []
 
     def test_missing_watchdog_flagged_but_not_telegrammed(self, digest):
         gaps, tg = self.call(digest, drop={("watchdog", "jamie")})
@@ -391,9 +413,103 @@ class TestBackupConfigHeartbeat:
     def test_per_athlete_false_matches_sync_oks_empty_athlete(self, digest):
         # sync_ok records athlete="" while per_athlete=False checks athlete=None
         # ("any"). A mismatch here would gap every night with the job running fine.
+        # Only backup-config's own heartbeat is supplied, so sync-private (the
+        # same shape, registered separately) correctly still gaps here — this
+        # test is about backup-config specifically, not a claim of a clean digest.
         row = _e("backup-config", athlete="", detail="sync ok")
         gaps, tg = digest.gap_lines([row], [row], {}, now=NOW)
-        assert not any("config backup" in l for l in gaps) and tg == []
+        assert not any("config backup" in l for l in gaps)
+        assert "config backup" not in tg
+
+
+class TestSyncPrivateHeartbeat:
+    """This ticket's registration of sync-private-repo.sh — the same shape as
+    backup-config, and just as sharp: it is the only place athlete data gets a
+    version history now that the public repo was cleaned."""
+
+    def test_the_registered_detail_is_what_the_shared_helper_actually_writes(
+            self, logs, monkeypatch):
+        """git_sync_ok "sync-private" (sync-private-repo.sh, via
+        lib_git_alert.sh) calls ops_log.sync_ok("sync-private") — the SAME
+        function backup-config uses, so it is the job label that must be
+        exact, not the script filename ("sync-private-repo.sh" is cron_cmd,
+        never script)."""
+        import coach_alert
+        monkeypatch.setattr(ops_log, "SYNC_STATE", logs / "git-sync-state")
+        ops_log.sync_ok("sync-private")
+        row = json.loads(ops_log.RUN_STATUS.read_text().splitlines()[-1])
+        d = next(x for x in coach_alert.DELIVERABLES if x["script"] == "sync-private")
+        assert row["script"] == d["script"] == "sync-private"
+        assert d["cron_cmd"] == "sync-private-repo.sh"
+        assert row["detail"] == d["detail"] == "sync ok"
+        assert d["window"] == "daily" and d["per_athlete"] is False and d["telegram"] is True
+
+    def test_transient_failure_does_not_satisfy_the_check(self, digest, logs, monkeypatch):
+        # Same trap as backup-config: sync-private runs once nightly (23:20),
+        # so the "1st consecutive failure, usually self-heals" ok=True would
+        # mask a whole missed night if it satisfied the check.
+        monkeypatch.setattr(ops_log, "SYNC_STATE", logs / "git-sync-state")
+        ops_log.sync_failure("sync-private", "push to dpc_private failed")
+        row = json.loads(ops_log.RUN_STATUS.read_text().splitlines()[-1])
+        assert row["ok"] is True and "transient" in row["detail"]
+        row["ts"] = "2026-08-05T07:00:00"
+        gaps, tg = digest.gap_lines([row], [row], {}, now=NOW)
+        assert any("private repo sync" in l for l in gaps)
+        assert "private repo sync" in tg
+
+
+class TestActivityWatcherRollingWindow:
+    """activity-watcher's window="rolling" is a different check shape from
+    every other deliverable: a short lookback (window_minutes) instead of
+    "today"/"7 days", because "ran at least once today" is meaningless for a
+    5-minute job — a watcher dead since 00:05 would still pass that at 21:30.
+    """
+
+    def gaps(self, digest, entries, now=NOW):
+        # {} athletes: activity-watcher is per_athlete=False, and an empty
+        # active-athlete set means every per_athlete=True deliverable simply
+        # has no targets to loop over — the same shape TestBackupConfigHeartbeat
+        # uses so these tests are only ever about activity-watcher.
+        return digest.gap_lines(entries, entries, {}, now=now)
+
+    def test_a_recent_heartbeat_is_not_a_gap(self, digest):
+        # Only activity-watcher's own heartbeat is supplied — every other
+        # due, per_athlete=False daily deliverable (backup-config,
+        # sync-private) correctly gaps here too; this test is about
+        # activity-watcher specifically, not a claim of a clean digest.
+        recent = _e("activity-watcher", detail="cycle complete",
+                    ts="2026-08-05T21:05:00")   # 25 min before NOW
+        gaps, tg = self.gaps(digest, [recent])
+        assert not any("activity watcher" in l for l in gaps)
+        assert "activity watcher heartbeat" not in tg   # telegram=False regardless
+
+    def test_a_heartbeat_older_than_the_window_is_a_gap(self, digest):
+        stale = _e("activity-watcher", detail="cycle complete",
+                   ts="2026-08-05T20:00:00")    # 90 min before NOW, > 60 min window
+        gaps, tg = self.gaps(digest, [stale])
+        assert any("activity watcher" in l and "60 min" in l for l in gaps)
+        assert "activity watcher heartbeat" not in tg   # never Telegrams, however stale
+
+    def test_no_heartbeat_at_all_is_a_gap(self, digest):
+        gaps, _ = self.gaps(digest, [])
+        assert any("activity watcher" in l for l in gaps)
+
+    def test_a_recorded_send_failure_does_not_satisfy_the_check(self, digest):
+        """A FAILURE-class heartbeat still does not count as "it ran" — the
+        same blind-spot fix _saw() already applies everywhere else."""
+        failed = _e("activity-watcher", ok=False,
+                    detail="Telegram send failed after retry",
+                    ts="2026-08-05T21:05:00")
+        gaps, _ = self.gaps(digest, [failed])
+        assert any("activity watcher" in l for l in gaps)
+
+    def test_only_the_tail_of_a_long_history_is_considered(self, digest):
+        """A heartbeat from hours ago must not paper over a watcher that died
+        since — only the rolling window's tail matters."""
+        old_ok = _e("activity-watcher", detail="cycle complete",
+                    ts="2026-08-05T09:00:00")
+        gaps, _ = self.gaps(digest, [old_ok])
+        assert any("activity watcher" in l for l in gaps)
 
 
 class TestCoachAlertRouting:
@@ -423,7 +539,7 @@ class TestCoachAlertRouting:
                      if d["telegram"] and d["window"] == "weekly"}
         assert daily_tg == {"morning-checkin", "daily-prescription",
                              "night-before-brief", "evening-checkin",
-                             "backup-config"}
+                             "backup-config", "sync-private"}
         assert weekly_tg == {"weekly-summary", "stage1-plan"}
 
     def test_a_test_can_never_execute_the_real_notify(self, logs, monkeypatch):
@@ -870,15 +986,18 @@ class TestDueWindows:
         assert (due, state) == (datetime(2026, 8, 2, 18, 0), ca.DUE)
 
     def test_every_newly_instrumented_deliverable_got_the_grace(self):
-        """FIVE deliverables were instrumented on 28 Jul, not the one that was
-        spotted: night-before-brief, capture-reminder, session-sync, backup-config
-        and stage1-plan had zero entries between them in 1075 lines of history.
-        Each must be silent about every cycle before its own instrumentation."""
+        """Seven deliverables now carry a 28 Jul `since` — the original five
+        (night-before-brief, capture-reminder [now deregistered, see below],
+        session-sync, backup-config, stage1-plan) plus sync-private and
+        activity-watcher, registered by this ticket. Each must be silent about
+        every cycle before its own instrumentation."""
         import coach_alert as ca
         new = [d for d in ca.DELIVERABLES if d["since"].startswith("2026-07-28")]
-        # capture-reminder was the fifth; it is deregistered (see coach_alert).
+        # capture-reminder was the fifth of the original batch; it is
+        # deregistered (see coach_alert), not one of these seven.
         assert {d["script"] for d in new} == {
-            "night-before-brief", "session-sync", "backup-config", "stage1-plan"}
+            "night-before-brief", "session-sync", "backup-config", "stage1-plan",
+            "sync-private", "activity-watcher"}
         for d in new:
             since = datetime.fromisoformat(d["since"])
             due, state = ca.due_status(d, since - timedelta(minutes=1))
@@ -1025,12 +1144,15 @@ _CRON_LINES = [
     f"25 6 * * * /root/.claude/cc-run python3 {CC}/lib/plan_audit.py --all >> /root/Library/Logs/ClaudeCoach/plan-audit.log 2>&1",
 ]
 
-# The two live entries that are neither registered nor exempt as of 28 Jul 2026 —
-# the genuine finding the cron->registry direction turned up on its first run.
-# Dropped from the fixture wherever a test needs a drift-free crontab, so that "no
-# problems" means "the mechanism is quiet when there is nothing to say" rather than
-# baking the finding in as acceptable.
-LIVE_UNWATCHED = ("activity-watcher.py", "sync-private-repo.sh")
+# FIXED 28 Jul 2026 (this ticket): activity-watcher.py and sync-private-repo.sh
+# were the two live entries the cron->registry direction turned up on its very
+# first run against the real crontab — neither registered nor exempt. Both are
+# now coach_alert.DELIVERABLES entries (see that file), so the real fixture
+# crontab above is drift-free as-is and needs nothing dropped from it any more.
+# Left as an empty tuple, not deleted, so every `drop=LIVE_UNWATCHED` call below
+# stays syntactically valid (a no-op drop) rather than requiring a edit at each
+# of the dozen call sites for a change that does not alter their behaviour.
+LIVE_UNWATCHED = ()
 
 
 def _script_of(line: str) -> str:
@@ -1177,6 +1299,34 @@ class TestCronDerivedRegistry:
         the deliverable I unscheduled" with "nothing at all". stage1-plan is given
         its heartbeats so weekly-summary is the only candidate left and `== []` is a
         true statement about the thing the test is named after.
+
+        RECONSIDERED, not just re-confirmed (this ticket, 28 Jul 2026). The
+        opposing view is that a cron entry vanishing is MORE serious than a
+        stale registry entry, not neutral, because that is how a deliverable
+        goes dark. Checked against the actual history rather than assumed:
+        coach_alert.py's own note on the registry ties the three-week silent
+        weekly-report incident to a *live cron entry with no registry entry*
+        (Direction 2 — `test_a_scheduled_job_nobody_watches_is_reported`
+        below) — a job that WAS running, unwatched. THIS test is the mirror
+        image, Direction 1: the registry says the job should run and the
+        crontab disagrees. Those are different facts and must not share a
+        response:
+          - Direction 2 (cron with no watcher) is exactly the historical
+            failure mode, and is genuinely silent if left unfixed — hence
+            loud + eligible for the same deliverable-missing framing once
+            registered, which is what registering activity-watcher and
+            sync-private in this ticket does.
+          - Direction 1 (registry with no cron) is NOT that failure mode: the
+            job cannot physically run, so "ClaudeCoach did not deliver the
+            weekly plan" would misattribute a scheduling fact as a delivery
+            failure. It is already loud, every single digest run, in
+            ops-alerts.log via the CRON AUDIT line — not silent, just not
+            Telegram-eligible, because misnaming the fault is worse than
+            under-alerting it for a condition that is by definition visible
+            in the log on every run.
+        Conclusion: keep this behaviour. Code and test already agreed before
+        this ticket; this docstring addendum is the record of the decision
+        being tested against the counter-argument, not left unexamined.
         """
         import coach_alert as ca
         monkeypatch.setattr(ca, "STATE", logs / "coach-alert-state.json")
@@ -1205,15 +1355,20 @@ class TestCronDerivedRegistry:
         assert "new-thing.py runs on the live crontab (15 4 * * *)" in a.problems[0]
         assert "NOTHING" in a.problems[0]
 
-    def test_the_two_currently_unwatched_live_jobs_are_reported(self):
-        """The finding this direction produced on its first run against the real
-        crontab. Neither is registered and neither is exempt; sync-private-repo.sh
-        even writes a heartbeat (lib_git_alert.sh's git_sync_ok "sync-private") that
-        nothing reads. Asserted so the finding cannot quietly be lost — the correct
-        way to make this test go away is to register or exempt them."""
+    def test_the_two_previously_unwatched_live_jobs_are_now_registered(self):
+        """The inverse of the test this replaces. activity-watcher.py and
+        sync-private-repo.sh were the finding this direction produced on its
+        first run — neither registered nor exempt, sync-private-repo.sh even
+        writing a heartbeat (lib_git_alert.sh's git_sync_ok "sync-private")
+        that nothing read. Both are now coach_alert.DELIVERABLES entries whose
+        declared cron_cmd/cron match the live crontab exactly, so the audit
+        against the real crontab must be silent about them — asserted
+        specifically (not just folded into "drift-free" below) so a future
+        edit that quietly de-registers one of them fails loudly here, by name,
+        rather than as an anonymous drop in the drift-free count."""
         a = self.audit()
-        for name in LIVE_UNWATCHED:
-            assert any(name in p and "NOTHING" in p for p in a.problems), name
+        for name in ("activity-watcher.py", "sync-private-repo.sh"):
+            assert not any(name in p for p in a.problems), (name, a.problems)
 
     def test_every_exemption_carries_a_reason_and_is_silent(self):
         """The exemptions are a reviewable table, not an implicit rule in someone's
