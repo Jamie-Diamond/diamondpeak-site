@@ -83,6 +83,7 @@ CEILING = bug_fixer.RULE_COUNT_CEILING
 # lib/rules_capture.py, shared with telegram/bot.py's live capture path so both callers
 # apply the exact same fold-on-write invariant instead of two copies that could drift.
 import rules_capture
+import rule_registry
 _PERM_RE            = rules_capture._PERM_RE
 _EXPIRES_RE         = rules_capture._EXPIRES_RE
 _TAG_RE             = rules_capture._TAG_RE
@@ -392,6 +393,13 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
                 text = guarded
             for reason, dline in drops:
                 _log(f"append guard dropped — {reason}: {dline}")
+
+    # IDENTITY: give every rule now on disk a stable ID and a default type (sidecar
+    # registry; the rule files themselves are never touched). Runs after the capture
+    # guard so a reverted write is never registered. Cannot raise — identity
+    # bookkeeping must not be able to undo or block a rule write.
+    if text != before_text:
+        rule_registry.register_after_write(BASE, slug)
 
     # TIER B — auto-clear trivially-safe redundancy (backup + log every removal).
     cleared, removals = _auto_clear(text, today, engine_rules)
