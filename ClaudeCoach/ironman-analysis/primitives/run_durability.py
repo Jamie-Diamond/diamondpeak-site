@@ -88,12 +88,47 @@ def compute_run_durability(time_s, watts, heartrate, cadence, velocity) -> dict 
 
 
 def fade_line(m: dict) -> str:
-    """One-line athlete-facing rendering for the post-run analysis message."""
-    parts = [f"pw:hr decoupling {m['decoupling_pct']}%"]
-    if m.get("cadence_fade_pct") is not None:
-        parts.append(f"cadence {m['cadence_fade_pct']:+.1f}%")
-    parts.append(f"running cost {m['cost_fade_pct']:+.1f}%")
-    line = "Durability: " + " · ".join(parts) + " (final vs first third)"
-    if m.get("flags"):
-        line += " ⚠"
-    return line
+    """Athlete-facing durability read: verdict first, then the one number worth
+    ranking (pace-to-heart-rate efficiency fade). The other two signals are named
+    in words when they broke down and left out when they held, because neither is
+    rankable by the reader. Thresholds are compared against the module constants,
+    not against the wording of `flags`. It stops at what the finding means — the
+    session advice belongs to the coaching analysis this line is appended to.
+    """
+    dec = m["decoupling_pct"]
+    cad = m.get("cadence_fade_pct")
+    dec_faded = dec > DECOUPLING_FLAG_PCT
+    cad_faded = cad is not None and cad < CADENCE_FADE_FLAG_PCT
+    cost_faded = m["cost_fade_pct"] > COST_FADE_FLAG_PCT
+
+    # A negative decoupling means efficiency IMPROVED across the run — "faded -2.4%"
+    # is nonsense to read, and the improvement is worth naming (guide Pair 6 does
+    # exactly this: "the opposite of fatigue").
+    if dec < 0:
+        dec_phrase = (f"your pace-to-heart-rate efficiency actually improved "
+                      f"{abs(dec)}% over the run, the opposite of fatigue")
+    else:
+        dec_phrase = f"your pace-to-heart-rate efficiency faded {dec}% over the run"
+
+    broke = []
+    if cad_faded:
+        broke.append("your cadence dropped away")
+    if cost_faded:
+        broke.append("you were spending more energy for the same speed")
+
+    if broke:
+        # The efficiency clause is only worth a number when it moved; a signal that
+        # held is named in words, so the line never prints a number that means nothing.
+        if dec_faded:
+            tail = f", and {dec_phrase}."
+        elif dec < 0:
+            tail = f", though {dec_phrase}."
+        else:
+            tail = ", though your pace-to-heart-rate efficiency held steady."
+        return ("Your form drifted in the last third of the run — "
+                + " and ".join(broke) + tail)
+    if dec_faded:
+        return (f"Durability was the weak point — {dec_phrase}, more than a steady "
+                f"effort should, though your cadence and your energy cost per unit "
+                f"of speed both held.")
+    return f"Durability held up — {dec_phrase}, and nothing else drifted."

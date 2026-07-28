@@ -364,23 +364,25 @@ def _credit_heat_exposure(slug: str, activity_id: str, profile: dict) -> None:
         print(f"[heat-credit:{slug}] {exc}", file=sys.stderr)
 
 
-def _run_durability_note(slug: str, activity_id: str) -> str:
+def _run_durability_note(slug: str, activity_id: str) -> tuple[str, bool]:
     """Deterministic durability line for a completed RUN with power — computed
     from the per-second streams, logged for trending, appended to the analysis
-    message. Empty string when not a run / no power / too short / any failure."""
+    message. Returns (note, flagged); ("", False) when not a run / no power /
+    too short / any failure. `flagged` comes from the metrics rather than from
+    a marker in the rendered text, so the prose is free to change."""
     try:
         from icu_api import IcuClient
         cfg = json.loads(ATHLETES_CONFIG.read_text())[slug]
         client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
         detail = client.get_activity_detail(activity_id)
         if (detail.get("type") or "") not in ("Run", "TrailRun", "VirtualRun"):
-            return ""
+            return "", False
         streams = {s.get("type"): s.get("data") for s in client.get_activity_streams(activity_id)}
         m = compute_run_durability(streams.get("time"), streams.get("watts"),
                                    streams.get("heartrate"), streams.get("cadence"),
                                    streams.get("velocity_smooth"))
         if not m:
-            return ""
+            return "", False
         log_f = BASE / f"athletes/{slug}/run-durability-log.json"
         entries = json.loads(log_f.read_text()) if log_f.exists() else []
         if not any(str(e.get("activity_id")) == str(activity_id) for e in entries):
@@ -392,10 +394,10 @@ def _run_durability_note(slug: str, activity_id: str) -> str:
                 **{k: m[k] for k in ("decoupling_pct", "cadence_fade_pct", "cost_fade_pct", "flags")},
             })
             log_f.write_text(json.dumps(entries[-200:], indent=2))
-        return "\n_" + fade_line(m) + "_"
+        return "\n\n" + fade_line(m), bool(m.get("flags"))
     except Exception as exc:
         print(f"[run-durability:{slug}] {exc}", file=sys.stderr)
-        return ""
+        return "", False
 
 
 def _dedup_session_log(path: Path) -> None:
@@ -1027,11 +1029,21 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
             state["timeout_count"] = 1
         save_state(state, state_file)
         if state["timeout_count"] >= 2:
-            _notify(
-                f"Activity watcher timed out for {first_name} "
-                f"({state['timeout_count']}x consecutive, 300s each). "
-                f"Last known activity: {stuck_at or 'unknown'}.",
-                chat_id, slug=slug,
+            # Log-only, deliberately: a stalled watcher is an engineering fact and
+            # the athlete has nothing to do about it (tone guide R4 / §4c). The
+            # ops log is where this belongs; ops-digest renders it sent=False.
+            # detail= is echoed verbatim into the ops digest, so it stays free of the
+            # timeout value and the activity id (§4a/§4c) even though that digest is
+            # log-only today (ops-digest.py:158 logs it sent=False and calls no notify).
+            # The mechanism the developer actually needs goes to stderr, which the cron
+            # log captures, so nothing diagnostic is lost.
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] activity analysis timed "
+                  f"out {state['timeout_count']}x consecutive (300s each), stuck at "
+                  f"activity {stuck_at or 'unknown'}", file=sys.stderr)
+            ops_log.alert(
+                "activity-watcher",
+                f"activity analysis timed out {state['timeout_count']}x in a row",
+                athlete=slug,
             )
         else:
             print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] activity analysis "
@@ -1184,11 +1196,11 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     if already_discussed:
         # Chat already covered this activity — stay silent, but a durability
         # flag is new insight the chat can't have had (it's computed here).
-        note = _run_durability_note(slug, activity_id)
-        if "⚠" in note:
+        note, flagged = _run_durability_note(slug, activity_id)
+        if flagged:
             _notify(f"*New activity*{note}", chat_id, slug=slug)
     elif analysis and analysis != "none":
-        analysis += _run_durability_note(slug, activity_id)
+        analysis += _run_durability_note(slug, activity_id)[0]
         _notify(f"*New activity*\n\n{analysis}", chat_id, slug=slug)
 
     # Send quick-log keyboard for immediate data capture
@@ -1265,8 +1277,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
             _rename_strava(slug, activity_id, derived)
         elif chat_id:
             _notify(
-                f"Sailing session logged ({activity_date}). What should I name it on Strava? "
-                f"(ICU: {activity_id})",
+                f"Sailing session logged ({activity_date}). What should I name it on Strava?",
                 chat_id, slug=slug,
             )
 

@@ -120,17 +120,20 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
     heat_block = ""
     heat_card_line = ""
     if heat_protocol:
+        # The acclimation score is decision-support for the model, never card copy:
+        # §6.2 is explicit that the card carries no score, label, ratio or internal
+        # metric, and a bare "62% ↑" is unrankable by the athlete anyway (R5). The
+        # actionable half — bath due, N this week against a 2–3x target — is the
+        # whole message, so the card line is the same whether or not a score exists.
         if heat_accl_pct is not None:
             heat_block = (
                 f"\n## Heat acclimation (pre-computed — authoritative)\n"
-                f"Score: {heat_accl_pct}%{heat_accl_trend}. Copy verbatim into the card — do not recompute.\n"
+                f"Score: {heat_accl_pct}%{heat_accl_trend}. Use this ONLY to decide whether to "
+                f"flag heat work — do NOT show the score, the percentage or the trend arrow to "
+                f"the athlete, and do not recompute it.\n"
             )
-            heat_card_line = (
-                f"🌡️ Heat acclim: {heat_accl_pct}%{heat_accl_trend}"
-                f"[If sessions_this_week < 2 AND today is Wednesday or later: · bath due ([N] this week, target 2–3×)]"
-            )
-        else:
-            heat_card_line = "[If sessions_this_week < 2 AND today is Wednesday or later: 🌡️ Heat bath due — [N] this week (target 2–3×)]"
+        heat_card_line = ("[If sessions_this_week < 2 AND today is Wednesday or later: "
+                          "🌡️ Heat bath due — [N] this week (target 2–3×)]")
 
     long_run_cap_block = ""
     if long_run_cap_km is not None:

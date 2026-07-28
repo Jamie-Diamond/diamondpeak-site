@@ -78,13 +78,29 @@ def _ctl_today(cfg) -> float | None:
 
 
 def _weekly_tss_cap(slug, phase) -> float | None:
-    """Blueprint hours ceiling (max_hours_per_week x 100 x IF^2) for the TSS hard
-    check — same maths the blueprint document displays (primitives.blueprint)."""
+    """Weekly TSS hard ceiling for the load check, in precedence order.
+
+    1. The athlete's hours ceiling (max_hours_per_week x 100 x IF^2) — the same
+       maths the blueprint document displays (primitives.blueprint).
+    2. Failing that, the blueprint phase's own `tss_ceiling`. Kathryn has no
+       hours ceiling by a permanent rule (10 Jul 2026), which left her weekly
+       load entirely unchecked — twelve SKIPPED checks in one build. The phase
+       ceiling is a LOAD bound, not a limit on how long she may train, so it
+       arms the check without reinstating the hours cap that rule removed.
+
+    None when neither exists — taper phases carry no ceiling in either source by
+    design, so a taper week still reports the check as skipped."""
     try:
         prof = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
         max_h = prof.get("max_hours_per_week")
         if max_h and phase.get("name"):
             return tss_ceiling(float(max_h), str(phase["name"]))
+    except Exception:
+        pass
+    try:
+        ceil = (phase or {}).get("tss_ceiling")
+        if ceil and float(ceil) > 0:
+            return float(ceil)
     except Exception:
         pass
     return None
@@ -132,9 +148,13 @@ def build_sessions(slug: str, proposal: dict) -> dict:
     dr = cfg.get("day_rules")
     phase = current_phase(_blueprint(slug), ws) or {}
     # ARM the hard checks (audit P0-4): without ctl_today the ramp check silently
-    # no-ops, and without weekly_tss_cap the load check does — the validator's
-    # "a breach cannot reach the athlete" guarantee was void. Both inputs are
-    # sourced here; a missing one lands in rep.skipped and is surfaced loudly.
+    # no-ops, and without weekly_tss_cap the load check does. Both inputs are
+    # sourced here, but NEITHER IS GUARANTEED, so the validator's "a breach cannot
+    # reach the athlete" claim does not hold unconditionally: ctl_today needs a
+    # live ICU call, and the load cap needs an hours ceiling or a blueprint phase
+    # ceiling (a taper has neither). A missing input lands in rep.skipped and is
+    # logged loudly — that log line is the only thing between a skipped check and
+    # an unchecked week reaching the athlete.
     import plan_tools as _pt
     try:
         _caps = _pt.run_caps(_pt._client(cfg), ws, run_protocol=cfg.get("run_protocol"))
