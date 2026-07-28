@@ -394,6 +394,15 @@ def _check_distribution(week_events: list[dict], week_start: date,
         row = (distribution or {}).get(sport)
         target = _easy_target_pct(row)
         if target is None or b["n"] < DIST_MIN_SESSIONS or b["total"] < DIST_MIN_MINUTES:
+            if skipped is not None:
+                if target is None:
+                    reason = f"no {sport} distribution target configured for this phase"
+                else:
+                    reason = (f"only {b['n']:.0f} session(s) / {b['total']:.0f} min planned "
+                              f"(need >= {DIST_MIN_SESSIONS} sessions and "
+                              f"{DIST_MIN_MINUTES} min)")
+                skipped.append(f"week of {week_start}: {sport} intensity distribution "
+                               f"check NOT RUN — {reason}")
             continue
         # Measurement fidelity decides the tolerance AND whether the per-zone limb runs.
         guess_frac = (b["guessed"] / b["total"]) if b["total"] else 0.0

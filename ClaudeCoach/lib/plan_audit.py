@@ -118,7 +118,13 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
     bike_min = (cfg.get("race_target_splits") or {}).get("bike_min")
     lr_ceiling = min(int(round(bike_min * 1.15 / 15) * 15), 300) if bike_min else None
 
-    fails = {"STRUCTURE": [], "FUELLING": [], "LONG_RIDE": [], "WEEKLY_LOAD": [], "RULES": []}
+    # SKIPPED is a distinct, non-failure category: checks that could not run at all
+    # (missing input, insufficient data) surfaced separately from RULES violations,
+    # so "not checked" never reads as "checked and passed". Never counts toward
+    # hard_fail — a skip is not a failure — but IS counted in `ok`, same as the
+    # other soft/warn categories below: a run with only skips is visibly not clean.
+    fails = {"STRUCTURE": [], "FUELLING": [], "LONG_RIDE": [], "WEEKLY_LOAD": [], "RULES": [],
+             "SKIPPED": []}
 
     for e in events:
         sport = e.get("type") or ""
@@ -171,8 +177,13 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
             # "_persistent" escalation alongside plain intensity_distribution.
             if v.severity == "hard" or v.code.startswith("intensity_distribution"):
                 fails["RULES"].append(f"week {ws}: {v}")
+        # rep.skipped covers EVERY hard check validate_week couldn't run this week
+        # (weekly_tss_cap/floor, ctl_ramp, run_weekly_volume, intensity_distribution
+        # gates, ...) — surface all of it, not just the distribution reasons.
+        for s in rep.skipped:
+            fails["SKIPPED"].append(f"week {ws}: {s}")
 
-    hard = any(fails[k] for k in ("STRUCTURE", "LONG_RIDE", "RULES"))  # fuelling/load = warn
+    hard = any(fails[k] for k in ("STRUCTURE", "LONG_RIDE", "RULES"))  # fuelling/load/skipped = warn
     return {"athlete": slug, "window": f"{win_start}..{win_end}", "fuel_target": fuel,
             "long_ride_ceiling_min": lr_ceiling, "ok": not any(fails.values()),
             "hard_fail": hard, "fails": {k: v for k, v in fails.items() if v}}
