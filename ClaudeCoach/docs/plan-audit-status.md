@@ -1,5 +1,44 @@
 # plan_audit.py — scheduled, alerting BASELINE-GATED (2026-07-28)
 
+> **day_rules are GUIDELINES, and the audit now says so (2026-07-28, later same
+> day).** The coach's ruling: *"I told it this week to swim on wed, so we swim on
+> wed, rules are guidelines."* `day_rules.swim_days=["Tue","Thu"]` is a true
+> description of Jamie's behaviour — Tue x7, Thu x7, Wed x0 since 1 Jun — so
+> widening it to include Wed would have thrown away the signal. But classifying a
+> DIRECTED deviation as a hard invariant breach makes the audit permanently red on
+> `day_rules`, and a permanently red check is one nobody reads.
+>
+> A coach-directed deviation is now recorded PER SESSION in
+> `athletes/<slug>/reference/day-rules-overrides.json` (gitignored, same as the
+> `rules-lint-accepted.json` register it is modelled on; schema in
+> `docs/rule-lifecycle.md`) and becomes a soft `{sport}_directed_day` in a NEW
+> `DIRECTED` category — reported on every run, never counted as `hard_fail`. An
+> UNDIRECTED deviation is untouched and still hard. Overrides cannot move the
+> pattern by stealth: three directed hits on the same sport+weekday inside 28 days
+> raise a hard `day_rules_drifted` naming `day_rules.<sport>_days` as the remedy.
+>
+> Measured on live data, 28 Jul: jamie's four hard day findings become **three hard
+> + one directed**. `RULES` 7 -> 6, `DIRECTED` 1. Only the Wednesday swim was
+> directed; the Thursday ride, the Thursday brick run and the Friday easy run were
+> not, and they still hard-fail — which is the live proof that an undirected
+> deviation is still caught. If any of those three was in fact directed too, it is
+> three more lines in the register.
+>
+> `DIRECTED` is listed in `plan-audit-baseline.json` for all three athletes,
+> including at 0 — a populated category with no baseline entry alerts on every run
+> (`accepted.get(cat, -1)`), which is the bug that fired when `SKIPPED` was added
+> earlier the same day. `jamie.RULES` was shrunk 7 -> 6 in the same edit: leaving it
+> at 7 would silently swallow the next new RULES failure.
+>
+> **Time-boxed day permissions in config.** `day_rules` now honours a
+> `<key>_expires` sidecar — `"bike_days_expires": {"Sat": "2026-09-05"}` — so a
+> dated exception reverts on its own. Calum's `[expires:2026-09-05]` Saturday
+> long-ride exception had been encoded by widening `bike_days` with nothing to
+> revert it, so the exception was permanent and his `[perm]` weekday-only rule was
+> silently lost. `rule_conflicts` axis A now hard-fails that shape
+> (`config_undated_exception`) and soft-flags a sidecar whose date has passed
+> (`config_exception_expired`, which by construction can only fire AFTER the date).
+
 > **Three hard checks ARMED, 2026-07-28 (later same day).** `plan_audit` called
 > `validate_week(..., day_rules, ctl_today)` and nothing else, so
 > `weekly_tss_cap`, `weekly_tss_floor` and `run_weekly_volume` were reported
@@ -94,6 +133,8 @@ permissions, not committed — contains athlete session detail):
 
 - **jamie** — 3 FUELLING, 1 WEEKLY_LOAD, 4 hard day_rules (ride Thu, swim Wed,
   run Thu, run Fri), 2 soft intensity_distribution
+  *(the swim Wed of these four is now `DIRECTED`, not hard — see the note at the
+  top of this page)*
 - **kathryn** — 1 STRUCTURE, 3 FUELLING, 2 WEEKLY_LOAD, 2 soft
   intensity_distribution
 - **calum** — 1 FUELLING, 1 WEEKLY_LOAD, 1 soft intensity_distribution
@@ -103,7 +144,11 @@ because no sessions are loaded past 2 Aug.
 
 ## Must fix before alerting is re-enabled
 
-1. The day_rules breaches (4 on jamie's week)
+1. The day_rules breaches — **now 3, not 4** (Thu ride, Thu brick run, Fri run).
+   The Wednesday swim was coach-directed and sits in `DIRECTED`, not `RULES`; the
+   remaining three are undirected and are still real. Either the plan moves them
+   back onto `run_days`/`bike_days`, or the coach records the instruction that put
+   them there.
 2. The missing structured steps on one of Kathryn's rides (STRUCTURE)
 3. Sessions with no FUELLING statement where one is expected (7 across the
    three athletes)
