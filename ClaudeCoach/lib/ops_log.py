@@ -79,15 +79,41 @@ def _trim(path: Path) -> None:
         pass
 
 
-def record_run(script: str, athlete: str = "", ok: bool = True, detail: str = "") -> None:
-    """One structured heartbeat line per script run (or per-athlete outcome)."""
-    _append(RUN_STATUS, json.dumps({
+# `ok` is OVERLOADED, and that is a bug we cannot fix by renaming it (a dozen
+# call sites across files owned by other work, plus 6 weeks of history already on
+# disk). ok=False has always meant BOTH "this run failed" and "this run succeeded
+# and found something worth telling you". The two need opposite handling: the
+# first is a missed deliverable and may interrupt the coach, the second is a
+# working script doing its job and must never alarm.
+#
+# `outcome` is the un-overloaded field. It is OPTIONAL and additive: when a call
+# site knows which kind it is, it says so and that wins. When it is absent — every
+# existing call site, and every line already in run-status.jsonl — the per-script
+# default in coach_alert.OUTCOME_CLASS decides. Resolution lives there, not here,
+# because it is a routing decision and coach_alert is the one file that answers
+# "what can reach Jamie".
+FAILURE = "failure"   # the run did not do its job
+FINDING = "finding"   # the run DID its job, and what it found is not good news
+
+
+def record_run(script: str, athlete: str = "", ok: bool = True, detail: str = "",
+               outcome: str = None) -> None:
+    """One structured heartbeat line per script run (or per-athlete outcome).
+
+    `outcome` (FAILURE / FINDING) disambiguates ok=False for callers that know
+    which they mean — see the note above. Omitted keeps the line byte-identical
+    to every one already written, so nothing has to be migrated.
+    """
+    rec = {
         "ts": datetime.now().isoformat(timespec="seconds"),
         "script": script,
         "athlete": athlete,
         "ok": bool(ok),
         "detail": detail,
-    }, separators=(",", ":")))
+    }
+    if outcome:
+        rec["outcome"] = outcome
+    _append(RUN_STATUS, json.dumps(rec, separators=(",", ":")))
 
 
 def alert(script: str, message: str, athlete: str = "") -> None:
