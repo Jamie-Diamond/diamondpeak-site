@@ -126,6 +126,28 @@ Keep the entire brief under 120 words. Never ask questions.
 Wrap your entire output in <telegram> and </telegram> tags. If Step 3 says output nothing, output empty tags: <telegram></telegram>. Output nothing outside those tags."""
 
 
+def _strip_questions(text):
+    """Backstop for "Never ask questions" in the prompt above.
+
+    This brief stays a SEPARATE 20:30 push from the 21:00 check-in — it carries tomorrow's
+    targets, which is a different job from capturing today, and it has a deterministic
+    race-eve path that a check-in prompt must not swallow. The price of keeping it separate
+    is that the evening must still contain at most ONE question, and that has to be the
+    check-in's. So any question line the model emits here is dropped rather than trusted.
+    """
+    out, dropped = [], []
+    for line in (text or "").split("\n"):
+        # Targets bullets and the bold headers can carry a legitimate '?' — the prompt's
+        # own swim line is "vs CSS {css or '?'}" — so only prose lines are candidates.
+        if "?" in line and not line.lstrip().startswith(("•", "*", "_", "-")):
+            dropped.append(line.strip())
+            continue
+        out.append(line)
+    if dropped:
+        print(f"dropped question line(s) from brief: {dropped}", file=sys.stderr)
+    return "\n".join(out).strip()
+
+
 def notify(msg, chat_id):
     try:
         subprocess.run(
@@ -206,7 +228,7 @@ def run_athlete(slug, athlete_cfg):
     import re as _re
     raw = (result.stdout or "").strip()
     m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
-    output = m.group(1).strip() if m else ""
+    output = _strip_questions(m.group(1)) if m else ""
     # HEARTBEAT. Silence is a legitimate outcome here — the prompt is instructed to
     # return empty <telegram></telegram> tags when there is nothing worth saying — so
     # "ran and correctly stayed silent" is recorded as a SUCCESS with detail="silent".

@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Capture reminder — runs via VM crontab at 20:00 daily. Loops over all active athletes."""
+"""Capture reminder — RETIRED 2026-07-28. Its job is now Case A2 of evening-checkin.py.
+
+It ran at 20:10, twenty minutes before the night-before brief and fifty before the evening
+check-in, and asked its own question ("Log <session> — say 'log session'"). Three evening
+pushes from three crons that knew nothing about each other is the defect; the ask itself is
+not. So the ask moved into the 21:00 check-in, which now reads the same
+.capture-reminded.json ledger and makes it at most once per activity_id.
+
+The 20:10 crontab entry is removed. main() is a no-op rather than working code so that
+re-adding the cron cannot silently restore the second push; _build_prompt is kept below
+because Case A2 of evening-checkin.py is derived from it and the two must stay comparable.
+"""
 import json, subprocess, sys
 from datetime import datetime
 from pathlib import Path
@@ -112,21 +123,9 @@ def run_athlete(slug, athlete_cfg):
 
 def main():
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] capture-reminder starting", file=sys.stderr)
-    try:
-        athletes = json.loads(ATHLETES_CONFIG.read_text())
-    except Exception as e:
-        print(f"[{ts}] Failed to load athletes config: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    for slug, cfg in athletes.items():
-        if not cfg.get("active", True):
-            continue
-        try:
-            run_athlete(slug, cfg)
-        except Exception as exc:
-            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] capture-reminder error: {exc}", file=sys.stderr)
-            ops_log.alert("capture-reminder", f"exception: {exc}", athlete=slug)
+    print(f"[{ts}] capture-reminder is RETIRED — its job is Case A2 of "
+          f"evening-checkin.py (21:00). Sending nothing.", file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":
