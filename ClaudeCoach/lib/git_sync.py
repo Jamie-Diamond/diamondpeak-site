@@ -130,7 +130,22 @@ def _push_with_retry(run, script, athlete) -> bool:
     and no `git commit`, and the caller has already committed by the time we get
     here. --autostash only shelves and restores UNCOMMITTED worktree files (the
     routine config/*.enc bot churn) — it cannot promote them into the commit
-    being pushed."""
+    being pushed.
+
+    A secret gate runs BEFORE the first push (28 Jul 2026), the same one
+    scripts/lib_git_alert.sh git_push_retry calls, so the Python and shell pushers
+    cannot drift. Fail CLOSED: a missing gate blocks the push. It never prints a
+    secret value."""
+    gate = os.path.join(PROJECT_DIR, "ClaudeCoach/scripts/check-no-public-secrets.sh")
+    if not os.access(gate, os.X_OK):
+        loud_fail(script, f"secret gate missing or not executable at {gate} — push blocked",
+                  athlete=athlete)
+        return False
+    r = run([gate, "tree"], 60)
+    if r.returncode != 0:
+        loud_fail(script, f"secret gate BLOCKED the push: {_stderr(r)}", athlete=athlete)
+        return False
+
     r = run(["git", "push", "origin", "main"], 30)
     if r.returncode == 0:
         sync_ok(script)
