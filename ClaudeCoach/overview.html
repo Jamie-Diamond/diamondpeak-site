@@ -172,6 +172,11 @@
           <td>Fetches live training metrics from Intervals.icu; writes training-data.json powering the athlete dashboard</td>
         </tr>
         <tr>
+          <td class="mono">Daily 06:25</td>
+          <td class="mono">plan_audit.py</td>
+          <td>Layer 4 self-check — asserts STRUCTURE/FUELLING/LONG_RIDE/WEEKLY_LOAD/RULES invariants against each athlete's live Intervals.icu calendar; read-only, hard-fail logs to ops-alerts.log (no Telegram)</td>
+        </tr>
+        <tr>
           <td class="mono">Hourly</td>
           <td class="mono">refresh-public-data.py</td>
           <td>Extracts public-safe fields (CTL trend, race countdown) from training-data.json; writes site-data.json and pushes to GitHub Pages</td>

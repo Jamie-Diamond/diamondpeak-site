@@ -37,11 +37,13 @@ from primitives.validate_plan import validate_week            # noqa: E402
 from primitives.blueprint import current_phase                # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 import plan_tools as pt                                        # noqa: E402
+import ops_log                                                 # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
 _STRUCTURED_SPORTS = {"Swim", "Run", "Ride", "GravelRide", "VirtualRide", "Brick"}
 _FUEL_SPORTS = {"Ride", "GravelRide", "VirtualRide", "Brick"}
 _LOAD_TOLERANCE = 0.15
+_FUEL_TOLERANCE_G_HR = 5  # fuel_target() rounds to the nearest 5 g/hr; match that granularity
 
 
 def _client(cfg):
@@ -91,7 +93,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
             g = re.findall(r"(\d+)\s*g\s*(?:CHO\s*)?/?\s*hr", desc, re.I)
             if not g:
                 fails["FUELLING"].append(f"{nm} — no fuelling stated (expect {fuel} g/hr)")
-            elif not any(int(x) == fuel for x in g):
+            elif not any(abs(int(x) - fuel) <= _FUEL_TOLERANCE_G_HR for x in g):
                 fails["FUELLING"].append(f"{nm} — states {g} g/hr, expected {fuel}")
         if sport in _FUEL_SPORTS and lr_ceiling and dur > lr_ceiling:
             fails["LONG_RIDE"].append(f"{nm} — {dur}min > {lr_ceiling}min event ceiling")
@@ -145,6 +147,14 @@ def main():
             r = {"athlete": slug, "error": f"{type(e).__name__}: {e}", "hard_fail": True}
         any_hard = any_hard or r.get("hard_fail")
         reports.append(r)
+        # Log-only alerting (ops chatter is log-only from 27 Jul 2026; no Telegram
+        # routing here — an ops-alerts.log entry is picked up by the evening digest).
+        if r.get("hard_fail"):
+            detail = r.get("error") or "; ".join(
+                f"{k}: {len(v)}" for k, v in (r.get("fails") or {}).items() if v)
+            ops_log.alert("plan_audit", detail or "hard invariant failed", athlete=slug)
+        else:
+            ops_log.record_run("plan_audit", athlete=slug, ok=True)
     print(json.dumps(reports, indent=1, ensure_ascii=False))
     sys.exit(1 if any_hard else 0)
 
