@@ -115,9 +115,9 @@ def _cooling_down(reason: str, key: str, now: datetime) -> bool:
 def send(reason: str, text: str, key: str = "") -> str:
     """Interrupt the coach — if and only if `reason` is one of the two approved.
 
-    Returns the action taken: "sent", "dry-run", "cooldown", or "refused"
-    (an unlisted reason: logged loudly and NOT sent, so a future caller adding
-    a third condition finds out in the log instead of silently messaging him).
+    Returns the action taken: "sent", "dry-run", "cooldown", "send-failed", or
+    "refused" (an unlisted reason: logged loudly and NOT sent, so a future caller
+    adding a third condition finds out in the log instead of silently messaging him).
     """
     now = datetime.now()
     if reason not in REASONS:
@@ -132,10 +132,10 @@ def send(reason: str, text: str, key: str = "") -> str:
         ops_log.log_outbound(f"coach-alert:{reason}", text, sent=False)
         return "dry-run"
 
-    state = _read_state()
-    state[f"{reason}|{key}"] = now.isoformat(timespec="seconds")
-    _write_state(state)
-    ops_log.log_outbound(f"coach-alert:{reason}", text, sent=True)
+    # Send FIRST, and only bank the cooldown if it actually went. Writing the
+    # cooldown before the send would mean a Telegram API error silently burned the
+    # next 6-12 hours of alerting — an alarm that fails quietly, which is the exact
+    # failure class this whole file exists to kill.
     try:
         notify = Path(__file__).resolve().parent.parent / "telegram" / "notify.py"
         cmd = [sys.executable, str(notify), "--no-history"]
@@ -143,7 +143,21 @@ def send(reason: str, text: str, key: str = "") -> str:
         if chat:
             cmd += ["--chat-id", chat]
         cmd.append(text)
-        subprocess.run(cmd, capture_output=True, timeout=30)
+        r = subprocess.run(cmd, capture_output=True, timeout=30)
+        rc, err = r.returncode, (getattr(r, "stderr", b"") or b"")
     except Exception as exc:
-        ops_log.alert("coach-alert", f"notify failed for {reason}: {exc}")
+        rc, err = -1, str(exc).encode()
+
+    if rc != 0:
+        # No cooldown banked: the next digest/claude_call tick tries again.
+        ops_log.log_outbound(f"coach-alert:{reason}", text, sent=False)
+        tail = err.decode(errors="replace")[-200:] if isinstance(err, bytes) else str(err)[-200:]
+        ops_log.alert("coach-alert", f"notify FAILED (rc={rc}) for {reason}, "
+                                     f"coach NOT told, will retry next tick: {tail}")
+        return "send-failed"
+
+    state = _read_state()
+    state[f"{reason}|{key}"] = now.isoformat(timespec="seconds")
+    _write_state(state)
+    ops_log.log_outbound(f"coach-alert:{reason}", text, sent=True)
     return "sent"

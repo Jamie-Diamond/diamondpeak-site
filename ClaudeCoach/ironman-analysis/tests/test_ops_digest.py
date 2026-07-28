@@ -271,3 +271,69 @@ class TestAuthFailureKind:
         import claude_call
         monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
         assert claude_call.auth_failure_kind() == "no-token"
+
+
+class TestSendFailureDoesNotEatTheCooldown:
+    """An alarm that fails quietly is the bug this file exists to kill: banking the
+    cooldown before the send would let one Telegram API error silence the next 6-12h."""
+
+    def _ca(self, monkeypatch, logs, rc):
+        import coach_alert
+        monkeypatch.setenv("CC_ALERT_DRY_RUN", "0")
+        monkeypatch.setattr(coach_alert, "STATE", logs / "coach-alert-state.json")
+        monkeypatch.setattr(ops_log, "ALERT_LOG", logs / "ops-alerts.log")
+        monkeypatch.setattr(ops_log, "RUN_STATUS", logs / "run-status.jsonl")
+        result = type("R", (), {"returncode": rc, "stderr": b"telegram 400"})
+        monkeypatch.setattr(coach_alert, "subprocess",
+                            type("S", (), {"run": staticmethod(lambda *a, **k: result)}))
+        return coach_alert
+
+    def test_failed_send_retries_next_tick(self, logs, monkeypatch):
+        ca = self._ca(monkeypatch, logs, rc=1)
+        assert ca.send(ca.CLAUDE_AUTH_FAILED, "x", key="k") == "send-failed"
+        assert ca.send(ca.CLAUDE_AUTH_FAILED, "x", key="k") == "send-failed"
+        assert "coach NOT told" in ops_log.ALERT_LOG.read_text()
+
+    def test_successful_send_banks_the_cooldown(self, logs, monkeypatch):
+        ca = self._ca(monkeypatch, logs, rc=0)
+        assert ca.send(ca.CLAUDE_AUTH_FAILED, "x", key="k") == "sent"
+        assert ca.send(ca.CLAUDE_AUTH_FAILED, "x", key="k") == "cooldown"
+
+
+class TestStage1PlanHeartbeat:
+    """stage1-plan's heartbeat is gated on --push: a hand dry-run must NOT satisfy the
+    weekly gap check, or a Wednesday experiment masks the Sunday cron never running."""
+
+    def _run(self, monkeypatch, logs, argv):
+        import importlib.util
+        monkeypatch.setattr(ops_log, "RUN_STATUS", logs / "run-status.jsonl")
+        monkeypatch.setattr(ops_log, "ALERT_LOG", logs / "ops-alerts.log")
+        spec = importlib.util.spec_from_file_location(
+            "stage1", REPO / "scripts" / "stage1-plan.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        monkeypatch.setattr(mod, "ops_log", ops_log)
+        monkeypatch.setattr(mod.sl, "planning_brief",
+                            lambda *a, **k: {"event_unknown": True})
+        monkeypatch.setattr(mod, "_load_prior_zones", lambda *a, **k: {})
+        base = logs / "base"
+        (base / "config").mkdir(parents=True)
+        (base / "config" / "athletes.json").write_text(
+            json.dumps({"testa": {"active": True, "chat_id": "1"}}))
+        monkeypatch.setattr(mod, "BASE", base)
+        monkeypatch.setattr(sys, "argv", argv)
+        with pytest.raises(SystemExit):
+            mod.main()
+        if not ops_log.RUN_STATUS.exists():
+            return []
+        return [json.loads(l) for l in ops_log.RUN_STATUS.read_text().splitlines()]
+
+    def test_push_run_records_the_failure(self, logs, monkeypatch):
+        rows = self._run(monkeypatch, logs,
+                         ["stage1-plan.py", "--athlete", "testa", "--push"])
+        assert [(r["script"], r["ok"], r["detail"]) for r in rows] == \
+            [("stage1-plan", False, "event unknown — cannot plan")]
+
+    def test_dry_run_records_nothing(self, logs, monkeypatch):
+        assert self._run(monkeypatch, logs,
+                         ["stage1-plan.py", "--athlete", "testa"]) == []
