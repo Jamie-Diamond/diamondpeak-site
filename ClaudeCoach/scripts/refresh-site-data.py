@@ -571,6 +571,16 @@ def post_process(data):
         week = max(1, math.ceil((d - PLAN_START).days / 7))
         return 0 if week == sick_week_num else _phase_daily_tss(d)
 
+    # planned_sessions is only a genuine forecast out to the last date we actually
+    # have calendar data for (weekCalendar — completed history + booked events).
+    # Beyond that date there is nothing to project from, so continuing the series
+    # to race day just plots a "what if you never train again" decay curve and it
+    # reads as a real forecast. Truncate the series there instead of hard-coding
+    # a horizon length — it must track however far weekCalendar actually reaches.
+    _wc_dates = [e.get("date") for e in data.get("weekCalendar", []) if e.get("date")]
+    last_known_date = date.fromisoformat(max(_wc_dates)) if _wc_dates else today
+    planned_sessions_horizon_days = max(1, (last_known_date - today).days + 1)
+
     # Jamie's config (phase_ctl) drives the Target CTL line — same helper as every
     # other athlete, so the displayed target tracks athletes.json automatically.
     try:
@@ -580,7 +590,7 @@ def post_process(data):
     data["ctlProjection"] = {
         "current_trend":    _ctl_project(current_ctl, current_trend_tss, days_to_race),
         "planned_build":    _ctl_project(current_ctl, _phase_daily_tss, days_to_race),
-        "planned_sessions": _ctl_project(current_ctl, planned_sessions_tss, days_to_race),
+        "planned_sessions": _ctl_project(current_ctl, planned_sessions_tss, days_to_race)[:planned_sessions_horizon_days],
         "sick_week":        _ctl_project(current_ctl, sick_week_tss, days_to_race),
         "target_milestones": _ctl_target_milestones(_jamie_cfg, current_ctl, today),
         "race_date": RACE_DATE.isoformat(),
