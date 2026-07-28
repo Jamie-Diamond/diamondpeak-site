@@ -110,6 +110,10 @@
   .week-total-cell.has-tss{color:var(--ink2);font-weight:500}
   .week-total-cell.done-tss{color:var(--green)}
   @media(max-width:760px){.session-detail{display:none}.day-date{font-size:14px}}
+  @media(max-width:620px){
+    .week-grid,.week-totals-row{grid-auto-flow:column;grid-auto-columns:118px;grid-template-columns:none;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+    .day-col,.week-total-cell{scroll-snap-align:start}
+  }
 </style>
 </head>
 <body>
@@ -319,7 +323,7 @@
   <!-- PLAN VS ACTUAL TSS -->
   <div class="panel" style="margin-bottom:14px">
     <h2>Plan vs actual TSS — last 6 weeks</h2>
-    <div class="small" style="margin-bottom:10px">Phase ceiling vs completed TSS · gap = missed volume</div>
+    <div class="small" style="margin-bottom:10px">Phase ceiling vs completed TSS · gap = missed volume · in-progress week's target is pro-rated to days elapsed (amber)</div>
     <div class="chart-wrap short"><canvas id="chartPlanActual"></canvas></div>
   </div>
 
@@ -808,7 +812,15 @@ function renderLoadChart(days) {
     if (!hasData) return;
     datasets.push({type:"bar",label:sport,data:vals,backgroundColor:bgVals,stack:"load",yAxisID:"y",order:2});
   });
-  const tsbVals = days.map(d => d.tsb != null ? Math.round(d.tsb*10)/10 : null);
+  const todayIdxSolid = labels.indexOf(todayStr);
+  const tsbVals = days.map((d, i) => {
+    if (d.tsb == null) return null;
+    // Solid Form line is actual-only: the ETL fills tsb forward across
+    // future days, so without this cutoff the solid line silently doubles
+    // as a second, differently-computed projection alongside _formProj below.
+    if (todayIdxSolid >= 0 && i > todayIdxSolid) return null;
+    return Math.round(d.tsb*10)/10;
+  });
   const tsbDotColors = tsbVals.map(v => {
     if (v==null) return "transparent";
     if (v>5)     return "rgba(29,104,64,0.9)";
@@ -896,6 +908,23 @@ function renderPlanActual(weeks) {
               : null;
     return tag ? [base, "("+tag+")"] : base;
   });
+  // The in-progress week can't be judged against its full target — that's
+  // only reached on Sunday. Pro-rate its target to days elapsed so the bar
+  // reads as "behind pace" rather than "missed", and colour it apart so the
+  // partial nature is visible, not just implied by the (in progress) tag.
+  const today = new Date(); today.setHours(0,0,0,0);
+  const planTargets = weeks.map(w => {
+    if (!w.in_progress) return w.planned_tss;
+    const start = new Date(w.week_start+"T00:00:00");
+    const elapsedDays = Math.min(7, Math.max(1, Math.round((today-start)/86400000)+1));
+    return Math.round(w.planned_tss * elapsedDays / 7);
+  });
+  const planColors = weeks.map(w => w.in_progress
+    ? "rgba(201,135,31,0.35)"   // amber: pro-rated, week not yet complete
+    : "rgba(180,180,180,0.35)");
+  const planBorders = weeks.map(w => w.in_progress
+    ? "rgba(201,135,31,0.7)"
+    : "rgba(120,120,120,0.6)");
   new Chart(ctx.getContext("2d"), {
     type:"bar",
     data:{
@@ -903,8 +932,8 @@ function renderPlanActual(weeks) {
       datasets:[
         {label:"Actual TSS",  data:weeks.map(w=>w.actual_tss),
          backgroundColor:"rgba(29,104,64,0.8)",borderRadius:3},
-        {label:"Plan target",data:weeks.map(w=>w.planned_tss),
-         backgroundColor:"rgba(180,180,180,0.35)",borderColor:"rgba(120,120,120,0.6)",
+        {label:"Plan target (pro-rated if in progress)",data:planTargets,
+         backgroundColor:planColors,borderColor:planBorders,
          borderWidth:1,borderRadius:3},
       ]
     },

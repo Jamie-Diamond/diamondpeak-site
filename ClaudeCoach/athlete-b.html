@@ -6,8 +6,6 @@
 <title>Kathryn — ClaudeCoach</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <style>
   :root {
     color-scheme: light;
@@ -110,6 +108,10 @@
   .week-total-cell.has-tss{color:var(--ink2);font-weight:500}
   .week-total-cell.done-tss{color:var(--green)}
   @media(max-width:760px){.session-detail{display:none}.day-date{font-size:14px}}
+  @media(max-width:620px){
+    .week-grid,.week-totals-row{grid-auto-flow:column;grid-auto-columns:118px;grid-template-columns:none;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+    .day-col,.week-total-cell{scroll-snap-align:start}
+  }
 </style>
 </head>
 <body>
@@ -138,19 +140,19 @@
         <div class="d" id="kpi-phase-ends"></div>
       </div>
       <div class="stat" id="stat-ctl">
-        <div class="l">CTL (fitness)</div>
+        <div class="l">Fitness</div>
         <div class="v" id="kpi-ctl">—</div>
         <div class="d">chronic training load</div>
       </div>
       <div class="stat" id="stat-tsb">
-        <div class="l">TSB (form)</div>
+        <div class="l">Form</div>
         <div class="v" id="kpi-tsb">—</div>
         <div class="d">positive = fresh</div>
       </div>
       <div class="stat">
         <div class="l">7d ramp</div>
         <div class="v" id="kpi-ramp">—</div>
-        <div class="d">CTL change / week</div>
+        <div class="d">Fitness change / week</div>
       </div>
     </div>
     <div style="margin-top:16px">
@@ -164,7 +166,7 @@
 
     <div class="panel">
       <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-        <h2 style="margin:0">Fitness trajectory (CTL)</h2>
+        <h2 style="margin:0">Fitness trajectory</h2>
         <div style="display:flex;gap:6px">
           <button onclick="zoomFitness(60)"  style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">60d</button>
           <button onclick="zoomFitness(0)"   style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;cursor:pointer;color:#4a4535">Season</button>
@@ -178,10 +180,6 @@
       </div>
       <div class="chart-wrap"><canvas id="chartFitness"></canvas></div>
       <div id="fit-sport-note" class="small" style="display:none;margin-top:6px;color:var(--muted)"></div>
-      <div class="legend">
-        <span><span class="swatch" style="background:#1a1a1a"></span>CTL — actual</span>
-        <span><span class="swatch" style="background:#c0392b;opacity:.6"></span>Target CTL milestones</span>
-      </div>
     </div>
 
     <div class="panel">
@@ -235,7 +233,7 @@
         <button id="load-btn-dur" onclick="setLoadMode('dur')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Duration</button>
       </div>
     </div>
-    <div class="small" id="load-chart-sub" style="margin-bottom:10px">TSS stacked by sport · faded bars = planned · TSB form line (right axis)</div>
+    <div class="small" id="load-chart-sub" style="margin-bottom:10px">Load stacked by sport · faded bars = planned · Form line (right axis)</div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
       <button id="load-sport-All" onclick="setLoadSport('All')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#1d6840;color:#fff;cursor:pointer">All</button>
       <button id="load-sport-Swim" onclick="setLoadSport('Swim')" style="font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;background:#f8f5ef;color:#4a4535;cursor:pointer">Swim</button>
@@ -427,7 +425,7 @@ window.chartFitness = null;
     data:{
       datasets:[
         {
-          label:"CTL — this season",
+          label:"Fitness — this season",
           data:[],
           borderColor:"#1a1a1a",
           backgroundColor:"transparent",
@@ -436,7 +434,7 @@ window.chartFitness = null;
           borderWidth:2.2
         },
         {
-          label:"CTL — Athens '24",
+          label:"Fitness — Athens '24",
           data:[],
           borderColor:"rgba(26,82,118,0.55)",
           backgroundColor:"transparent",
@@ -447,7 +445,7 @@ window.chartFitness = null;
           _prevSeason: true
         },
         {
-          label:"CTL — Venice '23",
+          label:"Fitness — Venice '23",
           data:[],
           borderColor:"rgba(39,174,96,0.5)",
           backgroundColor:"transparent",
@@ -476,7 +474,7 @@ window.chartFitness = null;
       maintainAspectRatio:false,
       interaction:{mode:"nearest",intersect:false},
       plugins:{
-        legend:{display:false, position:"top", labels:{boxWidth:12,font:{size:11},
+        legend:{display:true, position:"top", labels:{boxWidth:12,font:{size:11},
           filter: item => item.text !== "Target CTL"}},
         tooltip:{
           callbacks:{
@@ -491,7 +489,7 @@ window.chartFitness = null;
         x:{type:"linear",min:-265,max:14,
            ticks:{callback:v=>"T"+v,maxTicksLimit:10},
            grid:{color:"#e8e3da"}},
-        y:{title:{display:true,text:"CTL"},min:0,max:90,grid:{color:"#e8e3da"}}
+        y:{title:{display:true,text:"Fitness"},min:0,max:90,grid:{color:"#e8e3da"}}
       }
     }
   });
@@ -518,7 +516,7 @@ function setFitnessSport(s){
   if(!ch || !d) return;
   const toXY = (series, raceStr) => (series||[]).map(([dt,v])=>({x:toTX(dt,raceStr),y:v}));
   if(s === "All"){
-    ch.data.datasets[0].label = "CTL — this season";
+    ch.data.datasets[0].label = "Fitness — this season";
     ch.data.datasets[0].data  = toXY(d.fitnessThis);
     const pr = (d.profile&&d.profile.prev_race_date) || (d.fitnessPrev&&d.fitnessPrev.length ? d.fitnessPrev[d.fitnessPrev.length-1][0] : null);
     ch.data.datasets[1].data  = toXY(d.fitnessPrev, pr);
@@ -528,7 +526,7 @@ function setFitnessSport(s){
     const key = s === "Bike" ? "Ride" : s;
     const bs = d.fitnessBySport || {};
     const cur = (bs.current && bs.current[key]) || [], prev = (bs.prev && bs.prev[key]) || [], prev2 = (bs.prev2 && bs.prev2[key]) || [];
-    ch.data.datasets[0].label = "CTL — " + s + " this season";
+    ch.data.datasets[0].label = "Fitness — " + s + " this season";
     ch.data.datasets[0].data  = toXY(cur);
     const pr = (d.profile&&d.profile.prev_race_date) || (prev.length ? prev[prev.length-1][0] : null);
     ch.data.datasets[1].data  = toXY(prev, pr);
@@ -657,8 +655,8 @@ let _loadChartDays = [], _loadMode = "tss";
       plugins:{legend:{display:false}},
       scales:{
         x:{stacked:true,grid:{color:"#e8e3da"}},
-        y:{stacked:true,beginAtZero:true,position:"left",title:{display:true,text:"TSS"},grid:{color:"#e8e3da"}},
-        y1:{position:"right",title:{display:true,text:"TSB"},suggestedMin:-40,suggestedMax:20,grid:{drawOnChartArea:false}},
+        y:{stacked:true,beginAtZero:true,position:"left",title:{display:true,text:"Load"},grid:{color:"#e8e3da"}},
+        y1:{position:"right",title:{display:true,text:"Form"},suggestedMin:-40,suggestedMax:20,grid:{drawOnChartArea:false}},
       }
     }
   });
@@ -674,8 +672,8 @@ function setLoadMode(mode) {
     : "background:#f8f5ef;color:#4a4535;font:11px/1 'DM Sans',sans-serif;padding:3px 10px;border:1px solid #ddd8cc;border-radius:12px;cursor:pointer";
   const sub = document.getElementById("load-chart-sub");
   if (sub) sub.textContent = mode==="tss"
-    ? "TSS stacked by sport · faded bars = planned · TSB form line (right axis)"
-    : "Duration (min) stacked by sport · faded bars = planned · TSB form line (right axis)";
+    ? "Load stacked by sport · faded bars = planned · Form line (right axis)"
+    : "Duration (min) stacked by sport · faded bars = planned · Form line (right axis)";
   renderLoadChart(_loadChartDays);
 }
 
@@ -732,14 +730,14 @@ function renderLoadChart(days) {
     if (v>=-20)  return "rgba(201,135,31,0.9)";
     return "rgba(192,57,43,0.9)";
   });
-  datasets.push({type:"line",label:"TSB",data:tsbVals,
+  datasets.push({type:"line",label:"Form",data:tsbVals,
     borderColor:"rgba(60,60,60,0.75)",backgroundColor:"transparent",
     borderWidth:2,pointRadius:4,pointBackgroundColor:tsbDotColors,
     fill:false,tension:0.3,yAxisID:"y1",order:1,spanGaps:true});
   datasets.push({type:"line",label:"_zero",data:days.map(()=>0),
     borderColor:"rgba(100,100,100,0.25)",backgroundColor:"transparent",
     borderWidth:1,borderDash:[4,3],pointRadius:0,fill:false,yAxisID:"y1",order:3});
-  window.chartLoad.options.scales.y.title = {display:true,text:useDur?"Minutes":"TSS",font:{size:10},color:"#666"};
+  window.chartLoad.options.scales.y.title = {display:true,text:useDur?"Minutes":"Load",font:{size:10},color:"#666"};
   window.chartLoad.data.labels   = labels;
   window.chartLoad.data.datasets = datasets;
   window.chartLoad.options.plugins.legend = {
@@ -937,8 +935,15 @@ function renderSessionLog(entries) {
   const panel = document.getElementById("session-log-panel");
   const el    = document.getElementById("session-log-content");
   if (!el || !entries || !entries.length) return;
+  // Age cap: a session log has no value once the feed has gone stale — showing
+  // a heading that says "last 10 confirmed" over weeks-old rows misrepresents
+  // them as current. Hide the whole panel rather than show stale data, matching
+  // Jamie's page (hides when the source is absent).
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 21);
+  const fresh = entries.filter(e => new Date(e.date+"T00:00:00") >= cutoff);
+  if (!fresh.length) return;
   panel.style.display = "";
-  const sorted = [...entries].sort((a,b) => b.date.localeCompare(a.date));
+  const sorted = [...fresh].sort((a,b) => b.date.localeCompare(a.date));
   const sportCls = {Ride:"pill-ride",Run:"pill-run",Swim:"pill-swim",Strength:"pill-strength"};
   el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">
     <thead><tr style="font-family:'DM Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">
