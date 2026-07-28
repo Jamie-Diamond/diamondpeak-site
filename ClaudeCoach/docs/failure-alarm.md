@@ -455,3 +455,66 @@ stub that reports success (see `TestWeeklyAlerts._stub_sender`); there is exactl
 one `subprocess.run` in `coach_alert.py`, so no process is spawned and nothing
 leaves the box. A cooldown assertion made under `CC_ALERT_DRY_RUN=1` is vacuous
 and will pass whether the mechanism works or not.
+
+## The suite cannot Telegram — two independent guards (28 Jul 2026)
+
+**What happened.** `tests/test_ops_digest.py::TestCronDerivedRegistry::
+test_a_weekly_deliverable_with_no_cron_entry_neither_alerts_nor_clears` called
+`digest.weekly_alerts([], ...)`. The empty entries list starved *both* weekly
+deliverables, not just the one the test had unscheduled, so `stage1-plan` — still
+in the crontab, still `telegram=True` — was correctly judged missing and
+`coach_alert.send()` ran with no `CC_ALERT_DRY_RUN` and no stubbed `subprocess`.
+It executed `telegram/notify.py` for real and delivered *"⚠️ ClaudeCoach did not
+deliver: weekly plan (jamie, kathryn)"* to the coach's live thread. The suite ran
+twice, and the test's own `STATE` monkeypatch meant no cooldown was banked
+between runs, so it went out twice. The only verbatim record was written to a
+`tmp_path` `ALERT_LOG` that pytest then deleted, which is why the real
+`ops-alerts.log` shows no `SENT` line for it.
+
+**Guard 1 — the default (belt).** `ironman-analysis/conftest.py` has a
+session-scoped autouse fixture that sets `CC_ALERT_DRY_RUN=1` for the whole run
+and restores the previous value afterwards. Session scope because the variable is
+a process-wide default, not per-test state, and because `monkeypatch.setenv` in
+the tests that legitimately opt out restores *this* value rather than fighting a
+function-scoped fixture. Autouse because the test that sent for real requested
+`logs` and `monkeypatch`, not a safety fixture — protection that has to be asked
+for is protection that gets forgotten.
+
+**Guard 2 — the refusal (braces).** `coach_alert.send()` raises
+`TelegramSendBlocked` if pytest is in the process (`PYTEST_CURRENT_TEST` in the
+environment **or** `pytest` in `sys.modules` — the second catches collection and
+session/module fixtures, where the first is unset) *and* the module's
+`subprocess` is still the real stdlib one. A test that has stubbed
+`coach_alert.subprocess` is provably unable to reach the network and is allowed
+its real send path, which is what `TestWeeklyAlerts._stub_sender` and
+`TestSendFailureDoesNotEatTheCooldown` need. It **raises** rather than returning
+`"dry-run"`: a suppressed send and a send that was never warranted must stay
+distinguishable, or a real routing bug passes the suite. Before raising it writes
+the withheld text with `log_outbound(sent=False)` and prints the same line to
+stderr — stderr survives a test that has redirected `ALERT_LOG` to a temporary
+directory, which is exactly what hid this incident.
+
+Both exist because one was enough for this to happen once. A fixture only
+protects tests that inherit it; the guard sits on the single line that can reach
+Telegram, so it holds for a new test file under a different conftest, a direct
+`import coach_alert`, or a helper called outside a test function. Locked by
+`TestCoachAlertRouting::test_a_test_can_never_execute_the_real_notify` (must
+raise) and `::test_a_stubbed_subprocess_is_still_allowed_the_real_path` (must
+not).
+
+**Every send is logged, including the successful ones.** `send()` writes
+`log_outbound()` on all five exits — `refused` (via `ops_log.alert`), `cooldown`,
+`dry-run`, `send-failed`, and `sent` (`sent=True`, present since 83bb541).
+`::test_a_successful_send_is_recorded_verbatim` locks the success path, because
+it is what lets anyone establish after the fact whether a message really went
+out — and the 28 Jul incident is the proof that this matters: the record existed
+in code and was still lost, to a monkeypatched log path.
+
+**A weekly deliverable with no crontab entry stays silent.** Decided 28 Jul 2026
+and already what the code does: a job that is not scheduled cannot run, so a
+missing heartbeat says nothing about the job and everything about the registry.
+Alarming would name the wrong fault — *"did not deliver the weekly plan"* when
+the truth is *"nobody scheduled it"*. The direction is not silent: the loud
+`⚠ CRON AUDIT` line repeats every run until the entry is restored, the
+deliverable is deregistered, or it is annotated `no_cron="why"`. Same call as the
+daily case.
