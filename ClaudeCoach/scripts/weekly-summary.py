@@ -20,6 +20,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 from primitives.planned_tss import planned_session_tss
 from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
+import open_actions as oa_lib   # single store for open actions, arithmetic in Python
 
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 TG_CONFIG       = BASE / "telegram/config.json"
@@ -448,6 +449,13 @@ def run_summary(slug: str = "jamie") -> str:
     except Exception:
         pass
 
+    # -- Pre-compute the open-actions list -------------------------------------
+    # Arithmetic in Python, for the same reason as the TSS accounting above and for
+    # the reason lib/plan_builder.py:5-7 gives: told to do date arithmetic in prose,
+    # the model re-rendered the same nine placeholder rows for three months. The
+    # watchdog's T9 calls the same library, so the two surfaces cannot disagree.
+    open_actions_block = oa_lib.weekly_block(slug, today)
+
     recovery_block = ""
     if recovery:
         score  = recovery.get("score", "?")
@@ -506,11 +514,10 @@ voice the coaching level asks for everywhere else in this card.
 1. COMPLIANCE. The compliance figure gets its own row in the summary table, labelled "Compliance",
    carrying the percentage from the pre-computed Week TSS accounting block. Never fold it into the
    Load row, never substitute a Load percentage for it, never drop the label.
-2. OPEN ACTIONS. Step 4 lists EVERY action in the current-state.md "Open actions" table whose status
-   is not explicitly done — one line each, no sampling, no summarising, no truncating, however long
-   the list runs. An action whose due date is free text ("end May", "before June", "pre-race",
-   "recurring") is listed too; it is never dropped for being hard to date, and free text that names
-   a month or a phase already gone by is OVERDUE, not "unclear".
+2. OPEN ACTIONS. Step 4 reproduces EVERY line of the pre-computed open-actions block below —
+   one line each, no sampling, no summarising, no truncating, no merging, however long the list
+   runs. The list is computed in Python from the single store; you neither select from it nor
+   recompute it.
 3. TRAINING-BALANCE NOTE. If one is supplied below, it goes into the card verbatim, as written.
 {recovery_block}
 ---
@@ -725,33 +732,9 @@ If no triggers fire:
 
 ## Step 4 — Open actions review
 
-List EVERY action in the "Open actions" table in current-state.md whose status is NOT explicitly
-"done" — a status cell still holding its template placeholder (e.g. "[pending / booked / done]")
-counts as not done. Flag each one:
-- Due date has already passed: 🔴 OVERDUE
-- Due value is free text naming a month or a period that is already gone by — "end May", "before
-  June", "mid Jul", "June", or a training phase that has already ended (check the phase dates in the
-  Training Blueprint above): 🔴 OVERDUE as well. Quote the due value as written and say it has
-  passed ("due end May — past"). Never convert free text into a specific calendar date — "due build
-  phase" is reported as "due build phase (ended 5 Jul)", never as "due 2026-07-31". Do not downgrade
-  it to "date unclear" either: a two-month-late action is late, not ambiguous. And an action stays
-  OVERDUE even where the data suggests it has since been satisfied — say it looks done and needs its
-  status updating, but do not soften the flag on the athlete's behalf
-- Due date ≤ 14 days from today ({today}): ⚠️ DUE SOON
-- Due value is genuinely open-ended — "pre-race", "recurring", "when quality resumes" — or there is
-  no due value at all: 📋 STALE. Say so plainly rather than guessing a date, and never leave the
-  action out on that basis
-
-Format (append after the decision triggers, before the sign-off):
-
----
-**Open actions**
-[One line for every not-done action — none omitted, none merged:]
-[⚠️/🔴/📋] *[Action name]* — due [date or the free text as written] ([N days, if it is a date]) — [one-line nudge if overdue]
-
-Only omit this section if the table holds no not-done actions at all.
-
----
+{open_actions_block}
+Append the section after the decision triggers and before the sign-off, under a bold
+**Open actions** heading, in the order given.
 
 ## Step 5 — Update current-state.md
 
@@ -760,6 +743,13 @@ Using the Write tool, update ClaudeCoach/athletes/{slug}/current-state.md:
 - Update or add "Off-plan in last 7 days" with missed sessions (or "none")
 - If heat sessions this week > 0: append a row to "Heat acclimation log" table
 - If any body weight readings in wellness data: note the latest weight
+- LEAVE THE "Open actions" SECTION EXACTLY AS IT IS. It is a pointer at
+  current-state.json open_actions[], not a list. Never re-add a table or a checkbox list of
+  actions there, never edit a status there, and never copy the rendered lines from Step 4
+  into it. That duplicate is the defect this section was rewritten to remove.
+- Do NOT change any action's status yourself. If the week's data shows an item is finished,
+  say so in one clause in Step 4 and leave the status alone — closing it is the athlete's
+  call, made with `lib/open_actions.py --set-status`.
 
 Then using Bash, run EXACTLY this one command and nothing else:
   /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/scripts/cc-git-commit-push.sh "weekly: state update week ending {week_end}" ClaudeCoach/athletes/{slug}/current-state.md
