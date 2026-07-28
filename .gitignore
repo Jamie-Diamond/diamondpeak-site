@@ -56,3 +56,20 @@ ClaudeCoach/last_activity_state.json
 ClaudeCoach/docs-private/review-checklist.md
 .DS_Store
 ClaudeCoach/.bug-reviews.json
+
+# Live credentials — never commit to this PUBLIC repo.
+# Same root-vs-subtree class of gap as the athlete-data block above: the rules at
+# lines 12-15 name config/athletes.json and config/backup.key individually, so
+# sibling files in the same directory matched no rule at all. config/ holds
+# runtime credentials and encrypted state; nothing in it belongs in a public repo
+# unless it is explicitly listed as safe. All of these exist on disk on the VM —
+# only the tracking is removed.
+# A .gitignore rule alone does NOT prevent this: a tracked path beats .gitignore,
+# and `git add -f` walks past it. scripts/check-no-public-secrets.sh is the
+# enforcing half and runs on every push to this origin.
+ClaudeCoach/config/strava_app.json
+ClaudeCoach/config/athletes.json.enc
+# Belt and braces for the whole class, not just the files that prompted this.
+ClaudeCoach/athletes/*/strava_tokens.json
+*.pem
+*.env

@@ -103,8 +103,23 @@ git_unlock() {
 # promote them into the commit being pushed. If the automatic restore conflicts
 # the stash count grows, and we fail loudly rather than leave someone's dirty
 # work silently parked in a stash.
+# A secret gate runs BEFORE the first push (28 Jul 2026). .gitignore is advisory -
+# it does nothing for an already-tracked path and `git add -f` ignores it, so it
+# cannot by itself keep a credential out of this PUBLIC repo. Every shell pusher
+# reaches origin through this function, so this is the one place that makes the
+# deny-list load-bearing. Fail CLOSED: a missing/failing gate script blocks the
+# push. The gate never prints a secret value.
 git_push_retry() {
   local job="$1" mode="${2:-rebase}" stash_before stash_after
+  local gate="$CC_BASE/scripts/check-no-public-secrets.sh"
+  if [ ! -x "$gate" ]; then
+    echo "[$job] BLOCKED: secret gate missing or not executable at $gate" >&2
+    return 1
+  fi
+  if ! "$gate" tree; then
+    echo "[$job] BLOCKED by secret gate - refusing to push (see [secret-gate] lines above)" >&2
+    return 1
+  fi
   if git push origin main; then return 0; fi
   echo "[$job] push rejected - one bounded retry (fetch + $mode + push)"
   if ! git fetch origin; then

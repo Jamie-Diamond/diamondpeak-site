@@ -1,0 +1,12 @@
+#!/bin/bash
+# Secret gate at commit time. Blocks a commit that would ADD a deny-listed
+# credential path, or a file carrying a credential-shaped literal.
+#
+# Hooks are per-clone, so this one needs installing once per checkout:
+#   git config core.hooksPath githooks
+# That is the ADVISORY half. The load-bearing half is the same script wired into
+# the push path (lib_git_alert.sh git_push_retry, lib/git_sync.py
+# _push_with_retry) - those run whether or not the hook is installed.
+set -uo pipefail
+REPO="$(git rev-parse --show-toplevel)"
+exec "$REPO/ClaudeCoach/scripts/check-no-public-secrets.sh" staged
