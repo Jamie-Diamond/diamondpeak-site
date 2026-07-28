@@ -19,6 +19,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
 from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
+import weekly_availability     # per-week declared hours (Sunday ask + resolver)
 from primitives.planned_tss import planned_sessions_block
 from primitives.nutrition import fuel_target, recent_avg_g_hr
 import ops_log
@@ -645,6 +646,23 @@ def run_athlete(slug, athlete_cfg):
             if sentinel.exists():
                 return
             sentinel.touch()
+
+    # WEEKLY HOURS ASK (Sunday only) — appended DETERMINISTICALLY to the card rather
+    # than asked for in the prompt, because the Sunday build at 18:00 derives the
+    # week's Load ceiling from the answer and a dropped question means the build
+    # silently falls back to the standing config figure. weekday() == 6 is Sunday;
+    # the week asked about is tomorrow's Monday. weekly_availability owns the copy,
+    # the already-answered gate and the illness gate. The existing per-athlete daily
+    # sentinel already guarantees once-per-day, so this needs no idempotence of its
+    # own. Zero extra pushes: the morning card was going out anyway.
+    if output and date.today().weekday() == 6:
+        try:
+            _ask = weekly_availability.sunday_hours_ask(
+                slug, date.today() + timedelta(days=1), coaching_level=coaching_level)
+            if _ask:
+                output = f"{output}\n\n{_ask}"
+        except Exception:
+            pass                    # the morning card must send even if the ask cannot be built
 
     sent = False
     if output:

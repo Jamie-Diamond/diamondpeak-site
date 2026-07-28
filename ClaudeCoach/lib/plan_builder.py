@@ -43,6 +43,7 @@ from primitives.nutrition import (fuel_target, recent_avg_g_hr,          # noqa:
                                   RUN_TARGET_G_HR, LONG_RUN_MIN)
 from primitives.validate_plan import validate_week             # noqa: E402
 from primitives.blueprint import current_phase, tss_ceiling    # noqa: E402
+import weekly_availability                                     # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
 # Rides (Brick counts as a ride: its fuelling is bike fuelling carried into a run).
@@ -92,19 +93,47 @@ def _ctl_today(cfg) -> float | None:
     return None
 
 
-def _weekly_tss_cap(slug, phase) -> float | None:
+def _weekly_tss_cap(slug, phase, week_start=None) -> float | None:
     """Weekly TSS hard ceiling for the load check, in precedence order.
 
-    1. The athlete's hours ceiling (max_hours_per_week x 100 x IF^2) — the same
-       maths the blueprint document displays (primitives.blueprint).
+    0. The hours the ATHLETE DECLARED for `week_start` (weekly_availability), put
+       through the same hours x 100 x IF^2 maths. This is the figure Kathryn's rules
+       have always required ("confirm each week's available hours via the Sunday
+       check-in and build to that") and it outranks config because it describes the
+       week actually being planned rather than an average written down once.
+    1. Failing that, `profile.max_hours_per_week` — now a documented FALLBACK, not
+       the primary source. It is a static description of a typical week and drifts:
+       Jamie's 15 caps Peak at 778 TSS against an engine target of 918, though he
+       demonstrably trains above it (CTL peak 117.5 last season).
     2. Failing that, the blueprint phase's own `tss_ceiling`. Kathryn has no
        hours ceiling by a permanent rule (10 Jul 2026), which left her weekly
        load entirely unchecked — twelve SKIPPED checks in one build. The phase
        ceiling is a LOAD bound, not a limit on how long she may train, so it
        arms the check without reinstating the hours cap that rule removed.
 
-    None when neither exists — taper phases carry no ceiling in either source by
-    design, so a taper week still reports the check as skipped."""
+    None when none of them exists — taper phases carry no ceiling in any source by
+    design, so a taper week still reports the check as skipped.
+
+    `week_start` is OPTIONAL and defaults to None, which means "no declaration
+    applies" and reproduces the pre-declaration behaviour EXACTLY. That default is
+    load-bearing: lib/macro_projection.py:338 passes a ceiling lambda that discards
+    its week (`lambda ws, phase: _weekly_tss_cap(slug, phase)`), and one real week's
+    declaration must not be stretched across every projected week. Callers that know
+    which single week they are bounding — plan_builder.build_sessions,
+    plan_audit.audit_athlete, stage1-plan — pass it explicitly.
+
+    ONE PLACE. The hours formula lives in primitives.blueprint.tss_ceiling and its
+    precedence lives here; do not re-read max_hours_per_week to compute a ceiling
+    elsewhere. lib/plan_tools.py:663-667 (cmd_validate) still holds an inline copy
+    that predates this and is NOT declaration-aware — it is the manual
+    `validate_plan` CLI, off the Sunday build path, and is owned by a concurrent
+    ticket; see docs/weekly-hours-capture.md for the follow-up."""
+    try:
+        declared = weekly_availability.hours_for_week(slug, week_start)
+        if declared and phase.get("name"):
+            return tss_ceiling(float(declared), str(phase["name"]))
+    except Exception:
+        pass
     try:
         prof = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
         max_h = prof.get("max_hours_per_week")
@@ -119,6 +148,32 @@ def _weekly_tss_cap(slug, phase) -> float | None:
     except Exception:
         pass
     return None
+
+
+def cap_source(slug, phase, week_start=None) -> str:
+    """Which bound in _weekly_tss_cap bit: "declared" | "hours" | "phase" | "none".
+
+    Exists so the message an athlete reads can be honest about WHY the week is
+    capped without any caller re-deriving the precedence (and drifting from it).
+    """
+    try:
+        if weekly_availability.hours_for_week(slug, week_start) and phase.get("name"):
+            return "declared"
+    except Exception:
+        pass
+    try:
+        prof = json.loads((BASE / "athletes" / slug / "profile.json").read_text())
+        if prof.get("max_hours_per_week") and phase.get("name"):
+            return "hours"
+    except Exception:
+        pass
+    try:
+        ceil = (phase or {}).get("tss_ceiling")
+        if ceil and float(ceil) > 0:
+            return "phase"
+    except Exception:
+        pass
+    return "none"
 
 
 def build_sessions(slug: str, proposal: dict) -> dict:
@@ -196,7 +251,7 @@ def build_sessions(slug: str, proposal: dict) -> dict:
         except Exception:
             _floor = None
     rep = validate_week(events, ws, day_rules=dr,
-                        weekly_tss_cap=_weekly_tss_cap(slug, phase),
+                        weekly_tss_cap=_weekly_tss_cap(slug, phase, week_start=ws),
                         weekly_tss_floor=_floor,
                         run_week_min_cap=_caps.get("weekly_min_cap"),
                         run_long_min_cap=_caps.get("long_run_min_cap"),

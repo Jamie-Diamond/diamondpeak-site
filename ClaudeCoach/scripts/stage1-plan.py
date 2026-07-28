@@ -28,6 +28,7 @@ sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 
 import claude_call                    # noqa: E402
+import weekly_availability            # noqa: E402
 import ops_log                        # noqa: E402
 import session_library as sl          # noqa: E402
 import plan_builder as pb             # noqa: E402
@@ -661,6 +662,12 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
 - MENSTRUAL: if the brief has a non-null "menstrual_forecast", follow its "apply" guidance when
   PLACING quality vs easy sessions across the week (never breaking a day rule, never cutting TSS).
 - Do NOT output load_target, TSS numbers, or %FTP/pace targets — code derives them.
+- THIS WEEK'S DECLARED AVAILABILITY: if the brief has a non-null "declared_constraints",
+  those are the athlete's OWN words about this specific week (a travel block, "nothing
+  long Mon-Thu", a hard cap on one day). Honour them when PLACING sessions. They are
+  week-specific and outrank the standing day pattern where the two disagree; they do NOT
+  license breaking a hard_rule. "declared_hours" is the total time they have — the weekly
+  Load ceiling is already derived from it in code, so do not re-derive or exceed it.
 
 DATE GRID:
 {grid}
@@ -713,19 +720,33 @@ def main():
     # next week against THIS week's (lower) requirement — the 5 Jul 2026 bug
     # that planned 581 TSS into a week needing 816.
     # Per-week availability (Phase 5a): flex the default day_rules to this week if the
-    # athlete has told us their availability. Ad-hoc adjustable: an explicit --availability
-    # file, else a standing athletes/<slug>/this-week-availability.json (chat can write it).
+    # athlete has told us their availability.
+    # Day shape comes from THIS week's declaration if the athlete made one, else from a
+    # legacy undated Phase 5a file (unchanged semantics) — lib/weekly_availability
+    # resolves both and is the only reader of that file's shape. An explicit
+    # --availability path still wins, for ad-hoc replanning.
     _avail = None
-    _avail_path = (Path(args.availability) if args.availability
-                   else BASE / "athletes" / args.athlete / "this-week-availability.json")
-    if _avail_path.exists():
+    if args.availability:
         try:
-            _avail = json.loads(_avail_path.read_text())
+            _avail = json.loads(Path(args.availability).read_text())
         except Exception:
             _avail = None
+    else:
+        _avail = weekly_availability.day_shape(args.athlete, week_start)
+    _declared_hours = weekly_availability.hours_for_week(args.athlete, week_start)
+    _declared_constraints = weekly_availability.constraints_for_week(args.athlete, week_start)
     brief = sl.planning_brief(args.athlete, cfg, today=week_start, plan_start=week_start,
                               availability=_avail)
     brief["_prior_zones"] = _load_prior_zones(args.athlete, week_start)   # Phase 5.4 rolling window
+    # The athlete's own words about this week, carried to the planner and the message.
+    # Set ONLY when they exist: build_prompt serialises every non-underscore brief key
+    # into the Stage-1 prompt verbatim, and Stage-1 output reaches the athlete through
+    # session notes. A `"declared_hours": null` in the prompt is a config-shaped key one
+    # paraphrase away from the athlete, which the tone guide (section 4a) forbids outright.
+    if _declared_hours:
+        brief["declared_hours"] = _declared_hours
+    if _declared_constraints:
+        brief["declared_constraints"] = _declared_constraints
     if brief.get("event_unknown"):
         print(json.dumps({"error": f"event unknown for {args.athlete} — cannot plan"}))
         _beat(False, "event unknown — cannot plan")
@@ -743,18 +764,16 @@ def main():
     # aimed at an uncapped target that the validator would then hard-fail, which is the
     # 5 Jul failure mode above. week_start, not the run date, per the comment further up.
     _phase = pb.current_phase(pb._blueprint(args.athlete), week_start) or {"name": brief.get("phase")}
-    tss_cap = pb._weekly_tss_cap(args.athlete, _phase)
+    tss_cap = pb._weekly_tss_cap(args.athlete, _phase, week_start=week_start)
     if target and tss_cap and target > tss_cap:
         brief["weekly_tss_target_required"] = target
         brief["target_capped_by_hours"] = round(tss_cap)
-        # Which bound bit decides what we can honestly ask for: hours the athlete could
-        # give us, or a phase load ceiling that more hours would not move.
-        try:
-            _hrs = json.loads((BASE / "athletes" / args.athlete / "profile.json")
-                              .read_text()).get("max_hours_per_week")
-        except Exception:
-            _hrs = None
-        brief["_target_cap_source"] = "hours" if _hrs else "phase"
+        # Which bound bit decides what we can honestly ask for. Three answers, not two:
+        # hours the athlete DECLARED for this week, the standing config fallback they
+        # did not confirm, or a phase load ceiling that more hours would not move. Read
+        # from plan_builder.cap_source so this can never disagree with the cap actually
+        # applied (it used to re-read max_hours_per_week and would now be wrong).
+        brief["_target_cap_source"] = pb.cap_source(args.athlete, _phase, week_start=week_start)
         target = int(tss_cap)
         brief["weekly_tss_target"] = target
     override_path = Path(args.override_json) if args.override_json else None
@@ -883,11 +902,24 @@ def _week_message(brief: dict, built: dict) -> str:
     req = brief.get("weekly_tss_target_required")
     if req:
         cap = brief.get("target_capped_by_hours")
-        if brief.get("_target_cap_source") == "hours":
+        src = brief.get("_target_cap_source")
+        if src == "declared":
+            hrs = brief.get("declared_hours")
+            hrs_s = f"{hrs:g} hours" if hrs else "the hours"
             lines.append(f"⚠️ _This week wants about {req} Load and only {cap} fits in the "
-                         f"hours you've given me, so fitness will climb a little slower than "
-                         f"it could. If you can find another couple of hours a week, tell me "
-                         f"and I'll rebuild it._")
+                         f"{hrs_s} you told me you have, so fitness will climb a little "
+                         f"slower than it could. If you can find another couple of hours, "
+                         f"tell me and I'll rebuild it._")
+        elif src == "hours":
+            # NO declaration for this week — the athlete did not answer Sunday's ask, so
+            # the ceiling came from the standing figure on file. Say that out loud. The
+            # silent version is the defect this ticket exists to remove: a number the
+            # athlete never confirmed, quietly deciding how hard they train.
+            lines.append(f"⚠️ _This week wants about {req} Load and only {cap} fits in the "
+                         f"hours I have on file for you, so fitness will climb a little "
+                         f"slower than it could. You didn't tell me this week's hours, so "
+                         f"I used your usual week. Tell me the real figure and I'll "
+                         f"rebuild it._")
         else:
             # Default, because it is true whichever ceiling bit: only claim the cap is
             # hours the athlete gave us when we know it is. Where the bound is a phase

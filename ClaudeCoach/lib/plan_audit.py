@@ -179,9 +179,15 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
         # from the SAME function the generation path uses (plan_builder.build_week /
         # plan_tools.cmd_validate), so the audit can never disagree with the generator
         # about where the limit is:
-        #   cap   — plan_builder._weekly_tss_cap: the athlete's hours ceiling, else the
-        #           blueprint phase's tss_ceiling. None on a taper (neither source
+        #   cap   — plan_builder._weekly_tss_cap: the hours the athlete DECLARED for
+        #           this week (weekly_availability), else profile.max_hours_per_week,
+        #           else the blueprint phase's tss_ceiling. None on a taper (no source
         #           carries one) — a legitimate skip, still reported as skipped.
+        #           `week_start=ws` is REQUIRED, not decorative: without it the audit
+        #           would resolve a declared week against the static config ceiling and
+        #           hard-flag a week the generator built entirely correctly. Passing ws
+        #           is also why declarations EXPIRE by named week rather than by
+        #           deletion — this loop audits the current and next week every morning.
         #   floor — required_tss()['weekly_tss_floor'], the same key the builder uses.
         #           That function returns 0 for a deload / taper / manual easy week, so
         #           an INTENTIONAL down-week scores no violation; it must not be
@@ -201,7 +207,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
             run_cap = None
         rep = validate_week(wk_evs, ws, day_rules=dr,
                             day_overrides=day_overrides.load(slug, BASE), ctl_today=ctl,
-                            weekly_tss_cap=_weekly_tss_cap(slug, phase),
+                            weekly_tss_cap=_weekly_tss_cap(slug, phase, week_start=ws),
                             weekly_tss_floor=tss_floor,
                             run_week_min_cap=run_cap,
                             ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
