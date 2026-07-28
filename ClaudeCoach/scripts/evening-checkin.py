@@ -13,6 +13,7 @@ LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 from coaching_levels import level_block as _level_block
+import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import ops_log
 
 TOOLS = "Read,Bash"
@@ -80,6 +81,7 @@ def _build_prompt(slug, first_name, injuries, pain_next_morning=0, coaching_leve
 Evening training log check for {first_name}.
 
 {_level_block(coaching_level)}
+{illness_lib.prompt_block(slug, first_name=first_name)}
 
 
 Apply the GLOBAL coaching rules in ClaudeCoach/athletes/_shared/persistent-rules.md (read them first).

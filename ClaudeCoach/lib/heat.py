@@ -1,7 +1,15 @@
 """Heat-protocol state and dose rules, shared by the cron scripts.
 
-The protocol has three layers:
+The protocol has three layers, plus a surfacing gate:
   - profile.json `heat_protocol: false` — athlete-level kill switch (off entirely)
+  - profile.json `heat_silent: true` — SURFACING gate only: the model, the dose
+    accounting and the auto-crediting all keep running, but nothing proactively
+    mentions heat work in a card, a plan or a watchdog trigger. Added 28 Jul 2026
+    because Kathryn logged repeated heat prompts as a bug and the only thing
+    stopping them was one sentence in a 24-line persistent-rules file; her
+    protocol window opens 2026-08-23. Deliberately NOT folded into `active`:
+    activity-watcher credits ambient exposure off `active`, so silencing that way
+    would starve the dose log and change the model by data starvation.
   - blueprint sidecar env_protocols.heat {active, starts} — active when the race
     is hot; `starts` (race − 4 weeks) is when the formal sauna block begins
   - before `starts` the protocol is PAUSED on ambient exposure, not off: outdoor
@@ -212,19 +220,25 @@ def dose_multipliers(
 
 
 def state(slug: str, profile: dict | None = None) -> dict:
-    """{active, starts, in_protocol_window, maintenance} for an athlete.
+    """{active, starts, in_protocol_window, maintenance, silent, surface} for an athlete.
 
     `active` False means no heat prep for this race (or athlete kill switch);
     `in_protocol_window` True means the formal race−4wk block has begun;
+    `silent` True means the athlete has asked not to be prompted about heat
+    (profile `heat_silent`); `surface` is the one key a proactive card or trigger
+    should test — active AND in the window AND not silenced. Neither key changes
+    any computed dose or score; `active` keeps its exact old meaning so the
+    exposure crediting in activity-watcher.py is unaffected.
     `maintenance` True means the athlete opted in (profile `heat_maintenance`)
     to having their ambient-exposure dose policed BEFORE the window — for an
     athlete who deliberately paused formal heat work on "I'm in hot venues
     enough". Without it, nothing nags before `starts`.
     """
     profile = profile or {}
+    silent = bool(profile.get("heat_silent"))
     if profile.get("heat_protocol") is False:
-        return {"active": False, "starts": None,
-                "in_protocol_window": False, "maintenance": False}
+        return {"active": False, "starts": None, "in_protocol_window": False,
+                "maintenance": False, "silent": silent, "surface": False}
     f = BASE / "athletes" / slug / "reference/training-blueprint.json"
     try:
         h = (json.loads(f.read_text()).get("env_protocols") or {}).get("heat") or {}
@@ -239,7 +253,16 @@ def state(slug: str, profile: dict | None = None) -> dict:
         except (ValueError, TypeError):
             in_window = True
     return {"active": active, "starts": starts, "in_protocol_window": in_window,
-            "maintenance": active and bool(profile.get("heat_maintenance"))}
+            "maintenance": active and bool(profile.get("heat_maintenance")),
+            "silent": silent,
+            "surface": bool(active and in_window and not silent)}
+
+
+def surfacing_allowed(slug: str, profile: dict | None = None) -> bool:
+    """May a card / plan / watchdog trigger raise heat work UNPROMPTED for this
+    athlete? False when the protocol is off, before the window, or silenced. Answering
+    a heat question the athlete asked is not surfacing and is not gated here."""
+    return state(slug, profile)["surface"]
 
 
 def fetch_ambient_weather(

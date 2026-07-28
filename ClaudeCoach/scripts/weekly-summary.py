@@ -19,6 +19,7 @@ import recovery_score as rs
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 from primitives.planned_tss import planned_session_tss
 from coaching_levels import level_block as _level_block
+import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 TG_CONFIG       = BASE / "telegram/config.json"
@@ -496,6 +497,8 @@ If IcuSync current_date_local disagrees with {today}, flag it — do not silentl
 
 
 {_level_block(coaching_level)}
+{illness_lib.prompt_block(slug, first_name=first_name)}
+{illness_lib.weekly_card_line(slug)}
 ## MANDATORY — EXEMPT FROM THE COACHING-LEVEL RULES ABOVE
 The items below are NOT subject to anything above about compressing, surfacing "only the metrics
 that matter", or avoiding a full stat dump. They appear in full at every coaching level. Keep the

@@ -12,6 +12,7 @@ BASE        = Path(__file__).parent.parent   # ClaudeCoach/
 sys.path.insert(0, str(BASE / "lib"))
 import claude_call
 from coaching_levels import level_block as _level_block
+import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import menstrual
 import ops_log
 import injury_scope
@@ -115,6 +116,7 @@ sleep, so this prescription is never gated on a 05:00 sync gap:
     return f"""You are running the daily session prescription for {name}'s {race_name} coaching system.
 
 {_level_block(coaching_level)}
+{illness_lib.prompt_block(slug, first_name=name)}
 {cycle_block}
 {readiness_section}{engine_section}
 

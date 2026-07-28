@@ -154,8 +154,11 @@ class TestState:
     def test_inactive_when_race_not_hot(self, athlete):
         self._write(athlete, False, None)
         s = heat.state("x")
+        # silent/surface added 28 Jul 2026 (surfacing gate); the kill switch still
+        # returns a fully-off state, and silence is False because it was not asked for.
         assert s == {"active": False, "starts": None,
-                     "in_protocol_window": False, "maintenance": False}
+                     "in_protocol_window": False, "maintenance": False,
+                     "silent": False, "surface": False}
 
     def test_active_but_paused_before_starts(self, athlete):
         future = (date.today() + timedelta(days=30)).isoformat()

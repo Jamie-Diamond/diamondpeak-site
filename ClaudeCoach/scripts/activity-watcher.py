@@ -34,6 +34,7 @@ def _log_to_history(slug: str, message: str) -> None:
 sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 from coaching_levels import level_block as _level_block
+import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import ops_log
 import heat as heat_lib
 import claude_call
@@ -141,6 +142,7 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150,
 Check for new activities for {first_name} and stub them into the session log.
 
 {_level_block(coaching_level)}
+{illness_lib.prompt_block(slug, first_name=first_name)}
 
 
 Step 1 — Fetch data via Bash:

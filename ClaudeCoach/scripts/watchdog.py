@@ -51,7 +51,9 @@ def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: 
     heat = heat or {"active": False}
     heat_log_read = ""
     heat_triggers = ""
-    if heat.get("active"):
+    # profile heat_silent silences proactive heat triggers entirely (lib/heat.state
+    # "silent"). The dose is still logged and scored — nothing nags about it.
+    if heat.get("active") and not heat.get("silent"):
         heat_log_read = f"- {athlete_dir}/heat-log.json\n"
         starts = heat.get("starts") or today
         dose_note = ("Dose accounting: sum the dose field over entries in the last 14 days; "

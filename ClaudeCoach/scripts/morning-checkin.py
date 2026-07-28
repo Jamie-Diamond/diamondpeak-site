@@ -18,6 +18,7 @@ sys.path.insert(0, str(BASE / "telegram"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
 from coaching_levels import level_block as _level_block
+import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 from primitives.planned_tss import planned_sessions_block
 from primitives.nutrition import fuel_target, recent_avg_g_hr
 import ops_log
@@ -146,6 +147,7 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
 You are generating the morning briefing for {first_name}'s training day.
 
 {_level_block(coaching_level)}
+{illness_lib.prompt_block(slug, first_name=first_name)}
 {recovery_block}{wellness_block}{cycle_block}{planned_section}{race_block}{long_run_cap_block}{heat_block}
 Step 1 — Fetch data via Bash:
   python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
@@ -413,7 +415,9 @@ def run_athlete(slug, athlete_cfg):
     injuries = profile.get("injuries", [])
     # Morning heat nudges only once the formal race−4wk block has begun; before
     # that the watchdog's maintenance-dose check owns heat visibility.
-    heat_protocol = heat_lib.state(slug, profile)["in_protocol_window"]
+    # "surface", not "in_protocol_window": profile heat_silent suppresses the
+    # proactive nudge without touching the dose model or the score.
+    heat_protocol = heat_lib.state(slug, profile)["surface"]
 
     # Pre-compute 0–100% acclimation score so the card shows it without Claude guessing.
     heat_accl_pct = None
