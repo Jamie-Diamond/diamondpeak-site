@@ -34,6 +34,11 @@ except Exception:
         return ""
 
 try:
+    import illness as _illness
+except Exception:
+    _illness = None
+
+try:
     from claude_call import is_limit_message as _is_limit_message
 except Exception:
     def _is_limit_message(text: str) -> bool:  # type: ignore[misc]
@@ -131,6 +136,25 @@ def load_global_rules(sp_file) -> str:
     return ""
 
 
+def load_illness_block(sp_file, athlete_name: str = "") -> str:
+    """Illness/compromised instruction block for this athlete, or ''.
+
+    Read from the structured `illness` block in the current-state.json next to the
+    system prompt (lib/illness.py). Injected for EVERY athlete and every surface that
+    goes through this engine, because the 26 Jul failure was a prompt faithfully
+    executing rules that had no illness gate to check — a per-athlete prose note could
+    not have stopped it.
+    """
+    if _illness is None:
+        return ""
+    try:
+        return _illness.prompt_block_from_dir(Path(sp_file).parent,
+                                              first_name=athlete_name)
+    except Exception as e:
+        log(f"illness block skipped: {e}")
+        return ""
+
+
 def system_prompt_with_level(sp_file) -> str:
     """Read system_prompt.txt and append the athlete's coaching-level block."""
     sp_file = Path(sp_file)
@@ -216,7 +240,7 @@ _AUTHORITY_RULE = (
 
 
 def build_prompt(user_message, history, system_prompt, athlete_name, context,
-                 persistent_rules="", global_rules=""):
+                 persistent_rules="", global_rules="", illness_block=""):
     parts = [system_prompt, ""]
     if global_rules:
         parts.append("## Global coaching rules - apply to every athlete")
@@ -232,6 +256,13 @@ def build_prompt(user_message, history, system_prompt, athlete_name, context,
     parts.append("")
     parts.append(_AUTHORITY_RULE)
     parts.append("")
+    # After the standing rules and the hard-rails, deliberately: an active illness
+    # flag SUSPENDS the fuelling / compliance criticism those rules would otherwise
+    # demand, so it has to be the last word on that. It suspends nothing safety-
+    # critical — lib/illness.NOT_SUPPRESSED is spelled out inside the block.
+    if illness_block:
+        parts.append(illness_block)
+        parts.append("")
     if context:
         parts.append(context)
         parts.append("")
@@ -273,6 +304,7 @@ def _assemble(user_message, history, system_prompt_file, athlete_name, context):
         system_prompt_with_level(sp_file), athlete_name, context,
         persistent_rules=load_persistent_rules(sp_file),
         global_rules=load_global_rules(sp_file),
+        illness_block=load_illness_block(sp_file, athlete_name),
     )
 
 
@@ -296,9 +328,16 @@ def _prompt_fingerprint(sp_file) -> str:
         # added 22 Jul) must also rotate running sessions — otherwise a chat that
         # started under the old prompt keeps coaching without the new rule until
         # it expires (the resume path never re-injects them).
+        # The illness block is in the fingerprint for the same reason the rule
+        # constants are: it is baked in at session start and the --resume path never
+        # re-injects it. Without this, an athlete who falls ill mid-session keeps
+        # being coached without the gate for up to SESSION_MAX_TURNS / 24h — i.e.
+        # exactly the scolding this flag exists to stop. A state change here rotates
+        # the session so the next reply is built with (or without) the gate.
         blob = (system_prompt_with_level(sp_file) + "\n"
                 + load_global_rules(sp_file) + "\n"
                 + load_persistent_rules(sp_file) + "\n"
+                + load_illness_block(sp_file) + "\n"
                 + _FEEDBACK_LOG_RULE + "\n" + _ACCURACY_RULE + "\n" + _AUTHORITY_RULE)
     except Exception:
         return ""
@@ -613,6 +652,10 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
     parts.append("")
     parts.append(_AUTHORITY_RULE)
     parts.append("")
+    illness_block = load_illness_block(sp_file, athlete_name)
+    if illness_block:
+        parts.append(illness_block)
+        parts.append("")
     if context:
         parts.append(context)
         parts.append("")

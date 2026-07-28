@@ -93,7 +93,10 @@ between the numeric blueprint and the prose rules. The ranking is:
    requires.** If prose appears to remove a required slice, the blueprint wins.
 3. **The only exception** — the one thing that may zero a required quality slice
    — is an **injury/illness hard-gate read from structured `current-state.json`**
-   (e.g. an uncleared-ankle flag), never from prose and never from memory.
+   (e.g. an uncleared-ankle flag), never from prose and never from memory. The
+   injury half is `lib/injury.py`; the illness half is `lib/illness.py`, whose
+   `training_gate` field is the only thing in that flag that may reduce a plan
+   (see `docs/illness-flag.md`).
 4. **Phase labels come from config** (`athletes.json` phase weeks, resolved by
    `primitives.blueprint`), never narrated from memory.
 5. **Forward-plan questions** ("what will next week look like", "how do we hit X")
