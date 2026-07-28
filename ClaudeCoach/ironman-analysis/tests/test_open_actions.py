@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Tests for lib/open_actions.py. Fixtures only — no athlete data, no network.
 
-Run: python3 ClaudeCoach/lib/test_open_actions.py
+Collected by the ironman-analysis pytest suite (testpaths = ["tests"]); import
+path follows the same sibling-lib pattern as test_ops_digest.py, since
+open_actions.py lives in ClaudeCoach/lib, not under ironman-analysis/.
 """
 import json
 import sys
@@ -10,8 +12,9 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import open_actions as oa
+REPO = Path(__file__).resolve().parents[2]            # ClaudeCoach/
+sys.path.insert(0, str(REPO / "lib"))
+import open_actions as oa  # noqa: E402
 
 TODAY = date(2026, 7, 28)
 
