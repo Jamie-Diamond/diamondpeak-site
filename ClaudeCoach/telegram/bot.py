@@ -53,6 +53,7 @@ import races as races_lib
 import claude_call
 import engine
 import rules_capture
+import rule_registry
 from engine import call_claude, call_claude_with_image, stream_claude
 HEARTBEAT_FILE = BASE.parent / ".bot_heartbeat"  # touched each poll loop; watched by bot-watchdog.py
 try:
@@ -1637,6 +1638,9 @@ def _apply_rule_capture_guard(slug: str, before_text: str) -> None:
             f.write_text(guarded)
         for reason, dline in drops:
             log(f"[{slug}] rule capture guard dropped — {reason}: {dline}")
+    # IDENTITY: assign a stable ID + default type to whatever survived the guard
+    # (sidecar registry only — never edits persistent-rules.md). Never raises.
+    rule_registry.register_after_write(BASE.parent, slug)
 
 
 def _verify_logged_reply(slug: str, before_ts: float, clean: str,
