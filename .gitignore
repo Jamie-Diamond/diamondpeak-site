@@ -20,5 +20,15 @@ ClaudeCoach/config/backup.key
 ClaudeCoach/athletes/
 ClaudeCoach/ironman-analysis/fixtures/
 ClaudeCoach/docs-private/
+
+# The rules above cover the athletes/ SUBTREE only. The refresh scripts also write
+# athlete data into the ClaudeCoach/ ROOT (refresh-site-data.py -> training-data*.json,
+# refresh-public-data.py -> site-data.json), and telegram/history.json sits beside
+# the athletes/*/telegram/history.json rule rather than under it. Those root paths
+# matched no rule, so all five were tracked in the public repo from May 2026.
+ClaudeCoach/training-data.json
+ClaudeCoach/training-data-*.json
+ClaudeCoach/site-data.json
+ClaudeCoach/telegram/history.json
 .DS_Store
 ClaudeCoach/.bug-reviews.json
