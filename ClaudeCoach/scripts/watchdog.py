@@ -5,7 +5,7 @@ Runs via VM crontab at 05:30 daily. Loops over all active athletes.
 Safe to run manually: python3 ClaudeCoach/scripts/watchdog.py
 """
 import json, subprocess, sys, tempfile, os, time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
@@ -39,6 +39,180 @@ def load_profile(slug: str) -> dict:
         return json.loads(p.read_text()) if p.exists() else {}
     except Exception:
         return {}
+
+
+# -- T12: REALISED CTL ramp ---------------------------------------------------
+# max_ctl_ramp_per_week is enforced at BUILD time, on a PLANNED week
+# (plan_builder.py:155-163). Nothing watched what actually happened, so Calum's
+# off-plan riding took him CTL 5.6 (28 Jun) -> 30.3 (21 Jul) 2026 - a +9.4/wk
+# week against a 5.0/wk cap - and it passed unremarked for three weeks.
+#
+# Deliberately deterministic Python, not another prompt trigger: a check the
+# model evaluates cannot be tested, and "fires on this week, silent on that one"
+# is the only evidence a load guard works.
+#
+# SOURCE. intervals.icu's own CTL is authoritative and is used whenever it can be
+# fetched. Reconstructing CTL from session-log.json is the OFFLINE FALLBACK only,
+# because that log carries planned-event projections that never happened (Calum's
+# 2026-07-05 "Long ride", 138 TSS, stub=true, against ctlLoad=0 in ICU) and
+# entries with tss=null (Aosta, 2026-07-20). Measured against ICU over 29 Jun -
+# 19 Jul 2026 the reconstruction over-fires one week (+8.3 vs +4.7 actual) and
+# under-fires another (+4.9 vs +5.3), so a fallback flag is marked approximate.
+CTL_TIME_CONSTANT_DAYS = 42   # standard impulse-response CTL constant (as intervals.icu)
+RAMP_TOLERANCE = 0.3          # fallback source only: noise margin on a reconstructed series
+CTL_LOOKBACK_DAYS = 60
+
+
+def _daily_tss(log: list[dict]) -> dict[str, float]:
+    daily: dict[str, float] = {}
+    for e in log or []:
+        d = (e.get("date") or "")[:10]
+        if not d:
+            continue
+        try:
+            daily[d] = daily.get(d, 0.0) + float(e.get("tss") or 0)
+        except (TypeError, ValueError):
+            continue
+    return daily
+
+
+def ctl_from_log(log: list[dict], upto: date | None = None,
+                 tc: int = CTL_TIME_CONSTANT_DAYS) -> dict[str, float]:
+    """Realised CTL per day, reconstructed from logged TSS. Fallback source."""
+    daily = _daily_tss(log)
+    if not daily:
+        return {}
+    d = date.fromisoformat(min(daily))
+    end = upto or date.fromisoformat(max(daily))
+    ctl, out = 0.0, {}
+    while d <= end:
+        ctl += (daily.get(d.isoformat(), 0.0) - ctl) / tc
+        out[d.isoformat()] = round(ctl, 1)
+        d += timedelta(days=1)
+    return out
+
+
+def ctl_from_icu(slug: str, days: int = CTL_LOOKBACK_DAYS) -> dict[str, float]:
+    """Authoritative CTL per day from the intervals.icu fitness endpoint."""
+    try:
+        r = subprocess.run(
+            ["python3", "ClaudeCoach/lib/icu_fetch.py", "--athlete", slug,
+             "--endpoint", "fitness", "--days", str(days)],
+            capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
+        )
+        if r.returncode != 0:
+            return {}
+        out = {}
+        for e in json.loads(r.stdout) or []:
+            d = e.get("date") or e.get("id")        # the endpoint keys the day either way
+            if d and e.get("ctl") is not None:
+                out[str(d)[:10]] = round(float(e["ctl"]), 1)
+        return out
+    except Exception:
+        return {}
+
+
+def ctl_history(slug: str, log: list[dict] | None = None,
+                today: date | None = None) -> tuple[dict[str, float], str]:
+    series = ctl_from_icu(slug)
+    if series:
+        return series, "icu_fitness"
+    return ctl_from_log(log or [], upto=today or date.today()), "session_log"
+
+
+def realised_ramp(series: dict[str, float], cap: float, overreach: float | None = None,
+                  today: date | None = None, weeks: int = 4,
+                  tolerance: float = 0.0) -> list[dict]:
+    """Week-on-week realised CTL ramp over the last COMPLETE Mon-Sun weeks.
+
+    Complete weeks only - the current part-week is excluded, matching T11: a
+    part-week reads as a collapse every Monday and a spike every Sunday.
+    A breach escalates to Tier 1 above the athlete's ctl_ramp_overreach_threshold.
+    Newest breach first.
+    """
+    if not series:
+        return []
+    today = today or date.today()
+    last_sunday = today - timedelta(days=today.weekday() + 1)   # most recent completed week end
+    over = float(overreach) if overreach else None
+    breaches = []
+    for i in range(weeks):
+        wk_end = last_sunday - timedelta(days=7 * i)
+        prev_end = wk_end - timedelta(days=7)
+        now_ctl, was_ctl = series.get(wk_end.isoformat()), series.get(prev_end.isoformat())
+        if now_ctl is None or was_ctl is None:
+            continue
+        ramp = round(now_ctl - was_ctl, 1)
+        if ramp <= cap + tolerance:
+            continue
+        breaches.append({
+            "week_start": (wk_end - timedelta(days=6)).isoformat(),
+            "week_end": wk_end.isoformat(),
+            "ctl_from": was_ctl, "ctl_to": now_ctl, "ramp": ramp, "cap": cap,
+            "tier": 1 if (over and ramp > over) else 2,
+            "overreach_threshold": over,
+        })
+    return breaches
+
+
+def ramp_flags(slug: str, cfg: dict, today: date | None = None,
+               write: bool = True) -> list[dict]:
+    """Evaluate T12 for one athlete and (optionally) persist the flags.
+
+    Flags go into current-state.json watchdog_flags, numeric and dateable only,
+    never prose: refresh-site-data.py copies that key into the athlete payload and
+    public_sanitise.py holds it on FORBIDDEN_KEYS, so free text there is a
+    disclosure risk, not a formatting choice. Idempotent per (trigger, week).
+    """
+    sl = BASE / "athletes" / slug / "session-log.json"
+    try:
+        log = json.loads(sl.read_text()) if sl.exists() else []
+    except Exception:
+        log = []
+    series, source = ctl_history(slug, log, today=today)
+    breaches = realised_ramp(
+        series, float(cfg.get("max_ctl_ramp_per_week", 5.0)),
+        cfg.get("ctl_ramp_overreach_threshold"), today=today,
+        tolerance=0.0 if source == "icu_fitness" else RAMP_TOLERANCE)
+    for b in breaches:
+        b["source"] = source
+    if not breaches or not write:
+        return breaches
+    csp = BASE / "athletes" / slug / "current-state.json"
+    try:
+        state = json.loads(csp.read_text()) if csp.exists() else {}
+    except Exception:
+        return breaches
+    flags = state.setdefault("watchdog_flags", [])
+    seen = {(f.get("trigger"), f.get("week_end")) for f in flags if isinstance(f, dict)}
+    new = [{"trigger": "T12", "week_end": b["week_end"], "week_start": b["week_start"],
+            "signal": "realised_ctl_ramp", "ramp": b["ramp"], "cap": b["cap"],
+            "ctl_from": b["ctl_from"], "ctl_to": b["ctl_to"], "tier": b["tier"],
+            "source": source, "approximate": source != "icu_fitness",
+            "logged": (today or date.today()).isoformat()}
+           for b in breaches if ("T12", b["week_end"]) not in seen]
+    if new:
+        state["watchdog_flags"] = flags + new
+        tmp = csp.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
+        os.replace(tmp, csp)
+    return breaches
+
+
+def ramp_trail(breaches: list[dict]) -> str:
+    """One L2 reasoning line per breach, in the watchdog's stdout format."""
+    out = []
+    for b in breaches:
+        tier = "Tier 1, past the overreach threshold" if b["tier"] == 1 else "Tier 2"
+        approx = "" if b.get("source") == "icu_fitness" else " [reconstructed, approximate]"
+        out.append(
+            f"realised CTL {b['ctl_from']} -> {b['ctl_to']} over week "
+            f"{b['week_start']}..{b['week_end']} = +{b['ramp']}/wk vs cap "
+            f"{b['cap']}/wk{approx} -> T12 realised CTL ramp breach [{tier}] -> hold "
+            f"next week's load at or below the week just finished and re-check -> "
+            f"ramp back inside {b['cap']}/wk with the CTL gained retained"
+        )
+    return "\n".join(out)
 
 
 def build_prompt(slug: str, name: str, race_name: str, race_date: str, chat_id: str, heat: dict | None = None, strength_target: int | None = None) -> str:
@@ -139,6 +313,12 @@ T6 (Tier 1): Aerobic decoupling >5% on any Z2 ride in last 7 days (check via act
   - Read {athlete_dir}/reference/decision-points.md for dated items (skip if file missing)
   - Cross-check against open_actions in current-state.json; fire for any item whose due date <= today+7 and status does not start with "done" and status is not "dropped" and status is not "noted"
   - Example fire: "FTP retest due 2026-05-31 — not yet done"
+T12: ALREADY EVALUATED in Python before this prompt ran (realised week-on-week
+  CTL ramp vs the athlete\'s max_ctl_ramp_per_week, off the intervals.icu fitness endpoint).
+  Any breach is already written to current-state.json watchdog_flags. Do NOT recompute it
+  and do NOT invent one; if watchdog_flags contains a T12 entry dated today, log it in the
+  current-state.md Watchdog Log alongside the other triggers, subject to the same
+  daily-nag suppression.
 T10 (Tier 2): Run weekly km increase >10% week-on-week
   - Sum run distance (km) from history endpoint for Mon–today (current week)
   - Sum run distance for the 7 days prior (last week)
@@ -186,6 +366,21 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
     prompt = build_prompt(slug, name, race_name, race_date, chat_id, heat=heat,
                           strength_target=strength_target)
 
+    # T12 runs HERE, in Python, before the model is asked anything: the flag is
+    # written from the session log whether or not the Claude call succeeds.
+    ramp_out = ""
+    try:
+        breaches = ramp_flags(slug, cfg)
+        if breaches:
+            ramp_out = ramp_trail(breaches)
+            ops_log.record_run("watchdog", athlete=slug, ok=True,
+                               detail=f"T12: {len(breaches)} week(s) over the "
+                                      f"{cfg.get('max_ctl_ramp_per_week', 5.0)}/wk CTL ramp cap "
+                                      f"(source {breaches[0].get('source')})")
+    except Exception as e:
+        with open(LOG_FILE, "a") as lf:
+            lf.write(f"[watchdog:{slug}] T12 ramp check failed: {e}\n")
+
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="claudecoach_watchdog_", delete=False, suffix=".txt"
     ) as f:
@@ -206,15 +401,15 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
         if result.returncode != 0:
             ops_log.alert("watchdog",
                           f"claude CLI exit {result.returncode}: {stderr[-300:]}", athlete=slug)
-            return None
+            return ramp_out or None
         ops_log.record_run("watchdog", athlete=slug, ok=True,
                            detail="triggered" if output else "silent")
-        return output or None
+        return "\n".join(x for x in (ramp_out, output) if x) or None
     except Exception as e:
         with open(LOG_FILE, "a") as lf:
             lf.write(f"[watchdog:{slug}] Exception: {e}\n")
         ops_log.alert("watchdog", f"exception: {e}", athlete=slug)
-        return None
+        return ramp_out or None
     finally:
         os.unlink(prompt_file)
 
