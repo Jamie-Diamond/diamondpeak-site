@@ -32,6 +32,9 @@ from primitives.blueprint import (  # noqa: E402
     event_key as _event_key,
     IF_TARGETS, phase_family, content_family, tss_ceiling,
 )
+# Single source for the run-fuelling ceiling, so the blueprint's prose can
+# never drift from what plan_builder / morning-checkin actually prescribe.
+from primitives.nutrition import RUN_TARGET_G_HR  # noqa: E402
 
 # Brick targets by phase family — single source for both the markdown table and
 # the structured sidecar.
@@ -212,10 +215,39 @@ FUELLING = {
     },
 }
 
-def fuelling_note(event: str, phase_name: str) -> str:
+# Override for the "specific"-phase Full Ironman row when the athlete's bike
+# fuelling capacity is already proven at/near race rate (new profile.json field
+# `bike_capacity_proven`, bool, default False). The default FUELLING["specific"]
+# text above prescribes race-rate fuelling on EVERY key session — right for an
+# athlete still building bike capacity, wrong once it's proven, where repeating
+# it on every session has little left to prove and only adds GI load. This is a
+# profile switch, not an athlete-specific hard-code, so Kathryn/Calum (or Jamie
+# post-race, once reset) keep the default text unless their own profile opts in
+# (reconciled against athletes/jamie/persistent-rules.md:17, 28 Jul 2026).
+FUELLING_SPECIFIC_BIKE_PROVEN = (
+    "75–90 g CHO/hr at race rate on an occasional key session only — bike "
+    "capacity is already proven, so this checks gut tolerance rather than "
+    "building it session by session."
+)
+
+def fuelling_note(event: str, phase_name: str, profile: dict | None = None) -> str:
     fam = content_family(phase_family(phase_name))
     event_fuel = FUELLING.get(_event_key(event), FUELLING["Full Ironman"])
-    return event_fuel.get(fam, "Follow phase-progressive protocol.")
+    text = event_fuel.get(fam, "Follow phase-progressive protocol.")
+    profile = profile or {}
+    if fam == "specific" and profile.get("bike_capacity_proven"):
+        text = FUELLING_SPECIFIC_BIKE_PROVEN
+    # profile.json field `fuelling_focus` (str, default None; "run" supported):
+    # names the discipline whose fuelling is the athlete's open development
+    # area, and appends run-specific guidance ceilinged at nutrition.py's own
+    # RUN_TARGET_G_HR — never at the race-day bike figure above, and never a
+    # second source of truth for that number.
+    if profile.get("fuelling_focus") == "run" and "run" in event_sports(event):
+        text += (
+            f" Run fuelling is the current focus — build run carbs toward "
+            f"~{RUN_TARGET_G_HR} g CHO/hr on long runs."
+        )
+    return text
 
 
 # -- Test schedule ------------------------------------------------------------
@@ -574,7 +606,7 @@ def render_blueprint(slug: str, profile: dict, phases: list[dict],
         if fam in seen_fams:
             continue
         seen_fams.add(fam)
-        lines.append(f"- **{p['name']} ({fam.capitalize()}):** {fuelling_note(event, p['name'])}")
+        lines.append(f"- **{p['name']} ({fam.capitalize()}):** {fuelling_note(event, p['name'], profile)}")
     lines.append("")
 
     lines.append("## Test / Retest Schedule")
@@ -655,7 +687,7 @@ def build_blueprint_data(slug: str, profile: dict, phases: list[dict],
             "ctl_entry_low": entry[0] if entry else None,
             "ctl_entry_high": entry[1] if entry else None,
             "distribution": event_dist.get(cfam, {}),
-            "fuelling": fuelling_note(event, p["name"]),
+            "fuelling": fuelling_note(event, p["name"], profile),
             "brick_min": BRICK_MIN.get(cfam) if bricks_apply else None,
             "brick_type": BRICK_TYPE.get(cfam) if bricks_apply else None,
         })
