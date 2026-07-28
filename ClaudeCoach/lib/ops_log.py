@@ -160,9 +160,15 @@ def sync_ok(job: str) -> None:
 
 
 def _escalate(job: str, n: int, message: str) -> None:
+    # The underlying error is raw git plumbing (git_sync._stderr passes up to 300
+    # chars of stderr verbatim). It goes to the log, never into the sent text —
+    # tone guide §5: an alert names the consequence, not the mechanism.
+    ts = datetime.now().isoformat(timespec="seconds")
+    _append(ALERT_LOG, f"[{ts}] [{job}] ESCALATED after {n} consecutive "
+                       f"failures; underlying error: {message}")
     text = (f"⚠️ Git sync has been failing for {n} runs in a row ({job}). "
             f"Changes are saved on the VM but are not reaching GitHub, so they are "
-            f"not backed up. Last error: {message}")
+            "not backed up.")
     log_outbound(f"{job}-escalation", text, sent=True)
     try:
         notify = Path(__file__).resolve().parent.parent / "telegram" / "notify.py"

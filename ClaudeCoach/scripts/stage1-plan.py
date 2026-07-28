@@ -846,13 +846,14 @@ def _week_message(brief: dict, built: dict) -> str:
     lines = [header]
     floor = brief.get("weekly_tss_floor")
     if floor and built["total_tss"] < floor * 0.95:
-        lines.insert(0, f"🔥 *UNDER-TRAINING WEEK*: {built['total_tss']} TSS is below the "
-                        f"{floor} floor — this week does not train you. Flagged, not hidden.")
+        lines.insert(0, f"⚠️ *This week is too light to hold your fitness* — it comes to "
+                        f"{built['total_tss']} Load against the {floor} it needs.")
     req = brief.get("weekly_tss_target_required")
     if req:
-        lines.append(f"⚠️ _Phase requires ~{req} TSS but your weekly-hours ceiling caps the "
-                     f"plan at ~{brief.get('target_capped_by_hours')}. Fitness will build "
-                     f"slower than the blueprint — raise max_hours_per_week to close the gap._")
+        lines.append(f"⚠️ _This week wants about {req} Load and only "
+                     f"{brief.get('target_capped_by_hours')} fits in the hours you've given me, "
+                     f"so fitness will climb a little slower than it could. If you can find "
+                     f"another couple of hours a week, tell me and I'll rebuild it._")
     for s in built["sessions"]:
         wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""

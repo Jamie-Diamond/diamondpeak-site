@@ -65,12 +65,35 @@ class TestComputeRunDurability:
 
 
 class TestFadeLine:
-    def test_renders_all_metrics_and_warns_on_flags(self):
+    """The line is athlete-facing prose (tone guide §5, Pair 6): a verdict in the
+    first clause, exactly one number, and no internal metric names."""
+
+    _BANNED = ("pw:hr", "decoupling", "cadence fade", "running cost", "⚠", "Durability:")
+
+    def test_all_three_signals_faded_leads_with_the_verdict(self):
         m = {"decoupling_pct": 6.1, "cadence_fade_pct": -3.4, "cost_fade_pct": 5.2,
+             "flags": ["decoupling 6.1% > 5.0%", "cadence fade -3.4%", "running cost +5.2%"]}
+        line = fade_line(m)
+        assert line.startswith("Your form came apart")
+        assert "6.1%" in line
+        assert "cadence" in line and "energy" in line
+        assert not any(b in line for b in self._BANNED)
+
+    def test_decoupling_only_names_it_as_the_weak_point(self):
+        m = {"decoupling_pct": 6.1, "cadence_fade_pct": -0.4, "cost_fade_pct": 1.0,
              "flags": ["decoupling 6.1% > 5.0%"]}
         line = fade_line(m)
-        assert "6.1%" in line and "-3.4%" in line and "+5.2%" in line and "⚠" in line
+        assert line.startswith("Durability was the weak point")
+        assert "6.1%" in line and "5.2%" not in line
+        assert not any(b in line for b in self._BANNED)
 
-    def test_clean_run_no_warning(self):
+    def test_clean_run_says_it_held(self):
         m = {"decoupling_pct": 1.2, "cadence_fade_pct": 0.3, "cost_fade_pct": -0.5, "flags": []}
-        assert "⚠" not in fade_line(m)
+        line = fade_line(m)
+        assert line.startswith("Durability held up")
+        assert "1.2%" in line
+        assert not any(b in line for b in self._BANNED)
+
+    def test_missing_cadence_does_not_crash(self):
+        m = {"decoupling_pct": 2.0, "cadence_fade_pct": None, "cost_fade_pct": 0.0, "flags": []}
+        assert fade_line(m).startswith("Durability held up")
