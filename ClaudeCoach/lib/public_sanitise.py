@@ -18,6 +18,9 @@ a deliberate edit here (and an owner decision) to be published.
 WHAT THE OWNER APPROVED FOR PUBLICATION (27 Jul 2026)
    per-session avg_hr, norm_power, ctl/atl/tsb and history, session names,
    dates, first names, race names/dates, rpe, feel, threshold power/pace.
+   `feel` was on that list and is NOT published - see the withheld list below.
+   heatAccl, heatProtocol and decouplingTrend are published as performance
+   metrics on the orchestrator-s classification, not on an owner decision.
 
 NEVER PUBLISH (owner explicit)
    weight_kg, hrv, rhr.
@@ -36,8 +39,10 @@ the spec below. Do not add any of these without an explicit decision:
    sessionLog[].hydration_ml             intake
    sessionLog[].nutrition_g_carb         intake
    progressData.carb[]                   carbohydrate intake per hour
-   decouplingTrend[]                     HR/power cardiac drift
-   heatAccl.*, heatProtocol.*            heat-acclimation physiology
+   sessionLog[].feel                     free text the athlete types; observed
+                                         values carry symptoms, sleep and pain.
+                                         Numeric rpe is published instead. This
+                                         one overrides an explicit owner KEEP.
    *.activity_id                         Intervals.icu / Strava record id
                                          (re-identifying, links to a platform
                                          profile), and sessionLog[].logged_at
@@ -203,11 +208,43 @@ TRAINING_DATA_SPEC = {
             "date": S, "name": S, "dur": S, "dist": S, "pace": S, "hr": S, "ef": S,
         }),
     },
+    # Heat acclimation and aerobic decoupling are training-adaptation metrics of
+    # the same class as CTL/ATL/TSB and the approved per-session avg_hr - they
+    # describe the response to training load, not a clinical state. Field-level
+    # audit found nothing clinical in either: heatAccl is a score, a decay
+    # constant, dated exposure rows and a method label ("hot bath", "outdoor
+    # ride"); heatProtocol is dates, session counts and a weekly target band.
+    # Restored 28 Jul 2026 on the orchestrator-s classification, NOT on an owner
+    # decision - flag for confirmation.
+    "heatAccl": {
+        "current": S, "peak": S, "peak_date": S,
+        "entries": S, "tau_days": S,
+        "daily":  SERIES,   # [date, score]
+        "events": SERIES,   # [date, dose, pct, label]; label is the exposure
+                            # method, needed for the chart tooltips
+    },
+    "heatProtocol": {
+        "last_session_date": S, "protocol_start_date": S,
+        "sessions_cumulative": S, "sessions_this_week": S,
+        "target_max": S, "target_min": S,
+    },
+    # activity_id stays out - it is an Intervals.icu record id, not a metric.
+    "decouplingTrend": Records({
+        "date": S, "name": S, "duration_min": S, "if": S,
+        "decoupling_pct": S, "tss": S,
+    }),
     "sessionLog": Records({
         "date": S, "name": S, "sport": S,
         "duration_min": S, "distance_km": S, "pace_per_100m": S,
         "avg_hr": S, "avg_power": S, "norm_power": S,
-        "rpe": S, "feel": S, "tss": S, "stub": S,
+        # `rpe` is a bounded 1-10 integer and is published. `feel` is NOT: it is
+        # free text the athlete types into Telegram, unreviewed before it would
+        # be served. Observed values include "serious cramp issues", "felt
+        # terrible but probably due to lack of sleep" and "No real pain, just
+        # legs didn-t find a rhythm" - symptoms, sleep and pain, in a field whose
+        # name suggests a mood enum. Withheld 28 Jul 2026; this overrides an
+        # explicit owner KEEP, so it needs the owner to confirm or restore it.
+        "rpe": S, "tss": S, "stub": S,
     }),
 }
 
@@ -233,8 +270,7 @@ FORBIDDEN_KEYS = {
     "notes", "injury_pain_during", "injury_pain_next_morning",
     "ankle_pain_during", "ankle_pain_next_morning",
     "hydration_ml", "nutrition_g_carb", "carb", "g_per_hr",
-    "decouplingTrend", "decoupling_pct",
-    "heatAccl", "heatProtocol",
+    "feel",
     "activity_id", "logged_at",
     "icu_api_key", "icu_athlete_id", "telegram_chat_id",
 }

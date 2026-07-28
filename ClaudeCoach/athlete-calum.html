@@ -891,7 +891,6 @@ function renderSessionLog(entries) {
       <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:left">Session</th>
       <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:right">TSS</th>
       <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:right">RPE</th>
-      <th style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:left">Notes</th>
     </tr></thead><tbody>${sorted.map(e=>{
       const dt = new Date(e.date+"T00:00:00");
       const label = dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
@@ -902,7 +901,6 @@ function renderSessionLog(entries) {
         <td style="padding:5px 8px;border-bottom:1px solid var(--line);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.name||"—"}</td>
         <td style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:'DM Mono',monospace">${e.tss||"—"}</td>
         <td style="padding:5px 8px;border-bottom:1px solid var(--line);text-align:right">${e.rpe!=null?e.rpe+"/10":"—"}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid var(--line);font-size:11px;color:var(--ink2)">${(e.feel||"").slice(0,50)||"—"}</td>
       </tr>`;
     }).join("")}</tbody></table>`;
 }
@@ -1227,7 +1225,6 @@ function dataUnavailable(what, err) {
 // public_sanitise.py). Without this the panels that plotted them render blank,
 // which reads as "nothing logged" rather than "not published".
 const WITHHELD_PANELS = [
-  ["heat-accl-panel", "Heat acclimation"],
   ["live-flags-content", "Watchdog flags"],
   ["open-actions-content", "Open actions"]
 ];
