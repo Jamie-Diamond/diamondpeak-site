@@ -12,6 +12,11 @@ ClaudeCoach/athletes/jamie/last_activity_state.json
 ClaudeCoach/config/athletes.json
 ClaudeCoach/config/pending.json
 ClaudeCoach/config/onboarding_state.json
+# Runtime state, not config: consecutive-run counts for recurring soft plan_audit
+# advisories (validate_plan.escalate_repeats). Written on every audit run, so
+# committing it would produce a diff a day and would make one box's streaks
+# authoritative for every other.
+ClaudeCoach/config/plan-audit-streaks.json
 ClaudeCoach/config/backup.key
 
 # Athlete personal data — never commit to public repo

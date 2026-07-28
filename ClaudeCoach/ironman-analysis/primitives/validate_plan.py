@@ -108,14 +108,27 @@ class WeekReport:
 
 # -- Intensity-distribution drift ----------------------------------------------
 # The blueprint's per-phase tables ("75% Z1–2 / 15% Z3 / 10% Z4–5") are weekly
-# time-in-zone guidance. We can't see inside a session, but we CAN classify whole
-# sessions easy vs quality (the same coarse classifier the prescription backstop
-# uses) and flag a week whose easy share falls far below the phase's Z1–2 target.
-# Tolerance is generous (interval sessions contain Z2 warmup/recovery the binary
-# classification can't credit) and the check only fires on EXCESS QUALITY — extra
-# easy volume is never a safety problem, and undershooting load is the gap-check's
-# job. Swims and bricks are excluded: name-based quality detection is unreliable
-# for swims, and bricks are mixed by definition.
+# time-in-zone guidance, so the honest measurement is SEGMENT MINUTES, not sessions.
+#
+# WHY THIS WAS REWRITTEN (2026-07-28). The check used to bucket WHOLE SESSIONS via
+# classify_session_type, which name-matches keywords like "tempo"/"sweetspot". So
+# "Easy run + 10min tempo" (40 min, of which 10 are Z3) scored 100% QUALITY, and a
+# perfectly-shaped week read as excess intensity. Measured on Jamie's pushed week of
+# 2026-07-27 the old path said Run 60% easy vs a 78% target (a flag); the same week
+# by segment minutes is 87% easy (on spec). The generous 12pp tolerance existed only
+# to paper over that miscount — see DIST_TOLERANCE_PP below.
+#
+# The fix: a pushed workout carries workout_doc.steps (the STRUCTURE invariant already
+# requires them), and every step carries the %FTP / %threshold-pace band the planner
+# rendered from planned_tss._ZONE_BAND. That table is reversible — the band tuple is
+# unique per bucket within a sport (see _STEP_BAND_BUCKET) — so a step's minutes can be
+# credited to easy / Z3 / Z4-5 exactly. Sessions with no usable steps still fall back to
+# the old whole-session name matching, and a sport that needed that fallback keeps the
+# old loose tolerance, because the old evidence is all there is for it.
+#
+# The check fires on EXCESS QUALITY only — extra easy volume is never a safety problem,
+# and undershooting load is the gap-check's job. Swims and bricks stay excluded: swim
+# bands integrate low even for a threshold set, and bricks are mixed by definition.
 
 _EASY_TYPES = {"bike_z2", "run_easy", "run_long"}
 _QUALITY_TYPES = {"bike_threshold", "bike_vo2", "bike_race_pace", "run_quality"}
@@ -128,9 +141,24 @@ _TYPE_FALLBACK_MIN = {
     "run_easy": 50, "run_long": 90, "run_quality": 60,
 }
 
-DIST_TOLERANCE_PP = 12.0   # percentage points below the Z1–2 target before flagging
+# Two tolerances, ONE rule: measurement fidelity sets the band. A sport measured
+# entirely from structured steps is judged at SEGMENT_TOLERANCE_PP; a sport where any
+# session had to be name-classified keeps DIST_TOLERANCE_PP, because whole-session
+# matching credits a session's warmup/recovery minutes to quality and genuinely needs
+# the slack. This is not a third arbitrary number - the loose band is retained ONLY
+# where the loose measurement is, and retires with the last unstructured session.
+DIST_TOLERANCE_PP = 12.0      # name-classified sports (legacy, deliberately generous)
+SEGMENT_TOLERANCE_PP = 8.0    # fully segment-measured sports; matches plan_distribution
 DIST_MIN_SESSIONS = 2      # don't judge a sport on a single session
 DIST_MIN_MINUTES  = 120    # ...or on under two hours of planned work
+
+# A step band whose tuple is absent from _ZONE_BAND falls back to a midpoint-IF cut,
+# which is a GUESS. Above this share of a sport's minutes the sport is not trustworthy
+# by segment and reverts to name classification (fail-noisy, never silently wrong).
+DIST_MAX_UNKNOWN_FRAC = 0.15
+# Σ step minutes must reconcile with the event's stated duration this closely, else the
+# steps are partial (main set only) and the denominator would be wrong.
+DIST_STEP_RECONCILE_FRAC = 0.10
 
 
 def _easy_target_pct(dist_row) -> float | None:
@@ -139,38 +167,332 @@ def _easy_target_pct(dist_row) -> float | None:
     return float(m.group(1)) if m else None
 
 
+def dist_targets(dist_row) -> list[float] | None:
+    """[Z1-2, Z3, Z4-5] percentages from '72% Z1–2 / 22% Z3 / 6% Z4–5', or None.
+
+    The same row _easy_target_pct reads, parsed in full so the per-zone CEILING limb
+    below can reuse zone_band_deviations - one tolerance source for both surfaces.
+    Missing Z3 / Z4-5 figures read as 0 (a taper row often states only Z1-2)."""
+    s = str(dist_row or "")
+    easy = _easy_target_pct(s)
+    if easy is None:
+        return None
+    z3 = re.search(r"(\d+(?:\.\d+)?)\s*%\s*Z\s*3", s, re.I)
+    hi = re.search(r"(\d+(?:\.\d+)?)\s*%\s*Z\s*4", s, re.I)
+    return [easy, float(z3.group(1)) if z3 else 0.0, float(hi.group(1)) if hi else 0.0]
+
+
+# ── THE ONE distribution taxonomy (Task: three classifiers, one truth) ────────
+# zone NAME -> distribution bucket, per sport. This is the single canonical map:
+# lib/plan_distribution.py imports it rather than keeping its own copy (it used to
+# hold a near-identical table, which is how three classifiers with three answers
+# happened in the first place). Keys are lowercased, punctuation-stripped.
+DIST_ZONE_BUCKET = {
+    "run": {
+        "recovery": "easy", "easy": "easy", "z1": "easy", "z2": "easy",
+        "warmup": "easy", "cooldown": "easy", "aerobic": "easy",
+        "long": "easy", "endurance": "easy",
+        "steady": "z3", "z3": "z3", "tempo": "z3",
+        "z4": "z45", "z5": "z45", "threshold": "z45", "css": "z45",
+        "interval": "z45", "vo2": "z45", "hill": "z45", "sprint": "z45",
+        "speed": "z45", "race": "z45",
+    },
+    "bike": {
+        "recovery": "easy", "easy": "easy", "z1": "easy", "z2": "easy",
+        "warmup": "easy", "cooldown": "easy", "endurance": "easy", "aerobic": "easy",
+        "z3": "z3", "tempo": "z3", "sweetspot": "z3", "ss": "z3", "race": "z3",
+        "z4": "z45", "z5": "z45", "threshold": "z45", "ftp": "z45",
+        "vo2": "z45", "anaerobic": "z45", "sprint": "z45",
+    },
+}
+_DIST_SPORT_KEY = {"run": "run", "trailrun": "run", "virtualrun": "run",
+                   "bike": "bike", "ride": "bike", "virtualride": "bike",
+                   "gravelride": "bike"}
+# The Z2/Z3 and Z3/Z4 IF cuts used when a step band is NOT in the canonical table
+# (planned_tss._band falls back to intensity±4pp for a segment given a raw "if").
+# Identical to the cuts stage1-plan._zone_by_sport uses, so the generation-time and
+# post-push classifiers agree on the boundaries as well as the buckets.
+_DIST_IF_CUT = {"run": (0.85, 0.90), "bike": (0.76, 0.90)}
+
+
+def norm_zone_name(zone) -> str:
+    """'Z1-2' -> 'z1', 'VO2 max' -> 'vo2' - leading token, punctuation stripped."""
+    z = re.sub(r"[^a-z0-9]", " ", str(zone or "").lower()).strip()
+    return z.split()[0] if z else ""
+
+
+def bucket_for_zone_name(sport: str, zone) -> str | None:
+    """easy / z3 / z45 for a named zone in a sport, or None when unmappable."""
+    key = _DIST_SPORT_KEY.get(str(sport or "").strip().lower())
+    if not key:
+        return None
+    return DIST_ZONE_BUCKET[key].get(norm_zone_name(zone))
+
+
+def _build_step_band_bucket():
+    """{sport: {(lo, hi): bucket}} inverted from planned_tss._ZONE_BAND at import.
+
+    Derived, never hand-maintained, so it cannot drift from the table the planner
+    actually renders steps with. Asserted injective at bucket level: a tuple shared
+    by two zones in DIFFERENT buckets would make the reverse map a coin-flip, and
+    that must fail loudly at import rather than silently mis-credit minutes. (It is
+    injective today: run easy/z2 = (78,88) but steady/z3 = (80,86) - overlapping
+    ranges, distinct tuples, which is exactly why the tuple and not the midpoint is
+    the key. The midpoints are both 83.)"""
+    from primitives.planned_tss import _ZONE_BAND
+    out: dict = {}
+    for sport in ("run", "bike"):
+        for zone, band in _ZONE_BAND.get(sport, {}).items():
+            b = DIST_ZONE_BUCKET[sport].get(norm_zone_name(zone))
+            if b is None:
+                continue
+            prior = out.setdefault(sport, {}).setdefault(tuple(band), b)
+            if prior != b:
+                raise AssertionError(
+                    f"_ZONE_BAND {sport} band {band} maps to both {prior} and {b} - "
+                    f"the step-band reverse index is not injective")
+    return out
+
+
+_STEP_BAND_BUCKET = _build_step_band_bucket()
+
+
+def _step_band(step: dict):
+    """(start, end) of a workout_doc step's power/pace/hr target, or None."""
+    for key in ("power", "pace", "hr"):
+        t = step.get(key)
+        if isinstance(t, dict) and t.get("start") is not None and t.get("end") is not None:
+            return (t["start"], t["end"])
+    return None
+
+
+def bucket_for_step(sport: str, step: dict) -> str | None:
+    """easy / z3 / z45 for one workout_doc step by EXACT band-tuple lookup, else None.
+
+    Exact only, deliberately: a tuple absent from the table came from planned_tss._band's
+    intensity fallback (pct±4 around 100×IF) and can only be classified by guessing at
+    the midpoint. That guess is _bucket_from_band_midpoint's job, and step_bucket_minutes
+    counts those minutes separately, so a sport built mostly of guesses is never reported
+    as measured."""
+    key = _DIST_SPORT_KEY.get(str(sport or "").strip().lower())
+    band = _step_band(step or {})
+    if not key or not band:
+        return None
+    exact = _STEP_BAND_BUCKET.get(key, {}).get(tuple(band))
+    if exact:
+        return exact
+    return None
+
+
+def _bucket_from_band_midpoint(sport: str, step: dict) -> str | None:
+    key = _DIST_SPORT_KEY.get(str(sport or "").strip().lower())
+    band = _step_band(step or {})
+    if not key or not band:
+        return None
+    mid = (float(band[0]) + float(band[1])) / 200.0
+    z3_cut, hi_cut = _DIST_IF_CUT[key]
+    return "z45" if mid >= hi_cut else ("z3" if mid >= z3_cut else "easy")
+
+
+def step_bucket_minutes(sport: str, event: dict) -> dict | None:
+    """{easy, z3, z45, total, guessed_min, unbucketed_min} min from workout_doc.steps.
+
+    Returns None when the event cannot be measured by segment, so the caller falls
+    back to whole-session name classification. That happens when there are no steps,
+    when no step carries a duration, or when Σ step minutes does not reconcile with
+    the event's stated moving_time - a partially-stepped session would otherwise be
+    scored against a denominator that is missing its easy minutes."""
+    steps = ((event or {}).get("workout_doc") or {}).get("steps") or []
+    if not steps:
+        return None
+    # guessed_min SHADOWS the bucket totals (it is not a fourth bucket): those minutes
+    # are credited to a bucket by midpoint IF, and separately counted as not-measured so
+    # the caller can refuse to trust a sport built mostly of guesses.
+    agg = {"easy": 0.0, "z3": 0.0, "z45": 0.0, "total": 0.0,
+           "guessed_min": 0.0, "unbucketed_min": 0.0}
+    for st in steps:
+        secs = st.get("duration")
+        if not secs:
+            continue                      # distance-only / open step: contributes nothing
+        mins = float(secs) / 60.0
+        agg["total"] += mins
+        b = bucket_for_step(sport, st)
+        if b is None:
+            b = _bucket_from_band_midpoint(sport, st)
+            agg["guessed_min"] += mins
+        if b is None:
+            agg["unbucketed_min"] += mins   # no target band at all - unusable
+            continue
+        agg[b] += mins
+    if agg["total"] <= 0:
+        return None
+    stated = float((event or {}).get("moving_time") or 0) / 60.0
+    if stated > 0 and abs(agg["total"] - stated) > stated * DIST_STEP_RECONCILE_FRAC:
+        return None                        # partial structure - do not trust the split
+    return agg
+
+
+def _session_bucket_minutes(sport_key: str, event: dict):
+    """(buckets, measured) minutes for one Run/Bike event.
+
+    measured=True  -> credited from structured steps (segment minutes).
+    measured=False -> whole-session name classification, the legacy path: the WHOLE
+                      session lands in easy or quality, warmup and recoveries included.
+                      That overstatement is why such a sport keeps the loose tolerance.
+    Returns (None, False) for a session that is neither easy nor quality by name (e.g.
+    a brick run), preserving the old exclusion.
+    """
+    st0 = classify_session_type(event.get("type", ""), event.get("name", ""))
+    if st0 == "brick":
+        # A Run/Ride-typed session NAMED as a brick is excluded even though its steps
+        # would now bucket cleanly: bricks are mixed by definition and the module has
+        # always left them out, so crediting them here would silently change the
+        # denominator of every comparison against the pre-segment figures. (Measured:
+        # including Kathryn's 50-min "Brick run — tempo off the bike" for the week of
+        # 2026-07-27 pushes her Run Z3 from 10% to 20% and manufactures a ceiling flag.)
+        return (None, False)
+    segs = step_bucket_minutes(sport_key, event)
+    if segs and segs["total"] > 0:
+        usable = segs["total"] - segs["unbucketed_min"]
+        if usable > 0:
+            return ({"easy": segs["easy"], "z3": segs["z3"], "z45": segs["z45"],
+                     "total": usable, "guessed": segs["guessed_min"]}, True)
+    st = st0
+    if st not in _EASY_TYPES and st not in _QUALITY_TYPES:
+        return (None, False)
+    mins = (float(event.get("moving_time") or 0) / 60) or _TYPE_FALLBACK_MIN.get(st, 60)
+    easy = mins if st in _EASY_TYPES else 0.0
+    # A name-classified quality session cannot be split Z3 vs Z4-5, so its non-easy
+    # minutes are deliberately left OUT of the per-zone buckets - and the presence of
+    # any such session disables the per-zone limb for that sport (see below).
+    return ({"easy": easy, "z3": 0.0, "z45": 0.0, "total": mins, "guessed": 0.0}, False)
+
+
 def _check_distribution(week_events: list[dict], week_start: date,
-                        distribution: dict, tolerance_pp: float) -> list["Violation"]:
-    buckets: dict[str, dict[str, float]] = {}   # sport → {easy_min, total_min, n}
+                        distribution: dict, tolerance_pp: float,
+                        skipped: list[str] | None = None) -> list["Violation"]:
+    buckets: dict[str, dict[str, float]] = {}
     for e in week_events:
         sport = _SPORT_BUCKET.get(str(e.get("type") or "").strip().lower())
         if not sport:
             continue
-        st = classify_session_type(e.get("type", ""), e.get("name", ""))
-        if st not in _EASY_TYPES and st not in _QUALITY_TYPES:
+        got, measured = _session_bucket_minutes(str(e.get("type") or ""), e)
+        if not got:
             continue
-        mins = (float(e.get("moving_time") or 0) / 60) or _TYPE_FALLBACK_MIN.get(st, 60)
-        b = buckets.setdefault(sport, {"easy": 0.0, "total": 0.0, "n": 0})
-        b["total"] += mins
+        b = buckets.setdefault(sport, {"easy": 0.0, "z3": 0.0, "z45": 0.0,
+                                       "total": 0.0, "n": 0, "named_min": 0.0,
+                                       "guessed": 0.0})
+        for k in ("easy", "z3", "z45", "total"):
+            b[k] += got[k]
+        b["guessed"] += got["guessed"]
         b["n"] += 1
-        if st in _EASY_TYPES:
-            b["easy"] += mins
+        if not measured:
+            b["named_min"] += got["total"]
 
     out: list[Violation] = []
     for sport, b in buckets.items():
-        target = _easy_target_pct((distribution or {}).get(sport))
+        row = (distribution or {}).get(sport)
+        target = _easy_target_pct(row)
         if target is None or b["n"] < DIST_MIN_SESSIONS or b["total"] < DIST_MIN_MINUTES:
             continue
+        # Measurement fidelity decides the tolerance AND whether the per-zone limb runs.
+        guess_frac = (b["guessed"] / b["total"]) if b["total"] else 0.0
+        fully_measured = b["named_min"] <= 0 and guess_frac <= DIST_MAX_UNKNOWN_FRAC
+        tol = SEGMENT_TOLERANCE_PP if fully_measured else tolerance_pp
+        basis = "segment minutes" if fully_measured else "session time"
+        if skipped is not None and not fully_measured:
+            why = []
+            if b["named_min"] > 0:
+                why.append(f"{b['named_min']:.0f} of {b['total']:.0f} min from sessions "
+                           f"with no usable structured steps (name-classified whole)")
+            if guess_frac > DIST_MAX_UNKNOWN_FRAC:
+                why.append(f"{guess_frac*100:.0f}% of minutes on step bands absent from "
+                           f"the canonical table (zone inferred from the band midpoint)")
+            skipped.append(f"week of {week_start}: {sport} intensity distribution measured "
+                           f"loosely — " + "; ".join(why) + f" — judged at "
+                           f"−{tol:.0f}pp, per-zone ceilings not asserted")
         easy_pct = b["easy"] / b["total"] * 100
-        if easy_pct < target - tolerance_pp:
+        if easy_pct < target - tol:
             out.append(Violation(
                 code="intensity_distribution",
                 severity="soft",
                 detail=(f"week of {week_start}: {sport} is {easy_pct:.0f}% easy by "
-                        f"session time vs the phase target {target:.0f}% Z1–2 "
-                        f"(tolerance −{tolerance_pp:.0f}pp) — too much quality planned"),
+                        f"{basis} vs the phase target {target:.0f}% Z1–2 "
+                        f"(tolerance −{tol:.0f}pp) — too much quality planned"),
+            ))
+        # ── per-zone CEILING limb: the same _ZONE_BANDS tolerances the generation-time
+        # gate uses (zone_band_deviations), applied to the calendar-derived split. This
+        # closes the hole the easy-share check alone leaves: swapping Z3 for Z4-5 keeps
+        # the easy share identical while stacking VO2. CEILINGS ONLY (deload=True drops
+        # the floors) - plan_audit has no week_type to tell a deload week from a normal
+        # one, and a floor asserted on a deload/luteal-adjusted week is a manufactured
+        # false positive of exactly the kind this commit removes. Under-dosed quality is
+        # reported by lib/plan_distribution's INSUFFICIENT direction, not here.
+        tgts = dist_targets(row)
+        if not fully_measured or not tgts:
+            continue
+        realised = {sport: {"z3_pct": b["z3"] / b["total"] * 100,
+                            "high_pct": b["z45"] / b["total"] * 100,
+                            "min": b["total"]}}
+        for d in zone_band_deviations(realised, {sport: tgts}, deload=True,
+                                      min_minutes=DIST_MIN_MINUTES * 2):
+            if d["kind"] != "ceiling":
+                continue
+            label = "Z3" if d["zone"] == "z3" else "Z4–5"
+            out.append(Violation(
+                code=f"intensity_distribution_{'z3' if d['zone'] == 'z3' else 'vo2'}_high",
+                severity="soft",
+                detail=(f"week of {week_start}: {sport} {label} is {d['actual']:.0f}% of "
+                        f"segment minutes vs the phase target {d['target']:.0f}% "
+                        f"(over the ceiling by {d['dev']:.0f}pp) — move the excess to a "
+                        f"lower zone in the same sport"),
             ))
     return out
+
+
+# -- Repeat escalation (a flag pushed past every week is not a flag) -----------
+# A soft advisory that recurs week after week is materially different from a
+# one-off: the first is a plan the athlete keeps overriding, the second is noise.
+# plan_audit's baseline is COUNT-keyed, so a flag that never changes count is
+# accepted forever and never resurfaces. This adds an explicit streak so the
+# fourth consecutive week reads differently from the first.
+#
+# PURE by design (this module never does IO): the caller owns the store, passes
+# the prior streaks in and writes the returned ones back. Escalation raises the
+# WORDING and emits a distinct code, NEVER the severity - severity "hard" blocks a
+# push and would change plan_audit's hard_fail, and the standing rule is that only
+# safety ceilings block. An escalated advisory is loud, not blocking.
+
+DIST_ESCALATE_AFTER = 3    # consecutive weeks carrying the same code before escalating
+
+
+def escalate_repeats(violations: list["Violation"], streaks: dict | None,
+                     *, escalate_after: int = DIST_ESCALATE_AFTER):
+    """(violations, new_streaks) with recurring soft codes escalated in wording.
+
+    streaks: {code: consecutive_runs_seen} from the previous run. A code present
+    now increments; a code absent is dropped (the streak breaks on a clean run, so
+    an intermittent flag never accumulates into a false escalation). At or above
+    escalate_after, an extra Violation with code "<code>_persistent" is appended
+    naming the streak length, so the reader sees "3 weeks running" not "again".
+    """
+    prior = dict(streaks or {})
+    seen = {}
+    out = list(violations or [])
+    for v in violations or []:
+        if v.severity != "soft":
+            continue
+        seen[v.code] = int(prior.get(v.code, 0) or 0) + 1
+    for code, n in sorted(seen.items()):
+        if n < escalate_after:
+            continue
+        out.append(Violation(
+            code=f"{code}_persistent", severity="soft",
+            detail=(f"{code} has now fired {n} runs in a row — it is being pushed past "
+                    f"every week rather than acted on. Either change the plan or change "
+                    f"the phase target it is being judged against"),
+        ))
+    return out, seen
 
 
 # -- Overall intensity budget (Phase 5 redesign) ------------------------------
@@ -517,7 +839,8 @@ def validate_week(
     #    blueprint phase's Z1–2 share. Only asserted when a distribution is supplied.
     if distribution:
         violations.extend(
-            _check_distribution(week_events, week_start, distribution, dist_tolerance_pp))
+            _check_distribution(week_events, week_start, distribution,
+                                dist_tolerance_pp, skipped))
 
     # 6. Distance/duration internal consistency — walk-run sessions whose stated
     #    distance and stated run/walk cycle count imply different totals.
