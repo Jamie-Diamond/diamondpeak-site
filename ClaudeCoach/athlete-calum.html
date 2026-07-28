@@ -714,9 +714,17 @@ function renderLoadChart(days) {
 function renderPlanActual(weeks) {
   const ctx = document.getElementById("chartPlanActual");
   if (!ctx || !weeks || !weeks.length) return;
+  // Label carries the week's TYPE: a deload or B-race taper is prescribed light on
+  // purpose, so a bar that sits below its neighbours needs to say why rather than
+  // read as a miss. The current week is flagged as still being executed.
   const labels = weeks.map(w => {
     const dt = new Date(w.week_start+"T00:00:00");
-    return "W"+w.week_num+" "+dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+    const base = "W"+w.week_num+" "+dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+    const tag = w.in_progress ? "in progress"
+              : (w.week_type && w.week_type !== "build" && w.week_type !== "base"
+                 && w.week_type !== "specific" && w.week_type !== "peak") ? w.week_type
+              : null;
+    return tag ? [base, "("+tag+")"] : base;
   });
   new Chart(ctx.getContext("2d"), {
     type:"bar",
@@ -725,7 +733,7 @@ function renderPlanActual(weeks) {
       datasets:[
         {label:"Actual TSS",  data:weeks.map(w=>w.actual_tss),
          backgroundColor:"rgba(29,104,64,0.8)",borderRadius:3},
-        {label:"Phase target",data:weeks.map(w=>w.planned_tss),
+        {label:"Plan target",data:weeks.map(w=>w.planned_tss),
          backgroundColor:"rgba(180,180,180,0.35)",borderColor:"rgba(120,120,120,0.6)",
          borderWidth:1,borderRadius:3},
       ]

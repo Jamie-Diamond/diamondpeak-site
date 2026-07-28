@@ -479,8 +479,22 @@ sys.path.insert(0, str(BASE / "lib"))
 from race_predictor import race_predictor as _race_predictor  # noqa: E402
 
 
-def _phase_daily_tss(d):
-    """Return planned daily TSS based on phase (week number from PLAN_START).
+def _phase_daily_tss_projection(d):
+    """Daily TSS for the CTL PROJECTION CURVES ONLY — never as a plan target.
+
+    RENAMED 28 Jul 2026 (was `_phase_daily_tss`). This table is a FOURTH set of
+    weekly numbers, hard-coded here and blind to the athlete's config: it knows
+    nothing about manual_easy_weeks, deload_skip_weeks, phase_tss boundaries or the
+    CTL the athlete actually has. Used as a plan target it declared 854 TSS for the
+    week of 20 Jul 2026, a week the planning engine had deliberately cut to ~505 for
+    the Dorney B-race taper — so an exactly-executed taper rendered as a 24% miss.
+    planVsActual now reads the engine's own target (see _weekly_plan_targets).
+
+    It survives ONLY as the "what if he trained a generic phase block" shape for
+    _ctl_project(), which takes a date->daily-TSS function and evolves CTL itself;
+    the engine cannot substitute there without changing that contract. The name says
+    projection so no future surface can quietly reuse it as a target again.
+
     Calibrated to 2025 actuals (spring ~110/day, peak ~133/day).
     Projects peak CTL ~123, race-day CTL ~105 from current ~79 — exceeding 2025.
     - Base (wk 1-6):    105/day = 735/wk
@@ -494,6 +508,64 @@ def _phase_daily_tss(d):
     if week <= 14:   return 122   # Specific: ~854/wk
     if week <= 18:   return 135   # Peak: ~945/wk
     return 75                     # Taper: ~525/wk — matches 2025 actual
+
+
+def _ctl_on(ctl_by_date, d):
+    """CTL as at date `d` — exact day if present, else the most recent earlier day.
+    A past week must be judged against the fitness the athlete HAD when it was
+    planned, not against today's."""
+    ds = d.isoformat()
+    if ds in ctl_by_date:
+        return ctl_by_date[ds]
+    earlier = [k for k in ctl_by_date if k <= ds]
+    return ctl_by_date[max(earlier)] if earlier else None
+
+
+def _weekly_plan_targets(cfg, week_starts, ctl_by_date, weekly_actual):
+    """{week_start: {planned_tss, week_type, week_num}} from the PLANNING ENGINE.
+
+    plan_tools.required_tss is the single source the CLI, the weekly brief, the plan
+    audit and plan_builder all already agree on: phase CTL target -> required weekly
+    TSS, capped by the ramp, then reduced by the deload / manual-easy-week / taper
+    branches. Feeding it each week's own CTL and the prior week's executed load
+    reproduces the target that week was actually built to, including the reductions
+    that were the POINT of the week — which the old hard-coded phase table could not
+    represent, so every correctly-executed down-week read as a compliance miss.
+
+    week_num comes from the engine's `training_week` too: the ETL's own
+    ceil(days/7) formula ran one week ahead of the engine's days//7+1 from day 8 of
+    a week onward, so the chart labelled weeks differently from every other surface.
+
+    Returns {} rather than raising if the athlete has no CTL basis or plan_start —
+    the caller then simply omits the series instead of inventing a target.
+    """
+    targets = {}
+    try:
+        sys.path.insert(0, str(BASE / "lib"))
+        sys.path.insert(0, str(BASE / "ironman-analysis"))
+        from plan_tools import required_tss
+    except Exception as e:
+        log(f"planVsActual: planning engine unavailable ({e}) — series omitted")
+        return targets
+    for ws in week_starts:
+        ctl = _ctl_on(ctl_by_date, ws)
+        if not ctl:
+            continue
+        prev = weekly_actual.get((ws - timedelta(days=7)).isoformat())
+        try:
+            r = required_tss(cfg, float(ctl), today=ws, last_week_tss=prev)
+        except Exception as e:
+            log(f"planVsActual: required_tss failed for {ws} ({e})")
+            continue
+        target = r.get("recommended_weekly_tss")
+        if r.get("error") or target is None:
+            continue
+        targets[ws.isoformat()] = {
+            "planned_tss": int(round(target)),
+            "week_type": r.get("week_type"),
+            "week_num": r.get("training_week"),
+        }
+    return targets
 
 
 def post_process(data):
@@ -569,7 +641,7 @@ def post_process(data):
     sick_week_num = 10
     def sick_week_tss(d):
         week = max(1, math.ceil((d - PLAN_START).days / 7))
-        return 0 if week == sick_week_num else _phase_daily_tss(d)
+        return 0 if week == sick_week_num else _phase_daily_tss_projection(d)
 
     # planned_sessions is only a genuine forecast out to the last date we actually
     # have calendar data for (weekCalendar — completed history + booked events).
@@ -589,7 +661,7 @@ def post_process(data):
         _jamie_cfg = {}
     data["ctlProjection"] = {
         "current_trend":    _ctl_project(current_ctl, current_trend_tss, days_to_race),
-        "planned_build":    _ctl_project(current_ctl, _phase_daily_tss, days_to_race),
+        "planned_build":    _ctl_project(current_ctl, _phase_daily_tss_projection, days_to_race),
         "planned_sessions": _ctl_project(current_ctl, planned_sessions_tss, days_to_race)[:planned_sessions_horizon_days],
         "sick_week":        _ctl_project(current_ctl, sick_week_tss, days_to_race),
         "target_milestones": _ctl_target_milestones(_jamie_cfg, current_ctl, today),
@@ -736,8 +808,10 @@ def post_process(data):
         except Exception:
             pass
 
-    # Plan vs actual — last 6 weeks, grouped by week
-    # Actual TSS from session-log.json; planned from phase daily TSS * 7
+    # Plan vs actual — last 6 weeks, grouped by week.
+    # Actual TSS from session-log.json; PLANNED from the planning engine's own
+    # weekly target for that athlete and that week (was: a hard-coded phase table
+    # that knew nothing about his taper and deload weeks).
     if SESSION_LOG.exists():
         try:
             all_entries = json.loads(SESSION_LOG.read_text())
@@ -756,18 +830,31 @@ def post_process(data):
                 wk_start = dt - timedelta(days=dt.weekday())
                 weekly_actual[wk_start.isoformat()] += e.get("tss") or 0
 
+            this_monday = today - timedelta(days=today.weekday())
+            weeks = [this_monday - timedelta(weeks=i) for i in range(5, -1, -1)]
+            try:
+                _cfg = json.loads((BASE / "config/athletes.json").read_text()).get("jamie", {})
+            except Exception:
+                _cfg = {}
+            targets = _weekly_plan_targets(_cfg, weeks,
+                                           dict(data.get("fitnessThis") or []),
+                                           weekly_actual)
             plan_actual = []
-            for i in range(5, -1, -1):
-                wk_start = today - timedelta(days=today.weekday()) - timedelta(weeks=i)
-                wk_num = max(1, math.ceil((wk_start - PLAN_START).days / 7))
-                planned_tss = _phase_daily_tss(wk_start) * 7
+            for wk_start in weeks:
+                t = targets.get(wk_start.isoformat())
+                if not t:
+                    continue
                 plan_actual.append({
                     "week_start": wk_start.isoformat(),
-                    "week_num": wk_num,
+                    "week_num": t["week_num"],
                     "actual_tss": round(weekly_actual.get(wk_start.isoformat(), 0)),
-                    "planned_tss": round(planned_tss),
+                    "planned_tss": t["planned_tss"],
+                    "week_type": t["week_type"],
+                    # The current week is still being executed — without this the
+                    # chart shows a part-done week as a near-total miss.
+                    "in_progress": wk_start == this_monday,
                 })
-            data["planVsActual"] = plan_actual
+            data["planVsActual"] = plan_actual or None
         except Exception:
             pass
 
@@ -805,12 +892,19 @@ def _build_athlete_training_data(slug, athlete_cfg):
     year_start = f"{today.year}-01-01"
 
     # Parallel fetch
-    wellness_60, history_21, events_21, fitness_ytd = client.fetch_all(
+    # 49 days of history, not 21: planVsActual needs six completed weeks plus the
+    # week before them (the miss-trigger reads the prior week's executed load).
+    # Every pre-existing consumer looks back at most 14 days, so history_21 below
+    # keeps their behaviour byte-identical.
+    wellness_60, history_49, events_21, fitness_ytd = client.fetch_all(
         ("get_wellness", 60),
-        ("get_training_history", 21),
+        ("get_training_history", 49),
         ("get_events", today.isoformat(), twentyone_fwd),
         ("get_fitness", (today - date(today.year, 1, 1)).days + 1),
     )
+    twentyone_ago = (today - timedelta(days=21)).isoformat()
+    history_21 = [a for a in history_49
+                  if (a.get("start_date_local") or "")[:10] >= twentyone_ago]
 
     # -- kpi ------------------------------------------------------------------
     kpi = {}
@@ -985,6 +1079,44 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "sessionLog":   session_log,
         "swimLog":      swim_log,
     }
+
+    # -- planVsActual ----------------------------------------------------------
+    # Every active athlete has a CTL basis in athletes.json (phase_ctl or race_min),
+    # so required_tss returns a defensible weekly target for all of them and the
+    # series is no longer Jamie-only — it was null for Kathryn and Calum purely
+    # because the old hard-coded phase table was written against Jamie's plan.
+    # Actuals come from ICU training load (authoritative and complete) rather than
+    # session-log.json, which for these two is partial.
+    try:
+        weekly_actual = defaultdict(float)
+        for a in history_49:
+            d_str = (a.get("start_date_local") or "")[:10]
+            if not d_str:
+                continue
+            dt = date.fromisoformat(d_str)
+            wk = dt - timedelta(days=dt.weekday())
+            weekly_actual[wk.isoformat()] += float(a.get("icu_training_load") or 0)
+        this_monday = today - timedelta(days=today.weekday())
+        weeks = [this_monday - timedelta(weeks=i) for i in range(5, -1, -1)]
+        targets = _weekly_plan_targets(athlete_cfg, weeks, dict(fitness_this),
+                                       weekly_actual)
+        plan_actual = []
+        for wk_start in weeks:
+            t = targets.get(wk_start.isoformat())
+            if not t:
+                continue
+            plan_actual.append({
+                "week_start": wk_start.isoformat(),
+                "week_num": t["week_num"],
+                "actual_tss": round(weekly_actual.get(wk_start.isoformat(), 0)),
+                "planned_tss": t["planned_tss"],
+                "week_type": t["week_type"],
+                "in_progress": wk_start == this_monday,
+            })
+        if plan_actual:
+            data["planVsActual"] = plan_actual
+    except Exception as e:
+        log(f"[{slug}] planVsActual skipped (non-fatal): {e}")
 
     accl = _heat_accl_series(slug)
     if accl:
