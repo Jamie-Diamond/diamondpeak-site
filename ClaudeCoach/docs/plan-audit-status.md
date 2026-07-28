@@ -1,4 +1,24 @@
-# plan_audit.py — scheduled, alerting suppressed (2026-07-28)
+# plan_audit.py — scheduled, alerting BASELINE-GATED (2026-07-28)
+
+> **Superseded in part, same day.** This page originally said plan_audit needed
+> no code change because `ops_log.alert()` cannot Telegram. That is still true of
+> the Telegram route, but it was the wrong conclusion: the unconditional
+> `ops_log.alert()` wrote three `ok=False` entries into `run-status.jsonl` EVERY
+> DAY, and `run-status.jsonl` is the heartbeat store the failure alarm reads. A
+> permanently-failing job in there trains the reader to ignore ✗ lines, which
+> defeats the alarm.
+>
+> `plan_audit.main()` is now gated on `ClaudeCoach/config/plan-audit-baseline.json`
+> — failure **counts per category**, per athlete, committed. A run at or below its
+> athlete's accepted counts records `ok=True, "known baseline fail [...]"`. A new
+> category or a higher count still alerts. Counts, not an exact signature, so
+> partly fixing a defect does not start alerting. Verified against real data on
+> 28 Jul 2026: first run alerted all three, second recorded all three as known
+> baseline. Regenerate with `python3 lib/plan_audit.py --all --write-baseline`, or
+> just shrink the numbers as you fix things. See `docs/failure-alarm.md`.
+>
+> The rest of this page stands: the four defects below are still the work, and
+> "re-enable alerting" now means *shrink the baseline to zero*, not flip a switch.
 
 `ClaudeCoach/lib/plan_audit.py` runs daily via VM crontab at 06:25:
 ```
@@ -44,6 +64,7 @@ weekly-summary crash for three weeks (see review 2026-07-27).**
 
 ## Exit code
 
-Left honest — still `sys.exit(1 if any_hard else 0)`. A future baseline/diff
-mechanism can key off it; nothing currently consumes it, since cron output
-only reaches `plan-audit.log`.
+Left honest — still `sys.exit(1 if any_hard else 0)`, unchanged by the baseline
+gating: the gate decides how loud the log entry is, not whether the audit failed.
+Nothing currently consumes the exit code, since cron output only reaches
+`plan-audit.log`.

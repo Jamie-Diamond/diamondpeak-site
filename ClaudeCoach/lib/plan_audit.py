@@ -40,6 +40,16 @@ import plan_tools as pt                                        # noqa: E402
 import ops_log                                                 # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
+# Known-baseline signatures (committed, athlete-slug keyed). This check currently
+# hard-fails for all three athletes BY DESIGN — docs/plan-audit-status.md lists the
+# four real defects behind it. Unconditional ops_log.alert() therefore wrote three
+# ok=False entries into run-status.jsonl EVERY DAY, i.e. it poisoned the very
+# heartbeat store the failure alarm reads: a permanently-failing job trains the
+# reader to ignore ✗ lines. So a failure whose category signature MATCHES the
+# baseline is recorded as a success with the signature in the detail; a signature
+# that DIFFERS is still a real alert. New breakage is still visible; the known
+# backlog is not re-reported daily.
+BASELINE = BASE / "config" / "plan-audit-baseline.json"
 _STRUCTURED_SPORTS = {"Swim", "Run", "Ride", "GravelRide", "VirtualRide", "Brick"}
 _FUEL_SPORTS = {"Ride", "GravelRide", "VirtualRide", "Brick"}
 _LOAD_TOLERANCE = 0.15
@@ -130,15 +140,56 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
             "hard_fail": hard, "fails": {k: v for k, v in fails.items() if v}}
 
 
+def counts(report: dict) -> dict:
+    """Failure counts per category — the fingerprint the baseline is keyed on.
+
+    Category names + counts, never the per-item strings: those embed week dates
+    ("week 2026-08-03: 0 TSS vs ...") so they change every week even when the
+    underlying defect is identical, and a fingerprint that moves weekly is no
+    baseline at all.
+    """
+    if report.get("error"):
+        return {f"error:{report['error'].split(':')[0]}": 1}
+    return {k: len(v) for k, v in sorted((report.get("fails") or {}).items()) if v}
+
+
+def signature(report: dict) -> str:
+    c = counts(report)
+    return ",".join(f"{k}={n}" for k, n in c.items()) or "none"
+
+
+def _load_baseline() -> dict:
+    try:
+        return json.loads(BASELINE.read_text()).get("athletes", {})
+    except Exception:
+        return {}
+
+
+def within_baseline(report: dict, accepted: dict | None) -> bool:
+    """True when today's failures are all covered by the accepted baseline.
+
+    Counts, not equality: a category dropping BELOW its accepted count is an
+    improvement and must not alert, while a NEW category or a HIGHER count is
+    something that got worse today and must. Equality would alert every time a
+    defect was partly fixed — a fix that pages you is a fix nobody ships.
+    """
+    if not accepted:
+        return False
+    return all(n <= int(accepted.get(cat, -1)) for cat, n in counts(report).items())
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--athlete")
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--weeks", type=int, default=2)
+    ap.add_argument("--write-baseline", action="store_true",
+                    help="record the current signatures as the accepted baseline")
     args = ap.parse_args()
     athletes = json.loads(ATHLETES.read_text())
     slugs = ([s for s, c in athletes.items() if c.get("active", True)] if args.all
              else [args.athlete])
+    baseline = _load_baseline()
     reports, any_hard = [], False
     for slug in slugs:
         try:
@@ -146,15 +197,42 @@ def main():
         except Exception as e:
             r = {"athlete": slug, "error": f"{type(e).__name__}: {e}", "hard_fail": True}
         any_hard = any_hard or r.get("hard_fail")
+        sig = signature(r)
+        r["signature"] = sig
         reports.append(r)
         # Log-only alerting (ops chatter is log-only from 27 Jul 2026; no Telegram
         # routing here — an ops-alerts.log entry is picked up by the evening digest).
+        # Baseline-gated from 28 Jul 2026: a hard fail matching the accepted
+        # baseline signature is a KNOWN outstanding defect, not today's news, so it
+        # records ok=True and does not spend an alert. Anything else — a different
+        # signature, a new category, a higher count, or a clean-to-broken flip —
+        # still alerts.
         if r.get("hard_fail"):
             detail = r.get("error") or "; ".join(
                 f"{k}: {len(v)}" for k, v in (r.get("fails") or {}).items() if v)
-            ops_log.alert("plan_audit", detail or "hard invariant failed", athlete=slug)
+            if within_baseline(r, baseline.get(slug)):
+                ops_log.record_run("plan_audit", athlete=slug, ok=True,
+                                   detail=f"known baseline fail [{sig}] — see "
+                                          f"docs/plan-audit-status.md")
+            else:
+                was = baseline.get(slug) or "(no baseline)"
+                ops_log.alert("plan_audit", f"{detail or 'hard invariant failed'} "
+                                            f"[signature {sig}, baseline {was}]",
+                              athlete=slug)
         else:
             ops_log.record_run("plan_audit", athlete=slug, ok=True)
+    if args.write_baseline:
+        BASELINE.write_text(json.dumps(
+            {"_note": "Accepted plan_audit failure counts per category. A run at or "
+                      "below its athlete's accepted counts logs a success; a new "
+                      "category or a higher count alerts. Shrink these as the defects "
+                      "in docs/plan-audit-status.md are fixed (or regenerate with "
+                      "plan_audit.py --all --write-baseline); an empty map for an "
+                      "athlete means every hard fail alerts.",
+             "written": date.today().isoformat(),
+             "athletes": {r["athlete"]: counts(r) for r in reports}},
+            indent=1) + "\n")
+        print(f"baseline written to {BASELINE}", file=sys.stderr)
     print(json.dumps(reports, indent=1, ensure_ascii=False))
     sys.exit(1 if any_hard else 0)
 

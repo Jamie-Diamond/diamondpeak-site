@@ -14,6 +14,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
+import ops_log
 from progression import long_run_cap_km as _lr_cap
 from primitives.nutrition import recent_avg_g_hr
 import races as races_lib
@@ -180,6 +181,8 @@ def run_athlete(slug, athlete_cfg):
             _phase["race"], first_name, phase="race_eve",
             block_fact=_block_fact(athlete_cfg, date.today()),
             focus=_race_focus(slug, profile, athlete_cfg)), chat_id)
+        ops_log.record_run("night-before-brief", athlete=slug, ok=True,
+                           detail="sent (race eve)")
         return
     if _phase["phase"] == "race_day":
         # 20:30 on the EVENING OF the race. Nothing is sent: a generated session brief
@@ -187,6 +190,8 @@ def run_athlete(slug, athlete_cfg):
         # on a bad day the analysis "does not come the same day at all". The
         # acknowledgement is the morning-after card's job, not this surface's.
         print(f"[{slug}] race day — no night-before brief sent", file=sys.stderr)
+        ops_log.record_run("night-before-brief", athlete=slug, ok=True,
+                           detail="silent (race day, by design)")
         return
 
     prompt = _build_prompt(slug, first_name, ftp, css, run_threshold, race_name, injuries,
@@ -202,8 +207,24 @@ def run_athlete(slug, athlete_cfg):
     raw = (result.stdout or "").strip()
     m = _re.search(r"<telegram>(.*?)</telegram>", raw, _re.DOTALL)
     output = m.group(1).strip() if m else ""
+    # HEARTBEAT. Silence is a legitimate outcome here — the prompt is instructed to
+    # return empty <telegram></telegram> tags when there is nothing worth saying — so
+    # "ran and correctly stayed silent" is recorded as a SUCCESS with detail="silent".
+    # The gap check keys on the PRESENCE of an entry, not on its detail, so silence
+    # never reads as a missed brief. The one case that is NOT success is silence with
+    # no tags at all after a failed/empty model call: that is the model producing
+    # nothing, which looks identical to a correct silence in the athlete's thread and
+    # is precisely how a dead token would hide.
     if output:
         notify(output, chat_id)
+        ops_log.record_run("night-before-brief", athlete=slug, ok=True, detail="sent")
+    elif m:
+        ops_log.record_run("night-before-brief", athlete=slug, ok=True,
+                           detail="silent (empty tags — model chose silence)")
+    else:
+        ops_log.record_run("night-before-brief", athlete=slug, ok=False,
+                           detail=f"no <telegram> block in model output "
+                                  f"(rc={result.returncode}, auth_failed={result.auth_failed})")
 
 
 def main():
@@ -222,6 +243,9 @@ def main():
             run_athlete(slug, cfg)
         except Exception as exc:
             print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] night-before-brief error: {exc}", file=sys.stderr)
+            # A crash mid-athlete previously left NO trace in run-status.jsonl, so it
+            # was indistinguishable from the whole job never running.
+            ops_log.alert("night-before-brief", f"exception: {exc}", athlete=slug)
 
 
 if __name__ == "__main__":

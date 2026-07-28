@@ -11,6 +11,8 @@ NOTIFY          = BASE / "telegram/notify.py"
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 LOG_DIR         = Path.home() / "Library/Logs/ClaudeCoach"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+sys.path.insert(0, str(BASE / "lib"))
+import ops_log
 
 TOOLS = "Read,Bash"
 
@@ -89,6 +91,23 @@ def run_athlete(slug, athlete_cfg):
                 reminded_file.write_text(json.dumps((reminded_ids + new_ids)[-50:]))
             except Exception:
                 pass
+        ops_log.record_run("capture-reminder", athlete=slug, ok=True, detail="sent")
+    elif result.returncode == 0:
+        # HEARTBEAT. "No unlogged key session" is the COMMON case and the prompt
+        # demands total silence for it, so empty stdout on a clean exit is a success —
+        # it ran and correctly said nothing.
+        ops_log.record_run("capture-reminder", athlete=slug, ok=True,
+                           detail="silent (nothing unlogged)")
+    else:
+        # ...but empty stdout on a NON-ZERO exit is the CLI failing, not the model
+        # choosing silence, and the two are indistinguishable downstream. This script
+        # spawns the CLI directly rather than through claude_call, so it has no auth
+        # detection at all: without this branch a dead token would look like "correctly
+        # stayed silent" every night, forever.
+        tail = (result.stdout or "")[-200:].replace("\n", " ")
+        ops_log.record_run("capture-reminder", athlete=slug, ok=False,
+                           detail=f"claude CLI exited {result.returncode} with no "
+                                  f"<notify> block: {tail}")
 
 
 def main():
@@ -107,6 +126,7 @@ def main():
             run_athlete(slug, cfg)
         except Exception as exc:
             print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] capture-reminder error: {exc}", file=sys.stderr)
+            ops_log.alert("capture-reminder", f"exception: {exc}", athlete=slug)
 
 
 if __name__ == "__main__":

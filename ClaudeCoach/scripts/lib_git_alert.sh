@@ -18,7 +18,11 @@
 # loudness decision now lives in ONE place, lib/ops_log.py's sync_failure, so the
 # shell jobs and the Python jobs (lib/git_sync.py) cannot drift apart: first
 # failure is logged as transient, the second and beyond reach the evening digest,
-# and only a sync stuck for ESCALATE_AFTER runs still breaks through to Telegram.
+# and a sync failing ESCALATE_FAILS times in ESCALATE_WINDOW_H hours is ESCALATED.
+#
+# NOTHING here reaches Telegram from 28 Jul 2026: a stuck git sync is not one of the
+# two conditions allowed to interrupt the coach (see lib/coach_alert.py), so the
+# escalation is a louder log line and a digest cross, nothing more.
 #
 # The job label is what keys the consecutive-failure counter, so pass a STABLE
 # one - five jobs share this helper and each counts separately.

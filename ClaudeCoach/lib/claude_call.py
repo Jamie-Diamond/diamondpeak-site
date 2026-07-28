@@ -15,6 +15,7 @@ Sonnet -> Haiku keeps cheap/frequent jobs alive without draining the all-models
 pool the interactive bot relies on; quality-critical, low-frequency jobs pass
 fallback=[OPUS] and fall Sonnet -> Opus instead.
 """
+import os
 import re
 import subprocess
 import sys
@@ -89,6 +90,77 @@ def is_auth_failure(text: str) -> bool:
     if len(t) > 600:
         return False
     return bool(_AUTH_RE.search(t))
+
+
+def auth_failure_kind() -> str:
+    """WHY the CLI could not authenticate — and it matters, because the two cases
+    need opposite responses and used to produce an identical alert.
+
+      "token-expired"  : CLAUDE_CODE_OAUTH_TOKEN IS set and was rejected, in a
+                         non-interactive run. This is the production outage —
+                         every Claude-authored surface (morning card, brief,
+                         check-in, debrief, weekly card) is down at once.
+      "no-token"       : the variable is absent/empty. The run simply wasn't
+                         wrapped in /root/.claude/cc-run. Cron always is, so this
+                         is a hand-run, not an outage.
+      "interactive"    : a token exists but stdin is a tty — someone is sitting
+                         at a terminal and can read the error themselves.
+
+    Provenance, not wording, is what separates them: cc-run only execs the
+    command (no tty allocated), so cron runs are always non-interactive and
+    always carry the token.
+    """
+    if not (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip():
+        return "no-token"
+    try:
+        if sys.stdin.isatty() or sys.stderr.isatty():
+            return "interactive"
+    except Exception:
+        pass
+    return "token-expired"
+
+
+def _report_auth_failure(model: str, label: str = "") -> str:
+    """Log the auth failure at a severity matching its kind, and route ONLY the
+    production case to Telegram (via the one approved path). Returns the kind."""
+    kind = auth_failure_kind()
+    if kind == "token-expired":
+        msg = (f"PRODUCTION AUTH OUTAGE: CLI authentication FAILED on {model} with a"
+               f" CLAUDE_CODE_OAUTH_TOKEN present, non-interactively — the token has"
+               f" expired or been revoked. No fallback possible; every model shares"
+               f" this auth, so every Claude-authored message is down. Refresh"
+               f" /root/.claude/cc.env.")
+    elif kind == "no-token":
+        msg = (f"auth failed on {model} with NO CLAUDE_CODE_OAUTH_TOKEN in the"
+               f" environment — this is a hand-run outside /root/.claude/cc-run, not"
+               f" a production outage. Re-run via cc-run. Not escalated.")
+    else:
+        msg = (f"auth failed on {model} in an INTERACTIVE session — you are at a"
+               f" terminal and can see this; production cron is unaffected by"
+               f" definition. Not escalated.")
+    print(f"[{label or '?'}] AUTH-FAIL ({kind}): {msg}", file=sys.stderr, flush=True)
+    if _ops_log:
+        try:
+            if kind == "token-expired":
+                _ops_log.alert("claude_call", msg, athlete=label)
+            else:
+                # Not a failed run: nothing in production broke. Recorded so the
+                # digest can still show it happened, without a ✗ or a gap.
+                _ops_log.record_run("claude_call", athlete=label, ok=True, detail=msg)
+        except Exception:
+            pass
+    if kind == "token-expired":
+        try:
+            import coach_alert
+            coach_alert.send(
+                coach_alert.CLAUDE_AUTH_FAILED,
+                "⚠️ ClaudeCoach cannot reach Claude — the access token has expired, so "
+                "no coaching messages can be written until it is refreshed. "
+                "Nothing is lost; everything resumes once it is back.",
+                key="token-expired")
+        except Exception:
+            pass
+    return kind
 
 
 class ClaudeResult:
@@ -174,19 +246,11 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
         # AUTH FAILURE takes precedence over the limit/fallback logic: an
         # expired/invalid token fails identically on EVERY model, so falling
         # back is pointless and returning empty is dangerous (the caller reads
-        # it as "model produced nothing" and silently skips the work). Make it
-        # LOUD - ops_log alert (alert log + ops digest) and a stderr marker.
+        # it as "model produced nothing" and silently skips the work). How loud
+        # depends on WHY - see _report_auth_failure / auth_failure_kind.
         if is_auth_failure(out) or is_auth_failure(err):
             res.auth_failed = True
-            msg = (f"CLI authentication FAILED on {m} (token expired/invalid) -"
-                   f" no fallback possible; every model shares this auth. Refresh"
-                   f" CLAUDE_CODE_OAUTH_TOKEN (/root/.claude/cc.env).")
-            print(f"[{label or '?'}] AUTH-FAIL: {msg}", file=sys.stderr, flush=True)
-            if _ops_log:
-                try:
-                    _ops_log.alert("claude_call", msg, athlete=label)
-                except Exception:
-                    pass
+            _report_auth_failure(m, label)
             return res
 
         if limited and i < len(chain) - 1:
