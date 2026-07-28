@@ -58,7 +58,10 @@ class TestSyncCommitPush:
     def test_happy_path_runs_full_sequence(self, alerts):
         fake = FakeGit({"diff": 1})   # changes staged
         assert _sync(fake) is True
-        assert fake.subcommands() == ["add", "diff", "commit", "fetch", "rebase", "push"]
+        # "tree" is the secret gate (check-no-public-secrets.sh tree), run once
+        # before the first push attempt.
+        assert fake.subcommands() == ["add", "diff", "commit", "fetch", "rebase",
+                                      "tree", "push"]
         assert alerts == []
 
     def test_failed_commit_skips_push(self, alerts):
@@ -123,8 +126,10 @@ class TestPushRaceRetry:
 
         fake = RaceGit()
         assert _sync(fake) is True
+        # the secret gate ("tree") runs once before the first push attempt only,
+        # not again on the bounded retry.
         assert fake.subcommands() == ["add", "diff", "commit", "fetch", "rebase",
-                                      "push", "fetch", "rebase", "push"]
+                                      "tree", "push", "fetch", "rebase", "push"]
         assert alerts == []          # a race absorbed by the retry must be SILENT
 
     def test_retry_never_stages_or_commits(self, alerts):
@@ -139,6 +144,25 @@ class TestPushRaceRetry:
         fake = FakeGit({"diff": 1, "push": 1})
         assert _sync(fake) is False
         assert any("after one retry" in a for a in alerts)
+
+
+class TestSecretGate:
+    """check-no-public-secrets.sh tree runs before the first push attempt and
+    fails CLOSED (28 Jul 2026) — the repo had athlete health data and two live
+    credentials published for weeks before this landed. This is the property
+    the change exists to guarantee: a blocked gate must mean no push, ever."""
+
+    def test_gate_failure_blocks_the_push(self, alerts):
+        fake = FakeGit({"diff": 1, "tree": 1})   # gate rejects
+        assert _sync(fake) is False
+        assert "push" not in fake.subcommands()
+        assert any("secret gate BLOCKED the push" in a for a in alerts)
+
+    def test_gate_success_lets_the_push_through(self, alerts):
+        fake = FakeGit({"diff": 1, "tree": 0})   # gate clears
+        assert _sync(fake) is True
+        assert "push" in fake.subcommands()
+        assert alerts == []
 
 
 class TestRepoLock:
