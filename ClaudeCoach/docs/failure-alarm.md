@@ -199,10 +199,13 @@ Three defences, in increasing strength:
    get wrong.
 2. **`parse_cron` raises rather than guesses.** A spec it cannot read fails
    `test_every_deliverable_declares_a_parseable_schedule_and_a_since`.
-3. **The declared schedule is cross-checked against the live crontab.**
-   `test_declared_schedules_match_the_live_crontab` compares parsed value sets,
-   so declaring 05:00 for a job that really runs at 23:50 fails the build, and
-   so does registering a deliverable with *no* crontab entry at all.
+3. **The schedule is read from the live crontab at run time.** As of the
+   cron-derived registry (below) the declared `cron` is only a fallback: every
+   due time comes from the line cron will actually run, and a declaration that
+   disagrees with reality is reported loudly while reality is used. The
+   build-time check (`test_declared_schedules_match_the_live_crontab`) stays as
+   a second net, but it is no longer the only one — it `pytest.skip`s where
+   there is no crontab, and a skipped test defends nothing at 21:30.
 
 Defence 3 earned itself immediately. It caught that `capture-reminder`'s cron
 line (`10 20 * * *`) had been **removed from the live crontab** while this was
@@ -265,6 +268,115 @@ whole-job failure into **one** message that *names* the affected athletes, so
 the cost is a more useful message body rather than three messages — and
 `weekly-plan.sh` invokes `stage1-plan.py` once per athlete, so a single-athlete
 failure is a real shape that `per_athlete: False` would hide.
+
+## The registry is derived from the crontab, not trusted (28 Jul 2026)
+
+`DELIVERABLES` was hand-maintained, and it drifted **twice in one day** — once
+in each possible direction:
+
+1. `backup-config` was registered with a hand-declared time (23:50) that the
+   21:30 digest could never see satisfied. It would have alerted every night in
+   perpetuity about a job that was working.
+2. `capture-reminder` stayed registered after its cron entry was deleted. It
+   would have printed a false gap line every night in perpetuity.
+
+Both were caught by eye, hours apart. A third would not be. The registry is now
+**diffed against the live crontab on every run**, keyed on the script filename,
+and any mismatch is reported loudly into `ops-alerts.log` and the digest.
+
+### The direction that matters most
+
+The two incidents above are both *registry → cron* drift, which is **noisy**: it
+produces a false alarm that somebody eventually investigates. The dangerous
+direction is the mirror image nobody had thought of — **a cron entry with no
+registry entry** — which is **silent**. That is a scheduled job nobody watches,
+and it is exactly how the weekly report vanished for three weeks with nothing
+but a log line to show for it. `coach_alert._registry_problems()` checks both.
+
+### Authoritative source
+
+`crontab -l` for root — the actual thing cron executes.
+
+**Not** `ClaudeCoach/system/crontab.template`. That file is a sanitised rebuild
+reference and is itself demonstrably stale: as of 28 Jul 2026 it still lists
+`capture-reminder`, has five wrong times (`refresh-site-data` 06:00 vs 06:20,
+`cc-gitpull` `*/30` vs `5,35`, `refresh-public-data` `0 *` vs `9 *`,
+`backup-config` 23:00 vs 23:50) and is missing `plan_audit.py` entirely.
+Diffing against it would have verified one hand-maintained file against another
+— the same bug, one layer down. **Fixing the template is a separate job.**
+
+### What the audit reports
+
+| Condition | Reported | Judged? |
+|---|---|---|
+| Registered, no live cron entry, no `no_cron` | loud `⚠ CRON AUDIT` | **no** — `NO_CRON_ENTRY`. A job that is not scheduled cannot run, so a gap line about it is a false alarm about the *registry*. This is capture-reminder, detected instead of eyeballed. |
+| Registered, no cron entry, `no_cron: "reason"` | nothing | yes, on the declared schedule |
+| Annotated `no_cron` but a live entry exists | loud — stale annotation | no (the annotation is used) |
+| Declared `cron` disagrees with the live line | loud | yes, **on the live line**. Reality wins; the declaration is a fallback. |
+| Live cron entry, no registration, no exemption | loud | n/a — nothing watches it |
+| Live cron entry, listed in `CRON_EXEMPT` | nothing | n/a — by reviewed decision |
+| `CRON_EXEMPT` name with no live entry | loud — stale exemption | n/a |
+| Two cron entries for one job | loud | yes, on the **first** — approximate, and says so |
+| Live schedule this parser cannot read | loud | yes, on the declared schedule (a parser limit must not un-check a job) |
+| `crontab -l` unreadable | loud "NOT verified" | yes, whole registry on declared schedules |
+| `crontab -l` readable but with no ClaudeCoach jobs in it | loud "NOT verified" | yes — a crontab with none of our jobs is one read from the wrong account, not one where every deliverable was deregistered; trusting it would silence all ten at once |
+
+Mismatches are **log-only**. Registry drift is an engineering fault, not one of
+the two conditions Jamie approved for interrupting him, and this deliberately
+does not widen that surface. Lines go to the top of the digest so `MAX_LINES`
+truncation cannot hide them, and to `ops-alerts.log` via
+`ops_log.alert("cron-audit", …)` — its own script name, because `"coach-alert"`
+means *the alarm could not reach Jamie* and overloading it would make a config
+fault indistinguishable from a delivery fault in the same log. `cron-audit` is
+`FAILURE`-class in `OUTCOME_CLASS`, so it never surfaces as an `UNCLASSIFIED`
+line.
+
+### Which scheduled jobs legitimately need no deliverable
+
+`coach_alert.CRON_EXEMPT` — a table of script filename → **why**, so the
+decision is reviewable in a diff instead of being an implicit rule in somebody's
+head. Every reason was checked against the script's `ops_log` usage, not
+assumed. Currently exempt: `ops-digest.py` (this alarm itself — a deliverable
+would ask it to detect its own absence), `cc-gitpull.sh` and `bot-watchdog.py`
+(plumbing that only speaks when something is wrong, no success heartbeat to look
+for), `refresh-public-data.py` and `refresh-site-data.py` (site data
+regeneration, no `ops_log` instrumentation, nothing delivered to an athlete or
+the coach), `bug-fixer.py` (everything it does is already a digest line by
+construction) and `plan_audit.py` (`FINDING`-class, baseline-gated, its whole
+output *is* digest lines).
+
+**Open finding, 28 Jul 2026.** Two live jobs are neither registered nor exempt,
+and the audit reports both every night until somebody decides:
+
+- **`sync-private-repo.sh` (23:20 daily)** — the sharp one. It calls
+  `lib_git_alert.sh`'s `git_sync_ok "sync-private"`, so it *does* write a
+  heartbeat, and **nothing reads it**. That is the weekly-report shape exactly:
+  a job with a heartbeat and no watcher. It also sits twenty minutes before
+  `backup-config.sh`, which is registered precisely because it is the only
+  off-box copy of credentials and health data.
+- **`activity-watcher.py` (every 5 min)** — writes per-athlete `record_run`
+  heartbeats. It is the ingest everything downstream depends on.
+
+Neither was registered here on purpose: adding a deliverable needs a `since`
+instrumentation date and would change the alarm's blast radius, which is a
+decision for the owner, not a side effect of wiring up the audit.
+
+### Fail safe
+
+If `crontab -l` cannot be read at all — non-zero exit, empty output, no
+`crontab` binary, a timeout — `cron_audit()` returns `verified=False`, the gap
+check carries on **off the static registry exactly as before**, and the digest
+carries a loud line saying the registry was not verified this run. The two
+failure modes that matter are opposite, and both are avoided: the alarm is never
+silently disabled, and it never starts alerting on everything. An unreadable
+crontab is deliberately **not** the same as an absent entry: absent means "this
+cannot run, do not judge it", unreadable means "we cannot tell, keep judging".
+
+The audit also never raises. `parse_crontab` turns anything it cannot
+understand — cron nicknames, short lines, unparseable specs — into a problem
+line, and `cron_audit()` has a belt-and-braces `except` around the whole thing,
+because an exception at 21:30 would take the digest down and the alarm would go
+quiet: the exact failure mode this file exists to prevent.
 
 ## Weekly deliverables: one miss, one message
 

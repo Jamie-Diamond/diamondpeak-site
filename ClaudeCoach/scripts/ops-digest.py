@@ -49,6 +49,17 @@ coach_alert.due_status() gates the check on both. A deliverable scheduled after
 this digest is judged on its PREVIOUS cycle rather than skipped. Full reasoning:
 docs/failure-alarm.md, "Nothing is judged before it could have happened".
 
+Changed 28 Jul 2026 — THE REGISTRY IS DERIVED, NOT TRUSTED. coach_alert.DELIVERABLES
+was hand-maintained and drifted twice in one day: backup-config was registered with
+a time the digest could never see satisfied, and capture-reminder stayed registered
+after its cron entry was deleted. Every run now diffs the registry against
+`crontab -l` in BOTH directions — a registration with no cron entry, and (the one
+that matters) a cron entry nobody watches — derives every due time from the live
+schedule, and reports any mismatch as a loud CRON AUDIT line at the TOP of the
+digest plus an ops_log.alert. Registry drift is an engineering fault, so it is
+log-only: it never reaches Telegram. If the crontab cannot be read the gap check
+carries on off the static registry and says so. See coach_alert.cron_audit().
+
 Safe to run manually: python3 ClaudeCoach/scripts/ops-digest.py
   CC_ALERT_DRY_RUN=1 python3 .../ops-digest.py   # never sends; logs what it would
 
@@ -200,6 +211,13 @@ def not_due_line(d: dict, due, state: str) -> str:
     or never-instrumented deliverable could sit unchecked for ever with nothing
     to show. The line names the reason and the moment it starts being judged.
     """
+    if state == coach_alert.NO_CRON_ENTRY:
+        # The capture-reminder case, now detected instead of eyeballed. Not judged,
+        # because a job with no crontab entry cannot run and reporting it missing
+        # would be a false alarm about the REGISTRY. cron_audit() has already put a
+        # loud CRON AUDIT line at the top of this digest naming the fix.
+        return (f"\u2139 {d['label']} not judged \u2014 {d['cron_cmd']} has no live crontab "
+                f"entry, so it cannot run (see the CRON AUDIT line above)")
     if state == coach_alert.PRE_INSTRUMENTATION:
         return (f"ℹ {d['label']} not judged yet — its last scheduled run "
                 f"({due:%a %d %b %H:%M}) predates the heartbeat instrumentation "
@@ -208,7 +226,7 @@ def not_due_line(d: dict, due, state: str) -> str:
             f"(cron {d['cron']})")
 
 
-def gap_lines(today_entries, week_entries, athletes, now=None) -> tuple[list[str], list[str]]:
+def gap_lines(today_entries, week_entries, athletes, now=None, audit=None) -> tuple[list[str], list[str]]:
     """(all gap lines, the subset of DAILY misses that may interrupt the coach).
 
     Gap lines report the absence of a SUCCESSFUL heartbeat — either nothing was
@@ -235,6 +253,12 @@ def gap_lines(today_entries, week_entries, athletes, now=None) -> tuple[list[str
     this digest runs) is judged over the window since that moment rather than
     "today" — so last night's 23:50 backup is checked tonight, giving real 24-hour
     detection instead of the alternative of never checking it at all.
+
+    Changed 28 Jul 2026 — the due moment is DERIVED from the live crontab. `audit`
+    is coach_alert.cron_audit(); with it, the schedule each deliverable is judged
+    against is the line cron will actually run, and a deliverable with no cron line
+    at all is not judged (NO_CRON_ENTRY) because it cannot run. Without it, the
+    declared schedules are used — the hermetic test path and the fail-safe path.
     """
     now = now or datetime.now()
     day_start = datetime.combine(now.date(), time.min)
@@ -253,7 +277,7 @@ def gap_lines(today_entries, week_entries, athletes, now=None) -> tuple[list[str
     # "exit -1" (FAILURE-class, so both functions agree), and daily-prescription
     # has never recorded ok=False at all.
     for d in coach_alert.DELIVERABLES:
-        due, state = coach_alert.due_status(d, now)
+        due, state = coach_alert.due_status(d, now, audit)
         if state != coach_alert.DUE:
             lines.append(not_due_line(d, due, state))
             continue
@@ -283,7 +307,7 @@ def gap_lines(today_entries, week_entries, athletes, now=None) -> tuple[list[str
     return lines, telegram
 
 
-def weekly_alerts(week_entries, athletes, now=None) -> list[str]:
+def weekly_alerts(week_entries, athletes, now=None, audit=None) -> list[str]:
     """Telegram condition 1 for WEEKLY deliverables — split out from gap_lines()
     because it needs occurrence-based alerting, not the daily per-day key.
 
@@ -312,7 +336,10 @@ def weekly_alerts(week_entries, athletes, now=None) -> list[str]:
         # NOR clear_cooldown: clearing on a cycle we did not actually check would
         # discard a cooldown banked for a real, still-unfixed miss. The first cycle
         # that is genuinely checked does the clearing.
-        if coach_alert.due_status(d, now)[1] != coach_alert.DUE:
+        # NO_CRON_ENTRY lands here too, and correctly: a weekly deliverable whose
+        # cron entry has been deleted must not Telegram, and must not clear a
+        # cooldown banked for a real earlier miss either.
+        if coach_alert.due_status(d, now, audit)[1] != coach_alert.DUE:
             continue
         targets = list(active) if d["per_athlete"] else [None]
         missing = [slug for slug in targets
@@ -382,10 +409,21 @@ def main():
     today   = todays_entries(entries)
     week    = since(entries, WEEKLY_WINDOW_DAYS)
 
-    lines = build_digest(today, athletes)
+    # Diff the deliverable registry against the live crontab, BOTH directions, and
+    # derive every due time from what cron will actually do. Problems go first in
+    # the digest so MAX_LINES truncation can never hide them, and to ops-alerts.log
+    # via ops_log.alert under its own script name (not "coach-alert", which means
+    # "the alarm could not reach Jamie"). Deliberately NOT a Telegram condition:
+    # only the two Jamie approved may interrupt him, and registry drift is neither.
+    audit = coach_alert.cron_audit()
+    for problem in audit.problems:
+        ops_log.alert("cron-audit", problem)
+
+    lines = list(audit.problems)
+    lines += build_digest(today, athletes)
     # One `now` for the whole run: gap_lines and weekly_alerts must agree on what
     # is due, and two datetime.now() calls either side of midnight would not.
-    gaps, missing_deliverables = gap_lines(today, week, athletes, now=now)
+    gaps, missing_deliverables = gap_lines(today, week, athletes, now=now, audit=audit)
     lines += gaps
     lines += unclassified_lines(today)
     lines += plan_sanity(athletes)
@@ -404,7 +442,7 @@ def main():
             key=date.today().isoformat())
         print(f"coach-alert deliverable_missing: {action} ({what})", file=sys.stderr)
 
-    weekly_alerts(week, athletes, now=now)
+    weekly_alerts(week, athletes, now=now, audit=audit)
 
     if not lines:
         print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] ops-digest: all clean", file=sys.stderr)

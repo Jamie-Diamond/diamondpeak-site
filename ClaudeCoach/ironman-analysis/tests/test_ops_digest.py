@@ -929,3 +929,425 @@ class TestDueWindows:
                 self.test_declared_schedules_match_the_live_crontab()
             finally:
                 ca.DELIVERABLES = saved
+
+
+CC = "/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach"
+
+# The live root crontab of 28 Jul 2026, shape for shape, because the parser has to
+# survive all of it: banner comments, a MAILTO line, a commented-OUT job, `bash
+# x.sh` and `python3 x.py --flag` forms, two styles of redirection (`>> path 2>&1`
+# and a `~`-relative log path), the cc-run token wrapper, a job outside the repo
+# tree (/usr/local/bin/cc-gitpull.sh), a job under lib/ rather than scripts/, and a
+# foreign product sharing the same crontab (expense-bot).
+_CRON_LINES = [
+    "#",
+    "# ClaudeCoach root crontab",
+    'MAILTO=""',
+    f"0 20 * * 0 /root/.claude/cc-run bash {CC}/scripts/weekly-summary.sh",
+    f"0 18 * * 0 /root/.claude/cc-run bash {CC}/scripts/weekly-plan.sh >> /root/Library/Logs/ClaudeCoach/weekly-plan.log 2>&1",
+    f"0 21 * * * /root/.claude/cc-run python3 {CC}/scripts/evening-checkin.py >> /root/Library/Logs/ClaudeCoach/evening-checkin.log 2>&1",
+    "# 0 5 * * 1 tar -zcf /var/backups/home.tgz /home/",
+    f"0 5 * * * /root/.claude/cc-run python3 {CC}/scripts/daily-prescription.py >> /root/Library/Logs/ClaudeCoach/daily-prescription.log 2>&1",
+    f"20 6 * * * /root/.claude/cc-run python3 {CC}/scripts/refresh-site-data.py",
+    f"2-57/5 * * * * /root/.claude/cc-run python3 {CC}/scripts/activity-watcher.py",
+    f"*/30 6-9 * * * /root/.claude/cc-run python3 {CC}/scripts/morning-checkin.py >> /root/Library/Logs/ClaudeCoach/morning-checkin.log 2>&1",
+    f"30 5 * * * /root/.claude/cc-run python3 {CC}/scripts/watchdog.py >> /root/Library/Logs/ClaudeCoach/watchdog.log 2>&1",
+    "5,35 * * * * /root/.claude/cc-run /usr/local/bin/cc-gitpull.sh",
+    f"9 * * * * /root/.claude/cc-run python3 {CC}/scripts/refresh-public-data.py >> /root/Library/Logs/ClaudeCoach/public-data.log 2>&1",
+    f"30 20 * * * /root/.claude/cc-run python3 {CC}/scripts/night-before-brief.py >> /root/Library/Logs/ClaudeCoach/night-before-brief.log 2>&1",
+    f"40 7-22/2 * * * /root/.claude/cc-run python3 {CC}/scripts/session-sync.py >> /root/Library/Logs/ClaudeCoach/session-sync.log 2>&1",
+    f"50 23 * * * /root/.claude/cc-run bash {CC}/scripts/backup-config.sh >> ~/Library/Logs/ClaudeCoach/backup.log 2>&1",
+    f"30 21 * * * /root/.claude/cc-run python3 {CC}/scripts/ops-digest.py >> /root/Library/Logs/ClaudeCoach/ops-digest.log 2>&1",
+    f"*/5 * * * * /root/.claude/cc-run python3 {CC}/scripts/bot-watchdog.py >> /root/Library/Logs/ClaudeCoach/bot-watchdog.log 2>&1",
+    "0 9 * * 1 /root/.claude/cc-run /Users/diamondpeakconsulting/expense-bot/scripts/backup_staleness_alert.sh >> /root/backup-staleness.log 2>&1",
+    f"0 0 * * * /root/.claude/cc-run python3 {CC}/scripts/bug-fixer.py --fix >> /root/Library/Logs/ClaudeCoach/bug-fixer.log 2>&1",
+    f"20 23 * * * /root/.claude/cc-run bash {CC}/scripts/sync-private-repo.sh >> ~/Library/Logs/ClaudeCoach/sync-private.log 2>&1",
+    f"25 6 * * * /root/.claude/cc-run python3 {CC}/lib/plan_audit.py --all >> /root/Library/Logs/ClaudeCoach/plan-audit.log 2>&1",
+]
+
+# The two live entries that are neither registered nor exempt as of 28 Jul 2026 —
+# the genuine finding the cron->registry direction turned up on its first run.
+# Dropped from the fixture wherever a test needs a drift-free crontab, so that "no
+# problems" means "the mechanism is quiet when there is nothing to say" rather than
+# baking the finding in as acceptable.
+LIVE_UNWATCHED = ("activity-watcher.py", "sync-private-repo.sh")
+
+
+def _script_of(line: str) -> str:
+    """The script filename a fixture line runs — for the fixture's OWN bookkeeping.
+    Deliberately not coach_alert's parser: a helper that shares the code under test
+    could hide a parser bug from every test built on it."""
+    for tok in line.split():
+        if any(m in tok for m in ("/scripts/", "/lib/", "/usr/local/bin/")):
+            return tok.rsplit("/", 1)[-1]
+    return ""
+
+
+def crontab(drop=(), extra=(), replace=None):
+    """The fixture crontab, minus `drop` (by script filename), plus `extra` lines.
+
+    `replace` maps a script filename to a different 5-field schedule, for testing a
+    declaration that disagrees with reality.
+    """
+    out = []
+    for line in _CRON_LINES:
+        if line.startswith("#"):
+            out.append(line)
+            continue
+        name = _script_of(line)
+        if name and name in drop:
+            continue
+        if replace and name in replace:
+            out.append(" ".join(replace[name].split() + line.split()[5:]))
+            continue
+        out.append(line)
+    return "\n".join(out + list(extra)) + "\n"
+
+
+class TestCronDerivedRegistry:
+    """coach_alert.DELIVERABLES is DERIVED from `crontab -l`, not trusted.
+
+    The registry drifted twice in one day, once in each possible direction:
+      1. backup-config registered with a hand-declared time the 21:30 digest could
+         never see satisfied -> a false alarm every night, for ever.
+      2. capture-reminder left registered after its cron entry was deleted -> a
+         false gap line every night, for ever.
+    Both were caught by eye. Every run now diffs both directions and reports loudly
+    into ops-alerts.log. The direction that matters most is (2)'s mirror image,
+    which nobody had thought of: a cron entry with NO registry entry. Drift that way
+    is SILENT — a scheduled job nobody watches, which is how the weekly report
+    vanished for three weeks.
+    """
+
+    today = staticmethod(lambda **kw: TestGapLines().today(**kw))
+    week = staticmethod(lambda: TestGapLines().week())
+
+    def audit(self, **kw):
+        import coach_alert as ca
+        return ca.cron_audit(text=crontab(**kw))
+
+    # --- the parser ---------------------------------------------------------
+    def test_parses_every_shape_in_the_real_crontab(self):
+        a = self.audit()
+        assert a.verified
+        assert a.schedules["weekly-summary.sh"] == "0 20 * * 0"   # bash + no redirect
+        assert a.schedules["bug-fixer.py"] == "0 0 * * *"         # `--fix` skipped
+        assert a.schedules["cc-gitpull.sh"] == "5,35 * * * *"     # outside the repo
+        assert a.schedules["plan_audit.py"] == "25 6 * * *"       # lib/, not scripts/
+        assert a.schedules["backup-config.sh"] == "50 23 * * *"   # `~` log path
+        assert a.schedules["session-sync.py"] == "40 7-22/2 * * *"
+        # a redirection target is never mistaken for the script being run
+        assert not any(n.endswith(".log") for n in a.schedules)
+
+    def test_a_commented_out_job_is_not_live(self):
+        """`# 0 5 * * 1 tar -zcf ...` must read as neither a scheduled job nor a
+        problem."""
+        a = self.audit()
+        assert "tar" not in a.present
+        assert not any("tar" in p for p in a.problems)
+
+    def test_a_foreign_product_sharing_the_crontab_is_ignored(self):
+        """expense-bot is somebody else's job. Excluded by PATH rather than by name,
+        so a second foreign product needs no code change — and so ClaudeCoach jobs
+        that live OUTSIDE the repo (cc-gitpull.sh) are still caught."""
+        a = self.audit()
+        assert "backup_staleness_alert.sh" not in a.present
+        assert not any("expense" in p or "staleness" in p for p in a.problems)
+
+    def test_crontab_furniture_is_not_a_problem_line(self):
+        assert not any("MAILTO" in p for p in self.audit().problems)
+
+    def test_a_drift_free_crontab_is_silent(self):
+        """The mechanism must say nothing when there is nothing to say, or its output
+        becomes noise and the next real drift gets scrolled past."""
+        assert self.audit(drop=LIVE_UNWATCHED).problems == []
+
+    # --- DIRECTION 1: registered, but not scheduled -------------------------
+    def test_a_registered_deliverable_with_no_cron_entry_is_reported(self):
+        """capture-reminder's fault, detected instead of eyeballed."""
+        a = self.audit(drop=LIVE_UNWATCHED + ("evening-checkin.py",))
+        assert len(a.problems) == 1, a.problems
+        assert "evening-checkin.py has NO live crontab entry" in a.problems[0]
+        assert "evening check-in" in a.problems[0]
+
+    def test_a_deliverable_with_no_cron_entry_is_NOT_judged(self, digest):
+        """The half that stops the fix becoming the bug. A job with no crontab entry
+        CANNOT run, so a gap line saying it did not is a false alarm about the
+        REGISTRY, not a finding about the job — that is precisely capture-reminder.
+        evening-checkin is telegram=True, which is what makes this the sharp case.
+        """
+        import coach_alert as ca
+        a = self.audit(drop=("evening-checkin.py",))
+        d = next(x for x in ca.DELIVERABLES if x["script"] == "evening-checkin")
+        assert ca.due_status(d, NOW, a)[1] == ca.NO_CRON_ENTRY
+        today = self.today(drop=(("evening-checkin", "jamie"),
+                                 ("evening-checkin", "kathryn")))
+        gaps, tg = digest.gap_lines(today, today + self.week(), ATHLETES,
+                                    now=NOW, audit=a)
+        assert tg == [], f"would have Telegrammed a registry bug: {tg}"
+        assert not any(l.startswith("\u26a0") and "evening check-in" in l for l in gaps)
+        # ...but never silently: not judged is visible and names the reason.
+        info = [l for l in gaps if l.startswith("\u2139") and "evening check-in" in l]
+        assert len(info) == 1 and "no live crontab entry" in info[0]
+
+    def test_a_weekly_deliverable_with_no_cron_entry_neither_alerts_nor_clears(
+            self, digest, logs, monkeypatch):
+        """A cooldown banked for a real, still-unfixed weekly miss must survive a
+        cycle that was not actually checked — otherwise deleting a cron entry would
+        silently re-arm the alarm and re-Telegram an incident already sent."""
+        import coach_alert as ca
+        monkeypatch.setattr(ca, "STATE", logs / "coach-alert-state.json")
+        monkeypatch.setattr(ops_log, "ALERT_LOG", logs / "ops-alerts.log")
+        key = f"{ca.DELIVERABLE_MISSING}|weekly:weekly-summary"
+        ca._write_state({key: "2026-08-02T21:30:00"})
+        a = self.audit(drop=("weekly-summary.sh",))
+        assert digest.weekly_alerts([], ATHLETES, now=NOW, audit=a) == []
+        assert key in ca._read_state()
+
+    # --- DIRECTION 2: scheduled, but nobody watches it ----------------------
+    def test_a_scheduled_job_nobody_watches_is_reported(self):
+        """THE ONE NOBODY THOUGHT OF, and the one that matters most: drift this way
+        is silent. A new cron entry with no deliverable and no exemption is how the
+        weekly report went missing for three weeks."""
+        new = (f"15 4 * * * /root/.claude/cc-run python3 {CC}/scripts/new-thing.py "
+               f">> /root/Library/Logs/ClaudeCoach/new-thing.log 2>&1")
+        a = self.audit(drop=LIVE_UNWATCHED, extra=(new,))
+        assert len(a.problems) == 1, a.problems
+        assert "new-thing.py runs on the live crontab (15 4 * * *)" in a.problems[0]
+        assert "NOTHING" in a.problems[0]
+
+    def test_the_two_currently_unwatched_live_jobs_are_reported(self):
+        """The finding this direction produced on its first run against the real
+        crontab. Neither is registered and neither is exempt; sync-private-repo.sh
+        even writes a heartbeat (lib_git_alert.sh's git_sync_ok "sync-private") that
+        nothing reads. Asserted so the finding cannot quietly be lost — the correct
+        way to make this test go away is to register or exempt them."""
+        a = self.audit()
+        for name in LIVE_UNWATCHED:
+            assert any(name in p and "NOTHING" in p for p in a.problems), name
+
+    def test_every_exemption_carries_a_reason_and_is_silent(self):
+        """The exemptions are a reviewable table, not an implicit rule in someone's
+        head — that is the whole point of making the decision explicit. A blank
+        reason would put us straight back where we started."""
+        import coach_alert as ca
+        for name, reason in ca.CRON_EXEMPT.items():
+            assert isinstance(reason, str) and len(reason) > 40, name
+        a = self.audit(drop=LIVE_UNWATCHED)
+        for name in ca.CRON_EXEMPT:
+            assert not any(name in p for p in a.problems), name
+
+    def test_a_stale_exemption_is_reported_too(self):
+        """An exemption for a job that no longer exists is the same class of drift as
+        a stale registration, and would quietly authorise the next job to reuse the
+        name unwatched."""
+        a = self.audit(drop=LIVE_UNWATCHED + ("bot-watchdog.py",))
+        assert len(a.problems) == 1, a.problems
+        assert "bot-watchdog.py is listed in CRON_EXEMPT" in a.problems[0]
+        assert "stale" in a.problems[0]
+
+    def test_the_digests_own_schedule_is_verified_not_assumed(self):
+        """Every due-time margin in coach_alert is reasoned against a 21:30 digest.
+        If that slot moves, the reasoning is wrong and nothing else would notice."""
+        a = self.audit(drop=LIVE_UNWATCHED, replace={"ops-digest.py": "0 12 * * *"})
+        assert any("DIGEST_CRON" in p and "0 12 * * *" in p for p in a.problems)
+
+    # --- the due time is DERIVED, not declared ------------------------------
+    def test_the_due_time_comes_from_the_crontab_not_the_declaration(self):
+        """The backup-config class of bug at the root. Declare 05:00 for a job that
+        really runs at 23:50 and the check is mis-timed for ever; now the live line
+        wins and the declaration is reported."""
+        import coach_alert as ca
+        a = self.audit(drop=LIVE_UNWATCHED, replace={"backup-config.sh": "0 5 * * *"})
+        d = next(x for x in ca.DELIVERABLES if x["script"] == "backup-config")
+        assert d["cron"] == "50 23 * * *"                   # the declaration
+        assert ca.effective_cron(d, a) == "0 5 * * *"        # reality wins
+        assert ca.due_status(d, NOW, a)[0] == datetime(2026, 8, 5, 5, 0)
+        assert ca.due_status(d, NOW)[0] == datetime(2026, 8, 4, 23, 50)
+        assert any("declares cron '50 23 * * *'" in p and "0 5 * * *" in p
+                   for p in a.problems)
+
+    def test_a_correct_declaration_produces_no_problem_and_the_same_time(self):
+        import coach_alert as ca
+        a = self.audit(drop=LIVE_UNWATCHED)
+        for d in ca.DELIVERABLES:
+            assert ca.effective_cron(d, a) == d["cron"], d["script"]
+            assert ca.due_status(d, NOW, a) == ca.due_status(d, NOW), d["script"]
+
+    # --- the annotated exception -------------------------------------------
+    def test_an_annotated_no_cron_deliverable_is_accepted_and_still_judged(
+            self, monkeypatch):
+        import coach_alert as ca
+        d = dict(ca.DELIVERABLES[0], script="ghost", cron_cmd="no-such-job.py",
+                 no_cron="triggered by the bot, not by cron")
+        monkeypatch.setattr(ca, "DELIVERABLES", [d])
+        a = self.audit(drop=LIVE_UNWATCHED)
+        assert not any("ghost" in p or "no-such-job" in p for p in a.problems)
+        # annotated means "trust the declared schedule", NOT "stop checking"
+        assert ca.due_status(d, NOW, a)[1] == ca.DUE
+
+    def test_a_stale_no_cron_annotation_is_reported(self, monkeypatch):
+        """The annotation is reviewed at registration time; if the job is later given
+        a real cron entry the review is out of date, and the declared schedule would
+        be used in place of the real one."""
+        import coach_alert as ca
+        d = dict(ca.DELIVERABLES[0], script="watchdog", cron_cmd="watchdog.py",
+                 no_cron="not scheduled")
+        monkeypatch.setattr(ca, "DELIVERABLES", [d])
+        a = self.audit(drop=LIVE_UNWATCHED)
+        assert any("annotated no_cron" in p and "stale" in p for p in a.problems)
+
+    # --- FAIL SAFE ---------------------------------------------------------
+    def test_an_unreadable_crontab_keeps_the_alarm_working_and_says_so(
+            self, digest, monkeypatch):
+        """Two failure modes to avoid, in opposite directions: silently disabling the
+        alarm, and starting to alert on everything. Neither happens — the check runs
+        off the static registry exactly as before, and the fact that it could not be
+        verified is a loud line."""
+        import coach_alert as ca
+        monkeypatch.setattr(ca, "read_crontab", lambda: None)
+        a = ca.cron_audit()
+        assert a.verified is False
+        assert a.schedules == {} and a.present == set()
+        assert len(a.problems) == 1 and "NOT verified" in a.problems[0]
+        # every deliverable is still judged, on its declared schedule
+        for d in ca.DELIVERABLES:
+            assert ca.due_status(d, NOW, a) == ca.due_status(d, NOW), d["script"]
+        # ...and a real miss still reaches Telegram
+        today = self.today(drop=(("morning-checkin", "jamie"),))
+        gaps, tg = digest.gap_lines(today, today + self.week(), ATHLETES,
+                                    now=NOW, audit=a)
+        assert tg == ["morning card for jamie"]
+
+    def test_an_empty_or_failing_crontab_command_reads_as_unreadable(self, monkeypatch):
+        """`crontab -l` exits non-zero with "no crontab for root", and an empty
+        crontab is indistinguishable from a broken read — treating either as "no jobs
+        exist" would report every deliverable as unscheduled at once."""
+        import coach_alert as ca
+
+        class R:
+            def __init__(self, rc, out):
+                self.returncode, self.stdout = rc, out
+
+        monkeypatch.setattr(ca.subprocess, "run", lambda *a, **k: R(1, ""))
+        assert ca.read_crontab() is None
+        monkeypatch.setattr(ca.subprocess, "run", lambda *a, **k: R(0, "\n \n"))
+        assert ca.read_crontab() is None
+
+        def boom(*a, **k):
+            raise OSError("no crontab binary")
+        monkeypatch.setattr(ca.subprocess, "run", boom)
+        assert ca.read_crontab() is None
+
+    def test_a_readable_crontab_with_no_claudecoach_jobs_reads_as_unverified(self):
+        """A crontab with not one ClaudeCoach job in it is not a crontab where every
+        deliverable has been deregistered — it is a crontab read from the wrong
+        account. Trusting it would mark all ten deliverables NO_CRON_ENTRY and
+        silence the alarm entirely for that run."""
+        import coach_alert as ca
+        a = ca.cron_audit(text="0 9 * * 1 /root/.claude/cc-run "
+                               "/Users/diamondpeakconsulting/expense-bot/scripts/x.sh\n")
+        assert a.verified is False
+        assert "NOT verified" in a.problems[0] and "no ClaudeCoach jobs" in a.problems[0]
+        d = next(x for x in ca.DELIVERABLES if x["script"] == "evening-checkin")
+        assert ca.due_status(d, NOW, a) == ca.due_status(d, NOW)
+
+    # --- never crash, never widen the Telegram surface ---------------------
+    @pytest.mark.parametrize("junk", [
+        "",
+        "not a crontab at all",
+        "@daily /root/.claude/cc-run python3 " + CC + "/scripts/nightly.py",
+        "banana 5 * * * /root/.claude/cc-run python3 " + CC + "/scripts/x.py",
+        "0 5 1 * * /root/.claude/cc-run python3 " + CC + "/scripts/x.py",
+        "0 5 * * *",
+        "*/5 * * * * /root/.claude/cc-run",
+        "SHELL=/bin/bash\nPATH=/usr/bin:/bin",
+    ])
+    def test_the_audit_never_raises(self, junk):
+        """An exception here would take the whole 21:30 digest down with it and the
+        alarm would go quiet — the failure mode this file exists to prevent. Junk
+        becomes a problem line instead."""
+        import coach_alert as ca
+        a = ca.cron_audit(text=junk)
+        assert isinstance(a.problems, list)
+
+    def test_a_cron_nickname_is_reported_rather_than_guessed(self):
+        import coach_alert as ca
+        a = ca.cron_audit(text=f"@daily /root/.claude/cc-run python3 {CC}/scripts/x.py\n")
+        assert any("cron nickname" in p and "x.py" in p for p in a.problems)
+
+    def test_an_unreadable_schedule_falls_back_rather_than_unchecking(self):
+        """A live line whose spec this parser cannot read is reported, and the
+        deliverable keeps being checked on its declared time. NO_CRON_ENTRY is
+        reserved for genuinely absent: a job that IS scheduled must not be silently
+        un-checked because of a parser limitation."""
+        import coach_alert as ca
+        a = self.audit(drop=LIVE_UNWATCHED, replace={"watchdog.py": "30 5 1 * *"})
+        d = next(x for x in ca.DELIVERABLES if x["script"] == "watchdog")
+        assert any("cannot read watchdog.py's live schedule" in p for p in a.problems)
+        assert "watchdog.py" in a.present and "watchdog.py" not in a.schedules
+        assert ca.due_status(d, NOW, a) == ca.due_status(d, NOW)
+
+    def test_two_entries_for_one_job_are_reported(self):
+        """Duplicated schedules make "the" due time ambiguous. The check keeps
+        running off the first rather than going quiet, and says it may be mis-timed."""
+        a = self.audit(
+            drop=LIVE_UNWATCHED,
+            extra=(f"0 4 * * * /root/.claude/cc-run python3 {CC}/scripts/watchdog.py",))
+        assert any("watchdog.py has 2 live crontab entries" in p for p in a.problems)
+        assert a.schedules["watchdog.py"] == "30 5 * * *"
+
+    def test_registry_drift_never_reaches_telegram(self, digest, logs, monkeypatch):
+        """End to end through main(). Registry drift is an engineering fault; only
+        the two conditions Jamie approved may interrupt him and this must not widen
+        that. It lands in ops-alerts.log — FIRST, so MAX_LINES truncation cannot hide
+        it — and nowhere else.
+        """
+        import coach_alert as ca
+        sent = []
+        monkeypatch.setattr(ca, "send",
+                            lambda *a, **k: (sent.append(a), "dry-run")[1])
+        monkeypatch.setattr(ca, "STATE", logs / "coach-alert-state.json")
+        monkeypatch.setattr(digest, "CONFIG", logs / "athletes.json")
+        (logs / "athletes.json").write_text("{}")
+        monkeypatch.setattr(digest, "plan_sanity", lambda athletes: [])
+        monkeypatch.setattr(ca, "read_crontab",
+                            lambda: crontab(drop=("weekly-summary.sh",)))
+        # the two non-per-athlete deliverables need a clean heartbeat, or their
+        # (genuine) gaps would send and mask what this test is about
+        now = datetime.now().isoformat(timespec="seconds")
+        ops_log.RUN_STATUS.write_text("".join(
+            json.dumps({"ts": now, "script": s, "athlete": "", "ok": True,
+                        "detail": det}) + "\n"
+            for s, det in (("watchdog", "silent"), ("backup-config", "sync ok"))))
+
+        digest.main()
+
+        assert sent == [], f"registry drift reached Telegram: {sent}"
+        log = ops_log.ALERT_LOG.read_text()
+        assert "weekly-summary.sh has NO live crontab entry" in log
+        body = log.split("ClaudeCoach ops digest")[1].splitlines()
+        assert "\u26a0 CRON AUDIT" in body[1], body[:3]
+        # and it is a CLASSIFIED run-status failure under its own name — not
+        # "coach-alert" (which means the alarm could not reach Jamie) and not an
+        # UNCLASSIFIED line every night
+        rows = [json.loads(l) for l in ops_log.RUN_STATUS.read_text().splitlines()]
+        cron = [r for r in rows if r["script"] == "cron-audit"]
+        assert cron and all(r["ok"] is False for r in cron)
+        assert digest.unclassified_lines(cron) == []
+        assert ca.OUTCOME_CLASS["cron-audit"] == ca.FAILURE
+
+    # --- against the real thing --------------------------------------------
+    def test_the_live_crontab_has_no_registry_side_drift(self):
+        """Runs where there IS a crontab (the VM, where the digest runs). Only the
+        registry->cron direction is asserted clean: an unwatched job is a decision
+        for a human, and there are currently two of them (see
+        test_the_two_currently_unwatched_live_jobs_are_reported)."""
+        import coach_alert as ca
+        text = ca.read_crontab()
+        if text is None:                                       # pragma: no cover
+            pytest.skip("no crontab available")
+        a = ca.cron_audit(text=text)
+        assert a.verified
+        drift = [p for p in a.problems if "NOTHING" not in p]
+        assert drift == [], drift
