@@ -8,7 +8,7 @@ there is no second route to read.
 
 Jamie's decision, 28 Jul 2026: exactly TWO conditions may interrupt him.
 
-  1. DELIVERABLE_MISSING — a named DAILY deliverable did not happen.
+  1. DELIVERABLE_MISSING — a named deliverable (daily OR weekly) did not happen.
   2. CLAUDE_AUTH_FAILED  — the Claude CLI could not authenticate in production.
 
 Deliberately NOT here, and log-only as a result:
@@ -16,10 +16,18 @@ Deliberately NOT here, and log-only as a result:
     Telegram path; it is removed because it is not one of the two. The 24-27 Jul
     push failures now surface as a digest ✗ line via the new failures-in-window
     rule in ops_log, not as a message. Flipping it back is one REASONS entry.
-  - the WEEKLY deliverables (weekly summary, weekly plan). They are registered in
-    DELIVERABLES with telegram=False because Jamie said "daily". The three-week
-    silent weekly-summary crash would still be caught only in the log. One
-    boolean flips it.
+
+Changed 28 Jul 2026: the WEEKLY deliverables (weekly summary, weekly plan) are
+now routed to Telegram too — the owner approved this after a weekly-summary
+build crashed silently for three weeks with nothing but a log line to show for
+it. Both now carry telegram=True below. Because the weekly gap check reads a
+7-day window, a single Sunday miss stays "missing" for up to a week; routing it
+through the same per-day key as the daily check would Telegram every evening
+until it is fixed (up to 7 messages). ops-digest.py's weekly_alerts() sends
+these separately from the daily path, on a stable per-script key with a cooldown
+that spans the whole window, and explicitly clears that cooldown the moment the
+deliverable is seen again — so one miss is one message, and the FOLLOWING
+week's occurrence isn't silenced by a leftover cooldown.
 
 Environment:
   CC_COACH_CHAT_ID  — where coach alerts go. Unset = notify.py's config default.
@@ -28,6 +36,7 @@ Environment:
                       This is how the alert path is exercised without messaging
                       a real Telegram thread.
 """
+
 import json
 import os
 import subprocess
@@ -71,12 +80,13 @@ DELIVERABLES = [
      "per_athlete": True,  "telegram": False},
     {"script": "watchdog",           "label": "watchdog",           "window": "daily",
      "per_athlete": False, "telegram": False},
-    # Sunday jobs. Checked over 7 days, so a Sunday miss shows up that evening
-    # and every evening after until it runs.
+    # Sunday jobs. Checked over 7 days. telegram=True since 28 Jul 2026, but NOT
+    # via this per-day cooldown — ops-digest.py's weekly_alerts() sends these on
+    # its own occurrence-based key so one miss is one message, not one per evening.
     {"script": "weekly-summary",     "label": "weekly summary",     "window": "weekly",
-     "per_athlete": True,  "telegram": False},
+     "per_athlete": True,  "telegram": True},
     {"script": "stage1-plan",        "label": "weekly plan",        "window": "weekly",
-     "per_athlete": True,  "telegram": False},
+     "per_athlete": True,  "telegram": True},
 ]
 
 STATE = ops_log.LOG_DIR / "coach-alert-state.json"
@@ -101,8 +111,8 @@ def _write_state(state: dict) -> None:
         pass
 
 
-def _cooling_down(reason: str, key: str, now: datetime) -> bool:
-    hours = REASONS[reason]["cooldown_h"]
+def _cooling_down(reason: str, key: str, now: datetime, cooldown_h: float = None) -> bool:
+    hours = REASONS[reason]["cooldown_h"] if cooldown_h is None else cooldown_h
     last = _read_state().get(f"{reason}|{key}")
     if not last:
         return False
@@ -112,8 +122,23 @@ def _cooling_down(reason: str, key: str, now: datetime) -> bool:
         return False
 
 
-def send(reason: str, text: str, key: str = "") -> str:
+def clear_cooldown(reason: str, key: str) -> None:
+    """Forget a past send for this key. Used when an occurrence resolves (the
+    deliverable is seen again), so the NEXT genuinely new occurrence of the same
+    key alerts immediately instead of waiting out a cooldown banked for a miss
+    that has since been fixed."""
+    state = _read_state()
+    if state.pop(f"{reason}|{key}", None) is not None:
+        _write_state(state)
+
+
+def send(reason: str, text: str, key: str = "", cooldown_h: float = None) -> str:
     """Interrupt the coach — if and only if `reason` is one of the two approved.
+
+    `cooldown_h` overrides REASONS[reason]["cooldown_h"] for this call only —
+    used by ops-digest.py's weekly_alerts() to bank a cooldown that spans the
+    whole 7-day weekly window, rather than the shorter default tuned for the
+    daily/auth-failure cases.
 
     Returns the action taken: "sent", "dry-run", "cooldown", "send-failed", or
     "refused" (an unlisted reason: logged loudly and NOT sent, so a future caller
@@ -124,7 +149,7 @@ def send(reason: str, text: str, key: str = "") -> str:
         ops_log.alert("coach-alert", f"REFUSED to Telegram an unapproved reason "
                                      f"{reason!r} — log-only. Text: {text}")
         return "refused"
-    if _cooling_down(reason, key, now):
+    if _cooling_down(reason, key, now, cooldown_h):
         ops_log.log_outbound(f"coach-alert:{reason}", text, sent=False)
         return "cooldown"
 

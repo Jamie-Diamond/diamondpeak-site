@@ -184,13 +184,19 @@ class TestCoachAlertRouting:
         assert coach_alert.send("git_sync_stuck", "text") == "refused"
         assert coach_alert.send(coach_alert.DELIVERABLE_MISSING, "text") == "dry-run"
 
-    def test_only_daily_deliverables_route_to_telegram(self):
+    def test_daily_and_weekly_deliverables_route_to_telegram(self):
+        # Changed 28 Jul 2026: weekly deliverables now Telegram too (owner
+        # approved), but only via ops-digest.py's separate weekly_alerts() path —
+        # gap_lines() itself still only surfaces DAILY items (asserted in
+        # TestGapLines.test_weekly_gap_is_log_only / test_weekly_plan_gap_is_log_only).
         import coach_alert
-        tg = {d["script"] for d in coach_alert.DELIVERABLES if d["telegram"]}
-        assert tg == {"morning-checkin", "daily-prescription",
-                      "night-before-brief", "evening-checkin"}
-        assert all(d["window"] == "daily"
-                   for d in coach_alert.DELIVERABLES if d["telegram"])
+        daily_tg = {d["script"] for d in coach_alert.DELIVERABLES
+                    if d["telegram"] and d["window"] == "daily"}
+        weekly_tg = {d["script"] for d in coach_alert.DELIVERABLES
+                     if d["telegram"] and d["window"] == "weekly"}
+        assert daily_tg == {"morning-checkin", "daily-prescription",
+                             "night-before-brief", "evening-checkin"}
+        assert weekly_tg == {"weekly-summary", "stage1-plan"}
 
     def test_ops_log_cannot_send(self):
         import ast
@@ -298,6 +304,72 @@ class TestSendFailureDoesNotEatTheCooldown:
         ca = self._ca(monkeypatch, logs, rc=0)
         assert ca.send(ca.CLAUDE_AUTH_FAILED, "x", key="k") == "sent"
         assert ca.send(ca.CLAUDE_AUTH_FAILED, "x", key="k") == "cooldown"
+
+
+class TestWeeklyAlerts:
+    """WEEKLY deliverables Telegram once per occurrence (28 Jul 2026 change), not
+    once per evening the 7-day window still shows them missing, and once per
+    SCRIPT rather than once per athlete."""
+
+    def _week(self, missing=()):
+        # jamie + kathryn heartbeats present for both weekly scripts, except
+        # the (script, athlete) pairs listed in `missing`.
+        out = []
+        for slug in ("jamie", "kathryn"):
+            for script in ("weekly-summary", "stage1-plan"):
+                if (script, slug) in missing:
+                    continue
+                out.append(_e(script, slug, detail="sent"))
+        return out
+
+    def test_single_miss_is_one_message_not_one_per_athlete(self, digest, logs, monkeypatch):
+        import coach_alert
+        monkeypatch.setenv("CC_ALERT_DRY_RUN", "1")
+        monkeypatch.setattr(coach_alert, "STATE", logs / "coach-alert-state.json")
+        week = self._week(missing={("weekly-summary", "jamie"), ("weekly-summary", "kathryn")})
+        alerted = digest.weekly_alerts(week, ATHLETES)
+        assert len(alerted) == 1
+        assert "weekly summary" in alerted[0]
+        assert "jamie" in alerted[0] and "kathryn" in alerted[0]
+
+    def test_repeat_run_same_occurrence_does_not_re_alert(self, digest, logs, monkeypatch):
+        import coach_alert
+        monkeypatch.setenv("CC_ALERT_DRY_RUN", "0")
+        monkeypatch.setattr(coach_alert, "STATE", logs / "coach-alert-state.json")
+        result = type("R", (), {"returncode": 0, "stderr": b""})
+        monkeypatch.setattr(coach_alert, "subprocess",
+                            type("S", (), {"run": staticmethod(lambda *a, **k: result)}))
+        week = self._week(missing={("weekly-summary", "jamie"), ("weekly-summary", "kathryn")})
+        first = digest.weekly_alerts(week, ATHLETES)
+        # A later run (e.g. the next evening's digest) with the SAME miss still
+        # unresolved must not send a second message.
+        second = digest.weekly_alerts(week, ATHLETES)
+        assert len(first) == 1
+        assert second == []
+
+    def test_recovery_clears_cooldown_for_next_occurrence(self, digest, logs, monkeypatch):
+        import coach_alert
+        monkeypatch.setenv("CC_ALERT_DRY_RUN", "1")
+        monkeypatch.setattr(coach_alert, "STATE", logs / "coach-alert-state.json")
+        missing_week = self._week(missing={("weekly-summary", "jamie"), ("weekly-summary", "kathryn")})
+        present_week = self._week()
+        assert len(digest.weekly_alerts(missing_week, ATHLETES)) == 1
+        # Resolved: no alert, and the cooldown for this key is cleared.
+        assert digest.weekly_alerts(present_week, ATHLETES) == []
+        # A brand new occurrence (e.g. next Sunday) alerts again immediately,
+        # rather than being silenced by the leftover 168h cooldown.
+        assert len(digest.weekly_alerts(missing_week, ATHLETES)) == 1
+
+    def test_stage1_plan_failing_for_all_athletes_is_one_message(self, digest, logs, monkeypatch):
+        # Same root cause (one crashed Sunday plan build) affecting every
+        # athlete must be one Telegram message, not three.
+        import coach_alert
+        monkeypatch.setenv("CC_ALERT_DRY_RUN", "1")
+        monkeypatch.setattr(coach_alert, "STATE", logs / "coach-alert-state.json")
+        week = self._week(missing={("stage1-plan", "jamie"), ("stage1-plan", "kathryn")})
+        alerted = digest.weekly_alerts(week, ATHLETES)
+        assert len(alerted) == 1
+        assert "weekly plan" in alerted[0]
 
 
 class TestStage1PlanHeartbeat:

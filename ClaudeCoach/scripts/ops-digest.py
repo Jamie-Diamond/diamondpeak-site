@@ -15,11 +15,21 @@ where he or an agent can go and read them when there is a reason to. Repeated
 (script, athlete, detail) lines are folded into one line with a count, because
 the same warning eight times is one fact, not eight.
 
-Still log-only for everything EXCEPT one thing (28 Jul 2026): if a named DAILY
+Still log-only for everything EXCEPT one thing (28 Jul 2026): if a named
 deliverable has no heartbeat, the coach gets a Telegram. That is condition 1 of
 the two Jamie allows to interrupt him; which deliverables qualify is declared in
 lib/coach_alert.DELIVERABLES, not here, so the routing decision reads in one
-place. Weekly gaps and every failure line stay in the log.
+place. Every failure line stays in the log either way.
+
+DAILY deliverables are sent from main() below, keyed on today's date — a fresh
+key every day, so a recurring daily miss re-alerts daily, which is correct (each
+day is its own miss). WEEKLY deliverables (weekly summary, weekly plan) route
+to Telegram too as of 28 Jul 2026, but NOT through that same per-day key: the
+weekly gap check reads a 7-day window, so a single Sunday miss would otherwise
+stay "missing" and re-Telegram every evening for up to a week. weekly_alerts()
+below sends these on a stable per-script key with a cooldown spanning the whole
+window, and clears that cooldown the moment the deliverable is seen again — one
+miss, one message.
 
 Safe to run manually: python3 ClaudeCoach/scripts/ops-digest.py
   CC_ALERT_DRY_RUN=1 python3 .../ops-digest.py   # never sends; logs what it would
@@ -39,6 +49,10 @@ import coach_alert
 
 MAX_LINES = 40  # cap the logged digest — the raw entries stay in run-status.jsonl
 WEEKLY_WINDOW_DAYS = 7
+# A weekly miss stays "missing" for the whole 7-day window it's checked over.
+# Bank the cooldown for that long so one miss can't re-Telegram on 7 separate
+# evenings; weekly_alerts() clears it early the moment the job is seen again.
+WEEKLY_ALERT_COOLDOWN_H = WEEKLY_WINDOW_DAYS * 24
 
 
 def all_entries() -> list[dict]:
@@ -122,12 +136,13 @@ def _saw(entries, script, athlete=None, detail=None) -> bool:
 
 
 def gap_lines(today_entries, week_entries, athletes) -> tuple[list[str], list[str]]:
-    """(all gap lines, the subset that may interrupt the coach).
+    """(all gap lines, the subset of DAILY misses that may interrupt the coach).
 
     Gap lines report heartbeat absence — "we have no record it happened", which is
     distinct from "we recorded a failure" (the ✗ lines). What counts as a
     deliverable, its window, and whether it may Telegram all come from
-    coach_alert.DELIVERABLES.
+    coach_alert.DELIVERABLES. WEEKLY telegram routing is deliberately NOT done
+    here — see weekly_alerts() below for why it needs a different cooldown key.
     """
     lines, telegram = [], []
     active = {s: c for s, c in athletes.items() if c.get("active")}
@@ -157,9 +172,49 @@ def gap_lines(today_entries, week_entries, athletes) -> tuple[list[str], list[st
             who = f" for {slug}" if slug else ""
             line = f"⚠ no {d['label']} heartbeat{who} {when}"
             lines.append(line)
-            if d["telegram"]:
+            if d["telegram"] and d["window"] == "daily":
                 telegram.append(f"{d['label']}{who}")
     return lines, telegram
+
+
+def weekly_alerts(week_entries, athletes) -> list[str]:
+    """Telegram condition 1 for WEEKLY deliverables — split out from gap_lines()
+    because it needs occurrence-based alerting, not the daily per-day key.
+
+    Two differences from the daily path:
+      - ONE message per SCRIPT, not one per athlete. A Sunday job failing is a
+        single root cause; three copies of the same fact (one per athlete) is
+        noise, not three incidents.
+      - ONE message per OCCURRENCE, not one per evening it stays missing. The
+        cooldown key is stable (not date-based) and banked for
+        WEEKLY_ALERT_COOLDOWN_H (the whole window), then cleared the moment the
+        deliverable is seen again so the following week's miss isn't silenced
+        by a leftover cooldown.
+
+    Returns the labels actually alerted this run (sent or dry-run), for logging.
+    """
+    active = {s: c for s, c in athletes.items() if c.get("active")}
+    alerted = []
+    for d in coach_alert.DELIVERABLES:
+        if d["window"] != "weekly" or not d["telegram"]:
+            continue
+        targets = list(active) if d["per_athlete"] else [None]
+        missing = [slug for slug in targets
+                   if not _saw(week_entries, d["script"], athlete=slug, detail=d.get("detail"))]
+        key = f"weekly:{d['script']}"
+        if not missing:
+            coach_alert.clear_cooldown(coach_alert.DELIVERABLE_MISSING, key)
+            continue
+        who = " (" + ", ".join(missing) + ")" if d["per_athlete"] else ""
+        action = coach_alert.send(
+            coach_alert.DELIVERABLE_MISSING,
+            f"⚠️ ClaudeCoach did not deliver: {d['label']}{who}. "
+            f"Nothing is lost — the detail is in the ops log on the VM.",
+            key=key, cooldown_h=WEEKLY_ALERT_COOLDOWN_H)
+        print(f"coach-alert deliverable_missing weekly:{d['script']}: {action}", file=sys.stderr)
+        if action in ("sent", "dry-run"):
+            alerted.append(f"{d['label']}{who}")
+    return alerted
 
 
 def plan_sanity(athletes: dict) -> list[str]:
@@ -215,10 +270,11 @@ def main():
     lines += gaps
     lines += plan_sanity(athletes)
 
-    # CONDITION 1 of the two approved Telegram interruptions: a named daily
-    # deliverable did not happen. The list of what qualifies is coach_alert's, not
-    # this file's, and coach_alert refuses anything not on it — so this is the whole
-    # of the digest's outbound surface, in three lines.
+    # CONDITION 1 of the two approved Telegram interruptions: a named deliverable
+    # did not happen. The list of what qualifies is coach_alert's, not this
+    # file's, and coach_alert refuses anything not on it. Daily misses are sent
+    # here on today's date as the key; weekly misses go through weekly_alerts()
+    # below, which uses an occurrence-based key instead (see its docstring).
     if missing_deliverables:
         what = ", ".join(missing_deliverables)
         action = coach_alert.send(
@@ -227,6 +283,8 @@ def main():
             f"Nothing is lost — the detail is in the ops log on the VM.",
             key=date.today().isoformat())
         print(f"coach-alert deliverable_missing: {action} ({what})", file=sys.stderr)
+
+    weekly_alerts(week, athletes)
 
     if not lines:
         print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] ops-digest: all clean", file=sys.stderr)
