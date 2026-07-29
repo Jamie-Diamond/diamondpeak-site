@@ -751,9 +751,14 @@ def _load_blueprint(slug: str) -> dict:
 def cmd_validate(args) -> dict:
     """Hard-check a proposed week against the athlete's rules — the same backstop
     the Sunday generator uses (day_rules, CTL ramp, weekly TSS ceiling, strength
-    cap, intensity distribution). The weekly_tss_cap here is the blueprint HOURS
-    ceiling (max_hours_per_week x 100 x IF^2) — a hard upper bound, distinct from
-    the required-tss target, which is a floor."""
+    cap, intensity distribution). The weekly_tss_cap is a hard upper bound, distinct
+    from the required-tss target, which is a floor.
+
+    The cap is resolved by plan_builder._weekly_tss_cap — the SAME function the
+    Sunday build and the 06:25 audit use — so this CLI cannot disagree with them
+    about where the limit is. It used to hold an inline copy of the hours maths
+    reading profile.max_hours_per_week directly, which made it blind to a week the
+    athlete had declared hours for and so reported a stale, LOWER cap."""
     cfg = _load_cfg(args.athlete)
     try:
         week = json.loads(args.week)
@@ -777,12 +782,22 @@ def cmd_validate(args) -> dict:
 
     day_rules = cfg.get("day_rules")
     phase = current_phase(_load_blueprint(args.athlete), week_start) or {}
+    # ONE cap resolver, not a second copy of the hours maths. Imported inside the
+    # function because plan_builder defers its own import of this module (see
+    # plan_builder.py:237) — a module-level import here would couple the two at
+    # import time for no gain.
+    #
+    # `week_start` is passed, and that is the whole point: it makes this CLI
+    # declaration-aware. It also brings one deliberate behaviour change — an athlete
+    # with NO profile.max_hours_per_week (Kathryn, by the permanent 10 Jul 2026 rule)
+    # previously got tss_cap = None here and the load check was reported SKIPPED;
+    # she now gets the blueprint phase's own tss_ceiling and the check is ARMED. That
+    # is the same arming decision plan_builder already made, and a phase ceiling is a
+    # LOAD bound, not a reinstated limit on how long she may train.
     tss_cap = None
     try:
-        prof_p = BASE / "athletes" / args.athlete / "profile.json"
-        max_h = (json.loads(prof_p.read_text()) if prof_p.exists() else {}).get("max_hours_per_week")
-        if max_h and phase.get("name"):
-            tss_cap = tss_ceiling(float(max_h), str(phase["name"]))
+        from plan_builder import _weekly_tss_cap
+        tss_cap = _weekly_tss_cap(args.athlete, phase, week_start=week_start)
     except Exception:
         pass
     # Under-training floor for the week being validated (0 = deload/taper,
