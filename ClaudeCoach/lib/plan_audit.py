@@ -38,6 +38,9 @@ from primitives.blueprint import current_phase                # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
 import plan_tools as pt                                        # noqa: E402
 from plan_builder import _weekly_tss_cap                       # noqa: E402
+# IMPORTED, not restated: which of the hours ceiling / ramp-permitted maximum is the
+# lower bound is computed in exactly one place. See its docstring for why.
+from macro_projection import binding_constraint                # noqa: E402
 import ops_log                                                 # noqa: E402
 import day_overrides                                           # noqa: E402
 
@@ -133,6 +136,9 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
     # day_rules_drifted. Counted in `ok`, so a run carrying overrides is visibly not
     # clean, and listed in plan-audit-baseline.json (a populated category with no
     # baseline entry alerts every run — the 28 Jul SKIPPED bug).
+    # Informational, never fingerprinted (see counts()): observations that need to be
+    # visible daily without moving the baseline or spending an alert.
+    notes: list[str] = []
     fails = {"STRUCTURE": [], "FUELLING": [], "LONG_RIDE": [], "WEEKLY_LOAD": [], "RULES": [],
              "SKIPPED": [], "DIRECTED": []}
 
@@ -205,9 +211,35 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                                   run_protocol=cfg.get("run_protocol")).get("weekly_min_cap")
         except Exception:
             run_cap = None
+        # ONE cap value, used both by validate_week below and by the binding-constraint
+        # note — resolving it twice is how the ceiling and the thing reporting on the
+        # ceiling drift apart.
+        wk_cap = _weekly_tss_cap(slug, phase, week_start=ws)
+        # WHICH CONSTRAINT GOVERNS. Not a failure and deliberately NOT in `fails`:
+        # counts()/signature() fingerprint `fails` only, and a standing configuration
+        # conflict would otherwise raise the baseline for five consecutive weeks and
+        # alert on a fact the coach already knows. It is a note the 06:25 run surfaces
+        # every morning; lib/macro_projection.py is the full block-level treatment.
+        if req and req.get("ramp_capped_weekly_tss") and wk_cap:
+            _b = binding_constraint(wk_cap, req.get("ramp_capped_weekly_tss"))
+            if _b["binding"] == "hours":
+                notes.append(
+                    f"week {ws}: HOURS-BOUND — the hours-derived ceiling "
+                    f"{_b['ceiling']:.0f} TSS is {_b['gap_tss']:.0f} below the "
+                    f"{_b['ramp_permitted']:.0f} TSS this athlete's own "
+                    f"+{cfg.get('max_ctl_ramp_per_week')}/wk CTL-ramp cap permits, so "
+                    f"available time and not fatigue is limiting the week. Either the "
+                    f"athlete is genuinely time-limited (the CTL target must come down) "
+                    f"or the hours figure is stale — confirm with the athlete; no "
+                    f"setting is changed here")
+            else:
+                notes.append(
+                    f"week {ws}: ramp-bound ({_b['ramp_permitted']:.0f} TSS permitted "
+                    f"under a {_b['ceiling']:.0f} ceiling) — working as designed, "
+                    f"fatigue accumulation is the limiter")
         rep = validate_week(wk_evs, ws, day_rules=dr,
                             day_overrides=day_overrides.load(slug, BASE), ctl_today=ctl,
-                            weekly_tss_cap=_weekly_tss_cap(slug, phase, week_start=ws),
+                            weekly_tss_cap=wk_cap,
                             weekly_tss_floor=tss_floor,
                             run_week_min_cap=run_cap,
                             ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
@@ -236,7 +268,8 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
     hard = any(fails[k] for k in ("STRUCTURE", "LONG_RIDE", "RULES"))  # fuelling/load/skipped = warn
     return {"athlete": slug, "window": f"{win_start}..{win_end}", "fuel_target": fuel,
             "long_ride_ceiling_min": lr_ceiling, "ok": not any(fails.values()),
-            "hard_fail": hard, "fails": {k: v for k, v in fails.items() if v}}
+            "hard_fail": hard, "fails": {k: v for k, v in fails.items() if v},
+            "notes": notes}
 
 
 def counts(report: dict) -> dict:

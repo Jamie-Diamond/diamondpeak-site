@@ -661,8 +661,18 @@ def run_athlete(slug, athlete_cfg):
                 slug, date.today() + timedelta(days=1), coaching_level=coaching_level)
             if _ask:
                 output = f"{output}\n\n{_ask}"
-        except Exception:
-            pass                    # the morning card must send even if the ask cannot be built
+        except Exception as _e:
+            # The card must still send if the ask cannot be built — but it must NOT do so
+            # silently. This is the one question the Sunday 18:00 ceiling derives from, so
+            # a swallowed failure here means the build quietly falls back to the standing
+            # config figure and nobody finds out until the plan is already pushed. Alert,
+            # then carry on. (ops_log is log-only since 27 Jul; the evening digest picks
+            # it up, which is well inside the nine-hour answer window.)
+            ops_log.alert("morning-checkin",
+                          f"Sunday weekly-hours ask could NOT be built "
+                          f"({type(_e).__name__}: {_e}) — the 18:00 build will fall back "
+                          f"to profile.max_hours_per_week for this athlete",
+                          athlete=slug)
 
     sent = False
     if output:

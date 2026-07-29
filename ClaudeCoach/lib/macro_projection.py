@@ -38,6 +38,16 @@ Flags it raises
                      plan_tools.block_deload_weeks has placed them.
   heat_overlay       the sauna block (from lib/heat.py, injected) overlays weeks
                      that are already at or near the load ceiling.
+  hours_bound_below_ramp
+                     the week's hours-derived load ceiling sits BELOW the maximum
+                     the athlete's own CTL-ramp cap already deems safe. The hours
+                     figure, not fatigue, is the limiter: either the athlete is
+                     genuinely time-limited (so the CTL target must come down) or
+                     the hours on file are stale. Both options are named in the
+                     detail; the module does not choose, and never edits a setting.
+  ramp_bound         the ramp cap bites first, which is the design intent — fatigue
+                     accumulation is what bounds the block. Reported so a reader can
+                     tell "checked and fine" apart from "not checked".
 
 Usage:
   python3 lib/macro_projection.py --athlete jamie
@@ -80,6 +90,48 @@ def _cap_tolerance() -> float:
 
 # A week is "at the ceiling" for the heat-overlay flag at this fraction of it.
 _NEAR_CEILING = 0.90
+
+
+def binding_constraint(ceiling: float | None,
+                       ramp_permitted: float | None) -> dict:
+    """Which of the two INDEPENDENT upper bounds on a week's load bites first.
+
+    THE ONE PLACE this comparison is made — lib/plan_audit.py imports it rather
+    than restating it. Neither input is computed here, by design: this module
+    introduces no load arithmetic (see the module docstring), and the repo has
+    already had three bugs from duplicated load maths.
+
+      `ceiling`        plan_builder._weekly_tss_cap(slug, phase, week_start) — the
+                       hours-derived load ceiling, in precedence order: hours the
+                       athlete DECLARED for the week, else profile.max_hours_per_week,
+                       else the blueprint phase's own tss_ceiling. The formula behind
+                       the first two is primitives.blueprint.tss_ceiling
+                       (hours x 100 x IF^2).
+      `ramp_permitted` required_tss(...)["ramp_capped_weekly_tss"] — the SAME ramp
+                       logic the Sunday generator targets with, i.e.
+                       compute_required_tss(ctl, ctl + max_ctl_ramp_per_week, 1).
+                       Because CTL is a 42-day EWMA, +R CTL/week needs a daily TSS of
+                       CTL + 6R, so this is ~7 x (CTL + 6R). NOT recomputed here.
+
+    Returns {"binding": ..., "ceiling": ..., "ramp_permitted": ..., "gap_tss": ...}:
+
+      "hours"    the ceiling is the lower bound. The athlete is clipped BELOW what
+                 their own ramp cap already deems safe; `gap_tss` is by how much.
+      "ramp"     the ramp cap is the lower bound (or they are equal). Working as
+                 designed: fatigue accumulation is the limiter.
+      "unbounded" one or both bounds is absent, so nothing can be concluded. Taper
+                 weeks land here on both counts — no source carries a ceiling, and
+                 required_tss's taper branch returns no ramp_capped_weekly_tss at all.
+    """
+    if not ceiling or not ramp_permitted:
+        return {"binding": "unbounded", "ceiling": ceiling,
+                "ramp_permitted": ramp_permitted, "gap_tss": None}
+    c, r = float(ceiling), float(ramp_permitted)
+    # Ties go to "ramp": equal bounds are not a conflict, and calling them
+    # hours-bound would raise a coach-facing finding with a zero gap to act on.
+    return {"binding": "hours" if c < r else "ramp",
+            "ceiling": round(c, 1), "ramp_permitted": round(r, 1),
+            "gap_tss": round(abs(r - c), 1)}
 
 
 def _monday(d: date) -> date:
@@ -168,6 +220,11 @@ def project_block(
         req_uncapped = r.get("required_weekly_tss")
         ramp_capped = r.get("ramp_capped_weekly_tss")
         ramp_limited = bool(req_uncapped and ramp_capped and req_uncapped > ramp_capped)
+        # WHICH BOUND BITES. Distinct from ramp_limited above: that asks whether the
+        # ramp cap clipped this week's phase REQUIREMENT; this asks which of the two
+        # standing upper bounds — hours-derived ceiling vs ramp-permitted maximum — is
+        # the lower one, and so which constraint is actually governing the block.
+        bind = binding_constraint(ceiling, ramp_capped)
         weeks.append({
             "week_start": w.isoformat(),
             "phase": phase.get("name") or r.get("phase"),
@@ -186,6 +243,9 @@ def project_block(
             "ceiling_infeasible": bool(ceiling and rec > round(ceiling * (1 + tol))),
             "phase_target_ctl": r.get("phase_target_ctl"),
             "ctl_start": round(ctl, 1),
+            "ramp_permitted_tss": bind["ramp_permitted"],
+            "binding_constraint": bind["binding"],
+            "binding_gap_tss": bind["gap_tss"],
         })
         ctl = compute_projected_ctl(ctl, allowed, 1)
         ctl_strict = compute_projected_ctl(ctl_strict, at_ceiling, 1)
@@ -242,6 +302,64 @@ def project_block(
                        f"weekly generator can only overshoot the cap or miss the target."
                        + strict_note),
             "weeks": [k["week_start"] for k in infeasible]})
+
+    # ── which constraint governs the block ───────────────────────────────────
+    # Evaluated on LOADING weeks only: a deload or taper is deliberately below both
+    # bounds, so "which bound is lower" says nothing about how it was built. Weeks
+    # where either bound is absent are excluded and counted, so a silent gap in the
+    # inputs cannot read as a clean bill of health.
+    bounded = [k for k in loading if k["binding_constraint"] != "unbounded"]
+    unbounded_n = len(loading) - len(bounded)
+    hours_bound = [k for k in bounded if k["binding_constraint"] == "hours"]
+    ramp_bound = [k for k in bounded if k["binding_constraint"] == "ramp"]
+
+    if hours_bound:
+        worst = max(hours_bound, key=lambda k: k["binding_gap_tss"])
+        flags.append({
+            "code": "hours_bound_below_ramp", "severity": "warn",
+            "detail": (
+                f"{len(hours_bound)} of {len(loading)} remaining loading week(s) are "
+                f"limited by the HOURS ceiling, not by fatigue: worst is week "
+                f"{worst['week_start']} ({worst['phase']}), where the hours-derived "
+                f"ceiling {worst['phase_tss_ceiling']:.0f} TSS sits "
+                f"{worst['binding_gap_tss']:.0f} BELOW the "
+                f"{worst['ramp_permitted_tss']:.0f} TSS the athlete's own "
+                f"+{cfg.get('max_ctl_ramp_per_week')}/wk CTL-ramp cap already deems "
+                f"safe. The ramp cap is the constraint that manages fatigue "
+                f"accumulation and it is not the one binding here. Two readings, and "
+                f"this module deliberately does not choose between them: (1) the "
+                f"athlete really has only that much time, in which case the CTL target "
+                f"(ctl_targets) is the thing that must come down, because the block "
+                f"cannot reach it inside the hours; or (2) the hours figure is STALE — "
+                f"note the projection resolves the ceiling from the STANDING "
+                f"profile.max_hours_per_week, not from a declared week, so a week the "
+                f"athlete has since declared hours for is not reflected here. Confirm "
+                f"which with the athlete before changing any setting; both options are "
+                f"the coach's call."),
+            "weeks": [k["week_start"] for k in hours_bound]})
+
+    if ramp_bound:
+        flags.append({
+            "code": "ramp_bound", "severity": "info",
+            "detail": (
+                f"{len(ramp_bound)} of {len(loading)} remaining loading week(s) are "
+                f"bound by the +{cfg.get('max_ctl_ramp_per_week')}/wk CTL-ramp cap "
+                f"first, which is the design intent — fatigue accumulation is the "
+                f"limiter and the hours ceiling has headroom above it (e.g. week "
+                f"{ramp_bound[0]['week_start']}: ramp permits "
+                f"{ramp_bound[0]['ramp_permitted_tss']:.0f} TSS under a ceiling of "
+                f"{ramp_bound[0]['phase_tss_ceiling']:.0f}). Checked, no conflict; "
+                f"stated rather than left silent so this is distinguishable from "
+                f"not having been checked."),
+            "weeks": [k["week_start"] for k in ramp_bound]})
+
+    if unbounded_n:
+        flags.append({
+            "code": "binding_unknown", "severity": "info",
+            "detail": (f"{unbounded_n} loading week(s) could not be classified because "
+                       f"one of the two bounds was absent (no hours/phase ceiling, or "
+                       f"the engine returned no ramp-capped figure) — neither "
+                       f"hours-bound nor ramp-bound was concluded for them")})
 
     if loading and all(k["ramp_limited"] for k in loading):
         flags.append({
@@ -300,6 +418,12 @@ def project_block(
         "ctl_at_taper_start_at_ceiling": ctl_pre_taper_strict,
         "ctl_at_race_week_start_at_ceiling": ctl_strict_at_race_week_start,
         "cap_tolerance": tol,
+        # Block-level answer to "which constraint governs this athlete": the binding
+        # bound across the remaining LOADING weeks. "hours" on any week is the finding.
+        "binding_constraint": ("hours" if hours_bound else
+                               "ramp" if ramp_bound else "unknown"),
+        "hours_bound_weeks": len(hours_bound),
+        "ramp_bound_weeks": len(ramp_bound),
         "weeks": weeks,
         "skipped": skipped,
         "flags": flags,
@@ -354,14 +478,22 @@ def _render(rep: dict) -> str:
         return f"{rep.get('athlete')}: ERROR {rep['error']}"
     L = [f"── {rep['athlete']} · race {rep['race_date']} · CTL now {rep['ctl_now']} "
          f"· race_min {rep['race_min_ctl']} ──",
-         f"{'week':<12}{'phase':<10}{'type':<9}{'target':>7}{'ceil':>7}{'build':>7}"
-         f"{'CTL→':>7}"]
+         f"{'week':<12}{'phase':<10}{'type':<9}{'target':>7}{'ceil':>7}{'ramp':>7}"
+         f"{'bind':>6}{'build':>7}{'CTL→':>7}"]
     for k in rep["weeks"]:
         ceil = f"{k['phase_tss_ceiling']:.0f}" if k["phase_tss_ceiling"] else "-"
+        rampv = f"{k['ramp_permitted_tss']:.0f}" if k.get("ramp_permitted_tss") else "-"
+        # HOURS = the hours ceiling is the lower of the two bounds, i.e. the athlete is
+        # clipped below what their own ramp cap allows. ramp = working as designed.
+        bind = {"hours": "HOURS", "ramp": "ramp"}.get(k.get("binding_constraint"), "-")
         mark = "!" if k["ceiling_infeasible"] else ("~" if k["ramp_limited"] else " ")
         L.append(f"{k['week_start']:<12}{(k['phase'] or '')[:9]:<10}"
                  f"{(k['week_type'] or '')[:8]:<9}{k['engine_target_tss']:>7}{ceil:>7}"
-                 f"{k['buildable_tss']:>7}{k['ctl_end']:>7}{mark}")
+                 f"{rampv:>7}{bind:>6}{k['buildable_tss']:>7}{k['ctl_end']:>7}{mark}")
+    L.append(f"binding constraint over {rep['loading_weeks_remaining']} loading week(s): "
+             f"{rep['binding_constraint']} "
+             f"({rep['hours_bound_weeks']} hours-bound / {rep['ramp_bound_weeks']} "
+             f"ramp-bound)")
     L.append(f"projected CTL: taper start {rep['ctl_at_taper_start']} · race week "
              f"{rep['ctl_at_race_week_start']} · loading weeks left "
              f"{rep['loading_weeks_remaining']}")

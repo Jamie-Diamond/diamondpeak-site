@@ -282,3 +282,97 @@ def test_block_placement_moves_a_late_deload_and_closes_the_shortfall(monkeypatc
     assert after["ctl_at_race_week_start"] >= 76
     # and no week was pushed past the athlete's ramp cap to get there
     assert not any(w["ramp_limited"] for w in after["weeks"])
+
+
+# ── which constraint binds: hours ceiling vs CTL-ramp cap ─────────────────────
+# The defect these pin is not that the hours ceiling exists — hours are a real
+# constraint and letting the ramp cap override them would prescribe sessions the
+# athlete cannot do. The defect was that a ceiling clipping the athlete BELOW what
+# their own ramp cap already deems safe was invisible, and indistinguishable from
+# never having been checked.
+
+def test_binding_constraint_reports_hours_when_the_ceiling_is_the_lower_bound():
+    b = mp.binding_constraint(778, 856)
+    assert b["binding"] == "hours"
+    assert b["gap_tss"] == 78            # how far below the safe maximum he is clipped
+
+
+def test_binding_constraint_reports_ramp_when_the_ramp_cap_is_the_lower_bound():
+    assert mp.binding_constraint(1083, 744)["binding"] == "ramp"
+
+
+def test_binding_constraint_ties_go_to_ramp_not_a_zero_gap_finding():
+    # Equal bounds are not a conflict; calling them hours-bound would raise a
+    # coach-facing finding with nothing to act on.
+    assert mp.binding_constraint(500, 500)["binding"] == "ramp"
+
+
+def test_binding_constraint_refuses_to_conclude_when_a_bound_is_missing():
+    # Taper weeks: no source carries a ceiling AND required_tss's taper branch
+    # returns no ramp_capped_weekly_tss. Neither verdict may be invented.
+    for c, r in ((None, 856), (778, None), (None, None), (0, 856)):
+        out = mp.binding_constraint(c, r)
+        assert out["binding"] == "unbounded", (c, r)
+        assert out["gap_tss"] is None
+
+
+def test_hours_bound_below_ramp_is_flagged_and_names_both_readings():
+    # Ceiling well under the ramp-permitted maximum -> the hours figure limits him.
+    rep = mp.project_block(_cfg(), _bp(ceiling_peak=778, ceiling_spec=735), 96.6,
+                           today=date(2026, 7, 27))
+    assert "hours_bound_below_ramp" in _codes(rep)
+    assert rep["binding_constraint"] == "hours"
+    detail = next(f for f in rep["flags"]
+                  if f["code"] == "hours_bound_below_ramp")["detail"]
+    # BOTH options must be named — the module must not choose for the coach.
+    assert "ctl_targets" in detail and "STALE" in detail
+    assert "max_hours_per_week" in detail
+
+
+def test_ramp_bound_block_says_so_rather_than_staying_silent():
+    # Ceiling raised far above the ramp-permitted maximum -> ramp binds, which is
+    # the design intent. Silence here is what made "checked and fine" and "not
+    # checked" look identical.
+    rep = mp.project_block(_cfg(), _bp(ceiling_peak=3000, ceiling_spec=3000), 96.6,
+                           today=date(2026, 7, 27))
+    assert "ramp_bound" in _codes(rep)
+    assert "hours_bound_below_ramp" not in _codes(rep)
+    assert rep["binding_constraint"] == "ramp"
+
+
+def test_neither_binding_verdict_ever_contributes_to_hard_flag():
+    # hard_flag drives the CLI exit code, so neither new finding may flip an
+    # athlete's exit status: "working as designed" must not page anyone, and the
+    # hours conflict is already carried by ceiling_infeasible where it is fatal.
+    for bp in (_bp(ceiling_peak=778, ceiling_spec=735),        # hours-bound
+               _bp(ceiling_peak=3000, ceiling_spec=3000)):     # ramp-bound
+        rep = mp.project_block(_cfg(), bp, 96.6, today=date(2026, 7, 27))
+        binding = {"hours_bound_below_ramp", "ramp_bound", "binding_unknown"}
+        assert {f["code"] for f in rep["flags"]} & binding, "no binding verdict emitted"
+        for f in rep["flags"]:
+            if f["code"] in binding:
+                assert f["severity"] != "hard", f
+        # Removing the binding verdicts must leave hard_flag exactly as it was.
+        assert rep["hard_flag"] == any(f["severity"] == "hard" for f in rep["flags"]
+                                       if f["code"] not in binding)
+
+
+def test_ramp_permitted_is_the_engines_own_figure_not_a_second_formula():
+    # The anti-drift coupling: the ramp-permitted maximum reported per week must be
+    # required_tss's OWN ramp_capped_weekly_tss (the exact 42-day EMA solve in
+    # primitives.load.compute_required_tss), not a linearised restatement such as
+    # 7 x (CTL + 6R), which runs ~2% low and would flip a marginal verdict.
+    cfg, bp = _cfg(), _bp()
+    rep = mp.project_block(cfg, bp, 96.6, today=date(2026, 7, 27))
+    wk = rep["weeks"][0]
+    expected = pt.required_tss(cfg, 96.6, today=date(2026, 7, 27),
+                              last_week_tss=None)["ramp_capped_weekly_tss"]
+    assert wk["ramp_permitted_tss"] == expected
+    assert wk["ramp_permitted_tss"] != int(7 * (96.6 + 6 * 4.0))
+
+
+def test_plan_audit_imports_the_comparison_rather_than_restating_it():
+    # ONE place. Three bugs in this repo came from duplicated load maths; the audit
+    # must call the same function, not its own copy.
+    import plan_audit
+    assert plan_audit.binding_constraint is mp.binding_constraint
