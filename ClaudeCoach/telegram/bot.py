@@ -11,7 +11,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time as dt_time
 
 # Force IPv4 for the Telegram API. The IPv6 path to api.telegram.org intermittently
 # stalls the FIRST connection after the bot's been idle — the new SYN is lost and TCP
@@ -50,6 +50,7 @@ BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE.parent / "lib"))
 import races as races_lib
+import weekly_availability     # per-week declared hours (Sunday ask + reply capture)
 import claude_call
 import engine
 import rules_capture
@@ -2715,6 +2716,150 @@ def _handle_race_priority(token, chat_id, data, message_id, athletes):
     return True
 
 
+# Weekly hours capture. The Sunday morning card asks how many hours the athlete has for
+# the week starting tomorrow (weekly_availability.sunday_hours_ask, appended in
+# scripts/morning-checkin.py); until this handler existed nothing read the answer and a
+# declaration had to be hand-written by an agent. The figure sets the week's Load ceiling
+# at the 18:00 Sunday build, so a wrong capture is expensive and a missed one is not.
+#
+# TWO TIERS, because a bare number on that card is ambiguous. The same card asks "Ankle
+# score this morning? (0-10)" and "Weight this morning?", so "7" is at least as likely a
+# pain score as a seven-hour week. lib/weekly_availability draws the line:
+#   * looks_like_hours_declaration — the message frames itself as being about a week
+#     ("14h next week", "20, big week"). Written immediately, then read back.
+#   * looks_like_hours_reply       — a figure with no such framing ("12 max, nothing long
+#     midweek"). Only considered while `ask_outstanding` is true, and NEVER written on
+#     sight: the athlete gets a confirm keyboard and the write happens on the tap.
+# Nothing is inferred from silence, and no branch here can persist last week's figure —
+# `record` is keyed on the Monday being declared.
+_PENDING_HOURS: dict[str, dict] = {}
+_HOURS_CAPTURE_TTL = 3600        # 1 h to confirm an ambiguous figure
+
+# The Sunday build (`0 18 * * 0`). A declaration recorded after it is still worth having —
+# it is the athlete correcting the week — but the week has already been generated and
+# pushed, so the confirmation offers a rebuild instead of promising one, and this handler
+# never triggers a rebuild itself (docs/weekly-hours-capture.md, follow-up item 5).
+_WEEKLY_BUILD_HOUR = 18
+
+
+def _hours_week_is_built(week_start, now=None) -> bool:
+    """True once the build for the week beginning `week_start` has already run.
+
+    Keyed on the TARGET week rather than on "is it Sunday evening", because
+    weekly_availability.target_week resolves a mid-week "14 hours this week" to the
+    CURRENT Monday — a week generated the previous Sunday. Promising to build that week
+    this evening would be wrong; it needs the offer-a-rebuild wording instead. The build
+    for week W is the 18:00 cron on the Sunday before W.
+    """
+    n = now or datetime.now()
+    ws = date.fromisoformat(week_start) if isinstance(week_start, str) else week_start
+    build_at = datetime.combine(ws - timedelta(days=1),
+                                dt_time(hour=_WEEKLY_BUILD_HOUR))
+    return n >= build_at
+
+
+def _write_hours(slug, week_start, hours, constraints, coaching_level):
+    """Record the declaration and build the read-back. Returns (reply, ok)."""
+    try:
+        weekly_availability.record(slug, week_start, hours=hours,
+                                   constraints=constraints, source="telegram-reply")
+    except ValueError as e:
+        # Out of the sanity band. record() refuses rather than storing a figure that
+        # becomes a training ceiling, so say so instead of pretending it landed.
+        log(f"[{slug}] hours capture refused: {e}")
+        return (f"That came out as {hours:g} hours, which I don't think is right — "
+                f"nothing saved. Give me the number again?"), False
+    except Exception as e:
+        log(f"[{slug}] hours capture failed: {e}")
+        return "Couldn't save that — nothing written. Try again?", False
+    return weekly_availability.confirmation(
+        hours, constraints, coaching_level=coaching_level,
+        after_build=_hours_week_is_built(week_start)), True
+
+
+def _handle_hours_capture(token, chat_id, text, athletes):
+    """Turn "14h next week" into a declaration the Sunday build reads. Returns True if
+    handled.
+
+    Deliberately placed AFTER race capture and BEFORE the generative reply: a
+    deterministic read-back of what was stored beats a model's paraphrase of it for the
+    one figure the week's ceiling derives from."""
+    athlete = athletes.get(chat_id)
+    if not athlete:
+        return False
+    slug = athlete["slug"]
+    # WHICH week this reply is about. Resolved by weekly_availability, not computed here:
+    # an outstanding ask names the week that was actually asked, which beats any inference
+    # from today's date. Computing "the Monday after today" locally would send a Monday
+    # morning reply — well inside the answer window — to the FOLLOWING week, leaving the
+    # week the athlete was asked about on the config fallback.
+    ws = weekly_availability.target_week(slug, text)
+    level = _profile_coaching_level(slug)
+
+    # TIER 1 — self-framing, unambiguous, write now.
+    if weekly_availability.looks_like_hours_declaration(text):
+        parsed = weekly_availability.parse_hours_message(text)
+        reply, _ok = _write_hours(slug, ws, parsed["hours"], parsed["constraints"], level)
+        send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+        return True
+
+    # TIER 2 — ambiguous figure, and only while the ask is genuinely outstanding (sent,
+    # unanswered, inside its window). `ask_outstanding` is a recorded fact, not an
+    # inference from the calendar: sunday_hours_ask sends nothing while the illness flag
+    # is up, and offering to record an unrelated number as hours in that state would be
+    # the bot inventing a conversation it never had.
+    if not weekly_availability.ask_outstanding(slug, ws):
+        return False
+    if not weekly_availability.looks_like_hours_reply(text):
+        return False
+    parsed = weekly_availability.parse_hours_message(text)
+    _PENDING_HOURS[chat_id] = {"hours": parsed["hours"],
+                               "constraints": parsed["constraints"],
+                               "week_start": ws.isoformat(),
+                               "expiry": time.time() + _HOURS_CAPTURE_TTL}
+    cons = f" ({parsed['constraints']})" if parsed["constraints"] else ""
+    send(token, chat_id,
+         f"Just so I've got this right — is that *{parsed['hours']:g} hours* of training "
+         f"for next week{cons}?",
+         reply_markup={"inline_keyboard": [[
+             {"text": "Yes, that's my week", "callback_data": "__HOURS_YES__"},
+             {"text": "No", "callback_data": "__HOURS_NO__"},
+         ]]})
+    return True
+
+
+def _handle_hours_confirm(token, chat_id, data, message_id, athletes):
+    """The yes/no answer to the ambiguous-figure question above. Returns True if handled.
+
+    A "No" writes NOTHING and says so — the fallback to the standing figure is a stated,
+    visible outcome, and is strictly better than a ceiling built from a misread number."""
+    if data not in ("__HOURS_YES__", "__HOURS_NO__"):
+        return False
+    athlete = athletes.get(chat_id)
+    pending = _PENDING_HOURS.pop(chat_id, None)
+    if not athlete or not pending or time.time() > pending["expiry"]:
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id,
+                                  "That one timed out — tell me the hours again.")
+        return True
+    if data == "__HOURS_NO__":
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Nothing saved.")
+        send(token, chat_id,
+             "No problem — nothing saved. Tell me the number when you have it "
+             "(_\"14 hours next week\"_ works), or I'll use your usual week.",
+             reply_markup=build_keyboard(athlete["slug"]))
+        return True
+    slug = athlete["slug"]
+    reply, ok = _write_hours(slug, pending["week_start"], pending["hours"],
+                             pending["constraints"], _profile_coaching_level(slug))
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id,
+                              f"✅ {pending['hours']:g} h" if ok else "Not saved")
+    send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+    return True
+
+
 def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
     """Handle replan confirmation/cancel callbacks. Returns True if handled."""
     if data not in ("__REPLAN_CONFIRM__", "__REPLAN_CANCEL__"):
@@ -4167,6 +4312,12 @@ def _route_text(token, chat_id, text, athletes, config):
     if _handle_race_capture(token, chat_id, text, athletes):
         return
 
+    # Weekly hours capture: the answer to Sunday's "how many hours have you got?"
+    # becomes the week's Load ceiling at the 18:00 build. Deterministic read-back for
+    # the same reason race capture has one — the model must not paraphrase this figure.
+    if _handle_hours_capture(token, chat_id, text, athletes):
+        return
+
     # Sticky voice-reply toggle: /voice [on|off] or the 🎙 menu button.
     _vt = text.strip().lower()
     if _vt == "/voice" or _vt.startswith("/voice ") or _vt == "🎙 voice":
@@ -4467,6 +4618,8 @@ def main():
                 if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
+                    continue
+                if _handle_hours_confirm(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_race_priority(token, chat_id, text, msg_id, athletes):
                     continue

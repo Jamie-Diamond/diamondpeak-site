@@ -65,6 +65,7 @@ day-level caps belong in `constraints` prose, which reaches the Stage-1 planner.
 from __future__ import annotations
 
 import json
+import re
 import os
 import tempfile
 from datetime import date, datetime, timedelta
@@ -86,6 +87,16 @@ _KEEP = 6
 # config fallback rather than raising anyone's ceiling.
 MIN_HOURS = 1.0
 MAX_HOURS = 40.0
+
+# Floor for an UNFRAMED bare number offered as a possible hours reply (tier 2 below).
+# Deliberately higher than MIN_HOURS: the card this ask rides on also asks "Ankle score
+# this morning? (0-10)", so a bare "3" is overwhelmingly a pain score rather than a
+# three-hour training week for athletes whose standing figures are 8 and 15. An athlete
+# who genuinely has a very light week can still declare it in the framed form ("3 hours
+# this week"), which is unambiguous and bypasses this floor entirely. Between this floor
+# and 10 the two questions genuinely overlap, which is why tier 2 never writes without
+# an explicit confirmation tap.
+BARE_MIN_HOURS = 5.0
 
 
 def path_for(slug: str, base: Path | str | None = None) -> Path:
@@ -111,10 +122,25 @@ def _declarations(raw: dict) -> list[dict]:
     return [x for x in d if isinstance(x, dict)] if isinstance(d, list) else []
 
 
+# Keys this module manages. Their presence proves the file was written by THIS module, so
+# it cannot be a pre-existing Phase 5a flat file however empty it otherwise looks.
+_MANAGED_KEYS = ("declarations", "asks", "legacy_day_shape")
+
+
 def _is_legacy_flat(raw: dict) -> bool:
-    """A pre-existing Phase 5a file: an object with day-shape keys and no
-    `declarations` list and no `week_start`."""
-    return bool(raw) and not _declarations(raw) and not raw.get("week_start")
+    """A pre-existing Phase 5a file: an object of day-shape keys, with no `declarations`
+    list and no `week_start`.
+
+    The `_MANAGED_KEYS` test is load-bearing, not defensive. `note_ask_sent` writes
+    `{"asks": {...}, "declarations": []}` before any declaration exists, and an EMPTY
+    declarations list is falsy — so without this check that file satisfies every clause
+    above and `day_shape` hands the asks bookkeeping back to
+    session_library.reconcile_day_rules as though it were the athlete's day shape, for
+    every athlete, every Sunday, from the moment the ask goes out.
+    """
+    if not raw or any(k in raw for k in _MANAGED_KEYS):
+        return False
+    return not _declarations(raw) and not raw.get("week_start")
 
 
 def _clean_hours(v) -> float | None:
@@ -337,3 +363,332 @@ def sunday_hours_ask(slug: str, week_start: date | str, *, coaching_level: str =
     tail = (_FALLBACK_WITH_HOURS.format(hours=standing) if standing
             else _FALLBACK_NO_HOURS)
     return f"{ask}\n_{tail}_"
+
+
+# ---------------------------------------------------------------------------
+# THE REPLY — recognising an hours declaration in free text
+# ---------------------------------------------------------------------------
+# The ask above goes out on the Sunday morning card; until this half existed nothing
+# parsed the answer and a declaration had to be hand-written by an agent. Shape mirrors
+# lib/races.py and lib/illness.py: a NARROW detector plus a parser, both refusing rather
+# than guessing.
+#
+# WHY THERE ARE TWO TIERS, and why a bare number never writes on its own.
+# The morning check-in card this ask is appended to ALSO asks questions whose answer is
+# a bare number in the very band a plausible hours figure occupies:
+# "Ankle score this morning? (0-10)", "Injury pain score before heading out? (0-10)",
+# "Weight this morning?" (scripts/morning-checkin.py:60-72). An athlete replying "7" to
+# the ankle question would, under a one-tier "bare number 1-40 on a Sunday" detector,
+# silently become a 7-hour week and cap their Load ceiling at less than half their real
+# one. That is a worse failure than not capturing at all, because it is invisible: the
+# plan message would read "the {n} hours you told me you have" about a number the
+# athlete never said. So:
+#
+#   TIER 1 — UNAMBIGUOUS (`looks_like_hours_declaration`). The message carries a figure
+#            AND says it is about a week ("14 hours next week", "about 14 this week",
+#            "20, big week"). Nothing else on the card is phrased that way, so this
+#            writes immediately and echoes the consequence back.
+#   TIER 2 — CONTEXTUAL (`looks_like_hours_reply`). A figure with no weekly framing
+#            ("12 max, nothing long midweek", or a bare "14"). Only ever considered
+#            while the ask is genuinely OUTSTANDING (`ask_outstanding`), and even then
+#            it does NOT write — the caller asks the athlete to confirm and writes on
+#            the tap. An ambiguous number costs one tap; a wrong ceiling costs a week.
+#
+# Both tiers refuse a QUESTION outright, the lesson races.looks_like_race_statement
+# already learned the hard way ("Am I racing on Saturday?" became a race called "?").
+# Both also refuse a REPORT of hours already done — "I did 14 hours last week" is not a
+# declaration about the week ahead, and treating it as one would cap the coming week off
+# the previous one.
+
+# A figure with an explicit hours unit: "14h", "14 hrs", "17.5 hours".
+_HOURS_TOKEN_RE = re.compile(r"(\d{1,2}(?:\.\d)?)\s*(?:h\b|hr\b|hrs\b|hours?\b)", re.I)
+# A range — "maybe 12-13", "12 to 14". The LOWER bound is taken: the spec is explicit
+# about it, and building to the top of a range the athlete hedged would overshoot.
+_HOURS_RANGE_RE = re.compile(r"(\d{1,2}(?:\.\d)?)\s*(?:-|–|to)\s*(\d{1,2}(?:\.\d)?)", re.I)
+# A bare figure, used only once the message is already known to be about hours.
+_BARE_NUM_RE = re.compile(r"\b(\d{1,2}(?:\.\d)?)\b")
+
+# "…this week", "next week", "big week". NB `\bweek\b` deliberately does NOT match
+# "midweek", so "nothing long midweek" is a CONSTRAINT and not weekly framing — which is
+# what puts "12 max, nothing long midweek" in the contextual tier where it belongs.
+_WEEK_FRAMING_RE = re.compile(
+    r"\b(?:this|next|coming|the)\s+week\b|"
+    r"\b(?:big|easy|light|quiet|heavy|full|short|normal)\s+week\b|"
+    r"\bweek\s+(?:i|i'?ve|ive)\b", re.I)
+
+_THIS_WEEK_RE = re.compile(r"\bthis\s+week\b", re.I)
+_NEXT_WEEK_RE = re.compile(r"\bnext\s+week\b", re.I)
+
+# A question is never a declaration. Beyond the trailing "?" (which races.py relies on),
+# an interrogative opener catches the unpunctuated form — "how many hours should I do".
+_QUESTION_RE = re.compile(
+    r"^\s*(?:how|what|when|which|why|should|shall|can|could|would|do|does|did|is|are|am)\b"
+    r"|\bhow\s+(?:many|much|long)\b|\bshould\s+i\b|\bdo\s+i\s+(?:have|need)\b", re.I)
+
+# A REPORT of training already done, not a declaration of time available. "I did 14
+# hours last week", "managed 12", "slept 7 hours", "ended up with 9".
+_PAST_REPORT_RE = re.compile(
+    r"\b(?:did|done|managed|logged|completed|ended\s+up|got\s+through|totalled|totaled|"
+    r"slept|sleep\s+was|ran|rode|swam|trained)\b|\blast\s+week\b|\byesterday\b", re.I)
+
+# A SINGLE SESSION's duration, not a week's budget: "2 hour ride", "90 min run",
+# "long run of 3 hours". Without this, "I've got a 2 hour ride tomorrow" is a 2-hour
+# week. Weekly framing overrides it (see below) so "12 hours this week, one 3 hour ride"
+# still reads as 12.
+_SESSION_CTX_RE = re.compile(
+    r"\b(?:ride|rides|run|runs|swim|swims|session|sessions|bike|turbo|gym|race|"
+    r"long\s+run|long\s+ride|brick|interval|intervals|tempo|workout)\b", re.I)
+
+
+def _lower_of_range(text: str):
+    """The lower bound of a hedged range, or None. "maybe 12-13" -> 12.0."""
+    m = _HOURS_RANGE_RE.search(text)
+    if not m:
+        return None
+    try:
+        a, b = float(m.group(1)), float(m.group(2))
+    except ValueError:
+        return None
+    # Guard against a date or a score being read as a range: both ends must be a
+    # plausible weekly figure and the range must actually ascend.
+    if not (MIN_HOURS <= a <= MAX_HOURS and MIN_HOURS <= b <= MAX_HOURS and a < b):
+        return None
+    return a
+
+
+def _strip_hours_phrase(text: str) -> str:
+    """The message with the hours figure and its unit removed, leaving the prose that
+    is the athlete's CONSTRAINTS. Kept verbatim otherwise — it reaches the Stage-1
+    planner as written, so paraphrasing it here would lose the athlete's own words."""
+    out = _HOURS_RANGE_RE.sub(" ", text)
+    out = _HOURS_TOKEN_RE.sub(" ", out)
+    # A stranded unit word: the range regex removes "12-13" and leaves "hours" behind,
+    # which would otherwise be stored as the athlete constraint "hours".
+    out = re.sub(r"\b(?:h|hr|hrs|hours?)\b", " ", out, flags=re.I)
+    out = re.sub(r"\b(?:i'?ve\s+got|ive\s+got|i\s+have|i'?ve|got|about|maybe|around|"
+                 r"roughly|approx\w*|only|just|max|maximum|up\s+to|at\s+most)\b",
+                 " ", out, flags=re.I)
+    out = _WEEK_FRAMING_RE.sub(" ", out)
+    out = _BARE_NUM_RE.sub(" ", out)
+    # Tidy the punctuation the removals leave behind, without touching interior prose.
+    out = re.sub(r"\s+", " ", out).strip(" ,.;:-–—")
+    return out
+
+
+def parse_hours_message(text: str) -> dict:
+    """Pull a weekly hours figure and the athlete's constraints out of a chat message.
+
+    Returns {"hours": float|None, "constraints": str, "framed": bool, "refused": str}.
+    `refused` names the reason when the message is readable but must NOT be treated as a
+    declaration, so a caller can log WHY nothing was captured instead of failing silently.
+    `framed` is the tier-1 signal: the message itself says it is about a week.
+    """
+    out = {"hours": None, "constraints": "", "framed": False, "refused": ""}
+    t = (text or "").strip()
+    if not t:
+        out["refused"] = "empty"
+        return out
+    if t.endswith("?") or _QUESTION_RE.search(t):
+        out["refused"] = "question"
+        return out
+    if _PAST_REPORT_RE.search(t):
+        out["refused"] = "report of hours already done, not hours available"
+        return out
+
+    framed = bool(_WEEK_FRAMING_RE.search(t))
+    # A session noun with no weekly framing is a single session's duration, not a week.
+    if _SESSION_CTX_RE.search(t) and not framed:
+        out["refused"] = "reads as one session's duration, not a week's budget"
+        return out
+
+    h = _lower_of_range(t)
+    if h is None:
+        m = _HOURS_TOKEN_RE.search(t)
+        if m:
+            h = _clean_hours(m.group(1))
+        elif framed:
+            # No unit, but the message says "week" — a bare figure is the hours.
+            nums = [_clean_hours(n) for n in _BARE_NUM_RE.findall(t)]
+            nums = [n for n in nums if n is not None]
+            h = nums[0] if len(nums) == 1 else None
+        else:
+            # UNFRAMED and unitless. Held to BARE_MIN_HOURS, not MIN_HOURS: see the
+            # constant. A single figure only — two numbers with no unit and no weekly
+            # framing name nothing we can attribute.
+            nums = [_clean_hours(n) for n in _BARE_NUM_RE.findall(t)]
+            nums = [n for n in nums if n is not None]
+            h = nums[0] if len(nums) == 1 else None
+            if h is not None and h < BARE_MIN_HOURS:
+                out["refused"] = (f"bare {h:g} is below the {BARE_MIN_HOURS:g}h floor for an "
+                                  f"unframed figure — reads as a score, not a week")
+                return out
+    if h is None:
+        out["refused"] = out["refused"] or "no single plausible hours figure"
+        return out
+
+    out["hours"] = h
+    out["framed"] = framed
+    out["constraints"] = _strip_hours_phrase(t)
+    return out
+
+
+def looks_like_hours_declaration(text: str) -> bool:
+    """TIER 1 — the message is plainly declaring a week's available hours, with no
+    surrounding context needed. A figure AND weekly framing, and not a question or a
+    report. Safe to write on, because nothing else either athlete-facing card asks is
+    phrased this way."""
+    p = parse_hours_message(text)
+    return p["hours"] is not None and p["framed"]
+
+
+def looks_like_hours_reply(text: str) -> bool:
+    """TIER 2 — the message COULD be the answer to the Sunday ask: a figure, no weekly
+    framing, nothing disqualifying. True here is not permission to write; the caller
+    must have checked `ask_outstanding` and must confirm with the athlete first, because
+    a bare number on that card is equally plausibly an ankle score."""
+    p = parse_hours_message(text)
+    return p["hours"] is not None
+
+
+# ---------------------------------------------------------------------------
+# WAS THE ASK ACTUALLY SENT?
+# ---------------------------------------------------------------------------
+# The contextual tier must not fire on a guess that the ask went out. "It is Sunday and
+# there is no declaration" is NOT the same statement: `sunday_hours_ask` returns "" and
+# sends nothing when the illness flag is up, and a card can fail to send at all. In both
+# of those cases a bare "7" is answering something else, and offering to record it as
+# hours would be the bot inventing a conversation it never had. So the send is recorded
+# and the window is measured from it.
+_ASK_WINDOW_HOURS = 36          # generous: the ask lands 06:00-09:00 Sunday and the
+                                # build is 18:00 Sunday, but an athlete who answers
+                                # Monday morning is still answering THIS ask.
+
+
+def note_ask_sent(slug: str, week_start: date | str, base: Path | str | None = None) -> None:
+    """Record that the hours ask for `week_start` was sent, so a later bare-number reply
+    can be attributed to it. Best-effort and never raises: failing to record the send
+    must not stop the card going out — it only costs the contextual tier."""
+    try:
+        ws = date.fromisoformat(week_start) if isinstance(week_start, str) else week_start
+        ws = _monday(ws)
+        raw = load_raw(slug, base)
+        out = {k: v for k, v in raw.items() if k != "declarations"} if isinstance(raw, dict) else {}
+        if _is_legacy_flat(raw):
+            out = {"legacy_day_shape": raw}
+        asks = out.get("asks") if isinstance(out.get("asks"), dict) else {}
+        asks[ws.isoformat()] = datetime.now().isoformat(timespec="seconds")
+        out["asks"] = dict(sorted(asks.items())[-_KEEP:])
+        out["declarations"] = _declarations(raw)
+        _atomic_write(path_for(slug, base), out)
+    except Exception:
+        pass
+
+
+def ask_outstanding(slug: str, week_start: date | str, now: datetime | None = None,
+                    base: Path | str | None = None) -> bool:
+    """True when the ask for `week_start` was sent, is still within its answer window,
+    and has NOT yet been answered — the only state in which an unframed figure may be
+    offered to the athlete as an hours declaration."""
+    if has_declaration(slug, week_start, base):
+        return False
+    try:
+        ws = date.fromisoformat(week_start) if isinstance(week_start, str) else week_start
+        ws = _monday(ws)
+        asks = load_raw(slug, base).get("asks") or {}
+        sent = datetime.fromisoformat(str(asks[ws.isoformat()]))
+    except Exception:
+        return False
+    n = now or datetime.now()
+    return timedelta(0) <= (n - sent) <= timedelta(hours=_ASK_WINDOW_HOURS)
+
+
+def outstanding_ask_week(slug: str, now: datetime | None = None,
+                         base: Path | str | None = None) -> date | None:
+    """The week of the most recent ask that was sent, is in its window and is unanswered.
+
+    This is what a reply is ABOUT, and it must be read rather than recomputed from the
+    calendar. "The Monday after today" is only the same thing on a Sunday: an athlete who
+    answers on Monday morning — well inside `_ASK_WINDOW_HOURS`, which exists precisely so
+    that reply still counts — would otherwise have their figure recorded against the
+    FOLLOWING week, leaving the week they were asked about on the config fallback and
+    silently capping a week they never declared.
+    """
+    asks = load_raw(slug, base).get("asks") or {}
+    if not isinstance(asks, dict):
+        return None
+    best = None
+    for ws, _sent in asks.items():
+        try:
+            w = _monday(date.fromisoformat(str(ws)))
+        except Exception:
+            continue
+        if ask_outstanding(slug, w, now=now, base=base) and (best is None or w > best):
+            best = w
+    return best
+
+
+def target_week(slug: str, text: str = "", today: date | None = None,
+                now: datetime | None = None, base: Path | str | None = None) -> date:
+    """The Monday a reply should be recorded against, in precedence order:
+
+    1. the week of an OUTSTANDING ask — a recorded fact about what was actually asked,
+       which beats any inference from the calendar or the wording;
+    2. "next week" in the message — the following Monday;
+    3. "this week" in the message on a Mon-Sat — the CURRENT Monday. Said mid-week that
+       plainly means the week in progress, and defaulting to the next one would record a
+       figure against a week the athlete was not talking about;
+    4. otherwise the next Monday, which is what the Sunday ask is about and the right
+       reading of a bare figure.
+
+    Sunday deliberately falls through 3 to 4: it is the last day of the current week and
+    the ask that day is about the week starting tomorrow.
+    """
+    t = today or date.today()
+    pending = outstanding_ask_week(slug, now=now, base=base)
+    if pending:
+        return pending
+    nxt = t + timedelta(days=(7 - t.weekday()) % 7 or 7)
+    low = (text or "").lower()
+    if _NEXT_WEEK_RE.search(low):
+        return nxt
+    if _THIS_WEEK_RE.search(low) and t.weekday() != 6:
+        return _monday(t)
+    return nxt
+
+
+# ---------------------------------------------------------------------------
+# CONFIRMING BACK
+# ---------------------------------------------------------------------------
+# Written by hand per coaching level for the same reason `_ASK` is: these are
+# deterministic strings, and coaching_levels.level_block() only shapes LLM prompts, so
+# it cannot reach them. Calum is `beginner` — no Load/TSS/ceiling framing at all.
+# The confirmation states the figure, the constraints as STORED, and the consequence,
+# so a mis-parse is visible in the athlete's next glance rather than in next week's plan.
+
+_CONFIRM = {
+    "beginner": "👍 Got it — *{hours:g} hours* next week{cons}. I'll build the week around that.",
+    "mid":      "👍 Logged — *{hours:g} hours* next week{cons}. I'll build to that this evening.",
+    "pro":      ("👍 Logged — *{hours:g} hours* next week{cons}. The weekly Load ceiling "
+                 "comes off that figure; I build this evening."),
+}
+# Said INSTEAD of "I build this evening" once the 18:00 build has already run. Recording
+# a correction is right; silently rebuilding a week the athlete has already been sent is
+# not (spec item 5), so the rebuild is offered and not taken.
+_CONFIRM_LATE = {
+    "beginner": ("👍 Got it — *{hours:g} hours* next week{cons}. Next week is already put "
+                 "together, so say the word and I'll redo it to fit."),
+    "mid":      ("👍 Logged — *{hours:g} hours* next week{cons}. Next week is already built, "
+                 "so tell me if you want it rebuilt to that figure."),
+    "pro":      ("👍 Logged — *{hours:g} hours* next week{cons}. Next week is already built "
+                 "against the old ceiling — say the word and I'll rebuild to this one."),
+}
+
+
+def confirmation(hours: float, constraints: str = "", *, coaching_level: str = "mid",
+                 after_build: bool = False) -> str:
+    """The one-line read-back. `after_build` switches to the form that offers a rebuild
+    rather than promising one."""
+    table = _CONFIRM_LATE if after_build else _CONFIRM
+    tmpl = table.get(coaching_level, table["mid"])
+    cons = f", noted: _{constraints.strip()}_" if (constraints or "").strip() else ""
+    return tmpl.format(hours=hours, cons=cons)

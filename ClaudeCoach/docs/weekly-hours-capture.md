@@ -1,8 +1,9 @@
 # Weekly available hours — asked, not configured
 
-**Status:** mechanism landed on `feat/weekly-hours-capture` (28 Jul 2026). The ask is
-appended to the Sunday morning card and the ceiling derives from the answer. **The
-reply is not yet parsed automatically** — see [Follow-up: the bot half](#follow-up-the-bot-half).
+**Status:** mechanism landed on `feat/weekly-hours-capture` (28 Jul 2026); the reply
+capture landed on `feat/bot-capture-handlers` (29 Jul 2026). The ask is appended to the
+Sunday morning card, the reply is parsed automatically, and the ceiling derives from the
+answer. See [The bot half](#the-bot-half).
 
 ## Why
 
@@ -182,11 +183,11 @@ cap with week_start=None: 778.0   <- macro_projection unchanged
 `+10%` is `validate_week`'s `tss_tolerance`, read off the signature by
 `macro_projection._cap_tolerance()`.
 
-## Follow-up: the bot half
+## The bot half
 
-The ask goes out; **nothing parses the reply yet**, because that requires
-`telegram/bot.py`, which was out of scope for this ticket. Until it lands, a
-declaration has to be written by hand:
+**Landed 29 Jul 2026** (`feat/bot-capture-handlers`). The reply is parsed in
+`telegram/bot.py` `_handle_hours_capture` / `_handle_hours_confirm`, on the detector and
+parser in `lib/weekly_availability.py`. A declaration can still be written by hand:
 
 ```python
 python3 -c "import sys; sys.path.insert(0,'lib'); import weekly_availability as wa; \
@@ -194,7 +195,51 @@ python3 -c "import sys; sys.path.insert(0,'lib'); import weekly_availability as 
        constraints='away Thu-Fri, nothing long Mon-Thu', source='coach'))"
 ```
 
-What the bot follow-up must do:
+### Two tiers, because a bare number on that card is ambiguous
+
+The morning check-in the ask rides on also asks *"Ankle score this morning? (0-10)"*,
+*"Injury pain score before heading out? (0-10)"* and *"Weight this morning?"*
+(`morning-checkin.py:60-72`). A single-tier "bare number in 1-40 on a Sunday" detector
+would read a reply of `7` to the ankle question as a seven-hour week and cap that
+athlete's ceiling at under half its real value - invisibly, since the plan message would
+then say *"the 7 hours you told me you have"* about a figure never said. So:
+
+| Tier | Trigger | Behaviour |
+|---|---|---|
+| 1 | `looks_like_hours_declaration` - a figure **and** weekly framing (`14h next week`, `20, big week`) | writes immediately, reads the record back |
+| 2 | `looks_like_hours_reply` - a figure with no framing (`12 max, nothing long midweek`, a bare `14`) | only while `ask_outstanding`; **never writes on sight** - confirm keyboard, write on the tap |
+
+Unframed bare figures are held to `BARE_MIN_HOURS` (5.0) rather than `MIN_HOURS` (1.0),
+because a bare `3` is overwhelmingly a pain score for athletes whose standing figures are
+8 and 15. Between 5 and 10 the two questions genuinely overlap, which is why that tier
+requires a tap.
+
+Both tiers refuse a **question** (the lesson `races.looks_like_race_statement` learned), a
+**report of hours already done** (`I did 14 hours last week`, `slept 7 hours` - capping the
+coming week off the previous one is the silent persistence this design removes), and **one
+session's duration** (`a 2 hour ride tomorrow`).
+
+### `ask_outstanding` rests on a recorded send
+
+`morning-checkin.py` calls `note_ask_sent` when it appends the ask. *"It is Sunday and
+nothing is declared"* is a different statement: `sunday_hours_ask` returns `""` and sends
+nothing while the illness flag is up, and in that state an unexplained number is answering
+one of the card's other questions.
+
+Two traps found while building it, both now covered by tests:
+
+- **`note_ask_sent` must not look like a legacy flat file.** It writes
+  `{"asks": {...}, "declarations": []}`, and an *empty* declarations list is falsy - so
+  without the `_MANAGED_KEYS` check in `_is_legacy_flat`, `day_shape` would hand that
+  bookkeeping to `session_library.reconcile_day_rules` as the athlete's day shape, for
+  every athlete, every Sunday.
+- **Which week a reply is about must be read, not recomputed.** `target_week` resolves an
+  outstanding ask first. "The Monday after today" only equals the asked-about week on a
+  Sunday: a Monday-morning reply - well inside `_ASK_WINDOW_HOURS`, which exists precisely
+  so it still counts - would otherwise land on the *following* week, leaving the week the
+  athlete was asked about on the config fallback.
+
+### What the follow-up had to do
 
 1. **Recognise the reply.** A bare number in the ~1–40 range, on a Sunday, within a few
    hours of the ask, or any message containing an hours figure ("about 14", "14h",
@@ -211,11 +256,8 @@ What the bot follow-up must do:
 5. **Allow a mid-week correction.** `record` already replaces, but re-running the build
    for a week already pushed is a separate decision — do not do it silently.
 
-Also outstanding: **`lib/plan_tools.py:663-667`** (`cmd_validate`) still holds an inline
-copy of the hours-ceiling maths reading `max_hours_per_week` directly, so the manual
-`validate_plan` CLI is not declaration-aware and will report a stale, LOWER cap for a
-declared week. It is off the Sunday build path, so nothing in production disagrees;
-the file was owned by a concurrent ticket (`t-deload-placement`) on 28 Jul, which is
-why it was left alone. Fix is one line: call
-`plan_builder._weekly_tss_cap(args.athlete, phase, week_start=week_start)` and delete
-the inline block.
+~~Also outstanding: `lib/plan_tools.py:663-667` (`cmd_validate`) still holds an inline
+copy of the hours-ceiling maths.~~ **Fixed 28 Jul 2026 by `68b5ea3`** ("plan_tools
+cmd_validate: resolve the weekly cap through the shared precedence"). Note that
+`plan_builder._weekly_tss_cap`'s own docstring still describes that inline copy as
+outstanding and owned by a concurrent ticket - that comment is now stale.
