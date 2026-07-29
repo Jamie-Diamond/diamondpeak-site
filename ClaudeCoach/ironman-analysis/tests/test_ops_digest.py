@@ -1557,13 +1557,23 @@ class TestCronDerivedRegistry:
         monkeypatch.setattr(digest, "plan_sanity", lambda athletes: [])
         monkeypatch.setattr(ca, "read_crontab",
                             lambda: crontab(drop=("weekly-summary.sh",)))
-        # the two non-per-athlete deliverables need a clean heartbeat, or their
-        # (genuine) gaps would send and mask what this test is about
+        # EVERY non-per-athlete deliverable needs a clean heartbeat, or its (genuine,
+        # unrelated) gap would send and mask what this test is about. DERIVED from
+        # coach_alert.DELIVERABLES rather than hand-listed: the hand-listed version
+        # named only watchdog and backup-config, so when `sync-private` was added to
+        # the registry on 28 Jul 2026 this test silently became coupled to whether the
+        # private repo sync happened to be healthy on the box. It went red on 29 Jul
+        # for that reason — a real ops gap (no successful sync since 23:20 Tue 28 Jul)
+        # surfacing as a spurious failure of a guard test about something else.
+        # The guard itself is UNCHANGED and still `sent == []`; this only removes the
+        # test's dependence on live box state, which is what a hermetic test of
+        # registry drift should never have had.
+        # `detail` must match what the registry expects, because _saw() filters on it.
         now = datetime.now().isoformat(timespec="seconds")
         ops_log.RUN_STATUS.write_text("".join(
-            json.dumps({"ts": now, "script": s, "athlete": "", "ok": True,
-                        "detail": det}) + "\n"
-            for s, det in (("watchdog", "silent"), ("backup-config", "sync ok"))))
+            json.dumps({"ts": now, "script": d["script"], "athlete": "", "ok": True,
+                        "detail": d.get("detail") or "ok"}) + "\n"
+            for d in ca.DELIVERABLES if not d.get("per_athlete")))
 
         digest.main()
 

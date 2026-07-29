@@ -244,3 +244,46 @@ class TestSundayAsk:
         _athlete(based)
         assert wa.sunday_hours_ask("jamie", MON, coaching_level="nonsense") == \
                wa.sunday_hours_ask("jamie", MON, coaching_level="mid")
+
+
+# ── the manual validate CLI must not keep its own copy of the hours maths ──────
+# cmd_validate needs a live Intervals.icu client (wellness + run_caps), so it is not
+# unit-testable without network. What IS testable, and what actually regressed, is
+# the COUPLING: it must resolve the cap through plan_builder._weekly_tss_cap rather
+# than re-reading profile.max_hours_per_week. Same anti-drift pattern the repo
+# already uses for validate_week's tolerance and LATE_LOADING_WINDOW.
+
+def test_cmd_validate_resolves_the_cap_through_the_shared_precedence():
+    import inspect
+    import plan_tools as pt
+    src = inspect.getsource(pt.cmd_validate)
+    assert "_weekly_tss_cap" in src, "cmd_validate must use the shared cap resolver"
+    assert "week_start=week_start" in src, (
+        "cmd_validate must pass week_start or it stays blind to a declaration")
+    # The inline copy this replaced. Its return when the athlete has no hours figure
+    # was None (check SKIPPED); the shared resolver falls through to the phase
+    # ceiling instead, which is the 10 Jul 2026 arming decision.
+    # Match the CODE pattern, not the word: the docstring and comments legitimately
+    # explain what was removed and would otherwise trip this.
+    assert '.get("max_hours_per_week")' not in src, (
+        "cmd_validate must not re-read max_hours_per_week — that is the inline copy "
+        "that reported a stale, LOWER cap for a declared week")
+    assert "tss_ceiling(float(max_h)" not in src, "the inline hours formula is back"
+
+
+def test_shared_resolver_arms_the_check_for_an_athlete_with_no_hours_figure(tmp_path):
+    # The one deliberate behaviour change in that swap, pinned so it is a decision
+    # and not a surprise: no max_hours_per_week -> phase ceiling, not None.
+    import plan_builder as pb
+    base = tmp_path
+    (base / "athletes" / "nohours").mkdir(parents=True)
+    (base / "athletes" / "nohours" / "profile.json").write_text(json.dumps(
+        {"name": "No Hours"}))                      # deliberately no max_hours_per_week
+    old = pb.BASE
+    try:
+        pb.BASE = base
+        phase = {"name": "Peak", "tss_ceiling": 1083}
+        assert pb._weekly_tss_cap("nohours", phase) == 1083.0
+        assert pb.cap_source("nohours", phase) == "phase"
+    finally:
+        pb.BASE = old

@@ -124,7 +124,8 @@ def _weekly_tss_cap(slug, phase, week_start=None) -> float | None:
 
     ONE PLACE. The hours formula lives in primitives.blueprint.tss_ceiling and its
     precedence lives here; do not re-read max_hours_per_week to compute a ceiling
-    elsewhere. lib/plan_tools.py:663-667 (cmd_validate) still holds an inline copy
+    elsewhere. lib/plan_tools.py cmd_validate (the inline `max_h`/`tss_ceiling`
+    block, ~line 783) still holds a copy
     that predates this and is NOT declaration-aware — it is the manual
     `validate_plan` CLI, off the Sunday build path, and is owned by a concurrent
     ticket; see docs/weekly-hours-capture.md for the follow-up."""
