@@ -35,6 +35,7 @@ sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
+import acknowledgement as ack_lib   # §8.3 milestone triggers, evaluated in Python
 import ops_log
 import heat as heat_lib
 import claude_call
@@ -143,6 +144,7 @@ Check for new activities for {first_name} and stub them into the session log.
 
 {_level_block(coaching_level)}
 {illness_lib.prompt_block(slug, first_name=first_name)}
+{ack_lib.PROMPT_NOTE}
 
 
 Step 1 — Fetch data via Bash:
@@ -364,6 +366,47 @@ def _credit_heat_exposure(slug: str, activity_id: str, profile: dict) -> None:
                            detail=f"heat dose {entry['dose']} auto-credited ({entry['context']})")
     except Exception as exc:
         print(f"[heat-credit:{slug}] {exc}", file=sys.stderr)
+
+
+def _acknowledgement(slug: str, activity_id: str,
+                     coaching_level: str) -> tuple[str, list]:
+    """The §8.3 session-level acknowledgement for this activity, or ("", []).
+
+    Evaluated HERE rather than in the prompt because _build_prompt runs before
+    the activity is known — the model discovers it and emits ACTIVITY_ID — so an
+    id-keyed conditional in the prompt would be the instruction-following this
+    repo has documented failing twice (lib/plan_builder.py:5-7). Rendered in
+    Python once the id is authoritative, the acknowledgement is unconditional
+    and cannot be dropped, softened or duplicated by the model.
+
+    Reads the ICU history feed, never session-log.json — the feed reaches ~12
+    months where the logs reach three to four, and it carries no stub rows with a
+    null distance, which is what triggers 3 and 4 actually depend on (see the
+    lib docstring). Returns the keys so the caller can mark them only after the
+    message has actually gone out.
+
+    Any failure returns ("", []) — a missing acknowledgement is a non-event, a
+    wrong one discredits the rest of the debrief.
+    """
+    try:
+        from icu_api import IcuClient
+        cfg = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        client = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+        activity = client.get_activity_detail(activity_id)
+        if not isinstance(activity, dict) or not activity:
+            return "", []
+        history = client.get_training_history(365)
+        adir = BASE / "athletes" / slug
+        hits = ack_lib.evaluate_activity_from_dir(
+            adir, activity, history, coaching_level=coaching_level,
+            fired=ack_lib.load_state_from_dir(adir)["fired"])
+        # Every hit that evaluated true is marked, but only the first is said
+        # (§8.4 bans padding). A "longest ride" held back today in favour of the
+        # comeback line is still a fact about TODAY's ride — letting it re-fire
+        # on a later, shorter ride would be the false claim.
+        return ack_lib.activity_prefix(hits), [h["key"] for h in hits]
+    except Exception:
+        return "", []
 
 
 def _run_durability_note(slug: str, activity_id: str) -> tuple[str, bool]:
@@ -1308,15 +1351,38 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
             plan_delta_note = ""
     if plan_delta_note and not already_discussed:
         analysis = f"{analysis}\n_{plan_delta_note}_" if analysis else plan_delta_note
+    # §8.3 acknowledgement. Kept OUT of `analysis` deliberately: `analysis` is
+    # handed to _strava_update below, and §8.4 rules Strava the wrong surface —
+    # it is public and stays neutral. This only ever reaches Telegram.
+    ack_prefix, ack_keys = _acknowledgement(
+        slug, activity_id, profile.get("coaching_level", "mid"))
+    ack_sent = False
+
     if already_discussed:
         # Chat already covered this activity — stay silent, but a durability
         # flag is new insight the chat can't have had (it's computed here).
         note, flagged = _run_durability_note(slug, activity_id)
         if flagged:
-            _notify(f"*New activity*{note}", chat_id, slug=slug)
+            # W1: if there is an acknowledgement it leads, and the flag still
+            # lands at full strength immediately after. Praise-then-finding is
+            # §8.5 move 0; the §8.4 sandwich is the other order.
+            _notify(f"*New activity*\n\n{ack_prefix}{note.lstrip()}"
+                    if ack_prefix else f"*New activity*{note}", chat_id, slug=slug)
+            ack_sent = bool(ack_prefix)
     elif analysis and analysis != "none":
         analysis += _run_durability_note(slug, activity_id)[0]
-        _notify(f"*New activity*\n\n{analysis}", chat_id, slug=slug)
+        _notify(f"*New activity*\n\n{ack_prefix}{analysis}", chat_id, slug=slug)
+        ack_sent = bool(ack_prefix)
+
+    # Marked only once it has actually been said — an unsent occurrence must
+    # stay available, or the one message §8.3 exists to produce is silently
+    # spent. Idempotent, so a re-run cannot double-fire.
+    if ack_sent and ack_keys:
+        try:
+            ack_lib.mark_fired_in(BASE / "athletes" / slug, ack_keys)
+        except Exception as e:
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] acknowledgement "
+                  f"state not written: {e}", file=sys.stderr)
 
     # Send quick-log keyboard for immediate data capture
     new_entry = None

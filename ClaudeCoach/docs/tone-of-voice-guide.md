@@ -518,12 +518,12 @@ trigger does not exist at all (§8.6).
 | Trigger | Condition | Say | Status |
 |---|---|---|---|
 | Segment PB | `pr_rank == 1` on a Strava segment | Already sends `🏆 PR: <name>`. Add one clause of context: what it was and whether it was on a hard or easy day. | **Live today** (`activity-watcher.py:861–870`) |
-| Hard block finished | Final session of a build block completed, next week is deload/taper (`plan_tools.required_tss(...).week_type`) | Name the block and what it bought. "That's the build block done — three weeks, 2,340 Load, Fitness up 11 points. Next week steps down." | Needs trigger |
+| Hard block finished | Final session of a build block completed, next week is deload/taper (`plan_tools.required_tss(...).week_type`) | Name the block and what it bought. "That's the build block done — three weeks, 2,340 Load, Fitness up 11 points. Next week steps down." | **Live today** (`lib/acknowledgement.py`, 29 Jul 2026), weekly card. Scoped to the week boundary (this week a build type, next week a step-down) rather than to "the final session", which the planned-events feed cannot identify without guessing. Silent on a week under 80% compliance (W3), on any `{"error": ...}` from `required_tss`, and once the week is marked. Load/Fitness are omitted rather than estimated when the block-length totals are unavailable; Calum gets a figure-free variant. |
 | Consistent week | Weekly compliance ≥95% with no flags (already computed for the STRONG rating) | One sentence in the weekly card, before the table, not after. | **Live as a prompt instruction** (`2a4f96f`) — Claude picks the sentence on a STRONG/SOLID week; no separate streak-detection code exists yet, see the Streak row below. |
-| Streak | 3+ consecutive weeks at ≥90% compliance | "Third week running you've hit everything on the card." Once per streak, not weekly. | Needs trigger |
-| First time at a distance | Longest run/ride/swim in the available history | "Longest ride you've done this year." State it plainly; no superlatives. | Needs trigger |
-| Comeback from illness or injury | First completed session after ≥5 days with no training, or first run after an injury-pain gap (`current-state.json` injury log) | Acknowledge the return, not the numbers. "First one back — that's the hard one done." Then no analysis unless asked. | Needs trigger |
-| Session completed while ill or compromised | Any completed session on a day flagged ill/injured in `current-state.md` | W1 applies with force: lead with the fact they trained at all. | Needs trigger |
+| Streak | 3+ consecutive weeks at ≥90% compliance | "Third week running you've hit the plan — 91% at the lowest." Once per streak, not weekly. | **Live today** (`lib/acknowledgement.py`, 29 Jul 2026), weekly card. Keyed on the week the streak STARTED, so extending it does not re-congratulate. Needs the previous weeks PERSISTED (`athletes/<slug>/acknowledgement-state.json`, gitignored): a week missing from the record breaks the count rather than being read over, so the first genuine fire is three recorded weeks after this landed. Wording is "hit the plan, N% at the lowest" — at a 90% threshold "hit everything on the card" would overclaim. |
+| First time at a distance | Longest run/ride/swim in the available history | "Longest ride you've done in the last twelve months, at 107.0 km." State it plainly; no superlatives. | **Live today** (`lib/acknowledgement.py`, 29 Jul 2026), activity debrief. Reads the ICU history feed, not `session-log.json`. **"This year" is not sayable**: `get_training_history(days)` is a ROLLING window, so the span is named from the earliest date actually present in the feed. Silent under 120 days of span, under 8 prior sessions in that sport, inside a 2% margin, and — the important one — if ANY prior same-sport entry has no distance, because an unknown maximum cannot be beaten. |
+| Comeback from illness or injury | First completed session after ≥5 days with no training, or first run after an injury-pain gap (`current-state.json` injury log) | Acknowledge the return, not the numbers. "First one back after 9 days — that's the hard one done." Then no analysis unless asked. | **Live today** (`lib/acknowledgement.py`, 29 Jul 2026), activity debrief. **Only the ≥5-day branch ships.** The injury-pain branch has no store to read: on 29 Jul 2026 Jamie carries `ankle` and `niggles`, Kathryn neither, Calum `niggles`, and no athlete has an `injury_log` key — inventing one from `niggles` prose is how a false claim gets made. Gap comes from the ICU feed, and is silent unless the feed reaches back PAST the gap being claimed (a short feed and a real break are otherwise indistinguishable). Keyed on the gap-end date, so only the first session back carries it. "No analysis unless asked" is a prompt instruction, not code — see the caveat below. |
+| Session completed while ill or compromised | Any completed session on a day flagged ill/injured in `current-state.md` | W1 applies with force: lead with the fact they trained at all — "76 minutes done while ill, on day 4." | **Live today** (`lib/acknowledgement.py`, 29 Jul 2026), activity debrief. Consumes `lib/illness.py`'s structured flag; it does NOT re-derive it from `current-state.md` prose and does not restate the illness gate. Composed from the canonical fields rather than `illness._label()`, which renders a log handle ("tonsillitis (active, day 4)") that does not fit a sentence. Fires once per session. |
 | Pre-race | Race within 1 day | §8.6 | **Live** — `lib/races.py` `race_phase()` (commits `db10953`, `89f8124`, `aecc078`, `6ba357a`). |
 | Post-race | Race completed | §8.6 | **Live** — same registry, `race_completed` phase, fires once per race (`post_race_sent`). |
 
@@ -974,11 +974,41 @@ A prompt guide cannot reach these. They emit fixed strings:
   rendered as a message (identical entries are now folded with an `(xN)` suffix, which helps the
   volume and not the register). Either reformat it or accept it as a genuine engineering channel (Q5).
 
-### Step 3 — the acknowledgement triggers (new code, small)
+### Step 3 — the acknowledgement triggers — IMPLEMENTED 29 Jul 2026
 
-§8.2 changes how existing messages are worded and needs no new code. §8.3 needs something to
-*watch* for the conditions, because no script currently fires on a good outcome. Each of these
-reads data the system already computes:
+**Done, in `lib/acknowledgement.py`.** The five rows §8.3 marked "Needs trigger" now have one.
+Conditions are evaluated in Python and the surfaces are handed finished text, for the reason
+`lib/plan_builder.py:5-7` already records — a model told when to praise praises wrongly, and
+§8.3's value depends entirely on it never doing that.
+
+Two surfaces, both of which already send, because the athletes get 35-45 messages a week and
+three evening messages became two when Kathryn stopped answering:
+
+- **Weekly card** (`weekly-summary.py`) carries *hard block finished* and *streak* — week-level
+  facts, placed before the table as §8.3 asks. It also persists the week's compliance, which is
+  what makes a streak evaluable at all.
+- **Activity debrief** (`activity-watcher.py`) carries *first time at a distance*, *comeback* and
+  *session completed while ill*. These are session-level facts, so holding them for the weekly
+  card would deliver them days late. The sentence is rendered in Python and **prepended** rather
+  than requested in the prompt: `_build_prompt` runs before the activity is identified (the model
+  discovers it and emits `ACTIVITY_ID`), so an id-keyed conditional would be exactly the
+  instruction-following this repo has watched fail twice. At most one leads, and the finding that
+  follows is untouched — praise-then-finding is W1/§8.5 move 0, not the §8.4 sandwich.
+
+**Every trigger fails closed**, per the per-row notes in §8.3: incomplete, ambiguous or shallow
+data produces silence. False praise discredits every other thing the coach says, so there is no
+"probably" branch anywhere in the module. Once-per-occurrence is enforced by a gitignored
+`athletes/<slug>/acknowledgement-state.json` keyed on the OCCURRENCE (streak start week, gap-end
+date, sport+distance, block end week, session id), pruned on every write, and written only after
+the message has actually gone out.
+
+**Two things this does not do.** (1) The comeback row's "then no analysis unless asked" is a
+standing prompt instruction, not code — the analysis is written by the model in the same call, and
+the activity is not known when the prompt is built. Ignored, the acknowledgement still leads,
+because that part is code. (2) The block acknowledgement's Load and Fitness figures need
+block-length totals; when the fetch for them fails the clause is dropped rather than estimated.
+
+Original notes, for the record — each of these reads data the system already computes:
 
 - **Consistent week / streak** — `weekly-summary.py` already computes compliance % for the
   STRONG/SOLID/LIGHT/MIXED rating. A streak needs the previous two weeks' ratings persisted.
