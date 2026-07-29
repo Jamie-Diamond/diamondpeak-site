@@ -52,6 +52,7 @@ sys.path.insert(0, str(BASE.parent / "lib"))
 import races as races_lib
 import weekly_availability     # per-week declared hours (Sunday ask + reply capture)
 import open_actions            # the single open-actions store (close/defer/drop)
+import day_overrides           # fail-closed register of directed day-rule deviations
 import claude_call
 import engine
 import rules_capture
@@ -2995,6 +2996,113 @@ def _handle_action_confirm(token, chat_id, data, message_id, athletes):
     return True
 
 
+# Directed day-rule deviations. lib/day_overrides.py is the fail-closed register that turns
+# a coach-directed off-pattern session from a hard `{sport}_forbidden_day` breach into a
+# soft `{sport}_directed_day` advisory that still shows in the report. It works - Jamie's
+# Wednesday swim is in it - but only because an agent hand-wrote the JSON. The instructions
+# arrive here, in chat, so this is where one should land.
+#
+# THIS IS THE STRICTEST CAPTURE IN THE BOT, and deliberately so. The others risk writing
+# something wrong that a human later sees; this one risks SILENCING A CHECK, so a generator
+# genuinely drifting off an athlete's pattern would stop being reported. A missed capture
+# costs one hand-edit. A wrong one costs the check. Four library gates must all pass (sport,
+# directive-not-question-not-report, unambiguous date, day actually off-pattern) and then
+# the athlete must tap Yes. Nothing is written on a parse alone, which is what makes "if you
+# cannot be confident the athlete meant to direct a deviation, record nothing and leave it
+# hard" true by construction rather than by the parser being clever enough.
+_PENDING_DAYRULE: dict[str, dict] = {}
+_DAYRULE_CAPTURE_TTL = 900
+
+
+def _athlete_day_rules(slug):
+    """The athlete's normal weekly pattern, from the same config plan_builder reads."""
+    try:
+        return (json.loads(ATHLETES_CONFIG.read_text()).get(slug, {}) or {}).get("day_rules")
+    except Exception:
+        return None
+
+
+def _handle_dayrule_capture(token, chat_id, text, athletes):
+    """Record a coach-directed off-pattern session. Returns True if handled.
+
+    Returns False - silently, letting the normal reply happen - on every doubt. A message
+    this handler declines is NOT a message that goes unanswered; it just does not become a
+    permission."""
+    athlete = athletes.get(chat_id)
+    if not athlete:
+        return False
+    slug = athlete["slug"]
+    parsed = day_overrides.parse_directed_day(text)
+    if not (parsed["family"] and parsed["date"]):
+        return False
+    # The day must actually be off-pattern. An override for a day already in
+    # `{sport}_days` excuses nothing and is not harmless: validate_plan counts entries per
+    # sport+weekday for its `day_rules_drifted` alarm, so redundant ones would push a real
+    # pattern towards a false alarm.
+    if not day_overrides.is_off_pattern(_athlete_day_rules(slug),
+                                        parsed["family"], parsed["date"]):
+        return False
+
+    when = date.fromisoformat(parsed["date"]).strftime("%a %-d %b")
+    _PENDING_DAYRULE[chat_id] = {"family": parsed["family"], "date": parsed["date"],
+                                 "expiry": time.time() + _DAYRULE_CAPTURE_TTL}
+    # The resolved ABSOLUTE date is echoed, because a misread weekday is otherwise
+    # invisible — the same reason race capture spells the date out.
+    send(token, chat_id,
+         f"Just to be sure — you want a *{parsed['family']}* on *{when}*, which is not one "
+         f"of your usual {parsed['family']} days?",
+         reply_markup={"inline_keyboard": [[
+             {"text": "Yes, that's the plan", "callback_data": "__DAYRULE_YES__"},
+             {"text": "No", "callback_data": "__DAYRULE_NO__"},
+         ]]})
+    return True
+
+
+def _handle_dayrule_confirm(token, chat_id, data, message_id, athletes):
+    """The yes/no tap. Only this writes the register. Returns True if handled."""
+    if data not in ("__DAYRULE_YES__", "__DAYRULE_NO__"):
+        return False
+    athlete = athletes.get(chat_id)
+    pending = _PENDING_DAYRULE.pop(chat_id, None)
+    if not athlete or not pending or time.time() > pending["expiry"]:
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id,
+                                  "That one timed out — say it again if you meant it.")
+        return True
+    if data == "__DAYRULE_NO__":
+        # Fail closed: nothing recorded, so the day-rule check stays HARD for that session.
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Left as it was.")
+        send(token, chat_id, "Understood — I've not changed anything.",
+             reply_markup=build_keyboard(athlete["slug"]))
+        return True
+
+    slug = athlete["slug"]
+    try:
+        key = day_overrides.record(slug, BASE.parent, pending["family"], pending["date"],
+                                   day_overrides.capture_note("Telegram"))
+    except Exception as e:
+        log(f"[{slug}] day-override capture failed: {e}")
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Not recorded.")
+        send(token, chat_id,
+             "Couldn't record that — nothing changed, so the plan check stays strict "
+             "on that day.", reply_markup=build_keyboard(slug))
+        return True
+
+    when = date.fromisoformat(pending["date"]).strftime("%a %-d %b")
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id, "✅ Noted")
+    # Says what it did in plain terms at every coaching level: no `[hard]`/`[soft]` tags, no
+    # check names. What matters to the athlete is that it is allowed once and not adopted.
+    send(token, chat_id,
+         f"Noted — a *{pending['family']}* on *{when}* is deliberate, so I won't flag it. "
+         f"It applies to that day only; your usual {pending['family']} days are unchanged.",
+         reply_markup=build_keyboard(slug))
+    log(f"[{slug}] day override recorded: {key}")
+    return True
+
+
 def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
     """Handle replan confirmation/cancel callbacks. Returns True if handled."""
     if data not in ("__REPLAN_CONFIRM__", "__REPLAN_CANCEL__"):
@@ -4453,8 +4561,22 @@ def _route_text(token, chat_id, text, athletes, config):
     if _handle_hours_capture(token, chat_id, text, athletes):
         return
 
+    # Directed day-rule deviation: "swim Wednesday this week" lands in the fail-closed
+    # register instead of leaving the audit permanently red on day_rules.
+    #
+    # BEFORE action capture, and the order is load-bearing. "move the swim to Wednesday"
+    # satisfies BOTH detectors — "move ... to" is a deferral verb in open_actions — and
+    # only one handler can run, since each returns True and routing stops. The more
+    # SPECIFIC one wins: this handler demands a sport, an unambiguous date and a day
+    # that is genuinely off-pattern, so when it fires it is far more likely to be right
+    # than a substring match against an action label. It also declines silently on any
+    # doubt, so putting it first costs action capture nothing.
+    if _handle_dayrule_capture(token, chat_id, text, athletes):
+        return
+
     # Open-action capture: "sweat test is booked" writes the single store instead of
-    # leaving a status cell nobody can change from a phone.
+    # leaving a status cell nobody can change from a phone. After the day-rule handler
+    # above, which is the stricter of the two where their phrasings overlap.
     if _handle_action_capture(token, chat_id, text, athletes):
         return
 
@@ -4762,6 +4884,8 @@ def main():
                 if _handle_hours_confirm(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_action_confirm(token, chat_id, text, msg_id, athletes):
+                    continue
+                if _handle_dayrule_confirm(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_race_priority(token, chat_id, text, msg_id, athletes):
                     continue
