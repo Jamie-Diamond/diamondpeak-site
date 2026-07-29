@@ -51,6 +51,7 @@ sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE.parent / "lib"))
 import races as races_lib
 import weekly_availability     # per-week declared hours (Sunday ask + reply capture)
+import open_actions            # the single open-actions store (close/defer/drop)
 import claude_call
 import engine
 import rules_capture
@@ -2860,6 +2861,140 @@ def _handle_hours_confirm(token, chat_id, data, message_id, athletes):
     return True
 
 
+# Open-action capture. lib/open_actions.py has been the single store since 28 Jul, with the
+# arithmetic in Python and both surfaces reading the same rendered facts — and its only
+# writer was a CLI on the VM. That is why every status cell in the markdown table sat as a
+# template placeholder for three months: nobody could close anything from a phone. Four of
+# Jamie's items are 29-59 days overdue and the sweat-sodium test gates a race decision.
+#
+# ASK-THEN-WRITE, like race capture. Matching free text against fourteen entries is a guess
+# by nature, and closing the WRONG item is worse than closing nothing: the real action stays
+# open while a live one goes invisible. So the parser hands back candidates, the athlete
+# taps, and only the tap writes — through open_actions.set_status, the store's only writer,
+# never by editing current-state.json here.
+#
+# NOT illness-gated, deliberately. lib/illness gags OUTBOUND chasing; this is the athlete
+# volunteering that something is finished, and refusing to record it because they have a
+# cold would lose information they took the trouble to send.
+_PENDING_ACTION: dict[str, dict] = {}
+_ACTION_CAPTURE_TTL = 900
+
+
+def _handle_action_capture(token, chat_id, text, athletes):
+    """Close, defer or drop an open action from chat. Returns True if handled."""
+    athlete = athletes.get(chat_id)
+    if not athlete:
+        return False
+    if not open_actions.looks_like_action_instruction(text):
+        return False
+    slug = athlete["slug"]
+    parsed = open_actions.parse_action_message(text)
+
+    items = open_actions.evaluate(slug)
+    if parsed["refused"] == "deferral with no new date":
+        # A deferral with no date is how an item slips forever without anybody noticing,
+        # which is what the escalation bands exist to expose. Ask for the date instead.
+        cands = open_actions.candidates(items, parsed["subject"])
+        if not cands:
+            return False
+        send(token, chat_id,
+             f"Happy to push *{cands[0]['action']}* back — until when? "
+             "Give me a date (or _next week_) and I'll move it.",
+             reply_markup=build_keyboard(slug))
+        return True
+    if not parsed["status"]:
+        return False
+
+    cands = open_actions.candidates(items, parsed["subject"])
+    if not cands:
+        # Nothing matched. Say nothing and let the normal reply happen — picking the
+        # closest of fourteen entries on no evidence is the failure this avoids.
+        return False
+
+    _PENDING_ACTION[chat_id] = {
+        "status": parsed["status"], "defer_to": parsed["defer_to"],
+        "note": parsed["note"], "actions": [c["action"] for c in cands],
+        "expiry": time.time() + _ACTION_CAPTURE_TTL}
+
+    verb = {"done": "done", "dropped": "dropped", "booked": "booked",
+            "ordered": "ordered", "scheduled": "scheduled",
+            "defer": f"moved to {parsed['defer_to']}"}.get(parsed["status"], parsed["status"])
+    rows = [[{"text": c["action"][:60], "callback_data": f"__ACT_{i}__"}]
+            for i, c in enumerate(cands)]
+    rows.append([{"text": "None of those", "callback_data": "__ACT_CANCEL__"}])
+    if len(cands) == 1:
+        prompt = f"Mark *{cands[0]['action']}* as {verb}?"
+    else:
+        prompt = f"Which one is {verb}?"
+    send(token, chat_id, prompt, reply_markup={"inline_keyboard": rows})
+    return True
+
+
+def _handle_action_confirm(token, chat_id, data, message_id, athletes):
+    """The which-item tap. Returns True if handled. Writes through set_status only."""
+    if not data.startswith("__ACT_"):
+        return False
+    athlete = athletes.get(chat_id)
+    pending = _PENDING_ACTION.pop(chat_id, None)
+    if not athlete or not pending or time.time() > pending["expiry"]:
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id,
+                                  "That one timed out — say it again.")
+        return True
+    if data == "__ACT_CANCEL__":
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Nothing changed.")
+        send(token, chat_id, "Fair enough — nothing changed. Which one did you mean?",
+             reply_markup=build_keyboard(athlete["slug"]))
+        return True
+    try:
+        idx = int(data[len("__ACT_"):-2])
+        action = pending["actions"][idx]
+    except (ValueError, IndexError):
+        return True
+
+    slug = athlete["slug"]
+    # WHO closed it and when. `closed` alone cannot distinguish a decision from an
+    # omission: an item nobody ever captured is equally absent from the open list.
+    who = f"{slug} via telegram"
+    note = pending["note"]
+    try:
+        if pending["status"] == "defer":
+            entry = open_actions.set_status(slug, action, "pending", note=note,
+                                           due=pending["defer_to"], closed_by="")
+            reply = (f"Moved — *{entry['action']}* is now due {entry['due']}. "
+                     "It stays on the list until it is done.")
+        else:
+            entry = open_actions.set_status(slug, action, pending["status"],
+                                           note=note, closed_by=who)
+            if pending["status"] in open_actions.CLOSED_STATUSES:
+                reply = (f"Closed — *{entry['action']}* marked *{entry['status']}* "
+                         f"on {entry['closed']}. It drops off your list.")
+            else:
+                reply = (f"Updated — *{entry['action']}* is now *{entry['status']}*. "
+                         "Still on the list until it is finished.")
+    except ValueError as e:
+        # set_status refuses an ambiguous or missing match rather than guessing.
+        log(f"[{slug}] action capture refused: {e}")
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Not changed.")
+        send(token, chat_id, f"Couldn't do that safely — nothing changed. ({e})",
+             reply_markup=build_keyboard(slug))
+        return True
+    except Exception as e:
+        log(f"[{slug}] action capture failed: {e}")
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Not changed.")
+        send(token, chat_id, "Couldn't write that — nothing changed.",
+             reply_markup=build_keyboard(slug))
+        return True
+
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id, "✅ Updated")
+    send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+    return True
+
+
 def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
     """Handle replan confirmation/cancel callbacks. Returns True if handled."""
     if data not in ("__REPLAN_CONFIRM__", "__REPLAN_CANCEL__"):
@@ -4318,6 +4453,11 @@ def _route_text(token, chat_id, text, athletes, config):
     if _handle_hours_capture(token, chat_id, text, athletes):
         return
 
+    # Open-action capture: "sweat test is booked" writes the single store instead of
+    # leaving a status cell nobody can change from a phone.
+    if _handle_action_capture(token, chat_id, text, athletes):
+        return
+
     # Sticky voice-reply toggle: /voice [on|off] or the 🎙 menu button.
     _vt = text.strip().lower()
     if _vt == "/voice" or _vt.startswith("/voice ") or _vt == "🎙 voice":
@@ -4620,6 +4760,8 @@ def main():
                 if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_hours_confirm(token, chat_id, text, msg_id, athletes):
+                    continue
+                if _handle_action_confirm(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_race_priority(token, chat_id, text, msg_id, athletes):
                     continue
