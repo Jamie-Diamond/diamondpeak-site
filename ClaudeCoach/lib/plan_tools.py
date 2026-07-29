@@ -53,7 +53,7 @@ from primitives.load import (                                   # noqa: E402
     derive_phase_ctl_targets,
 )
 from primitives.validate_plan import validate_week              # noqa: E402
-from primitives.blueprint import current_phase, tss_ceiling     # noqa: E402
+from primitives.blueprint import current_phase                   # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr   # noqa: E402
 
 ATHLETES_CONFIG = BASE / "config" / "athletes.json"
