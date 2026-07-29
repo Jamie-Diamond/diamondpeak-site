@@ -11,7 +11,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import urllib.request, urllib.parse, urllib.error
 from pathlib import Path
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time as dt_time
 
 # Force IPv4 for the Telegram API. The IPv6 path to api.telegram.org intermittently
 # stalls the FIRST connection after the bot's been idle — the new SYN is lost and TCP
@@ -50,6 +50,9 @@ BASE = Path(__file__).parent
 sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(BASE.parent / "lib"))
 import races as races_lib
+import weekly_availability     # per-week declared hours (Sunday ask + reply capture)
+import open_actions            # the single open-actions store (close/defer/drop)
+import day_overrides           # fail-closed register of directed day-rule deviations
 import claude_call
 import engine
 import rules_capture
@@ -2715,6 +2718,391 @@ def _handle_race_priority(token, chat_id, data, message_id, athletes):
     return True
 
 
+# Weekly hours capture. The Sunday morning card asks how many hours the athlete has for
+# the week starting tomorrow (weekly_availability.sunday_hours_ask, appended in
+# scripts/morning-checkin.py); until this handler existed nothing read the answer and a
+# declaration had to be hand-written by an agent. The figure sets the week's Load ceiling
+# at the 18:00 Sunday build, so a wrong capture is expensive and a missed one is not.
+#
+# TWO TIERS, because a bare number on that card is ambiguous. The same card asks "Ankle
+# score this morning? (0-10)" and "Weight this morning?", so "7" is at least as likely a
+# pain score as a seven-hour week. lib/weekly_availability draws the line:
+#   * looks_like_hours_declaration — the message frames itself as being about a week
+#     ("14h next week", "20, big week"). Written immediately, then read back.
+#   * looks_like_hours_reply       — a figure with no such framing ("12 max, nothing long
+#     midweek"). Only considered while `ask_outstanding` is true, and NEVER written on
+#     sight: the athlete gets a confirm keyboard and the write happens on the tap.
+# Nothing is inferred from silence, and no branch here can persist last week's figure —
+# `record` is keyed on the Monday being declared.
+_PENDING_HOURS: dict[str, dict] = {}
+_HOURS_CAPTURE_TTL = 3600        # 1 h to confirm an ambiguous figure
+
+# The Sunday build (`0 18 * * 0`). A declaration recorded after it is still worth having —
+# it is the athlete correcting the week — but the week has already been generated and
+# pushed, so the confirmation offers a rebuild instead of promising one, and this handler
+# never triggers a rebuild itself (docs/weekly-hours-capture.md, follow-up item 5).
+_WEEKLY_BUILD_HOUR = 18
+
+
+def _hours_week_is_built(week_start, now=None) -> bool:
+    """True once the build for the week beginning `week_start` has already run.
+
+    Keyed on the TARGET week rather than on "is it Sunday evening", because
+    weekly_availability.target_week resolves a mid-week "14 hours this week" to the
+    CURRENT Monday — a week generated the previous Sunday. Promising to build that week
+    this evening would be wrong; it needs the offer-a-rebuild wording instead. The build
+    for week W is the 18:00 cron on the Sunday before W.
+    """
+    n = now or datetime.now()
+    ws = date.fromisoformat(week_start) if isinstance(week_start, str) else week_start
+    build_at = datetime.combine(ws - timedelta(days=1),
+                                dt_time(hour=_WEEKLY_BUILD_HOUR))
+    return n >= build_at
+
+
+def _write_hours(slug, week_start, hours, constraints, coaching_level):
+    """Record the declaration and build the read-back. Returns (reply, ok)."""
+    try:
+        weekly_availability.record(slug, week_start, hours=hours,
+                                   constraints=constraints, source="telegram-reply")
+    except ValueError as e:
+        # Out of the sanity band. record() refuses rather than storing a figure that
+        # becomes a training ceiling, so say so instead of pretending it landed.
+        log(f"[{slug}] hours capture refused: {e}")
+        return (f"That came out as {hours:g} hours, which I don't think is right — "
+                f"nothing saved. Give me the number again?"), False
+    except Exception as e:
+        log(f"[{slug}] hours capture failed: {e}")
+        return "Couldn't save that — nothing written. Try again?", False
+    return weekly_availability.confirmation(
+        hours, constraints, coaching_level=coaching_level,
+        after_build=_hours_week_is_built(week_start)), True
+
+
+def _handle_hours_capture(token, chat_id, text, athletes):
+    """Turn "14h next week" into a declaration the Sunday build reads. Returns True if
+    handled.
+
+    Deliberately placed AFTER race capture and BEFORE the generative reply: a
+    deterministic read-back of what was stored beats a model's paraphrase of it for the
+    one figure the week's ceiling derives from."""
+    athlete = athletes.get(chat_id)
+    if not athlete:
+        return False
+    slug = athlete["slug"]
+    # WHICH week this reply is about. Resolved by weekly_availability, not computed here:
+    # an outstanding ask names the week that was actually asked, which beats any inference
+    # from today's date. Computing "the Monday after today" locally would send a Monday
+    # morning reply — well inside the answer window — to the FOLLOWING week, leaving the
+    # week the athlete was asked about on the config fallback.
+    ws = weekly_availability.target_week(slug, text)
+    level = _profile_coaching_level(slug)
+
+    # TIER 1 — self-framing, unambiguous, write now.
+    if weekly_availability.looks_like_hours_declaration(text):
+        parsed = weekly_availability.parse_hours_message(text)
+        reply, _ok = _write_hours(slug, ws, parsed["hours"], parsed["constraints"], level)
+        send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+        return True
+
+    # TIER 2 — ambiguous figure, and only while the ask is genuinely outstanding (sent,
+    # unanswered, inside its window). `ask_outstanding` is a recorded fact, not an
+    # inference from the calendar: sunday_hours_ask sends nothing while the illness flag
+    # is up, and offering to record an unrelated number as hours in that state would be
+    # the bot inventing a conversation it never had.
+    if not weekly_availability.ask_outstanding(slug, ws):
+        return False
+    if not weekly_availability.looks_like_hours_reply(text):
+        return False
+    parsed = weekly_availability.parse_hours_message(text)
+    _PENDING_HOURS[chat_id] = {"hours": parsed["hours"],
+                               "constraints": parsed["constraints"],
+                               "week_start": ws.isoformat(),
+                               "expiry": time.time() + _HOURS_CAPTURE_TTL}
+    cons = f" ({parsed['constraints']})" if parsed["constraints"] else ""
+    send(token, chat_id,
+         f"Just so I've got this right — is that *{parsed['hours']:g} hours* of training "
+         f"for next week{cons}?",
+         reply_markup={"inline_keyboard": [[
+             {"text": "Yes, that's my week", "callback_data": "__HOURS_YES__"},
+             {"text": "No", "callback_data": "__HOURS_NO__"},
+         ]]})
+    return True
+
+
+def _handle_hours_confirm(token, chat_id, data, message_id, athletes):
+    """The yes/no answer to the ambiguous-figure question above. Returns True if handled.
+
+    A "No" writes NOTHING and says so — the fallback to the standing figure is a stated,
+    visible outcome, and is strictly better than a ceiling built from a misread number."""
+    if data not in ("__HOURS_YES__", "__HOURS_NO__"):
+        return False
+    athlete = athletes.get(chat_id)
+    pending = _PENDING_HOURS.pop(chat_id, None)
+    if not athlete or not pending or time.time() > pending["expiry"]:
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id,
+                                  "That one timed out — tell me the hours again.")
+        return True
+    if data == "__HOURS_NO__":
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Nothing saved.")
+        send(token, chat_id,
+             "No problem — nothing saved. Tell me the number when you have it "
+             "(_\"14 hours next week\"_ works), or I'll use your usual week.",
+             reply_markup=build_keyboard(athlete["slug"]))
+        return True
+    slug = athlete["slug"]
+    reply, ok = _write_hours(slug, pending["week_start"], pending["hours"],
+                             pending["constraints"], _profile_coaching_level(slug))
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id,
+                              f"✅ {pending['hours']:g} h" if ok else "Not saved")
+    send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+    return True
+
+
+# Open-action capture. lib/open_actions.py has been the single store since 28 Jul, with the
+# arithmetic in Python and both surfaces reading the same rendered facts — and its only
+# writer was a CLI on the VM. That is why every status cell in the markdown table sat as a
+# template placeholder for three months: nobody could close anything from a phone. Four of
+# Jamie's items are 29-59 days overdue and the sweat-sodium test gates a race decision.
+#
+# ASK-THEN-WRITE, like race capture. Matching free text against fourteen entries is a guess
+# by nature, and closing the WRONG item is worse than closing nothing: the real action stays
+# open while a live one goes invisible. So the parser hands back candidates, the athlete
+# taps, and only the tap writes — through open_actions.set_status, the store's only writer,
+# never by editing current-state.json here.
+#
+# NOT illness-gated, deliberately. lib/illness gags OUTBOUND chasing; this is the athlete
+# volunteering that something is finished, and refusing to record it because they have a
+# cold would lose information they took the trouble to send.
+_PENDING_ACTION: dict[str, dict] = {}
+_ACTION_CAPTURE_TTL = 900
+
+
+def _handle_action_capture(token, chat_id, text, athletes):
+    """Close, defer or drop an open action from chat. Returns True if handled."""
+    athlete = athletes.get(chat_id)
+    if not athlete:
+        return False
+    if not open_actions.looks_like_action_instruction(text):
+        return False
+    slug = athlete["slug"]
+    parsed = open_actions.parse_action_message(text)
+
+    items = open_actions.evaluate(slug)
+    if parsed["refused"] == "deferral with no new date":
+        # A deferral with no date is how an item slips forever without anybody noticing,
+        # which is what the escalation bands exist to expose. Ask for the date instead.
+        cands = open_actions.candidates(items, parsed["subject"])
+        if not cands:
+            return False
+        send(token, chat_id,
+             f"Happy to push *{cands[0]['action']}* back — until when? "
+             "Give me a date (or _next week_) and I'll move it.",
+             reply_markup=build_keyboard(slug))
+        return True
+    if not parsed["status"]:
+        return False
+
+    cands = open_actions.candidates(items, parsed["subject"])
+    if not cands:
+        # Nothing matched. Say nothing and let the normal reply happen — picking the
+        # closest of fourteen entries on no evidence is the failure this avoids.
+        return False
+
+    _PENDING_ACTION[chat_id] = {
+        "status": parsed["status"], "defer_to": parsed["defer_to"],
+        "note": parsed["note"], "actions": [c["action"] for c in cands],
+        "expiry": time.time() + _ACTION_CAPTURE_TTL}
+
+    verb = {"done": "done", "dropped": "dropped", "booked": "booked",
+            "ordered": "ordered", "scheduled": "scheduled",
+            "defer": f"moved to {parsed['defer_to']}"}.get(parsed["status"], parsed["status"])
+    rows = [[{"text": c["action"][:60], "callback_data": f"__ACT_{i}__"}]
+            for i, c in enumerate(cands)]
+    rows.append([{"text": "None of those", "callback_data": "__ACT_CANCEL__"}])
+    if len(cands) == 1:
+        prompt = f"Mark *{cands[0]['action']}* as {verb}?"
+    else:
+        prompt = f"Which one is {verb}?"
+    send(token, chat_id, prompt, reply_markup={"inline_keyboard": rows})
+    return True
+
+
+def _handle_action_confirm(token, chat_id, data, message_id, athletes):
+    """The which-item tap. Returns True if handled. Writes through set_status only."""
+    if not data.startswith("__ACT_"):
+        return False
+    athlete = athletes.get(chat_id)
+    pending = _PENDING_ACTION.pop(chat_id, None)
+    if not athlete or not pending or time.time() > pending["expiry"]:
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id,
+                                  "That one timed out — say it again.")
+        return True
+    if data == "__ACT_CANCEL__":
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Nothing changed.")
+        send(token, chat_id, "Fair enough — nothing changed. Which one did you mean?",
+             reply_markup=build_keyboard(athlete["slug"]))
+        return True
+    try:
+        idx = int(data[len("__ACT_"):-2])
+        action = pending["actions"][idx]
+    except (ValueError, IndexError):
+        return True
+
+    slug = athlete["slug"]
+    # WHO closed it and when. `closed` alone cannot distinguish a decision from an
+    # omission: an item nobody ever captured is equally absent from the open list.
+    who = f"{slug} via telegram"
+    note = pending["note"]
+    try:
+        if pending["status"] == "defer":
+            entry = open_actions.set_status(slug, action, "pending", note=note,
+                                           due=pending["defer_to"], closed_by="")
+            reply = (f"Moved — *{entry['action']}* is now due {entry['due']}. "
+                     "It stays on the list until it is done.")
+        else:
+            entry = open_actions.set_status(slug, action, pending["status"],
+                                           note=note, closed_by=who)
+            if pending["status"] in open_actions.CLOSED_STATUSES:
+                reply = (f"Closed — *{entry['action']}* marked *{entry['status']}* "
+                         f"on {entry['closed']}. It drops off your list.")
+            else:
+                reply = (f"Updated — *{entry['action']}* is now *{entry['status']}*. "
+                         "Still on the list until it is finished.")
+    except ValueError as e:
+        # set_status refuses an ambiguous or missing match rather than guessing.
+        log(f"[{slug}] action capture refused: {e}")
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Not changed.")
+        send(token, chat_id, f"Couldn't do that safely — nothing changed. ({e})",
+             reply_markup=build_keyboard(slug))
+        return True
+    except Exception as e:
+        log(f"[{slug}] action capture failed: {e}")
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Not changed.")
+        send(token, chat_id, "Couldn't write that — nothing changed.",
+             reply_markup=build_keyboard(slug))
+        return True
+
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id, "✅ Updated")
+    send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+    return True
+
+
+# Directed day-rule deviations. lib/day_overrides.py is the fail-closed register that turns
+# a coach-directed off-pattern session from a hard `{sport}_forbidden_day` breach into a
+# soft `{sport}_directed_day` advisory that still shows in the report. It works - Jamie's
+# Wednesday swim is in it - but only because an agent hand-wrote the JSON. The instructions
+# arrive here, in chat, so this is where one should land.
+#
+# THIS IS THE STRICTEST CAPTURE IN THE BOT, and deliberately so. The others risk writing
+# something wrong that a human later sees; this one risks SILENCING A CHECK, so a generator
+# genuinely drifting off an athlete's pattern would stop being reported. A missed capture
+# costs one hand-edit. A wrong one costs the check. Four library gates must all pass (sport,
+# directive-not-question-not-report, unambiguous date, day actually off-pattern) and then
+# the athlete must tap Yes. Nothing is written on a parse alone, which is what makes "if you
+# cannot be confident the athlete meant to direct a deviation, record nothing and leave it
+# hard" true by construction rather than by the parser being clever enough.
+_PENDING_DAYRULE: dict[str, dict] = {}
+_DAYRULE_CAPTURE_TTL = 900
+
+
+def _athlete_day_rules(slug):
+    """The athlete's normal weekly pattern, from the same config plan_builder reads."""
+    try:
+        return (json.loads(ATHLETES_CONFIG.read_text()).get(slug, {}) or {}).get("day_rules")
+    except Exception:
+        return None
+
+
+def _handle_dayrule_capture(token, chat_id, text, athletes):
+    """Record a coach-directed off-pattern session. Returns True if handled.
+
+    Returns False - silently, letting the normal reply happen - on every doubt. A message
+    this handler declines is NOT a message that goes unanswered; it just does not become a
+    permission."""
+    athlete = athletes.get(chat_id)
+    if not athlete:
+        return False
+    slug = athlete["slug"]
+    parsed = day_overrides.parse_directed_day(text)
+    if not (parsed["family"] and parsed["date"]):
+        return False
+    # The day must actually be off-pattern. An override for a day already in
+    # `{sport}_days` excuses nothing and is not harmless: validate_plan counts entries per
+    # sport+weekday for its `day_rules_drifted` alarm, so redundant ones would push a real
+    # pattern towards a false alarm.
+    if not day_overrides.is_off_pattern(_athlete_day_rules(slug),
+                                        parsed["family"], parsed["date"]):
+        return False
+
+    when = date.fromisoformat(parsed["date"]).strftime("%a %-d %b")
+    _PENDING_DAYRULE[chat_id] = {"family": parsed["family"], "date": parsed["date"],
+                                 "expiry": time.time() + _DAYRULE_CAPTURE_TTL}
+    # The resolved ABSOLUTE date is echoed, because a misread weekday is otherwise
+    # invisible — the same reason race capture spells the date out.
+    send(token, chat_id,
+         f"Just to be sure — you want a *{parsed['family']}* on *{when}*, which is not one "
+         f"of your usual {parsed['family']} days?",
+         reply_markup={"inline_keyboard": [[
+             {"text": "Yes, that's the plan", "callback_data": "__DAYRULE_YES__"},
+             {"text": "No", "callback_data": "__DAYRULE_NO__"},
+         ]]})
+    return True
+
+
+def _handle_dayrule_confirm(token, chat_id, data, message_id, athletes):
+    """The yes/no tap. Only this writes the register. Returns True if handled."""
+    if data not in ("__DAYRULE_YES__", "__DAYRULE_NO__"):
+        return False
+    athlete = athletes.get(chat_id)
+    pending = _PENDING_DAYRULE.pop(chat_id, None)
+    if not athlete or not pending or time.time() > pending["expiry"]:
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id,
+                                  "That one timed out — say it again if you meant it.")
+        return True
+    if data == "__DAYRULE_NO__":
+        # Fail closed: nothing recorded, so the day-rule check stays HARD for that session.
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Left as it was.")
+        send(token, chat_id, "Understood — I've not changed anything.",
+             reply_markup=build_keyboard(athlete["slug"]))
+        return True
+
+    slug = athlete["slug"]
+    try:
+        key = day_overrides.record(slug, BASE.parent, pending["family"], pending["date"],
+                                   day_overrides.capture_note("Telegram"))
+    except Exception as e:
+        log(f"[{slug}] day-override capture failed: {e}")
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id, "Not recorded.")
+        send(token, chat_id,
+             "Couldn't record that — nothing changed, so the plan check stays strict "
+             "on that day.", reply_markup=build_keyboard(slug))
+        return True
+
+    when = date.fromisoformat(pending["date"]).strftime("%a %-d %b")
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id, "✅ Noted")
+    # Says what it did in plain terms at every coaching level: no `[hard]`/`[soft]` tags, no
+    # check names. What matters to the athlete is that it is allowed once and not adopted.
+    send(token, chat_id,
+         f"Noted — a *{pending['family']}* on *{when}* is deliberate, so I won't flag it. "
+         f"It applies to that day only; your usual {pending['family']} days are unchanged.",
+         reply_markup=build_keyboard(slug))
+    log(f"[{slug}] day override recorded: {key}")
+    return True
+
+
 def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
     """Handle replan confirmation/cancel callbacks. Returns True if handled."""
     if data not in ("__REPLAN_CONFIRM__", "__REPLAN_CANCEL__"):
@@ -4167,6 +4555,31 @@ def _route_text(token, chat_id, text, athletes, config):
     if _handle_race_capture(token, chat_id, text, athletes):
         return
 
+    # Weekly hours capture: the answer to Sunday's "how many hours have you got?"
+    # becomes the week's Load ceiling at the 18:00 build. Deterministic read-back for
+    # the same reason race capture has one — the model must not paraphrase this figure.
+    if _handle_hours_capture(token, chat_id, text, athletes):
+        return
+
+    # Directed day-rule deviation: "swim Wednesday this week" lands in the fail-closed
+    # register instead of leaving the audit permanently red on day_rules.
+    #
+    # BEFORE action capture, and the order is load-bearing. "move the swim to Wednesday"
+    # satisfies BOTH detectors — "move ... to" is a deferral verb in open_actions — and
+    # only one handler can run, since each returns True and routing stops. The more
+    # SPECIFIC one wins: this handler demands a sport, an unambiguous date and a day
+    # that is genuinely off-pattern, so when it fires it is far more likely to be right
+    # than a substring match against an action label. It also declines silently on any
+    # doubt, so putting it first costs action capture nothing.
+    if _handle_dayrule_capture(token, chat_id, text, athletes):
+        return
+
+    # Open-action capture: "sweat test is booked" writes the single store instead of
+    # leaving a status cell nobody can change from a phone. After the day-rule handler
+    # above, which is the stricter of the two where their phrasings overlap.
+    if _handle_action_capture(token, chat_id, text, athletes):
+        return
+
     # Sticky voice-reply toggle: /voice [on|off] or the 🎙 menu button.
     _vt = text.strip().lower()
     if _vt == "/voice" or _vt.startswith("/voice ") or _vt == "🎙 voice":
@@ -4467,6 +4880,12 @@ def main():
                 if _handle_test_confirm(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_replan_confirm(token, chat_id, text, msg_id, athletes):
+                    continue
+                if _handle_hours_confirm(token, chat_id, text, msg_id, athletes):
+                    continue
+                if _handle_action_confirm(token, chat_id, text, msg_id, athletes):
+                    continue
+                if _handle_dayrule_confirm(token, chat_id, text, msg_id, athletes):
                     continue
                 if _handle_race_priority(token, chat_id, text, msg_id, athletes):
                     continue

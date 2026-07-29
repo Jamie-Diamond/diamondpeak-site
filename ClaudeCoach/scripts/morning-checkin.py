@@ -661,6 +661,16 @@ def run_athlete(slug, athlete_cfg):
                 slug, date.today() + timedelta(days=1), coaching_level=coaching_level)
             if _ask:
                 output = f"{output}\n\n{_ask}"
+                # Record that the ask went out, so telegram/bot.py can attribute a later
+                # BARE number ("14") to it. The bot's contextual tier must rest on a
+                # recorded send rather than inferring one from the calendar: this branch
+                # is skipped entirely when the athlete has already declared or the
+                # illness flag is up, and in those states an unexplained number is
+                # answering one of the card's OTHER questions (ankle score 0-10, weight).
+                # Best-effort by contract — note_ask_sent never raises, because failing
+                # to record the send must not stop the card sending.
+                weekly_availability.note_ask_sent(
+                    slug, date.today() + timedelta(days=1))
         except Exception as _e:
             # The card must still send if the ask cannot be built — but it must NOT do so
             # silently. This is the one question the Sunday 18:00 ceiling derives from, so

@@ -42,6 +42,13 @@ Schema — current-state.json "open_actions": [ ... ]
                                      # items are open-ended, so without it nothing about them
                                      # ever gets worse). Never inferred — set it or leave it.
       "closed":  "2026-07-28",       # optional ISO date, set by set_status() on a close
+      "closed_by": "jamie via telegram",
+                                     # optional, set by set_status() on a close. WHO closed
+                                     # it, so a closed item is distinguishable from one that
+                                     # was never captured at all: both read as "not open",
+                                     # and only this field says the difference. Additive —
+                                     # scripts/refresh-site-data.py:718 passes open_actions[]
+                                     # straight through and iterates no keys.
       "owner":   "Jamie"             # optional
     }
 
@@ -82,9 +89,10 @@ edit statuses on the athlete's behalf — see the prompt blocks below.
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent   # ClaudeCoach/
@@ -195,6 +203,7 @@ def evaluate_from_dir(athlete_dir, today: date | None = None) -> list[dict]:
             "owner": raw.get("owner") or None,
             "gates_race_decision": gates,
             "closed": raw.get("closed") or None,
+            "closed_by": raw.get("closed_by") or None,
             "raised": None,
             "days_open": None,
             "open": status in OPEN_STATUSES,
@@ -415,7 +424,8 @@ def _atomic_write(path: Path, payload: dict) -> None:
 
 def set_status(slug: str, match: str, status: str, note: str = "",
                due: str | None = None, today: date | None = None,
-               athlete_dir=None, raised: str | None = None) -> dict:
+               athlete_dir=None, raised: str | None = None,
+               closed_by: str = "") -> dict:
     """Set one action's status in the single store. Returns the updated entry.
 
     `match` is a case-insensitive substring of `action` and must hit exactly one entry —
@@ -448,10 +458,175 @@ def set_status(slug: str, match: str, status: str, note: str = "",
         entry["raised"] = raised
     if status in CLOSED_STATUSES:
         entry["closed"] = (today or date.today()).isoformat()
+        # WHO closed it, alongside WHEN. Without this a closed item and an item that was
+        # never captured are indistinguishable after the fact — both simply fail to appear
+        # — so there is no way to tell a decision from an omission.
+        if closed_by:
+            entry["closed_by"] = closed_by
     else:
         entry.pop("closed", None)
+        entry.pop("closed_by", None)
     _atomic_write(path, state)
     return entry
+
+
+# ---------------------------------------------------------------------------
+# CAPTURE — closing an item from Telegram
+# ---------------------------------------------------------------------------
+# WHY. Everything above computes an item's state honestly and renders it, and the coach
+# still could not mark one thing done from his phone. That is the reason every status cell
+# in the markdown table sat as its template placeholder for three months and the same nine
+# lines rendered every week: the only writer was a CLI on a VM. Four of Jamie's items are
+# 29-59 days overdue and one of them (the sweat-sodium test) gates a race decision.
+#
+# SHAPE mirrors lib/races.py and lib/illness.py: a narrow detector plus a parser, both
+# refusing rather than guessing. The write still goes through `set_status`, which is the
+# single store's only writer and already refuses an ambiguous match — nothing here edits
+# current-state.json directly.
+#
+# WHY IT ASKS BEFORE WRITING. Matching free text to one of fourteen entries is a guess by
+# nature ("the bike thing" fits a TT bike fit, an ISM saddle order and an aero helmet), and
+# closing the WRONG item is the failure mode the whole module exists to end — it makes a
+# live action invisible while leaving the real one open. So the parser returns CANDIDATES
+# and the caller confirms; a tap costs a second, a wrongly-closed item costs however long
+# it takes somebody to notice.
+
+# An intent to change an item's state. Ordered: the first match wins, so the more specific
+# phrasings ("not doing it") must precede the looser ones they contain.
+_INTENTS = (
+    ("dropped",   r"\b(?:drop(?:ping|ped)?(?:\s+it)?|forget\s+(?:it|about)|not\s+doing|"
+                  r"never\s+mind|bin\s+(?:it|that)|cancel(?:led|ling)?|scrap(?:ped)?)\b"),
+    ("booked",    r"\b(?:booked|booking\s+(?:is\s+)?(?:in|done)|got\s+it\s+booked)\b"),
+    ("ordered",   r"\b(?:ordered|on\s+order|bought|purchased)\b"),
+    ("scheduled", r"\b(?:scheduled|in\s+the\s+diary|got\s+a\s+date\s+for)\b"),
+    ("defer",     r"\b(?:defer(?:red|ring)?|postpone(?:d)?|reschedul(?:e|ed|ing)|"
+                  r"put\s+(?:it\s+)?off)\b|"
+                  r"\b(?:push(?:ing|ed)?|move|shift|slide)\b(?=.*\b(?:to|back|out|until|till)\b)"),
+    ("done",      r"\b(?:done|did\s+(?:it|that|this)|completed?|finished|sorted(?:\s+it)?|"
+                  r"ticked\s+off|all\s+good\s+on|had\s+(?:it|the)\s+\w+\s+done|"
+                  r"been\s+(?:done|and\s+done))\b"),
+)
+
+# A question is never an instruction — the lesson races.looks_like_race_statement learned.
+# "Is the sweat test done?" must not close the sweat test.
+_ACTION_QUESTION_RE = re.compile(
+    r"^\s*(?:is|are|was|were|has|have|did|do|does|should|shall|can|could|would|when|what|"
+    r"which|why|how|any)\b|\bstill\s+(?:open|outstanding|to\s+do)\b", re.I)
+
+# Words that carry no discriminating power when matching a message to an action label.
+_MATCH_STOP = {
+    "the", "a", "an", "my", "that", "this", "it", "is", "was", "and", "or", "for", "to",
+    "of", "on", "in", "at", "i", "ive", "we", "have", "has", "had", "get", "got", "do",
+    "did", "done", "all", "now", "just", "been", "be", "am", "with", "from", "off", "up",
+    "out", "back", "test", "thing", "one", "finally", "them", "then", "so", "but", "yet",
+}
+# `test` is in the stop list on purpose: five of Jamie's fourteen entries contain it, so it
+# selects nothing while making a one-word match look confident.
+
+_DEFER_DAYS = {"tomorrow": 1, "next week": 7, "a week": 7, "fortnight": 14,
+               "two weeks": 14, "next month": 30, "a month": 30}
+
+
+def _match_tokens(text: str) -> set:
+    """Discriminating lower-case words of 3+ characters."""
+    return {w for w in re.findall(r"[a-z0-9]{3,}", (text or "").lower())
+            if w not in _MATCH_STOP}
+
+
+def looks_like_action_instruction(text: str) -> bool:
+    """True only when the message plainly instructs a state change on an action AND names
+    something to match against. Both halves matter: a bare "done" could be about anything
+    (a session, a question, the conversation), and without an intent verb an ordinary
+    message about the sweat test would close it."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if t.endswith("?") or _ACTION_QUESTION_RE.search(t):
+        return False
+    if not any(re.search(rx, t, re.I) for _, rx in _INTENTS):
+        return False
+    return bool(_match_tokens(_strip_intent(t)))
+
+
+def _strip_intent(text: str) -> str:
+    out = text or ""
+    for _, rx in _INTENTS:
+        out = re.sub(rx, " ", out, flags=re.I)
+    return re.sub(r"\s+", " ", out).strip(" ,.;:-–—")
+
+
+def parse_action_message(text: str, today: date | None = None) -> dict:
+    """The intended state change and the words to match an item on.
+
+    Returns {"status", "defer_to", "subject", "note", "refused"}. `status` is one of
+    STATUSES, or "" when nothing is instructed; "defer" resolves to a new `defer_to` date
+    and leaves the status alone (a deferred item stays open — that is the point of it).
+    """
+    out = {"status": "", "defer_to": None, "subject": "", "note": "", "refused": ""}
+    t = (text or "").strip()
+    if not t:
+        out["refused"] = "empty"
+        return out
+    if t.endswith("?") or _ACTION_QUESTION_RE.search(t):
+        out["refused"] = "question, not an instruction"
+        return out
+
+    intent = next((name for name, rx in _INTENTS if re.search(rx, t, re.I)), "")
+    if not intent:
+        out["refused"] = "no close/defer/drop instruction"
+        return out
+
+    if intent == "defer":
+        base = today or date.today()
+        low = t.lower()
+        days = next((d for phrase, d in _DEFER_DAYS.items() if phrase in low), None)
+        if days is None:
+            iso = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", t)
+            if iso:
+                try:
+                    out["defer_to"] = date.fromisoformat(iso.group(1)).isoformat()
+                except ValueError:
+                    pass
+        else:
+            out["defer_to"] = (base + timedelta(days=days)).isoformat()
+        if not out["defer_to"]:
+            # A deferral with no new date is how an item slips forever with nobody
+            # noticing — the exact behaviour the escalation bands exist to expose. Refuse
+            # it and let the caller ask for a date.
+            out["refused"] = "deferral with no new date"
+            out["subject"] = _strip_intent(t)
+            return out
+        out["status"] = "defer"
+    else:
+        out["status"] = intent
+
+    out["subject"] = _strip_intent(t)
+    out["note"] = t.strip()
+    return out
+
+
+def candidates(items: list[dict], subject: str, limit: int = 4) -> list[dict]:
+    """Open items the `subject` words plausibly name, best first.
+
+    Scored on how much of the ITEM's label the message accounts for, not the reverse: a
+    long message must not out-score a precise one. Returns [] when nothing overlaps, which
+    the caller must treat as "say nothing and let the normal reply happen" rather than as
+    a reason to pick the closest thing.
+    """
+    want = _match_tokens(subject)
+    if not want:
+        return []
+    scored = []
+    for it in open_items(items):
+        have = _match_tokens(it["action"])
+        if not have:
+            continue
+        hits = want & have
+        if not hits:
+            continue
+        scored.append((len(hits) / len(have), len(hits), it))
+    scored.sort(key=lambda s: (-s[0], -s[1]))
+    return [it for _, _, it in scored[:limit]]
 
 
 # ---------------------------------------------------------------------------

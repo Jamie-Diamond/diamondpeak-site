@@ -774,6 +774,21 @@ def main():
         # from plan_builder.cap_source so this can never disagree with the cap actually
         # applied (it used to re-read max_hours_per_week and would now be wrong).
         brief["_target_cap_source"] = pb.cap_source(args.athlete, _phase, week_start=week_start)
+        if brief["_target_cap_source"] == "hours":
+            # NAME the standing figure in the message. "the hours I have on file for you"
+            # tells the athlete a number they never confirmed decided their week without
+            # telling them WHICH number, so they cannot see that 15 is wrong for them.
+            # Read from the profile only in this branch, where cap_source has already
+            # established that this is the bound that bit — this is a label for a
+            # decision made in plan_builder, not a second copy of the precedence.
+            try:
+                _prof = json.loads((pb.BASE / "athletes" / args.athlete
+                                    / "profile.json").read_text())
+                _standing = float(_prof.get("max_hours_per_week") or 0) or None
+            except Exception:
+                _standing = None
+            if _standing:
+                brief["standing_hours"] = _standing
         target = int(tss_cap)
         brief["weekly_tss_target"] = target
     override_path = Path(args.override_json) if args.override_json else None
@@ -915,8 +930,11 @@ def _week_message(brief: dict, built: dict) -> str:
             # the ceiling came from the standing figure on file. Say that out loud. The
             # silent version is the defect this ticket exists to remove: a number the
             # athlete never confirmed, quietly deciding how hard they train.
-            lines.append(f"⚠️ _This week wants about {req} Load and only {cap} fits in the "
-                         f"hours I have on file for you, so fitness will climb a little "
+            std = brief.get("standing_hours")
+            std_s = f"the {std:g} hours I have on file for you" if std else \
+                    "the hours I have on file for you"
+            lines.append(f"⚠️ _This week wants about {req} Load and only {cap} fits in "
+                         f"{std_s}, so fitness will climb a little "
                          f"slower than it could. You didn't tell me this week's hours, so "
                          f"I used your usual week. Tell me the real figure and I'll "
                          f"rebuild it._")

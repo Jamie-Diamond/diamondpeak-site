@@ -63,7 +63,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 # day_rules key -> register family. Kept in step with validate_plan._SPORT_RULE:
@@ -129,6 +129,218 @@ def record(slug: str, base, sport: str, on: date | str, note: str) -> str:
     blob[k] = note.strip()
     p.write_text(json.dumps(blob, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     return k
+
+
+# ---------------------------------------------------------------------------
+# CAPTURE — recognising a DIRECTED deviation in chat
+# ---------------------------------------------------------------------------
+# The register works, and until now the only way into it was a human editing the JSON or
+# running the CLI above: Jamie's directed Wednesday swim is on file because an agent
+# hand-wrote it. The instructions themselves arrive in Telegram ("I told it this week to
+# swim on wed"), so this is the parser that lets one land at the moment it is said.
+#
+# FAIL-CLOSED IS THE WHOLE POINT, and it is stricter here than in any other capture in the
+# tree. Every other parser risks writing something wrong that a human then sees. This one
+# risks SILENCING A CHECK: a wrongly-recorded override turns a hard `*_forbidden_day`
+# failure into a soft advisory, so a generator genuinely drifting off an athlete's pattern
+# stops being reported. A missed capture costs one hand-edit. A wrong one costs the check.
+# So every one of these must hold, and any doubt records NOTHING:
+#
+#   1. A SPORT the register has a family for.
+#   2. A DIRECTIVE, not a question ("should I swim Wednesday?") and not a REPORT of what
+#      already happened ("I swam on Wednesday"). The report case is the dangerous one: it
+#      would retro-excuse a deviation NOBODY directed, which is exactly the fail-open the
+#      register exists to prevent.
+#   3. AN UNAMBIGUOUS DATE. A bare weekday already past in the current week could mean
+#      that day or the same day next week, and guessing writes a permission for a day the
+#      athlete did not name. Refused.
+#   4. THE DAY MUST ACTUALLY BE OFF-PATTERN for that sport. An override for a day already
+#      in `{sport}_days` excuses nothing, and it is not harmless: validate_plan counts
+#      entries per sport+weekday and raises `day_rules_drifted` at DRIFT_THRESHOLD, so
+#      redundant entries would push a real pattern towards a false drift alarm.
+#
+# The caller confirms with the athlete before writing on top of all this, which is what
+# makes "if you cannot be confident, record nothing" true by construction rather than by
+# the parser being clever enough.
+
+_WEEKDAY_NAMES = ("monday", "tuesday", "wednesday", "thursday", "friday",
+                  "saturday", "sunday")
+_WEEKDAY_ABBR = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+# Tue/Tues, Thu/Thur/Thurs all work; the pattern is anchored so "sunday" cannot match "sun"
+# inside "sunny".
+_WEEKDAY_RE = re.compile(
+    r"\b(" + "|".join(f"{a}(?:{n[3:]})?|{a}s?" for a, n in zip(_WEEKDAY_ABBR, _WEEKDAY_NAMES))
+    + r")\b", re.I)
+
+_SPORT_WORDS = {
+    "swim": "swim", "swimming": "swim", "swims": "swim", "pool": "swim", "ows": "swim",
+    "bike": "bike", "biking": "bike", "ride": "bike", "riding": "bike", "cycle": "bike",
+    "cycling": "bike", "turbo": "bike", "spin": "bike",
+    "run": "run", "running": "run", "runs": "run", "jog": "run",
+}
+_SPORT_RE = re.compile(r"\b(" + "|".join(sorted(_SPORT_WORDS, key=len, reverse=True)) + r")\b", re.I)
+
+# PAST TENSE / REPORT. Checked before anything else: "I swam on Wednesday" is a statement
+# about history, and turning it into a directed-day permission would excuse a deviation
+# nobody asked for.
+_REPORT_RE = re.compile(
+    r"\b(?:swam|ran|rode|cycled|did|done|completed|finished|managed|logged|"
+    r"ended\s+up|went\s+for|just\s+got\s+back)\b|\b(?:yesterday|last\s+week)\b", re.I)
+
+# A question, or a request for advice — never an instruction.
+_DAY_QUESTION_RE = re.compile(
+    r"^\s*(?:should|shall|can|could|would|do|does|did|is|are|was|when|what|which|why|how|"
+    r"any)\b|\bshould\s+i\b|\bwhat\s+(?:if|about)\b|\bor\s+(?:should|shall)\b", re.I)
+
+# A DIRECTIVE. Either an imperative ("swim Wednesday", "move the swim to Wed") or an
+# explicit statement of intent ("I'm swimming Wednesday", "let's swim Wed", "swap the
+# swim to Wednesday"). Deliberately a positive requirement rather than "not a question":
+# an unrecognised phrasing must fall through to nothing, not to a write.
+_DIRECTIVE_RE = re.compile(
+    r"\b(?:i\s+told\s+(?:it|you|him|her|them|the\s+\w+)|"
+    r"move|moving|shift|swap|switch|put|make\s+it|do|let'?s|lets|"
+    r"i'?m\s+(?:going\s+to\s+)?(?:swim|swimming|bike|biking|riding|ride|run|running)|"
+    r"i\s+(?:will|shall)|we'?re|we\s+(?:will|shall)|this\s+week\s+(?:i|we))\b"
+    r"|^\s*(?:swim|bike|ride|run|cycle|turbo)\b"
+    r"|\b(?:instead|rather\s+than)\b", re.I)
+
+_THIS_WEEK_RE = re.compile(r"\bthis\s+week\b", re.I)
+_NEXT_WEEK_RE = re.compile(r"\bnext\s+week\b", re.I)
+
+
+def _weekday_index(token: str):
+    t = token.lower().rstrip("s")
+    for i, (abbr, name) in enumerate(zip(_WEEKDAY_ABBR, _WEEKDAY_NAMES)):
+        if t == abbr or name.startswith(t[:3]) and (t == name or t.startswith(abbr)):
+            return i
+    return None
+
+
+def resolve_directed_date(text: str, today: date | None = None):
+    """The single calendar date a directed-day instruction names, or None when it is not
+    unambiguous.
+
+    NOT lib/races.resolve_date, on purpose. That helper rolls a bare weekday FORWARD and
+    turns a weekday said ON that weekday into +7 - correct for "I'm racing on Saturday",
+    wrong here, where it would write a permission for a date a week away from the one the
+    athlete meant. The rules instead:
+
+      * an explicit ISO date is taken as given;
+      * "today" / "tomorrow" resolve directly;
+      * "<weekday> this week" is that weekday inside the CURRENT Monday-Sunday week, and
+        is refused if it lands outside it;
+      * "<weekday> next week" is that weekday in the following week;
+      * a BARE weekday resolves only when it is today or still to come this week. Already
+        past in this week it could mean that day or the same day next week, and a guess
+        writes a permission for a day nobody named, so it is refused.
+    """
+    t = (text or "").strip()
+    if not t:
+        return None
+    base = today or date.today()
+
+    m = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", t)
+    if m:
+        try:
+            return date.fromisoformat(m.group(1))
+        except ValueError:
+            return None
+
+    low = t.lower()
+    monday = base - timedelta(days=base.weekday())
+    if re.search(r"\btomorrow\b", low):
+        return base + timedelta(days=1)
+    if re.search(r"\btoday\b", low):
+        return base
+
+    wm = _WEEKDAY_RE.search(t)
+    if not wm:
+        return None
+    # More than one weekday named is not one session — "swim Wed or Thu" is a choice, and
+    # the register's granularity is one sport on one date.
+    if len(_WEEKDAY_RE.findall(t)) > 1:
+        return None
+    idx = _weekday_index(wm.group(1))
+    if idx is None:
+        return None
+
+    if _NEXT_WEEK_RE.search(low):
+        return monday + timedelta(days=7 + idx)
+    cand = monday + timedelta(days=idx)
+    if _THIS_WEEK_RE.search(low):
+        # Explicitly this week. `cand` is by construction inside it, but keep the assertion
+        # so a future change to the arithmetic cannot silently widen the window.
+        return cand if monday <= cand <= monday + timedelta(days=6) else None
+    # Bare weekday: only today or later this week.
+    return cand if cand >= base else None
+
+
+def parse_directed_day(text: str, today: date | None = None) -> dict:
+    """A directed-day instruction, or a refusal with the reason.
+
+    Returns {"family", "date", "refused"}. `family`/`date` are both set only when every
+    test passed; otherwise `refused` says which one did not. The caller must ALSO check the
+    day is off-pattern (see `is_off_pattern`) and confirm with the athlete before writing.
+    """
+    out = {"family": None, "date": None, "refused": ""}
+    t = (text or "").strip()
+    if not t:
+        out["refused"] = "empty"
+        return out
+    if t.endswith("?") or _DAY_QUESTION_RE.search(t):
+        out["refused"] = "question, not a direction"
+        return out
+    if _REPORT_RE.search(t):
+        # The dangerous case: retro-excusing a deviation nobody directed.
+        out["refused"] = "reports what already happened, not a direction"
+        return out
+    if not _DIRECTIVE_RE.search(t):
+        out["refused"] = "no directive phrasing"
+        return out
+
+    sm = _SPORT_RE.search(t)
+    if not sm:
+        out["refused"] = "no sport named"
+        return out
+    if len({_SPORT_WORDS[s.lower()] for s in _SPORT_RE.findall(t)}) > 1:
+        out["refused"] = "more than one sport named"
+        return out
+    fam = _SPORT_WORDS[sm.group(1).lower()]
+
+    d = resolve_directed_date(t, today)
+    if d is None:
+        out["refused"] = "no unambiguous single date"
+        return out
+
+    out["family"] = fam
+    out["date"] = d.isoformat()
+    return out
+
+
+def is_off_pattern(day_rules: dict | None, family: str, on: date | str) -> bool:
+    """True when `family` on that date is NOT one of the athlete's normal days, i.e. there
+    is a hard `{family}_forbidden_day` for the override to downgrade.
+
+    False when the day is already on-pattern (nothing to excuse) AND when `day_rules` has
+    no list for that sport at all — in that case validate_plan raises no forbidden-day
+    failure to begin with, so an override would be a permission with nothing to permit.
+    Both cases must record nothing: entries are counted per sport+weekday for the
+    `day_rules_drifted` alarm, so redundant ones push a real pattern towards a false alarm.
+    """
+    key = f"{family}_days"
+    days = (day_rules or {}).get(key)
+    if not isinstance(days, list) or not days:
+        return False
+    d = date.fromisoformat(on) if isinstance(on, str) else on
+    abbr = _WEEKDAY_ABBR[d.weekday()].capitalize()
+    return abbr not in {str(x)[:3].capitalize() for x in days}
+
+
+def capture_note(source: str = "Telegram", on_date: date | None = None) -> str:
+    """The note stored with an override. `record` requires one, because an entry with no
+    provenance is indistinguishable from a permission somebody granted by accident."""
+    return (f"Coach-directed in {source}, confirmed by the athlete. "
+            f"Recorded {(on_date or date.today()).isoformat()}.")
 
 
 def main():
