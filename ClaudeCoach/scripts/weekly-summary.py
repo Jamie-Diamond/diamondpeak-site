@@ -21,6 +21,7 @@ from primitives.planned_tss import planned_session_tss
 from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import open_actions as oa_lib   # single store for open actions, arithmetic in Python
+import acknowledgement as ack_lib   # §8.3 milestone triggers, evaluated in Python
 
 ATHLETES_CONFIG = BASE / "config/athletes.json"
 TG_CONFIG       = BASE / "telegram/config.json"
@@ -485,6 +486,55 @@ def run_summary(slug: str = "jamie") -> str:
 
     coaching_level = profile.get("coaching_level", "mid")
 
+    # -- Pre-compute the §8.3 acknowledgement ----------------------------------
+    # Until this landed, the only spontaneous positive message the system could
+    # produce was a Strava segment PB. The two WEEK-LEVEL triggers live here
+    # because this card is where a week's facts are true and it already sends —
+    # §8.3 puts the acknowledgement "in the weekly card, before the table, not
+    # after", and the athletes get 35-45 messages a week already, so no new push.
+    # Detected in Python for the plan_builder.py:5-7 reason: a model deciding
+    # when to praise praises wrongly, and a false "third week running" is worse
+    # than saying nothing at all. Everything below fails closed.
+    ack_hits = []
+    try:
+        _ack_ctl = None
+        for _row in reversed(wellness_14d or []):
+            if _row.get("ctl") is not None:
+                _ack_ctl = round(float(_row["ctl"]), 1)
+                break
+        ack_state = ack_lib.load_state_from_dir(adir)
+        ack_hits = ack_lib.evaluate_weekly_from_dir(
+            adir, cfg=_cfg, ctl_today=_ack_ctl, week_end=week_end,
+            compliance_pct=compliance_pct, coaching_level=coaching_level,
+            fired=ack_state["fired"], weeks=ack_state["weeks"])
+        # §8.3 wants the block acknowledgement to name "what it bought", which
+        # needs block-length totals the card does not otherwise fetch. One extra
+        # read, sized from the block the trigger already identified, and only
+        # when the trigger fired. If it fails the numbers are simply omitted —
+        # the sentence stays true without them, so this never blocks the card.
+        _blk = next((h for h in ack_hits if h["trigger"] == "block_finished"), None)
+        if _blk and _blk.get("block_weeks"):
+            try:
+                _days = int(_blk["block_weeks"]) * 7
+                _blk_acts = client.get_training_history(_days) or []
+                _blk_load = sum(round(float(a.get("icu_training_load") or 0))
+                                for a in _blk_acts)
+                _blk_well = client.get_wellness(_days + 1) or []
+                _ctls = [float(r["ctl"]) for r in _blk_well if r.get("ctl") is not None]
+                _fit_delta = round(_ctls[-1] - _ctls[0]) if len(_ctls) >= 2 else None
+                _richer = ack_lib.evaluate_block_finished(
+                    _cfg, _ack_ctl, week_end, compliance_pct=compliance_pct,
+                    coaching_level=coaching_level, block_load=_blk_load or None,
+                    fitness_delta=_fit_delta, fired=ack_state["fired"])
+                _richer = (ack_lib.filter_register([_richer], coaching_level) or [None])[0]
+                if _richer:
+                    ack_hits = [_richer if h is _blk else h for h in ack_hits]
+            except Exception:
+                pass
+    except Exception:
+        ack_hits = []          # fail closed: no acknowledgement beats a wrong one
+    acknowledgement_block = ack_lib.weekly_block(ack_hits)
+
     # -- Build prompt ----------------------------------------------------------
     # The MANDATORY block below sits directly under the coaching-level block on
     # purpose: PRO asserts that its rules override the format instructions in this
@@ -507,6 +557,7 @@ If IcuSync current_date_local disagrees with {today}, flag it — do not silentl
 {_level_block(coaching_level)}
 {illness_lib.prompt_block(slug, first_name=first_name)}
 {illness_lib.weekly_card_line(slug)}
+{acknowledgement_block}
 ## MANDATORY — EXEMPT FROM THE COACHING-LEVEL RULES ABOVE
 The items below are NOT subject to anything above about compressing, surfacing "only the metrics
 that matter", or avoiding a full stat dump. They appear in full at every coaching level. Keep the
@@ -621,7 +672,8 @@ Output the card in Telegram Markdown. Rating = STRONG (≥95% compliance, no fla
 ---
 **Week ending {week_end} — [STRONG / SOLID / LIGHT / MIXED]**
 
-[Acknowledgement — one sentence, here, before the table, never after: a "well done" appended under a
+[Acknowledgement — if the pre-computed ACKNOWLEDGEMENT block above listed a sentence, use that
+sentence here, verbatim, and write nothing of your own. Otherwise: one sentence, here, before the table, never after: a "well done" appended under a
 list of flags reads as an afterthought. Include it ONLY on a STRONG or SOLID week, and only if you
 can name the specific thing that earned it — a number, a streak, a session done in difficult
 circumstances. On a LIGHT or MIXED week there is no acknowledgement at all: praise on a week that
@@ -781,6 +833,23 @@ Wrap your entire output in <telegram> and </telegram> tags. Output nothing outsi
     output = m.group(1).strip() if m else ""
     if output:
         _tg_send(chat_id, output)
+
+    # -- Acknowledgement state -------------------------------------------------
+    # Written ONLY once the card actually went out. A card that never rendered
+    # must not consume the occurrence: the streak would then be silently spent
+    # and never acknowledged at all (the weekly summary sent nothing for three
+    # weeks once already). record_week is separate from mark_fired on purpose —
+    # the compliance record has to accrue every week, including the weeks that
+    # BREAK a streak, or a streak can never be evaluated. Both writes are
+    # idempotent and both prune, so re-running cannot re-fire or accumulate.
+    if output:
+        try:
+            ack_lib.record_week_in(adir, week_end, compliance_pct)
+            if ack_hits:
+                ack_lib.mark_fired_in(adir, [h["key"] for h in ack_hits], today)
+        except Exception as e:
+            print(f"[weekly-summary][{slug}] acknowledgement state not written: {e}",
+                  file=sys.stderr)
 
     # FALLBACK ONLY. The note is folded into the card (Step 2), so sending it
     # here as well would be the duplicate messaging it was moved out of the ops
