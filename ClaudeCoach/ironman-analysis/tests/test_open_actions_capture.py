@@ -211,3 +211,18 @@ class TestCrossFireWithOtherCaptures:
     @pytest.mark.parametrize("msg", ["14h next week", "20, big week"])
     def test_an_hours_declaration_is_not_read_as_an_action(self, msg):
         assert not oa.looks_like_action_instruction(msg), msg
+
+    @pytest.mark.parametrize("msg", [
+        "The run today hasn't synced yet due to a watch issue. It's completed. "
+        "7.96k 38.46.2, 4.59 gap, 148bpm AVE, Max 157bpm, Av power 405, 4.52 PACe.",
+        "Ride done, 46.5km, NP 222w, 91min",
+        "finished the swim, 2.6km, 1:41/100m ave",
+    ])
+    def test_a_manual_session_report_is_not_read_as_an_action(self, msg):
+        assert not oa.looks_like_action_instruction(msg), msg
+
+    def test_one_common_word_does_not_name_an_action(self):
+        items = [{"action": "Tested run-fuelling protocol in heat", "open": True,
+                  "bucket": "open_ended", "days_overdue": 0, "days_open": 3,
+                  "days_until": None}]
+        assert oa.candidates(items, "the run today") == []

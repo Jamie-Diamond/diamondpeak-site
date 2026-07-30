@@ -526,6 +526,22 @@ _MATCH_STOP = {
 _DEFER_DAYS = {"tomorrow": 1, "next week": 7, "a week": 7, "fortnight": 14,
                "two weeks": 14, "next month": 30, "a month": 30}
 
+# Session data is not an action instruction. "It's completed. 7.96k 38.46.2, 148bpm ave,
+# av power 405" matches the `done` intent on the word "completed" and then matches any
+# open action containing "run" — which is how a manual session report got answered with a
+# tick-off picker instead of a debrief. Two or more metric markers means the athlete is
+# reporting numbers from a session, so the intent verb belongs to that session.
+_METRIC_MARKERS = (
+    r"\b\d+(?:\.\d+)?\s*(?:bpm|k|km|kg|ml|w|watts|g/hr|g)\b",
+    r"\b(?:gap|pace|rpe|hr|bpm|watts|cadence|decoupling|np|if|tss|load)\b",
+    r"\b(?:avg?|ave|average|max)\b",
+    r"\b\d{1,2}[:.]\d{2}(?:[:.]\d{1,2})?\b",
+)
+
+
+def _metric_marker_count(text: str) -> int:
+    return sum(1 for rx in _METRIC_MARKERS if re.search(rx, text or "", re.I))
+
 
 def _match_tokens(text: str) -> set:
     """Discriminating lower-case words of 3+ characters."""
@@ -542,6 +558,8 @@ def looks_like_action_instruction(text: str) -> bool:
     if not t:
         return False
     if t.endswith("?") or _ACTION_QUESTION_RE.search(t):
+        return False
+    if _metric_marker_count(t) >= 2:
         return False
     if not any(re.search(rx, t, re.I) for _, rx in _INTENTS):
         return False
@@ -624,7 +642,12 @@ def candidates(items: list[dict], subject: str, limit: int = 4) -> list[dict]:
         hits = want & have
         if not hits:
             continue
-        scored.append((len(hits) / len(have), len(hits), it))
+        ratio = len(hits) / len(have)
+        # One common word off a long label ("run" in "Tested run-fuelling protocol in
+        # heat") names nothing. Require either a second hit or half the label.
+        if len(hits) < 2 and ratio < 0.5:
+            continue
+        scored.append((ratio, len(hits), it))
     scored.sort(key=lambda s: (-s[0], -s[1]))
     return [it for _, _, it in scored[:limit]]
 
