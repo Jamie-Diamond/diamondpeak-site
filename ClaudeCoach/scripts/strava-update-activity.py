@@ -23,7 +23,18 @@ def build_description(first_name: str, sport: str, entry: dict, detail: dict, ev
     ftp     = detail.get("icu_ftp") or 316
     # RPE and injury/pain scores are private — never published to Strava.
     carbs   = entry.get("nutrition_g_carb")
-    feel    = entry.get("feel") or ""
+    # `feel` is NEVER published either. It was stripped 2026-07-30: removing the `rpe`
+    # and `injury_pain_during` fields from the metrics line did not close the leak,
+    # because `feel` is free text the athlete writes FOR THE COACH and it routinely
+    # contains both banned categories in their own words, plus medical detail. Real
+    # examples that were being pushed to a public description verbatim:
+    #   "Stomach unsettled pre-run, emergency loo stop ~10k in; ankle 1/10 from 15k"
+    #   "Ankle 2/10 first 4k then settled to 0."
+    #   "Most of the ride RPE 4 (steady); 350-400W efforts felt RPE 9/10"
+    # A pattern-based scrub of free text would leak again on the next phrasing, so the
+    # field is simply not published. Third private-data leak into public Strava; treat
+    # any new athlete-authored free-text field as private by default.
+    feel    = ""
     dur     = entry.get("duration_min") or round((detail.get("moving_time") or 0) / 60)
     dist    = entry.get("distance_km") or (round((detail.get("distance") or 0) / 1000, 1) or None)
 
