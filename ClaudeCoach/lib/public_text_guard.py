@@ -38,9 +38,19 @@ _PRIVATE_PATTERNS = [
 ]
 
 
-def private_leaks(text: str) -> list[str]:
-    """Human-readable descriptions of every private pattern found in `text`."""
-    return [why for pat, why in _PRIVATE_PATTERNS if pat.search(text or "")]
+def private_leaks(text: str, exempt: str | None = None) -> list[str]:
+    """Human-readable descriptions of every private pattern found in `text`.
+
+    `exempt` is text that is already public and must not count as a leak — in practice
+    the activity's own name. Jamie has sessions titled "Ankle Training" and "Ankle
+    stability + lower body mobility": he chose those titles and they are already visible
+    on Strava, so matching the word "ankle" in them would block every description for
+    those sessions forever while protecting nothing.
+    """
+    body = text or ""
+    if exempt:
+        body = body.replace(str(exempt), " ")
+    return [why for pat, why in _PRIVATE_PATTERNS if pat.search(body)]
 
 
 def public_entry(entry: dict) -> dict:
@@ -48,14 +58,14 @@ def public_entry(entry: dict) -> dict:
     return {k: v for k, v in (entry or {}).items() if k in PUBLISHABLE_FIELDS}
 
 
-def assert_publishable(text: str) -> str:
+def assert_publishable(text: str, exempt: str | None = None) -> str:
     """Return `text` if it is safe to publish, else raise ValueError.
 
     Fails CLOSED: a description is not worth publishing at the cost of leaking an
     athlete's pain score. Callers should let this raise rather than catching it — a
     missing Strava description is a nuisance, a leaked one is a breach of trust.
     """
-    leaks = private_leaks(text)
+    leaks = private_leaks(text, exempt)
     if leaks:
         raise ValueError(
             "refusing to publish: text contains private athlete content — "

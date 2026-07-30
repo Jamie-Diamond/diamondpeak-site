@@ -205,7 +205,9 @@ def main():
         # freely, so even with `feel` stripped it can still surface a pain score it saw
         # in its context. Fails CLOSED: no description beats a leaked one. Three prior
         # leaks (25 Jul, and twice on 30 Jul) all got through prompt-level guards.
-        description = public_text_guard.assert_publishable(description)
+        # The activity's own name is exempt: it is already public and athlete-chosen.
+        description = public_text_guard.assert_publishable(
+            description, exempt=entry.get("name") or detail.get("name"))
         sc.update_description(strava_id, description)
         print(f"Updated Strava {strava_id} for {slug}/{icu_id}", file=sys.stderr)
     except Exception as e:
