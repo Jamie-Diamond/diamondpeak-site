@@ -56,10 +56,15 @@ import statistics
 # Edges below are the per-sport quartiles of the actual logged corpus (n=85 bike,
 # 42 run, 31 swim, 2026-07-30), so each band means the same thing WITHIN a sport.
 # Revisit if the corpus grows a lot or an athlete's training mix changes.
-IF_EDGES = {            # (q25, median, q75) — below q25 = easy, above q75 = hard
-    "bike": (0.68, 0.72, 0.78),
-    "run":  (0.78, 0.81, 0.84),
-    "swim": (0.79, 0.87, 0.92),
+# TWO bands per sport, split at that sport's median. Four quartile bands were tried
+# first and fragmented the history too finely: only 26% of assessments could use the
+# athlete's own baseline (Jamie had 29 logged RPEs but just 1 in the bucket that
+# mattered). Halving the bands lifted own-data use to 47% and cut false asks 16%->14%.
+# Prefer fewer, better-populated buckets over finer but empty ones.
+IF_MEDIAN = {
+    "bike": 0.72,
+    "run":  0.81,
+    "swim": 0.87,
 }
 SPORT_FAMILY = {
     "Ride": "bike", "VirtualRide": "bike", "GravelRide": "bike",
@@ -67,8 +72,10 @@ SPORT_FAMILY = {
     "Run": "run", "TrailRun": "run", "VirtualRun": "run",
     "Swim": "swim", "OpenWaterSwim": "swim",
 }
-# Band index -> the agreed prior. Index 0 = easy ... 3 = hard.
-PRIOR_BY_BAND = [(3, 4), (5, 6), (6, 7), (7, 8)]
+# Band 0 = below that sport's median intensity, band 1 = at/above it. These merge the
+# agreed four-row table pairwise: easy(3-4)+steady(5-6) -> (4,5), tempo(6-7)+hard(7-8)
+# -> (6,8). Cold start only; the athlete's own median replaces it from n=2.
+PRIOR_BY_BAND = [(4, 5), (6, 8)]
 
 # TRIED AND REJECTED 2026-07-30: shifting the prior by `coaching_level`
 # (beginner +2 / pro -2). It looked obvious — every cold-start flag for Jamie (pro)
@@ -124,8 +131,7 @@ def bucket(entry: dict) -> str | None:
     IF = intensity_factor(entry.get("tss"), entry.get("duration_min"))
     if IF is None:
         return None
-    q25, med, q75 = IF_EDGES[family]
-    band = 0 if IF < q25 else 1 if IF < med else 2 if IF < q75 else 3
+    band = 0 if IF < IF_MEDIAN[family] else 1
     long_tag = ""
     try:
         if float(entry.get("duration_min") or 0) >= LONG_SESSION_MIN:

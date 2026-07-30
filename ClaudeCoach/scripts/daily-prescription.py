@@ -16,6 +16,7 @@ import illness as illness_lib   # structured illness/compromised flag (surfacing
 import menstrual
 import ops_log
 import progression_guard
+import rpe_context
 import injury_scope
 from git_sync import sync_commit_push
 sys.path.insert(0, str(BASE / "ironman-analysis"))
@@ -320,6 +321,44 @@ def _last_rpe(slug: str):
     return None
 
 
+def _rpe_deviation(slug: str) -> dict:
+    """rpe_delta / rpe_expected / rpe_delta_confirmed for the readiness dict.
+
+    Empty dict when the last session cannot be assessed (strength, missing
+    Load/duration) — R5 then falls back to its old raw threshold. The athlete's
+    OWN logged history is the baseline wherever they have two or more comparable
+    sessions, so an established athlete is judged against themselves, not a
+    generic table.
+    """
+    try:
+        adir = BASE / "athletes" / slug
+        log = json.loads((adir / "session-log.json").read_text())
+        scored = [e for e in log
+                  if e.get("rpe") is not None and not e.get("stub") and e.get("date")]
+        if not scored:
+            return {}
+        latest = max(scored, key=lambda e: e["date"])
+        history = [e for e in scored if e is not latest]
+        try:
+            level = json.loads((adir / "profile.json").read_text()).get(
+                "coaching_level", "mid")
+        except Exception:
+            level = "mid"
+        a = rpe_context.assess(latest, history, level)
+        if a.get("delta") is None:
+            return {}
+        return {
+            "rpe_delta": a["delta"],
+            "rpe_expected": a["expected"],
+            # No confirm-ask is wired yet, so this stays None: large (possible
+            # mis-entry) deviations therefore HOLD rather than move load, which is
+            # the fail-safe direction.
+            "rpe_delta_confirmed": latest.get("rpe_confirmed"),
+        }
+    except Exception:
+        return {}
+
+
 def _ankle_state(slug: str):
     """(pain_score, quality_cleared) — athlete-scoped and direction-safe.
 
@@ -586,6 +625,10 @@ def _engine_prescription(slug: str) -> dict:
             "last_session_rpe": _last_rpe(slug),
             "ankle_pain_score": pain, "ankle_quality_cleared": cleared,
         }
+        # How far the last session's RPE sat from what this athlete logs for
+        # comparable sessions. R5 acts on this, not the raw score — an 8 after a VO2
+        # set is the session working; a 6 after an easy spin is the real signal.
+        readiness.update(_rpe_deviation(slug))
         # Per-athlete ankle pain-gate threshold (config run_protocol): modulation R1
         # EASES the run at/above this pain score. Defaults to 5 in modulation if unset.
         try:

@@ -9,11 +9,12 @@ Rule inventory (applied in order; hard rules fire first):
     R2  ATL swap to Z2        — (ATL − CTL) > 25 → quality → Z2
     R3  HRV intensity drop    — 7d HRV trend < −7% → −5% intensity, −1 interval
     R4  ATL moderate cap      — 15 < (ATL − CTL) ≤ 25 → cap 95% FTP, −1 interval
-    R5  Prior RPE reduction   — last session RPE ≥ 8 → −5% intensity
+    R5  Prior RPE reduction   — last session felt HARDER THAN EXPECTED for its
+                                intensity → −5% intensity (see _r5_prior_rpe)
     R6  Sleep swap (two-sig)  — sleep < 6h AND HRV < −5% → swap quality → Z2
     R7  Heat adjustment       — temp > 18°C → apply L1 env_pacing correction
-    R8  Luteal overlay        — luteal phase AND (temp > 20°C OR intensity ≥ 0.85)
-                                → −5% intensity (core temp/RPE run higher in luteal)
+    R8  Luteal heat overlay   — luteal phase AND temp > 20°C → −5% intensity
+                                (thermoregulatory only; see _r8_luteal_overlay)
 
 Design rule: start with 7; add only when an observed failure isn't caught.
 Sources: reference/rules.md, upgrade plan W2 spec, multi-signal corroboration rule.
@@ -42,8 +43,10 @@ _SLEEP_REDUCE_H: float = 7.0      # hours below this → single-signal reduce (c
 _ANKLE_PAIN_EASE_THRESHOLD: int = 5   # pain >= this → EASE run (Z2 + reduced volume), not a block
 _ANKLE_EASE_VOLUME_FACTOR: float = 0.75  # eased run volume as fraction of planned duration
 _INTENSITY_STEP: float = 0.05      # standard reduction increment
+_RPE_DELTA_EASE: float = 2.5       # RPE points above expected → R5 eases intensity
+_RPE_DELTA_SUSPECT: float = 4.0    # ...beyond this, looks like a typo: confirm first
 _LUTEAL_TEMP_C: float = 20.0       # luteal + ambient above this → R8 fires
-_LUTEAL_INTENSITY: float = 0.85    # luteal + planned intensity at/above this → R8 fires
+# _LUTEAL_INTENSITY removed 2026-07-30 — see _r8_luteal_overlay for why.
 
 
 # Session types with run load — ankle rule applies
@@ -243,20 +246,61 @@ def _r4_atl_moderate_cap(
 def _r5_prior_rpe(
     planned: dict, readiness: dict
 ) -> RuleResult:
-    """R5: Last session RPE ≥ 8 → −5% intensity."""
+    """R5: last session felt HARDER THAN EXPECTED → −5% intensity.
+
+    Rewritten 2026-07-30. It previously fired on the raw value (`rpe >= 8`), which
+    is wrong in both directions: an 8 after a VO2 set is the session working, while
+    a 6 after an easy spin — the genuinely useful signal — never fired at all.
+
+    The deviation is computed upstream (lib/rpe_context.py, which needs the session
+    log and so cannot live in this pure module) and arrives as
+    `readiness["rpe_delta"]`: RPE points above (+) or below (−) what that athlete
+    logs for comparable sessions. Only the POSITIVE side eases load; an
+    easier-than-expected session is advisory and handled outside this rule.
+
+    `rpe_delta_confirmed` guards against fat-fingered entries. A deviation big
+    enough to look like a typo (e.g. 3 keyed as 8) does NOT move load until the
+    athlete stands by it; a moderate, plausible deviation acts immediately, so the
+    rule stays useful before the confirm-ask is built.
+
+    Falls back to the old raw threshold ONLY when no deviation could be computed
+    (strength sessions, missing Load/duration) — better to keep the previous, blunt
+    caution there than to fire nothing at all.
+    """
     if not _is_quality(planned["session_type"]):
         return RuleResult("R5", False, "")
 
+    delta = readiness.get("rpe_delta")
     rpe = readiness.get("last_session_rpe")
-    if rpe is not None and rpe >= _RPE_REDUCTION_THRESHOLD:
-        trail = (
-            f"Yesterday's RPE {rpe}/10 (≥{_RPE_REDUCTION_THRESHOLD}) "
-            f"→ R5 prior-RPE rule → intensity −{_INTENSITY_STEP * 100:.0f}% "
-            f"→ allow partial glycogen and CNS recovery before today's stimulus"
-        )
-        return RuleResult("R5", True, trail)
 
-    return RuleResult("R5", False, "")
+    if delta is None:
+        if rpe is not None and rpe >= _RPE_REDUCTION_THRESHOLD:
+            trail = (
+                f"Last session RPE {rpe}/10 (≥{_RPE_REDUCTION_THRESHOLD}); no "
+                f"comparable-session baseline available, so falling back to the raw "
+                f"threshold → R5 → intensity −{_INTENSITY_STEP * 100:.0f}%"
+            )
+            return RuleResult("R5", True, trail)
+        return RuleResult("R5", False, "")
+
+    if delta < _RPE_DELTA_EASE:
+        return RuleResult("R5", False, "")
+
+    expected = readiness.get("rpe_expected")
+    exp_str = f" vs ~{expected} expected" if expected is not None else ""
+    if delta >= _RPE_DELTA_SUSPECT and readiness.get("rpe_delta_confirmed") is not True:
+        trail = (
+            f"Last session RPE {rpe}{exp_str} is {delta:+.1f} out — large enough to "
+            f"be a mis-entry, so R5 is HOLDING until it is confirmed. No change."
+        )
+        return RuleResult("R5", False, trail)
+
+    trail = (
+        f"Last session RPE {rpe}{exp_str} ({delta:+.1f}) — harder than this athlete's "
+        f"comparable sessions → R5 prior-RPE rule → intensity "
+        f"−{_INTENSITY_STEP * 100:.0f}% → allow partial glycogen and CNS recovery"
+    )
+    return RuleResult("R5", True, trail)
 
 
 def _r6_sleep_two_signal(
@@ -289,11 +333,28 @@ def _r6_sleep_two_signal(
 def _r8_luteal_overlay(
     planned: dict, readiness: dict
 ) -> RuleResult:
-    """R8: Luteal phase AND (ambient > 20°C OR planned intensity ≥ 0.85)
-    → −5% intensity.
+    """R8: Luteal phase AND ambient > 20°C → −5% intensity. THERMOREGULATORY ONLY.
 
-    Core temperature and RPE run higher in the luteal phase, and the effect
-    compounds with heat — preserve session completion over chasing numbers.
+    Progesterone raises core temperature ~0.3-0.5°C, shifts the thermoregulatory
+    set-point and lowers plasma volume, so heat strain at a given workload is
+    genuinely higher in the luteal phase. That is the evidence-backed part, and it
+    is what this rule now covers.
+
+    The second trigger (planned intensity ≥ 0.85) was REMOVED 2026-07-30 on Jamie's
+    instruction. There is no good evidence that luteal phase alone warrants easing a
+    hard session: the largest meta-analysis in the area (McNulty et al., Sports Med
+    2020) found only trivial, low-certainty phase effects on performance, and
+    inter-individual variation dwarfs them. It also contradicted this system's own
+    prompt line ("never cut load on phase alone"), and across a ~14-day luteal phase
+    it quietly removed ~5% from roughly half of an athlete's hard sessions during a
+    build block. Phase now informs FRAMING (hold targets loosely, RPE-led) and the
+    heat trigger above, never load on its own.
+
+    NOTE: this limb was, accidentally, the only guard that would have caught
+    Kathryn's 30 Jul 2x20 @ 95-102%. That session's real defect was an unsupported
+    FTP anchor and a double jump in rep length and intensity — caught properly by
+    lib/progression_guard.py, which is the right tool for it.
+
     `cycle_phase` is computed deterministically (lib/menstrual.py) and is only
     present for athletes with menstrual_tracking enabled; absent → never fires.
     """
@@ -303,19 +364,17 @@ def _r8_luteal_overlay(
         return RuleResult("R8", False, "")
 
     temp = readiness.get("temp_c", 15.0)
-    base = planned.get("target_intensity", 1.0)
-    if temp <= _LUTEAL_TEMP_C and base < _LUTEAL_INTENSITY:
+    if temp <= _LUTEAL_TEMP_C:
         return RuleResult("R8", False, "")
 
-    driver = (f"ambient {temp:.0f}°C (>{_LUTEAL_TEMP_C:.0f}°C)"
-              if temp > _LUTEAL_TEMP_C
-              else f"planned intensity {base:.2f} (≥{_LUTEAL_INTENSITY:.2f})")
+    driver = f"ambient {temp:.0f}°C (>{_LUTEAL_TEMP_C:.0f}°C)"
     day = readiness.get("cycle_day")
     day_str = f" (cycle day {day})" if day else ""
     trail = (
         f"Luteal phase{day_str} with {driver} "
-        f"→ R8 luteal overlay → intensity −{_INTENSITY_STEP * 100:.0f}% "
-        f"→ core temp and RPE run higher in luteal; complete the session rather than chase numbers"
+        f"→ R8 luteal heat overlay → intensity −{_INTENSITY_STEP * 100:.0f}% "
+        f"→ core temp runs higher in luteal and heat strain compounds it; "
+        f"complete the session rather than chase numbers"
     )
     return RuleResult("R8", True, trail)
 
