@@ -2462,7 +2462,17 @@ def _handle_quick_log(token, chat_id, data, message_id, athletes):
     for e in entries:
         if str(e.get("activity_id", "")) != activity_id:
             continue
-        e[field] = value
+        if field == "nutrition_g_carb":
+            # The quick-log buttons are labelled as RATES ("60g/hr") but this field
+            # stores a TOTAL in grams. Storing the tapped number raw meant a 60g/hr tap
+            # on a 3h ride was recorded as 60g total and then reported back as ~20g/hr
+            # — the athlete's answer inverted. Convert rate x duration -> total here.
+            # (The 30 Jul g/hr fix corrected the three DISPLAY sites and missed this,
+            # the input side, which is where the data actually got corrupted.)
+            hours = (e.get("duration_min") or 0) / 60.0
+            e[field] = round(value * hours) if hours > 0 else value
+        else:
+            e[field] = value
         if field == "rpe":
             e["stub"] = False
             entry_sport = e.get("sport", "")

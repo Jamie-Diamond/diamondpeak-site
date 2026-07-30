@@ -21,6 +21,16 @@ WINDOW_DAYS = 56          # ~8 weeks: long enough to hold a full build block
 WORK_REP_FLOOR_PCT = 80   # below this a segment is warm-up/recovery, not work
 BAND_TOLERANCE_PCT = 10   # "comparable band" = within this many points below
 
+# Margins added 2026-07-30 after the guard's only real-world positive turned out to be
+# a FALSE positive. It flagged Kathryn's 30 Jul 2x20 @ 95-102% as a double increase; she
+# completed both reps at 94-97% FTP. Bare "any increase on both axes" fires on ambitious
+# progressions as well as reckless ones, which is not useful — a coach who is told off
+# for a step the athlete then nails will stop reading the warnings. A step must now
+# CLEAR these margins, so 15min@94% -> 20min@102% (band +5, duration 1.33x) passes,
+# while 10min@90% -> 25min@105% (band +15, duration 2.5x) still fires.
+BAND_JUMP_PCT = 5             # band must exceed the demonstrated ceiling by MORE than this
+DURATION_JUMP_FACTOR = 1.34   # ...and rep duration exceed the comparable best by this much
+
 # "- 20m 95-102%" → (minutes, low, high). Negative lookahead drops pace targets,
 # which are percentages of threshold PACE (higher = slower) and not comparable.
 _REP_RE = re.compile(r"(\d+)\s*m\s+(\d{2,3})\s*-\s*(\d{2,3})\s*%(?!\s*pace)",
@@ -63,18 +73,19 @@ def check(proposed_reps: list[tuple[int, int]],
 
     prop_min, prop_band = max(proposed_reps, key=lambda r: (r[1], r[0]))
     hist_max_band = max(band for _m, band in history)
-    if prop_band <= hist_max_band:
-        return None                                  # not a new intensity band
+    if prop_band <= hist_max_band + BAND_JUMP_PCT:
+        return None                     # same band, or a step within normal progression
 
     floor = prop_band - BAND_TOLERANCE_PCT
     comparable = [m for m, band in history if band >= floor]
     longest_comparable = max(comparable) if comparable else 0
-    if prop_min <= longest_comparable:
-        return None                                  # duration already demonstrated
+    if prop_min <= longest_comparable * DURATION_JUMP_FACTOR:
+        return None                     # duration step is within normal progression
 
     return (
         f"PROGRESSION FLAG (advisory): proposed {prop_min}min reps at {prop_band}% FTP "
-        f"raise intensity AND rep duration in the same step. Demonstrated ceiling in the "
+        f"raise intensity AND rep duration WELL beyond demonstrated capacity in one step. "
+        f"Demonstrated ceiling in the "
         f"last {WINDOW_DAYS} days is {hist_max_band}% FTP, and the longest completed rep "
         f"at {floor}% or above is {longest_comparable}min. Advance one variable at a "
         f"time: either {prop_min}min at {hist_max_band}%, or "

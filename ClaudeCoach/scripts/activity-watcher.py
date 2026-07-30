@@ -38,6 +38,7 @@ import illness as illness_lib   # structured illness/compromised flag (surfacing
 import acknowledgement as ack_lib   # §8.3 milestone triggers, evaluated in Python
 import ops_log
 import heat as heat_lib
+import profile_fields
 import claude_call
 from git_sync import sync_commit_push
 from primitives.run_durability import compute_run_durability, fade_line
@@ -116,11 +117,21 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150,
         protocol = next((inj.get("protocol", "") for inj in injuries if inj.get("protocol")), "")
         injury_line = f" Injuries: {descs}." + (f" Protocol: {protocol}." if protocol else "")
 
-    threshold_pace = (profile or {}).get("run_threshold_pace_per_km", "4:02")
+    # Read via profile_fields: this field may carry a prose caveat after the pace, and
+    # it is interpolated into ATHLETE-FACING debrief text below. Passing it raw sent
+    # Kathryn the entire internal note on 2026-07-30. Only the M:SS part may leak out.
+    _thr_raw = (profile or {}).get("run_threshold_pace_per_km")
+    threshold_pace = profile_fields.pace(_thr_raw, "4:02")
+    _thr_note = (
+        " (that threshold pace is a provisional, non-field-tested estimate: you may say"
+        " 'provisional' once if it matters, but NEVER reproduce the caveat text from the"
+        " profile field itself — it is an internal note, not athlete-facing)"
+        if profile_fields.is_provisional(_thr_raw) else ""
+    )
     run_injury_ask = (
         f"- Run (walk-run): If Strava laps show alternating run/walk laps (walk laps: pace >8:00/km or duration ≤90s):"
         f" Your ANALYSIS must be formatted EXACTLY as multiple output lines — each on its own line:"
-        f" Line 1 (header): NxDUR / Xmin walk · avg GAP X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km)"
+        f" Line 1 (header): NxDUR / Xmin walk · avg GAP X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km){_thr_note}"
         f" Lines 2..N+1 (one per run rep, use gap_pace if present else pace): Rep N: DUR · GAP X:XX/km · AVGbpm/MAXbpm"
         f" Final lines: % HR ≤{run_hr_cap} bpm cap adherence · decoupling % if >40 min | Injury pain during and this morning? (0-10)"
         " Else (continuous run): Line 1 = distance + avg GAP pace vs threshold — state +/- sec/km."
@@ -129,7 +140,7 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150,
         if injuries else
         f"- Run (walk-run): If Strava laps show alternating run/walk laps (walk laps: pace >8:00/km or duration ≤90s):"
         f" Your ANALYSIS must be formatted EXACTLY as multiple output lines — each on its own line:"
-        f" Line 1 (header): NxDUR / Xmin walk · avg GAP X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km)"
+        f" Line 1 (header): NxDUR / Xmin walk · avg GAP X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km){_thr_note}"
         f" Lines 2..N+1 (one per run rep, use gap_pace if present else pace): Rep N: DUR · GAP X:XX/km · AVGbpm/MAXbpm"
         f" Final lines: HR zone split · decoupling % if >40 min | RPE and how did it feel?"
         " Else (continuous run): Line 1 = distance + avg GAP pace vs threshold — state +/- sec/km."

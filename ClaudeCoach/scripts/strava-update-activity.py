@@ -15,6 +15,7 @@ CLAUDE      = "/usr/bin/claude"
 sys.path.insert(0, str(BASE / "lib"))
 from icu_api import IcuClient
 from strava_client import StravaClient
+import public_text_guard
 
 
 def build_description(first_name: str, sport: str, entry: dict, detail: dict, events: list) -> str:
@@ -111,7 +112,7 @@ Line 3 — "ClaudeCoach"
 Examples of the right tone (neutral, factual, no judgement):
 - "Held Z2 throughout, 107 min in zone. Decoupling 3.2%."
 - "1.2km open water, avg 2:03/100m, HR 129. Firm aerobic effort in the heat."
-- "Intervals completed at NP 254W, IF 0.85. RPE 7."
+- "Intervals completed at NP 254W, IF 0.85. Steady across all reps."
 - "8.9km continuous, avg GAP 5:10/km, HR 143 — within the Z2 band."
 
 Total under 300 characters. Output nothing else."""
@@ -200,6 +201,11 @@ def main():
         sport = entry.get("sport") or detail.get("type", "session")
 
         description = build_description(first_name, sport, entry, detail, events)
+        # Hard gate, not a prompt request. The LLM writes line 2 of this description
+        # freely, so even with `feel` stripped it can still surface a pain score it saw
+        # in its context. Fails CLOSED: no description beats a leaked one. Three prior
+        # leaks (25 Jul, and twice on 30 Jul) all got through prompt-level guards.
+        description = public_text_guard.assert_publishable(description)
         sc.update_description(strava_id, description)
         print(f"Updated Strava {strava_id} for {slug}/{icu_id}", file=sys.stderr)
     except Exception as e:
