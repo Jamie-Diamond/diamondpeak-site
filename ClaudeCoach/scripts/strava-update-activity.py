@@ -21,10 +21,9 @@ def build_description(first_name: str, sport: str, entry: dict, detail: dict, ev
     tss     = entry.get("tss") or detail.get("icu_training_load")
     np_w    = entry.get("norm_power") or detail.get("icu_weighted_avg_watts")
     ftp     = detail.get("icu_ftp") or 316
-    rpe     = entry.get("rpe")
+    # RPE and injury/pain scores are private — never published to Strava.
     carbs   = entry.get("nutrition_g_carb")
     feel    = entry.get("feel") or ""
-    pain    = entry.get("injury_pain_during")
     dur     = entry.get("duration_min") or round((detail.get("moving_time") or 0) / 60)
     dist    = entry.get("distance_km") or (round((detail.get("distance") or 0) / 1000, 1) or None)
 
@@ -45,9 +44,12 @@ def build_description(first_name: str, sport: str, entry: dict, detail: dict, ev
     if tss:   metrics.append(f"TSS {tss}")
     if dur:   metrics.append(f"{dur} min")
     if dist:  metrics.append(f"{dist:.1f}km")
-    if rpe:   metrics.append(f"RPE {rpe}")
-    if carbs: metrics.append(f"{carbs}g/hr carbs")
-    if pain is not None: metrics.append(f"pain {pain}/10 during")
+    # nutrition_g_carb is a TOTAL in grams, never a rate — derive g/hr from duration.
+    if carbs:
+        if dur:
+            metrics.append(f"{carbs}g carbs ({round(carbs / (dur / 60))}g/hr)")
+        else:
+            metrics.append(f"{carbs}g carbs")
     if avg_t is not None:
         t_str = f"{round(avg_t)}°C avg"
         if min_t is not None and max_t is not None:
@@ -92,7 +94,7 @@ Metrics: {metrics_str}
 
 Write exactly 3 lines, plain text, no markdown, no hashtags, no exclamation marks:
 Line 1 — "Aim: [one plain sentence on what the session was targeting]"
-Line 2 — [one neutral, factual sentence describing what was actually done — key metrics (zones, NP/IF, decoupling, pace). Describe what happened, NOT how it deviated from plan. NEVER snide, sarcastic, wry, or negative. NEVER imply the athlete quit, gave up, fell short, or underperformed. A shorter-than-planned session is reported plainly by its actual numbers, with no commentary on the gap. If RPE or feel data is present, state it factually. {heat_rule}]
+Line 2 — [one neutral, factual sentence describing what was actually done — key metrics (zones, NP/IF, decoupling, pace). Describe what happened, NOT how it deviated from plan. NEVER snide, sarcastic, wry, or negative. NEVER imply the athlete quit, gave up, fell short, or underperformed. A shorter-than-planned session is reported plainly by its actual numbers, with no commentary on the gap. Never state RPE or any injury/pain score — those are private. {heat_rule}]
 Line 3 — "ClaudeCoach"
 
 Examples of the right tone (neutral, factual, no judgement):

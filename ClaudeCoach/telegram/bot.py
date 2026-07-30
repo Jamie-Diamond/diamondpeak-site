@@ -2481,7 +2481,7 @@ def _handle_quick_log(token, chat_id, data, message_id, athletes):
     except Exception:
         return False
 
-    label_map = {"r": f"RPE {value}", "p": f"Pain {value}/10", "c": f"{value}g/hr carbs"}
+    label_map = {"r": f"RPE {value}", "p": f"Pain {value}/10", "c": f"{value}g carbs total"}
     conf = f"✓ {label_map[field_code]} logged"
     # Keep drill buttons visible after logging — replace RPE/pain/carb rows but preserve drill row
     drill_kb = {"inline_keyboard": [[
@@ -3298,8 +3298,12 @@ def prefetch_context(slug: str) -> str:
                     if s.get("rpe") is not None:
                         today_answered.append(f"RPE for today's {sport} logged: {s['rpe']} — do not ask again")
                     if s.get("nutrition_g_carb") is not None:
+                        # nutrition_g_carb is a TOTAL in grams, not a rate.
+                        carb_str = f"{s['nutrition_g_carb']}g carbs total"
+                        if s.get("duration_min"):
+                            carb_str += f" (~{round(s['nutrition_g_carb'] / (s['duration_min'] / 60))}g/hr)"
                         today_answered.append(
-                            f"Nutrition for today's {sport} logged: {s['nutrition_g_carb']}g/hr carbs — do not ask again")
+                            f"Nutrition for today's {sport} logged: {carb_str} — do not ask again")
                 if today_answered:
                     lines.append("Already answered today: " + "  |  ".join(today_answered))
         except Exception:
