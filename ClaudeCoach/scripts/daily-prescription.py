@@ -5,7 +5,7 @@ Loops over all active athletes. Safe to run manually:
   python3 ClaudeCoach/scripts/daily-prescription.py
 """
 import json, re, shutil, subprocess, sys, tempfile, os, time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 BASE        = Path(__file__).parent.parent   # ClaudeCoach/
@@ -15,6 +15,7 @@ from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import menstrual
 import ops_log
+import progression_guard
 import injury_scope
 from git_sync import sync_commit_push
 sys.path.insert(0, str(BASE / "ironman-analysis"))
@@ -132,7 +133,8 @@ Step 2 — Read these files:
 - {athlete_dir}/persistent-rules.md (permanent coaching rules — zone targets, HR caps, and any [perm] rules OVERRIDE all defaults when writing event descriptions)
 - {athlete_dir}/current-state.md
 - {athlete_dir}/current-state.json ({state_json_note})
-- {athlete_dir}/session-log.json (most recent entry = last RPE)
+- {athlete_dir}/session-log.json (written NEWEST-FIRST — the last RPE is the entry with the
+  latest `date`, which is at the TOP of the array, not the bottom. Do not take the tail.)
 
 {step3}
 
@@ -293,13 +295,26 @@ def _hrv_trend_and_sleep(slug: str):
 
 
 def _last_rpe(slug: str):
+    """Most recent logged RPE, or None.
+
+    Sorts by date explicitly — never trust list order. session-log.json is written
+    newest-first (activity-watcher prepends), so the old `reversed(log)` walked it
+    OLDEST-first and returned the earliest RPE in the file: a frozen constant.
+    Confirmed 2026-07-30 across all three athletes (jamie 8 from 04 Jun, kathryn 5
+    from a 23 May tonsillitis test, calum 7 from 29 Jun), which pinned R5
+    permanently ON for jamie and permanently OFF for the other two. Returns float —
+    RPE is logged in half-points (7.5) and int() truncated them.
+    """
     p = BASE / "athletes" / slug / "session-log.json"
     if p.exists():
         try:
             log = json.loads(p.read_text())
-            for e in reversed(log if isinstance(log, list) else []):
-                if e.get("rpe") is not None and not e.get("stub"):
-                    return int(e["rpe"])
+            entries = [
+                e for e in (log if isinstance(log, list) else [])
+                if e.get("rpe") is not None and not e.get("stub") and e.get("date")
+            ]
+            if entries:
+                return float(max(entries, key=lambda e: e["date"])["rpe"])
         except Exception:
             pass
     return None
@@ -350,6 +365,38 @@ _INTENSITY_BY_TYPE = {
     "run_quality": 1.0, "run_long": 0.7, "run_easy": 0.65, "brick": 0.75,
     "swim": 0.7, "strength": 0.0,
 }
+
+# Power-target percentages in an ICU event description, e.g. "- 20m 95-102%".
+# Negative lookahead drops pace-based targets ("78-88% Pace"): those are percentages
+# of THRESHOLD PACE, where a higher number means SLOWER, so treating them as
+# intensity would read an easy Z2 run as near-threshold and fire guards spuriously.
+_PCT_TARGET_RE = re.compile(r"(\d{2,3})\s*%(?!\s*pace)", re.IGNORECASE)
+
+
+def _peak_intensity(session_type: str, event: dict) -> float:
+    """Peak prescribed intensity for the modulation `planned` dict.
+
+    `_INTENSITY_BY_TYPE` keys off session_type alone, which is blind to what a
+    session actually contains. Fixed 2026-07-30: Kathryn's "Threshold 2x20
+    (trimmed — 2h brick cap)" hit `classify_session_type`'s bare `"brick" in text`
+    check on the word "brick" in the *time-cap note*, so a 2x20 @ 95-102% FTP
+    session was typed `brick` and assumed 0.75 intensity. That sits under R8's 0.85
+    gate, so the luteal overlay silently skipped the hardest session of the week.
+    The real targets are in the event description — read them.
+
+    Returns max(type default, parsed peak) so this can only ever make guards fire
+    MORE readily, never less: a mis-parse cannot loosen a rule.
+    """
+    default = _INTENSITY_BY_TYPE.get(session_type, 0.7)
+    # Bike only. Run/swim descriptions express targets as % of threshold pace/CSS,
+    # which is inverted relative to power and not comparable to these thresholds.
+    if "ride" not in (event.get("type") or "").lower():
+        return default
+    pcts = [int(m) for m in _PCT_TARGET_RE.findall(event.get("description") or "")]
+    # Sanity band: ignore anything absurd (a stray "50% of the field" in prose).
+    pcts = [p for p in pcts if 30 <= p <= 150]
+    return max(default, max(pcts) / 100.0) if pcts else default
+
 
 # Fallback planned-duration (min) by session_type when the name carries nothing parseable.
 _DUR_DEFAULTS = {
@@ -424,6 +471,7 @@ def _todays_planned(slug: str, today: str):
     # Primary = highest planned load (so a strength add-on doesn't mask the key session).
     primary = max(workouts, key=lambda e: float(e.get("icu_training_load") or e.get("load_target") or 0))
     st = classify_session_type(primary.get("type", ""), primary.get("name", ""))
+    intensity = _peak_intensity(st, primary)
     dur = primary.get("moving_time")
     if dur:
         dur_min = int(float(dur) / 60)
@@ -438,11 +486,25 @@ def _todays_planned(slug: str, today: str):
         dur_min = _duration_from_name(primary.get("name", ""), st, css)
     return {
         "session_type": st,
-        "target_intensity": _INTENSITY_BY_TYPE.get(st, 0.7),
+        "target_intensity": intensity,
         "interval_count": None, "interval_duration_min": None, "recovery_min": None,
         "total_duration_min": dur_min,
         "_name": primary.get("name", ""),
+        # Advisory only — surfaced in the engine block, never fed to modulate_session
+        # (underscore keys are stripped at the call site).
+        "_progression_flag": _progression_flag(slug, today, primary),
     }
+
+
+def _progression_flag(slug: str, today: str, primary: dict) -> str | None:
+    """Double-increase check against completed interval history. Best-effort."""
+    try:
+        start = (date.fromisoformat(today)
+                 - timedelta(days=progression_guard.WINDOW_DAYS)).isoformat()
+        hist = _icu(slug, "events", "--start", start, "--end", today)
+        return progression_guard.check_event(primary, hist or [])
+    except Exception:
+        return None
 
 
 def _readiness_prefetch(slug: str) -> str:
@@ -569,6 +631,12 @@ def _engine_block_text(planned: dict, rx) -> str:
     ]
     for t in rx.reasoning_trails:
         lines.append(f"  - {t}")
+    if planned.get("_progression_flag"):
+        lines.append(planned["_progression_flag"])
+        lines.append(
+            "  ^ ADVISORY, not a block. The engine has NOT adjusted for this. Judge it: if you "
+            "agree the step is too big, say so in the card and prescribe the smaller step, and "
+            "log the reasoning in current-state.md.")
     lines.append(
         f"Adjusted targets: go={str(rx.go).lower()}, swapped_to_z2={str(rx.swapped_to_z2).lower()}, "
         f"modified={str(rx.modified).lower()}, intensity={rx.target_intensity}, "
