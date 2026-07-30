@@ -49,6 +49,11 @@ if _FALLBACK_CHAT_ID and _FALLBACK_CHAT_ID not in ATHLETE_BY_CHAT:
 _cafile = "/etc/ssl/cert.pem" if Path("/etc/ssl/cert.pem").exists() else None
 SSL     = ssl.create_default_context(cafile=_cafile)
 
+# An RPE this far from the athlete's own norm for comparable sessions looks more like
+# a mis-keyed digit than a real signal, so it is confirmed before it can move load.
+# Matches _RPE_DELTA_SUSPECT in ironman-analysis/primitives/modulation.py.
+_RPE_SUSPECT_DELTA = 4.0
+
 PARSE_PROMPT = """Parse this Telegram reply from an endurance athlete into structured session feedback.
 
 Sport: {sport}
@@ -58,7 +63,11 @@ Reply text: {reply!r}
 
 Extract ONLY what is clearly stated -- do not infer or default anything not mentioned.
 Output a JSON object with these fields (omit a field entirely if not mentioned):
-  "rpe": integer 1-10
+  "rpe": number 1-10 (half-points allowed, e.g. 7.5)
+  "rpe_confirmed": true or false -- ONLY when the reply is answering a question about
+      whether a previously-given RPE was right. true = they stood by it ("yes", "that's
+      right", "correct"); false = they are correcting it (also put the new number in
+      "rpe"). Omit entirely if the reply is not about confirming an RPE.
   "feel": string (qualitative description in athlete's own words)
   "injury_pain_during": integer 1-10  (runs only, if injury is tracked)
   "injury_pain_next_morning": integer 1-10  (runs only, if injury is tracked)
@@ -180,13 +189,21 @@ def parse_feedback(reply_text: str, stub: dict) -> tuple[dict, str | None]:
 
 # Apply and commit
 
-def apply_feedback(entries: list, idx: int, parsed: dict, raw_text: str) -> dict:
+def apply_feedback(entries: list, idx: int, parsed: dict, raw_text: str,
+                   slug: str = "") -> dict:
     stub = entries[idx]
     allowed = {"rpe", "feel", "injury_pain_during", "injury_pain_next_morning",
-               "nutrition_g_carb", "hydration_ml", "notes"}
+               "nutrition_g_carb", "hydration_ml", "notes", "rpe_confirmed"}
+    had_rpe = stub.get("rpe")
     for k, v in parsed.items():
         if k in allowed and v is not None:
             stub[k] = v
+    # A corrected RPE is a fresh value: re-assess it rather than inheriting the old
+    # confirmation. Only an explicit "yes, that's right" leaves rpe_confirmed True.
+    if parsed.get("rpe") is not None and parsed.get("rpe") != had_rpe \
+            and parsed.get("rpe_confirmed") is not True:
+        stub.pop("rpe_confirmed", None)
+    _flag_suspect_rpe(stub, slug)
     # If Claude found nothing useful, at least store the raw text
     if not any(parsed.get(k) for k in ("rpe", "feel", "notes")):
         stub["notes"] = (stub.get("notes") or "") + f" [raw: {raw_text.strip()}]"
@@ -194,6 +211,46 @@ def apply_feedback(entries: list, idx: int, parsed: dict, raw_text: str) -> dict
     stub["logged_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     entries[idx] = stub
     return stub
+
+
+def _flag_suspect_rpe(stub: dict, slug: str) -> None:
+    """Mark an RPE that is far enough from this athlete's norm to look mis-typed.
+
+    Sets rpe_confirmed=False ("asked, not yet answered") so the readiness rule HOLDS
+    instead of moving load on a value that might be a slip — a 3 keyed as an 8 must
+    not silently trim a training week. Leaves an already-True confirmation alone.
+    """
+    if not slug or stub.get("rpe") is None or stub.get("rpe_confirmed") is not None:
+        return
+    try:
+        sys.path.insert(0, str(BASE / "lib"))
+        import rpe_context
+        adir = BASE / "athletes" / slug
+        log = json.loads((adir / "session-log.json").read_text())
+        hist = [e for e in log
+                if e.get("rpe") is not None and not e.get("stub")
+                and str(e.get("activity_id")) != str(stub.get("activity_id"))]
+        level = json.loads((adir / "profile.json").read_text()).get("coaching_level", "mid")
+        a = rpe_context.assess(stub, hist, level)
+        if a.get("delta") is not None and abs(a["delta"]) >= _RPE_SUSPECT_DELTA:
+            stub["rpe_confirmed"] = False
+            stub["rpe_expected"] = a["expected"]
+    except Exception:
+        pass
+
+
+def suspect_rpe_question(stub: dict) -> str | None:
+    """The follow-up question to append, or None when the RPE looks normal."""
+    if stub.get("rpe_confirmed") is not False or stub.get("rpe_expected") is None:
+        return None
+    rpe, exp = stub["rpe"], stub["rpe_expected"]
+    direction = "harder" if rpe > exp else "easier"
+    return (
+        f"\n\nQuick check -- *RPE {rpe}* is a fair bit {direction} than you usually log "
+        f"for a session like this (~{exp}). Is {rpe} right, or was it a slip? "
+        f"Reply with the correct number if so. I'm holding today's plan unchanged "
+        f"until you say."
+    )
 
 
 def commit_and_push(session_log: Path):
@@ -222,7 +279,10 @@ def confirmation_msg(stub: dict, parsed: dict) -> str:
         lines.append(f"Nutrition: {parsed['nutrition_g_carb']}g carbs")
     if parsed.get("notes"):
         lines.append("Notes saved")
-    return " -- ".join(lines)
+    if parsed.get("rpe_confirmed") is True:
+        lines.append("RPE confirmed -- thanks, factoring it in")
+    msg = " -- ".join(lines)
+    return msg + (suspect_rpe_question(stub) or "")
 
 
 # Main
@@ -277,7 +337,8 @@ def main():
         # Step 3b: Write, commit, confirm
         try:
             entries = json.loads(session_log.read_text())
-            updated = apply_feedback(entries, idx, parsed, text)
+            updated = apply_feedback(entries, idx, parsed, text,
+                                     athlete_info["slug"])
             session_log.write_text(json.dumps(entries, indent=2))
             commit_and_push(session_log)
             if not error:
