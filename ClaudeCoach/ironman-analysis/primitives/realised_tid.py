@@ -6,6 +6,12 @@ from completed activities, session-level and coarse (the audit\'s own method):
 whole-activity power IF when present, else average HR relative to LTHR. Both
 failure directions matter: excess quality (grey-zone drift — easy sessions
 executed too hard) and missing quality (a build week collapsing to all-easy).
+
+Runs are the one exception to the power-IF-first order: `icu_intensity` on a
+run is ICU's estimated running power, which reads badly mis-anchored for some
+athletes (one Jamie session: 2.4% easy by running power vs 84% by HR/GAP on
+the same activity — see debrief.py's GAP-vs-power discrepancy). Runs always
+classify off HR/LTHR; power IF is never trusted for that sport here.
 """
 from __future__ import annotations
 
@@ -14,19 +20,22 @@ IF_LOW, IF_HIGH = 0.75, 0.88          # power IF thresholds
 HR_LOW, HR_HIGH = 0.85, 0.95          # avg HR / LTHR thresholds
 
 SKIP_TYPES = {"WeightTraining", "Workout", "Yoga", "Pilates"}   # not TID-relevant
+RUN_SPORTS = {"Run", "TrailRun", "VirtualRun"}                  # HR/LTHR only — never power IF
 
 
 def classify_activity(a: dict, lthr: float | None = None) -> str | None:
     """low / moderate / high, or None when the activity carries no usable signal."""
     t = float(a.get("moving_time") or 0)
-    if t <= 0 or (a.get("type") or "") in SKIP_TYPES:
+    sport = a.get("type") or ""
+    if t <= 0 or sport in SKIP_TYPES:
         return None
-    if_ = a.get("icu_intensity")
-    if if_:
-        if_ = float(if_)
-        if if_ > 3:                     # ICU reports percent on some endpoints
-            if_ /= 100.0
-        return "low" if if_ < IF_LOW else ("moderate" if if_ < IF_HIGH else "high")
+    if sport not in RUN_SPORTS:
+        if_ = a.get("icu_intensity")
+        if if_:
+            if_ = float(if_)
+            if if_ > 3:                  # ICU reports percent on some endpoints
+                if_ /= 100.0
+            return "low" if if_ < IF_LOW else ("moderate" if if_ < IF_HIGH else "high")
     hr = a.get("average_heartrate")
     if hr and lthr:
         r = float(hr) / float(lthr)
