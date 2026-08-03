@@ -48,7 +48,7 @@
     // Settings has no bar slot: it is entered from the masthead gear. It still needs a
     // TABS entry because show()/skeleton() drive every view from this list.
     { id: 'set', label: 'Settings', offBar: true,
-      icon: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.5 1.5M16.5 16.5 18 18M18 6l-1.5 1.5M7.5 16.5 6 18"/>' }
+      icon: '<path d="M10.3 3.2h3.4l.5 2.2 1.9.8 1.9-1.2 2.4 2.4-1.2 1.9.8 1.9 2.2.5v3.4l-2.2.5-.8 1.9 1.2 1.9-2.4 2.4-1.9-1.2-1.9.8-.5 2.2h-3.4l-.5-2.2-1.9-.8-1.9 1.2-2.4-2.4 1.2-1.9-.8-1.9-2.2-.5v-3.4l2.2-.5.8-1.9-1.2-1.9 2.4-2.41.9 1.2 1.9-.8z"/><circle cx="12" cy="12" r="3.1"/>' }
   ];
 
   // Each entry is one chart plus the numbers that belong with it.
@@ -69,7 +69,7 @@
 
   var state = {
     slug: 'jamie', tab: 'today', data: null, lib: null,
-    chart: null, trend: 'fit', fitSport: 'all',
+    chart: null, todayChart: null, trend: 'fit', fitSport: 'all',
     calMonth: null, calDay: null, libGroup: null
   };
 
@@ -188,6 +188,7 @@
     // Charts are drawn only while visible: a canvas sized inside a display:none
     // section comes out 0px wide and stays that way.
     if (tab === 'trends') drawTrend();
+    if (tab === 'today') drawToday();
   }
 
   /* ── shared bits ─────────────────────────────────────────────────────── */
@@ -280,27 +281,40 @@
     h += '<div class="figures">' +
       fig(Number(k.ctl).toFixed(1), 'Fitness', 'CTL') +
       fig(Number(k.atl).toFixed(1), 'Fatigue', 'ATL') +
-      fig(signed(k.tsb), 'Form', 'TSB', k.tsb >= 0 ? 'pos' : (k.tsb < -25 ? 'neg' : 'flat')) +
+      fig(signed(k.tsb), 'Form', 'TSB', k.tsb >= 0 ? 'pos' : (k.tsb <= -20 ? 'neg' : 'flat')) +
       '</div>';
 
     // Ramp and heat were two full cards each. They are two numbers - so they are
     // two numbers, on one row, with the warning state carried by colour.
+    // The guide is per-athlete config (rampCap), not a hard-coded 5.
+    var cap = d.rampCap != null ? d.rampCap : 5;
     var signals = '';
     if (ramp != null) {
-      signals += mini(signed(ramp), 'ramp / wk', Math.abs(ramp) > 5 ? 'warn' : '');
+      signals += mini(signed(ramp) + ' / ' + cap.toFixed(0), 'ramp vs target',
+                      Math.abs(ramp) > cap ? 'warn' : '');
     }
     if (ha.current != null) {
       signals += mini(Number(ha.current).toFixed(0) + '%', 'heat accl');
     }
     if (d.resolvedFtp) signals += mini(d.resolvedFtp + 'w', 'ftp');
     if (signals) h += '<div class="minis">' + signals + '</div>';
-    if (ramp != null && Math.abs(ramp) > 5) {
-      h += '<p class="flag">Ramp is above the 5-point weekly guide.</p>';
+    if (ramp != null && Math.abs(ramp) > cap) {
+      h += '<p class="flag">Ramp ' + signed(ramp) + ' is above the ' + cap.toFixed(0) +
+        '-point weekly guide.</p>';
     }
 
     h += card('Coming up', '<div class="body-flush">' +
       (next.length ? groupByDay(next) : '<div class="empty">Nothing planned yet</div>') +
       '</div>', { flush: true });
+
+    // The ±7 day chart, same one as Trends, at the bottom of Today: it answers "how
+    // heavy has this week been and what is left" without changing tab.
+    if ((d.loadChart || []).length) {
+      h += card('Seven days either side',
+        '<div class="readout" id="ro-today"><b>—</b><span></span></div>' +
+        '<div class="chartbox"><canvas id="c-today"></canvas></div>',
+        { foot: 'Daily TSS by sport, faded where still planned. Line is form (TSB).' });
+    }
 
     $('#v-today').innerHTML = h;
   }
@@ -328,74 +342,151 @@
     return by;
   }
 
+  // The data window is NOT the month. recent[] covers roughly the last three weeks and
+  // weekCalendar the plan window, so anything outside that has no data - and a day with
+  // no data is NOT a rest day. Counting it as one told Jamie that Kathryn took 19 rest
+  // days in July, which is invented, not measured.
+  function coverage(by) {
+    var d = state.data || {};
+    var dates = []
+      .concat((d.recent || []).map(function (r) { return r.date; }))
+      .concat((d.weekCalendar || []).map(function (r) { return r.date; }))
+      .concat((d.loadChart || []).map(function (r) { return r.date; }))
+      .concat(Object.keys(by || {}))
+      .filter(Boolean)
+      .sort();
+    if (!dates.length) return null;
+    return { from: dates[0], to: dates[dates.length - 1] };
+  }
+
   function renderCalendar() {
     var t = todayISO();
     if (!state.calMonth) state.calMonth = t.slice(0, 7);
     var by = calSessions();
+    var cov = coverage(by);
     var y = +state.calMonth.slice(0, 4), m = +state.calMonth.slice(5, 7) - 1;
 
-    var first = new Date(y, m, 1);
-    var days = new Date(y, m + 1, 0).getDate();
-    var lead = (first.getDay() + 6) % 7;          // Monday-first
-    var cells = [];
-    for (var i = 0; i < lead; i++) cells.push(null);
-    for (var dd = 1; dd <= days; dd++) {
-      cells.push(y + '-' + String(m + 1).padStart(2, '0') + '-' + String(dd).padStart(2, '0'));
+    // Whole weeks (Mon-first) that touch this month, so a row is always seven days.
+    var monday = new Date(y, m, 1);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    var lastDay = new Date(y, m + 1, 0);
+
+    var iso = function (dt) {
+      return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') +
+             '-' + String(dt.getDate()).padStart(2, '0');
+    };
+    // ISO week number, so "wk 31" means what a coach means by it.
+    var isoWeek = function (dt) {
+      var d0 = new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate()));
+      var day = d0.getUTCDay() || 7;
+      d0.setUTCDate(d0.getUTCDate() + 4 - day);
+      var y0 = new Date(Date.UTC(d0.getUTCFullYear(), 0, 1));
+      return Math.ceil((((d0 - y0) / 864e5) + 1) / 7);
+    };
+
+    var NAME = { swim: 'Swim', bike: 'Bike', run: 'Run', strength: 'Str', other: 'Other' };
+    var mTot = { mins: 0, tss: 0, sessions: 0, rest: 0, nodata: 0 };
+    var rows = [];
+
+    for (var cur = new Date(monday); cur <= lastDay; cur.setDate(cur.getDate() + 7)) {
+      var ws = new Date(cur);
+      var wk = { start: new Date(ws), num: isoWeek(ws), mins: 0, tss: 0,
+                 sports: {}, planned: 0, done: 0, days: [] };
+      for (var i = 0; i < 7; i++) {
+        var dd = new Date(ws); dd.setDate(dd.getDate() + i);
+        var key = iso(dd);
+        var items = by[key] || [];
+        var inMonth = dd.getMonth() === m;
+        var covered = cov && key >= cov.from && key <= cov.to;
+        wk.days.push({ iso: key, n: dd.getDate(), items: items,
+                       inMonth: inMonth, covered: covered });
+        items.forEach(function (x) {
+          var mn = x.duration_min || 0;
+          wk.mins += mn; wk.tss += x.tss || 0;
+          var fam = SPORT[x.sport] || 'other';
+          wk.sports[fam] = (wk.sports[fam] || 0) + mn;
+          if (x.status === 'completed') wk.done += mn; else wk.planned += mn;
+          if (inMonth) { mTot.mins += mn; mTot.tss += x.tss || 0; mTot.sessions++; }
+        });
+        if (inMonth && !items.length) {
+          // Only a covered day with nothing on it is a rest day.
+          if (covered && key <= t) mTot.rest++;
+          else if (!covered) mTot.nodata++;
+        }
+      }
+      rows.push(wk);
     }
-    while (cells.length % 7) cells.push(null);
 
-    var mins = 0, tss = 0, sessions = 0, rest = 0;
-    cells.forEach(function (iso) {
-      if (!iso) return;
-      var items = by[iso] || [];
-      if (!items.length) { if (iso <= t) rest++; return; }
-      sessions += items.length;
-      items.forEach(function (s) { mins += s.duration_min || 0; tss += s.tss || 0; });
-    });
+    var grid = rows.map(function (wk) {
+      var future = wk.planned > wk.done;
+      var split = ['swim', 'bike', 'run', 'strength', 'other'].filter(function (k) {
+        return wk.sports[k];
+      }).map(function (k) {
+        return '<span><i class="sp sp-' + k + '"></i>' + hhmm(wk.sports[k]) + '</span>';
+      }).join('');
+      return '<div class="wkrow">' +
+        '<div class="wkrow-t"><span class="wkn">wk ' + wk.num + '</span>' +
+        '<span class="wkdays">' + wk.days.map(function (dy) {
+          var cls = 'wkd';
+          if (!dy.inMonth) cls += ' out';
+          if (dy.iso === t) cls += ' today';
+          if (dy.iso === state.calDay) cls += ' sel';
+          if (!dy.items.length && dy.covered && dy.iso <= t) cls += ' rest';
+          if (!dy.covered) cls += ' nodata';
+          return '<button type="button" class="' + cls + '" data-d="' + dy.iso + '">' +
+            '<span class="n">' + dy.n + '</span><span class="dots">' +
+            dy.items.slice(0, 3).map(function (x) {
+              return '<i class="dot ' + sportClass(x.sport) +
+                (x.status === 'completed' ? ' done' : '') + '"></i>';
+            }).join('') + '</span></button>';
+        }).join('') + '</span>' +
+        '<span class="wksum"><b>' + (wk.mins ? hhmm(wk.mins) : '—') + '</b>' +
+        (wk.tss ? Math.round(wk.tss) + ' tss' : '') + '</span></div>' +
+        (split ? '<div class="wkrow-s">' + split +
+          (future ? '<span class="wk-tag">planned</span>' : '') + '</div>' : '') +
+        '</div>';
+    }).join('');
 
-    var grid = '<div class="cal-dows">' +
-      ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(function (x) { return '<span>' + x + '</span>'; }).join('') +
-      '</div><div class="cal-grid">' + cells.map(function (iso) {
-        if (!iso) return '<span class="cal-cell pad"></span>';
-        var items = by[iso] || [];
-        var cls = 'cal-cell';
-        if (iso === t) cls += ' today';
-        if (iso === state.calDay) cls += ' sel';
-        if (!items.length && iso < t) cls += ' rest';
-        return '<button type="button" class="' + cls + '" data-d="' + iso + '">' +
-          '<span class="n">' + dnum(iso) + '</span>' +
-          '<span class="dots">' + items.slice(0, 4).map(function (s) {
-            return '<i class="dot ' + sportClass(s.sport) +
-              (s.status === 'completed' ? ' done' : '') + '"></i>';
-          }).join('') + '</span></button>';
-      }).join('') + '</div>';
+    var head = '<div class="cal-dows"><span class="wkn"></span>' +
+      ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(function (x) {
+        return '<span>' + x + '</span>';
+      }).join('') + '<span></span></div>';
 
     var nav = '<div class="cal-nav">' +
       '<button type="button" class="cal-mo" data-mo="-1" aria-label="Previous month">‹</button>' +
       '<button type="button" class="cal-mo" data-mo="1" aria-label="Next month">›</button></div>';
 
-    var h = card(monthName(y, m), grid, { action: nav });
+    var h = card(monthName(y, m), head + '<div class="wkrows">' + grid + '</div>',
+      { action: nav });
 
-    h += '<div class="minis">' + mini(hhmm(mins), 'this month') +
-      mini(Math.round(tss), 'tss') + mini(sessions, 'sessions') +
-      mini(rest, 'rest days') + '</div>';
+    h += '<div class="minis">' + mini(hhmm(mTot.mins), 'this month') +
+      mini(Math.round(mTot.tss), 'tss') + mini(mTot.sessions, 'sessions') +
+      mini(mTot.rest, 'rest days') + '</div>';
 
-    h += weeklyTotals(by, y, m, t);
+    // Say what is not known rather than folding it into a number.
+    if (mTot.nodata) {
+      h += '<p class="hint">' + mTot.nodata + ' day' + (mTot.nodata === 1 ? '' : 's') +
+        ' this month are outside the published window' +
+        (cov ? ' (' + cov.from + ' to ' + cov.to + ')' : '') +
+        ' — not counted as rest.</p>';
+    }
 
     var sel = state.calDay && by[state.calDay] ? by[state.calDay] : null;
     if (state.calDay) {
       h += card(dow(state.calDay) + ' ' + dnum(state.calDay) + ' ' +
         new Date(state.calDay + 'T12:00:00').toLocaleDateString('en-GB', { month: 'short' }),
         '<div class="body-flush">' + (sel ? sel.map(seshRow).join('') :
-          '<div class="empty">Rest day — nothing recorded</div>') + '</div>', { flush: true });
+          '<div class="empty">' + (cov && state.calDay >= cov.from && state.calDay <= cov.to
+            ? 'Rest day — nothing recorded'
+            : 'Outside the published data window') + '</div>') + '</div>', { flush: true });
     } else {
       h += '<p class="hint">Tap a day for its sessions.</p>';
     }
 
     $('#v-cal').innerHTML = h;
 
-    $('#v-cal').querySelector('.cal-grid').onclick = function (e) {
-      var b = e.target.closest('.cal-cell');
+    $('#v-cal').querySelector('.wkrows').onclick = function (e) {
+      var b = e.target.closest('.wkd');
       if (!b || !b.dataset.d) return;
       state.calDay = (state.calDay === b.dataset.d) ? null : b.dataset.d;
       renderCalendar();
@@ -408,59 +499,6 @@
       state.calDay = null;
       renderCalendar();
     };
-  }
-
-  /* ── Trends ──────────────────────────────────────────────────────────── */
-
-  // Per-week hours / TSS / hours-by-sport for the displayed month. Future weeks are
-  // the same figures taken from the plan rather than from completed work, and are
-  // labelled as such - a planned week and a done week must never read alike.
-  function weeklyTotals(by, y, m, today) {
-    var monday = new Date(y, m, 1);
-    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-    var last = new Date(y, m + 1, 0);
-
-    var weeks = [];
-    for (var cur = new Date(monday); cur <= last; cur.setDate(cur.getDate() + 7)) {
-      var ws = new Date(cur);
-      var row = { start: ws, mins: 0, tss: 0, sports: {}, planned: 0, done: 0 };
-      for (var i = 0; i < 7; i++) {
-        var dd = new Date(ws); dd.setDate(dd.getDate() + i);
-        var iso = dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0') +
-                  '-' + String(dd.getDate()).padStart(2, '0');
-        (by[iso] || []).forEach(function (x) {
-          var mn = x.duration_min || 0;
-          row.mins += mn;
-          row.tss += x.tss || 0;
-          var fam = SPORT[x.sport] || 'other';
-          row.sports[fam] = (row.sports[fam] || 0) + mn;
-          if (x.status === 'completed') row.done += mn; else row.planned += mn;
-        });
-      }
-      if (row.mins > 0) weeks.push(row);
-    }
-    if (!weeks.length) return '';
-
-    var NAME = { swim: 'Swim', bike: 'Bike', run: 'Run', strength: 'Str', other: 'Other' };
-    var body = weeks.map(function (w) {
-      var iso = w.start.getFullYear() + '-' + String(w.start.getMonth() + 1).padStart(2, '0') +
-                '-' + String(w.start.getDate()).padStart(2, '0');
-      var future = w.planned > w.done;
-      var split = ['swim', 'bike', 'run', 'strength', 'other'].filter(function (k) {
-        return w.sports[k];
-      }).map(function (k) {
-        return '<span><i class="sp sp-' + k + '"></i>' + NAME[k] + ' ' + hhmm(w.sports[k]) + '</span>';
-      }).join('');
-      return '<div class="wk"><div class="wk-h"><span class="wk-d">w/c ' +
-        w.start.getDate() + ' ' +
-        w.start.toLocaleDateString('en-GB', { month: 'short' }) + '</span>' +
-        (future ? '<span class="wk-tag">planned</span>' : '') +
-        '<span class="wk-n">' + hhmm(w.mins) + '</span>' +
-        '<span class="wk-t">' + Math.round(w.tss) + ' tss</span></div>' +
-        '<div class="wk-s">' + split + '</div></div>';
-    }).join('');
-
-    return card('By week', '<div class="body-flush">' + body + '</div>', { flush: true });
   }
 
   function renderTrends() {
@@ -665,17 +703,27 @@
         // Duration and total grams, not just the rate: 120 g/hr held for an hour and
         // 120 g/hr held for five hours are different achievements, and the rate alone
         // hides which one happened (Jamie, 3 Aug 2026).
+        // Water and sodium come from the session log, joined by date, so all three
+        // intakes for a session read on one line instead of being buried per-activity.
+        var logBy = {};
+        (d.sessionLog || []).forEach(function (e) { logBy[e.date] = e; });
         h += card('Logged sessions', '<table class="tbl">' +
-          '<thead><tr><th>Date</th><th>Sport</th><th>Time</th><th>Total</th><th>g/hr</th></tr></thead><tbody>' +
+          '<thead><tr><th>Date</th><th>Time</th><th>Carb</th><th>g/hr</th>' +
+          '<th>Water</th><th>Na</th></tr></thead><tbody>' +
           f.points.slice().reverse().slice(0, 24).map(function (r) {
             var grams = (r.g_per_hr != null && r.dur) ? Math.round(r.g_per_hr * r.dur / 60) : null;
+            var lg = logBy[r.date] || {};
             return '<tr><td class="lbl">' + esc(dow(r.date) + ' ' + dnum(r.date)) + '</td><td>' +
-              esc(r.sport || '—') + '</td><td>' + hhmm(r.dur) + '</td><td>' +
-              (grams != null ? grams + ' g' : '—') + '</td><td class="t">' +
-              Number(r.g_per_hr).toFixed(0) + '</td></tr>';
+              hhmm(r.dur) + '</td><td>' + (grams != null ? grams + 'g' : '—') +
+              '</td><td class="t">' + Number(r.g_per_hr).toFixed(0) + '</td><td>' +
+              (lg.hydration_ml != null ? Math.round(lg.hydration_ml / 100) / 10 + 'L' : '—') +
+              '</td><td>' + (lg.nutrition_mg_sodium != null
+                ? Math.round(lg.nutrition_mg_sodium) + 'mg' : '—') + '</td></tr>';
           }).join('') + '</tbody></table>',
-          { flush: true, foot: 'A rate held for four hours is a different result from ' +
-                              'the same rate held for one, so the duration is shown with it.' });
+          { flush: true, foot: 'A rate held for four hours is a different result from the ' +
+                              'same rate held for one, so duration is shown with it. Water ' +
+                              'and sodium appear once logged - sodium capture is new, so ' +
+                              'older sessions have none.' });
       }
     }
 
@@ -793,8 +841,8 @@
     };
   }
 
-  function readout(txt, sub) {
-    var el = $('#ro');
+  function readout(txt, sub, target) {
+    var el = $(target || '#ro');
     if (!el) return;
     el.firstChild.textContent = txt || '—';
     el.lastChild.textContent = sub || '';
@@ -802,7 +850,7 @@
 
   // Wire a chart so dragging across it writes into the readout. Uses the SAME
   // callbacks the tooltip would have used, so mouse and touch never disagree.
-  function attachReadout(chart) {
+  function attachReadout(chart, roTarget) {
     if (!chart) return;
     var cbs = (chart.options.plugins.tooltip || {}).callbacks || {};
     var canvas = chart.canvas;
@@ -828,7 +876,7 @@
         if (out == null) return;
         lines = lines.concat(out);
       });
-      readout(title, lines.filter(Boolean).join('  ·  '));
+      readout(title, lines.filter(Boolean).join('  ·  '), roTarget);
     };
 
     ['touchstart', 'touchmove', 'mousemove'].forEach(function (ev) {
@@ -844,7 +892,7 @@
     var fn = { fit: chartFitness, load: chartLoad, heat: chartHeat,
                fuel: chartFuel, plan: chartPlan }[state.trend];
     if (fn) state.chart = fn(el, state.data);
-    attachReadout(state.chart);
+    attachReadout(state.chart, '#ro');
   }
 
   function chartFitness(el, d) {
@@ -1632,6 +1680,22 @@
       $('#cd').innerHTML = '<b>—</b>no race set';
     }
     if (state.tab === 'trends') drawTrend();
+    drawToday();
+  }
+
+  // Today's copy of the load chart. Separate instance from the Trends one: two charts
+  // can be mounted at once, so one shared `state.chart` would destroy the wrong canvas.
+  function drawToday() {
+    if (typeof Chart === 'undefined' || !state.data) return;
+    var el = document.getElementById('c-today');
+    if (!el) return;
+    if (state.todayChart) { state.todayChart.destroy(); state.todayChart = null; }
+    try {
+      state.todayChart = chartLoad(el, state.data);
+      attachReadout(state.todayChart, '#ro-today');
+    } catch (err) {
+      if (window.console) console.error('[peak] today load chart failed:', err);
+    }
   }
 
   /* ── entry screen ────────────────────────────────────────────────────── */

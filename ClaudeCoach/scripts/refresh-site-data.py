@@ -201,13 +201,16 @@ def _per_sport_ctl_cached(slug, client, today):
 def _build_jamie_data(client) -> dict:
     """Fetch Jamie's training data via IcuClient — replaces the old Claude+MCP approach."""
     today         = date.today()
-    fourteen_ago  = (today - timedelta(days=14)).isoformat()
+    # 120 days: the calendar shows whole months and lets you page back, so a 14-day
+    # window meant most of every month had no data at all.
+    HISTORY_DAYS  = 120
+    fourteen_ago  = (today - timedelta(days=HISTORY_DAYS)).isoformat()
     seven_ago     = (today - timedelta(days=7)).isoformat()
     twentyone_fwd = (today + timedelta(days=21)).isoformat()
 
     wellness_60, history_21, events_21, fitness_ytd = client.fetch_all(
         ("get_wellness", 60),
-        ("get_training_history", 21),
+        ("get_training_history", HISTORY_DAYS),
         ("get_events", today.isoformat(), twentyone_fwd),
         ("get_fitness", (today - date(today.year, 1, 1)).days + 1),
     )
@@ -225,7 +228,7 @@ def _build_jamie_data(client) -> dict:
     # fitnessThis
     fitness_this = [[w["id"][:10], round(w.get("ctl") or 0, 1)] for w in fitness_ytd if w.get("ctl")]
 
-    # recent (last 14 days, newest first)
+    # recent (last HISTORY_DAYS, newest first)
     recent = []
     for a in sorted([x for x in history_21 if x.get("start_date_local","")[:10] >= fourteen_ago],
                     key=lambda x: x.get("start_date_local",""), reverse=True):
@@ -414,7 +417,21 @@ def _build_jamie_data(client) -> dict:
         "powerCurve":   power_curve,
         "powerCurveWindow": power_curve_window,
         "resolvedFtp":  resolved_ftp,
+        "rampCap":      _ramp_cap("jamie"),
     }
+
+
+def _ramp_cap(slug: str) -> float:
+    """The athlete's weekly CTL ramp guide (max_ctl_ramp_per_week), default 5.0.
+
+    Published so the app can state the actual target instead of hard-coding 5, which
+    would be wrong for any athlete configured differently.
+    """
+    try:
+        cfg = json.loads(ATHLETES_CONFIG.read_text()).get(slug, {})
+        return float(cfg.get("max_ctl_ramp_per_week", 5.0))
+    except Exception:
+        return 5.0
 
 
 def write_public_variant(data, slug):
@@ -936,19 +953,21 @@ def _build_athlete_training_data(slug, athlete_cfg):
     client = IcuClient(athlete_cfg["icu_athlete_id"], athlete_cfg["icu_api_key"])
 
     seven_ago  = (today - timedelta(days=7)).isoformat()
-    fourteen_ago = (today - timedelta(days=14)).isoformat()
+    fourteen_ago = (today - timedelta(days=HISTORY_DAYS)).isoformat()
     seven_fwd  = (today + timedelta(days=7)).isoformat()
     twentyone_fwd = (today + timedelta(days=21)).isoformat()
     year_start = f"{today.year}-01-01"
 
     # Parallel fetch
-    # 49 days of history, not 21: planVsActual needs six completed weeks plus the
-    # week before them (the miss-trigger reads the prior week's executed load).
-    # Every pre-existing consumer looks back at most 14 days, so history_21 below
-    # keeps their behaviour byte-identical.
+    # 120 days, up from 49: planVsActual needs six completed weeks plus the week
+    # before them, and the app's calendar shows whole months and pages backwards, so
+    # a short window left most of every month with no data - which the calendar then
+    # miscounted as rest days ("19 rest days in July" for Kathryn). history_21 below
+    # still exists so pre-existing 14/21-day consumers are unaffected.
+    HISTORY_DAYS = 120
     wellness_60, history_49, events_21, fitness_ytd = client.fetch_all(
         ("get_wellness", 60),
-        ("get_training_history", 49),
+        ("get_training_history", HISTORY_DAYS),
         ("get_events", today.isoformat(), twentyone_fwd),
         ("get_fitness", (today - date(today.year, 1, 1)).days + 1),
     )
