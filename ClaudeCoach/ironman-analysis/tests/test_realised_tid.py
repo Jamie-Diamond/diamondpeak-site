@@ -11,6 +11,20 @@ def _a(mins, if_=None, hr=None, type_="Ride"):
     return d
 
 
+class TestRunIgnoresPowerIf:
+    def test_run_uses_hr_even_when_power_if_present(self):
+        # the mis-anchored-running-power case: icu_intensity says "low" (0.3),
+        # HR/LTHR says "high" — HR must win for a Run.
+        a = _a(45, if_=0.3, hr=175, type_="Run")
+        assert classify_activity(a, lthr=180) == "high"
+
+    def test_run_with_only_power_if_is_unclassifiable(self):
+        assert classify_activity(_a(45, if_=0.8, type_="Run")) is None
+
+    def test_non_run_still_prefers_power_if(self):
+        assert classify_activity(_a(60, if_=0.65, hr=175, type_="Ride"), lthr=180) == "low"
+
+
 class TestClassify:
     def test_power_if_bounds(self):
         assert classify_activity(_a(60, if_=0.65)) == "low"
