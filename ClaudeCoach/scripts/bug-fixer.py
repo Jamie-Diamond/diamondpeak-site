@@ -71,12 +71,28 @@ RULE_COUNT_CEILING = 90
 # budget understated the true attention cost by about 55%.
 #
 # The combined surface is athlete persistent-rules.md + _shared/persistent-rules.md +
-# system_prompt.txt: everything build_prompt() concatenates ahead of the athlete's
-# message. Measured for Jamie on 2026-08-03: 50,590 + 16,496 + 20,264 bytes =
-# 33,537 TOKENS. The budget is set near half of that deliberately, so the surface is
-# ALREADY over and the nightly triage cannot add a rule until the pile is pruned.
-# prune and merge remain available and unaffected - that is a budget working, not a bug.
-SURFACE_TOKEN_BUDGET = 16_000
+# system_prompt.txt: everything build_prompt() concatenates ahead of the athlete's message.
+#
+# SET FROM A DECOMPOSITION, not from "half the current size". The first attempt was
+# 16,000, arrived at by halving the measured 33,537 - and it was unmeetable by
+# construction. Jamie's surface breaks down as:
+#
+#     jamie persistent-rules.md   ~14,900 tokens   (prunable)
+#     _shared/persistent-rules.md  ~6,344 tokens   (prunable, but shared by 3 athletes)
+#     system_prompt.txt            ~7,793 tokens   (the athlete's persona - near-fixed)
+#
+# So shared + system prompt alone is a ~14,100-token FLOOR. A 16,000 budget therefore
+# left ~1,900 tokens for all 64 standing rules - about 12 rules at the 150-token cap.
+# A budget nobody can meet is not a budget, it is a permanent block on the nightly
+# triage, and it would have quietly stopped triage from ever recording anything again.
+#
+# 24,000 is set so it still BITES (Jamie is ~29,000, so ~5,000 must come out) while being
+# reachable by the two prunes already identified: the incident-narrative fat in the top
+# rules, and the methodology rules that duplicate code. RATCHET IT DOWN as the migration
+# proceeds - each block of reference data or methodology moved out of prose to a file or a
+# function should be followed by lowering this. The honest long-run floor is
+# shared + system_prompt, and both of those are themselves prunable.
+SURFACE_TOKEN_BUDGET = 24_000
 
 # A single standing rule may not exceed this. The corpus average is ~260 tokens and the
 # longest are case notes carrying dates, quotes and recurrence history; the instruction
