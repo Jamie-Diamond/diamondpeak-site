@@ -1039,6 +1039,54 @@ def _strava_update(slug: str, icu_activity_id: str, analysis: str,
         print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava update failed: {exc}", file=sys.stderr)
 
 
+def _live_planned_load(slug: str, plan_name: str, days_back: int = 1) -> dict | None:
+    """The planned event's load read LIVE from ICU, matched by event NAME.
+
+    Split of responsibility, deliberately: the model identifies WHICH planned session
+    a completed activity corresponds to (naming - it is good at that), and this reads
+    the NUMBER (lookup + arithmetic - it is not). `_event_tss` resolves the load
+    through the tested primitive, preferring `icu_training_load` then `load_target`,
+    which is the authoritative order.
+
+    Window is yesterday..today because an activity can sync after midnight. Returns
+    None on any failure, so a debrief never breaks over this - the caller keeps the
+    model's figure and the note still renders.
+    """
+    if not plan_name:
+        return None
+    try:
+        import plan_tools  # local: pulls primitives, only needed on this path
+        end = date.today()
+        start = end - timedelta(days=max(0, days_back))
+        r = subprocess.run(
+            [sys.executable, str(BASE / "lib" / "icu_fetch.py"), "--athlete", slug,
+             "--endpoint", "events", "--start", start.isoformat(),
+             "--end", end.isoformat()],
+            capture_output=True, text=True, timeout=90)
+        if r.returncode != 0:
+            return None
+        events = json.loads(r.stdout or "[]")
+        if isinstance(events, dict):
+            events = events.get("events") or events.get("data") or []
+        want = plan_name.strip().lower()
+        cands = [e for e in (events or [])
+                 if not e.get("category") or e.get("category") == "WORKOUT"]
+        for match in (lambda n: n == want,
+                      lambda n: n.startswith(want) or want.startswith(n),
+                      lambda n: want in n or n in want):
+            for ev in cands:
+                name = (ev.get("name") or "").strip().lower()
+                if name and match(name):
+                    res = plan_tools._event_tss(ev)
+                    if res and res.get("tss"):
+                        return {"name": ev.get("name") or "", "tss": float(res["tss"]),
+                                "source": res.get("source"), "event_id": ev.get("id")}
+    except Exception as e:
+        print(f"[plan-delta:{slug}] live planned-load lookup failed: {e}",
+              file=sys.stderr)
+    return None
+
+
 def _strava_refresh_updated(slug: str, state: dict, state_file: Path | None):
     """Re-describe any recent activities whose user-added fields changed since last Strava write."""
     import hashlib as _hl
@@ -1334,6 +1382,23 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
                 planned_tss = float(pd_parts[1].strip())
                 actual_tss = float(pd_parts[2].strip())
                 delta_pct = float(pd_parts[3].strip())
+                # The model is trusted to IDENTIFY which planned session this was - a
+                # naming task - but never for the NUMBER. Kathryn, 28 Jul 2026: the
+                # debrief quoted planned Load 122 for the Tue sweetspot ride when the
+                # live ICU event (125308764) read icu_training_load 97, making a session
+                # that was 9% under plan look 28% under. The stale figure came from
+                # recall, because PLAN_DELTA asks the model to supply planned_tss and to
+                # compute delta_pct by hand. Re-read the load from ICU and recompute.
+                live = _live_planned_load(slug, plan_name)
+                if live and live.get("tss"):
+                    if abs(float(live["tss"]) - planned_tss) >= 1:
+                        print(f"[plan-delta:{slug}] model said planned Load "
+                              f"{planned_tss:.0f}, live ICU event says {live['tss']:.0f}"
+                              f" - using live", file=sys.stderr)
+                    planned_tss = float(live["tss"])
+                    plan_name = live.get("name") or plan_name
+                if planned_tss:
+                    delta_pct = (actual_tss - planned_tss) / planned_tss * 100
                 sign = "+" if delta_pct >= 0 else ""
                 plan_delta_note = f"vs plan ({plan_name}): {int(planned_tss)}→{int(actual_tss)} Load ({sign}{delta_pct:.0f}%)"
         except Exception:
