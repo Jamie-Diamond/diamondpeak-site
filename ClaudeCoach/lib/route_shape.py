@@ -37,10 +37,13 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from pathlib import Path
 
 MAX_POINTS = 64          # enough for a recognisable outline at ~90px wide
 MAX_NEW_FETCHES = 25     # per refresh, so a cold cache warms over a few runs
+FETCH_PAUSE_S = 0.4      # streams is the heaviest endpoint; a backfill of 100+
+                         # activities earns HTTP 429 without a pause between calls
 GPS_SPORTS = {"Ride", "VirtualRide", "GravelRide", "Run", "TrailRun", "VirtualRun",
               "OpenWaterSwim", "Walk", "Hike"}
 
@@ -68,21 +71,58 @@ def _save_cache(base: Path, slug: str, cache: dict) -> None:
         pass               # best-effort; the shapes are recomputable
 
 
-def normalise(latlng_flat: list) -> list | None:
-    """Flat [lat, lng, lat, lng, ...] -> unit-box shape [[x, y], ...], or None.
+def _pair(data, data2=None) -> list:
+    """Coordinate pairs from whatever shape Intervals.icu returns.
+
+    THE LAYOUT THAT CAUGHT ME OUT: the latlng stream is TWO PARALLEL ARRAYS -
+    `data` holds latitudes and `data2` holds longitudes. It is not interleaved. Pairing
+    adjacent entries of `data` alone pairs latitude with latitude, which plots a perfect
+    diagonal line: every route came out as a straight 45-degree stroke, which is what
+    Jamie reported. The values look plausible individually, so nothing crashes and
+    nothing looks obviously null - only the picture is wrong.
+
+    Interleaved and list-of-pairs layouts are still handled, because this is one
+    undocumented API shape and I would rather not rediscover it.
+    """
+    # Two parallel arrays: the documented-by-observation case.
+    if data2 and isinstance(data2, list) and isinstance(data, list):
+        n = min(len(data), len(data2))
+        return [(data[i], data2[i]) for i in range(n)
+                if isinstance(data[i], (int, float)) and isinstance(data2[i], (int, float))]
+    if not isinstance(data, list) or not data:
+        return []
+    # List of [lat, lng] pairs.
+    if isinstance(data[0], (list, tuple)):
+        return [(p[0], p[1]) for p in data
+                if isinstance(p, (list, tuple)) and len(p) >= 2
+                and isinstance(p[0], (int, float)) and isinstance(p[1], (int, float))]
+    # Flat interleaved.
+    out = []
+    for i in range(0, len(data) - 1, 2):
+        la, lo = data[i], data[i + 1]
+        if isinstance(la, (int, float)) and isinstance(lo, (int, float)):
+            out.append((la, lo))
+    return out
+
+
+def normalise(data: list, data2: list | None = None) -> list | None:
+    """Coordinates -> unit-box shape [[x, y], ...], or None.
 
     Returns None when there is nothing worth drawing (no fix, or a track that never
     moves, e.g. a turbo session that still emitted a single stationary point).
     """
-    if not latlng_flat or len(latlng_flat) < 8:
+    pts = _pair(data, data2)
+    if len(pts) < 4:
         return None
 
-    pts = []
-    for i in range(0, len(latlng_flat) - 1, 2):
-        la, lo = latlng_flat[i], latlng_flat[i + 1]
-        if isinstance(la, (int, float)) and isinstance(lo, (int, float)):
-            pts.append((la, lo))
-    if len(pts) < 4:
+    # A sanity gate on the parse itself. If "longitude" occupies the same numeric range
+    # as "latitude", the two series are almost certainly the same quantity and the shape
+    # would be a diagonal artefact - refuse rather than publish a lie.
+    lats = [p[0] for p in pts]
+    lons = [p[1] for p in pts]
+    if not (-90 <= min(lats) and max(lats) <= 90 and -180 <= min(lons) and max(lons) <= 180):
+        return None
+    if abs(min(lats) - min(lons)) < 1e-4 and abs(max(lats) - max(lons)) < 1e-4:
         return None
 
     # Even sampling. Douglas-Peucker would keep corners better, but this runs on every
@@ -143,10 +183,11 @@ def attach_shapes(client, base: Path, slug: str, recent: list,
         if fetched >= MAX_NEW_FETCHES:
             continue
         try:
+            if fetched:
+                time.sleep(FETCH_PAUSE_S)
             streams = client.get_activity_streams(aid)
-            ll = next((s.get("data") for s in (streams or [])
-                       if s.get("type") == "latlng"), None)
-            shape = normalise(ll or [])
+            ll = next((s for s in (streams or []) if s.get("type") == "latlng"), None)
+            shape = normalise((ll or {}).get("data") or [], (ll or {}).get("data2"))
             cache[aid] = shape
             fetched += 1
             if shape:
