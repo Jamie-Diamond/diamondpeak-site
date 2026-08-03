@@ -84,15 +84,87 @@ body{
 .countdown{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.5}
 .countdown b{display:block;font-family:'Libre Baskerville',serif;font-size:16px;letter-spacing:-.01em;color:var(--ink);text-transform:none}
 
-/* athlete segmented control — a printed index tab, not a pill button */
-.who{display:flex;gap:0;max-width:var(--sheet);margin:11px auto 0;border-bottom:1px solid var(--rule)}
-.who button{
-  flex:1; appearance:none; background:none; border:0; border-bottom:2px solid transparent;
-  padding:7px 4px 8px; cursor:pointer;
-  font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;
-  color:var(--muted); transition:color .16s ease, border-color .16s ease;
+/* ── whobar: one line, not three tabs ────────────────────────────────────── */
+/* The athlete segmented control moved into the entry screen. Which athlete you
+   are is settled once, on open, so it does not deserve permanent chrome on
+   every view - it becomes a label with a way back. */
+.whobar{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  max-width:var(--sheet);margin:10px auto 0;
+  padding-top:9px;border-top:1px solid var(--rule);
 }
-.who button[aria-pressed=true]{color:var(--ink);border-bottom-color:var(--green)}
+.whobar-name{
+  font-family:'Libre Baskerville',serif;font-size:15px;letter-spacing:-.01em;color:var(--ink);
+}
+.whobar-switch{
+  appearance:none;background:none;border:0;padding:2px 0;cursor:pointer;
+  font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);border-bottom:1px solid transparent;transition:color .18s,border-color .18s;
+}
+.whobar-switch:hover,.whobar-switch:focus-visible{color:var(--green);border-bottom-color:var(--green)}
+
+/* ── entry screen ────────────────────────────────────────────────────────── */
+.gate{
+  position:fixed;inset:0;z-index:90;
+  background:var(--paper);
+  display:flex;align-items:center;justify-content:center;
+  padding:32px 20px calc(32px + env(safe-area-inset-bottom));
+  /* Faint letterpress grain so the screen reads as paper, not as a white modal. */
+  background-image:radial-gradient(circle at 22% 18%,rgba(29,104,64,.05),transparent 58%),
+                   radial-gradient(circle at 82% 88%,rgba(26,82,118,.05),transparent 60%);
+  transition:opacity .34s ease,visibility .34s;
+}
+.gate.out{opacity:0;visibility:hidden;pointer-events:none}
+body.gated{overflow:hidden}
+.gate-inner{width:100%;max-width:var(--sheet)}
+.gate-kicker{
+  margin:0;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--muted);
+}
+.gate-word{
+  margin:12px 0 0;font-family:'Libre Baskerville',serif;font-weight:400;
+  font-size:34px;line-height:1.02;letter-spacing:-.03em;color:var(--ink);
+}
+.gate-word em{font-style:italic;color:var(--green)}
+.gate-sub{margin:9px 0 0;font-size:14.5px;color:var(--ink-2);max-width:30ch}
+.gate-list{margin-top:26px;border-top:1px solid var(--rule)}
+
+/* Hairline rows rather than boxed cards: the list should look like an index in a
+   printed book, which is the whole conceit of the app. */
+.gate-row{
+  width:100%;display:flex;align-items:center;gap:15px;
+  appearance:none;background:none;border:0;border-bottom:1px solid var(--rule);
+  padding:17px 2px;cursor:pointer;text-align:left;
+  opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards;
+}
+.gate-row:nth-child(1){animation-delay:.06s}
+.gate-row:nth-child(2){animation-delay:.13s}
+.gate-row:nth-child(3){animation-delay:.2s}
+.gate-mark{
+  flex:0 0 auto;width:38px;height:38px;border-radius:50%;
+  border:1px solid var(--rule);display:grid;place-items:center;
+  font-family:'Libre Baskerville',serif;font-size:16px;color:var(--ink-2);
+  transition:border-color .2s,color .2s,background .2s;
+}
+.gate-row-t{flex:1 1 auto;min-width:0}
+.gate-row-t b{
+  display:block;font-family:'Libre Baskerville',serif;font-weight:400;
+  font-size:18px;letter-spacing:-.01em;color:var(--ink);
+}
+.gate-row-t span{
+  display:block;margin-top:3px;font-family:'DM Mono',monospace;font-size:9.5px;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+}
+.gate-go{flex:0 0 auto;color:var(--muted);font-size:17px;transition:transform .2s,color .2s}
+.gate-row:hover .gate-mark,.gate-row:focus-visible .gate-mark{
+  border-color:var(--green);color:var(--green);background:rgba(29,104,64,.05)
+}
+.gate-row:hover .gate-go,.gate-row:focus-visible .gate-go{transform:translateX(4px);color:var(--green)}
+.gate-row.picked .gate-mark{background:var(--green);border-color:var(--green);color:var(--paper)}
+.gate-foot{
+  margin:20px 0 0;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);
+}
 
 /* ── sheet & sections ───────────────────────────────────────────────────── */
 
@@ -269,8 +341,25 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
     <h1 class="wordmark">Claude<em>Coach</em></h1>
     <div class="countdown" id="cd"><b>—</b>days to race</div>
   </div>
-  <div class="who" id="who" role="group" aria-label="Athlete"></div>
+  <div class="whobar">
+    <span class="whobar-name" id="whoName">—</span>
+    <button type="button" class="whobar-switch" id="switch">Switch athlete</button>
+  </div>
 </header>
+
+<!-- Entry screen. Deliberately NOT authentication: this data is published to a public
+     URL, so a client-side gate would secure nothing and pretending otherwise would be
+     worse than being plain about it. It exists to make the app open on a profile choice
+     the way an app does, and to remember it. -->
+<div class="gate out" id="gate" role="dialog" aria-modal="true" aria-label="Choose athlete">
+  <div class="gate-inner">
+    <p class="gate-kicker">Diamond Peak · Coaching</p>
+    <h2 class="gate-word">Claude<em>Coach</em></h2>
+    <p class="gate-sub">Choose a profile to open the training almanac.</p>
+    <div class="gate-list" id="gateList"></div>
+    <p class="gate-foot">No password. This device remembers your choice.</p>
+  </div>
+</div>
 
 <main>
   <section class="view on" id="v-today" role="tabpanel" aria-label="Today"></section>

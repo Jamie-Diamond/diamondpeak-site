@@ -1,0 +1,1312 @@
+{
+ "schema_version": 1,
+ "_source": "docs/session-library-methodology.md (the athlete-approved 15 Jun). Canonical zones = ICU/Coggan. IFs match ironman-analysis/primitives/planned_tss.py _ZONE_IF/_ZONE_BAND so render + TSS agree. | expanded 2026-08-03: session archetypes from standard endurance physiology, cross-checked against public coaching material; original content, no plan copied.",
+ "canonical_zones": {
+  "bike": {
+   "unit": "%FTP",
+   "Z1": [
+    0,
+    55
+   ],
+   "Z2": [
+    55,
+    75
+   ],
+   "Z3": [
+    75,
+    90
+   ],
+   "Z4": [
+    90,
+    105
+   ],
+   "Z5": [
+    105,
+    120
+   ],
+   "Z6": [
+    120,
+    150
+   ],
+   "Z7": [
+    150,
+    999
+   ]
+  },
+  "run": {
+   "unit": "%threshold_pace",
+   "Z1": [
+    0,
+    77.5
+   ],
+   "Z2": [
+    77.5,
+    87.7
+   ],
+   "Z3": [
+    87.7,
+    94.3
+   ],
+   "Z4": [
+    94.3,
+    100
+   ],
+   "Z5a": [
+    100,
+    103.4
+   ],
+   "Z5b": [
+    103.4,
+    111.5
+   ],
+   "Z5c": [
+    111.5,
+    999
+   ]
+  },
+  "swim": {
+   "unit": "%CSS",
+   "Z1": [
+    0,
+    77.5
+   ],
+   "Z2": [
+    77.5,
+    87.7
+   ],
+   "Z3": [
+    87.7,
+    94.3
+   ],
+   "Z4": [
+    94.3,
+    100
+   ],
+   "Z5a": [
+    100,
+    103.4
+   ],
+   "Z5b": [
+    103.4,
+    111.5
+   ],
+   "Z5c": [
+    111.5,
+    999
+   ]
+  }
+ },
+ "phases": {
+  "base": {
+   "family": "pyramidal",
+   "menu": [
+    "endurance",
+    "long",
+    "tempo",
+    "sweetspot",
+    "css",
+    "aerobic",
+    "technique",
+    "strides",
+    "ow_skills",
+    "recovery",
+    "hill_strength",
+    "fartlek",
+    "progression_run",
+    "pull_set",
+    "kick_set",
+    "ankle_mobility",
+    "strength_general",
+    "core",
+    "mobility",
+    "hills",
+    "easy",
+    "brick"
+   ],
+   "forbid": [
+    "vo2",
+    "reps",
+    "race_pace_specific"
+   ]
+  },
+  "build": {
+   "family": "transition",
+   "menu": [
+    "endurance",
+    "long",
+    "tempo",
+    "sweetspot",
+    "threshold",
+    "race_pace_long",
+    "css",
+    "speed",
+    "technique",
+    "strides",
+    "ow_skills",
+    "brick",
+    "recovery",
+    "over_under",
+    "sweetspot_long",
+    "cruise_intervals",
+    "progression_run",
+    "brick_run",
+    "descend_set",
+    "pull_set",
+    "ankle_mobility",
+    "strength_general",
+    "core",
+    "mobility",
+    "hills",
+    "fartlek",
+    "easy"
+   ],
+   "vo2": "late_only",
+   "forbid": []
+  },
+  "specific": {
+   "family": "polarized",
+   "menu": [
+    "endurance",
+    "long",
+    "threshold",
+    "race_pace_long",
+    "race_pace_specific",
+    "vo2",
+    "css",
+    "speed",
+    "reps",
+    "technique",
+    "ow_skills",
+    "brick",
+    "durability",
+    "long_with_quality",
+    "broken_race_pace",
+    "ow_sim",
+    "brick_run",
+    "cruise_intervals",
+    "sweetspot_long",
+    "race_pace",
+    "ankle_mobility",
+    "strength_general",
+    "core",
+    "mobility",
+    "recovery",
+    "easy"
+   ],
+   "forbid": []
+  },
+  "peak": {
+   "family": "polarized",
+   "menu": [
+    "endurance",
+    "threshold",
+    "race_pace_specific",
+    "vo2",
+    "reps",
+    "css",
+    "speed",
+    "brick",
+    "race_sim",
+    "durability",
+    "vo2_short",
+    "broken_race_pace",
+    "ow_sim",
+    "brick_run",
+    "long_with_quality",
+    "ankle_mobility",
+    "core",
+    "mobility",
+    "recovery",
+    "easy",
+    "race_pace"
+   ],
+   "forbid": []
+  },
+  "taper": {
+   "family": "polarized",
+   "menu": [
+    "endurance",
+    "threshold",
+    "race_pace_specific",
+    "css",
+    "strides",
+    "recovery",
+    "vo2_short",
+    "brick_run",
+    "race_pace",
+    "ankle_mobility",
+    "core",
+    "mobility",
+    "easy",
+    "descend_set"
+   ],
+   "forbid": [
+    "vo2",
+    "long"
+   ]
+  }
+ },
+ "session_types": {
+  "bike": {
+   "endurance": {
+    "system": "aerobic",
+    "zone": "Z2",
+    "if": 0.65,
+    "min_phase": "base",
+    "duration": "to_target"
+   },
+   "long": {
+    "system": "aerobic",
+    "zone": "Z2",
+    "if": 0.66,
+    "min_phase": "base",
+    "duration": "event_anchor"
+   },
+   "tempo": {
+    "system": "tempo",
+    "zone": "Z3",
+    "if": 0.8,
+    "min_phase": "base",
+    "progression": [
+     {
+      "reps": 2,
+      "min": 15
+     },
+     {
+      "reps": 3,
+      "min": 15
+     },
+     {
+      "reps": 2,
+      "min": 25
+     }
+    ],
+    "rest_min": 5
+   },
+   "sweetspot": {
+    "system": "sweetspot",
+    "zone": "Z3",
+    "band": [
+     88,
+     94
+    ],
+    "if": 0.9,
+    "min_phase": "base",
+    "progression": [
+     {
+      "reps": 3,
+      "min": 12
+     },
+     {
+      "reps": 2,
+      "min": 20
+     },
+     {
+      "reps": 2,
+      "min": 25
+     },
+     {
+      "reps": 3,
+      "min": 20
+     }
+    ],
+    "rest_min": 6
+   },
+   "threshold": {
+    "system": "LT",
+    "zone": "Z4",
+    "if": 0.95,
+    "min_phase": "build",
+    "progression": [
+     {
+      "reps": 3,
+      "min": 10
+     },
+     {
+      "reps": 4,
+      "min": 10
+     },
+     {
+      "reps": 3,
+      "min": 15
+     },
+     {
+      "reps": 2,
+      "min": 20
+     }
+    ],
+    "rest_min": 4,
+    "intro": {
+     "reps": 3,
+     "min": 8
+    }
+   },
+   "vo2": {
+    "system": "VO2max",
+    "zone": "Z5",
+    "if": 1.05,
+    "min_phase": "build_late",
+    "progression": [
+     {
+      "reps": 5,
+      "min": 3
+     },
+     {
+      "reps": 6,
+      "min": 3
+     },
+     {
+      "reps": 5,
+      "min": 4
+     }
+    ],
+    "rest_ratio": 1.0,
+    "intro": {
+     "reps": 3,
+     "min": 3
+    }
+   },
+   "race_pace_long": {
+    "system": "specific",
+    "zone": "Z3",
+    "if": 0.78,
+    "min_phase": "build",
+    "note": "long-course race watts (IM Z2 ~70-75%, 70.3 Z3 ~80-88%) inside the long ride",
+    "progression": [
+     {
+      "reps": 2,
+      "min": 30
+     },
+     {
+      "reps": 3,
+      "min": 30
+     },
+     {
+      "reps": 2,
+      "min": 45
+     }
+    ],
+    "rest_min": 10
+   },
+   "recovery": {
+    "system": "recovery",
+    "zone": "Z1",
+    "if": 0.55,
+    "min_phase": "base",
+    "duration": "to_target",
+    "note": "true easy spin; exists so the planner has a legal low-load option instead of making an endurance ride shorter"
+   },
+   "hill_strength": {
+    "system": "torque",
+    "zone": "Z3",
+    "if": 0.82,
+    "min_phase": "base",
+    "progression": [
+     {
+      "reps": 4,
+      "min": 6
+     },
+     {
+      "reps": 5,
+      "min": 6
+     },
+     {
+      "reps": 4,
+      "min": 8
+     },
+     {
+      "reps": 5,
+      "min": 8
+     }
+    ],
+    "rest_min": 4,
+    "note": "low-cadence 50-60rpm seated climbing; muscular tension without the cardiovascular cost of threshold"
+   },
+   "over_under": {
+    "system": "LT",
+    "zone": "Z4",
+    "if": 0.93,
+    "min_phase": "build",
+    "progression": [
+     {
+      "reps": 3,
+      "min": 9
+     },
+     {
+      "reps": 4,
+      "min": 9
+     },
+     {
+      "reps": 3,
+      "min": 12
+     }
+    ],
+    "rest_min": 5,
+    "intro": {
+     "reps": 2,
+     "min": 9
+    },
+    "note": "2min at 95-100% FTP / 1min at 105-110%, repeating; trains lactate clearance at threshold rather than tolerance above it"
+   },
+   "vo2_short": {
+    "system": "VO2max",
+    "zone": "Z5",
+    "if": 1.1,
+    "min_phase": "build_late",
+    "progression": [
+     {
+      "reps": 10,
+      "min": 1
+     },
+     {
+      "reps": 12,
+      "min": 1
+     },
+     {
+      "reps": 8,
+      "min": 2
+     }
+    ],
+    "rest_ratio": 1.0,
+    "intro": {
+     "reps": 8,
+     "min": 1
+    },
+    "note": "30/30s and 1min repeats; same system as vo2 but far lower session load, so it fits a peak week or a fatigued athlete"
+   },
+   "sweetspot_long": {
+    "system": "sweetspot",
+    "zone": "Z3",
+    "band": [
+     88,
+     94
+    ],
+    "if": 0.88,
+    "min_phase": "build",
+    "progression": [
+     {
+      "reps": 2,
+      "min": 30
+     },
+     {
+      "reps": 3,
+      "min": 25
+     },
+     {
+      "reps": 2,
+      "min": 40
+     }
+    ],
+    "rest_min": 8,
+    "note": "extended sweetspot for long-course specificity"
+   },
+   "durability": {
+    "system": "specific",
+    "zone": "Z3",
+    "if": 0.75,
+    "min_phase": "specific",
+    "duration": "event_anchor",
+    "note": "long aerobic ride with the quality block placed in the FINAL third, on already-fatigued legs - the long-course limiter, and not the same stimulus as the same block done fresh"
+   },
+   "race_sim": {
+    "system": "specific",
+    "zone": "Z3",
+    "if": 0.74,
+    "min_phase": "peak",
+    "duration": "event_anchor",
+    "note": "sustained race watts with race fuelling and race position rehearsed; a dress rehearsal, not a workout"
+   }
+  },
+  "run": {
+   "easy": {
+    "system": "aerobic",
+    "zone": "Z2",
+    "if": 0.72,
+    "min_phase": "base",
+    "duration": "to_target"
+   },
+   "long": {
+    "system": "aerobic",
+    "zone": "Z2",
+    "if": 0.74,
+    "min_phase": "base",
+    "duration": "long_run_progression",
+    "note": "grow 10-15%/wk; honour ankle guard"
+   },
+   "strides": {
+    "system": "neuromuscular",
+    "zone": "Z5c",
+    "if": 0.95,
+    "min_phase": "base",
+    "structure": "6-8x20s @ Z5c, full rec, after easy run",
+    "note": "form/economy, low load"
+   },
+   "tempo": {
+    "system": "tempo",
+    "zone": "Z3",
+    "if": 0.88,
+    "min_phase": "base",
+    "progression": [
+     {
+      "reps": 1,
+      "min": 20
+     },
+     {
+      "reps": 2,
+      "min": 12
+     },
+     {
+      "reps": 2,
+      "min": 15
+     }
+    ],
+    "rest_min": 2
+   },
+   "threshold": {
+    "system": "LT",
+    "zone": "Z4",
+    "if": 0.97,
+    "min_phase": "build",
+    "progression": [
+     {
+      "reps": 1,
+      "min": 20
+     },
+     {
+      "reps": 2,
+      "min": 15
+     },
+     {
+      "reps": 3,
+      "min": 10
+     }
+    ],
+    "rest_min": 1,
+    "cap": "10% weekly mileage",
+    "intro": {
+     "reps": 2,
+     "min": 10
+    }
+   },
+   "vo2": {
+    "system": "VO2max",
+    "zone": "Z5b",
+    "if": 1.06,
+    "min_phase": "build_late",
+    "progression": [
+     {
+      "reps": 4,
+      "min": 3
+     },
+     {
+      "reps": 5,
+      "min": 3
+     },
+     {
+      "reps": 6,
+      "min": 3
+     }
+    ],
+    "rest_ratio": 1.0,
+    "cap": "min(8% wk mileage, 10k)",
+    "intro": {
+     "reps": 3,
+     "min": 3
+    },
+    "canonical": "4x3min @95% vVO2max, 3min jog"
+   },
+   "reps": {
+    "system": "economy",
+    "zone": "Z5c",
+    "if": 1.15,
+    "min_phase": "specific",
+    "progression": [
+     {
+      "reps": 6,
+      "dist": "400m"
+     },
+     {
+      "reps": 8,
+      "dist": "400m"
+     },
+     {
+      "reps": 10,
+      "dist": "400m"
+     }
+    ],
+    "rest": "full",
+    "cap": "min(5% wk mileage, 5mi)"
+   },
+   "race_pace_specific": {
+    "system": "specific",
+    "zone": "Z3",
+    "if": 0.9,
+    "min_phase": "specific",
+    "note": "marathon Z3 ~88-94% / HM Z4 ~94-100% thr-pace",
+    "progression": [
+     {
+      "reps": 2,
+      "dist": "3km"
+     },
+     {
+      "reps": 3,
+      "dist": "3km"
+     }
+    ],
+    "rest_min": 3
+   },
+   "recovery": {
+    "system": "recovery",
+    "zone": "Z1",
+    "if": 0.7,
+    "min_phase": "base",
+    "duration": "to_target",
+    "note": "NOTE the athlete's 40-min minimum still applies - drop the session rather than shorten it below that"
+   },
+   "hills": {
+    "system": "strength",
+    "zone": "Z4",
+    "if": 0.92,
+    "min_phase": "base",
+    "progression": [
+     {
+      "reps": 6,
+      "min": 1
+     },
+     {
+      "reps": 8,
+      "min": 1
+     },
+     {
+      "reps": 6,
+      "min": 2
+     }
+    ],
+    "rest_ratio": 1.5,
+    "note": "uphill reps; run-specific strength with lower impact loading than flat speed work, which suits a repaired ankle"
+   },
+   "fartlek": {
+    "system": "mixed",
+    "zone": "Z3",
+    "if": 0.85,
+    "min_phase": "base",
+    "progression": [
+     {
+      "reps": 8,
+      "min": 2
+     },
+     {
+      "reps": 10,
+      "min": 2
+     },
+     {
+      "reps": 6,
+      "min": 4
+     }
+    ],
+    "rest_ratio": 0.5,
+    "note": "unstructured surges inside a continuous run; useful when the athlete wants quality without a track-style session"
+   },
+   "cruise_intervals": {
+    "system": "LT",
+    "zone": "Z4",
+    "if": 0.93,
+    "min_phase": "build",
+    "progression": [
+     {
+      "reps": 4,
+      "min": 6
+     },
+     {
+      "reps": 5,
+      "min": 6
+     },
+     {
+      "reps": 3,
+      "min": 10
+     },
+     {
+      "reps": 4,
+      "min": 10
+     }
+    ],
+    "rest_min": 2,
+    "intro": {
+     "reps": 3,
+     "min": 6
+    },
+    "note": "threshold broken into repeats with short rest; more total time at LT than one continuous effort allows"
+   },
+   "progression_run": {
+    "system": "aerobic",
+    "zone": "Z2",
+    "if": 0.85,
+    "min_phase": "base",
+    "duration": "to_target",
+    "note": "starts Z2, finishes at or just under race pace; teaches negative split and pacing discipline"
+   },
+   "long_with_quality": {
+    "system": "specific",
+    "zone": "Z3",
+    "if": 0.88,
+    "min_phase": "specific",
+    "duration": "event_anchor",
+    "note": "long run with a race-pace block in the last third; the run analogue of bike durability"
+   },
+   "durability": {
+    "system": "specific",
+    "zone": "Z3",
+    "if": 0.87,
+    "min_phase": "specific",
+    "duration": "event_anchor",
+    "note": "quality on pre-fatigued legs, either late in a long run or off the bike"
+   },
+   "brick_run": {
+    "system": "specific",
+    "zone": "Z3",
+    "if": 0.9,
+    "min_phase": "build",
+    "progression": [
+     {
+      "reps": 1,
+      "min": 15
+     },
+     {
+      "reps": 1,
+      "min": 25
+     },
+     {
+      "reps": 1,
+      "min": 40
+     },
+     {
+      "reps": 1,
+      "min": 60
+     }
+    ],
+    "note": "the run leg of a brick; IF ~0.90 is the athlete's measured brick-run value. The 40-min run minimum does NOT apply here - it is part of a larger session, not a standalone run"
+   }
+  },
+  "swim": {
+   "aerobic": {
+    "system": "aerobic",
+    "zone": "Z2",
+    "if": 0.8,
+    "min_phase": "base",
+    "structure": "continuous 1500-3000m / pull sets at CSS+5-10s"
+   },
+   "long": {
+    "system": "aerobic",
+    "zone": "Z2",
+    "if": 0.78,
+    "min_phase": "base",
+    "structure": "continuous/minimally-broken endurance swim building toward long_swim_target_m \u2014 the OVERDISTANCE weekly long swim, normally BEYOND race distance (e.g. ~3km for a 70.3, ~4.5km for IM). Build volume through base/build; this is the key aerobic swim for long-course."
+   },
+   "technique": {
+    "system": "skill",
+    "zone": "Z1",
+    "if": 0.68,
+    "min_phase": "base",
+    "structure": "drill set (see drills) + kick; standalone or embedded WU",
+    "confidence": "ok (repetition fine)"
+   },
+   "css": {
+    "system": "threshold",
+    "zone": "Z4",
+    "if": 1.0,
+    "min_phase": "base",
+    "progression": [
+     {
+      "reps": 5,
+      "dist": "300m"
+     },
+     {
+      "reps": 6,
+      "dist": "300m"
+     },
+     {
+      "reps": 4,
+      "dist": "400m"
+     },
+     {
+      "reps": 5,
+      "dist": "400m"
+     }
+    ],
+    "rest_sec": 20,
+    "confidence": "research-grounded (Swim Smooth CSS; 70.3 published sets)",
+    "structure": "repetitive CSS reps 300-400m at CSS pace, short rest (hold threshold); ~35-40min main set"
+   },
+   "speed": {
+    "system": "VO2/speed",
+    "zone": "Z5b",
+    "if": 1.08,
+    "min_phase": "build",
+    "progression": [
+     {
+      "reps": 12,
+      "dist": "50m"
+     },
+     {
+      "reps": 16,
+      "dist": "50m"
+     },
+     {
+      "reps": 8,
+      "dist": "100m"
+     }
+    ],
+    "rest_sec": 20,
+    "confidence": "research-grounded (Z5 >105% CSS, short reps, applied sparingly)"
+   },
+   "ow_skills": {
+    "system": "skill",
+    "zone": "Z2",
+    "if": 0.8,
+    "min_phase": "build",
+    "structure": "sighting every 6-9 strokes, drafting, turns, deep starts",
+    "note": "OW events only (tri, 5k swim)"
+   },
+   "race_pace": {
+    "system": "specific",
+    "zone": "Z4",
+    "if": 0.95,
+    "min_phase": "specific",
+    "rest_sec": 30,
+    "structure": "race-sim at race pace toward race_sim_m (EXACT race distance, not overdistance): build broken->continuous \u2014 ~50% race distance early, ~75% mid, 100% continuous by peak.",
+    "confidence": "research-grounded (peak race-sim = race distance continuous)"
+   },
+   "_pool_note": "Pool length: swim sets are written for a 25m/50m pool (distances in 50m multiples). If the athlete says they are in a different-length pool that day (e.g. 30m, 33m), convert each rep to the NEAREST WHOLE number of lengths of that pool by sensible rounding, and restate the set in that pool distances \u2014 e.g. 400m in a 33m pool = 12 lengths ~400m (396m); a 100m rep in a 30m pool = 90m (3 lengths); a 50m rep in a 33m pool = 66m (2 lengths). Keep total volume and the session intent the same.",
+   "recovery": {
+    "system": "recovery",
+    "zone": "Z1",
+    "if": 0.7,
+    "min_phase": "base",
+    "duration": "to_target"
+   },
+   "threshold": {
+    "system": "LT",
+    "zone": "Z4",
+    "if": 0.98,
+    "min_phase": "build",
+    "progression": [
+     {
+      "reps": 8,
+      "min": 2
+     },
+     {
+      "reps": 10,
+      "min": 2
+     },
+     {
+      "reps": 6,
+      "min": 4
+     },
+     {
+      "reps": 5,
+      "min": 5
+     }
+    ],
+    "rest_min": 1,
+    "note": "CSS pace or slightly faster, short rest; express as LENGTHS in a variable-length pool, never as a clock"
+   },
+   "vo2": {
+    "system": "VO2max",
+    "zone": "Z5a",
+    "if": 1.05,
+    "min_phase": "build_late",
+    "progression": [
+     {
+      "reps": 12,
+      "min": 1
+     },
+     {
+      "reps": 16,
+      "min": 1
+     },
+     {
+      "reps": 10,
+      "min": 2
+     }
+    ],
+    "rest_ratio": 1.0,
+    "intro": {
+     "reps": 8,
+     "min": 1
+    }
+   },
+   "pull_set": {
+    "system": "aerobic",
+    "zone": "Z2",
+    "if": 0.8,
+    "min_phase": "base",
+    "progression": [
+     {
+      "reps": 4,
+      "min": 4
+     },
+     {
+      "reps": 6,
+      "min": 4
+     },
+     {
+      "reps": 4,
+      "min": 6
+     }
+    ],
+    "rest_min": 1,
+    "note": "pull buoy work - 'PB' means PULL BUOY, never personal best. Kit-gated: only prescribe if the athlete owns one"
+   },
+   "kick_set": {
+    "system": "aerobic",
+    "zone": "Z2",
+    "if": 0.75,
+    "min_phase": "base",
+    "progression": [
+     {
+      "reps": 8,
+      "min": 2
+     },
+     {
+      "reps": 10,
+      "min": 2
+     }
+    ],
+    "rest_min": 1,
+    "note": "kit-gated (board optional); ankle-friendly"
+   },
+   "descend_set": {
+    "system": "mixed",
+    "zone": "Z3",
+    "if": 0.9,
+    "min_phase": "build",
+    "progression": [
+     {
+      "reps": 6,
+      "min": 3
+     },
+     {
+      "reps": 8,
+      "min": 3
+     }
+    ],
+    "rest_min": 1,
+    "note": "each rep faster than the last; teaches pacing control and finishing speed"
+   },
+   "broken_race_pace": {
+    "system": "specific",
+    "zone": "Z3",
+    "if": 0.92,
+    "min_phase": "specific",
+    "progression": [
+     {
+      "reps": 4,
+      "min": 5
+     },
+     {
+      "reps": 3,
+      "min": 8
+     },
+     {
+      "reps": 2,
+      "min": 12
+     }
+    ],
+    "rest_min": 1,
+    "note": "race pace broken by short rest, so total volume at race effort exceeds what one continuous swim allows"
+   },
+   "ow_sim": {
+    "system": "specific",
+    "zone": "Z3",
+    "if": 0.9,
+    "min_phase": "specific",
+    "duration": "to_target",
+    "note": "open-water race rehearsal: wetsuit, sighting, mass-start positioning, straight-line swimming without lane guidance"
+   }
+  },
+  "strength": {
+   "ankle_mobility": {
+    "system": "rehab",
+    "zone": "Z1",
+    "if": 0.4,
+    "min_phase": "base",
+    "duration": "fixed_15",
+    "note": "ankle stability + runners mobility, bodyweight. the athlete's standing requirement is 3x15min per week, placeable on any day; counts toward but does not replace the strength cap"
+   },
+   "strength_general": {
+    "system": "strength",
+    "zone": "Z2",
+    "if": 0.6,
+    "min_phase": "base",
+    "duration": "fixed_40",
+    "note": "full-body; subject to day_rules.strength_max per week"
+   },
+   "core": {
+    "system": "strength",
+    "zone": "Z1",
+    "if": 0.5,
+    "min_phase": "base",
+    "duration": "fixed_20"
+   },
+   "mobility": {
+    "system": "rehab",
+    "zone": "Z1",
+    "if": 0.4,
+    "min_phase": "base",
+    "duration": "fixed_20"
+   }
+  },
+  "multi": {
+   "brick": {
+    "system": "specific",
+    "zone": "Z3",
+    "if": 0.85,
+    "min_phase": "build",
+    "components": [
+     "bike",
+     "run"
+    ],
+    "transition_max_min": 2,
+    "progression": [
+     {
+      "phase": "build",
+      "bike_min": 60,
+      "run_min": 20,
+      "rule": "intensity on ONE side only - either a threshold bike with an easy run, or an easy bike with a tempo run. Never both."
+     },
+     {
+      "phase": "specific",
+      "bike_min": 120,
+      "run_min": 40,
+      "rule": "bike at race IF, run at race pace"
+     },
+     {
+      "phase": "peak",
+      "bike_min": 180,
+      "run_min": 60,
+      "rule": "full race rehearsal including fuelling"
+     }
+    ],
+    "dose": "1-2 per week maximum; never two consecutive high-load bricks",
+    "note": "A true race brick needs the gap between the last bike data point and run start within ~1-2 minutes, or it is two sessions rather than a brick. Base-phase bricks stay aerobic (10-20min easy run off a Z2 ride) to build transition familiarity without a recovery cost.",
+    "_sources": "periodisation cross-checked against public coaching material (Triathlete, MyProCoach, Rouvy, Roadman) 2026-08-03; written as original content"
+   }
+  }
+ },
+ "drills": {
+  "_note": "Prescribe only drills whose kit the athlete owns (equipment profile). Unknown kit -> ask. None -> plain only.",
+  "catch_up": {
+   "kit": "none"
+  },
+  "single_arm": {
+   "kit": "none"
+  },
+  "fingertip_drag": {
+   "kit": "none"
+  },
+  "sculling": {
+   "kit": "none"
+  },
+  "six_three_six": {
+   "kit": "none"
+  },
+  "fist_swim": {
+   "kit": "none"
+  },
+  "head_up": {
+   "kit": "none"
+  },
+  "kick": {
+   "kit": "kickboard"
+  },
+  "vertical_kick": {
+   "kit": "none"
+  },
+  "pull": {
+   "kit": "pull_buoy",
+   "note": "swim AT CSS or slightly faster"
+  },
+  "paddle_catch": {
+   "kit": "hand_paddles",
+   "note": "introduce gradually - shoulder load"
+  },
+  "fin_kick": {
+   "kit": "fins"
+  },
+  "fin_body_position": {
+   "kit": "fins"
+  },
+  "buoyancy_pull": {
+   "kit": "buoyancy_shorts",
+   "note": "wetsuit-position sim"
+  },
+  "snorkel_position": {
+   "kit": "snorkel"
+  },
+  "side_kick": {
+   "kit": null,
+   "focus": "body position and balance",
+   "progress_to": "side_kick_with_stroke"
+  },
+  "side_kick_with_stroke": {
+   "kit": null,
+   "focus": "rotation under load",
+   "prereq": "side_kick"
+  },
+  "high_elbow_catch": {
+   "kit": null,
+   "focus": "catch mechanics"
+  },
+  "three_stroke_switch": {
+   "kit": null,
+   "focus": "rotation and breathing symmetry"
+  },
+  "bilateral_breathing": {
+   "kit": null,
+   "focus": "breathing symmetry, open-water sighting"
+  },
+  "sighting_practice": {
+   "kit": null,
+   "focus": "open-water navigation",
+   "note": "every 6-8 strokes; pool-legal"
+  },
+  "tarzan_drill": {
+   "kit": null,
+   "focus": "head-up sighting strength"
+  },
+  "band_only": {
+   "kit": "band",
+   "focus": "body position without kick"
+  },
+  "paddles_pull": {
+   "kit": "paddles",
+   "focus": "pull force",
+   "note": "identify from the session plan which sets used paddles"
+  }
+ },
+ "events": {
+  "ironman": {
+   "sports": [
+    "swim",
+    "bike",
+    "run"
+   ],
+   "emphasis": [
+    "endurance",
+    "long",
+    "race_pace_long",
+    "sweetspot"
+   ],
+   "vo2": "minimal",
+   "brick": "near_weekly_specific_long",
+   "long_ride_factor": 0.9,
+   "long_run_factor": 0.85,
+   "swim_m": 3800,
+   "long_swim_m": 4500
+  },
+  "70_3": {
+   "sports": [
+    "swim",
+    "bike",
+    "run"
+   ],
+   "emphasis": [
+    "threshold",
+    "race_pace_long",
+    "css",
+    "long"
+   ],
+   "periodisation": "7wk_general+13wk_specific_4_4_5",
+   "brick": "near_weekly_specific",
+   "long_ride_factor": 1.15,
+   "swim_m": 1900,
+   "long_swim_m": 3000
+  },
+  "olympic": {
+   "sports": [
+    "swim",
+    "bike",
+    "run"
+   ],
+   "emphasis": [
+    "threshold",
+    "vo2",
+    "css",
+    "brick"
+   ],
+   "brick": "weekly_short_sharp",
+   "long_ride_factor": 1.4,
+   "swim_m": 1500,
+   "long_swim_m": 2500
+  },
+  "marathon": {
+   "sports": [
+    "run"
+   ],
+   "emphasis": [
+    "long",
+    "threshold",
+    "race_pace_specific"
+   ],
+   "long_run_factor": 0.85
+  },
+  "half_marathon": {
+   "sports": [
+    "run"
+   ],
+   "emphasis": [
+    "threshold",
+    "vo2",
+    "race_pace_specific",
+    "long"
+   ]
+  },
+  "10k": {
+   "sports": [
+    "run"
+   ],
+   "emphasis": [
+    "vo2",
+    "threshold",
+    "reps"
+   ]
+  },
+  "5k": {
+   "sports": [
+    "run"
+   ],
+   "emphasis": [
+    "vo2",
+    "reps",
+    "threshold"
+   ]
+  },
+  "sportive": {
+   "sports": [
+    "bike"
+   ],
+   "emphasis": [
+    "long",
+    "sweetspot",
+    "tempo",
+    "threshold"
+   ],
+   "long_ride_factor": 1.0,
+   "note": "durability-led"
+  },
+  "swim_5k": {
+   "sports": [
+    "swim"
+   ],
+   "emphasis": [
+    "aerobic",
+    "css",
+    "race_pace",
+    "ow_skills"
+   ],
+   "swim_m": 5000,
+   "long_swim_m": 6000
+  }
+ },
+ "_published": "Generalised copy of config/session-library.json for the app. Athlete names removed: this library is shown to every athlete."
+}

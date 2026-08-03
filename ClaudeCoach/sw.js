@@ -16,7 +16,7 @@
  *
  * Bump CACHE on every deploy that changes a precached file.
  */
-const CACHE = 'claudecoach-v2';
+const CACHE = 'claudecoach-v3';
 
 const SHELL = [
   './',
@@ -30,6 +30,7 @@ const SHELL = [
   './app/icons/icon-512.png',
   './app/icons/apple-touch-icon.png',
   './app/icons/favicon-32.png',
+  './public/session-library.json',
 ];
 
 const CDN_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'cdn.jsdelivr.net'];

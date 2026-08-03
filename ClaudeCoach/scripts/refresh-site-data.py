@@ -1278,6 +1278,23 @@ def main():
 
         fetch_fitness_prev(client)  # one-time cache of 2025 CTL — skips if already exists
 
+        # The app's Library tab reads public/session-library.json, because
+        # config/ is excluded from the published site by _config.yml and always
+        # must be. Republish it here so an edit to the library reaches the app
+        # without a second manual step; failure is non-fatal, the app just shows
+        # the last published copy.
+        try:
+            r = subprocess.run(
+                [sys.executable, str(BASE / "scripts" / "publish-session-library.py")],
+                capture_output=True, text=True, timeout=60,
+            )
+            log(f"Session library: {(r.stdout or r.stderr).strip().splitlines()[0]}"
+                if (r.stdout or r.stderr) else "Session library: published")
+            if r.returncode == 0:
+                _PUBLISHED.append("ClaudeCoach/public/session-library.json")
+        except Exception as e:
+            log(f"Session library publish warning: {e} — app keeps last copy")
+
         log("Fetching live data via IcuClient...")
         try:
             data = _build_jamie_data(client)
@@ -1318,9 +1335,13 @@ def main():
             except Exception as e:
                 log(f"athletes.json load error: {e}")
 
-        # Publish ONLY the sanitised public files. Every path staged here comes
-        # from write_public_variant(), so it is a public/ path that passed the
-        # allow-list and the forbidden-key tripwire. The private files remain
+        # Publish ONLY the sanitised public files. Every path staged here has
+        # passed a sanitiser: the training-data files come from
+        # write_public_variant() (allow-list + forbidden-key tripwire), and
+        # public/session-library.json is only appended when
+        # publish-session-library.py exits 0, which it does only after asserting
+        # no athlete name survives in the output. Nothing is staged unsanitised.
+        # The private files remain
         # gitignored, and cc-git-commit-push.sh stages by explicit path only
         # (never `git add -A`), so an untracked private file cannot be swept in.
         #

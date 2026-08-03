@@ -1,7 +1,7 @@
 /* ClaudeCoach app — view logic.
  *
  * Static by design: it reads the nightly public subset (public/training-data-<slug>.json)
- * and the session library (config/session-library.json) and renders five views. There is no
+ * and the published session library (public/session-library.json) and renders five views. There is no
  * backend to talk to (GitHub Pages), so Chat deep-links to Telegram; when FastAPI lands,
  * that one href becomes a route.
  *
@@ -60,15 +60,6 @@
   /* ── chrome ──────────────────────────────────────────────────────────── */
 
   function buildChrome() {
-    $('#who').innerHTML = ATHLETES.map(function (a) {
-      return '<button type="button" data-slug="' + a.slug + '" aria-pressed="' +
-        (a.slug === state.slug) + '">' + esc(a.name) + '</button>';
-    }).join('');
-    $('#who').onclick = function (e) {
-      var b = e.target.closest('button');
-      if (b) load(b.dataset.slug);
-    };
-
     $('#tabs').innerHTML = TABS.map(function (t) {
       return '<button type="button" role="tab" data-tab="' + t.id + '" aria-selected="' +
         (t.id === state.tab) + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + t.icon +
@@ -438,12 +429,68 @@
     if (state.tab === 'trends') drawTrends();
   }
 
+  /* ── entry screen ────────────────────────────────────────────────────── */
+  /* A profile picker, not a login. The data behind it is published to a public
+   * URL, so a client-side gate would protect nothing; it is here because an app
+   * opens on "who are you", and because remembering the answer removes the
+   * segmented control from every subsequent screen. */
+
+  var KEY = 'cc.athlete';
+
+  function stored() {
+    try {
+      var v = localStorage.getItem(KEY);
+      return ATHLETES.some(function (a) { return a.slug === v; }) ? v : null;
+    } catch (e) { return null; }  // private mode / storage disabled
+  }
+
+  function buildGate() {
+    $('#gateList').innerHTML = ATHLETES.map(function (a) {
+      return '<button type="button" class="gate-row" data-slug="' + a.slug + '">' +
+        '<span class="gate-mark">' + esc(a.name.charAt(0)) + '</span>' +
+        '<span class="gate-row-t"><b>' + esc(a.name) + '</b>' +
+        '<span>Training almanac</span></span>' +
+        '<span class="gate-go" aria-hidden="true">→</span></button>';
+    }).join('');
+
+    $('#gateList').onclick = function (e) {
+      var b = e.target.closest('.gate-row');
+      if (!b) return;
+      b.classList.add('picked');
+      // Let the mark fill before the screen goes: the pick should feel confirmed
+      // rather than dismissed.
+      setTimeout(function () { pick(b.dataset.slug); }, 160);
+    };
+
+    $('#switch').onclick = openGate;
+  }
+
+  function openGate() {
+    document.body.classList.add('gated');
+    var g = $('#gate');
+    g.classList.remove('out');
+    Array.prototype.forEach.call(g.querySelectorAll('.gate-row'), function (r) {
+      r.classList.remove('picked');
+    });
+    var first = g.querySelector('.gate-row');
+    if (first) first.focus();
+  }
+
+  function closeGate() {
+    $('#gate').classList.add('out');
+    document.body.classList.remove('gated');
+  }
+
+  function pick(slug) {
+    try { localStorage.setItem(KEY, slug); } catch (e) { /* choice just won't persist */ }
+    closeGate();
+    if (slug !== state.slug || !state.data) load(slug);
+  }
+
   function load(slug) {
     state.slug = slug;
-    ATHLETES.forEach(function (a) {
-      var b = $('#who button[data-slug="' + a.slug + '"]');
-      if (b) b.setAttribute('aria-pressed', String(a.slug === slug));
-    });
+    var a = ATHLETES.filter(function (x) { return x.slug === slug; })[0];
+    $('#whoName').textContent = a ? a.name : slug;
     skeleton();
     fetch('public/training-data-' + slug + '.json', { cache: 'no-cache' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
@@ -456,7 +503,7 @@
   }
 
   function loadLibrary() {
-    fetch('config/session-library.json', { cache: 'default' })
+    fetch('public/session-library.json', { cache: 'default' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) { state.lib = j; if (state.lib) renderLibrary(); })
       .catch(function () { /* library is a nice-to-have; the rest of the app stands */ });
@@ -464,10 +511,16 @@
 
   function init() {
     buildChrome();
+    buildGate();
     var h = (location.hash || '').replace('#', '');
     if (TABS.some(function (t) { return t.id === h; })) state.tab = h;
     show(state.tab);
-    load(state.slug);
+
+    // A remembered profile skips the gate entirely - being asked who you are on
+    // every launch is the thing that makes a web app feel like a website.
+    var s = stored();
+    if (s) { closeGate(); load(s); } else { openGate(); }
+
     loadLibrary();
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
       navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {});
