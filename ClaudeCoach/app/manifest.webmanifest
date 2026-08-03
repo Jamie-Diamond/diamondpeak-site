@@ -1,0 +1,43 @@
+{
+  "name": "ClaudeCoach",
+  "short_name": "Coach",
+  "description": "Training dashboards and coaching for Diamond Peak athletes.",
+  "start_url": "/ClaudeCoach/index.html",
+  "scope": "/ClaudeCoach/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8f5ef",
+  "theme_color": "#18160f",
+  "lang": "en-GB",
+  "categories": ["health", "fitness", "sports"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Coach overview",
+      "url": "/ClaudeCoach/coach.html"
+    },
+    {
+      "name": "Training visualiser",
+      "url": "/ClaudeCoach/training-visualiser.html"
+    }
+  ]
+}

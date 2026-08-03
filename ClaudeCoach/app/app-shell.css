@@ -1,0 +1,162 @@
+/* ClaudeCoach app shell.
+ *
+ * Adds app chrome to pages that are otherwise self-contained. Deliberately additive: it
+ * introduces no new colours, type or spacing language - every value below is taken from
+ * the palette the pages already declare (--bg #f8f5ef, --ink #18160f, --line #ddd8cc,
+ * --green #1d6840) so the chrome reads as part of the same object, not a wrapper bolted on.
+ *
+ * Falls back gracefully: if the JS never runs, no tab bar is injected and the pages are
+ * exactly as they were.
+ */
+
+:root {
+  --shell-bar-h: 56px;
+  --shell-bg: #f8f5ef;
+  --shell-ink: #18160f;
+  --shell-muted: #9a9080;
+  --shell-line: #ddd8cc;
+  --shell-green: #1d6840;
+}
+
+/* Leave room for the fixed bar, plus the iPhone home-indicator inset. The pages already
+   set their own bottom padding, so add to it rather than replacing it. */
+body.has-app-shell {
+  padding-bottom: calc(var(--shell-bar-h) + env(safe-area-inset-bottom, 0px) + 24px) !important;
+}
+
+/* ---------- bottom tab bar ---------- */
+
+.app-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 900;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: stretch;
+  background: rgba(248, 245, 239, 0.92);
+  -webkit-backdrop-filter: saturate(1.8) blur(12px);
+  backdrop-filter: saturate(1.8) blur(12px);
+  border-top: 1px solid var(--shell-line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.app-tabbar a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  /* 56px tall and full-width per tab: comfortably past the 44px minimum touch target. */
+  min-height: var(--shell-bar-h);
+  padding: 6px 4px;
+  text-decoration: none;
+  color: var(--shell-muted);
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 140ms ease, transform 140ms ease;
+}
+
+.app-tabbar a:active {
+  transform: scale(0.94);
+}
+
+.app-tabbar a[aria-current='page'] {
+  color: var(--shell-ink);
+}
+
+/* The active marker is a rule above the tab, echoing the .kicker underlines used on the
+   pages, rather than a pill or a filled background which would be a new visual idea. */
+.app-tabbar a[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 26px;
+  height: 2px;
+  background: var(--shell-green);
+}
+
+.app-tabbar a {
+  position: relative;
+}
+
+.app-tabbar svg {
+  width: 21px;
+  height: 21px;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-tabbar a.tab-chat svg {
+  stroke: var(--shell-green);
+}
+
+/* ---------- standalone-only refinements ---------- */
+/* Applied only when launched from the home screen, so the browser experience is untouched. */
+
+@media (display-mode: standalone) {
+  html {
+    /* Stop the whole document rubber-banding, which is the single biggest tell that a
+       standalone page is a website. Inner scroll containers still scroll. */
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    /* Status-bar area on iOS is transparent in standalone; pad so headings clear it. */
+    padding-top: calc(28px + env(safe-area-inset-top, 0px)) !important;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Text the athlete may genuinely want to copy stays selectable. */
+  body table, body pre, body code, body .selectable {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* No hover states on a touch launcher - they stick after a tap. */
+  a:hover { color: inherit; }
+}
+
+/* ---------- offline notice ---------- */
+
+.app-offline {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--shell-bar-h) + env(safe-area-inset-bottom, 0px) + 12px);
+  z-index: 950;
+  background: var(--shell-ink);
+  color: var(--shell-bg);
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 7px 13px;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.app-offline.show {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tabbar a,
+  .app-offline {
+    transition: none;
+  }
+  .app-tabbar a:active {
+    transform: none;
+  }
+}
