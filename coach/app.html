@@ -85,7 +85,13 @@ body{
 .wordmark{letter-spacing:-.01em}
 .wordmark .mark{width:19px;height:19px;display:block}
 .gate-logo{width:44px;height:44px;display:block;margin:0 0 18px}
-.countdown{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.5}
+.countdown{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.5;margin-left:auto}
+.gear{
+  flex:0 0 auto;appearance:none;background:none;border:0;padding:0 0 0 4px;cursor:pointer;
+  color:var(--muted);transition:color .16s ease;
+}
+.gear svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;display:block}
+.gear[aria-pressed=true]{color:var(--green)}
 .countdown b{display:block;font-family:'Libre Baskerville',serif;font-size:16px;letter-spacing:-.01em;color:var(--ink);text-transform:none}
 
 /* ── whobar: one line, not three tabs ────────────────────────────────────── */
@@ -421,6 +427,15 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
 .sp-strength{background:var(--ink-2)}
 
 
+/* ── settings: tool links ───────────────────────────────────────────────── */
+.toolrow{
+  display:flex;align-items:center;gap:12px;padding:11px 15px;text-decoration:none;
+  border-bottom:1px solid var(--rule-soft);color:inherit;
+}
+.toolrow:last-child{border-bottom:0}
+.toolrow:hover{background:rgba(24,22,15,.03)}
+.toolrow .gate-row-t b{font-size:15px}
+
 /* ── settings: athlete picker rows ──────────────────────────────────────── */
 .pickrow{
   width:100%;display:flex;align-items:center;gap:13px;
@@ -545,6 +560,20 @@ body.drawn{overflow:hidden}
 .tabs button[aria-selected=true]::before{content:'';position:absolute;top:0;width:22px;height:2px;background:var(--green)}
 /* Chat leaves the app, so it is marked rather than selectable. */
 .tabs a.out{color:var(--green)}
+/* The primary action sits proud of the bar in a filled disc. It is the centre item, so
+   it needs no label - the shape carries it - and the bar keeps five even columns. */
+.tabs a.primary{color:var(--paper);position:relative;overflow:visible}
+.tabs a.primary span{display:none}
+.tabs a.primary svg{
+  width:22px;height:22px;stroke:var(--paper);position:relative;z-index:1;
+  transform:translateX(-1px);
+}
+.tabs a.primary::after{
+  content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);
+  width:46px;height:46px;border-radius:50%;background:var(--green);
+  box-shadow:0 3px 12px rgba(29,104,64,.34);
+}
+.tabs a.primary:active::after{transform:translate(-50%,-52%) scale(.93)}
 .tabs svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 @media (max-width:359px){.tabs button span,.tabs a span{display:none}.tabs svg{width:21px;height:21px}}
 
@@ -555,7 +584,10 @@ body.drawn{overflow:hidden}
   background:var(--ink);border-radius:3px;padding:13px 15px;margin:0 0 15px;
 }
 .chat svg{width:19px;height:19px;fill:none;stroke:var(--paper);stroke-width:1.6;flex:0 0 auto}
-.chat .t{font-size:14px}
+/* The label wrapper must be a flex column: as a plain inline span the title and
+   subtitle ran into each other. */
+.chat .txt{display:flex;flex-direction:column;min-width:0}
+.chat .t{font-size:14px;line-height:1.25}
 .chat .s{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:rgba(248,245,239,.62);margin-top:1px}
 .chat .go{margin-left:auto;font-family:'DM Mono',monospace;font-size:14px;color:rgba(248,245,239,.55)}
 
@@ -572,7 +604,6 @@ body.drawn{overflow:hidden}
   opacity:0;pointer-events:none;transition:opacity .22s ease;
 }
 .offline.on{opacity:1}
-.legacy{display:block;text-align:center;padding:4px 0 8px;color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;text-decoration:none}
 
 @media (display-mode:standalone){
   body{-webkit-user-select:none;user-select:none}
@@ -589,6 +620,9 @@ body.drawn{overflow:hidden}
   <div class="masthead-row">
     <h1 class="wordmark"><img src="icons/dpc-mark.png" alt="" class="mark">Peak</h1>
     <div class="countdown" id="cd"><b>—</b>days to race</div>
+    <button type="button" class="gear" id="gear" aria-pressed="false" aria-label="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.5 1.5M16.5 16.5 18 18M18 6l-1.5 1.5M7.5 16.5 6 18"/></svg>
+    </button>
   </div>
   <div class="whobar">
     <span class="whobar-name" id="whoName">—</span>
@@ -616,7 +650,6 @@ body.drawn{overflow:hidden}
   <section class="view" id="v-trends" role="tabpanel" aria-label="Trends"></section>
   <section class="view" id="v-goals" role="tabpanel" aria-label="Goals"></section>
   <section class="view" id="v-set" role="tabpanel" aria-label="Settings"></section>
-  <a class="legacy" href="../ClaudeCoach/index.html">Older dashboards ↗</a>
 </main>
 
 <nav class="tabs" id="tabs" role="tablist" aria-label="Sections"></nav>
@@ -631,6 +664,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=3" defer></script>
+<script src="app.js?v=6" defer></script>
 </body>
 </html>

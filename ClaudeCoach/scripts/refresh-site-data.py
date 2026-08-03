@@ -1098,14 +1098,37 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 _entry["projected"] = True
 
     # -- session log + swim log from local files -------------------------------
+    # 60, matching Jamie's path: fuelling is logged on a minority of sessions, so a
+    # 10-row window could not show it even when the values existed.
     session_log = []
     sl_file = BASE / f"athletes/{slug}/session-log.json"
     if sl_file.exists():
         try:
             all_e = json.loads(sl_file.read_text())
-            session_log = [e for e in all_e if not e.get("stub", True)][-10:]
+            session_log = [e for e in all_e if not e.get("stub", True)][-60:]
         except Exception:
             pass
+
+    # Fuelling history. This lived ONLY in post_process(), which runs for Jamie alone,
+    # so Kathryn's Fuel tab was empty while 24 logged carb sessions sat in her file
+    # (Calum, 4). Same computation, every athlete: g/hr = grams / minutes * 60, with
+    # the duration carried so the app can show 120g over 1h apart from 120g over 5h.
+    progress_data = {}
+    if sl_file.exists():
+        try:
+            carb_s = [e for e in json.loads(sl_file.read_text())
+                      if e.get("nutrition_g_carb") and e.get("duration_min")]
+            if carb_s:
+                progress_data["carb"] = [
+                    {"date": e["date"],
+                     "g_per_hr": round(float(e["nutrition_g_carb"]) /
+                                       float(e["duration_min"]) * 60, 1),
+                     "sport": e.get("sport"), "dur": e.get("duration_min"),
+                     "name": (e.get("name") or "")[:40]}
+                    for e in carb_s
+                ]
+        except Exception as e:
+            log(f"[{slug}] carb history skipped (non-fatal): {e}")
 
     swim_log = []
     sw_file = BASE / f"athletes/{slug}/swim-log.json"
@@ -1124,6 +1147,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "weekCalendar": week_calendar,
         "loadChart":    load_chart,
         "sessionLog":   session_log,
+        "progressData": progress_data,
         "swimLog":      swim_log,
     }
 

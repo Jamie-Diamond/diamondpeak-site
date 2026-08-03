@@ -39,14 +39,16 @@
   var TABS = [
     { id: 'today', label: 'Today', icon: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/>' },
     { id: 'cal', label: 'Calendar', icon: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/>' },
+    // Centre, raised and filled: it is the primary action, so it gets the position the
+    // thumb reaches without moving. A link out to Telegram until FastAPI lands.
+    { id: 'chat', label: 'Chat', href: TELEGRAM, primary: true,
+      icon: '<path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/>' },
     { id: 'trends', label: 'Trends', icon: '<path d="M4 19h16"/><path d="M4 15l4.5-5L12 13.5 20 6"/>' },
     { id: 'goals', label: 'Goals', icon: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/><path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20"/>' },
-    // Chat is a link out to Telegram until the FastAPI backend lands, but it belongs
-    // on the bar: it is the thing the athlete does most, and burying it in a card at
-    // the bottom of Today made it the hardest action to reach.
-    { id: 'chat', label: 'Chat', href: TELEGRAM,
-      icon: '<path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/>' },
-    { id: 'set', label: 'Settings', icon: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.5 1.5M16.5 16.5 18 18M18 6l-1.5 1.5M7.5 16.5 6 18"/>' }
+    // Settings has no bar slot: it is entered from the masthead gear. It still needs a
+    // TABS entry because show()/skeleton() drive every view from this list.
+    { id: 'set', label: 'Settings', offBar: true,
+      icon: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.5 1.5M16.5 16.5 18 18M18 6l-1.5 1.5M7.5 16.5 6 18"/>' }
   ];
 
   // Each entry is one chart plus the numbers that belong with it.
@@ -136,14 +138,18 @@
   /* ── chrome ──────────────────────────────────────────────────────────── */
 
   function buildChrome() {
-    $('#tabs').innerHTML = TABS.map(function (t) {
+    $('#tabs').innerHTML = TABS.filter(function (t) { return !t.offBar; }).map(function (t) {
       var inner = '<svg viewBox="0 0 24 24" aria-hidden="true">' + t.icon +
         '</svg><span>' + t.label + '</span>';
+      var cls = (t.href ? 'out' : '') + (t.primary ? ' primary' : '');
       return t.href
-        ? '<a class="out" href="' + t.href + '" target="_blank" rel="noopener">' + inner + '</a>'
+        ? '<a class="' + cls.trim() + '" href="' + t.href + '" target="_blank" rel="noopener">' +
+          inner + '</a>'
         : '<button type="button" role="tab" data-tab="' + t.id + '" aria-selected="' +
           (t.id === state.tab) + '">' + inner + '</button>';
     }).join('');
+
+    $('#gear').onclick = function () { show('set'); };
     $('#tabs').onclick = function (e) {
       var b = e.target.closest('button');
       if (b) show(b.dataset.tab);
@@ -176,6 +182,7 @@
       var b = $('#tabs button[data-tab="' + t.id + '"]');
       if (b) b.setAttribute('aria-selected', String(t.id === tab));
     });
+    $('#gear').setAttribute('aria-pressed', String(tab === 'set'));
     scrollTo({ top: 0, behavior: 'instant' });
     // Charts are drawn only while visible: a canvas sized inside a display:none
     // section comes out 0px wide and stays that way.
@@ -187,7 +194,8 @@
   function chatCTA(sub) {
     return '<a class="chat" href="' + TELEGRAM + '" target="_blank" rel="noopener">' +
       '<svg viewBox="0 0 24 24"><path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/></svg>' +
-      '<span><span class="t">Ask the coach</span><span class="s">' + esc(sub) + '</span></span>' +
+      '<span class="txt"><span class="t">Ask the coach</span>' +
+      '<span class="s">' + esc(sub) + '</span></span>' +
       '<span class="go">→</span></a>';
   }
 
@@ -293,7 +301,6 @@
       (next.length ? groupByDay(next) : '<div class="empty">Nothing planned yet</div>') +
       '</div>', { flush: true });
 
-    h += chatCTA('Telegram · @ClaudeCoachTri_bot');
     $('#v-today').innerHTML = h;
   }
 
@@ -1533,11 +1540,48 @@
 
     h += libraryBlock();
 
+    var TOOLS = [
+      ['Fuelling calculator', '../cycling/fuelling-calculator.html', 'carbs, fluid and sodium per hour'],
+      ['Sweat rate', '../cycling/sweat-rate-calculator.html', 'fluid loss from a weigh-in'],
+      ['Race predictor', '../cycling/triathlon-race-predictor.html', 'split and finish estimates'],
+      ['Pacing strategy', '../cycling/pacing-strategy-builder.html', 'build a race pacing plan'],
+      ['FTP calculator', '../cycling/ftp-calculator.html', 'threshold from a test effort'],
+      ['TSS calculator', '../cycling/tss-calculator.html', 'load for a single session'],
+      ['Run pace converter', '../cycling/run-pace-converter.html', 'pace, speed and splits'],
+      ['VO2max estimator', '../cycling/vo2max-estimator.html', 'from a time trial'],
+      ['Power to weight', '../cycling/power-to-weight.html', 'w/kg across durations'],
+      ['CdA calculator', '../cda-calculator/', 'aerodynamic drag from field data'],
+      ['Wetsuit decision', '../cycling/cervia-wetsuit.html', 'water temperature call'],
+      ['Gear ratios', '../cycling/gear-ratio-calculator.html', 'cadence and speed by gear']
+    ];
+    h += card('Tools', '<div class="body-flush">' + TOOLS.map(function (x) {
+      return '<a class="toolrow" href="' + x[1] + '">' +
+        '<span class="gate-row-t"><b>' + esc(x[0]) + '</b><span>' + esc(x[2]) + '</span></span>' +
+        '<span class="gate-go">\u2197</span></a>';
+    }).join('') + '</div>', { flush: true, foot: 'Calculators on diamondpeak.uk.' });
+
+    h += card('Session', '<div class="body-flush">' +
+      '<button type="button" class="pickrow" id="logout">' +
+      '<span class="gate-mark">⏻</span>' +
+      '<span class="gate-row-t"><b>Log out</b><span>forget this device and choose again</span></span>' +
+      '<span class="gate-go">→</span></button></div>', { flush: true });
+
     $('#v-set').innerHTML = h;
-    $('#v-set').querySelector('.body-flush').onclick = function (e) {
-      var b = e.target.closest('.pickrow');
+    // Scoped to the view, not to the first .body-flush: several cards use that class
+    // now, and binding to the first one silently stops working when a card is added
+    // above it.
+    $('#v-set').onclick = function (e) {
+      var b = e.target.closest('.pickrow[data-slug]');
       if (b) pick(b.dataset.slug);
     };
+    // Clearing the stored slug is the whole of "logging out" - there is no session to
+    // end, because there is no auth. It returns to the picker, which is what was
+    // actually missing: you could switch athlete but never get back to the front door.
+    $('#logout').onclick = function () {
+      try { localStorage.removeItem(KEY); } catch (e) { /* nothing to clear */ }
+      openGate();
+    };
+
     var ls = $('#libSeg');
     if (ls) ls.onclick = function (e) {
       var b = e.target.closest('button');
