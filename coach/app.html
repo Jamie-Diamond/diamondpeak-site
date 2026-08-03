@@ -292,7 +292,7 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
 }
 .card > :not(.card-h):not(.card-f){padding:13px 15px}
 .card > .body-flush,.card > .lib,.card > table.tbl,.card > .chartbox,.card > .cal-grid,
-.card > .cal-dows{padding:0}
+.card > .cal-dows,.card > .readout,.card > .seg{padding:0}
 .card.flush > :not(.card-h):not(.card-f){padding:0}
 
 /* ── hero: the one thing the screen is for ───────────────────────────────── */
@@ -503,6 +503,27 @@ body.drawn{overflow:hidden}
 .sesh.tap:hover{background:rgba(24,22,15,.028)}
 .sesh.tap:focus-visible{outline:2px solid var(--green);outline-offset:-2px}
 
+
+/* ── chart readout ──────────────────────────────────────────────────────── */
+/* Replaces the floating tooltip on touch. A tooltip on a phone is the wrong
+   instrument: your finger covers the point it describes, it needs a precise tap on a
+   1px line, and it disappears the moment you lift off. This is a fixed line above the
+   chart that updates as you drag, so the value stays put and stays readable. */
+.readout{
+  display:flex;align-items:baseline;gap:10px;min-height:34px;
+  padding:10px 15px 8px;border-bottom:1px solid var(--rule-soft);
+}
+.readout b{
+  font-family:'Libre Baskerville',serif;font-weight:400;font-size:15px;
+  letter-spacing:-.015em;color:var(--ink);white-space:nowrap;
+}
+.readout span{
+  font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.06em;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.seg.sub{margin-top:-6px}
+.seg.sub button{padding:7px 11px;font-size:8.5px}
+
 /* ── tab bar ────────────────────────────────────────────────────────────── */
 
 .tabs{
@@ -593,7 +614,6 @@ body.drawn{overflow:hidden}
   <section class="view on" id="v-today" role="tabpanel" aria-label="Today"></section>
   <section class="view" id="v-cal" role="tabpanel" aria-label="Calendar"></section>
   <section class="view" id="v-trends" role="tabpanel" aria-label="Trends"></section>
-  <section class="view" id="v-lib" role="tabpanel" aria-label="Library"></section>
   <section class="view" id="v-goals" role="tabpanel" aria-label="Goals"></section>
   <section class="view" id="v-set" role="tabpanel" aria-label="Settings"></section>
   <a class="legacy" href="../ClaudeCoach/index.html">Older dashboards ↗</a>
@@ -611,6 +631,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=1" defer></script>
+<script src="app.js?v=3" defer></script>
 </body>
 </html>

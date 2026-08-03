@@ -18,7 +18,8 @@ import re
 # private — including every free-text field the athlete writes for the coach.
 PUBLISHABLE_FIELDS = frozenset({
     "tss", "norm_power", "avg_power", "duration_min", "distance_km",
-    "nutrition_g_carb", "hydration_ml", "sport", "name", "date", "activity_id",
+    "nutrition_g_carb", "hydration_ml", "nutrition_mg_sodium",
+    "sport", "name", "date", "activity_id",
 })
 
 # Never publishable, listed explicitly so the intent is greppable.

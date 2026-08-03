@@ -40,7 +40,6 @@
     { id: 'today', label: 'Today', icon: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/>' },
     { id: 'cal', label: 'Calendar', icon: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/>' },
     { id: 'trends', label: 'Trends', icon: '<path d="M4 19h16"/><path d="M4 15l4.5-5L12 13.5 20 6"/>' },
-    { id: 'lib', label: 'Library', icon: '<path d="M5 4.5h6a2 2 0 0 1 2 2V20a1.6 1.6 0 0 0-1.6-1.6H5z"/><path d="M19 4.5h-6a2 2 0 0 0-2 2V20a1.6 1.6 0 0 1 1.6-1.6H19z"/>' },
     { id: 'goals', label: 'Goals', icon: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/><path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20"/>' },
     // Chat is a link out to Telegram until the FastAPI backend lands, but it belongs
     // on the bar: it is the thing the athlete does most, and burying it in a card at
@@ -68,8 +67,14 @@
 
   var state = {
     slug: 'jamie', tab: 'today', data: null, lib: null,
-    chart: null, trend: 'fit', calMonth: null, calDay: null, libGroup: null
+    chart: null, trend: 'fit', fitSport: 'all',
+    calMonth: null, calDay: null, libGroup: null
   };
+
+  // Coarse pointer => the tooltip is replaced by a fixed readout line.
+  var TOUCH = (function () {
+    try { return matchMedia('(hover: none)').matches; } catch (e) { return false; }
+  })();
 
   var $ = function (s) { return document.querySelector(s); };
   var esc = function (s) {
@@ -473,11 +478,29 @@
               foot: 'Weekly planned and completed TSS.' }
     }[sel];
 
+    // Overall CTL or one discipline. fitnessBySport carries Ride/Run/Swim for all
+    // three seasons, so the whole chart - seasons, race alignment and all - just
+    // switches which series it reads.
+    var sportBar = '';
+    if (sel === 'fit') {
+      var avail = Object.keys((d.fitnessBySport || {}).current || {});
+      if (avail.length) {
+        sportBar = '<div class="seg sub" id="fitSport">' +
+          [['all', 'All']].concat(avail.map(function (x) { return [x, x]; }))
+          .map(function (o) {
+            return '<button type="button" data-s="' + esc(o[0]) + '" aria-selected="' +
+              (state.fitSport === o[0]) + '">' + esc(o[1]) + '</button>';
+          }).join('') + '</div>';
+      }
+    }
+
     var zoomable = (sel === 'fit' || sel === 'heat');
     var action = zoomable
       ? '<button type="button" class="card-a" id="zreset">Reset zoom</button>' : '';
 
-    var h = seg + card(META.title,
+    var h = seg + sportBar + card(META.title +
+      (sel === 'fit' && state.fitSport !== 'all' ? ' · ' + state.fitSport : ''),
+      '<div class="readout" id="ro"><b>—</b><span></span></div>' +
       '<div class="chartbox tall"><canvas id="c-now"></canvas></div>',
       { action: action, foot: META.foot });
 
@@ -491,6 +514,15 @@
       renderTrends();
       drawTrend();
     };
+    var fs = $('#fitSport');
+    if (fs) fs.onclick = function (e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      state.fitSport = b.dataset.s;
+      renderTrends();
+      drawTrend();
+    };
+
     var zr = $('#zreset');
     if (zr) zr.onclick = function () { if (state.chart && state.chart.resetZoom) state.chart.resetZoom(); };
   }
@@ -583,15 +615,21 @@
         h += '<p class="flag' + (n >= hp.target_min ? ' ok' : '') + '">Weekly target ' +
           hp.target_min + '–' + hp.target_max + ' exposures · ' + n + ' logged.</p>';
       }
-      var ev = (ha.events || []).slice().reverse().slice(0, 12);
+      var ev = (ha.events || []).slice().reverse().slice(0, 14);
       if (ev.length) {
+        // heat.py emits [date, dose, PCT, label] - pct is the acclimation score on
+        // that date, NOT a temperature. This column read "Temp 8.2°" for a 45°C hot
+        // bath, which is how Jamie spotted it.
         h += card('Recent exposures', '<table class="tbl">' +
-          '<thead><tr><th>Date</th><th>Method</th><th>Temp</th></tr></thead><tbody>' +
+          '<thead><tr><th>Date</th><th>Method</th><th>Dose</th><th>Score</th></tr></thead><tbody>' +
           ev.map(function (e) {
             return '<tr><td class="lbl">' + esc(dow(e[0]) + ' ' + dnum(e[0])) + '</td><td>' +
-              esc(e[3] || '—') + '</td><td class="t">' +
-              (e[2] != null ? Number(e[2]).toFixed(1) + '°' : '—') + '</td></tr>';
-          }).join('') + '</tbody></table>', { flush: true });
+              esc(e[3] || '—') + '</td><td>' +
+              (e[1] != null ? Number(e[1]).toFixed(2) : '—') + '</td><td class="t">' +
+              (e[2] != null ? Number(e[2]).toFixed(0) + '%' : '—') + '</td></tr>';
+          }).join('') + '</tbody></table>',
+          { flush: true, foot: 'Dose is the credit for that exposure; score is the ' +
+                              'acclimation level it left you at. Neither is a temperature.' });
       }
     }
 
@@ -616,13 +654,20 @@
           mini(fmt(peak(f.Ride)), 'bike best') +
           mini(fmt(latest(f.Run)), 'run now') +
           mini(fmt(peak(f.Run)), 'run best') + '</div>';
+        // Duration and total grams, not just the rate: 120 g/hr held for an hour and
+        // 120 g/hr held for five hours are different achievements, and the rate alone
+        // hides which one happened (Jamie, 3 Aug 2026).
         h += card('Logged sessions', '<table class="tbl">' +
-          '<thead><tr><th>Date</th><th>Session</th><th>Sport</th><th>g/hr</th></tr></thead><tbody>' +
-          f.points.slice().reverse().slice(0, 20).map(function (r) {
+          '<thead><tr><th>Date</th><th>Sport</th><th>Time</th><th>Total</th><th>g/hr</th></tr></thead><tbody>' +
+          f.points.slice().reverse().slice(0, 24).map(function (r) {
+            var grams = (r.g_per_hr != null && r.dur) ? Math.round(r.g_per_hr * r.dur / 60) : null;
             return '<tr><td class="lbl">' + esc(dow(r.date) + ' ' + dnum(r.date)) + '</td><td>' +
-              esc(r.name || '—') + '</td><td>' + esc(r.sport || '—') + '</td><td class="t">' +
+              esc(r.sport || '—') + '</td><td>' + hhmm(r.dur) + '</td><td>' +
+              (grams != null ? grams + ' g' : '—') + '</td><td class="t">' +
               Number(r.g_per_hr).toFixed(0) + '</td></tr>';
-          }).join('') + '</tbody></table>', { flush: true });
+          }).join('') + '</tbody></table>',
+          { flush: true, foot: 'A rate held for four hours is a different result from ' +
+                              'the same rate held for one, so the duration is shown with it.' });
       }
     }
 
@@ -714,7 +759,10 @@
             filter: function (item) { return item.text && item.text[0] !== '_'; }
           }
         },
+        // Off on touch devices - see setReadout(). Kept for mouse, where a tooltip
+        // near the cursor is genuinely the best affordance.
         tooltip: {
+          enabled: !TOUCH,
           backgroundColor: C.ink, borderColor: C.ink, padding: 9,
           titleFont: { family: 'DM Mono', size: 10 },
           bodyFont: { family: 'DM Mono', size: 10 },
@@ -737,6 +785,49 @@
     };
   }
 
+  function readout(txt, sub) {
+    var el = $('#ro');
+    if (!el) return;
+    el.firstChild.textContent = txt || '—';
+    el.lastChild.textContent = sub || '';
+  }
+
+  // Wire a chart so dragging across it writes into the readout. Uses the SAME
+  // callbacks the tooltip would have used, so mouse and touch never disagree.
+  function attachReadout(chart) {
+    if (!chart) return;
+    var cbs = (chart.options.plugins.tooltip || {}).callbacks || {};
+    var canvas = chart.canvas;
+
+    var report = function (evt) {
+      var pts = chart.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
+      if (!pts.length) return;
+      var items = pts.map(function (pt) {
+        var ds = chart.data.datasets[pt.datasetIndex];
+        return {
+          dataset: ds, datasetIndex: pt.datasetIndex, dataIndex: pt.index,
+          raw: ds.data[pt.index],
+          parsed: chart.getDatasetMeta(pt.datasetIndex).data[pt.index].parsed
+        };
+      }).filter(function (it) {
+        return it.dataset.label && it.dataset.label[0] !== '_' && it.parsed.y != null;
+      });
+      if (!items.length) return;
+      var title = cbs.title ? cbs.title(items) : '';
+      var lines = [];
+      items.forEach(function (it) {
+        var out = cbs.label ? cbs.label(it) : null;
+        if (out == null) return;
+        lines = lines.concat(out);
+      });
+      readout(title, lines.filter(Boolean).join('  ·  '));
+    };
+
+    ['touchstart', 'touchmove', 'mousemove'].forEach(function (ev) {
+      canvas.addEventListener(ev, report, { passive: true });
+    });
+  }
+
   function drawTrend() {
     if (typeof Chart === 'undefined' || !state.data) return;
     var el = document.getElementById('c-now');
@@ -745,6 +836,7 @@
     var fn = { fit: chartFitness, load: chartLoad, heat: chartHeat,
                fuel: chartFuel, plan: chartPlan }[state.trend];
     if (fn) state.chart = fn(el, state.data);
+    attachReadout(state.chart);
   }
 
   function chartFitness(el, d) {
@@ -759,6 +851,15 @@
     var racePrev = (p.prev_race && p.prev_race.date) || p.prev_race_date;
     var racePrev2 = p.prev2_race_date;
 
+    // 'all' = overall CTL; otherwise the per-sport series for the same season.
+    var pick3 = function (which) {
+      if (state.fitSport === 'all') {
+        return { current: d.fitnessThis, prev: d.fitnessPrev, prev2: d.fitnessPrev2 }[which];
+      }
+      var bs = d.fitnessBySport || {};
+      return ((bs[which] || {})[state.fitSport]) || [];
+    };
+
     var rel = function (rows, race) {
       if (!race) return [];
       var r0 = doy0(race);
@@ -772,7 +873,7 @@
 
     var ds = [];
 
-    if (cp.target_ctl_min != null && raceThis) {
+    if (cp.target_ctl_min != null && raceThis && state.fitSport === 'all') {
       var x0 = doy0(todayISO()) - doy0(raceThis);
       ds.push({
         label: 'Target band', order: 9,
@@ -788,21 +889,21 @@
       });
     }
 
-    if ((d.fitnessPrev2 || []).length && racePrev2) {
+    if ((pick3('prev2') || []).length && racePrev2) {
       ds.push({
         label: (p.prev2_race_name || '2023').replace(' IM', " '23"), order: 6,
-        data: rel(d.fitnessPrev2, racePrev2), borderColor: C.blue, borderWidth: 1,
+        data: rel(pick3('prev2'), racePrev2), borderColor: C.blue, borderWidth: 1,
         borderDash: [5, 3], pointRadius: 0, tension: 0.3, fill: false
       });
     }
-    if ((d.fitnessPrev || []).length && racePrev) {
+    if ((pick3('prev') || []).length && racePrev) {
       ds.push({
         label: 'Last season', order: 5,
-        data: rel(d.fitnessPrev, racePrev), borderColor: C.muted, borderWidth: 1,
+        data: rel(pick3('prev'), racePrev), borderColor: C.muted, borderWidth: 1,
         borderDash: [2, 3], pointRadius: 0, tension: 0.3, fill: false
       });
     }
-    if ((cp.planned_build || []).length) {
+    if ((cp.planned_build || []).length && state.fitSport === 'all') {
       ds.push({
         label: 'Planned', order: 3,
         data: relObj(cp.planned_build, raceThis), borderColor: C.green, borderWidth: 1.4,
@@ -811,10 +912,10 @@
     }
     ds.push({
       label: 'This season', order: 1,
-      data: rel(d.fitnessThis, raceThis), borderColor: C.green, borderWidth: 2.2,
+      data: rel(pick3('current'), raceThis), borderColor: C.green, borderWidth: 2.2,
       pointRadius: 0, tension: 0.25, fill: false
     });
-    if ((cp.target_milestones || []).length && raceThis) {
+    if ((cp.target_milestones || []).length && raceThis && state.fitSport === 'all') {
       var r0m = doy0(raceThis);
       ds.push({
         label: 'Milestones', order: 0, showLine: false,
@@ -1012,7 +1113,7 @@
       label: function (it) {
         var raw = it.raw || {};
         return raw.lbl
-          ? raw.lbl + (raw.temp != null ? ' · ' + Number(raw.temp).toFixed(1) + '°' : '')
+          ? raw.lbl + (raw.pct != null ? ' · score ' + Number(raw.pct).toFixed(0) + '%' : '')
           : 'Score ' + Number(it.parsed.y).toFixed(0) + '%';
       }
     };
@@ -1029,7 +1130,7 @@
         label: 'Exposures', order: 0, showLine: false,
         data: ha.events.map(function (e) {
           return { x: doy(e[0]), y: byDate[e[0]] != null ? byDate[e[0]] : 0,
-                   lbl: e[3], temp: e[2] };
+                   lbl: e[3], pct: e[2] };
         }),
         borderColor: C.amber, backgroundColor: C.amber, pointRadius: 3
       });
@@ -1057,14 +1158,14 @@
     var out = { Ride: [], Run: [], points: cb, from: cb[0].date };
     for (var x = d0; x <= d1; x++) {
       ['Ride', 'Run'].forEach(function (sport) {
-        var best = null;
+        var best = null, bestDur = null;
         cb.forEach(function (r) {
           if (fam(r.sport) !== sport) return;
           var rd = doy0(r.date);
           if (rd > x || rd <= x - FUEL_WIN) return;   // trailing 14-day window
-          if (best == null || r.g_per_hr > best) best = r.g_per_hr;
+          if (best == null || r.g_per_hr > best) { best = r.g_per_hr; bestDur = r.dur; }
         });
-        out[sport].push({ x: x, y: best });           // null = nothing in the window
+        out[sport].push({ x: x, y: best, dur: bestDur });  // null = nothing in the window
       });
     }
     return out;
@@ -1103,7 +1204,9 @@
     o.plugins.tooltip.callbacks = {
       title: function (items) { return label(items[0].parsed.x); },
       label: function (it) {
-        return it.dataset.label + ': ' + Number(it.parsed.y).toFixed(0) + ' g/hr';
+        var r = (it.raw || {});
+        return it.dataset.label + ': ' + Number(it.parsed.y).toFixed(0) + ' g/hr' +
+          (r.dur ? ' over ' + hhmm(r.dur) : '');
       }
     };
 
@@ -1174,9 +1277,13 @@
 
   /* ── Library ─────────────────────────────────────────────────────────── */
 
-  function renderLibrary() {
+  /* ── session library ─────────────────────────────────────────────────── */
+  /* Lives inside Settings rather than owning a tab: it is reference material, looked
+   * up occasionally, and it was crowding the bar against things used daily. */
+
+  function libraryBlock() {
     var lib = state.lib;
-    if (!lib) { $('#v-lib').innerHTML = '<div class="card"><div class="skel"></div></div>'; return; }
+    if (!lib) return '';
     var types = lib.session_types || {};
     var groups = Object.keys(types);
     var sel = state.libGroup || groups[0];
@@ -1184,43 +1291,32 @@
       return a + Object.keys(types[g]).filter(function (k) { return k[0] !== '_'; }).length;
     }, 0);
 
-    var h = '<div class="seg wrap" id="libSeg">' + groups.map(function (g) {
+    var seg = '<div class="seg wrap" id="libSeg">' + groups.map(function (g) {
       return '<button type="button" data-g="' + esc(g) + '" aria-selected="' +
-        (g === sel) + '">' + esc(g) + '</button>';
+        (g === sel) + '">' + esc(g.replace(/_/g, ' ')) + '</button>';
     }).join('') + '</div>';
 
     var entries = Object.keys(types[sel] || {}).filter(function (k) { return k[0] !== '_'; });
-    h += card(sel.replace(/_/g, ' ') + ' · ' + entries.length + ' of ' + total,
+    return card('Session library · ' + total, seg +
       '<div class="lib">' + (entries.length ? entries.map(function (name) {
-        var s = types[sel][name] || {};
-        var prog = (s.progression || []).map(function (p) {
-          if (p.reps && p.min) return p.reps + '×' + p.min + 'min';
-          if (p.bike_min) return p.bike_min + '/' + p.run_min + 'min';
+        var x = types[sel][name] || {};
+        var prog = (x.progression || []).map(function (q) {
+          if (q.reps && q.min) return q.reps + '×' + q.min + 'min';
+          if (q.bike_min) return q.bike_min + '/' + q.run_min + 'min';
           return null;
         }).filter(Boolean);
         return '<details><summary><span class="nm">' + esc(name.replace(/_/g, ' ')) + '</span>' +
-          '<span class="zn">' + esc([s.zone, s.if != null ? 'IF ' + s.if : null]
-            .filter(Boolean).join(' · ')) + '</span></summary>' +
-          '<div class="inner">' +
-          '<div class="kv">' + esc([s.system, s.min_phase ? 'from ' + s.min_phase : null,
-               s.duration ? String(s.duration).replace(/_/g, ' ') : null].filter(Boolean).join(' · ')) +
+          '<span class="zn">' + esc([x.zone, x.if != null ? 'IF ' + x.if : null]
+            .filter(Boolean).join(' · ')) + '</span></summary><div class="inner">' +
+          '<div class="kv">' + esc([x.system, x.min_phase ? 'from ' + x.min_phase : null,
+            x.duration ? String(x.duration).replace(/_/g, ' ') : null].filter(Boolean).join(' · ')) +
           '</div>' +
-          (prog.length ? '<div class="prog">' + prog.map(function (p) {
-            return '<span>' + esc(p) + '</span>';
+          (prog.length ? '<div class="prog">' + prog.map(function (q) {
+            return '<span>' + esc(q) + '</span>';
           }).join('') + '</div>' : '') +
-          (s.rest_min ? '<div class="prog"><span>' + s.rest_min + 'min rest</span></div>' : '') +
-          (s.note ? '<p class="note">' + esc(s.note) + '</p>' : '') +
-          (s.dose ? '<p class="note">' + esc(s.dose) + '</p>' : '') +
+          (x.note ? '<p class="note">' + esc(x.note) + '</p>' : '') +
           '</div></details>';
-      }).join('') : '<div class="empty">No sessions in this group</div>') + '</div>', { flush: true });
-
-    $('#v-lib').innerHTML = h;
-    $('#libSeg').onclick = function (e) {
-      var b = e.target.closest('button');
-      if (!b) return;
-      state.libGroup = b.dataset.g;
-      renderLibrary();
-    };
+      }).join('') : '<div class="empty">No sessions in this group</div>') + '</div>');
   }
 
   /* ── Goals ───────────────────────────────────────────────────────────── */
@@ -1270,18 +1366,29 @@
         { flush: true, foot: 'Bike IF scales with √CTL from the anchor race.' });
     }
 
-    var pr = p.prev_race, tg = p.race_targets;
-    if (pr || tg) {
-      h += card('Splits · last race vs target', '<table class="tbl">' +
-        '<thead><tr><th>Leg</th><th>' + esc(pr ? pr.date.slice(0, 4) : 'Last') +
-        '</th><th>Target</th></tr></thead><tbody>' +
+    var pr = p.prev_race, pr2 = p.prev2_race, tg = p.race_targets;
+    if (pr || pr2 || tg) {
+      var cols = [];
+      if (pr2) cols.push([pr2.date.slice(0, 4), pr2]);
+      if (pr) cols.push([pr.date.slice(0, 4), pr]);
+      cols.push(['Target', tg || {}]);
+      h += card('Splits · progression to target', '<table class="tbl">' +
+        '<thead><tr><th>Leg</th>' + cols.map(function (c) {
+          return '<th>' + esc(c[0]) + '</th>';
+        }).join('') + '</tr></thead><tbody>' +
         [['Swim', 'swim_time'], ['T1/T2', 't1t2_time'], ['Bike', 'bike_time'],
          ['Run', 'run_time'], ['Total', 'total_time']].map(function (row) {
           var isTotal = row[0] === 'Total';
           return '<tr' + (isTotal ? ' class="hl"' : '') + '><td class="lbl">' + row[0] + '</td>' +
-            '<td>' + esc((pr && pr[row[1]]) || '—') + '</td>' +
-            '<td class="' + (isTotal ? 't' : '') + '">' + esc((tg && tg[row[1]]) || '—') + '</td></tr>';
-        }).join('') + '</tbody></table>', { flush: true });
+            cols.map(function (c, i) {
+              var last = i === cols.length - 1;
+              return '<td class="' + (isTotal && last ? 't' : '') + '">' +
+                esc(c[1][row[1]] || '—') + '</td>';
+            }).join('') + '</tr>';
+        }).join('') + '</tbody></table>',
+        { flush: true,
+          foot: pr2 ? 'Barcelona 2023 reconstructed from the Intervals.icu multisport ' +
+                      'legs; its stored date was wrong by six days and is corrected.' : '' });
     }
 
     h += chatCTA('Ask about pacing or the plan');
@@ -1362,15 +1469,19 @@
       ['Carbohydrate', x.carb ? Number(x.carb.g_per_hr).toFixed(0) + ' g/hr' : 'not logged',
        !!x.carb],
       ['Water', lg.hydration_ml != null ? lg.hydration_ml + ' ml' : 'not logged'],
-      ['Sodium', 'not measured']
-    ]), { foot: 'Sodium has no field upstream - the sweat-sodium test is still to be ' +
-                'booked, so there is nothing to show rather than a zero.' });
+      ['Sodium', lg.nutrition_mg_sodium != null ? lg.nutrition_mg_sodium + ' mg' : 'not logged',
+       lg.nutrition_mg_sodium != null],
+      (x.carb && x.carb.dur) ? ['Over', hhmm(x.carb.dur)] : null,
+      (x.carb && x.carb.dur && x.carb.g_per_hr != null)
+        ? ['Total carbohydrate', Math.round(x.carb.g_per_hr * x.carb.dur / 60) + ' g'] : null
+    ]), { foot: 'Sodium is captured from your reply to the post-session question. ' +
+                'Sweat sodium concentration is a separate test, still to be booked.' });
 
     h += card('Heat', x.heat
       ? kvRows([
           ['Exposure', x.heat[3] || 'logged', true],
-          x.heat[2] != null ? ['Temperature', Number(x.heat[2]).toFixed(1) + '°C'] : null,
-          x.heat[1] != null ? ['Dose', Number(x.heat[1]).toFixed(2)] : null
+          x.heat[1] != null ? ['Dose', Number(x.heat[1]).toFixed(2)] : null,
+          x.heat[2] != null ? ['Acclimation after', Number(x.heat[2]).toFixed(0) + '%'] : null
         ])
       : '<div class="empty">No heat exposure logged this day</div>', { flush: true });
 
@@ -1420,10 +1531,19 @@
       (('serviceWorker' in navigator) ? 'cached for offline use' : 'not supported') +
       '</td></tr></tbody></table>', { flush: true });
 
+    h += libraryBlock();
+
     $('#v-set').innerHTML = h;
     $('#v-set').querySelector('.body-flush').onclick = function (e) {
       var b = e.target.closest('.pickrow');
       if (b) pick(b.dataset.slug);
+    };
+    var ls = $('#libSeg');
+    if (ls) ls.onclick = function (e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      state.libGroup = b.dataset.g;
+      renderSettings();
     };
   }
 
@@ -1435,7 +1555,7 @@
   }
 
   function renderAll() {
-    renderToday(); renderCalendar(); renderTrends(); renderLibrary();
+    renderToday(); renderCalendar(); renderTrends();
     renderGoals(); renderSettings();
     var p = state.data.profile || {};
     if (p.race_date) {
@@ -1522,7 +1642,7 @@
   function loadLibrary() {
     fetch('../ClaudeCoach/public/session-library.json', { cache: 'default' })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) { state.lib = j; if (state.lib) renderLibrary(); })
+      .then(function (j) { state.lib = j; if (state.lib && state.data) renderSettings(); })
       .catch(function () { /* library is a nice-to-have; the rest of the app stands */ });
   }
 

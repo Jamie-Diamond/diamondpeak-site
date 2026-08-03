@@ -187,7 +187,8 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
       "avg_power": <avg_power or null>, "norm_power": <norm_power or null>, "avg_hr": <avg_hr or null>,
       "rpe": null, "feel": null,
       "injury_pain_during": null, "injury_pain_next_morning": null,
-      "nutrition_g_carb": null, "hydration_ml": null, "notes": null,
+      "nutrition_g_carb": null, "hydration_ml": null,
+      "nutrition_mg_sodium": null, "notes": null,
       "logged_at": "<current datetime as YYYY-MM-DDTHH:MM:SS>", "stub": true
     }}
 
@@ -238,9 +239,9 @@ RIDE:
 - Structured (Strava laps show alternating hard/easy, or ICU >3 intervals): header line + one line per WORK interval.
   Header: NxDUR @ AVG W (X% FTP) · NP XXXw · IF X.XX
   Rep lines: Rep N: DUR · XXXw (X% FTP) · AVGbpm/MAXbpm
-  Final line: completion note if intervals missed, else "Nutrition — g carbs/hr and bottles?"
-- Unstructured ≤90 min: NP + IF | "Nutrition — g carbs/hr and bottles?"
-- Unstructured >90 min: NP + IF | aerobic decoupling % | "Nutrition — g carbs/hr and bottles? (recent avg: [avg g/hr from last 4 rides >90 min in session-log.json with nutrition_g_carb set] · race target {nutrition_target}g/hr)"
+  Final line: completion note if intervals missed, else "Nutrition — g carbs/hr, bottles, and sodium?"
+- Unstructured ≤90 min: NP + IF | "Nutrition — g carbs/hr, bottles, and sodium?"
+- Unstructured >90 min: NP + IF | aerobic decoupling % | "Nutrition — g carbs/hr, bottles, and sodium? (recent avg: [avg g/hr from last 4 rides >90 min in session-log.json with nutrition_g_carb set] · race target {nutrition_target}g/hr)"
 
 RUN:
 {run_injury_ask}
@@ -628,7 +629,7 @@ def _defer_trailing_question(analysis, slug, activity_id, sport, name, state=Non
     stripped = []
     # `contains ?`, not `ends with ?`: the real question lines carry a trailing
     # parenthetical — "Injury pain score during and this morning? (0-10)",
-    # "Nutrition — g carbs/hr and bottles? (recent avg: 54g/hr · race target 70g/hr)".
+    # "Nutrition — g carbs/hr, bottles, and sodium? (recent avg: 54g/hr · race target 70g/hr)".
     # Scanning from the bottom and stopping at the first non-question line keeps this
     # confined to the trailing block.
     while lines and (not lines[-1].strip() or "?" in lines[-1]):

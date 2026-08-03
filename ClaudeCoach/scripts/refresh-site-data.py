@@ -772,12 +772,18 @@ def post_process(data):
         except Exception:
             pass
 
-    # Session log — last 10 confirmed (non-stub) entries
+    # Session log — last 60 confirmed (non-stub) entries.
+    #
+    # Was 10, which was too short to be useful and actively misleading: fuelling is
+    # logged on a minority of sessions, so a 10-row window was all nulls and the app
+    # reported "no water logged" while ten real values (2800ml, 1800ml, 1100ml...)
+    # sat just outside it. The published FIELDS are unchanged - the allow-list decides
+    # those - this only widens how far back the rows go.
     if SESSION_LOG.exists():
         try:
             all_entries = json.loads(SESSION_LOG.read_text())
             confirmed = [e for e in all_entries if not e.get("stub", True)]
-            data["sessionLog"] = confirmed[-10:]
+            data["sessionLog"] = confirmed[-60:]
         except Exception:
             pass
 

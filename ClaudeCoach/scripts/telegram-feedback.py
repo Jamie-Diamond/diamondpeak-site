@@ -73,6 +73,14 @@ Output a JSON object with these fields (omit a field entirely if not mentioned):
   "injury_pain_next_morning": integer 1-10  (runs only, if injury is tracked)
   "nutrition_g_carb": integer grams  (rides only)
   "hydration_ml": integer ml  (rides only)
+  "nutrition_mg_sodium": integer mg  (rides only). Total sodium taken on, in
+      milligrams. Athletes state this in several forms - convert to a total:
+      an explicit total ("1500mg sodium"), a rate ("about 700mg an hour" x the
+      session duration), or a count of products whose sodium content you know
+      ("3 Precision Hydration 1500 sachets" = 3 x 1500mg per litre at the stated
+      mix). If a product's sodium content is not something you actually know,
+      omit the field - do NOT guess a figure. Sweat sodium CONCENTRATION (mg/L,
+      from a sweat test) is a different measurement and does not go here.
   "notes": string (anything else worth keeping)
 
 Output ONLY the JSON object. No other text."""
@@ -193,7 +201,8 @@ def apply_feedback(entries: list, idx: int, parsed: dict, raw_text: str,
                    slug: str = "") -> dict:
     stub = entries[idx]
     allowed = {"rpe", "feel", "injury_pain_during", "injury_pain_next_morning",
-               "nutrition_g_carb", "hydration_ml", "notes", "rpe_confirmed"}
+               "nutrition_g_carb", "hydration_ml", "nutrition_mg_sodium",
+               "notes", "rpe_confirmed"}
     had_rpe = stub.get("rpe")
     for k, v in parsed.items():
         if k in allowed and v is not None:
@@ -277,6 +286,8 @@ def confirmation_msg(stub: dict, parsed: dict) -> str:
         lines.append(f"Injury during: {parsed['injury_pain_during']}/10, next morning: {parsed.get('injury_pain_next_morning', '?')}/10")
     if parsed.get("nutrition_g_carb"):
         lines.append(f"Nutrition: {parsed['nutrition_g_carb']}g carbs")
+    if parsed.get("nutrition_mg_sodium"):
+        lines.append(f"Sodium: {parsed['nutrition_mg_sodium']}mg")
     if parsed.get("notes"):
         lines.append("Notes saved")
     if parsed.get("rpe_confirmed") is True:

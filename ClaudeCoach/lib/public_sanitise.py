@@ -139,6 +139,15 @@ TRAINING_DATA_SPEC = {
             "bike_time": S, "bike_np_watts": S, "bike_if": S, "bike_vi": S,
             "run_time": S, "run_pace": S, "total_time": S,
         },
+        # 2023 Barcelona, same shape and same class of data as prev_race - split
+        # times and a bike NP off a race that is already named publicly. `notes` is
+        # NOT named here, matching prev_race, and neither is `source`.
+        "prev2_race": {
+            "name": S, "date": S,
+            "swim_time": S, "t1t2_time": S,
+            "bike_time": S, "bike_np_watts": S, "bike_if": S, "bike_vi": S,
+            "run_time": S, "run_pace": S, "total_time": S,
+        },
         "race_targets": {
             "swim_time": S, "swim_pace": S, "swim_pace_per_100m": S,
             "swim_gain": S, "swim_how": S,
@@ -273,7 +282,16 @@ TRAINING_DATA_SPEC = {
         # upstream. The only occurrence of the word is currentState.open_actions
         # ("Book Precision Hydration sweat-sodium test", still pending), which is
         # itself withheld. Sodium cannot be published because it is not measured.
-        "nutrition_g_carb": S, "hydration_ml": S,
+        # nutrition_mg_sodium added 3 Aug 2026. Jamie asked why sodium was absent -
+        # the honest answer was that nothing ever captured it: there was no field in
+        # the session-log schema and no prompt asking for it, so the figure was
+        # discussed in chat and then discarded. Field + capture added together;
+        # publishing it is the same decision as carbs and water.
+        #
+        # This is sodium CONSUMED (mg). Sweat sodium CONCENTRATION (mg/L, from the
+        # Precision Hydration test, still unbooked) is a different measurement and is
+        # NOT published - it is a physiological trait, not a training input.
+        "nutrition_g_carb": S, "hydration_ml": S, "nutrition_mg_sodium": S,
     }),
 }
 
