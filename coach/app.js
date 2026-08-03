@@ -703,23 +703,41 @@
         // Duration and total grams, not just the rate: 120 g/hr held for an hour and
         // 120 g/hr held for five hours are different achievements, and the rate alone
         // hides which one happened (Jamie, 3 Aug 2026).
-        // Water and sodium come from the session log, joined by date, so all three
-        // intakes for a session read on one line instead of being buried per-activity.
+        // Rows are every session with ANY intake logged, not just the ones with carbs.
+        // Keying off carb sessions alone dropped a water-only session (Kathryn had one),
+        // which is the same class of error as truncating the list: real data, no row to
+        // put it on.
         var logBy = {};
         (d.sessionLog || []).forEach(function (e) { logBy[e.date] = e; });
-        h += card('Logged sessions', '<table class="tbl">' +
+        var carbBy = {};
+        f.points.forEach(function (r) { carbBy[r.date] = r; });
+
+        var dates = {};
+        Object.keys(carbBy).forEach(function (k) { dates[k] = 1; });
+        (d.sessionLog || []).forEach(function (e) {
+          if (e.hydration_ml != null || e.nutrition_mg_sodium != null ||
+              e.nutrition_g_carb != null) dates[e.date] = 1;
+        });
+        var rows = Object.keys(dates).sort().reverse();
+
+        h += card('Logged sessions · ' + rows.length,
+          '<div class="scroller"><table class="tbl">' +
           '<thead><tr><th>Date</th><th>Time</th><th>Carb</th><th>g/hr</th>' +
           '<th>Water</th><th>Na</th></tr></thead><tbody>' +
-          f.points.slice().reverse().slice(0, 24).map(function (r) {
-            var grams = (r.g_per_hr != null && r.dur) ? Math.round(r.g_per_hr * r.dur / 60) : null;
-            var lg = logBy[r.date] || {};
-            return '<tr><td class="lbl">' + esc(dow(r.date) + ' ' + dnum(r.date)) + '</td><td>' +
-              hhmm(r.dur) + '</td><td>' + (grams != null ? grams + 'g' : '—') +
-              '</td><td class="t">' + Number(r.g_per_hr).toFixed(0) + '</td><td>' +
+          rows.map(function (dt) {
+            var r = carbBy[dt] || {}, lg = logBy[dt] || {};
+            var dur = r.dur != null ? r.dur : lg.duration_min;
+            var grams = (r.g_per_hr != null && r.dur)
+              ? Math.round(r.g_per_hr * r.dur / 60)
+              : (lg.nutrition_g_carb != null ? Math.round(lg.nutrition_g_carb) : null);
+            return '<tr><td class="lbl">' + esc(dow(dt) + ' ' + dnum(dt)) + '</td><td>' +
+              hhmm(dur) + '</td><td>' + (grams != null ? grams + 'g' : '—') +
+              '</td><td class="t">' +
+              (r.g_per_hr != null ? Number(r.g_per_hr).toFixed(0) : '—') + '</td><td>' +
               (lg.hydration_ml != null ? Math.round(lg.hydration_ml / 100) / 10 + 'L' : '—') +
               '</td><td>' + (lg.nutrition_mg_sodium != null
                 ? Math.round(lg.nutrition_mg_sodium) + 'mg' : '—') + '</td></tr>';
-          }).join('') + '</tbody></table>',
+          }).join('') + '</tbody></table></div>',
           { flush: true, foot: 'A rate held for four hours is a different result from the ' +
                               'same rate held for one, so duration is shown with it. Water ' +
                               'and sodium appear once logged - sodium capture is new, so ' +
