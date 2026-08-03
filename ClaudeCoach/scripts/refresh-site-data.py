@@ -238,6 +238,7 @@ def _build_jamie_data(client) -> dict:
         avg_p  = a.get("average_watts")
         norm_p = a.get("icu_weighted_avg_watts")
         recent.append({
+            "_aid":   a.get("id"),   # removed by route_shape.attach_shapes
             "date":   a.get("start_date_local","")[:10],
             "sport":  sport,
             "name":   a.get("name",""),
@@ -341,6 +342,18 @@ def _build_jamie_data(client) -> dict:
     # weightTrend (last 30 days where weight not null)
     weight_trend = [{"date":w.get("id","")[:10],"kg":w["weight"]}
                     for w in wellness_60 if w.get("weight")]
+
+    # Route outlines. Shape only, normalised into a unit box - see lib/route_shape.py
+    # for why nothing positional is published.
+    try:
+        from route_shape import attach_shapes
+        _n = attach_shapes(client, BASE, "jamie", recent, log=log)
+        if _n:
+            log(f"[jamie] route shapes: {_n} newly fetched")
+    except Exception as e:
+        log(f"[jamie] route shapes skipped (non-fatal): {e}")
+        for _r in recent:
+            _r.pop("_aid", None)
 
     # Power curve: best efforts at standard durations over the last 90 days, against
     # THE SAME 90 DAYS ONE YEAR EARLIER.
@@ -1002,6 +1015,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         avg_p  = a.get("average_watts")
         norm_p = a.get("icu_weighted_avg_watts")
         recent.append({
+            "_aid":   a.get("id"),   # removed by route_shape.attach_shapes
             "date":   a.get("start_date_local", "")[:10],
             "sport":  sport,
             "name":   a.get("name", ""),
@@ -1121,6 +1135,17 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 _patl += (_day_tss - _patl) / 7.0
                 _entry["tsb"] = round(_pctl - _patl, 1)
                 _entry["projected"] = True
+
+    # Route outlines, shape only (see lib/route_shape.py).
+    try:
+        from route_shape import attach_shapes
+        _n = attach_shapes(client, BASE, slug, recent, log=log)
+        if _n:
+            log(f"[{slug}] route shapes: {_n} newly fetched")
+    except Exception as e:
+        log(f"[{slug}] route shapes skipped (non-fatal): {e}")
+        for _r in recent:
+            _r.pop("_aid", None)
 
     # -- session log + swim log from local files -------------------------------
     # 60, matching Jamie's path: fuelling is logged on a minority of sessions, so a

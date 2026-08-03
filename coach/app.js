@@ -1694,6 +1694,21 @@
 
     h += '<div class="dr-b">';
 
+    // Route outline. A unit-box shape (no coordinates - see lib/route_shape.py), so it
+    // draws straight into a 0..1 viewBox with no projection work here.
+    if (a.shape && a.shape.length > 3) {
+      h += '<div class="route"><svg viewBox="-0.04 -0.04 1.08 1.08" ' +
+        'preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
+        '<polyline points="' + a.shape.map(function (pt) {
+          return pt[0] + ',' + pt[1];
+        }).join(' ') + '"/>' +
+        '<circle cx="' + a.shape[0][0] + '" cy="' + a.shape[0][1] + '" r="0.032"/>' +
+        '</svg><span class="route-c">' +
+        esc([a.dist ? Number(a.dist).toFixed(1) + ' km' : null,
+             a.dur ? hhmm(a.dur) : null].filter(Boolean).join(' · ')) +
+        '</span></div>';
+    }
+
     h += card('Summary', kvRows([
       ['Duration', hhmm(a.dur != null ? a.dur : (pl.duration_min != null ? pl.duration_min : lg.duration_min)), true],
       (a.dist || lg.distance_km) ? ['Distance', Number(a.dist || lg.distance_km).toFixed(1) + ' km'] : null,

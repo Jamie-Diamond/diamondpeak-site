@@ -522,6 +522,25 @@ table.tbl tr.prov td{
   color:var(--muted);
 }
 
+/* ── route outline ─────────────────────────────────────────────────────── */
+/* Drawn from a unit-box shape, so the viewBox is 0..1 and the stroke is scaled with
+   vector-effect rather than by fighting the transform. */
+.route{
+  position:relative;background:var(--paper);border:1px solid var(--rule);border-radius:4px;
+  padding:12px;margin:0 0 14px;display:flex;align-items:center;justify-content:center;
+}
+.route svg{width:100%;max-width:230px;height:150px;display:block;overflow:visible}
+.route polyline{
+  fill:none;stroke:var(--green);stroke-width:2;vector-effect:non-scaling-stroke;
+  stroke-linejoin:round;stroke-linecap:round;
+}
+.route circle{fill:var(--amber)}
+.route-c{
+  position:absolute;right:11px;bottom:9px;
+  font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);
+}
+
 /* ── charts ─────────────────────────────────────────────────────────────── */
 
 .chartbox{position:relative;height:200px;padding:4px 6px 2px}
@@ -723,6 +742,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=11" defer></script>
+<script src="app.js?v=12" defer></script>
 </body>
 </html>

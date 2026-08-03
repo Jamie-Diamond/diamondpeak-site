@@ -201,6 +201,12 @@ TRAINING_DATA_SPEC = {
         "rows":   Records(_PREDICTOR_ROW),
     },
     "recent": Records({
+        # `shape` is a route OUTLINE normalised into a unit box: no coordinates, no
+        # scale, no origin (lib/route_shape.py). A GPS track would publish Jamie's home
+        # address several times a week on a public URL; this cannot be geolocated
+        # because the absolute frame is discarded before it is written, not hidden.
+        # SERIES, so any row that is not a list of scalars is dropped.
+        "shape": SERIES,
         "date": S, "name": S, "sport": S, "dur": S, "dist": S, "pace": S,
         "hr": S,          # per-session average HR — owner-approved (same field
                           # as sessionLog.avg_hr, different key name upstream)
