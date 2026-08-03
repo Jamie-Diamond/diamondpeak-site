@@ -37,8 +37,12 @@ the spec below. Do not add any of these without an explicit decision:
    sessionLog[].injury_pain_during       clinical
    sessionLog[].injury_pain_next_morning clinical
    sessionLog[].hydration_ml             intake
-   sessionLog[].nutrition_g_carb         intake
-   progressData.carb[]                   carbohydrate intake per hour
+   sessionLog[].nutrition_g_carb         intake. Stays withheld: it is per-session
+                                         logged intake, and every observed value
+                                         is null, so unlocking it would widen the
+                                         spec for no data. The owner decision
+                                         below covers progressData.carb, which is
+                                         the same measure with values in it.
    sessionLog[].feel                     free text the athlete types; observed
                                          values carry symptoms, sleep and pain.
                                          Numeric rpe is published instead. This
@@ -201,9 +205,20 @@ TRAINING_DATA_SPEC = {
         "date": S, "name": S, "sport": S, "detail": S,
         "duration_min": S, "tss": S, "status": S, "key": S,
     }),
-    # progressData.carb is NOT named, so intake data cannot pass.
+    # progressData.carb: PUBLISHED on an explicit owner decision, 3 Aug 2026
+    # ("carb intake can be published and should be"). It was previously withheld
+    # pending exactly that decision. Field-level audit before unlocking: date,
+    # g_per_hr, sport, dur, name - a fuelling rate per ride and the ride it came
+    # from. Nothing clinical, no free text beyond the session title, which is
+    # already published in recent[] and weekCalendar[]. `carb` and `g_per_hr`
+    # were removed from FORBIDDEN_KEYS in the same change, because a tripwire
+    # that fires on an approved field would block every future write.
+    # sessionLog[].nutrition_g_carb stays withheld - see the header.
     "progressData": {
         "ftp": S,
+        "carb": Records({
+            "date": S, "g_per_hr": S, "sport": S, "dur": S, "name": S,
+        }),
         "rides": Records({
             "date": S, "name": S, "dur": S, "np": S, "hr": S, "ef": S, "vi": S,
         }),
@@ -272,7 +287,10 @@ FORBIDDEN_KEYS = {
     "sick_week", "watchdog_flags", "open_actions",
     "notes", "injury_pain_during", "injury_pain_next_morning",
     "ankle_pain_during", "ankle_pain_next_morning",
-    "hydration_ml", "nutrition_g_carb", "carb", "g_per_hr",
+    # "carb"/"g_per_hr" removed 3 Aug 2026: progressData.carb is now an approved
+    # field (see the spec), and a tripwire on an approved key blocks every write.
+    # hydration_ml and nutrition_g_carb remain withheld.
+    "hydration_ml", "nutrition_g_carb",
     "feel",
     "activity_id", "logged_at",
     "icu_api_key", "icu_athlete_id", "telegram_chat_id",

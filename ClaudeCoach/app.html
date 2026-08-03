@@ -80,7 +80,10 @@ body{
 }
 .masthead-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;max-width:var(--sheet);margin:0 auto}
 .wordmark{font-family:'Libre Baskerville',serif;font-weight:700;font-size:19px;letter-spacing:-.02em;line-height:1;margin:0}
+.wordmark{display:flex;align-items:center;gap:8px}
 .wordmark em{font-style:italic;font-weight:400;color:var(--green)}
+.wordmark .mark{width:19px;height:19px;display:block}
+.gate-logo{width:44px;height:44px;display:block;margin:0 0 18px}
 .countdown{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.5}
 .countdown b{display:block;font-family:'Libre Baskerville',serif;font-size:16px;letter-spacing:-.01em;color:var(--ink);text-transform:none}
 
@@ -180,13 +183,6 @@ main{max-width:var(--sheet);margin:0 auto;padding:0 0 26px}
 .view.on > *:nth-child(n+6){animation-delay:.26s}
 @keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
 
-.eyebrow{
-  font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;
-  color:var(--muted);display:flex;align-items:center;gap:9px;margin:0 0 9px;
-}
-.eyebrow::after{content:'';flex:1;height:1px;background:var(--rule)}
-.sheet{background:var(--paper);border:1px solid var(--rule);border-radius:3px;padding:15px 16px;margin:0 0 15px}
-.sheet.flush{padding:0;overflow:hidden}
 
 /* ── hero figures ───────────────────────────────────────────────────────── */
 
@@ -225,15 +221,6 @@ main{max-width:var(--sheet);margin:0 auto;padding:0 0 26px}
 
 /* ── library ────────────────────────────────────────────────────────────── */
 
-.chips{display:flex;gap:6px;overflow-x:auto;padding:0 0 12px;margin:0 0 3px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-.chips::-webkit-scrollbar{display:none}
-.chip{
-  flex:0 0 auto;appearance:none;background:var(--paper);border:1px solid var(--rule);border-radius:2px;
-  padding:6px 11px;cursor:pointer;color:var(--ink-2);
-  font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;
-  transition:background .15s ease,color .15s ease,border-color .15s ease;
-}
-.chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
 .lib{border:1px solid var(--rule);border-radius:3px;background:var(--paper);overflow:hidden}
 .lib details{border-bottom:1px solid var(--rule-soft)}
 .lib details:last-child{border-bottom:0}
@@ -272,6 +259,165 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
 .bar{height:5px;background:var(--rule-soft);border-radius:3px;overflow:hidden;margin-top:7px}
 .bar i{display:block;height:100%;background:var(--green);border-radius:3px}
 .bar.warn i{background:var(--amber)}
+
+
+/* ── card: ONE container, with a header ─────────────────────────────────── */
+/* The first cut floated an .eyebrow above a borderless .sheet, so every block
+   had identical weight and the screen read as busy and sparse at once. A card
+   with a titled header gives a section a top edge to start at, and lets an
+   action (reset zoom, month arrows) live where it belongs. */
+.card{
+  background:var(--paper);border:1px solid var(--rule);border-radius:4px;
+  margin:0 0 14px;overflow:hidden;
+}
+.card-h{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 15px 10px;border-bottom:1px solid var(--rule-soft);
+}
+.card-h h2{
+  margin:0;font-family:'DM Mono',monospace;font-weight:400;font-size:9.5px;
+  letter-spacing:.17em;text-transform:uppercase;color:var(--ink-2);
+}
+.card-a{
+  margin-left:auto;appearance:none;background:none;border:1px solid var(--rule);
+  border-radius:2px;padding:4px 8px;cursor:pointer;color:var(--muted);
+  font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;
+  transition:color .16s,border-color .16s;
+}
+.card-a:hover,.card-a:focus-visible{color:var(--green);border-color:var(--green)}
+.card > .card-f{
+  margin:0;padding:9px 15px 11px;border-top:1px solid var(--rule-soft);
+  font-family:'DM Mono',monospace;font-size:9px;line-height:1.5;letter-spacing:.05em;color:var(--muted);
+}
+.card > :not(.card-h):not(.card-f){padding:13px 15px}
+.card > .body-flush,.card > .lib,.card > table.tbl,.card > .chartbox,.card > .cal-grid,
+.card > .cal-dows{padding:0}
+.card.flush > :not(.card-h):not(.card-f){padding:0}
+
+/* ── hero: the one thing the screen is for ───────────────────────────────── */
+.hero{padding:4px 2px 16px}
+.hero-k{
+  margin:0;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--muted);
+}
+.hero-t{
+  margin:8px 0 0;font-family:'Libre Baskerville',serif;font-weight:400;
+  font-size:26px;line-height:1.12;letter-spacing:-.03em;color:var(--ink);
+}
+.hero-t .sp{width:7px;height:7px;vertical-align:.22em;margin-right:8px}
+.hero-m{margin:7px 0 0;font-size:14px;color:var(--ink-2)}
+.hero-done{
+  margin:8px 0 0;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--green);
+}
+.hero-r{border:0;border-top:1px solid var(--rule-soft);margin:14px 0 12px}
+
+/* ── minis: a number that does not deserve a card ───────────────────────── */
+.minis{
+  display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
+  border:1px solid var(--rule);border-radius:4px;background:var(--paper);
+  overflow:hidden;margin:0 0 14px;
+}
+.mini{padding:10px 8px 9px;text-align:center;border-right:1px solid var(--rule-soft)}
+.mini:last-child{border-right:0}
+.mini b{
+  display:block;font-family:'Libre Baskerville',serif;font-weight:400;font-size:17px;
+  letter-spacing:-.02em;color:var(--ink);
+}
+.mini span{
+  display:block;margin-top:4px;font-family:'DM Mono',monospace;font-size:8.5px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+}
+.mini.warn b{color:var(--amber)}
+
+.flag{
+  margin:-6px 0 14px;padding:8px 11px;border-left:2px solid var(--amber);
+  background:rgba(183,121,31,.06);font-size:13px;color:var(--ink-2);
+}
+.flag.ok{border-left-color:var(--green);background:rgba(29,104,64,.05)}
+.hint{
+  margin:-4px 0 14px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);
+}
+
+/* ── seg: sub-navigation inside a tab ───────────────────────────────────── */
+/* Trends holds five charts. Stacked they are a long busy scroll, so only one is
+   mounted at a time and this chooses which. */
+.seg{
+  display:flex;gap:0;margin:0 0 14px;border:1px solid var(--rule);border-radius:4px;
+  background:var(--paper);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.seg::-webkit-scrollbar{display:none}
+.seg.wrap{flex-wrap:wrap}
+.seg button{
+  flex:1 0 auto;appearance:none;background:none;border:0;
+  border-right:1px solid var(--rule-soft);padding:9px 12px;cursor:pointer;
+  font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);white-space:nowrap;transition:background .16s,color .16s;
+}
+.seg button:last-child{border-right:0}
+.seg button[aria-selected=true]{background:var(--ink);color:var(--paper)}
+
+/* ── calendar grid ──────────────────────────────────────────────────────── */
+.cal-nav{margin-left:auto;display:flex;gap:4px}
+.cal-mo{
+  appearance:none;background:none;border:1px solid var(--rule);border-radius:2px;
+  width:26px;height:22px;line-height:1;cursor:pointer;color:var(--ink-2);font-size:14px;
+  transition:color .16s,border-color .16s;
+}
+.cal-mo:hover,.cal-mo:focus-visible{color:var(--green);border-color:var(--green)}
+.cal-dows{
+  display:grid;grid-template-columns:repeat(7,1fr);
+  padding:9px 8px 5px;border-bottom:1px solid var(--rule-soft);
+}
+.cal-dows span{
+  text-align:center;font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);
+}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-cell{
+  appearance:none;background:none;border:0;border-top:1px solid var(--rule-soft);
+  border-right:1px solid var(--rule-soft);
+  aspect-ratio:1;min-height:40px;padding:5px 0 0;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  -webkit-tap-highlight-color:transparent;transition:background .15s;
+}
+.cal-cell:nth-child(7n){border-right:0}
+.cal-cell.pad{cursor:default;background:rgba(154,144,128,.045)}
+.cal-cell .n{font-family:'Libre Baskerville',serif;font-size:13px;color:var(--ink-2);line-height:1}
+.cal-cell.rest .n{color:var(--muted)}
+.cal-cell.today .n{color:var(--green);font-weight:700}
+.cal-cell.today{background:rgba(29,104,64,.055)}
+.cal-cell.sel{background:var(--ink)}
+.cal-cell.sel .n{color:var(--paper)}
+.cal-cell:hover:not(.pad):not(.sel){background:rgba(24,22,15,.035)}
+.cal-cell .dots{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;max-width:80%}
+.dot{
+  width:4px;height:4px;border-radius:50%;display:block;
+  border:1px solid currentColor;background:transparent;
+}
+.dot.done{background:currentColor}
+.dot.sp-swim{color:var(--blue)} .dot.sp-bike{color:var(--green)}
+.dot.sp-run{color:var(--amber)} .dot.sp-strength{color:var(--ink-2)}
+.dot.sp-other{color:var(--muted)}
+.cal-cell.sel .dot{border-color:var(--paper);color:var(--paper)}
+
+/* ── misc ───────────────────────────────────────────────────────────────── */
+.goals{
+  border:1px solid var(--rule);border-radius:4px;background:var(--paper);
+  padding:4px 15px;margin:0 0 14px;
+}
+.statline{display:flex;align-items:baseline;gap:9px}
+.statline b{font-family:'Libre Baskerville',serif;font-weight:400;font-size:22px;letter-spacing:-.02em}
+.statline span{
+  font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);
+}
+.kv{
+  font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);
+}
+.sp-strength{background:var(--ink-2)}
 
 /* ── charts ─────────────────────────────────────────────────────────────── */
 
@@ -338,7 +484,7 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
 
 <header class="masthead">
   <div class="masthead-row">
-    <h1 class="wordmark">Claude<em>Coach</em></h1>
+    <h1 class="wordmark"><img src="app/icons/dpc-mark.png" alt="" class="mark">Claude<em>Coach</em></h1>
     <div class="countdown" id="cd"><b>—</b>days to race</div>
   </div>
   <div class="whobar">
@@ -353,6 +499,7 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
      the way an app does, and to remember it. -->
 <div class="gate out" id="gate" role="dialog" aria-modal="true" aria-label="Choose athlete">
   <div class="gate-inner">
+    <img src="app/icons/dpc-mark.png" alt="Diamond Peak Consulting" class="gate-logo">
     <p class="gate-kicker">Diamond Peak · Coaching</p>
     <h2 class="gate-word">Claude<em>Coach</em></h2>
     <p class="gate-sub">Choose a profile to open the training almanac.</p>
@@ -374,9 +521,11 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
 <div class="offline" id="off" role="status">Offline · last loaded data</div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js" defer></script>
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app/app.js?v=3" defer></script>
+<script src="app/app.js?v=4" defer></script>
 </body>
 </html>
