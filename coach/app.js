@@ -1650,9 +1650,12 @@
     var fam = SPORT[sport] || null;
     var same = function (a, b) { return a && b && (SPORT[a] || a) === (SPORT[b] || b); };
 
-    var act = (d.recent || []).filter(function (r) {
-      return r.date === dateISO && (!sport || same(r.sport, sport));
-    })[0];
+    var onDate = (d.recent || []).filter(function (r) { return r.date === dateISO; });
+    var act = onDate.filter(function (r) { return !sport || same(r.sport, sport); })[0]
+      // Fall back to any activity that day: plan and activity sport names differ
+      // ("Bike" vs "Ride", "Brick" vs "Run"), and a route is better than a blank.
+      || onDate.filter(function (r) { return r.shape; })[0]
+      || onDate[0];
     var plan = (d.weekCalendar || []).filter(function (r) {
       return r.date === dateISO && (!sport || same(r.sport, sport));
     })[0];

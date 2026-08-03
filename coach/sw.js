@@ -16,7 +16,7 @@
  *
  * Bump CACHE on every deploy that changes a precached file.
  */
-const CACHE = 'peak-v11';
+const CACHE = 'peak-v12';
 
 const SHELL = [
   './',
