@@ -639,6 +639,13 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   weekday to allowed session type(s), that day's session of that sport MUST be one of those
   types — e.g. swim_focus {{"Tue":["technique","speed"],"Thu":["css"]}} means Tue swim is a
   skills/speed session and Thu swim is the CSS set, never the reverse.
+- ONE FULL REST DAY, EVERY WEEK. Exactly what it says: at least one day of the seven
+  carries NO session at all. This is not "an easy day" and not "a short swim" — a day
+  with any load on it is not a rest day. Choose the day that costs the week least and
+  leave it empty. A seven-day week is REJECTED by the validator (no_rest_day, hard), so
+  a plan without a rest day does not reach the athlete. Zero-load mobility/stretching is
+  the one thing that may sit on it. If the week genuinely cannot carry a rest day, you
+  must say why in the plan notes — the reason is recorded, not assumed.
 - Aim the week near the WEEKLY TSS TARGET **and actively deliver the QUALITY PRESCRIPTION below** — hit each sport's per-zone target (Z3 + Z4-5), not just the overall TSS/TID. A week that only hits TSS with easy volume is WRONG on a build/specific week.
 - PROTECT THE LONG RIDE: include one Ride of ~long_ride_target_min as the week's KEY session.
 - RUNS: total run mileage must NOT exceed weekly_run_mileage_cap_km (≈ minutes/5.3 km) and the

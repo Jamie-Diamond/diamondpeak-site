@@ -535,3 +535,64 @@ class TestDatedDayRuleExceptions:
             r = validate_week(self.SAT_RIDE, WEEK, day_rules=dr)
             assert not any("_day" in v.code for v in r.violations), bad
 
+
+
+class TestRestDay:
+    """Every week needs one full rest day (Jamie, 3 Aug 2026).
+
+    Deliberately NOT opt-in: the events alone answer it, and a rest day is a
+    requirement for every athlete. The two cases worth guarding are the false
+    fires - a part-planned week, and a zero-load mobility day.
+    """
+
+    def _seven_days(self, load: float = 40) -> list[dict]:
+        return [_ev(f"2026-06-{15 + i}", "Run", load) for i in range(7)]
+
+    def _rest_codes(self, rep) -> list[tuple[str, str]]:
+        return [(v.code, v.severity) for v in rep.violations if "rest" in v.code]
+
+    def test_clean_week_has_a_rest_day(self):
+        # _clean_week() leaves Wed 17 empty, which is the point.
+        r = validate_week(_clean_week(), WEEK)
+        assert self._rest_codes(r) == []
+
+    def test_seven_loaded_days_is_hard(self):
+        r = validate_week(self._seven_days(), WEEK)
+        assert self._rest_codes(r) == [("no_rest_day", "hard")]
+        assert not r.ok
+
+    def test_waiver_downgrades_to_soft_and_records_the_reason(self):
+        r = validate_week(self._seven_days(), WEEK,
+                          rest_day_waiver="race week — every day is a 20min opener")
+        assert self._rest_codes(r) == [("no_rest_day_waived", "soft")]
+        v = next(v for v in r.violations if "rest" in v.code)
+        assert "20min opener" in v.detail
+        # WeekReport.ok is `not violations` (soft included), so the thing that
+        # matters for a waiver is that nothing HARD was raised.
+        assert not r.hard
+
+    def test_zero_load_mobility_still_counts_as_rest(self):
+        # Mobility is logged as a zero-TSS workout; it must not cost the rest day.
+        week = self._seven_days()[:6] + [_ev("2026-06-21", "Workout", 0)]
+        assert self._rest_codes(validate_week(week, WEEK)) == []
+
+    def test_part_planned_week_does_not_false_fire(self):
+        week = [_ev("2026-06-15", "Run", 40), _ev("2026-06-16", "Swim", 35)]
+        assert self._rest_codes(validate_week(week, WEEK)) == []
+
+    def test_empty_week_does_not_false_fire(self):
+        assert self._rest_codes(validate_week([], WEEK)) == []
+
+    def test_two_rest_days_can_be_required(self):
+        week = self._seven_days()[:6]          # one rest day only
+        r = validate_week(week, WEEK, rest_days_min=2)
+        assert self._rest_codes(r) == [("no_rest_day", "hard")]
+
+    def test_can_be_disabled(self):
+        r = validate_week(self._seven_days(), WEEK, rest_days_min=0)
+        assert self._rest_codes(r) == []
+
+    def test_multiple_sessions_on_one_day_still_one_loaded_day(self):
+        # Six days loaded, one of them twice -> still a rest day on the seventh.
+        week = self._seven_days()[:6] + [_ev("2026-06-15", "Swim", 30)]
+        assert self._rest_codes(validate_week(week, WEEK)) == []

@@ -828,6 +828,8 @@ def validate_week(
     monotony_threshold: float = 2.0,
     distribution: dict | None = None,
     dist_tolerance_pp: float = DIST_TOLERANCE_PP,
+    rest_days_min: int = 1,
+    rest_day_waiver: str | None = None,
 ) -> WeekReport:
     """Validate the planned sessions for the 7 days starting `week_start`.
 
@@ -1024,6 +1026,42 @@ def validate_week(
                         f"(mean {mean:.0f}/sd {sd:.0f} daily TSS) over {monotony_threshold} — "
                         f"vary day sizes / protect a rest day (strain "
                         f"{total_tss * min(monotony, 99):.0f})")))
+
+    # 7. Weekly rest day (Jamie, 3 Aug 2026: "each week the athlete does a rest day
+    #    or has a very very good reason not to").
+    #
+    #    NOT opt-in, unlike most checks here. It needs no config to be answerable -
+    #    the events alone settle it - and a rest day is a requirement for every
+    #    athlete rather than a per-athlete setting, so defaulting it off would mean
+    #    the rule silently did nothing, which is the failure mode the monotony check
+    #    already had (it says "protect a rest day" and enforces nothing).
+    #
+    #    A rest day is a day carrying no planned LOAD, not a day with no entry:
+    #    mobility and stretching are logged as zero-TSS workouts and must not cost
+    #    the athlete their rest day. This also cannot false-fire on a part-planned
+    #    week, because unplanned days count as rest - a Mon-to-Wed plan has four.
+    #
+    #    The waiver IS the "very good reason": supplied, this drops to soft and the
+    #    reason is quoted into the report so the decision is on the record; absent,
+    #    it is hard, because the whole point is that skipping rest takes an argument.
+    if rest_days_min > 0:
+        loaded_days = {_event_date(e) for e in week_events if _planned_load(e) > 0}
+        rest = 7 - len(loaded_days)
+        if rest < rest_days_min:
+            plural = "day" if rest_days_min == 1 else "days"
+            base = (f"week of {week_start} plans load on {len(loaded_days)} of 7 days "
+                    f"— {rest} rest {'day' if rest == 1 else 'days'}, "
+                    f"below the required {rest_days_min} rest {plural}")
+            if rest_day_waiver:
+                violations.append(Violation(
+                    code="no_rest_day_waived", severity="soft",
+                    detail=f"{base}; WAIVED: {rest_day_waiver[:200]}"))
+            else:
+                violations.append(Violation(
+                    code="no_rest_day", severity="hard",
+                    detail=(f"{base}. Every week needs a full rest day. Drop the "
+                            f"lowest-value session, or state the reason for training "
+                            f"through (which is recorded, not waved through)")))
 
     return WeekReport(week_start=week_start, total_tss=total_tss,
                       violations=violations, skipped=skipped)
