@@ -1,4 +1,10 @@
 # Jekyll excludes — what must NEVER reach the published site.
+# The app itself now lives at TOP-LEVEL coach/ (published as diamondpeak.uk/coach/)
+# and holds nothing private: app.html, app.js, sw.js, manifest, icons. It is
+# deliberately outside ClaudeCoach/ so that the blanket "exclude every ClaudeCoach
+# subdirectory" rule below keeps applying to the engine without an exception per
+# app asset. Its DATA is still read from ClaudeCoach/public/ (see below).
+#
 # The public ClaudeCoach surface is:
 #   index/coach/overview/athlete-*.html, training-visualiser.html, and
 #   ClaudeCoach/public/*.json (the sanitised data feed).

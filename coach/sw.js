@@ -1,6 +1,6 @@
-/* ClaudeCoach service worker.
+/* Peak service worker.
  *
- * Lives at /ClaudeCoach/sw.js and NOT in app/ on purpose: a worker's default scope is its
+ * Lives at /coach/sw.js, alongside the page it controls: a worker's default scope is its
  * own directory, so app/sw.js could only ever control app/ and would never see the pages
  * it exists to serve. GitHub Pages cannot send a Service-Worker-Allowed header to widen
  * scope, so the file's location IS the scope.
@@ -16,7 +16,7 @@
  *
  * Bump CACHE on every deploy that changes a precached file.
  */
-const CACHE = 'claudecoach-v7';
+const CACHE = 'peak-v1';
 
 const SHELL = [
   './',
@@ -112,8 +112,11 @@ self.addEventListener('fetch', (event) => {
 
   // Only handle our own origin beyond this point.
   if (url.origin !== self.location.origin) return;
-  // And only our own scope - the rest of diamondpeak.uk is not this app.
-  if (!url.pathname.startsWith('/ClaudeCoach/')) return;
+  // The app lives at /coach/ but its data is still written under /ClaudeCoach/public/
+  // by the nightly refresh, so BOTH must be handled or every data fetch goes
+  // unhandled and offline stops working. The rest of diamondpeak.uk is not this app.
+  if (!url.pathname.startsWith('/coach/') &&
+      !url.pathname.startsWith('/ClaudeCoach/public/')) return;
 
   // Icons, CSS and the manifest are cache-first: versioned by CACHE, rarely changed.
   // Scripts deliberately are NOT. app.html is network-first, so a cache-first script
@@ -122,7 +125,7 @@ self.addEventListener('fetch', (event) => {
   // the old script wrote to. It self-heals only on the second load, which is one
   // blank launch too many. Network-first keeps HTML and JS in step; scripts stay
   // precached, so offline is unaffected.
-  const isAsset = /\/app\/(icons\/[^/]+|[^/]+\.(css|webmanifest))$/.test(url.pathname);
+  const isAsset = /\/(icons\/[^/]+|[^/]+\.(css|webmanifest))$/.test(url.pathname);
   if (isAsset) {
     event.respondWith(cacheFirst(request));
     return;

@@ -1,4 +1,11 @@
-/* ClaudeCoach app — view logic.
+/* Peak — view logic.
+ *
+ * The published data is fetched from ../ClaudeCoach/public/. That directory name is
+ * the ENGINE's, not the app's: refresh-site-data.py on the VM writes there, the seven
+ * legacy dashboards read from there, and _config.yml's publish-time exclusions are
+ * written against it. Moving the app's URL to /coach/ was cheap; moving the data path
+ * means touching the nightly pipeline and every legacy page, so it is deliberately a
+ * separate change. The path is invisible to anyone using the app.
  *
  * Static by design: it reads the nightly public subset (public/training-data-<slug>.json)
  * and the published session library (public/session-library.json) and renders five views.
@@ -1502,7 +1509,7 @@
     $('#whoName').textContent = a ? a.name : slug;
     state.calMonth = null; state.calDay = null;
     skeleton();
-    fetch('public/training-data-' + slug + '.json', { cache: 'no-cache' })
+    fetch('../ClaudeCoach/public/training-data-' + slug + '.json', { cache: 'no-cache' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function (j) { state.data = j; renderAll(); })
       .catch(function () {
@@ -1513,7 +1520,7 @@
   }
 
   function loadLibrary() {
-    fetch('public/session-library.json', { cache: 'default' })
+    fetch('../ClaudeCoach/public/session-library.json', { cache: 'default' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) { state.lib = j; if (state.lib) renderLibrary(); })
       .catch(function () { /* library is a nice-to-have; the rest of the app stands */ });

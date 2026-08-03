@@ -1,9 +1,9 @@
 {
-  "name": "ClaudeCoach",
-  "short_name": "Coach",
+  "name": "Peak — Diamond Peak Coaching",
+  "short_name": "Peak",
   "description": "Training almanac for Diamond Peak athletes: calendar, trends, session library and race goals.",
-  "start_url": "/ClaudeCoach/app.html",
-  "scope": "/ClaudeCoach/",
+  "start_url": "/coach/app.html",
+  "scope": "/coach/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#f8f5ef",
@@ -37,15 +37,15 @@
   "shortcuts": [
     {
       "name": "Calendar",
-      "url": "/ClaudeCoach/app.html#cal"
+      "url": "/coach/app.html#cal"
     },
     {
       "name": "Trends",
-      "url": "/ClaudeCoach/app.html#trends"
+      "url": "/coach/app.html#trends"
     },
     {
       "name": "Goals",
-      "url": "/ClaudeCoach/app.html#goals"
+      "url": "/coach/app.html#goals"
     }
   ]
 }
