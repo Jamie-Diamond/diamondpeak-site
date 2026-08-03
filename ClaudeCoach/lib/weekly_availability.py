@@ -404,9 +404,22 @@ def sunday_hours_ask(slug: str, week_start: date | str, *, coaching_level: str =
 _HOURS_TOKEN_RE = re.compile(r"(\d{1,2}(?:\.\d)?)\s*(?:h\b|hr\b|hrs\b|hours?\b)", re.I)
 # A range — "maybe 12-13", "12 to 14". The LOWER bound is taken: the spec is explicit
 # about it, and building to the top of a range the athlete hedged would overshoot.
-_HOURS_RANGE_RE = re.compile(r"(\d{1,2}(?:\.\d)?)\s*(?:-|–|to)\s*(\d{1,2}(?:\.\d)?)", re.I)
+# A hedged hours range ("maybe 12-13"). The trailing (?![...]) is load-bearing: without
+# it "the wheels came off at 15-20k" parsed as 15 HOURS and the bot asked Jamie to confirm
+# "15 hours of training for next week" while quoting his sentence about run pacing back at
+# him (3 Aug 2026). A number followed by a unit is a distance, a pace, a power or a weight
+# - never a weekly hours budget.
+_NON_HOURS_UNIT = r"(?!\s*(?:k\b|km|m\b|mi\b|mile|%|s\b|sec|min|bpm|w\b|watt|kg|lb|°|C\b|:))"
+_HOURS_RANGE_RE = re.compile(
+    r"(\d{1,2}(?:\.\d)?)\s*(?:-|–|to)\s*(\d{1,2}(?:\.\d)?)" + _NON_HOURS_UNIT, re.I)
 # A bare figure, used only once the message is already known to be about hours.
-_BARE_NUM_RE = re.compile(r"\b(\d{1,2}(?:\.\d)?)\b")
+# The BARE path is reached only after the range path declined, so it must also reject a
+# number that is part of a hyphenated/slashed/colonned construct: in "came off at 15-20k",
+# the range guard correctly rejects 15-20, and without this the bare path then picks "15"
+# out of it on its own and calls it 15 hours.
+_BARE_NON_HOURS = (r"(?!\s*(?:[-–/:]|k\b|km|m\b|mi\b|mile|%|s\b|sec|min|bpm|w\b|watt|"
+                   r"kg|lb|°|C\b))")
+_BARE_NUM_RE = re.compile(r"\b(\d{1,2}(?:\.\d)?)\b" + _BARE_NON_HOURS)
 
 # "…this week", "next week", "big week". NB `\bweek\b` deliberately does NOT match
 # "midweek", so "nothing long midweek" is a CONSTRAINT and not weekly framing — which is
@@ -541,11 +554,19 @@ def looks_like_hours_declaration(text: str) -> bool:
     return p["hours"] is not None and p["framed"]
 
 
+# Longest a message can be and still plausibly be an ANSWER to the Sunday hours ask.
+# "12", "about 12 hours", "maybe 12-13, away Thu" all fit. The 3 Aug 2026 false positive
+# was 21 words about where a race went wrong, which is not an answer to anything.
+_REPLY_MAX_WORDS = 12
+
+
 def looks_like_hours_reply(text: str) -> bool:
     """TIER 2 — the message COULD be the answer to the Sunday ask: a figure, no weekly
     framing, nothing disqualifying. True here is not permission to write; the caller
     must have checked `ask_outstanding` and must confirm with the athlete first, because
     a bare number on that card is equally plausibly an ankle score."""
+    if len((text or "").split()) > _REPLY_MAX_WORDS:
+        return False
     p = parse_hours_message(text)
     return p["hours"] is not None
 
