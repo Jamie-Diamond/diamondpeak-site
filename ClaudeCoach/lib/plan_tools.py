@@ -55,6 +55,44 @@ from primitives.load import (                                   # noqa: E402
 from primitives.validate_plan import validate_week              # noqa: E402
 from primitives.blueprint import current_phase                   # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr   # noqa: E402
+from rpe_context import SPORT_FAMILY                             # noqa: E402
+
+# Non-endurance ICU types that all mean "the strength / other slot for that day".
+# Kathryn's 27 Jul week had a COMPLETED "Cardio" against a PLANNED "Kettlebell";
+# neither string appears in SPORT_FAMILY, so they read as two different sports and
+# the planned one was counted a second time.
+_STRENGTH_TYPES = frozenset({
+    "WeightTraining", "Workout", "Strength", "Kettlebell", "Cardio",
+    "Crossfit", "Yoga", "Pilates", "Elliptical", "StairStepper",
+})
+
+
+def _sport_family(icu_type: str) -> str:
+    """Collapse an ICU activity/event `type` to the family a day's slot belongs to.
+
+    Exists because week-TSS de-duplication compared RAW type strings, so a completed
+    VirtualRide never matched its own planned Ride twin and both were summed. Jamie's
+    standing rule already said to treat Gravel and Virtual Ride as subsets of Ride -
+    it had simply never been implemented in code, and seven separate ad-hoc sport-family
+    maps existed elsewhere in the tree while this path had none.
+
+    Unknown types fall back to their own lowercased name, so anything not mapped
+    de-duplicates exactly as it did before - no silent widening.
+    """
+    t = (icu_type or "").strip()
+    if t in SPORT_FAMILY:
+        return SPORT_FAMILY[t]
+    if t in _STRENGTH_TYPES:
+        return "strength"
+    return t.lower() or "?"
+
+
+def _already_completed(planned_type: str, completed_for_day: list) -> bool:
+    """True when a completed activity already occupies this planned session's slot,
+    i.e. the planned TSS must NOT be added on top. Compares FAMILIES, not raw type
+    strings."""
+    fam = _sport_family(planned_type)
+    return any(_sport_family(c.get("sport")) == fam for c in completed_for_day or [])
 
 ATHLETES_CONFIG = BASE / "config" / "athletes.json"
 
@@ -264,7 +302,7 @@ def cmd_week_tss(args) -> dict:
         if ev.get("category") and ev.get("category") != "WORKOUT":
             continue
         sport = ev.get("type") or ""
-        if any(c["sport"] == sport for c in completed.get(d, [])):
+        if _already_completed(sport, completed.get(d, [])):
             continue  # actual already counted
         r = _event_tss(ev)
         days[d].append({"sport": sport, "tss": r["tss"], "min": r["duration_min"],
