@@ -122,6 +122,9 @@ _PREDICTOR_ROW = {
 TRAINING_DATA_SPEC = {
     "generated":   S,
     "resolvedFtp": S,
+    # The athlete's weekly CTL ramp guide. A configured coaching threshold,
+    # not a measurement - the app states it instead of hard-coding 5.
+    "rampCap":     S,
 
     # kpi: ctl/atl/tsb/ramp7d only. hrv and rhr are NOT named, so they cannot pass.
     "kpi": {"ctl": S, "atl": S, "tsb": S, "ramp7d": S},

@@ -952,8 +952,9 @@ def _build_athlete_training_data(slug, athlete_cfg):
     today = date.today()
     client = IcuClient(athlete_cfg["icu_athlete_id"], athlete_cfg["icu_api_key"])
 
+    HISTORY_DAYS = 120
     seven_ago  = (today - timedelta(days=7)).isoformat()
-    fourteen_ago = (today - timedelta(days=HISTORY_DAYS)).isoformat()
+    history_from = (today - timedelta(days=HISTORY_DAYS)).isoformat()
     seven_fwd  = (today + timedelta(days=7)).isoformat()
     twentyone_fwd = (today + timedelta(days=21)).isoformat()
     year_start = f"{today.year}-01-01"
@@ -964,7 +965,6 @@ def _build_athlete_training_data(slug, athlete_cfg):
     # a short window left most of every month with no data - which the calendar then
     # miscounted as rest days ("19 rest days in July" for Kathryn). history_21 below
     # still exists so pre-existing 14/21-day consumers are unaffected.
-    HISTORY_DAYS = 120
     wellness_60, history_49, events_21, fitness_ytd = client.fetch_all(
         ("get_wellness", 60),
         ("get_training_history", HISTORY_DAYS),
@@ -988,9 +988,12 @@ def _build_athlete_training_data(slug, athlete_cfg):
     # -- fitnessThis -----------------------------------------------------------
     fitness_this = [[w["id"][:10], round(w.get("ctl") or 0, 1)] for w in fitness_ytd if w.get("ctl")]
 
-    # -- recent (last 14 days) -------------------------------------------------
+    # -- recent (full history window) ------------------------------------------
+    # From history_49 (120 days), NOT history_21: filtering the 21-day list by a wider
+    # date bound still gives 21 days, which is why widening the fetch alone changed
+    # nothing here.
     recent = []
-    for a in sorted([x for x in history_21 if x.get("start_date_local", "")[:10] >= fourteen_ago],
+    for a in sorted([x for x in history_49 if x.get("start_date_local", "")[:10] >= history_from],
                     key=lambda x: x.get("start_date_local", ""), reverse=True):
         sport = _sport_normalise(a.get("type", "Other"))
         dist_m = a.get("distance") or 0
@@ -1170,6 +1173,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "loadChart":    load_chart,
         "sessionLog":   session_log,
         "progressData": progress_data,
+        "rampCap":      _ramp_cap(slug),
         "swimLog":      swim_log,
     }
 
