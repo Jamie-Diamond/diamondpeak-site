@@ -36,13 +36,6 @@ the spec below. Do not add any of these without an explicit decision:
    sessionLog[].notes                    free text
    sessionLog[].injury_pain_during       clinical
    sessionLog[].injury_pain_next_morning clinical
-   sessionLog[].hydration_ml             intake
-   sessionLog[].nutrition_g_carb         intake. Stays withheld: it is per-session
-                                         logged intake, and every observed value
-                                         is null, so unlocking it would widen the
-                                         spec for no data. The owner decision
-                                         below covers progressData.carb, which is
-                                         the same measure with values in it.
    sessionLog[].feel                     free text the athlete types; observed
                                          values carry symptoms, sleep and pain.
                                          Numeric rpe is published instead. This
@@ -263,6 +256,19 @@ TRAINING_DATA_SPEC = {
         # name suggests a mood enum. Withheld 28 Jul 2026; this overrides an
         # explicit owner KEEP, so it needs the owner to confirm or restore it.
         "rpe": S, "tss": S, "stub": S,
+        # nutrition_g_carb + hydration_ml: PUBLISHED on an explicit owner decision,
+        # 3 Aug 2026 - carbs ("carb intake can be published and should be") and then
+        # per-activity fuelling in the app ("if i click on an activity i should be
+        # able to see the summary and heat/carb/sodium/water"). Both are currently
+        # null for every logged session, so the app shows "not logged" rather than a
+        # number; they are unlocked now so a value flows through the moment one is
+        # recorded, instead of silently vanishing at the sanitiser.
+        #
+        # NOTE for whoever reads this next: there is NO sodium field anywhere
+        # upstream. The only occurrence of the word is currentState.open_actions
+        # ("Book Precision Hydration sweat-sodium test", still pending), which is
+        # itself withheld. Sodium cannot be published because it is not measured.
+        "nutrition_g_carb": S, "hydration_ml": S,
     }),
 }
 
@@ -287,10 +293,9 @@ FORBIDDEN_KEYS = {
     "sick_week", "watchdog_flags", "open_actions",
     "notes", "injury_pain_during", "injury_pain_next_morning",
     "ankle_pain_during", "ankle_pain_next_morning",
-    # "carb"/"g_per_hr" removed 3 Aug 2026: progressData.carb is now an approved
-    # field (see the spec), and a tripwire on an approved key blocks every write.
-    # hydration_ml and nutrition_g_carb remain withheld.
-    "hydration_ml", "nutrition_g_carb",
+    # Removed 3 Aug 2026 as each became an approved field (see the spec): "carb",
+    # "g_per_hr", "hydration_ml", "nutrition_g_carb". A tripwire on an approved key
+    # blocks every write, so the two lists must not disagree.
     "feel",
     "activity_id", "logged_at",
     "icu_api_key", "icu_athlete_id", "telegram_chat_id",
