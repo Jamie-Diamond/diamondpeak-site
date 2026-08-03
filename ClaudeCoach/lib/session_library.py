@@ -276,6 +276,16 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     forbid = set(phase_cfg.get("forbid", []))
     vo2_late = phase_cfg.get("vo2") == "late_only"
     sports = event.get("sports") or ["swim", "bike", "run"]
+    # `strength` and `multi` are cross-cutting groups, not event disciplines, so they are
+    # never in event["sports"] and were therefore invisible to the planner. Added
+    # 2026-08-03 with the library expansion: `strength` carries the ankle/mobility/core
+    # work that is a STANDING weekly requirement (and an ankle-rehab need), and `multi`
+    # carries `brick` - which the phase menus had referenced since inception with nothing
+    # behind it, so every brick was improvised rather than resolved from the library.
+    # Each still passes the same min_phase and forbid gates as any other type.
+    for _group in ("strength", "multi"):
+        if _group in lib.get("session_types", {}) and _group not in sports:
+            sports = list(sports) + [_group]
 
     available = {}
     for sport in sports:
