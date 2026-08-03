@@ -324,12 +324,23 @@ class TestR8Luteal:
         p = modulate_session(planned_threshold(), fresh_readiness())
         assert "R8" not in p.applied_rules
 
-    def test_luteal_high_intensity_reduces(self):
+    def test_luteal_high_intensity_alone_does_NOT_reduce(self):
+        """The `planned intensity >= 0.85` limb was removed 2026-07-30 on Jamie's
+        instruction: there is no good evidence that luteal phase alone warrants easing
+        a hard session (McNulty et al. 2020 found only trivial, low-certainty phase
+        effects), it contradicted the system's own "never cut load on phase alone"
+        line, and over a ~14-day luteal phase it quietly took ~5% off roughly half an
+        athlete's hard sessions in a build block.
+
+        This test used to assert the opposite and had been failing ever since. It now
+        pins the intended behaviour instead: luteal + hard + COOL must not fire. The
+        thermoregulatory limb is covered by test_luteal_warm_z2_intensity_triggers_on_temp
+        and test_stacks_with_heat, both of which pass.
+        """
         r = fresh_readiness({"cycle_phase": "luteal", "cycle_day": 20})
-        p = modulate_session(planned_threshold(), r)   # intensity 1.0 ≥ 0.85
-        assert "R8" in p.applied_rules
-        assert p.target_intensity == 1.0 - _INTENSITY_STEP
-        assert "cycle day 20" in p.reasoning_trails[0]
+        p = modulate_session(planned_threshold(), r)   # intensity 1.0, temp defaults 15C
+        assert "R8" not in p.applied_rules
+        assert p.target_intensity == 1.0
 
     def test_luteal_warm_z2_intensity_triggers_on_temp(self):
         r = fresh_readiness({"cycle_phase": "luteal", "cycle_day": 22, "temp_c": 24.0})
