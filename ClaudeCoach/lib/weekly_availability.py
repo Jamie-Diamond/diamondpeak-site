@@ -448,6 +448,14 @@ _PAST_REPORT_RE = re.compile(
 # "long run of 3 hours". Without this, "I've got a 2 hour ride tomorrow" is a 2-hour
 # week. Weekly framing overrides it (see below) so "12 hours this week, one 3 hour ride"
 # still reads as 12.
+# The Sunday ask is about a WEEK. A figure attached to a single day is answering a
+# different question - "I only have 3-4h today", "tomorrow I'll do 3hrs" - and recording it
+# as the week's budget would cap the whole week at one day's training. Checked BEFORE the
+# session-noun test, because "3-4h today" carries no session noun at all.
+_SINGLE_DAY_RE = re.compile(
+    r"\b(?:today|tonight|tomorrow|this\s+(?:morning|afternoon|evening|arvo)|"
+    r"right\s+now|later\s+(?:today|on))\b", re.I)
+
 _SESSION_CTX_RE = re.compile(
     r"\b(?:ride|rides|run|runs|swim|swims|session|sessions|bike|turbo|gym|race|"
     r"long\s+run|long\s+ride|brick|interval|intervals|tempo|workout)\b", re.I)
@@ -509,6 +517,26 @@ def parse_hours_message(text: str) -> dict:
         return out
 
     framed = bool(_WEEK_FRAMING_RE.search(t))
+    # A single-day figure is not a week's budget, unless the message ALSO frames a week
+    # ("3h today, maybe 12 across the week").
+    if _SINGLE_DAY_RE.search(t):
+        if not framed:
+            out["refused"] = "figure attached to a single day, not a week's budget"
+            return out
+        # Both a day marker AND week framing, e.g. "3h today, maybe 12 across the week".
+        # Which figure is the week's is genuinely ambiguous, and guessing writes a ceiling.
+        # Refuse and let the athlete say it plainly.
+        # Count ALL three patterns together. Counting them separately undercounts: in
+        # "3h today, maybe 12 across the week" the "3" of "3h" is invisible to
+        # _BARE_NUM_RE (no word boundary before the h), so each pattern sees one figure
+        # while the message plainly contains two.
+        n_figures = (len(_HOURS_TOKEN_RE.findall(t))
+                     + len(_HOURS_RANGE_RE.findall(t))
+                     + len(_BARE_NUM_RE.findall(t)))
+        if n_figures > 1:
+            out["refused"] = ("a day figure and a week figure in one message - ambiguous, "
+                              "ask which is the week")
+            return out
     # A session noun with no weekly framing is a single session's duration, not a week.
     if _SESSION_CTX_RE.search(t) and not framed:
         out["refused"] = "reads as one session's duration, not a week's budget"
