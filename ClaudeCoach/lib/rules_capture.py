@@ -293,21 +293,26 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list):
         if before_norm.get(_norm(line), 0) > 0:
             dropped[i] = "exact duplicate of an existing [perm] rule"
 
-    # Per-rule LENGTH cap on newly appended lines. The count ceiling below cannot see
-    # this, and it is how the pile actually grows: on 2026-08-03, hours after a byte
-    # budget was added to the NIGHTLY triage, this live chat path took Jamie's file from
-    # 67 rules / 45,298 bytes to 69 rules / 50,380 bytes - about 2,500 bytes per new
-    # rule, i.e. case notes with dates, quotes and recurrence history rather than
+    # Per-rule SIZE cap on newly appended lines, in TOKENS. The count ceiling below
+    # cannot see this, and it is how the pile actually grows: on 2026-08-03, hours after
+    # a budget was added to the NIGHTLY triage, this live chat path took Jamie's file
+    # from 67 rules / 45,298 bytes to 69 / 50,380 - about 2,500 bytes (~960 tokens) per
+    # new rule, i.e. case notes with dates, quotes and recurrence history rather than
     # instructions. A rule states what to do; the evidence belongs in feedback-log.json.
+    #
+    # Estimated from the MEASURED 2.60 bytes/token rather than called out to
+    # count_tokens: this runs inline on a live chat reply, so it must be instant and must
+    # never fail open. The cap does not need single-token precision.
     # Applies ONLY to appends, so existing long rules are left for the coach to prune.
     for i in list(appended_idx):
         if i in dropped or _is_fold_result(i):
             continue
         line = after_lines[i].strip()
         if _PERM_RE.match(line) or _EXPIRES_RE.match(line):
-            if len(line) > bug_fixer.RULE_MAX_BYTES:
-                dropped[i] = (f"rule is {len(line)} bytes, over the "
-                              f"{bug_fixer.RULE_MAX_BYTES}-byte per-rule cap - state the "
+            est = int(round(len(line) / bug_fixer.BYTES_PER_TOKEN))
+            if est > bug_fixer.RULE_MAX_TOKENS:
+                dropped[i] = (f"rule is ~{est} tokens, over the "
+                              f"{bug_fixer.RULE_MAX_TOKENS}-token per-rule cap - state the "
                               f"instruction only and leave the evidence in the feedback log")
 
     def _standing_count():

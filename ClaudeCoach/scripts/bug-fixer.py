@@ -32,7 +32,7 @@ Run:  python3 ClaudeCoach/scripts/bug-fixer.py [--athlete jamie] [--json]
       python3 ClaudeCoach/scripts/bug-fixer.py --apply-prune <review_id>
 Cron: 0 0 * * *  (midnight, Stage 1 only)
 """
-import argparse, json, re, sys, subprocess, py_compile, difflib
+import argparse, json, os, re, sys, subprocess, py_compile, difflib
 from datetime import date
 from pathlib import Path
 
@@ -60,23 +60,36 @@ TG_CONFIG     = BASE / "telegram/config.json"
 RULE_COUNT_CEILING = 90
 
 # Volume brake (2026-08-03). RULE_COUNT_CEILING never fired for Jamie - 67 of 90 while
-# the file quadrupled in bytes - so these bound what the model actually pays for: the
-# COMBINED instruction surface, and the length of any single new rule.
+# the file quadrupled - so these bound what the model actually pays for: the COMBINED
+# instruction surface, and the size of any single new rule.
+#
+# BUDGETED IN TOKENS, not bytes. Bytes were the first attempt and were materially
+# misleading: measured against the real corpus with the count_tokens endpoint on
+# 2026-08-03, the surface runs at 2.60 BYTES PER TOKEN, not the ~4 that prose usually
+# gives. Rule text is dense in exactly the things that tokenize badly - "GAP
+# 4:36-5:12/km", "NP 55-75% FTP", dates, units, snake_case field names - so a byte
+# budget understated the true attention cost by about 55%.
 #
 # The combined surface is athlete persistent-rules.md + _shared/persistent-rules.md +
-# system_prompt.txt, i.e. everything build_prompt() concatenates ahead of the athlete's
-# message. On 3 Aug 2026 that was ~82,100 bytes for Jamie (45.3K + 15.9K + 20.9K).
-# The budget is set at roughly half of that deliberately: the surface is ALREADY over
-# budget, so from tonight the nightly triage cannot add a rule until the pile has been
-# pruned. prune and merge remain available and unaffected - that is the intended
-# behaviour of a budget, not a bug. Raise it only with a reason.
-SURFACE_BYTES_BUDGET = 41_000
+# system_prompt.txt: everything build_prompt() concatenates ahead of the athlete's
+# message. Measured for Jamie on 2026-08-03: 50,590 + 16,496 + 20,264 bytes =
+# 33,537 TOKENS. The budget is set near half of that deliberately, so the surface is
+# ALREADY over and the nightly triage cannot add a rule until the pile is pruned.
+# prune and merge remain available and unaffected - that is a budget working, not a bug.
+SURFACE_TOKEN_BUDGET = 16_000
 
-# A single standing rule may not exceed this. Today's average is 676 bytes and the
-# longest are 200-word case notes with citations and verification narratives, which is
-# how the file grew 4.6x while the rule count barely doubled. Applies only to NEWLY
-# added rules - existing long rules are left alone for the coach to prune by hand.
-RULE_MAX_BYTES = 400
+# A single standing rule may not exceed this. The corpus average is ~260 tokens and the
+# longest are case notes carrying dates, quotes and recurrence history; the instruction
+# inside one is a sentence. Applies to NEWLY added rules only - existing long rules are
+# left for the coach to prune by hand.
+RULE_MAX_TOKENS = 150
+
+# Fallback conversion when count_tokens is unreachable. MEASURED, not assumed:
+# 2.60 bytes/token across the live rule surface on 2026-08-03 (jamie 2.59, shared 2.79,
+# system prompt 2.51). Re-measure with scripts/measure-rule-tokens.py if the corpus
+# changes character. A brake must never fail OPEN, so an unreachable API degrades to
+# this estimate rather than waving the edit through.
+BYTES_PER_TOKEN = 2.60
 
 # A standing-rule line in persistent-rules.md: "[perm] ..." or "[expires:YYYY-MM-DD] ...".
 _RULE_LINE_RE = re.compile(r"^\s*\[(perm|expires:[^\]]*)\]", re.I)
@@ -139,6 +152,39 @@ def _count_rules(text: str) -> int:
     return sum(1 for ln in text.splitlines() if _RULE_LINE_RE.match(ln))
 
 
+def count_tokens(text: str) -> tuple[int, str]:
+    """(tokens, how) for `text`. `how` is "api" or "estimate".
+
+    Uses Anthropic's count_tokens endpoint, which is the only accurate source for a
+    Claude model - never tiktoken, which is OpenAI's tokenizer and undercounts Claude
+    prose by 15-20% and dense technical text by more. Falls back to the MEASURED
+    bytes-per-token ratio when the call fails, because a brake that fails open is worse
+    than one running on a good estimate.
+    """
+    if not text:
+        return 0, "api"
+    tok = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or os.environ.get("ANTHROPIC_API_KEY")
+    if tok:
+        try:
+            import urllib.request
+            body = json.dumps({"model": "claude-opus-5",
+                               "messages": [{"role": "user", "content": text}]}).encode()
+            hdrs = {"content-type": "application/json",
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "oauth-2025-04-20",
+                    "Authorization": f"Bearer {tok}"}
+            req = urllib.request.Request(
+                "https://api.anthropic.com/v1/messages/count_tokens",
+                data=body, headers=hdrs)
+            with urllib.request.urlopen(req, timeout=45) as r:
+                return int(json.loads(r.read())["input_tokens"]), "api"
+        except Exception as e:
+            print(f"[bug-fixer] count_tokens unavailable ({str(e)[:70]}) - "
+                  f"using the measured {BYTES_PER_TOKEN} bytes/token estimate",
+                  file=sys.stderr)
+    return int(round(len(text) / BYTES_PER_TOKEN)), "estimate"
+
+
 def _surface_bytes(slug: str, athlete_rules: str | None = None) -> int:
     """Bytes of the COMBINED instruction surface build_prompt() sends every reply:
     the athlete's rules + the shared rules + the athlete's system prompt. Pass
@@ -160,21 +206,42 @@ def _surface_bytes(slug: str, athlete_rules: str | None = None) -> int:
     return total
 
 
+def _surface_text(slug: str, athlete_rules: str | None = None) -> str:
+    """The concatenated surface, for token counting in one call rather than three."""
+    parts = []
+    if athlete_rules is None:
+        p = _rules_path(slug)
+        parts.append(p.read_text() if p.exists() else "")
+    else:
+        parts.append(athlete_rules)
+    for p in (BASE / "athletes" / "_shared" / "persistent-rules.md",
+              BASE / "athletes" / slug / "system_prompt.txt"):
+        try:
+            parts.append(p.read_text() if p.exists() else "")
+        except OSError:
+            pass
+    return "\n".join(parts)
+
+
 def _surface_over_budget(slug: str, proposed_rules: str) -> str:
     """'' when the proposed athlete rules keep the combined surface inside
-    SURFACE_BYTES_BUDGET, else a human-readable reason for the log."""
-    total = _surface_bytes(slug, proposed_rules)
-    if total <= SURFACE_BYTES_BUDGET:
+    SURFACE_TOKEN_BUDGET, else a human-readable reason for the log."""
+    tokens, how = count_tokens(_surface_text(slug, proposed_rules))
+    if tokens <= SURFACE_TOKEN_BUDGET:
         return ""
-    return (f"combined instruction surface would be {total} bytes, over the "
-            f"{SURFACE_BYTES_BUDGET} budget by {total - SURFACE_BYTES_BUDGET}")
+    return (f"combined instruction surface would be {tokens} tokens ({how}), over the "
+            f"{SURFACE_TOKEN_BUDGET} budget by {tokens - SURFACE_TOKEN_BUDGET}")
 
 
 def _overlong_new_rule(original: str, proposed: str) -> int:
-    """Length of the longest standing-rule line that is in `proposed` but not in
-    `original` and exceeds RULE_MAX_BYTES, else 0. Compares whole normalised lines,
-    so a reworded existing rule counts as new - which is intended: a 'refinement'
-    that balloons a rule past the cap is the exact growth path being closed."""
+    """Token count of the longest standing-rule line that is in `proposed` but not in
+    `original` and exceeds RULE_MAX_TOKENS, else 0. Compares whole normalised lines, so
+    a reworded existing rule counts as new - intended: a 'refinement' that balloons a
+    rule past the cap is the exact growth path being closed.
+
+    Uses the estimate rather than the API deliberately - one network call per candidate
+    line would be slow and flaky, and the cap does not need single-token precision.
+    """
     before = {ln.strip() for ln in original.splitlines() if _RULE_LINE_RE.match(ln)}
     worst = 0
     for ln in proposed.splitlines():
@@ -183,8 +250,9 @@ def _overlong_new_rule(original: str, proposed: str) -> int:
         s = ln.strip()
         if s in before:
             continue
-        if len(s) > RULE_MAX_BYTES:
-            worst = max(worst, len(s))
+        est = int(round(len(s) / BYTES_PER_TOKEN))
+        if est > RULE_MAX_TOKENS:
+            worst = max(worst, est)
     return worst
 
 
@@ -461,7 +529,7 @@ Work in this order:
    count is brought back under the ceiling.
    THE BINDING LIMIT IS BYTES, NOT COUNT. The combined instruction surface (this athlete's \
    rules + the shared rules + the system prompt - everything sent ahead of every single \
-   message) is {surface_bytes} bytes against a budget of {surface_budget}. If it is over \
+   message) is {surface_tokens} TOKENS against a budget of {surface_budget}. If it is over \
    budget, an add_rule WILL be refused at apply time however good the rule is: propose \
    prune/merge to get back under, or a code_fix, and say so in the plan. Rule count went \
    19 -> 67 for Jamie between 12 Jul and 3 Aug 2026 while staying under the count ceiling \
@@ -504,7 +572,7 @@ Work in this order:
        misremembered fact is worse than an absent one. \
    (d) prune or merge - does an existing rule already cover this, badly? \
    Choose add_rule only for genuine judgement or tone that no check can express. If you do, \
-   the rule must be ONE instruction under {rule_max_bytes} bytes: state what to do, and leave \
+   the rule must be ONE instruction under {rule_max_tokens} tokens: state what to do, and leave \
    the evidence, dates and verification narrative in the feedback log where they belong.
 
 6. NEVER propose a rule that contradicts a CONFIRMED PREFERENCE. If a candidate rule would \
@@ -559,9 +627,9 @@ def plan(slug: str) -> dict:
     prompt = (PLAN_PROMPT
               .replace("{rule_count}", str(surface["rule_count"]))
               .replace("{ceiling}", str(RULE_COUNT_CEILING))
-              .replace("{rule_max_bytes}", str(RULE_MAX_BYTES))
-              .replace("{surface_bytes}", str(_surface_bytes(slug)))
-              .replace("{surface_budget}", str(SURFACE_BYTES_BUDGET))
+              .replace("{rule_max_tokens}", str(RULE_MAX_TOKENS))
+              .replace("{surface_tokens}", str(count_tokens(_surface_text(slug))[0]))
+              .replace("{surface_budget}", str(SURFACE_TOKEN_BUDGET))
               .replace("{rule_surface}", surface["text"])
               .replace("{confirmed_prefs}", "\n".join(prefs) if prefs else "(none marked)")
               .replace("{recurrence}", _format_recurrence(rmap))
@@ -826,7 +894,7 @@ def _prune_group(group, idx, slug, dry_run, prefs):
         long_rule = _overlong_new_rule(original, proposed)
         if long_rule:
             print(f"[bug-fixer] {rid}: add_rule refused - proposed rule is "
-                  f"{long_rule} bytes (cap {RULE_MAX_BYTES}). A rule is an instruction, "
+                  f"~{long_rule} tokens (cap {RULE_MAX_TOKENS}). A rule is an instruction, "
                   f"not a case note: state the instruction and put the evidence in the "
                   f"feedback log", file=sys.stderr); return None
     else:

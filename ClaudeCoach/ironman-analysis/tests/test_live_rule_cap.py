@@ -23,7 +23,7 @@ sys.path.insert(0, str(REPO / "ironman-analysis"))
 import rules_capture as rc  # noqa: E402
 
 BEFORE = "# Persistent coaching rules\n[perm] An existing short rule.\n"
-CAP = rc.bug_fixer.RULE_MAX_BYTES
+CAP = rc.bug_fixer.RULE_MAX_TOKENS
 
 
 def test_short_append_is_kept():
@@ -43,12 +43,12 @@ def test_overlong_append_is_dropped_with_a_reason():
 
 def test_cap_boundary():
     """At the cap is fine; one byte over is not."""
-    pad = CAP - len("[perm] ") - 1
+    pad = int(CAP * rc.bug_fixer.BYTES_PER_TOKEN) - len("[perm] ") - 1
     ok = BEFORE + "[perm] " + ("x" * pad) + "\n"
     text, drops = rc.enforce_rule_guards(BEFORE, ok, [])
-    assert drops == [], f"a rule of exactly {CAP} bytes should be allowed"
+    assert drops == [], f"a rule of ~{CAP} tokens should be allowed"
 
-    over = BEFORE + "[perm] " + ("y" * (pad + 50)) + "\n"
+    over = BEFORE + "[perm] " + ("y" * (pad + 200)) + "\n"
     text, drops = rc.enforce_rule_guards(BEFORE, over, [])
     assert drops and "per-rule cap" in drops[0][0]
 
@@ -56,8 +56,8 @@ def test_cap_boundary():
 def test_existing_long_rules_are_not_retro_dropped():
     """The cap is for appends. An athlete's existing long rules survive untouched -
     pruning them is a coach decision, not something a guard does silently."""
-    long_existing = "# Persistent coaching rules\n[perm] " + ("z" * (CAP + 500)) + "\n"
+    long_existing = "# Persistent coaching rules\n[perm] " + ("z" * (int(CAP * rc.bug_fixer.BYTES_PER_TOKEN) + 900)) + "\n"
     after = long_existing + "[perm] A short new rule.\n"
     text, drops = rc.enforce_rule_guards(long_existing, after, [])
-    assert ("z" * (CAP + 500)) in text, "an existing long rule must not be dropped"
+    assert ("z" * (int(CAP * rc.bug_fixer.BYTES_PER_TOKEN) + 900)) in text, "an existing long rule must not be dropped"
     assert drops == []
