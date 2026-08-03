@@ -2815,6 +2815,35 @@ def _handle_hours_capture(token, chat_id, text, athletes):
         send(token, chat_id, reply, reply_markup=build_keyboard(slug))
         return True
 
+    # TIER 1b — a DAY-SHAPE declaration: which sports fall on which days, with no hours
+    # figure anywhere in it. Added 2026-08-03. This is the write that was missing: Jamie's
+    # 1 Aug "Monday rest Tuesday swim morning long run evening ... Thursday long ride.
+    # Friday/Saturday run Sunday rest" matched no capture path, went only into
+    # current-state.md prose, and stage1-plan.py reads THIS file - so the generator used
+    # default day_rules and built a Friday-threshold / Saturday-long-ride week. He then
+    # restated his availability on 27 Jul, 1 Aug, 2 Aug and 3 Aug.
+    if weekly_availability.looks_like_day_shape_declaration(text):
+        p = weekly_availability.parse_day_shape_message(text)
+        try:
+            # record() REPLACES the week's declaration, so an hours figure already
+            # declared for this week must be carried forward or it is silently dropped.
+            prior_hours = weekly_availability.hours_for_week(slug, ws)
+            prior_cons  = weekly_availability.constraints_for_week(slug, ws) or ""
+            weekly_availability.record(
+                slug, ws, source="chat-day-shape",
+                hours=prior_hours, constraints=prior_cons,
+                swim_days=p["swim_days"], bike_days=p["bike_days"],
+                run_days=p["run_days"], unavailable_days=p["unavailable_days"])
+        except Exception as e:
+            log(f"day-shape capture failed for {slug}: {e}")
+            return False
+        # Write first, then restate what was saved in one line (shared rule S38).
+        send(token, chat_id,
+             f"Recorded for w/c {ws.isoformat()} — *{weekly_availability.day_shape_summary(p)}*. "
+             f"That is what the plan will be built to; tell me if any of it is wrong.",
+             reply_markup=build_keyboard(slug))
+        return True
+
     # TIER 2 — ambiguous figure, and only while the ask is genuinely outstanding (sent,
     # unanswered, inside its window). `ask_outstanding` is a recorded fact, not an
     # inference from the calendar: sunday_hours_ask sends nothing while the illness flag
@@ -3489,6 +3518,30 @@ def prefetch_context(slug: str) -> str:
                             f"id={s.get('activity_id','?')}  [{flag}]")
         except Exception as _e:
             log(f"prefetch session-log (non-fatal): {_e}")
+
+        # Fitness/Fatigue/Form — computed ONCE here and injected, so every reply in a
+        # conversation quotes the same figure. Added 2026-08-03. Nothing used to inject
+        # it: _form_stats() existed only behind /fitness, so on a chat turn the model
+        # derived CTL itself from whatever it happened to read, and on 3 Aug Jamie was
+        # given 102.7, then 100.0, then 99.7, then 103.6 inside 19 minutes - each stated
+        # as settled. This is the same compute-and-inject fix that stopped hand-rolled
+        # TSS arithmetic on 15 Jun (see docs/planning-chat-bypass-diagnosis.md); that one
+        # held, and the model quotes injected figures reliably.
+        try:
+            _fstats = _form_stats(slug)
+            if _fstats and "No fitness data" not in _fstats:
+                lines.append(
+                    "\n=== FITNESS / FATIGUE / FORM (authoritative — computed from the "
+                    "single PMC source) ===\n"
+                    f"{_fstats}\n"
+                    "QUOTE THESE FIGURES. Do not recompute CTL/ATL/TSB, do not derive them "
+                    "from activity Loads, and do not restate a figure from earlier in this "
+                    "conversation - it may predate a sync. If the athlete challenges a "
+                    "number, re-read this block rather than recalculating. If a session has "
+                    "not finished syncing in Intervals.icu, say the figure is provisional "
+                    "and say why; never present a mid-sync read as settled.")
+        except Exception as _e:
+            log(f"prefetch form stats (non-fatal): {_e}")
 
         # Subjective layer (top of current-state.md) — travel blocks, current
         # ankle/niggle status, open actions. The full file is large (~65KB of

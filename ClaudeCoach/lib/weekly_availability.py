@@ -692,3 +692,176 @@ def confirmation(hours: float, constraints: str = "", *, coaching_level: str = "
     tmpl = table.get(coaching_level, table["mid"])
     cons = f", noted: _{constraints.strip()}_" if (constraints or "").strip() else ""
     return tmpl.format(hours=hours, cons=cons)
+
+
+# ---------------------------------------------------------------------------
+# DAY-SHAPE DECLARATIONS (added 2026-08-03)
+# ---------------------------------------------------------------------------
+# `record()` has always accepted swim_days / bike_days / run_days /
+# unavailable_days, but nothing ever produced them: the only capture path was
+# parse_hours_message, which needs a NUMBER. So a message like
+#
+#   "Monday rest Tuesday swim morning long run evening, Wednesday swim.
+#    Thursday long ride. Friday/Saturday run Sunday rest. (Travelling)"
+#
+# (Jamie, 1 Aug 2026) carried a complete week shape and no hours figure, matched
+# nothing, and was written only into current-state.md prose. stage1-plan.py does
+# not read prose or persistent-rules.md - it reads this file - so the generator
+# fell back to the default day_rules and produced a Friday-threshold /
+# Saturday-long-ride week. Jamie then had to restate his availability on 27 Jul,
+# 1 Aug, 2 Aug and 3 Aug. No standing rule could have fixed that; it is a write
+# bug, and this is the missing write.
+#
+# Discipline matches the hours tiers: a wrong declaration silently becomes the
+# planner's constraint set, so detection demands MULTIPLE named days each
+# carrying a sport or rest, and bails on anything interrogative.
+
+_DAY_CANON = {
+    "mon": "Mon", "monday": "Mon", "tue": "Tue", "tues": "Tue", "tuesday": "Tue",
+    "wed": "Wed", "weds": "Wed", "wednesday": "Wed", "thu": "Thu", "thur": "Thu",
+    "thurs": "Thu", "thursday": "Thu", "fri": "Fri", "friday": "Fri",
+    "sat": "Sat", "saturday": "Sat", "sun": "Sun", "sunday": "Sun",
+}
+_DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+_DAY_TOKEN_RE = re.compile(
+    r"\b(mon|monday|tues?|tuesday|weds?|wednesday|thur?s?|thursday|fri|friday|"
+    r"sat|saturday|sun|sunday)\b", re.I)
+
+# Sport cues. Order matters only for readability; a segment may carry several.
+_SPORT_CUES = (
+    ("swim_days", re.compile(r"\b(swim|swimming|pool|css|ows)\b", re.I)),
+    ("bike_days", re.compile(r"\b(bike|ride|riding|cycl\w*|turbo|spin|brick)\b", re.I)),
+    ("run_days",  re.compile(r"\b(run|running|jog\w*|tempo run|long run)\b", re.I)),
+)
+_REST_RE = re.compile(r"\b(rest|off|nothing|no training|day off|travel\w*)\b", re.I)
+# Anything that means "this is not a declaration".
+_DAY_SHAPE_DISQUALIFY_RE = re.compile(
+    r"\?|\b(what|when|which|how|why|shall|should i|can i|did|does|was|were|"
+    r"remind me|talk me through|debrief)\b", re.I)
+# "Thursday till Sunday", "Thu-Sun", "Friday/Saturday"
+_RANGE_RE = re.compile(
+    r"\b(\w+?)\s*(?:till|til|to|through|thru|-|–|/)\s*(\w+?)\b", re.I)
+
+
+def _canon_day(tok: str) -> str | None:
+    return _DAY_CANON.get((tok or "").strip().lower().rstrip("."))
+
+
+def _expand_range(a: str, b: str) -> list[str]:
+    """Mon..Sun inclusive span between two day tokens, [] if either is not a day."""
+    ca, cb = _canon_day(a), _canon_day(b)
+    if not ca or not cb:
+        return []
+    i, j = _DAY_ORDER.index(ca), _DAY_ORDER.index(cb)
+    if i <= j:
+        return _DAY_ORDER[i:j + 1]
+    return _DAY_ORDER[i:] + _DAY_ORDER[:j + 1]
+
+
+def parse_day_shape_message(text: str) -> dict:
+    """Pull a per-day sport shape out of free text.
+
+    Returns {"swim_days", "bike_days", "run_days", "unavailable_days", "days_named",
+    "framed"}. Day lists are canonical "Mon".."Sun" and de-duplicated in week order.
+    `days_named` counts every distinct day mentioned, so the caller can insist on a
+    real week shape rather than a single-day aside. Never raises.
+    """
+    out = {"swim_days": [], "bike_days": [], "run_days": [],
+           "unavailable_days": [], "days_named": 0, "framed": False}
+    if not text or not text.strip():
+        return out
+    # Parenthesised asides are dropped before anything is attributed. Without this,
+    # "Wednesday swim (will be tired after run)" marks Wednesday as a RUN day, because
+    # the aside sits inside Wednesday's segment - a real misparse of Jamie's 1 Aug
+    # message, and precisely the kind that silently becomes the planner's day_rules.
+    t = re.sub(r"\([^)]*\)", " ", str(text))
+    out["framed"] = bool(re.search(
+        r"\b(next week|this week|the week|week of|availability|available)\b", t, re.I))
+
+    matches = list(_DAY_TOKEN_RE.finditer(t))
+    if not matches:
+        return out
+
+    # Group adjacent day tokens separated ONLY by a joiner, so "Friday/Saturday run"
+    # and "Thursday till Sunday" share the sport that follows the group. Attributing
+    # to the last day alone (the naive reading) dropped Friday's run entirely.
+    _JOIN_ONLY = re.compile(r"^\s*(?:till|til|to|through|thru|and|[-–/,&])\s*$", re.I)
+    groups: list[tuple[list[str], int]] = []   # (days in group, end offset of group)
+    i = 0
+    while i < len(matches):
+        j = i
+        while (j + 1 < len(matches)
+               and _JOIN_ONLY.match(t[matches[j].end():matches[j + 1].start()])):
+            j += 1
+        if j > i:
+            # A span joiner ("till"/"to"/"-") fills the range; a list joiner
+            # ("/", "and", ",") takes only the named days.
+            gap = t[matches[i].end():matches[i + 1].start()]
+            if re.search(r"till|til|to|through|thru|[-–]", gap, re.I):
+                days = _expand_range(matches[i].group(0), matches[j].group(0))
+            else:
+                days = [_canon_day(m.group(0)) for m in matches[i:j + 1]]
+        else:
+            days = [_canon_day(matches[i].group(0))]
+        days = [d for d in days if d]
+        if days:
+            groups.append((days, matches[j].end()))
+        i = j + 1
+
+    named: list[str] = []
+    for gi, (days, end) in enumerate(groups):
+        seg_end = len(t)
+        if gi + 1 < len(groups):
+            # Segment runs to the first day token of the NEXT group.
+            nxt = groups[gi + 1]
+            m = _DAY_TOKEN_RE.search(t, end)
+            seg_end = m.start() if m else nxt[1]
+        seg = t[end:seg_end]
+        for d in days:
+            if d not in named:
+                named.append(d)
+        hit = False
+        for key, rx in _SPORT_CUES:
+            if rx.search(seg):
+                hit = True
+                for d in days:
+                    if d not in out[key]:
+                        out[key].append(d)
+        if not hit and _REST_RE.search(seg):
+            for d in days:
+                if d not in out["unavailable_days"]:
+                    out["unavailable_days"].append(d)
+    for key in ("swim_days", "bike_days", "run_days", "unavailable_days"):
+        out[key] = [d for d in _DAY_ORDER if d in out[key]]
+    out["days_named"] = len(named)
+    return out
+
+
+def looks_like_day_shape_declaration(text: str) -> bool:
+    """True only for a message that plainly lays out a week's shape.
+
+    Deliberately strict, because a false positive rewrites the planner's day_rules:
+    at least THREE distinct days named, at least TWO of them carrying a sport or an
+    explicit rest, and nothing interrogative anywhere in the message. "Long ride is
+    now Friday. Can brick tomorrow?" is a question and a single day, so it fails on
+    both counts and is left to the day-override path.
+    """
+    if not text or _DAY_SHAPE_DISQUALIFY_RE.search(text):
+        return False
+    p = parse_day_shape_message(text)
+    if p["days_named"] < 3:
+        return False
+    assigned = {d for k in ("swim_days", "bike_days", "run_days", "unavailable_days")
+                for d in p[k]}
+    return len(assigned) >= 2
+
+
+def day_shape_summary(p: dict) -> str:
+    """One-line readback of a parsed shape, for the confirmation message. Named so the
+    caller never hand-formats it (rule S38: write the file, then restate what saved)."""
+    bits = []
+    for key, label in (("swim_days", "swim"), ("bike_days", "bike"),
+                       ("run_days", "run"), ("unavailable_days", "rest")):
+        if p.get(key):
+            bits.append(f"{label} {'/'.join(p[key])}")
+    return "; ".join(bits) if bits else "no days resolved"

@@ -57,7 +57,12 @@ def _resolve_claude_bin() -> str:
 
 
 CLAUDE_BIN = _resolve_claude_bin()
-TOOLS = "Read,Write,Edit,Bash"
+# WebSearch/WebFetch added 2026-08-03: without them a chat-level grant from the
+# athlete can never work, and the model falls back to urllib over Bash, which 429s
+# on saltstick.com/highfive.co.uk and cannot read JS-rendered nutrition panels.
+# They are NOT a fabrication fix - the 300mg SiS and ~600mg sausage-roll figures
+# were invented while a working shell fetch route was available.
+TOOLS = "Read,Write,Edit,Bash,WebSearch,WebFetch"
 # Commands the chat model must never run mid-reply. Restarting the service (or
 # killing the process) drops the in-flight reply — the cause of the 5 self-
 # restarts + ~25-min silences on 2026-07-05. Code edits/pushes stay allowed
@@ -80,7 +85,17 @@ PROMPT_HISTORY_PAIRS = 12
 # Session-resume tuning. Rotate before the session transcript grows unwieldy
 # (each resume replays the whole session server-side) and daily so a stale
 # thread never anchors today's coaching.
-SESSION_MAX_TURNS = 30
+#
+# 30 -> 12 (2026-08-03). The resume path sends NO system prompt and NO rules
+# (see _resume_prompt): the whole 82KB / 123-rule surface goes in once at turn 1
+# and is never re-sent. Jamie's .chat_session.json read turns=9 at the point
+# quality collapsed on 3 Aug. Rotation is the only thing that puts the rules back
+# in front of the model, and it is not a memory reset - the `new` path re-sends
+# the full prompt AND the last PROMPT_HISTORY_PAIRS exchanges. 12 matches that
+# window, so a rotation carries roughly what the session was already holding.
+# Override per athlete with "session_max_turns" in telegram/config.json - no
+# deploy needed, and setting it back to 30 restores the old behaviour exactly.
+SESSION_MAX_TURNS = 12
 SESSION_MAX_AGE_S = 24 * 3600
 SESSION_CATCHUP_PAIRS = 6
 
@@ -368,10 +383,13 @@ def _clear_session(sp_file):
         pass
 
 
-def _session_usable(st, fp) -> bool:
+def _session_usable(st, fp, max_turns: int | None = None) -> bool:
+    """max_turns None = the module default. Passed explicitly by _plan_session so
+    "session_max_turns" in telegram/config.json can be tuned without a deploy."""
+    cap = SESSION_MAX_TURNS if max_turns is None else max_turns
     return bool(
         st and fp and st.get("fp") == fp
-        and st.get("turns", 0) < SESSION_MAX_TURNS
+        and st.get("turns", 0) < cap
         and time.time() - st.get("started", 0) < SESSION_MAX_AGE_S
     )
 
@@ -405,7 +423,11 @@ def _plan_session(user_message, config, history, sp_file, athlete_name, context)
                 _assemble(user_message, history, sp_file, athlete_name, context),
                 "stateless", None)
     st = _load_session(sp_file)
-    if _session_usable(st, _prompt_fingerprint(sp_file)):
+    try:
+        max_turns = int(config.get("session_max_turns", SESSION_MAX_TURNS))
+    except (TypeError, ValueError):
+        max_turns = SESSION_MAX_TURNS
+    if _session_usable(st, _prompt_fingerprint(sp_file), max_turns):
         return (["--resume", st["session_id"]],
                 _resume_prompt(user_message, history, athlete_name, context,
                                st.get("last_seen", "")),
@@ -436,14 +458,36 @@ def _finish_session(sp_file, mode, st, session_id):
         })
 
 
-def _log_timing(path, model, mode, t0, t_init, t_first):
+def _log_timing(path, model, mode, t0, t_init, t_first,
+                turns=None, prompt_bytes=None):
     """One line per reply so latency can be split into CLI boot (spawn→init),
-    ingest+thinking (init→first text) and generation (→total)."""
+    ingest+thinking (init→first text) and generation (→total).
+
+    turns/prompt_bytes added 2026-08-03: without them the resume and rotation
+    populations cannot be separated after the fact, so there is no way to tell
+    whether lowering SESSION_MAX_TURNS helped or cost anything. `turns` is the
+    1-based index of THIS reply within its session; `prompt_bytes` is what we
+    send locally, which on a resume is small by design - the transcript is
+    replayed server-side and is not visible here."""
     t_end = time.time()
     boot = f"{t_init - t0:.1f}" if t_init else "?"
     first = f"{t_first - t0:.1f}" if t_first else "?"
+    extra = ""
+    if turns is not None:
+        extra += f" turn={turns}"
+    if prompt_bytes is not None:
+        extra += f" prompt_bytes={prompt_bytes}"
     log(f"[timing] {path} model={model} session={mode} "
-        f"boot={boot}s first_text={first}s total={t_end - t0:.1f}s")
+        f"boot={boot}s first_text={first}s total={t_end - t0:.1f}s{extra}")
+
+
+def _turn_index(st) -> int:
+    """1-based index of the reply about to be produced within its session. A new
+    or stateless session is turn 1."""
+    try:
+        return int((st or {}).get("turns", 0)) + 1
+    except (TypeError, ValueError):
+        return 1
 
 
 # ---------------------------------------------------------------------------
@@ -491,7 +535,8 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
             model = MODEL_SONNET
         if rc == 0 and text:
             _finish_session(sp_file, mode, st, sid)
-        _log_timing("call", model, mode, t0, None, None)
+        _log_timing("call", model, mode, t0, None, None,
+                    turns=_turn_index(st), prompt_bytes=len(prompt or ""))
         return text or "(no response)"
     except subprocess.TimeoutExpired:
         return "Sorry, that took too long. Try a simpler question or break it into steps."
@@ -626,7 +671,8 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
 
     if rc == 0 and text:
         _finish_session(sp_file, mode, st, sid)
-    _log_timing("stream", model, mode, t0, t_init, t_first)
+    _log_timing("stream", model, mode, t0, t_init, t_first,
+                turns=_turn_index(st), prompt_bytes=len(prompt or ""))
     yield ("final", text or "(no response)")
 
 

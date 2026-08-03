@@ -59,6 +59,25 @@ TG_CONFIG     = BASE / "telegram/config.json"
 # consolidate before it may add anything.
 RULE_COUNT_CEILING = 90
 
+# Volume brake (2026-08-03). RULE_COUNT_CEILING never fired for Jamie - 67 of 90 while
+# the file quadrupled in bytes - so these bound what the model actually pays for: the
+# COMBINED instruction surface, and the length of any single new rule.
+#
+# The combined surface is athlete persistent-rules.md + _shared/persistent-rules.md +
+# system_prompt.txt, i.e. everything build_prompt() concatenates ahead of the athlete's
+# message. On 3 Aug 2026 that was ~82,100 bytes for Jamie (45.3K + 15.9K + 20.9K).
+# The budget is set at roughly half of that deliberately: the surface is ALREADY over
+# budget, so from tonight the nightly triage cannot add a rule until the pile has been
+# pruned. prune and merge remain available and unaffected - that is the intended
+# behaviour of a budget, not a bug. Raise it only with a reason.
+SURFACE_BYTES_BUDGET = 41_000
+
+# A single standing rule may not exceed this. Today's average is 676 bytes and the
+# longest are 200-word case notes with citations and verification narratives, which is
+# how the file grew 4.6x while the rule count barely doubled. Applies only to NEWLY
+# added rules - existing long rules are left alone for the coach to prune by hand.
+RULE_MAX_BYTES = 400
+
 # A standing-rule line in persistent-rules.md: "[perm] ..." or "[expires:YYYY-MM-DD] ...".
 _RULE_LINE_RE = re.compile(r"^\s*\[(perm|expires:[^\]]*)\]", re.I)
 
@@ -118,6 +137,55 @@ def _rules_path(slug: str) -> Path:
 def _count_rules(text: str) -> int:
     """Number of standing-rule lines ([perm]/[expires:...]) in a persistent-rules.md body."""
     return sum(1 for ln in text.splitlines() if _RULE_LINE_RE.match(ln))
+
+
+def _surface_bytes(slug: str, athlete_rules: str | None = None) -> int:
+    """Bytes of the COMBINED instruction surface build_prompt() sends every reply:
+    the athlete's rules + the shared rules + the athlete's system prompt. Pass
+    `athlete_rules` to measure a proposed body instead of what is on disk.
+    Missing files count as zero rather than raising - a brake must never be the
+    reason the nightly job dies."""
+    total = 0
+    if athlete_rules is None:
+        p = _rules_path(slug)
+        total += len(p.read_text()) if p.exists() else 0
+    else:
+        total += len(athlete_rules)
+    for p in (BASE / "athletes" / "_shared" / "persistent-rules.md",
+              BASE / "athletes" / slug / "system_prompt.txt"):
+        try:
+            total += len(p.read_text()) if p.exists() else 0
+        except OSError:
+            pass
+    return total
+
+
+def _surface_over_budget(slug: str, proposed_rules: str) -> str:
+    """'' when the proposed athlete rules keep the combined surface inside
+    SURFACE_BYTES_BUDGET, else a human-readable reason for the log."""
+    total = _surface_bytes(slug, proposed_rules)
+    if total <= SURFACE_BYTES_BUDGET:
+        return ""
+    return (f"combined instruction surface would be {total} bytes, over the "
+            f"{SURFACE_BYTES_BUDGET} budget by {total - SURFACE_BYTES_BUDGET}")
+
+
+def _overlong_new_rule(original: str, proposed: str) -> int:
+    """Length of the longest standing-rule line that is in `proposed` but not in
+    `original` and exceeds RULE_MAX_BYTES, else 0. Compares whole normalised lines,
+    so a reworded existing rule counts as new - which is intended: a 'refinement'
+    that balloons a rule past the cap is the exact growth path being closed."""
+    before = {ln.strip() for ln in original.splitlines() if _RULE_LINE_RE.match(ln)}
+    worst = 0
+    for ln in proposed.splitlines():
+        if not _RULE_LINE_RE.match(ln):
+            continue
+        s = ln.strip()
+        if s in before:
+            continue
+        if len(s) > RULE_MAX_BYTES:
+            worst = max(worst, len(s))
+    return worst
 
 
 def _engine_rule_constants() -> dict:
@@ -391,6 +459,13 @@ Work in this order:
    {rule_count} standing rules; the ceiling is {ceiling}. If the count exceeds the ceiling \
    you MUST propose prune/merge consolidations and MUST NOT propose ANY new rule until the \
    count is brought back under the ceiling.
+   THE BINDING LIMIT IS BYTES, NOT COUNT. The combined instruction surface (this athlete's \
+   rules + the shared rules + the system prompt - everything sent ahead of every single \
+   message) is {surface_bytes} bytes against a budget of {surface_budget}. If it is over \
+   budget, an add_rule WILL be refused at apply time however good the rule is: propose \
+   prune/merge to get back under, or a code_fix, and say so in the plan. Rule count went \
+   19 -> 67 for Jamie between 12 Jul and 3 Aug 2026 while staying under the count ceiling \
+   the whole time, which is why bytes now govern.
 
 2. CONTEXT. For each log entry, check whether it is ALREADY addressed in the current \
    codebase or was already fixed (see RECURRENCE NOTES). Run `git log --oneline -60` ONCE \
@@ -412,7 +487,25 @@ Work in this order:
 5. CONSOLIDATE the OPEN entries that share ONE root cause into ONE group. For each group set \
    an action: "prune" (delete dead/duplicate/superseded rules), "merge" (combine overlapping \
    rules into one, preserving every distinct preference), "code_fix" (change code / tool \
-   wiring), or "add_rule" (add exactly ONE new standing rule - last resort only).
+   wiring), or "add_rule" (add exactly ONE new standing rule).
+
+5a. add_rule IS THE LAST RESORT, NOT THE DEFAULT. Prose in a prompt is the weakest \
+   enforcement available: on 2 Aug 2026 an anti-fabrication rule was written at 17:04 and \
+   violated at 17:23 in the same conversation. Before choosing add_rule you MUST rule out, \
+   in this order, and say in `plan` which you rejected and why: \
+   (a) code_fix - can a check, assert or validator make the wrong output impossible? A \
+       precondition ("never state an RPE that is null in session-log.json") is an assert, \
+       not a sentence. \
+   (b) code_fix - is the real defect that a value never reaches the code that needs it? \
+       Availability declared in chat but never written to this-week-availability.json is a \
+       WRITE bug; no rule can fix it, because stage1-plan.py does not read persistent-rules.md. \
+   (c) a reference-data entry - is this a FACT (a sodium figure, a bottle volume, an IF)? \
+       Facts belong in a file the coach looks up, not in every prompt. A truncated or \
+       misremembered fact is worse than an absent one. \
+   (d) prune or merge - does an existing rule already cover this, badly? \
+   Choose add_rule only for genuine judgement or tone that no check can express. If you do, \
+   the rule must be ONE instruction under {rule_max_bytes} bytes: state what to do, and leave \
+   the evidence, dates and verification narrative in the feedback log where they belong.
 
 6. NEVER propose a rule that contradicts a CONFIRMED PREFERENCE. If a candidate rule would \
    collide with one, drop it and name the clashing preference in conflicts_with.
@@ -466,6 +559,9 @@ def plan(slug: str) -> dict:
     prompt = (PLAN_PROMPT
               .replace("{rule_count}", str(surface["rule_count"]))
               .replace("{ceiling}", str(RULE_COUNT_CEILING))
+              .replace("{rule_max_bytes}", str(RULE_MAX_BYTES))
+              .replace("{surface_bytes}", str(_surface_bytes(slug)))
+              .replace("{surface_budget}", str(SURFACE_BYTES_BUDGET))
               .replace("{rule_surface}", surface["text"])
               .replace("{confirmed_prefs}", "\n".join(prefs) if prefs else "(none marked)")
               .replace("{recurrence}", _format_recurrence(rmap))
@@ -718,6 +814,21 @@ def _prune_group(group, idx, slug, dry_run, prefs):
         if new_count > RULE_COUNT_CEILING:
             print(f"[bug-fixer] {rid}: add_rule would exceed the ceiling "
                   f"({new_count}>{RULE_COUNT_CEILING}) - consolidate first; discarding", file=sys.stderr); return None
+        # Volume brake (2026-08-03). The count ceiling above never fired: Jamie sat
+        # at 67 of 90 while the file went 19 -> 67 rules and 9.7KB -> 45.3KB, because
+        # count is the wrong unit (avg rule length went 287 -> 676 bytes) and it is
+        # checked per-file, so the 56 shared rules were never counted against him.
+        # These two checks measure what actually costs the model its attention.
+        over = _surface_over_budget(slug, proposed)
+        if over:
+            print(f"[bug-fixer] {rid}: add_rule refused - {over}; "
+                  f"prune or merge first", file=sys.stderr); return None
+        long_rule = _overlong_new_rule(original, proposed)
+        if long_rule:
+            print(f"[bug-fixer] {rid}: add_rule refused - proposed rule is "
+                  f"{long_rule} bytes (cap {RULE_MAX_BYTES}). A rule is an instruction, "
+                  f"not a case note: state the instruction and put the evidence in the "
+                  f"feedback log", file=sys.stderr); return None
     else:
         print(f"[bug-fixer] {rid}: unknown rule action {action!r} - discarding", file=sys.stderr); return None
 
