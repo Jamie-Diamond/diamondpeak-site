@@ -16,11 +16,13 @@
  *
  * Bump CACHE on every deploy that changes a precached file.
  */
-const CACHE = 'claudecoach-v1';
+const CACHE = 'claudecoach-v2';
 
 const SHELL = [
   './',
+  './app.html',
   './index.html',
+  './app/app.js',
   './app/app-shell.css',
   './app/app-shell.js',
   './app/manifest.webmanifest',
@@ -89,7 +91,7 @@ function offlineFallback(request) {
   // A navigation that misses entirely still gets the hub rather than the browser's
   // dinosaur, so the app never looks broken.
   if (request.mode === 'navigate') {
-    return caches.match('./index.html');
+    return caches.match('./app.html');
   }
   return Response.error();
 }

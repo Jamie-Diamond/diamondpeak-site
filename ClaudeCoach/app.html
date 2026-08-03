@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<title>ClaudeCoach</title>
+<meta name="description" content="Training almanac for Diamond Peak athletes.">
+
+<link rel="manifest" href="app/manifest.webmanifest">
+<meta name="theme-color" content="#efe9dc">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Coach">
+<link rel="apple-touch-icon" href="app/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="app/icons/favicon-32.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   ClaudeCoach — a training almanac.
+
+   Direction: ink on warm paper. A printed logbook, not a dashboard. Hairline
+   rules instead of boxes and shadows; Libre Baskerville for figures so numbers
+   read as typeset rather than rendered; DM Mono only for labels and units, at
+   9-10px with wide tracking, the way a printed table annotates itself. ONE
+   accent (the green) earns its place by marking only what is done or key.
+   Everything else is ink, secondary ink, or the rule colour.
+
+   Palette is the one the existing pages already declare, pushed harder: the
+   paper is warmed a shade for chrome so the content sheets sit ON something.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  --paper:#f8f5ef;      /* content sheet */
+  --paper-2:#efe9dc;    /* chrome / behind the sheet */
+  --ink:#18160f;
+  --ink-2:#4a4535;
+  --muted:#9a9080;
+  --rule:#ddd8cc;
+  --rule-soft:#e8e2d6;
+  --green:#1d6840;
+  --blue:#1a5276;
+  --amber:#b7791f;
+  --red:#b91c1c;
+  --tab-h:58px;
+  --sheet:min(680px,100%);
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  font-family:'DM Sans',system-ui,sans-serif;
+  font-weight:300;
+  font-size:15px;
+  line-height:1.5;
+  color:var(--ink);
+  background:var(--paper-2);
+  /* Faint paper tooth. Two tiny gradients rather than an image: no request, and
+     it survives being cached offline. */
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(24,22,15,.020) 0 1px, transparent 1px),
+    radial-gradient(circle at 72% 63%, rgba(24,22,15,.016) 0 1px, transparent 1px);
+  background-size:7px 7px, 11px 11px;
+  padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px));
+  overscroll-behavior-y:none;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── masthead ───────────────────────────────────────────────────────────── */
+
+.masthead{
+  position:sticky; top:0; z-index:60;
+  padding:calc(14px + env(safe-area-inset-top,0px)) 18px 11px;
+  background:linear-gradient(var(--paper-2) 72%, rgba(239,233,220,0));
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+}
+.masthead-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;max-width:var(--sheet);margin:0 auto}
+.wordmark{font-family:'Libre Baskerville',serif;font-weight:700;font-size:19px;letter-spacing:-.02em;line-height:1;margin:0}
+.wordmark em{font-style:italic;font-weight:400;color:var(--green)}
+.countdown{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.5}
+.countdown b{display:block;font-family:'Libre Baskerville',serif;font-size:16px;letter-spacing:-.01em;color:var(--ink);text-transform:none}
+
+/* athlete segmented control — a printed index tab, not a pill button */
+.who{display:flex;gap:0;max-width:var(--sheet);margin:11px auto 0;border-bottom:1px solid var(--rule)}
+.who button{
+  flex:1; appearance:none; background:none; border:0; border-bottom:2px solid transparent;
+  padding:7px 4px 8px; cursor:pointer;
+  font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted); transition:color .16s ease, border-color .16s ease;
+}
+.who button[aria-pressed=true]{color:var(--ink);border-bottom-color:var(--green)}
+
+/* ── sheet & sections ───────────────────────────────────────────────────── */
+
+main{max-width:var(--sheet);margin:0 auto;padding:0 0 26px}
+.view{display:none;padding:16px 18px 0}
+.view.on{display:block}
+.view.on > *{animation:rise .42s cubic-bezier(.16,1,.3,1) backwards}
+.view.on > *:nth-child(1){animation-delay:.02s}
+.view.on > *:nth-child(2){animation-delay:.07s}
+.view.on > *:nth-child(3){animation-delay:.12s}
+.view.on > *:nth-child(4){animation-delay:.17s}
+.view.on > *:nth-child(5){animation-delay:.22s}
+.view.on > *:nth-child(n+6){animation-delay:.26s}
+@keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+
+.eyebrow{
+  font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--muted);display:flex;align-items:center;gap:9px;margin:0 0 9px;
+}
+.eyebrow::after{content:'';flex:1;height:1px;background:var(--rule)}
+.sheet{background:var(--paper);border:1px solid var(--rule);border-radius:3px;padding:15px 16px;margin:0 0 15px}
+.sheet.flush{padding:0;overflow:hidden}
+
+/* ── hero figures ───────────────────────────────────────────────────────── */
+
+.figures{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--rule);border-radius:3px;background:var(--paper);overflow:hidden;margin:0 0 15px}
+.fig{padding:13px 12px 12px;border-right:1px solid var(--rule-soft);text-align:center}
+.fig:last-child{border-right:0}
+.fig .n{font-family:'Libre Baskerville',serif;font-size:29px;line-height:1;letter-spacing:-.025em;display:block}
+.fig .l{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.17em;text-transform:uppercase;color:var(--muted);margin-top:6px;display:block}
+.fig .d{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px;display:block}
+.pos{color:var(--green)} .neg{color:var(--red)} .flat{color:var(--muted)}
+
+/* ── session rows ───────────────────────────────────────────────────────── */
+
+.day{border-bottom:1px solid var(--rule-soft)}
+.day:last-child{border-bottom:0}
+.day-h{display:flex;align-items:baseline;gap:9px;padding:9px 15px 5px;background:linear-gradient(var(--paper),var(--paper))}
+.day-h .dow{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.17em;text-transform:uppercase;color:var(--muted)}
+.day-h .dnum{font-family:'Libre Baskerville',serif;font-size:13px}
+.day-h.today .dnum,.day-h.today .dow{color:var(--green)}
+.day-h .sum{margin-left:auto;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)}
+
+.sesh{display:flex;gap:11px;align-items:flex-start;padding:8px 15px 10px;position:relative}
+.sesh + .sesh{border-top:1px dotted var(--rule-soft)}
+.sesh .tick{flex:0 0 auto;width:15px;padding-top:3px;font-family:'DM Mono',monospace;font-size:11px;line-height:1;color:var(--muted)}
+.sesh.done .tick{color:var(--green)}
+.sesh .body{min-width:0;flex:1}
+.sesh .nm{font-size:14px;font-weight:400;letter-spacing:-.005em}
+.sesh.done .nm{color:var(--ink-2)}
+.sesh .meta{font-family:'DM Mono',monospace;font-size:9.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sesh .rt{flex:0 0 auto;text-align:right;font-family:'DM Mono',monospace;font-size:9.5px;color:var(--muted);padding-top:2px}
+.sesh .rt b{display:block;font-family:'Libre Baskerville',serif;font-size:14px;color:var(--ink);letter-spacing:-.01em}
+.sp{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:5px;vertical-align:.08em}
+.sp-swim{background:var(--blue)} .sp-bike{background:var(--green)} .sp-run{background:var(--amber)}
+.sp-other{background:var(--muted)}
+.keymark{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.14em;color:var(--green);border:1px solid var(--green);border-radius:2px;padding:1px 4px;margin-left:6px;vertical-align:1.5px}
+
+/* ── library ────────────────────────────────────────────────────────────── */
+
+.chips{display:flex;gap:6px;overflow-x:auto;padding:0 0 12px;margin:0 0 3px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:0 0 auto;appearance:none;background:var(--paper);border:1px solid var(--rule);border-radius:2px;
+  padding:6px 11px;cursor:pointer;color:var(--ink-2);
+  font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  transition:background .15s ease,color .15s ease,border-color .15s ease;
+}
+.chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.lib{border:1px solid var(--rule);border-radius:3px;background:var(--paper);overflow:hidden}
+.lib details{border-bottom:1px solid var(--rule-soft)}
+.lib details:last-child{border-bottom:0}
+.lib summary{
+  list-style:none;cursor:pointer;padding:11px 15px;display:flex;align-items:baseline;gap:9px;
+  -webkit-tap-highlight-color:transparent;
+}
+.lib summary::-webkit-details-marker{display:none}
+.lib summary .nm{font-size:14px}
+.lib summary .zn{margin-left:auto;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.1em;color:var(--muted)}
+.lib .inner{padding:0 15px 13px;font-size:13.5px;color:var(--ink-2)}
+.lib .prog{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0 0}
+.lib .prog span{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.06em;border:1px solid var(--rule);border-radius:2px;padding:3px 6px;color:var(--ink-2)}
+.lib .note{margin-top:8px;font-size:13px;line-height:1.5;color:var(--ink-2);border-left:2px solid var(--rule);padding-left:10px}
+
+/* ── goals / predictor table ─────────────────────────────────────────────── */
+
+table.tbl{width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:11px}
+table.tbl th{
+  text-align:left;font-weight:400;font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);padding:9px 15px 7px;border-bottom:1px solid var(--rule);
+}
+table.tbl td{padding:9px 15px;border-bottom:1px solid var(--rule-soft)}
+table.tbl tr:last-child td{border-bottom:0}
+table.tbl td.t{font-family:'Libre Baskerville',serif;font-size:15px;letter-spacing:-.01em}
+table.tbl td.lbl{font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:400}
+table.tbl tr.hl td{background:rgba(29,104,64,.05)}
+
+.goal{display:flex;align-items:baseline;gap:10px;padding:11px 0;border-bottom:1px solid var(--rule-soft)}
+.goal:last-child{border-bottom:0}
+.goal .tag{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.16em;color:var(--muted);width:16px}
+.goal .v{font-family:'Libre Baskerville',serif;font-size:19px;letter-spacing:-.02em}
+.goal .n{margin-left:auto;font-family:'DM Mono',monospace;font-size:9.5px;color:var(--muted)}
+
+/* bar — a printed measure, filled to the value */
+.bar{height:5px;background:var(--rule-soft);border-radius:3px;overflow:hidden;margin-top:7px}
+.bar i{display:block;height:100%;background:var(--green);border-radius:3px}
+.bar.warn i{background:var(--amber)}
+
+/* ── charts ─────────────────────────────────────────────────────────────── */
+
+.chartbox{position:relative;height:190px;padding:4px 6px 2px}
+.chartbox.tall{height:225px}
+
+/* ── tab bar ────────────────────────────────────────────────────────────── */
+
+.tabs{
+  position:fixed;left:0;right:0;bottom:0;z-index:80;
+  display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
+  background:rgba(239,233,220,.93);
+  backdrop-filter:saturate(1.7) blur(14px);-webkit-backdrop-filter:saturate(1.7) blur(14px);
+  border-top:1px solid var(--rule);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.tabs button{
+  appearance:none;background:none;border:0;cursor:pointer;position:relative;
+  min-height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  color:var(--muted);font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;
+  -webkit-tap-highlight-color:transparent;transition:color .16s ease,transform .12s ease;
+}
+.tabs button:active{transform:scale(.93)}
+.tabs button[aria-selected=true]{color:var(--ink)}
+.tabs button[aria-selected=true]::before{content:'';position:absolute;top:0;width:24px;height:2px;background:var(--green)}
+.tabs svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── chat call ──────────────────────────────────────────────────────────── */
+
+.chat{
+  display:flex;align-items:center;gap:11px;width:100%;text-decoration:none;color:var(--paper);
+  background:var(--ink);border-radius:3px;padding:13px 15px;margin:0 0 15px;
+}
+.chat svg{width:19px;height:19px;fill:none;stroke:var(--paper);stroke-width:1.6;flex:0 0 auto}
+.chat .t{font-size:14px}
+.chat .s{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:rgba(248,245,239,.62);margin-top:1px}
+.chat .go{margin-left:auto;font-family:'DM Mono',monospace;font-size:14px;color:rgba(248,245,239,.55)}
+
+/* ── states ─────────────────────────────────────────────────────────────── */
+
+.empty{padding:26px 15px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+.skel{height:11px;background:linear-gradient(90deg,var(--rule-soft),var(--rule),var(--rule-soft));background-size:200% 100%;border-radius:2px;animation:sweep 1.3s linear infinite}
+@keyframes sweep{from{background-position:200% 0}to{background-position:-200% 0}}
+.offline{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(var(--tab-h) + env(safe-area-inset-bottom,0px) + 13px);z-index:90;
+  background:var(--ink);color:var(--paper);border-radius:999px;padding:7px 14px;
+  font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  opacity:0;pointer-events:none;transition:opacity .22s ease;
+}
+.offline.on{opacity:1}
+.legacy{display:block;text-align:center;padding:4px 0 8px;color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;text-decoration:none}
+
+@media (display-mode:standalone){
+  body{-webkit-user-select:none;user-select:none}
+  table,.lib .inner,.selectable{-webkit-user-select:text;user-select:text}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-row">
+    <h1 class="wordmark">Claude<em>Coach</em></h1>
+    <div class="countdown" id="cd"><b>—</b>days to race</div>
+  </div>
+  <div class="who" id="who" role="group" aria-label="Athlete"></div>
+</header>
+
+<main>
+  <section class="view on" id="v-today" role="tabpanel" aria-label="Today"></section>
+  <section class="view" id="v-cal" role="tabpanel" aria-label="Calendar"></section>
+  <section class="view" id="v-trends" role="tabpanel" aria-label="Trends"></section>
+  <section class="view" id="v-lib" role="tabpanel" aria-label="Library"></section>
+  <section class="view" id="v-goals" role="tabpanel" aria-label="Goals"></section>
+  <a class="legacy" href="index.html">Older dashboards ↗</a>
+</main>
+
+<nav class="tabs" id="tabs" role="tablist" aria-label="Sections"></nav>
+<div class="offline" id="off" role="status">Offline · last loaded data</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" defer></script>
+<script src="app/app.js" defer></script>
+</body>
+</html>
