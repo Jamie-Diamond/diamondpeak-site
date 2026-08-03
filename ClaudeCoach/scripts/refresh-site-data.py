@@ -739,6 +739,9 @@ def post_process(data):
                 "prev_race":                 prof.get("prev_race"),
                 "prev_race_date":            prof.get("prev_race_date"),
                 "prev2_race_date":           prof.get("prev2_race_date"),
+                # Splits for the 2023 race, so the Goals table can show the
+                # progression 2023 -> 2025 -> target rather than one prior race.
+                "prev2_race":                prof.get("prev2_race"),
                 "prev2_race_name":           prof.get("prev2_race_name"),
                 "race_targets":              prof.get("race_targets"),
             }
@@ -1228,6 +1231,9 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 "prev_race":                 prof.get("prev_race"),
                 "prev_race_date":            prof.get("prev_race_date"),
                 "prev2_race_date":           prof.get("prev2_race_date"),
+                # Splits for the 2023 race, so the Goals table can show the
+                # progression 2023 -> 2025 -> target rather than one prior race.
+                "prev2_race":                prof.get("prev2_race"),
                 "prev2_race_name":           prof.get("prev2_race_name"),
                 "race_targets":              prof.get("race_targets"),
             }
