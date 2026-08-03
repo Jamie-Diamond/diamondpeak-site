@@ -419,10 +419,41 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
 }
 .sp-strength{background:var(--ink-2)}
 
+
+/* ── settings: athlete picker rows ──────────────────────────────────────── */
+.pickrow{
+  width:100%;display:flex;align-items:center;gap:13px;
+  appearance:none;background:none;border:0;border-bottom:1px solid var(--rule-soft);
+  padding:12px 15px;cursor:pointer;text-align:left;
+}
+.pickrow:last-child{border-bottom:0}
+.pickrow .gate-mark{width:32px;height:32px;font-size:14px}
+.pickrow.on .gate-mark{background:var(--green);border-color:var(--green);color:var(--paper)}
+.pickrow.on .gate-go{color:var(--green)}
+.pickrow:hover:not(.on){background:rgba(24,22,15,.03)}
+
+/* ── weekly totals ──────────────────────────────────────────────────────── */
+.wk{padding:11px 15px;border-bottom:1px solid var(--rule-soft)}
+.wk:last-child{border-bottom:0}
+.wk-h{display:flex;align-items:baseline;gap:9px}
+.wk-d{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.wk-tag{
+  font-family:'DM Mono',monospace;font-size:7.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);border:1px solid var(--rule);border-radius:2px;padding:1px 4px;
+}
+.wk-n{margin-left:auto;font-family:'Libre Baskerville',serif;font-size:16px;letter-spacing:-.02em}
+.wk-t{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)}
+.wk-s{display:flex;flex-wrap:wrap;gap:4px 11px;margin-top:6px}
+.wk-s span{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.05em;color:var(--ink-2)}
+.wk-s .sp{width:4px;height:4px;margin-right:4px}
+
 /* ── charts ─────────────────────────────────────────────────────────────── */
 
-.chartbox{position:relative;height:190px;padding:4px 6px 2px}
-.chartbox.tall{height:225px}
+.chartbox{position:relative;height:200px;padding:4px 6px 2px}
+/* Taller than it looks like it needs to be: three overlaid seasons plus a
+   target band on a 225px canvas was unreadable on a phone. */
+.chartbox.tall{height:300px}
+@media (min-width:520px){.chartbox.tall{height:340px}}
 
 /* ── tab bar ────────────────────────────────────────────────────────────── */
 
@@ -434,16 +465,19 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
   border-top:1px solid var(--rule);
   padding-bottom:env(safe-area-inset-bottom,0px);
 }
-.tabs button{
-  appearance:none;background:none;border:0;cursor:pointer;position:relative;
-  min-height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
-  color:var(--muted);font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;
+.tabs button,.tabs a{
+  appearance:none;background:none;border:0;cursor:pointer;position:relative;text-decoration:none;
+  min-height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  color:var(--muted);font-family:'DM Mono',monospace;font-size:7.5px;letter-spacing:.07em;text-transform:uppercase;
   -webkit-tap-highlight-color:transparent;transition:color .16s ease,transform .12s ease;
 }
-.tabs button:active{transform:scale(.93)}
+.tabs button:active,.tabs a:active{transform:scale(.93)}
 .tabs button[aria-selected=true]{color:var(--ink)}
-.tabs button[aria-selected=true]::before{content:'';position:absolute;top:0;width:24px;height:2px;background:var(--green)}
-.tabs svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.tabs button[aria-selected=true]::before{content:'';position:absolute;top:0;width:22px;height:2px;background:var(--green)}
+/* Chat leaves the app, so it is marked rather than selectable. */
+.tabs a.out{color:var(--green)}
+.tabs svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+@media (max-width:359px){.tabs button span,.tabs a span{display:none}.tabs svg{width:21px;height:21px}}
 
 /* ── chat call ──────────────────────────────────────────────────────────── */
 
@@ -489,7 +523,6 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
   </div>
   <div class="whobar">
     <span class="whobar-name" id="whoName">—</span>
-    <button type="button" class="whobar-switch" id="switch">Switch athlete</button>
   </div>
 </header>
 
@@ -514,6 +547,7 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
   <section class="view" id="v-trends" role="tabpanel" aria-label="Trends"></section>
   <section class="view" id="v-lib" role="tabpanel" aria-label="Library"></section>
   <section class="view" id="v-goals" role="tabpanel" aria-label="Goals"></section>
+  <section class="view" id="v-set" role="tabpanel" aria-label="Settings"></section>
   <a class="legacy" href="index.html">Older dashboards ↗</a>
 </main>
 
@@ -526,6 +560,6 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app/app.js?v=4" defer></script>
+<script src="app/app.js?v=5" defer></script>
 </body>
 </html>

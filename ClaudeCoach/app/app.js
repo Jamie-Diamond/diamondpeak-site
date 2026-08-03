@@ -27,12 +27,20 @@
     { slug: 'calum', name: 'Calum' }
   ];
 
+  var TELEGRAM = 'https://t.me/ClaudeCoachTri_bot';
+
   var TABS = [
     { id: 'today', label: 'Today', icon: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/>' },
     { id: 'cal', label: 'Calendar', icon: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/>' },
     { id: 'trends', label: 'Trends', icon: '<path d="M4 19h16"/><path d="M4 15l4.5-5L12 13.5 20 6"/>' },
     { id: 'lib', label: 'Library', icon: '<path d="M5 4.5h6a2 2 0 0 1 2 2V20a1.6 1.6 0 0 0-1.6-1.6H5z"/><path d="M19 4.5h-6a2 2 0 0 0-2 2V20a1.6 1.6 0 0 1 1.6-1.6H19z"/>' },
-    { id: 'goals', label: 'Goals', icon: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/><path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20"/>' }
+    { id: 'goals', label: 'Goals', icon: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/><path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20"/>' },
+    // Chat is a link out to Telegram until the FastAPI backend lands, but it belongs
+    // on the bar: it is the thing the athlete does most, and burying it in a card at
+    // the bottom of Today made it the hardest action to reach.
+    { id: 'chat', label: 'Chat', href: TELEGRAM,
+      icon: '<path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/>' },
+    { id: 'set', label: 'Settings', icon: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.5 1.5M16.5 16.5 18 18M18 6l-1.5 1.5M7.5 16.5 6 18"/>' }
   ];
 
   // Each entry is one chart plus the numbers that belong with it.
@@ -44,7 +52,6 @@
     { id: 'plan', label: 'Plan' }
   ];
 
-  var TELEGRAM = 'https://t.me/ClaudeCoachTri_bot';
   var SPORT = { Swim: 'swim', Ride: 'bike', VirtualRide: 'bike', GravelRide: 'bike',
                 Run: 'run', Brick: 'run', WeightTraining: 'strength', Workout: 'strength' };
 
@@ -98,6 +105,10 @@
   // compared, and a linear axis (rather than a time axis) means no date adapter and
   // zoom/pan that behaves. Aligning by calendar date is the right comparison for a
   // triathlon season: the races sit within three weeks of each other.
+  function doy0(iso) {
+    return Math.round(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1,
+                               +iso.slice(8, 10)) / 864e5);
+  }
   function doy(iso) {
     var y = +iso.slice(0, 4);
     return Math.round((Date.UTC(y, +iso.slice(5, 7) - 1, +iso.slice(8, 10)) -
@@ -114,9 +125,12 @@
 
   function buildChrome() {
     $('#tabs').innerHTML = TABS.map(function (t) {
-      return '<button type="button" role="tab" data-tab="' + t.id + '" aria-selected="' +
-        (t.id === state.tab) + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + t.icon +
-        '</svg><span>' + t.label + '</span></button>';
+      var inner = '<svg viewBox="0 0 24 24" aria-hidden="true">' + t.icon +
+        '</svg><span>' + t.label + '</span>';
+      return t.href
+        ? '<a class="out" href="' + t.href + '" target="_blank" rel="noopener">' + inner + '</a>'
+        : '<button type="button" role="tab" data-tab="' + t.id + '" aria-selected="' +
+          (t.id === state.tab) + '">' + inner + '</button>';
     }).join('');
     $('#tabs').onclick = function (e) {
       var b = e.target.closest('button');
@@ -131,6 +145,7 @@
     state.tab = tab;
     location.hash = tab;
     TABS.forEach(function (t) {
+      if (t.href) return;                 // link-out tab: no view to toggle
       $('#v-' + t.id).classList.toggle('on', t.id === tab);
       var b = $('#tabs button[data-tab="' + t.id + '"]');
       if (b) b.setAttribute('aria-selected', String(t.id === tab));
@@ -329,6 +344,8 @@
       mini(Math.round(tss), 'tss') + mini(sessions, 'sessions') +
       mini(rest, 'rest days') + '</div>';
 
+    h += weeklyTotals(by, y, m, t);
+
     var sel = state.calDay && by[state.calDay] ? by[state.calDay] : null;
     if (state.calDay) {
       h += card(dow(state.calDay) + ' ' + dnum(state.calDay) + ' ' +
@@ -359,6 +376,57 @@
 
   /* ── Trends ──────────────────────────────────────────────────────────── */
 
+  // Per-week hours / TSS / hours-by-sport for the displayed month. Future weeks are
+  // the same figures taken from the plan rather than from completed work, and are
+  // labelled as such - a planned week and a done week must never read alike.
+  function weeklyTotals(by, y, m, today) {
+    var monday = new Date(y, m, 1);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    var last = new Date(y, m + 1, 0);
+
+    var weeks = [];
+    for (var cur = new Date(monday); cur <= last; cur.setDate(cur.getDate() + 7)) {
+      var ws = new Date(cur);
+      var row = { start: ws, mins: 0, tss: 0, sports: {}, planned: 0, done: 0 };
+      for (var i = 0; i < 7; i++) {
+        var dd = new Date(ws); dd.setDate(dd.getDate() + i);
+        var iso = dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0') +
+                  '-' + String(dd.getDate()).padStart(2, '0');
+        (by[iso] || []).forEach(function (x) {
+          var mn = x.duration_min || 0;
+          row.mins += mn;
+          row.tss += x.tss || 0;
+          var fam = SPORT[x.sport] || 'other';
+          row.sports[fam] = (row.sports[fam] || 0) + mn;
+          if (x.status === 'completed') row.done += mn; else row.planned += mn;
+        });
+      }
+      if (row.mins > 0) weeks.push(row);
+    }
+    if (!weeks.length) return '';
+
+    var NAME = { swim: 'Swim', bike: 'Bike', run: 'Run', strength: 'Str', other: 'Other' };
+    var body = weeks.map(function (w) {
+      var iso = w.start.getFullYear() + '-' + String(w.start.getMonth() + 1).padStart(2, '0') +
+                '-' + String(w.start.getDate()).padStart(2, '0');
+      var future = w.planned > w.done;
+      var split = ['swim', 'bike', 'run', 'strength', 'other'].filter(function (k) {
+        return w.sports[k];
+      }).map(function (k) {
+        return '<span><i class="sp sp-' + k + '"></i>' + NAME[k] + ' ' + hhmm(w.sports[k]) + '</span>';
+      }).join('');
+      return '<div class="wk"><div class="wk-h"><span class="wk-d">w/c ' +
+        w.start.getDate() + ' ' +
+        w.start.toLocaleDateString('en-GB', { month: 'short' }) + '</span>' +
+        (future ? '<span class="wk-tag">planned</span>' : '') +
+        '<span class="wk-n">' + hhmm(w.mins) + '</span>' +
+        '<span class="wk-t">' + Math.round(w.tss) + ' tss</span></div>' +
+        '<div class="wk-s">' + split + '</div></div>';
+    }).join('');
+
+    return card('By week', '<div class="body-flush">' + body + '</div>', { flush: true });
+  }
+
   function renderTrends() {
     var d = state.data;
     var sel = state.trend;
@@ -375,8 +443,9 @@
               foot: 'Bars are daily TSS, faded where still planned. The line is form (TSB).' },
       heat: { title: 'Heat acclimation',
               foot: 'Score decays with a 21-day constant. Dots are logged heat exposures.' },
-      fuel: { title: 'Carbohydrate intake',
-              foot: 'Grams per hour, rides only. The line is the mean across logged rides.' },
+      fuel: { title: 'Fuelling capacity',
+              foot: 'Best carbohydrate rate achieved in the trailing 14 days, bike and run ' +
+                    'separately. A gap means nothing was logged in that window.' },
       plan: { title: 'Plan vs actual',
               foot: 'Weekly planned and completed TSS.' }
     }[sel];
@@ -425,13 +494,24 @@
       }
       var pc = d.powerCurve || [];
       if (pc.length) {
+        var pw = d.powerCurveWindow || {};
+        var days = pw.days || 90;
         h += card('Power curve', '<table class="tbl">' +
-          '<thead><tr><th>Duration</th><th>Now</th><th>Last season</th></tr></thead><tbody>' +
+          '<thead><tr><th>Duration</th><th>Last ' + days + 'd</th>' +
+          '<th>Year ago</th><th>Δ</th></tr></thead><tbody>' +
           pc.map(function (r) {
+            var dl = (r.w != null && r.wPrev) ? Math.round((r.w - r.wPrev) / r.wPrev * 100) : null;
             return '<tr><td class="lbl">' + esc(r.label) + '</td><td class="t">' +
               (r.w != null ? r.w + 'w' : '—') + '</td><td>' +
-              (r.wPrev != null ? r.wPrev + 'w' : '—') + '</td></tr>';
-          }).join('') + '</tbody></table>', { flush: true });
+              (r.wPrev != null ? r.wPrev + 'w' : '—') + '</td><td class="' +
+              (dl == null ? '' : (dl >= 0 ? 'pos' : 'neg')) + '">' +
+              (dl == null ? '—' : (dl >= 0 ? '+' : '') + dl + '%') + '</td></tr>';
+          }).join('') + '</tbody></table>',
+          { flush: true,
+            foot: pw.label ? 'Best of ' + pw.now_from + ' to ' + pw.now_to +
+                             ', against the same ' + days + ' days a year earlier (' +
+                             pw.prev_from + ' to ' + pw.prev_to + ').'
+                           : 'Best efforts over the last ' + days + ' days.' });
       }
     }
 
@@ -493,23 +573,32 @@
     }
 
     if (sel === 'fuel') {
-      var cb = ((d.progressData || {}).carb) || [];
-      if (!cb.length) {
-        h += '<p class="hint">No fuelling logged yet. Tell the coach what you took on and it lands here.</p>';
+      var f = fuelSeries(d);
+      if (!f) {
+        h += '<p class="hint">No fuelling logged yet. Tell the coach what you took ' +
+             'on and it lands here.</p>';
       } else {
-        var rates = cb.map(function (r) { return r.g_per_hr; }).filter(function (v) { return v != null; });
-        var avg = rates.reduce(function (a, b) { return a + b; }, 0) / (rates.length || 1);
+        var latest = function (rows) {
+          for (var i = rows.length - 1; i >= 0; i--) if (rows[i].y != null) return rows[i].y;
+          return null;
+        };
+        var peak = function (rows) {
+          return rows.reduce(function (m, r) {
+            return r.y != null && (m == null || r.y > m) ? r.y : m;
+          }, null);
+        };
+        var fmt = function (v) { return v == null ? '—' : Number(v).toFixed(0); };
         h += '<div class="minis">' +
-          mini(avg.toFixed(0), 'g/hr mean') +
-          mini(Math.max.apply(null, rates).toFixed(0), 'best') +
-          mini(Math.min.apply(null, rates).toFixed(0), 'lowest') +
-          mini(cb.length, 'rides') + '</div>';
-        h += card('Logged rides', '<table class="tbl">' +
-          '<thead><tr><th>Date</th><th>Ride</th><th>g/hr</th></tr></thead><tbody>' +
-          cb.slice().reverse().map(function (r) {
+          mini(fmt(latest(f.Ride)), 'bike now') +
+          mini(fmt(peak(f.Ride)), 'bike best') +
+          mini(fmt(latest(f.Run)), 'run now') +
+          mini(fmt(peak(f.Run)), 'run best') + '</div>';
+        h += card('Logged sessions', '<table class="tbl">' +
+          '<thead><tr><th>Date</th><th>Session</th><th>Sport</th><th>g/hr</th></tr></thead><tbody>' +
+          f.points.slice().reverse().slice(0, 20).map(function (r) {
             return '<tr><td class="lbl">' + esc(dow(r.date) + ' ' + dnum(r.date)) + '</td><td>' +
-              esc(r.name || r.sport) + '</td><td class="t">' +
-              (r.g_per_hr != null ? Number(r.g_per_hr).toFixed(0) : '—') + '</td></tr>';
+              esc(r.name || '—') + '</td><td>' + esc(r.sport || '—') + '</td><td class="t">' +
+              Number(r.g_per_hr).toFixed(0) + '</td></tr>';
           }).join('') + '</tbody></table>', { flush: true });
       }
     }
@@ -637,86 +726,119 @@
 
   function chartFitness(el, d) {
     var p = d.profile || {}, cp = d.ctlProjection || {};
-    var xy = function (rows) {
-      return (rows || []).map(function (r) { return { x: doy(r[0]), y: r[1] }; });
+
+    // x is DAYS RELATIVE TO RACE DAY, not day-of-year. Aligning three seasons by
+    // calendar date put Barcelona's race (7 Oct) 18 days right of Italy's (19 Sep),
+    // so the taper and the peak of one season sat over mid-build of another and the
+    // comparison was worthless. Race day is 0 for every season; tick labels are
+    // still calendar dates, read off THIS season, which is what was asked for.
+    var raceThis = cp.race_date || p.race_date;
+    var racePrev = (p.prev_race && p.prev_race.date) || p.prev_race_date;
+    var racePrev2 = p.prev2_race_date;
+
+    var rel = function (rows, race) {
+      if (!race) return [];
+      var r0 = doy0(race);
+      return (rows || []).map(function (x) { return { x: doy0(x[0]) - r0, y: x[1] }; });
     };
-    var xyObj = function (rows) {
-      return (rows || []).map(function (r) { return { x: doy(r.date), y: r.ctl }; });
+    var relObj = function (rows, race) {
+      if (!race) return [];
+      var r0 = doy0(race);
+      return (rows || []).map(function (x) { return { x: doy0(x.date) - r0, y: x.ctl }; });
     };
 
     var ds = [];
 
-    // Race-day target band first so it sits behind every line.
-    if (cp.target_ctl_min != null && cp.race_date) {
-      var x0 = doy(todayISO()), x1 = doy(cp.race_date);
+    if (cp.target_ctl_min != null && raceThis) {
+      var x0 = doy0(todayISO()) - doy0(raceThis);
       ds.push({
         label: 'Target band', order: 9,
-        data: [{ x: x0, y: cp.target_ctl_max }, { x: x1, y: cp.target_ctl_max }],
+        data: [{ x: x0, y: cp.target_ctl_max }, { x: 0, y: cp.target_ctl_max }],
         borderColor: 'rgba(29,104,64,.35)', borderWidth: 1, borderDash: [4, 3],
         pointRadius: 0, fill: '+1', backgroundColor: 'rgba(29,104,64,.09)'
       });
       ds.push({
         label: '_band-lo', order: 10,
-        data: [{ x: x0, y: cp.target_ctl_min }, { x: x1, y: cp.target_ctl_min }],
+        data: [{ x: x0, y: cp.target_ctl_min }, { x: 0, y: cp.target_ctl_min }],
         borderColor: 'rgba(29,104,64,.35)', borderWidth: 1, borderDash: [4, 3],
         pointRadius: 0, fill: false
       });
     }
 
-    // Barcelona 2023 and last season, thin and dashed - reference, not subject.
-    if ((d.fitnessPrev2 || []).length) {
+    if ((d.fitnessPrev2 || []).length && racePrev2) {
       ds.push({
         label: (p.prev2_race_name || '2023').replace(' IM', " '23"), order: 6,
-        data: xy(d.fitnessPrev2), borderColor: C.blue, borderWidth: 1,
+        data: rel(d.fitnessPrev2, racePrev2), borderColor: C.blue, borderWidth: 1,
         borderDash: [5, 3], pointRadius: 0, tension: 0.3, fill: false
       });
     }
-    if ((d.fitnessPrev || []).length) {
+    if ((d.fitnessPrev || []).length && racePrev) {
       ds.push({
         label: 'Last season', order: 5,
-        data: xy(d.fitnessPrev), borderColor: C.muted, borderWidth: 1,
+        data: rel(d.fitnessPrev, racePrev), borderColor: C.muted, borderWidth: 1,
         borderDash: [2, 3], pointRadius: 0, tension: 0.3, fill: false
       });
     }
     if ((cp.planned_build || []).length) {
       ds.push({
-        label: 'Planned build', order: 3,
-        data: xyObj(cp.planned_build), borderColor: C.green, borderWidth: 1.4,
+        label: 'Planned', order: 3,
+        data: relObj(cp.planned_build, raceThis), borderColor: C.green, borderWidth: 1.4,
         borderDash: [3, 3], pointRadius: 0, tension: 0.25, fill: false
       });
     }
     ds.push({
       label: 'This season', order: 1,
-      data: xy(d.fitnessThis), borderColor: C.green, borderWidth: 2,
+      data: rel(d.fitnessThis, raceThis), borderColor: C.green, borderWidth: 2.2,
       pointRadius: 0, tension: 0.25, fill: false
     });
-    if ((cp.target_milestones || []).length) {
+    if ((cp.target_milestones || []).length && raceThis) {
+      var r0m = doy0(raceThis);
       ds.push({
         label: 'Milestones', order: 0, showLine: false,
         data: cp.target_milestones.map(function (m) {
-          return { x: doy(m.date), y: m.ctl, lbl: m.label };
+          return { x: doy0(m.date) - r0m, y: m.ctl, lbl: m.label };
         }),
         borderColor: C.amber, backgroundColor: C.amber,
         pointRadius: 3.4, pointStyle: 'rectRot'
       });
     }
 
-    var lines = [];
-    if (cp.race_date) {
-      lines.push({ x: doy(cp.race_date),
-                   label: (p.race_name || 'Race').replace(/^IM /, ''), color: C.green });
-    }
-    if (p.prev2_race_date) {
-      lines.push({ x: doy(p.prev2_race_date),
-                   label: (p.prev2_race_name || '2023').replace(' IM', " '23"), color: C.blue });
-    }
+    // Ticks read as calendar dates on THIS season's timeline.
+    var label = function (v) {
+      if (!raceThis) return Math.round(v) + 'd';
+      var t = new Date(raceThis + 'T12:00:00');
+      t.setDate(t.getDate() + Math.round(v));
+      return t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    };
 
     var o = baseOpts();
-    o.scales = axes(false, 'CTL');
+    o.scales = {
+      x: {
+        type: 'linear',
+        // Default to the run-in rather than the whole three-year span: on a phone a
+        // full season of three overlaid lines is unreadable. Zoom out reaches the rest.
+        min: -175, max: 12,
+        ticks: { color: C.muted, maxTicksLimit: 6, autoSkip: true,
+                 font: { family: 'DM Mono', size: 9 },
+                 callback: function (v) { return label(v); } },
+        grid: { display: false }, border: { color: C.rule }
+      },
+      y: {
+        title: { display: true, text: 'CTL', color: C.muted,
+                 font: { family: 'DM Mono', size: 9 } },
+        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 6 },
+        grid: { color: C.rule, drawTicks: false }, border: { display: false }
+      }
+    };
     o.plugins.zoom = zoomOpts();
-    o.plugins.vlines = { lines: lines };
+    o.plugins.zoom.limits = { x: { min: -400, max: 30, minRange: 21 } };
+    o.plugins.vlines = { lines: [{ x: 0, label: 'RACE DAY', color: C.green }] };
     o.plugins.tooltip.callbacks = {
-      title: function (items) { return doyLabel(items[0].parsed.x, true); },
+      title: function (items) {
+        var v = Math.round(items[0].parsed.x);
+        return label(v) + ' · ' + (v === 0 ? 'race day' : Math.abs(v) + 'd ' +
+          (v < 0 ? 'to race' : 'after'));
+      },
       label: function (it) {
         var raw = it.raw || {};
         return (it.dataset.label || '') + ': ' + Number(it.parsed.y).toFixed(1) +
@@ -727,27 +849,96 @@
   }
 
   function chartLoad(el, d) {
+    // Matched to the bot's load_chart (telegram/charts.py), which is the version
+    // Jamie reads and the one he confirmed is right. Three things this had wrong:
+    // one undifferentiated total bar instead of a stack BY SPORT, no rolling 7-day
+    // average load line, and a bare TSB line with no fresh/load/heavy banding.
     var lc = (d.loadChart || []).slice();
     var t = todayISO();
-    var tssOf = function (r) {
-      return (r.activities || []).reduce(function (a, x) { return a + (x.tss || 0); }, 0);
+    var SPORTS = ['Ride', 'Run', 'Swim', 'Strength', 'Other'];
+    var BASE = { Ride: '29,104,64', Run: '192,57,43', Swim: '26,82,118',
+                 Strength: '127,140,141', Other: '176,170,160' };
+    var norm = function (sp) {
+      var k = SPORT[sp] || 'other';
+      return { bike: 'Ride', run: 'Run', swim: 'Swim', strength: 'Strength' }[k] || 'Other';
     };
+
+    var totals = lc.map(function (r) {
+      return (r.activities || []).reduce(function (a, x) { return a + (x.tss || 0); }, 0);
+    });
+    // Trailing 7-day mean of daily load, on the TSS axis because it shares the unit.
+    var roll = totals.map(function (_, i) {
+      var w = totals.slice(Math.max(0, i - 6), i + 1);
+      return w.reduce(function (a, b) { return a + b; }, 0) / w.length;
+    });
+
+    var ds = [];
+    SPORTS.forEach(function (sport) {
+      var vals = lc.map(function (r) {
+        return (r.activities || []).reduce(function (a, x) {
+          return a + (norm(x.sport) === sport ? (x.tss || 0) : 0);
+        }, 0);
+      });
+      if (!vals.some(function (v) { return v > 0; })) return;
+      ds.push({
+        type: 'bar', label: sport, stack: 'tss', yAxisID: 'y', order: 3,
+        data: vals,
+        backgroundColor: lc.map(function (r, i) {
+          if (!vals[i]) return 'transparent';
+          var planned = r.projected || r.date > t ||
+            (r.activities || []).some(function (x) {
+              return norm(x.sport) === sport && x.status === 'planned';
+            });
+          return 'rgba(' + BASE[sport] + ',' + (planned ? 0.3 : 0.87) + ')';
+        }),
+        borderWidth: 0, barPercentage: 0.8, categoryPercentage: 0.92
+      });
+    });
+    ds.push({
+      type: 'line', label: '7d avg load', yAxisID: 'y', order: 2, data: roll,
+      borderColor: 'rgba(24,22,15,.55)', borderWidth: 1.6, borderDash: [5, 3],
+      pointRadius: 0, tension: 0.3, fill: false
+    });
+    ds.push({
+      type: 'line', label: 'TSB', yAxisID: 'y1', order: 1,
+      data: lc.map(function (r) { return r.tsb; }),
+      borderColor: C.ink2, borderWidth: 1.4, tension: 0.3, fill: false,
+      pointRadius: 3, pointBorderColor: '#fff', pointBorderWidth: 1,
+      pointBackgroundColor: lc.map(function (r) {
+        var v = r.tsb == null ? 0 : r.tsb;
+        return v > 5 ? '#2e9c8e' : (v >= -20 ? '#c9871f' : '#c0392b');
+      })
+    });
+
+    // TSB zone bands, drawn behind everything on the right-hand scale.
+    var bands = {
+      id: 'tsbBands',
+      beforeDatasetsDraw: function (chart) {
+        var y1 = chart.scales.y1, ca = chart.chartArea, g = chart.ctx;
+        if (!y1) return;
+        [[5, Infinity, 'rgba(46,156,142,.09)'], [0, 5, 'rgba(120,200,140,.10)'],
+         [-20, 0, 'rgba(200,160,60,.08)'], [-Infinity, -20, 'rgba(192,57,43,.09)']]
+          .forEach(function (b) {
+            var lo = Math.max(b[0], y1.min), hi = Math.min(b[1], y1.max);
+            if (hi <= lo) return;
+            var yTop = y1.getPixelForValue(hi), yBot = y1.getPixelForValue(lo);
+            g.save(); g.fillStyle = b[2];
+            g.fillRect(ca.left, yTop, ca.right - ca.left, yBot - yTop);
+            g.restore();
+          });
+      }
+    };
+
     var o = baseOpts();
     o.scales = {
       x: {
-        type: 'linear', offset: true,
-        ticks: {
-          color: C.muted, autoSkip: false, maxRotation: 0,
-          font: { family: 'DM Mono', size: 9 },
-          callback: function (v) {
-            var r = lc[Math.round(v)];
-            return r ? dow(r.date).charAt(0) + dnum(r.date) : '';
-          }
-        },
+        stacked: true, type: 'category',
+        ticks: { color: C.muted, autoSkip: false, maxRotation: 0,
+                 font: { family: 'DM Mono', size: 9 } },
         grid: { display: false }, border: { color: C.rule }
       },
       y: {
-        position: 'left', beginAtZero: true,
+        stacked: true, position: 'left', beginAtZero: true,
         title: { display: true, text: 'TSS', color: C.muted, font: { family: 'DM Mono', size: 9 } },
         ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5 },
         grid: { color: C.rule, drawTicks: false }, border: { display: false }
@@ -759,38 +950,29 @@
         grid: { display: false }, border: { display: false }
       }
     };
+    o.plugins.vlines = { lines: [] };
     o.plugins.tooltip.callbacks = {
       title: function (items) {
         var r = lc[items[0].dataIndex];
-        return r ? dow(r.date) + ' ' + dnum(r.date) + (r.projected ? ' (planned)' : '') : '';
+        return r ? dow(r.date) + ' ' + dnum(r.date) +
+          (r.projected || r.date > t ? ' · planned' : '') : '';
       },
       label: function (it) {
         if (it.dataset.yAxisID === 'y1') return 'TSB ' + signed(it.parsed.y);
-        var r = lc[it.dataIndex];
-        var names = (r.activities || []).map(function (a) {
-          return a.sport + ' ' + hhmm(a.dur);
-        });
-        return ['TSS ' + Math.round(it.parsed.y)].concat(names);
+        if (it.dataset.label === '7d avg load') return '7d avg ' + Math.round(it.parsed.y);
+        if (!it.parsed.y) return null;
+        return it.dataset.label + ' ' + Math.round(it.parsed.y) + ' tss';
+      },
+      footer: function (items) {
+        return 'Day total ' + Math.round(totals[items[0].dataIndex]) + ' tss';
       }
     };
+    o.plugins.tooltip.footerFont = { family: 'DM Mono', size: 9 };
+
     return new Chart(el, {
       data: {
-        labels: lc.map(function (r, i) { return i; }),
-        datasets: [
-          {
-            type: 'bar', label: 'TSS', yAxisID: 'y', order: 2,
-            data: lc.map(tssOf),
-            backgroundColor: lc.map(function (r) {
-              return r.projected || r.date > t ? 'rgba(29,104,64,.22)' : 'rgba(29,104,64,.72)';
-            }),
-            borderWidth: 0, borderRadius: 2, barPercentage: 0.62, categoryPercentage: 0.9
-          },
-          {
-            type: 'line', label: 'TSB', yAxisID: 'y1', order: 1,
-            data: lc.map(function (r) { return r.tsb; }),
-            borderColor: C.ink2, borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false
-          }
-        ]
+        labels: lc.map(function (r) { return dow(r.date).charAt(0) + dnum(r.date); }),
+        datasets: ds
       },
       options: o
     });
@@ -832,60 +1014,84 @@
     return new Chart(el, { type: 'line', data: { datasets: ds }, options: o });
   }
 
-  function chartFuel(el, d) {
+  // Rolling 14-day MAX g/hr per sport. A raw per-ride scatter answers "what did I
+  // take on that day", which is noisy and not the question - fuelling is a trainable
+  // capacity, so the useful figure is the best rate demonstrated in the last fortnight
+  // (Jamie, 3 Aug 2026). Split by sport because gut tolerance on the bike and on the
+  // run are different problems and a combined line hides the run, which is the harder one.
+  var FUEL_WIN = 14;
+
+  function fuelSeries(d) {
     var cb = (((d.progressData || {}).carb) || []).slice()
+      .filter(function (r) { return r.date && r.g_per_hr != null; })
       .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
-    var rates = cb.map(function (r) { return r.g_per_hr; });
-    var avg = rates.length ? rates.reduce(function (a, b) { return a + b; }, 0) / rates.length : 0;
+    if (!cb.length) return null;
+
+    var fam = function (sp) { return SPORT[sp] === 'run' ? 'Run' : (SPORT[sp] === 'bike' ? 'Ride' : null); };
+    var d0 = doy0(cb[0].date), d1 = doy0(todayISO());
+    if (d1 < doy0(cb[cb.length - 1].date)) d1 = doy0(cb[cb.length - 1].date);
+
+    var out = { Ride: [], Run: [], points: cb, from: cb[0].date };
+    for (var x = d0; x <= d1; x++) {
+      ['Ride', 'Run'].forEach(function (sport) {
+        var best = null;
+        cb.forEach(function (r) {
+          if (fam(r.sport) !== sport) return;
+          var rd = doy0(r.date);
+          if (rd > x || rd <= x - FUEL_WIN) return;   // trailing 14-day window
+          if (best == null || r.g_per_hr > best) best = r.g_per_hr;
+        });
+        out[sport].push({ x: x, y: best });           // null = nothing in the window
+      });
+    }
+    return out;
+  }
+
+  function chartFuel(el, d) {
+    var f = fuelSeries(d);
+    if (!f) return null;
+
+    var label = function (v) {
+      var t = new Date((Math.round(v)) * 864e5);
+      return t.getUTCDate() + ' ' +
+        t.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' });
+    };
+
     var o = baseOpts();
+    o.spanGaps = false;
     o.scales = {
       x: {
-        type: 'linear', offset: true,
-        ticks: {
-          color: C.muted, autoSkip: true, maxRotation: 0, maxTicksLimit: 6,
-          font: { family: 'DM Mono', size: 9 },
-          callback: function (v) {
-            var r = cb[Math.round(v)];
-            return r ? dnum(r.date) + ' ' +
-              new Date(r.date + 'T12:00:00').toLocaleDateString('en-GB', { month: 'short' }) : '';
-          }
-        },
+        type: 'linear',
+        ticks: { color: C.muted, maxTicksLimit: 6, autoSkip: true,
+                 font: { family: 'DM Mono', size: 9 },
+                 callback: function (v) { return label(v); } },
         grid: { display: false }, border: { color: C.rule }
       },
       y: {
         beginAtZero: true,
-        title: { display: true, text: 'g carb / hr', color: C.muted,
+        title: { display: true, text: 'max g/hr · 14d', color: C.muted,
                  font: { family: 'DM Mono', size: 9 } },
         ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 5 },
         grid: { color: C.rule, drawTicks: false }, border: { display: false }
       }
     };
+    o.plugins.zoom = zoomOpts();
+    o.plugins.zoom.limits = { x: { min: 'original', max: 'original', minRange: 21 } };
     o.plugins.tooltip.callbacks = {
-      title: function (items) {
-        var r = cb[items[0].dataIndex];
-        return r ? dow(r.date) + ' ' + dnum(r.date) : '';
-      },
+      title: function (items) { return label(items[0].parsed.x); },
       label: function (it) {
-        var r = cb[it.dataIndex] || {};
-        return [Number(it.parsed.y).toFixed(0) + ' g/hr',
-                r.name || '', r.dur ? hhmm(r.dur) : ''].filter(Boolean);
+        return it.dataset.label + ': ' + Number(it.parsed.y).toFixed(0) + ' g/hr';
       }
     };
+
     return new Chart(el, {
+      type: 'line',
       data: {
-        labels: cb.map(function (r, i) { return i; }),
         datasets: [
-          {
-            type: 'bar', label: 'g/hr', order: 2, data: rates,
-            backgroundColor: 'rgba(26,82,118,.68)', borderWidth: 0,
-            borderRadius: 2, barPercentage: 0.55, categoryPercentage: 0.9
-          },
-          {
-            type: 'line', label: 'Mean ' + avg.toFixed(0), order: 1,
-            data: cb.map(function () { return avg; }),
-            borderColor: C.amber, borderWidth: 1, borderDash: [4, 3],
-            pointRadius: 0, fill: false
-          }
+          { label: 'Bike', data: f.Ride, borderColor: C.green, borderWidth: 2,
+            pointRadius: 0, tension: 0.2, fill: false, stepped: 'after' },
+          { label: 'Run', data: f.Run, borderColor: C.red, borderWidth: 2,
+            pointRadius: 0, tension: 0.2, fill: false, stepped: 'after' }
         ]
       },
       options: o
@@ -1059,15 +1265,54 @@
     $('#v-goals').innerHTML = h;
   }
 
+  /* ── Settings ────────────────────────────────────────────────────────── */
+
+  function renderSettings() {
+    var d = state.data || {};
+    var cur = state.slug;
+
+    var h = card('Athlete', '<div class="body-flush">' + ATHLETES.map(function (a) {
+      return '<button type="button" class="pickrow' + (a.slug === cur ? ' on' : '') +
+        '" data-slug="' + a.slug + '">' +
+        '<span class="gate-mark">' + esc(a.name.charAt(0)) + '</span>' +
+        '<span class="gate-row-t"><b>' + esc(a.name) + '</b><span>' +
+        (a.slug === cur ? 'showing now' : 'switch to this profile') + '</span></span>' +
+        '<span class="gate-go">' + (a.slug === cur ? '✓' : '→') + '</span></button>';
+    }).join('') + '</div>', { flush: true });
+
+    h += card('Data', '<table class="tbl"><tbody>' +
+      '<tr><td class="lbl">Last refreshed</td><td class="t">' +
+      esc(d.generated || '—') + '</td></tr>' +
+      '<tr><td class="lbl">Refresh schedule</td><td>nightly, 06:20</td></tr>' +
+      '<tr><td class="lbl">Threshold power</td><td>' +
+      (d.resolvedFtp ? d.resolvedFtp + 'w' : '—') + '</td></tr>' +
+      '</tbody></table>',
+      { flush: true, foot: 'Figures come from the nightly published subset. ' +
+                          'Body weight, HRV and resting HR are never published.' });
+
+    h += card('App', '<table class="tbl"><tbody>' +
+      '<tr><td class="lbl">Coach chat</td><td>Telegram</td></tr>' +
+      '<tr><td class="lbl">Offline</td><td>' +
+      (('serviceWorker' in navigator) ? 'cached for offline use' : 'not supported') +
+      '</td></tr></tbody></table>', { flush: true });
+
+    $('#v-set').innerHTML = h;
+    $('#v-set').querySelector('.body-flush').onclick = function (e) {
+      var b = e.target.closest('.pickrow');
+      if (b) pick(b.dataset.slug);
+    };
+  }
+
   /* ── data ────────────────────────────────────────────────────────────── */
 
   function skeleton() {
     var s = '<div class="card">' + '<div class="skel"></div>'.repeat(3) + '</div>';
-    TABS.forEach(function (t) { $('#v-' + t.id).innerHTML = s; });
+    TABS.forEach(function (t) { if (!t.href) $('#v-' + t.id).innerHTML = s; });
   }
 
   function renderAll() {
-    renderToday(); renderCalendar(); renderTrends(); renderLibrary(); renderGoals();
+    renderToday(); renderCalendar(); renderTrends(); renderLibrary();
+    renderGoals(); renderSettings();
     var p = state.data.profile || {};
     if (p.race_date) {
       $('#cd').innerHTML = '<b>' + daysBetween(todayISO(), p.race_date) + '</b>days to ' +
@@ -1109,7 +1354,6 @@
       setTimeout(function () { pick(b.dataset.slug); }, 160);
     };
 
-    $('#switch').onclick = openGate;
   }
 
   function openGate() {
@@ -1131,6 +1375,7 @@
   function pick(slug) {
     try { localStorage.setItem(KEY, slug); } catch (e) { /* choice just won't persist */ }
     closeGate();
+    if (state.tab === 'set') show('today');
     if (slug !== state.slug || !state.data) load(slug);
   }
 

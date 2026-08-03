@@ -339,15 +339,55 @@ def _build_jamie_data(client) -> dict:
     weight_trend = [{"date":w.get("id","")[:10],"kg":w["weight"]}
                     for w in wellness_60 if w.get("weight")]
 
-    # power curve (90-day best efforts at standard durations)
+    # Power curve: best efforts at standard durations over the last 90 days, against
+    # THE SAME 90 DAYS ONE YEAR EARLIER.
+    #
+    # wPrev used to be hard-coded None, so the "Last season" column was permanently
+    # blank (Jamie, 3 Aug 2026). The obvious fix - curves="s1", last season entire -
+    # would be misleading: a best-of-a-full-season beats a best-of-90-days almost by
+    # construction, so every row would read as a regression. Comparing the same 90
+    # calendar days a year apart is like-for-like, and the same point in the season.
+    #
+    # The window is published (powerCurveWindow) because "Now vs Last season" over an
+    # unstated period is not a number anyone can act on.
     power_curve = []
+    power_curve_window = None
     try:
         pc_raw = client.get_power_curves(sport="Ride", curves="90d")
         if pc_raw.get("list"):
-            curve        = pc_raw["list"][0]
-            secs_to_w    = dict(zip(curve.get("secs",[]), curve.get("values",[])))
-            power_curve  = [{"t":t,"label":lbl,"w":secs_to_w.get(t),"wPrev":None}
-                             for t, lbl in _POWER_DURATIONS]
+            curve     = pc_raw["list"][0]
+            secs_to_w = dict(zip(curve.get("secs", []), curve.get("values", [])))
+
+            prev_w = {}
+            # Shift by 365 days rather than replace(year=...): the latter raises
+            # ValueError on 29 Feb, which would take the whole nightly refresh down
+            # one day every four years.
+            p_from = today - timedelta(days=90 + 365)
+            p_to   = today - timedelta(days=365)
+            try:
+                prev_raw = client.get_power_curves(
+                    sport="Ride", curves=f"r.{p_from.isoformat()}.{p_to.isoformat()}")
+                if prev_raw.get("list"):
+                    pcurve = prev_raw["list"][0]
+                    prev_w = dict(zip(pcurve.get("secs", []), pcurve.get("values", [])))
+                else:
+                    log("Power curve: no year-ago data in range — wPrev left blank")
+            except Exception as e:
+                # Non-fatal and NAMED: a blank column with no log line is how this
+                # sat broken for months.
+                log(f"Power curve year-ago fetch failed (non-fatal): {e}")
+
+            power_curve = [{"t": t, "label": lbl,
+                            "w": secs_to_w.get(t), "wPrev": prev_w.get(t)}
+                           for t, lbl in _POWER_DURATIONS]
+            power_curve_window = {
+                "days": 90,
+                "now_from": (today - timedelta(days=90)).isoformat(),
+                "now_to": today.isoformat(),
+                "prev_from": p_from.isoformat(),
+                "prev_to": p_to.isoformat(),
+                "label": "best 90 days vs same 90 days last year",
+            }
     except Exception as e:
         log(f"Power curve fetch failed (non-fatal): {e}")
 
@@ -372,6 +412,7 @@ def _build_jamie_data(client) -> dict:
         "loadChart":    load_chart,
         "weightTrend":  weight_trend,
         "powerCurve":   power_curve,
+        "powerCurveWindow": power_curve_window,
         "resolvedFtp":  resolved_ftp,
     }
 

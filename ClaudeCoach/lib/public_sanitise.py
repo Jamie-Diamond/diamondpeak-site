@@ -179,6 +179,11 @@ TRAINING_DATA_SPEC = {
         "week_type": S, "in_progress": S,
     }),
     "powerCurve": Records({"t": S, "label": S, "w": S, "wPrev": S}),
+    # Dates and a day count describing the comparison window - no physiology.
+    "powerCurveWindow": {
+        "days": S, "now_from": S, "now_to": S,
+        "prev_from": S, "prev_to": S, "label": S,
+    },
     "racePredictor": {
         "anchor": _PREDICTOR_ROW,
         "rows":   Records(_PREDICTOR_ROW),
