@@ -78,7 +78,7 @@ body{
   background:linear-gradient(var(--paper-2) 72%, rgba(239,233,220,0));
   backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
 }
-.masthead-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;max-width:var(--sheet);margin:0 auto}
+.masthead-row{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:var(--sheet);margin:0 auto}
 .wordmark{font-family:'Libre Baskerville',serif;font-weight:700;font-size:19px;letter-spacing:-.02em;line-height:1;margin:0}
 .wordmark{display:flex;align-items:center;gap:8px}
 .wordmark em{font-style:italic;font-weight:400;color:var(--green)}
@@ -87,10 +87,13 @@ body{
 .gate-logo{width:44px;height:44px;display:block;margin:0 0 18px}
 .countdown{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.5;margin-left:auto}
 .gear{
-  flex:0 0 auto;appearance:none;background:none;border:0;padding:0 0 0 4px;cursor:pointer;
-  color:var(--muted);transition:color .16s ease;
+  flex:0 0 auto;appearance:none;border:1px solid var(--rule);border-radius:50%;
+  background:var(--paper);width:34px;height:34px;display:grid;place-items:center;
+  cursor:pointer;color:var(--ink-2);transition:color .16s ease,border-color .16s ease;
+  -webkit-tap-highlight-color:transparent;
 }
-.gear svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;display:block}
+.gear:hover,.gear:focus-visible{color:var(--green);border-color:var(--green)}
+.gear svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;display:block}
 .gear[aria-pressed=true]{color:var(--green)}
 .countdown b{display:block;font-family:'Libre Baskerville',serif;font-size:16px;letter-spacing:-.01em;color:var(--ink);text-transform:none}
 
@@ -104,8 +107,16 @@ body{
   padding-top:9px;border-top:1px solid var(--rule);
 }
 .whobar-name{
+  appearance:none;background:none;border:0;padding:4px 0;cursor:pointer;
+  display:flex;align-items:baseline;gap:8px;
   font-family:'Libre Baskerville',serif;font-size:15px;letter-spacing:-.01em;color:var(--ink);
+  -webkit-tap-highlight-color:transparent;
 }
+.whobar-name .chg{
+  font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);border-bottom:1px solid var(--rule);
+}
+.whobar-name:hover .chg,.whobar-name:focus-visible .chg{color:var(--green);border-bottom-color:var(--green)}
 .whobar-switch{
   appearance:none;background:none;border:0;padding:2px 0;cursor:pointer;
   font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
@@ -625,7 +636,7 @@ body.drawn{overflow:hidden}
     </button>
   </div>
   <div class="whobar">
-    <span class="whobar-name" id="whoName">—</span>
+    <button type="button" class="whobar-name" id="whoName">—</button>
   </div>
 </header>
 
@@ -664,6 +675,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=6" defer></script>
+<script src="app.js?v=8" defer></script>
 </body>
 </html>

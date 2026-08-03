@@ -150,6 +150,7 @@
     }).join('');
 
     $('#gear').onclick = function () { show('set'); };
+    $('#whoName').onclick = openGate;
     $('#tabs').onclick = function (e) {
       var b = e.target.closest('button');
       if (b) show(b.dataset.tab);
@@ -1373,7 +1374,11 @@
         { flush: true, foot: 'Bike IF scales with √CTL from the anchor race.' });
     }
 
-    var pr = p.prev_race, pr2 = p.prev2_race, tg = p.race_targets;
+    // An empty object is truthy, and Calum's profile carries prev_race:{} and
+    // prev2_race:{}. Test for the field actually dereferenced, not for the key.
+    var has = function (o) { return o && o.date ? o : null; };
+    var pr = has(p.prev_race), pr2 = has(p.prev2_race);
+    var tg = (p.race_targets && Object.keys(p.race_targets).length) ? p.race_targets : null;
     if (pr || pr2 || tg) {
       var cols = [];
       if (pr2) cols.push([pr2.date.slice(0, 4), pr2]);
@@ -1599,12 +1604,32 @@
   }
 
   function renderAll() {
-    renderToday(); renderCalendar(); renderTrends();
-    renderGoals(); renderSettings();
+    // Each view is isolated. Previously these ran as one statement, so the first
+    // exception skipped every later view: renderGoals threw on Calum, Settings never
+    // rendered, and Settings is the only route to switching athlete - which stranded
+    // the user on a profile with no way out. A broken view should cost that view only.
+    [['today', renderToday], ['cal', renderCalendar], ['trends', renderTrends],
+     ['goals', renderGoals], ['set', renderSettings]].forEach(function (v) {
+      try {
+        v[1]();
+      } catch (err) {
+        if (window.console) console.error('[peak] ' + v[0] + ' failed to render:', err);
+        var el = $('#v-' + v[0]);
+        if (el) {
+          el.innerHTML = '<div class="card"><div class="empty">This view could not be ' +
+            'built from the current data.</div></div>';
+        }
+      }
+    });
+
     var p = state.data.profile || {};
+    // Set unconditionally: guarding on race_date left the PREVIOUS athlete's countdown
+    // on screen after a switch.
     if (p.race_date) {
       $('#cd').innerHTML = '<b>' + daysBetween(todayISO(), p.race_date) + '</b>days to ' +
         esc((p.race_name || '').split(' ').slice(0, 2).join(' '));
+    } else {
+      $('#cd').innerHTML = '<b>—</b>no race set';
     }
     if (state.tab === 'trends') drawTrend();
   }
@@ -1670,7 +1695,8 @@
   function load(slug) {
     state.slug = slug;
     var a = ATHLETES.filter(function (x) { return x.slug === slug; })[0];
-    $('#whoName').textContent = a ? a.name : slug;
+    $('#whoName').innerHTML = '<span>' + esc(a ? a.name : slug) + '</span>' +
+      '<span class="chg">change</span>';
     state.calMonth = null; state.calDay = null;
     skeleton();
     fetch('../ClaudeCoach/public/training-data-' + slug + '.json', { cache: 'no-cache' })
