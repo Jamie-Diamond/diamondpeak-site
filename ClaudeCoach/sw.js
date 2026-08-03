@@ -16,7 +16,7 @@
  *
  * Bump CACHE on every deploy that changes a precached file.
  */
-const CACHE = 'claudecoach-v3';
+const CACHE = 'claudecoach-v4';
 
 const SHELL = [
   './',
@@ -62,7 +62,8 @@ function networkFirst(request) {
       }
       return res;
     })
-    .catch(() => caches.match(request).then((hit) => hit || offlineFallback(request)));
+    .catch(() => caches.match(request, { ignoreSearch: true })
+      .then((hit) => hit || offlineFallback(request)));
 }
 
 function cacheFirst(request) {
@@ -113,8 +114,15 @@ self.addEventListener('fetch', (event) => {
   // And only our own scope - the rest of diamondpeak.uk is not this app.
   if (!url.pathname.startsWith('/ClaudeCoach/')) return;
 
-  const isShell = /\/(app\/|sw\.js)/.test(url.pathname);
-  if (isShell) {
+  // Icons, CSS and the manifest are cache-first: versioned by CACHE, rarely changed.
+  // Scripts deliberately are NOT. app.html is network-first, so a cache-first script
+  // lets the worker that is STILL CONTROLLING the page pair new HTML with an old
+  // script - and that pairing broke the app once, when new markup dropped an element
+  // the old script wrote to. It self-heals only on the second load, which is one
+  // blank launch too many. Network-first keeps HTML and JS in step; scripts stay
+  // precached, so offline is unaffected.
+  const isAsset = /\/app\/(icons\/[^/]+|[^/]+\.(css|webmanifest))$/.test(url.pathname);
+  if (isAsset) {
     event.respondWith(cacheFirst(request));
     return;
   }
