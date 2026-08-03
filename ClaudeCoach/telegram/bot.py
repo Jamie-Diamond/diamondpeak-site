@@ -3531,6 +3531,30 @@ def prefetch_context(slug: str) -> str:
         except Exception as _e:
             log(f"prefetch planning numbers (non-fatal): {_e}")
 
+        # Nutrition reference facts live in a FILE, not in the prompt. A ~120-token
+        # pointer replaces ~3,650 tokens of inlined product prose, and a fact that is
+        # looked up cannot be half-remembered - which is how a 300mg SiS figure and a
+        # ~600mg sausage roll got invented and quoted back as confirmed. Injected as a
+        # pointer rather than as content on purpose: the file is ~11KB and inlining it
+        # would buy nothing over the rules it replaces.
+        try:
+            _nut = BASE.parent / "athletes" / slug / "reference" / "nutrition.json"
+            if _nut.exists():
+                lines.append(
+                    f"\n=== NUTRITION REFERENCE (authoritative) ===\n"
+                    f"Product carb / sodium / caffeine figures are NOT in these rules. Read "
+                    f"{_nut} before stating ANY product figure. Every entry carries "
+                    f"`confidence` and `provenance`; quote the number AND say where it came "
+                    f"from. athlete_label beats manufacturer_label beats database beats "
+                    f"derived. If a value is null, or the product is listed under "
+                    f"never_quote_a_number, or it carries a CONFLICT or WITHDRAWN field: say "
+                    f"it is unconfirmed and offer to look it up or ask him to read the "
+                    f"packet. NEVER supply a mid-range average and present it as a lookup. "
+                    f"standing_facts in that file are absolute (Jamie has never used a gel; "
+                    f"historical sodium totals count electrolyte tabs only and are floors).")
+        except Exception as _e:
+            log(f"prefetch nutrition pointer (non-fatal): {_e}")
+
         # Recent session-log entries — so "log session" / "analyse" / "how did I
         # do" don't burn a tool round-trip reading session-log.json to find the
         # stub. Stubs (stub=true) still need RPE/notes; filled ones are context.

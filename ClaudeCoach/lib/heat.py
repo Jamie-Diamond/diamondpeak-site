@@ -399,6 +399,22 @@ def exposure_entry(act: dict, latlng_fallback=None) -> dict | None:
     if temp < HEAT_AMBIENT_C:
         return None
 
+    # A dose needs EXTERNAL weather, or an explicit manual override. Jamie's call,
+    # 2026-08-03: "need meteo data for a recording, or a manual override."
+    #
+    # Device temp alone is not evidence. The athlete's own standing rule says Garmin
+    # wrist sensors over-read true ambient by roughly 5-8°C in sunlight, so a device-only
+    # reading above the 25°C gate is exactly as likely to be a sunlit sensor as real
+    # heat. The 2026-08-03 backfill produced the proof: a NordicSki logged at 28.2°C in
+    # April, and a Workout at 28.9°C, both device-only - skiing does not happen at 28°C.
+    # Crediting those inflates the acclimation score, which then drives real coaching.
+    #
+    # `manual_override` is honoured for a genuine hot session with no GPS (indoor turbo
+    # in a hot room, a sauna, a treadmill session) where the athlete states the
+    # temperature himself - the same athlete_label-beats-database order used everywhere.
+    if temp_source != "external" and not act.get("heat_manual_override"):
+        return None
+
     base = base_dose(mins)
     avg_hr = act.get("average_heartrate")
     tss = act.get("icu_training_load")

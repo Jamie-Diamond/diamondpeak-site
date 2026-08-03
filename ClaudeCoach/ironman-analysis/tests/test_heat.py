@@ -13,11 +13,23 @@ sys.path.insert(0, str(REPO / "lib"))
 import heat  # noqa: E402
 
 
-def _act(temp=27.0, mins=90, type_="Ride", trainer=None, tss=None, avg_hr=None):
-    return {"id": 12345, "average_temp": temp, "moving_time": mins * 60,
-            "type": type_, "trainer": trainer, "icu_training_load": tss,
-            "average_heartrate": avg_hr,
-            "start_date_local": "2026-07-01T10:00:00"}
+def _act(temp=27.0, mins=90, type_="Ride", trainer=None, tss=None, avg_hr=None,
+         override=True):
+    """A synthetic activity with a STATED temperature and no GPS.
+
+    `override` defaults True because from 2026-08-03 a dose requires external weather
+    or an explicit manual override - a device-only reading no longer credits, since
+    Garmin wrist sensors over-read ambient by 5-8C in sunlight. These fixtures assert
+    dose ARITHMETIC on a known temperature, which is precisely the manual-override case;
+    the provenance rule itself is pinned by TestDoseProvenance below.
+    """
+    a = {"id": 12345, "average_temp": temp, "moving_time": mins * 60,
+         "type": type_, "trainer": trainer, "icu_training_load": tss,
+         "average_heartrate": avg_hr,
+         "start_date_local": "2026-07-01T10:00:00"}
+    if override:
+        a["heat_manual_override"] = True
+    return a
 
 
 class TestExposureEntry:
@@ -198,3 +210,35 @@ class TestBaseDose:
 
     def test_anchor_60min_is_full_dose(self):
         assert heat.base_dose(60) == 1.0
+
+
+class TestDoseProvenance:
+    """A heat dose needs EXTERNAL weather or an explicit manual override.
+
+    Jamie, 2026-08-03: "need meteo data for a recording, or a manual override." His own
+    standing rule says Garmin wrist sensors over-read true ambient by 5-8C in sunlight,
+    so a device-only reading over the 25C gate is as likely to be a sunlit sensor as real
+    heat. The backfill that day proved it: a NordicSki logged at 28.2C in April and a
+    Workout at 28.9C, both device-only. Crediting those inflates the acclimation score,
+    which then drives real coaching decisions.
+    """
+
+    def test_device_only_reading_does_not_credit(self):
+        assert heat.exposure_entry(_act(temp=30.0, override=False)) is None
+
+    def test_manual_override_credits(self):
+        e = heat.exposure_entry(_act(temp=30.0, override=True))
+        assert e is not None and e["dose"] > 0
+
+    def test_the_april_nordicski_case_is_refused(self):
+        """The exact false positive: an implausibly hot reading for the sport and date,
+        device-only. 28.2C skiing is a sensor in sunlight, not ambient."""
+        act = _act(temp=28.2, mins=91, type_="NordicSki", override=False)
+        assert heat.exposure_entry(act) is None
+
+    def test_still_refuses_below_the_gate_even_with_override(self):
+        """The override is about PROVENANCE, not about bypassing the 25C threshold."""
+        assert heat.exposure_entry(_act(temp=15.0, override=True)) is None
+
+    def test_still_refuses_indoor_even_with_override(self):
+        assert heat.exposure_entry(_act(temp=30.0, trainer=True, override=True)) is None
