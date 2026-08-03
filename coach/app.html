@@ -384,14 +384,6 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
   transition:color .16s,border-color .16s;
 }
 .cal-mo:hover,.cal-mo:focus-visible{color:var(--green);border-color:var(--green)}
-.cal-dows{
-  display:grid;grid-template-columns:repeat(7,1fr);
-  padding:9px 8px 5px;border-bottom:1px solid var(--rule-soft);
-}
-.cal-dows span{
-  text-align:center;font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--muted);
-}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
 .cal-cell{
   appearance:none;background:none;border:0;border-top:1px solid var(--rule-soft);
@@ -478,6 +470,18 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
 /* ── calendar: one row per week ─────────────────────────────────────────── */
 /* wk N | the seven days | the week's totals, on ONE line. A 7x5 month grid put the
    week's numbers nowhere near its days; this reads the way a coach reads a week. */
+/* Header and week rows share ONE column model: a 34px week label, a 7-column day grid,
+   and a fixed-width summary. The summary must be a fixed width - when it sized to its
+   content, the header's empty summary box collapsed to 0 and the seven day columns in
+   the header were wider than the seven below them. */
+.cal-dows{
+  display:flex;align-items:center;gap:8px;padding:9px 12px 5px;
+  border-bottom:1px solid var(--rule-soft);
+}
+.cal-dows .wkdays span{
+  text-align:center;font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);
+}
 .wkrows{}
 .wkrow{padding:8px 12px 9px;border-bottom:1px solid var(--rule-soft)}
 .wkrow:last-child{border-bottom:0}
@@ -503,12 +507,11 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
 .wkd.sel .n{color:var(--paper)}
 .wkd.sel .dot{border-color:var(--paper);color:var(--paper)}
 .wkd:hover:not(.sel){background:rgba(24,22,15,.04)}
-.wksum{flex:0 0 auto;text-align:right;font-family:'DM Mono',monospace;font-size:8.5px;color:var(--muted);line-height:1.3}
+.wksum{flex:0 0 62px;text-align:right;font-family:'DM Mono',monospace;font-size:8.5px;color:var(--muted);line-height:1.3}
 .wksum b{display:block;font-family:'Libre Baskerville',serif;font-size:13px;color:var(--ink);letter-spacing:-.01em}
 .wkrow-s{display:flex;flex-wrap:wrap;gap:3px 9px;margin:5px 0 0 42px}
 .wkrow-s span{font-family:'DM Mono',monospace;font-size:8.5px;color:var(--ink-2)}
 .wkrow-s .sp{width:4px;height:4px;margin-right:3px}
-.cal-dows{grid-template-columns:34px repeat(7,1fr) auto!important}
 
 /* A long table stays inside the card and scrolls itself, so the page never grows a
    horizontal scrollbar and the card keeps its shape. */
@@ -742,6 +745,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=13" defer></script>
+<script src="app.js?v=14" defer></script>
 </body>
 </html>

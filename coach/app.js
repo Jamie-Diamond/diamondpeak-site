@@ -504,10 +504,13 @@
         '</div>';
     }).join('');
 
+    // Mirrors .wkrow-t exactly - same wrapper classes, same three boxes - so the day
+    // headers are positioned by the same rules as the day cells. Two parallel layouts
+    // that merely look similar is why they drifted apart.
     var head = '<div class="cal-dows"><span class="wkn"></span>' +
-      ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(function (x) {
+      '<span class="wkdays">' + ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(function (x) {
         return '<span>' + x + '</span>';
-      }).join('') + '<span></span></div>';
+      }).join('') + '</span><span class="wksum"></span></div>';
 
     var nav = '<div class="cal-nav">' +
       '<button type="button" class="cal-mo" data-mo="-1" aria-label="Previous month">‹</button>' +
