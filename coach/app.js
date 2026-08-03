@@ -303,7 +303,8 @@
     return card('This week', '<div><p class="wsum">' + esc(bits.join(' · ')) + '</p>' +
       (target ? '<div class="bar' + (pct > 110 ? ' warn' : '') + '"><i style="width:' +
         Math.min(100, pct || 0) + '%"></i></div>' : '') + '</div>',
-      { foot: 'As of ' + esc(d.generated || 'unknown') + '. Refreshes every two hours.' }) + h;
+      { foot: 'As of ' + esc(d.generated || 'unknown') +
+              (d.refreshCadence ? '. Refreshes ' + d.refreshCadence + '.' : '.') }) + h;
   }
 
   function renderToday() {
@@ -1784,7 +1785,9 @@
     h += card('Data', '<table class="tbl"><tbody>' +
       '<tr><td class="lbl">Last refreshed</td><td class="t">' +
       esc(d.generated || '—') + '</td></tr>' +
-      '<tr><td class="lbl">Refresh schedule</td><td>nightly, 06:20</td></tr>' +
+      (d.refreshCadence
+        ? '<tr><td class="lbl">Refresh schedule</td><td>' + esc(d.refreshCadence) + '</td></tr>'
+        : '') +
       '<tr><td class="lbl">Threshold power</td><td>' +
       (d.resolvedFtp ? d.resolvedFtp + 'w' : '—') + '</td></tr>' +
       '</tbody></table>',

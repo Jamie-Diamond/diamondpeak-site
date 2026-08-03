@@ -431,7 +431,68 @@ def _build_jamie_data(client) -> dict:
         "powerCurveWindow": power_curve_window,
         "resolvedFtp":  resolved_ftp,
         "rampCap":      _ramp_cap("jamie"),
+        "refreshCadence": _refresh_cadence(),
     }
+
+
+def _refresh_cadence() -> str | None:
+    """This job's own schedule, in words, read from crontab.
+
+    Hard-coding it in the app is what produced "nightly, 06:20" still being shown
+    hours after the schedule became two-hourly. Derived from the crontab entry that
+    actually runs this file, so it cannot drift from reality; returns None on any
+    doubt, and the app then says nothing rather than something wrong.
+    """
+    try:
+        out = subprocess.run(["crontab", "-l"], capture_output=True, text=True,
+                             timeout=10)
+        if out.returncode != 0:
+            return None
+        me = Path(__file__).name
+        for line in out.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("#") or me not in line:
+                continue
+            parts = line.split()
+            if len(parts) < 5:
+                continue
+            minute, hour = parts[0], parts[1]
+            if not minute.isdigit():
+                return None
+            mm = int(minute)
+            if hour == "*":
+                return f"hourly, at {mm:02d} past"
+            hours = []
+            for chunk in hour.split(","):
+                if chunk.isdigit():
+                    hours.append(int(chunk))
+                elif "/" in chunk:          # e.g. */2 or 6-22/2
+                    base, _, step = chunk.partition("/")
+                    if not step.isdigit():
+                        return None
+                    lo, hi = 0, 23
+                    if "-" in base:
+                        a, _, b = base.partition("-")
+                        if a.isdigit() and b.isdigit():
+                            lo, hi = int(a), int(b)
+                    hours = list(range(lo, hi + 1, int(step)))
+                else:
+                    return None
+            if not hours:
+                return None
+            hours = sorted(set(hours))
+            if len(hours) == 1:
+                return f"daily at {hours[0]:02d}:{mm:02d}"
+            gaps = {b - a for a, b in zip(hours, hours[1:])}
+            span = f"{hours[0]:02d}:{mm:02d}\u2013{hours[-1]:02d}:{mm:02d}"
+            if len(gaps) == 1:
+                g = gaps.pop()
+                unit = "hour" if g == 1 else "hours"
+                return f"every {g} {unit}, {span}"
+            return f"{len(hours)}\u00d7 daily, {span}"
+    except Exception:
+        return None
+    return None
 
 
 def _ramp_cap(slug: str) -> float:
@@ -1199,6 +1260,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "sessionLog":   session_log,
         "progressData": progress_data,
         "rampCap":      _ramp_cap(slug),
+        "refreshCadence": _refresh_cadence(),
         "swimLog":      swim_log,
     }
 
