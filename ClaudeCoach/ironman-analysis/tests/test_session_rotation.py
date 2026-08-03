@@ -134,3 +134,36 @@ def test_changed_rules_rotate_immediately(athlete):
         "hello", {"session_max_turns": 12}, [], athlete, "Tester", "")
     assert mode == "new"
     assert "a brand new rule" in prompt
+
+
+class TestTurnIndexLogging:
+    """_finish_session increments st["turns"] IN PLACE. _log_timing is called after
+    it, so reading the turn index at that point reports the NEXT turn rather than the
+    one just served - the logged turn ran one ahead of the session file on 3 Aug 2026
+    (log said turn=12, disk said turns=11). Harmless to rotation, which reads the
+    loaded state, but it makes the only instrument for judging the rotation change
+    off by one."""
+
+    def test_turn_index_is_the_turn_being_served(self, athlete):
+        st = {"session_id": "s", "fp": "f", "turns": 4, "started": time.time()}
+        assert engine._turn_index(st) == 5, "5th reply on a session holding 4 turns"
+
+    def test_new_and_stateless_sessions_are_turn_one(self):
+        assert engine._turn_index(None) == 1
+        assert engine._turn_index({}) == 1
+
+    def test_finish_session_mutates_in_place_so_order_matters(self, athlete):
+        """Pins the actual mechanism, so a future refactor that moves the read back
+        after _finish_session fails here instead of silently skewing the logs."""
+        st = {"session_id": "s", "fp": "f", "turns": 4,
+              "started": time.time(), "last_seen": ""}
+        before = engine._turn_index(st)
+        engine._finish_session(athlete, "resume", st, "s")
+        after = engine._turn_index(st)
+        assert before == 5
+        assert after == 6, "_finish_session incremented st in place"
+        assert st["turns"] == 5, "the turn just served is now recorded on disk"
+
+    def test_garbage_turns_value_does_not_raise(self):
+        for bad in ({"turns": "four"}, {"turns": None}, {"turns": []}):
+            assert engine._turn_index(bad) == 1

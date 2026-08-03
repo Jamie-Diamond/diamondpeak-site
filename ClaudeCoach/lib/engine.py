@@ -533,10 +533,13 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
             log(f"[limit] {model} capped - retrying on {MODEL_SONNET}")
             text, sid, rc = _run_once(prompt, MODEL_SONNET, extra, config["project_dir"])
             model = MODEL_SONNET
+        # Read the turn index BEFORE _finish_session, which increments st["turns"]
+        # IN PLACE - reading it afterwards logs the NEXT turn, not the one just served.
+        turn_idx = _turn_index(st)
         if rc == 0 and text:
             _finish_session(sp_file, mode, st, sid)
         _log_timing("call", model, mode, t0, None, None,
-                    turns=_turn_index(st), prompt_bytes=len(prompt or ""))
+                    turns=turn_idx, prompt_bytes=len(prompt or ""))
         return text or "(no response)"
     except subprocess.TimeoutExpired:
         return "Sorry, that took too long. Try a simpler question or break it into steps."
@@ -669,10 +672,12 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
         text = (final if final is not None else streamed).strip()
         model = MODEL_SONNET
 
+    # Before _finish_session: it increments st["turns"] in place (see call_claude).
+    turn_idx = _turn_index(st)
     if rc == 0 and text:
         _finish_session(sp_file, mode, st, sid)
     _log_timing("stream", model, mode, t0, t_init, t_first,
-                turns=_turn_index(st), prompt_bytes=len(prompt or ""))
+                turns=turn_idx, prompt_bytes=len(prompt or ""))
     yield ("final", text or "(no response)")
 
 
