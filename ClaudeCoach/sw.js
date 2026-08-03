@@ -16,7 +16,7 @@
  *
  * Bump CACHE on every deploy that changes a precached file.
  */
-const CACHE = 'claudecoach-v6';
+const CACHE = 'claudecoach-v7';
 
 const SHELL = [
   './',

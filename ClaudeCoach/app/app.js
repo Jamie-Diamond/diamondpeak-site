@@ -137,6 +137,20 @@
       if (b) show(b.dataset.tab);
     };
 
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('.dr-b') || e.target.closest('.dr-h')) return;
+      var row = e.target.closest('.sesh.tap');
+      if (row && row.dataset.d) openDetail(row.dataset.d, row.dataset.sp, row.dataset.n);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeDetail();
+      if ((e.key === 'Enter' || e.key === ' ') && document.activeElement) {
+        var row = document.activeElement.closest && document.activeElement.closest('.sesh.tap');
+        if (row && row.dataset.d) { e.preventDefault(); openDetail(row.dataset.d, row.dataset.sp, row.dataset.n); }
+      }
+    });
+    $('#scrim').onclick = closeDetail;
+
     function net() { $('#off').classList.toggle('on', !navigator.onLine); }
     addEventListener('online', net); addEventListener('offline', net); net();
   }
@@ -185,7 +199,9 @@
 
   function seshRow(s) {
     var done = s.status === 'completed';
-    return '<div class="sesh' + (done ? ' done' : '') + '">' +
+    return '<div class="sesh tap' + (done ? ' done' : '') + '" role="button" tabindex="0"' +
+      ' data-d="' + esc(s.date || '') + '" data-sp="' + esc(s.sport || '') +
+      '" data-n="' + esc(s.name || '') + '">' +
       '<span class="tick">' + (done ? '✓' : '○') + '</span>' +
       '<span class="body"><span class="nm"><span class="sp ' + sportClass(s.sport) + '"></span>' +
       esc(s.name || s.sport) + (s.key ? '<span class="keymark">KEY</span>' : '') + '</span>' +
@@ -1263,6 +1279,107 @@
 
     h += chatCTA('Ask about pacing or the plan');
     $('#v-goals').innerHTML = h;
+  }
+
+  /* ── activity detail ─────────────────────────────────────────────────── */
+  /* Joined BY DATE, because the public subset carries no activity id - the id is
+   * withheld deliberately (it re-identifies an Intervals.icu/Strava record), so
+   * date plus sport is the only key available. Consequence worth knowing: two rides
+   * on one day share their fuelling and heat rows. */
+
+  function detailFor(dateISO, sport, name) {
+    var d = state.data || {};
+    var fam = SPORT[sport] || null;
+    var same = function (a, b) { return a && b && (SPORT[a] || a) === (SPORT[b] || b); };
+
+    var act = (d.recent || []).filter(function (r) {
+      return r.date === dateISO && (!sport || same(r.sport, sport));
+    })[0];
+    var plan = (d.weekCalendar || []).filter(function (r) {
+      return r.date === dateISO && (!sport || same(r.sport, sport));
+    })[0];
+    var log = (d.sessionLog || []).filter(function (r) {
+      return r.date === dateISO && (!sport || same(r.sport, sport));
+    })[0];
+    var carb = (((d.progressData || {}).carb) || []).filter(function (r) {
+      return r.date === dateISO && (!fam || same(r.sport, sport));
+    })[0];
+    var heat = ((d.heatAccl || {}).events || []).filter(function (e) {
+      return e[0] === dateISO;
+    })[0];
+
+    return { act: act, plan: plan, log: log, carb: carb, heat: heat,
+             date: dateISO, sport: sport, name: name };
+  }
+
+  function kvRows(rows) {
+    var live = rows.filter(function (r) { return r; });
+    if (!live.length) return '';
+    return '<table class="tbl"><tbody>' + live.map(function (r) {
+      return '<tr><td class="lbl">' + esc(r[0]) + '</td><td class="' +
+        (r[2] ? 't' : '') + '">' + esc(r[1]) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+  }
+
+  function openDetail(dateISO, sport, name) {
+    var x = detailFor(dateISO, sport, name);
+    var a = x.act || {}, pl = x.plan || {}, lg = x.log || {};
+    var done = !!x.act || pl.status === 'completed';
+
+    var h = '<header class="dr-h"><div><p class="dr-k">' +
+      esc(dow(dateISO) + ' ' + dnum(dateISO) + ' ' +
+          new Date(dateISO + 'T12:00:00').toLocaleDateString('en-GB', { month: 'long' })) +
+      (done ? ' · completed' : ' · planned') + '</p>' +
+      '<h2 class="dr-t"><span class="sp ' + sportClass(sport) + '"></span>' +
+      esc(name || pl.name || a.name || sport || 'Session') + '</h2></div>' +
+      '<button type="button" class="dr-x" id="drX" aria-label="Close">✕</button></header>';
+
+    h += '<div class="dr-b">';
+
+    h += card('Summary', kvRows([
+      ['Duration', hhmm(a.dur != null ? a.dur : (pl.duration_min != null ? pl.duration_min : lg.duration_min)), true],
+      (a.dist || lg.distance_km) ? ['Distance', Number(a.dist || lg.distance_km).toFixed(1) + ' km'] : null,
+      (a.pace || lg.pace_per_100m) ? ['Pace', a.pace || lg.pace_per_100m] : null,
+      (a.hr || lg.avg_hr) ? ['Avg HR', (a.hr || lg.avg_hr) + ' bpm'] : null,
+      (a.powNp || lg.norm_power) ? ['Normalised power', (a.powNp || lg.norm_power) + ' w'] : null,
+      (a.powAvg || lg.avg_power) ? ['Average power', (a.powAvg || lg.avg_power) + ' w'] : null,
+      (a.tss != null || pl.tss != null || lg.tss != null)
+        ? ['Training load', Math.round(a.tss != null ? a.tss : (lg.tss != null ? lg.tss : pl.tss)) + ' tss', true] : null,
+      lg.rpe != null ? ['RPE', lg.rpe + ' / 10'] : null,
+      pl.detail ? ['Prescription', pl.detail] : null
+    ]) || '<div class="empty">No summary recorded</div>', { flush: true });
+
+    // Fuelling. Every row is shown even when empty: a blank is information (it says
+    // log it), whereas hiding the row makes a gap look like a feature that is missing.
+    h += card('Fuelling', kvRows([
+      ['Carbohydrate', x.carb ? Number(x.carb.g_per_hr).toFixed(0) + ' g/hr' : 'not logged',
+       !!x.carb],
+      ['Water', lg.hydration_ml != null ? lg.hydration_ml + ' ml' : 'not logged'],
+      ['Sodium', 'not measured']
+    ]), { foot: 'Sodium has no field upstream - the sweat-sodium test is still to be ' +
+                'booked, so there is nothing to show rather than a zero.' });
+
+    h += card('Heat', x.heat
+      ? kvRows([
+          ['Exposure', x.heat[3] || 'logged', true],
+          x.heat[2] != null ? ['Temperature', Number(x.heat[2]).toFixed(1) + '°C'] : null,
+          x.heat[1] != null ? ['Dose', Number(x.heat[1]).toFixed(2)] : null
+        ])
+      : '<div class="empty">No heat exposure logged this day</div>', { flush: true });
+
+    h += '</div>';
+
+    var dr = $('#drawer');
+    dr.innerHTML = h;
+    dr.classList.add('on');
+    document.body.classList.add('drawn');
+    $('#drX').onclick = closeDetail;
+    dr.querySelector('.dr-h').focus && dr.querySelector('.dr-x').focus();
+  }
+
+  function closeDetail() {
+    $('#drawer').classList.remove('on');
+    document.body.classList.remove('drawn');
   }
 
   /* ── Settings ────────────────────────────────────────────────────────── */
