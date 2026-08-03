@@ -625,8 +625,50 @@ def note_ask_sent(slug: str, week_start: date | str, base: Path | str | None = N
         if _is_legacy_flat(raw):
             out = {"legacy_day_shape": raw}
         asks = out.get("asks") if isinstance(out.get("asks"), dict) else {}
-        asks[ws.isoformat()] = datetime.now().isoformat(timespec="seconds")
+        asks[ws.isoformat()] = {"sent": datetime.now().isoformat(timespec="seconds"),
+                                "consumed": False}
         out["asks"] = dict(sorted(asks.items())[-_KEEP:])
+        out["declarations"] = _declarations(raw)
+        _atomic_write(path_for(slug, base), out)
+    except Exception:
+        pass
+
+
+def consume_ask(slug: str, week_start: date | str,
+                base: Path | str | None = None) -> None:
+    """Close the free-scan window on the hours ask.
+
+    The ask used to stay live for _ASK_WINDOW_HOURS (36), and during that whole window ANY
+    one-or-two-digit number in ANY message was a candidate answer. That is a text scanner
+    pretending to be a form field, and on 3 Aug 2026 it misread a distance range, an
+    elapsed-minutes reference and two single-day figures as weekly budgets - four times in
+    24 hours.
+
+    Called after the FIRST athlete message following the ask, whether or not that message
+    turned out to be an hours figure. So the ask is answerable by the next thing they say
+    and nothing after it. A later declaration still works through the self-framing tier
+    ("14 hours next week"), which needs no outstanding ask at all.
+
+    Best-effort and never raises: failing to close the window must not drop a reply.
+    """
+    try:
+        ws = date.fromisoformat(week_start) if isinstance(week_start, str) else week_start
+        ws = _monday(ws)
+        raw = load_raw(slug, base)
+        if not isinstance(raw, dict):
+            return
+        asks = raw.get("asks")
+        if not isinstance(asks, dict) or ws.isoformat() not in asks:
+            return
+        rec = asks[ws.isoformat()]
+        if isinstance(rec, dict):
+            if rec.get("consumed"):
+                return
+            rec["consumed"] = True
+        else:
+            asks[ws.isoformat()] = {"sent": str(rec), "consumed": True}
+        out = {k: v for k, v in raw.items() if k != "declarations"}
+        out["asks"] = asks
         out["declarations"] = _declarations(raw)
         _atomic_write(path_for(slug, base), out)
     except Exception:
@@ -644,7 +686,19 @@ def ask_outstanding(slug: str, week_start: date | str, now: datetime | None = No
         ws = date.fromisoformat(week_start) if isinstance(week_start, str) else week_start
         ws = _monday(ws)
         asks = load_raw(slug, base).get("asks") or {}
-        sent = datetime.fromisoformat(str(asks[ws.isoformat()]))
+        rec = asks[ws.isoformat()]
+        # Two stored shapes: a bare ISO string (legacy) or {"sent":..., "consumed":...}.
+        if isinstance(rec, dict):
+            if rec.get("consumed"):
+                # The athlete has already spoken since the ask went out and said something
+                # that was not an hours figure. The moment has passed: a number typed later
+                # is about something else. This is what stopped "came off at 15-20k" and
+                # "you told me 10 mins ago" being read as 15 and 10 HOURS a day after a
+                # Sunday ask (3 Aug 2026, four occurrences in 24h).
+                return False
+            sent = datetime.fromisoformat(str(rec.get("sent")))
+        else:
+            sent = datetime.fromisoformat(str(rec))
     except Exception:
         return False
     n = now or datetime.now()

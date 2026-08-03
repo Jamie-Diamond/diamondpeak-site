@@ -89,3 +89,62 @@ class TestReplyLengthGuard:
     def test_short_message_still_can(self):
         assert wa.looks_like_hours_reply("12") is True
         assert wa.looks_like_hours_reply("about 12 hours") is True
+
+
+class TestAskWindowClosesAfterOneMessage:
+    """The mechanism fix, not another regex.
+
+    The ask used to stay live for 36 hours, and during that whole window ANY one-or-two
+    digit number in ANY message was a candidate answer. That is a text scanner pretending
+    to be a form field. It is why the same bug fired four times in 24 hours on 3 Aug 2026
+    with four different trigger shapes: a distance range, an elapsed-minutes reference and
+    two single-day figures.
+
+    Now the ask is answerable by the NEXT thing the athlete says and nothing after it.
+    """
+
+    @pytest.fixture
+    def base(self, tmp_path):
+        (tmp_path / "athletes" / "j").mkdir(parents=True)
+        return tmp_path
+
+    def test_ask_is_live_until_the_first_message(self, base):
+        from datetime import date
+        ws = date(2026, 8, 10)
+        wa.note_ask_sent("j", ws, base=base)
+        assert wa.ask_outstanding("j", ws, base=base) is True
+
+    def test_ask_closes_once_the_athlete_says_something_else(self, base):
+        from datetime import date
+        ws = date(2026, 8, 10)
+        wa.note_ask_sent("j", ws, base=base)
+        wa.consume_ask("j", ws, base=base)
+        assert wa.ask_outstanding("j", ws, base=base) is False
+
+    def test_consume_is_idempotent(self, base):
+        from datetime import date
+        ws = date(2026, 8, 10)
+        wa.note_ask_sent("j", ws, base=base)
+        wa.consume_ask("j", ws, base=base)
+        wa.consume_ask("j", ws, base=base)
+        assert wa.ask_outstanding("j", ws, base=base) is False
+
+    def test_legacy_string_shape_is_still_readable_and_consumable(self, base):
+        """Existing files store the ask as a bare ISO string. That must keep working, and
+        must be closable, or a live athlete file would be permanently exposed."""
+        import json
+        from datetime import date, datetime
+        ws = date(2026, 8, 10)
+        p = base / "athletes" / "j" / "this-week-availability.json"
+        p.write_text(json.dumps({
+            "asks": {ws.isoformat(): datetime.now().isoformat(timespec="seconds")},
+            "declarations": []}))
+        assert wa.ask_outstanding("j", ws, base=base) is True
+        wa.consume_ask("j", ws, base=base)
+        assert wa.ask_outstanding("j", ws, base=base) is False
+
+    def test_a_real_declaration_still_lands_with_no_ask_at_all(self):
+        """Closing the window must not cost the athlete the ability to declare hours
+        whenever they like - that path never needed an outstanding ask."""
+        assert wa.looks_like_hours_declaration("14 hours next week") is True
+        assert wa.parse_hours_message("14 hours next week")["hours"] == 14.0

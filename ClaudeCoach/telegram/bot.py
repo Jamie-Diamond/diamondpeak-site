@@ -2884,8 +2884,19 @@ def _handle_hours_capture(token, chat_id, text, athletes):
     if not weekly_availability.ask_outstanding(slug, ws):
         return False
     if not weekly_availability.looks_like_hours_reply(text):
+        # The athlete has spoken since the ask went out and this was not an hours figure,
+        # so the free-scan window closes HERE. Without this the ask stayed live for 36
+        # hours and every one-or-two-digit number in any later message was a candidate:
+        # "came off at 15-20k" became 15 hours, "you told me 10 mins ago" became 10, and
+        # two single-day figures became weeks - four times in 24h on 3 Aug 2026.
+        # A genuine later declaration still lands via the self-framing tier above
+        # ("14 hours next week"), which needs no outstanding ask.
+        weekly_availability.consume_ask(slug, ws)
         return False
     parsed = weekly_availability.parse_hours_message(text)
+    # The offer itself is the one shot: whether they tap Yes, No, or ignore it, the
+    # window is spent and a later stray number must not reopen it.
+    weekly_availability.consume_ask(slug, ws)
     _PENDING_HOURS[chat_id] = {"hours": parsed["hours"],
                                "constraints": parsed["constraints"],
                                "week_start": ws.isoformat(),
