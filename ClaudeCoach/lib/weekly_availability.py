@@ -865,3 +865,87 @@ def day_shape_summary(p: dict) -> str:
         if p.get(key):
             bits.append(f"{label} {'/'.join(p[key])}")
     return "; ".join(bits) if bits else "no days resolved"
+
+
+# ---------------------------------------------------------------------------
+# WHOLE-WEEK SPORT EXCLUSIONS (added 2026-08-03)
+# ---------------------------------------------------------------------------
+# Kathryn, 12 Jul 2026: "Auto-sync overwrote the explicitly-agreed locked week
+# (13-19 Jul) with a generic template that put cycling on Thu and Sat, violating
+# standing no-cycling constraints."
+#
+# Her STANDING bike_days are ["Tue","Thu","Sat"] - Thu and Sat are legitimately
+# permitted - so the auto-sync was not wrong about the standing shape. What it never
+# saw was a WEEK-SPECIFIC agreement to drop cycling, because that agreement lived only
+# in conversation. stage1-plan.py flexes day_rules from weekly_availability.day_shape()
+# for the week being planned, so a recorded declaration would have held; nothing wrote
+# one.
+#
+# parse_day_shape_message needs THREE named days, so it cannot catch this: "no cycling
+# this week" names none. This is the negative form - a sport removed for one week.
+#
+# Deliberately requires explicit WEEK framing. "No cycling today" is a single-day
+# deviation and belongs to lib/day_overrides.py, not here; recording it as a week
+# exclusion would silently delete two other sessions.
+
+_SPORT_TO_DAYKEY = {
+    "swim": "swim_days", "swimming": "swim_days", "pool": "swim_days",
+    "bike": "bike_days", "biking": "bike_days", "cycling": "bike_days",
+    "cycle": "bike_days", "ride": "bike_days", "rides": "bike_days",
+    "riding": "bike_days", "turbo": "bike_days",
+    "run": "run_days", "runs": "run_days", "running": "run_days",
+}
+_WEEK_FRAMED_RE = re.compile(r"\b(this week|next week|the week|all week|whole week)\b", re.I)
+_NEG_SPORT_RE = re.compile(
+    r"\b(?:no|not|zero|avoid|skip|drop|without)\s+"
+    r"(?:any\s+|more\s+)?"
+    r"(swim\w*|pool|bike\w*|cycl\w*|rid\w*|turbo|run\w*)\b", re.I)
+# A question or a report is not a declaration.
+_EXCL_DISQUALIFY_RE = re.compile(
+    r"\?|\b(why|what|when|shall|should i|can i|did i|was there|how come)\b", re.I)
+
+
+def parse_sport_exclusion_message(text: str) -> dict:
+    """Sports removed for a whole week. {"bike_days": [], ...} plus "framed".
+
+    Returns only the keys that were explicitly excluded, each mapped to an EMPTY list,
+    which is how `record` stores "declared, and it is none" as distinct from absent.
+    Never raises.
+    """
+    out: dict = {"framed": False, "excluded": {}}
+    if not text or not text.strip():
+        return out
+    t = re.sub(r"\([^)]*\)", " ", str(text))
+    out["framed"] = bool(_WEEK_FRAMED_RE.search(t))
+    for m in _NEG_SPORT_RE.finditer(t):
+        word = m.group(1).lower()
+        key = _SPORT_TO_DAYKEY.get(word)
+        if key is None:                       # stemmed forms: cycling/riding/running…
+            for stem, k in _SPORT_TO_DAYKEY.items():
+                if word.startswith(stem[:4]):
+                    key = k
+                    break
+        if key:
+            out["excluded"][key] = []
+    return out
+
+
+def looks_like_sport_exclusion(text: str) -> bool:
+    """True only for an unambiguous whole-week sport exclusion.
+
+    Requires explicit week framing AND at least one negated sport AND nothing
+    interrogative, because the consequence of a false positive is deleting a sport from
+    a week's plan.
+    """
+    if not text or _EXCL_DISQUALIFY_RE.search(text):
+        return False
+    p = parse_sport_exclusion_message(text)
+    return bool(p["framed"] and p["excluded"])
+
+
+def sport_exclusion_summary(excluded: dict) -> str:
+    """One-line readback for the confirmation message."""
+    label = {"swim_days": "swim", "bike_days": "bike", "run_days": "run"}
+    names = [label.get(k, k) for k in ("swim_days", "bike_days", "run_days")
+             if k in (excluded or {})]
+    return ("no " + "/".join(names)) if names else "nothing excluded"

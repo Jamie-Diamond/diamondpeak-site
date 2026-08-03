@@ -2844,6 +2844,38 @@ def _handle_hours_capture(token, chat_id, text, athletes):
              reply_markup=build_keyboard(slug))
         return True
 
+    # TIER 1c — a whole-week SPORT EXCLUSION ("no cycling this week"). The negative form
+    # of 1b, which needs 3+ named days and so cannot see this. Kathryn, 12 Jul 2026:
+    # auto-sync overwrote an explicitly-agreed locked week and put cycling on Thu and Sat.
+    # Her STANDING bike_days are ["Tue","Thu","Sat"], so the sync was right about the
+    # standing shape - what it never saw was the week-specific agreement to drop cycling,
+    # because that lived only in conversation. stage1-plan.py flexes day_rules from
+    # weekly_availability.day_shape() for the week it is planning, so a recorded
+    # declaration holds; nothing wrote one.
+    if weekly_availability.looks_like_sport_exclusion(text):
+        p = weekly_availability.parse_sport_exclusion_message(text)
+        try:
+            # record() REPLACES the week, so merge over what is already declared -
+            # otherwise "no cycling" silently erases a swim/run shape or an hours figure
+            # captured earlier in the same week.
+            shape = dict(weekly_availability.day_shape(slug, ws) or {})
+            shape.update(p["excluded"])
+            weekly_availability.record(
+                slug, ws, source="chat-sport-exclusion",
+                hours=weekly_availability.hours_for_week(slug, ws),
+                constraints=weekly_availability.constraints_for_week(slug, ws) or "",
+                **{k: v for k, v in shape.items()
+                   if k in ("swim_days", "bike_days", "run_days", "unavailable_days")})
+        except Exception as e:
+            log(f"sport-exclusion capture failed for {slug}: {e}")
+            return False
+        send(token, chat_id,
+             f"Recorded for w/c {ws.isoformat()} — "
+             f"*{weekly_availability.sport_exclusion_summary(p['excluded'])}*. "
+             f"The plan for that week will be built without it; tell me if that is wrong.",
+             reply_markup=build_keyboard(slug))
+        return True
+
     # TIER 2 — ambiguous figure, and only while the ask is genuinely outstanding (sent,
     # unanswered, inside its window). `ask_outstanding` is a recorded fact, not an
     # inference from the calendar: sunday_hours_ask sends nothing while the illness flag
