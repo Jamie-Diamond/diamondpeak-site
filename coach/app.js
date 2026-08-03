@@ -57,7 +57,11 @@
     { id: 'load', label: '±7 days' },
     { id: 'heat', label: 'Heat' },
     { id: 'fuel', label: 'Fuel' },
-    { id: 'plan', label: 'Plan' }
+    { id: 'plan', label: 'Plan' },
+    // Jamie asked for exactly this on 17 Jul and the bot could not do it: "Can you make
+    // me a graph of my long run distance by week up to race week... we will probably go
+    // to 35k and stop. And have a taper." He then derived it by hand, message by message.
+    { id: 'longrun', label: 'Long run' }
   ];
 
   var SPORT = { Swim: 'swim', Ride: 'bike', VirtualRide: 'bike', GravelRide: 'bike',
@@ -251,6 +255,57 @@
 
   /* ── Today ───────────────────────────────────────────────────────────── */
 
+  // Monday of the week containing `iso`.
+  function weekStart(iso) {
+    var dt = new Date(iso + 'T12:00:00');
+    dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
+    return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') +
+           '-' + String(dt.getDate()).padStart(2, '0');
+  }
+
+  function weekSoFar(d) {
+    var t = todayISO(), ws = weekStart(t);
+    var done = { mins: 0, tss: 0, n: 0 }, left = { mins: 0, tss: 0, n: 0 };
+    var daysLoaded = {};
+
+    (d.recent || []).forEach(function (r) {
+      if (r.date < ws || r.date > t) return;
+      done.mins += r.dur || 0; done.tss += r.tss || 0; done.n++;
+      if ((r.tss || 0) > 0) daysLoaded[r.date] = 1;
+    });
+    (d.weekCalendar || []).forEach(function (x) {
+      if (x.date < ws) return;
+      if (x.date > t && x.status !== 'completed') {
+        left.mins += x.duration_min || 0; left.tss += x.tss || 0; left.n++;
+      }
+    });
+
+    // Target for the week from planVsActual, which is the same figure the planner used.
+    var wk = (d.planVsActual || []).filter(function (w) { return w.week_start === ws; })[0];
+    var target = wk ? wk.planned_tss : null;
+    var pct = (target && target > 0) ? Math.round(done.tss / target * 100) : null;
+
+    var rest = 7 - Object.keys(daysLoaded).length;
+
+    var h = '<div class="minis">' +
+      mini(hhmm(done.mins), 'hours done') +
+      mini(Math.round(done.tss), 'tss done') +
+      mini(target ? Math.round(target) : '—', 'tss target') +
+      mini(pct != null ? pct + '%' : '—', 'of target',
+           pct != null && pct > 110 ? 'warn' : '') +
+      '</div>';
+
+    var bits = [done.n + ' done'];
+    if (left.n) bits.push(left.n + ' left (' + hhmm(left.mins) + ')');
+    bits.push(rest > 0 ? rest + ' rest day' + (rest === 1 ? '' : 's') + ' so far'
+                       : 'no rest day yet this week');
+
+    return card('This week', '<div><p class="wsum">' + esc(bits.join(' · ')) + '</p>' +
+      (target ? '<div class="bar' + (pct > 110 ? ' warn' : '') + '"><i style="width:' +
+        Math.min(100, pct || 0) + '%"></i></div>' : '') + '</div>',
+      { foot: 'As of ' + esc(d.generated || 'unknown') + '. Refreshes every two hours.' }) + h;
+  }
+
   function renderToday() {
     var d = state.data, k = d.kpi || {};
     var t = todayISO();
@@ -302,6 +357,8 @@
       h += '<p class="flag">Ramp ' + signed(ramp) + ' is above the ' + cap.toFixed(0) +
         '-point weekly guide.</p>';
     }
+
+    h += weekSoFar(d);
 
     h += card('Coming up', '<div class="body-flush">' +
       (next.length ? groupByDay(next) : '<div class="empty">Nothing planned yet</div>') +
@@ -521,7 +578,10 @@
               foot: 'Best carbohydrate rate achieved in the trailing 14 days, bike and run ' +
                     'separately. A gap means nothing was logged in that window.' },
       plan: { title: 'Plan vs actual',
-              foot: 'Weekly planned and completed TSS.' }
+              foot: 'Weekly planned and completed TSS.' },
+      longrun: { title: 'Longest run by week',
+                 foot: 'The longest single run in each week, with the week-on-week build. ' +
+                       '10% is the usual floor for a build week; the dashed line is the race.' }
     }[sel];
 
     // Overall CTL or one discipline. fitnessBySport carries Ride/Run/Swim for all
@@ -745,6 +805,32 @@
       }
     }
 
+    if (sel === 'longrun') {
+      var lr = longRunWeeks(d);
+      if (!lr.length) {
+        h += '<p class="hint">No runs with distance in the published window.</p>';
+      } else {
+        var peak = lr.reduce(function (m, r) { return r.km > m.km ? r : m; }, lr[0]);
+        var over = lr.filter(function (r) { return r.pct != null && r.pct > 10; }).length;
+        h += '<div class="minis">' +
+          mini(lr[lr.length - 1].km.toFixed(1), 'latest km') +
+          mini(peak.km.toFixed(1), 'longest') +
+          mini(lr.length, 'weeks') +
+          mini(over, 'builds over 10%', over ? 'warn' : '') + '</div>';
+        h += card('Week by week', '<div class="scroller"><table class="tbl">' +
+          '<thead><tr><th>Week</th><th>Longest</th><th>Build</th><th>Session</th></tr></thead><tbody>' +
+          lr.slice().reverse().map(function (r) {
+            return '<tr><td class="lbl">' + esc(r.ws.slice(5)) + '</td><td class="t">' +
+              r.km.toFixed(1) + '</td><td class="' +
+              (r.pct == null ? '' : (r.pct > 10 ? 'neg' : 'pos')) + '">' +
+              (r.pct == null ? '—' : (r.pct >= 0 ? '+' : '') + r.pct + '%') + '</td><td>' +
+              esc((r.name || '').slice(0, 26)) + '</td></tr>';
+          }).join('') + '</tbody></table></div>',
+          { flush: true, foot: 'Amber bars and red percentages are weeks that grew the ' +
+                              'long run by more than 10%.' });
+      }
+    }
+
     if (sel === 'plan') {
       var pva = d.planVsActual || [];
       if (pva.length) {
@@ -908,7 +994,7 @@
     if (!el) return;
     if (state.chart) { state.chart.destroy(); state.chart = null; }
     var fn = { fit: chartFitness, load: chartLoad, heat: chartHeat,
-               fuel: chartFuel, plan: chartPlan }[state.trend];
+               fuel: chartFuel, plan: chartPlan, longrun: chartLongRun }[state.trend];
     if (fn) state.chart = fn(el, state.data);
     attachReadout(state.chart, '#ro');
   }
@@ -1298,6 +1384,86 @@
     });
   }
 
+  // Longest run per ISO week, from completed activities.
+  function longRunWeeks(d) {
+    var by = {};
+    (d.recent || []).forEach(function (r) {
+      if ((SPORT[r.sport] || '') !== 'run') return;
+      var km = r.dist;
+      if (!km) return;
+      var ws = weekStart(r.date);
+      if (!by[ws] || km > by[ws].km) by[ws] = { ws: ws, km: km, date: r.date, name: r.name };
+    });
+    var rows = Object.keys(by).sort().map(function (k) { return by[k]; });
+    rows.forEach(function (r, i) {
+      var prev = i > 0 ? rows[i - 1].km : null;
+      r.pct = prev ? Math.round((r.km - prev) / prev * 100) : null;
+    });
+    return rows;
+  }
+
+  function chartLongRun(el, d) {
+    var rows = longRunWeeks(d);
+    if (!rows.length) return null;
+    var race = (d.profile || {}).race_date;
+
+    var o = baseOpts();
+    o.scales = {
+      x: {
+        type: 'linear', offset: true,
+        ticks: { color: C.muted, maxTicksLimit: 7, autoSkip: true, maxRotation: 0,
+                 font: { family: 'DM Mono', size: 9 },
+                 callback: function (v) {
+                   var r = rows[Math.round(v)];
+                   if (!r) return '';
+                   var dt = new Date(r.ws + 'T12:00:00');
+                   return dt.getDate() + ' ' +
+                     dt.toLocaleDateString('en-GB', { month: 'short' });
+                 } },
+        grid: { display: false }, border: { color: C.rule }
+      },
+      y: {
+        beginAtZero: true,
+        title: { display: true, text: 'km', color: C.muted, font: { family: 'DM Mono', size: 9 } },
+        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 6 },
+        grid: { color: C.rule, drawTicks: false }, border: { display: false }
+      }
+    };
+    o.plugins.tooltip.callbacks = {
+      title: function (items) {
+        var r = rows[items[0].dataIndex];
+        return r ? 'w/c ' + r.ws + (r.pct != null ? ' · ' + (r.pct >= 0 ? '+' : '') + r.pct + '%' : '') : '';
+      },
+      label: function (it) {
+        var r = rows[it.dataIndex] || {};
+        return [Number(it.parsed.y).toFixed(1) + ' km', r.name || ''].filter(Boolean);
+      }
+    };
+    // Race week marked on the same axis the bars sit on.
+    var lines = [];
+    if (race) {
+      var rw = weekStart(race);
+      var idx = rows.map(function (r) { return r.ws; }).indexOf(rw);
+      if (idx >= 0) lines.push({ x: idx, label: 'RACE', color: C.green });
+    }
+    o.plugins.vlines = { lines: lines };
+
+    return new Chart(el, {
+      type: 'bar',
+      data: {
+        labels: rows.map(function (r, i) { return i; }),
+        datasets: [{
+          label: 'Longest run', data: rows.map(function (r) { return r.km; }),
+          backgroundColor: rows.map(function (r) {
+            return r.pct != null && r.pct > 10 ? 'rgba(183,121,31,.8)' : 'rgba(29,104,64,.75)';
+          }),
+          borderWidth: 0, borderRadius: 2, barPercentage: 0.7
+        }]
+      },
+      options: o, plugins: [vlines]
+    });
+  }
+
   function chartPlan(el, d) {
     var pva = (d.planVsActual || []).slice();
     var o = baseOpts();
@@ -1582,6 +1748,7 @@
 
   function renderSettings() {
     var d = state.data || {};
+    var p = d.profile || {};
     var cur = state.slug;
 
     var h = card('Athlete', '<div class="body-flush">' + ATHLETES.map(function (a) {
@@ -1602,6 +1769,41 @@
       '</tbody></table>',
       { flush: true, foot: 'Figures come from the nightly published subset. ' +
                           'Body weight, HRV and resting HR are never published.' });
+
+    var css = (d.swimLog || []).filter(function (x) {
+      return /css|test/i.test(x.name || '');
+    }).slice(-4).reverse();
+
+    h += card('Where the numbers come from', '<table class="tbl"><tbody>' +
+      [['Fitness (CTL)', (d.kpi || {}).ctl, 'Intervals.icu wellness, as of ' + (d.generated || '?')],
+       ['Threshold power', d.resolvedFtp ? d.resolvedFtp + 'w' : null,
+        p.ftp_watts === d.resolvedFtp ? 'profile value, confirmed against season eFTP'
+                                      : 'season eFTP — overrides a stale profile value'],
+       ['Threshold run pace', p.run_threshold_pace_per_km, 'profile — set from testing, not auto-derived'],
+       ['Swim CSS', p.swim_css_per_100m,
+        css.length ? 'profile — last test ' + css[0].date + ' (' + esc(css[0].name || '') + ')'
+                   : 'profile — no CSS test found in the published swim log'],
+       ['Ramp guide', d.rampCap != null ? '+' + d.rampCap + ' CTL/wk' : null,
+        'your configured max_ctl_ramp_per_week, not a global default'],
+       ['Heat decay', (d.heatAccl || {}).tau_days ? (d.heatAccl.tau_days) + ' day tau' : null,
+        'exponential decay; score falls to ~37% of peak after one tau with no exposure'],
+       ['Power curve window', (d.powerCurveWindow || {}).days ?
+          (d.powerCurveWindow.days) + ' days' : null, (d.powerCurveWindow || {}).label || '']
+      ].filter(function (r) { return r[1] != null && r[1] !== ''; }).map(function (r) {
+        return '<tr><td class="lbl">' + esc(r[0]) + '</td><td class="t">' + esc(r[1]) +
+          '</td></tr><tr class="prov"><td colspan="2">' + esc(r[2]) + '</td></tr>';
+      }).join('') + '</tbody></table>',
+      { flush: true, foot: 'Every figure the coach quotes is derived from these. If one ' +
+                          'looks wrong, this is the input to challenge.' });
+
+    if (css.length) {
+      h += card('CSS test history', '<table class="tbl">' +
+        '<thead><tr><th>Date</th><th>Session</th><th>Pace</th></tr></thead><tbody>' +
+        css.map(function (x) {
+          return '<tr><td class="lbl">' + esc(x.date) + '</td><td>' + esc(x.name || '—') +
+            '</td><td class="t">' + esc(x.pace_per_100m || '—') + '</td></tr>';
+        }).join('') + '</tbody></table>', { flush: true });
+    }
 
     h += card('App', '<table class="tbl"><tbody>' +
       '<tr><td class="lbl">Coach chat</td><td>Telegram</td></tr>' +

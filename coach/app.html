@@ -514,6 +514,14 @@ table.tbl tr.hl td{background:rgba(29,104,64,.05)}
    horizontal scrollbar and the card keeps its shape. */
 .scroller{max-height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch}
 
+.wsum{margin:0;font-size:13.5px;color:var(--ink-2)}
+/* Provenance line under each number: quieter than the value it explains. */
+table.tbl tr.prov td{
+  padding:0 15px 9px;border-bottom:1px solid var(--rule-soft);
+  font-family:'DM Mono',monospace;font-size:9px;line-height:1.5;letter-spacing:.04em;
+  color:var(--muted);
+}
+
 /* ── charts ─────────────────────────────────────────────────────────────── */
 
 .chartbox{position:relative;height:200px;padding:4px 6px 2px}
@@ -715,6 +723,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=10" defer></script>
+<script src="app.js?v=11" defer></script>
 </body>
 </html>
