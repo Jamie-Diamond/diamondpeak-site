@@ -61,8 +61,12 @@ class TestArmedChecksFire:
                    for v in rep.violations)
 
     def test_compliant_week_is_clean_and_unskipped(self):
+        # long_ride_max_min joins the armed set (4 Aug 2026): both real callers
+        # (plan_builder, plan_audit) supply it, so an unsupplied ceiling is a genuine
+        # skip and this test is what holds callers to arming it.
         rep = validate_week(_week(300), WS, weekly_tss_cap=500.0,
-                            ctl_today=60.0, ramp_cap=5.0, weekly_tss_floor=200.0)
+                            ctl_today=60.0, ramp_cap=5.0, weekly_tss_floor=200.0,
+                            long_ride_max_min=300)
         assert rep.ok
         assert rep.skipped == []
 

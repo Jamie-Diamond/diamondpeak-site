@@ -263,7 +263,10 @@ def build_sessions(slug: str, proposal: dict) -> dict:
                         ctl_today=_ctl,
                         ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
                         strength_max=(dr or {}).get("strength_max"),
-                        distribution=phase.get("distribution"))
+                        distribution=phase.get("distribution"),
+                        # Absolute ride ceiling (Jamie, 4 Aug 2026: no benefit past 5h,
+                        # close the gap with intensity below it). Per-athlete override.
+                        long_ride_max_min=int(cfg.get("long_ride_max_min") or 300))
     hard = [{"code": v.code, "msg": str(v)} for v in rep.violations if v.severity == "hard"]
     soft = [{"code": v.code, "msg": str(v)} for v in rep.violations if v.severity != "hard"]
     if rep.skipped:

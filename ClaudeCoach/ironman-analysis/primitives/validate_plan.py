@@ -831,6 +831,7 @@ def validate_week(
     dist_tolerance_pp: float = DIST_TOLERANCE_PP,
     rest_days_min: int = 1,
     rest_day_waiver: str | None = None,
+    long_ride_max_min: int | None = None,
 ) -> WeekReport:
     """Validate the planned sessions for the 7 days starting `week_start`.
 
@@ -899,6 +900,31 @@ def validate_week(
             ))
 
     violations.extend(_drift_violations(overrides, week_end))
+
+    # 1a. Ride longer than the athlete's long-ride ceiling. Jamie, 4 Aug 2026: "I don't
+    #     think there is much benefit going over 5hrs, I would rather add intensity below
+    #     it to get the same TSS." plan_audit already flagged a 330min ride, but only
+    #     AFTER it was on the calendar; nothing stopped the proposer writing it, and the
+    #     brief's long_ride_target_min (255 for him) is advisory prose the LLM overshot.
+    #     Hard here, so the attempt is blocking and the planner re-proposes shorter.
+    if long_ride_max_min:
+        for e in week_events:
+            # This module's own mapping, not planned_tss._norm_sport: Ride/VirtualRide/
+            # GravelRide already share the "bike" family here (_SPORT_FAMILY), and the
+            # docstring's SINGLE RULE SOURCE principle says sport identity resolves one way.
+            if _SPORT_FAMILY.get(str(e.get("type") or "").strip().lower()) != "bike":
+                continue
+            mins = float(e.get("moving_time") or 0) / 60.0
+            if mins > float(long_ride_max_min):
+                violations.append(Violation(
+                    code="long_ride_over_ceiling",
+                    severity="hard",
+                    detail=(f"'{e.get('name', '')}' on {_event_date(e)} is {int(mins)}min, over the "
+                            f"{int(long_ride_max_min)}min ride ceiling — close the load gap with "
+                            f"INTENSITY below the ceiling, not more duration"),
+                ))
+    else:
+        skipped.append("long_ride ceiling check SKIPPED — no long_ride_max_min supplied")
 
     # 1b. Name claims an intensity the STEPS never reach (4 Aug 2026). HARD, so a
     #     Stage-1 attempt that writes "VO2 6x3min" over easy steps is blocking and

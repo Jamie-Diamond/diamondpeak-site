@@ -180,8 +180,6 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                 fails["FUELLING"].append(f"{nm} — no fuelling stated (expect {fuel} g/hr)")
             elif not any(abs(int(x) - fuel) <= _FUEL_TOLERANCE_G_HR for x in g):
                 fails["FUELLING"].append(f"{nm} — states {g} g/hr, expected {fuel}")
-        if sport in _FUEL_SPORTS and lr_ceiling and dur > lr_ceiling:
-            fails["LONG_RIDE"].append(f"{nm} — {dur}min > {lr_ceiling}min event ceiling")
 
     # Per-week: load vs target + validate_week rules.
     for wk in range(weeks):
@@ -268,7 +266,13 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                             run_week_min_cap=run_cap,
                             ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
                             strength_max=(dr or {}).get("strength_max"),
-                            distribution=phase.get("distribution"))
+                            distribution=phase.get("distribution"),
+                        # Was an inline LONG_RIDE check here; validate_week now owns it
+                        # so plan time and calendar time cannot disagree, and a breach is
+                        # reported once. `or 300` keeps the absolute ceiling armed for an
+                        # athlete with no race bike split (else it would land in SKIPPED
+                        # and alert daily).
+                        long_ride_max_min=(lr_ceiling or 300))
         # Escalate soft advisories that keep recurring. Only the CURRENT week updates the
         # streak store: the next-week audit re-runs against the same plan a week later and
         # would otherwise double-count a single occurrence.
