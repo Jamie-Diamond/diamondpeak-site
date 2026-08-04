@@ -190,8 +190,18 @@ def sync_commit_push(paths, message, script, athlete="", run=None) -> bool:
 
             # Stage individually — a missing pathspec (e.g. an athlete with no
             # swim-log.json) must not abort staging of the files that do exist.
+            #
+            # A DIRECTORY pathspec stages with -u (tracked files only), so it can
+            # never INTRODUCE a file. bot.py passes "ClaudeCoach/", and on 4 Aug 2026
+            # that swept an untracked athletes.json BACKUP — every athlete's ICU api
+            # key and chat_id — into a public-repo commit whose message was about
+            # logging a feel note. .gitignore named athletes.json by exact path, so
+            # the .backup-* copy was not covered. Callers naming explicit FILES keep
+            # plain add, because publishing a genuinely new file (a first-ever
+            # public/*.json) is the intended behaviour there.
             for p in paths:
-                run(["git", "add", "--", p], 15)
+                is_dir = p.endswith("/") or os.path.isdir(os.path.join(PROJECT_DIR, p))
+                run(["git", "add", "-u", "--", p] if is_dir else ["git", "add", "--", p], 15)
 
             staged = run(["git", "diff", "--cached", "--quiet"], 15)
             if staged.returncode == 0:
