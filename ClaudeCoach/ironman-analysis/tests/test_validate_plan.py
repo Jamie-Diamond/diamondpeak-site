@@ -400,19 +400,38 @@ class TestEscalateRepeats:
         return Violation(code=code, severity="soft", detail="x")
 
     def test_first_occurrence_does_not_escalate(self):
-        out, streaks = escalate_repeats([self._v()], {})
-        assert len(out) == 1 and streaks == {"intensity_distribution": 1}
+        out, streaks = escalate_repeats([self._v()], {}, week="2026-08-03")
+        assert len(out) == 1 and streaks == {"intensity_distribution": ["2026-08-03"]}
 
-    def test_third_consecutive_run_escalates(self):
-        out, streaks = escalate_repeats([self._v()], {"intensity_distribution": 2})
+    def test_third_distinct_week_escalates(self):
+        out, streaks = escalate_repeats(
+            [self._v()], {"intensity_distribution": ["2026-07-20", "2026-07-27"]},
+            week="2026-08-03")
         codes = [v.code for v in out]
         assert "intensity_distribution_persistent" in codes
-        assert streaks == {"intensity_distribution": 3}
+        assert streaks["intensity_distribution"] == ["2026-07-20", "2026-07-27", "2026-08-03"]
         # loud, never blocking
         assert all(v.severity == "soft" for v in out)
 
+    def test_re_auditing_one_week_daily_never_escalates(self):
+        """The bug this replaced: plan_audit runs DAILY against the same plan, so
+        counting runs escalated an unchanged week to "persistent" in three days —
+        Kathryn's 4 Aug flag read "fired 4 runs in a row" off one week."""
+        store = None
+        for _ in range(6):
+            out, store = escalate_repeats([self._v()], store, week="2026-08-03")
+        assert not any(v.code.endswith("_persistent") for v in out)
+        assert store == {"intensity_distribution": ["2026-08-03"]}
+
+    def test_a_legacy_integer_store_still_escalates(self):
+        # Stores written before the week-keyed change hold a plain count.
+        out, _ = escalate_repeats([self._v()], {"intensity_distribution": 2},
+                                  week="2026-08-03")
+        assert any(v.code.endswith("_persistent") for v in out)
+
     def test_a_clean_run_breaks_the_streak(self):
-        out, streaks = escalate_repeats([], {"intensity_distribution": 5})
+        out, streaks = escalate_repeats([], {"intensity_distribution": ["2026-07-20"]},
+                                        week="2026-08-03")
         assert out == [] and streaks == {}
 
     def test_hard_violations_are_not_streak_tracked(self):

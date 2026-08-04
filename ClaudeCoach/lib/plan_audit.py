@@ -278,7 +278,10 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
         # would otherwise double-count a single occurrence.
         viols = rep.violations
         if wk == 0:
-            viols, new_streaks = escalate_repeats(rep.violations, _load_streaks(slug))
+            # Pass the WEEK: the streak counts distinct weeks, not audit runs, so this
+            # daily job cannot escalate an unchanged plan just by looking at it again.
+            viols, new_streaks = escalate_repeats(rep.violations, _load_streaks(slug),
+                                                  week=ws.isoformat())
             _save_streaks(slug, new_streaks)
         for v in viols:
             # Prefix match: the distribution check now emits per-zone ceiling codes and a

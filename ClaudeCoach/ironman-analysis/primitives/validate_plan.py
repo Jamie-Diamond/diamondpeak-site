@@ -507,7 +507,8 @@ DIST_ESCALATE_AFTER = 3    # consecutive weeks carrying the same code before esc
 
 
 def escalate_repeats(violations: list["Violation"], streaks: dict | None,
-                     *, escalate_after: int = DIST_ESCALATE_AFTER):
+                     *, escalate_after: int = DIST_ESCALATE_AFTER,
+                     week: str | None = None):
     """(violations, new_streaks) with recurring soft codes escalated in wording.
 
     streaks: {code: consecutive_runs_seen} from the previous run. A code present
@@ -519,17 +520,36 @@ def escalate_repeats(violations: list["Violation"], streaks: dict | None,
     prior = dict(streaks or {})
     seen = {}
     out = list(violations or [])
+
+    def _weeks(v) -> list:
+        """Weeks this code has already fired in. Accepts the old int-counter store."""
+        p = prior.get(v)
+        if isinstance(p, list):
+            return list(p)
+        return [f"pre-{int(p or 0)}"] * int(p or 0)      # legacy count, weeks unknown
+
     for v in violations or []:
         if v.severity != "soft":
             continue
-        seen[v.code] = int(prior.get(v.code, 0) or 0) + 1
-    for code, n in sorted(seen.items()):
+        # Count DISTINCT WEEKS, not audit runs. plan_audit runs daily against the SAME
+        # plan, so counting runs meant an unchanged week escalated to "persistent" in
+        # three days while the docstring claimed "3 weeks running" — Kathryn's 4 Aug
+        # flag read "fired 4 runs in a row" off a single week. A signal is only being
+        # pushed past if it survives ACROSS weeks, which is also the methodology's
+        # reason for judging distribution on a slightly longer average.
+        wks = _weeks(v.code)
+        wk = week or "unknown"
+        if wk not in wks:
+            wks.append(wk)
+        seen[v.code] = wks
+    for code, wks in sorted(seen.items()):
+        n = len(wks)
         if n < escalate_after:
             continue
         out.append(Violation(
             code=f"{code}_persistent", severity="soft",
-            detail=(f"{code} has now fired {n} runs in a row — it is being pushed past "
-                    f"every week rather than acted on. Either change the plan or change "
+            detail=(f"{code} has now fired in {n} separate weeks — it is being pushed past "
+                    f"rather than acted on. Either change the plan or change "
                     f"the phase target it is being judged against"),
         ))
     return out, seen
@@ -557,7 +577,17 @@ _ZONE_TGT_IDX = {"z3": 1, "high": 2}
 _ZONE_PCT_KEY = {"z3": "z3_pct", "high": "high_pct"}
 
 
+# A deviation must clear the tolerance edge by a MEANINGFUL margin before it is
+# reported. Kathryn, 4 Aug 2026: Run Z4-5 at 12.5% against a 10% target and a 12% edge
+# raised a violation whose own text read "over the ceiling by 0pp" — a half-point
+# excursion presented as a finding, and it survived to the escalation. Jamie: "I think
+# 2% is within the noise and why the guidance is to look at a slightly longer average."
+# Sub-1pp past the edge is noise, not a signal; a real drift clears it easily.
+MIN_DEV_PP = 1.0
+
+
 def zone_band_deviations(per_sport, per_sport_targets, *, deload=False,
+                        min_dev_pp: float = MIN_DEV_PP,
                         injury_bands=None, min_minutes=180):
     """Symmetric per-sport per-zone deviations vs [floor_edge, ceil_edge] (default
     [t - tol_lo, t + tol_hi] from _ZONE_BANDS). Returns [{sport, zone, kind, actual, target,
@@ -581,10 +611,10 @@ def zone_band_deviations(per_sport, per_sport_targets, *, deload=False,
             target = float(tgt[_ZONE_TGT_IDX[zone]])
             ceil_edge = band["ceiling"] if band else target + tol_hi
             floor_edge = band["floor"] if band else target - tol_lo
-            if actual > ceil_edge:
+            if actual > ceil_edge + min_dev_pp:
                 out.append({"sport": sport, "zone": zone, "kind": "ceiling",
                             "actual": actual, "target": target, "dev": actual - ceil_edge})
-            elif actual < floor_edge:
+            elif actual < floor_edge - min_dev_pp:
                 if deload:
                     continue
                 out.append({"sport": sport, "zone": zone, "kind": "floor",
