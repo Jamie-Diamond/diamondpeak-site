@@ -78,3 +78,8 @@ ClaudeCoach/config/athletes.json.enc
 ClaudeCoach/athletes/*/strava_tokens.json
 *.pem
 *.env
+# Secret-bearing backups. athletes.json is ignored by exact path above, so a
+# *.backup-* copy of it was NOT covered and sat untracked in this PUBLIC repo,
+# one `git add -A` from being published (4 Aug 2026). athletes.json.enc is
+# committed deliberately and is unaffected - it is encrypted.
+ClaudeCoach/config/*.backup-*
