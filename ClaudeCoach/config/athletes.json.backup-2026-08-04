@@ -1,0 +1,284 @@
+{
+  "jamie": {
+    "name": "Jamie Diamond",
+    "chat_id": "6090343263",
+    "icu_athlete_id": "i196362",
+    "icu_api_key": "30f1smcobrcbm87lzk6j9zzsi",
+    "active": true,
+    "race_date": "2026-09-19",
+    "race_name": "IM Italy Emilia-Romagna",
+    "plan_start": "2026-04-27",
+    "max_ctl_ramp_per_week": 4.0,
+    "taper_overshoot": 1.15,
+    "manual_easy_weeks": [
+      {
+        "week_start": "2026-07-20",
+        "reason": "Dorney Olympic tri (B-race) taper \u2014 race Sun 26 Jul",
+        "factor": 0.6
+      }
+    ],
+    "nutrition_target_g_hr": 90,
+    "nutrition_alert_threshold_g_hr": 75,
+    "run_hr_cap": 150,
+    "tsb_fresh_threshold": 10,
+    "tsb_overreach_threshold": -30,
+    "ctl_ramp_overreach_threshold": 7,
+    "phase_tss": {
+      "base_end_week": 5,
+      "build_end_week": 10,
+      "specific_end_week": 14,
+      "peak_end_week": 19
+    },
+    "race_target_splits": {
+      "swim_min": 67,
+      "bike_min": 284,
+      "bike_np_target_watts": 225,
+      "run_min": 210,
+      "t1t2_min": 5.5
+    },
+    "ctl_targets": {
+      "race_min": 97,
+      "phase_ctl": {
+        "base": 85,
+        "build": 95,
+        "specific": 105,
+        "peak": 112
+      }
+    },
+    "daily_prescription": true,
+    "day_rules": {
+      "swim_days": [
+        "Tue",
+        "Thu"
+      ],
+      "bike_days": [
+        "Fri",
+        "Sat",
+        "Sun"
+      ],
+      "run_days": [
+        "Tue",
+        "Wed",
+        "Sat",
+        "Sun"
+      ],
+      "strength_max": 2,
+      "swim_focus": {
+        "Tue": [
+          "technique",
+          "speed"
+        ],
+        "Thu": [
+          "css"
+        ]
+      }
+    },
+    "run_protocol": {
+      "weekly_km_next": 30,
+      "weekly_increase_pct": [
+        10,
+        15
+      ],
+      "quality_allowed": true,
+      "runs_per_week": [
+        3,
+        4
+      ],
+      "format": "continuous (no walk-run), HR cap 150; easy Z2 default, run quality added cautiously within mileage/long-run caps; ease if ankle pain >=5/10",
+      "ankle_pain_ease_threshold": 5
+    },
+    "deload_skip_weeks": [
+      "2026-07-13"
+    ],
+    "sweat_ml_hr": 1380,
+    "races": [
+      {
+        "name": "Barcelona IM",
+        "date": "2023-10-07",
+        "priority": null,
+        "distance": "Full Ironman",
+        "status": "completed",
+        "source": "profile.json prev2_race_date/prev2_race_name"
+      },
+      {
+        "name": "IM Italy Emilia-Romagna",
+        "date": "2025-09-20",
+        "priority": null,
+        "distance": "Full Ironman",
+        "status": "completed",
+        "source": "profile.json prev_race"
+      },
+      {
+        "name": "Dorney Olympic tri",
+        "date": "2026-07-26",
+        "priority": "B",
+        "distance": "Olympic triathlon",
+        "status": "completed",
+        "source": "persistent-rules.md:32,45; current-state.md:19,137",
+        "post_race_sent": true
+      },
+      {
+        "name": "IM Italy Emilia-Romagna",
+        "date": "2026-09-19",
+        "priority": "A",
+        "distance": "Full Ironman",
+        "status": "upcoming",
+        "source": "config/athletes.json race_date; profile.json; persistent-rules.md:45"
+      }
+    ]
+  },
+  "kathryn": {
+    "name": "Kathryn",
+    "chat_id": "8338438956",
+    "icu_athlete_id": "i497812",
+    "icu_api_key": "1loq7iiyr8dfkmx56lup2ift2",
+    "active": true,
+    "race_date": "2026-09-20",
+    "race_name": "70.3 Emilia Romagna",
+    "plan_start": "2026-05-04",
+    "max_ctl_ramp_per_week": 6.0,
+    "taper_overshoot": 1.1,
+    "nutrition_target_g_hr": 70,
+    "nutrition_alert_threshold_g_hr": 55,
+    "run_hr_cap": 155,
+    "tsb_fresh_threshold": 8,
+    "tsb_overreach_threshold": -25,
+    "ctl_ramp_overreach_threshold": 6,
+    "phase_tss": {
+      "base_end_week": 8,
+      "build_end_week": 14,
+      "peak_end_week": 18
+    },
+    "race_target_splits": {
+      "swim_min": 34,
+      "bike_min": 165,
+      "bike_np_target_watts": 150,
+      "run_min": 121,
+      "t1t2_min": 5
+    },
+    "ctl_targets": {
+      "race_min": 76,
+      "race_max": 80
+    },
+    "run_protocol": {
+      "weekly_km_next": 30,
+      "weekly_increase_pct": [
+        10,
+        15
+      ],
+      "quality_allowed": true,
+      "runs_per_week": [
+        3,
+        4
+      ],
+      "weekly_km_floor": 31,
+      "long_run_km_floor": 13.5,
+      "increase_pct": 15
+    },
+    "day_rules": {
+      "swim_days": [
+        "Mon",
+        "Wed",
+        "Fri"
+      ],
+      "bike_days": [
+        "Tue",
+        "Thu",
+        "Sat"
+      ],
+      "run_days": [
+        "Wed",
+        "Thu",
+        "Sun"
+      ],
+      "strength_max": 2,
+      "swim_focus": {
+        "Mon": [
+          "technique",
+          "speed"
+        ],
+        "Fri": [
+          "css"
+        ]
+      }
+    },
+    "races": [
+      {
+        "name": "Venice 70.3",
+        "date": "2023-09-24",
+        "priority": null,
+        "distance": "70.3",
+        "status": "completed",
+        "source": "profile.json prev2_race_date/prev2_race_name"
+      },
+      {
+        "name": "70.3 Marathonas Greece",
+        "date": "2024-10-20",
+        "priority": null,
+        "distance": "70.3",
+        "status": "completed",
+        "source": "profile.json prev_race (the 'Greece 2024' reference in current-state.md)"
+      },
+      {
+        "name": "70.3 Emilia Romagna",
+        "date": "2026-09-20",
+        "priority": "A",
+        "distance": "70.3",
+        "status": "upcoming",
+        "source": "config/athletes.json race_date; profile.json; current-state.md:33"
+      }
+    ]
+  },
+  "calum": {
+    "name": "Calum Healey",
+    "chat_id": "6189857701",
+    "icu_athlete_id": "i584412",
+    "icu_api_key": "64rms9we7lzb5ou6clv3j70v6",
+    "active": true,
+    "race_date": "2026-08-29",
+    "race_name": "Tour de stations, marmottes",
+    "max_ctl_ramp_per_week": 5.0,
+    "taper_overshoot": 1.1,
+    "tsb_fresh_threshold": 10,
+    "tsb_overreach_threshold": -30,
+    "ctl_ramp_overreach_threshold": 7,
+    "ctl_targets": {
+      "race_min": 40,
+      "race_max": 48
+    },
+    "plan_start": "2026-06-08",
+    "phase_tss": {
+      "base_end_week": 3,
+      "build_end_week": 8,
+      "peak_end_week": 11
+    },
+    "nutrition_target_g_hr": 70,
+    "races": [
+      {
+        "name": "Tour de Stations / Marmottes",
+        "date": "2026-08-29",
+        "priority": "A",
+        "distance": "Sportive \u2014 134 km / 4,700 m",
+        "status": "upcoming",
+        "source": "config/athletes.json race_date; profile.json; current-state.md:11,32"
+      }
+    ],
+    "race_target_splits": {
+      "bike_min": 600
+    },
+    "day_rules": {
+      "bike_days": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
+      ],
+      "bike_days_expires": {
+        "Sat": "2026-09-05"
+      },
+      "strength_max": 4
+    }
+  }
+}
