@@ -41,7 +41,12 @@ fi
 
 # Polarity is fail-closed: enforce everywhere EXCEPT the repo we have positively
 # confirmed is private. An unknown/missing origin is enforced, not skipped.
-REMOTE="$(git remote get-url origin 2>/dev/null || echo none)"
+# Redacted: the origin URL carries an embedded GitHub PAT
+# (https://ghp_xxx@github.com/...), and this script printed it verbatim in its
+# own BLOCK message — into terminals, cron logs and the ops digest — while its
+# header claimed it never prints a secret value. Found 4 Aug 2026 by running the
+# gate against a deliberately staged secret. Host and path only.
+REMOTE="$(git remote get-url origin 2>/dev/null | sed -E 's#//[^@/]*@#//#' || echo none)"
 case "$REMOTE" in
   *dpc_private*)
     echo "[secret-gate] target is dpc_private (private) - path deny-list not applied"
@@ -62,6 +67,14 @@ DENY_EXACT=(
 # Glob patterns, matched against the whole path.
 DENY_GLOB=(
   "*/strava_tokens.json"
+  # A backup or copy of a deny-listed file is the same secret. DENY_EXACT names
+  # athletes.json by exact path, so athletes.json.backup-2026-08-04 walked straight
+  # past it into a public commit (4 Aug 2026) — the identical exact-path blind spot
+  # .gitignore had. Matches .bak/.orig/.save and dated backups.
+  "*.backup-*"
+  "*.bak"
+  "*.orig"
+  "*.save"
   "*.pem"
   "*.env"
   "*.p12"

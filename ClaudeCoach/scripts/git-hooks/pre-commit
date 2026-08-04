@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Same gate on the staged set, so a secret is caught before it is ever committed and
+# there is nothing to rewrite. See the pre-push hook for why hooks rather than call sites.
+set -uo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+GATE="$ROOT/ClaudeCoach/scripts/check-no-public-secrets.sh"
+if [ ! -x "$GATE" ]; then
+  echo "[pre-commit] secret gate missing or not executable at $GATE — commit blocked" >&2
+  exit 1
+fi
+exec "$GATE" staged

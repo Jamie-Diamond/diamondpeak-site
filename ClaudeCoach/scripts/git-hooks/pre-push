@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Secret gate for EVERY push from this clone, whoever runs it.
+#
+# Why a hook and not another call site: on 4 Aug 2026 an athletes.json backup with all
+# three athletes' ICU api keys reached this PUBLIC repo in a commit messaged "auto: log
+# feel note for Kathryn 4 Aug ride". No script in the repo emits that message — it was an
+# LLM-driven git command from the bot's own tooling, which never goes through
+# lib/git_sync.py and so never reached the gate git_sync calls. Guarding call sites can
+# only ever cover the callers we know about; a hook covers the ones we don't.
+#
+# Fails CLOSED: a missing or non-executable gate blocks the push.
+set -uo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+GATE="$ROOT/ClaudeCoach/scripts/check-no-public-secrets.sh"
+if [ ! -x "$GATE" ]; then
+  echo "[pre-push] secret gate missing or not executable at $GATE — push blocked" >&2
+  exit 1
+fi
+if ! "$GATE" tree; then
+  echo "[pre-push] secret gate BLOCKED this push. Do NOT --no-verify: rotate anything" >&2
+  echo "[pre-push] already exposed, remove the file, and push again." >&2
+  exit 1
+fi
+exit 0
