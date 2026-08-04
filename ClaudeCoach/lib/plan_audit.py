@@ -36,6 +36,7 @@ sys.path.insert(0, str(BASE / "lib"))
 from primitives.validate_plan import validate_week, escalate_repeats  # noqa: E402
 from primitives.blueprint import current_phase                # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
+from primitives.planned_tss import name_intensity_mismatch     # noqa: E402
 import plan_tools as pt                                        # noqa: E402
 from plan_builder import _weekly_tss_cap                       # noqa: E402
 # IMPORTED, not restated: which of the hours ceiling / ramp-permitted maximum is the
@@ -150,6 +151,14 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
         dur = _dur_min(e)
         if sport in _STRUCTURED_SPORTS and steps == 0:
             fails["STRUCTURE"].append(f"{nm} ({sport}) — no structured steps")
+        # Named hard, built easy. validate_week blocks this at plan time, but a
+        # session can also reach the calendar by chat edit or a hand push, so the
+        # daily audit checks what is actually ON the calendar (4 Aug 2026).
+        mm = name_intensity_mismatch(sport, nm, desc)
+        if mm:
+            fails["STRUCTURE"].append(
+                f"{nm} ({sport}) — name claims {mm['claim']} but hardest step is "
+                f"{mm['found']}%, short of {mm['required']}%")
         if sport in _FUEL_SPORTS and dur >= 90:
             g = re.findall(r"(\d+)\s*g\s*(?:CHO\s*)?/?\s*hr", desc, re.I)
             if not g:

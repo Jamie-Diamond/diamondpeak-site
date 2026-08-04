@@ -46,6 +46,7 @@ from datetime import date, timedelta
 
 from primitives.load import compute_projected_ctl
 from primitives.modulation import classify_session_type
+from primitives.planned_tss import name_intensity_mismatch
 
 # Weekday name → Python weekday() int (Mon=0). Accepts common abbreviations.
 _DOW = {
@@ -898,6 +899,24 @@ def validate_week(
             ))
 
     violations.extend(_drift_violations(overrides, week_end))
+
+    # 1b. Name claims an intensity the STEPS never reach (4 Aug 2026). HARD, so a
+    #     Stage-1 attempt that writes "VO2 6x3min" over easy steps is blocking and
+    #     the planner re-proposes rather than the athlete getting ~7:00/km labelled
+    #     VO2. Needs the RENDERED steps: an event with no `description` is not
+    #     checked here (no-steps is already STRUCTURE's job), so this cannot fire on
+    #     a caller that only passes coaching prose.
+    for e in week_events:
+        mm = name_intensity_mismatch(str(e.get("type") or ""), str(e.get("name") or ""),
+                                     str(e.get("description") or ""))
+        if mm:
+            violations.append(Violation(
+                code="name_intensity_mismatch",
+                severity="hard",
+                detail=(f"'{e.get('name', '')}' ({e.get('type')}) claims {mm['claim']} but its "
+                        f"hardest step is {mm['found']}%, short of {mm['required']}% — "
+                        f"rename it or build the stimulus it promises"),
+            ))
 
     # 2. Weekly planned-TSS cap.
     total_tss = sum(_planned_load(e) for e in week_events)

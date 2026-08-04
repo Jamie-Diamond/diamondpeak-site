@@ -114,6 +114,96 @@ def _band(sport: str, zone: str, intensity: float = None):
     return (max(pct - 4, 1), pct + 4)
 
 
+# ── name-vs-structure ────────────────────────────────────────────────────────
+# A session NAME that claims an intensity its STEPS do not contain (4 Aug 2026:
+# Kathryn's "VO2 Reps 6x3min + sweetspot" whose hardest step was 80-86% pace, a
+# "CSS 5x400" swim of five aerobic blocks with no 400s, a brick "+ VO2" topping out
+# at 84% FTP). It was invisible while her ICU run threshold was unset, because every
+# "% Pace" step then resolved to nothing on the watch; with a threshold set, the same
+# session actively prescribes ~7:00/km as "VO2". The steps are the prescription and
+# the name is what the athlete reads, so a divergence is a defect either way.
+#
+# Each claim maps to the zone whose band the steps must REACH, resolved through
+# _ZONE_BAND so a band edit cannot leave this check asserting a stale number. The
+# bar is the band's LOWER edge: a "threshold" session must have a step reaching
+# 95% (run), not the full 95-101%.
+_NAME_CLAIMS = (
+    ("vo2", "vo2"), ("v02", "vo2"), ("aerobic capacity", "vo2"),
+    ("css", "css"), ("threshold", "threshold"), ("cruise", "threshold"),
+    ("sweetspot", "sweetspot"), ("sweet spot", "sweetspot"),
+    ("race-pace", "race"), ("race pace", "race"), ("tempo", "tempo"),
+)
+# %LTHR cannot be compared with %pace or %FTP: threshold HR is ~100% LTHR and VO2
+# work barely exceeds it, so a VO2 step targeted by HR tops out near 102%. An
+# HR-targeted step counts as reaching any claim once it is at threshold HR.
+_HR_SATISFIES_AT_PCT = 97
+
+# A step line, e.g. "- 5m 97-101% Pace 94-100% LTHR". ICU accepts more than one
+# target on a step, so each %-range is read SEPARATELY with its own unit word: the
+# first version of this matched once per line and read "Pace ... LTHR" as one HR
+# target, which mis-scored every dual-target step.
+_STEP_LINE_RE = re.compile(r"^-\s*\d+(?:\.\d+)?\s*[ms]\b", re.IGNORECASE)
+_TARGET_RE = re.compile(r"(\d+)\s*-\s*(\d+)\s*%\s*([A-Za-z]*)", re.IGNORECASE)
+
+
+def name_intensity_claim(sport: str, name: str) -> tuple[str, int] | None:
+    """(claimed word, minimum % the steps must reach) for a session name, or None.
+
+    The most demanding claim in the name wins, so "VO2 + sweetspot" is judged on
+    VO2. A claim the sport has no band for (a "sweetspot" swim) is not asserted.
+    """
+    low = (name or "").lower()
+    bands = _ZONE_BAND.get(_norm_sport(sport), {})
+    best = None
+    for word, zone in _NAME_CLAIMS:
+        if word in low and zone in bands:
+            need = bands[zone][0]
+            if best is None or need > best[1]:
+                best = (word, need)
+    return best
+
+
+def top_step_pct(description: str) -> tuple[int | None, int | None]:
+    """(hardest %pace-or-%FTP target, hardest %LTHR target) over rendered steps.
+
+    Reads the TOP of each step's range, so a 97-101% step counts as 101.
+    """
+    top_main = top_hr = None
+    for line in (description or "").splitlines():
+        line = line.strip()
+        if not _STEP_LINE_RE.match(line):
+            continue
+        for m in _TARGET_RE.finditer(line):
+            hi, unit = int(m.group(2)), (m.group(3) or "").lower()
+            if unit in ("lthr", "hr", "maxhr"):
+                top_hr = hi if top_hr is None else max(top_hr, hi)
+            else:
+                top_main = hi if top_main is None else max(top_main, hi)
+    return top_main, top_hr
+
+
+def name_intensity_mismatch(sport: str, name: str, description: str) -> dict | None:
+    """The session's name claims an intensity its steps never reach. None if fine.
+
+    Returns {claim, required, found}. Silent when the name makes no claim, or when
+    there are no parseable steps at all - an unstructured session is a different
+    defect, already caught as STRUCTURE/no-steps.
+    """
+    claim = name_intensity_claim(sport, name)
+    if not claim:
+        return None
+    word, need = claim
+    top_main, top_hr = top_step_pct(description)
+    if top_main is None and top_hr is None:
+        return None
+    if top_hr is not None and top_hr >= _HR_SATISFIES_AT_PCT:
+        return None
+    if top_main is not None and top_main >= need:
+        return None
+    found = top_main if top_main is not None else top_hr
+    return {"claim": word, "required": need, "found": found}
+
+
 def render_workout(sport: str, segments: list) -> dict:
     """Render time-at-intensity segments into an Intervals.icu STRUCTURED workout
     (the `description` text push_workout sends → parsed into steps → synced to

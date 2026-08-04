@@ -218,7 +218,11 @@ def build_sessions(slug: str, proposal: dict) -> dict:
         events.append({"start_date_local": f"{date_s}T00:00:00", "type": sport,
                        "category": "WORKOUT", "load_target": load,
                        "moving_time": dur * 60,
-                       "name": s.get("name", ""), "description_raw": notes})
+                       # `description` = the RENDERED steps, so validate_week can check
+                       # the name's intensity claim against the structure. Without it
+                       # that check silently no-ops (4 Aug 2026).
+                       "name": s.get("name", ""), "description": desc,
+                       "description_raw": notes})
 
     # Validate the whole week against the athlete's hard rules.
     ws = min((date.fromisoformat(e["start_date_local"][:10]) for e in events),
