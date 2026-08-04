@@ -30,6 +30,31 @@ class ClaimDetection(unittest.TestCase):
         self.assertEqual(name_intensity_claim("Run", "Threshold 4x5min")[1], 95)
 
 
+class BrickNaming(unittest.TestCase):
+    """A brick lives on a Ride event but is named for both legs."""
+
+    def test_ride_leg_is_not_judged_on_the_run_legs_claim(self):
+        self.assertIsNone(name_intensity_mismatch(
+            "Ride", "Brick: Z2 ride 70min + tempo run off the bike",
+            "- 10m 55-65%\n- 50m 62-72%"))
+
+    def test_run_leg_is_still_judged_on_its_own_claim(self):
+        # "off the bike" is brick idiom, not another leg's claim: the tempo is this
+        # run's, and 76-84% falls short of the run tempo band's 85% edge.
+        mm = name_intensity_mismatch("Run", "Brick run: 15min tempo off the bike",
+                                     "- 20m 76-84% Pace")
+        self.assertEqual((mm["claim"], mm["required"]), ("tempo", 85))
+
+    def test_run_leg_at_real_tempo_passes(self):
+        self.assertIsNone(name_intensity_mismatch(
+            "Run", "Brick run: 15min tempo off the bike", "- 15m 86-91% Pace"))
+
+    def test_a_bike_claim_on_a_ride_still_counts(self):
+        mm = name_intensity_mismatch("Ride", "Brick: Z2 ride + VO2 bike set + easy run",
+                                     "- 54m 60-70%")
+        self.assertEqual(mm["required"], 105)
+
+
 class StepParsing(unittest.TestCase):
     def test_reads_top_of_each_range_and_separates_hr_from_pace(self):
         desc = "- 12m 82-88% Pace 84-89% LTHR\n- 5m 97-101% Pace 94-100% LTHR"

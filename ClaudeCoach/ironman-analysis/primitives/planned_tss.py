@@ -146,20 +146,53 @@ _STEP_LINE_RE = re.compile(r"^-\s*\d+(?:\.\d+)?\s*[ms]\b", re.IGNORECASE)
 _TARGET_RE = re.compile(r"(\d+)\s*-\s*(\d+)\s*%\s*([A-Za-z]*)", re.IGNORECASE)
 
 
+_SPORT_WORDS = {"run": "run", "ride": "bike", "bike": "bike", "cycl": "bike",
+                "swim": "swim"}
+
+
+def _claims_another_sport(name_low: str, at: int, word: str, own: str) -> bool:
+    """True when this claim belongs to a DIFFERENT sport's leg of the session.
+
+    A brick lives on a Ride event but is named for both legs: "Brick: Z2 ride 70min
+    + tempo run off the bike" claims tempo for the RUN, and the bike steps rightly
+    have none. Without this, every brick name trips the check.
+
+    The sport word must be ADJACENT to the claim ("tempo run", "VO2 bike"). A wider
+    window would swallow the brick idiom "tempo off the bike" on the run leg itself,
+    where the claim really is the run's.
+    """
+    after = name_low[at + len(word):at + len(word) + 12]
+    before = name_low[max(0, at - 8):at]
+    for sw, fam in _SPORT_WORDS.items():
+        if fam == own:
+            continue
+        if re.match(rf"\s*{sw}", after) or re.search(rf"{sw}\w*\s*$", before):
+            return True
+    return False
+
+
 def name_intensity_claim(sport: str, name: str) -> tuple[str, int] | None:
     """(claimed word, minimum % the steps must reach) for a session name, or None.
 
     The most demanding claim in the name wins, so "VO2 + sweetspot" is judged on
-    VO2. A claim the sport has no band for (a "sweetspot" swim) is not asserted.
+    VO2. A claim the sport has no band for (a "sweetspot" swim) is not asserted, and
+    nor is one attached to another sport's leg.
     """
     low = (name or "").lower()
-    bands = _ZONE_BAND.get(_norm_sport(sport), {})
+    own = _norm_sport(sport)
+    bands = _ZONE_BAND.get(own, {})
     best = None
     for word, zone in _NAME_CLAIMS:
-        if word in low and zone in bands:
-            need = bands[zone][0]
-            if best is None or need > best[1]:
-                best = (word, need)
+        if zone not in bands:
+            continue
+        at = low.find(word)
+        while at != -1:
+            if not _claims_another_sport(low, at, word, own):
+                need = bands[zone][0]
+                if best is None or need > best[1]:
+                    best = (word, need)
+                break
+            at = low.find(word, at + 1)
     return best
 
 
