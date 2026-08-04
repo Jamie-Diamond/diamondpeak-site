@@ -97,6 +97,9 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent   # ClaudeCoach/
 
+sys.path.insert(0, str(BASE / "lib"))
+import day_overrides                                           # noqa: E402
+
 OPEN_STATUSES   = ("pending", "booked", "ordered", "scheduled")
 # Open, but action HAS been taken. A booked sweat test is still late, and the day count
 # still says so, but "abandoned" is the wrong word for it and the wrong nudge to give.
@@ -513,6 +516,29 @@ _ACTION_QUESTION_RE = re.compile(
     r"^\s*(?:is|are|was|were|has|have|did|do|does|should|shall|can|could|would|when|what|"
     r"which|why|how|any)\b|\bstill\s+(?:open|outstanding|to\s+do)\b", re.I)
 
+# A day-name plus a session-type word ("drop Friday's brick", "move Monday's swim to
+# Tuesday") is usually training-plan language, not an open-action instruction: the same
+# intent verbs (drop, move, done) apply to both a plan session and a to-do item, and
+# pairing with a weekday is the one signal that tells them apart. Vocabulary mirrors the
+# sport enum stage1-plan.py emits (Swim|Bike|Run|Brick|Strength) plus the weekday set
+# lib/day_overrides.py already matches directed-day instructions against — no open
+# action in the store is named after a weekday, so this costs nothing there.
+#
+# ONE genuinely overlapping phrasing exists: "move the swim to Wednesday" is BOTH a
+# day-rule directive (lib/day_overrides.parse_directed_day) and, read as prose, a
+# defer instruction. telegram/bot.py resolves that by dispatch order — the day-rule
+# handler runs first, being the more specific of the two (see
+# test_day_overrides_capture.TestCrossFireWithOtherCaptures). So this detector must
+# keep reporting True for that case and defer only when day_overrides itself would
+# NOT recognise the message as a directed-day instruction (unrecognised verb, e.g.
+# "drop", or a session word day_overrides has no family for, e.g. "brick").
+_PLAN_DAY_RE = re.compile(
+    r"\b(?:mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|"
+    r"fri(?:day)?|sat(?:urday)?|sun(?:day)?)s?\b", re.I)
+_PLAN_SESSION_RE = re.compile(
+    r"\b(?:swim(?:ming|s)?|bike|biking|ride|riding|cycle|cycling|turbo|spin|"
+    r"run(?:ning|s)?|jog(?:ging)?|brick|strength|gym)\b", re.I)
+
 # Words that carry no discriminating power when matching a message to an action label.
 _MATCH_STOP = {
     "the", "a", "an", "my", "that", "this", "it", "is", "was", "and", "or", "for", "to",
@@ -562,6 +588,9 @@ def looks_like_action_instruction(text: str) -> bool:
     if _metric_marker_count(t) >= 2:
         return False
     if not any(re.search(rx, t, re.I) for _, rx in _INTENTS):
+        return False
+    if (_PLAN_DAY_RE.search(t) and _PLAN_SESSION_RE.search(t)
+            and not day_overrides.parse_directed_day(t)["family"]):
         return False
     return bool(_match_tokens(_strip_intent(t)))
 
