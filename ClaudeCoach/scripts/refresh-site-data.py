@@ -132,7 +132,19 @@ def _compute_per_sport_ctl(activities, start, today):
     return series
 
 
-def _per_sport_ctl_cached(slug, client, today):
+def _today_fingerprint(activities, today) -> str:
+    """id:load for every activity dated `today`, so the per-sport cache can tell
+    "already computed today" from "already computed today AND nothing has changed
+    since". Includes load, so an ICU re-analysis that revises a load also busts it.
+    """
+    d = today.isoformat()
+    return ",".join(sorted(
+        f"{a.get('id')}:{a.get('icu_training_load')}"
+        for a in (activities or [])
+        if (a.get("start_date_local") or "")[:10] == d))
+
+
+def _per_sport_ctl_cached(slug, client, today, activities=None):
     """Per-sport CTL for the fitness-by-sport chart. Returns
     {"current": {sport: series}, "prev": {sport: series}, "prev2": {sport: series}}.
     Current season is recomputed at most once a day (the season activity fetch is heavy
@@ -154,9 +166,17 @@ def _per_sport_ctl_cached(slug, client, today):
     except Exception:
         pass
 
-    # Current season — daily.
+    # Current season. Recomputed once a day PLUS whenever today's activities change
+    # (4 Aug 2026): "once a day" meant the 06:20 run built the series before Jamie's
+    # 07:03 swim, every later refresh reused that cache, and his swim CTL sat visibly
+    # DECLINING on a day he had swum — the chart said detraining while the swim was
+    # already in `recent` on the same page. Moving the cron to */10 could not fix it.
+    # `activities` is the history the caller has already fetched, so the freshness
+    # check costs no extra API call; without it the old date-only behaviour stands.
+    fp = _today_fingerprint(activities, today) if activities is not None else None
     current = cache.get("current") or {}
-    if cache.get("date") != today.isoformat() or not current:
+    stale = (fp is not None and cache.get("today_fp") != fp)
+    if cache.get("date") != today.isoformat() or not current or stale:
         start = date(today.year, 1, 1)
         try:
             current = _compute_per_sport_ctl(
@@ -192,7 +212,8 @@ def _per_sport_ctl_cached(slug, client, today):
 
     out = {"current": current, "prev": prev or {}, "prev2": prev2 or {}}
     try:
-        cache_f.write_text(json.dumps({"date": today.isoformat(), **out}))
+        cache_f.write_text(json.dumps({"date": today.isoformat(),
+                                       "today_fp": fp, **out}))
     except Exception:
         pass
     return out
@@ -422,7 +443,7 @@ def _build_jamie_data(client) -> dict:
         "generated":    today.isoformat(),
         "kpi":          kpi,
         "fitnessThis":  fitness_this,
-        "fitnessBySport": _per_sport_ctl_cached("jamie", client, today),
+        "fitnessBySport": _per_sport_ctl_cached("jamie", client, today, history_21),
         "recent":       recent,
         "weekCalendar": week_calendar,
         "loadChart":    load_chart,
@@ -435,7 +456,7 @@ def _build_jamie_data(client) -> dict:
     }
 
 
-def _refresh_cadence() -> str | None:
+def _refresh_cadence(cron_lines=None) -> str | None:
     """This job's own schedule, in words, read from crontab.
 
     Hard-coding it in the app is what produced "nightly, 06:20" still being shown
@@ -444,12 +465,14 @@ def _refresh_cadence() -> str | None:
     doubt, and the app then says nothing rather than something wrong.
     """
     try:
-        out = subprocess.run(["crontab", "-l"], capture_output=True, text=True,
-                             timeout=10)
-        if out.returncode != 0:
-            return None
+        if cron_lines is None:                      # injectable so it is testable
+            out = subprocess.run(["crontab", "-l"], capture_output=True, text=True,
+                                 timeout=10)
+            if out.returncode != 0:
+                return None
+            cron_lines = out.stdout.splitlines()
         me = Path(__file__).name
-        for line in out.stdout.splitlines():
+        for line in cron_lines:
             line = line.strip()
             if line.startswith("#") or me not in line:
                 continue
@@ -457,6 +480,12 @@ def _refresh_cadence() -> str | None:
             if len(parts) < 5:
                 continue
             minute, hour = parts[0], parts[1]
+            # A step minute (*/10) is the whole schedule when the hour is unrestricted:
+            # this returned None the moment the job went to */10 on 4 Aug 2026, so the
+            # app silently stopped stating its own cadence.
+            if minute.startswith("*/") and minute[2:].isdigit() and hour == "*":
+                n = int(minute[2:])
+                return "every minute" if n == 1 else f"every {n} minutes"
             if not minute.isdigit():
                 return None
             mm = int(minute)
@@ -1253,7 +1282,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "generated":    today.isoformat(),
         "kpi":          kpi,
         "fitnessThis":  fitness_this,
-        "fitnessBySport": _per_sport_ctl_cached(slug, client, today),
+        "fitnessBySport": _per_sport_ctl_cached(slug, client, today, history_49),
         "recent":       recent,
         "weekCalendar": week_calendar,
         "loadChart":    load_chart,
