@@ -1,9 +1,10 @@
 {
- "_note": "Accepted plan_audit failure counts per category. A run at or below its athlete's accepted counts logs a success; a new category or a higher count alerts. Shrink these as the defects in docs/plan-audit-status.md are fixed (or regenerate with plan_audit.py --all --write-baseline); an empty map for an athlete means every hard fail alerts. SKIPPED is a category like any other, so it MUST be listed even at 0 \u2014 omitting it made get(cat,-1) reject every run and alerted all three athletes daily from the moment the category was added (28 Jul 2026). RULES now includes the three checks armed on 28 Jul (weekly_tss_cap / weekly_tss_floor / run_weekly_volume), which is why the counts went UP while SKIPPED went to ~0: those failures were always there, they were just never being checked. DIRECTED (28 Jul 2026) is the coach-directed day_rules deviations register (athletes/<slug>/reference/day-rules-overrides.json): reported, never hard. Like SKIPPED it MUST be listed even at 0, or get(cat,-1) rejects every run. jamie RULES 7->6 because his Wednesday swim was DIRECTED and moved category; the three UNDIRECTED breaches (Thu ride, Thu brick run, Fri run) are still in RULES and still hard, which is why RULES was shrunk rather than left at 7.",
- "written": "2026-07-28",
+ "_note": "Accepted plan_audit failure counts per category. A run at or below its athlete's accepted counts logs a success; a new category or a higher count alerts. Shrink these as the defects in docs/plan-audit-status.md are fixed (or regenerate with plan_audit.py --all --write-baseline); an empty map for an athlete means every hard fail alerts. SKIPPED is a category like any other, so it MUST be listed even at 0 — omitting it made get(cat,-1) reject every run and alerted all three athletes daily from the moment the category was added (28 Jul 2026). RULES now includes the three checks armed on 28 Jul (weekly_tss_cap / weekly_tss_floor / run_weekly_volume), which is why the counts went UP while SKIPPED went to ~0: those failures were always there, they were just never being checked. DIRECTED (28 Jul 2026) is the coach-directed day_rules deviations register (athletes/<slug>/reference/day-rules-overrides.json): reported, never hard. Like SKIPPED it MUST be listed even at 0, or get(cat,-1) rejects every run. jamie RULES 7->6 because his Wednesday swim was DIRECTED and moved category; the three UNDIRECTED breaches (Thu ride, Thu brick run, Fri run) are still in RULES and still hard, which is why RULES was shrunk rather than left at 7. DISTRIBUTION (4 Aug 2026) splits the SOFT per-zone intensity signal out of RULES: `hard` is any(RULES), so a [soft] distribution violation was returning hard_fail and a warning blocked. Same must-be-listed-even-at-0 rule as SKIPPED/DIRECTED. kathryn 1 = her Run Z4-5 at 13% vs a 10% phase target, 0pp over after tolerance, which appeared only once canonical step bands let the check assert instead of skipping.",
+ "written": "2026-08-04",
  "athletes": {
   "jamie": {
    "DIRECTED": 1,
+   "DISTRIBUTION": 0,
    "FUELLING": 3,
    "RULES": 6,
    "SKIPPED": 0,
@@ -11,6 +12,7 @@
   },
   "kathryn": {
    "DIRECTED": 0,
+   "DISTRIBUTION": 1,
    "FUELLING": 3,
    "RULES": 4,
    "SKIPPED": 1,
@@ -19,6 +21,7 @@
   },
   "calum": {
    "DIRECTED": 0,
+   "DISTRIBUTION": 0,
    "FUELLING": 1,
    "RULES": 1,
    "SKIPPED": 0,

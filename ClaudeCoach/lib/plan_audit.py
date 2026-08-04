@@ -109,6 +109,18 @@ def _dur_min(ev) -> int:
     return int(m.group(1)) if m else 0
 
 
+# The only categories that BLOCK. Everything else (fuelling, weekly load, soft
+# distribution, skipped checks, coach-directed deviations) is a warning: it is reported
+# and fingerprinted, but does not fail the audit. Kept as a named function so the
+# grading is testable rather than an inline any() nobody can reach.
+_HARD_CATEGORIES = ("STRUCTURE", "LONG_RIDE", "RULES")
+
+
+def is_hard(fails: dict) -> bool:
+    """True when a blocking category has anything in it."""
+    return any(fails.get(k) for k in _HARD_CATEGORIES)
+
+
 def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
     client = _client(cfg)
     today = date.today()
@@ -140,8 +152,11 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
     # Informational, never fingerprinted (see counts()): observations that need to be
     # visible daily without moving the baseline or spending an alert.
     notes: list[str] = []
+    # DISTRIBUTION (4 Aug 2026) is the SOFT per-zone intensity-distribution signal.
+    # Like SKIPPED and DIRECTED it MUST carry a baseline entry even at 0, or
+    # get(cat,-1) rejects every run and alerts daily.
     fails = {"STRUCTURE": [], "FUELLING": [], "LONG_RIDE": [], "WEEKLY_LOAD": [], "RULES": [],
-             "SKIPPED": [], "DIRECTED": []}
+             "DISTRIBUTION": [], "SKIPPED": [], "DIRECTED": []}
 
     for e in events:
         sport = e.get("type") or ""
@@ -266,15 +281,24 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
             # "_persistent" escalation alongside plain intensity_distribution.
             if v.code.endswith("_directed_day"):
                 fails["DIRECTED"].append(f"week {ws}: {v}")
-            elif v.severity == "hard" or v.code.startswith("intensity_distribution"):
+            elif v.severity == "hard":
                 fails["RULES"].append(f"week {ws}: {v}")
+            elif v.code.startswith("intensity_distribution"):
+                # SOFT distribution signals belong in their own warn category. They
+                # used to be appended to RULES to make them visible, but `hard` is
+                # any(RULES), so a violation the validator itself marked [soft] came
+                # back as hard_fail — a distribution warning blocked, against the
+                # standing rule that warnings are not hard rules. Found 4 Aug 2026
+                # only because canonicalising Kathryn's step bands let the check
+                # ASSERT instead of landing in SKIPPED, so it had never fired.
+                fails["DISTRIBUTION"].append(f"week {ws}: {v}")
         # rep.skipped covers EVERY hard check validate_week couldn't run this week
         # (weekly_tss_cap/floor, ctl_ramp, run_weekly_volume, intensity_distribution
         # gates, ...) — surface all of it, not just the distribution reasons.
         for s in rep.skipped:
             fails["SKIPPED"].append(f"week {ws}: {s}")
 
-    hard = any(fails[k] for k in ("STRUCTURE", "LONG_RIDE", "RULES"))  # fuelling/load/skipped = warn
+    hard = is_hard(fails)
     return {"athlete": slug, "window": f"{win_start}..{win_end}", "fuel_target": fuel,
             "long_ride_ceiling_min": lr_ceiling, "ok": not any(fails.values()),
             "hard_fail": hard, "fails": {k: v for k, v in fails.items() if v},
