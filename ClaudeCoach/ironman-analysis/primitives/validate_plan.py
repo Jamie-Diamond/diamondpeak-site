@@ -522,11 +522,16 @@ def escalate_repeats(violations: list["Violation"], streaks: dict | None,
     out = list(violations or [])
 
     def _weeks(v) -> list:
-        """Weeks this code has already fired in. Accepts the old int-counter store."""
+        """Weeks this code has already fired in.
+
+        A pre-migration store held a plain RUN count, and those runs were mostly the
+        daily job re-reading one unchanged week — so they are not evidence of weekly
+        recurrence and are deliberately NOT carried over. Migrating them in would
+        assert "N separate weeks" from data that never recorded a week.
+        """
         p = prior.get(v)
-        if isinstance(p, list):
-            return list(p)
-        return [f"pre-{int(p or 0)}"] * int(p or 0)      # legacy count, weeks unknown
+        return [w for w in p if isinstance(w, str) and not w.startswith("pre-")] \
+            if isinstance(p, list) else []
 
     for v in violations or []:
         if v.severity != "soft":

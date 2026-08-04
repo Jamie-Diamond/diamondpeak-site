@@ -423,11 +423,22 @@ class TestEscalateRepeats:
         assert not any(v.code.endswith("_persistent") for v in out)
         assert store == {"intensity_distribution": ["2026-08-03"]}
 
-    def test_a_legacy_integer_store_still_escalates(self):
-        # Stores written before the week-keyed change hold a plain count.
-        out, _ = escalate_repeats([self._v()], {"intensity_distribution": 2},
-                                  week="2026-08-03")
-        assert any(v.code.endswith("_persistent") for v in out)
+    def test_a_legacy_run_count_does_not_carry_into_the_week_streak(self):
+        """A pre-migration store held a RUN count, and those runs were mostly the daily
+        job re-reading one unchanged week. Carrying them over would assert "N separate
+        weeks" from data that never recorded a week — Jamie's store did exactly that and
+        escalated on migration."""
+        out, streaks = escalate_repeats([self._v()], {"intensity_distribution": 2},
+                                        week="2026-08-03")
+        assert not any(v.code.endswith("_persistent") for v in out)
+        assert streaks == {"intensity_distribution": ["2026-08-03"]}
+
+    def test_placeholder_entries_from_the_migration_are_discarded(self):
+        out, streaks = escalate_repeats(
+            [self._v()], {"intensity_distribution": ["pre-2", "pre-2", "2026-07-27"]},
+            week="2026-08-03")
+        assert not any(v.code.endswith("_persistent") for v in out)
+        assert streaks == {"intensity_distribution": ["2026-07-27", "2026-08-03"]}
 
     def test_a_clean_run_breaks_the_streak(self):
         out, streaks = escalate_repeats([], {"intensity_distribution": ["2026-07-20"]},
