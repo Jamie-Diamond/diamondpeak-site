@@ -45,6 +45,14 @@ the spec below. Do not add any of these without an explicit decision:
                                          profile), and sessionLog[].logged_at
 """
 
+import sys
+from pathlib import Path
+
+# Callers already put lib/ on sys.path before importing this module, but the
+# sanitiser must not be the thing that breaks if one ever does not.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import profile_fields  # noqa: E402
+
 # ── spec vocabulary ──────────────────────────────────────────────────────────
 _SCALAR_TYPES = (str, int, float, bool)
 
@@ -58,6 +66,22 @@ class Records:
 
     def __init__(self, spec):
         self.spec = spec
+
+
+class Derived:
+    """A leaf whose published value is `fn(value)`, not the value itself.
+
+    Added 4 Aug 2026 for the threshold-pace fields. Some profile values carry a
+    COACH-FACING prose caveat after the number (Kathryn's run threshold read
+    "5:08/km - DERIVED working estimate ... NOT field-tested ... LTHR 191 remains
+    the primary intensity control"), and a plain `S` published the whole note to a
+    PUBLIC repo. `profile_fields` already exists to stop exactly that class of leak
+    at the athlete-facing boundary; this puts the same extraction on the publishing
+    boundary, so the note can be as long as the coach needs without leaking.
+    """
+
+    def __init__(self, fn):
+        self.fn = fn
 
 
 class Mapping:
@@ -83,6 +107,9 @@ def prune(value, spec):
     """Copy `value` into a new structure containing ONLY what `spec` names."""
     if isinstance(spec, _Scalar):
         return value if (value is None or isinstance(value, _SCALAR_TYPES)) else None
+    if isinstance(spec, Derived):
+        out = spec.fn(value)
+        return out if (out is None or isinstance(out, _SCALAR_TYPES)) else None
     if isinstance(spec, Series):
         if not isinstance(value, list):
             return []
@@ -111,6 +138,10 @@ def prune(value, spec):
 # ── specs ────────────────────────────────────────────────────────────────────
 _SPORT_SERIES = {"Ride": SERIES, "Run": SERIES, "Swim": SERIES}
 
+# Publishes "5:08" out of "5:08/km - DERIVED working estimate ...", and leaves an
+# already-clean value untouched.
+_PACE_ONLY = Derived(profile_fields.pace)
+
 _CTL_POINT = Records({"date": S, "ctl": S})
 
 _PREDICTOR_ROW = {
@@ -137,7 +168,8 @@ TRAINING_DATA_SPEC = {
         "ftp_watts": S,
         "race_name": S, "race_date": S, "race_distance": S,
         "prev_race_date": S, "prev2_race_date": S, "prev2_race_name": S,
-        "run_threshold_pace_per_km": S, "swim_css_per_100m": S,
+        # Pace ONLY, never the coach note that may follow it — see Derived.
+        "run_threshold_pace_per_km": _PACE_ONLY, "swim_css_per_100m": _PACE_ONLY,
         "prev_race": {
             "name": S, "date": S,
             "swim_time": S, "t1t2_time": S,
