@@ -229,9 +229,14 @@ def name_intensity_mismatch(sport: str, name: str, description: str) -> dict | N
     top_main, top_hr = top_step_pct(description)
     if top_main is None and top_hr is None:
         return None
-    if top_hr is not None and top_hr >= _HR_SATISFIES_AT_PCT:
-        return None
-    if top_main is not None and top_main >= need:
+    # HR can only SATISFY a claim when it is the sole target on the steps. Since the
+    # house style is now a pace target with an HR guardrail on every quality step,
+    # letting HR win outright would switch this check off for exactly the sessions it
+    # exists to police: "VO2 6x3min" over "- 3m 80-86% Pace 94-100% LTHR" would pass.
+    if top_main is not None:
+        if top_main >= need:
+            return None
+    elif top_hr >= _HR_SATISFIES_AT_PCT:
         return None
     found = top_main if top_main is not None else top_hr
     return {"claim": word, "required": need, "found": found}

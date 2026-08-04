@@ -94,6 +94,13 @@ class NoFalseAlarms(unittest.TestCase):
             "Run", "Run threshold 4x5min @ 180-190 bpm",
             "- 12m 82-88% Pace 84-89% LTHR\n- 5m 97-101% Pace 94-100% LTHR"))
 
+    def test_an_hr_guardrail_cannot_excuse_an_easy_pace_target(self):
+        # The one with teeth. Pace target + HR guardrail is now the house style, so if
+        # HR could satisfy a claim outright this check would be off for every quality
+        # session it exists to police.
+        mm = name_intensity_mismatch("Run", "VO2 6x3min", "- 3m 80-86% Pace 94-100% LTHR")
+        self.assertEqual((mm["claim"], mm["found"]), ("vo2", 86))
+
     def test_hr_targeted_quality_passes_without_a_pace_step(self):
         # %LTHR is not comparable with %pace: VO2 work barely exceeds threshold HR,
         # so a step at threshold HR satisfies any claim.
