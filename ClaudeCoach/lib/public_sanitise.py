@@ -91,6 +91,17 @@ class Mapping:
         self.spec = spec
 
 
+class ScalarList:
+    """A flat list of scalars - e.g. ["swim", "bike", "run"].
+
+    Series cannot express this: it requires every row to itself be a list, so a list
+    of plain strings is dropped entirely. Added rather than reshaping the data into a
+    dict-of-true purely to fit the existing vocabulary, because the shape the app wants
+    should not be decided by the sanitiser. Still an allow-list: non-scalar members are
+    dropped, so this can never become a route for an object to pass.
+    """
+
+
 class Series:
     """A list of [date, value, ...] rows of scalars — e.g. a CTL history.
 
@@ -110,6 +121,10 @@ def prune(value, spec):
     if isinstance(spec, Derived):
         out = spec.fn(value)
         return out if (out is None or isinstance(out, _SCALAR_TYPES)) else None
+    if isinstance(spec, ScalarList):
+        if not isinstance(value, list):
+            return None if value is None else []
+        return [v for v in value if v is None or isinstance(v, _SCALAR_TYPES)]
     if isinstance(spec, Series):
         if not isinstance(value, list):
             return []
@@ -224,11 +239,43 @@ TRAINING_DATA_SPEC = {
         # both plan metadata, not physiology — no wellness field is added here.
         "week_type": S, "in_progress": S,
     }),
-    "powerCurve": Records({"t": S, "label": S, "w": S, "wPrev": S}),
+    # np/npPrev are NORMALISED power at the same durations, computed from power
+    # streams because intervals.icu has no mean-maximal NP curve. Same class of data
+    # as w/wPrev - a wattage over a duration, no wellness field involved.
+    "powerCurve": Records({"t": S, "label": S, "w": S, "wPrev": S,
+                           "np": S, "npPrev": S}),
     # Dates and a day count describing the comparison window - no physiology.
     "powerCurveWindow": {
         "days": S, "now_from": S, "now_to": S,
         "prev_from": S, "prev_to": S, "label": S,
+        "np_basis": S, "np_pending": S,
+    },
+
+    # The athlete's focus sports, e.g. ["swim","bike","run"] or ["bike"]. A coaching
+    # preference read off the blueprint, not a measurement.
+    "sports": ScalarList(),
+
+    # Time in zones by sport against the blueprint's phase target. Minutes and
+    # percentages of TRAINING time plus the zone labels - no HR, no wellness. `basis`
+    # is a per-sport word ("power", "grade-adjusted pace") stating what the split was
+    # measured on, which is published because the number is not interpretable without
+    # it. Window and sport keys are data-driven, hence Mapping.
+    "zoneDistribution": {
+        "phase":   S,
+        "basis":   Mapping(S),
+        "min_coverage": S,
+        "windows": Mapping({"from": S, "to": S, "label": S}),
+        "sports":  Mapping(Mapping({
+            "minutes": S, "sessions": S, "unclassified_sessions": S,
+            # basis is the word "power"/"heart rate"/"grade-adjusted pace" - what the
+            # split was measured on, per sport. coverage is the share of moving time
+            # that could be classified. Both are stated because a zone split is not
+            # interpretable without them, and neither is a wellness measurement.
+            "basis": S, "coverage": S,
+            "target_stated": S,
+            "bands": Records({"label": S, "target": S, "minutes": S, "actual": S}),
+            "zones": Mapping(S),
+        })),
     },
     "racePredictor": {
         "anchor": _PREDICTOR_ROW,

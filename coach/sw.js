@@ -16,22 +16,27 @@
  *
  * Bump CACHE on every deploy that changes a precached file.
  */
-const CACHE = 'peak-v14';
+const CACHE = 'peak-v15';
 
+// SHELL paths are relative to /coach/, where this worker actually lives - the app moved
+// out of /coach/app/ and these entries were left pointing at the old tree. addAll's
+// per-entry catch() means a 404 here fails silently (see below), so the whole precache
+// had been doing nothing since the move, with no error to notice.
 const SHELL = [
-  './',
+  // No index.html or 404.html exists under /coach/, so a bare './' has nothing to
+  // resolve to on GitHub Pages and would 404 like the stale ./app/... entries below did
+  // - app.html is the real entry point and is precached explicitly.
   './app.html',
-  './index.html',
-  './app/app.js',
-  './app/app-shell.css',
-  './app/app-shell.js',
-  './app/manifest.webmanifest',
-  './app/icons/icon-192.png',
-  './app/icons/icon-512.png',
-  './app/icons/apple-touch-icon.png',
-  './app/icons/favicon-32.png',
-  './app/icons/dpc-mark.png',
-  './public/session-library.json',
+  './app.js',
+  './manifest.webmanifest',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/apple-touch-icon.png',
+  './icons/favicon-32.png',
+  './icons/dpc-mark.png',
+  // Training data still lives under ClaudeCoach/public/ on disk, not under /coach/ -
+  // this is the one SHELL entry that reaches outside the worker's own directory.
+  '../ClaudeCoach/public/session-library.json',
 ];
 
 const CDN_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'cdn.jsdelivr.net'];

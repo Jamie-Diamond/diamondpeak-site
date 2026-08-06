@@ -61,7 +61,8 @@
     // Jamie asked for exactly this on 17 Jul and the bot could not do it: "Can you make
     // me a graph of my long run distance by week up to race week... we will probably go
     // to 35k and stop. And have a taper." He then derived it by hand, message by message.
-    { id: 'longrun', label: 'Long run' }
+    { id: 'longrun', label: 'Run km' },
+    { id: 'zones', label: 'Zones' }
   ];
 
   var SPORT = { Swim: 'swim', Ride: 'bike', VirtualRide: 'bike', GravelRide: 'bike',
@@ -74,7 +75,8 @@
   var state = {
     slug: 'jamie', tab: 'today', data: null, lib: null,
     chart: null, todayChart: null, trend: 'fit', fitSport: 'all',
-    calMonth: null, calDay: null, libGroup: null
+    calMonth: null, calDay: null, libGroup: null,
+    lrMode: 'long', pcMode: 'avg', zoneWin: 'week'
   };
 
   // Coarse pointer => the tooltip is replaced by a fixed readout line.
@@ -111,6 +113,13 @@
     return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5);
   }
   function sportClass(s) { return 'sp-' + (SPORT[s] || 'other'); }
+
+  // The published blocks label a sport for display ('Bike'), while an activity carries
+  // the intervals.icu name ('Ride'). SPORT knows the second set only, so the fallback is
+  // the lower-cased label - not a second mapping, which is how the two would drift.
+  function family(s) {
+    return SPORT[s] || String(s == null ? '' : s).toLowerCase();
+  }
   function signed(n, dp) {
     var v = Number(n).toFixed(dp == null ? 1 : dp);
     return (Number(n) >= 0 ? '+' : '') + v;
@@ -137,6 +146,38 @@
     return dense
       ? d.getUTCDate() + ' ' + d.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })
       : d.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' });
+  }
+
+  /* ── focus sports ────────────────────────────────────────────────────── */
+  /* Which disciplines this athlete is actually training for. Calum rides only; Jamie
+   * and Kathryn do all three. It is a FOCUS, not a filter on reality: strength, hikes
+   * and a one-off swim are still training that happened, so the Calendar, the ±7 day
+   * chart, Today and the week totals never consult this. It only decides what gets its
+   * own sub-nav entry, its own card, or its own trend tab. */
+
+  var FOCUS = ['swim', 'bike', 'run'];
+  var SKEY = 'cc.sports.';
+
+  // Stored as a comma list rather than JSON: there is nothing to nest, and a corrupt
+  // value degrades to "no override" instead of throwing on parse.
+  function storedSports() {
+    try {
+      var raw = localStorage.getItem(SKEY + state.slug);
+      if (!raw) return null;
+      var got = raw.split(',');
+      var out = FOCUS.filter(function (s) { return got.indexOf(s) >= 0; });
+      return out.length ? out : null;
+    } catch (e) { return null; }   // private mode / storage disabled
+  }
+
+  // ONE place the rule lives: stored override, else the published default, else all
+  // three. Always returned in FOCUS order, so no consumer has to sort.
+  function focusSports() {
+    var own = storedSports();
+    if (own) return own;
+    var pub = ((state.data || {}).sports || []).map(function (s) { return family(s); });
+    var out = FOCUS.filter(function (s) { return pub.indexOf(s) >= 0; });
+    return out.length ? out : FOCUS.slice();
   }
 
   /* ── chrome ──────────────────────────────────────────────────────────── */
@@ -218,6 +259,16 @@
       '<span class="l">' + esc(label) + '</span><span class="d">' + esc(detail) + '</span></div>';
   }
 
+  // A secondary segmented control under the Trends sub-nav. The id doubles as the
+  // state key it writes (see SUBSEG wiring in renderTrends), so adding a toggle is one
+  // call here plus one state field - not another bespoke click handler.
+  function subSeg(id, current, opts) {
+    return '<div class="seg sub" id="' + id + '">' + opts.map(function (o) {
+      return '<button type="button" data-s="' + esc(o[0]) + '" aria-selected="' +
+        (current === o[0]) + '">' + esc(o[1]) + '</button>';
+    }).join('') + '</div>';
+  }
+
   function mini(v, label, cls) {
     return '<div class="mini' + (cls ? ' ' + cls : '') + '"><b>' + esc(v) + '</b>' +
       '<span>' + esc(label) + '</span></div>';
@@ -271,7 +322,10 @@
     (d.recent || []).forEach(function (r) {
       if (r.date < ws || r.date > t) return;
       done.mins += r.dur || 0; done.tss += r.tss || 0; done.n++;
-      if ((r.tss || 0) > 0) daysLoaded[r.date] = 1;
+      // Any logged activity means the day was trained, TSS or not: a strength session
+      // or a technique swim can score zero load and is still not a rest day. This also
+      // matches the Calendar's rule (a covered day with no items), so the two agree.
+      if ((r.tss || 0) > 0 || (r.dur || 0) > 0) daysLoaded[r.date] = 1;
     });
     (d.weekCalendar || []).forEach(function (x) {
       if (x.date < ws) return;
@@ -285,7 +339,11 @@
     var target = wk ? wk.planned_tss : null;
     var pct = (target && target > 0) ? Math.round(done.tss / target * 100) : null;
 
-    var rest = 7 - Object.keys(daysLoaded).length;
+    // Days ELAPSED, not 7. Dividing into the whole week counted Friday, Saturday and
+    // Sunday as rest days on a Thursday, so a week with one real rest day reported four
+    // (Jamie, 6 Aug 2026). "So far" has to mean so far.
+    var elapsed = daysBetween(ws, t) + 1;              // Monday..today inclusive
+    var rest = Math.max(0, elapsed - Object.keys(daysLoaded).length);
 
     var h = '<div class="minis">' +
       mini(hhmm(done.mins), 'hours done') +
@@ -562,11 +620,32 @@
     };
   }
 
+  // 'Run km' is a run tab and nothing else: with run out of focus it is an empty chart
+  // and a dead sub-nav entry, so it leaves the list entirely.
+  function trendTabs() {
+    var fs = focusSports();
+    return TRENDS.filter(function (t) {
+      return t.id !== 'longrun' || fs.indexOf('run') >= 0;
+    });
+  }
+
+  // Both renderTrends and drawTrend go through this: show('trends') draws without
+  // re-rendering, so a selection left pointing at a dropped tab has to be corrected in
+  // one place or the chart and the sub-nav disagree.
+  function normaliseTrend() {
+    var fs = focusSports();
+    if (!trendTabs().some(function (t) { return t.id === state.trend; })) state.trend = 'fit';
+    if (state.fitSport !== 'all' && fs.indexOf(family(state.fitSport)) < 0) {
+      state.fitSport = 'all';
+    }
+  }
+
   function renderTrends() {
     var d = state.data;
+    normaliseTrend();
     var sel = state.trend;
 
-    var seg = '<div class="seg" id="trendSeg" role="tablist">' + TRENDS.map(function (x) {
+    var seg = '<div class="seg" id="trendSeg" role="tablist">' + trendTabs().map(function (x) {
       return '<button type="button" role="tab" data-t="' + x.id + '" aria-selected="' +
         (x.id === sel) + '">' + esc(x.label) + '</button>';
     }).join('') + '</div>';
@@ -583,9 +662,17 @@
                     'separately. A gap means nothing was logged in that window.' },
       plan: { title: 'Plan vs actual',
               foot: 'Weekly planned and completed TSS.' },
-      longrun: { title: 'Longest run by week',
-                 foot: 'The longest single run in each week, with the week-on-week build. ' +
-                       '10% is the usual floor for a build week; the dashed line is the race.' }
+      longrun: state.lrMode === 'total'
+        ? { title: 'Total run km by week',
+            foot: 'Every run in the week added together, with the week-on-week build. ' +
+                  '10% is the usual ceiling for a build week; the dashed line is the race.' }
+        : { title: 'Longest run by week',
+            foot: 'The longest single run in each week, with the week-on-week build. ' +
+                  '10% is the usual ceiling for a build week; the dashed line is the race.' },
+      zones: { title: 'Time in zones vs target',
+               foot: 'Bike by power, run by pace, swim by pace against CSS. Bars are the ' +
+                     'share of moving time in each band; the notch is the blueprint target ' +
+                     'for the current phase.' }
     }[sel];
 
     // Overall CTL or one discipline. fitnessBySport carries Ride/Run/Swim for all
@@ -593,15 +680,25 @@
     // switches which series it reads.
     var sportBar = '';
     if (sel === 'fit') {
-      var avail = Object.keys((d.fitnessBySport || {}).current || {});
+      var fs = focusSports();
+      var avail = Object.keys((d.fitnessBySport || {}).current || {}).filter(function (s) {
+        return fs.indexOf(family(s)) >= 0;
+      });
       if (avail.length) {
-        sportBar = '<div class="seg sub" id="fitSport">' +
-          [['all', 'All']].concat(avail.map(function (x) { return [x, x]; }))
-          .map(function (o) {
-            return '<button type="button" data-s="' + esc(o[0]) + '" aria-selected="' +
-              (state.fitSport === o[0]) + '">' + esc(o[1]) + '</button>';
-          }).join('') + '</div>';
+        sportBar = subSeg('fitSport', state.fitSport,
+          [['all', 'All']].concat(avail.map(function (x) { return [x, x]; })));
       }
+    }
+    if (sel === 'longrun') {
+      sportBar = subSeg('lrMode', state.lrMode,
+        [['long', 'Long run'], ['total', 'Week total']]);
+    }
+    if (sel === 'zones') {
+      // Only the windows the data carries, and marked with the window actually being
+      // shown: `phase` is absent for an athlete with no phase set, and a button that
+      // highlights a window the view then falls back out of is a lie about the numbers.
+      var wins = zoneWindows(d);
+      if (wins.length) sportBar = subSeg('zoneWin', zoneWinSel(d), wins);
     }
 
     var zoomable = (sel === 'fit' || sel === 'heat');
@@ -624,14 +721,18 @@
       renderTrends();
       drawTrend();
     };
-    var fs = $('#fitSport');
-    if (fs) fs.onclick = function (e) {
-      var b = e.target.closest('button');
-      if (!b) return;
-      state.fitSport = b.dataset.s;
-      renderTrends();
-      drawTrend();
-    };
+    // Every sub-segment writes the state field its container id names.
+    ['fitSport', 'lrMode', 'pcMode', 'zoneWin'].forEach(function (key) {
+      var el = $('#' + key);
+      if (!el) return;
+      el.onclick = function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        state[key] = b.dataset.s;
+        renderTrends();
+        drawTrend();
+      };
+    });
 
     var zr = $('#zreset');
     if (zr) zr.onclick = function () { if (state.chart && state.chart.resetZoom) state.chart.resetZoom(); };
@@ -643,8 +744,9 @@
     var h = '';
 
     if (sel === 'fit') {
+      var fs = focusSports();
       var bs = (d.fitnessBySport || {}).current || {};
-      var sports = Object.keys(bs);
+      var sports = Object.keys(bs).filter(function (s) { return fs.indexOf(family(s)) >= 0; });
       if (sports.length) {
         h += card('Fitness by sport', '<div class="body-flush">' + sports.map(function (s) {
           var series = bs[s] || [];
@@ -657,26 +759,56 @@
             '</b>peak ' + Number(max).toFixed(0) + '</span></div>';
         }).join('') + '</div>', { flush: true });
       }
-      var pc = d.powerCurve || [];
+      // Best efforts in watts: a bike block. It stays out of the view for an athlete
+      // whose focus does not include the bike, even though the rides are still logged.
+      var pc = fs.indexOf('bike') >= 0 ? (d.powerCurve || []) : [];
       if (pc.length) {
         var pw = d.powerCurveWindow || {};
         var days = pw.days || 90;
-        h += card('Power curve', '<table class="tbl">' +
+        // Average or normalised. NP is the honest number for a long race effort: over
+        // four hours a lumpy ride and a smooth one can share an average and be entirely
+        // different rides, and it is the smooth one that gets you off the bike able to
+        // run. Intervals.icu has no NP curve, so these come from the power streams and
+        // populate a few rides per refresh - hence np_pending.
+        var npMode = state.pcMode === 'np';
+        var hasNp = pc.some(function (r) { return r.np != null; });
+        var pick = function (r) { return npMode ? r.np : r.w; };
+        var pickPrev = function (r) { return npMode ? r.npPrev : r.wPrev; };
+        var bar = hasNp || npMode
+          ? subSeg('pcMode', state.pcMode, [['avg', 'Average'], ['np', 'Normalised']])
+          : '';
+        var pending = pw.np_pending;
+
+        var body = bar + '<table class="tbl">' +
           '<thead><tr><th>Duration</th><th>Last ' + days + 'd</th>' +
           '<th>Year ago</th><th>Δ</th></tr></thead><tbody>' +
           pc.map(function (r) {
-            var dl = (r.w != null && r.wPrev) ? Math.round((r.w - r.wPrev) / r.wPrev * 100) : null;
+            var now = pick(r), was = pickPrev(r);
+            var dl = (now != null && was) ? Math.round((now - was) / was * 100) : null;
             return '<tr><td class="lbl">' + esc(r.label) + '</td><td class="t">' +
-              (r.w != null ? r.w + 'w' : '—') + '</td><td>' +
-              (r.wPrev != null ? r.wPrev + 'w' : '—') + '</td><td class="' +
+              (now != null ? now + 'w' : '—') + '</td><td>' +
+              (was != null ? was + 'w' : '—') + '</td><td class="' +
               (dl == null ? '' : (dl >= 0 ? 'pos' : 'neg')) + '">' +
               (dl == null ? '—' : (dl >= 0 ? '+' : '') + dl + '%') + '</td></tr>';
-          }).join('') + '</tbody></table>',
-          { flush: true,
-            foot: pw.label ? 'Best of ' + pw.now_from + ' to ' + pw.now_to +
-                             ', against the same ' + days + ' days a year earlier (' +
-                             pw.prev_from + ' to ' + pw.prev_to + ').'
-                           : 'Best efforts over the last ' + days + ' days.' });
+          }).join('') + '</tbody></table>';
+
+        var pcFoot = pw.label
+          ? 'Best of ' + pw.now_from + ' to ' + pw.now_to + ', against the same ' +
+            days + ' days a year earlier (' + pw.prev_from + ' to ' + pw.prev_to + ').'
+          : 'Best efforts over the last ' + days + ' days.';
+        if (npMode) {
+          pcFoot += ' Normalised power: ' + (pw.np_basis ||
+            'the 30-second rolling fourth-power mean over every window of that length') +
+            '.';
+          // Named rather than left as a table of dashes, which reads as "you have never
+          // ridden that long" instead of "this is still being computed".
+          if (pending) {
+            pcFoot += ' Still building: ' + pending + ' ride' +
+              (pending === 1 ? '' : 's') + ' not yet processed, so the longer ' +
+              'durations may fill in over the next few refreshes.';
+          }
+        }
+        h += card('Power curve', body, { flush: true, foot: pcFoot });
       }
     }
 
@@ -810,7 +942,8 @@
     }
 
     if (sel === 'longrun') {
-      var lr = longRunWeeks(d);
+      var total = state.lrMode === 'total';
+      var lr = longRunWeeks(d, state.lrMode);
       if (!lr.length) {
         h += '<p class="hint">No runs with distance in the published window.</p>';
       } else {
@@ -818,22 +951,27 @@
         var over = lr.filter(function (r) { return r.pct != null && r.pct > 10; }).length;
         h += '<div class="minis">' +
           mini(lr[lr.length - 1].km.toFixed(1), 'latest km') +
-          mini(peak.km.toFixed(1), 'longest') +
+          mini(peak.km.toFixed(1), total ? 'biggest week' : 'longest') +
           mini(lr.length, 'weeks') +
           mini(over, 'builds over 10%', over ? 'warn' : '') + '</div>';
         h += card('Week by week', '<div class="scroller"><table class="tbl">' +
-          '<thead><tr><th>Week</th><th>Longest</th><th>Build</th><th>Session</th></tr></thead><tbody>' +
+          '<thead><tr><th>Week</th><th>' + (total ? 'Total' : 'Longest') +
+          '</th><th>Build</th><th>' + (total ? 'Runs' : 'Session') +
+          '</th></tr></thead><tbody>' +
           lr.slice().reverse().map(function (r) {
             return '<tr><td class="lbl">' + esc(r.ws.slice(5)) + '</td><td class="t">' +
               r.km.toFixed(1) + '</td><td class="' +
               (r.pct == null ? '' : (r.pct > 10 ? 'neg' : 'pos')) + '">' +
               (r.pct == null ? '—' : (r.pct >= 0 ? '+' : '') + r.pct + '%') + '</td><td>' +
-              esc((r.name || '').slice(0, 26)) + '</td></tr>';
+              (total ? r.n + ' · longest ' + r.longest.toFixed(1) + 'km'
+                     : esc((r.name || '').slice(0, 26))) + '</td></tr>';
           }).join('') + '</tbody></table></div>',
           { flush: true, foot: 'Amber bars and red percentages are weeks that grew the ' +
-                              'long run by more than 10%.' });
+                              (total ? 'weekly total' : 'long run') + ' by more than 10%.' });
       }
     }
+
+    if (sel === 'zones') h += zoneExtras(d);
 
     if (sel === 'plan') {
       var pva = d.planVsActual || [];
@@ -997,8 +1135,10 @@
     var el = document.getElementById('c-now');
     if (!el) return;
     if (state.chart) { state.chart.destroy(); state.chart = null; }
+    normaliseTrend();
     var fn = { fit: chartFitness, load: chartLoad, heat: chartHeat,
-               fuel: chartFuel, plan: chartPlan, longrun: chartLongRun }[state.trend];
+               fuel: chartFuel, plan: chartPlan, longrun: chartLongRun,
+               zones: chartZones }[state.trend];
     if (fn) state.chart = fn(el, state.data);
     attachReadout(state.chart, '#ro');
   }
@@ -1388,26 +1528,36 @@
     });
   }
 
-  // Longest run per ISO week, from completed activities.
-  function longRunWeeks(d) {
+  // Run distance per ISO week, from completed activities. Carries BOTH figures per week -
+  // the longest single run and the week's total - because they answer different questions
+  // and the 10% build rule applies to each on its own terms. `km` is whichever the toggle
+  // has selected, so every consumer (chart, table, minis, build %) reads one field and
+  // the percentages recompute against the right series rather than the long-run one.
+  function longRunWeeks(d, mode) {
     var by = {};
     (d.recent || []).forEach(function (r) {
       if ((SPORT[r.sport] || '') !== 'run') return;
       var km = r.dist;
       if (!km) return;
       var ws = weekStart(r.date);
-      if (!by[ws] || km > by[ws].km) by[ws] = { ws: ws, km: km, date: r.date, name: r.name };
+      var w = by[ws] || (by[ws] = { ws: ws, longest: 0, total: 0, n: 0,
+                                    date: null, name: null });
+      w.total += km;
+      w.n++;
+      if (km > w.longest) { w.longest = km; w.date = r.date; w.name = r.name; }
     });
     var rows = Object.keys(by).sort().map(function (k) { return by[k]; });
+    var field = mode === 'total' ? 'total' : 'longest';
     rows.forEach(function (r, i) {
-      var prev = i > 0 ? rows[i - 1].km : null;
+      r.km = r[field];
+      var prev = i > 0 ? rows[i - 1][field] : null;
       r.pct = prev ? Math.round((r.km - prev) / prev * 100) : null;
     });
     return rows;
   }
 
   function chartLongRun(el, d) {
-    var rows = longRunWeeks(d);
+    var rows = longRunWeeks(d, state.lrMode);
     if (!rows.length) return null;
     var race = (d.profile || {}).race_date;
 
@@ -1440,7 +1590,10 @@
       },
       label: function (it) {
         var r = rows[it.dataIndex] || {};
-        return [Number(it.parsed.y).toFixed(1) + ' km', r.name || ''].filter(Boolean);
+        return state.lrMode === 'total'
+          ? [Number(it.parsed.y).toFixed(1) + ' km total',
+             r.n + ' run' + (r.n === 1 ? '' : 's') + ' · longest ' + r.longest.toFixed(1) + ' km']
+          : [Number(it.parsed.y).toFixed(1) + ' km', r.name || ''].filter(Boolean);
       }
     };
     // Race week marked on the same axis the bars sit on.
@@ -1457,7 +1610,8 @@
       data: {
         labels: rows.map(function (r, i) { return i; }),
         datasets: [{
-          label: 'Longest run', data: rows.map(function (r) { return r.km; }),
+          label: state.lrMode === 'total' ? 'Week total' : 'Longest run',
+          data: rows.map(function (r) { return r.km; }),
           backgroundColor: rows.map(function (r) {
             return r.pct != null && r.pct > 10 ? 'rgba(183,121,31,.8)' : 'rgba(29,104,64,.75)';
           }),
@@ -1516,6 +1670,312 @@
         ]
       },
       options: o
+    });
+  }
+
+  /* ── Zones ───────────────────────────────────────────────────────────── */
+  /* Time in zones against the blueprint's target for the phase. Everything here reads
+   * the data rather than assuming a shape: the number of bands and their names differ by
+   * sport (the swim splits Z1-2 / Z3-4 / Z5 where the bike splits Z1-2 / Z3 / Z4-5), and
+   * a phase may state no target at all. Hard-coding three buckets would print a 0%
+   * target in a taper, which is a target the blueprint never set. */
+
+  // Deviation the blueprint tolerates. Beyond this a band is off plan in EITHER
+  // direction, which is why the delta is coloured by size and not by sign: 10pp more
+  // Z4-5 than prescribed is not a good week, and a green + would say it was.
+  var ZONE_TOL = 5;
+
+  var ZONE_WINS = [['week', 'This week'], ['r4', '4 weeks'], ['phase', 'Phase']];
+
+  // Coverage below this gets a caveat on the card. Deliberately NOT the published
+  // min_coverage (60): that is the threshold at which the PUBLISHER gives up on the
+  // preferred signal and falls back to heart rate, so reusing it here would leave
+  // everything it chose to keep - Kathryn's bike at 61.7% classified - uncaveated,
+  // which is the one case most in need of the caveat.
+  var ZONE_COV_WARN = 90;
+
+  // A window counts as available only if it actually HAS focus-sport data in it. The
+  // window objects always exist, and an empty one is `{}`, which is truthy - so testing
+  // for the key offered Calum a "This week" tab that resolved to nothing and left him
+  // on "no zone time recorded" while four weeks of his rides sat in the next window.
+  function zoneWindows(d) {
+    var zd = (d || {}).zoneDistribution || {};
+    var sp = zd.sports || {};
+    var fs = focusSports();
+    return ZONE_WINS.filter(function (o) {
+      var block = sp[o[0]];
+      if (!block) return false;
+      return Object.keys(block).some(function (name) {
+        return fs.indexOf(family(name)) >= 0 &&
+               ((block[name] || {}).minutes || 0) > 0;
+      });
+    });
+  }
+
+  // Selected window, falling back through r4 to week.
+  function zoneWinSel(d) {
+    var avail = zoneWindows(d).map(function (o) { return o[0]; });
+    if (!avail.length) return null;
+    if (avail.indexOf(state.zoneWin) >= 0) return state.zoneWin;
+    if (avail.indexOf('r4') >= 0) return 'r4';
+    if (avail.indexOf('week') >= 0) return 'week';
+    return avail[0];
+  }
+
+  // One shape for the chart and the table to share, so a band can never be drawn with
+  // one target and tabulated with another. `targeted` says whether a comparison exists
+  // at all; with no bands the raw per-zone split stands in, which is the honest answer
+  // to "what did I do" when there is nothing to compare it against.
+  function zoneData(d) {
+    var zd = (d || {}).zoneDistribution;
+    if (!zd) return null;
+    var win = zoneWinSel(d);
+    if (!win) return null;
+    var block = (zd.sports || {})[win] || {};
+    var fs = focusSports();
+    var out = [];
+
+    Object.keys(block).forEach(function (name) {
+      if (fs.indexOf(family(name)) < 0) return;
+      var s = block[name] || {};
+      var bands = s.bands || null;
+      var rows = [];
+
+      if (bands && bands.length) {
+        // Percentages are of CLASSIFIED time, so the fallback denominator is the sum of
+        // the band minutes - not s.minutes, which includes the sessions that carried no
+        // zone data and would quietly shrink every share.
+        var cls = bands.reduce(function (a, b) { return a + (b.minutes || 0); }, 0);
+        bands.forEach(function (b) {
+          rows.push({
+            label: b.label, minutes: b.minutes, target: b.target == null ? null : b.target,
+            actual: b.actual != null ? b.actual : (cls > 0 ? (b.minutes || 0) / cls * 100 : null)
+          });
+        });
+      } else if (s.zones) {
+        var z = s.zones;
+        var tot = Object.keys(z).reduce(function (a, k) { return a + (z[k] || 0); }, 0);
+        Object.keys(z).sort().forEach(function (k) {
+          rows.push({ label: k, minutes: z[k], target: null,
+                      actual: tot > 0 ? (z[k] || 0) / tot * 100 : null });
+        });
+      }
+      if (!rows.length) return;
+
+      out.push({ sport: name, minutes: s.minutes, sessions: s.sessions,
+                 unclassified: s.unclassified_sessions || 0,
+                 // PER-SPORT, not the top-level map. The published basis falls back to
+                 // heart rate per sport when the preferred signal is too sparse to
+                 // classify: Kathryn's runs do (her ICU run threshold was set recently,
+                 // so almost no historical run carries pace zones) and Jamie's do not.
+                 // Labelling both off the page-level preferred map would state "pace"
+                 // over a split that is actually heart rate, for one athlete and not
+                 // the other, which is worse than showing no basis at all.
+                 basis: s.basis || null,
+                 coverage: s.coverage == null ? null : s.coverage,
+                 targeted: !!(bands && bands.length), rows: rows });
+    });
+
+    if (!out.length) return null;
+    return { win: win, meta: (zd.windows || {})[win] || {}, phase: zd.phase || null,
+             // Only the PREFERRED basis per sport, used as a last resort when a sport
+             // published none of its own. minCoverage is the threshold below which the
+             // publisher considers a split thin enough to need saying so.
+             basis: zd.basis || d.basis || {},
+             sports: out };
+  }
+
+  function zoneExtras(d) {
+    if (!(d || {}).zoneDistribution) {
+      return '<p class="hint">Time in zones appears here once the nightly refresh has ' +
+             'published it.</p>';
+    }
+    var z = zoneData(d);
+    if (!z) {
+      return '<p class="hint">No zone time recorded for your focus sports in this ' +
+             'window.</p>';
+    }
+
+    // The sport's OWN basis first; the preferred map only if it published none.
+    var basisFor = function (s) {
+      if (s.basis) return s.basis;
+      var b = z.basis || {};
+      if (b[s.sport]) return b[s.sport];
+      var k = Object.keys(b).filter(function (x) {
+        return family(x) === family(s.sport);
+      })[0];
+      return k ? b[k] : null;
+    };
+
+    var wl = ZONE_WINS.filter(function (o) { return o[0] === z.win; })[0];
+    var bits = [];
+    if (z.phase) bits.push(z.phase + ' phase');
+    bits.push(z.meta.label || (wl ? wl[1] : z.win));
+    if (z.meta.from && z.meta.to) bits.push(z.meta.from + ' to ' + z.meta.to);
+    var h = '<p class="hint">' + esc(bits.join(' · ')) + '</p>';
+
+    var tot = z.sports.reduce(function (a, s) {
+      return { min: a.min + (s.minutes || 0), n: a.n + (s.sessions || 0),
+               un: a.un + s.unclassified };
+    }, { min: 0, n: 0, un: 0 });
+    h += '<div class="minis">' +
+      mini(hhmm(tot.min), 'in zones') +
+      mini(tot.n, 'sessions') +
+      mini(tot.un, 'no zone data', tot.un ? 'warn' : '') + '</div>';
+
+    z.sports.forEach(function (s) {
+      var head = [s.sport, hhmm(s.minutes),
+                  s.sessions != null
+                    ? s.sessions + ' session' + (s.sessions === 1 ? '' : 's') : null]
+        .filter(Boolean).join(' · ');
+
+      var body = '<table class="tbl"><thead><tr><th>Band</th><th>Actual</th>' +
+        (s.targeted ? '<th>Target</th><th>Δ pp</th>' : '') +
+        '<th>Time</th></tr></thead><tbody>' +
+        s.rows.map(function (r) {
+          // Rounded BEFORE it is signed: an actual of 69.7 against a target of 70 is
+          // 0pp off, and signed(-0.3, 0) prints it as '-0pp'.
+          var dl = (r.target != null && r.actual != null)
+            ? Math.round(r.actual - r.target) : null;
+          return '<tr><td class="lbl">' + esc(r.label) + '</td><td class="t">' +
+            (r.actual != null ? Math.round(r.actual) + '%' : '–') + '</td>' +
+            (s.targeted
+              ? '<td>' + (r.target != null ? Math.round(r.target) + '%' : '–') + '</td>' +
+                '<td class="' + (dl == null ? ''
+                  : (Math.abs(dl) <= ZONE_TOL ? 'pos' : 'neg')) + '">' +
+                (dl == null ? '–' : signed(dl, 0) + 'pp') + '</td>'
+              : '') +
+            '<td>' + hhmm(r.minutes) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+
+      var foot = [];
+      var bas = basisFor(s);
+      // Stated, always: "run by grade-adjusted pace" is the difference between a
+      // believable Z2 share on a hilly week and a meaningless one.
+      if (bas) foot.push(s.sport + ' by ' + bas + '.');
+      // A split drawn from two thirds of the time is not the window, and saying 48%
+      // Z1-2 without saying that is how a partial figure gets read as the whole one.
+      if (s.coverage != null && s.coverage < ZONE_COV_WARN) {
+        foot.push('Only ' + Math.round(s.coverage) + '% of ' + s.sport +
+          ' time could be classified, so this is that share, not the whole window.');
+      }
+      if (!s.targeted) {
+        foot.push('The blueprint sets no target for ' + s.sport +
+          (z.phase ? ' in the ' + z.phase + ' phase' : '') +
+          ', so this is the split as it happened with nothing to compare it against.');
+      }
+      if (s.unclassified) {
+        foot.push(s.unclassified + ' session' + (s.unclassified === 1 ? '' : 's') +
+          ' had no zone data' + (s.unclassified === 1 ? ' and is' : ' and are') +
+          ' not in these figures.');
+      }
+      h += card(head, body, { flush: true, foot: foot.join(' ') });
+    });
+
+    return h;
+  }
+
+  // The target, drawn on the bar it belongs to. A second bar per band would be two
+  // things to read; the question is the GAP between what was done and what was asked
+  // for, and a notch on the same line IS that gap.
+  var znotch = {
+    id: 'znotch',
+    afterDatasetsDraw: function (chart, args, opts) {
+      var t = (opts && opts.targets) || [];
+      if (!t.length) return;
+      var x = chart.scales.x, meta = chart.getDatasetMeta(0), g = chart.ctx;
+      t.forEach(function (v, i) {
+        var bar = meta.data[i];
+        if (v == null || !bar) return;
+        var half = ((bar.height || 12) / 2) + 2.5;
+        var px = x.getPixelForValue(v);
+        g.save();
+        g.strokeStyle = C.ink;
+        g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(px, bar.y - half); g.lineTo(px, bar.y + half); g.stroke();
+        g.restore();
+      });
+    }
+  };
+
+  function chartZones(el, d) {
+    var z = zoneData(d);
+    if (!z) return null;
+
+    // Flattened to one bar per sport-and-band. Grouping by band across sports needs the
+    // bands to line up, and they do not: the swim's second band is Z3-4 where the bike's
+    // is Z3, so a shared dataset would have put two different bands on one legend entry.
+    var rows = [];
+    z.sports.forEach(function (s) {
+      s.rows.forEach(function (r, i) {
+        rows.push({ sport: s.sport, label: r.label, actual: r.actual, target: r.target,
+                    minutes: r.minutes, i: i, n: s.rows.length });
+      });
+    });
+
+    var HEAT = ['29,104,64', '183,121,31', '185,28,28'];
+    // Positional, not by name: the first band is the easy one and the last is the
+    // hardest whatever they are called, so a three-band bike and a five-zone raw split
+    // both read calm to hot without this function knowing a single zone name.
+    var tone = function (r) {
+      if (r.n < 2 || r.i === 0) return HEAT[0];
+      return r.i === r.n - 1 ? HEAT[2] : HEAT[1];
+    };
+
+    var peak = rows.reduce(function (m, r) {
+      return Math.max(m, r.actual || 0, r.target || 0);
+    }, 0);
+
+    var o = baseOpts();
+    o.indexAxis = 'y';
+    // baseOpts() compares along x, right for every other chart because they are all
+    // vertical. On a horizontal bar that resolves the index against the VALUE axis, so
+    // dragging down the rows never changes the row the readout names.
+    o.interaction.axis = 'y';
+    o.plugins.legend.display = false;      // one dataset; the row labels carry the bands
+    o.scales = {
+      x: {
+        beginAtZero: true, max: Math.min(100, Math.ceil((peak + 6) / 10) * 10),
+        title: { display: true, text: '% of classified time', color: C.muted,
+                 font: { family: 'DM Mono', size: 9 } },
+        ticks: { color: C.muted, font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 6,
+                 callback: function (v) { return v + '%'; } },
+        grid: { color: C.rule, drawTicks: false }, border: { display: false }
+      },
+      y: {
+        // No autoSkip: a dropped row label leaves a bar belonging to nothing.
+        ticks: { color: C.ink2, font: { family: 'DM Mono', size: 9 }, autoSkip: false },
+        grid: { display: false }, border: { color: C.rule }
+      }
+    };
+    o.plugins.znotch = { targets: rows.map(function (r) { return r.target; }) };
+    o.plugins.tooltip.callbacks = {
+      title: function (items) {
+        var r = rows[items[0].dataIndex] || {};
+        return (r.sport || '') + ' ' + (r.label || '');
+      },
+      label: function (it) {
+        var r = rows[it.dataIndex] || {};
+        return [Math.round(it.parsed.x) + '% · ' + hhmm(r.minutes),
+                r.target != null
+                  ? 'target ' + Math.round(r.target) + '% · ' +
+                    signed(Math.round((r.actual || 0) - r.target), 0) + 'pp'
+                  : 'no target this phase'];
+      }
+    };
+
+    return new Chart(el, {
+      type: 'bar',
+      data: {
+        labels: rows.map(function (r) { return r.sport + ' ' + r.label; }),
+        datasets: [{
+          label: 'Share of time',
+          data: rows.map(function (r) { return r.actual; }),
+          backgroundColor: rows.map(function (r) { return 'rgba(' + tone(r) + ',.78)'; }),
+          borderWidth: 0, borderRadius: 2, barPercentage: 0.72, categoryPercentage: 0.88
+        }]
+      },
+      options: o, plugins: [znotch]
     });
   }
 
@@ -1782,6 +2242,27 @@
         '<span class="gate-go">' + (a.slug === cur ? '✓' : '→') + '</span></button>';
     }).join('') + '</div>', { flush: true });
 
+    // Multi-select, so these are toggle rows rather than a segmented control: a seg
+    // reads as "pick one". data-sport, not data-slug, keeps them clear of the athlete
+    // handler bound on the whole view.
+    var fs = focusSports();
+    var SPNAME = { swim: 'Swim', bike: 'Bike', run: 'Run' };
+    h += card('Focus sports', '<div class="body-flush" id="sportPick">' +
+      FOCUS.map(function (s) {
+        var on = fs.indexOf(s) >= 0;
+        return '<button type="button" class="pickrow' + (on ? ' on' : '') +
+          '" data-sport="' + s + '" aria-pressed="' + on + '">' +
+          '<span class="gate-mark"><span class="sp sp-' + s + '" style="margin:0"></span></span>' +
+          '<span class="gate-row-t"><b>' + esc(SPNAME[s]) + '</b><span>' +
+          (on ? 'in focus' : 'logged, but not a focus') + '</span></span>' +
+          '<span class="gate-go">' + (on ? '✓' : '+') + '</span></button>';
+      }).join('') + '</div>',
+      { flush: true,
+        foot: 'Sets which sports get their own fitness series, zone card and trend tab. ' +
+              'Strength and everything else still appear in the calendar, the week ' +
+              'totals and the load chart, because they are training you did. The last ' +
+              'sport cannot be turned off - an app focused on nothing has nothing to show.' });
+
     h += card('Data', '<table class="tbl"><tbody>' +
       '<tr><td class="lbl">Last refreshed</td><td class="t">' +
       esc(d.generated || '—') + '</td></tr>' +
@@ -1877,6 +2358,26 @@
     $('#logout').onclick = function () {
       try { localStorage.removeItem(KEY); } catch (e) { /* nothing to clear */ }
       openGate();
+    };
+
+    // Deselecting the last sport is refused rather than silently read as "all", because a
+    // control showing nothing selected while the app behaves as though everything is
+    // selected misreports its own state.
+    $('#sportPick').onclick = function (e) {
+      var b = e.target.closest('.pickrow[data-sport]');
+      if (!b) return;
+      var cur = focusSports(), s = b.dataset.sport;
+      var next = cur.indexOf(s) >= 0
+        ? cur.filter(function (x) { return x !== s; })
+        : FOCUS.filter(function (x) { return x === s || cur.indexOf(x) >= 0; });
+      if (!next.length) return;
+      try { localStorage.setItem(SKEY + state.slug, next.join(',')); }
+      catch (err) { /* choice just won't persist */ }
+      renderSettings();
+      renderTrends();
+      // Only while Trends is on screen: a canvas sized inside a display:none section
+      // comes out 0px wide and stays that way.
+      if (state.tab === 'trends') drawTrend();
     };
 
     var ls = $('#libSeg');

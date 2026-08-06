@@ -20,7 +20,7 @@ deliberately different so a private file can never be mistaken for a public one.
 
 Run daily (e.g. 06:00 via launchd/cron). Requires git push credentials (SSH key or keychain).
 """
-import json, subprocess, sys, time, math
+import json, re, subprocess, sys, time, math
 from pathlib import Path
 from datetime import datetime, date, timedelta
 from collections import defaultdict
@@ -50,7 +50,42 @@ PLAN_START = date(2026, 4, 27)  # Week 1 Monday
 _POWER_DURATIONS = [
     (5,"5s"),(10,"10s"),(30,"30s"),(60,"1m"),(120,"2m"),(300,"5m"),
     (600,"10m"),(1200,"20m"),(1800,"30m"),(3600,"60m"),(5400,"90m"),(7200,"2h"),
+    # Out to race duration. The curve stopped at 2h, which is under half the target
+    # bike split - so the one duration that actually decides the race was the one
+    # number missing (Jamie, 6 Aug 2026). Intervals.icu already returns these: its
+    # curve runs to 18300s on a 300s grid, so nothing new is fetched for them.
+    (9000,"2h30"),(10800,"3h"),(12600,"3h30"),(14400,"4h"),(16200,"4h30"),
 ]
+
+# intervals.icu samples its long-duration curve every 300s, so a race target must be
+# snapped to that grid or the lookup silently misses and the row reads "—".
+_PC_GRID = 300
+
+
+def _race_bike_seconds(profile) -> int | None:
+    """Target bike split in seconds, snapped UP to the intervals.icu curve grid.
+
+    Derived from race_targets.bike_time rather than hard-coded so the curve's top row
+    follows the target if it is revised. Jamie's 4:44 becomes 17100s = 4h45.
+    """
+    raw = str(((profile or {}).get("race_targets") or {}).get("bike_time") or "").strip()
+    m = re.match(r"^~?\s*(\d+):(\d{2})(?::(\d{2}))?$", raw)
+    if not m:
+        return None
+    secs = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3) or 0)
+    if secs <= 7200:
+        return None
+    return -(-secs // _PC_GRID) * _PC_GRID       # ceil to the grid
+
+
+def _power_durations(profile):
+    """_POWER_DURATIONS plus the race-duration row, when there is a target to anchor it."""
+    race = _race_bike_seconds(profile)
+    if not race or any(t == race for t, _ in _POWER_DURATIONS):
+        return list(_POWER_DURATIONS)
+    h, m = divmod(race // 60, 60)
+    label = f"{h}h{m:02d} · race" if m else f"{h}h · race"
+    return [d for d in _POWER_DURATIONS if d[0] < race] + [(race, label)]
 
 
 def _eftp_from_fitness(fitness_rows: list) -> int | None:
@@ -87,18 +122,159 @@ def _resolve_ftp(profile_ftp: int | None, fitness_rows: list, session_log_path: 
     return profile_ftp or 250
 
 
+def _prev_race_date(slug):
+    """The athlete's OWN previous-season race date, or None.
+
+    Both season-overlay windows used to end on a hard-coded 19 September, which is
+    Jamie's 2026 race date and belongs to neither prior season of anybody. It caused
+    two separate faults (both reported 6 Aug 2026):
+
+      * Jamie's 2025 line stopped on 2025-09-19 when he raced on the 20th, so every
+        prior season sat one day short of race day - the "old races are a day out".
+      * Kathryn's per-sport prior season was fetched over Jamie's window entirely
+        (2025-01-01 to 2025-09-19) when her last race was 2024-10-20, so aligning it
+        on her race date threw the line ~a year off the axis and it vanished. That is
+        the missing Marathonas 70.3.
+
+    prev_race.date is preferred over prev_race_date because the flat field is null for
+    Jamie while the nested one is populated.
+    """
+    try:
+        prof = json.loads((BASE / f"athletes/{slug}/profile.json").read_text())
+    except Exception:
+        return None
+    raw = ((prof.get("prev_race") or {}).get("date")) or prof.get("prev_race_date")
+    try:
+        return date.fromisoformat(str(raw)[:10]) if raw else None
+    except ValueError:
+        return None
+
+
 def fetch_fitness_prev(client):
-    """Fetch 2025 CTL series once and cache it. Skips if cache already exists."""
+    """Fetch last season's CTL series once and cache it. Skips if cache exists."""
     if FITNESS_PREV_CACHE.exists():
         return
     log("Fetching last-season fitness (one-time cache)...")
+    race = _prev_race_date("jamie")
+    if not race:
+        log("fitnessPrev skipped: jamie has no previous race date in profile")
+        return
     try:
-        rows = client.get_fitness(start_date="2025-01-01", end_date="2025-09-19")
+        rows = client.get_fitness(start_date=f"{race.year}-01-01",
+                                  end_date=race.isoformat())
         series = [[r["id"][:10], round(r.get("ctl") or 0, 1)] for r in rows if r.get("ctl")]
         FITNESS_PREV_CACHE.write_text(json.dumps(series))
         log(f"fitnessPrev cached: {len(series)} days")
     except Exception as e:
         log(f"fitnessPrev fetch failed (non-fatal): {e}")
+
+
+def _focus_sports(slug):
+    """The athlete's focus sports, from their blueprint. ["swim","bike","run"] for the
+    triathletes, ["bike"] for Calum's sportive.
+
+    The app offers a per-athlete override in Settings; this is the default it starts
+    from, so the switch opens on the right answer rather than on all three for someone
+    who only rides. Strength and everything else is still logged and still shown - a
+    sport not being a FOCUS is not the same as it not counting.
+    """
+    try:
+        bp = json.loads((BASE / f"athletes/{slug}/reference/training-blueprint.json").read_text())
+    except Exception:
+        return None
+    sports = bp.get("sports")
+    return sports if isinstance(sports, list) and sports else None
+
+
+def _zone_distribution(slug, activities, today):
+    """Time in zones by sport against the blueprint phase target, or None.
+
+    Costs no API call: get_training_history already returns full activity objects,
+    zone arrays included. See lib/zone_distribution.py for why the bands are read from
+    the blueprint row rather than bucketed with a fixed easy/z3/z45 table.
+    """
+    try:
+        sys.path.insert(0, str(BASE / "lib"))
+        import zone_distribution
+        return zone_distribution.build_for_slug(BASE, slug, activities, today)
+    except Exception as e:
+        log(f"[{slug}] zone distribution skipped (non-fatal): {e}")
+        return None
+
+
+NP_CURVE_CACHE = BASE / "athletes/jamie/np-curve-cache.json"
+_BIKE_TYPES = ("Ride", "VirtualRide", "GravelRide", "MountainBikeRide")
+
+# Streams are the expensive call in this estate and this job runs every 10 minutes, so
+# only a handful of new activities are converted per run. The curve publishes from
+# whatever is cached, so the first build fills in over a couple of hours instead of
+# stalling one refresh for forty minutes.
+_NP_MAX_NEW_PER_RUN = 6
+
+
+def _np_curves(client, recent_acts, durations, today, p_from, p_to):
+    """Mean-maximal NP for the 90-day window and the same 90 days a year earlier.
+
+    Returns (np_now, np_prev, pending) where pending is the number of rides still
+    without a cached curve - published so the app can say "still building" rather than
+    presenting a half-populated column as a complete one.
+    """
+    sys.path.insert(0, str(BASE / "lib"))
+    from np_curve import load_cache, save_cache, refresh_cache, best_over
+
+    cache = load_cache(NP_CURVE_CACHE)
+    if not isinstance(cache, dict):
+        cache = {}
+
+    def _rides(acts, lo, hi):
+        out = []
+        for a in (acts or []):
+            if a.get("type") not in _BIKE_TYPES:
+                continue
+            day = (a.get("start_date_local") or "")[:10]
+            if day and lo.isoformat() <= day <= hi.isoformat():
+                out.append(a)
+        return out
+
+    now_rides = _rides(recent_acts, today - timedelta(days=90), today)
+
+    # The year-ago rides are outside the 120-day history this job already holds, so
+    # they need their own activity-list call. That list is historical and cannot
+    # change, so it is cached by window and fetched once rather than every 10 minutes.
+    prev_key = f"{p_from.isoformat()}..{p_to.isoformat()}"
+    stash = cache.get("_prev_list")
+    if isinstance(stash, dict) and stash.get("key") == prev_key:
+        prev_rides = stash.get("acts") or []
+    else:
+        prev_rides = []
+        try:
+            raw = client._get("activities", {"oldest": p_from.isoformat(),
+                                             "newest": p_to.isoformat()})
+            prev_rides = [{"id": a.get("id"), "type": a.get("type"),
+                           "moving_time": a.get("moving_time"),
+                           "start_date_local": a.get("start_date_local")}
+                          for a in _rides(raw, p_from, p_to)]
+            cache["_prev_list"] = {"key": prev_key, "acts": prev_rides}
+        except Exception as e:
+            log(f"NP curve: year-ago activity list failed (non-fatal): {e}")
+
+    dset = set(durations)
+    todo = now_rides + prev_rides
+    cache, fetched = refresh_cache(client, todo, cache, durations,
+                                   max_new=_NP_MAX_NEW_PER_RUN, log=log)
+    if fetched:
+        save_cache(NP_CURVE_CACHE, cache)
+
+    pending = sum(1 for a in todo
+                  if not isinstance(cache.get(str(a.get("id"))), dict))
+    if pending:
+        log(f"NP curve: {fetched} computed this run, {pending} rides still pending")
+
+    ids_now = [a.get("id") for a in now_rides]
+    ids_prev = [a.get("id") for a in prev_rides]
+    return (best_over(cache, ids_now, dset),
+            best_over(cache, ids_prev, dset),
+            pending or None)
 
 
 def _compute_per_sport_ctl(activities, start, today):
@@ -150,9 +326,12 @@ def _per_sport_ctl_cached(slug, client, today, activities=None):
     Current season is recomputed at most once a day (the season activity fetch is heavy
     and refresh runs after every activity). The prior seasons are historical, so they are
     fetched once (a single heavier pull back to the earliest one) and cached forever.
-    `prev` = last season (Jan 1 -> mid-Sep, to match fitnessPrev); `prev2` = the season of
-    the athlete's profile.prev2_race_date (Jan 1 -> that race), so it lines up with the
-    Barcelona '23 overlay. `prev2` is {} for athletes with no prev2_race_date."""
+    `prev` = the season of the athlete's own prev_race (Jan 1 -> that race, matching
+    fitnessPrev); `prev2` = the season of profile.prev2_race_date (Jan 1 -> that race),
+    so it lines up with the Barcelona '23 overlay. Both windows are per-ATHLETE: they
+    were briefly a shared hard-coded date, which is a bug the module header of
+    lib/zone_distribution.py would call inventing data. `prev2` is {} for athletes with
+    no prev2_race_date."""
     cache_f = BASE / f"athletes/{slug}/fitness-bysport-cache.json"
     cache = {}
     try:
@@ -190,7 +369,18 @@ def _per_sport_ctl_cached(slug, client, today, activities=None):
     prev2 = cache.get("prev2")
     need_prev2 = bool(prev2_race)
     if not prev or (need_prev2 and not prev2):
-        p1s, p1e = date(today.year - 1, 1, 1), date(today.year - 1, 9, 19)
+        # The athlete's OWN last race, Jan 1 of that race's year to race day - NOT
+        # date(today.year - 1, 9, 19), which was Jamie's 2026 race date applied to
+        # every athlete and every prior season. See _prev_race_date().
+        p1race = _prev_race_date(slug)
+        if p1race:
+            p1s, p1e = date(p1race.year, 1, 1), p1race
+        else:
+            # No recorded prior race: fall back to the calendar year before this one,
+            # whole, rather than to a date borrowed from someone else's season.
+            p1s, p1e = date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)
+            log(f"[{slug}] no previous race date — per-sport prior season "
+                f"falls back to {p1s.year} entire")
         p2s = p2e = None
         earliest = p1s
         if need_prev2:
@@ -390,6 +580,11 @@ def _build_jamie_data(client) -> dict:
     power_curve = []
     power_curve_window = None
     try:
+        _pc_profile = json.loads((BASE / "athletes/jamie/profile.json").read_text())
+    except Exception:
+        _pc_profile = {}
+    pc_durations = _power_durations(_pc_profile)
+    try:
         pc_raw = client.get_power_curves(sport="Ride", curves="90d")
         if pc_raw.get("list"):
             curve     = pc_raw["list"][0]
@@ -414,9 +609,23 @@ def _build_jamie_data(client) -> dict:
                 # sat broken for months.
                 log(f"Power curve year-ago fetch failed (non-fatal): {e}")
 
+            # Normalised power at each duration. NOT available from this endpoint -
+            # /power-curves is mean-maximal AVERAGE power only, and passing
+            # powerField=np or np=true returns the identical average curve without
+            # erroring, which is exactly how you would ship a mislabelled column.
+            # So NP is computed from the power streams, cached per activity.
+            np_now, np_prev, np_ready = {}, {}, None
+            try:
+                np_now, np_prev, np_ready = _np_curves(
+                    client, history_21, [t for t, _ in pc_durations],
+                    today, p_from, p_to)
+            except Exception as e:
+                log(f"NP curve skipped (non-fatal): {e}")
+
             power_curve = [{"t": t, "label": lbl,
-                            "w": secs_to_w.get(t), "wPrev": prev_w.get(t)}
-                           for t, lbl in _POWER_DURATIONS]
+                            "w": secs_to_w.get(t), "wPrev": prev_w.get(t),
+                            "np": np_now.get(t), "npPrev": np_prev.get(t)}
+                           for t, lbl in pc_durations]
             power_curve_window = {
                 "days": 90,
                 "now_from": (today - timedelta(days=90)).isoformat(),
@@ -424,6 +633,9 @@ def _build_jamie_data(client) -> dict:
                 "prev_from": p_from.isoformat(),
                 "prev_to": p_to.isoformat(),
                 "label": "best 90 days vs same 90 days last year",
+                "np_basis": "30s-rolling 4th-power mean over every window of that "
+                            "length, best across all rides in the period",
+                "np_pending": np_ready,
             }
     except Exception as e:
         log(f"Power curve fetch failed (non-fatal): {e}")
@@ -453,6 +665,8 @@ def _build_jamie_data(client) -> dict:
         "resolvedFtp":  resolved_ftp,
         "rampCap":      _ramp_cap("jamie"),
         "refreshCadence": _refresh_cadence(),
+        "sports":       _focus_sports("jamie"),
+        "zoneDistribution": _zone_distribution("jamie", history_21, today),
     }
 
 
@@ -1291,6 +1505,8 @@ def _build_athlete_training_data(slug, athlete_cfg):
         "rampCap":      _ramp_cap(slug),
         "refreshCadence": _refresh_cadence(),
         "swimLog":      swim_log,
+        "sports":       _focus_sports(slug),
+        "zoneDistribution": _zone_distribution(slug, history_49, today),
     }
 
     # -- planVsActual ----------------------------------------------------------
