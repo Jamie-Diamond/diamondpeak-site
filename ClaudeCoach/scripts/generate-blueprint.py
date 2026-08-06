@@ -15,6 +15,7 @@ Writes:
 """
 import argparse
 import json
+import re
 import subprocess
 import sys
 from datetime import date, timedelta
@@ -440,24 +441,114 @@ def fitness_check(slug: str, event: str, current_ctl: float,
 
 # -- Distribution table --------------------------------------------------------
 
-DISTRIBUTION = {
-    "Full Ironman": {
-        "base": {"Swim": "70% Z1–2 / 0% Z3 / 30% Z4–5", "Bike": "80% Z1–2 / 12% Z3 / 8% Z4–5", "Run": "85% Z1–2 / 10% Z3 / 5% Z4–5"},
-        "build": {"Swim": "65% Z1–2 / 0% Z3 / 35% Z4–5", "Bike": "75% Z1–2 / 19% Z3 / 6% Z4–5", "Run": "80% Z1–2 / 15% Z3 / 5% Z4–5"},
-        "specific": {"Swim": "62% Z1–2 / 0% Z3 / 38% Z4–5", "Bike": "72% Z1–2 / 22% Z3 / 6% Z4–5", "Run": "78% Z1–2 / 17% Z3 / 5% Z4–5"},
-        "peak": {"Swim": "60% Z1–2 / 0% Z3 / 40% Z4–5", "Bike": "70% Z1–2 / 20% Z3 / 10% Z4–5", "Run": "75% Z1–2 / 17% Z3 / 8% Z4–5"},
-    },
-    "70.3": {
-        "base": {"Swim": "70% Z1–2 / 0% Z3 / 30% Z4–5", "Bike": "78% Z1–2 / 14% Z3 / 8% Z4–5", "Run": "83% Z1–2 / 12% Z3 / 5% Z4–5"},
-        "build": {"Swim": "65% Z1–2 / 0% Z3 / 35% Z4–5", "Bike": "70% Z1–2 / 18% Z3 / 12% Z4–5", "Run": "78% Z1–2 / 12% Z3 / 10% Z4–5"},
-        "peak": {"Swim": "58% Z1–2 / 0% Z3 / 42% Z4–5", "Bike": "65% Z1–2 / 21% Z3 / 14% Z4–5", "Run": "72% Z1–2 / 16% Z3 / 12% Z4–5"},
-    },
-    "Sportive": {
-        "base": {"Bike": "80% Z1–2 / 12% Z3 / 8% Z4–5"},
-        "build": {"Bike": "70% Z1–2 / 18% Z3 / 12% Z4–5"},
-        "peak": {"Bike": "65% Z1–2 / 18% Z3 / 17% Z4–5"},
-    },
-}
+def _parse_distribution_doc():
+    """Read the weekly distribution targets from blueprints/blueprint.md section 3.2.
+
+    THE METHODOLOGY DOC IS THE SOURCE, not a table in here. This used to be a literal
+    dict and it had drifted from the doc in TWELVE places by 6 Aug 2026 - the same
+    failure lib/plan_distribution.py's header describes ("three classifiers with three
+    answers"), which is why that module imports its taxonomy rather than copying it.
+
+    The drift was not cosmetic:
+      * Every SWIM row had been rewritten from the doc's Z1-2 / Z3-4 / Z5 bands into
+        the bike/run shape with Z3 pinned to "0%". That contradicts the doc's own swim
+        zone table, where Z4 IS "Threshold / CSS sets" - so it prescribed zero tempo
+        while lumping CSS work into a band it called Z4-5. Published as a 0% target,
+        it read to the athlete as no target at all, and it marked Kathryn's 41% Z3
+        swimming as a violation of a rule nobody wrote.
+      * Bike and run rows in build and peak had all shifted the SAME direction, more
+        Z3 and less Z4-5 than the doc (e.g. Full Ironman peak bike 20/10 against the
+        doc's 15/15), quietly under-prescribing threshold work in exactly the phases
+        that need it.
+
+    Parsed rather than re-copied so it cannot drift again. Raises on an unparseable or
+    empty result: a silent {} here would publish "distribution not yet defined" for
+    every athlete, which is a worse failure than crashing the generator.
+    """
+    md = (BASE / "blueprints" / "blueprint.md").read_text()
+    try:
+        sec = md.split("### 3.2 Weekly Distribution Targets")[1].split("## 4.")[0]
+    except IndexError:
+        raise AssertionError(
+            "blueprint.md section 3.2 not found - the distribution table moved or was "
+            "renamed; generate-blueprint.py reads it as the single source of truth")
+
+    out: dict = {}
+    event = None
+    for line in sec.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("**") and stripped.endswith(":**"):
+            name = stripped.strip("*: ")
+            # "70.3 / Half Ironman" in the doc, "70.3" as the event key.
+            event = "70.3" if name.startswith("70.3") else name
+            continue
+        m = re.match(r"\|\s*(Base|Build|Specific|Peak)\s*\|(.+)\|\s*$", stripped)
+        if not (m and event):
+            continue
+        cells = [c.strip() for c in m.group(2).split("|")]
+        row = {k: v for k, v in zip(("Swim", "Bike", "Run"), cells) if v}
+        out.setdefault(event, {})[m.group(1).lower()] = row
+
+    if not out or not all(out.get(e) for e in ("Full Ironman", "70.3")):
+        raise AssertionError(
+            f"blueprint.md 3.2 parsed to {out!r} - expected Full Ironman and 70.3 "
+            f"distribution rows")
+
+    # Sportive is bike-only and the doc states it in the EVENT table (section 4), not in
+    # 3.2, as "Base 80/12/8 -> Build 70/18/12 -> Peak 65/18/17 Z1-2/Z3/Z4-5". Read it
+    # from there. It is emphatically NOT the Ironman bike column: deriving it that way
+    # gives Build 75/15/10 and Peak 70/15/15, which is a different prescription from the
+    # one written down for Calum's event.
+    sport_row = re.search(
+        r"bike distribution by phase\s*\(\s*Base\s+(\d+)/(\d+)/(\d+)\s*[^B]*Build\s+"
+        r"(\d+)/(\d+)/(\d+)\s*[^P]*Peak\s+(\d+)/(\d+)/(\d+)", md)
+    if not sport_row:
+        raise AssertionError(
+            "Sportive bike distribution not found in blueprint.md section 4 - it is "
+            "stated there as 'Base a/b/c -> Build .. -> Peak ..', not in section 3.2")
+    n = [int(x) for x in sport_row.groups()]
+    out["Sportive"] = {
+        phase: {"Bike": f"{n[i]}% Z1–2 / {n[i + 1]}% Z3 / {n[i + 2]}% Z4–5"}
+        for phase, i in (("base", 0), ("build", 3), ("peak", 6))
+    }
+
+    # The doc states Base / Build / Peak. A SPECIFIC phase sits between build and peak,
+    # so where the doc does not name it, interpolate the two it lies between rather
+    # than carry a hand-written row the doc never sanctioned (the old literal's
+    # specific row was exactly that, and was the least defensible entry in the table).
+    for event, phases in out.items():
+        if "specific" in phases or not {"build", "peak"} <= set(phases):
+            continue
+        phases["specific"] = {
+            sport: _interpolate_row(phases["build"][sport], phases["peak"][sport])
+            for sport in phases["build"] if sport in phases["peak"]
+        }
+    return out
+
+
+_BAND_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*(Z\s*[1-7](?:\s*[-\u2010-\u2015]\s*[1-7])?)")
+
+
+def _interpolate_row(a: str, b: str) -> str:
+    """Midpoint of two distribution rows, e.g. build and peak -> specific.
+
+    Band LABELS must match between the two rows; they always do within one sport in the
+    doc. Percentages are rounded with the remainder pushed onto the largest band so the
+    row still sums to exactly 100 - a distribution that sums to 99 would be read as a
+    missing percent of training rather than as rounding.
+    """
+    pa, pb = _BAND_RE.findall(a), _BAND_RE.findall(b)
+    if len(pa) != len(pb) or [x[1] for x in pa] != [x[1] for x in pb]:
+        raise AssertionError(f"cannot interpolate mismatched bands: {a!r} vs {b!r}")
+    vals = [(float(x[0]) + float(y[0])) / 2 for x, y in zip(pa, pb)]
+    rounded = [int(round(v)) for v in vals]
+    drift = 100 - sum(rounded)
+    if drift:
+        rounded[rounded.index(max(rounded))] += drift
+    return " / ".join(f"{v}% {lbl}" for v, (_, lbl) in zip(rounded, pa))
+
+
+DISTRIBUTION = _parse_distribution_doc()
 
 def dist_table(event: str, phases: list[dict]) -> list[str]:
     event_dist = DISTRIBUTION.get(_event_key(event))
