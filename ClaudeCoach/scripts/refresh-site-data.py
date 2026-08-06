@@ -159,9 +159,17 @@ def fetch_fitness_prev(client):
     if not race:
         log("fitnessPrev skipped: jamie has no previous race date in profile")
         return
+    # get_fitness takes (days, newest), NOT (start_date, end_date). The old call passed
+    # the latter and raised TypeError every time, caught by the except below and logged
+    # as "non-fatal" - so this one-time cache had in fact NEVER been built by this
+    # script. Jamie's existed only because build-fitness-prev-cache.py was run by hand,
+    # and Kathryn's still does; a permanently broken call hidden behind a soft failure
+    # is why nobody noticed. `days` is a span back from `newest`, so Jan 1 to race day
+    # is (race - Jan 1).days.
+    season_start = date(race.year, 1, 1)
     try:
-        rows = client.get_fitness(start_date=f"{race.year}-01-01",
-                                  end_date=race.isoformat())
+        rows = client.get_fitness(days=(race - season_start).days,
+                                  newest=race.isoformat())
         series = [[r["id"][:10], round(r.get("ctl") or 0, 1)] for r in rows if r.get("ctl")]
         FITNESS_PREV_CACHE.write_text(json.dumps(series))
         log(f"fitnessPrev cached: {len(series)} days")
@@ -205,11 +213,15 @@ def _zone_distribution(slug, activities, today):
 NP_CURVE_CACHE = BASE / "athletes/jamie/np-curve-cache.json"
 _BIKE_TYPES = ("Ride", "VirtualRide", "GravelRide", "MountainBikeRide")
 
-# Streams are the expensive call in this estate and this job runs every 10 minutes, so
-# only a handful of new activities are converted per run. The curve publishes from
-# whatever is cached, so the first build fills in over a couple of hours instead of
-# stalling one refresh for forty minutes.
-_NP_MAX_NEW_PER_RUN = 6
+# Streams are the expensive call in this estate, so activities are converted in batches
+# and the curve publishes from whatever is cached rather than waiting for a complete set.
+# Measured at 6 rides in about a second, so the original ceiling of 6 was far too timid:
+# it spread an 80-ride backfill over 13 runs, and because every run then changed the
+# published np values it produced 13 commits and 13 GitHub Pages builds. Pages builds
+# here take longer than the 10-minute refresh interval, so each one cancels the last and
+# the queue times out - churn in this number is not free. 20 finishes the backfill in
+# about four runs and still keeps a single refresh well under a few seconds.
+_NP_MAX_NEW_PER_RUN = 20
 
 
 def _np_curves(client, recent_acts, durations, today, p_from, p_to):

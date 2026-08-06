@@ -68,9 +68,9 @@
   var SPORT = { Swim: 'swim', Ride: 'bike', VirtualRide: 'bike', GravelRide: 'bike',
                 Run: 'run', Brick: 'run', WeightTraining: 'strength', Workout: 'strength' };
 
-  var C = { ink: '#18160f', ink2: '#4a4535', muted: '#9a9080', rule: '#ddd8cc',
-            green: '#1d6840', blue: '#1a5276', amber: '#b7791f', red: '#b91c1c',
-            paper: '#f8f5ef' };
+  var C = { ink: '#14181d', ink2: '#3d4650', muted: '#8b949e', rule: '#d8dce1',
+            accent: '#10656b', blue: '#1d4e73', amber: '#a86a12', red: '#b3241f',
+            paper: '#f6f7f8' };
 
   var state = {
     slug: 'jamie', tab: 'today', data: null, lib: null,
@@ -779,7 +779,7 @@
           : '';
         var pending = pw.np_pending;
 
-        var body = bar + '<table class="tbl">' +
+        var table = '<table class="tbl">' +
           '<thead><tr><th>Duration</th><th>Last ' + days + 'd</th>' +
           '<th>Year ago</th><th>Δ</th></tr></thead><tbody>' +
           pc.map(function (r) {
@@ -792,6 +792,15 @@
               (dl == null ? '—' : (dl >= 0 ? '+' : '') + dl + '%') + '</td></tr>';
           }).join('') + '</tbody></table>';
 
+        // Twelve rows of dashes reads as "you have never ridden that long", which is a
+        // different and wrong statement. Until one duration has an NP, the column says
+        // what it is doing instead of pretending to be a table.
+        var body = bar + ((npMode && !hasNp)
+          ? '<div class="empty">Normalised curve still building' +
+            (pending ? ' · ' + pending + ' ride' + (pending === 1 ? '' : 's') + ' to go' : '') +
+            '</div>'
+          : table);
+
         var pcFoot = pw.label
           ? 'Best of ' + pw.now_from + ' to ' + pw.now_to + ', against the same ' +
             days + ' days a year earlier (' + pw.prev_from + ' to ' + pw.prev_to + ').'
@@ -800,8 +809,8 @@
           pcFoot += ' Normalised power: ' + (pw.np_basis ||
             'the 30-second rolling fourth-power mean over every window of that length') +
             '.';
-          // Named rather than left as a table of dashes, which reads as "you have never
-          // ridden that long" instead of "this is still being computed".
+          // Counted, so a curve that is thin at the long end is read as work in progress
+          // rather than as a ceiling.
           if (pending) {
             pcFoot += ' Still building: ' + pending + ' ride' +
               (pending === 1 ? '' : 's') + ' not yet processed, so the longer ' +
@@ -1182,13 +1191,13 @@
       ds.push({
         label: 'Target band', order: 9,
         data: [{ x: x0, y: cp.target_ctl_max }, { x: 0, y: cp.target_ctl_max }],
-        borderColor: 'rgba(29,104,64,.35)', borderWidth: 1, borderDash: [4, 3],
-        pointRadius: 0, fill: '+1', backgroundColor: 'rgba(29,104,64,.09)'
+        borderColor: 'rgba(16,101,107,.35)', borderWidth: 1, borderDash: [4, 3],
+        pointRadius: 0, fill: '+1', backgroundColor: 'rgba(16,101,107,.09)'
       });
       ds.push({
         label: '_band-lo', order: 10,
         data: [{ x: x0, y: cp.target_ctl_min }, { x: 0, y: cp.target_ctl_min }],
-        borderColor: 'rgba(29,104,64,.35)', borderWidth: 1, borderDash: [4, 3],
+        borderColor: 'rgba(16,101,107,.35)', borderWidth: 1, borderDash: [4, 3],
         pointRadius: 0, fill: false
       });
     }
@@ -1210,13 +1219,13 @@
     if ((cp.planned_build || []).length && state.fitSport === 'all') {
       ds.push({
         label: 'Planned', order: 3,
-        data: relObj(cp.planned_build, raceThis), borderColor: C.green, borderWidth: 1.4,
+        data: relObj(cp.planned_build, raceThis), borderColor: C.accent, borderWidth: 1.4,
         borderDash: [3, 3], pointRadius: 0, tension: 0.25, fill: false
       });
     }
     ds.push({
       label: 'This season', order: 1,
-      data: rel(pick3('current'), raceThis), borderColor: C.green, borderWidth: 2.2,
+      data: rel(pick3('current'), raceThis), borderColor: C.accent, borderWidth: 2.2,
       pointRadius: 0, tension: 0.25, fill: false
     });
     if ((cp.target_milestones || []).length && raceThis && state.fitSport === 'all') {
@@ -1260,7 +1269,7 @@
     };
     o.plugins.zoom = zoomOpts();
     o.plugins.zoom.limits = { x: { min: -400, max: 30, minRange: 21 } };
-    o.plugins.vlines = { lines: [{ x: 0, label: 'RACE DAY', color: C.green }] };
+    o.plugins.vlines = { lines: [{ x: 0, label: 'RACE DAY', color: C.accent }] };
     o.plugins.tooltip.callbacks = {
       title: function (items) {
         var v = Math.round(items[0].parsed.x);
@@ -1284,8 +1293,8 @@
     var lc = (d.loadChart || []).slice();
     var t = todayISO();
     var SPORTS = ['Ride', 'Run', 'Swim', 'Strength', 'Other'];
-    var BASE = { Ride: '29,104,64', Run: '192,57,43', Swim: '26,82,118',
-                 Strength: '127,140,141', Other: '176,170,160' };
+    var BASE = { Ride: '16,101,107', Run: '186,60,50', Swim: '29,78,115',
+                 Strength: '120,132,142', Other: '166,172,180' };
     var norm = function (sp) {
       var k = SPORT[sp] || 'other';
       return { bike: 'Ride', run: 'Run', swim: 'Swim', strength: 'Strength' }[k] || 'Other';
@@ -1324,7 +1333,7 @@
     });
     ds.push({
       type: 'line', label: '7d avg load', yAxisID: 'y', order: 2, data: roll,
-      borderColor: 'rgba(24,22,15,.55)', borderWidth: 1.6, borderDash: [5, 3],
+      borderColor: 'rgba(20,24,29,.55)', borderWidth: 1.6, borderDash: [5, 3],
       pointRadius: 0, tension: 0.3, fill: false
     });
     ds.push({
@@ -1334,7 +1343,7 @@
       pointRadius: 3, pointBorderColor: '#fff', pointBorderWidth: 1,
       pointBackgroundColor: lc.map(function (r) {
         var v = r.tsb == null ? 0 : r.tsb;
-        return v > 5 ? '#2e9c8e' : (v >= -20 ? '#c9871f' : '#c0392b');
+        return v > 5 ? '#2aa6a0' : (v >= -20 ? '#c08428' : '#ba3c32');
       })
     });
 
@@ -1344,8 +1353,8 @@
       beforeDatasetsDraw: function (chart) {
         var y1 = chart.scales.y1, ca = chart.chartArea, g = chart.ctx;
         if (!y1) return;
-        [[5, Infinity, 'rgba(46,156,142,.09)'], [0, 5, 'rgba(120,200,140,.10)'],
-         [-20, 0, 'rgba(200,160,60,.08)'], [-Infinity, -20, 'rgba(192,57,43,.09)']]
+        [[5, Infinity, 'rgba(42,166,160,.09)'], [0, 5, 'rgba(110,190,170,.10)'],
+         [-20, 0, 'rgba(196,158,70,.08)'], [-Infinity, -20, 'rgba(186,60,50,.09)']]
           .forEach(function (b) {
             var lo = Math.max(b[0], y1.min), hi = Math.min(b[1], y1.max);
             if (hi <= lo) return;
@@ -1425,7 +1434,7 @@
       label: 'Acclimation', order: 1,
       data: (ha.daily || []).map(function (r) { return { x: doy(r[0]), y: r[1] }; }),
       borderColor: C.red, borderWidth: 1.8, pointRadius: 0, tension: 0.25,
-      fill: true, backgroundColor: 'rgba(185,28,28,.07)'
+      fill: true, backgroundColor: 'rgba(179,36,31,.07)'
     }];
     if ((ha.events || []).length) {
       var byDate = {};
@@ -1518,7 +1527,7 @@
       type: 'line',
       data: {
         datasets: [
-          { label: 'Bike', data: f.Ride, borderColor: C.green, borderWidth: 2,
+          { label: 'Bike', data: f.Ride, borderColor: C.accent, borderWidth: 2,
             pointRadius: 0, tension: 0.2, fill: false, stepped: 'after' },
           { label: 'Run', data: f.Run, borderColor: C.red, borderWidth: 2,
             pointRadius: 0, tension: 0.2, fill: false, stepped: 'after' }
@@ -1601,7 +1610,7 @@
     if (race) {
       var rw = weekStart(race);
       var idx = rows.map(function (r) { return r.ws; }).indexOf(rw);
-      if (idx >= 0) lines.push({ x: idx, label: 'RACE', color: C.green });
+      if (idx >= 0) lines.push({ x: idx, label: 'RACE', color: C.accent });
     }
     o.plugins.vlines = { lines: lines };
 
@@ -1613,7 +1622,7 @@
           label: state.lrMode === 'total' ? 'Week total' : 'Longest run',
           data: rows.map(function (r) { return r.km; }),
           backgroundColor: rows.map(function (r) {
-            return r.pct != null && r.pct > 10 ? 'rgba(183,121,31,.8)' : 'rgba(29,104,64,.75)';
+            return r.pct != null && r.pct > 10 ? 'rgba(168,106,18,.8)' : 'rgba(16,101,107,.75)';
           }),
           borderWidth: 0, borderRadius: 2, barPercentage: 0.7
         }]
@@ -1664,9 +1673,9 @@
         labels: pva.map(function (r, i) { return i; }),
         datasets: [
           { label: 'Planned', data: pva.map(function (r) { return r.planned_tss || 0; }),
-            backgroundColor: 'rgba(154,144,128,.55)', borderWidth: 0, borderRadius: 2 },
+            backgroundColor: 'rgba(139,148,158,.55)', borderWidth: 0, borderRadius: 2 },
           { label: 'Actual', data: pva.map(function (r) { return r.actual_tss || 0; }),
-            backgroundColor: 'rgba(29,104,64,.75)', borderWidth: 0, borderRadius: 2 }
+            backgroundColor: 'rgba(16,101,107,.75)', borderWidth: 0, borderRadius: 2 }
         ]
       },
       options: o
@@ -1738,10 +1747,16 @@
     Object.keys(block).forEach(function (name) {
       if (fs.indexOf(family(name)) < 0) return;
       var s = block[name] || {};
-      var bands = s.bands || null;
+      // `bands: []` and `bands: null` mean the same thing and neither can be trusted on
+      // its own: the publishing sanitiser's Records spec turns a None into an empty
+      // array, so the field that actually says whether the blueprint set a target for
+      // this phase is target_stated. Both are tested, because an empty band list is
+      // nothing to compare against however it was spelled.
+      var bands = (s.bands && s.bands.length) ? s.bands : null;
+      var stated = !!bands && s.target_stated !== false;
       var rows = [];
 
-      if (bands && bands.length) {
+      if (stated) {
         // Percentages are of CLASSIFIED time, so the fallback denominator is the sum of
         // the band minutes - not s.minutes, which includes the sessions that carried no
         // zone data and would quietly shrink every share.
@@ -1759,6 +1774,16 @@
           rows.push({ label: k, minutes: z[k], target: null,
                       actual: tot > 0 ? (z[k] || 0) / tot * 100 : null });
         });
+      } else if (bands) {
+        // No target stated and no raw split published either: the bands still carry real
+        // minutes, so they are shown with their targets dropped rather than the sport
+        // vanishing from a view that is about where its time went.
+        var cls2 = bands.reduce(function (a, b) { return a + (b.minutes || 0); }, 0);
+        bands.forEach(function (b) {
+          rows.push({ label: b.label, minutes: b.minutes, target: null,
+                      actual: b.actual != null ? b.actual
+                        : (cls2 > 0 ? (b.minutes || 0) / cls2 * 100 : null) });
+        });
       }
       if (!rows.length) return;
 
@@ -1773,15 +1798,15 @@
                  // the other, which is worse than showing no basis at all.
                  basis: s.basis || null,
                  coverage: s.coverage == null ? null : s.coverage,
-                 targeted: !!(bands && bands.length), rows: rows });
+                 targeted: stated, rows: rows });
     });
 
     if (!out.length) return null;
+    // No top-level basis map here on purpose: it is the PREFERRED basis and the publisher
+    // falls back per sport, so it disagrees with what was actually measured. It states
+    // 'pace' for Kathryn's runs, which are classified by heart rate (1 of 44 runs carried
+    // pace zones), and 'pace' for Jamie's, which are grade-adjusted pace.
     return { win: win, meta: (zd.windows || {})[win] || {}, phase: zd.phase || null,
-             // Only the PREFERRED basis per sport, used as a last resort when a sport
-             // published none of its own. minCoverage is the threshold below which the
-             // publisher considers a split thin enough to need saying so.
-             basis: zd.basis || d.basis || {},
              sports: out };
   }
 
@@ -1795,17 +1820,6 @@
       return '<p class="hint">No zone time recorded for your focus sports in this ' +
              'window.</p>';
     }
-
-    // The sport's OWN basis first; the preferred map only if it published none.
-    var basisFor = function (s) {
-      if (s.basis) return s.basis;
-      var b = z.basis || {};
-      if (b[s.sport]) return b[s.sport];
-      var k = Object.keys(b).filter(function (x) {
-        return family(x) === family(s.sport);
-      })[0];
-      return k ? b[k] : null;
-    };
 
     var wl = ZONE_WINS.filter(function (o) { return o[0] === z.win; })[0];
     var bits = [];
@@ -1849,10 +1863,10 @@
         }).join('') + '</tbody></table>';
 
       var foot = [];
-      var bas = basisFor(s);
-      // Stated, always: "run by grade-adjusted pace" is the difference between a
-      // believable Z2 share on a hilly week and a meaningless one.
-      if (bas) foot.push(s.sport + ' by ' + bas + '.');
+      // The sport's OWN basis, always stated, and nothing stood in for it: "Run by heart
+      // rate" against "Run by grade-adjusted pace" is the difference between a Z2 share
+      // you can act on and one you cannot, and the two sit side by side across athletes.
+      if (s.basis) foot.push(s.sport + ' by ' + s.basis + '.');
       // A split drawn from two thirds of the time is not the window, and saying 48%
       // Z1-2 without saying that is how a partial figure gets read as the whole one.
       if (s.coverage != null && s.coverage < ZONE_COV_WARN) {
@@ -1913,7 +1927,7 @@
       });
     });
 
-    var HEAT = ['29,104,64', '183,121,31', '185,28,28'];
+    var HEAT = ['16,101,107', '168,106,18', '179,36,31'];
     // Positional, not by name: the first band is the easy one and the last is the
     // hardest whatever they are called, so a three-band bike and a five-zone raw split
     // both read calm to hot without this function knowing a single zone name.

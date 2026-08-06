@@ -1,13 +1,13 @@
 {
-  "name": "Peak — Diamond Peak Coaching",
+  "name": "Peak - Diamond Peak Coaching",
   "short_name": "Peak",
   "description": "Training almanac for Diamond Peak athletes: calendar, trends, session library and race goals.",
   "start_url": "/coach/app.html",
   "scope": "/coach/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#f8f5ef",
-  "theme_color": "#efe9dc",
+  "background_color": "#f6f7f8",
+  "theme_color": "#eceff2",
   "lang": "en-GB",
   "categories": [
     "health",
