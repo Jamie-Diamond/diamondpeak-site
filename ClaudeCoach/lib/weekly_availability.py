@@ -836,6 +836,16 @@ _SPORT_CUES = (
     ("bike_days", re.compile(r"\b(bike|ride|riding|cycl\w*|turbo|spin|brick)\b", re.I)),
     ("run_days",  re.compile(r"\b(run|running|jog\w*|tempo run|long run)\b", re.I)),
 )
+
+# A NEGATED sport mention within a segment ("run not ride", "swim, no turbo"). Stripped
+# before the cues above are matched, otherwise "Fri and Sat I run not ride" reads the
+# "ride" inside "not ride" as a bike cue and adds Fri/Sat to bike_days in the very
+# message that excludes them from it — silently reinstating the day the athlete just
+# said was out (Jamie, "Thu is my only bike day ... Fri and Sat I run not ride").
+_NEG_SPORT_CUE_RE = re.compile(
+    r"\b(?:not|no|n't|without)\s+(?:any\s+)?"
+    r"(?:swim\w*|pool|css|ows|bike|ride[sd]?|riding|cycl\w*|turbo|spin|brick|"
+    r"run\w*|jog\w*)\b", re.I)
 _REST_RE = re.compile(r"\b(rest|off|nothing|no training|day off|travel\w*)\b", re.I)
 # Anything that means "this is not a declaration".
 _DAY_SHAPE_DISQUALIFY_RE = re.compile(
@@ -924,8 +934,9 @@ def parse_day_shape_message(text: str) -> dict:
             if d not in named:
                 named.append(d)
         hit = False
+        cue_seg = _NEG_SPORT_CUE_RE.sub(" ", seg)
         for key, rx in _SPORT_CUES:
-            if rx.search(seg):
+            if rx.search(cue_seg):
                 hit = True
                 for d in days:
                     if d not in out[key]:
