@@ -44,15 +44,30 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy1.outputs.page_url }}
     steps:
+      # timeout is 10 MINUTES by default, and that default was the bug (found 6 Aug
+      # 2026). A deployment here can sit in `deployment_queued` for 20+ minutes and
+      # still be perfectly healthy - one observed run took 27 minutes end to end. When
+      # deploy1 gave up at 10 minutes the retry below fired, and because a Pages
+      # deployment ID is the COMMIT SHA, creating a second deployment for the same
+      # commit cancels the first: the log reads "Created deployment for <sha>" then
+      # "Deployment cancelled" five seconds later. So the retry that exists to survive
+      # transient failures was instead killing deploys that were merely slow, and no
+      # number of re-runs could ever land them. 30 minutes covers the slowest observed
+      # build with headroom; the retries stay for genuine Pages outages, which is what
+      # they were added for.
       - id: deploy1
         uses: actions/deploy-pages@v4
         continue-on-error: true
+        with:
+          timeout: 1800000
       - if: steps.deploy1.outcome == 'failure'
         run: sleep 90
       - id: deploy2
         if: steps.deploy1.outcome == 'failure'
         uses: actions/deploy-pages@v4
         continue-on-error: true
+        with:
+          timeout: 900000
       - if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
         run: sleep 300
       - id: deploy3
