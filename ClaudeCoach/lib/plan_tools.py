@@ -860,6 +860,11 @@ def cmd_validate(args) -> dict:
         ramp_cap=float(cfg.get("max_ctl_ramp_per_week", 5.0)),
         strength_max=(day_rules or {}).get("strength_max"),
         distribution=phase.get("distribution"),
+        # Absolute ride ceiling, same arming pattern as plan_builder.py: `or 300`
+        # keeps this CLI backstop from silently skipping the check for an athlete
+        # with no per-athlete override, which is exactly how it drifted out of
+        # parity with the Sunday generator (4 Aug 2026 RIDE CEILING rule).
+        long_ride_max_min=int(cfg.get("long_ride_max_min") or 300),
     )
     viol = [{"code": v.code, "severity": v.severity, "message": str(v)} for v in rep.violations]
     return {"athlete": args.athlete, "week_start": week_start.isoformat(),
