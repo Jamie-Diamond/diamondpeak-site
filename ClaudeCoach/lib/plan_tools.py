@@ -703,7 +703,12 @@ def last_week_actual_tss(client, today: date | None = None) -> float | None:
     lo = (monday - timedelta(days=7)).isoformat()
     hi = (monday - timedelta(days=1)).isoformat()
     try:
-        hist = client.get_training_history(days=(today - (monday - timedelta(days=7))).days + 1)
+        # get_training_history(days=N) counts back from the REAL today, not `today`, so
+        # the lookback must be anchored there — otherwise evaluating a past week_start
+        # truncates the window and silently under-sums it into a false deload trigger
+        # (8 Aug 2026: --date 2026-08-03 read 495 for a 929 TSS week).
+        anchor = max(today, date.today())
+        hist = client.get_training_history(days=(anchor - (monday - timedelta(days=7))).days + 1)
         return round(sum(float(a.get("icu_training_load") or 0) for a in hist or []
                          if lo <= (a.get("start_date_local") or "")[:10] <= hi), 1)
     except Exception:
