@@ -386,7 +386,7 @@ def run_athlete(slug: str, athlete_cfg: dict) -> None:
     # loss-free in-place fold of a refinement into the rule it extends; refuse any lossy edit.
     text = rules_file.read_text() if rules_file.exists() else ""
     if text != before_text:
-        guarded, drops = _enforce_rule_guards(before_text, text, prefs)
+        guarded, drops = _enforce_rule_guards(before_text, text, prefs, slug=slug)
         if drops:
             if guarded != text:
                 rules_file.write_text(guarded)

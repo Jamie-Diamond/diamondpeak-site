@@ -1632,7 +1632,7 @@ def _apply_rule_capture_guard(slug: str, before_text: str) -> None:
         return
     try:
         prefs = rules_capture.confirmed_preferences(slug)
-        guarded, drops = rules_capture.enforce_rule_guards(before_text, after_text, prefs)
+        guarded, drops = rules_capture.enforce_rule_guards(before_text, after_text, prefs, slug=slug)
     except Exception as e:
         log(f"[{slug}] rule capture guard errored (leaving file as the model wrote it): {e}")
         return
