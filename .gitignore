@@ -1,5 +1,7 @@
 .claude/
 ClaudeCoach/telegram/config.json
+ClaudeCoach/telegram/nutrition_config.json
+ClaudeCoach/telegram/nutrition_bot.log
 ClaudeCoach/telegram/bot.log
 ClaudeCoach/telegram/voices/
 ClaudeCoach/athletes/*/telegram/history.json

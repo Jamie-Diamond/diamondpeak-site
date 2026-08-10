@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to nutrition_config.json (gitignored) and fill in. The token comes from @BotFather via /newbot. This is a SECOND bot, distinct from the coach: its own token, its own long-poll process, its own systemd unit. Same Telegram user id, so chat_id matches config/athletes.json.",
+  "bot_token": "PUT-THE-BOTFATHER-TOKEN-HERE",
+  "chat_id": "6090343263",
+  "athlete": "jamie",
+  "_optional": "Keys below are optional. Absent keys mean that ladder rung reports not_configured rather than failing, which is visible on every item.",
+  "fdc_api_key": "",
+  "nutritionix_app_id": "",
+  "nutritionix_app_key": "",
+  "morning_weigh_in": "06:30",
+  "evening_close_out": "21:00"
+}
