@@ -139,7 +139,7 @@ body{
 .reach h2{font-family:'Libre Baskerville',serif;font-size:25px;line-height:1.16;
   letter-spacing:-.02em;margin:0 0 7px;font-weight:400}
 .reach p{margin:0;font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.5;
-  color:var(--secondary)}
+  color:var(--ink-2)}
 .reach.done h2{color:var(--muted)}
 
 /* Where you are now. No target here: the zones below carry it, and two sources for
@@ -152,7 +152,7 @@ body{
 .fnow-r{display:block;font-family:'DM Mono',monospace;font-size:10px;
   color:var(--muted);margin-top:7px}
 .chips{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
-.chip{font-family:'DM Mono',monospace;font-size:10px;color:var(--secondary);
+.chip{font-family:'DM Mono',monospace;font-size:10px;color:var(--ink-2);
   border:1px solid var(--rule);border-radius:2px;padding:3px 7px}
 .chip b{font-family:'Libre Baskerville',serif;font-size:13px;color:var(--ink);
   margin-right:3px;letter-spacing:-.01em}
@@ -181,8 +181,8 @@ body{
 .mi.insess{border-left-color:var(--accent)}
 /* An estimated item is dimmed as well as tagged, so the eye can sort a page of items
    without reading every tag. */
-.mi.est .mi-n{color:var(--secondary)}
-.dens.limit{color:var(--secondary)}
+.mi.est .mi-n{color:var(--ink-2)}
+.dens.limit{color:var(--ink-2)}
 /* New since the last look. Deliberately NOT red: red on this page means a zone
    cannot be reached, and a colour with two meanings has none. */
 .mi.fresh{border-left-color:var(--blue)}
@@ -195,13 +195,13 @@ body{
 .dtbl td.nw{white-space:nowrap}
 .dens{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.1em;
   text-transform:uppercase;border:1px solid var(--rule);border-radius:2px;
-  padding:2px 5px;white-space:nowrap;color:var(--secondary)}
+  padding:2px 5px;white-space:nowrap;color:var(--ink-2)}
 .dens.high{border-color:var(--accent);color:var(--accent)}
-.dens.avoid{border-color:#a4472f;color:#a4472f}
+.dens.avoid{border-color:var(--red);color:var(--red)}
 .dens.met{color:var(--muted)}
 .mut{color:var(--muted)}
 .prov{padding:11px 15px 4px;margin:0;font-family:'DM Sans',sans-serif;font-size:12.5px;
-  color:var(--secondary);border-top:1px solid var(--rule-soft)}
+  color:var(--ink-2);border-top:1px solid var(--rule-soft)}
 
 /* ── food: zone rows ─────────────────────────────────────────────────────────
    A ceiling is NOT a progress bar. Fibre before a long session is a limit, so a low
@@ -218,28 +218,37 @@ body{
   text-transform:uppercase;color:var(--muted);font-style:normal;margin-top:1px}
 .zt{position:relative;height:7px;border-radius:4px;background:var(--rule-soft);
   display:block;overflow:visible}
+/* Fill colour follows the spec's rule and the class names the JS actually emits.
+   Both were wrong before: the base used var(--green), which does not exist in this
+   palette (it is --accent), and the states were .low/.over while the JS emits
+   .good/.bad. An undefined variable resolves to nothing and an unmatched class does
+   nothing, so no bar ever got a fill at all.
+   Grey is the default INCLUDING ahead or behind pace, because being ahead on fat at
+   2pm is a normal day. Green only when a zone is satisfied, red only when a ceiling
+   is passed. min-width keeps a tiny amount visible rather than showing an empty
+   track that looks broken. */
 .zt i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;
-  background:var(--green);display:block}
-.zt i.low{background:var(--muted)}
-.zt i.over{background:#a4472f}
-.zt .zmark{position:absolute;top:-3px;width:1px;height:13px;background:var(--secondary);
+  background:var(--muted);display:block;min-width:2px}
+.zt i.good{background:var(--accent)}
+.zt i.bad{background:var(--red)}
+.zt .zmark{position:absolute;top:-3px;width:1px;height:13px;background:var(--ink-2);
   opacity:.55}
 .zt-ceil{background:repeating-linear-gradient(90deg,var(--rule-soft) 0 4px,transparent 4px 7px)}
-.zt-ceil i{background:var(--secondary);opacity:.5}
-.zt-ceil .zlim{position:absolute;right:0;top:-4px;width:2px;height:15px;
-  background:#a4472f}
+.zt-ceil i{background:var(--ink-2);opacity:.5}
+.zt-ceil .zlim{position:absolute;right:0;top:-5px;width:2px;height:17px;
+  background:var(--red)}
 .zv{text-align:right;font-family:'DM Mono',monospace;font-size:11px;line-height:1.3}
 .zv b{display:block;font-family:'Libre Baskerville',serif;font-size:15px;font-weight:400;
   letter-spacing:-.01em}
 .zv span{display:block;color:var(--muted);font-size:8.5px;white-space:nowrap}
 .zv span.good{color:var(--accent)}
-.zv span.bad{color:#a4472f}
+.zv span.bad{color:var(--red)}
 /* The pace marker: where a macro would sit if it tracked calories exactly. Dashed and
    grey on purpose - it says what to reach for, never that anything is wrong. */
-.zt .zpace{position:absolute;top:-4px;width:0;height:15px;
-  border-left:1px dashed var(--secondary);opacity:.7}
+.zt .zpace{position:absolute;top:-5px;width:0;height:17px;
+  border-left:2px dashed var(--ink);opacity:.45}
 .notelist{margin:0;padding:10px 15px 4px 30px;font-family:'DM Sans',sans-serif;
-  font-size:12px;color:var(--secondary)}
+  font-size:12px;color:var(--ink-2)}
 .notelist li{margin:0 0 4px}
 /* The Settings copy of the evidence notes: read once by whoever wants them, rather
    than every day by whoever does not. */
@@ -247,10 +256,10 @@ body{
 .notelist.about li{margin:0 0 7px}
 .notelist.about li:last-child{margin-bottom:0}
 .plantlist{padding:2px 15px 12px;font-family:'DM Mono',monospace;font-size:10.5px;
-  color:var(--secondary);line-height:1.7}
+  color:var(--ink-2);line-height:1.7}
 .proj{padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:13px;
   border-top:1px solid var(--rule-soft);margin:0}
-.proj.miss{color:#8d3f2a}
+.proj.miss{color:var(--red)}
 
 /* ── whobar: one line, not three tabs ────────────────────────────────────── */
 /* The athlete segmented control moved into the entry screen. Which athlete you
@@ -903,6 +912,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=19" defer></script>
+<script src="app.js?v=20" defer></script>
 </body>
 </html>
