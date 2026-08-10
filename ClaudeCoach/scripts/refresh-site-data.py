@@ -1755,7 +1755,7 @@ def main():
                 if "wrote" in line and slug:
                     _PUBLISHED.append(f"ClaudeCoach/public/nutrition-{slug}.json")
         except Exception as e:
-            log(f"Nutrition publish warning: {e} — app keeps last copy")
+            log(f"Nutrition publish warning: {e}, app keeps last copy")
 
         log("Fetching live data via IcuClient...")
         try:
