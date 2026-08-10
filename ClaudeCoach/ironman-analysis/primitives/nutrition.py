@@ -62,7 +62,19 @@ RUN_TARGET_G_HR = 60
 
 def fuel_target(avg_g_hr, race_target_g_hr) -> int:
     """Prescribed carbs (g/hr) for >90-min sessions, gap-closing toward the race
-    target. avg_g_hr is the athlete's recent average intake (None if no logs)."""
+    target. avg_g_hr is the athlete's recent average intake (None if no logs).
+
+    NEVER prescribes below what the athlete has already demonstrated. Without that
+    floor the ceiling turns the ramp into a brake: with the run target at 60 g/hr and
+    a recent run average of 64, this returned 60 - asking for LESS than he did on his
+    last long run. Jamie spotted it on 10 Aug 2026 ("why would you prescribe less than
+    last week?"). A gap-closing ramp that can move an athlete backwards is not closing
+    a gap.
+
+    The demonstrated floor is rounded DOWN to the nearest 5 so it stays a floor rather
+    than becoming a sneaky increment, and it still respects the ceiling: if the target
+    itself is below the demonstrated rate, the target is what is stale and should be
+    revisited rather than silently overridden here."""
     rt = float(race_target_g_hr)
     if avg_g_hr is None:
         base = min(_CAREFUL_FROM, rt)
@@ -71,7 +83,11 @@ def fuel_target(avg_g_hr, race_target_g_hr) -> int:
     else:
         base = avg_g_hr + _CAREFUL_STEP
     target = round(base / 5) * 5                      # round to nearest 5
-    return int(max(min(target, rt), min(_MIN_USEFUL, rt)))
+    out = int(max(min(target, rt), min(_MIN_USEFUL, rt)))
+    if avg_g_hr is not None:
+        demonstrated = int(float(avg_g_hr) // 5 * 5)
+        out = max(out, demonstrated)
+    return out
 
 
 def run_fuel_target(avg_g_hr, run_target_g_hr=None) -> int:
