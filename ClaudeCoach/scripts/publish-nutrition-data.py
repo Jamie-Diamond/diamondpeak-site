@@ -46,7 +46,8 @@ import nutrition_engine as NE       # noqa: E402
 import nutrition_reconcile as RC    # noqa: E402
 import plants as PL                 # noqa: E402
 from nutrition_store import NutritionStore  # noqa: E402
-from primitives.nutrition import (fuel_target, recent_avg_g_hr,  # noqa: E402
+from primitives.nutrition import (fuel_target, last_ride_g_hr,  # noqa: E402
+                                  last_run_g_hr, recent_avg_g_hr,
                                   recent_run_avg_g_hr, run_fuel_target)
 
 RUN_SPORTS_FUEL = ("Run", "VirtualRun", "TrailRun")
@@ -76,10 +77,11 @@ def _prescribed_g_hr(sport: str, session_log, cfg: dict) -> float:
     if sport in RUN_SPORTS_FUEL:
         avg = recent_run_avg_g_hr(session_log)
         avg = avg[0] if isinstance(avg, tuple) else avg
-        return float(run_fuel_target(avg))
+        return float(run_fuel_target(avg, last_g_hr=last_run_g_hr(session_log)))
     avg = recent_avg_g_hr(session_log)
     avg = avg[0] if isinstance(avg, tuple) else avg
-    return float(fuel_target(avg, cfg.get("nutrition_target_g_hr") or 90))
+    return float(fuel_target(avg, cfg.get("nutrition_target_g_hr") or 90,
+                             last_g_hr=last_ride_g_hr(session_log)))
 
 
 def build(slug: str, today: date) -> dict:

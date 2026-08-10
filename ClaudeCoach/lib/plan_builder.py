@@ -38,7 +38,8 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.planned_tss import render_workout, planned_session_tss  # noqa: E402
-from primitives.nutrition import (fuel_target, recent_avg_g_hr,          # noqa: E402
+from primitives.nutrition import (fuel_target, last_ride_g_hr,           # noqa: E402
+                                  last_run_g_hr, recent_avg_g_hr,
                                   recent_run_avg_g_hr, run_fuel_target,
                                   RUN_TARGET_G_HR, LONG_RUN_MIN)
 from primitives.validate_plan import validate_week             # noqa: E402
@@ -70,12 +71,23 @@ def _blueprint(slug):
 def _fuel_for(slug, cfg):
     """(ride_g_hr, run_g_hr). Two numbers because the two sports are at different
     places: the bike ramps toward the athlete's race target off a LONG-ride window,
-    the run ramps toward RUN_TARGET_G_HR off its own run window. Blending them would
-    let a low run average drag the bike prescription (and vice versa)."""
+    the run ramps toward the run TRAINING target off its own run window. Blending them
+    would let a low run average drag the bike prescription (and vice versa).
+
+    Both pass the MOST RECENT qualifying session as well as the average. Without it the
+    ramp climbed off a six-session mean that creeps about 1 g/hr per session, so it could
+    prescribe below what the athlete did last week and then sit still for weeks. The
+    session notes the coach writes and the figure the nutrition bot shows come from this
+    same call, so they cannot disagree."""
     sl = BASE / "athletes" / slug / "session-log.json"
     log = json.loads(sl.read_text()) if sl.exists() else []
-    ride = fuel_target(recent_avg_g_hr(log), int(cfg.get("nutrition_target_g_hr") or 90))
-    run = run_fuel_target(recent_run_avg_g_hr(log), cfg.get("nutrition_run_target_g_hr"))
+    if isinstance(log, dict):
+        log = log.get("sessions") or log.get("entries") or []
+    ride = fuel_target(recent_avg_g_hr(log), int(cfg.get("nutrition_target_g_hr") or 90),
+                      last_g_hr=last_ride_g_hr(log))
+    run = run_fuel_target(recent_run_avg_g_hr(log),
+                          cfg.get("nutrition_run_target_g_hr"),
+                          last_g_hr=last_run_g_hr(log))
     return ride, run
 
 

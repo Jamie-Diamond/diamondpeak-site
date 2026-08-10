@@ -575,6 +575,59 @@ check("the basis names the ramp rather than a hardcoded number",
 check("no in-session carbs still splits cleanly",
       N.split_carbs({"carb_g": 400})["out_of_session_g"] == 400)
 
+# 25) The shared fuelling ramp. These live here rather than in the primitive's own tests
+#     because the nutrition bot is now a consumer of them, and the failures were found
+#     through it.
+import os                                                              # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "ironman-analysis"))
+from primitives import nutrition as NU                                 # noqa: E402
+
+check("race-day run figure is unchanged at 60", NU.RUN_TARGET_G_HR == 60)
+check("training ceiling is separate and higher", NU.RUN_TRAINING_TARGET_G_HR == 90)
+check("training is the DEFAULT ceiling for a prescription, not the race figure",
+      NU.run_fuel_target(85) > 60)
+
+# The bug Jamie caught: prescribing below last week.
+check("never prescribes below the last long run",
+      NU.run_fuel_target(57.2, last_g_hr=64.0) > 64)
+check(f"his real numbers give 70 g/hr "
+      f"(got {NU.run_fuel_target(57.2, last_g_hr=64.0)})",
+      NU.run_fuel_target(57.2, last_g_hr=64.0) == 70)
+
+# The second bug: ramping off the trailing average stalled it. A six-session mean creeps
+# ~1 g/hr per session, so it sat at 65 for seven blocks and a raised ceiling did nothing.
+a, l, seen = 57.2, 64.0, []
+for _ in range(6):
+    t = NU.run_fuel_target(a, last_g_hr=l)
+    seen.append(t)
+    a, l = (a * 5 + t) / 6, t
+check(f"the ramp actually climbs rather than stalling (got {seen})",
+      len(set(seen)) >= 4 and seen[-1] >= 85)
+check("and reaches the training ceiling within his remaining long runs",
+      max(seen) >= NU.RUN_TRAINING_TARGET_G_HR - 5)
+
+# Guards that must survive both changes.
+check("no fuelling history starts at the useful floor, not the ceiling",
+      NU.run_fuel_target(None) == 40)
+check("one bad-gut session does not drop the prescription, the average holds",
+      NU.run_fuel_target(65, last_g_hr=30) >= 65)
+check("an explicit race ceiling is still respected",
+      NU.run_fuel_target(57.2, NU.RUN_TARGET_G_HR, 64.0) == 60)
+check("the ride ramp still caps at the race target",
+      NU.fuel_target(71.8, 90, last_g_hr=89.6) == 90)
+check("the documented aggressive-ramp case is unchanged",
+      NU.fuel_target(20, 70) == 45)
+check("last_run_g_hr returns the most recent, not the mean",
+      NU.last_run_g_hr([
+          {"sport": "Run", "duration_min": 120, "nutrition_g_carb": 100,
+           "date": "2026-07-01"},
+          {"sport": "Run", "duration_min": 120, "nutrition_g_carb": 200,
+           "date": "2026-08-01"}]) == 100.0)
+check("a short run does not qualify as a fuelling data point",
+      NU.last_run_g_hr([{"sport": "Run", "duration_min": 30,
+                         "nutrition_g_carb": 30, "date": "2026-08-01"}]) is None)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

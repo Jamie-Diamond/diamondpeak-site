@@ -96,18 +96,25 @@ def fuel_target(avg_g_hr, race_target_g_hr, last_g_hr=None) -> int:
     athlete has demonstrated, the CEILING is what is stale and should be revisited
     deliberately rather than silently overridden here."""
     rt = float(race_target_g_hr)
-    if avg_g_hr is None:
+    # The ramp climbs from the HIGHER of the trailing average and the most recent
+    # session. Using the average alone stalled it: a six-session mean creeps up about
+    # 1 g/hr per session, so after a 64 g/hr long run it sat at 65 for seven blocks and
+    # a raised ceiling achieved nothing. Progressive overload works from what was last
+    # actually done; the average is only there to stop one freak session setting the
+    # pace, which it still does whenever it is the higher of the two.
+    basis = None
+    if avg_g_hr is not None:
+        basis = float(avg_g_hr)
+    if last_g_hr is not None:
+        basis = max(basis if basis is not None else 0.0, float(last_g_hr))
+    if basis is None:
         base = min(_CAREFUL_FROM, rt)
-    elif avg_g_hr < _CAREFUL_FROM:
-        base = min(float(_CAREFUL_FROM), avg_g_hr + _AGGRESSIVE_STEP)
+    elif basis < _CAREFUL_FROM:
+        base = min(float(_CAREFUL_FROM), basis + _AGGRESSIVE_STEP)
     else:
-        base = avg_g_hr + _CAREFUL_STEP
+        base = basis + _CAREFUL_STEP
     target = round(base / 5) * 5                      # round to nearest 5
     out = int(max(min(target, rt), min(_MIN_USEFUL, rt)))
-    if avg_g_hr is not None:
-        out = max(out, int(float(avg_g_hr) // 5 * 5))
-    if last_g_hr is not None:
-        out = max(out, int(round(float(last_g_hr) / 5) * 5))
     return int(min(out, rt)) if rt else out
 
 

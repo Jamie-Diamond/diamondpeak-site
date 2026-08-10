@@ -412,8 +412,9 @@ class Context:
         toward the race figure. Never restated here, or the bot and the coach would
         disagree about the same session."""
         sys.path.insert(0, str(BASE / "ironman-analysis"))
-        from primitives.nutrition import (fuel_target, recent_avg_g_hr,
-                                          recent_run_avg_g_hr, run_fuel_target)
+        from primitives.nutrition import (fuel_target, last_ride_g_hr, last_run_g_hr,
+                                          recent_avg_g_hr, recent_run_avg_g_hr,
+                                          run_fuel_target)
         slog_path = self.athlete_dir / "session-log.json"
         slog = []
         if slog_path.exists():
@@ -426,10 +427,11 @@ class Context:
         if sport in ("Run", "VirtualRun", "TrailRun"):
             avg = recent_run_avg_g_hr(slog)
             avg = avg[0] if isinstance(avg, tuple) else avg
-            return float(run_fuel_target(avg))
+            return float(run_fuel_target(avg, last_g_hr=last_run_g_hr(slog)))
         avg = recent_avg_g_hr(slog)
         avg = avg[0] if isinstance(avg, tuple) else avg
-        return float(fuel_target(avg, self.athlete.get("nutrition_target_g_hr") or 90))
+        return float(fuel_target(avg, self.athlete.get("nutrition_target_g_hr") or 90,
+                                 last_g_hr=last_ride_g_hr(slog)))
 
     def weight_readings(self, day: date, days: int = 14) -> list:
         """Store readings plus intervals.icu, with the sweat weigh-ins filtered out.
