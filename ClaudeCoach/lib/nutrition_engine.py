@@ -1177,3 +1177,65 @@ def classify_icu_weights(rows, existing_by_date=None) -> list:
                                     f"{baseline:.1f} kg baseline"),
                     "source": "intervals.icu", "body_fat_pct": fat})
     return out
+
+
+# --- in-session fuelling, assessed separately (Jamie's call, 10 Aug 2026) -----
+
+def in_session_requirement(*, session_minutes: float, carbs_in_session_g: float,
+                           target_g_hr: float, alert_g_hr: float = None,
+                           sport: str = "") -> dict | None:
+    """Assess fuel taken DURING a session against a g/hr target, on its own terms.
+
+    Why this exists, in Jamie's words: "I can over carb in the day and under in the run
+    and it looks fine." He is right, and it was a real blind spot. In-session fuel was
+    TAGGED and PROTECTED but never ASSESSED, so it counted toward the day's carb zone
+    and a satisfied day total could hide a badly under-fuelled long run. A day figure
+    and a session figure answer different questions: the day is an energy budget, the
+    session is a delivery RATE, and a rate cannot be rescued by eating more at dinner.
+
+    `target_g_hr` is passed in rather than computed here, because the prescription
+    already exists in ironman-analysis/primitives/nutrition.py as a gap-closing ramp -
+    fuel_target for rides, run_fuel_target for runs, which is ceilinged near 60 g/hr and
+    NOT the 90 g/hr race-bike figure. Restating either would let the two drift.
+
+    Returns None for a session too short to need fuelling, so nothing is flagged for a
+    45-minute swim."""
+    hours = (session_minutes or 0) / 60.0
+    if hours <= 0 or session_minutes < 90:
+        return None
+    actual = (carbs_in_session_g or 0) / hours
+    required = target_g_hr * hours
+    alert = alert_g_hr if alert_g_hr is not None else target_g_hr * 0.85
+    if actual >= target_g_hr:
+        verdict = "on_target"
+    elif actual >= alert:
+        verdict = "acceptable"
+    else:
+        verdict = "under"
+    return {
+        "sport": sport,
+        "session_minutes": round(session_minutes),
+        "carbs_g": round(carbs_in_session_g or 0),
+        "g_per_hr": round(actual, 1),
+        "target_g_hr": round(target_g_hr, 1),
+        "alert_g_hr": round(alert, 1),
+        "required_g": round(required),
+        "shortfall_g": max(0, round(required - (carbs_in_session_g or 0))),
+        "verdict": verdict,
+        # A rate, not a budget: this cannot be made good later in the day, which is the
+        # whole reason it is assessed apart from the day's carb zone.
+        "basis": "gap-closing ramp from the athlete's recent logged sessions",
+    }
+
+
+def split_carbs(totals: dict) -> dict:
+    """Day carbs split into in-session and out-of-session.
+
+    The day zone legitimately covers BOTH - fuel eaten on a run is real energy - but the
+    two must be visible apart, or a large day total reads as success while the session
+    inside it was under-fuelled."""
+    total = float(totals.get("carb_g") or 0)
+    in_sess = float(totals.get("in_session_carb_g") or 0)
+    return {"total_g": round(total, 1), "in_session_g": round(in_sess, 1),
+            "out_of_session_g": round(max(0.0, total - in_sess), 1),
+            "in_session_share": (round(in_sess / total, 3) if total else 0.0)}

@@ -144,6 +144,10 @@ def fmt_totals(totals: dict, z: dict) -> str:
                      f"not counted toward protein)")
     if totals.get("dietary_sodium_mg"):
         lines.append(f"Sodium {round(totals['dietary_sodium_mg']):,} mg (no target set)")
+    if totals.get("in_session_carb_g"):
+        split = NE.split_carbs(totals)
+        lines.append(f"_of which {split['in_session_g']:.0f} g carbs in-session, "
+                     f"{split['out_of_session_g']:.0f} g out._")
     if totals.get("in_session_from_coach"):
         lines.append(f"_Includes {round(totals['in_session_carb_g'])} g of ride fuel "
                      f"from the coach bot (energy derived from carbs)._")
@@ -400,6 +404,32 @@ class Context:
         except Exception as exc:
             log(f"icu profile failed, falling back to server date: {exc}")
         return date.today()
+
+    def prescribed_g_hr(self, sport: str) -> float:
+        """READ the prescribed in-session rate from the existing fuelling primitives.
+
+        Runs use run_fuel_target (ceilinged near 60 g/hr); rides use fuel_target, ramping
+        toward the race figure. Never restated here, or the bot and the coach would
+        disagree about the same session."""
+        sys.path.insert(0, str(BASE / "ironman-analysis"))
+        from primitives.nutrition import (fuel_target, recent_avg_g_hr,
+                                          recent_run_avg_g_hr, run_fuel_target)
+        slog_path = self.athlete_dir / "session-log.json"
+        slog = []
+        if slog_path.exists():
+            try:
+                slog = json.loads(slog_path.read_text())
+                if isinstance(slog, dict):
+                    slog = slog.get("sessions") or slog.get("entries") or []
+            except json.JSONDecodeError:
+                slog = []
+        if sport in ("Run", "VirtualRun", "TrailRun"):
+            avg = recent_run_avg_g_hr(slog)
+            avg = avg[0] if isinstance(avg, tuple) else avg
+            return float(run_fuel_target(avg))
+        avg = recent_avg_g_hr(slog)
+        avg = avg[0] if isinstance(avg, tuple) else avg
+        return float(fuel_target(avg, self.athlete.get("nutrition_target_g_hr") or 90))
 
     def weight_readings(self, day: date, days: int = 14) -> list:
         """Store readings plus intervals.icu, with the sweat weigh-ins filtered out.
@@ -821,6 +851,37 @@ def commit_one(ctx: Context, item: dict, day: date) -> None:
     NR.cache_resolved(ctx.store, item)
 
 
+def in_session_line(ctx: Context, day: date) -> str:
+    """The in-run verdict, stated apart from the day's macros.
+
+    A day carb total is an energy budget; a session is a delivery RATE. Reporting only
+    the day figure let a big total hide an under-fuelled long run, which is a rate
+    problem dinner cannot fix."""
+    rec = RC.reconcile(ctx.store, ctx.athlete_dir, day)
+    sessions = rec.get("sessions") or []
+    longest = max(sessions, key=lambda x: float(x.get("duration_min") or 0), default=None)
+    if not longest or float(longest.get("duration_min") or 0) < 90:
+        return ""
+    try:
+        target = ctx.prescribed_g_hr(longest.get("sport") or "")
+    except Exception as exc:
+        log(f"prescribed rate unavailable: {exc}")
+        return ""
+    ins = NE.in_session_requirement(
+        session_minutes=float(longest["duration_min"]),
+        carbs_in_session_g=(rec["fuel"].get("carb_g") or 0),
+        target_g_hr=target,
+        alert_g_hr=ctx.athlete.get("nutrition_alert_threshold_g_hr"),
+        sport=longest.get("sport") or "")
+    if not ins:
+        return ""
+    tail = (" _Under the prescribed rate, and a rate cannot be made up later._"
+            if ins["verdict"] == "under" else "")
+    return (f"\n\n*In-run:* {ins['g_per_hr']:.0f} g/hr of {ins['target_g_hr']:.0f} "
+            f"over {ins['session_minutes']} min"
+            + (f", {ins['shortfall_g']} g short" if ins["shortfall_g"] else "") + tail)
+
+
 def today_block(ctx: Context, day: date) -> str:
     z = ctx.zones_for(day)
     # merged_totals, never store.day_totals: fuel logged in the COACH bot is otherwise
@@ -833,7 +894,7 @@ def today_block(ctx: Context, day: date) -> str:
     proj = NE.project({k: totals.get(k) for k in
                        ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g")})
     flags = NE.zone_flags(z, proj)
-    return fmt_totals(totals, z) + fmt_flags(flags)
+    return fmt_totals(totals, z) + fmt_flags(flags) + in_session_line(ctx, day)
 
 
 def handle_command(ctx: Context, cmd: str, day: date, token, chat_id) -> None:

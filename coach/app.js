@@ -2315,7 +2315,7 @@
      Colour carries meaning and nothing else. Grey is the default INCLUDING ahead or
      behind pace, because being ahead on fat at 2pm is what a normal day looks like.
      Red is earned only when a macro cannot reach its zone or has passed a ceiling. */
-  function zoneRow(label, consumed, z, pacePct, req) {
+  function zoneRow(label, consumed, z, pacePct, req, extra) {
     if (!z) return '';
     var c = Math.round(consumed || 0), lo = Math.round(z.low), hi = Math.round(z.high);
     var bias = z.bias, ceiling = bias === 'ceiling', floor = bias === 'floor';
@@ -2345,7 +2345,7 @@
       ? '<b class="zpace" style="left:' + Math.min(100, pacePct).toFixed(1) + '%"></b>' : '';
     return '<div class="zrow">' +
       '<span class="zl">' + esc(label) +
-        '<em>' + esc(bias) + '</em></span>' +
+        '<em>' + esc(extra || bias) + '</em></span>' +
       '<span class="zt' + (ceiling ? ' zt-ceil' : '') + '">' +
         '<i class="' + tone + '" style="width:' + pct.toFixed(1) + '%"></i>' +
         (ceiling ? '<b class="zlim"></b>' : '') + marker + '</span>' +
@@ -2396,12 +2396,38 @@
       '<div class="zones">' +
       zoneRow('Protein', t.protein_g, z && z.protein_g, day.pace_pct,
               r && r.macros.protein_g) +
-      zoneRow('Carbs', t.carb_g, z && z.carb_g, day.pace_pct, r && r.macros.carb_g) +
+      zoneRow('Carbs', t.carb_g, z && z.carb_g, day.pace_pct, r && r.macros.carb_g,
+              day.carb_split && day.carb_split.in_session_g
+                ? Math.round(day.carb_split.in_session_g) + ' g in-run' : '') +
       zoneRow('Fat', t.fat_g, z && z.fat_g, day.pace_pct, r && r.macros.fat_g) +
       zoneRow('Fibre', t.fibre_g, z && z.fibre_g, day.pace_pct,
               r && r.macros.fibre_g) +
       '</div>',
       );
+
+    /* 3b. In-run fuelling, assessed apart from the day. Jamie: "I can over carb in the
+           day and under in the run and it looks fine." A rate cannot be made good at
+           dinner, so it gets its own verdict rather than living inside the carb zone. */
+    var ins = day.in_session;
+    if (ins) {
+      var vlabel = { on_target: 'on target', acceptable: 'acceptable', under: 'under' };
+      h += card('In-run fuelling',
+        '<div class="figures in-card">' +
+        fig(ins.g_per_hr.toFixed(0), 'g/hr taken', ins.sport + ', ' +
+            ins.session_minutes + ' min') +
+        fig(ins.target_g_hr.toFixed(0), 'g/hr prescribed', 'ramping from your logs') +
+        fig(ins.shortfall_g ? '-' + ins.shortfall_g : 'ok', 'shortfall',
+            ins.shortfall_g ? 'grams over the session' : 'rate met',
+            ins.verdict === 'under' ? 'neg' : (ins.verdict === 'on_target' ? 'pos' : '')) +
+        '</div>' +
+        '<p class="insnote' + (ins.verdict === 'under' ? ' miss' : '') + '">' +
+        esc(ins.verdict === 'under'
+            ? 'Under the prescribed rate. This is a delivery rate, not a budget, so it '
+              + 'cannot be recovered by eating more later.'
+            : 'Rate ' + (vlabel[ins.verdict] || ins.verdict) +
+              '. Counted in the day total as well, but judged on its own.') +
+        '</p>');
+    }
 
     /* 4. What the rest of the day has to look like. Required density against a normal
           meal's density is what turns grams into "high protein, low fat". */

@@ -40,10 +40,16 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "lib"))
 
+sys.path.insert(0, str(BASE / "ironman-analysis"))
+
 import nutrition_engine as NE       # noqa: E402
 import nutrition_reconcile as RC    # noqa: E402
 import plants as PL                 # noqa: E402
 from nutrition_store import NutritionStore  # noqa: E402
+from primitives.nutrition import (fuel_target, recent_avg_g_hr,  # noqa: E402
+                                  recent_run_avg_g_hr, run_fuel_target)
+
+RUN_SPORTS_FUEL = ("Run", "VirtualRun", "TrailRun")
 
 PUBLIC = BASE / "public"
 WINDOW_DAYS = 28          # enough for the rolling views and a block history
@@ -60,11 +66,36 @@ def athlete_enabled(slug: str) -> bool:
         return False
 
 
+def _prescribed_g_hr(sport: str, session_log, cfg: dict) -> float:
+    """The prescribed in-session rate, READ from the existing fuelling primitives.
+
+    Runs use run_fuel_target, ceilinged near 60 g/hr; rides use fuel_target, ramping
+    toward the athlete's race figure. Restating either number here would let the bot and
+    the coach disagree about the same session, which is the divergence this project has
+    refused everywhere else."""
+    if sport in RUN_SPORTS_FUEL:
+        avg = recent_run_avg_g_hr(session_log)
+        avg = avg[0] if isinstance(avg, tuple) else avg
+        return float(run_fuel_target(avg))
+    avg = recent_avg_g_hr(session_log)
+    avg = avg[0] if isinstance(avg, tuple) else avg
+    return float(fuel_target(avg, cfg.get("nutrition_target_g_hr") or 90))
+
+
 def build(slug: str, today: date) -> dict:
     athlete_dir = BASE / "athletes" / slug
     store = NutritionStore(athlete_dir)
     profile = json.loads((athlete_dir / "profile.json").read_text())
     table = PL.SpeciesTable()
+    cfg_all = json.loads((BASE / "config" / "athletes.json").read_text())
+    cfg = cfg_all.get(slug, {})
+    slog_path = athlete_dir / "session-log.json"
+    try:
+        slog = json.loads(slog_path.read_text()) if slog_path.exists() else []
+        if isinstance(slog, dict):
+            slog = slog.get("sessions") or slog.get("entries") or []
+    except json.JSONDecodeError:
+        slog = []
 
     start = today - timedelta(days=WINDOW_DAYS - 1)
     days_raw = store.get_range(start, today)
@@ -84,6 +115,22 @@ def build(slug: str, today: date) -> dict:
         # produces plausible wrong numbers rather than visible errors, and the page has
         # no way to signal that it guessed.
         requirement = NE.meal_requirement(totals, z) if z else None
+        # In-session fuel assessed on its OWN terms, as a RATE. A day carb zone is an
+        # energy budget and can look satisfied while the session inside it was badly
+        # under-fuelled, which a rate cannot recover from at dinner.
+        rec_fuel = RC.reconcile(store, athlete_dir, day)
+        sessions = rec_fuel.get("sessions") or []
+        longest = max(sessions, key=lambda x: float(x.get("duration_min") or 0),
+                      default=None)
+        in_session = None
+        if longest and float(longest.get("duration_min") or 0) >= 90:
+            in_session = NE.in_session_requirement(
+                session_minutes=float(longest["duration_min"]),
+                carbs_in_session_g=(rec_fuel["fuel"].get("carb_g") or 0),
+                target_g_hr=_prescribed_g_hr(longest.get("sport") or "", slog, cfg),
+                alert_g_hr=cfg.get("nutrition_alert_threshold_g_hr"),
+                sport=longest.get("sport") or "")
+        carb_split = NE.split_carbs(totals)
         # Meals are inferred from the clock, because nothing asks the athlete to
         # categorise. Stated as inferred so an odd bucket is not read as a data error.
         meals = {"breakfast": [], "lunch": [], "snacks": [], "dinner": []}
@@ -136,6 +183,8 @@ def build(slug: str, today: date) -> dict:
             "flags": [{"type": f.get("type"), "severity": f.get("severity")}
                       for f in (rec.get("flags") or [])],
             "requirement": requirement,
+            "in_session": in_session,
+            "carb_split": carb_split,
             "meals": meals,
             "meals_inferred_from_clock": True,
             # Pace: where each macro would sit if it tracked calories exactly. This

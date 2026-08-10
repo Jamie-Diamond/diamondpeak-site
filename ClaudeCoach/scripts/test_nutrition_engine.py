@@ -544,6 +544,37 @@ merged = [{"type": "weight", "date": r["date"], "value": r["value"],
 rm = N.rolling_weight_kg(merged, on=date(2026, 8, 10), days=14)
 check(f"rolling mean from the filtered set is ~83.4 (got {rm})", 83.2 <= rm <= 83.6)
 
+# 24) In-session fuel assessed as a RATE, apart from the day's carb budget. Jamie:
+#     "I can over carb in the day and under in the run and it looks fine." A day zone
+#     is a budget; a session is a delivery rate that dinner cannot fix.
+big_day = {"carb_g": 700, "in_session_carb_g": 60, "kcal": 4200}
+sp = N.split_carbs(big_day)
+check("the carb split separates in-run from the rest",
+      sp["in_session_g"] == 60 and sp["out_of_session_g"] == 640)
+ins = N.in_session_requirement(session_minutes=165, carbs_in_session_g=60,
+                               target_g_hr=40, sport="Run")
+check("a 700 g carb day still reports the run as under-fuelled",
+      ins["verdict"] == "under")
+check("the shortfall is in grams over the session", ins["shortfall_g"] == 50)
+check("the rate is reported, not just the total", ins["g_per_hr"] == 21.8)
+ok = N.in_session_requirement(session_minutes=165, carbs_in_session_g=120,
+                              target_g_hr=40, sport="Run")
+check("meeting the rate reads on_target", ok["verdict"] == "on_target")
+check("and reports no shortfall", ok["shortfall_g"] == 0)
+mid = N.in_session_requirement(session_minutes=165, carbs_in_session_g=100,
+                               target_g_hr=40, alert_g_hr=34, sport="Run")
+check("between the alert and the target reads acceptable", mid["verdict"] == "acceptable")
+check("a session under 90 min is not assessed at all",
+      N.in_session_requirement(session_minutes=45, carbs_in_session_g=0,
+                               target_g_hr=40) is None)
+check("a zero-length session is not assessed",
+      N.in_session_requirement(session_minutes=0, carbs_in_session_g=0,
+                               target_g_hr=40) is None)
+check("the basis names the ramp rather than a hardcoded number",
+      "ramp" in ins["basis"])
+check("no in-session carbs still splits cleanly",
+      N.split_carbs({"carb_g": 400})["out_of_session_g"] == 400)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))
