@@ -514,3 +514,115 @@ def label_to_item(label: dict) -> dict:
     out["ingredients"] = label.get("ingredients") or ""
     out["source_url"] = "photo of the product label"
     return out
+
+
+# --- interpret first, resolve second (Jamie's design, 10 Aug 2026) ------------
+
+INTERPRET_PROMPT = """You are the lookup planner for a nutrition logger. Work out what \
+each item actually IS and how to search for it. Reply with ONLY a JSON object.
+
+{"items":[{
+  "canonical_name": "<the clearest plain name for this exact thing>",
+  "brand": "<brand ONLY if the user stated one, else null>",
+  "form": "capsule|tablet|powder|liquid|bar|drink|whole_food|prepared_meal|bakery|"
+          "confectionery|dairy|other",
+  "category": "supplement|whole_food|branded_packaged|restaurant|homemade",
+  "is_supplement": true|false,
+  "expect_macros": true|false,
+  "portion_g": <grams as eaten, or null>,
+  "dose_mg": <milligrams if stated in mg/mcg, else null>,
+  "count": <number of units if stated, else null>,
+  "in_session": true|false,
+  "search_terms": ["<best query first>", "<fallback>", "..."]
+}]}
+
+Rules that matter:
+- NEVER give nutrition figures. You are planning a search, not answering one.
+- NEVER invent a brand. If the user did not name one, brand is null.
+- search_terms should be what a food database would actually match: strip quantities,
+  possessives and filler. "400mg of my protein collagen capsules" searches best as
+  "collagen peptides", not as the original sentence.
+- expect_macros is false when the amount is nutritionally trivial, e.g. a 400 mg
+  capsule or an electrolyte tablet. Say false and the logger will record a dose only.
+- is_supplement true for anything in a capsule, tablet, softgel or measured scoop taken
+  for a nutrient rather than eaten as food.
+- form is what the product physically IS. A collagen capsule is "capsule". A collagen
+  protein bar is "bar". These are different products and the logger uses this to throw
+  out wrong matches.
+- Split multiple items. Keep each one self-contained.
+
+Message: %s
+"""
+
+_FORM_FAMILIES = {
+    "dose": {"capsule", "tablet", "softgel", "powder"},
+    "food": {"bar", "drink", "whole_food", "prepared_meal", "bakery",
+             "confectionery", "dairy", "liquid", "other"},
+}
+
+
+def form_family(form: str) -> str:
+    for fam, forms in _FORM_FAMILIES.items():
+        if (form or "").lower() in forms:
+            return fam
+    return "unknown"
+
+
+def interpret(text: str, claude_bin: str, model: str, log=print, runner=None,
+              timeout: int = 90) -> dict | None:
+    """Plan the lookup before doing it. Returns {'items': [...]} or None.
+
+    Jamie's design, and it is better than what it replaces. The ladder used to search the
+    athlete's raw sentence, which is a poor query: "400mg of my protein collagen capsules"
+    matched a COLLAGEN PROTEIN BAR because the sentence happens to contain the word
+    protein. Every fix I bolted on after that was a hand-written word list trying to guess
+    what the sentence meant.
+
+    So the model goes FIRST, as an interpreter: what is this, what form is it, what should
+    we search for. It still never supplies a NUMBER, which is the property that made the
+    ladder trustworthy in the first place - first for meaning, last for macros.
+
+    The returned `form` and `category` are what the ladder validates hits against, which
+    replaces guesswork with a stated expectation."""
+    runner = runner or subprocess.run
+    try:
+        proc = runner([claude_bin, "--print", "--model", model],
+                      input=INTERPRET_PROMPT % text, capture_output=True, text=True,
+                      timeout=timeout)
+    except Exception as exc:
+        log(f"interpret failed: {exc}")
+        return None
+    raw = (getattr(proc, "stdout", "") or "").strip()
+    a, b = raw.find("{"), raw.rfind("}")
+    if a < 0 or b <= a:
+        log(f"interpret: no JSON; out={raw[:140]!r}")
+        return None
+    try:
+        got = json.loads(raw[a:b + 1])
+    except json.JSONDecodeError:
+        log("interpret: unparseable JSON")
+        return None
+    out = []
+    for it in got.get("items") or []:
+        if not isinstance(it, dict) or not (it.get("canonical_name") or it.get("search_terms")):
+            continue
+        terms = [t for t in (it.get("search_terms") or []) if isinstance(t, str) and t.strip()]
+        name = (it.get("canonical_name") or (terms[0] if terms else "")).strip()
+        if not terms:
+            terms = [name]
+        out.append({
+            "canonical_name": name,
+            # A brand is only ever what the athlete said. A model-invented brand is how a
+            # confident wrong product gets chosen.
+            "brand": (it.get("brand") or None),
+            "form": (it.get("form") or "other").lower(),
+            "category": (it.get("category") or "other").lower(),
+            "is_supplement": bool(it.get("is_supplement")),
+            "expect_macros": it.get("expect_macros", True) is not False,
+            "portion_g": it.get("portion_g"),
+            "dose_mg": it.get("dose_mg"),
+            "count": it.get("count"),
+            "in_session": bool(it.get("in_session")),
+            "search_terms": terms[:4],
+        })
+    return {"items": out} if out else None

@@ -164,6 +164,7 @@ def _relevant(query: str, name: str) -> bool:
 
 class Rung:
     CACHE = "cache"
+    WEB = "web"
     MANUAL = "manual"
     RETAILER = "retailer"
     COFID = "cofid"
@@ -174,7 +175,52 @@ class Rung:
 
 
 # Order IS the preference. Adding a source is one entry here.
-LADDER = (Rung.RETAILER, Rung.COFID, Rung.USDA, Rung.OFF, Rung.NUTRITIONIX, Rung.LLM)
+# THE TEST EVERY RUNG HAS TO PASS (Jamie, 10 Aug 2026): "the ladder should be the same or
+# better than just using llm to do it, if its worse than the llm just googling it, then we
+# should just use that". Applied honestly, that prunes it hard.
+#
+# KEPT, because each genuinely beats a web search:
+#   cache   a previous good answer. Instant, free, already checked.
+#   cofid   Public Health England's own composition tables. For an unbranded UK whole
+#           food this IS the reference, it is deterministic, and it needs no network.
+#   web     the model with search. The benchmark, and it can reach a manufacturer page,
+#           which is label data.
+#   llm     a bare estimate, for when even search finds nothing. Always flagged.
+# Plus barcode, which short-circuits everything: an exact GTIN lookup cannot be ambiguous.
+#
+# DROPPED from the default path, having lost that comparison:
+#   usda          American, name-searched, and it is what matched "collagen capsules" to
+#                 "Soy protein isolate". For UK whole foods CoFID is better; for UK
+#                 branded products the web is better. It was winning nowhere.
+#   openfoodfacts NAME search only. Crowd-sourced and patchy on the own-brand prepared
+#                 food that is most of this athlete's intake. Its BARCODE endpoint is
+#                 excellent and is still used - the two are different queries.
+#   nutritionix   keyed, commercial, and its natural-language parsing is the one thing
+#                 the interpret pass already does.
+#   retailer      never built. The web rung is this, without a scraper per supermarket.
+#
+# All four remain implemented and tested, and can be re-enabled per athlete via config.
+# They are off the default path because they lost on merit, not because they are broken.
+LADDER = (Rung.COFID, Rung.WEB, Rung.LLM)
+OPTIONAL_RUNGS = (Rung.RETAILER, Rung.USDA, Rung.OFF, Rung.NUTRITIONIX)
+# Preference order for EVERY rung, default or optional. An optional rung that a caller
+# supplies a fetcher for joins the ladder at its proper place rather than being ignored -
+# otherwise enabling one would silently do nothing, which is the same class of bug as a
+# parameter nobody passes.
+FULL_ORDER = (Rung.RETAILER, Rung.COFID, Rung.USDA, Rung.OFF, Rung.NUTRITIONIX,
+              Rung.WEB, Rung.LLM)
+
+
+def effective_ladder(fetchers: dict = None, cofid_ready: bool = True) -> tuple:
+    """The rungs that will actually be walked, in order."""
+    supplied = set(fetchers or {})
+    out = []
+    for rung in FULL_ORDER:
+        if rung in LADDER or rung in supplied:
+            if rung == Rung.COFID and not (cofid_ready or Rung.COFID in supplied):
+                continue
+            out.append(rung)
+    return tuple(out)
 
 
 def _scale(per_100g: dict, portion_g: float) -> dict:
@@ -413,9 +459,48 @@ class CofidTable:
 
 # --- the ladder -------------------------------------------------------------
 
+# Product forms, grouped. A hit whose form family differs from the one the interpreter
+# stated is the wrong product, however well the words overlap: a collagen CAPSULE and a
+# collagen protein BAR share every meaningful token and are not the same thing.
+_HINT_FORM_WORDS = {
+    "capsule": {"capsule", "capsules", "cap", "caps", "softgel", "softgels"},
+    "tablet": {"tablet", "tablets", "tab", "tabs", "lozenge"},
+    "powder": {"powder", "powdered", "isolate", "concentrate", "scoop"},
+    "bar": {"bar", "bars", "flapjack", "brownie"},
+    "drink": {"drink", "juice", "smoothie", "shake", "squash", "cordial", "soda"},
+    "prepared_meal": {"meal", "ready", "curry", "salad", "pizza", "sandwich", "wrap",
+                      "soup", "risotto"},
+    "bakery": {"cookie", "cookies", "biscuit", "biscuits", "cake", "muffin", "bread"},
+    "confectionery": {"chocolate", "sweets", "candy", "bar"},
+}
+_DOSE_FAMILY = {"capsule", "tablet", "powder"}
+
+
+def _hint_conflict(hint: dict, name: str) -> bool:
+    """True when a candidate's name betrays a different product FORM than expected.
+
+    This is the structural version of the guard that word lists kept failing at. The
+    interpreter states what the thing IS (capsule, bar, prepared_meal), and a candidate
+    naming a form from the other family is rejected. Only a stated expectation makes this
+    possible, which is why interpretation now comes first."""
+    if not hint:
+        return False
+    want = (hint.get("form") or "").lower()
+    if want not in _HINT_FORM_WORDS:
+        return False
+    words = set(re.split(r"[^a-z]+", (name or "").lower()))
+    want_dose = want in _DOSE_FAMILY
+    for form, tokens in _HINT_FORM_WORDS.items():
+        if form == want or not (words & tokens):
+            continue
+        if (form in _DOSE_FAMILY) != want_dose:
+            return True          # dose form against food form, or the reverse
+    return False
+
+
 def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             table=None, fetchers: dict = None, cofid: CofidTable = None,
-            on: date = None) -> dict:
+            hint: dict = None, queries=None, on: date = None) -> dict:
     """Walk the ladder and return one resolved item plus a full attempt log.
 
     `fetchers` maps a rung name to a callable (text, portion_g) -> dict|None. Any
@@ -430,6 +515,10 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
     to the record than an absent one, because it looks like data."""
     attempts = []
     fetchers = dict(fetchers or {})
+    hint = hint or {}
+    # Search the INTERPRETED terms, not the athlete's sentence. "400mg of my protein
+    # collagen capsules" is a poor query; "collagen peptides" is a good one.
+    search_queries = [q for q in (queries or hint.get("search_terms") or [raw_text]) if q]
     key = (raw_text or "").strip().lower()
     on = on or (date.fromisoformat(str(day)[:10]) if day else date.today())
 
@@ -453,7 +542,7 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             fetchers[Rung.COFID] = lambda t, p, _c=cofid: _c.lookup(t, p)
 
     degraded = False
-    for rung in LADDER:
+    for rung in effective_ladder(fetchers, cofid_ready=True):
         fetch = fetchers.get(rung)
         if fetch is None:
             # Not built is NOT degradation: nothing failed. Conflating the two would
@@ -461,7 +550,18 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             record(rung, "not_configured")
             continue
         try:
-            got = fetch(raw_text, portion_g)
+            got = None
+            for q in search_queries:
+                cand = fetch(q, portion_g)
+                if not cand:
+                    continue
+                if _hint_conflict(hint, cand.get("resolved_name") or ""):
+                    record(rung, "wrong_form",
+                           f"{cand.get('resolved_name')!r} is not a "
+                           f"{hint.get('form')}")
+                    continue
+                got = cand
+                break
         except Exception as exc:
             # A configured rung that FAILS is degradation and must be visible. This
             # is the difference between "not found" and "we did not really look".
@@ -469,8 +569,13 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             degraded = True
             continue
         if got:
-            record(rung, "hit")
-            return _finalise(got, raw_text, rung, RUNG_CONFIDENCE[rung], attempts,
+            record(rung, "hit", got.get("source_kind") or "")
+            # A rung may declare its own confidence: `web` is label data when it lands on
+            # a manufacturer or retailer page and an estimate when it does not.
+            conf = got.get("confidence") or RUNG_CONFIDENCE[rung]
+            if conf not in CONFIDENCE_LEVELS:
+                conf = RUNG_CONFIDENCE[rung]
+            return _finalise(got, raw_text, rung, conf, attempts,
                              table, day, degraded=degraded)
         record(rung, "no_match")
 
@@ -572,15 +677,21 @@ def describe_provenance(item: dict) -> str:
 
 
 def ladder_status(fetchers: dict = None, cofid: CofidTable = None) -> dict:
-    """Which rungs are actually available. For a startup log and the /target reply,
-    so an unbuilt ladder is visible without reading an item's attempt log."""
+    """Which rungs will actually be walked, in order, and which are off.
+
+    Reports every rung, not just the default ones, so "off by default" is visible rather
+    than looking like a missing feature."""
     fetchers = fetchers or {}
     cofid = cofid if cofid is not None else CofidTable()
     out = {}
-    for rung in LADDER:
+    for rung in FULL_ORDER:
         if rung == Rung.COFID:
             out[rung] = "ready" if (Rung.COFID in fetchers or cofid.available) \
                 else "not_configured"
+        elif rung in fetchers:
+            out[rung] = "ready"
+        elif rung in LADDER:
+            out[rung] = "not_configured"
         else:
-            out[rung] = "ready" if rung in fetchers else "not_configured"
+            out[rung] = "off_by_default"
     return out

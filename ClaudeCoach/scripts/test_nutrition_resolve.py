@@ -82,8 +82,8 @@ item2 = R.resolve("mixed nuts", day=TODAY, store=new_store(), table=TABLE,
                   cofid=EMPTY_COFID,
                   fetchers={R.Rung.OFF: lambda t, p: OFF_HIT,
                             R.Rung.LLM: lambda t, p: LLM_HIT})
-check("absent retailer hook reads not_configured",
-      outcome(item2, R.Rung.RETAILER) == "not_configured")
+check("the retailer rung is not walked at all now, so it logs nothing",
+      outcome(item2, R.Rung.RETAILER) is None)
 check("an unbuilt rung is NOT counted as degradation", item2["degraded"] is False)
 check("it falls to Open Food Facts", item2["source_rung"] == R.Rung.OFF)
 check("OFF resolution is database confidence", item2["confidence"] == "database")
@@ -288,13 +288,26 @@ try:
 finally:
     R._get_json = saved_get
 
-# 16) ladder_status makes an unbuilt ladder visible without reading an item.
+# 16) ladder_status reports EVERY rung, so "off by default" is visible rather than
+#     looking like a missing feature.
 status = R.ladder_status(fetchers={R.Rung.OFF: lambda t, p: None})
-check("status reports a wired rung ready", status[R.Rung.OFF] == "ready")
-check("status reports the retailer gap", status[R.Rung.RETAILER] == "not_configured")
-check("status reports CoFID ready from the local table",
-      status[R.Rung.COFID] == "ready")
-check("every ladder rung is accounted for", set(status) == set(R.LADDER))
+check("an injected optional rung reports ready", status[R.Rung.OFF] == "ready")
+check("the retailer rung reads off_by_default",
+      status[R.Rung.RETAILER] == "off_by_default")
+check("CoFID is ready from the local table", status[R.Rung.COFID] == "ready")
+check("every rung is accounted for", set(status) == set(R.FULL_ORDER))
+
+# The default ladder is the pruned one, and an injected optional rung JOINS it at its
+# proper place rather than being ignored - enabling a rung that then does nothing is the
+# same class of bug as a parameter nobody passes.
+check("default ladder is cofid, web, llm",
+      R.LADDER == (R.Rung.COFID, R.Rung.WEB, R.Rung.LLM))
+eff = R.effective_ladder({R.Rung.OFF: lambda q, p: None})
+check(f"an injected OFF joins the walk in order (got {eff})",
+      eff.index(R.Rung.OFF) > eff.index(R.Rung.COFID)
+      and eff.index(R.Rung.OFF) < eff.index(R.Rung.WEB))
+check("nothing injected means the pruned ladder is walked",
+      R.effective_ladder({}) == (R.Rung.COFID, R.Rung.WEB, R.Rung.LLM))
 
 # 17) THE RELEVANCE GUARD. "400mg of my protein collagen capsules" resolved to "Soy
 #     protein isolate" from USDA: a product he never ate, with confident macros, a
@@ -343,6 +356,70 @@ check("no soy species is credited from a wrong product name",
       "glycine_max" not in res["species"])
 check("species come from the raw text when there are no ingredients",
       res["species_from"] == "name")
+
+# 19) INTERPRET FIRST, RESOLVE SECOND (Jamie's design). The ladder now searches the
+#     interpreted terms and validates each hit against the stated FORM, which is the
+#     structural version of a guard that hand-written word lists kept failing at.
+CAP = {"form": "capsule", "category": "supplement", "search_terms": ["collagen peptides"]}
+BAR = {"form": "bar", "category": "branded_packaged", "search_terms": ["protein bar"]}
+MEAL = {"form": "prepared_meal", "category": "branded_packaged"}
+check("a capsule expectation rejects a protein bar",
+      R._hint_conflict(CAP, "COLLAGEN PROTEIN BAR, LEMON COOKIE") is True)
+check("and accepts a real collagen supplement",
+      R._hint_conflict(CAP, "Collagen peptides, hydrolysed") is False)
+check("powder is the same family as capsule, so no conflict",
+      R._hint_conflict(CAP, "Magnesium citrate powder") is False)
+check("a bar expectation rejects capsules",
+      R._hint_conflict(BAR, "Collagen capsules 400mg") is True)
+check("and accepts the bar", R._hint_conflict(BAR, "COLLAGEN PROTEIN BAR") is False)
+check("a meal expectation rejects tablets",
+      R._hint_conflict(MEAL, "Vitamin D tablets") is True)
+check("no hint means no conflict", R._hint_conflict({}, "anything") is False)
+
+# The ladder must SEARCH the interpreted terms, not the raw sentence, and record a
+# wrong-form rejection rather than silently accepting or silently missing.
+seen = []
+
+
+def spy(q, p):
+    seen.append(q)
+    return {"kcal": 300, "resolved_name": "COLLAGEN PROTEIN BAR, LEMON COOKIE"}
+
+
+it = R.resolve("400mg of my protein collagen capsules", day=TODAY, store=new_store(),
+               table=TABLE, cofid=EMPTY_COFID, hint=CAP,
+               queries=["collagen peptides", "hydrolysed collagen"],
+               fetchers={R.Rung.OFF: spy})
+check(f"searched the interpreted terms, not the sentence (got {seen})",
+      seen and "collagen peptides" in seen[0] and "400mg" not in seen[0])
+check("tried the fallback term too after the first was rejected", len(seen) == 2)
+check("a wrong-form hit is recorded as wrong_form",
+      outcome(it, R.Rung.OFF) == "wrong_form")
+check("and the wrong product is NOT returned",
+      "BAR" not in (it.get("resolved_name") or "").upper())
+
+# A rung may declare its own confidence: the web rung is label data on a manufacturer
+# page and an estimate otherwise.
+web_label = R.resolve("twix xtra", day=TODAY, store=new_store(), table=TABLE,
+                      cofid=EMPTY_COFID,
+                      fetchers={R.Rung.WEB: lambda q, p: {
+                          "kcal": 370, "resolved_name": "Twix Xtra",
+                          "source_kind": "manufacturer", "confidence": "label"}})
+check("a manufacturer page counts as label data",
+      web_label["source_rung"] == R.Rung.WEB and web_label["confidence"] == "label")
+web_est = R.resolve("something vague", day=TODAY, store=new_store(), table=TABLE,
+                    cofid=EMPTY_COFID,
+                    fetchers={R.Rung.WEB: lambda q, p: {
+                        "kcal": 200, "resolved_name": "guess",
+                        "source_kind": "estimate", "confidence": "estimate"}})
+check("a web guess stays an estimate", web_est["confidence"] == "estimate")
+check("an invalid declared confidence falls back to the rung default",
+      R.resolve("x", day=TODAY, store=new_store(), table=TABLE, cofid=EMPTY_COFID,
+                fetchers={R.Rung.WEB: lambda q, p: {
+                    "kcal": 1, "resolved_name": "x", "confidence": "nonsense"}}
+                )["confidence"] == "database")
+check("web sits before the bare llm estimate in the ladder",
+      R.LADDER.index(R.Rung.WEB) < R.LADDER.index(R.Rung.LLM))
 
 print()
 if FAILED:

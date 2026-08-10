@@ -327,21 +327,85 @@ def make_llm_fetch(log=log):
     return fetch
 
 
+DEEP_PROMPT = """Find the nutrition figures for this exact product and portion. Search \
+the web if you need to; prefer the manufacturer's own page, then a UK retailer listing \
+(Ocado, Tesco, M&S, Sainsbury's), then a reputable database.
+
+Reply with ONLY JSON:
+{"resolved_name":"...","kcal":n,"protein_g":n,"carb_g":n,"fat_g":n,"fibre_g":n,
+ "dietary_sodium_mg":n or null,"ingredients":"<verbatim list if you find one>",
+ "source_url":"<the page you used>",
+ "source_kind":"manufacturer|retailer|database|estimate"}
+
+Rules:
+- Figures are for the WHOLE portion described, not per 100 g.
+- source_kind must be honest. Say "estimate" if you did not find the actual product.
+- If the form does not match (a capsule is not a bar), say so by returning {}.
+- Return {} rather than guessing at a product you could not find.
+
+Product: %s
+Form: %s
+Portion: %s
+"""
+
+
+def make_deep_fetch(log=log):
+    """The model doing a REAL search, with confidence set by what it lands on.
+
+    This is the retailer rung, finally, and by a route that does not need a scraper per
+    supermarket. A manufacturer or retailer page IS label data, so it is allowed to
+    return `label`; anything vaguer comes back an estimate and is flagged as one."""
+    def fetch(text, portion_g=None, hint=None):
+        hint = hint or {}
+        try:
+            proc = subprocess.run(
+                [CLAUDE_BIN, "--print", "--model", LLM_MODEL,
+                 "--allowedTools", "WebSearch,WebFetch"],
+                input=DEEP_PROMPT % (text, hint.get("form") or "unknown",
+                                     (f"{portion_g} g" if portion_g else "as described")),
+                capture_output=True, text=True, timeout=180)
+        except Exception as exc:
+            log(f"web rung failed: {exc}")
+            return None
+        raw = (proc.stdout or "").strip()
+        a, b = raw.find("{"), raw.rfind("}")
+        if a < 0 or b <= a:
+            return None
+        try:
+            got = json.loads(raw[a:b + 1])
+        except json.JSONDecodeError:
+            return None
+        if not got or got.get("kcal") in (None, ""):
+            return None
+        kind = (got.get("source_kind") or "estimate").lower()
+        got["confidence"] = ("label" if kind in ("manufacturer", "retailer")
+                            else "database" if kind == "database" else "estimate")
+        return got
+    return fetch
+
+
 def build_fetchers(cfg: dict) -> dict:
     """Wire the ladder from config. A key that is absent leaves that rung
     not_configured, which is reported on every item rather than hidden."""
-    fetchers = {NR.Rung.LLM: make_llm_fetch()}
-    if cfg.get("fdc_api_key"):
-        key = cfg["fdc_api_key"]
-        fetchers[NR.Rung.USDA] = lambda t, p, _k=key: NR.usda_fetch(t, p, api_key=_k)
-    fetchers[NR.Rung.OFF] = NR.off_fetch
-    if cfg.get("nutritionix_app_id") and cfg.get("nutritionix_app_key"):
-        aid, akey = cfg["nutritionix_app_id"], cfg["nutritionix_app_key"]
-        fetchers[NR.Rung.NUTRITIONIX] = (
-            lambda t, p, _a=aid, _k=akey: NR.nutritionix_fetch(t, p, app_id=_a,
-                                                               app_key=_k))
-    # retailer stays unwired: see nutrition_resolve's docstring on why a
-    # half-working scraper is worse than an absent rung.
+    deep = make_deep_fetch()
+    fetchers = {NR.Rung.LLM: make_llm_fetch(),
+                # takes a hint, so it is wrapped to the (text, portion) signature the
+                # ladder calls with; offer_planned rebinds it per item with the form
+                NR.Rung.WEB: lambda t, p, _d=deep: _d(t, p)}
+    # The name-search databases are OFF the default path: each lost to a plain web
+    # search, and USDA is what matched "collagen capsules" to "Soy protein isolate". They
+    # are re-enabled per athlete with enable_name_databases, for anyone who wants a
+    # deterministic rung ahead of the model even at the cost of accuracy.
+    if cfg.get("enable_name_databases"):
+        if cfg.get("fdc_api_key"):
+            key = cfg["fdc_api_key"]
+            fetchers[NR.Rung.USDA] = lambda t, p, _k=key: NR.usda_fetch(t, p, api_key=_k)
+        fetchers[NR.Rung.OFF] = NR.off_fetch
+        if cfg.get("nutritionix_app_id") and cfg.get("nutritionix_app_key"):
+            aid, akey = cfg["nutritionix_app_id"], cfg["nutritionix_app_key"]
+            fetchers[NR.Rung.NUTRITIONIX] = (
+                lambda t, p, _a=aid, _k=akey: NR.nutritionix_fetch(t, p, app_id=_a,
+                                                                   app_key=_k))
     return fetchers
 
 
@@ -617,6 +681,13 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         return
 
     if intent in ("log_food", "log_supplement") and got.get("items"):
+        # Interpret before resolving: work out what each thing IS and how to search for
+        # it, then let the ladder search THAT rather than the athlete's sentence. The
+        # model plans the lookup; it still never supplies a macro.
+        plan = NLU.interpret(t, CLAUDE_BIN, LLM_MODEL, log=log)
+        if plan and plan.get("items"):
+            offer_planned(ctx, plan["items"], day, token, chat_id)
+            return
         if got.get("nutritionally_trivial"):
             # Say it plainly rather than logging "kcal 1" and implying it counted.
             tg.send(token, chat_id,
@@ -775,6 +846,55 @@ def download_photo(ctx: Context, file_id: str, token: str):
     with os.fdopen(fd, "wb") as fh:
         fh.write(data)
     return Path(tmp)
+
+
+def offer_planned(ctx: Context, planned: list, day: date, token, chat_id) -> None:
+    """Resolve each INTERPRETED item, with its form and search terms.
+
+    The interpretation is what makes the ladder honest: it searches good queries, and it
+    can throw out a hit whose form is wrong rather than accepting anything whose name
+    happens to share a word. A capsule and a protein bar share every meaningful token."""
+    batch, notes = [], []
+    for it in planned[:8]:
+        name = it["canonical_name"]
+        if it["is_supplement"] or not it["expect_macros"]:
+            # Supplements record a dose and are never searched against food data.
+            batch.append({
+                "raw_text": name, "_raw": name, "resolved_name": name,
+                "confidence": "label", "source_rung": NR.Rung.MANUAL,
+                "resolved_at": str(day)[:10], "species": [],
+                "attempts": [{"rung": "supplement", "outcome": "dose recorded, no lookup",
+                              "detail": "supplements are not searched against food data"}],
+                "degraded": False, "needs_input": False, "_supplement": True,
+                "_trivial": not it["expect_macros"], "_dose_mg": it.get("dose_mg"),
+                "in_session": it["in_session"],
+                **{f: None for f in NR.MACRO_FIELDS}})
+            dose = (f"{it['dose_mg']:.0f} mg" if it.get("dose_mg")
+                    else (f"{it['portion_g']} g" if it.get("portion_g") else "as stated"))
+            notes.append(f"*{name}*\nSupplement, {dose}. Recorded as a dose, not looked "
+                         f"up against food data, and it does not touch your macros.")
+            continue
+        # The web rung needs the form to reject a wrong-form product, so it is rebound
+        # per item rather than taken from the shared fetcher table.
+        fetchers = dict(ctx.fetchers)
+        deep = make_deep_fetch()
+        fetchers[NR.Rung.WEB] = lambda q, p, _h=it, _d=deep: _d(q, p, hint=_h)
+        item = NR.resolve(name, day=day, store=ctx.store, table=ctx.table,
+                          portion_g=it.get("portion_g"), fetchers=fetchers,
+                          cofid=ctx.cofid, hint=it, queries=it["search_terms"])
+        item["_raw"] = name
+        item["in_session"] = it["in_session"]
+        item["_supplement"] = False
+        item["_trivial"] = False
+        item["_dose_mg"] = None
+        batch.append(item)
+        notes.append(fmt_confirm(item))
+    set_pending(ctx.store, {"batch": batch})
+    if any(i.get("in_session") for i in batch):
+        notes.append("_Tagged as in-session fuel, so it is protected from any trimming._")
+    kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
+    tg.send(token, chat_id, "\n\n".join(notes) + "\n\nLog "
+            + ("these?" if len(batch) > 1 else "it?"), reply_markup=kb, log=log)
 
 
 def offer_items(ctx: Context, items: list, day: date, token, chat_id,

@@ -335,20 +335,33 @@ NB.clear_pending(store)
 check("pending item clears", NB.get_pending(store) is None)
 check("clearing twice is safe", NB.clear_pending(store) is None)
 
-# 10) The ladder wiring: absent keys leave rungs not_configured rather than failing,
-#     and the retailer rung is deliberately never wired here.
+# 10) The pruned ladder. Every rung has to beat "the LLM just googling it" (Jamie,
+#     10 Aug 2026); the name-search databases lost, so they are off the default path and
+#     opt-in per athlete. They remain implemented and tested, because they lost on merit
+#     rather than being broken.
 fetchers = NB.build_fetchers({})
 status = NR.ladder_status(fetchers, NR.CofidTable())
-check("OFF is wired with no key needed", status[NR.Rung.OFF] == "ready")
-check("the LLM rung is wired", status[NR.Rung.LLM] == "ready")
-check("USDA without a key is not_configured", status[NR.Rung.USDA] == "not_configured")
-check("Nutritionix without keys is not_configured",
-      status[NR.Rung.NUTRITIONIX] == "not_configured")
-check("the retailer rung is still not built", status[NR.Rung.RETAILER] == "not_configured")
+check("the web rung is wired by default", status[NR.Rung.WEB] == "ready")
+check("the bare LLM estimate is wired by default", status[NR.Rung.LLM] == "ready")
+check("CoFID is ready from the local table", status[NR.Rung.COFID] == "ready")
+for rung in (NR.Rung.RETAILER, NR.Rung.USDA, NR.Rung.OFF, NR.Rung.NUTRITIONIX):
+    check(f"{rung} is off by default", status[rung] == "off_by_default")
+check("so the default walk is cofid, web, llm",
+      NR.effective_ladder(fetchers) == (NR.Rung.COFID, NR.Rung.WEB, NR.Rung.LLM))
+
+# An FDC key alone does nothing now: the flag is what enables the rung, so a key left in
+# config from before cannot quietly put a losing rung back in the path.
 keyed = NB.build_fetchers({"fdc_api_key": "k", "nutritionix_app_id": "a",
                            "nutritionix_app_key": "b"})
-check("a supplied FDC key wires USDA", NR.Rung.USDA in keyed)
-check("supplied Nutritionix keys wire that rung", NR.Rung.NUTRITIONIX in keyed)
+check("a key without the flag does NOT wire USDA", NR.Rung.USDA not in keyed)
+opted = NB.build_fetchers({"enable_name_databases": True, "fdc_api_key": "k",
+                           "nutritionix_app_id": "a", "nutritionix_app_key": "b"})
+check("the flag plus a key wires USDA", NR.Rung.USDA in opted)
+check("the flag wires Open Food Facts name search", NR.Rung.OFF in opted)
+check("the flag plus keys wires Nutritionix", NR.Rung.NUTRITIONIX in opted)
+check("and they join the walk in preference order",
+      NR.effective_ladder(opted).index(NR.Rung.USDA)
+      < NR.effective_ladder(opted).index(NR.Rung.WEB))
 
 # 11) The LLM rung refuses junk rather than inventing numbers.
 fetch = NB.make_llm_fetch(log=lambda *a: None)
