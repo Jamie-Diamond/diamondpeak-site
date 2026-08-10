@@ -219,6 +219,11 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
     window_species, today_species, unmatched = {}, {}, []
     per_day_new = {}
     claimed_gap = 0
+    # Entries written before scores were stored have no way to distinguish a whole plant
+    # from a refined derivative, so their contribution is an OVERSTATEMENT of unknown size:
+    # sunflower oil reads as sunflower, sugar as beet. A count built on them cannot be
+    # stood behind, so it is marked provisional rather than presented as a figure.
+    unscored = 0
     for rec in days or []:
         d = rec.get("date")
         if not d:
@@ -229,6 +234,9 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
         for e in rec.get("entries") or []:
             claimed_gap += max(0, int(e.get("plants_claimed") or 0)
                                - len(e.get("species") or []))
+            for sp in e.get("species") or []:
+                if not isinstance(sp, dict) or sp.get("score") is None:
+                    unscored += 1
         res = species_for_entries(rec.get("entries"), table)
         scoring = _scoring_species(res["species"])
         unmatched.extend(res["unmatched"])
@@ -266,6 +274,10 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
         # saying "14 plants" whose ingredient list was never retrieved contributes only
         # what could be resolved from its title.
         "claimed_unresolved": claimed_gap,
+        # True when any species in the window lacks a stored score, which makes the count
+        # an upper bound rather than a figure.
+        "provisional": unscored > 0,
+        "unscored_species": unscored,
         "window_days": window,
     }
 

@@ -213,6 +213,7 @@ body{
 .wktbl td.low{color:var(--ink-2)}
 .wktbl td.bad{color:var(--red)}
 .wktbl tr.miss td{font-style:italic}
+.prov.warn{color:var(--amber)}
 .prov{padding:11px 15px 4px;margin:0;font-family:'DM Sans',sans-serif;font-size:12.5px;
   color:var(--ink-2);border-top:1px solid var(--rule-soft)}
 
@@ -925,6 +926,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=22" defer></script>
+<script src="app.js?v=23" defer></script>
 </body>
 </html>

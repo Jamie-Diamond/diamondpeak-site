@@ -2546,12 +2546,21 @@
     var p = n.plants || {}, pv = day.provenance || {};
     h += card('Week and provenance',
       '<div class="figures in-card">' +
-      fig(p.unique_7d != null ? p.unique_7d : '-', 'plant species',
-          'aiming around ' + (p.target || 30)) +
+      fig((p.provisional ? '~' : '') + (p.unique_7d != null ? p.unique_7d : '-'),
+          'plant species',
+          p.provisional ? 'upper bound, see below' : 'aiming around ' + (p.target || 30),
+          p.provisional ? 'flat' : '') +
       fig(p.new_today != null ? p.new_today : '-', 'new today', 'variety, not a score') +
       fig((n.weight && n.weight.rolling_7d_mean_kg)
           ? n.weight.rolling_7d_mean_kg.toFixed(1) : '-', 'kg', 'morning 7-day mean') +
       '</div>' +
+      (p.provisional
+        ? '<p class="prov warn">This plant count is an UPPER BOUND, not a figure. ' +
+          esc(p.unscored_species + ' species') + ' were logged before the matched score ' +
+          'was stored, so refined derivatives such as sunflower oil, sugar and soy ' +
+          'lecithin are being counted as whole plants. Anything logged from now on is ' +
+          'scored correctly.</p>'
+        : '') +
       '<p class="prov">' +
       esc((pv.label || 0) + ' label-verified, ' + (pv.database || 0) + ' from a database, ' +
           (pv.estimate || 0) + ' estimated' +
