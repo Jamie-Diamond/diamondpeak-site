@@ -42,14 +42,162 @@ Z_STD = NE.zones(day_type="standard", rolling_weight=W, rmr=RMR, sessions=RIDE,
 Z_PRELONG = NE.zones(day_type="recovery", rolling_weight=W, rmr=RMR,
                      tomorrow_type="long_ride", deficit_enabled=True)
 
-# 1) Weight parsing is bounded. An unbounded parse turns a mistyped food quantity
-#    into a weight reading, and a bad weight moves the mean the deficit rides on.
-check("a bare number parses as weight", NB.parse_weight("83.4") == 83.4)
-check("kg suffix parses", NB.parse_weight("83.4kg") == 83.4)
-check("the word weight parses", NB.parse_weight("weight 83.4") == 83.4)
-check("food text is not a weight", NB.parse_weight("two slices of toast") is None)
-check("an implausible number is rejected", NB.parse_weight("750") is None)
-check("a portion size is rejected as a weight", NB.parse_weight("30") is None)
+# 1) CONVERSATIONAL weight statements, bounded. An unbounded parse turns a mistyped
+#    portion into a weight reading, and a bad weight moves the mean the deficit
+#    rides on. This must handle how a person actually types, not a fixed format.
+import nutrition_nlu as NLU  # noqa: E402
+for phrase in ("83.4", "83.4kg", "weight 83.4", "83.4 kg", "weighed 83.4",
+               "I'm 83.4 this morning", "83,4", "scales said 83.4",
+               "weighed in at 83.4kg"):
+    check(f"weight understood: {phrase!r}", NLU.looks_like_weight(phrase) == 83.4)
+check("food text is not a weight", NLU.looks_like_weight("two slices of toast") is None)
+check("an implausible number is rejected", NLU.looks_like_weight("750") is None)
+check("a portion size is not a weight", NLU.looks_like_weight("200g chicken") is None)
+check("a gram quantity is never a weigh-in", NLU.looks_like_weight("75g pack") is None)
+check("a number inside a long sentence is not a weigh-in",
+      NLU.looks_like_weight("I had about 83 of those little tomatoes with lunch today")
+      is None)
+
+# 1b) INTENT is decided before anything is resolved. The first cut sent
+#     "how much protein have I had?" to the resolution ladder, which came back with a
+#     food item and offered to log it.
+def fake_model(reply):
+    return lambda *a, **k: type("P", (), {"stdout": reply, "stderr": ""})()
+
+
+q = NLU.classify("how much protein have I had?", False, "claude", "m",
+                 log=lambda *a: None, runner=fake_model('{"intent":"question"}'))
+check("a question is a question, not food", q["intent"] == "question")
+check("a question falls back to question even if the model fails",
+      NLU.classify("how much protein have I had?", False, "claude", "m",
+                   log=lambda *a: None,
+                   runner=fake_model("garbage"))["intent"] == "question")
+check("a lookup question is still a question",
+      NLU.classify("whats in a chicken breast?", False, "claude", "m",
+                   log=lambda *a: None,
+                   runner=fake_model('{"intent":"question"}'))["intent"] == "question")
+
+# Slash commands, yes and no never reach the model at all.
+check("a slash command is a fast path",
+      NLU.fast_intent("/today", False)["intent"] == "command")
+for yes in ("y", "yes", "go on", "log it", "please do"):
+    check(f"{yes!r} confirms", NLU.fast_intent(yes, True)["intent"] == "confirm")
+for no in ("n", "no", "forget it", "drop it"):
+    check(f"{no!r} cancels", NLU.fast_intent(no, True)["intent"] == "cancel")
+check("yes with nothing pending is not a confirm",
+      NLU.fast_intent("yes", False) is None
+      or NLU.fast_intent("yes", False)["intent"] != "confirm")
+
+# 1c) Multiple foods in one sentence are separate items, or each one loses its own
+#     provenance and the whole string gets mis-costed as one lookup.
+multi = NLU.parse_with_model(
+    "porridge with blueberries and a flat white", "claude", "m", log=lambda *a: None,
+    runner=fake_model('{"intent":"log_food","items":['
+                      '{"text":"porridge","portion_g":60},'
+                      '{"text":"blueberries","portion_g":80},'
+                      '{"text":"flat white"}]}'))
+check("three foods parse as three items", len(multi["items"]) == 3)
+check("portions are carried per item", multi["items"][0]["portion_g"] == 60)
+check("a missing portion is null, not zero", multi["items"][2]["portion_g"] is None)
+check("in-session defaults to false", multi["items"][0]["in_session"] is False)
+sess = NLU.parse_with_model("gel on the bike", "claude", "m", log=lambda *a: None,
+                            runner=fake_model('{"intent":"log_food","items":'
+                                              '[{"text":"gel","in_session":true}]}'))
+check("in-session fuel is tagged", sess["items"][0]["in_session"] is True)
+
+# 1d) The model NEVER supplies macros through this path, and junk is never food.
+check("an unparseable reply is unknown, never food",
+      NLU.parse_with_model("x", "claude", "m", log=lambda *a: None,
+                           runner=fake_model("sorry"))["intent"] == "unknown")
+check("an invalid intent is rejected",
+      NLU.parse_with_model("x", "claude", "m", log=lambda *a: None,
+                           runner=fake_model('{"intent":"eat_everything"}'))["intent"]
+      == "unknown")
+check("a crashed model is unknown, not food",
+      NLU.parse_with_model("x", "claude", "m", log=lambda *a: None,
+                           runner=lambda *a, **k: (_ for _ in ()).throw(
+                               TimeoutError("x")))["intent"] == "unknown")
+
+# 1e) Corrections re-parse from combined text rather than patching the misparse.
+combined = NLU.apply_correction("a bag of nuts", "it was the whole 200g bag")
+check("correction folds into the original text",
+      "bag of nuts" in combined and "200g" in combined)
+
+# 1f) An answer is phrased from injected facts, and a dead model falls back rather
+#     than leaving a question unanswered.
+ans = NLU.answer_question("how much protein?", {"protein_g": 68}, "claude", "m",
+                          log=lambda *a: None, runner=fake_model("You are on 68 g."))
+check("an answer comes back phrased", "68" in ans)
+check("a dead model returns None so the caller can fall back",
+      NLU.answer_question("q", {}, "claude", "m", log=lambda *a: None,
+                          runner=lambda *a, **k: (_ for _ in ()).throw(OSError("x")))
+      is None)
+
+# 1g) BARCODES. Distinct from weights by digit count, so the two never collide.
+for code in ("5000112637922", "01234565", "012345678905"):
+    check(f"barcode recognised: {code}", NLU.looks_like_barcode(code) == code)
+check("a weight is not a barcode", NLU.looks_like_barcode("83.4") is None)
+check("a barcode is not a weight", NLU.looks_like_weight("5000112637922") is None)
+bc = NLU.fast_intent("5000112637922", False)
+check("a bare barcode goes straight to log_food with no model call",
+      bc["intent"] == "log_food" and bc["barcode"] == "5000112637922")
+
+# 1h) PHOTOS take three different paths at three different confidences. A plate is an
+#     ESTIMATE, a printed panel is LABEL data, and conflating them would put
+#     label-grade confidence on a guess.
+ph = NLU.read_photo("/tmp/x.jpg", "claude", "m", log=lambda *a: None,
+                    runner=fake_model('{"kind":"barcode","barcode":"5000112637922"}'))
+check("a barcode photo is recognised", ph["kind"] == "barcode")
+plate = NLU.read_photo("/tmp/x.jpg", "claude", "m", log=lambda *a: None,
+                       runner=fake_model('{"kind":"food_plate","items":['
+                                         '{"text":"grilled chicken","portion_g":150},'
+                                         '{"text":"basmati rice","portion_g":200}]}'))
+check("a plate becomes items, not macros", len(plate["items"]) == 2)
+check("the plate path supplies NO nutrition figures",
+      not any(k in plate for k in ("kcal", "protein_g")))
+check("an empty plate is unknown rather than an empty log",
+      NLU.read_photo("/tmp/x.jpg", "claude", "m", log=lambda *a: None,
+                     runner=fake_model('{"kind":"food_plate","items":[]}'))["kind"]
+      == "unknown")
+check("an unreadable photo is unknown, never food",
+      NLU.read_photo("/tmp/x.jpg", "claude", "m", log=lambda *a: None,
+                     runner=fake_model("no idea"))["kind"] == "unknown")
+
+# THE SALT TRAP. UK panels print salt, not sodium, and salt is sodium x 2.5. A silent
+# conversion the wrong way is a 150% error that looks entirely plausible.
+lab = NLU.read_photo("/tmp/x.jpg", "claude", "m", log=lambda *a: None,
+                     runner=fake_model('{"kind":"nutrition_label","per":"100g",'
+                                       '"portion_g":200,"kcal":150,"protein_g":10,'
+                                       '"carb_g":12,"fat_g":6,"fibre_g":2,'
+                                       '"salt_g":1.0,"product":"Test Meal",'
+                                       '"ingredients":"chicken, rice, spinach"}'))
+check("salt is converted to sodium, not copied",
+      lab["dietary_sodium_mg"] == 400 and lab.get("sodium_from_salt") is True)
+item = NLU.label_to_item(lab)
+check("a per-100g panel scales to the stated portion", item["kcal"] == 300.0)
+check("scaled sodium follows the portion", item["dietary_sodium_mg"] == 800)
+check("the label carries its ingredients for species tagging",
+      "spinach" in item["ingredients"])
+per_portion = NLU.label_to_item({"per": "portion", "portion_g": 200, "kcal": 150})
+check("a per-portion panel is NOT scaled again", per_portion["kcal"] == 150.0)
+absent = NLU.label_to_item({"per": "100g", "portion_g": 100, "kcal": 150})
+check("a field the panel did not show stays absent, not zero",
+      "fibre_g" not in absent)
+
+# 1i) DEBATE. Options are resolved before the discussion, and nothing is logged.
+adv = NLU.parse_with_model("should I have the pasta or the rice tonight?", "claude",
+                           "m", log=lambda *a: None,
+                           runner=fake_model('{"intent":"advice","options":'
+                                             '["pasta","rice"]}'))
+check("a decision is advice, not a log", adv["intent"] == "advice")
+check("both options are captured", adv["options"] == ["pasta", "rice"])
+check("advice yields no items to log", not adv.get("items"))
+reply = NLU.advise("pasta or rice?", {"options": []}, "claude", "m",
+                   log=lambda *a: None, runner=fake_model("Rice, you are short on carbs."))
+check("advice comes back phrased", "Rice" in reply)
+check("a dead model returns None so the caller can fall back",
+      NLU.advise("q", {}, "claude", "m", log=lambda *a: None,
+                 runner=lambda *a, **k: (_ for _ in ()).throw(OSError("x"))) is None)
 
 # 2) A CEILING must never render as consumed/target. This is the misreading spec
 #    4.1 warns about: a bar reading low against a ceiling looks like failure when

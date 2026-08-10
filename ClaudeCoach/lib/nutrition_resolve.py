@@ -84,6 +84,7 @@ TIMEOUT_S = 6
 USER_AGENT = "ClaudeCoach-Nutrition/1.0 (personal training log)"
 
 OFF_ENDPOINT = "https://world.openfoodfacts.org/cgi/search.pl"
+OFF_PRODUCT = "https://world.openfoodfacts.org/api/v2/product"
 USDA_ENDPOINT = "https://api.nal.usda.gov/fdc/v1/foods/search"
 NUTRITIONIX_ENDPOINT = "https://trackapi.nutritionix.com/v2/natural/nutrients"
 
@@ -162,6 +163,44 @@ def off_fetch(query: str, portion_g: float = None) -> dict | None:
                 "source_url": product.get("url") or "",
                 "barcode": product.get("code") or ""}
     return None
+
+
+def off_barcode_fetch(barcode: str, portion_g: float = None) -> dict | None:
+    """Direct barcode lookup. Far more reliable than a name search, which is why a
+    scanned barcode short-circuits the text ladder entirely.
+
+    Open Food Facts barcode coverage on UK packaged goods is good; own-brand prepared
+    food is patchier, and a miss here simply falls through to the rest of the ladder."""
+    code = "".join(ch for ch in str(barcode or "") if ch.isdigit())
+    if not code:
+        return None
+    fields = ("product_name,brands,code,url,ingredients_text,serving_quantity,"
+              + ",".join(OFF_KEYS) + ",sodium_100g")
+    data = _get_json(f"{OFF_PRODUCT}/{code}.json?fields={urllib.parse.quote(fields)}")
+    if data.get("status") != 1:
+        return None
+    product = data.get("product") or {}
+    if product.get("energy-kcal_100g") in (None, ""):
+        return None
+    # A barcode with no stated portion means the whole pack is ambiguous, so fall back
+    # to the label serving size rather than silently assuming 100 g.
+    if portion_g is None and product.get("serving_quantity"):
+        try:
+            portion_g = float(product["serving_quantity"])
+        except (TypeError, ValueError):
+            portion_g = None
+    out = _scale({ours: product.get(theirs) for theirs, ours in OFF_KEYS.items()},
+                 portion_g)
+    sodium_g = product.get("sodium_100g")
+    if sodium_g not in (None, ""):
+        out["dietary_sodium_mg"] = round(float(sodium_g) * 1000
+                                         * ((portion_g or 100.0) / 100.0))
+    name = " ".join(x for x in ((product.get("brands") or "").split(",")[0].strip(),
+                                product.get("product_name") or "") if x).strip()
+    return {**out, "resolved_name": name or f"barcode {code}",
+            "ingredients": product.get("ingredients_text") or "",
+            "source_url": product.get("url") or f"https://world.openfoodfacts.org/product/{code}",
+            "barcode": code, "portion_used_g": portion_g}
 
 
 # --- rung: USDA FoodData Central --------------------------------------------

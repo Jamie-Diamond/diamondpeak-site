@@ -187,6 +187,12 @@ PACE_LEGACY_REMOVED = True             # v0.1 percentage pacing deleted, see §7
 # and every deviation from it flags. So the cap reserves this much fat range.
 FAT_ZONE_MIN_WIDTH_G = 15
 
+# How far the carb safety floor may be eased to protect the fat zone, as a fraction of
+# the day-type floor. There has to be a limit: without one, an impossible day was made
+# to "fit" by easing carbs from 250 g to 35 g (0.4 g/kg) and the unsatisfiable warning
+# stopped firing. Easing is a small accommodation, not a release valve.
+CARB_EASE_FLOOR_FRACTION = 0.8
+
 # Below this the deficit is not a deficit, it is rounding. A headroom-capped
 # recovery day produced a 16 kcal "deficit", which is far inside the error on every
 # input feeding it; reporting it would be false precision.
@@ -448,14 +454,42 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
         modifiers.append("carb load: within 3 days of the race")
     else:
         c_lo_kg, c_hi_kg = DAY_TYPES[day_type]["carb_g_per_kg"]
+    # 3. fat floor is known before the carb floor moves, because the carb lift below
+    #    has to respect it.
+    f_floor = FAT_FLOOR_G_PER_KG * rolling_weight
+
     c_low = c_lo_kg * rolling_weight
     if pre_long and not race_week:
-        # Topping glycogen before the session: lift the floor to the band midpoint.
+        # Topping glycogen before the session: lift the floor toward the band midpoint.
         c_low = (c_low + c_hi_kg * rolling_weight) / 2
         modifiers.append("carb floor lifted: long session tomorrow")
 
-    # 3. fat is a g/kg band, no longer a residual
-    f_floor = FAT_FLOOR_G_PER_KG * rolling_weight
+    # The carb SAFETY FLOOR must never squeeze the fat zone flat. This cap is general,
+    # not pre-long-only: the same collapse appeared three times in three different
+    # places before it was generalised - once from the deficit taking the full
+    # headroom, once from the pre-long carb lift, and once from the post-long-ride
+    # protein floor rising to 2.2 g/kg on a low-energy day (fat 75-84, nine grams of
+    # range). Carbs are explicitly the day's shock absorber and the day-type g/kg
+    # figures are only a cross-check, so carbs yield here and the dip below the
+    # reference floor is REPORTED rather than hidden.
+    if not race_week:
+        cap = (maintenance - p_low * 4 - (f_floor + FAT_ZONE_MIN_WIDTH_G) * 9) / 4
+        hard_min = c_lo_kg * rolling_weight * CARB_EASE_FLOOR_FRACTION
+        if c_low > cap:
+            eased = max(cap, hard_min)
+            if eased < c_low:
+                modifiers.append(
+                    f"carb floor eased from {c_low / rolling_weight:.1f} to "
+                    f"{eased / rolling_weight:.1f} g/kg, capped, to keep a workable "
+                    f"fat range on a crowded day")
+                c_low = eased
+            if cap < hard_min:
+                # Easing stopped at its own limit, so the day genuinely does not fit.
+                # Say so rather than starving carbs until the arithmetic closes.
+                warnings.append(
+                    f"this day does not fit: protein {p_low:.0f} g plus a "
+                    f"{c_low / rolling_weight:.1f} g/kg carb floor leaves too little "
+                    f"for the fat floor")
 
     floors_kcal = p_low * 4 + f_floor * 9 + c_low * 4
     headroom = max(0.0, maintenance - floors_kcal)

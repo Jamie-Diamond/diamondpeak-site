@@ -96,6 +96,34 @@ for label, kw in (("recovery", dict(day_type="recovery")),
     check(f"fat zone keeps width on {label} (got {width:.1f} g)",
           width >= N.FAT_ZONE_MIN_WIDTH_G - 0.5)
 
+# 6b) REGRESSION: no zone may collapse to a point on ANY day shape. The pre-long
+#     carb-floor lift caused this a second time, in a different place: capping the
+#     lift at exactly where the fat floor fits gave fat 75-75 and carbs 288-288.
+#     Silencing a nuisance warning took the zones with it.
+for label, kw in (("recovery", dict(day_type="recovery")),
+                  ("pre-long recovery", dict(day_type="recovery",
+                                             tomorrow_type="long_ride")),
+                  ("pre-long standard", dict(day_type="standard", sessions=RIDE2H,
+                                             tomorrow_type="long_ride")),
+                  ("post-long recovery", dict(day_type="recovery",
+                                              yesterday_type="long_ride")),
+                  ("long ride", dict(day_type="long_ride", sessions=LONGRIDE)),
+                  ("HR-only standard", dict(day_type="standard", sessions=RUN90))):
+    zc = z(deficit_enabled=True, **kw)
+    for macro in ("fat_g", "carb_g"):
+        width = zc[macro]["high"] - zc[macro]["low"]
+        check(f"{label}: {macro} keeps a real range (got {width:.0f} g)", width >= 10)
+
+# 6c) And a pre-long recovery day must not emit the fat-floor warning at all: it
+#     fired on every one of them for the sake of 2 g of fat, which trains the
+#     athlete to ignore warnings that matter.
+prelong_rec = z(day_type="recovery", tomorrow_type="long_ride", deficit_enabled=True)
+check("pre-long recovery day does not warn about the fat floor",
+      not any("no calorie room for the fat floor" in w
+              for w in prelong_rec["warnings"]))
+check("the carb floor easing is reported, not silent",
+      any("eased" in m or "capped" in m for m in prelong_rec["modifiers"]))
+
 # 7) The deficit is proportional, headroom-capped, and zero on the protected days.
 rec = z(day_type="recovery", deficit_enabled=True)
 std = z(day_type="standard", sessions=RIDE2H, deficit_enabled=True)
@@ -140,9 +168,14 @@ for label, zc in (("recovery", rec), ("standard", std), ("long_ride", lng),
 # 7b-ii) When the floors genuinely exceed the day's energy, the engine must SAY so
 #        rather than let max() hide it. Forced with an implausibly low RMR, because
 #        the headroom cap makes this unreachable through the deficit alone.
+# REGRESSION: the carb easing must not make an impossible day "fit" by starving
+# carbs. An unbounded ease took the floor from 250 g to 35 g (0.4 g/kg) and the
+# warning stopped firing, which is worse than the collapse it was fixing.
 squeezed = N.zones(day_type="recovery", rolling_weight=W, rmr=1200.0)
-check("an unsatisfiable day warns about the fat floor",
-      any("no calorie room for the fat floor" in w for w in squeezed["warnings"]))
+check("an unsatisfiable day says so",
+      any("does not fit" in w or "no calorie room" in w for w in squeezed["warnings"]))
+check("carb easing is bounded, never starved to nothing",
+      squeezed["carb_g"]["low"] >= 3.0 * W * N.CARB_EASE_FLOOR_FRACTION - 0.5)
 check("an unsatisfiable day still returns a usable fat floor",
       squeezed["fat_g"]["low"] > 0)
 check("an unsatisfiable day does not silently invert the carb zone",
