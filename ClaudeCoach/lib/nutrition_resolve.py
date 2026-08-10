@@ -568,6 +568,18 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             record(rung, "error", f"{type(exc).__name__}: {exc}")
             degraded = True
             continue
+        if got and got.get("needs_portion"):
+            # A rung found the right product but cannot know how much was eaten. That is
+            # a question, not a result: it is recorded and the ladder stops, because a
+            # lower rung guessing would overwrite a good label with a worse guess.
+            record(rung, "needs_portion", got.get("resolved_name") or "")
+            out = _finalise(got, raw_text, rung, "label", attempts, table, day,
+                            degraded=degraded)
+            out.update({f: None for f in MACRO_FIELDS})
+            out["needs_input"] = True
+            out["needs_portion"] = True
+            out["per_100g"] = got.get("per_100g") or {}
+            return out
         if got:
             record(rung, "hit", got.get("source_kind") or "")
             # A rung may declare its own confidence: `web` is label data when it lands on
