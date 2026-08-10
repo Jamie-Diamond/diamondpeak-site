@@ -39,17 +39,39 @@
   var TABS = [
     { id: 'today', label: 'Today', icon: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/>' },
     { id: 'cal', label: 'Calendar', icon: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/>' },
-    // Centre, raised and filled: it is the primary action, so it gets the position the
-    // thumb reaches without moving. A link out to Telegram until FastAPI lands.
-    { id: 'chat', label: 'Chat', href: TELEGRAM, primary: true,
-      icon: '<path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/>' },
+    // Chat used to sit raised in the CENTRE of the bar, which only works on an odd
+    // number of slots. Adding the opt-in Food tab makes it six for Jamie, so chat moved
+    // out to a corner button (offBar) and the bar became an ordinary even row. It keeps
+    // the thumb-reachable position without dictating the bar's arithmetic.
     { id: 'trends', label: 'Trends', icon: '<path d="M4 19h16"/><path d="M4 15l4.5-5L12 13.5 20 6"/>' },
     { id: 'goals', label: 'Goals', icon: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/><path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20"/>' },
+    // Food is OPT-IN per athlete and hidden unless enabled, so the bar is five slots
+    // for Kathryn and Calum and six for Jamie. See nutritionOn().
+    { id: 'food', label: 'Food', optIn: 'nutrition',
+      icon: '<path d="M7 3.5v7a2.5 2.5 0 0 0 5 0v-7"/><path d="M9.5 10.5V20"/><path d="M17 3.5c1.6 1 2.4 2.6 2.4 4.6 0 1.7-.8 2.9-2.4 3.4V20"/>' },
     // Settings has no bar slot: it is entered from the masthead gear. It still needs a
     // TABS entry because show()/skeleton() drive every view from this list.
     { id: 'set', label: 'Settings', offBar: true,
       icon: '<path d="M10.3 3.2h3.4l.5 2.2 1.9.8 1.9-1.2 2.4 2.4-1.2 1.9.8 1.9 2.2.5v3.4l-2.2.5-.8 1.9 1.2 1.9-2.4 2.4-1.9-1.2-1.9.8-.5 2.2h-3.4l-.5-2.2-1.9-.8-1.9 1.2-2.4-2.4 1.2-1.9-.8-1.9-2.2-.5v-3.4l2.2-.5.8-1.9-1.2-1.9 2.4-2.41.9 1.2 1.9-.8z"/><circle cx="12" cy="12" r="3.1"/>' }
   ];
+
+  /* Opt-in views. `nutrition_enabled` is published per athlete by
+     publish-nutrition-data.py, which writes nothing at all unless that athlete's
+     profile carries nutrition_tracker: true - so the default for a new athlete is off
+     by omission rather than by a list of exclusions. A local toggle in Settings can
+     hide it for someone it IS published for, but can never reveal a tab whose data was
+     never published: there would be nothing to render. */
+  function nutritionOn() {
+    if (!(state.nutr && state.nutr.nutrition_enabled)) return false;
+    var pref = null;
+    try { pref = localStorage.getItem('cc.food.' + state.slug); } catch (e) { pref = null; }
+    return pref === null ? true : pref === '1';
+  }
+
+  function tabAllowed(t) {
+    if (t.optIn === 'nutrition') return nutritionOn();
+    return true;
+  }
 
   // Each entry is one chart plus the numbers that belong with it.
   var TRENDS = [
@@ -182,8 +204,10 @@
 
   /* ── chrome ──────────────────────────────────────────────────────────── */
 
-  function buildChrome() {
-    $('#tabs').innerHTML = TABS.filter(function (t) { return !t.offBar; }).map(function (t) {
+  function buildTabs() {
+    $('#tabs').innerHTML = TABS.filter(function (t) {
+      return !t.offBar && tabAllowed(t);
+    }).map(function (t) {
       var inner = '<svg viewBox="0 0 24 24" aria-hidden="true">' + t.icon +
         '</svg><span>' + t.label + '</span>';
       var cls = (t.href ? 'out' : '') + (t.primary ? ' primary' : '');
@@ -193,6 +217,24 @@
         : '<button type="button" role="tab" data-tab="' + t.id + '" aria-selected="' +
           (t.id === state.tab) + '">' + inner + '</button>';
     }).join('');
+  }
+
+  function buildChrome() {
+    buildTabs();
+    // The corner chat button. A link out to Telegram until FastAPI lands.
+    var fab = document.getElementById('chatFab');
+    if (!fab) {
+      fab = document.createElement('a');
+      fab.id = 'chatFab';
+      fab.className = 'fab';
+      fab.target = '_blank';
+      fab.rel = 'noopener';
+      fab.setAttribute('aria-label', 'Chat to the coach');
+      fab.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+        '<path d="M21 4 3 11l5 2 2 5 3-4 5 3z"/></svg>';
+      document.body.appendChild(fab);
+    }
+    fab.href = TELEGRAM;
 
     $('#gear').onclick = function () { show('set'); };
     $('#whoName').onclick = openGate;
@@ -224,7 +266,13 @@
     location.hash = tab;
     TABS.forEach(function (t) {
       if (t.href) return;                 // link-out tab: no view to toggle
-      $('#v-' + t.id).classList.toggle('on', t.id === tab);
+      var v = $('#v-' + t.id);
+      // Null-guarded: a TABS entry whose section is missing must not throw here. An
+      // exception in this loop skips every LATER tab, and Settings is last, which is
+      // the only route to switching athlete - that combination has stranded the app
+      // before.
+      if (!v) return;
+      v.classList.toggle('on', t.id === tab);
       var b = $('#tabs button[data-tab="' + t.id + '"]');
       if (b) b.setAttribute('aria-selected', String(t.id === tab));
     });
@@ -2240,6 +2288,158 @@
     document.body.classList.remove('drawn');
   }
 
+
+  /* ── Food ────────────────────────────────────────────────────────────────
+     Three views in one page, per spec 13: today against its zones, the rolling
+     week, and the block.
+
+     The one rule this renderer must not break: a CEILING is not a progress bar.
+     Fibre before a long session, and fat on a crowded day, are limits. Drawing them
+     as bars filling toward a goal makes a low number read as failure when it is
+     compliance - the exact misreading spec 4.1 warns about. So a ceiling gets its
+     own treatment: a limit line and a plain "within" or "over", never a fill.
+
+     There is deliberately no body-fat chart. BIA fat is weight divided by an assumed
+     hydration constant, so it tracks the scale at r = 0.999 and a trend line would be
+     a weight chart wearing a fat label. publish-nutrition-data.py does not even emit
+     the series. */
+
+  function zoneRow(label, consumed, z) {
+    if (!z) return '';
+    var c = Math.round(consumed || 0), lo = Math.round(z.low), hi = Math.round(z.high);
+    var ceiling = z.bias === 'ceiling', floor = z.bias === 'floor';
+    var state_, note;
+    if (ceiling) {
+      state_ = c <= hi ? 'ok' : 'over';
+      note = c <= hi ? 'within ' + hi + ' g' : Math.round(c - hi) + ' g over';
+    } else if (floor) {
+      state_ = c >= lo ? 'ok' : 'low';
+      note = c >= lo ? 'past ' + lo + ' g' : Math.round(lo - c) + ' g short of ' + lo;
+    } else {
+      state_ = c < lo ? 'low' : (c > hi ? 'over' : 'ok');
+      note = lo + '-' + hi + ' g';
+    }
+    var pct = Math.max(0, Math.min(100, hi ? (c / hi) * 100 : 0));
+    var loPct = hi ? Math.max(0, Math.min(100, (lo / hi) * 100)) : 0;
+    // A ceiling shows a limit marker and no fill; a floor and a band show a fill.
+    var track = ceiling
+      ? '<span class="zt zt-ceil"><i style="width:' + pct.toFixed(1) + '%"></i>' +
+        '<b class="zlim"></b></span>'
+      : '<span class="zt"><i class="' + state_ + '" style="width:' + pct.toFixed(1) +
+        '%"></i><b class="zmark" style="left:' + loPct.toFixed(1) + '%"></b></span>';
+    return '<div class="zrow"><span class="zl">' + esc(label) +
+      (ceiling ? ' <em>ceiling</em>' : '') + '</span>' + track +
+      '<span class="zv"><b>' + c + '</b><span>' + esc(note) + '</span></span></div>';
+  }
+
+  function renderFood() {
+    var n = state.nutr;
+    var host = $('#v-food');
+    if (!host) return;
+    if (!n || !n.days || !n.days.length) {
+      host.innerHTML = '<div class="card"><div class="empty">No food logged yet. ' +
+        'Tell the nutrition bot what you ate and it appears here.</div></div>';
+      return;
+    }
+    var today = n.days[n.days.length - 1];
+    var z = today.zones || null;
+    var t = today.totals || {};
+    var h = '';
+
+    /* Today */
+    var head = '<div class="figrow">' +
+      fig(Math.round(t.kcal || 0).toLocaleString(), 'kcal today',
+          z ? 'of ' + Math.round(z.kcal_target).toLocaleString() : 'no target yet') +
+      fig(today.day_type ? today.day_type.replace(/_/g, ' ') : '-', 'day type',
+          z && z.confidence === 'low_confidence' ? 'guessed from your week' : 'from your calendar') +
+      fig(z && z.deficit_applied_kcal ? '-' + z.deficit_applied_kcal : 'none', 'deficit',
+          z && z.deficit_applied_kcal ? 'applied today' : 'not today') +
+      '</div>';
+    var rows = z ? (zoneRow('Protein', t.protein_g, z.protein_g) +
+                    zoneRow('Carbs', t.carb_g, z.carb_g) +
+                    zoneRow('Fat', t.fat_g, z.fat_g) +
+                    zoneRow('Fibre', t.fibre_g, z.fibre_g)) : '';
+    var notes = [];
+    if (t.non_counting_protein_g) {
+      notes.push('+' + Math.round(t.non_counting_protein_g) +
+                 ' g collagen, not counted toward protein (no tryptophan, low leucine)');
+    }
+    if (today.fuel_from_coach) {
+      notes.push('Includes ' + Math.round(t.in_session_carb_g) +
+                 ' g of ride fuel logged in the coach bot' +
+                 (today.energy_is_derived ? ', energy derived from carbs' : ''));
+    }
+    if (t.dietary_sodium_mg) {
+      notes.push('Sodium ' + Math.round(t.dietary_sodium_mg).toLocaleString() +
+                 ' mg. No personal target: no sweat test, so the assumed band is ' +
+                 n.sodium.assumed_band_mg_l.join('-') + ' mg/L');
+    }
+    if (t.lowest_confidence === 'estimate') {
+      notes.push('Some items are estimates, roughly +/-10-15%');
+    }
+    (z && z.modifiers ? z.modifiers : []).forEach(function (m) { notes.push(m); });
+    h += card('Today', head + '<div class="zones">' + rows + '</div>' +
+      (notes.length ? '<ul class="notelist"><li>' +
+        notes.map(esc).join('</li><li>') + '</li></ul>' : ''),
+      { foot: 'A ceiling is a limit, not a goal. Coming in under one is compliance.' });
+
+    /* Rolling 7 days */
+    var last7 = n.days.slice(-7);
+    var logged = last7.filter(function (d) { return d.items && d.items.length; }).length;
+    var p = n.plants || {};
+    var w = n.weight || {};
+    h += card('Last 7 days',
+      '<div class="figrow">' +
+      fig(p.unique_7d != null ? p.unique_7d : '-', 'plant species',
+          'aiming around ' + (p.target || 30)) +
+      fig(p.new_today != null ? p.new_today : '-', 'new today', 'variety, not a score') +
+      fig(w.rolling_7d_mean_kg ? w.rolling_7d_mean_kg.toFixed(1) : '-', 'kg',
+          'morning 7-day mean') +
+      fig(logged + '/7', 'days logged', 'in the last week') +
+      '</div>' +
+      (p.species && p.species.length
+        ? '<p class="plantlist">' + esc(p.species.join(' · ')) + '</p>' : ''),
+      { foot: p.basis || '' });
+
+    /* Block */
+    var b = n.block || {};
+    var proj = w.projection || null;
+    var flagRows = n.days.slice().reverse().filter(function (d) {
+      return d.flags && d.flags.length;
+    }).slice(0, 8).map(function (d) {
+      return '<tr><td class="lbl">' + esc(d.date) + '</td><td>' +
+        esc(d.flags.map(function (f) { return f.type.replace(/_/g, ' '); }).join(', ')) +
+        '</td></tr>';
+    }).join('');
+    var blockBody = '<div class="figrow">' +
+      fig(b.days_to_race != null ? b.days_to_race : '-', 'days to race',
+          b.race_name || '') +
+      fig(w.rolling_7d_mean_kg ? w.rolling_7d_mean_kg.toFixed(1) : '-', 'kg now',
+          'morning mean') +
+      fig(w.race_target_kg || '-', 'kg target', 'from your profile') +
+      '</div>';
+    if (proj) {
+      // The target is never shown without the shortfall beside it: an unreachable
+      // number displayed alone is worse than no number.
+      blockBody += '<p class="proj' + (proj.reaches_target ? '' : ' miss') + '">' +
+        'On the current deficit you land near <b>' + proj.projected_race_kg +
+        ' kg</b>' + (proj.reaches_target ? ', which meets the target.'
+          : ', which is ' + proj.shortfall_kg + ' kg short. Reaching ' +
+            w.race_target_kg + ' kg would need about ' +
+            proj.required_daily_kcal_to_reach.toLocaleString() +
+            ' kcal/day every day, which the safety limits block.') + '</p>';
+    }
+    if (flagRows) {
+      blockBody += '<table class="tbl"><tbody>' + flagRows + '</tbody></table>';
+    }
+    h += card('Block', blockBody,
+      { foot: 'Protein is a floor that flexes with load, so it is not charted as a ' +
+              'constant. No body-fat trend: BIA fat tracks the scale at r = 0.999, ' +
+              'so a trend line would be a weight chart with a different label.' });
+
+    host.innerHTML = h;
+  }
+
   /* ── Settings ────────────────────────────────────────────────────────── */
 
   function renderSettings() {
@@ -2276,6 +2476,24 @@
               'Strength and everything else still appear in the calendar, the week ' +
               'totals and the load chart, because they are training you did. The last ' +
               'sport cannot be turned off - an app focused on nothing has nothing to show.' });
+
+    // Only offered when the data exists. A toggle that cannot reveal anything is
+    // worse than no toggle: it implies the feature is broken rather than not published.
+    if (state.nutr && state.nutr.nutrition_enabled) {
+      var fon = nutritionOn();
+      h += card('Food tracking',
+        '<div class="body-flush" id="foodPick">' +
+        '<button type="button" class="pickrow' + (fon ? ' on' : '') +
+        '" data-food="1" aria-pressed="' + fon + '">' +
+        '<span class="gate-mark">F</span>' +
+        '<span class="gate-row-t"><b>Food tab</b><span>' +
+        (fon ? 'showing in the bar' : 'hidden') + '</span></span>' +
+        '<span class="gate-go">' + (fon ? '✓' : '+') + '</span></button></div>',
+        { flush: true,
+          foot: 'Hides or shows the Food tab on this device. It is opt-in per athlete ' +
+                'and off unless nutrition data is published for them, so turning it ' +
+                'on here cannot reveal anyone else\u2019s log.' });
+    }
 
     h += card('Data', '<table class="tbl"><tbody>' +
       '<tr><td class="lbl">Last refreshed</td><td class="t">' +
@@ -2394,6 +2612,18 @@
       if (state.tab === 'trends') drawTrend();
     };
 
+    var fp = $('#foodPick');
+    if (fp) fp.onclick = function (e) {
+      if (!e.target.closest('.pickrow[data-food]')) return;
+      var next = nutritionOn() ? '0' : '1';
+      try { localStorage.setItem('cc.food.' + state.slug, next); }
+      catch (err) { /* choice just won't persist */ }
+      renderSettings();
+      buildTabs();
+      // If the tab being hidden is the one on screen, move somewhere that still exists.
+      if (next === '0' && state.tab === 'food') show('today');
+    };
+
     var ls = $('#libSeg');
     if (ls) ls.onclick = function (e) {
       var b = e.target.closest('button');
@@ -2407,7 +2637,10 @@
 
   function skeleton() {
     var s = '<div class="card">' + '<div class="skel"></div>'.repeat(3) + '</div>';
-    TABS.forEach(function (t) { if (!t.href) $('#v-' + t.id).innerHTML = s; });
+    TABS.forEach(function (t) {
+      var v = t.href ? null : $('#v-' + t.id);
+      if (v) v.innerHTML = s;
+    });
   }
 
   function renderAll() {
@@ -2416,7 +2649,8 @@
     // rendered, and Settings is the only route to switching athlete - which stranded
     // the user on a profile with no way out. A broken view should cost that view only.
     [['today', renderToday], ['cal', renderCalendar], ['trends', renderTrends],
-     ['goals', renderGoals], ['set', renderSettings]].forEach(function (v) {
+     ['goals', renderGoals], ['food', renderFood],
+     ['set', renderSettings]].forEach(function (v) {
       try {
         v[1]();
       } catch (err) {
@@ -2525,11 +2759,30 @@
     fetch('../ClaudeCoach/public/training-data-' + slug + '.json', { cache: 'no-cache' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function (j) { state.data = j; renderAll(); })
+      .then(loadNutrition)
       .catch(function () {
         $('#v-today').innerHTML =
           '<div class="card"><div class="empty">Could not load ' + esc(slug) +
           '’s data. It refreshes nightly.</div></div>' + chatCTA('Ask the coach instead');
       });
+  }
+
+  /* Opt-in and per athlete, so a 404 is the NORMAL case for anyone without the flag
+     and must not surface as an error. */
+  function loadNutrition() {
+    state.nutr = null;
+    fetch('../ClaudeCoach/public/nutrition-' + state.slug + '.json?v=' + Date.now(),
+          { cache: 'no-cache' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        state.nutr = j;
+        // The tab bar is built before this resolves, so it has to be rebuilt once the
+        // opt-in answer is known - otherwise Food never appears without a reload.
+        buildTabs();
+        renderFood();
+        renderSettings();
+      })
+      .catch(function () { /* absent by design for athletes without the flag */ });
   }
 
   function loadLibrary() {

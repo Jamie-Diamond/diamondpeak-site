@@ -103,6 +103,60 @@ body{
 .gear[aria-pressed=true]{color:var(--accent)}
 .countdown b{display:block;font-family:'Libre Baskerville',serif;font-size:16px;letter-spacing:-.01em;color:var(--ink);text-transform:none}
 
+/* ── corner chat button ──────────────────────────────────────────────────────
+   Chat was the raised CENTRE slot of the tab bar, which requires an odd number of
+   slots. The opt-in Food tab makes it six, so chat moved out here: same
+   thumb-reachable corner, no constraint on how many tabs the bar carries. Sits above
+   the bar rather than inside it, and clear of the safe-area inset. */
+.fab{
+  position:fixed;right:16px;z-index:40;
+  bottom:calc(var(--tab-h) + 14px + env(safe-area-inset-bottom,0px));
+  width:52px;height:52px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--ink);color:var(--paper);
+  box-shadow:0 6px 18px rgba(0,0,0,.28);
+  -webkit-tap-highlight-color:transparent;
+}
+.fab svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round;margin-left:-2px}
+.fab:active{transform:scale(.94)}
+
+/* ── food: zone rows ─────────────────────────────────────────────────────────
+   A ceiling is NOT a progress bar. Fibre before a long session is a limit, so a low
+   number is compliance; drawing it as a bar filling toward a goal makes success look
+   like failure. Ceilings therefore get a limit line at the end of the track and no
+   coloured fill, while floors and bands get a fill plus a marker at the floor. */
+.zones{padding:2px 0 6px}
+.zrow{display:grid;grid-template-columns:76px 1fr 84px;align-items:center;
+  gap:10px;padding:8px 15px;border-bottom:1px solid var(--rule-soft)}
+.zrow:last-child{border-bottom:0}
+.zl{font-family:'DM Sans',sans-serif;font-size:12.5px}
+.zl em{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);font-style:normal}
+.zt{position:relative;height:7px;border-radius:4px;background:var(--rule-soft);
+  display:block;overflow:visible}
+.zt i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;
+  background:var(--green);display:block}
+.zt i.low{background:var(--muted)}
+.zt i.over{background:#a4472f}
+.zt .zmark{position:absolute;top:-3px;width:1px;height:13px;background:var(--secondary);
+  opacity:.55}
+.zt-ceil{background:repeating-linear-gradient(90deg,var(--rule-soft) 0 4px,transparent 4px 7px)}
+.zt-ceil i{background:var(--secondary);opacity:.5}
+.zt-ceil .zlim{position:absolute;right:0;top:-4px;width:2px;height:15px;
+  background:#a4472f}
+.zv{text-align:right;font-family:'DM Mono',monospace;font-size:11px;line-height:1.25}
+.zv b{display:block;font-size:14px;font-weight:500}
+.zv span{color:var(--muted);font-size:9px}
+.notelist{margin:0;padding:10px 15px 4px 30px;font-family:'DM Sans',sans-serif;
+  font-size:12px;color:var(--secondary)}
+.notelist li{margin:0 0 4px}
+.plantlist{padding:2px 15px 12px;font-family:'DM Mono',monospace;font-size:10.5px;
+  color:var(--secondary);line-height:1.7}
+.proj{padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:13px;
+  border-top:1px solid var(--rule-soft);margin:0}
+.proj.miss{color:#8d3f2a}
+
 /* ── whobar: one line, not three tabs ────────────────────────────────────── */
 /* The athlete segmented control moved into the entry screen. Which athlete you
    are is settled once, on open, so it does not deserve permanent chrome on
@@ -736,6 +790,9 @@ body.drawn{overflow:hidden}
   <section class="view" id="v-cal" role="tabpanel" aria-label="Calendar"></section>
   <section class="view" id="v-trends" role="tabpanel" aria-label="Trends"></section>
   <section class="view" id="v-goals" role="tabpanel" aria-label="Goals"></section>
+  <!-- Opt-in per athlete: present in the DOM for everyone, but the tab that reaches it
+       only exists when nutrition data was published for this athlete. -->
+  <section class="view" id="v-food" role="tabpanel" aria-label="Food"></section>
   <section class="view" id="v-set" role="tabpanel" aria-label="Settings"></section>
 </main>
 

@@ -1739,6 +1739,24 @@ def main():
         except Exception as e:
             log(f"Session library publish warning: {e} — app keeps last copy")
 
+        # Nutrition subset for the app's Food tab. OPT-IN: the script writes nothing at
+        # all for an athlete whose profile lacks nutrition_tracker: true, so a new
+        # athlete is never published by omission. Non-fatal, like the library above:
+        # this refresh must never fail because a secondary publish did.
+        try:
+            r = subprocess.run(
+                [sys.executable, str(BASE / "scripts" / "publish-nutrition-data.py")],
+                capture_output=True, text=True, timeout=120,
+            )
+            out = (r.stdout or r.stderr).strip().splitlines()
+            log("Nutrition: " + ("; ".join(out[-3:]) if out else "nothing published"))
+            for line in out:
+                slug = line.split(":")[0].strip()
+                if "wrote" in line and slug:
+                    _PUBLISHED.append(f"ClaudeCoach/public/nutrition-{slug}.json")
+        except Exception as e:
+            log(f"Nutrition publish warning: {e} — app keeps last copy")
+
         log("Fetching live data via IcuClient...")
         try:
             data = _build_jamie_data(client)
