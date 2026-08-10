@@ -78,8 +78,10 @@ zz = z(day_type="standard", sessions=RIDE2H)
 check("protein is a floor", zz["protein_g"]["bias"] == N.BIAS_FLOOR)
 check("calories are a band", zz["kcal"]["bias"] == N.BIAS_BAND)
 check("fibre on a normal day is a floor", zz["fibre_g"]["bias"] == N.BIAS_FLOOR)
-check("fat ceiling declares it is reasoned, not literature",
-      "reason" in zz["fat_g"]["basis"])
+check("fat zone declares which end is sourced and which is practice",
+      "sourced" in zz["fat_g"]["basis"] and "practice" in zz["fat_g"]["basis"])
+check("protein zone states its g/kg basis", "g/kg" in zz["protein_g"]["basis"])
+check("carb zone says it is the remainder", "remainder" in zz["carb_g"]["basis"])
 check("calorie band is +/-5%",
       abs(zz["kcal"]["high"] - zz["kcal"]["low"] - 0.1 * zz["kcal_target"]) < 2)
 
@@ -122,9 +124,46 @@ off = z(day_type="standard", sessions=RIDE2H)
 check("deficit off by default", off["deficit_applied_kcal"] == 0)
 check("deficit lowers the target", off["kcal_target"] > std["kcal_target"])
 
+# 7b) The day must CLOSE: protein floor + fat floor + carb high == the target. A
+#     prescribed carb band left 824 kcal unallocated on long days.
+for label, zc in (("recovery", rec), ("standard", std), ("long_ride", lng),
+                  ("pre-long", pre)):
+    total = zc["protein_g"]["low"] * 4 + zc["fat_g"]["low"] * 9 + zc["carb_g"]["high"] * 4
+    check(f"{label} day closes to its target (got {total:.0f} vs {zc['kcal_target']})",
+          abs(total - zc["kcal_target"]) <= 2)
+
+# 7c) A deficit too small to mean anything is dropped, not reported.
+check("recovery day reports no deficit rather than a 16 kcal one",
+      rec["deficit_applied_kcal"] == 0)
+check("the protein deficit bump is never claimed without a deficit",
+      all((z_["deficit_applied_kcal"] > 0)
+          == any("lean mass" in m for m in z_["modifiers"])
+          for z_ in (rec, std, lng, pre)))
+
+# 7d) Protein flexes with load and with the deficit, in g/kg.
+check("protein floor is higher on a long day than a recovery day",
+      lng["protein_g"]["low"] > rec["protein_g"]["low"])
+check("protein floor rises when a deficit is actually applied",
+      std["protein_g"]["low"] > z(day_type="standard", sessions=RIDE2H)["protein_g"]["low"])
+check("protein tracks bodyweight, not a fixed gram figure",
+      z(day_type="standard", rolling_weight=79.0, rmr=RMR)["protein_g"]["low"]
+      < z(day_type="standard", rolling_weight=88.0, rmr=RMR)["protein_g"]["low"])
+
+# 7e) Race week: carbs are prescribed and the energy follows them, with the surplus
+#     stated. Deriving the target from maintenance left the day 1,470 kcal short.
+rw = z(day_type="standard", sessions=RIDE2H, days_to_race=2, deficit_enabled=True)
+check("race week reports a surplus against maintenance",
+      rw["carb_load_surplus_kcal"] > 0)
+check("race week target exceeds maintenance", rw["kcal_target"] > rw["kcal_maintenance"])
+check("no deficit during the carb load", rw["deficit_applied_kcal"] == 0)
+check("carb load suppression is explained",
+      any("carb loading" in w for w in rw["warnings"]))
+
 # 8) Fat is bidirectional: crowded on low days, GI-limited on pre-long days.
-check("long day has far more fat headroom than a recovery day",
-      lng["fat_g"]["high"] > rec["fat_g"]["high"] + 50)
+check("fat is capped in g/kg, so a long day cannot quote an absurd ceiling",
+      lng["fat_g"]["high"] <= N.FAT_CEILING_G_PER_KG * W + 0.5)
+check("carbs, not fat, absorb the long day's energy",
+      lng["carb_g"]["high"] > rec["carb_g"]["high"] * 3)
 check("pre-long day tightens the fat ceiling to 90 g",
       pre["fat_g"]["high"] <= N.FAT_CEILING_PRE_LONG_G)
 check("fat floor is 0.9 g/kg on rolling weight",
@@ -150,7 +189,7 @@ check("carbs go to the upper half before a long session",
 # 10) Post-long-ride protein modifier.
 post = z(day_type="recovery", yesterday_type="long_ride")
 check("protein floor rises after a long ride",
-      post["protein_g"]["low"] == N.PROTEIN_POST_LONG_FLOOR_G)
+      abs(post["protein_g"]["low"] - N.PROTEIN_POST_LONG_FLOOR_G_PER_KG * W) < 0.6)
 check("the modifier is reported", any("yesterday" in m for m in post["modifiers"]))
 
 # 11) Projection replaces percentage pacing. No pacing function should survive.

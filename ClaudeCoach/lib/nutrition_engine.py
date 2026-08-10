@@ -37,14 +37,16 @@ more estimating.
 THE DEFICIT IS PROPORTIONAL AND SELF-LIMITING (Jamie's call, 10 Aug 2026)
   deficit = min(deficit_pct × maintenance, headroom)
   headroom = maintenance − (protein_floor + fat_floor + carb_band_minimum)
-A FLAT deficit does not land equally. The floors are near-fixed costs (165 g
-protein + 75 g fat = 1,335 kcal whatever the day), which is 54% of a 2,487 kcal
-recovery day but only 34% of a 3,933 kcal standard day, so a flat 350 crowds small
-days hard and large days barely - on a recovery day it left the floors and the
-carb band ~200 kcal short of satisfiable. Proportional tracks the same crowding
-mechanism §3.3 identifies for fat, and the headroom cap means it can never breach
-a floor. At 10% that is ~153 kcal on a recovery day, ~393 on a standard day, zero
-on long days, projecting ~1.3 kg over 40 days.
+A FLAT deficit does not land equally. The floors are near-fixed costs (~167 g
+protein + 75 g fat = ~1,343 kcal whatever the day), which is 54% of a 2,491 kcal
+recovery day but only 34% of a 3,938 kcal standard day, so a flat 350 crowds small
+days hard and large days barely - on a recovery day it left the floors and the carb
+floor ~200 kcal short of satisfiable. Proportional tracks the same crowding
+mechanism §3.3 identifies for fat, and the headroom cap means it can never breach a
+floor. In practice that is ~394 kcal on a standard day and ZERO on a recovery day:
+after the headroom cap and the fat-zone reserve there are only ~16 kcal of room
+there, which is inside the error on every input, so it is dropped rather than
+reported as a deficit. Projects ~1.1-1.3 kg over 40 days.
 
 Known tension, recorded rather than resolved: proportional puts the largest
 absolute cut on the largest non-long training day, which is the opposite of "fuel
@@ -58,6 +60,8 @@ preferences:
   2. suppressed entirely while the RHR guard is active - a deficit stacked on an
      unresolved illness signal is the failure mode §10.2 exists to prevent, and it
      already happened once in early August
+  3. never the day BEFORE a long session (it would fight the glycogen top-up the
+     pre-long modifier has just prescribed) and never during race-week carb loading
 The low-energy-availability flag (§10.1) fires whether or not the deficit is
 deliberate.
 
@@ -65,10 +69,31 @@ FAT IS BIDIRECTIONAL AND ITS CEILING IS DERIVED, NOT LITERATURE (v0.2 §3.3)
 Two mechanisms bind on opposite days. Calorie crowding binds on low-energy days:
 once protein and carbs are paid for, what remains for fat on a recovery day is
 tight. Gastric emptying binds on long days, where there is plenty of calorie room
-but fat slows absorption of the carbs the session needs. So the ceiling is computed
-from residual calorie space and then tightened on pre-long and race days. The floor
-(0.9 g/kg) is well sourced; the ceilings are reasoning, and the returned zone says
-so via `basis`.
+but fat slows absorption of the carbs the session needs.
+
+Fat is a g/kg BAND (0.9-1.2), not a residual. An earlier cut derived the ceiling
+from whatever calorie space remained, which quoted 75-229 g on a long ride day: 229
+g is not a sane target and would compromise GI on the day it matters most. The floor
+(0.9 g/kg) is well sourced and matches commercial practice exactly; the 1.2 g/kg
+ceiling is practice, and the pre-long (90 g) and race-week (80 g) tightenings are
+reasoning. `basis` says which on every zone returned.
+
+CARBS ARE THE REMAINDER, NOT A PRESCRIBED BAND (reverting v0.2 to v0.1 here)
+Carbs are the day's shock absorber: they take whatever energy is left once protein
+and fat are paid for. v0.2 made them a prescribed g/kg band, and the day then did
+not add up - on a long ride day, protein plus fat capped at 1.2 g/kg plus carbs at
+the top of the 8-9 g/kg band left 824 kcal unallocated with nothing to absorb it.
+The day-type g/kg figures survive as (a) a safety FLOOR and (b) a cross-check that
+warns when the landing is far outside the reference band, which is usually a signal
+that the activity calories are wrong. Commercial practice does the same: Fuelin sets
+protein and fat per kg and leaves carbs emergent, classifying them after the fact.
+
+Race week inverts this. A 10-12 g/kg load is a PRESCRIPTION and at 83 kg it is
+3,300-4,000 kcal of carbohydrate alone, so it cannot fit inside a maintenance
+target: the energy follows the carbs, and the resulting surplus is reported in
+`carb_load_surplus_kcal`. That surplus is exactly why the spec suppresses the weight
+display during the load - 1-2 kg of glycogen-bound water reads as fat gain on a BIA
+scale.
 
 G/KG BASIS DIFFERS FROM THE FUELLING ENGINE, DELIBERATELY
 plan_tools.py race-fuelling computes carbs/kg off profile `race_weight_kg` (79.0),
@@ -120,15 +145,32 @@ from datetime import date, datetime, timedelta
 KCAL_PER_KG_FAT = 7700
 NEAT_TEF_MULTIPLIER = 1.35
 
-# Protein is a FLOOR with headroom, not the flat 180 of v0.1. Noting the cost of
-# that change: v0.1 justified a flat figure as "the one target that should not move
-# with training load", and the Block view charted adherence to it. v0.2 makes it a
-# range and adds a post-long-ride modifier, so that chart loses its premise.
-PROTEIN_FLOOR_G = 165
-PROTEIN_HIGH_G = 200
-PROTEIN_POST_LONG_FLOOR_G = 180        # yesterday was a long ride
+# Protein is expressed PER KG and flexes with load, not as a fixed gram figure.
+# v0.1 had a flat 180 g; v0.2 made it a 165-200 g range; this makes it g/kg so it
+# tracks the athlete's weight as it changes, which a fixed figure cannot. Range
+# and magnitude match commercial practice (Fuelin prescribes 2.0-2.5 g/kg
+# bodyweight, flexing with training load) rather than being invented here.
+# Cost of the change, worth knowing: v0.1 justified a flat figure as "the one target
+# that should not move with training load" and the Block view charted adherence to
+# it. Protein now moves, so that chart loses its premise.
+PROTEIN_G_PER_KG = {
+    "recovery":  (2.0, 2.5),
+    "standard":  (2.1, 2.5),
+    "long_run":  (2.2, 2.6),
+    "long_ride": (2.2, 2.6),
+}
+# In an energy deficit protein requirement rises to protect lean mass (Helms et al.,
+# cited in the spec's own provenance note), so the floor lifts when a deficit is
+# actually applied - not merely when the flag is on.
+PROTEIN_DEFICIT_BUMP_G_PER_KG = 0.1
+PROTEIN_POST_LONG_FLOOR_G_PER_KG = 2.2   # yesterday was a long ride
 
-FAT_FLOOR_G_PER_KG = 0.9               # well sourced. v0.1 used a flat 80 g
+FAT_FLOOR_G_PER_KG = 0.9               # well sourced; also Fuelin's floor exactly
+# Fat now has a HARD ceiling in g/kg rather than taking whatever residual calorie
+# space remains. Deriving it from the residual gave 75-229 g on a long ride day:
+# 229 g is not a sane target and would compromise GI on the day it matters most.
+# 1.2 g/kg is Fuelin's ceiling.
+FAT_CEILING_G_PER_KG = 1.2
 FAT_CEILING_PRE_LONG_G = 90            # GI, not energetics
 FAT_CEILING_RACE_WEEK_G = 80
 
@@ -144,6 +186,11 @@ PACE_LEGACY_REMOVED = True             # v0.1 percentage pacing deleted, see §7
 # zero-width zone is a point target, which is the thing v0.2 3.2 exists to remove,
 # and every deviation from it flags. So the cap reserves this much fat range.
 FAT_ZONE_MIN_WIDTH_G = 15
+
+# Below this the deficit is not a deficit, it is rounding. A headroom-capped
+# recovery day produced a 16 kcal "deficit", which is far inside the error on every
+# input feeding it; reporting it would be false precision.
+DEFICIT_MIN_MEANINGFUL_KCAL = 50
 
 # Adaptive correction (see deficit_correction). Bounded so a noisy trend can nudge
 # intake but never swing it, and gated on enough clean morning weights to mean
@@ -365,25 +412,49 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
     pre_long = tomorrow_type in LONG_DAY_TYPES
     race_week = days_to_race is not None and 0 <= days_to_race <= 3
 
-    # 1. protein: a floor with headroom, raised the day after a long ride
-    p_low, p_high = PROTEIN_FLOOR_G, PROTEIN_HIGH_G
+    # 1. protein: a g/kg band that flexes with load, the deficit, and yesterday.
+    #    The deficit bump is applied only if a deficit will ACTUALLY be applied, which
+    #    is not the same as deficit_enabled. Bumping on the flag alone was circular:
+    #    the bump raised the floors, the floors consumed the headroom, the headroom
+    #    cap then zeroed the deficit, and the day carried a modifier saying "energy
+    #    deficit" with no deficit in it. Two passes, because the bump feeds back into
+    #    the headroom that decides whether it should have been applied at all.
+    p_lo_kg, p_hi_kg = PROTEIN_G_PER_KG[day_type]
+    deficit_possible = (deficit_enabled and not is_long and not rhr_guard_active
+                        and not pre_long and not race_week)
+    if deficit_possible:
+        # Probe with the BUMPED floor, not the base one: the question is whether a
+        # deficit survives once the bump is paid for. Probing with the base floor
+        # said yes on a recovery day, applied the bump, and the bump then consumed
+        # the last of the headroom - leaving the modifier claiming a deficit that
+        # had been capped to zero.
+        probe_low = (p_lo_kg + PROTEIN_DEFICIT_BUMP_G_PER_KG) * rolling_weight
+        probe_floors = (probe_low * 4 + FAT_FLOOR_G_PER_KG * rolling_weight * 9
+                        + DAY_TYPES[day_type]["carb_g_per_kg"][0] * rolling_weight * 4)
+        probe_room = maintenance - probe_floors - FAT_ZONE_MIN_WIDTH_G * 9
+        if probe_room > 0:
+            p_lo_kg += PROTEIN_DEFICIT_BUMP_G_PER_KG
+            modifiers.append("protein floor raised: energy deficit, protecting lean mass")
     if yesterday_type == "long_ride":
-        p_low = PROTEIN_POST_LONG_FLOOR_G
+        p_lo_kg = max(p_lo_kg, PROTEIN_POST_LONG_FLOOR_G_PER_KG)
         modifiers.append("protein floor raised: yesterday was a long ride")
+    p_low, p_high = p_lo_kg * rolling_weight, p_hi_kg * rolling_weight
 
-    # 2. carbs: g/kg by day type, or the carb load inside 3 days of the race
+    # 2. carbs: the SAFETY FLOOR only. The upper end is derived at step 5 from
+    #    whatever energy is left, because carbs are the day's shock absorber - see
+    #    the module docstring on why they cannot be a prescribed band.
     if race_week:
         c_lo_kg, c_hi_kg = CARB_LOAD_G_PER_KG
         modifiers.append("carb load: within 3 days of the race")
     else:
         c_lo_kg, c_hi_kg = DAY_TYPES[day_type]["carb_g_per_kg"]
-    c_low, c_high = c_lo_kg * rolling_weight, c_hi_kg * rolling_weight
+    c_low = c_lo_kg * rolling_weight
     if pre_long and not race_week:
-        # Upper half only: topping glycogen before the session, not after.
-        c_low = (c_low + c_high) / 2
-        modifiers.append("carbs to the upper half: long session tomorrow")
+        # Topping glycogen before the session: lift the floor to the band midpoint.
+        c_low = (c_low + c_hi_kg * rolling_weight) / 2
+        modifiers.append("carb floor lifted: long session tomorrow")
 
-    # 3. fat floor is sourced; the deficit is then capped so it cannot breach it
+    # 3. fat is a g/kg band, no longer a residual
     f_floor = FAT_FLOOR_G_PER_KG * rolling_weight
 
     floors_kcal = p_low * 4 + f_floor * 9 + c_low * 4
@@ -397,6 +468,8 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
             warnings.append("deficit suppressed: long session day, fuelling takes priority")
         elif rhr_guard_active:
             warnings.append("deficit suppressed: resting HR elevated, holding maintenance")
+        elif race_week:
+            warnings.append("deficit suppressed: carb loading for the race")
         elif pre_long:
             # A deficit here fights the modifier already applied: carbs have just
             # been pushed to the upper half to arrive at tomorrow's session
@@ -406,28 +479,72 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
             uncapped = deficit_pct * maintenance
             deficit = min(uncapped, allowable) + correction_kcal
             deficit = max(0.0, min(deficit, allowable))
+            if 0 < deficit < DEFICIT_MIN_MEANINGFUL_KCAL:
+                warnings.append(
+                    f"deficit dropped: only {deficit:.0f} kcal of room, which is inside "
+                    f"the error on the inputs")
+                deficit = 0.0
             if deficit < uncapped - 1:
                 warnings.append(
                     f"deficit capped at {deficit:.0f} kcal (from {uncapped:.0f}): the "
                     f"protein, fat and carb floors leave only {allowable:.0f} kcal of room")
     target_kcal = maintenance - deficit
 
-    # 4. fat ceiling from residual calorie space, then tightened for GI reasons
-    residual_fat_g = (target_kcal - p_low * 4 - c_low * 4) / 9
-    f_high = max(f_floor, residual_fat_g)
-    fat_basis = "residual calorie space (reasoned, not literature)"
-    if race_week and f_high > FAT_CEILING_RACE_WEEK_G:
-        f_high = FAT_CEILING_RACE_WEEK_G
+    # Race week inverts the whole calculation. A 10-12 g/kg carb load is a
+    # PRESCRIPTION, and at 83 kg it is 3,300-4,000 kcal of carbohydrate alone, so it
+    # cannot be fitted inside a maintenance target: the energy has to follow the
+    # carbs. Deriving the target from maintenance here produced a day that did not
+    # close by 1,470 kcal and a collapsed fat zone. The resulting surplus is expected
+    # and is exactly why the spec suppresses the weight display during the load: the
+    # 1-2 kg of glycogen-bound water reads as fat gain on a BIA scale.
+    carb_load_surplus = 0
+    if race_week:
+        load_mid = sum(CARB_LOAD_G_PER_KG) / 2 * rolling_weight
+        target_kcal = p_low * 4 + f_floor * 9 + load_mid * 4
+        carb_load_surplus = round(target_kcal - maintenance)
+        modifiers.append(
+            f"target driven by the carb load, not maintenance: "
+            f"{carb_load_surplus:+d} kcal against maintenance")
+
+    # 4. fat ceiling: a g/kg band, tightened for GI on pre-long and race days, and
+    #    then limited by whatever energy is actually left. The g/kg cap is what stops
+    #    the old residual approach quoting 229 g on a long ride.
+    f_ceiling = FAT_CEILING_G_PER_KG * rolling_weight
+    fat_basis = f"{FAT_FLOOR_G_PER_KG}-{FAT_CEILING_G_PER_KG} g/kg (floor sourced, ceiling practice)"
+    if race_week and f_ceiling > FAT_CEILING_RACE_WEEK_G:
+        f_ceiling = FAT_CEILING_RACE_WEEK_G
         fat_basis = "race week ceiling (GI, reasoned)"
         modifiers.append("fat ceiling tightened: race week")
-    elif pre_long and f_high > FAT_CEILING_PRE_LONG_G:
-        f_high = FAT_CEILING_PRE_LONG_G
+    elif pre_long and f_ceiling > FAT_CEILING_PRE_LONG_G:
+        f_ceiling = FAT_CEILING_PRE_LONG_G
         fat_basis = "pre-long-session ceiling (GI, reasoned)"
         modifiers.append("fat ceiling tightened: long session tomorrow")
-    if residual_fat_g < f_floor:
+    # Energy left for fat once protein and the carb safety floor are paid for.
+    fat_room_g = (target_kcal - p_low * 4 - c_low * 4) / 9
+    f_high = max(f_floor, min(f_ceiling, fat_room_g))
+    if fat_room_g < f_floor:
         warnings.append(
-            f"no calorie room for the fat floor: protein and carb floors leave "
-            f"{residual_fat_g:.0f} g against a {f_floor:.0f} g floor")
+            f"no calorie room for the fat floor: the protein and carb floors leave "
+            f"{fat_room_g:.0f} g against a {f_floor:.0f} g floor")
+
+    # 5. carbs absorb the remainder. The zone spans the two extremes of the protein
+    #    and fat ranges, so the day CLOSES at both ends of every zone. A prescribed
+    #    carb band cannot do that: on a long ride day, protein plus capped fat plus
+    #    carbs at the top of the 8-9 g/kg band left 824 kcal unallocated. The
+    #    day-type g/kg figures survive only as a cross-check that warns.
+    c_high = max(c_low, (target_kcal - p_low * 4 - f_floor * 9) / 4)
+    c_derived_low = max(c_low, (target_kcal - p_high * 4 - f_high * 9) / 4)
+    if race_week:
+        # Race week is the one case where carbs are PRESCRIBED, not emergent: the
+        # load is the point of the day and protein and fat yield to it.
+        c_high = max(c_high, c_hi_kg * rolling_weight)
+        c_derived_low = c_low
+    c_per_kg_low = c_derived_low / rolling_weight
+    c_per_kg_high = c_high / rolling_weight
+    if not race_week and not (c_lo_kg * 0.8 <= c_per_kg_high <= c_hi_kg * 1.35):
+        warnings.append(
+            f"carbs land at {c_per_kg_low:.1f}-{c_per_kg_high:.1f} g/kg against the "
+            f"{day_type} reference band {c_lo_kg}-{c_hi_kg} g/kg; check activity calories")
 
     # 5. fibre: a target most days, a CEILING before long sessions and at the race.
     #    Same day type can carry opposite bias, decided purely by the lookahead.
@@ -455,10 +572,13 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
         "net_session_kcal": net,
         "deficit_applied_kcal": round(deficit),
         "deficit_headroom_kcal": round(headroom),
-        "protein_g": _zone(p_low, p_high, BIAS_FLOOR, "2.2-2.7 g/kg FFM"),
+        "carb_load_surplus_kcal": carb_load_surplus,
+        "protein_g": _zone(p_low, p_high, BIAS_FLOOR,
+                           f"{p_lo_kg:.1f}-{p_hi_kg:.1f} g/kg bodyweight, flexing with load"),
         "fat_g": _zone(f_floor, f_high, BIAS_BAND, fat_basis),
-        "carb_g": _zone(c_low, c_high, BIAS_BAND,
-                        f"{c_lo_kg}-{c_hi_kg} g/kg on rolling weight"),
+        "carb_g": _zone(c_derived_low, c_high, BIAS_BAND,
+                        "remainder after protein and fat; "
+                        f"lands {c_per_kg_low:.1f}-{c_per_kg_high:.1f} g/kg"),
         "fibre_g": _zone(fb_low, fb_high, fb_bias,
                          "ceiling before long sessions: residue and splanchnic flow"),
         "modifiers": modifiers,
@@ -723,7 +843,10 @@ def race_weight_projection(current_kg: float, target_kg: float, days_to_race: in
         net = {"standard": 1446.0, "recovery": 0.0}.get(dtype, 0.0)
         maintenance = base + net
         c_low = DAY_TYPES[dtype]["carb_g_per_kg"][0] * current_kg
-        floors = PROTEIN_FLOOR_G * 4 + FAT_FLOOR_G_PER_KG * current_kg * 9 + c_low * 4
+        # Protein floor is per-kg and load-dependent now, so the projection must
+        # price each day type's own floor rather than one flat figure.
+        p_low = (PROTEIN_G_PER_KG[dtype][0] + PROTEIN_DEFICIT_BUMP_G_PER_KG) * current_kg
+        floors = p_low * 4 + FAT_FLOOR_G_PER_KG * current_kg * 9 + c_low * 4
         headroom = max(0.0, maintenance - floors)
         weekly_deficit += count * min(deficit_pct * maintenance, headroom)
 
