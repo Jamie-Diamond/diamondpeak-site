@@ -1087,12 +1087,14 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         hint = it.get("hint") or {}
         vendor = hint.get("brand")
         if vendor and hint.get("category") == "restaurant_dish":
-            key, _entry = RS.find_vendor(vendor)
-            if key:
-                fetchers[NR.Rung.VENDOR] = (
-                    lambda t, p, _v=vendor: RS.lookup(_v, t, RESTAURANT_CACHE))
-            else:
-                log(f"  no published nutrition held for {vendor!r}, falling to search")
+            # No allowlist. A vendor we hold nothing for is DISCOVERED and verified
+            # against the parse, then remembered - so this works for wherever he orders
+            # from, not only for chains somebody approved in advance. A miss is cached
+            # too, briefly, because discovery is a search plus a multi-megabyte fetch.
+            discover = RS.make_discover(CLAUDE_BIN, LLM_MODEL, log=log)
+            fetchers[NR.Rung.VENDOR] = (
+                lambda t, p, _v=vendor, _d=discover: RS.lookup(
+                    _v, t, RESTAURANT_CACHE, discover=_d))
         if barcode:
             fetchers[NR.Rung.RETAILER] = (
                 lambda t, p, _c=barcode: NR.off_barcode_fetch(_c, p))

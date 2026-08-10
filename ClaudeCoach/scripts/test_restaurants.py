@@ -133,6 +133,112 @@ for name in ("Wagamama", "wagamama - Camden", "WAGAMAMAS", "wagamama (halal)"):
 check("an unknown vendor returns nothing, so the ladder falls through",
       RS.find_vendor("Bob's Kebab House", reg)[0] is None)
 
+print("\n--- a size is part of a dish's identity ---")
+sizes = HEADER + dish("9 inch margherita", 700, 2900, 30.0, 90.0, 8.0, 25.0, 10.0,
+                      0.8, 2.0, 4.0) + dish(
+    "12 inch margherita", 1200, 5000, 52.0, 150.0, 12.0, 44.0, 18.0, 1.4, 3.5, 7.0)
+srows = RS.parse_tenkites(sizes)
+check("both sizes parse", len(srows) == 2, [r["name"] for r in srows])
+check("a 12 inch order does not match the 9 inch row",
+      (RS.match_dish(srows, "12 inch margherita, Franco Manca") or {}).get("kcal")
+      == 1200.0,
+      (RS.match_dish(srows, "12 inch margherita, Franco Manca") or {}).get("name"))
+check("and a 9 inch order does not match the 12 inch row",
+      (RS.match_dish(srows, "9 inch margherita, Franco Manca") or {}).get("kcal")
+      == 700.0)
+
+print("\n--- discovery: a vendor nobody approved in advance ---")
+import shutil          # noqa: E402
+import tempfile         # noqa: E402
+
+TMP = Path(tempfile.mkdtemp(prefix="rtest-"))
+_real_download = RS._download
+CALLS = {"download": 0, "discover": 0}
+
+
+def stub_download(url):
+    CALLS["download"] += 1
+    if url == "https://menus.example.com/nandos/matrix":
+        return GOOD_BIG
+    if url == "https://example.com/not-a-matrix":
+        return "<html><body>calories only, no macros</body></html>"
+    raise OSError("host unreachable")
+
+
+# A matrix big enough to earn label confidence, built from the same shape as the real one.
+GOOD_BIG = HEADER + "".join(
+    dish(f"dish number {i}", 300 + i, 1250, 10.0, 40.0, 2.0, 10.0, 2.0, 0.8, 2.0, 3.0)
+    for i in range(25))
+
+RS._download = stub_download
+
+
+def discover_ok(vendor):
+    CALLS["discover"] += 1
+    return {"official_site": "nandos.co.uk",
+            "nutrition_url": "https://menus.example.com/nandos/matrix",
+            "platform": "tenkites", "many_dishes_with_macros": True}
+
+
+def discover_nothing(vendor):
+    CALLS["discover"] += 1
+    return {"official_site": "bobskebabs.example", "nutrition_url": None,
+            "notes": "publishes no per-dish macros"}
+
+
+def discover_unparseable(vendor):
+    CALLS["discover"] += 1
+    return {"nutrition_url": "https://example.com/not-a-matrix", "platform": "unknown"}
+
+
+key, entry = RS.learn_vendor("Nando's", TMP, discover_ok, now=1000.0)
+check("an unknown chain is discovered and verified", key == "nando-s", key)
+check("and it records WHAT it verified",
+      entry and entry.get("rows_verified") == 25 and "identities held" in entry["verified"],
+      entry)
+check("a learned vendor has no swap groups, since those cannot be discovered",
+      entry.get("swap_groups") == [])
+
+CALLS["discover"] = 0
+RS.learn_vendor("Nando's", TMP, discover_ok, now=2000.0)
+check("a second order does not re-discover", CALLS["discover"] == 0)
+
+got = RS.lookup("Nando's", "dish number 7", TMP, registry={}, discover=discover_ok)
+check("a dish resolves from the learned source", got and got["kcal"] == 307.0, got)
+check("25 consistent rows earns LABEL confidence",
+      got and got["confidence"] == "label", got and got["confidence"])
+
+# Too few rows is a partial extraction, not an authoritative one.
+RS._download = lambda url: GOOD          # the 6-row fixture
+small = RS.lookup("Wagamama", "soy sauce", TMP,
+                  registry={"wagamama": {"display": "Wagamama", "platform": "tenkites",
+                                         "nutrition_url": "https://x/y",
+                                         "aliases": ["wagamama"]}})
+check("a thin extraction is downgraded to database, not passed off as label",
+      small and small["confidence"] == "database", small and small["confidence"])
+RS._download = stub_download
+
+CALLS["discover"] = 0
+key2, _ = RS.learn_vendor("Bobs Kebab House", TMP, discover_nothing, now=3000.0)
+check("a vendor with no published data returns nothing", key2 is None)
+RS.learn_vendor("Bobs Kebab House", TMP, discover_nothing, now=3100.0)
+check("and the miss is remembered rather than re-searched every time",
+      CALLS["discover"] == 1, CALLS["discover"])
+RS.learn_vendor("Bobs Kebab House", TMP, discover_nothing,
+                now=3000.0 + RS.NEGATIVE_TTL_S + 1)
+check("but the miss expires, so a chain that starts publishing is picked up",
+      CALLS["discover"] == 2, CALLS["discover"])
+
+key3, _ = RS.learn_vendor("Someplace New", TMP, discover_unparseable, now=4000.0)
+check("an unreadable format is refused rather than half-parsed", key3 is None)
+rec = RS.load_learned(TMP).get("someplace-new") or {}
+check("and its URL is kept as a sample for the next parser",
+      rec.get("tried_url") == "https://example.com/not-a-matrix"
+      and "sample" in (rec.get("reason") or ""), rec)
+
+RS._download = _real_download
+shutil.rmtree(TMP, ignore_errors=True)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

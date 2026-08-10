@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "note": "Chains that publish per-dish nutrition in a form that can be read at source. Every entry here must be VERIFIED by fetching it: an unverified URL costs a wasted fetch and then falls through to the model anyway, and a guessed one that happens to resolve to an aggregator would put label confidence on somebody's estimate. `platform` selects the parser in lib/restaurants.py. UK chain kcal on menus is mandatory, but full macros are not, so most chains publish only via a platform like this one - which is exactly why a plain web search cannot replace this rung.",
-  "how_to_add": "Find the chain's allergen/nutrition link on its own site (usually in the footer), fetch it, and confirm it serves per-dish macros as static HTML rather than a JavaScript app. Then add the vendor with that URL and its platform. Verify with: python3 -c \"import sys; sys.path.insert(0,'ClaudeCoach/lib'); import restaurants as R; m=R.load_menu('<key>', R.load_registry()['<key>'], '/tmp/rcache'); print(len(m['rows']), m.get('error'))\"",
+  "note": "SEED, not an allowlist. A vendor missing from here is discovered at resolution time, verified by actually parsing what discovery returns, and remembered in the cache directory's _learned.json - so ordering from somewhere new needs no change here. This file is for entries worth hand-holding: a chain with a swap group (which cannot be discovered), or one where discovery picks the wrong page. Nothing here is trusted because it is listed; every source still has to parse consistently to earn label confidence.",
+  "how_to_add": "Usually unnecessary - just order and let discovery run. Add an entry by hand when a chain needs a swap group, or when _learned.json shows a `failed` record whose tried_url is actually the right page in a format the parser does not read yet.",
   "vendors": {
     "wagamama": {
       "display": "Wagamama",
@@ -17,8 +17,8 @@
       "swap_groups": [
         {
           "component": "rice",
-          "note": "A rice bowl is published with sticky rice. Ordering brown rice instead is a SWAP, not an addition, so the difference between the two published side rows is the honest adjustment - and it is mostly fibre (+3.5 g), not energy (-8 kcal). Nothing in the order line marks it as a change, which is why it needs naming here: 'with brown rice' reads like part of the dish.",
-          "default_row": "sticky rice",
+          "note": "A rice bowl arrives with plain white rice (Jamie, 10 Aug 2026 - he is the authority on what is in the bowl, not the menu's wording). Ordering brown instead is a SWAP, so the honest adjustment is the difference between those two published rows: -30 kcal and +4.5 g fibre. Nothing in the order line marks it as a change, which is why it needs naming here - 'with brown rice' reads like part of the dish.",
+          "default_row": "white rice",
           "applies_to_tokens": [
             "bowl",
             "donburi",
@@ -31,12 +31,6 @@
               "row": "steamed brown rice",
               "match": [
                 "brown rice"
-              ]
-            },
-            {
-              "row": "white rice",
-              "match": [
-                "white rice"
               ]
             },
             {

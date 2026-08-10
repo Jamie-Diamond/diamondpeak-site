@@ -38,6 +38,22 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "restaurants.json"
+
+# THE PARSE IS THE PROVENANCE TEST.
+#
+# There is no approved-domain list and there should not be one: it cannot scale to every
+# place he orders from, and domain reputation is the wrong signal anyway. A page that
+# yields this many dish rows, where EVERY row satisfies the 4/4/9 energy identity and
+# salt = sodium x 2.5, is not somebody's copy of a menu. Scraped menu listings carry
+# kcal and nothing else - which is exactly why they are useless here - so ten-column
+# internal consistency at scale is itself the evidence that this is the operator's own
+# data. Below this count the extraction is partial and the figures drop to `database`.
+LABEL_MIN_ROWS = 20
+
+# A vendor we could not find data for is remembered too, briefly. Discovery is a web
+# search and a multi-megabyte fetch; repeating that for every line of every order from a
+# place with no published figures would cost a minute an item for a guaranteed miss.
+NEGATIVE_TTL_S = 2 * 24 * 3600
 CACHE_TTL_S = 7 * 24 * 3600          # matrices change with the menu, a few times a year
 FETCH_TIMEOUT_S = 90
 USER_AGENT = "Mozilla/5.0 (compatible; ClaudeCoach nutrition)"
@@ -74,11 +90,156 @@ _STOP = {"the", "and", "with", "of", "a", "an", "in", "on", "or", "your", "our",
 
 
 def _tokens(text: str) -> set:
+    """Identifying words, and SMALL NUMBERS, which on a restaurant menu identify a dish.
+
+    Discarding digits made "9 inch pizza" and "12 inch pizza" the same string, and "6
+    wings" the same as "12 wings" - a two-fold error with every consistency check passing,
+    since both rows are internally fine and only the wrong one was chosen. Long numbers
+    stay out: those are weights and prices, not names."""
     out = set()
     for w in re.split(r"[^a-z0-9]+", (text or "").lower()):
-        if len(w) >= 2 and w not in _STOP and not w.isdigit():
+        if w.isdigit():
+            if len(w) <= 2:
+                out.add(w)
+            continue
+        if len(w) >= 2 and w not in _STOP:
             out.add(w[:-1] if len(w) > 4 and w.endswith("s") else w)
     return out
+
+
+DISCOVER_PROMPT = """Find where %s publishes the NUTRITION for its own menu \
+dishes - energy, protein, carbohydrate, fat, fibre, salt per dish.
+
+Where to look, in order:
+1. The chain's own website, usually a footer link named "allergens", "nutrition",
+   "allergen information" or "dietary information".
+2. The allergen/nutrition matrix that link points to. UK chains normally publish through a
+   menu-data platform rather than on the site itself, so the data often sits on a
+   different host - the matrix is what matters, not who serves it.
+3. A downloadable nutrition PDF or spreadsheet the chain publishes.
+
+What matters is a page listing MANY dishes with a full macro breakdown for each. A page
+showing only calories is no use. Neither is a third-party copy of the menu.
+
+Reply with ONLY JSON:
+{"official_site":"<the chain's own domain>",
+ "nutrition_url":"<the matrix or data page itself, not the page linking to it>",
+ "platform":"<the platform name if you can tell, else null>",
+ "many_dishes_with_macros":true|false,
+ "notes":"<how you got there, or why there is nothing>"}
+
+Return nutrition_url:null if the chain does not publish per-dish macros. Do not offer a
+third-party menu copy as a substitute - a wrong source here is worse than none.
+"""
+
+
+def make_discover(claude_bin: str, model: str, log=print, runner=None, timeout=240):
+    """A discovery function: vendor name in, candidate source out.
+
+    Deliberately a CALLABLE passed into lookup rather than something this module reaches
+    for, so the parse and the verification can be tested without a model or a network."""
+    import subprocess
+    runner = runner or subprocess.run
+
+    def discover(vendor: str) -> dict:
+        try:
+            proc = runner([claude_bin, "--print", "--model", model,
+                           "--allowedTools", "WebSearch,WebFetch"],
+                          input=DISCOVER_PROMPT % vendor,
+                          capture_output=True, text=True, timeout=timeout)
+        except Exception as exc:
+            log(f"vendor discovery failed for {vendor!r}: {exc}")
+            return {}
+        raw = (getattr(proc, "stdout", "") or "").strip()
+        a, b = raw.find("{"), raw.rfind("}")
+        if a < 0 or b <= a:
+            log(f"vendor discovery: no JSON for {vendor!r} - {raw[:120]!r}")
+            return {}
+        try:
+            return json.loads(raw[a:b + 1])
+        except json.JSONDecodeError:
+            return {}
+    return discover
+
+
+def _learned_path(cache_dir) -> Path:
+    return Path(cache_dir) / "_learned.json"
+
+
+def load_learned(cache_dir) -> dict:
+    p = _learned_path(cache_dir)
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_learned(cache_dir, data: dict) -> None:
+    Path(cache_dir).mkdir(parents=True, exist_ok=True)
+    _learned_path(cache_dir).write_text(json.dumps(data, indent=1))
+
+
+def slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")[:48]
+
+
+def learn_vendor(vendor: str, cache_dir, discover, now=None) -> tuple:
+    """Discover and VERIFY a vendor's published nutrition, then remember the result.
+
+    Verification is the whole point: whatever discovery returns is fetched and parsed
+    here, and only a source that yields consistent dish rows is kept. A URL that does not
+    parse is recorded as a miss WITH its reason, which doubles as the sample list for
+    supporting a second matrix format - rather than guessing at one now, against no
+    example, with a mis-mapped column as the failure mode."""
+    now = now or time.time()
+    key = slug(vendor)
+    learned = load_learned(cache_dir)
+    known = learned.get(key)
+    if known:
+        if known.get("failed"):
+            if now - known.get("at", 0) < NEGATIVE_TTL_S:
+                return None, None
+        else:
+            return key, known
+    if discover is None:
+        return None, None
+    got = discover(vendor) or {}
+    url = got.get("nutrition_url")
+    if not url:
+        learned[key] = {"failed": True, "at": now, "vendor": vendor,
+                        "reason": got.get("notes") or "no nutrition_url found"}
+        save_learned(cache_dir, learned)
+        return None, None
+    try:
+        html = _download(url)
+    except Exception as exc:
+        learned[key] = {"failed": True, "at": now, "vendor": vendor,
+                        "tried_url": url, "reason": f"fetch failed: {exc}"}
+        save_learned(cache_dir, learned)
+        return None, None
+    rows = parse_tenkites(html)
+    if len(rows) < 2:
+        # Kept as a SAMPLE, not just a failure: this is the URL to write the next parser
+        # against when a second real format turns up.
+        learned[key] = {"failed": True, "at": now, "vendor": vendor, "tried_url": url,
+                        "platform_hint": got.get("platform"),
+                        "reason": ("fetched but nothing parsed - unsupported format, "
+                                   "worth a look as a new parser sample")}
+        save_learned(cache_dir, learned)
+        return None, None
+    entry = {"display": vendor.strip()[:48], "aliases": [vendor.strip().lower()],
+             "platform": "tenkites", "nutrition_url": url, "learned": True,
+             "at": now, "rows_verified": len(rows),
+             "verified": f"{len(rows)} rows parsed, all identities held",
+             # Swap groups are hand-authored per chain and cannot be discovered, so a
+             # learned vendor gets additive modifiers but no swap handling. Stated here so
+             # the asymmetry is known rather than silent.
+             "swap_groups": []}
+    learned[key] = entry
+    save_learned(cache_dir, learned)
+    return key, entry
 
 
 def load_registry(path: Path = None) -> dict:
@@ -321,9 +482,15 @@ def apply_swaps(out: dict, dish: str, base_row: dict, rows: list,
 
 
 def lookup(vendor: str, dish: str, cache_dir, registry: dict = None,
-           now=None) -> dict | None:
-    """Fetcher-shaped result for one ordered dish, or None to fall through the ladder."""
+           now=None, discover=None) -> dict | None:
+    """Fetcher-shaped result for one ordered dish, or None to fall through the ladder.
+
+    The curated registry is a SEED, not a gate: a vendor missing from it is discovered,
+    verified against the parse and remembered, so this works for wherever he orders from
+    rather than only for chains somebody approved in advance."""
     key, entry = find_vendor(vendor, registry)
+    if not key:
+        key, entry = learn_vendor(vendor, cache_dir, discover, now=now)
     if not key:
         return None
     menu = load_menu(key, entry, cache_dir, now=now)
@@ -343,7 +510,11 @@ def lookup(vendor: str, dish: str, cache_dir, registry: dict = None,
            "per": "portion", "pack_g": row.get("portion_g"),
            "source_url": menu["source_url"],
            # The chain's own published figures for its own dish. That is label data.
-           "source_kind": "manufacturer", "confidence": "label",
+           "source_kind": "manufacturer",
+           # Graded by how well the source parsed, which is the only authority signal
+           # available for a vendor nobody vetted - and a better one than a domain list.
+           "confidence": ("label" if len(menu["rows"]) >= LABEL_MIN_ROWS
+                          else "database"),
            "vendor": entry.get("display") or key,
            "authoritative_host": urlparse(menu["source_url"]).netloc}
     # MODIFIERS. Wagamama publish "extra salmon" as its own row, 282 kcal, so an order
