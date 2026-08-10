@@ -79,6 +79,18 @@ t = store.day_totals(TODAY)
 check("in-session kcal counted in the day total", t["kcal"] == 885.0)
 check("in-session totalled separately for protection", t["in_session_carb_g"] == 80.0)
 
+# REGRESSION: with NO in-session items, the in-session totals must be ZERO, not the
+# whole day. `rows or entries` made an empty list fall through to every entry, so a
+# normal day reported all its calories as protected in-session fuel.
+plain = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nut-plain-")))
+plain.add_entry(TODAY, raw_text="porridge", kcal=400, carb_g=60, confidence="label",
+                source_rung="cofid")
+pt = plain.day_totals(TODAY)
+check(f"no in-session items means zero in-session kcal (got {pt['in_session_kcal']})",
+      pt["in_session_kcal"] == 0)
+check("and zero in-session carbs", pt["in_session_carb_g"] == 0)
+check("while the day total is unaffected", pt["kcal"] == 400.0)
+
 # 6) Lowest confidence propagates, so the UI can never imply label-grade data.
 check("all-label day reads label", t["lowest_confidence"] == "label")
 store.add_entry(TODAY, raw_text="handful of something", kcal=100, confidence="estimate",

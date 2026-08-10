@@ -428,7 +428,12 @@ class NutritionStore:
         supps = rec.get("supplements") or []
 
         def s(key, rows=None):
-            return round(sum(float(r.get(key) or 0) for r in (rows or entries)), 1)
+            # `rows if rows is not None` - NOT `rows or entries`. An EMPTY in-session
+            # list is falsy, so the `or` fell through to the whole day and
+            # in_session_kcal reported every calorie eaten as protected in-session
+            # fuel whenever nothing was actually in-session.
+            src = entries if rows is None else rows
+            return round(sum(float(r.get(key) or 0) for r in src), 1)
 
         # The non-counting token list lives ONCE, in nutrition_engine. An earlier
         # cut inlined the same three tokens here, which would have meant adding
