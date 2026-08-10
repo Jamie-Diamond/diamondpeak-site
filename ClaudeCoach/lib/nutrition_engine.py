@@ -999,7 +999,11 @@ def meal_requirement(totals: dict, z: dict) -> dict:
         head_share = ((headroom * kpg / remaining_kcal)
                       if (headroom is not None and remaining_kcal > 0 and kpg) else None)
         head_ratio = (head_share / normal) if (head_share is not None and normal) else None
-        if head_ratio is not None and head_ratio <= 0.25:
+        if headroom is not None and headroom <= 0:
+            # Already at or past the limit. Fibre at 21 g against a 20 g ceiling read
+            # "limit", which understates a ceiling that has gone.
+            density = "avoid"
+        elif head_ratio is not None and head_ratio <= 0.25:
             density = "avoid"
         elif ceiling:
             density = "limit"
@@ -1049,8 +1053,12 @@ def meal_requirement(totals: dict, z: dict) -> dict:
         wants.sort(key=lambda k: m[k]["required_share"] / (m[k]["normal_share"] or 1),
                    reverse=True)
         parts.append(", ".join(name[k] for k in wants))
-    if avoids:
-        parts.append("near zero " + " and ".join(name[k] for k in avoids))
+    # Fibre on a ceiling day is described ONCE, as "low residue". Listing it in avoids
+    # as well produced "near zero fibre; low residue", which says the same thing twice
+    # and reads as two separate instructions.
+    avoids_no_fibre = [k for k in avoids if not (k == "fibre_g" and fibre_ceiling)]
+    if avoids_no_fibre:
+        parts.append("near zero " + " and ".join(name[k] for k in avoids_no_fibre))
     if fibre_ceiling:
         parts.append("low residue")
     else:
@@ -1077,7 +1085,7 @@ def meal_requirement(totals: dict, z: dict) -> dict:
     for k in wants:
         bits.append(f"{m[k]['still_needed_g']:.0f} g {name[k]} still to find in "
                     f"{remaining_kcal:,} kcal")
-    for k in avoids:
+    for k in avoids_no_fibre:
         hr = m[k].get("headroom_g")
         bits.append(f"{name[k]} has {hr:.0f} g of room left"
                     if hr else f"{name[k]} is at its ceiling")
@@ -1088,7 +1096,9 @@ def meal_requirement(totals: dict, z: dict) -> dict:
     if fibre_short:
         bits.append(f"{fibre['still_needed_g']:.0f} g fibre to go")
     if fibre_ceiling and fibre.get("headroom_g") is not None:
-        bits.append(f"fibre ceiling has {fibre['headroom_g']:.0f} g left")
+        hr = fibre["headroom_g"]
+        bits.append(f"fibre ceiling has {hr:.0f} g left" if hr
+                    else f"fibre is at its {fibre['zone_high']:.0f} g ceiling")
     out["reason"] = ("; ".join(bits) if bits
                      else f"{remaining_kcal:,} kcal left and every zone is met")
     return out

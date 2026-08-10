@@ -77,6 +77,8 @@ def build(slug: str, today: date) -> dict:
         day = date.fromisoformat(d)
         totals = RC.merged_totals(store, athlete_dir, day)
         z = rec.get("targets") or None
+        if day == today and z is None:
+            z = None    # nothing logged yet today; the bot writes the snapshot on first use
         entries = rec.get("entries") or []
         # Computed HERE, not in the page. A rendering layer doing its own arithmetic
         # produces plausible wrong numbers rather than visible errors, and the page has
@@ -185,7 +187,10 @@ def build(slug: str, today: date) -> dict:
                    "target": div["target"], "basis": div["target_basis"],
                    "new_today": div["new_species_today"],
                    "species": div["species"],
-                   "herb_spice_count": div["herb_spice_count"]},
+                   "herb_spice_count": div["herb_spice_count"],
+                   # Plants a pack claimed that could not be NAMED, so the headline
+                   # count reads honestly incomplete rather than quietly low.
+                   "claimed_unresolved": div.get("claimed_unresolved", 0)},
         "block": {"days_to_race": days_to_race, "race_name": profile.get("race_name"),
                   "protein_floor_basis": "g/kg bodyweight, flexes with load"},
         "sodium": {"has_sweat_test": False,
