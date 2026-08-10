@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""Offline tests for lib/nutrition_store.py. Run: python3 scripts/test_nutrition_store.py
+
+Writes to a tmpdir, never to a real athlete directory. Covers the failure modes
+that would corrupt the longitudinal record silently: sweat weigh-in tagging,
+collagen protein exclusion, stale cache treated as a miss, flag de-duplication,
+snapshotted targets, and a corrupt month file not taking the bot down.
+"""
+import json
+import sys
+import tempfile
+from datetime import date, timedelta
+from pathlib import Path
+
+_here = Path(__file__).resolve().parent
+for cand in (_here / "lib", _here.parent / "lib"):
+    if (cand / "nutrition_store.py").exists():
+        sys.path.insert(0, str(cand))
+        break
+import nutrition_store as S
+import nutrition_engine as N
+
+FAILED = []
+
+
+def check(name, cond):
+    print(("PASS" if cond else "FAIL"), name)
+    if not cond:
+        FAILED.append(name)
+
+
+TODAY = date(2026, 8, 10)
+tmp = Path(tempfile.mkdtemp(prefix="nut-test-"))
+store = S.NutritionStore(tmp)
+
+# 1) A blank day is a real shape, never None.
+d = store.get_day(TODAY)
+check("blank day has the full shape",
+      d["entries"] == [] and d["closed_at"] is None and d["date"] == TODAY.isoformat())
+check("blank day did not create a file", not (tmp / "nutrition" / "2026-08.json").exists())
+
+# 2) Entries round-trip, and dietary sodium is a first-class field.
+e1 = store.add_entry(TODAY, raw_text="half a bag of M&S nut collection, 75g pack",
+                     resolved_name="M&S nut collection 75g", portion_g=37.5,
+                     kcal=235, protein_g=6, carb_g=6, fat_g=21, fibre_g=3,
+                     dietary_sodium_mg=45, confidence="label", source_rung="retailer",
+                     source_url="https://www.marksandspencer.com/x", logged_at=f"{TODAY}T12:40",
+                     species=["Corylus avellana", "Anacardium occidentale"])
+check("entry gets a stable id", e1["id"] == "2026-08-10-001")
+check("dietary sodium stored", store.get_day(TODAY)["entries"][0]["dietary_sodium_mg"] == 45)
+check("source rung stored", e1["source_rung"] == "retailer")
+check("species stored", len(e1["species"]) == 2)
+check("month file now exists", (tmp / "nutrition" / "2026-08.json").exists())
+
+# 3) Bad confidence or rung is rejected loudly rather than stored.
+for bad in ({"confidence": "guess"}, {"source_rung": "vibes"}):
+    try:
+        store.add_entry(TODAY, raw_text="x", **bad)
+        check(f"rejects bad {list(bad)[0]}", False)
+    except ValueError:
+        check(f"rejects bad {list(bad)[0]}", True)
+
+# 4) Collagen is excluded from the protein total but reported separately.
+store.add_entry(TODAY, raw_text="chicken breast 200g", resolved_name="chicken breast",
+                kcal=330, protein_g=62, confidence="label", source_rung="retailer")
+store.add_supplement(TODAY, nutrient="collagen peptides", dose=15, unit="g",
+                     protein_g=15, timing="30 min before ankle session")
+t = store.day_totals(TODAY)
+check(f"protein total excludes collagen (got {t['protein_g']})", t["protein_g"] == 68.0)
+check("collagen reported separately", t["non_counting_protein_g"] == 15.0)
+check("supplement confidence is label by definition",
+      store.get_day(TODAY)["supplements"][0]["confidence"] == "label")
+
+# 5) In-session fuel counts toward totals but is also isolated.
+store.add_entry(TODAY, raw_text="Maurten 320", resolved_name="Maurten drink mix 320",
+                kcal=320, carb_g=80, confidence="label", source_rung="retailer",
+                in_session=True)
+t = store.day_totals(TODAY)
+check("in-session kcal counted in the day total", t["kcal"] == 885.0)
+check("in-session totalled separately for protection", t["in_session_carb_g"] == 80.0)
+
+# 6) Lowest confidence propagates, so the UI can never imply label-grade data.
+check("all-label day reads label", t["lowest_confidence"] == "label")
+store.add_entry(TODAY, raw_text="handful of something", kcal=100, confidence="estimate",
+                source_rung="llm")
+check("one estimate downgrades the whole day",
+      store.day_totals(TODAY)["lowest_confidence"] == "estimate")
+
+# 7) Undo removes the last entry only.
+before = len(store.get_day(TODAY)["entries"])
+popped = store.undo_last(TODAY)
+check("undo returns the removed entry", popped["raw_text"] == "handful of something")
+check("undo removed exactly one", len(store.get_day(TODAY)["entries"]) == before - 1)
+check("remove_entry finds by id", store.remove_entry(TODAY, e1["id"])["id"] == e1["id"])
+check("remove_entry on a missing id returns None",
+      store.remove_entry(TODAY, "nope-999") is None)
+
+# 8) Weight: the first reading of the day is morning, later ones are sweat.
+day2 = TODAY + timedelta(days=1)
+m1 = store.add_measurement(day2, type="weight", value=83.4, logged_at=f"{day2}T06:12")
+m2 = store.add_measurement(day2, type="weight", value=80.6, logged_at=f"{day2}T13:55")
+check("first weight of the day is tagged morning", m1["tag"] == "morning")
+check("second weight is auto-tagged session_sweat", m2["tag"] == "session_sweat")
+check("reading_index records the order", (m1["reading_index"], m2["reading_index"]) == (0, 1))
+check("explicit tag is honoured over the default",
+      store.add_measurement(day2, type="weight", value=83.0,
+                            logged_at=f"{day2}T20:00", tag="morning")["tag"] == "morning")
+try:
+    store.add_measurement(day2, type="bodyweight", value=83)
+    check("rejects an unknown measurement type", False)
+except ValueError:
+    check("rejects an unknown measurement type", True)
+
+# 9) The store feeds the engine: a contaminated day must not move the rolling mean.
+for i in range(2, 8):
+    d_i = TODAY - timedelta(days=i)
+    store.add_measurement(d_i, type="weight", value=83.4, logged_at=f"{d_i}T06:10")
+rows = store.measurements_range(TODAY - timedelta(days=7), day2, type="weight")
+mean = N.rolling_weight_kg(rows, on=day2, days=8)
+check(f"sweat reading excluded from the engine's mean (got {mean})",
+      mean is not None and mean >= 83.3)
+
+# 10) Flags de-duplicate by type, or the history becomes unreadable.
+store.add_flag(TODAY, type="fat_frontload", severity="warn", payload={"deviation_pp": 22})
+store.add_flag(TODAY, type="fat_frontload", severity="warn", payload={"deviation_pp": 31})
+store.add_flag(TODAY, type="underfuel", severity="high")
+flags = store.get_day(TODAY)["flags"]
+check("one flag per type per day", len([f for f in flags if f["type"] == "fat_frontload"]) == 1)
+check("latest payload wins",
+      [f for f in flags if f["type"] == "fat_frontload"][0]["payload"]["deviation_pp"] == 31)
+check("different types coexist", len(flags) == 2)
+try:
+    store.add_flag(TODAY, type="made_up")
+    check("rejects an unknown flag type", False)
+except ValueError:
+    check("rejects an unknown flag type", True)
+
+# 11) Targets are snapshotted, not recomputed. ICU revises activity calories after
+#     the fact, so a day reviewed later must show what was in force on the day.
+rmr = N.mifflin_st_jeor(83.3, 1.86, date(1995, 5, 6), "M", on=TODAY)
+tgt = N.targets(day_type="standard", rolling_weight=83.3, rmr=rmr,
+                sessions=[{"type": "Ride", "moving_time": 7200, "calories": 1600,
+                           "average_watts": 210}])
+store.set_targets(TODAY, tgt, day_type="standard", phase="maintenance")
+saved = store.get_day(TODAY)
+check("targets snapshotted onto the day", saved["targets"]["kcal_target"] == tgt["kcal_target"])
+check("day_type recorded", saved["day_type"] == "standard")
+check("phase recorded", saved["phase"] == "maintenance")
+
+# 12) Close-out and push markers.
+store.close_day(TODAY, when=f"{TODAY}T22:10")
+store.mark_pushed(TODAY, when=f"{TODAY}T22:11")
+saved = store.get_day(TODAY)
+check("close_day stamps closed_at", saved["closed_at"] == f"{TODAY}T22:10")
+check("mark_pushed stamps the push", saved["pushed_to_intervals_at"] == f"{TODAY}T22:11")
+
+# 13) Cache: fresh hits, stale misses.
+store.cache_put("m&s nut collection 75g",
+                {"kcal": 470, "resolved_at": "2026-08-01", "confidence": "label"})
+check("fresh cache entry hits", store.cache_get("M&S Nut Collection 75g", on=TODAY) is not None)
+check("cache key is case and space insensitive",
+      store.cache_get("  m&s nut collection 75g  ", on=TODAY)["kcal"] == 470)
+store.cache_put("old item", {"kcal": 100, "resolved_at": "2024-01-01"})
+check("stale cache entry is a MISS, not a warning",
+      store.cache_get("old item", on=TODAY) is None)
+check("absent key is a miss", store.cache_get("never seen", on=TODAY) is None)
+
+# 14) Unresolved strings are queued for review, never dropped.
+store.log_unresolved("some artisanal thing from a market stall", day=TODAY)
+store.log_unresolved("another mystery", day=TODAY)
+queue = json.loads((tmp / "nutrition" / "unresolved.json").read_text())
+check("unresolved strings are queued", len(queue) == 2)
+
+# 15) A corrupt month file must not take the bot down mid-conversation.
+month = tmp / "nutrition" / "2026-09.json"
+month.write_text("{not json at all")
+sep = date(2026, 9, 3)
+check("corrupt month reads as blank rather than raising",
+      store.get_day(sep)["entries"] == [])
+check("corrupt file preserved for inspection",
+      (tmp / "nutrition" / "2026-09.json.corrupt").exists())
+store.add_entry(sep, raw_text="recovery works", kcal=10, confidence="estimate",
+                source_rung="llm")
+check("writes resume after a corrupt file", len(store.get_day(sep)["entries"]) == 1)
+
+# 16) get_range includes gaps, so a 7-day window cannot silently average over fewer.
+rng = store.get_range(TODAY - timedelta(days=6), TODAY)
+check("get_range returns every day including blanks", len(rng) == 7)
+
+# 17) Month boundaries: entries land in the right file.
+check("September entry lives in the September file",
+      json.loads((tmp / "nutrition" / "2026-09.json").read_text())["days"]["2026-09-03"]
+      ["entries"][0]["raw_text"] == "recovery works")
+check("August day is untouched by the September write",
+      len(store.get_day(TODAY)["entries"]) > 0)
+
+print()
+if FAILED:
+    print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))
+    sys.exit(1)
+print("all checks passed")
