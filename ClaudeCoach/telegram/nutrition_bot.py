@@ -544,6 +544,10 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         return
 
     if intent in ("log_food", "log_supplement") and got.get("items"):
+        if got.get("degraded"):
+            tg.send(token, chat_id, "I could not reach the model to split that up, so I "
+                                    "am treating it as one item. Correct me if that is "
+                                    "wrong.", log=log)
         offer_items(ctx, got["items"], day, token, chat_id,
                     supplement=(intent == "log_supplement"),
                     barcode=got.get("barcode"))

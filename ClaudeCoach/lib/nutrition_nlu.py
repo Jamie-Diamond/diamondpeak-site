@@ -171,14 +171,21 @@ def parse_with_model(text: str, claude_bin: str, model: str, log=print,
         log(f"nlu parse failed: {exc}")
         return {"intent": "unknown", "error": str(exc)}
     raw = (getattr(proc, "stdout", "") or "").strip()
+    err = (getattr(proc, "stderr", "") or "").strip()
     start, end = raw.find("{"), raw.rfind("}")
     if start < 0 or end <= start:
+        # Log the head of whatever came back. Returning unknown SILENTLY made a failing
+        # model indistinguishable from an unreadable message, which is how an expired
+        # OAuth token went unnoticed: the bot just kept saying it did not understand.
+        log(f"nlu: no JSON in model reply; out={raw[:160]!r} err={err[:160]!r}")
         return {"intent": "unknown"}
     try:
         got = json.loads(raw[start:end + 1])
     except json.JSONDecodeError:
+        log(f"nlu: unparseable JSON: {raw[start:start + 160]!r}")
         return {"intent": "unknown"}
     if got.get("intent") not in INTENTS:
+        log(f"nlu: unexpected intent {got.get('intent')!r}")
         return {"intent": "unknown"}
     items = []
     for it in got.get("items") or []:
@@ -212,7 +219,35 @@ def classify(text: str, has_pending: bool, claude_bin: str, model: str, log=prin
         if got.get("intent") == "unknown":
             return {"intent": "question", "question": text}
         return got
-    return parse_with_model(text, claude_bin, model, log=log, runner=runner)
+    got = parse_with_model(text, claude_bin, model, log=log, runner=runner)
+    if got.get("intent") == "unknown" and looks_like_eating(text):
+        # Degrade to something useful. One unsplit item is worse than three items, and
+        # far better than telling him his sentence was incomprehensible.
+        log(f"nlu fell back to a single unsplit item: {text[:80]!r}")
+        return {"intent": "log_food", "degraded": True,
+                "items": [{"text": text, "portion_g": None, "in_session": False}]}
+    return got
+
+
+# An explicit statement of having eaten. Used ONLY as a fallback when the model is
+# unavailable: deliberately narrow, because the wide version is what sent
+# "how much protein have I had?" to the resolution ladder as food.
+_ATE_RE = re.compile(
+    r"\b(?:i(?:'ve|ve| have| just)?\s+(?:just\s+)?(?:had|ate|eaten|drank|drunk|"
+    r"finished|demolished)|just\s+had|had\s+a|having\s+a)\b", re.I)
+
+
+def looks_like_eating(text: str) -> bool:
+    """True for an unambiguous "I ate X" statement, with no question mark.
+
+    The bot must not answer "I could not tell whether that was food" to "I've just had
+    500 ml of Rubicon". When the model is unavailable this carries the message through
+    as a single unsplit item rather than failing outright. Narrow on purpose: a looser
+    pattern is exactly how a question became a food entry."""
+    t = (text or "").strip()
+    if not t or t.endswith("?"):
+        return False
+    return bool(_ATE_RE.search(t))
 
 
 ANSWER_PROMPT = """You are a nutrition logging assistant answering a short question \

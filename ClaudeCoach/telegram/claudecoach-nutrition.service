@@ -16,9 +16,14 @@ Type=simple
 User=root
 WorkingDirectory=/Users/diamondpeakconsulting/diamondpeak-site
 ExecStart=/usr/bin/python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/nutrition_bot.py
-# The ladder's LLM rung shells out to the claude CLI, which needs the same auth the
-# coach bot uses. cc.env holds the setup token; credentials.json is NOT the file.
-EnvironmentFile=-/root/cc.env
+# The ladder's LLM rung and the whole NLU layer shell out to the claude CLI, which needs
+# the same auth the coach bot uses. The path is /root/.CLAUDE/cc.env, NOT /root/cc.env:
+# an earlier version of this unit had the latter with a leading '-', so the missing file
+# was ignored silently and every model call failed 401 while the bot looked healthy.
+# Confirm against the live coach rather than guessing:
+#   systemctl show -p EnvironmentFiles claudecoach-bot
+EnvironmentFile=/root/.claude/cc.env
+Environment=HOME=/root
 Environment=CLAUDE_BIN=/usr/bin/claude
 Restart=always
 RestartSec=10
