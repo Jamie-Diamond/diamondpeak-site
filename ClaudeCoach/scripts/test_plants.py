@@ -170,12 +170,31 @@ check(f"a refined-only day scores zero species (got {dref['unique_7d']})",
 
 # 13) Stored species ids win over re-matching, so a table change cannot rewrite
 #     history for days already logged.
-stored = [{"date": TODAY.isoformat(),
+# Scores must be STORED with the id. A bare id cannot say whether the match was a whole
+# plant or a refined derivative, so the count becomes unreportable rather than wrong.
+scored = [{"date": TODAY.isoformat(),
            "entries": [{"resolved_name": "unrecognisable at log time",
-                        "species": ["mangifera_indica", "pistacia_vera"]}]}]
-dstored = P.diversity(stored, T, on=TODAY)
-check("stored species ids are used in preference to re-matching",
+                        "species": [{"id": "mangifera_indica", "score": 1.0},
+                                    {"id": "pistacia_vera", "score": 1.0}]}]}]
+dstored = P.diversity(scored, T, on=TODAY)
+check("stored species are used in preference to re-matching",
       dstored["unique_7d"] == 2 and "Mango" in dstored["species"])
+check("a fully scored window is reportable", dstored["provisional"] is False)
+
+legacy = [{"date": TODAY.isoformat(),
+           "entries": [{"resolved_name": "old entry",
+                        "species": ["mangifera_indica", "helianthus_annuus"]}]}]
+dl = P.diversity(legacy, T, on=TODAY)
+check("bare ids make the count UNREPORTABLE rather than wrong",
+      dl["unique_7d"] is None)
+check("the upper bound is still available for diagnosis",
+      dl["unique_7d_upper_bound"] == 2)
+check("and the reason is countable", dl["unscored_species"] == 2)
+check("a refined derivative with a stored 0 is excluded, not counted",
+      P.diversity([{"date": TODAY.isoformat(), "entries": [{"resolved_name": "x",
+        "species": [{"id": "helianthus_annuus", "score": 0.0},
+                    {"id": "mangifera_indica", "score": 1.0}]}]}],
+        T, on=TODAY)["unique_7d"] == 1)
 
 # 14) Low-variety prompt: a prompt, never a failure, and absent when not needed.
 same_days = [day(TODAY - timedelta(days=i), "oats and blueberries") for i in range(7)]

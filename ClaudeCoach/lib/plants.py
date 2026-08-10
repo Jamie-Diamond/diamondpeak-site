@@ -219,6 +219,12 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
     window_species, today_species, unmatched = {}, {}, []
     per_day_new = {}
     claimed_gap = 0
+    # Days carrying entries. NOT a compliance measure and NOT a caveat on the count:
+    # unique_7d is a count of DISTINCT species, so 40 species from one logged day means 40
+    # species really were eaten in the window. If anything a small sample makes it an
+    # UNDERCOUNT of true variety, since the unlogged days also had food in them. An
+    # earlier cut framed low coverage as an overstatement, which was backwards.
+    days_with_entries = 0
     # Entries written before scores were stored have no way to distinguish a whole plant
     # from a refined derivative, so their contribution is an OVERSTATEMENT of unknown size:
     # sunflower oil reads as sunflower, sugar as beet. A count built on them cannot be
@@ -237,6 +243,8 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
             for sp in e.get("species") or []:
                 if not isinstance(sp, dict) or sp.get("score") is None:
                     unscored += 1
+        if rec.get("entries"):
+            days_with_entries += 1
         res = species_for_entries(rec.get("entries"), table)
         scoring = _scoring_species(res["species"])
         unmatched.extend(res["unmatched"])
@@ -257,9 +265,16 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
     new_ids = sorted(set(today_species) - prior)
 
     weighted = round(sum(s["score"] for s in window_species.values()), 2)
+    # A count built on species with no stored score cannot distinguish a whole plant from
+    # a refined derivative, so it is not reportable. Return None rather than a number with
+    # a caveat: a caveated wrong number is still a wrong number, and it gets read as the
+    # number. Anything logged since scores were stored counts correctly, so this clears
+    # itself as real days accumulate.
+    reportable = unscored == 0
     return {
-        "unique_7d": len(window_species),
-        "weighted_7d": weighted,
+        "unique_7d": len(window_species) if reportable else None,
+        "unique_7d_upper_bound": len(window_species),
+        "weighted_7d": weighted if reportable else None,
         "target": DIVERSITY_TARGET_7D,
         "target_basis": TARGET_BASIS,
         "new_species_today": len(new_ids),
@@ -276,6 +291,10 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
         "claimed_unresolved": claimed_gap,
         # True when any species in the window lacks a stored score, which makes the count
         # an upper bound rather than a figure.
+        "days_logged": days_with_entries,
+        # The count covers only the days that were logged. Stated so the figure is read
+        # as "across N days sampled" rather than as a week.
+        "coverage_days": days_with_entries,
         "provisional": unscored > 0,
         "unscored_species": unscored,
         "window_days": window,

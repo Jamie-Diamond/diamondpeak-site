@@ -2505,7 +2505,7 @@
       var rows = wk.days.map(function (d) {
         if (!d.logged) {
           return '<tr class="miss"><td class="lbl">' + esc(d.dow) + '</td>' +
-            '<td colspan="4"><span class="mut">not logged</span></td></tr>';
+            '<td colspan="4"><span class="mut">not sampled</span></td></tr>';
         }
         var pm = d.protein_met ? 'ok' : 'low';
         var fk = d.fibre_ok === false ? 'bad' : '';
@@ -2523,15 +2523,16 @@
           '<td class="nw ' + fk + '">' + esc(fibLabel) + 'f</td>' +
           '<td class="nw">' + run + '</td></tr>';
       }).join('');
-      // The gap count leads, because that is the question he asked.
-      var missed = sm.days_missed || 0;
-      h += card('This week',
+      // Days SAMPLED, never "missed", and never coloured: logging is occasional by
+      // design, so an unlogged day is a choice rather than a failure. The count is here
+      // to size the other figures, not to judge.
+      h += card('Recent days',
         '<div class="figures in-card">' +
-        fig(sm.days_logged + '/' + sm.days_in_window, 'days logged',
-            missed ? missed + ' missed' : 'none missed',
-            missed >= 3 ? 'neg' : (missed === 0 ? 'pos' : '')) +
-        fig(sm.protein_met_days + '/' + sm.days_logged, 'protein floor met',
-            'of the days logged') +
+        // No expectation of frequency: he dips in when he wants a check, not weekly.
+        fig(sm.days_logged, 'days sampled', 'in the last ' + sm.days_in_window) +
+        fig(sm.days_logged
+            ? sm.protein_met_days + '/' + sm.days_logged : '-', 'protein floor met',
+            'of the days sampled') +
         fig(sm.in_run_sessions
             ? sm.in_run_on_target + '/' + sm.in_run_sessions : '-',
             'in-run fuelling', sm.in_run_sessions ? 'at or above the rate' : 'no long sessions') +
@@ -2546,20 +2547,21 @@
     var p = n.plants || {}, pv = day.provenance || {};
     h += card('Week and provenance',
       '<div class="figures in-card">' +
-      fig((p.provisional ? '~' : '') + (p.unique_7d != null ? p.unique_7d : '-'),
-          'plant species',
-          p.provisional ? 'upper bound, see below' : 'aiming around ' + (p.target || 30),
-          p.provisional ? 'flat' : '') +
+      // No number while the scores are missing. A caveated wrong number gets read as
+      // the number.
+      fig(p.unique_7d != null ? p.unique_7d : 'n/a', 'plant species',
+          p.unique_7d != null ? 'aiming around ' + (p.target || 30) : 'not yet countable',
+          p.unique_7d != null ? '' : 'flat') +
       fig(p.new_today != null ? p.new_today : '-', 'new today', 'variety, not a score') +
       fig((n.weight && n.weight.rolling_7d_mean_kg)
           ? n.weight.rolling_7d_mean_kg.toFixed(1) : '-', 'kg', 'morning 7-day mean') +
       '</div>' +
-      (p.provisional
-        ? '<p class="prov warn">This plant count is an UPPER BOUND, not a figure. ' +
-          esc(p.unscored_species + ' species') + ' were logged before the matched score ' +
-          'was stored, so refined derivatives such as sunflower oil, sugar and soy ' +
-          'lecithin are being counted as whole plants. Anything logged from now on is ' +
-          'scored correctly.</p>'
+      (p.unique_7d == null
+        ? '<p class="prov warn">No plant count yet. ' +
+          esc(String(p.unscored_species)) + ' species in this window were logged before ' +
+          'the matched score was stored, so refined derivatives such as sunflower oil, ' +
+          'sugar and soy lecithin cannot be told apart from whole plants. A count will ' +
+          'appear once the window holds only correctly scored days.</p>'
         : '') +
       '<p class="prov">' +
       esc((pv.label || 0) + ' label-verified, ' + (pv.database || 0) + ' from a database, ' +

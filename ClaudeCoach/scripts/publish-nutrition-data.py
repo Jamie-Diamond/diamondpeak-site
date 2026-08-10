@@ -248,8 +248,13 @@ def build(slug: str, today: date) -> dict:
             "days": rows,
             "summary": {
                 "days_logged": len(done), "days_in_window": len(rows),
-                # The headline he asked for: a gap is fine, a habit of gaps is not.
-                "days_missed": len(rows) - len(done),
+                # NOT a compliance figure. Jamie logs occasionally to spot-check rather
+                # than daily, so an unlogged day is a choice, not a miss. It is reported
+                # only so a rolling number is read as "across N days sampled" instead of
+                # as a week. An earlier cut called these `days_missed` and coloured three
+                # or more red, which nagged him about something he had deliberately
+                # decided.
+                "days_unlogged": len(rows) - len(done),
                 "protein_met_days": sum(1 for r in done if r["protein_met"]),
                 "fibre_respected_days": sum(1 for r in done if r["fibre_ok"]),
                 "mean_kcal": (round(sum(r["kcal"] or 0 for r in done) / len(done))
