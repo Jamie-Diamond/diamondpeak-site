@@ -438,12 +438,24 @@ class CofidTable:
             return None
         food = self.foods.get(q)
         if food is None:
-            hits = [(name, f) for name, f in self.foods.items()
-                    if name in q or q in name]
+            # Substring matching alone was the bug: "chicken" appears inside "satay
+            # chicken with black rice and mango", so a five-word branded dish matched raw
+            # chicken breast. A partial match now needs the TABLE name to be essentially
+            # contained in the query, and at least two shared identifying tokens, so a
+            # single ingredient word can never carry a match.
+            qt = _tokens(q)
+            hits = []
+            for name, f in self.foods.items():
+                nt = _tokens(name)
+                if not nt:
+                    continue
+                shared = qt & nt
+                if len(shared) >= 2 or (name in q and len(nt) >= 2):
+                    hits.append((len(shared), len(name), name, f))
             if not hits:
                 return None
-            hits.sort(key=lambda h: len(h[0]), reverse=True)
-            food = hits[0][1]
+            hits.sort(reverse=True)
+            food = hits[0][3]
             if not _relevant(query, food.get("name") or ""):
                 return None
         per_100 = {f: food.get(f) for f in MACRO_FIELDS if food.get(f) is not None}
@@ -541,8 +553,21 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
         if cofid.available:
             fetchers[Rung.COFID] = lambda t, p, _c=cofid: _c.lookup(t, p)
 
+    # CoFID is Public Health England's WHOLE FOOD composition table. Letting it answer a
+    # branded product is how "M&S Satay Chicken with Black Rice & Mango" became
+    # "Chicken, breast, skinless, raw" at 106 kcal, and the overnight oats pot became
+    # "Oats, porridge, raw" - both wearing label confidence, both matched on one word.
+    # Exactly the failure USDA was dropped for, in the rung I kept.
+    category = (hint.get("category") or "").lower()
+    skip = set()
+    if category and category not in ("whole_food", "homemade", ""):
+        skip.add(Rung.COFID)
+
     degraded = False
     for rung in effective_ladder(fetchers, cofid_ready=True):
+        if rung in skip:
+            record(rung, "skipped", f"a {category} is not in a whole-food table")
+            continue
         fetch = fetchers.get(rung)
         if fetch is None:
             # Not built is NOT degradation: nothing failed. Conflating the two would

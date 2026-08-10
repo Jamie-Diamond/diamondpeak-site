@@ -421,6 +421,41 @@ check("an invalid declared confidence falls back to the rung default",
 check("web sits before the bare llm estimate in the ladder",
       R.LADDER.index(R.Rung.WEB) < R.LADDER.index(R.Rung.LLM))
 
+# 20) CoFID IS A WHOLE-FOOD TABLE. Letting it answer branded products turned three of
+#     eight real items into single ingredients wearing label confidence: an M&S satay
+#     chicken pack became "Chicken, breast, skinless, raw" at 106 kcal, the same for the
+#     bang bang pack, and an overnight-oats pot became "Oats, porridge, raw" at 379. All
+#     matched on ONE word. The exact failure USDA was dropped for, in the rung I kept.
+C = R.CofidTable()
+for q in ("porridge oats", "chicken breast", "cheddar", "blueberries"):
+    check(f"CoFID still answers a whole food: {q}", C.lookup(q, 100) is not None)
+for q in ("M&S Satay Chicken with Black Rice & Mango",
+          "satay chicken with black rice and mango",
+          "bang bang chicken with satay dip",
+          "salted caramel overnight oats",
+          "M&S Cookies and Cream Protein Bar"):
+    check(f"CoFID refuses a branded dish: {q[:34]}", C.lookup(q, 100) is None)
+
+# And the ladder skips it entirely by CATEGORY, so it cannot even be asked.
+skipped = R.resolve("M&S Satay Chicken with Black Rice & Mango", day=TODAY,
+                    store=new_store(), table=TABLE,
+                    hint={"category": "branded_packaged", "form": "prepared_meal"},
+                    fetchers={R.Rung.WEB: lambda q, p: {
+                        "kcal": 339, "resolved_name": "M&S Satay Chicken",
+                        "source_kind": "retailer", "confidence": "label"}})
+check("a branded product skips CoFID by category",
+      outcome(skipped, R.Rung.COFID) == "skipped")
+check("and resolves on the web rung instead", skipped["source_rung"] == R.Rung.WEB)
+check("the skip says why", "whole-food table" in next(
+    a["detail"] for a in skipped["attempts"] if a["rung"] == R.Rung.COFID))
+whole = R.resolve("porridge oats", day=TODAY, store=new_store(), table=TABLE,
+                  hint={"category": "whole_food", "form": "whole_food"},
+                  fetchers={})
+check("a whole food still reaches CoFID", whole["source_rung"] == R.Rung.COFID)
+check("with no hint at all CoFID is still tried",
+      R.resolve("porridge oats", day=TODAY, store=new_store(), table=TABLE,
+                fetchers={})["source_rung"] == R.Rung.COFID)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))
