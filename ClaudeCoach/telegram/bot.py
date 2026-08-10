@@ -55,6 +55,7 @@ import open_actions            # the single open-actions store (close/defer/drop
 import day_overrides           # fail-closed register of directed day-rule deviations
 import claude_call
 import engine
+import ops_log                 # run-status + ops-alerts, for work that fails unattended
 import rules_capture
 import rule_registry
 from engine import call_claude, call_claude_with_image, stream_claude
@@ -3236,12 +3237,64 @@ def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
             override_path = _write_plan_override(slug, override)
             cmd += ["--override-json", override_path]
             log(f"[{slug}] replan using conversation-agreed plan override")
-        subprocess.Popen(cmd, cwd=str(PROJECT_DIR),
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        proc = subprocess.Popen(cmd, cwd=str(PROJECT_DIR),
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         log(f"[{slug}] replan launched in background (confirmed)")
+        _watch_replan(token, chat_id, slug, proc)
     except Exception as e:
         send(token, chat_id, f"Couldn't start replan: {e}", reply_markup=build_keyboard(slug))
     return True
+
+
+# stage1-plan exit codes that mean IT ALREADY TOLD THE ATHLETE: 0 pushed (sends the week
+# message), 3 built-but-gated (sends "couldn't build a clean week"). Anything else means it
+# died before reaching either, so the athlete is the only one who does not know.
+_REPLAN_SELF_REPORTS = (0, 3)
+
+
+def _watch_replan(token, chat_id, slug, proc) -> None:
+    """Report a replan that died without telling the athlete.
+
+    The launch was fire-and-forget - Popen, output to DEVNULL, return code never read -
+    so the bot said "✅ Replan confirmed, rebuilding week…" and then learned nothing. On
+    the paths where stage1 notifies for itself that is fine. On the others it is not:
+    exit 1 (no parseable proposal after every attempt) notifies NOBODY, and a
+    `timeout 2700` kill (124) cannot. The athlete is left on "rebuilding week…"
+    indefinitely with an unchanged calendar and no idea.
+
+    Jamie, 10 Aug 2026: "the bot was replying but not doing anything, like replanning."
+    This is the half of that which is mechanical rather than conversational.
+
+    A daemon thread, so it cannot hold the poll loop up or keep the process alive.
+    """
+    def _wait():
+        try:
+            rc = proc.wait()
+        except Exception as e:
+            log(f"[{slug}] replan watcher could not wait: {e}")
+            return
+        if rc in _REPLAN_SELF_REPORTS:
+            log(f"[{slug}] replan finished rc={rc} (stage1 reported to the athlete)")
+            return
+        why = ("it ran out of time" if rc == 124
+               else "it could not build a usable week at all")
+        log(f"[{slug}] replan FAILED SILENTLY rc={rc} - telling the athlete")
+        try:
+            ops_log.alert("bot-replan",
+                          f"replan for {slug} exited {rc} without notifying the athlete "
+                          f"({why}); their calendar is unchanged", athlete=slug)
+        except Exception:
+            pass
+        try:
+            send(token, chat_id,
+                 f"⚠️ That replan did not finish - {why}. Your calendar is unchanged, "
+                 f"so nothing has been lost. Say `replan` to try again, or tell me what "
+                 f"you want the week to look like and I'll build it with you.",
+                 reply_markup=build_keyboard(slug))
+        except Exception as e:
+            log(f"[{slug}] could not tell the athlete the replan failed: {e}")
+
+    threading.Thread(target=_wait, name=f"replan-watch-{slug}", daemon=True).start()
 
 
 def prefetch_context(slug: str) -> str:
