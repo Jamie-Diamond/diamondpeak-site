@@ -221,6 +221,12 @@ _NAME_CLAIMS = (
     ("css", "css"), ("threshold", "threshold"), ("cruise", "threshold"),
     ("sweetspot", "sweetspot"), ("sweet spot", "sweetspot"),
     ("race-pace", "race"), ("race pace", "race"), ("tempo", "tempo"),
+    # "speed" is swim's own band (104-112% pace, distinct from "sprint"); a
+    # "Technique + speed 8x100" pushed as five generic drill blocks (11 Aug 2026)
+    # had no claim at all to catch it. Only swim carries a "speed" _ZONE_BAND
+    # key, so this is silently un-asserted on run/bike, same as any other claim
+    # the sport has no band for.
+    ("speed", "speed"),
 )
 # %LTHR cannot be compared with %pace or %FTP: threshold HR is ~100% LTHR and VO2
 # work barely exceeds it, so a VO2 step targeted by HR tops out near 102%. An
