@@ -395,6 +395,51 @@ WHAT HE ASKED
 """
 
 
+COACH_PROMPT = """You are this athlete's nutrition coach. Below is everything known
+about today and tomorrow, computed from his logged food, his ICU calendar and the
+fuelling primitives his coach already uses.
+
+FACTS (the only figures you may use):
+%s
+
+Write him a short brief. Cover, in this order and only where it matters:
+  1. What tomorrow is - the session, in one line, using the aim if there is one.
+  2. What to do with the REST OF TODAY. Be concrete and specific.
+  3. Tomorrow's in-session fuel, if a rate is given.
+
+Rules that matter more than style:
+- NEVER do arithmetic and never state a number that is not in the facts above. If you
+  need a figure that is not there, say what is missing instead of estimating it. Every
+  number in those facts was computed deliberately; a plausible one you invent is
+  indistinguishable from a real one and corrupts the log.
+- Suggest swaps from `foods_he_actually_eats` ONLY. He can act on "swap the Twix for the
+  protein bar"; "add some lean protein" is useless to him.
+- A zone is a landing area, not a rule. If he is over on something, say what it costs
+  tomorrow rather than telling him off. If nothing needs changing, say so and stop.
+- No tables, no bullet-point macro dumps - he can read those on the app. Under 130 words.
+- UK English. Speak plainly, like a coach who knows him.
+"""
+
+
+def coach_brief(facts: dict, claude_bin: str, model: str, log=print, runner=None,
+                timeout: int = 120) -> str | None:
+    """The coaching brief. Returns None when the model is unavailable, so the caller can
+    fall back to the deterministic block rather than saying nothing."""
+    runner = runner or subprocess.run
+    try:
+        proc = runner([claude_bin, "--print", "--model", model],
+                      input=COACH_PROMPT % json.dumps(facts, indent=2, default=str),
+                      capture_output=True, text=True, timeout=timeout)
+    except Exception as exc:
+        log(f"coach brief failed: {exc}")
+        return None
+    raw = ((getattr(proc, "stdout", "") or "").strip()) or None
+    if raw and model_unavailable(raw):
+        log(f"coach brief: MODEL UNAVAILABLE - {raw[:100]}")
+        return None
+    return raw
+
+
 def advise(question: str, facts: dict, claude_bin: str, model: str, log=print,
            runner=None, timeout: int = 90) -> str | None:
     """Discuss options against the day's real remaining room.

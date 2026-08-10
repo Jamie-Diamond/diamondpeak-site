@@ -91,7 +91,7 @@ def log(msg):
     """Print only. The systemd unit appends stdout to nutrition_bot.log, so writing
     the file here as well put every line in it TWICE - visible on the very first
     startup line after install. Duplicated logging is a recurring shape in this
-    codebase (see the coach's duplicate-notify bug), so it gets one owner: systemd."""
+    codebase (see the coach's duplicate-notify bug), so it gets one owner: systemd.\n/tomorrow - what tomorrow's session needs, and what to do with the rest of today\n"""
     print(f"[{datetime.now().isoformat(timespec='seconds')}] {msg}", flush=True)
 
 
@@ -292,7 +292,11 @@ def classify_today_and_tomorrow(icu: IcuClient, today: date, day_rules: dict):
         tomorrow_type = NE.classify_day(tomorrow_sessions)
     else:
         tomorrow_type, _ = NE.classify_from_day_rules(today + timedelta(days=1), day_rules)
-    return today_type, tomorrow_type, confidence, today_sessions
+    # Tomorrow's SESSIONS come back too, not only their classification. They were being
+    # computed and dropped, which is why the bot could shift today's fibre ceiling
+    # "because of a long session tomorrow" and still be unable to say what that session
+    # is. The whole reason it reads dumb is that this detail never left this function.
+    return (today_type, tomorrow_type, confidence, today_sessions, tomorrow_sessions)
 
 
 # --- the LLM rung -----------------------------------------------------------
@@ -630,8 +634,10 @@ class Context:
 
     def zones_for(self, day: date) -> dict:
         rules = self.athlete.get("day_rules") or {}
-        today_type, tomorrow_type, conf, sessions = classify_today_and_tomorrow(
-            self.icu, day, rules)
+        (today_type, tomorrow_type, conf, sessions,
+         tomorrow_sessions) = classify_today_and_tomorrow(self.icu, day, rules)
+        self._tomorrow_sessions = tomorrow_sessions
+        self._tomorrow_type = tomorrow_type
         yesterday_type = None
         try:
             prev = [a for a in (self.icu.get_training_history(days=3) or [])
@@ -674,6 +680,97 @@ class Context:
 
 # --- message handling -------------------------------------------------------
 
+def tomorrow_brief(ctx: Context, day: date) -> dict:
+    """What tomorrow actually is, and what it needs. Numbers only, no phrasing.
+
+    Every figure here is READ from something that already computes it - the ICU calendar,
+    the shared fuelling primitives, the zone engine - because the moment this file starts
+    restating a prescription, the bot and the coach begin disagreeing about the same
+    session."""
+    zones = ctx.zones_for(day)              # populates the cached sessions as a side effect
+    sessions = getattr(ctx, "_tomorrow_sessions", None) or []
+    out = {"date": (day + timedelta(days=1)).isoformat(),
+           "day_type": getattr(ctx, "_tomorrow_type", None),
+           "from_calendar": bool(sessions), "sessions": []}
+    total_min = 0.0
+    for ev in sessions:
+        mins = ((ev.get("moving_time") or ev.get("icu_training_load_time")
+                 or ev.get("duration") or 0) or 0) / 60.0
+        if not mins and ev.get("time"):
+            mins = float(ev["time"]) / 60.0
+        total_min += mins
+        out["sessions"].append({
+            "sport": ev.get("type") or ev.get("category") or "unknown",
+            "name": (ev.get("name") or "")[:80],
+            "minutes": round(mins) or None,
+            "planned_load": ev.get("icu_training_load") or ev.get("load_target"),
+            # The aim line the coach writes, which is the actual instruction for the
+            # session - far more use than its duration alone.
+            "aim": (ev.get("description") or "")[:400] or None,
+        })
+    out["total_minutes"] = round(total_min) or None
+    # In-session fuel, PER SESSION, from the same primitives the coach uses.
+    #
+    # The first cut multiplied the run rate by the day's TOTAL minutes, so a 60 min swim
+    # plus a 165 min run prescribed 263 g of carbohydrate for "the session" instead of
+    # 192 g for the run. Nothing raised, the figure looked reasonable, and it went
+    # straight into the coaching brief - a swim is not fuelled at run rates and the two
+    # sessions are not one session.
+    for sn in out["sessions"]:
+        sport_raw = (sn.get("sport") or "").lower()
+        sport = ("Run" if "run" in sport_raw
+                 else "Ride" if ("ride" in sport_raw or "bike" in sport_raw) else None)
+        if not (sport and sn.get("minutes")):
+            # Swims and anything else that is not fuelled on the move say so, rather than
+            # silently contributing zero to a total that looks complete.
+            sn["in_session"] = None
+            continue
+        try:
+            rate = ctx.prescribed_g_hr(sport)
+        except Exception as exc:
+            log(f"prescription unavailable for {sport}: {exc}")
+            continue
+        sn["in_session"] = {
+            "sport": sport, "prescribed_carb_g_per_hr": rate,
+            "minutes": sn["minutes"],
+            "carb_g": round(rate * sn["minutes"] / 60.0) if rate else None}
+    fuelled = [sn["in_session"] for sn in out["sessions"] if sn.get("in_session")]
+    if fuelled:
+        out["in_session_by_session"] = fuelled
+        out["in_session_carb_g_total"] = sum(f["carb_g"] or 0 for f in fuelled)
+        out["in_session_note"] = ("per session, not per day: only sessions fuelled on the "
+                                 "move appear here")
+    # What TODAY's zones are already doing about tomorrow, so advice does not contradict
+    # the targets the athlete is looking at.
+    out["todays_zones_because_of_tomorrow"] = [m for m in (zones.get("modifiers") or [])
+                                               if "tomorrow" in m]
+    return out
+
+
+def eating_levers(ctx: Context, day: date, back_days: int = 21) -> list:
+    """What he ACTUALLY eats, with real figures, most-used first.
+
+    Suggestions have to come from his own shopping. Advice to "add some lean protein" is
+    worthless; "swap the Twix for the M&S protein bar, 170 kcal less and 15 g more
+    protein" is actionable, and only possible because both are in his own log with label
+    figures behind them."""
+    seen = {}
+    for rec in ctx.store.get_range(day - timedelta(days=back_days), day):
+        for e in rec.get("entries") or []:
+            name = e.get("resolved_name") or ""
+            if not name or e.get("_supplement"):
+                continue
+            row = seen.setdefault(name, {"name": name, "times": 0,
+                                         "kcal": e.get("kcal"),
+                                         "protein_g": e.get("protein_g"),
+                                         "carb_g": e.get("carb_g"),
+                                         "fat_g": e.get("fat_g"),
+                                         "fibre_g": e.get("fibre_g"),
+                                         "confidence": e.get("confidence")})
+            row["times"] += 1
+    return sorted(seen.values(), key=lambda r: -r["times"])[:25]
+
+
 def facts_for_question(ctx: Context, day: date) -> dict:
     """Everything a question could reasonably need, so the model phrases rather than
     computes. Nothing here is generated by a model: totals come from the store, zones
@@ -706,6 +803,11 @@ def facts_for_question(ctx: Context, day: date) -> dict:
         "items_logged_today": [{"name": e.get("resolved_name"), "kcal": e.get("kcal"),
                                 "confidence": e.get("confidence")} for e in entries],
         "modifiers_today": z.get("modifiers"), "warnings_today": z.get("warnings"),
+        # Tomorrow, and what he actually eats. Without these the model can only read
+        # today's numbers back out - which is exactly how this bot came to feel like a
+        # form rather than a coach.
+        "tomorrow": tomorrow_brief(ctx, day),
+        "foods_he_actually_eats": eating_levers(ctx, day),
     }
 
 
@@ -1219,6 +1321,33 @@ def in_session_line(ctx: Context, day: date) -> str:
             + (f", {ins['shortfall_g']} g short" if ins["shortfall_g"] else "") + tail)
 
 
+def fmt_tomorrow(facts: dict) -> str:
+    """The same facts without the model. Used when the model is down, so /tomorrow always
+    answers with something true rather than an apology."""
+    t = facts.get("tomorrow") or {}
+    bits = ["*Tomorrow*"]
+    if not t.get("sessions"):
+        bits.append("Nothing on the calendar, so this is from your typical week: "
+                    + str(t.get("day_type")))
+    for sn in t.get("sessions") or []:
+        line = " - ".join(str(x) for x in
+                          (sn.get("sport"), sn.get("name") or None,
+                           (f"{sn['minutes']} min" if sn.get("minutes") else None)) if x)
+        bits.append(line)
+        if sn.get("aim"):
+            bits.append("_" + sn["aim"][:220] + "_")
+    for ins in t.get("in_session_by_session") or []:
+        bits.append(f"{ins['sport']} fuel: {ins['prescribed_carb_g_per_hr']:.0f} g carb/hr"
+                    + (f" over {ins['minutes']} min, about {ins['carb_g']} g"
+                       if ins.get("carb_g") else ""))
+    for m in t.get("todays_zones_because_of_tomorrow") or []:
+        bits.append("Today, because of it: " + m)
+    e = facts.get("energy") or {}
+    if e.get("remaining_kcal") is not None:
+        bits.append(f"Left today: {e['remaining_kcal']} kcal against target.")
+    return "\n".join(bits)
+
+
 def today_block(ctx: Context, day: date) -> str:
     z = ctx.zones_for(day)
     # merged_totals, never store.day_totals: fuel logged in the COACH bot is otherwise
@@ -1236,6 +1365,16 @@ def today_block(ctx: Context, day: date) -> str:
 
 def handle_command(ctx: Context, cmd: str, day: date, token, chat_id) -> None:
     store = ctx.store
+    if cmd.startswith("/tomorrow") or cmd.startswith("/brief"):
+        tg.send(token, chat_id, "Looking at tomorrow...", log=log)
+        facts = facts_for_question(ctx, day)
+        brief = NLU.coach_brief(facts, CLAUDE_BIN, LLM_MODEL, log=log)
+        if brief:
+            tg.send(token, chat_id, brief, log=log)
+        else:
+            # Never silence. The deterministic brief is worse prose and the same numbers.
+            tg.send(token, chat_id, fmt_tomorrow(facts), log=log)
+        return
     if cmd.startswith("/today"):
         tg.send(token, chat_id, today_block(ctx, day), log=log)
     elif cmd.startswith("/target"):
