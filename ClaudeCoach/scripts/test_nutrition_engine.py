@@ -159,6 +159,46 @@ check("one elevated day is not enough", N.rhr_guard(
     on=TODAY)["active"] is False)
 check("no data is not an active guard", N.rhr_guard([], on=TODAY)["active"] is False)
 
+# 10b) REGRESSION: the guard must stay firable at consecutive=3, and must survive
+#      a missing current-day row. An earlier cut keyed the tested window off
+#      calendar days, so an absent today row (routine in ICU) made the guard
+#      silently unfirable - coverage that does not fire is worse than none.
+base30 = [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52}
+          for i in range(3, 34)]
+three_up = base30 + [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 70}
+                     for i in (0, 1, 2)]
+g3 = N.rhr_guard(three_up, on=TODAY, consecutive=3)
+check(f"guard fires at consecutive=3 (got {g3.get('active')}, {g3.get('reason', '')})",
+      g3["active"] is True)
+
+# today's row absent, yesterday and the day before elevated
+missing_today = [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52}
+                 for i in range(3, 34)]
+missing_today += [{"id": (TODAY - timedelta(days=1)).isoformat(), "restingHR": 74},
+                  {"id": (TODAY - timedelta(days=2)).isoformat(), "restingHR": 71}]
+g_missing = N.rhr_guard(missing_today, on=TODAY)
+check(f"guard still fires when today's row is missing (got {g_missing.get('active')})",
+      g_missing["active"] is True)
+check("guard reports which days it tested", len(g_missing.get("tested_days", [])) == 2)
+
+# two elevated readings a week apart are not consecutive
+scattered = base30 + [{"id": TODAY.isoformat(), "restingHR": 76},
+                      {"id": (TODAY - timedelta(days=8)).isoformat(), "restingHR": 76}]
+check("scattered elevated readings do not count as consecutive",
+      N.rhr_guard(scattered, on=TODAY)["active"] is False)
+
+# baseline must not include the days under test at consecutive=3 either
+check("baseline excludes the tested days at consecutive=3",
+      51 <= N.rhr_guard(three_up, on=TODAY, consecutive=3)["baseline_bpm"] <= 53)
+
+# a thin baseline is insufficient history, not a quiet pass
+thin = [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52} for i in (2, 3, 4)]
+thin += [{"id": TODAY.isoformat(), "restingHR": 76},
+         {"id": (TODAY - timedelta(days=1)).isoformat(), "restingHR": 76}]
+r = N.rhr_guard(thin, on=TODAY)
+check(f"thin baseline reports insufficient history (got {r.get('reason')})",
+      r["active"] is False and "baseline" in (r.get("reason") or ""))
+
 # 11) Under-fuelling guard fires whether or not the deficit is deliberate.
 check("underfuel fires well below the floor",
       N.underfuel_flag([{"kcal": 1500}], tgt, rmr83) is not None)

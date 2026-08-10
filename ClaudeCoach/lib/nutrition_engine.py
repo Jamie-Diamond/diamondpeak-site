@@ -300,7 +300,17 @@ def targets(*, day_type: str, rolling_weight: float, rmr: float,
     Carbs are the REMAINDER after protein and fat, then cross-checked against the
     day-type g/kg band. A remainder outside the band is surfaced as a warning and
     the figure is still returned - clamping it would hide a bad activity-kcal
-    input, which is the thing the warning exists to catch."""
+    input, which is the thing the warning exists to catch.
+
+    FAT IS PINNED TO THE FLOOR when setting targets, and FAT_CEILING_G plays no
+    part in the arithmetic. The spec gives fat a floor of 80 g and a soft ceiling
+    of 95 g, but only one of the two can coexist with "carbs are the remainder":
+    pinning fat higher on a big day would take those calories straight out of the
+    carbs that fuel the session. So the floor sets the target and the ceiling is
+    advisory only, applied to LOGGED intake as a warning. The consequence to know:
+    on a long_ride day the carb figure absorbs the entire remainder above 80 g of
+    fat, which is why the g/kg cross-check is doing the real sanity work there
+    rather than the kcal range."""
     if day_type not in DAY_TYPES:
         raise ValueError(f"unknown day_type {day_type!r}")
 
@@ -450,30 +460,56 @@ def rhr_guard(wellness, on: date | None = None, baseline_days: int = 30,
 
     The baseline deliberately excludes the days being tested, otherwise a
     sustained elevation drags its own reference upward and the guard stops firing
-    precisely when it matters most."""
+    precisely when it matters most.
+
+    The tested window is the newest `consecutive` rows that EXIST, searched over a
+    slightly wider calendar window, not the last `consecutive` calendar days. An
+    earlier cut used the calendar days directly, which made the guard unfirable at
+    consecutive >= 3: ICU's current-day wellness row is often absent or
+    unfinalised, so the window could never hold enough rows and the guard silently
+    never fired. A guard that cannot fire is worse than no guard, because it reads
+    as coverage. Contiguity is still enforced (`span`), so two elevated readings
+    five days apart do not count as consecutive.
+
+    Reading an unfinalised row is safe here: `restingHR` is device-sourced and
+    ICU does not recompute it. What `_wellness_row_finalized` protects is
+    CTL/ATL/Form, which this guard never touches, so no finalisation filter is
+    wanted - do not add one."""
     on = on or date.today()
     rows = []
     for w in wellness or []:
         d = _as_date(w.get("id") or w.get("date"))
         rhr = w.get("restingHR") or w.get("resting_hr")
-        if d and rhr:
+        if d and rhr and d <= on:
             rows.append((d, float(rhr)))
-    rows.sort()
+    rows.sort(reverse=True)
     if not rows:
         return {"active": False, "reason": "no resting HR data"}
 
-    recent = [(d, v) for d, v in rows if (on - d).days < consecutive and d <= on]
+    # Newest `consecutive` rows that exist, tolerating up to 2 missing days.
+    search = [(d, v) for d, v in rows if (on - d).days <= consecutive + 1]
+    tested = search[:consecutive]
+    if len(tested) < consecutive:
+        return {"active": False, "reason": "insufficient recent resting HR data"}
+
+    span = (tested[0][0] - tested[-1][0]).days + 1
+    if span > consecutive + 1:
+        return {"active": False, "reason": "recent readings too scattered to call consecutive"}
+
+    oldest_tested = tested[-1][0]
     baseline_pool = [v for d, v in rows
-                     if consecutive <= (on - d).days <= baseline_days]
-    if len(recent) < consecutive or len(baseline_pool) < 7:
-        return {"active": False, "reason": "insufficient history"}
+                     if 0 < (oldest_tested - d).days <= baseline_days]
+    if len(baseline_pool) < 7:
+        return {"active": False, "reason": "insufficient baseline history"}
 
     baseline = sum(baseline_pool) / len(baseline_pool)
     limit = baseline * threshold
-    elevated = [(d.isoformat(), v) for d, v in recent if v > limit]
+    elevated = [(d.isoformat(), v) for d, v in tested if v > limit]
     active = len(elevated) >= consecutive
     return {"active": active, "baseline_bpm": round(baseline, 1),
-            "limit_bpm": round(limit, 1), "elevated": elevated,
+            "limit_bpm": round(limit, 1),
+            "tested_days": [d.isoformat() for d, _ in tested],
+            "elevated": elevated,
             "message": ("Resting HR elevated above baseline - holding maintenance."
                         if active else "")}
 
