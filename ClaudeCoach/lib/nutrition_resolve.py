@@ -119,6 +119,24 @@ def _tokens(text: str) -> set:
     return out
 
 
+# A query naming a DOSE form must not match a candidate naming a FOOD form. "collagen
+# capsules" shares the token "collagen" with "COLLAGEN PROTEIN BAR, LEMON COOKIE", so the
+# token test alone passed it. Capsules are not a bar.
+_DOSE_FORMS = {"capsule", "capsules", "cap", "caps", "pill", "pills", "tablet",
+               "tablets", "tab", "tabs", "softgel", "softgels", "gummy", "gummies"}
+_FOOD_FORMS = {"bar", "bars", "cookie", "cookies", "biscuit", "biscuits", "drink",
+               "smoothie", "shake", "yogurt", "yoghurt", "cake", "brownie", "cereal",
+               "crisps", "chips", "meal", "pizza", "sandwich", "wrap", "soup"}
+
+
+def _form_conflict(query: str, name: str) -> bool:
+    """True when one side is a dose form and the other is a food form."""
+    q = set(re.split(r"[^a-z]+", (query or "").lower()))
+    n = set(re.split(r"[^a-z]+", (name or "").lower()))
+    return bool((q & _DOSE_FORMS and n & _FOOD_FORMS)
+                or (n & _DOSE_FORMS and q & _FOOD_FORMS))
+
+
 def _relevant(query: str, name: str) -> bool:
     """Does this database hit actually correspond to what was asked for?
 
@@ -136,6 +154,8 @@ def _relevant(query: str, name: str) -> bool:
     Erring toward rejection is right: a rejected hit falls through to the next rung and
     ultimately to an LLM estimate that is LABELLED an estimate, whereas a wrong hit wears
     a database badge and looks trustworthy."""
+    if _form_conflict(query, name):
+        return False
     q, n = _tokens(query), _tokens(name)
     if not q:
         return True                      # nothing to check against

@@ -784,6 +784,41 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
 
     Per-item resolution matters: a whole sentence resolved as one string both
     mis-costs it and loses the per-item provenance the confidence flag depends on."""
+    if supplement:
+        # A supplement is a DOSE, not a food, so it never touches a food database.
+        # Leaving it on the ladder is how "400mg of my protein collagen capsules"
+        # name-matched a COLLAGEN PROTEIN BAR and picked up 4 plant species from that
+        # bar's ingredient list. A capsule has no ingredients worth searching for and no
+        # plants in it; what matters is what it is and how much.
+        batch = []
+        for it in items[:8]:
+            batch.append({
+                "raw_text": it["text"], "_raw": it["text"],
+                "resolved_name": it["text"],
+                "confidence": "label",          # he read it off his own pack
+                "source_rung": NR.Rung.MANUAL,
+                "resolved_at": str(day)[:10],
+                "species": [],                  # a capsule is not a plant
+                "attempts": [{"rung": "supplement", "outcome": "dose recorded, no lookup",
+                              "detail": "supplements are not searched against food data"}],
+                "degraded": False, "needs_input": False,
+                "_supplement": True, "_trivial": bool(trivial), "_dose_mg": dose_mg,
+                "in_session": bool(it.get("in_session")),
+                **{f: None for f in NR.MACRO_FIELDS},
+            })
+        set_pending(ctx.store, {"batch": batch})
+        dose = (f"{dose_mg:.0f} mg" if dose_mg
+                else (f"{items[0].get('portion_g')} g" if items[0].get("portion_g")
+                      else "dose as stated"))
+        kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
+        tg.send(token, chat_id,
+                f"*{items[0]['text']}*\nSupplement, {dose}. Recorded as a dose, not "
+                f"looked up against food data, and it does not touch your macros."
+                + ("\n_Tell me the label figures if you want them counted._"
+                   if not trivial else "")
+                + "\n\nLog it?", reply_markup=kb, log=log)
+        return
+
     resolved = []
     for it in items[:8]:
         # A barcode short-circuits the text ladder: an exact product lookup beats any
@@ -850,8 +885,12 @@ def commit_one(ctx: Context, item: dict, day: date) -> None:
             day, nutrient=item.get("_raw") or item.get("resolved_name") or "",
             dose=item.get("_dose_mg") or item.get("portion_g"),
             unit="mg" if item.get("_dose_mg") else "g",
+            # Collagen is excluded from the protein target anyway, and a supplement
+            # never carries macros from a food lookup, so this is only ever a figure the
+            # athlete stated himself.
             protein_g=0 if trivial else (item.get("protein_g") or 0),
-            note="dose below a nutritionally meaningful amount" if trivial else "")
+            note=("dose below a nutritionally meaningful amount" if trivial
+                  else "recorded as a dose; not looked up against food data"))
         return
     ctx.store.add_entry(
         day, raw_text=item.get("raw_text") or item.get("_raw") or "",

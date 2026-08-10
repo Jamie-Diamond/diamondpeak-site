@@ -225,6 +225,22 @@ check("food is still food", NLU.classify(
     runner=fake_model('{"intent":"log_food","items":[{"text":"porridge"}]}')
 )["intent"] == "log_food")
 
+# 1k) A SUPPLEMENT NEVER TOUCHES A FOOD DATABASE. The intent was routed correctly but
+#     the item still went through the resolution ladder, so "400mg of my protein collagen
+#     capsules" name-matched "COLLAGEN PROTEIN BAR, LEMON COOKIE" and picked up 4 plant
+#     species from that bar's ingredient list.
+check("a dose form conflicts with a food form",
+      NR._relevant("400mg of my protein collagen capsules",
+                   "COLLAGEN PROTEIN BAR, LEMON COOKIE") is False)
+check("but a genuine collagen supplement still matches",
+      NR._relevant("collagen capsules", "Collagen peptides, bovine") is True)
+check("a real protein bar can still match a protein bar",
+      NR._relevant("protein bar", "COLLAGEN PROTEIN BAR, LEMON COOKIE") is True)
+check("tablets do not match a fortified cereal",
+      NR._relevant("vitamin d tablets", "Vitamin D Fortified Cereal") is False)
+check("a powder is not a dose-form conflict",
+      NR._relevant("magnesium capsules", "Magnesium citrate powder") is True)
+
 # 2) A CEILING must never render as consumed/target. This is the misreading spec
 #    4.1 warns about: a bar reading low against a ceiling looks like failure when
 #    it is compliance.
