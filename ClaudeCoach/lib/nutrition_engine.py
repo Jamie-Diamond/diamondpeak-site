@@ -833,22 +833,32 @@ def race_weight_projection(current_kg: float, target_kg: float, days_to_race: in
     it. Because the deficit now scales with the day and is headroom-capped, the
     projection has to walk a representative week rather than multiply one number:
     `weekly_mix` maps day_type to how many such days a week, defaulting to Jamie's
-    pattern from day_rules (2 long, 4 standard, 1 recovery)."""
+    pattern from day_rules (2 long, 4 standard, 1 recovery).
+
+    It calls zones() per day type rather than re-deriving the arithmetic. An earlier
+    cut duplicated the floor and headroom maths here and immediately drifted: it
+    priced the protein deficit bump unconditionally while zones() applies it only
+    when headroom survives it, so recovery days were priced with a floor the engine
+    never uses. This figure appears on the Peak tab AND in the bot, so the two must
+    come from the same code path or the athlete sees two different projections."""
     mix = weekly_mix or {"long_ride": 1, "long_run": 1, "standard": 4, "recovery": 1}
-    base = base_tdee(rmr, tdee_multiplier)
+    # Representative net training energy per day type. Approximations, and the only
+    # approximations left in here: everything downstream comes from zones().
+    NET_BY_TYPE = {"recovery": 0.0, "standard": 1446.0}
     weekly_deficit = 0.0
+    per_day = {}
     for dtype, count in mix.items():
         if dtype in LONG_DAY_TYPES:
-            continue                                    # never a deficit on long days
-        net = {"standard": 1446.0, "recovery": 0.0}.get(dtype, 0.0)
-        maintenance = base + net
-        c_low = DAY_TYPES[dtype]["carb_g_per_kg"][0] * current_kg
-        # Protein floor is per-kg and load-dependent now, so the projection must
-        # price each day type's own floor rather than one flat figure.
-        p_low = (PROTEIN_G_PER_KG[dtype][0] + PROTEIN_DEFICIT_BUMP_G_PER_KG) * current_kg
-        floors = p_low * 4 + FAT_FLOOR_G_PER_KG * current_kg * 9 + c_low * 4
-        headroom = max(0.0, maintenance - floors)
-        weekly_deficit += count * min(deficit_pct * maintenance, headroom)
+            per_day[dtype] = 0                          # never a deficit on long days
+            continue
+        z = zones(day_type=dtype, rolling_weight=current_kg, rmr=rmr,
+                  sessions=[{"type": "Ride", "moving_time": 7200,
+                             "calories": NET_BY_TYPE[dtype] + 2 * rmr / 24,
+                             "average_watts": 200}] if NET_BY_TYPE[dtype] else [],
+                  deficit_enabled=True, deficit_pct=deficit_pct,
+                  tdee_multiplier=tdee_multiplier)
+        per_day[dtype] = z["deficit_applied_kcal"]
+        weekly_deficit += count * z["deficit_applied_kcal"]
 
     weeks = max(0, days_to_race) / 7.0
     loss_kg = weekly_deficit * weeks / KCAL_PER_KG_FAT
@@ -858,6 +868,7 @@ def race_weight_projection(current_kg: float, target_kg: float, days_to_race: in
             "projected_race_kg": projected,
             "projected_loss_kg": round(loss_kg, 1),
             "weekly_deficit_kcal": round(weekly_deficit),
+            "deficit_by_day_type": per_day,
             "reaches_target": projected <= target_kg,
             "shortfall_kg": round(max(0.0, projected - target_kg), 1),
             "required_daily_kcal_to_reach": (

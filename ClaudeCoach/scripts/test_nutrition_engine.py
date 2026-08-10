@@ -126,11 +126,27 @@ check("deficit lowers the target", off["kcal_target"] > std["kcal_target"])
 
 # 7b) The day must CLOSE: protein floor + fat floor + carb high == the target. A
 #     prescribed carb band left 824 kcal unallocated on long days.
+#     NOTE this is close to an identity while the carb safety floor does not bind,
+#     which is the point: the check that earns its keep is 7b-ii below, where the
+#     floor DOES bind and max() would otherwise paper over an unsatisfiable day.
 for label, zc in (("recovery", rec), ("standard", std), ("long_ride", lng),
                   ("pre-long", pre)):
     total = zc["protein_g"]["low"] * 4 + zc["fat_g"]["low"] * 9 + zc["carb_g"]["high"] * 4
     check(f"{label} day closes to its target (got {total:.0f} vs {zc['kcal_target']})",
           abs(total - zc["kcal_target"]) <= 2)
+    check(f"{label} carb high is not below its safety floor",
+          zc["carb_g"]["high"] >= zc["carb_g"]["low"] - 0.5)
+
+# 7b-ii) When the floors genuinely exceed the day's energy, the engine must SAY so
+#        rather than let max() hide it. Forced with an implausibly low RMR, because
+#        the headroom cap makes this unreachable through the deficit alone.
+squeezed = N.zones(day_type="recovery", rolling_weight=W, rmr=1200.0)
+check("an unsatisfiable day warns about the fat floor",
+      any("no calorie room for the fat floor" in w for w in squeezed["warnings"]))
+check("an unsatisfiable day still returns a usable fat floor",
+      squeezed["fat_g"]["low"] > 0)
+check("an unsatisfiable day does not silently invert the carb zone",
+      squeezed["carb_g"]["high"] >= squeezed["carb_g"]["low"] - 0.5)
 
 # 7c) A deficit too small to mean anything is dropped, not reported.
 check("recovery day reports no deficit rather than a 16 kcal one",
@@ -341,6 +357,18 @@ check("projection states the shortfall", p["shortfall_kg"] > 0)
 check(f"required daily deficit to reach 79 is ~830 "
       f"(got {p['required_daily_kcal_to_reach']})",
       780 <= p["required_daily_kcal_to_reach"] <= 880)
+# The projection MUST agree with zones() day for day. It appears on the Peak tab and
+# in the bot, and an earlier cut re-derived the arithmetic here and drifted: it priced
+# the protein deficit bump unconditionally where zones() applies it only when headroom
+# survives, so recovery days were projected off a floor the engine never uses.
+check(f"projection agrees with zones() on a standard day "
+      f"(got {p['deficit_by_day_type'].get('standard')} vs {std['deficit_applied_kcal']})",
+      p["deficit_by_day_type"].get("standard") == std["deficit_applied_kcal"])
+check(f"projection agrees with zones() on a recovery day "
+      f"(got {p['deficit_by_day_type'].get('recovery')} vs {rec['deficit_applied_kcal']})",
+      p["deficit_by_day_type"].get("recovery") == rec["deficit_applied_kcal"])
+check("projection gives long days no deficit",
+      p["deficit_by_day_type"].get("long_ride") == 0)
 
 # 20) Micronutrients never fabricate an adequacy verdict.
 micro = N.micronutrient_status([{"nutrient": "vitamin_d", "dose": 2000, "unit": "IU"}])
