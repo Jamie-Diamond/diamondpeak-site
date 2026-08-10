@@ -197,12 +197,14 @@ except ValueError:
 # 11) Targets are snapshotted, not recomputed. ICU revises activity calories after
 #     the fact, so a day reviewed later must show what was in force on the day.
 rmr = N.mifflin_st_jeor(83.3, 1.86, date(1995, 5, 6), "M", on=TODAY)
-tgt = N.targets(day_type="standard", rolling_weight=83.3, rmr=rmr,
-                sessions=[{"type": "Ride", "moving_time": 7200, "calories": 1600,
-                           "average_watts": 210}])
+tgt = N.zones(day_type="standard", rolling_weight=83.3, rmr=rmr,
+              sessions=[{"type": "Ride", "moving_time": 7200, "calories": 1600,
+                         "average_watts": 210}])
 store.set_targets(TODAY, tgt, day_type="standard", phase="maintenance")
 saved = store.get_day(TODAY)
-check("targets snapshotted onto the day", saved["targets"]["kcal_target"] == tgt["kcal_target"])
+check("zones snapshotted onto the day", saved["targets"]["kcal_target"] == tgt["kcal_target"])
+check("the snapshot keeps the bias, so a reviewed day renders the same way",
+      saved["targets"]["fibre_g"]["bias"] == tgt["fibre_g"]["bias"])
 check("day_type recorded", saved["day_type"] == "standard")
 check("phase recorded", saved["phase"] == "maintenance")
 
