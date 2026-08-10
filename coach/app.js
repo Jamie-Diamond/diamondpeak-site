@@ -2388,10 +2388,10 @@
         esc(MACRO_LABEL[k].slice(0, 1).toLowerCase()) + '</span>';
     }).join('');
     h += card('So far today',
-      '<div class="pos"><span class="pos-n">' +
+      '<div class="fnow"><span class="fnow-n">' +
       Math.round(t.kcal || 0).toLocaleString() + '</span>' +
-      '<span class="pos-u">kcal</span><div class="chips">' + chips + '</div>' +
-      (r ? '<span class="pos-r">' + Math.round(r.remaining_kcal).toLocaleString() +
+      '<span class="fnow-u">kcal</span><div class="chips">' + chips + '</div>' +
+      (r ? '<span class="fnow-r">' + Math.round(r.remaining_kcal).toLocaleString() +
         ' kcal left</span>' : '') + '</div>' +
       '<div class="zones">' +
       zoneRow('Protein', t.protein_g, z && z.protein_g, day.pace_pct,
@@ -2416,17 +2416,18 @@
           ? '<span class="mut">max ' + Math.round(v.headroom_g || 0) + ' g</span>'
           : (v.still_needed_g ? Math.round(v.still_needed_g) + ' g' :
              '<span class="mut">met</span>');
-        var reqp = v.required_share
-          ? Math.round(v.required_share * 100) + '%' : '<span class="mut">-</span>';
-        var norm = v.normal_share
-          ? Math.round(v.normal_share * 100) + '%' : '<span class="mut">-</span>';
+        var cmp = v.required_share
+          ? Math.round(v.required_share * 100) + '% <span class="mut">vs ' +
+            (v.normal_share ? Math.round(v.normal_share * 100) + '%' : 'n/a') + '</span>'
+          : '<span class="mut">-</span>';
         return '<tr><td class="lbl">' + esc(MACRO_LABEL[k]) + '</td>' +
-          '<td>' + need + '</td><td>' + reqp + '</td><td>' + norm + '</td>' +
-          '<td class="dens ' + esc(v.density) + '">' + esc(v.density) + '</td></tr>';
+          '<td class="nw">' + need + '</td><td class="nw">' + cmp + '</td>' +
+          '<td><span class="dens ' + esc(v.density) + '">' + esc(v.density) +
+          '</span></td></tr>';
       }).join('');
       h += card('What is left has to look like',
         '<table class="tbl dtbl"><thead><tr><th>Macro</th><th>Still needed</th>' +
-        '<th>% of remaining kcal</th><th>Normal meal</th><th></th></tr></thead>' +
+        '<th>Share of what is left</th><th></th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table>',
         { foot: 'The last two columns are the point: a share only means something ' +
                 'next to what an ordinary meal looks like.' });
@@ -2479,7 +2480,7 @@
           above; this is the summary, not the substitute. */
     var p = n.plants || {}, pv = day.provenance || {};
     h += card('Week and provenance',
-      '<div class="figrow">' +
+      '<div class="figures in-card">' +
       fig(p.unique_7d != null ? p.unique_7d : '-', 'plant species',
           'aiming around ' + (p.target || 30)) +
       fig(p.new_today != null ? p.new_today : '-', 'new today', 'variety, not a score') +
@@ -2496,7 +2497,7 @@
 
     /* Block. Kept last: it is context, not the day's decision. */
     var b = n.block || {}, w = n.weight || {}, proj = w.projection;
-    var blockBody = '<div class="figrow">' +
+    var blockBody = '<div class="figures in-card">' +
       fig(b.days_to_race != null ? b.days_to_race : '-', 'days to race',
           b.race_name || '') +
       fig(w.race_target_kg || '-', 'kg target', 'from your profile') +
