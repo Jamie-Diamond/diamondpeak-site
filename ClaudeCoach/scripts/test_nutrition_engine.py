@@ -483,6 +483,67 @@ check("normal share is published alongside it", pm["normal_share"] == 0.20)
 check("required protein density is above a normal meal",
       pm["required_share"] > pm["normal_share"])
 
+# 23) ICU weight ingest. ICU holds ONE untimestamped weight per day and mixes morning
+#     weights with sweat-rate weigh-ins, so they are separated by physics rather than by
+#     time: nobody loses 3.3 kg of fat in three days. Real series from this athlete.
+ICU_ROWS = [{"id": "2026-07-27", "weight": 83.099, "bodyFat": 10.8},
+            {"id": "2026-07-30", "weight": 80.58, "bodyFat": 9.3},
+            {"id": "2026-07-31", "weight": 81.65, "bodyFat": 9.9},
+            {"id": "2026-08-03", "weight": 84.889, "bodyFat": 11.9},
+            {"id": "2026-08-06", "weight": 81.589, "bodyFat": 9.9},
+            {"id": "2026-08-10", "weight": 84.0, "bodyFat": 11.3}]
+cls = N.classify_icu_weights(ICU_ROWS)
+tags = {r["date"]: r["tag"] for r in cls}
+check("the 2.5 kg drop is caught as a sweat weigh-in",
+      tags["2026-07-30"] == "session_sweat")
+check("the 3.3 kg drop is caught too", tags["2026-08-06"] == "session_sweat")
+check("morning readings are kept", tags["2026-08-10"] == "morning"
+      and tags["2026-08-03"] == "morning")
+check("the first reading is accepted, having nothing to compare against",
+      tags["2026-07-27"] == "morning")
+morning = [r["value"] for r in cls if r["tag"] == "morning"]
+mean = sum(morning) / len(morning)
+allmean = sum(r["weight"] for r in ICU_ROWS) / len(ICU_ROWS)
+check(f"filtered mean recovers ~83.4 kg (got {mean:.2f})", 83.2 <= mean <= 83.6)
+check(f"the unfiltered mean would be ~0.8 kg lower (got {allmean:.2f})",
+      mean - allmean > 0.6)
+check("every rejection states its reason",
+      all(r["reason"] for r in cls if r["tag"] == "session_sweat"))
+check("body fat is carried through but never returned as a series",
+      all("body_fat_pct" in r for r in cls))
+
+# A timestamped reading the athlete logged himself always wins: known provenance beats
+# inferred provenance, so the ICU value for that date is skipped rather than second-guessed.
+sup = N.classify_icu_weights(ICU_ROWS, existing_by_date={"2026-08-10": {"value": 83.3}})
+check("an athlete-logged day supersedes the ICU value",
+      {r["date"]: r["tag"] for r in sup}["2026-08-10"] == "superseded")
+check("a superseded reading is not counted as morning",
+      "2026-08-10" not in [r["date"] for r in sup if r["tag"] == "morning"])
+
+# The baseline must use ACCEPTED readings only. Including rejected ones would drag it
+# down and let the next sweat reading through, the same self-defeating loop the RHR
+# guard avoids by excluding the days under test.
+drifting = [{"id": "2026-08-01", "weight": 84.0},
+            {"id": "2026-08-02", "weight": 81.0},
+            {"id": "2026-08-03", "weight": 81.0},
+            {"id": "2026-08-04", "weight": 81.0}]
+dt = {r["date"]: r["tag"] for r in N.classify_icu_weights(drifting)}
+check("repeated sweat readings do not become the new baseline",
+      all(dt[d] == "session_sweat" for d in ("2026-08-02", "2026-08-03", "2026-08-04")))
+
+# Real fat loss must never be rejected: it moves ~0.2 kg a week.
+slow = [{"id": f"2026-08-{d:02d}", "weight": 84.0 - i * 0.03}
+        for i, d in enumerate(range(1, 15))]
+check("a genuine slow downward trend is all kept",
+      all(r["tag"] == "morning" for r in N.classify_icu_weights(slow)))
+
+# And the classified output feeds rolling_weight_kg without the sweat readings.
+merged = [{"type": "weight", "date": r["date"], "value": r["value"],
+           "logged_at": r["date"] + "T06:00", "tag": r["tag"]}
+          for r in cls if r["tag"] == "morning"]
+rm = N.rolling_weight_kg(merged, on=date(2026, 8, 10), days=14)
+check(f"rolling mean from the filtered set is ~83.4 (got {rm})", 83.2 <= rm <= 83.6)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

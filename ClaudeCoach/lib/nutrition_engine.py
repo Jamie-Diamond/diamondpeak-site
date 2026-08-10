@@ -1101,3 +1101,79 @@ def meal_requirement(totals: dict, z: dict) -> dict:
     out["reason"] = ("; ".join(bits) if bits
                      else f"{remaining_kcal:,} kcal left and every zone is met")
     return out
+
+
+# --- intervals.icu weight ingest (Jamie's call, 10 Aug 2026) -----------------
+
+# How far below the running morning baseline a reading has to sit before it is treated
+# as a sweat-rate weigh-in rather than a morning weight.
+#
+# This exists because ICU stores ONE UNTIMESTAMPED weight per day, so morning and
+# post-session readings are indistinguishable by time. They are separable by physics:
+# Jamie's own series runs 83.10, 80.58, 81.65, 84.89, 81.59, 84.00 over a fortnight, and
+# nobody loses 3.3 kg of fat in three days. A drop that size is fluid.
+#
+# 1.5 kg is chosen against that series: it catches the 80.58 and 81.59 readings and
+# recovers a morning-only mean of ~83.4 kg, which matches the ~83.3 kg computed by hand
+# from timestamped data. Tighter (1.2) over-rejects and drifts the mean up; looser (2.0)
+# lets the 80.58 through and drags it down. A genuine fat-loss trend moves ~0.2 kg a
+# week, so nothing real is ever rejected by this.
+SWEAT_DROP_KG = 1.5
+ICU_BASELINE_DAYS = 14
+
+
+def classify_icu_weights(rows, existing_by_date=None) -> list:
+    """Tag each intervals.icu weight as morning or session_sweat, in date order.
+
+    Returns [{date, value, tag, reason, source}] ready for the store. ICU is the best
+    place these land - the scale syncs there automatically and Jamie weighs there
+    anyway - but the series MIXES morning weights with sweat-rate weigh-ins, and a
+    post-session reading in the rolling mean reads as progress that did not happen. The
+    deficit is driven off that mean, so this filter is load-bearing rather than tidy.
+
+    `existing_by_date` maps an ISO date to a weight the athlete logged DIRECTLY (via the
+    bot, timestamped, so its provenance is known). Those always win: a known morning
+    reading beats an inferred one, and the ICU value for that date is skipped entirely
+    rather than second-guessed.
+
+    The baseline is the median of ACCEPTED morning readings in the trailing window, not
+    of everything. Including rejected readings would drag the baseline down and let the
+    next sweat reading through - the same self-defeating loop the RHR guard avoids by
+    excluding the days under test."""
+    existing = existing_by_date or {}
+    parsed = []
+    for w in rows or []:
+        d = _as_date(w.get("id") or w.get("date"))
+        val = w.get("weight") or w.get("weight_kg")
+        if d and val:
+            parsed.append((d, float(val), w.get("bodyFat") or w.get("body_fat_pct")))
+    parsed.sort()
+
+    out, accepted = [], []
+    for d, val, fat in parsed:
+        iso = d.isoformat()
+        if iso in existing:
+            out.append({"date": iso, "value": val, "tag": "superseded",
+                        "reason": "athlete logged a timestamped weight for this day",
+                        "source": "intervals.icu", "body_fat_pct": fat})
+            continue
+        window = [v for dd, v in accepted if 0 <= (d - dd).days <= ICU_BASELINE_DAYS]
+        baseline = None
+        if window:
+            s = sorted(window)
+            mid = len(s) // 2
+            baseline = s[mid] if len(s) % 2 else (s[mid - 1] + s[mid]) / 2
+        if baseline is not None and val < baseline - SWEAT_DROP_KG:
+            out.append({"date": iso, "value": val, "tag": "session_sweat",
+                        "reason": f"{baseline - val:.1f} kg below the {baseline:.1f} kg "
+                                  f"morning baseline, which is fluid rather than fat",
+                        "source": "intervals.icu", "body_fat_pct": fat})
+            continue
+        accepted.append((d, val))
+        out.append({"date": iso, "value": val, "tag": "morning",
+                    "reason": ("first reading, nothing to compare against"
+                               if baseline is None
+                               else f"within {SWEAT_DROP_KG} kg of the "
+                                    f"{baseline:.1f} kg baseline"),
+                    "source": "intervals.icu", "body_fat_pct": fat})
+    return out

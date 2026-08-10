@@ -151,9 +151,34 @@ def build(slug: str, today: date) -> dict:
                 "estimate_error_band": "+/-10-15%"},
         })
 
+    # ICU is the right weight source (the scale syncs there), but it holds ONE
+    # UNTIMESTAMPED reading per day and mixes morning weights with sweat-rate weigh-ins.
+    # Classify before use, or the page's 7-day mean carries a post-session reading and
+    # shows progress that did not happen. On this athlete's fortnight that is the
+    # difference between 83.4 and 82.6 kg.
     measurements = store.measurements_range(start, today, type="weight")
+    own_morning = {(m.get("date") or "")[:10]: m for m in measurements
+                   if m.get("tag") == "morning"}
+    icu_rejected = []
+    try:
+        cfg = json.loads((BASE / "config" / "athletes.json").read_text())[slug]
+        from icu_api import IcuClient
+        rows = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"]).get_wellness(
+            days=WINDOW_DAYS + 7) or []
+        for r in NE.classify_icu_weights(rows, existing_by_date=own_morning):
+            if r["tag"] == "morning":
+                measurements.append({"type": "weight", "date": r["date"],
+                                     "value": r["value"],
+                                     "logged_at": r["date"] + "T06:00",
+                                     "tag": "morning", "source": "intervals.icu"})
+            elif r["tag"] == "session_sweat":
+                icu_rejected.append({"date": r["date"], "kg": r["value"],
+                                     "reason": r["reason"]})
+    except Exception as exc:
+        print(f"{slug}: icu weights unavailable ({exc}); using logged readings only")
     weight_series = [{"date": m["date"], "kg": m["value"]}
                      for m in measurements if m.get("tag") == "morning"]
+    weight_series.sort(key=lambda r: r["date"])
     div = PL.diversity(days_raw, table, on=today)
 
     race = profile.get("race_date") or None
@@ -182,6 +207,10 @@ def build(slug: str, today: date) -> dict:
             "projection": projection,
             # Deliberately no body-fat series. See the module docstring.
             "body_fat_charted": False,
+            # Shown so the filtering is visible rather than silent: a rejected reading
+            # is a real number the athlete saw on his scale, and hiding the rejection
+            # would look like the app had lost it.
+            "sweat_readings_excluded": icu_rejected,
         },
         "plants": {"unique_7d": div["unique_7d"], "weighted_7d": div["weighted_7d"],
                    "target": div["target"], "basis": div["target_basis"],

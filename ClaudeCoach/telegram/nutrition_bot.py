@@ -401,6 +401,38 @@ class Context:
             log(f"icu profile failed, falling back to server date: {exc}")
         return date.today()
 
+    def weight_readings(self, day: date, days: int = 14) -> list:
+        """Store readings plus intervals.icu, with the sweat weigh-ins filtered out.
+
+        ICU is the right source: the scale syncs there automatically and it is where he
+        weighs anyway. But it holds ONE UNTIMESTAMPED weight per day and mixes morning
+        weights with sweat-rate weigh-ins, so it is classified first. A bot-logged
+        reading for a date always wins, because its provenance is known rather than
+        inferred.
+
+        Only `morning` readings come back. Letting a post-session reading into the
+        rolling mean would read as progress that did not happen, and the deficit is
+        driven off that mean."""
+        own = self.store.measurements_range(day - timedelta(days=days - 1), day)
+        by_date = {(m.get("date") or "")[:10]: m for m in own
+                   if m.get("tag") == "morning"}
+        try:
+            rows = self.icu.get_wellness(days=days + 7) or []
+        except Exception as exc:
+            log(f"icu weights unavailable: {exc}")
+            return own
+        merged = list(own)
+        for r in NE.classify_icu_weights(rows, existing_by_date=by_date):
+            if r["tag"] != "morning":
+                continue
+            merged.append({"type": "weight", "date": r["date"], "value": r["value"],
+                           # 06:00 so it passes the after-04:00 gate and counts as the
+                           # day's first reading. ICU gives no time; this is a stand-in,
+                           # not a claim about when he stood on the scale.
+                           "logged_at": r["date"] + "T06:00", "tag": "morning",
+                           "source": "intervals.icu"})
+        return merged
+
     def zones_for(self, day: date) -> dict:
         rules = self.athlete.get("day_rules") or {}
         today_type, tomorrow_type, conf, sessions = classify_today_and_tomorrow(
@@ -415,8 +447,7 @@ class Context:
         except Exception:
             pass
 
-        weight = NE.rolling_weight_kg(
-            self.store.measurements_range(day - timedelta(days=13), day), on=day)
+        weight = NE.rolling_weight_kg(self.weight_readings(day), on=day)
         if weight is None:
             weight = float(self.athlete.get("weight_kg")
                            or json.loads((BASE / "athletes" / self.slug
@@ -499,6 +530,16 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
 
     got = NLU.classify(t, bool(pend), CLAUDE_BIN, LLM_MODEL, log=log)
     intent = got.get("intent")
+
+    if intent == "secret":
+        # The reply deliberately does NOT quote it back: echoing a credential into the
+        # chat log is the same exposure again.
+        tg.send(token, chat_id,
+                "That looks like an API key or token, so I have not logged it or sent "
+                "it anywhere. Keys go in `nutrition_config.json` on the VM, never "
+                "through a bot. Assume anything pasted into a chat is burnt and get a "
+                "fresh one.", log=log)
+        return
 
     if intent == "command":
         handle_command(ctx, got.get("command", "/help"), day, token, chat_id)

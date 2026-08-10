@@ -40,7 +40,8 @@ import re
 import subprocess
 
 INTENTS = ("log_food", "log_weight", "log_supplement", "question", "advice",
-           "correction", "command", "confirm", "cancel", "smalltalk", "unknown")
+           "correction", "command", "confirm", "cancel", "smalltalk", "secret",
+           "unknown")
 
 YES = {"y", "yes", "yep", "yeah", "ok", "okay", "sure", "go on", "do it", "log it",
        "confirm", "correct", "that's right", "thats right", "aye", "please do"}
@@ -101,12 +102,41 @@ def looks_like_barcode(text: str):
     return m.group(1) if m else None
 
 
+# Credential-shaped input. Checked BEFORE the model is called and before anything is
+# resolved, because a key sent to a food logger would otherwise become a food entry, and
+# `resolved_name` IS published to a PUBLIC repo. The nutrition log itself is gitignored,
+# but the published subset is not, so an un-resolvable key would have gone out as the
+# item's name and into permanent public git history.
+_SECRET_PATTERNS = (
+    re.compile(r"\b(sk|pk|rk)[-_][A-Za-z0-9_\-]{16,}", re.I),      # stripe/openai style
+    re.compile(r"\b(gh[pousr]|glpat)_[A-Za-z0-9_\-]{16,}"),         # github/gitlab
+    re.compile(r"\b\d{8,12}:[A-Za-z0-9_\-]{30,}"),                  # telegram bot token
+    re.compile(r"\b[A-Za-z0-9]{32,}\b"),                            # bare 32+ char token
+    re.compile(r"\b(api[_ -]?key|token|secret|password|bearer)\b\s*[:=]", re.I),
+)
+
+
+def looks_like_secret(text: str) -> bool:
+    """True if the message looks like a credential.
+
+    Deliberately loose on the tell and strict on the consequence: a false positive costs
+    one confused reply, a false negative writes a key into a public repo. A bare 32+
+    character alphanumeric run is not a food, so the width is affordable."""
+    t = (text or "").strip()
+    if len(t) < 16:
+        return False
+    return any(p.search(t) for p in _SECRET_PATTERNS)
+
+
 def fast_intent(text: str, has_pending: bool) -> dict | None:
     """Deterministic classification, no model call. None means "ask the model"."""
     t = (text or "").strip()
     low = t.lower().rstrip("!. ")
     if not t:
         return {"intent": "unknown"}
+    if looks_like_secret(t):
+        # Never reaches the model and never reaches the store.
+        return {"intent": "secret"}
     if t.startswith("/"):
         return {"intent": "command", "command": low.split()[0]}
     if has_pending and low in YES:
