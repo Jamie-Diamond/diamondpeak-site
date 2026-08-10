@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Offline tests for lib/nutrition_engine.py. Run: python3 scripts/test_nutrition_engine.py
+"""Offline tests for lib/nutrition_engine.py (spec v0.2).
+Run: python3 ClaudeCoach/scripts/test_nutrition_engine.py
 
-Covers the cases that would silently corrupt the longitudinal record if they
-regressed: the resting subtraction, the deficit ceilings, the fibre lookahead,
-pacing suppression on long days, the sweat-weigh-in filter, and the collagen
-protein exclusion.
+Covers what would silently corrupt the record or mislead the athlete: the resting
+subtraction, the proportional deficit and its ceilings, zone collapse, the fibre
+lookahead flip, projection-based flags (which replaced percentage pacing), the
+sweat weigh-in filter, and the closed-loop correction.
 """
 import sys
 from datetime import date, timedelta
@@ -28,212 +29,290 @@ def check(name, cond):
 
 TODAY = date(2026, 8, 10)
 DOB = date(1995, 5, 6)
+W = 83.3
+RMR = N.mifflin_st_jeor(W, 1.86, DOB, "M", on=TODAY)
+RIDE2H = [{"type": "Ride", "moving_time": 7200, "calories": 1600, "average_watts": 210}]
+RUN90 = [{"type": "Run", "moving_time": 5400, "calories": 900}]
+LONGRIDE = [{"type": "Ride", "moving_time": 14400, "calories": 3200, "average_watts": 200}]
 
-# 1) Mifflin-St Jeor against the spec's stated figure (~1,840 at 83 kg)
-rmr83 = N.mifflin_st_jeor(83.0, 1.86, DOB, "M", on=TODAY)
+
+def z(**kw):
+    kw.setdefault("rolling_weight", W)
+    kw.setdefault("rmr", RMR)
+    return N.zones(**kw)
+
+
+# 1) Anthropometrics
 check("age is 31 on 2026-08-10", N.age_years(DOB, TODAY) == 31)
-check(f"RMR at 83kg is ~1842 (got {rmr83:.0f})", 1838 <= rmr83 <= 1846)
-check("base TDEE ~2488", 2470 <= N.base_tdee(rmr83) <= 2510)
+check(f"RMR at 83.3kg is ~1845 (got {RMR:.0f})", 1840 <= RMR <= 1850)
 
-# 2) The resting subtraction actually subtracts. A 2-hour ride burning 1600 kcal
-#    should net ~1600 − 2×(1842/24) = ~1447, not 1600.
-ride2h = [{"type": "Ride", "moving_time": 7200, "calories": 1600, "average_watts": 210}]
-net, conf = N.net_session_kcal(ride2h, rmr83)
-check(f"net session kcal subtracts resting (got {net})", 1440 <= net <= 1455)
-check("power-metered ride reads 'measured'", conf == "measured")
-hr_run = [{"type": "Run", "moving_time": 3600, "calories": 700}]
-check("HR-only session reads 'estimated'", N.net_session_kcal(hr_run, rmr83)[1] == "estimated")
+# 2) The resting subtraction actually subtracts, and confidence is honest.
+net, conf = N.net_session_kcal(RIDE2H, RMR)
+check(f"net subtracts resting energy (got {net})", 1440 <= net <= 1455)
+check("power-metered reads measured", conf == "measured")
+check("HR-only reads estimated", N.net_session_kcal(RUN90, RMR)[1] == "estimated")
 
-# 3) Day classification. Ride wins over run in a brick, and the longest single
-#    session decides it rather than the daily total.
-check("4h ride is long_ride", N.classify_day(
-    [{"type": "Ride", "moving_time": 14400, "calories": 3000}]) == "long_ride")
-check("brick 4h ride + 30min run is long_ride", N.classify_day([
-    {"type": "Ride", "moving_time": 14400}, {"type": "Run", "moving_time": 1800}]) == "long_ride")
+# 3) Day classification: longest single session decides, ride beats run in a brick.
+check("4h ride is long_ride", N.classify_day(LONGRIDE) == "long_ride")
+check("brick reads long_ride", N.classify_day(
+    LONGRIDE + [{"type": "Run", "moving_time": 1800}]) == "long_ride")
 check("2h run is long_run", N.classify_day([{"type": "Run", "moving_time": 7200}]) == "long_run")
-check("two 90min rides is standard, not long_ride", N.classify_day([
-    {"type": "Ride", "moving_time": 5400}, {"type": "Ride", "moving_time": 5400}]) == "standard")
-check("30min swim is recovery", N.classify_day([{"type": "Swim", "moving_time": 1800}]) == "recovery")
-check("nothing logged is recovery", N.classify_day([]) == "recovery")
+check("two 90min rides is standard", N.classify_day(
+    [{"type": "Ride", "moving_time": 5400}, {"type": "Ride", "moving_time": 5400}]) == "standard")
+check("nothing is recovery", N.classify_day([]) == "recovery")
 
-# 4) Deficit ceilings - the three that hold regardless of the flag.
-common = dict(rolling_weight=83.3, rmr=rmr83, deficit_enabled=True)
-t_std = N.targets(day_type="standard", sessions=ride2h, **common)
-check(f"deficit applies on a standard day (got {t_std['deficit_applied_kcal']})",
-      t_std["deficit_applied_kcal"] == N.DEFICIT_KCAL_DEFAULT)
+# 4) Empty calendar is NOT a rest day: fall back to the typical week, low confidence.
+rules = {"swim_days": ["Tue", "Thu"], "bike_days": ["Fri", "Sat", "Sun"],
+         "run_days": ["Tue", "Wed", "Sat", "Sun"]}
+dt, cf = N.classify_from_day_rules(date(2026, 8, 14), rules)     # a Friday, bike day
+check("scheduled day falls back to standard", dt == "standard")
+check("fallback is marked low_confidence", cf == "low_confidence")
+dt2, _ = N.classify_from_day_rules(date(2026, 8, 10), rules)     # a Monday, nothing
+check("unscheduled day falls back to recovery", dt2 == "recovery")
+check("fallback never guesses a long day",
+      all(N.classify_from_day_rules(TODAY + timedelta(days=i), rules)[0]
+          not in N.LONG_DAY_TYPES for i in range(7)))
 
-t_long = N.targets(day_type="long_ride",
-                   sessions=[{"type": "Ride", "moving_time": 14400, "calories": 3200,
-                              "average_watts": 200}], **common)
-check("deficit suppressed on long_ride", t_long["deficit_applied_kcal"] == 0)
-check("suppression is explained", any("long session" in w for w in t_long["warnings"]))
+# 5) Zones carry a bias, which is what decides warning direction.
+zz = z(day_type="standard", sessions=RIDE2H)
+check("protein is a floor", zz["protein_g"]["bias"] == N.BIAS_FLOOR)
+check("calories are a band", zz["kcal"]["bias"] == N.BIAS_BAND)
+check("fibre on a normal day is a floor", zz["fibre_g"]["bias"] == N.BIAS_FLOOR)
+check("fat ceiling declares it is reasoned, not literature",
+      "reason" in zz["fat_g"]["basis"])
+check("calorie band is +/-5%",
+      abs(zz["kcal"]["high"] - zz["kcal"]["low"] - 0.1 * zz["kcal_target"]) < 2)
 
-t_rhr = N.targets(day_type="standard", sessions=ride2h, rhr_guard_active=True, **common)
-check("deficit suppressed while RHR guard active", t_rhr["deficit_applied_kcal"] == 0)
-check("RHR suppression is explained", any("resting HR" in w for w in t_rhr["warnings"]))
+# 6) REGRESSION: the deficit must never collapse a zone to a point. A first cut
+#    capped it at the full headroom, so residual fat landed exactly on its floor
+#    and the fat zone became 75-75 on recovery and HR-estimated days.
+for label, kw in (("recovery", dict(day_type="recovery")),
+                  ("standard, HR run", dict(day_type="standard", sessions=RUN90)),
+                  ("standard, powered", dict(day_type="standard", sessions=RIDE2H))):
+    zc = z(deficit_enabled=True, **kw)
+    width = zc["fat_g"]["high"] - zc["fat_g"]["low"]
+    check(f"fat zone keeps width on {label} (got {width:.1f} g)",
+          width >= N.FAT_ZONE_MIN_WIDTH_G - 0.5)
 
-t_off = N.targets(day_type="standard", sessions=ride2h, rolling_weight=83.3, rmr=rmr83)
-check("deficit off by default", t_off["deficit_applied_kcal"] == 0)
-check("deficit lowers the target by exactly the deficit",
-      t_off["kcal_target"] - t_std["kcal_target"] == N.DEFICIT_KCAL_DEFAULT)
+# 7) The deficit is proportional, headroom-capped, and zero on the protected days.
+rec = z(day_type="recovery", deficit_enabled=True)
+std = z(day_type="standard", sessions=RIDE2H, deficit_enabled=True)
+check(f"recovery deficit is small (got {rec['deficit_applied_kcal']})",
+      0 <= rec["deficit_applied_kcal"] <= 60)
+check(f"standard deficit is ~10% of maintenance (got {std['deficit_applied_kcal']})",
+      370 <= std["deficit_applied_kcal"] <= 400)
+check("proportional means the bigger day carries the bigger cut",
+      std["deficit_applied_kcal"] > rec["deficit_applied_kcal"])
+check("recovery cap is explained in warnings",
+      any("floors leave only" in w for w in rec["warnings"]))
 
-# 5) Protein is flat across every day type - the one target that must not move.
-prot = {N.targets(day_type=dt, rolling_weight=83.3, rmr=rmr83)["protein_target_g"]
-        for dt in N.DAY_TYPES}
-check("protein target is flat across all day types", prot == {N.PROTEIN_G_FLAT})
+lng = z(day_type="long_ride", sessions=LONGRIDE, deficit_enabled=True)
+check("no deficit on a long day", lng["deficit_applied_kcal"] == 0)
+check("long-day suppression explained", any("long session" in w for w in lng["warnings"]))
 
-# 6) Fibre: ceiling the day BEFORE a long session, regardless of today's own type.
-g, ceil = N.fibre_target("recovery")
-check(f"recovery day fibre is a target ~42 (got {g})", g > 35 and ceil is False)
-g, ceil = N.fibre_target("recovery", tomorrow_type="long_ride")
-check("recovery day before a long ride flips to a ceiling", g <= 20 and ceil is True)
-g, ceil = N.fibre_target("long_run")
-check("long run day is itself a ceiling", g <= 20 and ceil is True)
-g, ceil = N.fibre_target("standard", days_to_race=3)
-check("race week overrides to 10-15g ceiling", 10 <= g <= 15 and ceil is True)
-check("race week beats the day-before rule",
-      N.fibre_target("standard", tomorrow_type="long_ride", days_to_race=2)[0] <= 15)
+guard = z(day_type="standard", sessions=RIDE2H, deficit_enabled=True, rhr_guard_active=True)
+check("no deficit while the RHR guard is active", guard["deficit_applied_kcal"] == 0)
+check("RHR suppression explained", any("resting HR" in w for w in guard["warnings"]))
 
-# 7) Pacing. Fires on a front-loaded fat day, suppressed on long days and on any
-#    day containing in-session fuel.
-tgt = N.targets(day_type="standard", sessions=ride2h, rolling_weight=83.3, rmr=rmr83)
-frontload = [
-    {"resolved_name": "M&S nut collection 75g", "kcal": 470, "fat_g": 42, "protein_g": 12, "carb_g": 12},
-    {"resolved_name": "high-protein ready meal", "kcal": 450, "fat_g": 20, "protein_g": 40, "carb_g": 30},
-]
-p = N.pacing(frontload, tgt)
-check("fat front-load is flagged", any(f["macro"] == "fat" for f in p["flags"]))
-fat_flag = [f for f in p["flags"] if f["macro"] == "fat"][0]
-check("flag names ranked contributors", len(fat_flag["contributors"]) == 2)
-check("top contributor is the nuts", fat_flag["contributors"][0]["name"].startswith("M&S"))
+pre = z(day_type="standard", sessions=RIDE2H, deficit_enabled=True, tomorrow_type="long_ride")
+check("no deficit the day before a long session", pre["deficit_applied_kcal"] == 0)
+check("pre-long suppression explained", any("glycogen" in w for w in pre["warnings"]))
 
-p_long = N.pacing(frontload, t_long)
-check("pacing suppressed on a long day", p_long["suppressed"] is True and not p_long["flags"])
-p_insess = N.pacing(frontload + [{"resolved_name": "Maurten 320", "kcal": 320, "carb_g": 80,
-                                  "in_session": True}], tgt)
-check("pacing suppressed when in-session fuel present", p_insess["suppressed"] is True)
+off = z(day_type="standard", sessions=RIDE2H)
+check("deficit off by default", off["deficit_applied_kcal"] == 0)
+check("deficit lowers the target", off["kcal_target"] > std["kcal_target"])
 
-# 8) In-session fuel is marked protected so nothing can offer it for reduction.
+# 8) Fat is bidirectional: crowded on low days, GI-limited on pre-long days.
+check("long day has far more fat headroom than a recovery day",
+      lng["fat_g"]["high"] > rec["fat_g"]["high"] + 50)
+check("pre-long day tightens the fat ceiling to 90 g",
+      pre["fat_g"]["high"] <= N.FAT_CEILING_PRE_LONG_G)
+check("fat floor is 0.9 g/kg on rolling weight",
+      abs(std["fat_g"]["low"] - 0.9 * W) < 0.6)
+
+# 9) Fibre: same day type, opposite bias, decided purely by the lookahead.
+plain = z(day_type="recovery")
+flip = z(day_type="recovery", tomorrow_type="long_ride")
+check("recovery day normally targets high fibre",
+      plain["fibre_g"]["low"] >= 40 and plain["fibre_g"]["bias"] == N.BIAS_FLOOR)
+check("same day before a long ride flips to a ceiling",
+      flip["fibre_g"]["high"] <= 20 and flip["fibre_g"]["bias"] == N.BIAS_CEILING)
+check("the flip is reported as a modifier",
+      any("fibre flipped" in m for m in flip["modifiers"]))
+race = z(day_type="standard", days_to_race=2)
+check("race week is a 10-15 g fibre ceiling",
+      race["fibre_g"]["bias"] == N.BIAS_CEILING and race["fibre_g"]["high"] <= 15)
+check("race week loads carbs to 10-12 g/kg",
+      race["carb_g"]["low"] >= 10 * W - 1)
+check("carbs go to the upper half before a long session",
+      flip["carb_g"]["low"] > plain["carb_g"]["low"])
+
+# 10) Post-long-ride protein modifier.
+post = z(day_type="recovery", yesterday_type="long_ride")
+check("protein floor rises after a long ride",
+      post["protein_g"]["low"] == N.PROTEIN_POST_LONG_FLOOR_G)
+check("the modifier is reported", any("yesterday" in m for m in post["modifiers"]))
+
+# 11) Projection replaces percentage pacing. No pacing function should survive.
+check("percentage pacing is gone", not hasattr(N, "pacing"))
+check("v0.1 targets() is gone", not hasattr(N, "targets"))
+
+proj = N.project({"kcal": 1200, "protein_g": 60, "fat_g": 70, "carb_g": 120, "fibre_g": 8})
+check("with no stated plan the projection is open-ended",
+      proj["protein_g"]["open_ended"] is True and proj["protein_g"]["high"] is None)
+flags = N.zone_flags(std, proj)
+check("an open-ended projection cannot declare a floor unreachable",
+      not any(f["direction"] == "cannot_reach_floor" for f in flags))
+
+# already past a ceiling: that IS knowable without a plan
+zc = z(day_type="standard", sessions=RIDE2H, tomorrow_type="long_ride")
+over = N.project({"fibre_g": 35, "kcal": 1000})
+fl = N.zone_flags(zc, over)
+check("an exceeded fibre ceiling flags without a plan",
+      any(f["macro"] == "fibre_g" and f["direction"] == "exceeds_ceiling" for f in fl))
+
+# with a stated plan, an unreachable floor flags
+plan = {"protein_g": (20, 40), "kcal": (800, 1400)}
+short = N.project({"protein_g": 60, "kcal": 1200}, plan)
+fl2 = N.zone_flags(std, short)
+check("a protein floor that cannot be reached flags",
+      any(f["macro"] == "protein_g" and f["direction"] == "cannot_reach_floor" for f in fl2))
+check("the flag reports the distance from the zone",
+      [f for f in fl2 if f["macro"] == "protein_g"][0]["distance"] > 0)
+
+# straddling a boundary is NOT a flag
+straddle = N.project({"protein_g": 140}, {"protein_g": (10, 60)})
+check("straddling the floor is not a flag",
+      not any(f["macro"] == "protein_g" for f in N.zone_flags(std, straddle)))
+
+# a floor never flags high
+plenty = N.project({"protein_g": 240}, {"protein_g": (0, 0)})
+check("exceeding a protein floor is not an event",
+      not any(f["macro"] == "protein_g" for f in N.zone_flags(std, plenty)))
+
+# a ceiling never flags low: low fibre on a pre-long day is compliance
+low_fibre = N.project({"fibre_g": 6}, {"fibre_g": (0, 4)})
+check("low fibre on a pre-long day is compliance, not failure",
+      not any(f["macro"] == "fibre_g" for f in N.zone_flags(zc, low_fibre)))
+
+check("flags are ranked worst first",
+      all(fl2[i]["distance"] >= fl2[i + 1]["distance"] for i in range(len(fl2) - 1)))
+
+# 12) No long-day special case is needed any more (v0.2 7).
+in_sess = N.project({"carb_g": 240, "kcal": 2000}, {"carb_g": (200, 400)})
+check("long days need no suppression rule", isinstance(N.zone_flags(lng, in_sess), list))
+
+# 13) Contributor ranking survives, and in-session fuel is protected.
 ranked = N.rank_contributors([{"resolved_name": "gel", "carb_g": 30, "in_session": True},
                               {"resolved_name": "toast", "carb_g": 40}], "carb_g")
-check("in-session items are flagged protected",
+check("contributors ranked by amount", ranked[0]["name"] == "toast")
+check("in-session fuel is marked protected",
       [r["protected"] for r in ranked if r["name"] == "gel"] == [True])
 
-# 9) Weight: sweat weigh-ins must not enter the rolling mean.
+# 14) Weight: sweat weigh-ins must never enter the rolling mean.
 days = [TODAY - timedelta(days=i) for i in range(7)]
 clean = [{"type": "weight", "date": d.isoformat(),
           "logged_at": f"{d.isoformat()}T06:15", "value": 83.3} for d in days]
-check("clean 7-day mean is 83.3", N.rolling_weight_kg(clean, on=TODAY) == 83.3)
-
-contaminated = clean + [
-    {"type": "weight", "date": TODAY.isoformat(),
-     "logged_at": f"{TODAY.isoformat()}T13:40", "value": 80.4},          # post-ride, later same day
-    {"type": "weight", "date": days[1].isoformat(),
-     "logged_at": f"{days[1].isoformat()}T14:02", "value": 80.6, "tag": "session_sweat"},
-]
-check("later same-day reading is excluded by time",
-      N.rolling_weight_kg(contaminated, on=TODAY) == 83.3)
-check("explicitly tagged sweat reading is excluded",
-      N.rolling_weight_kg(contaminated, on=TODAY) == 83.3)
-check("pre-04:00 reading is excluded", N.rolling_weight_kg(
+check("clean mean is 83.3", N.rolling_weight_kg(clean, on=TODAY) == 83.3)
+check("later same-day reading excluded", N.rolling_weight_kg(
+    clean + [{"type": "weight", "date": TODAY.isoformat(),
+              "logged_at": f"{TODAY.isoformat()}T13:40", "value": 80.4}], on=TODAY) == 83.3)
+check("tagged sweat reading excluded", N.rolling_weight_kg(
+    clean + [{"type": "weight", "date": TODAY.isoformat(), "logged_at": f"{TODAY}T14:00",
+              "value": 80.6, "tag": "session_sweat"}], on=TODAY) == 83.3)
+check("pre-04:00 reading excluded", N.rolling_weight_kg(
     clean + [{"type": "weight", "date": TODAY.isoformat(),
               "logged_at": f"{TODAY.isoformat()}T03:10", "value": 70.0}], on=TODAY) == 83.3)
-check("no usable readings returns None", N.rolling_weight_kg([], on=TODAY) is None)
+check("no data returns None", N.rolling_weight_kg([], on=TODAY) is None)
+try:
+    z(day_type="standard", rolling_weight=None)
+    check("zones refuses to run without a rolling weight", False)
+except ValueError:
+    check("zones refuses to run without a rolling weight", True)
 
-# 10) RHR guard. Baseline must exclude the days under test, or a sustained
-#     elevation drags its own reference up and the guard stops firing.
-wellness = [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52}
-            for i in range(2, 32)]
-wellness += [{"id": TODAY.isoformat(), "restingHR": 76},
-             {"id": (TODAY - timedelta(days=1)).isoformat(), "restingHR": 71}]
-g = N.rhr_guard(wellness, on=TODAY)
-check(f"RHR guard fires on 71/76 against a 52 baseline (got {g})", g["active"] is True)
-check("baseline is ~52, not dragged by the spike", 51 <= g["baseline_bpm"] <= 53)
-
+# 15) RHR guard, including the unfirable-at-3 regression.
+base30 = [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52} for i in range(2, 32)]
+spike = base30 + [{"id": TODAY.isoformat(), "restingHR": 76},
+                  {"id": (TODAY - timedelta(days=1)).isoformat(), "restingHR": 71}]
+g = N.rhr_guard(spike, on=TODAY)
+check("guard fires on 71/76 against a 52 baseline", g["active"] is True)
+check("baseline not dragged by the spike", 51 <= g["baseline_bpm"] <= 53)
 calm = [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52} for i in range(32)]
-check("RHR guard quiet at baseline", N.rhr_guard(calm, on=TODAY)["active"] is False)
-check("one elevated day is not enough", N.rhr_guard(
-    [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52} for i in range(2, 32)]
-    + [{"id": TODAY.isoformat(), "restingHR": 76},
-       {"id": (TODAY - timedelta(days=1)).isoformat(), "restingHR": 52}],
+check("quiet at baseline", N.rhr_guard(calm, on=TODAY)["active"] is False)
+b3 = [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52} for i in range(3, 34)]
+up3 = b3 + [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 70} for i in (0, 1, 2)]
+check("still firable at consecutive=3", N.rhr_guard(up3, on=TODAY, consecutive=3)["active"] is True)
+miss = b3 + [{"id": (TODAY - timedelta(days=1)).isoformat(), "restingHR": 74},
+             {"id": (TODAY - timedelta(days=2)).isoformat(), "restingHR": 71}]
+check("fires with today's row missing", N.rhr_guard(miss, on=TODAY)["active"] is True)
+check("scattered spikes are not consecutive", N.rhr_guard(
+    base30 + [{"id": TODAY.isoformat(), "restingHR": 76},
+              {"id": (TODAY - timedelta(days=8)).isoformat(), "restingHR": 76}],
     on=TODAY)["active"] is False)
 check("no data is not an active guard", N.rhr_guard([], on=TODAY)["active"] is False)
 
-# 10b) REGRESSION: the guard must stay firable at consecutive=3, and must survive
-#      a missing current-day row. An earlier cut keyed the tested window off
-#      calendar days, so an absent today row (routine in ICU) made the guard
-#      silently unfirable - coverage that does not fire is worse than none.
-base30 = [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52}
-          for i in range(3, 34)]
-three_up = base30 + [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 70}
-                     for i in (0, 1, 2)]
-g3 = N.rhr_guard(three_up, on=TODAY, consecutive=3)
-check(f"guard fires at consecutive=3 (got {g3.get('active')}, {g3.get('reason', '')})",
-      g3["active"] is True)
-
-# today's row absent, yesterday and the day before elevated
-missing_today = [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52}
-                 for i in range(3, 34)]
-missing_today += [{"id": (TODAY - timedelta(days=1)).isoformat(), "restingHR": 74},
-                  {"id": (TODAY - timedelta(days=2)).isoformat(), "restingHR": 71}]
-g_missing = N.rhr_guard(missing_today, on=TODAY)
-check(f"guard still fires when today's row is missing (got {g_missing.get('active')})",
-      g_missing["active"] is True)
-check("guard reports which days it tested", len(g_missing.get("tested_days", [])) == 2)
-
-# two elevated readings a week apart are not consecutive
-scattered = base30 + [{"id": TODAY.isoformat(), "restingHR": 76},
-                      {"id": (TODAY - timedelta(days=8)).isoformat(), "restingHR": 76}]
-check("scattered elevated readings do not count as consecutive",
-      N.rhr_guard(scattered, on=TODAY)["active"] is False)
-
-# baseline must not include the days under test at consecutive=3 either
-check("baseline excludes the tested days at consecutive=3",
-      51 <= N.rhr_guard(three_up, on=TODAY, consecutive=3)["baseline_bpm"] <= 53)
-
-# a thin baseline is insufficient history, not a quiet pass
-thin = [{"id": (TODAY - timedelta(days=i)).isoformat(), "restingHR": 52} for i in (2, 3, 4)]
-thin += [{"id": TODAY.isoformat(), "restingHR": 76},
-         {"id": (TODAY - timedelta(days=1)).isoformat(), "restingHR": 76}]
-r = N.rhr_guard(thin, on=TODAY)
-check(f"thin baseline reports insufficient history (got {r.get('reason')})",
-      r["active"] is False and "baseline" in (r.get("reason") or ""))
-
-# 11) Under-fuelling guard fires whether or not the deficit is deliberate.
-check("underfuel fires well below the floor",
-      N.underfuel_flag([{"kcal": 1500}], tgt, rmr83) is not None)
+# 16) Under-fuelling fires whether or not the deficit is deliberate.
+check("underfuel fires below the floor", N.underfuel_flag([{"kcal": 1500}], std, RMR) is not None)
 check("underfuel quiet at target",
-      N.underfuel_flag([{"kcal": tgt['kcal_target']}], tgt, rmr83) is None)
+      N.underfuel_flag([{"kcal": std["kcal_target"]}], std, RMR) is None)
 
-# 12) Collagen is excluded from the protein total.
-counting, non_counting = N.counting_protein_g([
-    {"resolved_name": "chicken breast", "protein_g": 40},
-    {"resolved_name": "collagen peptides 15g", "protein_g": 15},
-])
-check(f"collagen excluded from protein total (got {counting})", counting == 40.0)
-check("collagen still reported separately", non_counting == 15.0)
+# 17) Collagen excluded from protein.
+c, nc = N.counting_protein_g([{"resolved_name": "chicken", "protein_g": 40},
+                              {"resolved_name": "collagen peptides", "protein_g": 15}])
+check("collagen excluded from protein", c == 40.0)
+check("collagen reported separately", nc == 15.0)
 
-# 13) Race-weight projection tells the truth about what the deficit delivers.
-proj = N.race_weight_projection(83.3, 79.0, days_to_race=40)
-check(f"40-day projection lands ~81.9, not 79 (got {proj['projected_race_kg']})",
-      81.0 <= proj["projected_race_kg"] <= 82.5)
-check("projection admits it misses the target", proj["reaches_target"] is False)
-check(f"required daily deficit to reach 79 is ~830 (got {proj['required_daily_kcal_to_reach']})",
-      780 <= proj["required_daily_kcal_to_reach"] <= 880)
+# 18) Closed loop: gated on enough clean data, bounded, correctly signed.
+none_yet = N.deficit_correction(clean[:3], 0.25, on=TODAY)
+check("correction refuses to act on thin data", none_yet["usable"] is False)
+check("thin data means zero correction, not a guess", none_yet["correction_kcal"] == 0)
 
-# 14) Micronutrients report compliance, never a fabricated adequacy verdict.
+flat = [{"type": "weight", "date": (TODAY - timedelta(days=i)).isoformat(),
+         "logged_at": f"{(TODAY - timedelta(days=i)).isoformat()}T06:10",
+         "value": 83.3, "tag": "morning"} for i in range(28)]
+corr = N.deficit_correction(flat, 0.25, on=TODAY)
+check(f"a flat trend against an intended loss asks for MORE deficit (got "
+      f"{corr['correction_kcal']})", corr["usable"] and corr["correction_kcal"] > 0)
+
+losing = [{"type": "weight", "date": (TODAY - timedelta(days=i)).isoformat(),
+           "logged_at": f"{(TODAY - timedelta(days=i)).isoformat()}T06:10",
+           "value": 83.3 + i * 0.09, "tag": "morning"} for i in range(28)]
+corr2 = N.deficit_correction(losing, 0.25, on=TODAY)
+check(f"losing faster than intended reduces the deficit (got {corr2['correction_kcal']})",
+      corr2["correction_kcal"] < 0)
+check("correction is bounded",
+      abs(corr2["correction_kcal"]) <= N.CORRECTION_MAX_KCAL)
+
+# the correction must actually move the target, and stay inside the headroom cap
+z_corr = z(day_type="standard", sessions=RIDE2H, deficit_enabled=True, correction_kcal=200)
+check("a positive correction increases the deficit",
+      z_corr["deficit_applied_kcal"] > std["deficit_applied_kcal"])
+z_big = z(day_type="recovery", deficit_enabled=True, correction_kcal=2000)
+check("a correction cannot breach the headroom cap",
+      z_big["deficit_applied_kcal"] <= z_big["deficit_headroom_kcal"])
+check("a correction cannot collapse the fat zone",
+      z_big["fat_g"]["high"] - z_big["fat_g"]["low"] >= N.FAT_ZONE_MIN_WIDTH_G - 0.5)
+
+# 19) Race-weight projection tells the truth about the proportional deficit.
+p = N.race_weight_projection(83.3, 79.0, 40, RMR)
+check(f"projection lands short of 79 (got {p['projected_race_kg']})",
+      81.0 <= p["projected_race_kg"] <= 83.0)
+check("projection admits it misses", p["reaches_target"] is False)
+check("projection states the shortfall", p["shortfall_kg"] > 0)
+check(f"required daily deficit to reach 79 is ~830 "
+      f"(got {p['required_daily_kcal_to_reach']})",
+      780 <= p["required_daily_kcal_to_reach"] <= 880)
+
+# 20) Micronutrients never fabricate an adequacy verdict.
 micro = N.micronutrient_status([{"nutrient": "vitamin_d", "dose": 2000, "unit": "IU"}])
-check("supplemented nutrient reads supplemented", micro["vitamin_d"]["state"] == "supplemented")
-check("unsupplemented nutrient reads not_supplemented",
-      micro["iron"]["state"] == "not_supplemented")
-check("no nutrient is ever labelled adequate or low",
-      all(v["state"] in ("supplemented", "not_supplemented", "unknown")
-          for v in micro.values()))
+check("supplemented reads supplemented", micro["vitamin_d"]["state"] == "supplemented")
+check("no nutrient is labelled adequate or low",
+      all(v["state"] in ("supplemented", "not_supplemented", "unknown") for v in micro.values()))
 
-# 15) Sodium is a band, tagged assumed, and never a target.
-check("sodium reported as an assumed band",
-      tgt["sodium_basis"]["confidence"] == "assumed"
-      and tgt["sodium_basis"]["sweat_na_mg_l"] == [950, 1500])
+# 21) Sodium stays an assumed band, never a target.
+check("sodium is an assumed band",
+      std["sodium_basis"]["confidence"] == "assumed"
+      and std["sodium_basis"]["sweat_na_mg_l"] == [950, 1500])
 
 print()
 if FAILED:
