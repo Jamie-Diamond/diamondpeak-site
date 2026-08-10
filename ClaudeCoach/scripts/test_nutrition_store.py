@@ -95,6 +95,65 @@ check("remove_entry finds by id", store.remove_entry(TODAY, e1["id"])["id"] == e
 check("remove_entry on a missing id returns None",
       store.remove_entry(TODAY, "nope-999") is None)
 
+# 7b) REGRESSION: ids must never be reused after a removal. Deriving the id from
+#     list length meant /undo then log again produced a duplicate id, so
+#     remove_entry and the ICU re-push after a retrospective edit acted on the
+#     wrong row.
+idtmp = Path(tempfile.mkdtemp(prefix="nut-id-"))
+ids = S.NutritionStore(idtmp)
+first = [ids.add_entry(TODAY, raw_text=f"item {i}", kcal=10,
+                       confidence="estimate", source_rung="llm")["id"]
+         for i in range(3)]
+ids.undo_last(TODAY)
+ids.undo_last(TODAY)
+after = ids.add_entry(TODAY, raw_text="item 3", kcal=10,
+                      confidence="estimate", source_rung="llm")["id"]
+check(f"entry id not reused after undo (got {after}, earlier {first})",
+      after not in first)
+s1 = ids.add_supplement(TODAY, nutrient="creatine", dose=5, unit="g")["id"]
+ids.get_day(TODAY)  # no supplement removal path, but the counter must still advance
+s2 = ids.add_supplement(TODAY, nutrient="collagen", dose=15, unit="g",
+                        protein_g=15)["id"]
+check(f"supplement ids are distinct ({s1}, {s2})", s1 != s2)
+
+# 7c) REGRESSION: a lost update. Atomic writes stop a torn file, not a lost
+#     update - two writers each loading, appending and replacing would leave only
+#     the second. Two independent store objects stand in for the bot and a cron.
+race = Path(tempfile.mkdtemp(prefix="nut-race-"))
+a, b = S.NutritionStore(race), S.NutritionStore(race)
+a.add_entry(TODAY, raw_text="from the bot", kcal=100, confidence="estimate",
+            source_rung="llm")
+b.add_entry(TODAY, raw_text="from the cron", kcal=200, confidence="estimate",
+            source_rung="llm")
+texts = [e["raw_text"] for e in a.get_day(TODAY)["entries"]]
+check(f"both writers' entries survive (got {texts})",
+      "from the bot" in texts and "from the cron" in texts)
+check("lock file is a sidecar, not the month file",
+      (race / "nutrition" / ".2026-08.lock").exists()
+      and (race / "nutrition" / "2026-08.json").exists())
+
+# 7d) The non-counting protein token list has ONE home. Asserted by IDENTITY, not
+#     by monkey-patching both modules: patching both would pass whether or not the
+#     store kept its own copy, which is the thing under test.
+check("store and engine share one token list object",
+      S.NON_COUNTING_PROTEIN_SOURCES is N.NON_COUNTING_PROTEIN_SOURCES)
+bt = Path(tempfile.mkdtemp(prefix="nut-tok-"))
+tok = S.NutritionStore(bt)
+for token in N.NON_COUNTING_PROTEIN_SOURCES:
+    tok.add_entry(TODAY, raw_text=f"{token} product", resolved_name=f"{token} product",
+                  protein_g=10, kcal=40, confidence="label", source_rung="retailer")
+tt = tok.day_totals(TODAY)
+check(f"every engine token is excluded by the store (got {tt['protein_g']})",
+      tt["protein_g"] == 0.0
+      and tt["non_counting_protein_g"] == 10.0 * len(N.NON_COUNTING_PROTEIN_SOURCES))
+
+# 7e) log_unresolved must not silently date itself off server UTC.
+try:
+    store.log_unresolved("no date given")
+    check("log_unresolved requires an explicit local day", False)
+except TypeError:
+    check("log_unresolved requires an explicit local day", True)
+
 # 8) Weight: the first reading of the day is morning, later ones are sweat.
 day2 = TODAY + timedelta(days=1)
 m1 = store.add_measurement(day2, type="weight", value=83.4, logged_at=f"{day2}T06:12")

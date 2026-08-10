@@ -41,11 +41,17 @@ athlete's data it correlates with scale weight at r = 0.999. It is kept for
 completeness and must never enter a calculation or a trend chart.
 """
 
+import contextlib
+import fcntl
 import json
 import os
+import sys
 import tempfile
 from datetime import date, datetime, timedelta
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from nutrition_engine import NON_COUNTING_PROTEIN_SOURCES  # noqa: E402
 
 CONFIDENCE_LEVELS = ("label", "database", "estimate")
 CACHE_MAX_AGE_DAYS = 365        # UK retailers reformulate; older is a cache miss
@@ -109,6 +115,41 @@ class NutritionStore:
     def _month_path(self, day_iso: str) -> Path:
         return self.dir / f"{day_iso[:7]}.json"
 
+    @contextlib.contextmanager
+    def _month_lock(self, day_iso: str):
+        """Cross-process exclusive lock on one month, held across read-modify-write.
+
+        Atomic writes stop a TORN file; they do not stop a LOST UPDATE. Two writers
+        that both load the month, both append, and both replace leave only the
+        second writer's entry, and the first is gone with no error anywhere. That
+        is a live risk here rather than a theoretical one: the bot mutates an open
+        day across many short messages while refresh-site-data runs on a */10 cron
+        and the evening close-out fires.
+
+        bot.py's `_chat_lock` cannot serve for this - it is an in-process
+        threading.Lock keyed by chat_id, so it serialises one bot process against
+        itself and is blind to cron. Hence flock, on a sidecar lock file rather
+        than the month file itself: os.replace swaps the inode, so a lock held on
+        the old file would not be seen by the next writer."""
+        with self._file_lock(day_iso[:7]):
+            yield
+
+    @contextlib.contextmanager
+    def _file_lock(self, name: str):
+        """flock on a sidecar lock file. Used by every read-modify-write in here,
+        including the cache, which is a single shared file that the resolution
+        ladder will hammer."""
+        self.dir.mkdir(parents=True, exist_ok=True)
+        fh = open(self.dir / f".{name}.lock", "a+")
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            finally:
+                fh.close()
+
     def _load_month(self, day_iso: str) -> dict:
         p = self._month_path(day_iso)
         if not p.exists():
@@ -129,27 +170,52 @@ class NutritionStore:
 
     @staticmethod
     def _blank_day(day_iso: str) -> dict:
+        # next_seq / next_supp_seq are MONOTONIC and never derived from list length.
+        # Deriving from length reuses ids after a removal: log 001-003, /undo, log
+        # again and the new entry is another 003, so remove_entry and the ICU
+        # re-push after a retrospective edit both act on the wrong row. Sequence
+        # numbers are only ever handed out, never handed back.
         return {"date": day_iso, "entries": [], "supplements": [],
                 "measurements": [], "flags": [], "targets": None,
-                "day_type": None, "phase": None,
+                "day_type": None, "phase": None, "next_seq": 1, "next_supp_seq": 1,
                 "closed_at": None, "pushed_to_intervals_at": None}
 
     # --- days ---------------------------------------------------------------
 
     def get_day(self, day) -> dict:
         """The day's record, or a blank one. Never returns None, so callers do not
-        each invent their own empty shape."""
+        each invent their own empty shape.
+
+        Not side-effect free: a month file that will not parse is moved aside to
+        `.json.corrupt` here, so a cron READ can mutate the directory. That is
+        deliberate (a corrupt file must not take the bot down mid-conversation) but
+        surprising enough to be worth stating."""
         iso = _as_iso(day)
         return self._load_month(iso)["days"].get(iso) or self._blank_day(iso)
 
+    def _next_seq(self, rec: dict, key: str, prefix: str, width: int) -> str:
+        """Hand out the next sequence number, tolerating a record written before
+        these counters existed by seeding past the highest id already present."""
+        nxt = rec.get(key)
+        if not nxt:
+            field = "entries" if key == "next_seq" else "supplements"
+            used = [int((r.get("id") or "").rsplit(prefix, 1)[-1] or 0)
+                    for r in rec.get(field) or []]
+            nxt = (max(used) + 1) if used else 1
+        rec[key] = nxt + 1
+        return f"{rec['date']}-{prefix}{nxt:0{width}d}"
+
     def _mutate_day(self, day, fn):
+        """Read-modify-write under the month lock. Every mutation goes through here,
+        which is what makes the locking complete rather than best-effort."""
         iso = _as_iso(day)
-        data = self._load_month(iso)
-        rec = data["days"].get(iso) or self._blank_day(iso)
-        result = fn(rec)
-        data["days"][iso] = rec
-        self._save_month(iso, data)
-        return result
+        with self._month_lock(iso):
+            data = self._load_month(iso)
+            rec = data["days"].get(iso) or self._blank_day(iso)
+            result = fn(rec)
+            data["days"][iso] = rec
+            self._save_month(iso, data)
+            return result
 
     def get_range(self, start, end) -> list:
         """Days from start to end inclusive, blanks included so a caller counting a
@@ -187,7 +253,7 @@ class NutritionStore:
 
         def _add(rec):
             entry = {
-                "id": f"{iso}-{len(rec['entries']) + 1:03d}",
+                "id": self._next_seq(rec, "next_seq", "", 3),
                 "logged_at": logged_at or f"{iso}T00:00",
                 "raw_text": raw_text,
                 "resolved_name": resolved_name or raw_text,
@@ -239,7 +305,7 @@ class NutritionStore:
         day. `timing` matters for collagen (30-60 min before tendon loading) and not
         at all for creatine, so it is free text rather than an enum."""
         def _add(rec):
-            item = {"id": f"{_as_iso(day)}-s{len(rec['supplements']) + 1:02d}",
+            item = {"id": self._next_seq(rec, "next_supp_seq", "s", 2),
                     "nutrient": nutrient, "dose": dose, "unit": unit,
                     "protein_g": round(float(protein_g or 0), 1),
                     "confidence": "label", "timing": timing, "note": note}
@@ -262,7 +328,13 @@ class NutritionStore:
         unless the caller says otherwise: on long-ride days the athlete weighs
         repeatedly to measure sweat rate, and those readings sit 2-3 kg low. With
         the deficit driven off rolling weight, letting one into the mean would read
-        as progress that did not happen."""
+        as progress that did not happen.
+
+        `reading_index` is derived from the count because there is deliberately no
+        removal path for measurements: a weigh-in is a fact, and correcting one
+        means correcting the value, not deleting the reading. If a removal path is
+        ever added, this must move to a monotonic counter like next_seq, or indices
+        will be reused and the morning-versus-sweat ordering will be wrong."""
         if type not in MEASUREMENT_TYPES:
             raise ValueError(f"type must be one of {MEASUREMENT_TYPES}")
 
@@ -353,18 +425,22 @@ class NutritionStore:
         def s(key, rows=None):
             return round(sum(float(r.get(key) or 0) for r in (rows or entries)), 1)
 
-        non_counting = 0.0
-        counting = 0.0
+        # The non-counting token list lives ONCE, in nutrition_engine. An earlier
+        # cut inlined the same three tokens here, which would have meant adding
+        # "bone broth" to the engine and having the store quietly keep counting it.
+        # Same divergence trap this project refused for the fuelling constant.
+        counting = non_counting = 0.0
         for e in entries:
             name = (e.get("resolved_name") or e.get("raw_text") or "").lower()
             grams = float(e.get("protein_g") or 0)
-            if "collagen" in name or "gelatin" in name or "gelatine" in name:
+            if any(tok in name for tok in NON_COUNTING_PROTEIN_SOURCES):
                 non_counting += grams
             else:
                 counting += grams
-        non_counting += sum(float(x.get("protein_g") or 0) for x in supps
-                            if "collagen" in (x.get("nutrient") or "").lower()
-                            or "gelatin" in (x.get("nutrient") or "").lower())
+        non_counting += sum(
+            float(x.get("protein_g") or 0) for x in supps
+            if any(tok in (x.get("nutrient") or "").lower()
+                   for tok in NON_COUNTING_PROTEIN_SOURCES))
 
         in_sess = [e for e in entries if e.get("in_session")]
         return {
@@ -419,32 +495,38 @@ class NutritionStore:
 
     def cache_put(self, key: str, payload: dict) -> None:
         p = self._cache_path()
-        cache = {}
-        if p.exists():
-            try:
-                cache = json.loads(p.read_text() or "{}")
-            except json.JSONDecodeError:
-                cache = {}
-        cache[key.strip().lower()] = payload
-        _atomic_write(p, cache)
+        with self._file_lock("cache"):
+            cache = {}
+            if p.exists():
+                try:
+                    cache = json.loads(p.read_text() or "{}")
+                except json.JSONDecodeError:
+                    cache = {}
+            cache[key.strip().lower()] = payload
+            _atomic_write(p, cache)
 
-    def log_unresolved(self, raw_text: str, day=None) -> None:
+    def log_unresolved(self, raw_text: str, day) -> None:
         """Record a string the ladder could not map, for the review queue.
 
         Unmapped strings are logged rather than dropped because the plant-diversity
         count depends on canonicalisation: an unmapped variant either inflates the
         species count or is missed entirely, and both corrupt the headline metric
         quietly. This is the admin path that lets mappings be added without a
-        redeploy."""
+        redeploy.
+
+        `day` is required, not defaulted to date.today(): this module never decides
+        which local day something belongs to, because a UTC-dated write after 23:00
+        London time lands on the wrong day."""
         p = self.dir / "unresolved.json"
-        rows = []
-        if p.exists():
-            try:
-                rows = json.loads(p.read_text() or "[]")
-            except json.JSONDecodeError:
-                rows = []
-        rows.append({"raw_text": raw_text, "seen_on": _as_iso(day or date.today())})
-        _atomic_write_list(p, rows)
+        with self._month_lock(_as_iso(day)):
+            rows = []
+            if p.exists():
+                try:
+                    rows = json.loads(p.read_text() or "[]")
+                except json.JSONDecodeError:
+                    rows = []
+            rows.append({"raw_text": raw_text, "seen_on": _as_iso(day)})
+            _atomic_write_list(p, rows)
 
 
 def _atomic_write_list(path: Path, payload: list) -> None:
