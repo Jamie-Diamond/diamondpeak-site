@@ -28,6 +28,7 @@ from primitives.validate_plan import _ZONE_BANDS          # noqa: E402  (Phase 5
 import plan_tools as pt                                    # noqa: E402
 import injury as _injury                                   # noqa: E402  (Phase 5.6)
 import thresholds as th                                    # noqa: E402
+import weekly_availability as _wa                          # noqa: E402  (day-rule precedence)
 
 LIBRARY = BASE / "config" / "session-library.json"
 ATHLETES = BASE / "config" / "athletes.json"
@@ -161,40 +162,23 @@ def reconcile_day_rules(default_rules: dict | None, availability: dict | None,
     plan flexes them to the days actually available, and they stay ad-hoc adjustable
     (drop/update athletes/<slug>/this-week-availability.json any time).
 
-    availability keys (all optional): swim_days / bike_days / run_days (replace the
-    default day list for that sport this week) and unavailable_days (weekday abbrevs
-    removed from every sport). For a RUN-LIMITED athlete the rehab structure is a
-    FLOOR: swim_focus days are always kept, and run frequency is never increased
-    beyond the default - reconciliation may relieve, never override, the spacing.
+    THE PRECEDENCE AND THE ARITHMETIC LIVE IN weekly_availability.merge_day_rules, which
+    owns the declaration's semantics; this stays the name every planning caller already
+    uses. It is a delegation and not a copy on purpose: the per-sport wholesale replacement
+    that used to be here left the OTHER sports' standing days on a declared day, so
+    "Wednesday swim" kept the standing Wednesday run (Jamie, 10 Aug 2026).
 
-    NOTE: the deterministic validator (plan_builder -> validate_week) reads day_rules
-    from athletes.json directly, so availability that only NARROWS/REMOVES days is
-    validator-safe today; MOVING a sport to a new day is honoured by the proposer but
-    would need plan_builder to consume the reconciled rules to also pass validation.
+    availability keys (all optional): swim_days / bike_days / run_days, unavailable_days
+    (weekday abbrevs removed from every sport) and declared_days (the days the athlete
+    NAMED, which is what makes the precedence per-day). For a RUN-LIMITED athlete the rehab
+    structure is a FLOOR: swim_focus days are kept and run frequency is never increased
+    beyond the default - but only over days the athlete did not name.
+
+    Conflicts between the declaration and day_rules are reported, not silently resolved:
+    call `weekly_availability.merge_day_rules` directly (as `planning_brief` does) when you
+    need them.
     """
-    import json as _json
-    dr = _json.loads(_json.dumps(default_rules or {}))
-    if not availability:
-        return default_rules
-    for key in ("swim_days", "bike_days", "run_days"):
-        v = availability.get(key)
-        if isinstance(v, list):
-            dr[key] = list(v)
-    for d in (availability.get("unavailable_days") or []):
-        for key in ("swim_days", "bike_days", "run_days"):
-            if isinstance(dr.get(key), list):
-                dr[key] = [x for x in dr[key] if str(x).lower() != str(d).lower()]
-    if run_limited:
-        base = default_rules or {}
-        sf = base.get("swim_focus") or {}
-        if sf and isinstance(dr.get("swim_days"), list):
-            for wd in sf:
-                if wd not in dr["swim_days"]:
-                    dr["swim_days"].append(wd)
-        if isinstance(base.get("run_days"), list) and isinstance(dr.get("run_days"), list):
-            if len(dr["run_days"]) > len(base["run_days"]):
-                dr["run_days"] = dr["run_days"][:len(base["run_days"])]
-    return dr
+    return _wa.merge_day_rules(default_rules, availability, run_limited=run_limited)[0]
 
 
 def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None,
@@ -325,8 +309,8 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
     injuries = profile.get("injuries") or []
     run_limited = (rp.get("quality_allowed") is False)
     single_sport = len(available) <= 1
-    day_rules_effective = reconcile_day_rules(cfg.get("day_rules"), availability,
-                                              run_limited=run_limited)
+    day_rules_effective, _decl_conflicts = _wa.merge_day_rules(
+        cfg.get("day_rules"), availability, run_limited=run_limited)
     # Conditional TSS-closing guidance for the Stage-1 proposer (Phase 5b): a limited
     # or single-sport athlete closes gaps with BIKE volume; everyone else spreads the
     # closure across sports and MUST carry the phase quality share, not easy bike alone.
@@ -474,6 +458,14 @@ def planning_brief(slug: str, cfg: dict | None = None, today: date | None = None
         "day_rules": day_rules_effective,
         "day_rules_default": cfg.get("day_rules"),
         "availability_applied": bool(availability),
+        # Where the athlete's declaration and their standing day_rules disagree. Carried so
+        # the coach can TELL them which won rather than either side being rewritten in
+        # silence - the declaration is authoritative, and a silent rewrite is what had
+        # Jamie restating the same week four times (27 Jul, 1, 2, 3 Aug 2026). Present only
+        # when there IS a clash: stage1-plan serialises every non-underscore brief key into
+        # the prompt verbatim, and an empty key is a config-shaped line one paraphrase away
+        # from the athlete.
+        **({"declaration_conflicts": _decl_conflicts} if _decl_conflicts else {}),
         "injuries": injuries,
         "run_limited": run_limited,
         "single_sport": single_sport,

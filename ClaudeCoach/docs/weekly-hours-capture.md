@@ -46,7 +46,39 @@ repo (`git check-ignore -v` confirms the rule at `.gitignore:26`).
 `hours` is the athlete's total training time for that week. It is **not** a per-day cap
 — day-level limits go in `constraints`, free prose that reaches the Stage-1 planner
 verbatim. `swim_days` / `bike_days` / `run_days` / `unavailable_days` are the existing
-Phase 5a keys and behave exactly as before.
+Phase 5a keys.
+
+Two further keys, added 10 Aug 2026 with the precedence fix below:
+
+- `declared_days` - every day the athlete **named**. This is what makes the precedence
+  per **day** rather than per sport. Without it, "Wednesday swim" cannot be told apart
+  from "add a swim to Wednesday and leave the standing Wednesday run alone", which is the
+  reading that put a run on the Wednesday Jamie had given to a swim. Absent (a
+  hand-written record, the `--availability` JSON path, a legacy flat file) it is derived
+  from the union of the four day lists.
+- `excluded_sports` - the day-rule keys taken off for the **whole** week
+  (`["bike_days"]` for "no cycling this week"). An empty day list can no longer carry that
+  meaning on its own: `parse_day_shape_message` returns all four keys every time, so a
+  week that simply names no bike day arrives with `bike_days: []`. A record carrying
+  neither new key predates both, and for it an empty list still means the sport was
+  replaced wholesale.
+
+### Declaration vs standing `day_rules`
+
+**The declaration is authoritative for every day it names; `day_rules` fill only the days
+it does not.** One implementation, `weekly_availability.merge_day_rules`, which
+`session_library.reconcile_day_rules`, `plan_builder` (before `validate_week`) and
+`plan_audit` all go through. The engine may move a session's duration and intensity to hit
+the load target; it may not move the sport off a named day, substitute it, or add a second
+sport to it. `swim_focus` is pruned to the swim days that survive, because it is the second
+place a sport can land on a day. Clashes are returned as prose and carried to the Stage-1
+prompt as `declaration_conflicts` - reported, never silently resolved.
+
+Which week a **day shape** belongs to is `day_shape_target_week`, not `target_week`: the
+latter answers a reply to the Sunday hours ask, whose subject is next week, so an unframed
+message rightly falls through to the next Monday. A day shape arrives unsolicited on any
+day, and that fall-through is what recorded Jamie's Monday restatement of the week in
+progress against w/c 17 Aug, leaving `day_shape()` empty for the week he was talking about.
 
 ### Expiry
 

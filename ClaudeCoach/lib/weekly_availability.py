@@ -99,6 +99,18 @@ MAX_HOURS = 40.0
 BARE_MIN_HOURS = 5.0
 
 
+# The day-shape keys a declaration can carry. `declared_days` is the list of days the
+# athlete NAMED, and it is stored separately from the three sport lists because it is the
+# only thing that can answer "did the athlete speak about Wednesday at all?". Without it a
+# declaration of "Wednesday swim" is indistinguishable from a declaration that adds a swim
+# to Wednesday and leaves the standing Wednesday run alone - which is the reading that put
+# a run on the Wednesday Jamie had declared as a swim. `excluded_sports` names the sports
+# taken off for the WHOLE week, which an empty day list can no longer mean on its own (see
+# excluded_sports()).
+DAY_SHAPE_KEYS = ("swim_days", "bike_days", "run_days", "unavailable_days",
+                  "declared_days", "excluded_sports")
+
+
 def path_for(slug: str, base: Path | str | None = None) -> Path:
     return Path(base or BASE) / "athletes" / slug / FILENAME
 
@@ -208,8 +220,7 @@ def day_shape(slug: str, week_start: date | str | None,
     """
     d = for_week(slug, week_start, base)
     if d:
-        shape = {k: d[k] for k in ("swim_days", "bike_days", "run_days", "unavailable_days")
-                 if isinstance(d.get(k), list)}
+        shape = {k: d[k] for k in DAY_SHAPE_KEYS if isinstance(d.get(k), list)}
         return shape or None
     raw = load_raw(slug, base)
     return raw if _is_legacy_flat(raw) else None
@@ -248,7 +259,7 @@ def record(slug: str, week_start: date | str, *, hours=None, constraints: str = 
         rec["hours"] = h
     if constraints:
         rec["constraints"] = str(constraints).strip()
-    for k in ("swim_days", "bike_days", "run_days", "unavailable_days"):
+    for k in DAY_SHAPE_KEYS:
         v = day_keys.get(k)
         if isinstance(v, list):
             rec[k] = list(v)
@@ -759,6 +770,61 @@ def target_week(slug: str, text: str = "", today: date | None = None,
     return nxt
 
 
+# Last weekday on which an unframed day-shape declaration may be read as the week IN
+# PROGRESS: Thursday. A Thursday message naming days from Thursday on IS about this week
+# (there are four of them left); typed on a Friday, Saturday or Sunday it is not, because
+# what remains of the week cannot carry a week's shape and the Sunday ask's reading (next
+# Monday) is then the right default. Naming only days that have already gone falls through
+# to next Monday on any day of the week - see rule 4.
+_DAY_SHAPE_CURRENT_WEEK_LAST_WD = 3          # Mon=0 ... Thu=3
+
+
+def day_shape_target_week(slug: str, text: str = "", named_days=(),
+                          today: date | None = None, now: datetime | None = None,
+                          base: Path | str | None = None) -> date:
+    """The Monday a DAY-SHAPE declaration belongs to.
+
+    Separate from `target_week` because the two are answering different questions. That one
+    resolves a reply to the SUNDAY HOURS ASK, whose subject is next week, so an unframed
+    figure rightly falls through to the next Monday. A day-shape declaration is unsolicited
+    and arrives on any day, and the same fall-through is what caused the 10 Aug 2026
+    argument: Jamie restated his availability on a MONDAY, it was recorded against w/c 17
+    Aug, `day_shape()` for the current week returned None, stage1-plan therefore saw no
+    declaration at all and rebuilt the week off day_rules - which is where the Wednesday
+    run and the Friday ride he had not asked for came back from. He was then asked to
+    confirm which week he meant, three times.
+
+    Precedence:
+      1. an OUTSTANDING ask - a recorded fact about the week actually under discussion;
+      2. "next week" in the message;
+      3. "this week" in the message on a Mon-Sat (as `target_week`);
+      4. Mon-Thu, and the message names a day still to come this week - the week IN
+         PROGRESS. "Monday rest, Tuesday swim..." typed on a Monday is about today;
+      5. otherwise the next Monday.
+
+    Rule 4 can still read a week wrong, so it is deliberately paired with the caller's
+    read-back ("Recorded for w/c ..."): a wrong week is then visible at a glance and
+    correctable in one message, which is the standard this module holds itself to - never
+    discard a declaration, but never hide which week it landed on either.
+    """
+    t = today or date.today()
+    pending = outstanding_ask_week(slug, now=now, base=base)
+    if pending:
+        return pending
+    low = (text or "").lower()
+    if _NEXT_WEEK_RE.search(low):
+        return t + timedelta(days=(7 - t.weekday()) % 7 or 7)
+    if _THIS_WEEK_RE.search(low) and t.weekday() != 6:
+        return _monday(t)
+    if t.weekday() <= _DAY_SHAPE_CURRENT_WEEK_LAST_WD:
+        ahead = [d for d in named_days or ()
+                 if _canon_day(str(d)) in _DAY_ORDER
+                 and _DAY_ORDER.index(_canon_day(str(d))) >= t.weekday()]
+        if ahead:
+            return _monday(t)
+    return t + timedelta(days=(7 - t.weekday()) % 7 or 7)
+
+
 # ---------------------------------------------------------------------------
 # CONFIRMING BACK
 # ---------------------------------------------------------------------------
@@ -874,13 +940,16 @@ def _expand_range(a: str, b: str) -> list[str]:
 def parse_day_shape_message(text: str) -> dict:
     """Pull a per-day sport shape out of free text.
 
-    Returns {"swim_days", "bike_days", "run_days", "unavailable_days", "days_named",
-    "framed"}. Day lists are canonical "Mon".."Sun" and de-duplicated in week order.
-    `days_named` counts every distinct day mentioned, so the caller can insist on a
-    real week shape rather than a single-day aside. Never raises.
+    Returns {"swim_days", "bike_days", "run_days", "unavailable_days", "named_days",
+    "days_named", "framed"}. Day lists are canonical "Mon".."Sun" and de-duplicated in
+    week order. `days_named` counts every distinct day mentioned, so the caller can insist
+    on a real week shape rather than a single-day aside. `named_days` is that same set of
+    days, and it is what `merge_day_rules` needs: a day the athlete NAMED is a day the
+    standing day_rules no longer decide, even when the sport cue for it did not parse.
+    Never raises.
     """
     out = {"swim_days": [], "bike_days": [], "run_days": [],
-           "unavailable_days": [], "days_named": 0, "framed": False}
+           "unavailable_days": [], "named_days": [], "days_named": 0, "framed": False}
     if not text or not text.strip():
         return out
     # Parenthesised asides are dropped before anything is attributed. Without this,
@@ -947,6 +1016,7 @@ def parse_day_shape_message(text: str) -> dict:
                     out["unavailable_days"].append(d)
     for key in ("swim_days", "bike_days", "run_days", "unavailable_days"):
         out[key] = [d for d in _DAY_ORDER if d in out[key]]
+    out["named_days"] = [d for d in _DAY_ORDER if d in named]
     out["days_named"] = len(named)
     return out
 
@@ -979,6 +1049,243 @@ def day_shape_summary(p: dict) -> str:
         if p.get(key):
             bits.append(f"{label} {'/'.join(p[key])}")
     return "; ".join(bits) if bits else "no days resolved"
+
+
+# ---------------------------------------------------------------------------
+# PRECEDENCE: DECLARATION vs STANDING day_rules (added 2026-08-10)
+# ---------------------------------------------------------------------------
+# Jamie, 10 Aug 2026: "Are you stupid... I already told you what my availability was for
+# this week. Find it and sort your shit out." His 1 Aug declaration ("Monday rest, Tuesday
+# swim morning long run evening, Wednesday swim... Thursday long ride. Friday/Saturday run.
+# Sunday rest") was acknowledged, then dropped as junk because it clashed with his standing
+# day_rules, and the week was rebuilt off the day_rules - three times in one conversation.
+# The coach's own admission: "Your declaration outranks my day rules; I had it backwards."
+#
+# THE RULE, one place, so every consumer inherits it:
+#   * the declaration is AUTHORITATIVE for every day it NAMES;
+#   * day_rules fill ONLY the days it does not name;
+#   * a sport is never added to a named day and never moved off one. Duration and
+#     intensity remain the engine's to move; the sport-to-day mapping does not;
+#   * a clash is REPORTED, never silently resolved either way.
+#
+# WHY THE OLD MERGE WAS NOT ENOUGH. session_library.reconcile_day_rules replaced day_rules
+# PER SPORT KEY, so a declaration naming only "Wednesday swim" replaced swim_days and left
+# run_days = [Tue, Wed, Sat, Sun] untouched - a run on the Wednesday the athlete had given
+# to a swim. The same hole ran through `swim_focus`: Jamie's {"Thu": ["css"]} kept a CSS
+# swim on the Thursday he declared as his long ride.
+#
+# A KEY PRESENT BUT EMPTY IS A WHOLE-WEEK EXCLUSION, not a per-day statement. That is how
+# parse_sport_exclusion_message records "no cycling this week" (Kathryn, 12 Jul 2026:
+# auto-sync put cycling on Thu and Sat against a week-specific agreement to drop it), and
+# per-day precedence must not quietly reinstate it from day_rules.
+
+_SPORT_DAY_KEYS = ("swim_days", "bike_days", "run_days")
+_SPORT_LABEL = {"swim_days": "swim", "bike_days": "bike", "run_days": "run"}
+
+
+def _canon_or_raw(x) -> str:
+    """Canonical "Mon".."Sun", or the token unchanged when it is not a day name. Unknown
+    tokens are kept rather than dropped: day_rules is hand-maintained config and silently
+    deleting something we failed to recognise would widen a week."""
+    return _canon_day(str(x)) or str(x)
+
+
+def _order_days(days) -> list[str]:
+    """De-duplicated, week order, with any non-day token appended in first-seen order."""
+    seen: list[str] = []
+    for d in days:
+        if d not in seen:
+            seen.append(d)
+    known = [d for d in _DAY_ORDER if d in seen]
+    return known + [d for d in seen if d not in _DAY_ORDER]
+
+
+def declared_days(declaration: dict | None) -> list[str]:
+    """Every day the athlete NAMED in this declaration, canonical and in week order.
+
+    Read from the stored `declared_days` when the record carries it (the chat capture
+    passes parse_day_shape_message's `named_days`), else the union of the sport lists and
+    `unavailable_days`. The union is what a hand-written record, the `--availability` JSON
+    path in stage1-plan.py and a legacy Phase 5a flat file all give. It differs from the
+    stored list only for a day the athlete mentioned WITHOUT a sport or rest cue, and such
+    a day carries no instruction to enforce, so the fallback is safe rather than merely
+    convenient: a legacy file of {"unavailable_days": ["Wed"]} names Wed and nothing else,
+    which is exactly today's behaviour.
+    """
+    if not isinstance(declaration, dict):
+        return []
+    explicit = declaration.get("declared_days")
+    if isinstance(explicit, list):
+        src = explicit
+    else:
+        src = [d for k in _SPORT_DAY_KEYS + ("unavailable_days",)
+               if isinstance(declaration.get(k), list)
+               for d in declaration[k]]
+    return _order_days(_canon_day(str(d)) for d in src if _canon_day(str(d)))
+
+
+def excluded_sports(declaration: dict | None) -> list[str]:
+    """The day_rules keys the athlete has taken OFF for the whole week.
+
+    Named explicitly by `excluded_sports` (what the sport-exclusion capture writes), and
+    that explicitness is load-bearing: parse_day_shape_message returns ALL FOUR day keys
+    every time, so a week whose declaration happens to name no bike day arrives with
+    `bike_days: []`. Reading that as "no cycling this week" would delete the bike from
+    every partial declaration - "Monday rest, Tuesday swim, Wednesday swim" would silently
+    cancel Jamie's Friday, Saturday and Sunday rides.
+
+    LEGACY RECORDS ONLY: a record carrying neither `excluded_sports` nor `declared_days`
+    predates both keys, and for it an empty list DID mean the sport was replaced wholesale
+    (the old per-sport reconciliation). Honoured so a declaration already on disk keeps the
+    meaning it was written with; such records expire with the week they name.
+    """
+    if not isinstance(declaration, dict):
+        return []
+    named = declaration.get("excluded_sports")
+    if isinstance(named, list):
+        return [k for k in _SPORT_DAY_KEYS if k in named]
+    if "declared_days" in declaration:
+        return []
+    return [k for k in _SPORT_DAY_KEYS if declaration.get(k) == []]
+
+
+def _declared_sports_by_day(declaration: dict) -> dict[str, list[str]]:
+    """day -> the sports the athlete gave that day, for the conflict wording."""
+    out: dict[str, list[str]] = {}
+    for key in _SPORT_DAY_KEYS:
+        for d in (declaration.get(key) or []):
+            out.setdefault(_canon_or_raw(d), []).append(_SPORT_LABEL[key])
+    for d in (declaration.get("unavailable_days") or []):
+        out.setdefault(_canon_or_raw(d), []).append("rest")
+    return out
+
+
+def merge_day_rules(day_rules: dict | None, declaration: dict | None, *,
+                    run_limited: bool = False) -> tuple[dict | None, list[str]]:
+    """Fold one week's declaration into the athlete's standing day_rules.
+
+    Returns (effective_rules, conflicts). `conflicts` is prose the caller must SHOW - each
+    line names the day, what the athlete declared and what day_rules wanted instead, so the
+    coach can tell the athlete rather than either side being rewritten in silence.
+
+    No declaration returns `day_rules` unchanged (the same object, as before), so an
+    athlete who has said nothing this week is unaffected.
+    """
+    if not declaration:
+        return day_rules, []
+    dr = json.loads(json.dumps(day_rules or {}))
+    named = declared_days(declaration)
+    by_day = _declared_sports_by_day(declaration)
+    conflicts: list[str] = []
+    reported: set[tuple[str, str]] = set()
+
+    def _clash(day: str, key: str) -> None:
+        if (day, key) in reported:
+            return
+        reported.add((day, key))
+        gave = "/".join(by_day.get(day) or []) or "nothing"
+        conflicts.append(
+            f"{day}: you declared {gave}; your standing day_rules put a "
+            f"{_SPORT_LABEL[key]} there. Your declaration wins for this week, so the "
+            f"{_SPORT_LABEL[key]} is not on {day}.")
+
+    off = excluded_sports(declaration)
+    for key in _SPORT_DAY_KEYS:
+        v = declaration.get(key)
+        if not isinstance(v, list) and key not in off:
+            continue                    # sport not spoken about: day_rules stand entire
+        standing = [_canon_or_raw(x) for x in (dr.get(key) or [])]
+        wanted = [_canon_or_raw(x) for x in (v or [])]
+        if key in off:
+            dr[key] = []
+            if standing:
+                conflicts.append(
+                    f"{_SPORT_LABEL[key]}: declared off for the whole week; your standing "
+                    f"day_rules had {'/'.join(_order_days(standing))}. The declaration wins.")
+                for d in standing:
+                    reported.add((d, key))
+            continue
+        for d in standing:
+            if d in named and d not in wanted:
+                _clash(d, key)
+        dr[key] = _order_days(wanted + [d for d in standing if d not in named])
+
+    for d in (declaration.get("unavailable_days") or []):
+        day = _canon_or_raw(d)
+        for key in _SPORT_DAY_KEYS:
+            if not isinstance(dr.get(key), list):
+                continue
+            if day in [_canon_or_raw(x) for x in dr[key]]:
+                _clash(day, key)
+            dr[key] = [x for x in dr[key] if _canon_or_raw(x) != day]
+
+    if run_limited:
+        # The rehab structure is a FLOOR (swim_focus days kept, run frequency never
+        # raised) - but only over days the athlete did NOT speak about. Re-adding a swim
+        # to a day they declared as a rest or a ride is the invention this module exists
+        # to stop, so those days are reported instead of overridden.
+        base = day_rules or {}
+        sf = base.get("swim_focus") or {}
+        if sf and isinstance(dr.get("swim_days"), list):
+            for wd in sf:
+                day = _canon_or_raw(wd)
+                if day in named:
+                    # Reported once, by the swim_focus prune below - not twice.
+                    continue
+                if day not in [_canon_or_raw(x) for x in dr["swim_days"]]:
+                    dr["swim_days"] = _order_days([_canon_or_raw(x) for x in dr["swim_days"]]
+                                                  + [day])
+        if isinstance(base.get("run_days"), list) and isinstance(dr.get("run_days"), list):
+            budget = len(base["run_days"])
+            if len(dr["run_days"]) > budget:
+                # Trim the days the athlete did NOT name first. The old slice took the
+                # front of the list, which could cut a declared run day to make room for a
+                # standing one - the declaration losing to the very rules it outranks.
+                keep = [d for d in dr["run_days"] if _canon_or_raw(d) in named]
+                spare = [d for d in dr["run_days"] if _canon_or_raw(d) not in named]
+                if len(keep) > budget:
+                    # The athlete has declared MORE run days than the rehab pattern runs.
+                    # They win, and that is exactly the case the coach must raise with them
+                    # rather than have the floor trim it away unseen.
+                    conflicts.append(
+                        f"run: you declared {len(keep)} run days "
+                        f"({'/'.join(_order_days(keep))}); your rehab pattern runs "
+                        f"{budget}. Your declaration stands - flag the extra frequency.")
+                dr["run_days"] = _order_days(keep + spare[:max(0, budget - len(keep))])
+
+    # swim_focus is a day-keyed map, so it is a second place a sport can land on a day.
+    # Prune it to the days that survived, or Jamie's {"Thu": ["css"]} puts a CSS swim on
+    # the Thursday he declared as his long ride.
+    sf = dr.get("swim_focus")
+    if isinstance(sf, dict) and isinstance(dr.get("swim_days"), list):
+        keep_days = [_canon_or_raw(x) for x in dr["swim_days"]]
+        dropped = [k for k in sf if _canon_or_raw(k) not in keep_days]
+        for k in dropped:
+            day = _canon_or_raw(k)
+            focus = "/".join(sf[k]) if isinstance(sf[k], list) else str(sf[k])
+            conflicts.append(
+                f"{day}: your standing swim focus ({focus}) is dropped this week - "
+                f"you declared {'/'.join(by_day.get(day) or ['nothing'])} on {day}.")
+        dr["swim_focus"] = {k: v for k, v in sf.items() if k not in dropped}
+    # Day order, because these lines are read out to the athlete as a week. Sport-key
+    # iteration order would list Thursday's clash before Wednesday's.
+    conflicts.sort(key=lambda c: _DAY_ORDER.index(c.split(":")[0])
+                   if c.split(":")[0] in _DAY_ORDER else -1)
+    return dr, conflicts
+
+
+def effective_day_rules(slug: str, week_start: date | str | None, day_rules: dict | None,
+                        *, run_limited: bool = False,
+                        base: Path | str | None = None) -> tuple[dict | None, list[str]]:
+    """merge_day_rules against whatever the athlete declared for THAT week.
+
+    The one call a consumer needs. plan_builder validates with this rather than raw
+    config, so a declared move (Jamie's Thursday long ride against bike_days
+    [Fri,Sat,Sun]) is not a hard `ride_forbidden_day` that fails every attempt - the
+    "no clean week EXISTS" loop stage1-plan.py already documents for Kathryn.
+    """
+    return merge_day_rules(day_rules, day_shape(slug, week_start, base),
+                           run_limited=run_limited)
 
 
 # ---------------------------------------------------------------------------

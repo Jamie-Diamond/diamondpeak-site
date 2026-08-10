@@ -2824,22 +2824,42 @@ def _handle_hours_capture(token, chat_id, text, athletes):
     # restated his availability on 27 Jul, 1 Aug, 2 Aug and 3 Aug.
     if weekly_availability.looks_like_day_shape_declaration(text):
         p = weekly_availability.parse_day_shape_message(text)
+        # WHICH WEEK a day shape is about is NOT the same question as which week an hours
+        # reply is about, so it gets its own resolver. `target_week` falls through an
+        # unframed message to the NEXT Monday, which is right for a reply to the Sunday
+        # hours ask and wrong here: Jamie restated this week's availability on Monday
+        # 10 Aug, it landed on w/c 17 Aug, day_shape() for the current week then returned
+        # None and the week was rebuilt off day_rules - the whole 10 Aug argument.
+        ws_shape = weekly_availability.day_shape_target_week(
+            slug, text, named_days=p["named_days"])
         try:
             # record() REPLACES the week's declaration, so an hours figure already
             # declared for this week must be carried forward or it is silently dropped.
-            prior_hours = weekly_availability.hours_for_week(slug, ws)
-            prior_cons  = weekly_availability.constraints_for_week(slug, ws) or ""
+            prior_hours = weekly_availability.hours_for_week(slug, ws_shape)
+            prior_cons  = weekly_availability.constraints_for_week(slug, ws_shape) or ""
+            # A whole-week sport exclusion already recorded for this week survives, unless
+            # the new shape names a day for that sport - in which case he has just
+            # contradicted it and the shape is the later word.
+            prior_excl = [k for k in ((weekly_availability.day_shape(slug, ws_shape) or {})
+                                      .get("excluded_sports") or []) if not p.get(k)]
             weekly_availability.record(
-                slug, ws, source="chat-day-shape",
-                hours=prior_hours, constraints=prior_cons,
+                slug, ws_shape, source="chat-day-shape",
+                hours=prior_hours, constraints=prior_cons, excluded_sports=prior_excl,
                 swim_days=p["swim_days"], bike_days=p["bike_days"],
-                run_days=p["run_days"], unavailable_days=p["unavailable_days"])
+                run_days=p["run_days"], unavailable_days=p["unavailable_days"],
+                # The days the athlete NAMED, which is what makes day_rules yield per day
+                # rather than per sport. Without it "Wednesday swim" leaves the standing
+                # Wednesday run in place and the plan carries a run he did not ask for.
+                declared_days=p["named_days"])
         except Exception as e:
             log(f"day-shape capture failed for {slug}: {e}")
             return False
-        # Write first, then restate what was saved in one line (shared rule S38).
+        # Write first, then restate what was saved in one line (shared rule S38). The week
+        # is named because day_shape_target_week can still read it wrong: a wrong week is
+        # then one message away from being fixed instead of silently planned.
         send(token, chat_id,
-             f"Recorded for w/c {ws.isoformat()} — *{weekly_availability.day_shape_summary(p)}*. "
+             f"Recorded for w/c {ws_shape.isoformat()} - "
+             f"*{weekly_availability.day_shape_summary(p)}*. "
              f"That is what the plan will be built to; tell me if any of it is wrong.",
              reply_markup=build_keyboard(slug))
         return True
@@ -2860,12 +2880,20 @@ def _handle_hours_capture(token, chat_id, text, athletes):
             # captured earlier in the same week.
             shape = dict(weekly_availability.day_shape(slug, ws) or {})
             shape.update(p["excluded"])
+            # NAME the excluded sports. An empty day list cannot carry that meaning on its
+            # own: parse_day_shape_message emits all four day keys every time, so a week
+            # that simply names no bike day also arrives with bike_days=[].
+            shape["excluded_sports"] = sorted(
+                set(shape.get("excluded_sports") or []) | set(p["excluded"]))
             weekly_availability.record(
                 slug, ws, source="chat-sport-exclusion",
                 hours=weekly_availability.hours_for_week(slug, ws),
                 constraints=weekly_availability.constraints_for_week(slug, ws) or "",
+                # `declared_days` travels with the shape: dropping it here would demote an
+                # earlier per-day declaration back to per-sport precedence, so "no cycling
+                # this week" would quietly hand the athlete's named days back to day_rules.
                 **{k: v for k, v in shape.items()
-                   if k in ("swim_days", "bike_days", "run_days", "unavailable_days")})
+                   if k in weekly_availability.DAY_SHAPE_KEYS})
         except Exception as e:
             log(f"sport-exclusion capture failed for {slug}: {e}")
             return False

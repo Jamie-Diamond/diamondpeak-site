@@ -675,6 +675,13 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
   week-specific and outrank the standing day pattern where the two disagree; they do NOT
   license breaking a hard_rule. "declared_hours" is the total time they have — the weekly
   Load ceiling is already derived from it in code, so do not re-derive or exceed it.
+  The "day_rules" in the brief ALREADY have this week's declaration folded in per day
+  (code does it, in lib/weekly_availability.merge_day_rules): for a day the athlete named,
+  the sport shown IS the sport they asked for, so do not move it, substitute it or add a
+  second sport to that day. Duration and intensity are yours to set; the sport-to-day
+  mapping is not. If the brief has "declaration_conflicts", each line is a day where their
+  declaration displaced their standing pattern - restate those lines in the plan notes so
+  the athlete is TOLD, and never resolve one by putting the standing session back.
 
 DATE GRID:
 {grid}

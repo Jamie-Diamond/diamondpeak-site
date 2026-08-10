@@ -44,6 +44,7 @@ from plan_builder import _weekly_tss_cap                       # noqa: E402
 from macro_projection import binding_constraint                # noqa: E402
 import ops_log                                                 # noqa: E402
 import day_overrides                                           # noqa: E402
+import weekly_availability                                     # noqa: E402
 
 ATHLETES = BASE / "config" / "athletes.json"
 # Known-baseline signatures (committed, athlete-slug keyed). This check currently
@@ -198,7 +199,14 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
             if tgt and abs(total - tgt) > tgt * _LOAD_TOLERANCE:
                 fails["WEEKLY_LOAD"].append(
                     f"week {ws}: {total} TSS vs target ~{tgt} (>{int(_LOAD_TOLERANCE*100)}% off)")
-        dr = cfg.get("day_rules")
+        # The day rules for THIS week, declaration included. Same resolution as
+        # plan_builder, for the same reason `week_start=ws` is required on the cap below:
+        # the audit must resolve what the GENERATOR resolved. Auditing a declared week
+        # against the standing config retro-flags a week that was built exactly as the
+        # athlete asked, and a permanently red check is one nobody reads.
+        dr, _ = weekly_availability.effective_day_rules(
+            slug, ws, cfg.get("day_rules"),
+            run_limited=((cfg.get("run_protocol") or {}).get("quality_allowed") is False))
         phase = current_phase(pt._load_blueprint(slug), ws) or {}
         # ARM the three hard checks that were never given an input (28 Jul 2026).
         # weekly_tss_cap / weekly_tss_floor / run_weekly_volume were reported SKIPPED

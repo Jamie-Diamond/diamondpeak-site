@@ -228,7 +228,16 @@ def build_sessions(slug: str, proposal: dict) -> dict:
     ws = min((date.fromisoformat(e["start_date_local"][:10]) for e in events),
              default=date.today())
     ws -= timedelta(days=ws.weekday())
-    dr = cfg.get("day_rules")
+    # Validate against the day rules THIS WEEK actually has, not the standing config: the
+    # athlete's declaration for the week outranks day_rules, so a declared move (Jamie's
+    # "Thursday long ride" against bike_days [Fri,Sat,Sun]) must not come back as a hard
+    # `ride_forbidden_day`. It would fail every attempt of a week built exactly as he asked
+    # - the "no clean week EXISTS" loop stage1-plan.py documents for Kathryn's cap.
+    dr, _decl_conflicts = weekly_availability.effective_day_rules(
+        slug, ws, cfg.get("day_rules"),
+        run_limited=((cfg.get("run_protocol") or {}).get("quality_allowed") is False))
+    for _c in _decl_conflicts:
+        print(f"[plan_builder:{slug}] declaration vs day_rules - {_c}", file=sys.stderr)
     phase = current_phase(_blueprint(slug), ws) or {}
     # ARM the hard checks (audit P0-4): without ctl_today the ramp check silently
     # no-ops, and without weekly_tss_cap the load check does. Both inputs are

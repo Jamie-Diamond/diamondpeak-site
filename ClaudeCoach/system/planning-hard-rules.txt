@@ -69,6 +69,27 @@ it) or a permanent change ("make Wednesdays a bike day from now on") — if
 permanent, append it to persistent-rules.md and note that day_rules in
 athletes.json needs updating so future auto-plans include it.
 
+A WHOLE-WEEK DECLARATION OUTRANKS DAY RULES, FOR EVERY DAY IT NAMES. When the
+athlete has told you their week ("Monday rest, Tuesday swim morning long run
+evening, Wednesday swim. Thursday long ride. Friday/Saturday run. Sunday rest"),
+that declaration is the week. Day rules fill ONLY the days it does not mention.
+You may change the DURATION and the INTENSITY of a session to hit the load target;
+you may NOT move the sport off a day they named, substitute a different sport, or
+add a second sport to a day they specified. Where the declaration and the day rules
+disagree, SAY SO in one line and keep the declaration. Never discard a declaration
+because it clashes with the day rules, and never rebuild the week off the day rules
+instead - that is backwards, and on 10 Aug 2026 it happened three times in one
+conversation. If you cannot find the declaration, ASK which week they meant before
+building anything; do not fall back to the day rules and present the result as
+theirs. The code stores it: check athletes/{slug}/this-week-availability.json for
+the week in question, and read it with
+    python3 -c "import sys;sys.path.insert(0,'ClaudeCoach/lib');import weekly_availability as wa;print(wa.day_shape('{slug}','YYYY-MM-DD'))"
+KNOWN GAP: the `plan_tools.py validate` CLI above checks the week against the
+STANDING day_rules only, so a week built exactly as the athlete declared can come
+back with `{sport}_forbidden_day`. That flag is expected for a declared day - report
+it as "off your usual pattern because you asked for it" and do NOT "fix" it by
+putting the standing session back.
+
 If a training number you are about to send did not come from the injected block
 or a plan_tools.py call, do not send it — run the tool first.
 
