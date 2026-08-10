@@ -479,9 +479,8 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
             eased = max(cap, hard_min)
             if eased < c_low:
                 modifiers.append(
-                    f"carb floor eased from {c_low / rolling_weight:.1f} to "
-                    f"{eased / rolling_weight:.1f} g/kg, capped, to keep a workable "
-                    f"fat range on a crowded day")
+                    f"carb floor eased to {eased / rolling_weight:.1f} g/kg to leave "
+                    f"fat some room")
                 c_low = eased
             if cap < hard_min:
                 # Easing stopped at its own limit, so the day genuinely does not fit.

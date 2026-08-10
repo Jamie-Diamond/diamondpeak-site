@@ -241,6 +241,11 @@ body{
 .notelist{margin:0;padding:10px 15px 4px 30px;font-family:'DM Sans',sans-serif;
   font-size:12px;color:var(--secondary)}
 .notelist li{margin:0 0 4px}
+/* The Settings copy of the evidence notes: read once by whoever wants them, rather
+   than every day by whoever does not. */
+.notelist.about{padding:12px 15px 12px 30px;font-size:12.5px;line-height:1.5}
+.notelist.about li{margin:0 0 7px}
+.notelist.about li:last-child{margin-bottom:0}
 .plantlist{padding:2px 15px 12px;font-family:'DM Mono',monospace;font-size:10.5px;
   color:var(--secondary);line-height:1.7}
 .proj{padding:10px 15px;font-family:'DM Sans',sans-serif;font-size:13px;
@@ -898,6 +903,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=18" defer></script>
+<script src="app.js?v=19" defer></script>
 </body>
 </html>

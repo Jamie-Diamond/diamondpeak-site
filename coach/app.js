@@ -2401,9 +2401,7 @@
       zoneRow('Fibre', t.fibre_g, z && z.fibre_g, day.pace_pct,
               r && r.macros.fibre_g) +
       '</div>',
-      { foot: 'The dashed mark is where a macro would sit if it tracked calories ' +
-              'exactly. It tells you what to reach for, not whether anything is ' +
-              'wrong. A ceiling is a limit, so coming in under one is compliance.' });
+      );
 
     /* 4. What the rest of the day has to look like. Required density against a normal
           meal's density is what turns grams into "high protein, low fat". */
@@ -2428,9 +2426,7 @@
       h += card('What is left has to look like',
         '<table class="tbl dtbl"><thead><tr><th>Macro</th><th>Still needed</th>' +
         '<th>Share of what is left</th><th></th></tr></thead>' +
-        '<tbody>' + rows + '</tbody></table>',
-        { foot: 'The last two columns are the point: a share only means something ' +
-                'next to what an ordinary meal looks like.' });
+        '<tbody>' + rows + '</tbody></table>');
     }
 
     /* 5. The log, by meal. Unlogged meals stay visible and greyed: an empty Dinner
@@ -2458,23 +2454,21 @@
     }).join('');
     var notes = [];
     if (t.non_counting_protein_g) {
-      notes.push('+' + Math.round(t.non_counting_protein_g) + ' g collagen, not ' +
-                 'counted toward protein: no tryptophan and little leucine');
+      notes.push('+' + Math.round(t.non_counting_protein_g) +
+                 ' g collagen, not counted toward protein');
     }
     if (day.fuel_from_coach) {
-      notes.push('Includes ' + Math.round(t.in_session_carb_g) + ' g of ride fuel from ' +
-                 'the coach bot' + (day.energy_is_derived ? ', energy derived from carbs' : ''));
+      notes.push('Includes ' + Math.round(t.in_session_carb_g) +
+                 ' g of ride fuel from the coach bot');
     }
     if (t.dietary_sodium_mg) {
       notes.push('Sodium ' + Math.round(t.dietary_sodium_mg).toLocaleString() +
-                 ' mg. No personal target: no sweat test, so the assumed band is ' +
-                 n.sodium.assumed_band_mg_l.join(' to ') + ' mg/L');
+                 ' mg, no target set');
     }
     (z && z.modifiers ? z.modifiers : []).forEach(function (m) { notes.push(m); });
     h += card('Log', '<div class="meals">' + mealHtml + '</div>' +
       (notes.length ? '<ul class="notelist"><li>' + notes.map(esc).join('</li><li>') +
-        '</li></ul>' : ''),
-      { foot: 'Meals are grouped by the clock, not by anything you told it.' });
+        '</li></ul>' : ''));
 
     /* 6. Footer: plants and provenance. Per-item confidence is already on each row
           above; this is the summary, not the substitute. */
@@ -2492,8 +2486,7 @@
           (pv.estimate || 0) + ' estimated' +
           (pv.estimate ? ' at roughly ' + pv.estimate_error_band : '')) + '</p>' +
       (p.species && p.species.length
-        ? '<p class="plantlist">' + esc(p.species.join(' · ')) + '</p>' : ''),
-      { foot: p.basis || '' });
+        ? '<p class="plantlist">' + esc(p.species.join(' · ')) + '</p>' : ''));
 
     /* Block. Kept last: it is context, not the day's decision. */
     var b = n.block || {}, w = n.weight || {}, proj = w.projection;
@@ -2511,9 +2504,9 @@
         ' kg would need about ' + proj.required_daily_kcal_to_reach.toLocaleString() +
         ' kcal/day every day, which the safety limits block.</p>';
     }
-    h += card('Block', blockBody,
-      { foot: 'No body-fat trend: BIA fat tracks the scale at r = 0.999, so a trend ' +
-              'line would be a weight chart with a different label.' });
+    // No body-fat trend, and no note explaining its absence: nobody needs telling
+    // what is not on a page. The reason lives in Settings.
+    h += card('Block', blockBody);
 
     host.innerHTML = h;
   }
@@ -2571,6 +2564,26 @@
           foot: 'Hides or shows the Food tab on this device. It is opt-in per athlete ' +
                 'and off unless nutrition data is published for them, so turning it ' +
                 'on here cannot reveal anyone else\u2019s log.' });
+    }
+
+    if (state.nutr && state.nutr.nutrition_enabled) {
+      h += card('About the food numbers',
+        '<ul class="notelist about">' +
+        '<li>A <b>ceiling</b> is a limit, so coming in under one is the point. A ' +
+        '<b>floor</b> is a minimum, and going past it is not an event.</li>' +
+        '<li>The dashed mark on a bar is where a macro would sit if it tracked ' +
+        'calories exactly. It says what to reach for, not that anything is wrong.</li>' +
+        '<li>30 plants a week comes from an observational study (McDonald et al., ' +
+        '2018) comparing 30+ against 10 or fewer. It is a variety prompt, not a ' +
+        'threshold: 28 against 32 means nothing.</li>' +
+        '<li>Sodium has no personal target because there is no sweat test, so the ' +
+        'assumed band is ' + esc(state.nutr.sodium.assumed_band_mg_l.join(' to ')) +
+        ' mg/L.</li>' +
+        '<li>There is no body-fat trend. BIA body fat tracks the scale at r = 0.999, ' +
+        'so a trend line would be a weight chart with a different label.</li>' +
+        '<li>Collagen is excluded from the protein figure: no tryptophan and little ' +
+        'leucine, so counting it would show a target met that was not.</li>' +
+        '<li>Meals are grouped by the clock, not by anything you told it.</li></ul>');
     }
 
     h += card('Data', '<table class="tbl"><tbody>' +
