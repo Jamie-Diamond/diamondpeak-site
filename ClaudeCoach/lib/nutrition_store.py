@@ -53,17 +53,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nutrition_engine import NON_COUNTING_PROTEIN_SOURCES  # noqa: E402
 
-CONFIDENCE_LEVELS = ("label", "database", "estimate")
+# `computed` is a real fourth level, not a shade of estimate: the M&S nut collection was
+# derived from an equal blend of four named nuts per the product listing, which is far
+# more defensible than a model guess and far less than a printed panel. Collapsing it
+# into either neighbour would misreport how good the figure is.
+CONFIDENCE_LEVELS = ("label", "computed", "database", "estimate")
 CACHE_MAX_AGE_DAYS = 365        # UK retailers reformulate; older is a cache miss
 
 # Ladder rungs, in preference order. Recorded per entry so a degraded resolution
 # is visible rather than silent - the bot states the rung it used.
 SOURCE_RUNGS = ("cache", "retailer", "cofid", "usda", "openfoodfacts",
-                "nutritionix", "manual", "llm")
+                "nutritionix", "manual", "computed", "llm")
 RUNG_CONFIDENCE = {"cache": None,          # inherits whatever produced it
                    "retailer": "label",    # the actual product listing
                    "cofid": "label",       # PHE McCance & Widdowson, UK whole foods
                    "manual": "label",      # the athlete read it off the pack
+                   "computed": "computed",  # summed from a known ingredient blend
                    "usda": "database",
                    "openfoodfacts": "database",
                    "nutritionix": "database",
@@ -236,7 +241,8 @@ class NutritionStore:
 
     def add_entry(self, day, *, raw_text: str, resolved_name: str = "",
                   portion_g=None, kcal=0, protein_g=0, carb_g=0, fat_g=0,
-                  fibre_g=0, dietary_sodium_mg=0, confidence: str = "estimate",
+                  fibre_g=0, dietary_sodium_mg=0, plants_claimed=None,
+                  confidence: str = "estimate",
                   source_rung: str = "llm", source_url: str = "",
                   resolved_at=None, in_session: bool = False,
                   species=None, logged_at=None) -> dict:
@@ -275,6 +281,9 @@ class NutritionStore:
                 "resolved_at": _as_iso(resolved_at) if resolved_at else iso,
                 "in_session": bool(in_session),
                 "species": list(species or []),
+                # What the pack CLAIMS, when it says so. Kept beside what we could
+                # actually name, never instead of it.
+                "plants_claimed": plants_claimed,
             }
             rec["entries"].append(entry)
             return entry
@@ -465,10 +474,17 @@ class NutritionStore:
             "in_session_kcal": s("kcal", in_sess),
             "in_session_carb_g": s("carb_g", in_sess),
             "entry_count": len(entries),
-            "lowest_confidence": (
-                "estimate" if any(e.get("confidence") == "estimate" for e in entries)
-                else "database" if any(e.get("confidence") == "database" for e in entries)
-                else "label" if entries else None),
+            # Worst wins, in ladder order, so the day can never read better than its
+            # weakest item.
+            "lowest_confidence": next(
+                (lvl for lvl in ("estimate", "database", "computed", "label")
+                 if any(e.get("confidence") == lvl for e in entries)), None),
+            # Front-of-pack plant claims we could not name. A composite product saying
+            # "14 plants" whose ingredients we never retrieved leaves the count honestly
+            # incomplete rather than silently low.
+            "plants_claimed_unresolved": sum(
+                max(0, int(e.get("plants_claimed") or 0) - len(e.get("species") or []))
+                for e in entries),
         }
 
     # --- resolved-item cache ------------------------------------------------

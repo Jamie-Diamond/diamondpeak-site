@@ -943,3 +943,152 @@ def micronutrient_status(supplement_entries) -> dict:
                               "dose": e.get("dose"), "unit": e.get("unit")}
     return {key: taken.get(key, {"state": "not_supplemented", "dose": None, "unit": None})
             for key in MICRO_WATCH}
+
+
+# --- what to reach for next (page spec, 10 Aug 2026) ------------------------
+
+# Reference composition of an ordinary mixed meal, as a share of its calories. Used
+# ONLY as a comparison: the point of the density table is that "40% of your remaining
+# calories must be protein" means nothing until you know a normal meal is about 20%.
+NORMAL_MEAL_KCAL_SHARE = {"protein_g": 0.20, "carb_g": 0.55, "fat_g": 0.25}
+KCAL_PER_G = {"protein_g": 4, "carb_g": 4, "fat_g": 9, "fibre_g": 0}
+
+# How far above the normal share a macro must sit before the callout calls it out.
+DENSITY_HIGH = 1.4      # 40% denser than an ordinary meal
+DENSITY_LOW = 0.5       # half an ordinary meal or less
+
+
+def meal_requirement(totals: dict, z: dict) -> dict:
+    """What the rest of the day has to look like, computed here rather than in the page.
+
+    Answers "what do I reach for next", which is a different question from "am I in
+    trouble" and is NOT derived from pace deltas. Pace says where a macro sits relative
+    to the clock; this says what the remaining calories have to be made of. A macro can
+    be well ahead of pace and still need to dominate dinner.
+
+    Everything the page shows is computed here on purpose. A rendering layer that does
+    its own arithmetic produces plausible wrong numbers instead of visible errors, and
+    the page has no way to signal that it guessed.
+
+    Returns `headline` (the callout), `reason` (one line), and `macros` (the table)."""
+    remaining_kcal = round((z.get("kcal_target") or 0) - (totals.get("kcal") or 0))
+    out = {"remaining_kcal": remaining_kcal, "macros": {}, "headline": "", "reason": "",
+           "at_target": remaining_kcal <= 0}
+
+    for key in ("protein_g", "carb_g", "fat_g", "fibre_g"):
+        zone = z.get(key)
+        if not zone:
+            continue
+        eaten = float(totals.get(key) or 0)
+        lo, hi, bias = zone["low"], zone["high"], zone["bias"]
+        ceiling = bias == BIAS_CEILING
+        # Against the zone MINIMUM, not the midpoint: a floor is satisfied at its floor,
+        # and measuring to the middle would make a met floor look unmet.
+        still = max(0.0, lo - eaten)
+        headroom = None if bias == BIAS_FLOOR else max(0.0, hi - eaten)
+        kpg = KCAL_PER_G[key]
+        req_share = ((still * kpg / remaining_kcal)
+                     if (remaining_kcal > 0 and kpg and still) else 0.0)
+        normal = NORMAL_MEAL_KCAL_SHARE.get(key)
+        ratio = (req_share / normal) if (normal and req_share) else 0.0
+        # A macro with room LEFT can still need avoiding. Fat at 95 g against a 100 g
+        # ceiling has met its floor, so a still-needed test alone called it "met" while
+        # the next meal had 5 g of room - the spec's own "near zero fat" case. So the
+        # headroom gets the same density treatment: its share of the remaining calories
+        # against a normal meal's share.
+        head_share = ((headroom * kpg / remaining_kcal)
+                      if (headroom is not None and remaining_kcal > 0 and kpg) else None)
+        head_ratio = (head_share / normal) if (head_share is not None and normal) else None
+        if head_ratio is not None and head_ratio <= 0.25:
+            density = "avoid"
+        elif ceiling:
+            density = "limit"
+        elif not still:
+            density = "met"
+        elif ratio >= DENSITY_HIGH:
+            density = "high"
+        elif ratio and ratio <= DENSITY_LOW:
+            density = "low"
+        else:
+            density = "normal"
+        out["macros"][key] = {
+            "eaten": round(eaten, 1), "zone_low": lo, "zone_high": hi, "bias": bias,
+            "still_needed_g": round(still, 1),
+            "headroom_g": None if headroom is None else round(headroom, 1),
+            "required_share": round(req_share, 3) if req_share else 0.0,
+            "headroom_share": None if head_share is None else round(head_share, 3),
+            "normal_share": normal, "density": density,
+            # Progress against the zone MINIMUM, capped for display only.
+            "pct_of_floor": round(min(100.0, (eaten / lo * 100) if lo else 100.0), 1),
+        }
+
+    # The callout. Deterministic wording: the page must never phrase this itself.
+    if remaining_kcal <= 0:
+        out["headline"] = "You are at your energy target"
+        out["reason"] = ("Anything else today sits on top of it. Protein and fibre are "
+                         "still worth having if you are short.")
+        return out
+
+    m = out["macros"]
+    name = {"protein_g": "protein", "carb_g": "carbs", "fat_g": "fat",
+            "fibre_g": "fibre"}
+    wants = [k for k, v in m.items()
+             if v["density"] == "high" and k != "fibre_g"]
+    avoids = [k for k, v in m.items() if v["density"] == "avoid"]
+    # Below its floor with no urgency in the density terms. Still has to be SAID: an
+    # earlier cut reported "every zone is on track" while fat sat under its floor.
+    shorts = [k for k, v in m.items()
+              if v["still_needed_g"] > 0 and v["bias"] != BIAS_CEILING
+              and k not in wants]
+    fibre = m.get("fibre_g") or {}
+    fibre_short = fibre.get("still_needed_g", 0) > 0 and fibre.get("bias") != BIAS_CEILING
+    fibre_ceiling = fibre.get("bias") == BIAS_CEILING
+
+    parts = []
+    if wants:
+        wants.sort(key=lambda k: m[k]["required_share"] / (m[k]["normal_share"] or 1),
+                   reverse=True)
+        parts.append(", ".join(name[k] for k in wants))
+    if avoids:
+        parts.append("near zero " + " and ".join(name[k] for k in avoids))
+    if fibre_ceiling:
+        parts.append("low residue")
+    else:
+        # Fibre reaches the HEADLINE only when it is the only thing outstanding. It
+        # otherwise won by default on an empty day, headlining "Reach for fibre" while
+        # 183 g of protein was the actual gap - the callout has to name what matters
+        # most, and nothing is unusually dense at the start of a day.
+        others_short = [k for k in shorts if k != "fibre_g"] + wants
+        if fibre_short and not others_short:
+            parts.append("fibre")
+
+    if parts:
+        out["headline"] = "Reach for " + "; ".join(parts)
+    elif all(v["still_needed_g"] == 0 for v in m.values()):
+        out["headline"] = ("Every zone is met" if remaining_kcal > 250
+                           else "You are essentially there")
+    elif shorts or wants:
+        # Nothing is unusually dense, which is itself the answer: eat normally.
+        out["headline"] = "A normal balanced day from here"
+    else:
+        out["headline"] = "Anything balanced works from here"
+
+    bits = []
+    for k in wants:
+        bits.append(f"{m[k]['still_needed_g']:.0f} g {name[k]} still to find in "
+                    f"{remaining_kcal:,} kcal")
+    for k in avoids:
+        hr = m[k].get("headroom_g")
+        bits.append(f"{name[k]} has {hr:.0f} g of room left"
+                    if hr else f"{name[k]} is at its ceiling")
+    for k in shorts:
+        if k == "fibre_g":
+            continue
+        bits.append(f"{m[k]['still_needed_g']:.0f} g {name[k]} under its floor")
+    if fibre_short:
+        bits.append(f"{fibre['still_needed_g']:.0f} g fibre to go")
+    if fibre_ceiling and fibre.get("headroom_g") is not None:
+        bits.append(f"fibre ceiling has {fibre['headroom_g']:.0f} g left")
+    out["reason"] = ("; ".join(bits) if bits
+                     else f"{remaining_kcal:,} kcal left and every zone is met")
+    return out

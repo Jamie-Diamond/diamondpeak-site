@@ -2304,138 +2304,215 @@
      a weight chart wearing a fat label. publish-nutrition-data.py does not even emit
      the series. */
 
-  function zoneRow(label, consumed, z) {
+  /* One zone row. Three things share this space and must stay distinguishable:
+     - the FILL, measured against the zone MINIMUM (a floor is satisfied at its floor;
+       measuring to the midpoint would make a met floor look unmet)
+     - the PACE MARKER, a dashed line at the calorie-progress point, answering "what
+       should I reach for". It does NOT answer "am I in trouble" - only the projection
+       does, and conflating them is how this page would start crying wolf.
+     - the ZONE, as text on the right
+
+     Colour carries meaning and nothing else. Grey is the default INCLUDING ahead or
+     behind pace, because being ahead on fat at 2pm is what a normal day looks like.
+     Red is earned only when a macro cannot reach its zone or has passed a ceiling. */
+  function zoneRow(label, consumed, z, pacePct, req) {
     if (!z) return '';
     var c = Math.round(consumed || 0), lo = Math.round(z.low), hi = Math.round(z.high);
-    var ceiling = z.bias === 'ceiling', floor = z.bias === 'floor';
-    var state_, note;
+    var bias = z.bias, ceiling = bias === 'ceiling', floor = bias === 'floor';
+    var dens = req ? req.density : null;
+
+    var pct = lo ? Math.min(100, (c / lo) * 100) : (c ? 100 : 0);
+    var tone = '';                                  // grey unless earned
+    var right, delta;
     if (ceiling) {
-      state_ = c <= hi ? 'ok' : 'over';
-      note = c <= hi ? 'within ' + hi + ' g' : Math.round(c - hi) + ' g over';
+      right = 'ceiling ' + hi + ' g';
+      if (c > hi) { tone = 'bad'; delta = Math.round(c - hi) + ' g over'; }
+      else { delta = Math.round(hi - c) + ' g of room'; }
+      pct = hi ? Math.min(100, (c / hi) * 100) : 0;
     } else if (floor) {
-      state_ = c >= lo ? 'ok' : 'low';
-      note = c >= lo ? 'past ' + lo + ' g' : Math.round(lo - c) + ' g short of ' + lo;
+      right = 'floor ' + lo + ' g';
+      delta = c >= lo ? 'met' : Math.round(lo - c) + ' g to go';
+      if (c >= lo) tone = 'good';
     } else {
-      state_ = c < lo ? 'low' : (c > hi ? 'over' : 'ok');
-      note = lo + '-' + hi + ' g';
+      right = lo + '-' + hi + ' g';
+      if (c > hi) { tone = 'bad'; delta = Math.round(c - hi) + ' g over'; }
+      else if (c >= lo) { tone = 'good'; delta = 'in zone'; }
+      else { delta = Math.round(lo - c) + ' g to go'; }
     }
-    var pct = Math.max(0, Math.min(100, hi ? (c / hi) * 100 : 0));
-    var loPct = hi ? Math.max(0, Math.min(100, (lo / hi) * 100)) : 0;
-    // A ceiling shows a limit marker and no fill; a floor and a band show a fill.
-    var track = ceiling
-      ? '<span class="zt zt-ceil"><i style="width:' + pct.toFixed(1) + '%"></i>' +
-        '<b class="zlim"></b></span>'
-      : '<span class="zt"><i class="' + state_ + '" style="width:' + pct.toFixed(1) +
-        '%"></i><b class="zmark" style="left:' + loPct.toFixed(1) + '%"></b></span>';
-    return '<div class="zrow"><span class="zl">' + esc(label) +
-      (ceiling ? ' <em>ceiling</em>' : '') + '</span>' + track +
-      '<span class="zv"><b>' + c + '</b><span>' + esc(note) + '</span></span></div>';
+    if (dens === 'avoid' && !ceiling) tone = tone || '';
+
+    var marker = (pacePct != null && !ceiling)
+      ? '<b class="zpace" style="left:' + Math.min(100, pacePct).toFixed(1) + '%"></b>' : '';
+    return '<div class="zrow">' +
+      '<span class="zl">' + esc(label) +
+        '<em>' + esc(bias) + '</em></span>' +
+      '<span class="zt' + (ceiling ? ' zt-ceil' : '') + '">' +
+        '<i class="' + tone + '" style="width:' + pct.toFixed(1) + '%"></i>' +
+        (ceiling ? '<b class="zlim"></b>' : '') + marker + '</span>' +
+      '<span class="zv"><b>' + c + '</b><span>' + esc(right) + '</span>' +
+        '<span class="' + tone + '">' + esc(delta) + '</span></span></div>';
   }
+
+  var MEAL_ORDER = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'],
+                    ['snacks', 'Snacks & fuel'], ['dinner', 'Dinner']];
+  var MACRO_LABEL = { protein_g: 'Protein', carb_g: 'Carbs', fat_g: 'Fat',
+                      fibre_g: 'Fibre' };
 
   function renderFood() {
     var n = state.nutr;
     var host = $('#v-food');
     if (!host) return;
     if (!n || !n.days || !n.days.length) {
-      host.innerHTML = '<div class="card"><div class="empty">No food logged yet. ' +
+      host.innerHTML = '<div class="card"><div class="empty">Nothing logged yet. ' +
         'Tell the nutrition bot what you ate and it appears here.</div></div>';
       return;
     }
-    var today = n.days[n.days.length - 1];
-    var z = today.zones || null;
-    var t = today.totals || {};
+    var day = n.days[n.days.length - 1];
+    var z = day.zones, t = day.totals || {}, r = day.requirement;
     var h = '';
 
-    /* Today */
-    var head = '<div class="figrow">' +
-      fig(Math.round(t.kcal || 0).toLocaleString(), 'kcal today',
-          z ? 'of ' + Math.round(z.kcal_target).toLocaleString() : 'no target yet') +
-      fig(today.day_type ? today.day_type.replace(/_/g, ' ') : '-', 'day type',
-          z && z.confidence === 'low_confidence' ? 'guessed from your week' : 'from your calendar') +
-      fig(z && z.deficit_applied_kcal ? '-' + z.deficit_applied_kcal : 'none', 'deficit',
-          z && z.deficit_applied_kcal ? 'applied today' : 'not today') +
-      '</div>';
-    var rows = z ? (zoneRow('Protein', t.protein_g, z.protein_g) +
-                    zoneRow('Carbs', t.carb_g, z.carb_g) +
-                    zoneRow('Fat', t.fat_g, z.fat_g) +
-                    zoneRow('Fibre', t.fibre_g, z.fibre_g)) : '';
+    /* 1. Reach for. First on the page and the whole point of it: what the next meal
+          has to be, stated as an instruction rather than as a fault. Composed in
+          Python, never phrased here. */
+    if (r) {
+      h += '<section class="reach' + (r.at_target ? ' done' : '') + '">' +
+        '<span class="reach-k">Reach for</span>' +
+        '<h2>' + esc(r.headline.replace(/^Reach for /, '')) + '</h2>' +
+        '<p>' + esc(r.reason) + '</p></section>';
+    }
+
+    /* 2. Position. Where you are, not where you are going: the zones carry the
+          targets and repeating them here would be two sources for one number. */
+    var chips = ['protein_g', 'carb_g', 'fat_g', 'fibre_g'].map(function (k) {
+      return '<span class="chip"><b>' + Math.round(t[k] || 0) + '</b>' +
+        esc(MACRO_LABEL[k].slice(0, 1).toLowerCase()) + '</span>';
+    }).join('');
+    h += card('So far today',
+      '<div class="pos"><span class="pos-n">' +
+      Math.round(t.kcal || 0).toLocaleString() + '</span>' +
+      '<span class="pos-u">kcal</span><div class="chips">' + chips + '</div>' +
+      (r ? '<span class="pos-r">' + Math.round(r.remaining_kcal).toLocaleString() +
+        ' kcal left</span>' : '') + '</div>' +
+      '<div class="zones">' +
+      zoneRow('Protein', t.protein_g, z && z.protein_g, day.pace_pct,
+              r && r.macros.protein_g) +
+      zoneRow('Carbs', t.carb_g, z && z.carb_g, day.pace_pct, r && r.macros.carb_g) +
+      zoneRow('Fat', t.fat_g, z && z.fat_g, day.pace_pct, r && r.macros.fat_g) +
+      zoneRow('Fibre', t.fibre_g, z && z.fibre_g, day.pace_pct,
+              r && r.macros.fibre_g) +
+      '</div>',
+      { foot: 'The dashed mark is where a macro would sit if it tracked calories ' +
+              'exactly. It tells you what to reach for, not whether anything is ' +
+              'wrong. A ceiling is a limit, so coming in under one is compliance.' });
+
+    /* 4. What the rest of the day has to look like. Required density against a normal
+          meal's density is what turns grams into "high protein, low fat". */
+    if (r && !r.at_target) {
+      var rows = Object.keys(MACRO_LABEL).filter(function (k) {
+        return r.macros[k];
+      }).map(function (k) {
+        var v = r.macros[k];
+        var need = v.bias === 'ceiling'
+          ? '<span class="mut">max ' + Math.round(v.headroom_g || 0) + ' g</span>'
+          : (v.still_needed_g ? Math.round(v.still_needed_g) + ' g' :
+             '<span class="mut">met</span>');
+        var reqp = v.required_share
+          ? Math.round(v.required_share * 100) + '%' : '<span class="mut">-</span>';
+        var norm = v.normal_share
+          ? Math.round(v.normal_share * 100) + '%' : '<span class="mut">-</span>';
+        return '<tr><td class="lbl">' + esc(MACRO_LABEL[k]) + '</td>' +
+          '<td>' + need + '</td><td>' + reqp + '</td><td>' + norm + '</td>' +
+          '<td class="dens ' + esc(v.density) + '">' + esc(v.density) + '</td></tr>';
+      }).join('');
+      h += card('What is left has to look like',
+        '<table class="tbl dtbl"><thead><tr><th>Macro</th><th>Still needed</th>' +
+        '<th>% of remaining kcal</th><th>Normal meal</th><th></th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table>',
+        { foot: 'The last two columns are the point: a share only means something ' +
+                'next to what an ordinary meal looks like.' });
+    }
+
+    /* 5. The log, by meal. Unlogged meals stay visible and greyed: an empty Dinner
+          row is information. */
+    var meals = day.meals || {};
+    var mealHtml = MEAL_ORDER.map(function (pair) {
+      var items = meals[pair[0]] || [];
+      var sub = items.reduce(function (a, i) { return a + (i.kcal || 0); }, 0);
+      if (!items.length) {
+        return '<div class="meal empty-meal"><div class="meal-h"><b>' + esc(pair[1]) +
+          '</b><span>not logged</span></div></div>';
+      }
+      return '<div class="meal"><div class="meal-h"><b>' + esc(pair[1]) +
+        '</b><span>' + Math.round(sub).toLocaleString() + ' kcal</span></div>' +
+        items.map(function (i) {
+          return '<div class="mi' + (i.confidence === 'estimate' ? ' est' : '') +
+            (i.in_session ? ' insess' : '') + '">' +
+            '<span class="mi-n">' + esc(i.name || '') +
+            (i.in_session ? ' <em>in session</em>' : '') +
+            (i.confidence === 'estimate' ? ' <em>est</em>' : '') + '</span>' +
+            '<span class="mi-m">' + Math.round(i.kcal || 0) + ' · ' +
+            Math.round(i.protein_g || 0) + 'p · ' + Math.round(i.carb_g || 0) + 'c · ' +
+            Math.round(i.fat_g || 0) + 'f</span></div>';
+        }).join('') + '</div>';
+    }).join('');
     var notes = [];
     if (t.non_counting_protein_g) {
-      notes.push('+' + Math.round(t.non_counting_protein_g) +
-                 ' g collagen, not counted toward protein (no tryptophan, low leucine)');
+      notes.push('+' + Math.round(t.non_counting_protein_g) + ' g collagen, not ' +
+                 'counted toward protein: no tryptophan and little leucine');
     }
-    if (today.fuel_from_coach) {
-      notes.push('Includes ' + Math.round(t.in_session_carb_g) +
-                 ' g of ride fuel logged in the coach bot' +
-                 (today.energy_is_derived ? ', energy derived from carbs' : ''));
+    if (day.fuel_from_coach) {
+      notes.push('Includes ' + Math.round(t.in_session_carb_g) + ' g of ride fuel from ' +
+                 'the coach bot' + (day.energy_is_derived ? ', energy derived from carbs' : ''));
     }
     if (t.dietary_sodium_mg) {
       notes.push('Sodium ' + Math.round(t.dietary_sodium_mg).toLocaleString() +
                  ' mg. No personal target: no sweat test, so the assumed band is ' +
-                 n.sodium.assumed_band_mg_l.join('-') + ' mg/L');
-    }
-    if (t.lowest_confidence === 'estimate') {
-      notes.push('Some items are estimates, roughly +/-10-15%');
+                 n.sodium.assumed_band_mg_l.join(' to ') + ' mg/L');
     }
     (z && z.modifiers ? z.modifiers : []).forEach(function (m) { notes.push(m); });
-    h += card('Today', head + '<div class="zones">' + rows + '</div>' +
-      (notes.length ? '<ul class="notelist"><li>' +
-        notes.map(esc).join('</li><li>') + '</li></ul>' : ''),
-      { foot: 'A ceiling is a limit, not a goal. Coming in under one is compliance.' });
+    h += card('Log', '<div class="meals">' + mealHtml + '</div>' +
+      (notes.length ? '<ul class="notelist"><li>' + notes.map(esc).join('</li><li>') +
+        '</li></ul>' : ''),
+      { foot: 'Meals are grouped by the clock, not by anything you told it.' });
 
-    /* Rolling 7 days */
-    var last7 = n.days.slice(-7);
-    var logged = last7.filter(function (d) { return d.items && d.items.length; }).length;
-    var p = n.plants || {};
-    var w = n.weight || {};
-    h += card('Last 7 days',
+    /* 6. Footer: plants and provenance. Per-item confidence is already on each row
+          above; this is the summary, not the substitute. */
+    var p = n.plants || {}, pv = day.provenance || {};
+    h += card('Week and provenance',
       '<div class="figrow">' +
       fig(p.unique_7d != null ? p.unique_7d : '-', 'plant species',
           'aiming around ' + (p.target || 30)) +
       fig(p.new_today != null ? p.new_today : '-', 'new today', 'variety, not a score') +
-      fig(w.rolling_7d_mean_kg ? w.rolling_7d_mean_kg.toFixed(1) : '-', 'kg',
-          'morning 7-day mean') +
-      fig(logged + '/7', 'days logged', 'in the last week') +
+      fig((n.weight && n.weight.rolling_7d_mean_kg)
+          ? n.weight.rolling_7d_mean_kg.toFixed(1) : '-', 'kg', 'morning 7-day mean') +
       '</div>' +
+      '<p class="prov">' +
+      esc((pv.label || 0) + ' label-verified, ' + (pv.database || 0) + ' from a database, ' +
+          (pv.estimate || 0) + ' estimated' +
+          (pv.estimate ? ' at roughly ' + pv.estimate_error_band : '')) + '</p>' +
       (p.species && p.species.length
         ? '<p class="plantlist">' + esc(p.species.join(' · ')) + '</p>' : ''),
       { foot: p.basis || '' });
 
-    /* Block */
-    var b = n.block || {};
-    var proj = w.projection || null;
-    var flagRows = n.days.slice().reverse().filter(function (d) {
-      return d.flags && d.flags.length;
-    }).slice(0, 8).map(function (d) {
-      return '<tr><td class="lbl">' + esc(d.date) + '</td><td>' +
-        esc(d.flags.map(function (f) { return f.type.replace(/_/g, ' '); }).join(', ')) +
-        '</td></tr>';
-    }).join('');
+    /* Block. Kept last: it is context, not the day's decision. */
+    var b = n.block || {}, w = n.weight || {}, proj = w.projection;
     var blockBody = '<div class="figrow">' +
       fig(b.days_to_race != null ? b.days_to_race : '-', 'days to race',
           b.race_name || '') +
-      fig(w.rolling_7d_mean_kg ? w.rolling_7d_mean_kg.toFixed(1) : '-', 'kg now',
-          'morning mean') +
       fig(w.race_target_kg || '-', 'kg target', 'from your profile') +
+      fig(proj ? proj.projected_race_kg : '-', 'kg projected',
+          proj ? (proj.reaches_target ? 'meets it' : proj.shortfall_kg + ' kg short') : '') +
       '</div>';
-    if (proj) {
-      // The target is never shown without the shortfall beside it: an unreachable
-      // number displayed alone is worse than no number.
-      blockBody += '<p class="proj' + (proj.reaches_target ? '' : ' miss') + '">' +
-        'On the current deficit you land near <b>' + proj.projected_race_kg +
-        ' kg</b>' + (proj.reaches_target ? ', which meets the target.'
-          : ', which is ' + proj.shortfall_kg + ' kg short. Reaching ' +
-            w.race_target_kg + ' kg would need about ' +
-            proj.required_daily_kcal_to_reach.toLocaleString() +
-            ' kcal/day every day, which the safety limits block.') + '</p>';
-    }
-    if (flagRows) {
-      blockBody += '<table class="tbl"><tbody>' + flagRows + '</tbody></table>';
+    if (proj && !proj.reaches_target) {
+      // The target is never shown without the shortfall: an unreachable number on its
+      // own is worse than no number.
+      blockBody += '<p class="proj miss">Reaching ' + w.race_target_kg +
+        ' kg would need about ' + proj.required_daily_kcal_to_reach.toLocaleString() +
+        ' kcal/day every day, which the safety limits block.</p>';
     }
     h += card('Block', blockBody,
-      { foot: 'Protein is a floor that flexes with load, so it is not charted as a ' +
-              'constant. No body-fat trend: BIA fat tracks the scale at r = 0.999, ' +
-              'so a trend line would be a weight chart with a different label.' });
+      { foot: 'No body-fat trend: BIA fat tracks the scale at r = 0.999, so a trend ' +
+              'line would be a weight chart with a different label.' });
 
     host.innerHTML = h;
   }

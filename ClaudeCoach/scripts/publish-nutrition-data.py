@@ -78,6 +78,31 @@ def build(slug: str, today: date) -> dict:
         totals = RC.merged_totals(store, athlete_dir, day)
         z = rec.get("targets") or None
         entries = rec.get("entries") or []
+        # Computed HERE, not in the page. A rendering layer doing its own arithmetic
+        # produces plausible wrong numbers rather than visible errors, and the page has
+        # no way to signal that it guessed.
+        requirement = NE.meal_requirement(totals, z) if z else None
+        # Meals are inferred from the clock, because nothing asks the athlete to
+        # categorise. Stated as inferred so an odd bucket is not read as a data error.
+        meals = {"breakfast": [], "lunch": [], "snacks": [], "dinner": []}
+        for e in entries:
+            hhmm = (e.get("logged_at") or "")[11:16]
+            if e.get("in_session"):
+                bucket = "snacks"
+            elif hhmm and hhmm < "11:00":
+                bucket = "breakfast"
+            elif hhmm and hhmm < "15:00":
+                bucket = "lunch"
+            elif hhmm and hhmm >= "17:00":
+                bucket = "dinner"
+            else:
+                bucket = "snacks"
+            meals[bucket].append({
+                "name": e.get("resolved_name"), "kcal": e.get("kcal"),
+                "protein_g": e.get("protein_g"), "carb_g": e.get("carb_g"),
+                "fat_g": e.get("fat_g"), "confidence": e.get("confidence"),
+                "rung": e.get("source_rung"), "in_session": bool(e.get("in_session")),
+                "logged_at": hhmm})
         days.append({
             "date": d,
             "day_type": rec.get("day_type"),
@@ -108,6 +133,20 @@ def build(slug: str, today: date) -> dict:
                             for s in (rec.get("supplements") or [])],
             "flags": [{"type": f.get("type"), "severity": f.get("severity")}
                       for f in (rec.get("flags") or [])],
+            "requirement": requirement,
+            "meals": meals,
+            "meals_inferred_from_clock": True,
+            # Pace: where each macro would sit if it tracked calories exactly. This
+            # answers "what do I reach for", NEVER "am I in trouble" - only the
+            # projection answers that, and the two must not be conflated. A macro can
+            # be well ahead of pace and still land perfectly.
+            "pace_pct": (round((totals.get("kcal") or 0) / z["kcal_target"] * 100, 1)
+                         if z and z.get("kcal_target") else None),
+            "provenance": {
+                "label": sum(1 for e in entries if e.get("confidence") == "label"),
+                "database": sum(1 for e in entries if e.get("confidence") == "database"),
+                "estimate": sum(1 for e in entries if e.get("confidence") == "estimate"),
+                "estimate_error_band": "+/-10-15%"},
         })
 
     measurements = store.measurements_range(start, today, type="weight")

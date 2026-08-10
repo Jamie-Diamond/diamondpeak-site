@@ -414,6 +414,75 @@ check("sodium is an assumed band",
       std["sodium_basis"]["confidence"] == "assumed"
       and std["sodium_basis"]["sweat_na_mg_l"] == [950, 1500])
 
+# 22) meal_requirement: what to reach for. This answers a DIFFERENT question from
+#     pace, and everything the page shows is computed here, because a rendering layer
+#     doing its own arithmetic produces plausible wrong numbers instead of visible
+#     errors.
+Z_PRE = z(day_type="recovery", tomorrow_type="long_ride", deficit_enabled=True)
+
+
+def req(totals, zone=None):
+    return N.meal_requirement(totals, zone or std)
+
+
+# The spec's own case: fat has met its floor but has almost no room, so "met" was the
+# wrong verdict. Headroom gets the same density treatment as still-needed.
+fatty = req({"kcal": 1800, "protein_g": 45, "carb_g": 140, "fat_g": 95, "fibre_g": 12})
+check(f"a nearly-full ceiling reads avoid, not met (got {fatty['macros']['fat_g']['density']})",
+      fatty["macros"]["fat_g"]["density"] == "avoid")
+check("the callout names both the want and the avoid",
+      "protein" in fatty["headline"] and "near zero fat" in fatty["headline"])
+check("the reason quantifies the remaining room",
+      "g of room left" in fatty["reason"])
+
+# Fibre must not win the headline by default. It did on an empty day, headlining
+# "Reach for fibre" while 183 g of protein was the actual gap.
+empty = req({"kcal": 0})
+check(f"an empty day does not headline fibre (got {empty['headline']!r})",
+      "fibre" not in empty["headline"].lower())
+check("an empty day says eat normally", "balanced" in empty["headline"])
+check("but the reason still lists every floor outstanding",
+      "protein under its floor" in empty["reason"])
+
+# Fibre reaches the headline only when it is the ONLY thing outstanding.
+only = req({"kcal": 3400, "protein_g": 190, "carb_g": 460, "fat_g": 85, "fibre_g": 18})
+check("fibre headlines when nothing else is short", "fibre" in only["headline"].lower())
+
+# A day under a floor must never be described as on track. An earlier cut said
+# "every zone is on track" while fat sat below its floor.
+short = req({"kcal": 2200, "protein_g": 130, "carb_g": 300, "fat_g": 60, "fibre_g": 22})
+check("a day under a floor is not called on track",
+      "on track" not in short["reason"] and "every zone is met" not in short["reason"])
+check("and the shortfall is named", "fat under its floor" in short["reason"])
+
+# Bars measure against the zone MINIMUM, so a met floor reads as met.
+met = req({"kcal": 3500, "protein_g": 190, "carb_g": 480, "fat_g": 85, "fibre_g": 34})
+check("a met floor reports 100% of floor",
+      met["macros"]["protein_g"]["pct_of_floor"] == 100.0)
+check("all zones met is stated plainly", "essentially there" in met["headline"]
+      or "Every zone is met" in met["headline"])
+
+# At or past the target, the page must stop asking for more energy.
+over = req({"kcal": 3900, "protein_g": 200, "carb_g": 500, "fat_g": 95, "fibre_g": 35})
+check("past the target is flagged as at_target", over["at_target"] is True)
+check("and does not tell him to reach for more energy",
+      "Reach for" not in over["headline"])
+
+# A fibre CEILING day asks for low residue, never for more fibre.
+pre = req({"kcal": 900, "protein_g": 40, "carb_g": 110, "fat_g": 25, "fibre_g": 9}, Z_PRE)
+check("a pre-long day asks for low residue", "low residue" in pre["headline"])
+check("and never asks for more fibre on a ceiling day",
+      "Reach for fibre" not in pre["headline"])
+check("fibre remaining room is reported as a ceiling", "ceiling has" in pre["reason"])
+
+# The required share is compared against a NORMAL meal, which is what makes it mean
+# anything. Both numbers are published so the page never invents the comparison.
+pm = fatty["macros"]["protein_g"]
+check("required share is published", pm["required_share"] > 0)
+check("normal share is published alongside it", pm["normal_share"] == 0.20)
+check("required protein density is above a normal meal",
+      pm["required_share"] > pm["normal_share"])
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

@@ -204,6 +204,7 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
 
     window_species, today_species, unmatched = {}, {}, []
     per_day_new = {}
+    claimed_gap = 0
     for rec in days or []:
         d = rec.get("date")
         if not d:
@@ -211,6 +212,9 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
         dd = date.fromisoformat(d[:10])
         if dd < cutoff or dd > on:
             continue
+        for e in rec.get("entries") or []:
+            claimed_gap += max(0, int(e.get("plants_claimed") or 0)
+                               - len(e.get("species") or []))
         res = species_for_entries(rec.get("entries"), table)
         scoring = _scoring_species(res["species"])
         unmatched.extend(res["unmatched"])
@@ -243,6 +247,11 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
         "herb_spice_count": sum(1 for s in window_species.values()
                                 if s["category"] == HERB_SPICE_CATEGORY),
         "unmatched_strings": unmatched,
+        # Plants a pack claimed that we could not NAME. Reported so the headline count
+        # is honestly incomplete rather than quietly low: a nutrient-dense ready meal
+        # saying "14 plants" whose ingredient list was never retrieved contributes only
+        # what could be resolved from its title.
+        "claimed_unresolved": claimed_gap,
         "window_days": window,
     }
 
