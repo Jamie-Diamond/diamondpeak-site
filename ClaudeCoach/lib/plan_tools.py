@@ -392,6 +392,30 @@ _DELOAD_EVERY_N = 4         # every Nth training week (cfg: deload_every_n_weeks
 _DELOAD_FACTOR = 0.62       # 60-65% of the normal prescription (cfg: deload_factor)
 _MISS_TRIGGER = 0.70        # last week < 70% executed → this week is recovery
 
+# Return-to-load step and the de-facto-deload query (Jamie + Kathryn, 10 Aug 2026).
+#
+# _MISS_TRIGGER only fires on a COLLAPSE (< 70% of maintenance). The far commoner case
+# is a week that merely failed to build: Kathryn ran 474 against 584 planned with
+# maintenance at 489, i.e. 97% of maintenance, so nothing tripped - and the next week's
+# target was then computed purely from the CTL line, asking 690. That is +46% on what
+# she had actually just done, off a week with no build in it, and it exceeded her
+# highest realised ramp all season (+4.3 CTL). The engine sized the week from the plan
+# while ignoring where the athlete actually was.
+#
+# So a week at or below maintenance limits the NEXT week's step up to this multiple of
+# what was actually executed. Never below maintenance itself, or the cap would prescribe
+# detraining, which is the opposite failure.
+_RETURN_STEP = 1.30
+
+# A week at or below maintenance IS an unload in all but name. When the cadence then
+# schedules a deload on top, that is two consecutive down-weeks nobody chose, landing
+# (for Kathryn) in the first week of her Peak phase while she sat 6 CTL below her race
+# band. This does NOT auto-skip the deload - block_deload_weeks' contract is that
+# recovery is never silently stripped - it attaches a question for the brief and the
+# audit to surface. Jamie only got this corrected by arguing with the coach for an
+# hour; Kathryn, who does not push back, silently got the wrong plan.
+_DEFACTO_DELOAD_AT = 1.00   # last week <= 1.00 x maintenance = already a de facto unload
+
 # Taper (blueprint: "70% -> 55% -> 40% of peak, maintain intensity"; audit P0-2 —
 # volume steps down by weeks-to-race, intensity is HELD by the taper TID row).
 # Pre-taper weekly load is approximated by the steady-state 7 x CTL (the load
@@ -619,6 +643,33 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     # Deload/taper weeks overwrite this with 0 (explicitly no floor).
     maintenance = int(round(7 * float(ctl_today))) if ctl_today else None
     out["maintenance_weekly_tss"] = maintenance
+
+    # RETURN-TO-LOAD CAP (see _RETURN_STEP). Applied to the CTL-derived recommendation
+    # before the floor is taken off it, so the floor tracks the week actually being
+    # prescribed rather than one the athlete was never going to be asked for.
+    # Deliberately NOT applied to the deload/easy/taper branches below: those set their
+    # own reduced figure and capping a down-week's step-up is meaningless.
+    last_at_or_below_maint = (
+        last_week_tss is not None and maintenance
+        and float(last_week_tss) <= _DEFACTO_DELOAD_AT * maintenance)
+    if last_at_or_below_maint and rec:
+        step_cap = max(int(maintenance), int(round(float(last_week_tss) * _RETURN_STEP)))
+        if step_cap < int(rec):
+            out.update({
+                "uncapped_weekly_tss": int(rec),
+                "return_step_cap": step_cap,
+                "recommended_weekly_tss": step_cap,
+                "note": (f"RETURN TO LOAD: last week executed {int(last_week_tss)} TSS, at or "
+                         f"below maintenance (~{maintenance}), so no build happened. The phase "
+                         f"line wants ~{int(rec)} this week, which is "
+                         f"+{round((int(rec) / max(1.0, float(last_week_tss)) - 1) * 100)}% on "
+                         f"what was actually done. Step to ~{step_cap} "
+                         f"(+{int((_RETURN_STEP - 1) * 100)}% on last week's actual) instead and "
+                         f"rebuild from there; chasing the line off an unloaded week is how a "
+                         f"week gets missed outright."),
+            })
+            rec = out["recommended_weekly_tss"]
+
     out["weekly_tss_floor"] = min(int(rec), maintenance) if (rec and maintenance) else None
     # Manual easy-week override (B-race taper etc.): a hand-declared week that the
     # mechanical every-Nth-week cadence doesn't know about. Keyed on the Monday of
@@ -658,6 +709,21 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         _from = next((m["from"] for m in _placement["moves"] if m["to"] == week_now), None)
         if _from is not None:
             out["deload_moved_from_week"] = _from
+        # De-facto-deload QUERY (see _DEFACTO_DELOAD_AT). The deload still stands - this
+        # only attaches the question, for the Monday brief and the audit to put in front
+        # of a human. Two consecutive down-weeks may well be right; what must not happen
+        # is it going unremarked because the cadence cannot see what was executed.
+        if last_at_or_below_maint:
+            out["deload_may_be_redundant"] = {
+                "last_week_tss": int(last_week_tss),
+                "maintenance_weekly_tss": int(maintenance),
+                "question": (
+                    f"Scheduled deload this week, but last week executed "
+                    f"{int(last_week_tss)} TSS against maintenance ~{int(maintenance)} - "
+                    f"at or below it, so that week was already a de facto deload. "
+                    f"Deloading again stacks two unchosen down-weeks. Skip this one and "
+                    f"load through, or keep it?"),
+            }
     # Genuine-miss recovery (fix, 15 Jul 2026): reference the athlete's SUSTAINABLE
     # maintenance load (~7×CTL), NOT 70% of this week's aspirational ramp-capped target.
     # Realistic execution routinely lands under the ramp-capped target, and a PLANNED
