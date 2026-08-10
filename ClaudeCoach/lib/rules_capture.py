@@ -18,8 +18,10 @@ CONFIRMED is held to a stricter bar again - it may be extended in place but neve
 reworded away. Any lossy edit fails
 the invariant and the WHOLE write is refused — the caller gets `before_text` back,
 untouched. A newly-appended [perm] line is still reverted if it contradicts a confirmed
-preference, exactly duplicates an existing line, or would push the pile over the
-standing-rule ceiling (unchanged append-guard behaviour).
+preference, exactly duplicates an existing line, pushes the pile over the standing-rule
+ceiling, is over the per-rule token cap, or (when the caller passes a `slug`) would push
+the combined instruction surface over bug-fixer's SURFACE_TOKEN_BUDGET — the same ceiling
+the nightly triage already enforces, now also checked at the moment a rule is written.
 
 Callers are responsible for snapshotting `before_text` themselves (before the model
 runs) and re-reading `after_text` (after it has had a chance to edit the file); this
@@ -43,6 +45,7 @@ bug_fixer = importlib.util.module_from_spec(_bf_spec)
 _bf_spec.loader.exec_module(bug_fixer)
 
 CEILING = bug_fixer.RULE_COUNT_CEILING
+SURFACE_TOKEN_BUDGET = bug_fixer.SURFACE_TOKEN_BUDGET
 
 # A [perm] standing rule (the append-only lines that bloated); [expires:] lines carry a date.
 _PERM_RE    = re.compile(r"^\s*\[perm\]", re.I)
@@ -183,7 +186,7 @@ def _line_conflicts(line: str, prefs: list) -> str:
     return ""
 
 
-def enforce_rule_guards(before_text: str, after_text: str, prefs: list):
+def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: str | None = None):
     """TIER A — capture-time guard. Runs AFTER the model has edited persistent-rules.md.
 
     Two edit shapes are allowed:
@@ -196,7 +199,9 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list):
 
     The guard is deterministic and conservative:
       * a NEWLY-APPENDED [perm] line is reverted if it contradicts a confirmed preference, exactly
-        duplicates an existing line, or pushes the pile over the ceiling (unchanged behaviour);
+        duplicates an existing line, pushes the pile over the standing-rule ceiling, is over the
+        per-rule token cap, or — when `slug` is given — would push the combined instruction
+        surface (this file + the shared file + system_prompt.txt) over SURFACE_TOKEN_BUDGET;
       * an in-place edit that removes/rewrites an existing rule is PERMITTED only when every
         removed rule is absorbed by some [perm] line still on file (`_absorbs`). Rewording is
         allowed — it has to be, or every fold aborts on a dropped stop word — but every number
@@ -324,6 +329,29 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list):
         if _standing_count() <= CEILING:
             break
         dropped[i] = f"append would exceed the standing-rule ceiling ({CEILING})"
+
+    # SURFACE budget — the combined instruction surface (this file + the shared file +
+    # system_prompt.txt) is what build_prompt() actually sends every reply. The count
+    # ceiling and the per-rule cap above each bound one axis; neither bounds the total.
+    # That gap is exactly how the pile went from 19 rules to 67 between 12 Jul and
+    # 3 Aug while staying under the count ceiling the whole time: bug-fixer.py's
+    # nightly triage got a surface budget on 2026-08-03, but this LIVE chat append
+    # path — the one that actually did the growing — never did. Estimated from bytes
+    # (never an API call): this runs inline on a live chat reply and must be instant
+    # and must never fail open. Only runs when the caller passes a slug; callers that
+    # don't (unit tests, or a diff with no known athlete) skip this axis exactly as
+    # they always could.
+    if slug:
+        for i in sorted((j for j in appended_idx
+                         if j not in dropped and not _is_fold_result(j)), reverse=True):
+            kept = "".join(l for j, l in enumerate(after_lines) if j not in dropped)
+            tokens = int(round(bug_fixer._surface_bytes(slug, athlete_rules=kept)
+                               / bug_fixer.BYTES_PER_TOKEN))
+            if tokens <= SURFACE_TOKEN_BUDGET:
+                break
+            dropped[i] = (f"append would keep the combined rule surface at ~{tokens} tokens "
+                          f"(estimate), over the {SURFACE_TOKEN_BUDGET}-token budget — prune "
+                          f"an existing rule before adding another")
 
     if not dropped:
         return after_text, []
