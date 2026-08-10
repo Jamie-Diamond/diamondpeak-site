@@ -435,7 +435,8 @@ restaurant bill or menu):
   {"kind":"order","vendor":"<restaurant or shop name>",
    "stated_item_count":<the number the screen claims, e.g. from "Your order (5 items)",
                         else null>,
-   "items":[{"text":"<the dish name WITH its options folded in>","portion_g":null}]}
+   "items":[{"text":"<the dish name WITH its options folded in>","qty":<the Nx number,
+              default 1>,"portion_g":null}]}
 
   Fold each dish's modifiers INTO its text. A Wagamama order reading
     1x  new! gochujang salmon rice bowl
@@ -449,13 +450,14 @@ restaurant bill or menu):
   Strip marketing and dietary markers from the text: "new!", "(vg)", "(ve)", "(v)",
   "NEW", "chef's special". They are noise in a search query.
 
-  STATED_ITEM_COUNT MATTERS. If the screen says 5 items and you can only see 3, still
-  report 5 in stated_item_count and return the 3 you can see. The screenshot may be
-  cropped and it is better to say so than to imply the order was smaller than it was.
+  STATED_ITEM_COUNT COUNTS UNITS, NOT LINES. "Your order (5 items)" on a screen showing
+  1x rice bowl, 1x edamame and 3x soy sauce is 1 + 1 + 3 = 5, and nothing is missing.
+  Report the number the screen states, and put the Nx figure in each item's qty. The
+  logger compares the SUM OF QUANTITIES against it, so a genuinely cropped screenshot is
+  the only thing that looks short.
 
   Keep condiments and sauces as items. 3x soy sauce is negligible energy but real
-  sodium, which this athlete tracks.
-  If a quantity is shown (3x), repeat that item that many times.
+  sodium, which this athlete tracks. Give it qty 3 rather than three separate lines.
   Include the vendor in each text if the dish name alone would be ambiguous.
   Ignore prices, delivery fees, tips, cutlery and bag charges.
   Do NOT provide nutrition figures.
@@ -531,9 +533,17 @@ def read_photo(img_path: str, claude_bin: str, model: str, log=print, runner=Non
                 continue
             if vendor and got["kind"] == "order" and vendor.lower() not in text.lower():
                 text = f"{text}, {vendor}"
-            items.append({"text": text, "portion_g": i.get("portion_g"),
-                          "in_session": False})
+            try:
+                qty = max(1, int(i.get("qty") or 1))
+            except (TypeError, ValueError):
+                qty = 1
+            items.append({"text": text, "qty": qty,
+                          "portion_g": i.get("portion_g"), "in_session": False})
         got["items"] = items
+        # UNITS, not lines. Jamie's Wagamama order stated 5 items and had 3 lines, because
+        # one was 3x soy sauce. Comparing the stated count to the LINE count would have
+        # called a complete screenshot cropped, which is crying wolf on correct input.
+        got["units_seen"] = sum(i["qty"] for i in items)
         if not items:
             return {"kind": "unknown"}
     return got

@@ -269,13 +269,32 @@ check("the vendor is appended so a dish name is searchable",
 check("condiments are kept, because soy sauce is real sodium",
       any("soy sauce" in t for t in texts))
 
-# A cropped screenshot must be DECLARED, not silently under-logged.
+# "5 items" counts UNITS, not lines. Jamie's real order was 3 lines and 5 units, because
+# one line was 3x soy sauce. Comparing the stated count to the LINE count would have called
+# a complete screenshot cropped, which is crying wolf on correct input.
+real = NLU.read_photo("/tmp/x.jpg", "c", "m", log=lambda *a: None,
+                      runner=fake_model('{"kind":"order","vendor":"Wagamama",'
+                                        '"stated_item_count":5,"items":['
+                                        '{"text":"gochujang salmon rice bowl","qty":1},'
+                                        '{"text":"edamame","qty":1},'
+                                        '{"text":"soy sauce","qty":3}]}'))
+check("units are summed from the quantities", real["units_seen"] == 5)
+check("3 lines and 5 units is NOT treated as cropped",
+      real["units_seen"] >= real["stated_item_count"])
+check("a quantity is kept on the item rather than repeated in the reading",
+      [i["qty"] for i in real["items"]] == [1, 1, 3])
+check("a missing qty defaults to 1", NLU.read_photo(
+    "/tmp/x.jpg", "c", "m", log=lambda *a: None,
+    runner=fake_model('{"kind":"order","items":[{"text":"one thing"}]}')
+)["units_seen"] == 1)
+
+# A genuinely cropped screenshot must still be declared.
 crop = NLU.read_photo("/tmp/x.jpg", "c", "m", log=lambda *a: None,
                       runner=fake_model('{"kind":"order","vendor":"Wagamama",'
                                         '"stated_item_count":5,"items":['
-                                        '{"text":"salmon rice bowl"},{"text":"edamame"}]}'))
-check("the stated count is carried even when it exceeds what is visible",
-      crop["stated_item_count"] == 5 and len(crop["items"]) == 2)
+                                        '{"text":"salmon rice bowl","qty":1},'
+                                        '{"text":"edamame","qty":1}]}'))
+check("a real crop is still detectable", crop["units_seen"] < crop["stated_item_count"])
 
 # 2) A CEILING must never render as consumed/target. This is the misreading spec
 #    4.1 warns about: a bar reading low against a ceiling looks like failure when

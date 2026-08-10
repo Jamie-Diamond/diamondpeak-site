@@ -912,15 +912,18 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
         return
 
     if kind == "order":
-        seen, stated = len(got["items"]), got.get("stated_item_count")
+        # Expand quantities into separate items to log, but compare UNITS against the
+        # stated count: 1 bowl + 1 edamame + 3x soy sauce is 5 items on 3 lines.
+        expanded = []
+        for it in got["items"]:
+            expanded.extend([dict(it)] * max(1, int(it.get("qty") or 1)))
+        got["items"] = expanded
+        units, stated = got.get("units_seen") or len(expanded), got.get("stated_item_count")
         who = got.get("vendor") or "that order"
-        msg = f"{who}, {seen} item{'s' if seen != 1 else ''}. Looking each one up."
-        if stated and stated > seen:
-            # Silently logging 3 of 5 is the quiet undercount this whole build keeps
-            # tripping over. Say it instead.
-            msg += (f"\n\n_The screen says {stated} items and I can only see {seen}, so "
-                    f"the screenshot is probably cropped. Send the rest or tell me what "
-                    f"is missing._")
+        msg = f"{who}, {units} item{'s' if units != 1 else ''}. Looking each one up."
+        if stated and stated > units:
+            msg += (f"\n\n_The screen says {stated} and I can account for {units}, so the "
+                    f"screenshot may be cropped. Tell me what is missing._")
         tg.send(token, chat_id, msg, log=log)
         # A restaurant dish has no label, so this leans on the web rung finding the
         # vendor's own nutrition and falls to an estimate when it cannot. Either way it
