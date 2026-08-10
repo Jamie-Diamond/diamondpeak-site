@@ -274,11 +274,51 @@ def record(slug: str, week_start: date | str, *, hours=None, constraints: str = 
     elif isinstance(raw, dict):
         out = {k: v for k, v in raw.items() if k != "declarations"}
     decls = [d for d in _declarations(raw) if str(d.get("week_start")) != rec["week_start"]]
+    replaced = next((d for d in _declarations(raw)
+                     if str(d.get("week_start")) == rec["week_start"]), None)
     decls.append(rec)
     decls.sort(key=lambda d: str(d.get("week_start")))
     out["declarations"] = decls[-_KEEP:]
     _atomic_write(path_for(slug, base), out)
+    _audit(slug, rec, replaced, base)
     return rec
+
+
+def _audit(slug: str, rec: dict, replaced: dict | None,
+           base: Path | str | None) -> None:
+    """Write one ops-alerts line per declaration write. Best-effort, never raises.
+
+    On 10 Aug 2026 a day-shape nobody typed appeared against Jamie's w/c 17 Aug -
+    "swim Wed, bike Wed, run Tue" - and the coach rebuilt his week off it. It was
+    deleted before anyone could look at it, and there was NO WAY to find out what had
+    written it: record() stores a `source` string but logged nothing, so the who, the
+    when and the triggering text were all unrecoverable. An hour of his morning is
+    still unexplained for exactly that reason.
+
+    This also names what was OVERWRITTEN. record() REPLACES a week's declaration, so a
+    capture firing on a stray sentence can silently discard the athlete's real one, and
+    that is the failure that costs a week rather than a message.
+
+    Skipped when `base` is passed, which only tests do - so the suite does not write to
+    the operator's alert log.
+    """
+    if base is not None:
+        return
+    try:
+        import ops_log
+        days = {k: rec.get(k) for k in DAY_SHAPE_KEYS if rec.get(k)}
+        was = ""
+        if replaced:
+            prior = {k: replaced.get(k) for k in DAY_SHAPE_KEYS if replaced.get(k)}
+            was = (f" REPLACED a {replaced.get('source')!r} record from "
+                   f"{replaced.get('declared_at')}: {prior or 'no day keys'}")
+        ops_log.record_run(
+            "availability-record", athlete=slug, ok=True,
+            detail=(f"wrote {rec.get('source')!r} declaration for w/c "
+                    f"{rec.get('week_start')}: {days or 'no day keys'}"
+                    f"{' hours=' + str(rec['hours']) if rec.get('hours') else ''}{was}"))
+    except Exception:
+        pass
 
 
 def has_declaration(slug: str, week_start: date | str | None,
