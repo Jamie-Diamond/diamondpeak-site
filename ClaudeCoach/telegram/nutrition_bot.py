@@ -327,26 +327,42 @@ def make_llm_fetch(log=log):
     return fetch
 
 
-DEEP_PROMPT = """Find the nutrition figures for this exact product and portion. Search \
-the web if you need to; prefer the manufacturer's own page, then a UK retailer listing \
-(Ocado, Tesco, M&S, Sainsbury's), then a reputable database.
+DEEP_PROMPT = """Find the nutrition LABEL for this exact product. Search the web if you \
+need to; prefer the manufacturer's own page, then a UK retailer listing (Ocado, Tesco, \
+M&S, Sainsbury's), then a reputable database.
+
+Report the label AS PRINTED. Do not convert anything.
 
 Reply with ONLY JSON:
-{"resolved_name":"...","kcal":n,"protein_g":n,"carb_g":n,"fat_g":n,"fibre_g":n,
- "dietary_sodium_mg":n or null,"ingredients":"<verbatim list if you find one>",
+{"resolved_name":"...",
+ "per":"100g"|"portion"|"serving",
+ "pack_g":<the pack or serving size in grams that the figures refer to, or null>,
+ "kcal":n,"protein_g":n,"carb_g":n,"fat_g":n,"fibre_g":n,
+ "dietary_sodium_mg":n or null,"salt_g":n or null,
+ "ingredients":"<verbatim list if you find one>",
  "source_url":"<the page you used>",
  "source_kind":"manufacturer|retailer|database|estimate"}
 
 Rules:
-- Figures are for the WHOLE portion described, not per 100 g.
+- `per` and `pack_g` are REQUIRED for the figures to be usable. If the label gives
+  per-100g values, say per:"100g" and put the pack size in pack_g. If it gives
+  per-pack values, say per:"portion" and put that pack size in pack_g.
+- Do NOT scale anything yourself. Report what is printed and say which basis it is.
+- salt_g if the label gives salt rather than sodium. Do not convert it.
 - source_kind must be honest. Say "estimate" if you did not find the actual product.
-- If the form does not match (a capsule is not a bar), say so by returning {}.
-- Return {} rather than guessing at a product you could not find.
+- Return {} rather than guessing at a product you could not find, or if the form does
+  not match (a capsule is not a bar).
 
 Product: %s
 Form: %s
-Portion: %s
+Portion eaten: %s
 """
+
+# Plausible energy density for real food, kcal per 100 g. Pure fat is ~900 and a
+# zero-calorie drink is ~0, so anything outside this is a units or basis error rather
+# than a food.
+_MIN_KCAL_100G, _MAX_KCAL_100G = 0.0, 950.0
+SALT_TO_SODIUM_MG = 400.0          # 1 g salt = 400 mg sodium
 
 
 def make_deep_fetch(log=log):
@@ -377,9 +393,59 @@ def make_deep_fetch(log=log):
             return None
         if not got or got.get("kcal") in (None, ""):
             return None
+
+        # WE do the arithmetic. Two different M&S prepared meals both came back as
+        # "106 kcal", which is the signature of per-100g figures reported as per-portion:
+        # the prompt asked for a portion and the model reported the label. Asking for the
+        # basis and scaling here removes the ambiguity, rather than trusting an
+        # instruction not to convert.
+        fields = ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g")
+        basis = (got.get("per") or "").lower()
+        pack = got.get("pack_g")
+        try:
+            pack = float(pack) if pack else None
+        except (TypeError, ValueError):
+            pack = None
+        eaten = portion_g or pack
+        if basis.startswith("100") and eaten:
+            factor = eaten / 100.0
+        elif pack and portion_g and pack > 0:
+            factor = portion_g / pack          # per-pack figures, part of a pack eaten
+        else:
+            factor = 1.0
+        for f in fields:
+            if got.get(f) not in (None, ""):
+                try:
+                    got[f] = round(float(got[f]) * factor, 1)
+                except (TypeError, ValueError):
+                    got[f] = None
+        if got.get("dietary_sodium_mg") in (None, "") and got.get("salt_g") not in (None, ""):
+            try:
+                got["dietary_sodium_mg"] = round(float(got["salt_g"]) * SALT_TO_SODIUM_MG
+                                                 * factor)
+                got["sodium_from_salt"] = True
+            except (TypeError, ValueError):
+                pass
+        elif got.get("dietary_sodium_mg") not in (None, ""):
+            try:
+                got["dietary_sodium_mg"] = round(float(got["dietary_sodium_mg"]) * factor)
+            except (TypeError, ValueError):
+                got["dietary_sodium_mg"] = None
+
+        # Plausibility, on the density rather than the total: a basis error survives every
+        # other check because the numbers are internally consistent, just for the wrong
+        # amount of food.
+        if eaten and got.get("kcal") is not None:
+            density = float(got["kcal"]) / eaten * 100.0
+            if not (_MIN_KCAL_100G <= density <= _MAX_KCAL_100G):
+                log(f"web rung rejected {got.get('resolved_name')!r}: "
+                    f"{density:.0f} kcal/100g is not food")
+                return None
+
         kind = (got.get("source_kind") or "estimate").lower()
         got["confidence"] = ("label" if kind in ("manufacturer", "retailer")
                             else "database" if kind == "database" else "estimate")
+        got["portion_used_g"] = eaten
         return got
     return fetch
 
