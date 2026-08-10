@@ -62,6 +62,43 @@ _ZONE_IF = {
 }
 _ZONE_DEFAULT_IF = {"swim": 0.80, "run": 0.75, "bike": 0.68, "brick": 0.78}
 
+# ── the OTHER zone vocabulary: canonical TID band labels ─────────────────────
+# _ZONE_IF / _ZONE_BAND above are keyed by TRAINING SYSTEM (threshold, sweetspot,
+# vo2, css). config/session-library.json keys the same intensities by canonical BAND
+# LABEL (bike Z4 = 90-105% FTP, swim Z4 = 94.3-100% CSS ...), and the planning brief
+# hands Stage 1 `zone: "Z4"` for every quality type - so proposals come back with band
+# labels, not system names. Unmapped, they fell through to _ZONE_DEFAULT_IF: on
+# 9 Aug 2026 every athlete's week hard-blocked on name_intensity_mismatch because
+# a bike "Threshold 3x8" rendered its Z4 reps at 64-72% FTP (bike default 0.68) and a
+# swim "CSS set" rendered its Z4 reps at 76-84% pace (swim default 0.80) - and the
+# same fallback put every TID-labelled swim WARM-UP at 76-84% of CSS.
+# These are ALIASES, deliberately not extra _ZONE_BAND keys: name_intensity_claim reads
+# _ZONE_BAND to decide which claims to assert, and a new key there would ARM a new hard
+# check (e.g. a swim "vo2" band) - a new hard rule in this path is how the outage happened.
+# IFs agree with scripts/stage1-plan.py:_ZLABEL_IF, which scores the same labels for the
+# distribution; the two tables must not drift.
+_TID_ALIAS = {
+    "bike": {"z4": "threshold", "z5": "vo2", "z6": "anaerobic", "z7": "anaerobic"},
+    "run":  {"z1": "recovery", "z4": "threshold", "z5": "vo2", "z5a": "interval",
+             "z5b": "vo2", "z5c": "sprint"},
+    # swim Z5a is the library's swim `vo2` (if 1.05); it renders as `speed` (1.08) rather
+    # than gaining a swim "vo2" band, for the arming reason above. The EASY end matters as
+    # much: swim carries no z1/z2 band either, so a TID-labelled swim warm-up rendered at
+    # 76-84% of CSS (the swim default 0.80) - near race pace, as a warm-up.
+    "swim": {"z1": "recovery", "z2": "easy", "z3": "steady", "z4": "css",
+             "z5": "speed", "z5a": "speed", "z5b": "speed", "z5c": "sprint"},
+}
+# Canonical %-ranges for those labels (config/session-library.json → canonical_zones).
+# Used to decide whether a session NAME's claim lives inside the label's own band - see
+# _refine_to_claim. Bare "z5" on run/swim spans all three Z5 subzones.
+_TID_RANGE = {
+    "bike": {"z1": (0, 55), "z2": (55, 75), "z3": (75, 90), "z4": (90, 105),
+             "z5": (105, 120), "z6": (120, 150), "z7": (150, 999)},
+    "run":  {"z1": (0, 77.5), "z2": (77.5, 87.7), "z3": (87.7, 94.3), "z4": (94.3, 100),
+             "z5": (100, 999), "z5a": (100, 103.4), "z5b": (103.4, 111.5), "z5c": (111.5, 999)},
+}
+_TID_RANGE["swim"] = _TID_RANGE["run"]      # same %-of-CSS scale as run's %-of-pace
+
 
 def _norm_sport(sport: str) -> str:
     s = (sport or "").lower()
@@ -75,10 +112,15 @@ def _norm_sport(sport: str) -> str:
 
 
 def segment_if(sport: str, zone: str) -> float:
-    """IF for a named intensity zone in a sport. Falls back to the sport default."""
+    """IF for a named intensity zone in a sport. Accepts a training-system name
+    (threshold/sweetspot/css) or a canonical TID band label (Z4/Z5a). Falls back to
+    the sport default only for a zone in NEITHER vocabulary."""
     sp = _norm_sport(sport)
-    return _ZONE_IF.get(sp, {}).get((zone or "").lower().strip(),
-                                    _ZONE_DEFAULT_IF.get(sp, 0.75))
+    z = (zone or "").lower().strip()
+    table = _ZONE_IF.get(sp, {})
+    if z not in table:
+        z = _TID_ALIAS.get(sp, {}).get(z, z)
+    return table.get(z, _ZONE_DEFAULT_IF.get(sp, 0.75))
 
 
 # %-of-threshold bands per zone for STRUCTURED workout steps (what syncs to
@@ -105,13 +147,60 @@ _ZONE_BAND = {
 
 
 def _band(sport: str, zone: str, intensity: float = None):
+    """%-range for a segment.
+
+    An explicit IF wins over a coarse TID BAND LABEL (Z3 spans 75-90% FTP; the number is
+    the specific one, and it is what tss_from_segments already scores the segment at - so
+    the pushed steps and the computed TSS agree, which the _ZONE_BAND docstring claims and
+    this did not deliver). A zone named for a training SYSTEM keeps its band even against
+    a conflicting IF: an IF that undershoots its own zone word would otherwise
+    under-prescribe a named session and hard-block the week on the name's claim.
+    Then the label alias, then the sport default.
+    """
     sp = _norm_sport(sport)
-    b = _ZONE_BAND.get(sp, {}).get((zone or "").lower().strip())
+    z = (zone or "").lower().strip()
+    if intensity is not None and (z in _TID_RANGE.get(sp, {})
+                                  or z not in _ZONE_BAND.get(sp, {})):
+        pct = int(round(intensity * 100))
+        return (max(pct - 4, 1), pct + 4)
+    b = (_ZONE_BAND.get(sp, {}).get(z)
+         or _ZONE_BAND.get(sp, {}).get(_TID_ALIAS.get(sp, {}).get(z, "")))
     if b:
         return b
-    pct = int(round((intensity if intensity is not None
-                     else segment_if(sport, zone)) * 100))
+    pct = int(round(segment_if(sport, zone) * 100))
     return (max(pct - 4, 1), pct + 4)
+
+
+def _refine_to_claim(sport: str, zone: str, claim_zone: str | None) -> str:
+    """A coarse TID band label, narrowed to the system the session NAME claims.
+
+    A band label is a FAMILY, not a prescription: the library gives both `tempo` (0.80)
+    and `sweetspot` (0.90, band 88-94) the label Z3, so "Sweetspot 2x20" arrived with
+    Z3 segments and rendered at 76-84% FTP - short of the 88% its own name promises, and
+    a hard block on the whole week (9 Aug 2026). Where the name names a system that lives
+    INSIDE the label's canonical range, that system is the prescription.
+
+    Bounded to the label's own family on purpose: a name claiming VO2 over Z2 segments is
+    an over-claim, not a coarse label, and must keep failing the check.
+
+    Bounded UPWARD only, too. Several systems share a family, so a "VO2 8x400" run whose
+    reps are labelled Z5c (the library's `reps`, 112-120% pace) would otherwise be refined
+    DOWN to the vo2 band's 103-110% - softening a prescription the proposal asked for, in
+    a session that already satisfied its own claim.
+    """
+    if not claim_zone:
+        return zone
+    sp = _norm_sport(sport)
+    z = (zone or "").lower().strip()
+    rng = _TID_RANGE.get(sp, {}).get(z)
+    claim_band = _ZONE_BAND.get(sp, {}).get(claim_zone)
+    if not rng or not claim_band:
+        return zone
+    if not (rng[0] <= claim_band[0] < rng[1]):
+        return zone
+    raw = (_ZONE_BAND.get(sp, {}).get(z)
+           or _ZONE_BAND.get(sp, {}).get(_TID_ALIAS.get(sp, {}).get(z, "")))
+    return claim_zone if (raw is None or claim_band[0] > raw[0]) else zone
 
 
 # ── name-vs-structure ────────────────────────────────────────────────────────
@@ -196,6 +285,14 @@ def name_intensity_claim(sport: str, name: str) -> tuple[str, int] | None:
     return best
 
 
+def claimed_zone(sport: str, name: str) -> str | None:
+    """The _ZONE_BAND zone a session name claims ("Sweetspot 2x20" -> "sweetspot"), or
+    None. Same claim resolution as name_intensity_mismatch uses, so what the renderer
+    builds and what the check demands can never come from two different readings."""
+    claim = name_intensity_claim(sport, name)
+    return dict(_NAME_CLAIMS)[claim[0]] if claim else None
+
+
 def top_step_pct(description: str) -> tuple[int | None, int | None]:
     """(hardest %pace-or-%FTP target, hardest %LTHR target) over rendered steps.
 
@@ -242,17 +339,32 @@ def name_intensity_mismatch(sport: str, name: str, description: str) -> dict | N
     return {"claim": word, "required": need, "found": found}
 
 
-def render_workout(sport: str, segments: list) -> dict:
+def render_workout(sport: str, segments: list, name: str = "") -> dict:
     """Render time-at-intensity segments into an Intervals.icu STRUCTURED workout
     (the `description` text push_workout sends → parsed into steps → synced to
     Garmin). Bike steps are %FTP power; run/swim are %threshold pace.
 
     segments: flat {"minutes":N,"zone":"css"} (or "if"), and/or repeat blocks
     {"repeat":N,"steps":[...]}. Returns {description, tss, duration_min, steps}.
-    `tss` is the deterministic estimate (ICU recomputes its own on push)."""
+    `tss` is the deterministic estimate (ICU recomputes its own on push).
+
+    `name` is OPTIONAL and only narrows a coarse TID band label to the system the name
+    claims (_refine_to_claim); omitting it reproduces the old behaviour exactly, which is
+    why lib/plan_tools.py's manual `render-workout` CLI is left as it is (off the Sunday
+    build path, and owned by a concurrent ticket)."""
     sp = _norm_sport(sport)
     suffix = "" if sp == "bike" else " Pace"   # bare % = power; "% Pace" = pace
+    claim_zone = claimed_zone(sport, name) if name else None
     lines, flat = [], []
+
+    def _zone_of(seg):
+        """The segment's zone, with a coarse TID label narrowed to the name's claim.
+        An explicit `if` is left to speak for itself (it is the more specific target and
+        _band prefers it), so refinement never contradicts a number the proposal gave."""
+        zone = seg.get("zone")
+        if seg.get("if") is not None:
+            return zone
+        return _refine_to_claim(sport, zone, claim_zone)
 
     def _line(seg):
         """Return the structured-text line for a segment, or None; never mutates flat.
@@ -266,7 +378,7 @@ def render_workout(sport: str, segments: list) -> dict:
         secs = int(round(raw_min * 60))
         if secs <= 0:
             return None, 0
-        zone = seg.get("zone")
+        zone = _zone_of(seg)
         lo, hi = (_band(sport, zone, float(seg["if"])) if seg.get("if") is not None
                   else _band(sport, zone))
         # NO trailing zone label: a token like "Z2" makes ICU parse the step as power
@@ -278,7 +390,8 @@ def render_workout(sport: str, segments: list) -> dict:
         return f"- {mins}m {lo}-{hi}%{suffix}", mins
 
     def _flat(seg, mins):
-        flat.append({"minutes": mins, "zone": seg.get("zone"), "if": seg.get("if")})
+        # The REFINED zone, so the computed TSS is the load of the steps actually pushed.
+        flat.append({"minutes": mins, "zone": _zone_of(seg), "if": seg.get("if")})
 
     # Render FLAT — one line per interval, no "Nx" header (ICU's API collapses
     # repeat-header blocks to unique steps; a fully-expanded flat list parses into

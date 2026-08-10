@@ -1266,7 +1266,7 @@ def cmd_render_workout(args) -> dict:
         raise SystemExit(_err(f"--segments is not valid JSON: {e}"))
     if not args.sport:
         raise SystemExit(_err("--sport required (swim/run/bike)"))
-    r = render_workout(args.sport, segs)
+    r = render_workout(args.sport, segs, getattr(args, "name", "") or "")
     r["how_to_push"] = ("pass description=<the description field above> to "
                         "icu_fetch.py push_workout (put coaching prose in description_raw)")
     return r
@@ -1314,6 +1314,13 @@ def main():
     prw = sub.add_parser("render-workout", help="segments -> ICU structured workout text (syncs to Garmin)")
     prw.add_argument("--sport", required=True)
     prw.add_argument("--segments", required=True)
+    # --name is not cosmetic: render_workout narrows a COARSE band label to the system the
+    # NAME claims (planned_tss._refine_to_claim), because the library gives both `tempo`
+    # and `sweetspot` the label Z3. Without it, "Sweetspot 2x20" over Z3 segments renders
+    # at 84% FTP and then hard-blocks name_intensity_mismatch at validation - the same
+    # outage that cost all three athletes their week on 9 Aug 2026, reached by the CLI door.
+    prw.add_argument("--name", default="", help="session name; narrows a coarse Z-label to "
+                                                "the system the name claims")
 
     pf = sub.add_parser("fuel-target", help="deterministic g/hr fuelling prescription for >90-min sessions")
     pf.add_argument("--athlete", required=True)

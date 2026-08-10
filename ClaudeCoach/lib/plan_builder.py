@@ -189,7 +189,10 @@ def build_sessions(slug: str, proposal: dict) -> dict:
         notes = (s.get("notes") or "").strip()
         segs = s.get("segments") or []
         if segs and sport not in ("Strength", "WeightTraining"):
-            r = render_workout(sport, segs)
+            # NAME passed in: it disambiguates a coarse TID band label (the library gives
+            # both tempo and sweetspot the label Z3), so "Sweetspot 2x20" renders at 88-94%
+            # FTP instead of 76-84% and stops hard-blocking on name_intensity_mismatch.
+            r = render_workout(sport, segs, s.get("name", ""))
             desc, load, dur = r["description"], r["tss"], r["duration_min"]
         else:
             # No structured segments (Strength, or a session Stage 1 left unstructured):

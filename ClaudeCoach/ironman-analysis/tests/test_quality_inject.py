@@ -104,11 +104,11 @@ class TestInjection:
         assert any("no sane day" in n for n in notes)
 
     def test_would_block_backed_off(self):
-        # audit blocks any proposal containing a bike z4 (VO2) segment → bike VO2 injection backs off
+        # audit blocks any proposal containing a bike z5 (VO2) segment → bike VO2 injection backs off
         def audit_block_vo2(brief, built, tgt, prop):
             for s in prop["sessions"]:
                 for sg in s.get("segments", []):
-                    if sg.get("zone") == "z4" and qi._is(s.get("sport"), "Bike"):
+                    if sg.get("zone") == qi._SEG_ZONE["high"] and qi._is(s.get("sport"), "Bike"):
                         return ["bike VO2 blocked (stub)"], []
             return [], []
         p = kathryn_all_easy()

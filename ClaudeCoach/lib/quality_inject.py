@@ -22,7 +22,13 @@ from datetime import date, timedelta
 
 _SPORTS = ("Bike", "Run", "Swim")
 _MATCH = {"Bike": ("bike", "ride", "brick"), "Run": ("run",), "Swim": ("swim",)}
-_SEG_ZONE = {"z3": "z3", "high": "z4"}          # written seg label (maps via _seg_if to the zone)
+# Written seg label (maps via _seg_if to the zone). The high dose is Z5, not Z4: it is
+# NAMED "+ VO2" below, and a Z4 label renders 95-102% FTP - short of the 105% a VO2 claim
+# requires, so every injected VO2 touch hard-blocked the week on name_intensity_mismatch
+# (9 Aug 2026). The z3 dose keeps its band label rather than "sweetspot" because
+# sweetspot's IF is exactly 0.90 and _zone_min buckets `high` at >= 0.90, so the label
+# would count in the wrong zone and the injector would never converge.
+_SEG_ZONE = {"z3": "z3", "high": "z5"}
 _DOSE_NAME = {"z3": "sweetspot", "high": "VO2"}
 _MIN_DELTA = 5.0                                # ignore sub-5pp-min nudges (close enough)
 _MIN_EASY_TO_CONVERT = 10.0
