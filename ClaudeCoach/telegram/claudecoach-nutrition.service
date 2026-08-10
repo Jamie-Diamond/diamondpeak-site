@@ -1,6 +1,10 @@
 [Unit]
 # Second bot, beside claudecoach-bot.service, not replacing it. Own token, own
 # process, own log. Install with:
+# NOTE the paths: the VM MIRRORS the Mac's home path, so the live repo is at
+# /Users/diamondpeakconsulting/diamondpeak-site even on Linux. /root/diamondpeak-site
+# does not exist. Confirm with:
+#   systemctl show -p WorkingDirectory claudecoach-bot
 #   cp ClaudeCoach/telegram/claudecoach-nutrition.service /etc/systemd/system/
 #   systemctl daemon-reload && systemctl enable --now claudecoach-nutrition
 Description=ClaudeCoach nutrition logger (Telegram)
@@ -10,8 +14,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/diamondpeak-site
-ExecStart=/usr/bin/python3 /root/diamondpeak-site/ClaudeCoach/telegram/nutrition_bot.py
+WorkingDirectory=/Users/diamondpeakconsulting/diamondpeak-site
+ExecStart=/usr/bin/python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/nutrition_bot.py
 # The ladder's LLM rung shells out to the claude CLI, which needs the same auth the
 # coach bot uses. cc.env holds the setup token; credentials.json is NOT the file.
 EnvironmentFile=-/root/cc.env
@@ -22,8 +26,8 @@ RestartSec=10
 # failure is visible rather than hidden behind a bot that appears to be running.
 StartLimitBurst=5
 StartLimitIntervalSec=60
-StandardOutput=append:/root/diamondpeak-site/ClaudeCoach/telegram/nutrition_bot.log
-StandardError=append:/root/diamondpeak-site/ClaudeCoach/telegram/nutrition_bot.log
+StandardOutput=append:/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/nutrition_bot.log
+StandardError=append:/Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/telegram/nutrition_bot.log
 
 [Install]
 WantedBy=multi-user.target
