@@ -207,6 +207,63 @@ def build(slug: str, today: date) -> dict:
     # Classify before use, or the page's 7-day mean carries a post-session reading and
     # shows progress that did not happen. On this athlete's fortnight that is the
     # difference between 83.4 and 82.6 kg.
+    # WEEKLY SUMMARY (Jamie, 10 Aug 2026: "missing one day is fine, missing every day is a
+    # problem"). A single day says nothing about a pattern, so the week reports per-day
+    # compliance and the counts that go with it. Everything here is derived from the days
+    # already built above, so the page never recomputes and cannot disagree.
+    def _week(win: int):
+        rows, wk = [], days[-win:]
+        for d in wk:
+            z, t = d.get("zones") or {}, d.get("totals") or {}
+            pz, fz = z.get("protein_g") or {}, z.get("fibre_g") or {}
+            logged = bool(d.get("items"))
+            pro, fib = t.get("protein_g"), t.get("fibre_g")
+            fib_ok = None
+            if logged and fz:
+                fib_ok = ((fib or 0) <= fz["high"] if fz.get("bias") == "ceiling"
+                          else (fib or 0) >= fz["low"])
+            ins = d.get("in_session") or None
+            rows.append({
+                "date": d["date"],
+                "dow": date.fromisoformat(d["date"]).strftime("%a"),
+                "logged": logged,
+                "day_type": d.get("day_type"),
+                "kcal": t.get("kcal") if logged else None,
+                "kcal_target": z.get("kcal_target"),
+                "protein_g": pro if logged else None,
+                "protein_floor": pz.get("low"),
+                "protein_met": (logged and pz and (pro or 0) >= pz["low"]) or None,
+                "fibre_g": fib if logged else None,
+                "fibre_limit": fz.get("high"),
+                "fibre_bias": fz.get("bias"),
+                "fibre_ok": fib_ok,
+                "in_run_g_hr": (ins or {}).get("g_per_hr"),
+                "in_run_target": (ins or {}).get("target_g_hr"),
+                "in_run_verdict": (ins or {}).get("verdict"),
+                "flags": [f["type"] for f in (d.get("flags") or [])],
+            })
+        done = [r for r in rows if r["logged"]]
+        runs = [r for r in rows if r["in_run_verdict"]]
+        return {
+            "days": rows,
+            "summary": {
+                "days_logged": len(done), "days_in_window": len(rows),
+                # The headline he asked for: a gap is fine, a habit of gaps is not.
+                "days_missed": len(rows) - len(done),
+                "protein_met_days": sum(1 for r in done if r["protein_met"]),
+                "fibre_respected_days": sum(1 for r in done if r["fibre_ok"]),
+                "mean_kcal": (round(sum(r["kcal"] or 0 for r in done) / len(done))
+                              if done else None),
+                "mean_target": (round(sum(r["kcal_target"] or 0 for r in done) / len(done))
+                                if done else None),
+                "in_run_sessions": len(runs),
+                "in_run_on_target": sum(1 for r in runs
+                                        if r["in_run_verdict"] in ("on_target",
+                                                                   "acceptable")),
+                "flag_days": sum(1 for r in rows if r["flags"]),
+            },
+        }
+
     measurements = store.measurements_range(start, today, type="weight")
     own_morning = {(m.get("date") or "")[:10]: m for m in measurements
                    if m.get("tag") == "morning"}
@@ -248,6 +305,8 @@ def build(slug: str, today: date) -> dict:
         "nutrition_enabled": True,
         "window_days": WINDOW_DAYS,
         "days": days,
+        "week": _week(7),
+        "fortnight": _week(14),
         "weight": {
             # Morning readings only. Sweat weigh-ins are excluded upstream, not hidden
             # by the chart: on long-ride days they sit 2-3 kg low and would read as

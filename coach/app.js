@@ -2496,6 +2496,51 @@
       (notes.length ? '<ul class="notelist"><li>' + notes.map(esc).join('</li><li>') +
         '</li></ul>' : ''));
 
+    /* 5b. THE WEEK. Jamie: "missing one day s fine missing every day is a problem." A
+           single day cannot show that, so this is one row per day with the counts
+           underneath. Consistency is the thing being measured, not any one number. */
+    var wk = n.week;
+    if (wk && wk.days && wk.days.length) {
+      var sm = wk.summary || {};
+      var rows = wk.days.map(function (d) {
+        if (!d.logged) {
+          return '<tr class="miss"><td class="lbl">' + esc(d.dow) + '</td>' +
+            '<td colspan="4"><span class="mut">not logged</span></td></tr>';
+        }
+        var pm = d.protein_met ? 'ok' : 'low';
+        var fk = d.fibre_ok === false ? 'bad' : '';
+        var fibLabel = (d.fibre_bias === 'ceiling' ? '\u2264' : '') +
+          Math.round(d.fibre_g || 0);
+        var run = d.in_run_verdict
+          ? '<span class="dens ' + (d.in_run_verdict === 'under' ? 'avoid' : 'high') +
+            '">' + Math.round(d.in_run_g_hr) + ' g/hr</span>'
+          : '<span class="mut">-</span>';
+        return '<tr><td class="lbl">' + esc(d.dow) + '</td>' +
+          '<td class="nw">' + Math.round(d.kcal || 0).toLocaleString() +
+          '<span class="mut"> / ' + Math.round(d.kcal_target || 0).toLocaleString() +
+          '</span></td>' +
+          '<td class="nw ' + pm + '">' + Math.round(d.protein_g || 0) + 'p</td>' +
+          '<td class="nw ' + fk + '">' + esc(fibLabel) + 'f</td>' +
+          '<td class="nw">' + run + '</td></tr>';
+      }).join('');
+      // The gap count leads, because that is the question he asked.
+      var missed = sm.days_missed || 0;
+      h += card('This week',
+        '<div class="figures in-card">' +
+        fig(sm.days_logged + '/' + sm.days_in_window, 'days logged',
+            missed ? missed + ' missed' : 'none missed',
+            missed >= 3 ? 'neg' : (missed === 0 ? 'pos' : '')) +
+        fig(sm.protein_met_days + '/' + sm.days_logged, 'protein floor met',
+            'of the days logged') +
+        fig(sm.in_run_sessions
+            ? sm.in_run_on_target + '/' + sm.in_run_sessions : '-',
+            'in-run fuelling', sm.in_run_sessions ? 'at or above the rate' : 'no long sessions') +
+        '</div>' +
+        '<table class="tbl wktbl"><thead><tr><th>Day</th><th>Energy</th>' +
+        '<th>Protein</th><th>Fibre</th><th>In-run</th></tr></thead><tbody>' +
+        rows + '</tbody></table>');
+    }
+
     /* 6. Footer: plants and provenance. Per-item confidence is already on each row
           above; this is the summary, not the substitute. */
     var p = n.plants || {}, pv = day.provenance || {};
