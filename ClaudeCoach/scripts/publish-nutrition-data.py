@@ -322,14 +322,12 @@ def build(slug: str, today: date) -> dict:
             # would look like the app had lost it.
             "sweat_readings_excluded": icu_rejected,
         },
-        "plants": {"unique_7d": div["unique_7d"], "weighted_7d": div["weighted_7d"],
-                   "target": div["target"], "basis": div["target_basis"],
-                   "new_today": div["new_species_today"],
-                   "species": div["species"],
-                   "herb_spice_count": div["herb_spice_count"],
-                   # Plants a pack claimed that could not be NAMED, so the headline
-                   # count reads honestly incomplete rather than quietly low.
-                   "claimed_unresolved": div.get("claimed_unresolved", 0)},
+        # Pass the diversity block through WHOLE rather than picking keys. Hand-picking
+        # them is how `provisional` was computed and then never reached the page, which is
+        # the fourth instance today of a value produced at one stage and dropped at the
+        # next. A dict that forwards everything cannot silently omit a new field.
+        "plants": {**div, "basis": div["target_basis"],
+                   "new_today": div["new_species_today"]},
         "block": {"days_to_race": days_to_race, "race_name": profile.get("race_name"),
                   "protein_floor_basis": "g/kg bodyweight, flexes with load"},
         "sodium": {"has_sweat_test": False,
