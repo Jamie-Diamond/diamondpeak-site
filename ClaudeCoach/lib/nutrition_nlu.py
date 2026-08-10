@@ -416,7 +416,7 @@ def advise(question: str, facts: dict, claude_bin: str, model: str, log=print,
 
 # --- photographs ------------------------------------------------------------
 
-PHOTO_PROMPT = """Read the image at %s. It is one of three things. Reply with ONLY a \
+PHOTO_PROMPT = """Read the image at %s. It is one of FOUR things. Reply with ONLY a \
 JSON object, no prose.
 
 If it is a BARCODE:
@@ -429,6 +429,36 @@ If it is a NUTRITION LABEL or ingredients panel:
    "product":"<name if visible>","ingredients":"<the ingredients list, verbatim>"}
   Transcribe the printed figures EXACTLY. Do not convert, round or estimate them.
   Report salt_g separately if the panel gives salt rather than sodium; do not convert.
+
+If it is an ORDER, RECEIPT or MENU screenshot (Deliveroo, Just Eat, Uber Eats, a
+restaurant bill or menu):
+  {"kind":"order","vendor":"<restaurant or shop name>",
+   "stated_item_count":<the number the screen claims, e.g. from "Your order (5 items)",
+                        else null>,
+   "items":[{"text":"<the dish name WITH its options folded in>","portion_g":null}]}
+
+  Fold each dish's modifiers INTO its text. A Wagamama order reading
+    1x  new! gochujang salmon rice bowl
+        brown rice (vg)
+        extra salmon
+  is ONE item: "gochujang salmon rice bowl with brown rice and extra salmon".
+
+  A modifier is NEVER its own item. Returning "(meal is with double salmon and brown
+  rice)" as an item is wrong, because it names no dish.
+
+  Strip marketing and dietary markers from the text: "new!", "(vg)", "(ve)", "(v)",
+  "NEW", "chef's special". They are noise in a search query.
+
+  STATED_ITEM_COUNT MATTERS. If the screen says 5 items and you can only see 3, still
+  report 5 in stated_item_count and return the 3 you can see. The screenshot may be
+  cropped and it is better to say so than to imply the order was smaller than it was.
+
+  Keep condiments and sauces as items. 3x soy sauce is negligible energy but real
+  sodium, which this athlete tracks.
+  If a quantity is shown (3x), repeat that item that many times.
+  Include the vendor in each text if the dish name alone would be ambiguous.
+  Ignore prices, delivery fees, tips, cutlery and bag charges.
+  Do NOT provide nutrition figures.
 
 If it is a PLATE OF FOOD (no label visible):
   {"kind":"food_plate","items":[{"text":"<single food>","portion_g":<estimate or null>}]}
@@ -467,7 +497,7 @@ def read_photo(img_path: str, claude_bin: str, model: str, log=print, runner=Non
         got = json.loads(raw[start:end + 1])
     except json.JSONDecodeError:
         return {"kind": "unknown"}
-    if got.get("kind") not in ("barcode", "nutrition_label", "food_plate"):
+    if got.get("kind") not in ("barcode", "nutrition_label", "food_plate", "order"):
         return {"kind": "unknown"}
     if got["kind"] == "nutrition_label":
         # UK panels usually print SALT, not sodium. Convert here, once, rather than
@@ -479,12 +509,32 @@ def read_photo(img_path: str, claude_bin: str, model: str, log=print, runner=Non
                 got["sodium_from_salt"] = True
             except (TypeError, ValueError):
                 pass
-    if got["kind"] == "food_plate":
-        got["items"] = [{"text": str(i["text"]), "portion_g": i.get("portion_g"),
-                         "in_session": False}
-                        for i in (got.get("items") or [])
-                        if isinstance(i, dict) and i.get("text")]
-        if not got["items"]:
+    if got["kind"] in ("food_plate", "order"):
+        vendor = (got.get("vendor") or "").strip()
+        # The trailing punctuation has to be consumed by the pattern: a word boundary
+        # cannot eat the "!" in "new!", which left "! gochujang salmon rice bowl".
+        _NOISE_MARKERS = re.compile(
+            r"\((?:vg|ve|v)\)|\b(?:new|vegan|vegetarian|plant based|chef'?s special)\b[!\s]*",
+            re.I)
+        items = []
+        for i in (got.get("items") or []):
+            if not isinstance(i, dict) or not i.get("text"):
+                continue
+            text = str(i["text"]).strip()
+            # A parenthetical modifier is not a dish. The first cut returned
+            # "(meal is with double salmon and brown rice)" as an item from a Deliveroo
+            # screenshot, which then matched raw brown rice in the composition tables.
+            if text.startswith("(") or len(text) < 4:
+                continue
+            text = re.sub(r"\s{2,}", " ", _NOISE_MARKERS.sub(" ", text)).strip(" ,-!.+")
+            if len(text) < 4:
+                continue
+            if vendor and got["kind"] == "order" and vendor.lower() not in text.lower():
+                text = f"{text}, {vendor}"
+            items.append({"text": text, "portion_g": i.get("portion_g"),
+                          "in_session": False})
+        got["items"] = items
+        if not items:
             return {"kind": "unknown"}
     return got
 

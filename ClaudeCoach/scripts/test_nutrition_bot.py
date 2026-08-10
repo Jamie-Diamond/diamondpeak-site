@@ -241,6 +241,42 @@ check("tablets do not match a fortified cereal",
 check("a powder is not a dose-form conflict",
       NR._relevant("magnesium capsules", "Magnesium citrate powder") is True)
 
+# 1l) AN ORDER SCREENSHOT is a fourth photo kind. A real Deliveroo/Wagamama screenshot
+#     sent on 10 Aug had no path, so it was forced into "plate" and the model returned a
+#     MODIFIER as the item: "(meal is with double salmon and brown rice)", which then
+#     matched raw brown rice in the composition tables.
+order = NLU.read_photo("/tmp/x.jpg", "c", "m", log=lambda *a: None,
+                       runner=fake_model('{"kind":"order","vendor":"Wagamama",'
+                                         '"stated_item_count":5,"items":['
+                                         '{"text":"new! gochujang salmon rice bowl with '
+                                         'brown rice and extra salmon"},'
+                                         '{"text":"edamame with chilli + garlic salt (vg)"},'
+                                         '{"text":"soy sauce (vg)"},'
+                                         '{"text":"(meal is with double salmon and brown rice)"}]}'))
+check("an order screenshot is its own kind", order["kind"] == "order")
+check("the vendor is captured", order["vendor"] == "Wagamama")
+texts = [i["text"] for i in order["items"]]
+check("a parenthetical modifier is never an item",
+      not any(t.startswith("(") for t in texts))
+check("modifiers stay folded into the dish they belong to",
+      any("brown rice and extra salmon" in t for t in texts))
+check("marketing and dietary markers are stripped",
+      not any("new!" in t or "(vg)" in t for t in texts))
+check("no stray punctuation is left where a marker was",
+      not any(t.startswith(("!", ",", "-", ".")) for t in texts))
+check("the vendor is appended so a dish name is searchable",
+      all("Wagamama" in t for t in texts))
+check("condiments are kept, because soy sauce is real sodium",
+      any("soy sauce" in t for t in texts))
+
+# A cropped screenshot must be DECLARED, not silently under-logged.
+crop = NLU.read_photo("/tmp/x.jpg", "c", "m", log=lambda *a: None,
+                      runner=fake_model('{"kind":"order","vendor":"Wagamama",'
+                                        '"stated_item_count":5,"items":['
+                                        '{"text":"salmon rice bowl"},{"text":"edamame"}]}'))
+check("the stated count is carried even when it exceeds what is visible",
+      crop["stated_item_count"] == 5 and len(crop["items"]) == 2)
+
 # 2) A CEILING must never render as consumed/target. This is the misreading spec
 #    4.1 warns about: a bar reading low against a ceiling looks like failure when
 #    it is compliance.

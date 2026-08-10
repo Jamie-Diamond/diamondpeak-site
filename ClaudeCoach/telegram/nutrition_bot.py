@@ -712,6 +712,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
     day = ctx.local_today()
     t = (text or "").strip()
     pend = get_pending(ctx.store)
+    log(f"msg {t[:70]!r} pending={bool(pend)}")
 
     if t.lower().rstrip("!. ") in ("help", "start"):
         tg.send(token, chat_id, HELP, log=log)
@@ -719,6 +720,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
 
     got = NLU.classify(t, bool(pend), CLAUDE_BIN, LLM_MODEL, log=log)
     intent = got.get("intent")
+    log(f"  intent={intent} items={len(got.get('items') or [])}")
 
     if intent == "secret":
         # The reply deliberately does NOT quote it back: echoing a credential into the
@@ -883,6 +885,8 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
         return
     got = NLU.read_photo(str(path), CLAUDE_BIN, LLM_MODEL, log=log)
     kind = got.get("kind")
+    log(f"photo {path.name} kind={kind} vendor={got.get('vendor')!r} "
+        f"items={[i['text'][:40] for i in (got.get('items') or [])]}")
 
     if kind == "barcode":
         tg.send(token, chat_id, f"Barcode {got['barcode']}, looking it up...", log=log)
@@ -905,6 +909,23 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
         kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
         tg.send(token, chat_id, fmt_confirm(item) + extra + "\n\nLog it?",
                 reply_markup=kb, log=log)
+        return
+
+    if kind == "order":
+        seen, stated = len(got["items"]), got.get("stated_item_count")
+        who = got.get("vendor") or "that order"
+        msg = f"{who}, {seen} item{'s' if seen != 1 else ''}. Looking each one up."
+        if stated and stated > seen:
+            # Silently logging 3 of 5 is the quiet undercount this whole build keeps
+            # tripping over. Say it instead.
+            msg += (f"\n\n_The screen says {stated} items and I can only see {seen}, so "
+                    f"the screenshot is probably cropped. Send the rest or tell me what "
+                    f"is missing._")
+        tg.send(token, chat_id, msg, log=log)
+        # A restaurant dish has no label, so this leans on the web rung finding the
+        # vendor's own nutrition and falls to an estimate when it cannot. Either way it
+        # is flagged.
+        offer_items(ctx, got["items"], day, token, chat_id)
         return
 
     if kind == "food_plate":
@@ -980,6 +1001,8 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id) -> Non
         item["_supplement"] = False
         item["_trivial"] = False
         item["_dose_mg"] = None
+        log(f"    -> {item.get('resolved_name')!r} {item.get('source_rung')}/"
+            f"{item.get('confidence')} {item.get('kcal')} kcal")
         batch.append(item)
         notes.append(fmt_confirm(item))
     set_pending(ctx.store, {"batch": batch})
@@ -1034,6 +1057,7 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
 
     resolved = []
     for it in items[:8]:
+        log(f"  resolving {it['text'][:60]!r} portion={it.get('portion_g')}")
         # A barcode short-circuits the text ladder: an exact product lookup beats any
         # name search, so it is tried before the ordinary rungs rather than as one.
         fetchers = dict(ctx.fetchers)
