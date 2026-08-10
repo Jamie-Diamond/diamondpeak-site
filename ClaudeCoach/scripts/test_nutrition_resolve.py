@@ -175,8 +175,12 @@ check("a cache hit is not degraded even though the retailer would have failed",
 st8 = new_store()
 st8.cache_put("old biscuit", {"kcal": 100, "resolved_at": "2023-01-01",
                               "confidence": "label"})
+# The stub name must plausibly BE the query, as a real fetcher's would: the ladder now
+# checks relevance on every candidate, so an unrelated stub name is correctly rejected.
 item8 = R.resolve("old biscuit", day=TODAY, store=st8, table=TABLE,
-                  cofid=EMPTY_COFID, fetchers={R.Rung.OFF: lambda t, p: OFF_HIT})
+                  cofid=EMPTY_COFID,
+                  fetchers={R.Rung.OFF: lambda t, p: dict(OFF_HIT,
+                                                          resolved_name="Old Biscuit")})
 check("a stale cache entry is bypassed", item8["source_rung"] == R.Rung.OFF)
 check("the miss says why", "older than" in
       next(a["detail"] for a in item8["attempts"] if a["rung"] == R.Rung.CACHE))
@@ -241,7 +245,8 @@ check("CoFID cites the dataset", "CoFID" in R.describe_provenance(item13))
 
 # A branded item the retailer would own still falls past CoFID correctly.
 item13b = R.resolve("zzz branded thing zzz", day=TODAY, store=new_store(), table=TABLE,
-                    fetchers={R.Rung.OFF: lambda t, p: OFF_HIT})
+                    fetchers={R.Rung.OFF: lambda t, p: dict(
+                        OFF_HIT, resolved_name="ZZZ Branded Thing")})
 check("CoFID misses on a branded product and the ladder continues",
       item13b["source_rung"] == R.Rung.OFF
       and outcome(item13b, R.Rung.COFID) == "no_match")

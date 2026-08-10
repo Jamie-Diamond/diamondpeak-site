@@ -580,10 +580,27 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
                 cand = fetch(q, portion_g)
                 if not cand:
                     continue
-                if _hint_conflict(hint, cand.get("resolved_name") or ""):
+                cname = cand.get("resolved_name") or ""
+                if _hint_conflict(hint, cname):
                     record(rung, "wrong_form",
-                           f"{cand.get('resolved_name')!r} is not a "
-                           f"{hint.get('form')}")
+                           f"{cname!r} is not a {hint.get('form')}")
+                    continue
+                # Relevance is checked HERE, on every candidate from every rung, not
+                # inside each fetcher. It used to live in the fetchers, so an injected or
+                # newly added rung got no check at all and the guard was something each
+                # future rung had to remember to call. The golden fixtures caught that on
+                # their first run: a stubbed USDA returned "Soy protein isolate" for
+                # collagen capsules and sailed straight through.
+                # Relevance applies to LOOKUPS, not to estimates. A lookup has to return
+                # the thing that was asked for; an estimate is BY DEFINITION about the
+                # thing that was asked for, so its name may legitimately differ ("mixed
+                # nuts (estimated)" for "something homemade"). Checking an estimate for
+                # relevance would reject the fallback that exists for exactly the case
+                # where nothing matches.
+                estimating = (rung == Rung.LLM
+                              or (cand.get("source_kind") or "").lower() == "estimate")
+                if not estimating and not _relevant(q, cname):
+                    record(rung, "irrelevant", f"{cname!r} does not match {q!r}")
                     continue
                 got = cand
                 break
