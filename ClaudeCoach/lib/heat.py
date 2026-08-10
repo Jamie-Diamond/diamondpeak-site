@@ -452,8 +452,28 @@ def exposure_entry(act: dict, latlng_fallback=None) -> dict | None:
     return entry
 
 
+def require_athlete(slug: str) -> None:
+    """Raise if `slug` is not an athlete. A MISSING heat-log is fine (nothing logged
+    yet, and 0% is the honest answer); a missing ATHLETE is a caller bug.
+
+    Added 10 Aug 2026. heat_accl.py takes a positional slug and was invoked as
+    `--athlete jamie`, so it scored an athlete literally named "--athlete", found no
+    heat-log for it, and printed a full 30-day trend of 0% with no error. Jamie was
+    told his acclimation "reads 0%" when it was 65% and decaying - the number was
+    wrong in the direction that hides a problem, and nothing in the chain complained.
+    A plausible zero is the worst possible failure here, so the two cases are now
+    distinguished at the point the athlete is resolved rather than at each caller.
+    """
+    if not slug or slug.startswith("-") or \
+            not (BASE / "athletes" / slug).is_dir():
+        raise ValueError(
+            f"unknown athlete {slug!r} - heat figures would silently read 0%. "
+            f"Pass a bare slug (e.g. 'jamie'), not a flag.")
+
+
 def _dated_doses(slug: str) -> list[tuple[date, float, dict]]:
     """[(date, dose, entry)] from an athlete's heat-log, undated entries dropped."""
+    require_athlete(slug)
     log_file = BASE / "athletes" / slug / "heat-log.json"
     try:
         entries = json.loads(log_file.read_text())

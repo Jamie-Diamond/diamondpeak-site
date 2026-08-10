@@ -16,7 +16,28 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: heat_accl.py <slug>", file=sys.stderr)
         sys.exit(1)
-    slug = sys.argv[1]
+    # The slug is POSITIONAL, but every sibling script in scripts/ takes --athlete, so
+    # it gets called that way and used to score an athlete named "--athlete" (see
+    # heat.require_athlete). Accept the flag form rather than only rejecting it: the
+    # inconsistency is the trap, and erroring on a call that clearly states which
+    # athlete it means would be pedantry.
+    args = sys.argv[1:]
+    slug = None
+    for i, a in enumerate(args):
+        if a in ("--athlete", "-a") and i + 1 < len(args):
+            slug = args[i + 1]
+            break
+        if a.startswith("--athlete="):
+            slug = a.split("=", 1)[1]
+            break
+        if not a.startswith("-"):
+            slug = a
+            break
+    try:
+        heat_lib.require_athlete(slug)
+    except ValueError as e:
+        print(f"heat_accl.py: {e}", file=sys.stderr)
+        sys.exit(2)
     today = date.today()
 
     score = heat_lib.acclimation_score(slug)
