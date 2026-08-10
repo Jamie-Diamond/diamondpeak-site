@@ -14,6 +14,9 @@ RUNNING it against Jamie's real day, one bug at a time, over several hours:
   4. re-resolving from the already-resolved name lost the portion and doubled two items
   5. the matched species SCORE was discarded on write, so refined derivatives read back as
      whole plants
+  6. a Deliveroo screenshot of a Wagamama order was logged as "Rice, brown, raw", because
+     CoFID's two-shared-token bar is easy to clear by accident (rice + brown) and because
+     the photo path dropped the hint that would have skipped CoFID entirely
 
 Every one produced a plausible number rather than an error. A fixture file turns each into
 a one-second check: the recorded response goes in, the expected verdict comes out, and a
@@ -32,8 +35,24 @@ for cand in (_here / "lib", _here.parent / "lib"):
     if (cand / "nutrition_resolve.py").exists():
         sys.path.insert(0, str(cand))
         break
+import nutrition_nlu as NLU  # noqa: E402
 import nutrition_resolve as NR  # noqa: E402
 import plants as PL  # noqa: E402
+
+BASE = _here.parent
+
+
+def load_bot():
+    """Import the bot module so its CALL SITES can be exercised, not just the library.
+
+    Every fixture here used to call NR.resolve directly, which is exactly why the photo
+    path could drop its hint and still show a green run: the bug was in the caller."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "nb", BASE / "telegram" / "nutrition_bot.py")
+    nb = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(nb)
+    return nb
 
 FAILED = []
 
@@ -166,6 +185,160 @@ check("and logs no macros in the meantime",
 check("the ladder stops rather than letting a lower rung guess",
       next((a["outcome"] for a in it["attempts"] if a["rung"] == NR.Rung.WEB), None)
       == "needs_portion")
+
+# --- 6. a restaurant order is not a row in a whole-food table ---------------
+
+print("\n--- the Wagamama order ---")
+DISH = "gochujang salmon rice bowl with brown rice and extra salmon, Wagamama"
+
+# Two SHARED tokens were the bar, and this dish clears it: "rice" and "brown" both appear
+# in the table row "Rice, brown, raw". The earlier M&S fixtures never caught this because
+# they only ever shared ONE token, so the >= 2 branch was never actually exercised.
+got = REAL_COFID.lookup(DISH, None)
+check("CoFID refuses the Wagamama dish", got is None, (got or {}).get("resolved_name"))
+check("and refuses it with a portion attached too",
+      REAL_COFID.lookup(DISH, 450) is None)
+for q in ("edamame with chilli and garlic salt, Wagamama",
+          "katsu chicken curry with sticky white rice",
+          "chicken teriyaki donburi with steamed rice and greens"):
+    got = REAL_COFID.lookup(q, 100)
+    check(f"CoFID refuses {q[:38]}", got is None, (got or {}).get("resolved_name"))
+
+# The coverage rule must not swing the other way: these are exactly what CoFID is FOR.
+print("\n--- and still answers the whole foods it exists for ---")
+for q in ("brown rice", "porridge oats", "chicken breast", "cheddar cheese",
+          "blueberries", "extra virgin olive oil", "half a large banana",
+          "a handful of almonds", "sweet potato", "greek yogurt"):
+    got = REAL_COFID.lookup(q, 100)
+    check(f"CoFID answers {q}", got is not None, "refused")
+
+# --- 7. what the photo established must REACH the ladder -------------------
+
+print("\n--- the hint survives the hand-off from photo to ladder ---")
+order = {"kind": "order", "vendor": "Wagamama",
+         "items": [{"text": DISH}, {"text": "edamame with chilli and garlic salt"}]}
+items = NLU.photo_item_hints(order)
+check("an order's items are tagged as restaurant dishes",
+      all((i.get("hint") or {}).get("category") == "restaurant_dish" for i in items))
+check("and the vendor survives as the brand",
+      items[0]["hint"].get("brand") == "Wagamama")
+plate = NLU.photo_item_hints({"kind": "food_plate",
+                              "items": [{"text": "brown rice"}]})
+check("a plate's components stay whole_food, so CoFID still serves them",
+      plate[0]["hint"]["category"] == "whole_food")
+
+it = NR.resolve(DISH, day=TODAY, store=None, table=TABLE, cofid=REAL_COFID,
+                hint=items[0]["hint"], fetchers={NR.Rung.WEB: fetch("web_rubicon")})
+check("with that hint the dish skips CoFID entirely",
+      next((a["outcome"] for a in it["attempts"] if a["rung"] == NR.Rung.COFID), None)
+      == "skipped")
+
+# THE CALLER. The library was right and the caller dropped the hint on the floor, so a
+# library-only fixture would have passed while the bot stayed broken.
+nb = load_bot()
+seen = {}
+
+
+def _capture(text, **kw):
+    seen.update(kw)
+    seen["text"] = text
+    return NR._finalise({"kcal": 500.0, "protein_g": 30.0, "carb_g": 60.0, "fat_g": 12.0},
+                        text, NR.Rung.WEB, "estimate", [], TABLE, TODAY, degraded=False)
+
+
+# nb.NR IS this module's NR - same import, same object - so this stub is GLOBAL and has
+# to be put back afterwards. It was not, and every later fixture silently ran against the
+# stub instead of the real resolver: green because nothing was being tested.
+_real_resolve = NR.resolve
+nb.NR.resolve = _capture
+nb.tg.send = lambda *a, **k: None
+nb.tg.inline = lambda rows: None
+nb.set_pending = lambda store, item: None
+
+
+class _Ctx:
+    store, table, cofid, fetchers = None, TABLE, EMPTY_COFID, {}
+
+
+nb.offer_items(_Ctx(), items, TODAY, "token", 1)
+check("offer_items FORWARDS the hint to resolve",
+      (seen.get("hint") or {}).get("category") == "restaurant_dish",
+      f"hint={seen.get('hint')}")
+check("and forwards the search terms with it",
+      seen.get("queries") == [items[-1]["text"]], seen.get("queries"))
+NR.resolve = _real_resolve
+check("the real resolver is back in place for the fixtures below",
+      NR.resolve is _real_resolve and nb.NR.resolve is _real_resolve)
+
+# --- 8. the whole photo chain, on the recorded real screenshot --------------
+
+# The vision call is STUBBED with what the model actually returned for Jamie's Deliveroo
+# screenshot on 10 Aug at 20:17, taken from the bot log. That keeps this offline and
+# deterministic while still exercising read_photo's cleaning, the hint annotation, and the
+# ladder - the three hand-offs the live failure passed through.
+print("\n--- the recorded Deliveroo screenshot, end to end ---")
+
+RECORDED_ORDER = """Looking at the image now.
+{"kind": "order", "vendor": "Wagamama", "stated_item_count": 5, "items": [
+  {"text": "gochujang salmon rice bowl with brown rice and extra salmon", "qty": 1},
+  {"text": "(meal is with double salmon and brown rice)", "qty": 1},
+  {"text": "edamame with chilli and garlic salt (vg)", "qty": 1},
+  {"text": "new! soy sauce sachet", "qty": 3}]}"""
+
+
+class _Proc:
+    def __init__(self, out):
+        self.stdout, self.stderr, self.returncode = out, "", 0
+
+
+got = NLU.read_photo("/tmp/x.jpg", "claude", "m", log=lambda *a: None,
+                     runner=lambda *a, **k: _Proc(RECORDED_ORDER))
+check("the screenshot reads as an order from Wagamama",
+      got["kind"] == "order" and got["vendor"] == "Wagamama", got.get("kind"))
+texts = [i["text"] for i in got["items"]]
+check("the parenthetical modifier is not treated as a dish",
+      not any(t.startswith("(") for t in texts), texts)
+check("and it does not survive as a rice-shaped item either",
+      not any("double salmon" in t for t in texts), texts)
+check("the (vg) marker and the new! shout are stripped",
+      not any("(vg)" in t or t.lower().startswith("new") for t in texts), texts)
+check("the vendor is appended to every dish",
+      all("Wagamama" in t for t in texts), texts)
+check("3 lines but 5 UNITS, matching what the screen said",
+      got["units_seen"] == 5 == got["stated_item_count"], got.get("units_seen"))
+
+# Expand and resolve exactly as handle_photo does.
+expanded = []
+for i in got["items"]:
+    expanded.extend([dict(i)] * i["qty"])
+got["items"] = expanded
+check("5 units go forward to be logged", len(expanded) == 5, len(expanded))
+NLU.photo_item_hints(got)
+bowl = next(i for i in got["items"] if "gochujang" in i["text"])
+res = NR.resolve(bowl["text"], day=TODAY, store=None, table=TABLE, cofid=REAL_COFID,
+                 hint=bowl["hint"], queries=bowl["hint"]["search_terms"],
+                 fetchers={NR.Rung.WEB: fetch("web_rubicon")})
+check("THE BUG: the salmon bowl is no longer raw brown rice",
+      "Rice, brown, raw" != res.get("resolved_name"), res.get("resolved_name"))
+check("CoFID was skipped rather than merely outvoted",
+      next((a["outcome"] for a in res["attempts"] if a["rung"] == NR.Rung.COFID), None)
+      == "skipped")
+
+# --- 9. an expired token is not an unreadable photo ------------------------
+
+print("\n--- an outage announces itself ---")
+EXPIRED = ("Failed to authenticate. API Error: 401 OAuth access token has expired. "
+           "Re-authenticate to continue.")
+check("an expired token is recognised", NLU.model_unavailable(EXPIRED))
+check("a usage limit is recognised too",
+      NLU.model_unavailable("Claude AI usage limit reached"))
+check("a real JSON answer is not mistaken for an outage",
+      not NLU.model_unavailable(RECORDED_ORDER))
+check("empty output is not called an outage", not NLU.model_unavailable(""))
+got = NLU.read_photo("/tmp/x.jpg", "claude", "m", log=lambda *a: None,
+                     runner=lambda *a, **k: _Proc(EXPIRED))
+check("read_photo flags the outage instead of blaming the photo",
+      got.get("model_unavailable") is True, got)
 
 print()
 if FAILED:

@@ -473,6 +473,20 @@ If you cannot tell, reply {"kind":"unknown"}.
 SALT_TO_SODIUM = 1 / 2.5   # UK labels give salt; sodium = salt / 2.5
 
 
+# The CLI prints this to STDOUT with a non-zero exit rather than raising, so a caller that
+# only looks for JSON sees "no JSON" and reports the input as unreadable. It is neither the
+# photo's fault nor the food's: the VM's token has expired and every model call is failing.
+# Telling the two apart is the difference between "send a clearer picture" and "go and
+# re-authenticate", and guessing wrong wastes the user's time on a fine photo.
+_AUTH_FAILURE = re.compile(r"401|oauth|access token|authenticat|usage limit", re.I)
+
+
+def model_unavailable(raw: str) -> bool:
+    """True when output is the CLI refusing to run, not an answer."""
+    head = (raw or "")[:400]
+    return bool(head and _AUTH_FAILURE.search(head) and "{" not in head)
+
+
 def read_photo(img_path: str, claude_bin: str, model: str, log=print, runner=None,
                timeout: int = 180) -> dict:
     """Classify and extract from a photo. Returns {'kind': 'unknown'} on any failure.
@@ -492,14 +506,24 @@ def read_photo(img_path: str, claude_bin: str, model: str, log=print, runner=Non
         log(f"photo read failed: {exc}")
         return {"kind": "unknown", "error": str(exc)}
     raw = (getattr(proc, "stdout", "") or "").strip()
+    # Every one of the exits below used to return a bare {"kind": "unknown"} with nothing
+    # logged, so a photo that failed for an infrastructure reason was indistinguishable
+    # from a blurry one. On 10 Aug the VM's OAuth token expired and the bot answered "I
+    # could not read that" to a perfectly legible Deliveroo screenshot.
+    if model_unavailable(raw):
+        log(f"photo read: MODEL UNAVAILABLE - {raw[:120]}")
+        return {"kind": "unknown", "model_unavailable": True, "error": raw[:200]}
     start, end = raw.find("{"), raw.rfind("}")
     if start < 0 or end <= start:
+        log(f"photo read: no JSON in {len(raw)} chars of output - {raw[:120]!r}")
         return {"kind": "unknown"}
     try:
         got = json.loads(raw[start:end + 1])
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        log(f"photo read: JSON did not parse ({exc}) - {raw[start:start + 120]!r}")
         return {"kind": "unknown"}
     if got.get("kind") not in ("barcode", "nutrition_label", "food_plate", "order"):
+        log(f"photo read: unusable kind {got.get('kind')!r}")
         return {"kind": "unknown"}
     if got["kind"] == "nutrition_label":
         # UK panels usually print SALT, not sodium. Convert here, once, rather than
@@ -545,6 +569,7 @@ def read_photo(img_path: str, claude_bin: str, model: str, log=print, runner=Non
         # called a complete screenshot cropped, which is crying wolf on correct input.
         got["units_seen"] = sum(i["qty"] for i in items)
         if not items:
+            log(f"photo read: {got['kind']} had no usable items after cleaning")
             return {"kind": "unknown"}
     return got
 
@@ -619,6 +644,40 @@ _FORM_FAMILIES = {
     "food": {"bar", "drink", "whole_food", "prepared_meal", "bakery",
              "confectionery", "dairy", "liquid", "other"},
 }
+
+
+# What a photo of each kind establishes about the items in it. This lives here, rather
+# than inline in handle_photo where it started, so that a test can reach it: the order
+# branch shipped with its hint never arriving at the ladder and nothing could see that.
+_PHOTO_HINT_BY_KIND = {
+    # A named vendor cooked this. It is not a row in a whole-food composition table, and
+    # not saying so is how a Wagamama order came back as 357 kcal of raw brown rice.
+    "order": {"category": "restaurant_dish", "form": "prepared_meal"},
+    # Components of a plate genuinely ARE whole foods, so CoFID is the right rung for
+    # them. Stated explicitly rather than achieved by leaving the hint empty.
+    "food_plate": {"category": "whole_food"},
+}
+
+
+def photo_item_hints(got: dict) -> list:
+    """Annotate the items read off a photo with what the photo itself established.
+
+    read_photo works out the kind and the vendor, and until this existed the caller threw
+    both away before resolution. Every hint-driven guard in the ladder - the CoFID skip
+    for anything that is not a whole food, the form-conflict check - was therefore inert
+    on the photo path while looking perfectly wired on the text path."""
+    items = got.get("items") or []
+    base = _PHOTO_HINT_BY_KIND.get(got.get("kind"))
+    if base is None:
+        return items
+    for it in items:
+        hint = dict(base)
+        hint.update({"canonical_name": it["text"], "search_terms": [it["text"]],
+                     "expect_macros": True})
+        if got.get("vendor"):
+            hint["brand"] = got["vendor"]
+        it.setdefault("hint", hint)
+    return items
 
 
 def form_family(form: str) -> str:

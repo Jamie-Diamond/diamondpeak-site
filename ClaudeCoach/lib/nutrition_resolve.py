@@ -108,7 +108,21 @@ _STOPWORDS = {
     "value", "brand", "own", "food", "foods", "drink", "mix", "flavour", "flavoured",
     "style", "type", "supplement", "capsule",
     "capsules", "pill", "pills", "tablet", "tablets", "this", "morning", "had",
+    # How MUCH, never WHAT. These have to be stopwords for the coverage rule to work:
+    # "a handful of almonds" was refused by CoFID because "handful" counted as an
+    # identifying token the table row failed to explain, so a label-grade match for a
+    # plain whole food fell through to an LLM estimate. Deliberately excluded: "bowl",
+    # "bar" and the like, which do carry meaning about the product.
+    "handful", "handfuls", "pinch", "cup", "cups", "spoon", "spoonful", "tbsp", "tsp",
+    "tablespoon", "teaspoon", "glass", "can", "tin", "bottle", "box", "few", "couple",
+    "about", "roughly", "approx", "approximately", "big", "little", "each",
 }
+
+
+# How much of a query a CoFID row is allowed to leave unexplained. One spare token covers
+# the ordinary descriptors that survive the stopword list ("handful of almonds",
+# "extra virgin olive oil"); anything beyond that is a composite dish, not a table row.
+COFID_MAX_UNEXPLAINED_TOKENS = 1
 
 
 def _tokens(text: str) -> set:
@@ -443,6 +457,21 @@ class CofidTable:
             # chicken breast. A partial match now needs the TABLE name to be essentially
             # contained in the query, and at least two shared identifying tokens, so a
             # single ingredient word can never carry a match.
+            #
+            # SHARED TOKENS ARE NOT ENOUGH, AND TWO OF THEM ARE EASY TO HIT BY ACCIDENT.
+            # "gochujang salmon rice bowl with brown rice and extra salmon, Wagamama"
+            # shares BOTH "rice" and "brown" with the table row "Rice, brown, raw", so
+            # the two-token bar passed and a restaurant dish was logged as 357 kcal of raw
+            # grain. What separates the two cases is COVERAGE, not overlap: for a real
+            # whole-food query the table name accounts for essentially the whole query
+            # ("brown rice", "porridge oats", "chicken breast" each leave nothing over),
+            # whereas the dish leaves gochujang, salmon, bowl, extra and Wagamama
+            # unexplained. So a candidate must also leave at most one query token
+            # unaccounted for.
+            #
+            # The coverage test belongs HERE, inside the candidate loop, not after the
+            # sort: applied to the winner it would let a high-overlap, poor-coverage row
+            # shadow a lower-overlap row that actually covers the query.
             qt = _tokens(q)
             hits = []
             for name, f in self.foods.items():
@@ -450,10 +479,24 @@ class CofidTable:
                 if not nt:
                     continue
                 shared = qt & nt
-                if len(shared) >= 2 or (name in q and len(nt) >= 2):
-                    hits.append((len(shared), len(name), name, f))
+                if len(qt - nt) > COFID_MAX_UNEXPLAINED_TOKENS:
+                    continue
+                # ONE shared token is enough when the row explains the WHOLE query. The
+                # two-token bar was standing in for coverage, and it cost real matches:
+                # "a handful of almonds" and "half a large banana" are exactly what this
+                # table is for, and both fell through to an LLM estimate because they
+                # reduce to a single identifying word. Coverage is now checked directly
+                # above, so the bar can come down without reopening the "chicken" bug -
+                # "satay chicken with black rice and mango" leaves four tokens
+                # unexplained and never reaches here.
+                if (len(shared) >= 2 or (name in q and len(nt) >= 2)
+                        or (shared and not (qt - nt))):
+                    hits.append((len(shared), -len(nt - qt), name, f))
             if not hits:
                 return None
+            # Best row: most of the query explained, then the row that adds the LEAST the
+            # query did not ask for. Preferring the longest name instead picked the most
+            # embellished row, so a bare "almonds" could land on a roasted salted one.
             hits.sort(reverse=True)
             food = hits[0][3]
             if not _relevant(query, food.get("name") or ""):

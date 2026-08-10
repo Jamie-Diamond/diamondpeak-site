@@ -918,6 +918,7 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
         for it in got["items"]:
             expanded.extend([dict(it)] * max(1, int(it.get("qty") or 1)))
         got["items"] = expanded
+        NLU.photo_item_hints(got)
         units, stated = got.get("units_seen") or len(expanded), got.get("stated_item_count")
         who = got.get("vendor") or "that order"
         msg = f"{who}, {units} item{'s' if units != 1 else ''}. Looking each one up."
@@ -935,9 +936,19 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
         tg.send(token, chat_id,
                 "No label, so I have identified the components and will look each one "
                 "up. Portions are my estimate, so correct me.", log=log)
+        NLU.photo_item_hints(got)
         offer_items(ctx, got["items"], day, token, chat_id)
         return
 
+    if got.get("model_unavailable"):
+        # Not the photo. Saying "I could not read that" here sends him off to retake a
+        # picture that was fine, and hides an outage that needs fixing on the VM.
+        tg.send(token, chat_id,
+                "My model access has expired, so I cannot read images or interpret "
+                "anything right now - nothing to do with your photo. Re-authenticate on "
+                "the VM and send it again. Typed items with the figures still log fine.",
+                log=log)
+        return
     tg.send(token, chat_id,
             "I could not read that. A barcode or the nutrition panel works best; a "
             "plate is fine too, just tell me roughly what is on it.", log=log)
@@ -1067,9 +1078,17 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         if barcode:
             fetchers[NR.Rung.RETAILER] = (
                 lambda t, p, _c=barcode: NR.off_barcode_fetch(_c, p))
+        # The hint has to be FORWARDED, not dropped. Every hint-based protection in the
+        # ladder - the CoFID skip for anything that is not a whole food, the form-conflict
+        # check - is inert without it, and this caller had no hint parameter at all. That
+        # is how a Wagamama order came back as "Rice, brown, raw": read_photo knew it was
+        # a restaurant order from a named vendor, and offer_items threw that away before
+        # resolve ever saw it. Same class of bug as the dropped species score and the
+        # dropped provisional flag: computed at one stage, lost at the hand-off.
         item = NR.resolve(it["text"], day=day, store=ctx.store, table=ctx.table,
                           portion_g=it.get("portion_g"), fetchers=fetchers,
-                          cofid=ctx.cofid)
+                          cofid=ctx.cofid, hint=it.get("hint"),
+                          queries=(it.get("hint") or {}).get("search_terms"))
         item["_raw"] = it["text"]
         item["in_session"] = bool(it.get("in_session"))
         item["_supplement"] = supplement

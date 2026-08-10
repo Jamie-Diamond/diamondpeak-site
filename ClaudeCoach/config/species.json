@@ -1,1437 +1,1526 @@
 {
-  "version": "1.0",
-  "seeded": "2026-08-10",
-  "note": "Plant species table for the diversity metric. `synonyms` all resolve to the same species and score by category; `refined` entries are the SAME species but score 0.0, because a refined derivative carries the fibre and polyphenols the metric is a proxy for in name only. Matching is longest-phrase-first with the matched span consumed, so 'rice flour' cannot also match 'rice'. Herbs and spices score 0.25 by category. Add mappings here rather than in code: this file is read at runtime, so the admin path needs no redeploy. Unmapped strings go to the athlete's unresolved.json review queue.",
-  "species": [
-    {
-      "id": "oryza_sativa",
-      "canonical": "Rice",
-      "latin": "Oryza sativa",
-      "category": "wholegrain",
-      "synonyms": [
-        "rice",
-        "brown rice",
-        "black rice",
-        "white rice",
-        "basmati",
-        "basmati rice",
-        "jasmine rice",
-        "wholegrain rice",
-        "wild rice"
-      ],
-      "refined": [
-        "rice flour",
-        "rice syrup",
-        "rice cake",
-        "puffed rice",
-        "rice milk",
-        "rice starch",
-        "rice protein"
-      ]
-    },
-    {
-      "id": "avena_sativa",
-      "canonical": "Oats",
-      "latin": "Avena sativa",
-      "category": "wholegrain",
-      "synonyms": [
-        "oat",
-        "oats",
-        "rolled oats",
-        "porridge oats",
-        "jumbo oats",
-        "oatmeal",
-        "oat bran",
-        "steel cut oats"
-      ],
-      "refined": [
-        "oat milk",
-        "oat syrup"
-      ]
-    },
-    {
-      "id": "triticum_aestivum",
-      "canonical": "Wheat",
-      "latin": "Triticum aestivum",
-      "category": "wholegrain",
-      "synonyms": [
-        "wholemeal",
-        "wholemeal flour",
-        "wholewheat",
-        "wholewheat pasta",
-        "wheat bran",
-        "bulgur",
-        "bulgur wheat",
-        "freekeh",
-        "spelt",
-        "wheatgerm"
-      ],
-      "refined": [
-        "white flour",
-        "plain flour",
-        "white bread",
-        "pasta",
-        "white pasta",
-        "semolina",
-        "couscous",
-        "wheat flour",
-        "wheat starch",
-        "wheat syrup",
-        "fortified wheat flour",
-        "wheat glucose syrup",
-        "wheat protein",
-        "wheat fibre"
-      ]
-    },
-    {
-      "id": "hordeum_vulgare",
-      "canonical": "Barley",
-      "latin": "Hordeum vulgare",
-      "category": "wholegrain",
-      "synonyms": [
-        "barley",
-        "pearl barley",
-        "pot barley"
-      ],
-      "refined": [
-        "barley malt",
-        "malt extract"
-      ]
-    },
-    {
-      "id": "secale_cereale",
-      "canonical": "Rye",
-      "latin": "Secale cereale",
-      "category": "wholegrain",
-      "synonyms": [
-        "rye",
-        "rye bread",
-        "rye flour",
-        "pumpernickel"
-      ],
-      "refined": []
-    },
-    {
-      "id": "zea_mays",
-      "canonical": "Maize",
-      "latin": "Zea mays",
-      "category": "veg",
-      "synonyms": [
-        "sweetcorn",
-        "corn",
-        "corn on the cob",
-        "polenta",
-        "cornmeal",
-        "popcorn"
-      ],
-      "refined": [
-        "cornflour",
-        "corn starch",
-        "corn syrup",
-        "glucose syrup",
-        "maltodextrin",
-        "corn oil",
-        "dextrose",
-        "glucose-fructose syrup",
-        "modified maize starch",
-        "modified corn starch",
-        "corn fibre",
-        "maize starch"
-      ]
-    },
-    {
-      "id": "chenopodium_quinoa",
-      "canonical": "Quinoa",
-      "latin": "Chenopodium quinoa",
-      "category": "wholegrain",
-      "synonyms": [
-        "quinoa",
-        "red quinoa",
-        "white quinoa"
-      ],
-      "refined": []
-    },
-    {
-      "id": "fagopyrum_esculentum",
-      "canonical": "Buckwheat",
-      "latin": "Fagopyrum esculentum",
-      "category": "wholegrain",
-      "synonyms": [
-        "buckwheat",
-        "soba",
-        "soba noodles",
-        "buckwheat flour"
-      ],
-      "refined": []
-    },
-    {
-      "id": "cicer_arietinum",
-      "canonical": "Chickpea",
-      "latin": "Cicer arietinum",
-      "category": "legume",
-      "synonyms": [
-        "chickpea",
-        "chick pea",
-        "garbanzo",
-        "garbanzo bean",
-        "hummus",
-        "houmous",
-        "humous",
-        "gram flour",
-        "chana",
-        "falafel"
-      ],
-      "refined": []
-    },
-    {
-      "id": "lens_culinaris",
-      "canonical": "Lentil",
-      "latin": "Lens culinaris",
-      "category": "legume",
-      "synonyms": [
-        "lentil",
-        "red lentil",
-        "green lentil",
-        "puy lentil",
-        "beluga lentil",
-        "dal",
-        "daal",
-        "dhal"
-      ],
-      "refined": []
-    },
-    {
-      "id": "phaseolus_vulgaris",
-      "canonical": "Common bean",
-      "latin": "Phaseolus vulgaris",
-      "category": "legume",
-      "synonyms": [
-        "kidney bean",
-        "black bean",
-        "cannellini",
-        "cannellini bean",
-        "borlotti",
-        "borlotti bean",
-        "haricot",
-        "haricot bean",
-        "baked beans",
-        "pinto bean",
-        "green bean",
-        "french bean",
-        "flageolet"
-      ],
-      "refined": []
-    },
-    {
-      "id": "glycine_max",
-      "canonical": "Soybean",
-      "latin": "Glycine max",
-      "category": "legume",
-      "synonyms": [
-        "soy",
-        "soya",
-        "soybean",
-        "soya bean",
-        "edamame",
-        "tofu",
-        "tempeh",
-        "miso",
-        "soy sauce",
-        "tamari",
-        "soya mince"
-      ],
-      "refined": [
-        "soy protein isolate",
-        "soya lecithin",
-        "soybean oil",
-        "soya oil",
-        "soy lecithin",
-        "soy protein",
-        "soya protein",
-        "soy flour",
-        "soya flour",
-        "textured soy protein"
-      ]
-    },
-    {
-      "id": "pisum_sativum",
-      "canonical": "Pea",
-      "latin": "Pisum sativum",
-      "category": "legume",
-      "synonyms": [
-        "pea",
-        "peas",
-        "garden pea",
-        "petit pois",
-        "mangetout",
-        "sugar snap",
-        "sugar snap pea",
-        "split pea",
-        "marrowfat"
-      ],
-      "refined": [
-        "pea protein isolate"
-      ]
-    },
-    {
-      "id": "vicia_faba",
-      "canonical": "Broad bean",
-      "latin": "Vicia faba",
-      "category": "legume",
-      "synonyms": [
-        "broad bean",
-        "fava",
-        "fava bean",
-        "broad bean protein"
-      ],
-      "refined": []
-    },
-    {
-      "id": "arachis_hypogaea",
-      "canonical": "Peanut",
-      "latin": "Arachis hypogaea",
-      "category": "legume",
-      "synonyms": [
-        "peanut",
-        "peanut butter",
-        "groundnut",
-        "monkey nut"
-      ],
-      "refined": [
-        "peanut oil"
-      ]
-    },
-    {
-      "id": "vigna_radiata",
-      "canonical": "Mung bean",
-      "latin": "Vigna radiata",
-      "category": "legume",
-      "synonyms": [
-        "mung bean",
-        "mung",
-        "beansprout",
-        "bean sprout"
-      ],
-      "refined": []
-    },
-    {
-      "id": "corylus_avellana",
-      "canonical": "Hazelnut",
-      "latin": "Corylus avellana",
-      "category": "nut",
-      "synonyms": [
-        "hazelnut",
-        "cobnut",
-        "filbert"
-      ],
-      "refined": []
-    },
-    {
-      "id": "prunus_dulcis",
-      "canonical": "Almond",
-      "latin": "Prunus dulcis",
-      "category": "nut",
-      "synonyms": [
-        "almond",
-        "ground almonds",
-        "almond butter",
-        "flaked almonds"
-      ],
-      "refined": [
-        "almond milk",
-        "almond oil"
-      ]
-    },
-    {
-      "id": "juglans_regia",
-      "canonical": "Walnut",
-      "latin": "Juglans regia",
-      "category": "nut",
-      "synonyms": [
-        "walnut"
-      ],
-      "refined": [
-        "walnut oil"
-      ]
-    },
-    {
-      "id": "anacardium_occidentale",
-      "canonical": "Cashew",
-      "latin": "Anacardium occidentale",
-      "category": "nut",
-      "synonyms": [
-        "cashew",
-        "cashew nut",
-        "cashew butter"
-      ],
-      "refined": []
-    },
-    {
-      "id": "pistacia_vera",
-      "canonical": "Pistachio",
-      "latin": "Pistacia vera",
-      "category": "nut",
-      "synonyms": [
-        "pistachio"
-      ],
-      "refined": []
-    },
-    {
-      "id": "bertholletia_excelsa",
-      "canonical": "Brazil nut",
-      "latin": "Bertholletia excelsa",
-      "category": "nut",
-      "synonyms": [
-        "brazil nut",
-        "brazil"
-      ],
-      "refined": []
-    },
-    {
-      "id": "carya_illinoinensis",
-      "canonical": "Pecan",
-      "latin": "Carya illinoinensis",
-      "category": "nut",
-      "synonyms": [
-        "pecan"
-      ],
-      "refined": []
-    },
-    {
-      "id": "macadamia_integrifolia",
-      "canonical": "Macadamia",
-      "latin": "Macadamia integrifolia",
-      "category": "nut",
-      "synonyms": [
-        "macadamia"
-      ],
-      "refined": []
-    },
-    {
-      "id": "castanea_sativa",
-      "canonical": "Chestnut",
-      "latin": "Castanea sativa",
-      "category": "nut",
-      "synonyms": [
-        "chestnut"
-      ],
-      "refined": []
-    },
-    {
-      "id": "linum_usitatissimum",
-      "canonical": "Flaxseed",
-      "latin": "Linum usitatissimum",
-      "category": "seed",
-      "synonyms": [
-        "flaxseed",
-        "flax",
-        "linseed",
-        "ground flaxseed"
-      ],
-      "refined": [
-        "flaxseed oil",
-        "linseed oil"
-      ]
-    },
-    {
-      "id": "salvia_hispanica",
-      "canonical": "Chia",
-      "latin": "Salvia hispanica",
-      "category": "seed",
-      "synonyms": [
-        "chia",
-        "chia seed"
-      ],
-      "refined": []
-    },
-    {
-      "id": "cucurbita_pepo",
-      "canonical": "Pumpkin",
-      "latin": "Cucurbita pepo",
-      "category": "veg",
-      "synonyms": [
-        "pumpkin",
-        "pumpkin seed",
-        "pepita",
-        "courgette",
-        "zucchini",
-        "marrow",
-        "yellow squash"
-      ],
-      "refined": [
-        "pumpkin seed oil"
-      ]
-    },
-    {
-      "id": "helianthus_annuus",
-      "canonical": "Sunflower",
-      "latin": "Helianthus annuus",
-      "category": "seed",
-      "synonyms": [
-        "sunflower seed",
-        "sunflower"
-      ],
-      "refined": [
-        "sunflower oil",
-        "sunflower lecithin",
-        "sunflower seed oil",
-        "high oleic sunflower oil"
-      ]
-    },
-    {
-      "id": "sesamum_indicum",
-      "canonical": "Sesame",
-      "latin": "Sesamum indicum",
-      "category": "seed",
-      "synonyms": [
-        "sesame",
-        "sesame seed",
-        "tahini"
-      ],
-      "refined": [
-        "sesame oil"
-      ]
-    },
-    {
-      "id": "cannabis_sativa",
-      "canonical": "Hemp",
-      "latin": "Cannabis sativa",
-      "category": "seed",
-      "synonyms": [
-        "hemp",
-        "hemp seed",
-        "hemp protein"
-      ],
-      "refined": [
-        "hemp oil"
-      ]
-    },
-    {
-      "id": "solanum_lycopersicum",
-      "canonical": "Tomato",
-      "latin": "Solanum lycopersicum",
-      "category": "veg",
-      "synonyms": [
-        "tomato",
-        "cherry tomato",
-        "plum tomato",
-        "passata",
-        "tomato puree",
-        "sundried tomato",
-        "tomato paste"
-      ],
-      "refined": []
-    },
-    {
-      "id": "solanum_tuberosum",
-      "canonical": "Potato",
-      "latin": "Solanum tuberosum",
-      "category": "veg",
-      "synonyms": [
-        "potato",
-        "new potato",
-        "jacket potato",
-        "maris piper",
-        "charlotte potato"
-      ],
-      "refined": [
-        "potato starch",
-        "crisps",
-        "chips",
-        "modified potato starch"
-      ]
-    },
-    {
-      "id": "ipomoea_batatas",
-      "canonical": "Sweet potato",
-      "latin": "Ipomoea batatas",
-      "category": "veg",
-      "synonyms": [
-        "sweet potato",
-        "kumara"
-      ],
-      "refined": []
-    },
-    {
-      "id": "solanum_melongena",
-      "canonical": "Aubergine",
-      "latin": "Solanum melongena",
-      "category": "veg",
-      "synonyms": [
-        "aubergine",
-        "eggplant"
-      ],
-      "refined": []
-    },
-    {
-      "id": "capsicum_annuum",
-      "canonical": "Pepper (capsicum)",
-      "latin": "Capsicum annuum",
-      "category": "veg",
-      "synonyms": [
-        "pepper",
-        "red pepper",
-        "green pepper",
-        "yellow pepper",
-        "bell pepper",
-        "romano pepper",
-        "chilli",
-        "chili",
-        "jalapeno",
-        "paprika",
-        "cayenne"
-      ],
-      "refined": []
-    },
-    {
-      "id": "brassica_oleracea",
-      "canonical": "Brassica oleracea",
-      "latin": "Brassica oleracea",
-      "category": "veg",
-      "synonyms": [
-        "broccoli",
-        "tenderstem",
-        "tenderstem broccoli",
-        "cauliflower",
-        "kale",
-        "cavolo nero",
-        "cabbage",
-        "red cabbage",
-        "savoy cabbage",
-        "brussels sprout",
-        "sprouts",
-        "kohlrabi",
-        "spring greens",
-        "romanesco"
-      ],
-      "refined": []
-    },
-    {
-      "id": "brassica_rapa",
-      "canonical": "Brassica rapa",
-      "latin": "Brassica rapa",
-      "category": "veg",
-      "synonyms": [
-        "pak choi",
-        "bok choy",
-        "turnip",
-        "chinese cabbage",
-        "tatsoi",
-        "mizuna"
-      ],
-      "refined": []
-    },
-    {
-      "id": "brassica_napus",
-      "canonical": "Swede / rapeseed",
-      "latin": "Brassica napus",
-      "category": "veg",
-      "synonyms": [
-        "swede",
-        "rutabaga"
-      ],
-      "refined": [
-        "rapeseed oil",
-        "vegetable oil",
-        "canola oil",
-        "rape seed oil",
-        "rapeseed lecithin"
-      ]
-    },
-    {
-      "id": "eruca_vesicaria",
-      "canonical": "Rocket",
-      "latin": "Eruca vesicaria",
-      "category": "veg",
-      "synonyms": [
-        "rocket",
-        "arugula"
-      ],
-      "refined": []
-    },
-    {
-      "id": "spinacia_oleracea",
-      "canonical": "Spinach",
-      "latin": "Spinacia oleracea",
-      "category": "veg",
-      "synonyms": [
-        "spinach",
-        "baby spinach"
-      ],
-      "refined": []
-    },
-    {
-      "id": "beta_vulgaris",
-      "canonical": "Beet",
-      "latin": "Beta vulgaris",
-      "category": "veg",
-      "synonyms": [
-        "beetroot",
-        "beet",
-        "chard",
-        "swiss chard",
-        "rainbow chard",
-        "beetroot juice",
-        "beetroot shot"
-      ],
-      "refined": [
-        "sugar",
-        "caster sugar",
-        "granulated sugar",
-        "beet sugar",
-        "invert sugar",
-        "invert sugar syrup",
-        "sugar syrup",
-        "molasses"
-      ]
-    },
-    {
-      "id": "daucus_carota",
-      "canonical": "Carrot",
-      "latin": "Daucus carota",
-      "category": "veg",
-      "synonyms": [
-        "carrot",
-        "chantenay"
-      ],
-      "refined": []
-    },
-    {
-      "id": "apium_graveolens",
-      "canonical": "Celery",
-      "latin": "Apium graveolens",
-      "category": "veg",
-      "synonyms": [
-        "celery",
-        "celeriac",
-        "celery salt"
-      ],
-      "refined": []
-    },
-    {
-      "id": "allium_cepa",
-      "canonical": "Onion",
-      "latin": "Allium cepa",
-      "category": "veg",
-      "synonyms": [
-        "onion",
-        "red onion",
-        "white onion",
-        "shallot",
-        "onion powder"
-      ],
-      "refined": []
-    },
-    {
-      "id": "allium_sativum",
-      "canonical": "Garlic",
-      "latin": "Allium sativum",
-      "category": "veg",
-      "synonyms": [
-        "garlic",
-        "garlic powder",
-        "black garlic"
-      ],
-      "refined": []
-    },
-    {
-      "id": "allium_fistulosum",
-      "canonical": "Spring onion",
-      "latin": "Allium fistulosum",
-      "category": "veg",
-      "synonyms": [
-        "spring onion",
-        "scallion",
-        "green onion",
-        "salad onion"
-      ],
-      "refined": []
-    },
-    {
-      "id": "allium_ampeloprasum",
-      "canonical": "Leek",
-      "latin": "Allium ampeloprasum",
-      "category": "veg",
-      "synonyms": [
-        "leek",
-        "elephant garlic"
-      ],
-      "refined": []
-    },
-    {
-      "id": "asparagus_officinalis",
-      "canonical": "Asparagus",
-      "latin": "Asparagus officinalis",
-      "category": "veg",
-      "synonyms": [
-        "asparagus"
-      ],
-      "refined": []
-    },
-    {
-      "id": "cucumis_sativus",
-      "canonical": "Cucumber",
-      "latin": "Cucumis sativus",
-      "category": "veg",
-      "synonyms": [
-        "cucumber",
-        "gherkin"
-      ],
-      "refined": []
-    },
-    {
-      "id": "agaricus_bisporus",
-      "canonical": "Mushroom",
-      "latin": "Agaricus bisporus",
-      "category": "veg",
-      "synonyms": [
-        "mushroom",
-        "chestnut mushroom",
-        "button mushroom",
-        "portobello"
-      ],
-      "refined": []
-    },
-    {
-      "id": "lactuca_sativa",
-      "canonical": "Lettuce",
-      "latin": "Lactuca sativa",
-      "category": "veg",
-      "synonyms": [
-        "lettuce",
-        "little gem",
-        "romaine",
-        "cos lettuce",
-        "iceberg"
-      ],
-      "refined": []
-    },
-    {
-      "id": "cynara_scolymus",
-      "canonical": "Artichoke",
-      "latin": "Cynara scolymus",
-      "category": "veg",
-      "synonyms": [
-        "artichoke",
-        "globe artichoke"
-      ],
-      "refined": []
-    },
-    {
-      "id": "persea_americana",
-      "canonical": "Avocado",
-      "latin": "Persea americana",
-      "category": "fruit",
-      "synonyms": [
-        "avocado",
-        "guacamole"
-      ],
-      "refined": [
-        "avocado oil"
-      ]
-    },
-    {
-      "id": "olea_europaea",
-      "canonical": "Olive",
-      "latin": "Olea europaea",
-      "category": "fruit",
-      "synonyms": [
-        "olive",
-        "black olive",
-        "green olive",
-        "extra virgin olive oil"
-      ],
-      "refined": [
-        "olive oil"
-      ]
-    },
-    {
-      "id": "musa_acuminata",
-      "canonical": "Banana",
-      "latin": "Musa acuminata",
-      "category": "fruit",
-      "synonyms": [
-        "banana",
-        "plantain"
-      ],
-      "refined": []
-    },
-    {
-      "id": "malus_domestica",
-      "canonical": "Apple",
-      "latin": "Malus domestica",
-      "category": "fruit",
-      "synonyms": [
-        "apple",
-        "braeburn",
-        "pink lady",
-        "granny smith",
-        "apple puree"
-      ],
-      "refined": [
-        "apple juice",
-        "apple juice concentrate"
-      ]
-    },
-    {
-      "id": "citrus_sinensis",
-      "canonical": "Orange",
-      "latin": "Citrus sinensis",
-      "category": "fruit",
-      "synonyms": [
-        "orange",
-        "satsuma",
-        "clementine",
-        "mandarin",
-        "blood orange"
-      ],
-      "refined": [
-        "orange juice"
-      ]
-    },
-    {
-      "id": "citrus_limon",
-      "canonical": "Lemon",
-      "latin": "Citrus limon",
-      "category": "fruit",
-      "synonyms": [
-        "lemon",
-        "lemon zest",
-        "lemon juice"
-      ],
-      "refined": []
-    },
-    {
-      "id": "citrus_aurantiifolia",
-      "canonical": "Lime",
-      "latin": "Citrus aurantiifolia",
-      "category": "fruit",
-      "synonyms": [
-        "lime",
-        "lime juice",
-        "lime zest"
-      ],
-      "refined": []
-    },
-    {
-      "id": "fragaria_ananassa",
-      "canonical": "Strawberry",
-      "latin": "Fragaria ananassa",
-      "category": "fruit",
-      "synonyms": [
-        "strawberry"
-      ],
-      "refined": []
-    },
-    {
-      "id": "vaccinium_corymbosum",
-      "canonical": "Blueberry",
-      "latin": "Vaccinium corymbosum",
-      "category": "fruit",
-      "synonyms": [
-        "blueberry"
-      ],
-      "refined": []
-    },
-    {
-      "id": "rubus_idaeus",
-      "canonical": "Raspberry",
-      "latin": "Rubus idaeus",
-      "category": "fruit",
-      "synonyms": [
-        "raspberry"
-      ],
-      "refined": []
-    },
-    {
-      "id": "rubus_fruticosus",
-      "canonical": "Blackberry",
-      "latin": "Rubus fruticosus",
-      "category": "fruit",
-      "synonyms": [
-        "blackberry",
-        "bramble"
-      ],
-      "refined": []
-    },
-    {
-      "id": "vitis_vinifera",
-      "canonical": "Grape",
-      "latin": "Vitis vinifera",
-      "category": "fruit",
-      "synonyms": [
-        "grape",
-        "raisin",
-        "sultana",
-        "currant"
-      ],
-      "refined": [
-        "grape juice",
-        "wine",
-        "balsamic vinegar"
-      ]
-    },
-    {
-      "id": "prunus_persica",
-      "canonical": "Peach",
-      "latin": "Prunus persica",
-      "category": "fruit",
-      "synonyms": [
-        "peach",
-        "nectarine"
-      ],
-      "refined": []
-    },
-    {
-      "id": "prunus_avium",
-      "canonical": "Cherry",
-      "latin": "Prunus avium",
-      "category": "fruit",
-      "synonyms": [
-        "cherry",
-        "tart cherry",
-        "montmorency"
-      ],
-      "refined": [
-        "cherry juice"
-      ]
-    },
-    {
-      "id": "prunus_domestica",
-      "canonical": "Plum",
-      "latin": "Prunus domestica",
-      "category": "fruit",
-      "synonyms": [
-        "plum",
-        "prune"
-      ],
-      "refined": []
-    },
-    {
-      "id": "mangifera_indica",
-      "canonical": "Mango",
-      "latin": "Mangifera indica",
-      "category": "fruit",
-      "synonyms": [
-        "mango"
-      ],
-      "refined": []
-    },
-    {
-      "id": "ananas_comosus",
-      "canonical": "Pineapple",
-      "latin": "Ananas comosus",
-      "category": "fruit",
-      "synonyms": [
-        "pineapple"
-      ],
-      "refined": [
-        "pineapple juice"
-      ]
-    },
-    {
-      "id": "actinidia_deliciosa",
-      "canonical": "Kiwi",
-      "latin": "Actinidia deliciosa",
-      "category": "fruit",
-      "synonyms": [
-        "kiwi",
-        "kiwifruit"
-      ],
-      "refined": []
-    },
-    {
-      "id": "phoenix_dactylifera",
-      "canonical": "Date",
-      "latin": "Phoenix dactylifera",
-      "category": "fruit",
-      "synonyms": [
-        "date",
-        "medjool",
-        "medjool date",
-        "date paste"
-      ],
-      "refined": [
-        "date syrup"
-      ]
-    },
-    {
-      "id": "ficus_carica",
-      "canonical": "Fig",
-      "latin": "Ficus carica",
-      "category": "fruit",
-      "synonyms": [
-        "fig",
-        "dried fig"
-      ],
-      "refined": []
-    },
-    {
-      "id": "pyrus_communis",
-      "canonical": "Pear",
-      "latin": "Pyrus communis",
-      "category": "fruit",
-      "synonyms": [
-        "pear",
-        "conference pear"
-      ],
-      "refined": []
-    },
-    {
-      "id": "punica_granatum",
-      "canonical": "Pomegranate",
-      "latin": "Punica granatum",
-      "category": "fruit",
-      "synonyms": [
-        "pomegranate"
-      ],
-      "refined": [
-        "pomegranate juice"
-      ]
-    },
-    {
-      "id": "cocos_nucifera",
-      "canonical": "Coconut",
-      "latin": "Cocos nucifera",
-      "category": "fruit",
-      "synonyms": [
-        "coconut",
-        "desiccated coconut",
-        "coconut flakes",
-        "coconut milk"
-      ],
-      "refined": [
-        "coconut oil",
-        "coconut water",
-        "coconut sugar",
-        "coconut fat",
-        "fractionated coconut oil"
-      ]
-    },
-    {
-      "id": "theobroma_cacao",
-      "canonical": "Cacao",
-      "latin": "Theobroma cacao",
-      "category": "seed",
-      "synonyms": [
-        "cocoa",
-        "cacao",
-        "cocoa nibs",
-        "cacao nibs",
-        "dark chocolate",
-        "cocoa powder"
-      ],
-      "refined": [
-        "cocoa butter",
-        "white chocolate"
-      ]
-    },
-    {
-      "id": "coffea_arabica",
-      "canonical": "Coffee",
-      "latin": "Coffea arabica",
-      "category": "seed",
-      "synonyms": [
-        "coffee",
-        "espresso",
-        "americano",
-        "filter coffee"
-      ],
-      "refined": []
-    },
-    {
-      "id": "camellia_sinensis",
-      "canonical": "Tea",
-      "latin": "Camellia sinensis",
-      "category": "herb_spice",
-      "synonyms": [
-        "tea",
-        "green tea",
-        "black tea",
-        "matcha"
-      ],
-      "refined": []
-    },
-    {
-      "id": "coriandrum_sativum",
-      "canonical": "Coriander",
-      "latin": "Coriandrum sativum",
-      "category": "herb_spice",
-      "synonyms": [
-        "coriander",
-        "coriander leaf",
-        "coriander seed",
-        "cilantro"
-      ],
-      "refined": []
-    },
-    {
-      "id": "ocimum_basilicum",
-      "canonical": "Basil",
-      "latin": "Ocimum basilicum",
-      "category": "herb_spice",
-      "synonyms": [
-        "basil",
-        "thai basil",
-        "pesto"
-      ],
-      "refined": []
-    },
-    {
-      "id": "petroselinum_crispum",
-      "canonical": "Parsley",
-      "latin": "Petroselinum crispum",
-      "category": "herb_spice",
-      "synonyms": [
-        "parsley",
-        "flat leaf parsley"
-      ],
-      "refined": []
-    },
-    {
-      "id": "mentha_spicata",
-      "canonical": "Mint",
-      "latin": "Mentha spicata",
-      "category": "herb_spice",
-      "synonyms": [
-        "mint",
-        "peppermint",
-        "spearmint"
-      ],
-      "refined": []
-    },
-    {
-      "id": "thymus_vulgaris",
-      "canonical": "Thyme",
-      "latin": "Thymus vulgaris",
-      "category": "herb_spice",
-      "synonyms": [
-        "thyme"
-      ],
-      "refined": []
-    },
-    {
-      "id": "rosmarinus_officinalis",
-      "canonical": "Rosemary",
-      "latin": "Rosmarinus officinalis",
-      "category": "herb_spice",
-      "synonyms": [
-        "rosemary"
-      ],
-      "refined": []
-    },
-    {
-      "id": "origanum_vulgare",
-      "canonical": "Oregano",
-      "latin": "Origanum vulgare",
-      "category": "herb_spice",
-      "synonyms": [
-        "oregano",
-        "marjoram"
-      ],
-      "refined": []
-    },
-    {
-      "id": "zingiber_officinale",
-      "canonical": "Ginger",
-      "latin": "Zingiber officinale",
-      "category": "herb_spice",
-      "synonyms": [
-        "ginger",
-        "root ginger",
-        "ground ginger"
-      ],
-      "refined": []
-    },
-    {
-      "id": "curcuma_longa",
-      "canonical": "Turmeric",
-      "latin": "Curcuma longa",
-      "category": "herb_spice",
-      "synonyms": [
-        "turmeric",
-        "turmeric root"
-      ],
-      "refined": []
-    },
-    {
-      "id": "cuminum_cyminum",
-      "canonical": "Cumin",
-      "latin": "Cuminum cyminum",
-      "category": "herb_spice",
-      "synonyms": [
-        "cumin",
-        "cumin seed"
-      ],
-      "refined": []
-    },
-    {
-      "id": "cinnamomum_verum",
-      "canonical": "Cinnamon",
-      "latin": "Cinnamomum verum",
-      "category": "herb_spice",
-      "synonyms": [
-        "cinnamon"
-      ],
-      "refined": []
-    },
-    {
-      "id": "piper_nigrum",
-      "canonical": "Black pepper",
-      "latin": "Piper nigrum",
-      "category": "herb_spice",
-      "synonyms": [
-        "black pepper",
-        "peppercorn",
-        "white pepper"
-      ],
-      "refined": []
-    },
-    {
-      "id": "brassica_juncea",
-      "canonical": "Mustard",
-      "latin": "Brassica juncea",
-      "category": "herb_spice",
-      "synonyms": [
-        "mustard",
-        "dijon",
-        "dijon mustard",
-        "wholegrain mustard",
-        "mustard seed"
-      ],
-      "refined": []
-    },
-    {
-      "id": "elettaria_cardamomum",
-      "canonical": "Cardamom",
-      "latin": "Elettaria cardamomum",
-      "category": "herb_spice",
-      "synonyms": [
-        "cardamom"
-      ],
-      "refined": []
-    },
-    {
-      "id": "syzygium_aromaticum",
-      "canonical": "Clove",
-      "latin": "Syzygium aromaticum",
-      "category": "herb_spice",
-      "synonyms": [
-        "clove"
-      ],
-      "refined": []
-    },
-    {
-      "id": "myristica_fragrans",
-      "canonical": "Nutmeg",
-      "latin": "Myristica fragrans",
-      "category": "herb_spice",
-      "synonyms": [
-        "nutmeg",
-        "mace"
-      ],
-      "refined": []
-    },
-    {
-      "id": "capparis_spinosa",
-      "canonical": "Caper",
-      "latin": "Capparis spinosa",
-      "category": "herb_spice",
-      "synonyms": [
-        "caper"
-      ],
-      "refined": []
-    },
-    {
-      "id": "laurus_nobilis",
-      "canonical": "Bay",
-      "latin": "Laurus nobilis",
-      "category": "herb_spice",
-      "synonyms": [
-        "bay leaf",
-        "bay"
-      ],
-      "refined": []
-    },
-    {
-      "id": "anethum_graveolens",
-      "canonical": "Dill",
-      "latin": "Anethum graveolens",
-      "category": "herb_spice",
-      "synonyms": [
-        "dill"
-      ],
-      "refined": []
-    },
-    {
-      "id": "foeniculum_vulgare",
-      "canonical": "Fennel",
-      "latin": "Foeniculum vulgare",
-      "category": "veg",
-      "synonyms": [
-        "fennel",
-        "fennel seed",
-        "fennel bulb"
-      ],
-      "refined": []
-    },
-    {
-      "id": "trigonella_foenum",
-      "canonical": "Fenugreek",
-      "latin": "Trigonella foenum-graecum",
-      "category": "herb_spice",
-      "synonyms": [
-        "fenugreek",
-        "methi"
-      ],
-      "refined": []
-    },
-    {
-      "id": "nigella_sativa",
-      "canonical": "Nigella",
-      "latin": "Nigella sativa",
-      "category": "herb_spice",
-      "synonyms": [
-        "nigella",
-        "nigella seed",
-        "black onion seed",
-        "kalonji"
-      ],
-      "refined": []
-    },
-    {
-      "id": "crocus_sativus",
-      "canonical": "Saffron",
-      "latin": "Crocus sativus",
-      "category": "herb_spice",
-      "synonyms": [
-        "saffron"
-      ],
-      "refined": []
-    },
-    {
-      "id": "vanilla_planifolia",
-      "canonical": "Vanilla",
-      "latin": "Vanilla planifolia",
-      "category": "herb_spice",
-      "synonyms": [
-        "vanilla",
-        "vanilla pod",
-        "vanilla extract"
-      ],
-      "refined": []
-    },
-    {
-      "id": "capsicum_frutescens",
-      "canonical": "Tabasco pepper",
-      "latin": "Capsicum frutescens",
-      "category": "herb_spice",
-      "synonyms": [
-        "tabasco",
-        "birds eye chilli",
-        "scotch bonnet"
-      ],
-      "refined": []
-    }
-  ]
+ "version": "1.0",
+ "seeded": "2026-08-10",
+ "note": "Plant species table for the diversity metric. `synonyms` all resolve to the same species and score by category; `refined` entries are the SAME species but score 0.0, because a refined derivative carries the fibre and polyphenols the metric is a proxy for in name only. Matching is longest-phrase-first with the matched span consumed, so 'rice flour' cannot also match 'rice'. Herbs and spices score 0.25 by category. Add mappings here rather than in code: this file is read at runtime, so the admin path needs no redeploy. Unmapped strings go to the athlete's unresolved.json review queue.",
+ "species": [
+  {
+   "id": "malus_domestica",
+   "canonical": "Apple",
+   "latin": "Malus domestica",
+   "category": "fruit",
+   "synonyms": [
+    "apple",
+    "braeburn",
+    "pink lady",
+    "granny smith",
+    "apple puree"
+   ],
+   "refined": [
+    "apple juice",
+    "apple juice concentrate"
+   ]
+  },
+  {
+   "id": "persea_americana",
+   "canonical": "Avocado",
+   "latin": "Persea americana",
+   "category": "fruit",
+   "synonyms": [
+    "avocado",
+    "guacamole"
+   ],
+   "refined": [
+    "avocado oil"
+   ]
+  },
+  {
+   "id": "musa_acuminata",
+   "canonical": "Banana",
+   "latin": "Musa acuminata",
+   "category": "fruit",
+   "synonyms": [
+    "banana",
+    "plantain"
+   ],
+   "refined": []
+  },
+  {
+   "id": "rubus_fruticosus",
+   "canonical": "Blackberry",
+   "latin": "Rubus fruticosus",
+   "category": "fruit",
+   "synonyms": [
+    "blackberry",
+    "bramble"
+   ],
+   "refined": []
+  },
+  {
+   "id": "ribes_nigrum",
+   "canonical": "Blackcurrant",
+   "latin": "Ribes nigrum",
+   "category": "fruit",
+   "synonyms": [
+    "blackcurrant",
+    "blackcurrants",
+    "black currant",
+    "black currants",
+    "cassis"
+   ],
+   "refined": [
+    "blackcurrant syrup",
+    "blackcurrant cordial",
+    "blackcurrant squash"
+   ]
+  },
+  {
+   "id": "vaccinium_corymbosum",
+   "canonical": "Blueberry",
+   "latin": "Vaccinium corymbosum",
+   "category": "fruit",
+   "synonyms": [
+    "blueberry"
+   ],
+   "refined": []
+  },
+  {
+   "id": "prunus_avium",
+   "canonical": "Cherry",
+   "latin": "Prunus avium",
+   "category": "fruit",
+   "synonyms": [
+    "cherry",
+    "tart cherry",
+    "montmorency"
+   ],
+   "refined": [
+    "cherry juice"
+   ]
+  },
+  {
+   "id": "cocos_nucifera",
+   "canonical": "Coconut",
+   "latin": "Cocos nucifera",
+   "category": "fruit",
+   "synonyms": [
+    "coconut",
+    "desiccated coconut",
+    "coconut flakes",
+    "coconut milk"
+   ],
+   "refined": [
+    "coconut oil",
+    "coconut water",
+    "coconut sugar",
+    "coconut fat",
+    "fractionated coconut oil"
+   ]
+  },
+  {
+   "id": "vaccinium_macrocarpon",
+   "canonical": "Cranberry",
+   "latin": "Vaccinium macrocarpon",
+   "category": "fruit",
+   "synonyms": [
+    "cranberry",
+    "cranberries",
+    "dried cranberry",
+    "dried cranberries"
+   ],
+   "refined": [
+    "cranberry juice drink",
+    "cranberry syrup"
+   ]
+  },
+  {
+   "id": "phoenix_dactylifera",
+   "canonical": "Date",
+   "latin": "Phoenix dactylifera",
+   "category": "fruit",
+   "synonyms": [
+    "date",
+    "medjool",
+    "medjool date",
+    "date paste"
+   ],
+   "refined": [
+    "date syrup"
+   ]
+  },
+  {
+   "id": "sambucus_nigra",
+   "canonical": "Elderberry",
+   "latin": "Sambucus nigra",
+   "category": "fruit",
+   "synonyms": [
+    "elderberry",
+    "elderberries",
+    "elderflower"
+   ],
+   "refined": [
+    "elderflower cordial",
+    "elderflower syrup",
+    "elderberry syrup"
+   ]
+  },
+  {
+   "id": "ficus_carica",
+   "canonical": "Fig",
+   "latin": "Ficus carica",
+   "category": "fruit",
+   "synonyms": [
+    "fig",
+    "dried fig"
+   ],
+   "refined": []
+  },
+  {
+   "id": "ribes_uva_crispa",
+   "canonical": "Gooseberry",
+   "latin": "Ribes uva-crispa",
+   "category": "fruit",
+   "synonyms": [
+    "gooseberry",
+    "gooseberries"
+   ],
+   "refined": []
+  },
+  {
+   "id": "vitis_vinifera",
+   "canonical": "Grape",
+   "latin": "Vitis vinifera",
+   "category": "fruit",
+   "synonyms": [
+    "grape",
+    "raisin",
+    "sultana",
+    "currant"
+   ],
+   "refined": [
+    "grape juice",
+    "wine",
+    "balsamic vinegar"
+   ]
+  },
+  {
+   "id": "actinidia_deliciosa",
+   "canonical": "Kiwi",
+   "latin": "Actinidia deliciosa",
+   "category": "fruit",
+   "synonyms": [
+    "kiwi",
+    "kiwifruit"
+   ],
+   "refined": []
+  },
+  {
+   "id": "citrus_limon",
+   "canonical": "Lemon",
+   "latin": "Citrus limon",
+   "category": "fruit",
+   "synonyms": [
+    "lemon",
+    "lemon zest",
+    "lemon juice"
+   ],
+   "refined": []
+  },
+  {
+   "id": "citrus_aurantiifolia",
+   "canonical": "Lime",
+   "latin": "Citrus aurantiifolia",
+   "category": "fruit",
+   "synonyms": [
+    "lime",
+    "lime juice",
+    "lime zest"
+   ],
+   "refined": []
+  },
+  {
+   "id": "mangifera_indica",
+   "canonical": "Mango",
+   "latin": "Mangifera indica",
+   "category": "fruit",
+   "synonyms": [
+    "mango"
+   ],
+   "refined": []
+  },
+  {
+   "id": "olea_europaea",
+   "canonical": "Olive",
+   "latin": "Olea europaea",
+   "category": "fruit",
+   "synonyms": [
+    "olive",
+    "black olive",
+    "green olive",
+    "extra virgin olive oil"
+   ],
+   "refined": [
+    "olive oil"
+   ]
+  },
+  {
+   "id": "citrus_sinensis",
+   "canonical": "Orange",
+   "latin": "Citrus sinensis",
+   "category": "fruit",
+   "synonyms": [
+    "orange",
+    "satsuma",
+    "clementine",
+    "mandarin",
+    "blood orange"
+   ],
+   "refined": [
+    "orange juice"
+   ]
+  },
+  {
+   "id": "prunus_persica",
+   "canonical": "Peach",
+   "latin": "Prunus persica",
+   "category": "fruit",
+   "synonyms": [
+    "peach",
+    "nectarine"
+   ],
+   "refined": []
+  },
+  {
+   "id": "pyrus_communis",
+   "canonical": "Pear",
+   "latin": "Pyrus communis",
+   "category": "fruit",
+   "synonyms": [
+    "pear",
+    "conference pear"
+   ],
+   "refined": []
+  },
+  {
+   "id": "ananas_comosus",
+   "canonical": "Pineapple",
+   "latin": "Ananas comosus",
+   "category": "fruit",
+   "synonyms": [
+    "pineapple"
+   ],
+   "refined": [
+    "pineapple juice"
+   ]
+  },
+  {
+   "id": "prunus_domestica",
+   "canonical": "Plum",
+   "latin": "Prunus domestica",
+   "category": "fruit",
+   "synonyms": [
+    "plum",
+    "prune"
+   ],
+   "refined": []
+  },
+  {
+   "id": "punica_granatum",
+   "canonical": "Pomegranate",
+   "latin": "Punica granatum",
+   "category": "fruit",
+   "synonyms": [
+    "pomegranate"
+   ],
+   "refined": [
+    "pomegranate juice"
+   ]
+  },
+  {
+   "id": "rubus_idaeus",
+   "canonical": "Raspberry",
+   "latin": "Rubus idaeus",
+   "category": "fruit",
+   "synonyms": [
+    "raspberry"
+   ],
+   "refined": []
+  },
+  {
+   "id": "ribes_rubrum",
+   "canonical": "Redcurrant",
+   "latin": "Ribes rubrum",
+   "category": "fruit",
+   "synonyms": [
+    "redcurrant",
+    "redcurrants",
+    "red currant",
+    "red currants",
+    "whitecurrant",
+    "whitecurrants"
+   ],
+   "refined": [
+    "redcurrant jelly"
+   ]
+  },
+  {
+   "id": "fragaria_ananassa",
+   "canonical": "Strawberry",
+   "latin": "Fragaria ananassa",
+   "category": "fruit",
+   "synonyms": [
+    "strawberry"
+   ],
+   "refined": []
+  },
+  {
+   "id": "ocimum_basilicum",
+   "canonical": "Basil",
+   "latin": "Ocimum basilicum",
+   "category": "herb_spice",
+   "synonyms": [
+    "basil",
+    "thai basil",
+    "pesto"
+   ],
+   "refined": []
+  },
+  {
+   "id": "laurus_nobilis",
+   "canonical": "Bay",
+   "latin": "Laurus nobilis",
+   "category": "herb_spice",
+   "synonyms": [
+    "bay leaf",
+    "bay"
+   ],
+   "refined": []
+  },
+  {
+   "id": "piper_nigrum",
+   "canonical": "Black pepper",
+   "latin": "Piper nigrum",
+   "category": "herb_spice",
+   "synonyms": [
+    "black pepper",
+    "peppercorn",
+    "white pepper"
+   ],
+   "refined": []
+  },
+  {
+   "id": "capparis_spinosa",
+   "canonical": "Caper",
+   "latin": "Capparis spinosa",
+   "category": "herb_spice",
+   "synonyms": [
+    "caper"
+   ],
+   "refined": []
+  },
+  {
+   "id": "elettaria_cardamomum",
+   "canonical": "Cardamom",
+   "latin": "Elettaria cardamomum",
+   "category": "herb_spice",
+   "synonyms": [
+    "cardamom"
+   ],
+   "refined": []
+  },
+  {
+   "id": "cinnamomum_verum",
+   "canonical": "Cinnamon",
+   "latin": "Cinnamomum verum",
+   "category": "herb_spice",
+   "synonyms": [
+    "cinnamon"
+   ],
+   "refined": []
+  },
+  {
+   "id": "syzygium_aromaticum",
+   "canonical": "Clove",
+   "latin": "Syzygium aromaticum",
+   "category": "herb_spice",
+   "synonyms": [
+    "clove"
+   ],
+   "refined": []
+  },
+  {
+   "id": "coriandrum_sativum",
+   "canonical": "Coriander",
+   "latin": "Coriandrum sativum",
+   "category": "herb_spice",
+   "synonyms": [
+    "coriander",
+    "coriander leaf",
+    "coriander seed",
+    "cilantro"
+   ],
+   "refined": []
+  },
+  {
+   "id": "cuminum_cyminum",
+   "canonical": "Cumin",
+   "latin": "Cuminum cyminum",
+   "category": "herb_spice",
+   "synonyms": [
+    "cumin",
+    "cumin seed"
+   ],
+   "refined": []
+  },
+  {
+   "id": "anethum_graveolens",
+   "canonical": "Dill",
+   "latin": "Anethum graveolens",
+   "category": "herb_spice",
+   "synonyms": [
+    "dill"
+   ],
+   "refined": []
+  },
+  {
+   "id": "trigonella_foenum",
+   "canonical": "Fenugreek",
+   "latin": "Trigonella foenum-graecum",
+   "category": "herb_spice",
+   "synonyms": [
+    "fenugreek",
+    "methi"
+   ],
+   "refined": []
+  },
+  {
+   "id": "zingiber_officinale",
+   "canonical": "Ginger",
+   "latin": "Zingiber officinale",
+   "category": "herb_spice",
+   "synonyms": [
+    "ginger",
+    "root ginger",
+    "ground ginger"
+   ],
+   "refined": []
+  },
+  {
+   "id": "mentha_spicata",
+   "canonical": "Mint",
+   "latin": "Mentha spicata",
+   "category": "herb_spice",
+   "synonyms": [
+    "mint",
+    "peppermint",
+    "spearmint"
+   ],
+   "refined": []
+  },
+  {
+   "id": "brassica_juncea",
+   "canonical": "Mustard",
+   "latin": "Brassica juncea",
+   "category": "herb_spice",
+   "synonyms": [
+    "mustard",
+    "dijon",
+    "dijon mustard",
+    "wholegrain mustard",
+    "mustard seed"
+   ],
+   "refined": []
+  },
+  {
+   "id": "nigella_sativa",
+   "canonical": "Nigella",
+   "latin": "Nigella sativa",
+   "category": "herb_spice",
+   "synonyms": [
+    "nigella",
+    "nigella seed",
+    "black onion seed",
+    "kalonji"
+   ],
+   "refined": []
+  },
+  {
+   "id": "myristica_fragrans",
+   "canonical": "Nutmeg",
+   "latin": "Myristica fragrans",
+   "category": "herb_spice",
+   "synonyms": [
+    "nutmeg",
+    "mace"
+   ],
+   "refined": []
+  },
+  {
+   "id": "origanum_vulgare",
+   "canonical": "Oregano",
+   "latin": "Origanum vulgare",
+   "category": "herb_spice",
+   "synonyms": [
+    "oregano",
+    "marjoram"
+   ],
+   "refined": []
+  },
+  {
+   "id": "petroselinum_crispum",
+   "canonical": "Parsley",
+   "latin": "Petroselinum crispum",
+   "category": "herb_spice",
+   "synonyms": [
+    "parsley",
+    "flat leaf parsley"
+   ],
+   "refined": []
+  },
+  {
+   "id": "rosmarinus_officinalis",
+   "canonical": "Rosemary",
+   "latin": "Rosmarinus officinalis",
+   "category": "herb_spice",
+   "synonyms": [
+    "rosemary"
+   ],
+   "refined": []
+  },
+  {
+   "id": "crocus_sativus",
+   "canonical": "Saffron",
+   "latin": "Crocus sativus",
+   "category": "herb_spice",
+   "synonyms": [
+    "saffron"
+   ],
+   "refined": []
+  },
+  {
+   "id": "capsicum_frutescens",
+   "canonical": "Tabasco pepper",
+   "latin": "Capsicum frutescens",
+   "category": "herb_spice",
+   "synonyms": [
+    "tabasco",
+    "birds eye chilli",
+    "scotch bonnet"
+   ],
+   "refined": []
+  },
+  {
+   "id": "camellia_sinensis",
+   "canonical": "Tea",
+   "latin": "Camellia sinensis",
+   "category": "herb_spice",
+   "synonyms": [
+    "tea",
+    "green tea",
+    "black tea",
+    "matcha"
+   ],
+   "refined": []
+  },
+  {
+   "id": "thymus_vulgaris",
+   "canonical": "Thyme",
+   "latin": "Thymus vulgaris",
+   "category": "herb_spice",
+   "synonyms": [
+    "thyme"
+   ],
+   "refined": []
+  },
+  {
+   "id": "curcuma_longa",
+   "canonical": "Turmeric",
+   "latin": "Curcuma longa",
+   "category": "herb_spice",
+   "synonyms": [
+    "turmeric",
+    "turmeric root"
+   ],
+   "refined": []
+  },
+  {
+   "id": "vanilla_planifolia",
+   "canonical": "Vanilla",
+   "latin": "Vanilla planifolia",
+   "category": "herb_spice",
+   "synonyms": [
+    "vanilla",
+    "vanilla pod",
+    "vanilla extract"
+   ],
+   "refined": []
+  },
+  {
+   "id": "vicia_faba",
+   "canonical": "Broad bean",
+   "latin": "Vicia faba",
+   "category": "legume",
+   "synonyms": [
+    "broad bean",
+    "fava",
+    "fava bean",
+    "broad bean protein"
+   ],
+   "refined": []
+  },
+  {
+   "id": "cicer_arietinum",
+   "canonical": "Chickpea",
+   "latin": "Cicer arietinum",
+   "category": "legume",
+   "synonyms": [
+    "chickpea",
+    "chick pea",
+    "garbanzo",
+    "garbanzo bean",
+    "hummus",
+    "houmous",
+    "humous",
+    "gram flour",
+    "chana",
+    "falafel"
+   ],
+   "refined": []
+  },
+  {
+   "id": "phaseolus_vulgaris",
+   "canonical": "Common bean",
+   "latin": "Phaseolus vulgaris",
+   "category": "legume",
+   "synonyms": [
+    "kidney bean",
+    "black bean",
+    "cannellini",
+    "cannellini bean",
+    "borlotti",
+    "borlotti bean",
+    "haricot",
+    "haricot bean",
+    "baked beans",
+    "pinto bean",
+    "green bean",
+    "french bean",
+    "flageolet"
+   ],
+   "refined": []
+  },
+  {
+   "id": "lens_culinaris",
+   "canonical": "Lentil",
+   "latin": "Lens culinaris",
+   "category": "legume",
+   "synonyms": [
+    "lentil",
+    "red lentil",
+    "green lentil",
+    "puy lentil",
+    "beluga lentil",
+    "dal",
+    "daal",
+    "dhal"
+   ],
+   "refined": []
+  },
+  {
+   "id": "vigna_radiata",
+   "canonical": "Mung bean",
+   "latin": "Vigna radiata",
+   "category": "legume",
+   "synonyms": [
+    "mung bean",
+    "mung",
+    "beansprout",
+    "bean sprout"
+   ],
+   "refined": []
+  },
+  {
+   "id": "pisum_sativum",
+   "canonical": "Pea",
+   "latin": "Pisum sativum",
+   "category": "legume",
+   "synonyms": [
+    "pea",
+    "peas",
+    "garden pea",
+    "petit pois",
+    "mangetout",
+    "sugar snap",
+    "sugar snap pea",
+    "split pea",
+    "marrowfat"
+   ],
+   "refined": [
+    "pea protein isolate"
+   ]
+  },
+  {
+   "id": "arachis_hypogaea",
+   "canonical": "Peanut",
+   "latin": "Arachis hypogaea",
+   "category": "legume",
+   "synonyms": [
+    "peanut",
+    "peanut butter",
+    "groundnut",
+    "monkey nut"
+   ],
+   "refined": [
+    "peanut oil"
+   ]
+  },
+  {
+   "id": "glycine_max",
+   "canonical": "Soybean",
+   "latin": "Glycine max",
+   "category": "legume",
+   "synonyms": [
+    "soy",
+    "soya",
+    "soybean",
+    "soya bean",
+    "edamame",
+    "tofu",
+    "tempeh",
+    "miso",
+    "soy sauce",
+    "tamari",
+    "soya mince"
+   ],
+   "refined": [
+    "soy protein isolate",
+    "soya lecithin",
+    "soybean oil",
+    "soya oil",
+    "soy lecithin",
+    "soy protein",
+    "soya protein",
+    "soy flour",
+    "soya flour",
+    "textured soy protein"
+   ]
+  },
+  {
+   "id": "prunus_dulcis",
+   "canonical": "Almond",
+   "latin": "Prunus dulcis",
+   "category": "nut",
+   "synonyms": [
+    "almond",
+    "ground almonds",
+    "almond butter",
+    "flaked almonds"
+   ],
+   "refined": [
+    "almond milk",
+    "almond oil"
+   ]
+  },
+  {
+   "id": "bertholletia_excelsa",
+   "canonical": "Brazil nut",
+   "latin": "Bertholletia excelsa",
+   "category": "nut",
+   "synonyms": [
+    "brazil nut",
+    "brazil"
+   ],
+   "refined": []
+  },
+  {
+   "id": "anacardium_occidentale",
+   "canonical": "Cashew",
+   "latin": "Anacardium occidentale",
+   "category": "nut",
+   "synonyms": [
+    "cashew",
+    "cashew nut",
+    "cashew butter"
+   ],
+   "refined": []
+  },
+  {
+   "id": "castanea_sativa",
+   "canonical": "Chestnut",
+   "latin": "Castanea sativa",
+   "category": "nut",
+   "synonyms": [
+    "chestnut"
+   ],
+   "refined": []
+  },
+  {
+   "id": "corylus_avellana",
+   "canonical": "Hazelnut",
+   "latin": "Corylus avellana",
+   "category": "nut",
+   "synonyms": [
+    "hazelnut",
+    "cobnut",
+    "filbert"
+   ],
+   "refined": []
+  },
+  {
+   "id": "macadamia_integrifolia",
+   "canonical": "Macadamia",
+   "latin": "Macadamia integrifolia",
+   "category": "nut",
+   "synonyms": [
+    "macadamia"
+   ],
+   "refined": []
+  },
+  {
+   "id": "carya_illinoinensis",
+   "canonical": "Pecan",
+   "latin": "Carya illinoinensis",
+   "category": "nut",
+   "synonyms": [
+    "pecan"
+   ],
+   "refined": []
+  },
+  {
+   "id": "pistacia_vera",
+   "canonical": "Pistachio",
+   "latin": "Pistacia vera",
+   "category": "nut",
+   "synonyms": [
+    "pistachio"
+   ],
+   "refined": []
+  },
+  {
+   "id": "juglans_regia",
+   "canonical": "Walnut",
+   "latin": "Juglans regia",
+   "category": "nut",
+   "synonyms": [
+    "walnut"
+   ],
+   "refined": [
+    "walnut oil"
+   ]
+  },
+  {
+   "id": "theobroma_cacao",
+   "canonical": "Cacao",
+   "latin": "Theobroma cacao",
+   "category": "seed",
+   "synonyms": [
+    "cocoa",
+    "cacao",
+    "cocoa nibs",
+    "cacao nibs",
+    "dark chocolate",
+    "cocoa powder"
+   ],
+   "refined": [
+    "cocoa butter",
+    "white chocolate"
+   ]
+  },
+  {
+   "id": "salvia_hispanica",
+   "canonical": "Chia",
+   "latin": "Salvia hispanica",
+   "category": "seed",
+   "synonyms": [
+    "chia",
+    "chia seed"
+   ],
+   "refined": []
+  },
+  {
+   "id": "coffea_arabica",
+   "canonical": "Coffee",
+   "latin": "Coffea arabica",
+   "category": "seed",
+   "synonyms": [
+    "coffee",
+    "espresso",
+    "americano",
+    "filter coffee"
+   ],
+   "refined": []
+  },
+  {
+   "id": "linum_usitatissimum",
+   "canonical": "Flaxseed",
+   "latin": "Linum usitatissimum",
+   "category": "seed",
+   "synonyms": [
+    "flaxseed",
+    "flax",
+    "linseed",
+    "ground flaxseed"
+   ],
+   "refined": [
+    "flaxseed oil",
+    "linseed oil"
+   ]
+  },
+  {
+   "id": "cannabis_sativa",
+   "canonical": "Hemp",
+   "latin": "Cannabis sativa",
+   "category": "seed",
+   "synonyms": [
+    "hemp",
+    "hemp seed",
+    "hemp protein"
+   ],
+   "refined": [
+    "hemp oil"
+   ]
+  },
+  {
+   "id": "sesamum_indicum",
+   "canonical": "Sesame",
+   "latin": "Sesamum indicum",
+   "category": "seed",
+   "synonyms": [
+    "sesame",
+    "sesame seed",
+    "tahini"
+   ],
+   "refined": [
+    "sesame oil"
+   ]
+  },
+  {
+   "id": "helianthus_annuus",
+   "canonical": "Sunflower",
+   "latin": "Helianthus annuus",
+   "category": "seed",
+   "synonyms": [
+    "sunflower seed",
+    "sunflower"
+   ],
+   "refined": [
+    "sunflower oil",
+    "sunflower lecithin",
+    "sunflower seed oil",
+    "high oleic sunflower oil"
+   ]
+  },
+  {
+   "id": "cynara_scolymus",
+   "canonical": "Artichoke",
+   "latin": "Cynara scolymus",
+   "category": "veg",
+   "synonyms": [
+    "artichoke",
+    "globe artichoke"
+   ],
+   "refined": []
+  },
+  {
+   "id": "asparagus_officinalis",
+   "canonical": "Asparagus",
+   "latin": "Asparagus officinalis",
+   "category": "veg",
+   "synonyms": [
+    "asparagus"
+   ],
+   "refined": []
+  },
+  {
+   "id": "solanum_melongena",
+   "canonical": "Aubergine",
+   "latin": "Solanum melongena",
+   "category": "veg",
+   "synonyms": [
+    "aubergine",
+    "eggplant"
+   ],
+   "refined": []
+  },
+  {
+   "id": "beta_vulgaris",
+   "canonical": "Beet",
+   "latin": "Beta vulgaris",
+   "category": "veg",
+   "synonyms": [
+    "beetroot",
+    "beet",
+    "chard",
+    "swiss chard",
+    "rainbow chard",
+    "beetroot juice",
+    "beetroot shot"
+   ],
+   "refined": [
+    "sugar",
+    "caster sugar",
+    "granulated sugar",
+    "beet sugar",
+    "invert sugar",
+    "invert sugar syrup",
+    "sugar syrup",
+    "molasses"
+   ]
+  },
+  {
+   "id": "brassica_oleracea",
+   "canonical": "Cabbage family",
+   "latin": "Brassica oleracea",
+   "category": "veg",
+   "synonyms": [
+    "broccoli",
+    "tenderstem",
+    "tenderstem broccoli",
+    "cauliflower",
+    "kale",
+    "cavolo nero",
+    "cabbage",
+    "red cabbage",
+    "savoy cabbage",
+    "brussels sprout",
+    "sprouts",
+    "kohlrabi",
+    "spring greens",
+    "romanesco"
+   ],
+   "refined": []
+  },
+  {
+   "id": "brassica_rapa",
+   "canonical": "Brassica rapa",
+   "latin": "Brassica rapa",
+   "category": "veg",
+   "synonyms": [
+    "pak choi",
+    "bok choy",
+    "turnip",
+    "chinese cabbage",
+    "tatsoi",
+    "mizuna"
+   ],
+   "refined": []
+  },
+  {
+   "id": "daucus_carota",
+   "canonical": "Carrot",
+   "latin": "Daucus carota",
+   "category": "veg",
+   "synonyms": [
+    "carrot",
+    "chantenay"
+   ],
+   "refined": []
+  },
+  {
+   "id": "apium_graveolens",
+   "canonical": "Celery",
+   "latin": "Apium graveolens",
+   "category": "veg",
+   "synonyms": [
+    "celery",
+    "celeriac",
+    "celery salt"
+   ],
+   "refined": []
+  },
+  {
+   "id": "cucumis_sativus",
+   "canonical": "Cucumber",
+   "latin": "Cucumis sativus",
+   "category": "veg",
+   "synonyms": [
+    "cucumber",
+    "gherkin"
+   ],
+   "refined": []
+  },
+  {
+   "id": "foeniculum_vulgare",
+   "canonical": "Fennel",
+   "latin": "Foeniculum vulgare",
+   "category": "veg",
+   "synonyms": [
+    "fennel",
+    "fennel seed",
+    "fennel bulb"
+   ],
+   "refined": []
+  },
+  {
+   "id": "allium_sativum",
+   "canonical": "Garlic",
+   "latin": "Allium sativum",
+   "category": "veg",
+   "synonyms": [
+    "garlic",
+    "garlic powder",
+    "black garlic"
+   ],
+   "refined": []
+  },
+  {
+   "id": "allium_ampeloprasum",
+   "canonical": "Leek",
+   "latin": "Allium ampeloprasum",
+   "category": "veg",
+   "synonyms": [
+    "leek",
+    "elephant garlic"
+   ],
+   "refined": []
+  },
+  {
+   "id": "lactuca_sativa",
+   "canonical": "Lettuce",
+   "latin": "Lactuca sativa",
+   "category": "veg",
+   "synonyms": [
+    "lettuce",
+    "little gem",
+    "romaine",
+    "cos lettuce",
+    "iceberg"
+   ],
+   "refined": []
+  },
+  {
+   "id": "zea_mays",
+   "canonical": "Maize",
+   "latin": "Zea mays",
+   "category": "veg",
+   "synonyms": [
+    "sweetcorn",
+    "corn",
+    "corn on the cob",
+    "polenta",
+    "cornmeal",
+    "popcorn"
+   ],
+   "refined": [
+    "cornflour",
+    "corn starch",
+    "corn syrup",
+    "glucose syrup",
+    "maltodextrin",
+    "corn oil",
+    "dextrose",
+    "glucose-fructose syrup",
+    "modified maize starch",
+    "modified corn starch",
+    "corn fibre",
+    "maize starch"
+   ]
+  },
+  {
+   "id": "agaricus_bisporus",
+   "canonical": "Mushroom",
+   "latin": "Agaricus bisporus",
+   "category": "veg",
+   "synonyms": [
+    "mushroom",
+    "chestnut mushroom",
+    "button mushroom",
+    "portobello"
+   ],
+   "refined": []
+  },
+  {
+   "id": "allium_cepa",
+   "canonical": "Onion",
+   "latin": "Allium cepa",
+   "category": "veg",
+   "synonyms": [
+    "onion",
+    "red onion",
+    "white onion",
+    "shallot",
+    "onion powder"
+   ],
+   "refined": []
+  },
+  {
+   "id": "capsicum_annuum",
+   "canonical": "Pepper (capsicum)",
+   "latin": "Capsicum annuum",
+   "category": "veg",
+   "synonyms": [
+    "pepper",
+    "red pepper",
+    "green pepper",
+    "yellow pepper",
+    "bell pepper",
+    "romano pepper",
+    "chilli",
+    "chili",
+    "jalapeno",
+    "paprika",
+    "cayenne"
+   ],
+   "refined": []
+  },
+  {
+   "id": "solanum_tuberosum",
+   "canonical": "Potato",
+   "latin": "Solanum tuberosum",
+   "category": "veg",
+   "synonyms": [
+    "potato",
+    "new potato",
+    "jacket potato",
+    "maris piper",
+    "charlotte potato"
+   ],
+   "refined": [
+    "potato starch",
+    "crisps",
+    "chips",
+    "modified potato starch"
+   ]
+  },
+  {
+   "id": "cucurbita_pepo",
+   "canonical": "Pumpkin",
+   "latin": "Cucurbita pepo",
+   "category": "veg",
+   "synonyms": [
+    "pumpkin",
+    "pumpkin seed",
+    "pepita",
+    "courgette",
+    "zucchini",
+    "marrow",
+    "yellow squash"
+   ],
+   "refined": [
+    "pumpkin seed oil"
+   ]
+  },
+  {
+   "id": "rheum_rhabarbarum",
+   "canonical": "Rhubarb",
+   "latin": "Rheum rhabarbarum",
+   "category": "veg",
+   "synonyms": [
+    "rhubarb",
+    "forced rhubarb"
+   ],
+   "refined": []
+  },
+  {
+   "id": "eruca_vesicaria",
+   "canonical": "Rocket",
+   "latin": "Eruca vesicaria",
+   "category": "veg",
+   "synonyms": [
+    "rocket",
+    "arugula"
+   ],
+   "refined": []
+  },
+  {
+   "id": "spinacia_oleracea",
+   "canonical": "Spinach",
+   "latin": "Spinacia oleracea",
+   "category": "veg",
+   "synonyms": [
+    "spinach",
+    "baby spinach"
+   ],
+   "refined": []
+  },
+  {
+   "id": "allium_fistulosum",
+   "canonical": "Spring onion",
+   "latin": "Allium fistulosum",
+   "category": "veg",
+   "synonyms": [
+    "spring onion",
+    "scallion",
+    "green onion",
+    "salad onion"
+   ],
+   "refined": []
+  },
+  {
+   "id": "brassica_napus",
+   "canonical": "Swede / rapeseed",
+   "latin": "Brassica napus",
+   "category": "veg",
+   "synonyms": [
+    "swede",
+    "rutabaga"
+   ],
+   "refined": [
+    "rapeseed oil",
+    "vegetable oil",
+    "canola oil",
+    "rape seed oil",
+    "rapeseed lecithin"
+   ]
+  },
+  {
+   "id": "ipomoea_batatas",
+   "canonical": "Sweet potato",
+   "latin": "Ipomoea batatas",
+   "category": "veg",
+   "synonyms": [
+    "sweet potato",
+    "kumara"
+   ],
+   "refined": []
+  },
+  {
+   "id": "solanum_lycopersicum",
+   "canonical": "Tomato",
+   "latin": "Solanum lycopersicum",
+   "category": "veg",
+   "synonyms": [
+    "tomato",
+    "cherry tomato",
+    "plum tomato",
+    "passata",
+    "tomato puree",
+    "sundried tomato",
+    "tomato paste"
+   ],
+   "refined": []
+  },
+  {
+   "id": "hordeum_vulgare",
+   "canonical": "Barley",
+   "latin": "Hordeum vulgare",
+   "category": "wholegrain",
+   "synonyms": [
+    "barley",
+    "pearl barley",
+    "pot barley"
+   ],
+   "refined": [
+    "barley malt",
+    "malt extract"
+   ]
+  },
+  {
+   "id": "fagopyrum_esculentum",
+   "canonical": "Buckwheat",
+   "latin": "Fagopyrum esculentum",
+   "category": "wholegrain",
+   "synonyms": [
+    "buckwheat",
+    "soba",
+    "soba noodles",
+    "buckwheat flour"
+   ],
+   "refined": []
+  },
+  {
+   "id": "avena_sativa",
+   "canonical": "Oats",
+   "latin": "Avena sativa",
+   "category": "wholegrain",
+   "synonyms": [
+    "oat",
+    "oats",
+    "rolled oats",
+    "porridge oats",
+    "jumbo oats",
+    "oatmeal",
+    "oat bran",
+    "steel cut oats"
+   ],
+   "refined": [
+    "oat milk",
+    "oat syrup"
+   ]
+  },
+  {
+   "id": "chenopodium_quinoa",
+   "canonical": "Quinoa",
+   "latin": "Chenopodium quinoa",
+   "category": "wholegrain",
+   "synonyms": [
+    "quinoa",
+    "red quinoa",
+    "white quinoa"
+   ],
+   "refined": []
+  },
+  {
+   "id": "oryza_sativa",
+   "canonical": "Rice",
+   "latin": "Oryza sativa",
+   "category": "wholegrain",
+   "synonyms": [
+    "rice",
+    "brown rice",
+    "black rice",
+    "white rice",
+    "basmati",
+    "basmati rice",
+    "jasmine rice",
+    "wholegrain rice",
+    "wild rice"
+   ],
+   "refined": [
+    "rice flour",
+    "rice syrup",
+    "rice cake",
+    "puffed rice",
+    "rice milk",
+    "rice starch",
+    "rice protein"
+   ]
+  },
+  {
+   "id": "secale_cereale",
+   "canonical": "Rye",
+   "latin": "Secale cereale",
+   "category": "wholegrain",
+   "synonyms": [
+    "rye",
+    "rye bread",
+    "rye flour",
+    "pumpernickel"
+   ],
+   "refined": []
+  },
+  {
+   "id": "triticum_aestivum",
+   "canonical": "Wheat",
+   "latin": "Triticum aestivum",
+   "category": "wholegrain",
+   "synonyms": [
+    "wholemeal",
+    "wholemeal flour",
+    "wholewheat",
+    "wholewheat pasta",
+    "wheat bran",
+    "bulgur",
+    "bulgur wheat",
+    "freekeh",
+    "spelt",
+    "wheatgerm"
+   ],
+   "refined": [
+    "white flour",
+    "plain flour",
+    "white bread",
+    "pasta",
+    "white pasta",
+    "semolina",
+    "couscous",
+    "wheat flour",
+    "wheat starch",
+    "wheat syrup",
+    "fortified wheat flour",
+    "wheat glucose syrup",
+    "wheat protein",
+    "wheat fibre"
+   ]
+  }
+ ]
 }
