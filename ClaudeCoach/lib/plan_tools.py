@@ -649,9 +649,26 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     # prescribed rather than one the athlete was never going to be asked for.
     # Deliberately NOT applied to the deload/easy/taper branches below: those set their
     # own reduced figure and capping a down-week's step-up is meaningless.
+    # A prior INTRINSIC down-week (scheduled deload, B-race taper, race week) is light BY
+    # DESIGN and must not read as "no build happened". Without this guard the cap fires
+    # off every deload and ratchets the return week down to 1.30x the deload itself -
+    # Kathryn's 27 Jul went 636 -> 515 off her 20 Jul deload - which defeats the entire
+    # point of unloading. This is the same trap, and the same fix, as the miss-trigger
+    # branch below; classification is shared so the two cannot disagree about what
+    # counts as a planned down-week.
+    _prev_type_cache = {}
+
+    def _prev_week_type():
+        if "t" not in _prev_type_cache:
+            _prev_type_cache["t"] = required_tss(
+                cfg, ctl_today, today=today - timedelta(days=7),
+                last_week_tss=None).get("week_type")
+        return _prev_type_cache["t"]
+
     last_at_or_below_maint = (
         last_week_tss is not None and maintenance
-        and float(last_week_tss) <= _DEFACTO_DELOAD_AT * maintenance)
+        and float(last_week_tss) <= _DEFACTO_DELOAD_AT * maintenance
+        and _prev_week_type() not in ("deload", "taper", "race"))
     if last_at_or_below_maint and rec:
         step_cap = max(int(maintenance), int(round(float(last_week_tss) * _RETURN_STEP)))
         if step_cap < int(rec):
@@ -740,9 +757,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
         # Classify the prior week by recomputing it — required_tss is pure and the inner
         # call passes last_week_tss=None, so it skips THIS branch (bounded recursion).
         # This also subsumes the old scheduled-deload arithmetic guard (prev type=deload).
-        _prev_type = required_tss(cfg, ctl_today, today=today - timedelta(days=7),
-                                  last_week_tss=None).get("week_type")
-        if _prev_type not in ("deload", "taper", "race"):
+        if _prev_week_type() not in ("deload", "taper", "race"):
             deload_why = (f"recovery week: last week's executed load "
                           f"({int(last_week_tss)} TSS) was under {int(_MISS_TRIGGER * 100)}% "
                           f"of maintenance (~{int(_MISS_TRIGGER * maintenance)})")

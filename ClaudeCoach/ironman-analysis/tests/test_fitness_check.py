@@ -75,8 +75,15 @@ class TestSpecificPhaseContent:
         assert gb.ctl_range("Full Ironman", "Specific") == (75, 90)
 
     def test_distribution_row_exists(self, gb):
-        d = gb.DISTRIBUTION["Full Ironman"]["specific"]
-        assert d["Bike"].startswith("72%") and d["Run"].startswith("78%")
+        # Interpolated, not canonical: blueprint.md section 3.2 states Base/Build/Peak
+        # only. Previously pinned to "72%"/"78%", the pre-doc hand-written literals.
+        D = gb.DISTRIBUTION["Full Ironman"]
+        d, build, peak = D["specific"], D["build"], D["peak"]
+        _easy = lambda row: float(__import__("re").search(r"(\d+)", row).group(1))
+        for sport in ("Bike", "Run", "Swim"):
+            assert _easy(peak[sport]) <= _easy(d[sport]) <= _easy(build[sport]), sport
+            assert sum(float(x) for x in __import__("re").findall(
+                r"(\d+(?:\.\d+)?)\s*%", d[sport])) == 100, sport
 
     def test_fuelling_is_race_rate_on_all_key_sessions(self, gb):
         note = gb.fuelling_note("Full Ironman", "Specific")

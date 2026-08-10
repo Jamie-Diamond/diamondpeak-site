@@ -313,7 +313,15 @@ class TestSpecificPhaseContent:
         build = next(p for p in data["phases"] if p["family"] == "build")
         assert spec["if_target"] == 0.70               # between build 0.68 and peak 0.72
         assert spec["distribution"] != build["distribution"]
-        assert spec["distribution"]["Bike"].startswith("72%")
+        # Specific is INTERPOLATED between build and peak: blueprints/blueprint.md
+        # section 3.2 states Base/Build/Peak only, so there is no canonical Specific
+        # row to pin. This used to assert "72%", which was the hand-written literal
+        # the generator carried before it read the doc - pinning a number the
+        # methodology never sanctioned. Assert the RELATIONSHIP instead.
+        peak = next(p for p in data["phases"] if p["family"] == "peak")
+        _easy = lambda row: float(__import__("re").search(r"(\d+)", row).group(1))
+        assert _easy(peak["distribution"]["Bike"]) < _easy(spec["distribution"]["Bike"]) \
+            < _easy(build["distribution"]["Bike"])
         assert spec["brick_min"] == "2–3"
         assert spec["tss_ceiling"] > build["tss_ceiling"]   # higher IF -> higher ceiling
 

@@ -289,3 +289,82 @@ class TestBlockDeloadPlacement:
     def test_cadence_off_places_nothing(self):
         p = pt.block_deload_weeks(self._kathryn(deload_every_n_weeks=0))
         assert p["weeks"] == {} and p["cadence"] == []
+
+
+class TestReturnToLoadAndDefactoDeload:
+    """Both from Jamie and Kathryn, 10 Aug 2026.
+
+    _MISS_TRIGGER only fires on a COLLAPSE (< 70% of maintenance). The commoner case
+    is a week that merely failed to BUILD, and nothing caught it: Kathryn ran 474
+    against 584 planned with maintenance at 489 - 97% of maintenance, so no branch
+    tripped - and the next week was then sized purely off the CTL line at 690, which
+    is +46% on what she had actually done and above her best realised ramp all season.
+    On top of that the cadence scheduled a deload, stacking two unchosen down-weeks
+    into the first week of her Peak phase while she sat 6 CTL below her race band.
+    """
+
+    def _kathryn(self, **over):
+        return _cfg(plan_start="2026-05-04", race_date="2026-09-20",
+                    phase_tss={"base_end_week": 8, "build_end_week": 14,
+                               "peak_end_week": 18},
+                    ctl_targets={"race_min": 76, "race_max": 80},
+                    max_ctl_ramp_per_week=6.0, **over)
+
+    # Kathryn's real numbers: CTL 69.9 -> maintenance 489, last week executed 474.
+    K_CTL, K_LAST, K_MAINT = 69.9, 474.0, 489
+
+    def test_step_up_is_capped_after_a_week_at_or_below_maintenance(self):
+        # Week 17 (24 Aug) is an ordinary loading week, so only the cap is in play.
+        r = pt.required_tss(self._kathryn(), self.K_CTL,
+                            today=date(2026, 8, 24), last_week_tss=self.K_LAST)
+        assert r["week_type"] != "deload"
+        assert r["return_step_cap"] == round(self.K_LAST * 1.30)
+        assert r["recommended_weekly_tss"] == r["return_step_cap"]
+        assert r["uncapped_weekly_tss"] > r["return_step_cap"]
+        assert "RETURN TO LOAD" in r["note"]
+
+    def test_cap_never_prescribes_detraining(self):
+        # 100 x 1.30 is far below maintenance; the cap floors at maintenance so it
+        # cannot ask for less load than holding fitness requires.
+        r = pt.required_tss(self._kathryn(), self.K_CTL,
+                            today=date(2026, 8, 24), last_week_tss=100.0)
+        assert r["return_step_cap"] == self.K_MAINT
+
+    def test_no_cap_after_a_genuine_build_week(self):
+        r = pt.required_tss(self._kathryn(), self.K_CTL,
+                            today=date(2026, 8, 24), last_week_tss=628.0)
+        assert "return_step_cap" not in r
+
+    def test_no_cap_when_last_week_is_unknown(self):
+        # A fetch failure must never silently cap the prescription.
+        r = pt.required_tss(self._kathryn(), self.K_CTL,
+                            today=date(2026, 8, 24), last_week_tss=None)
+        assert "return_step_cap" not in r
+
+    def test_a_planned_deload_does_not_ratchet_the_return_week_down(self):
+        # THE regression this guard exists for. Week 12 (20 Jul) is a scheduled
+        # deload; the week after it must return to FULL load. Without the guard the
+        # cap fired off the deload's own reduced load and dragged 636 down to 515,
+        # which defeats the point of unloading and ratchets down after every deload.
+        r = pt.required_tss(self._kathryn(), 67.2,
+                            today=date(2026, 7, 27), last_week_tss=396.0)
+        assert "return_step_cap" not in r
+        assert r["recommended_weekly_tss"] == r["required_weekly_tss"]
+        assert "deload_may_be_redundant" not in r
+
+    def test_scheduled_deload_after_a_flat_week_is_questioned_not_skipped(self):
+        # Week 15 (10 Aug) is where block_deload_weeks places her deload.
+        r = pt.required_tss(self._kathryn(), self.K_CTL,
+                            today=date(2026, 8, 10), last_week_tss=self.K_LAST)
+        # The deload STANDS: recovery is never silently stripped.
+        assert r["week_type"] == "deload"
+        q = r["deload_may_be_redundant"]
+        assert q["last_week_tss"] == int(self.K_LAST)
+        assert q["maintenance_weekly_tss"] == self.K_MAINT
+        assert "de facto deload" in q["question"]
+
+    def test_an_earned_deload_is_not_questioned(self):
+        r = pt.required_tss(self._kathryn(), self.K_CTL,
+                            today=date(2026, 8, 10), last_week_tss=640.0)
+        assert r["week_type"] == "deload"
+        assert "deload_may_be_redundant" not in r
