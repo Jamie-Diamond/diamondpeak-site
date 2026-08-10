@@ -58,10 +58,15 @@ CACHE_MAX_AGE_DAYS = 365        # UK retailers reformulate; older is a cache mis
 
 # Ladder rungs, in preference order. Recorded per entry so a degraded resolution
 # is visible rather than silent - the bot states the rung it used.
-SOURCE_RUNGS = ("cache", "retailer", "openfoodfacts", "llm")
+SOURCE_RUNGS = ("cache", "retailer", "cofid", "usda", "openfoodfacts",
+                "nutritionix", "manual", "llm")
 RUNG_CONFIDENCE = {"cache": None,          # inherits whatever produced it
-                   "retailer": "label",
+                   "retailer": "label",    # the actual product listing
+                   "cofid": "label",       # PHE McCance & Widdowson, UK whole foods
+                   "manual": "label",      # the athlete read it off the pack
+                   "usda": "database",
                    "openfoodfacts": "database",
+                   "nutritionix": "database",
                    "llm": "estimate"}
 
 MEASUREMENT_TYPES = ("weight", "body_fat", "rhr", "hrv")
