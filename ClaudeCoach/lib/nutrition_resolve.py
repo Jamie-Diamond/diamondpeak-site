@@ -178,6 +178,10 @@ def _relevant(query: str, name: str) -> bool:
 
 class Rung:
     CACHE = "cache"
+    # The chain's own published per-dish nutrition, read from the platform it publishes
+    # through. Ahead of everything else for a restaurant dish: it is the manufacturer of
+    # that dish, so its figures are label data, and no search can beat them.
+    VENDOR = "vendor"
     WEB = "web"
     MANUAL = "manual"
     RETAILER = "retailer"
@@ -216,13 +220,13 @@ class Rung:
 # All four remain implemented and tested, and can be re-enabled per athlete via config.
 # They are off the default path because they lost on merit, not because they are broken.
 LADDER = (Rung.COFID, Rung.WEB, Rung.LLM)
-OPTIONAL_RUNGS = (Rung.RETAILER, Rung.USDA, Rung.OFF, Rung.NUTRITIONIX)
+OPTIONAL_RUNGS = (Rung.VENDOR, Rung.RETAILER, Rung.USDA, Rung.OFF, Rung.NUTRITIONIX)
 # Preference order for EVERY rung, default or optional. An optional rung that a caller
 # supplies a fetcher for joins the ladder at its proper place rather than being ignored -
 # otherwise enabling one would silently do nothing, which is the same class of bug as a
 # parameter nobody passes.
-FULL_ORDER = (Rung.RETAILER, Rung.COFID, Rung.USDA, Rung.OFF, Rung.NUTRITIONIX,
-              Rung.WEB, Rung.LLM)
+FULL_ORDER = (Rung.VENDOR, Rung.RETAILER, Rung.COFID, Rung.USDA, Rung.OFF,
+              Rung.NUTRITIONIX, Rung.WEB, Rung.LLM)
 
 
 def effective_ladder(fetchers: dict = None, cofid_ready: bool = True) -> tuple:
@@ -685,6 +689,18 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
     return out
 
 
+# Keys a fetcher may set that MUST survive finalisation.
+#
+# The dict _finalise returns is an allowlist, so anything a fetcher computes and this
+# tuple does not name is dropped in silence. That has now happened three times - the
+# matched species score, the `provisional` diversity flag, and the vendor rung's
+# modifier note, which was computed correctly and never reached the confirm message.
+# Naming them in one place makes the next addition a one-line change instead of a
+# silent loss.
+PASSTHROUGH_FIELDS = ("note", "vendor", "components", "swaps", "modifiers_unaccounted",
+                      "per", "pack_g", "portion_used_g", "sodium_from_salt")
+
+
 def _finalise(got: dict, raw_text: str, rung: str, confidence: str, attempts, table,
               day, degraded: bool) -> dict:
     """Shape one resolved item, tag species from its INGREDIENTS, and state how good
@@ -728,6 +744,9 @@ def _finalise(got: dict, raw_text: str, rung: str, confidence: str, attempts, ta
     }
     for f in MACRO_FIELDS:
         out[f] = got.get(f)
+    for f in PASSTHROUGH_FIELDS:
+        if got.get(f) is not None:
+            out[f] = got[f]
     return out
 
 
@@ -757,7 +776,9 @@ def describe_provenance(item: dict) -> str:
     estimate must never look like label data, and a degraded resolution must say so."""
     if item.get("needs_input"):
         return "Could not resolve this one. Give me the pack figures?"
-    label = {Rung.CACHE: "from your saved items",
+    label = {Rung.VENDOR: ("from " + (item.get("vendor") or "the chain")
+                           + "'s published nutrition"),
+             Rung.CACHE: "from your saved items",
              Rung.MANUAL: "from the pack, as you gave it",
              Rung.RETAILER: "from the retailer listing",
              Rung.COFID: "from the UK composition tables (CoFID)",
@@ -768,6 +789,11 @@ def describe_provenance(item: dict) -> str:
     bits = [label]
     if item.get("confidence") == "estimate":
         bits.append("roughly +/-10-15%")
+    if item.get("note"):
+        # An unaccounted modifier changes the number materially - "extra salmon" is 282
+        # kcal at Wagamama - so it belongs on the line he reads BEFORE confirming, not
+        # only in the stored record.
+        bits.append(item["note"])
     if item.get("degraded"):
         failed = [a["rung"] for a in item.get("attempts", []) if a["outcome"] == "error"]
         bits.append("a better source failed: " + ", ".join(failed))

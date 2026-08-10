@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "note": "Chains that publish per-dish nutrition in a form that can be read at source. Every entry here must be VERIFIED by fetching it: an unverified URL costs a wasted fetch and then falls through to the model anyway, and a guessed one that happens to resolve to an aggregator would put label confidence on somebody's estimate. `platform` selects the parser in lib/restaurants.py. UK chain kcal on menus is mandatory, but full macros are not, so most chains publish only via a platform like this one - which is exactly why a plain web search cannot replace this rung.",
+  "how_to_add": "Find the chain's allergen/nutrition link on its own site (usually in the footer), fetch it, and confirm it serves per-dish macros as static HTML rather than a JavaScript app. Then add the vendor with that URL and its platform. Verify with: python3 -c \"import sys; sys.path.insert(0,'ClaudeCoach/lib'); import restaurants as R; m=R.load_menu('<key>', R.load_registry()['<key>'], '/tmp/rcache'); print(len(m['rows']), m.get('error'))\"",
+  "vendors": {
+    "wagamama": {
+      "display": "Wagamama",
+      "aliases": [
+        "wagamama",
+        "waga mama",
+        "wagamamas"
+      ],
+      "platform": "tenkites",
+      "nutrition_url": "https://menus.tenkites.com/wagamamauk/wagamamainternalallergymatrix",
+      "verified": "2026-08-10, 161 dishes parsed, 0 dropped",
+      "notes": "Linked from wagamama.com/allergen-information. The chain's own menu pages are JavaScript-rendered and yield nothing to a fetch. Northern Ireland has a separate matrix (\u2026allergymatrix03) not wired here.",
+      "swap_groups": [
+        {
+          "component": "rice",
+          "note": "A rice bowl is published with sticky rice. Ordering brown rice instead is a SWAP, not an addition, so the difference between the two published side rows is the honest adjustment - and it is mostly fibre (+3.5 g), not energy (-8 kcal). Nothing in the order line marks it as a change, which is why it needs naming here: 'with brown rice' reads like part of the dish.",
+          "default_row": "sticky rice",
+          "applies_to_tokens": [
+            "bowl",
+            "donburi",
+            "curry",
+            "katsu",
+            "teriyaki"
+          ],
+          "options": [
+            {
+              "row": "steamed brown rice",
+              "match": [
+                "brown rice"
+              ]
+            },
+            {
+              "row": "white rice",
+              "match": [
+                "white rice"
+              ]
+            },
+            {
+              "row": "cauliflower 'rice'",
+              "match": [
+                "cauliflower rice"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -62,9 +62,13 @@ CACHE_MAX_AGE_DAYS = 365        # UK retailers reformulate; older is a cache mis
 
 # Ladder rungs, in preference order. Recorded per entry so a degraded resolution
 # is visible rather than silent - the bot states the rung it used.
-SOURCE_RUNGS = ("cache", "retailer", "cofid", "usda", "openfoodfacts",
+SOURCE_RUNGS = ("cache", "vendor", "retailer", "cofid", "usda", "openfoodfacts",
                 "nutritionix", "manual", "computed", "web", "llm")
-RUNG_CONFIDENCE = {"cache": None,          # inherits whatever produced it
+RUNG_CONFIDENCE = {# A chain publishing figures for its own dish IS the manufacturer of
+                   # that dish, so this is label data - not a database lookup, and
+                   # certainly not an estimate.
+                   "vendor": "label",
+                   "cache": None,          # inherits whatever produced it
                    "retailer": "label",    # the actual product listing
                    "cofid": "label",       # PHE McCance & Widdowson, UK whole foods
                    "manual": "label",      # the athlete read it off the pack

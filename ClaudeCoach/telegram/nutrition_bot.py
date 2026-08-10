@@ -50,9 +50,10 @@ sys.path.insert(0, str(BASE / "lib"))
 
 import nutrition_engine as NE       # noqa: E402
 import nutrition_nlu as NLU         # noqa: E402
-import nutrition_reconcile as RC     # noqa: E402
+import nutrition_reconcile as RC
 import nutrition_resolve as NR      # noqa: E402
 import plants as PL                 # noqa: E402
+import restaurants as RS            # noqa: E402
 import tg                           # noqa: E402
 from icu_api import IcuClient       # noqa: E402
 from nutrition_store import NutritionStore  # noqa: E402
@@ -370,6 +371,11 @@ Portion eaten: %s
 # than a food.
 _MIN_KCAL_100G, _MAX_KCAL_100G = 0.0, 950.0
 SALT_TO_SODIUM_MG = 400.0          # 1 g salt = 400 mg sodium
+
+
+# Parsed chain menus live here for a week. The matrices are megabytes of HTML, so the
+# rows are cached and the HTML is thrown away; a cache older than the TTL is a miss.
+RESTAURANT_CACHE = BASE / "athletes" / "_shared" / "restaurant-cache"
 
 
 def make_deep_fetch(log=log):
@@ -1075,6 +1081,18 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         # A barcode short-circuits the text ladder: an exact product lookup beats any
         # name search, so it is tried before the ordinary rungs rather than as one.
         fetchers = dict(ctx.fetchers)
+        # A dish from a chain we hold nutrition for goes to the chain's own figures first.
+        # Wired per ITEM because it depends on the vendor the photo identified - the same
+        # hand-off that was being dropped entirely until tonight.
+        hint = it.get("hint") or {}
+        vendor = hint.get("brand")
+        if vendor and hint.get("category") == "restaurant_dish":
+            key, _entry = RS.find_vendor(vendor)
+            if key:
+                fetchers[NR.Rung.VENDOR] = (
+                    lambda t, p, _v=vendor: RS.lookup(_v, t, RESTAURANT_CACHE))
+            else:
+                log(f"  no published nutrition held for {vendor!r}, falling to search")
         if barcode:
             fetchers[NR.Rung.RETAILER] = (
                 lambda t, p, _c=barcode: NR.off_barcode_fetch(_c, p))
@@ -1087,8 +1105,8 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         # dropped provisional flag: computed at one stage, lost at the hand-off.
         item = NR.resolve(it["text"], day=day, store=ctx.store, table=ctx.table,
                           portion_g=it.get("portion_g"), fetchers=fetchers,
-                          cofid=ctx.cofid, hint=it.get("hint"),
-                          queries=(it.get("hint") or {}).get("search_terms"))
+                          cofid=ctx.cofid, hint=hint,
+                          queries=hint.get("search_terms"))
         item["_raw"] = it["text"]
         item["in_session"] = bool(it.get("in_session"))
         item["_supplement"] = supplement
