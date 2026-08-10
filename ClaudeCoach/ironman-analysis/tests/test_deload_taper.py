@@ -22,6 +22,20 @@ sys.path.insert(0, str(REPO / "lib"))
 import plan_tools as pt  # noqa: E402
 
 
+def _frozen_date(y, m, d):
+    """A `date` SUBCLASS whose today() is fixed, for testing the completed-window guard.
+
+    Returns the CLASS, not an instance: plan_tools calls `date.today()`, and patching in
+    an instance leaves today() bound to the real calendar - which made two of these tests
+    pass only because the real date happened to be 2026-08-10.
+    """
+    class _D(date):
+        @classmethod
+        def today(cls):
+            return date(y, m, d)
+    return _D
+
+
 def _cfg(**over):
     cfg = {
         "plan_start": "2026-04-27",            # a Monday
@@ -368,3 +382,60 @@ class TestReturnToLoadAndDefactoDeload:
                             today=date(2026, 8, 10), last_week_tss=640.0)
         assert r["week_type"] == "deload"
         assert "deload_may_be_redundant" not in r
+
+
+class TestLookbackWindowMustBeOver:
+    """The miss-trigger's lookback must not read a week that has not finished.
+
+    Found 10 Aug 2026 by dry-running the generator off-cadence. Building w/c 17 Aug on
+    Monday 10 Aug made the lookback 10-16 Aug - the week IN PROGRESS, 33 TSS logged so
+    far. That is under 70% of the 489 maintenance, so _MISS_TRIGGER fired and turned a
+    PEAK week into a 303 TSS recovery week (489 x 0.62), for an athlete whose deload had
+    been deliberately removed. Pre-existing, and it silently HALVES the target of any
+    week rebuilt early - which is exactly what someone does when they want next week's
+    plan in advance.
+    """
+
+    class _Client:
+        def __init__(self): self.calls = 0
+        def get_training_history(self, days=0, sport=None):
+            self.calls += 1
+            return [{"start_date_local": "2026-08-04T09:00:00", "icu_training_load": 216},
+                    {"start_date_local": "2026-08-06T09:00:00", "icu_training_load": 258},
+                    {"start_date_local": "2026-08-10T09:00:00", "icu_training_load": 33}]
+
+    def test_a_finished_week_is_summed(self, monkeypatch):
+        # Window 3-9 Aug, entirely in the past relative to 10 Aug.
+        monkeypatch.setattr(pt, "date", _frozen_date(2026, 8, 10))
+        c = self._Client()
+        assert pt.last_week_actual_tss(c, today=date(2026, 8, 10)) == 474.0
+        assert c.calls == 1
+
+    def test_the_sunday_cron_window_ending_TODAY_is_allowed(self, monkeypatch):
+        # The 18:00 Sunday build targets the next Monday, so its window ends on that
+        # same Sunday. Rejecting hi == today would disable the trigger on the one
+        # cadence that actually uses it.
+        monkeypatch.setattr(pt, "date", _frozen_date(2026, 8, 9))
+        c = self._Client()
+        assert pt.last_week_actual_tss(c, today=date(2026, 8, 10)) == 474.0
+        assert c.calls == 1
+
+    def test_a_window_reaching_into_the_future_is_refused(self, monkeypatch):
+        monkeypatch.setattr(pt, "date", _frozen_date(2026, 8, 10))
+        c = self._Client()
+        # Building w/c 17 Aug early: window 10-16 Aug is not over.
+        assert pt.last_week_actual_tss(c, today=date(2026, 8, 17)) is None
+        assert c.calls == 0, "must refuse before spending an API call"
+
+    def test_the_future_week_is_no_longer_spuriously_deloaded(self):
+        cfg = _cfg(plan_start="2026-05-04", race_date="2026-09-20",
+                   deload_skip_weeks=["2026-08-17"],
+                   ctl_targets={"race_min": 76, "race_max": 80},
+                   phase_tss={"base_end_week": 8, "build_end_week": 14,
+                              "peak_end_week": 18},
+                   max_ctl_ramp_per_week=6.0)
+        bad = pt.required_tss(cfg, 69.9, today=date(2026, 8, 17), last_week_tss=33.0)
+        good = pt.required_tss(cfg, 69.9, today=date(2026, 8, 17), last_week_tss=None)
+        assert bad["week_type"] == "deload"          # what the partial week produced
+        assert good["week_type"] != "deload"         # what "unknown" correctly produces
+        assert good["recommended_weekly_tss"] > bad["recommended_weekly_tss"] * 2

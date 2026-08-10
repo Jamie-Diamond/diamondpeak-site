@@ -781,8 +781,24 @@ def last_week_actual_tss(client, today: date | None = None) -> float | None:
     genuinely empty week (which correctly converts this week to recovery)."""
     today = today or date.today()
     monday = _monday(today)
-    lo = (monday - timedelta(days=7)).isoformat()
-    hi = (monday - timedelta(days=1)).isoformat()
+    lo_d = monday - timedelta(days=7)
+    hi_d = monday - timedelta(days=1)
+    lo = lo_d.isoformat()
+    hi = hi_d.isoformat()
+    # The window must actually be OVER. Building a week EARLY makes the lookback the week
+    # currently in progress, and a barely-started week reads as a collapse: a dry run on
+    # Monday 10 Aug 2026 for w/c 17 Aug summed 10-16 Aug at 33 TSS, tripped _MISS_TRIGGER
+    # (< 70% of the 489 maintenance), and turned a PEAK week into a 303 TSS recovery week
+    # (489 x 0.62) for an athlete whose deload had been deliberately removed. Returning
+    # None means "unknown", which the miss-trigger already treats as do-not-fire, so an
+    # off-cadence rebuild simply gets no recovery conversion rather than a wrong one.
+    #
+    # `hi_d == date.today()` is ALLOWED, and must be: the Sunday 18:00 cron builds the
+    # following Monday, so its window ends on that same Sunday. Rejecting it would
+    # disable the trigger on the one cadence that actually uses it. Only a window
+    # reaching into the FUTURE is refused.
+    if hi_d > date.today():
+        return None
     try:
         # get_training_history(days=N) counts back from the REAL today, not `today`, so
         # the lookback must be anchored there — otherwise evaluating a past week_start
