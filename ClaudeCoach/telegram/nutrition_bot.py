@@ -171,6 +171,13 @@ def fmt_flags(flags: list, limit: int = 1) -> str:
 def fmt_confirm(item: dict) -> str:
     """The confirm prompt. States the rung every time."""
     bits = [f"*{item['resolved_name']}*", NR.describe_provenance(item)]
+    if item.get("needs_portion"):
+        per = item.get("per_100g") or {}
+        k = per.get("kcal")
+        return (f"*{item['resolved_name']}*\nFound the label, but it is per 100 g and I "
+                f"could not find the pack size"
+                + (f" ({round(float(k))} kcal per 100 g)." if k else ".")
+                + "\nHow much did you have? Grams, or the pack size.")
     if item.get("needs_input"):
         return "\n".join(bits)
     macros = " · ".join(
@@ -407,6 +414,26 @@ def make_deep_fetch(log=log):
         except (TypeError, ValueError):
             pack = None
         eaten = portion_g or pack
+        # ASK whenever the AMOUNT the figures refer to is unknown, whatever basis the
+        # model claims. Restricting this to a declared per-100g basis was not enough: the
+        # model returned per:"portion" while giving per-100g numbers, so two prepared
+        # meals came back as 106 kcal each for a second time. A label figure without an
+        # amount is unusable, and a claimed basis is not evidence.
+        if not eaten:
+            # Per-100g figures and no idea how much was eaten. ASK, do not assume
+            # (Jamie's call, 10 Aug 2026). Assuming 100 g is what turned two prepared
+            # meals into 106 kcal each, and a guess that lands inside a plausible range
+            # is undetectable afterwards.
+            log(f"web rung needs a portion for {got.get('resolved_name')!r}: "
+                f"label is per 100 g and no pack size was found")
+            return {"needs_portion": True,
+                    "resolved_name": got.get("resolved_name") or text,
+                    "per_100g": {f: got.get(f) for f in
+                                 ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g")},
+                    "ingredients": got.get("ingredients") or "",
+                    "source_url": got.get("source_url") or "",
+                    "source_kind": got.get("source_kind") or "estimate",
+                    "confidence": "label"}
         if basis.startswith("100") and eaten:
             factor = eaten / 100.0
         elif pack and portion_g and pack > 0:
