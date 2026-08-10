@@ -199,6 +199,32 @@ check("a dead model returns None so the caller can fall back",
       NLU.advise("q", {}, "claude", "m", log=lambda *a: None,
                  runner=lambda *a, **k: (_ for _ in ()).throw(OSError("x"))) is None)
 
+# 1j) A DOSE FORM is a supplement, not a food. "had 400mg of my protein collagen
+#     capsules. (1 pill)" was classified as food, name-searched, and came back as soy
+#     protein isolate with a plant species attached.
+msg = "had 400mg of my protein collagen capsules. (1 pill) This morning"
+check("capsules are detected as a dose form", NLU.looks_like_supplement(msg) is True)
+check("the mg dose is parsed", NLU.tiny_dose_mg(msg) == 400.0)
+check("a gram dose is not treated as a mg dose",
+      NLU.tiny_dose_mg("15g collagen powder") is None)
+sup = NLU.classify(msg, False, "c", "m", log=lambda *a: None,
+                   runner=fake_model('{"intent":"log_food","items":'
+                                     '[{"text":"collagen capsules"}]}'))
+check("a dose form overrides a log_food classification",
+      sup["intent"] == "log_supplement")
+check("the override is recorded", sup.get("form_detected") is True)
+check("400 mg is flagged nutritionally trivial",
+      sup.get("nutritionally_trivial") is True)
+big = NLU.classify("had 15g of collagen powder", False, "c", "m", log=lambda *a: None,
+                   runner=fake_model('{"intent":"log_food","items":'
+                                     '[{"text":"collagen powder","portion_g":15}]}'))
+check("a real 15 g dose is not flagged trivial",
+      not big.get("nutritionally_trivial"))
+check("food is still food", NLU.classify(
+    "porridge with blueberries", False, "c", "m", log=lambda *a: None,
+    runner=fake_model('{"intent":"log_food","items":[{"text":"porridge"}]}')
+)["intent"] == "log_food")
+
 # 2) A CEILING must never render as consumed/target. This is the misreading spec
 #    4.1 warns about: a bar reading low against a ceiling looks like failure when
 #    it is compliance.

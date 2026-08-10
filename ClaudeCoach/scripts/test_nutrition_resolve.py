@@ -296,6 +296,54 @@ check("status reports CoFID ready from the local table",
       status[R.Rung.COFID] == "ready")
 check("every ladder rung is accounted for", set(status) == set(R.LADDER))
 
+# 17) THE RELEVANCE GUARD. "400mg of my protein collagen capsules" resolved to "Soy
+#     protein isolate" from USDA: a product he never ate, with confident macros, a
+#     database badge, and a soy plant species tagged against it. USDA matched on the
+#     word "protein" and the fetcher took the first hit carrying an energy figure.
+check("the real failure is now rejected",
+      R._relevant("400mg of my protein collagen capsules", "Soy protein isolate") is False)
+check("a genuine collagen product is accepted",
+      R._relevant("collagen capsules", "Collagen peptides, bovine") is True)
+for q, n in (("porridge oats", "Oats, porridge, raw"),
+             ("cottage cheese", "COTTAGE CHEESE"),
+             ("M&S nut collection", "Nut Collection"),
+             ("twix xtra", "TWIX Xtra Caramel Cookie Bars"),
+             ("rubicon spring orange and mango", "Rubicon Spring Orange & Mango")):
+    check(f"still accepts a real match: {q[:26]}", R._relevant(q, n) is True)
+for q, n in (("sis immune tab", "Soy protein isolate"),
+             ("chicken breast", "Whey protein powder"),
+             ("beetroot shot", "Chicken, breast, raw")):
+    check(f"rejects an unrelated match: {q[:26]}", R._relevant(q, n) is False)
+check("'protein' alone can never be the shared token",
+      R._relevant("protein bar", "protein isolate") is False)
+check("an empty query does not reject everything",
+      R._relevant("", "anything at all") is True)
+
+# The guard is applied at the rung, not just available as a helper.
+saved = R._get_json
+try:
+    R._get_json = lambda *a, **k: {"foods": [
+        {"description": "Soy protein isolate", "dataType": "SR Legacy", "fdcId": 1,
+         "foodNutrients": [{"nutrientId": 1008, "value": 335}]}]}
+    check("USDA skips an irrelevant hit rather than returning it",
+          R.usda_fetch("collagen capsules", 100, api_key="T") is None)
+    R._get_json = lambda *a, **k: {"products": [
+        {"product_name": "Soy protein isolate", "brands": "X",
+         "energy-kcal_100g": 335, "url": "u", "code": "1"}]}
+    check("OFF skips an irrelevant hit too",
+          R.off_fetch("collagen capsules", 100) is None)
+finally:
+    R._get_json = saved
+
+# 18) Species must not be credited from a mismatched product NAME.
+res = R._finalise({"resolved_name": "Soy protein isolate", "kcal": 1},
+                  "400mg of my protein collagen capsules", R.Rung.USDA, "database",
+                  [], TABLE, TODAY, degraded=False)
+check("no soy species is credited from a wrong product name",
+      "glycine_max" not in res["species"])
+check("species come from the raw text when there are no ingredients",
+      res["species_from"] == "name")
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

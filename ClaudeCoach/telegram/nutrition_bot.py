@@ -615,13 +615,21 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         return
 
     if intent in ("log_food", "log_supplement") and got.get("items"):
+        if got.get("nutritionally_trivial"):
+            # Say it plainly rather than logging "kcal 1" and implying it counted.
+            tg.send(token, chat_id,
+                    f"{got['dose_mg']:.0f} mg is nutritionally negligible, so I will "
+                    f"record it as a supplement dose with no macros rather than pretend "
+                    f"it moves the day.", log=log)
         if got.get("degraded"):
             tg.send(token, chat_id, "I could not reach the model to split that up, so I "
                                     "am treating it as one item. Correct me if that is "
                                     "wrong.", log=log)
         offer_items(ctx, got["items"], day, token, chat_id,
                     supplement=(intent == "log_supplement"),
-                    barcode=got.get("barcode"))
+                    barcode=got.get("barcode"),
+                    trivial=bool(got.get("nutritionally_trivial")),
+                    dose_mg=got.get("dose_mg"))
         return
 
     if intent == "smalltalk":
@@ -768,7 +776,8 @@ def download_photo(ctx: Context, file_id: str, token: str):
 
 
 def offer_items(ctx: Context, items: list, day: date, token, chat_id,
-                supplement: bool = False, barcode: str = None) -> None:
+                supplement: bool = False, barcode: str = None,
+                trivial: bool = False, dose_mg: float = None) -> None:
     """Resolve each item separately and ask once for the batch.
 
     Per-item resolution matters: a whole sentence resolved as one string both
@@ -787,6 +796,8 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         item["_raw"] = it["text"]
         item["in_session"] = bool(it.get("in_session"))
         item["_supplement"] = supplement
+        item["_trivial"] = bool(trivial)
+        item["_dose_mg"] = dose_mg
         resolved.append(item)
     set_pending(ctx.store, {"batch": resolved})
     body = "\n\n".join(fmt_confirm(i) for i in resolved)
@@ -830,10 +841,15 @@ def commit_one(ctx: Context, item: dict, day: date) -> None:
     if item.get("needs_input"):
         return
     if item.get("_supplement"):
+        # Supplements record a DOSE. Macros are only carried when they are meaningful:
+        # a 400 mg capsule contributes nothing and a nominal 1 kcal reads as data.
+        trivial = bool(item.get("_trivial"))
         ctx.store.add_supplement(
-            day, nutrient=item.get("resolved_name") or item.get("_raw") or "",
-            dose=item.get("portion_g"), unit="g",
-            protein_g=item.get("protein_g") or 0)
+            day, nutrient=item.get("_raw") or item.get("resolved_name") or "",
+            dose=item.get("_dose_mg") or item.get("portion_g"),
+            unit="mg" if item.get("_dose_mg") else "g",
+            protein_g=0 if trivial else (item.get("protein_g") or 0),
+            note="dose below a nutritionally meaningful amount" if trivial else "")
         return
     ctx.store.add_entry(
         day, raw_text=item.get("raw_text") or item.get("_raw") or "",

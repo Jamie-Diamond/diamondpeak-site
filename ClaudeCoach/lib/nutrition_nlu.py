@@ -250,6 +250,17 @@ def classify(text: str, has_pending: bool, claude_bin: str, model: str, log=prin
             return {"intent": "question", "question": text}
         return got
     got = parse_with_model(text, claude_bin, model, log=log, runner=runner)
+    # A dose form overrides a log_food classification. The model reads "had 400mg of my
+    # collagen capsules" as eating, which it is, but the SUPPLEMENT path is the one that
+    # records a dose and keeps collagen out of the protein target.
+    if got.get("intent") == "log_food" and looks_like_supplement(text):
+        got["intent"] = "log_supplement"
+        got["form_detected"] = True
+    if got.get("intent") in ("log_food", "log_supplement"):
+        mg = tiny_dose_mg(text)
+        if mg is not None:
+            got["dose_mg"] = mg
+            got["nutritionally_trivial"] = mg < 2000
     if got.get("intent") == "unknown" and looks_like_eating(text):
         # Degrade to something useful. One unsplit item is worse than three items, and
         # far better than telling him his sentence was incomprehensible.
@@ -278,6 +289,35 @@ def looks_like_eating(text: str) -> bool:
     if not t or t.endswith("?"):
         return False
     return bool(_ATE_RE.search(t))
+
+
+# Dose forms. A capsule, pill or tablet is a SUPPLEMENT, never a food: it belongs on the
+# supplement path, where collagen is kept out of the protein target and the dose is
+# recorded as a dose. "400mg of my protein collagen capsules (1 pill)" was classified as
+# food, sent to a name search, and came back as soy protein isolate.
+_SUPPLEMENT_FORM = re.compile(
+    r"\b(capsule|capsules|caps|pill|pills|tablet|tablets|tabs?|softgel|softgels|"
+    r"gummies|sachet|scoop|scoops|drops?)\b", re.I)
+# A dose stated in milligrams or micrograms is nutritionally trivial as food. 400 mg of
+# anything is under 2 kcal, so reporting "kcal 1" as though it were a meal is noise.
+_TINY_DOSE = re.compile(r"\b(\d+(?:\.\d+)?)\s*(mg|mcg|ug|µg)\b", re.I)
+
+
+def looks_like_supplement(text: str) -> bool:
+    return bool(_SUPPLEMENT_FORM.search(text or ""))
+
+
+def tiny_dose_mg(text: str):
+    """Dose in mg if the message states one in mg/mcg, else None.
+
+    Used to say "that is nutritionally negligible" rather than logging a 1 kcal entry
+    and implying it was food worth counting."""
+    m = _TINY_DOSE.search(text or "")
+    if not m:
+        return None
+    val = float(m.group(1))
+    unit = m.group(2).lower()
+    return val if unit == "mg" else val / 1000.0
 
 
 ANSWER_PROMPT = """You are a nutrition logging assistant answering a short question \

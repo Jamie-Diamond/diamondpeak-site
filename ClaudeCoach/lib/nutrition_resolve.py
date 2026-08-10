@@ -70,6 +70,7 @@ reason.
 
 import json
 import os
+import re
 import sys
 import urllib.parse
 import urllib.request
@@ -91,6 +92,54 @@ NUTRITIONIX_ENDPOINT = "https://trackapi.nutritionix.com/v2/natural/nutrients"
 COFID_TABLE = Path(__file__).resolve().parent.parent / "config" / "cofid.json"
 
 MACRO_FIELDS = ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g", "dietary_sodium_mg")
+
+# Words that carry no product identity, so they must never be the thing a database hit
+# and a query have "in common". "protein" is the one that did the damage.
+#
+# NOT in here, deliberately: bar, powder, isolate, concentrate. Those are product FORMS
+# and they discriminate - a bar is not an isolate, and "collagen powder" against "soy
+# protein isolate" should fail on form as well as on substance. Treating them as noise
+# left "protein bar" with no identifying tokens at all, which made the guard abstain.
+_STOPWORDS = {
+    "the", "and", "with", "of", "a", "an", "in", "my", "some", "half", "one", "two",
+    "raw", "fresh", "plain", "whole", "large", "small", "medium", "pack", "packet",
+    "bag", "pot", "tub", "slice", "slices", "portion", "serving", "g", "kg",
+    "mg", "ml", "l", "oz", "protein", "high", "low", "free", "light", "extra", "new",
+    "value", "brand", "own", "food", "foods", "drink", "mix", "flavour", "flavoured",
+    "style", "type", "supplement", "capsule",
+    "capsules", "pill", "pills", "tablet", "tablets", "this", "morning", "had",
+}
+
+
+def _tokens(text: str) -> set:
+    out = set()
+    for w in re.split(r"[^a-z0-9]+", (text or "").lower()):
+        if len(w) >= 3 and w not in _STOPWORDS and not w.isdigit():
+            out.add(w.rstrip("s") if len(w) > 4 and w.endswith("s") else w)
+    return out
+
+
+def _relevant(query: str, name: str) -> bool:
+    """Does this database hit actually correspond to what was asked for?
+
+    THE BUG THIS EXISTS FOR. "400mg of my protein collagen capsules" resolved to
+    "Soy protein isolate" from USDA, with confident macros, a `database` badge and a
+    soy plant species tagged against it - a product he never ate, inflating the
+    diversity count. USDA matched on the word "protein" and the fetcher took the first
+    result that carried an energy figure.
+
+    So a name-searched hit must now share at least one IDENTIFYING token with the query.
+    "protein", "isolate", "capsule" and friends are stopwords precisely because they are
+    what a wrong match latches onto. `collagen` against {soy, isolate} shares nothing, so
+    it is rejected and the ladder moves on.
+
+    Erring toward rejection is right: a rejected hit falls through to the next rung and
+    ultimately to an LLM estimate that is LABELLED an estimate, whereas a wrong hit wears
+    a database badge and looks trustworthy."""
+    q, n = _tokens(query), _tokens(name)
+    if not q:
+        return True                      # nothing to check against
+    return bool(q & n)
 
 
 class Rung:
@@ -158,6 +207,8 @@ def off_fetch(query: str, portion_g: float = None) -> dict | None:
                                              * ((portion_g or 100.0) / 100.0))
         name = " ".join(x for x in ((product.get("brands") or "").split(",")[0].strip(),
                                     product.get("product_name") or "") if x).strip()
+        if not _relevant(query, name):
+            continue                     # wrong product; keep looking
         return {**out, "resolved_name": name or query,
                 "ingredients": product.get("ingredients_text") or "",
                 "source_url": product.get("url") or "",
@@ -231,6 +282,8 @@ def usda_fetch(query: str, portion_g: float = None, api_key: str = None) -> dict
                 per_100[field] = n["value"]
         if "kcal" not in per_100:
             continue
+        if not _relevant(query, food.get("description") or ""):
+            continue                     # wrong product; keep looking
         sodium = per_100.pop("dietary_sodium_mg", None)
         out = _scale(per_100, portion_g)
         if sodium is not None:
@@ -261,6 +314,8 @@ def nutritionix_fetch(query: str, portion_g: float = None,
                      body={"query": query})
     foods = data.get("foods") or []
     if not foods:
+        return None
+    if not any(_relevant(query, f.get("food_name") or "") for f in foods):
         return None
     total = {"kcal": 0.0, "protein_g": 0.0, "carb_g": 0.0, "fat_g": 0.0,
              "fibre_g": 0.0, "dietary_sodium_mg": 0.0}
@@ -323,6 +378,8 @@ class CofidTable:
                 return None
             hits.sort(key=lambda h: len(h[0]), reverse=True)
             food = hits[0][1]
+            if not _relevant(query, food.get("name") or ""):
+                return None
         per_100 = {f: food.get(f) for f in MACRO_FIELDS if food.get(f) is not None}
         sodium = per_100.pop("dietary_sodium_mg", None)
         out = _scale(per_100, portion_g)
@@ -420,7 +477,12 @@ def _finalise(got: dict, raw_text: str, rung: str, confidence: str, attempts, ta
     if table is not None:
         # Ingredients first: a composite product's NAME does not say what is in it.
         # "M&S nut collection" tags zero species off the name alone.
-        subject = ingredients or f"{raw_text} {name}"
+        #
+        # And when there are no ingredients, tag from the RAW TEXT only, never from a
+        # resolved product name. Tagging from the name credited a soy species against
+        # "collagen capsules" because the resolver had matched the wrong product - a
+        # plant he never ate, in the headline diversity count.
+        subject = ingredients or raw_text
         res = table.match_text(subject)
         species = [s["id"] for s in res["species"]]
         unmatched = res["unmatched"]
