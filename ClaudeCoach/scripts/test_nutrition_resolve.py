@@ -67,9 +67,14 @@ check("cache miss is recorded, not skipped", outcome(item, R.Rung.CACHE) == "mis
 check("macros come through", item["kcal"] == 235 and item["dietary_sodium_mg"] == 45)
 # Species come from the INGREDIENTS, not the name. "M&S nut collection" tags zero
 # species off its name alone, which is how this was found.
+# Species are stored as {"id", "score"}: the score is the one MATCHED, so a refined
+# derivative keeps its 0 instead of being read back as the category default.
+sp_ids = {s["id"] for s in item["species"]}
 check("species are tagged from the ingredients list",
       {"prunus_dulcis", "anacardium_occidentale", "corylus_avellana",
-       "bertholletia_excelsa"} <= set(item["species"]))
+       "bertholletia_excelsa"} <= sp_ids)
+check("each species carries the score it was matched at",
+      all("score" in s for s in item["species"]))
 check("the item records that species came from ingredients",
       item["species_from"] == "ingredients")
 check("a composite product name alone yields no species",
@@ -353,7 +358,7 @@ res = R._finalise({"resolved_name": "Soy protein isolate", "kcal": 1},
                   "400mg of my protein collagen capsules", R.Rung.USDA, "database",
                   [], TABLE, TODAY, degraded=False)
 check("no soy species is credited from a wrong product name",
-      "glycine_max" not in res["species"])
+      "glycine_max" not in {s["id"] for s in res["species"]})
 check("species come from the raw text when there are no ingredients",
       res["species_from"] == "name")
 

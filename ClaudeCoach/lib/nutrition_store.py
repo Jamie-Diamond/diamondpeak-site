@@ -249,7 +249,7 @@ class NutritionStore:
                   confidence: str = "estimate",
                   source_rung: str = "llm", source_url: str = "",
                   resolved_at=None, in_session: bool = False,
-                  species=None, logged_at=None) -> dict:
+                  species=None, ingredients: str = "", logged_at=None) -> dict:
         """Append one confirmed food entry. Returns the stored entry, including the
         `id` the bot needs for /undo and /edit.
 
@@ -284,7 +284,14 @@ class NutritionStore:
                 "source_url": source_url,
                 "resolved_at": _as_iso(resolved_at) if resolved_at else iso,
                 "in_session": bool(in_session),
-                "species": list(species or []),
+                # Each species is {"id", "score"}: the score is the one MATCHED, which
+                # is 0 for a refined derivative. Storing bare ids lost it and read the
+                # category default back, turning sunflower oil into sunflower.
+                "species": [s if isinstance(s, dict) else {"id": s, "score": None}
+                            for s in (species or [])],
+                # Kept so species can be re-derived after a table change without going
+                # back to the network.
+                "ingredients": ingredients or "",
                 # What the pack CLAIMS, when it says so. Kept beside what we could
                 # actually name, never instead of it.
                 "plants_claimed": plants_claimed,

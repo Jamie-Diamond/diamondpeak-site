@@ -170,12 +170,26 @@ def species_for_entries(entries, table: SpeciesTable) -> dict:
     for e in entries or []:
         stored = e.get("species")
         if stored:
-            for sid in stored:
+            for entry in stored:
+                # Accept {"id","score"} or a bare id. Storing only the ID threw the
+                # matched score away and read it back as the species' CATEGORY DEFAULT,
+                # which promoted every refined derivative to a whole plant: sunflower OIL
+                # came back as sunflower the seed, rapeseed oil as swede, glucose syrup as
+                # maize, soy lecithin as soybean, sugar as beet and potato starch as
+                # potato. Six free species per ingredient list, and it is what inflated a
+                # 7-day count to 40.
+                if isinstance(entry, dict):
+                    sid, score = entry.get("id"), entry.get("score")
+                else:
+                    sid, score = entry, None
                 meta = table.species.get(sid)
                 if not meta:
                     continue
-                if sid not in found or meta["score"] > found[sid]["score"]:
-                    found[sid] = dict(meta)
+                rec = dict(meta)
+                if score is not None:
+                    rec["score"] = float(score)
+                if sid not in found or rec["score"] > found[sid]["score"]:
+                    found[sid] = rec
             continue
         res = table.match_text(e.get("resolved_name") or e.get("raw_text") or "")
         for s in res["species"]:

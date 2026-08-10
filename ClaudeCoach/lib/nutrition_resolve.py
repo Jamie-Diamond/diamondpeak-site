@@ -646,7 +646,8 @@ def _finalise(got: dict, raw_text: str, rung: str, confidence: str, attempts, ta
         # plant he never ate, in the headline diversity count.
         subject = ingredients or raw_text
         res = table.match_text(subject)
-        species = [s["id"] for s in res["species"]]
+        # id AND matched score: a refined form scores 0 and must stay 0 when read back.
+        species = [{"id": s["id"], "score": s["score"]} for s in res["species"]]
         unmatched = res["unmatched"]
     out = {
         "raw_text": raw_text,

@@ -1116,6 +1116,7 @@ def commit_one(ctx: Context, item: dict, day: date) -> None:
         source_rung=item.get("source_rung", "llm"),
         source_url=item.get("source_url", ""),
         resolved_at=item.get("resolved_at"), species=item.get("species") or [],
+        ingredients=item.get("ingredients") or "",
         in_session=bool(item.get("in_session")),
         logged_at=datetime.now().isoformat(timespec="minutes"))
     NR.cache_resolved(ctx.store, item)
