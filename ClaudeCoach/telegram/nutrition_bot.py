@@ -944,9 +944,9 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
         # Not the photo. Saying "I could not read that" here sends him off to retake a
         # picture that was fine, and hides an outage that needs fixing on the VM.
         tg.send(token, chat_id,
-                "My model access has expired, so I cannot read images or interpret "
-                "anything right now - nothing to do with your photo. Re-authenticate on "
-                "the VM and send it again. Typed items with the figures still log fine.",
+                "My model access is failing right now - an expired token or a usage "
+                "limit - so I cannot read images. Nothing to do with your photo. Try "
+                "again shortly, and typed items with the figures still log fine.",
                 log=log)
         return
     tg.send(token, chat_id,
