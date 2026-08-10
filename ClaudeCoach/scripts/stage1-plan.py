@@ -888,16 +888,29 @@ def main():
                       "load": s["load_target"], "min": s["duration_min"],
                       "structured": bool(s["description"])} for s in built["sessions"]],
     }
+    not_pushed = False
     if args.push:
         if not overall_ok:
+            not_pushed = True
             summary["pushed"] = False
             summary["reason"] = f"not ready (rules_ok={built['ok']}, load_on_target={load_on_target}) — not pushing"
+            # hard entries are {code, msg} dicts — joining them raw crashed here
+            # (masked every clean-week failure until 5 Jul 2026). Hoisted out of the
+            # notify branch: _beat() below reads `why`, so with --notify off, or an
+            # athlete with no chat_id, this raised NameError on the one path whose whole
+            # job is to report the failure.
+            why = (blocking[0] if blocking
+                   else (f"load {load_pct_off}% off target" if not load_on_target else "audit failed"))
             if args.notify and cfg.get("chat_id"):
-                # hard entries are {code, msg} dicts — joining them raw crashed here
-                # (masked every clean-week failure until 5 Jul 2026)
-                why = (blocking[0] if blocking
-                       else (f"load {load_pct_off}% off target" if not load_on_target else "audit failed"))
-                _notify(cfg["chat_id"], f"⚠️ Couldn't generate a clean week ({why}). Your existing plan is unchanged.")
+                # "Your existing plan is unchanged" was WRONG and reassuring in the worst
+                # way: on 9 Aug all three athletes had nothing on the calendar for the
+                # coming week, so there was no existing plan to leave alone. State only
+                # what is true - the week was not written - and name the day it covers.
+                _notify(cfg["chat_id"],
+                        f"⚠️ Couldn't build a clean week for {built['week_start']} ({why}). "
+                        f"Your calendar has NOT been updated for that week - tell me and "
+                        f"I'll build it with you.",
+                        athlete=args.athlete)
             # A real deliverable failure, not silence-by-design: the athlete's week was
             # not replaced. Recorded ok=False so it shows as a digest ✗ — and because an
             # entry EXISTS, the gap check stays quiet and it is reported once, not twice.
@@ -912,9 +925,15 @@ def main():
                 except Exception:
                     pass
             if args.notify and cfg.get("chat_id"):
-                _notify(cfg["chat_id"], _week_message(brief, built))
+                _notify(cfg["chat_id"], _week_message(brief, built), athlete=args.athlete)
             _beat(True, f"pushed week of {built['week_start']} ({built['total_tss']} TSS)")
     print(json.dumps(summary, indent=1, ensure_ascii=False))
+    # Exit NON-ZERO when a --push run delivered no week. It exited 0 before, which is why
+    # weekly-plan.sh's `rc=$?` was decorative and a total failure for all three athletes
+    # (9 Aug 2026) was visible only to whoever went and read the log. 3, not 1, so the
+    # shell can tell "built nothing at all" (1) from "built a week I would not push" (3).
+    if not_pushed:
+        sys.exit(3)
 
 
 def _week_message(brief: dict, built: dict) -> str:
@@ -999,13 +1018,45 @@ def _advance_injury_ramp(slug, week_start, targets):
         pass
 
 
-def _notify(chat_id, text):
+def _notify(chat_id, text, athlete: str = "") -> bool:
+    """Send, RECORD, and report whether it went. Returns True only on a clean send.
+
+    This was fire-and-forget: subprocess.run without check, the return code never
+    inspected, `except Exception: pass`, and no ops_log entry. So a failed send left no
+    trace anywhere. That matters most for the one message that must never be lost - the
+    "couldn't generate a clean week" warning - because the athlete's alternative to
+    reading it is discovering an empty calendar themselves, which is what happened to all
+    three athletes on 9 Aug 2026. notify.py genuinely does fail: it timed out at 60s on a
+    morning chart the same week, and that too was swallowed.
+
+    Every send is now written to ops-alerts.log VERBATIM via log_outbound, marked SENT or
+    NOT SENT, so "was the athlete actually told" is answerable after the fact instead of
+    inferred from their Telegram thread.
+    """
+    ok = False
+    detail = ""
     try:
-        subprocess.run(["python3", str(BASE / "telegram" / "notify.py"),
-                        "--chat-id", str(chat_id), text],
-                       cwd=PROJECT_DIR, timeout=30, capture_output=True)
+        p = subprocess.run(["python3", str(BASE / "telegram" / "notify.py"),
+                            "--chat-id", str(chat_id), text],
+                           cwd=PROJECT_DIR, timeout=30, capture_output=True)
+        ok = (p.returncode == 0)
+        if not ok:
+            detail = (p.stderr or b"").decode("utf-8", "replace").strip()[:300] \
+                     or f"notify.py exited {p.returncode}"
+    except subprocess.TimeoutExpired:
+        detail = "notify.py timed out after 30s"
+    except Exception as e:
+        detail = f"{type(e).__name__}: {e}"
+    try:
+        ops_log.log_outbound("stage1-plan", text, sent=ok, athlete=athlete)
+        if not ok:
+            ops_log.alert("stage1-plan",
+                          f"could NOT message {athlete or chat_id} ({detail}) - "
+                          f"the athlete has not seen this: {str(text)[:120]}",
+                          athlete=athlete)
     except Exception:
-        pass
+        pass          # the send outcome is the point; logging must not mask it
+    return ok
 
 
 if __name__ == "__main__":
