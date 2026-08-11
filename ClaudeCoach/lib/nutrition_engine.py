@@ -187,6 +187,31 @@ PACE_LEGACY_REMOVED = True             # v0.1 percentage pacing deleted, see §7
 # and every deviation from it flags. So the cap reserves this much fat range.
 FAT_ZONE_MIN_WIDTH_G = 15
 
+# A BAND HAS TO BE A BAND. Carbs came out 466.5-466.5 on a long-run day: the derived low and
+# the high both clamp against the carb floor, so when the protein and fat highs consume the
+# energy they meet at a point. A zero-width band can only ever read "in zone" or "over" -
+# there is no room to land in - which makes a landing zone behave like the point target this
+# model exists to avoid.
+#
+# Widened UPWARD only, never downward. The lower edge of these bands is a physiological floor
+# (protein per kg, the carb floor, the essential-fat floor) and lowering it would sanction
+# eating less than the floor to stay "in zone" - the one direction that does real harm. The
+# upper edge is practice, so that is the edge that moves.
+BAND_MIN_WIDTH_G = 10.0
+BAND_MIN_WIDTH_FRACTION = 0.05
+
+
+def widen_band(low: float, high: float) -> tuple:
+    """Give a collapsed band usable width, above the floor rather than below it."""
+    low, high = float(min(low, high)), float(max(low, high))
+    mid = (low + high) / 2.0
+    # The absolute minimum is capped at a quarter of the band's own size, so a 10 g rule
+    # cannot turn an 8 g band into 8-18 g. Proportional at small values, absolute at large.
+    want = max(min(BAND_MIN_WIDTH_G, mid * 0.25), mid * BAND_MIN_WIDTH_FRACTION)
+    if high - low >= want:
+        return round(low, 1), round(high, 1)
+    return round(low, 1), round(low + want, 1)
+
 # How far the carb safety floor may be eased to protect the fat zone, as a fraction of
 # the day-type floor. There has to be a limit: without one, an impossible day was made
 # to "fit" by easing carbs from 250 g to 35 g (0.4 g/kg) and the unsatisfiable warning
@@ -252,7 +277,21 @@ def _as_date(v):
 
 def _zone(low, high, bias, basis="", confidence="normal") -> dict:
     """One macro's landing zone. `bias` decides warning direction, `basis` records
-    whether the numbers are sourced or reasoned so the UI can be honest about it."""
+    whether the numbers are sourced or reasoned so the UI can be honest about it.
+
+    Every zone in the model is built here, which is why the band-width rule lives here:
+    applied per caller it would be applied to some macros and not others, and the one it
+    was missing from would collapse silently. Floors and ceilings are one-sided on purpose
+    and are left alone."""
+    if bias == BIAS_BAND:
+        widened_low, widened_high = widen_band(low, high)
+        out = {"low": widened_low, "high": widened_high, "bias": bias,
+               "basis": basis, "confidence": confidence}
+        if round(high, 1) != widened_high:
+            # Said out loud: the upper edge is no longer the derived figure, and a number
+            # the page shows that was adjusted here has to admit it.
+            out["widened_from_high"] = round(high, 1)
+        return out
     return {"low": round(low, 1), "high": round(high, 1), "bias": bias,
             "basis": basis, "confidence": confidence}
 

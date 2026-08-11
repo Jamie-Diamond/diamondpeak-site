@@ -666,6 +666,32 @@ check("and the reserve is gone once it is real",
 check("a reserve never makes the day look finished when it is not",
       held["at_target"] is False)
 
+print("\n--- a band has to be a band ---")
+# Carbs came out 466.5-466.5 on a long-run day: the derived low and the high both clamp
+# against the carb floor, so when the protein and fat highs consume the energy they meet at a
+# point. A zero-width band can only read "in zone" or "over" - there is nowhere to land -
+# which makes a landing zone behave like the point target this model exists to avoid.
+check("a collapsed band is given width", N.widen_band(466.5, 466.5)[1] > 466.5)
+check("and it grows UPWARD, never below the floor",
+      N.widen_band(466.5, 466.5)[0] == 466.5)
+check("a band that is already wide is untouched",
+      N.widen_band(278.2, 367.8) == (278.2, 367.8))
+check("a nearly-collapsed band is widened too", N.widen_band(75.0, 76.0)[1] == 85.0)
+# The absolute minimum must not swamp a small band: 10 g would turn 8 g into 8-18 g.
+check("the rule is proportional at small values", N.widen_band(8.0, 8.0)[1] == 10.0)
+check("a zero band stays zero rather than inventing a target",
+      N.widen_band(0.0, 0.0) == (0.0, 0.0))
+# And it must reach every band, because it is applied where zones are BUILT.
+zb = N._zone(400.0, 400.0, N.BIAS_BAND, "test")
+check("every band zone gets it, since _zone is the one construction point",
+      zb["high"] > zb["low"])
+check("and the adjustment is declared, not silent",
+      zb.get("widened_from_high") == 400.0)
+check("a FLOOR is one-sided on purpose and left alone",
+      N._zone(180.0, 180.0, N.BIAS_FLOOR, "test")["high"] == 180.0)
+check("so is a CEILING",
+      N._zone(0.0, 20.0, N.BIAS_CEILING, "test")["high"] == 20.0)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))
