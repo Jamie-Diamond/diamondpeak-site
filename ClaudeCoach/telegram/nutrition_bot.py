@@ -1255,6 +1255,45 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
             + ("these?" if len(resolved) > 1 else "it?"), reply_markup=kb, log=log)
 
 
+def publish_now(ctx: Context) -> None:
+    """Push the app's data as soon as something is logged, in the background.
+
+    Publishing was only on the hourly cron, so a protein bar logged at 08:17 did not
+    reach the app until 09:09 and looked lost. Nothing was wrong with the log - the page
+    simply had no way to know yet.
+
+    Threaded because publish plus a push is seconds and the confirmation should not wait
+    for it, and routed through cc-git-commit-push.sh so it takes the repo lock and the
+    push retry that every other writer of this tree goes through - the crons write the
+    same working copy every few minutes."""
+    import threading
+
+    def run():
+        try:
+            pub = subprocess.run(
+                [sys.executable, str(BASE / "scripts" / "publish-nutrition-data.py")],
+                capture_output=True, text=True, timeout=120)
+            if pub.returncode != 0:
+                log(f"publish failed: {(pub.stderr or pub.stdout or '')[:200]}")
+                return
+            rel = f"ClaudeCoach/public/nutrition-{ctx.slug}.json"
+            if not (BASE.parent / rel).exists():
+                log(f"publish wrote nothing for {ctx.slug} (tracker off?)")
+                return
+            push = subprocess.run(
+                [str(BASE / "scripts" / "cc-git-commit-push.sh"),
+                 f"nutrition: {ctx.slug} log update", rel],
+                capture_output=True, text=True, timeout=180)
+            log(f"published to the app: rc={push.returncode} "
+                f"{(push.stdout or '').strip()[-120:]}")
+        except Exception as exc:
+            # Never let this break the logging path: the entry is already written and
+            # the hourly cron will publish it regardless.
+            log(f"publish_now failed, cron will catch it: {exc}")
+
+    threading.Thread(target=run, daemon=True).start()
+
+
 def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
     """Write the pending batch. Called only after an explicit confirmation."""
     batch = pend.get("batch") or [pend]
@@ -1275,6 +1314,8 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
                             sodium_mg=fuel["sodium_mg"] or None, log=log)
         if not res["written"]:
             log(f"fuel write-back deferred: {res['reason']}")
+    if wrote:
+        publish_now(ctx)
     msg = (f"Logged{'' if wrote == 1 else f' {wrote} items'}.\n\n"
            + today_block(ctx, day)) if wrote else ""
     if asked:

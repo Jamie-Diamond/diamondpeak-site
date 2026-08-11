@@ -2357,6 +2357,9 @@
                     ['snacks', 'Snacks & fuel'], ['dinner', 'Dinner']];
   var MACRO_LABEL = { protein_g: 'Protein', carb_g: 'Carbs', fat_g: 'Fat',
                       fibre_g: 'Fibre' };
+  /* Written out rather than derived, because deriving it is what collided Fat with
+     Fibre. Distinct by construction. */
+  var MACRO_SHORT = { protein_g: 'p', carb_g: 'c', fat_g: 'fat', fibre_g: 'fibre' };
 
   function renderFood() {
     var n = state.nutr;
@@ -2383,9 +2386,11 @@
 
     /* 2. Position. Where you are, not where you are going: the zones carry the
           targets and repeating them here would be two sources for one number. */
+    /* First letter of the label was the shorthand, which made Fat and Fibre BOTH "f" -
+       two different numbers wearing the same name, on the one row you glance at. */
     var chips = ['protein_g', 'carb_g', 'fat_g', 'fibre_g'].map(function (k) {
       return '<span class="chip"><b>' + Math.round(t[k] || 0) + '</b>' +
-        esc(MACRO_LABEL[k].slice(0, 1).toLowerCase()) + '</span>';
+        esc(MACRO_SHORT[k]) + '</span>';
     }).join('');
     h += card('So far today',
       '<div class="fnow"><span class="fnow-n">' +
@@ -2449,9 +2454,10 @@
           '<td><span class="dens ' + esc(v.density) + '">' + esc(v.density) +
           '</span></td></tr>';
       }).join('');
-      h += card('What is left has to look like',
+      h += card('What the rest of today has to look like',
         '<table class="tbl dtbl"><thead><tr><th>Macro</th><th>Still needed</th>' +
-        '<th>Share of what is left</th><th></th></tr></thead>' +
+        '<th>Share of remaining kcal <span class="mut">vs a normal meal</span></th>' +
+        '<th></th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table>');
     }
 
