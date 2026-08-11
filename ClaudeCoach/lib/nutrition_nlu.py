@@ -500,6 +500,19 @@ How to answer:
   does, not a coach.
 - It is fine to disagree with him, and fine to say "either is fine" when it is true.
 
+WHAT TO EAT, when he asks for options:
+- Give two or three CONCRETE options, not categories. A named dish from a named place, or a
+  meal he can actually assemble - "swap in a jacket potato" beats "add some carbohydrate".
+- Anchor them to the gap that is actually open: the remaining food budget, the macro that is
+  short, and the fibre PHASE - after a long session the ceiling has expired and fibre is
+  wanted back, before one it is not.
+- His city is in the facts if it is known. For delivery, search for what is genuinely
+  available there rather than naming a chain you assume exists, and say which you would pick.
+- Figures for anything not in the facts are ESTIMATES and must be labelled as such. If he
+  wants one logged properly, say so - the ladder will resolve it from the vendor's own
+  published data when he tells you what he ordered.
+- Say which single option you would choose, and why, in one line.
+
 Rules that are not style preferences:
 - NEVER do arithmetic and never state a figure that is not in the facts above. Everything
   there was computed deliberately; a number you produce yourself is indistinguishable
@@ -515,6 +528,21 @@ Rules that are not style preferences:
 """
 
 
+_WANTS_OPTIONS = re.compile(
+    r"\bwhat\s+(?:shall|should|can|do)\s+i\s+(?:eat|have|order|make|cook)\b"
+    r"|\bwhat\s+to\s+(?:eat|have|order|make)\b"
+    r"|\b(?:give|suggest|recommend)\b[^.]{0,20}\b(?:option|options|ideas|something)\b"
+    r"|\b(?:deliveroo|just\s?eat|uber\s?eats|takeaway|take-?away|delivery)\b"
+    r"|\bwhat\s+(?:kind\s+of\s+)?thing\s+should\s+i\s+(?:make|cook|eat)\b"
+    r"|\bi(?:\047|\u2019)?ve?\s+f\w*shed\s+my\s+\w+.{0,30}\beat\b",
+    re.I)
+
+
+def wants_options(message: str) -> bool:
+    """True when he is asking WHAT to eat, which needs more than his own log."""
+    return bool(_WANTS_OPTIONS.search(message or ""))
+
+
 def converse(message: str, facts: dict, history: list, claude_bin: str, model: str,
              log=print, runner=None, timeout: int = 150) -> str | None:
     """A turn of actual conversation. None when the model is unavailable.
@@ -524,8 +552,17 @@ def converse(message: str, facts: dict, history: list, claude_bin: str, model: s
     of a conversation however good the facts were."""
     runner = runner or subprocess.run
     convo = "\n".join(f"{t.get('role')}: {t.get('text')}" for t in (history or []))
+    # WEB TOOLS ONLY WHEN HE IS ASKING WHAT TO EAT. "what shall I eat" and "options on
+    # Deliveroo" cannot be answered from his own log alone - a takeaway menu is not in it -
+    # and a tool-less model would either invent a restaurant or fall back to "have some lean
+    # protein", which is the useless advice this is meant to replace. Every other kind of
+    # turn stays tool-free, because tools cost 30-60s and most questions are about figures
+    # that are already in the facts.
+    cmd = [claude_bin, "--print", "--model", model]
+    if wants_options(message):
+        cmd += ["--allowedTools", "WebSearch,WebFetch"]
     try:
-        proc = runner([claude_bin, "--print", "--model", model],
+        proc = runner(cmd,
                       input=CONVERSE_PROMPT % (json.dumps(facts, indent=2, default=str),
                                                convo or "(nothing yet)", message),
                       capture_output=True, text=True, timeout=timeout)

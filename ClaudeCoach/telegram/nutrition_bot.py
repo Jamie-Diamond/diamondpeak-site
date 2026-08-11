@@ -841,6 +841,12 @@ def facts_for_question(ctx: Context, day: date) -> dict:
         # Tomorrow, and what he actually eats. Without these the model can only read
         # today's numbers back out - which is exactly how this bot came to feel like a
         # form rather than a coach.
+        # Where he is, when the profile says. Needed for "what should I order" to name
+        # places that exist rather than a chain the model assumes is nearby; absent rather
+        # than guessed when unknown, and anything he says in chat overrides it.
+        "location": (json.loads((BASE / "athletes" / ctx.slug / "profile.json").read_text())
+                     .get("city") if (BASE / "athletes" / ctx.slug / "profile.json").exists()
+                     else None),
         "tomorrow": tomorrow_brief(ctx, day),
         "foods_he_actually_eats": eating_levers(ctx, day),
     }
