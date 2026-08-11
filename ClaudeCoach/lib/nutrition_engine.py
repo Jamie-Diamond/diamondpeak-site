@@ -957,7 +957,7 @@ DENSITY_HIGH = 1.4      # 40% denser than an ordinary meal
 DENSITY_LOW = 0.5       # half an ordinary meal or less
 
 
-def meal_requirement(totals: dict, z: dict) -> dict:
+def meal_requirement(totals: dict, z: dict, reserved: dict = None) -> dict:
     """What the rest of the day has to look like, computed here rather than in the page.
 
     Answers "what do I reach for next", which is a different question from "am I in
@@ -970,15 +970,29 @@ def meal_requirement(totals: dict, z: dict) -> dict:
     the page has no way to signal that it guessed.
 
     Returns `headline` (the callout), `reason` (one line), and `macros` (the table)."""
-    remaining_kcal = round((z.get("kcal_target") or 0) - (totals.get("kcal") or 0))
+    # `reserved` is fuel PRESCRIBED for a session that has not been taken yet. It is part
+    # of the day's totals but it is not food he may eat now, so it comes out of the budget
+    # the next meal is measured against - otherwise the day tells him to eat the run's
+    # carbohydrate at lunch and then tells him to stop eating after the run, when recovery
+    # is precisely when he should not.
+    reserved = {k: float(v or 0) for k, v in (reserved or {}).items()}
+    reserved_kcal = round(reserved.get("carb_g", 0) * 4 + reserved.get("protein_g", 0) * 4
+                          + reserved.get("fat_g", 0) * 9)
+    remaining_kcal = round((z.get("kcal_target") or 0) - (totals.get("kcal") or 0)
+                           - reserved_kcal)
     out = {"remaining_kcal": remaining_kcal, "macros": {}, "headline": "", "reason": "",
            "at_target": remaining_kcal <= 0}
+    if reserved_kcal:
+        out["reserved_for_session"] = {**{k: round(v, 1) for k, v in reserved.items()
+                                          if v},
+                                       "kcal": reserved_kcal}
 
     for key in ("protein_g", "carb_g", "fat_g", "fibre_g"):
         zone = z.get(key)
         if not zone:
             continue
-        eaten = float(totals.get(key) or 0)
+        # Counted as though the reserved fuel were already eaten: it is committed.
+        eaten = float(totals.get(key) or 0) + reserved.get(key, 0.0)
         lo, hi, bias = zone["low"], zone["high"], zone["bias"]
         ceiling = bias == BIAS_CEILING
         # Against the zone MINIMUM, not the midpoint: a floor is satisfied at its floor,

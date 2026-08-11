@@ -116,7 +116,7 @@ def build(slug: str, today: date) -> dict:
         # Computed HERE, not in the page. A rendering layer doing its own arithmetic
         # produces plausible wrong numbers rather than visible errors, and the page has
         # no way to signal that it guessed.
-        requirement = NE.meal_requirement(totals, z) if z else None
+        requirement = None          # computed below, once the session is known
         # In-session fuel assessed on its OWN terms, as a RATE. A day carb zone is an
         # energy budget and can look satisfied while the session inside it was badly
         # under-fuelled, which a rate cannot recover from at dinner.
@@ -126,13 +126,30 @@ def build(slug: str, today: date) -> dict:
                       default=None)
         in_session = None
         if longest and float(longest.get("duration_min") or 0) >= 90:
+            _rate = _prescribed_g_hr(longest.get("sport") or "", slog, cfg)
             in_session = NE.in_session_requirement(
                 session_minutes=float(longest["duration_min"]),
                 carbs_in_session_g=(rec_fuel["fuel"].get("carb_g") or 0),
-                target_g_hr=_prescribed_g_hr(longest.get("sport") or "", slog, cfg),
+                target_g_hr=_rate,
                 alert_g_hr=cfg.get("nutrition_alert_threshold_g_hr"),
                 sport=longest.get("sport") or "")
         carb_split = NE.split_carbs(totals)
+        # Fuel prescribed for a session and not yet taken is RESERVED out of the food
+        # budget. Prescription minus what is already logged in-session, so it is full
+        # before the session and zero afterwards without needing to know which.
+        reserve = {}
+        planned_fuel = float((z or {}).get("planned_in_session_carb_g") or 0)
+        taken_fuel = float((totals or {}).get("in_session_carb_g") or 0)
+        if planned_fuel - taken_fuel > 5:
+            reserve["carb_g"] = round(planned_fuel - taken_fuel, 1)
+        elif in_session and (in_session.get("target_g_hr") or 0) > 0:
+            planned = ((in_session.get("target_g_hr") or 0)
+                       * (in_session.get("session_minutes") or 0) / 60.0)
+            taken = float((rec_fuel.get("fuel") or {}).get("carb_g") or 0)
+            if planned - taken > 5:
+                reserve["carb_g"] = round(planned - taken, 1)
+        requirement = NE.meal_requirement(totals, z, reserved=reserve) if z else None
+
         # A STATED meal wins; the clock is only the fallback. He knows when he ate, and
         # writing the log up an hour later is normal - so "that was breakfast" has to be
         # able to override an 11:30 timestamp rather than argue with it.

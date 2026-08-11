@@ -280,7 +280,22 @@ def classify_today_and_tomorrow(icu: IcuClient, today: date, day_rules: dict):
         return [r for r in rows
                 if (r.get("start_date_local") or r.get("date") or "")[:10] == d]
 
-    today_sessions = done or for_date(events, start)
+    # COMPLETED PLUS STILL PLANNED, not one or the other.
+    #
+    # Preferring completed activities meant today was classified off a 42 minute swim while
+    # a 33 km long run with a tempo finish sat on the calendar for the afternoon: day_type
+    # came back "recovery", the targets were recovery-sized, and fibre was set as a FLOOR of
+    # 40 g - on the morning of a long run, having correctly been flipped to a ceiling
+    # yesterday when the same run was still "tomorrow".
+    #
+    # The asymmetry decides it. Fuelling for a session he then skips leaves him a few
+    # hundred kcal up, which the rolling weight correction absorbs. Under-fuelling a 33 km
+    # run because the plan was invisible costs him the session.
+    planned_today = for_date(events, start)
+    seen_ids = {(a.get("id") or a.get("activity_id")) for a in done}
+    today_sessions = done + [e for e in planned_today
+                             if (e.get("id") or e.get("activity_id")) not in seen_ids
+                             and not e.get("paired_activity_id")]
     tomorrow_sessions = for_date(events, end)
 
     confidence = "normal"
@@ -674,6 +689,26 @@ class Context:
                      deficit_enabled=bool(prof.get("deficit_enabled", True)),
                      rhr_guard_active=bool(guard.get("active")),
                      day_confidence=conf)
+        # What TODAY's sessions will need on the move, recorded with the zone snapshot
+        # because only the bot can see the calendar - the publish step reads the snapshot.
+        # Without it the food budget silently contains the run's carbohydrate: he would be
+        # told to eat it at lunch, then told to stop eating after the run, when recovery is
+        # exactly when he should not.
+        planned = 0.0
+        for ev in sessions or []:
+            sport_raw = (ev.get("type") or ev.get("category") or "").lower()
+            sport = ("Run" if "run" in sport_raw
+                     else "Ride" if ("ride" in sport_raw or "bike" in sport_raw) else None)
+            mins = ((ev.get("moving_time") or ev.get("icu_training_load_time")
+                     or ev.get("duration") or ev.get("time") or 0) or 0) / 60.0
+            if not (sport and mins):
+                continue
+            try:
+                planned += (self.prescribed_g_hr(sport) or 0) * mins / 60.0
+            except Exception as exc:
+                log(f"planned fuel unavailable for {sport}: {exc}")
+        if planned:
+            z["planned_in_session_carb_g"] = round(planned, 1)
         self.store.set_targets(day, z, day_type=today_type)
         return z
 

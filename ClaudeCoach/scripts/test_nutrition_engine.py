@@ -628,6 +628,44 @@ check("a short run does not qualify as a fuelling data point",
       NU.last_run_g_hr([{"sport": "Run", "duration_min": 30,
                          "nutrition_g_carb": 30, "date": "2026-08-01"}]) is None)
 
+print("\n--- fuel not yet taken is not food he can eat now ---")
+# Jamie, 11 Aug 2026: "isnt today going to tell me to under eat then over eat after my run
+# later?" The day carb zone is a TOTAL, so the run's 192 g sat inside it: eat it at lunch
+# and the ceiling goes on the gels, and after the run those gels shrink what is left and the
+# page tells him to stop eating, which is when recovery matters most.
+Z = {"kcal_target": 2950, "kcal": {"low": 2800.0, "high": 3100.0, "bias": "band"},
+     "protein_g": {"low": 183.0, "high": 216.0, "bias": "floor"},
+     "carb_g": {"low": 466.0, "high": 466.0, "bias": "band"},
+     "fat_g": {"low": 75.0, "high": 100.0, "bias": "band"},
+     "fibre_g": {"low": 0, "high": 20, "bias": "ceiling"}}
+T0 = {"kcal": 743.0, "protein_g": 46.0, "carb_g": 100.0, "fat_g": 17.0, "fibre_g": 13.0}
+plain = N.meal_requirement(T0, Z)
+held = N.meal_requirement(T0, Z, reserved={"carb_g": 192.5})
+check("without a reserve the run's carbs are offered as food",
+      plain["macros"]["carb_g"]["still_needed_g"] > 360)
+check("with one, only FOOD carbs are asked for",
+      abs(held["macros"]["carb_g"]["still_needed_g"] - 174.0) < 1.0)
+check("the energy budget drops by the reserved fuel",
+      plain["remaining_kcal"] - held["remaining_kcal"] == 770)
+check("and the reserve is stated, not silently applied",
+      held["reserved_for_session"]["carb_g"] == 192.5
+      and held["reserved_for_session"]["kcal"] == 770)
+check("no reserve means no claim of one", "reserved_for_session" not in plain)
+# After the run the fuel is logged, the reserve goes to zero, and the budget reopens for
+# recovery - which is the whole point of it being prescription MINUS what is logged.
+after = dict(T0, kcal=1513.0, carb_g=292.5)
+done = N.meal_requirement(after, Z, reserved={})
+# The budget is IDENTICAL before and after the run, which is the property that actually
+# matters and is stronger than the one I first asserted: reserving the fuel in advance means
+# logging it changes nothing, so there is no cliff at the end of the session and no moment
+# where the page suddenly decides he has eaten his allowance.
+check("logging the fuel afterwards moves the budget by nothing",
+      done["remaining_kcal"] == held["remaining_kcal"])
+check("and the reserve is gone once it is real",
+      "reserved_for_session" not in done)
+check("a reserve never makes the day look finished when it is not",
+      held["at_target"] is False)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))
