@@ -178,7 +178,8 @@ def merged_totals(store, athlete_dir, day) -> dict:
     return totals
 
 
-def write_back(athlete_dir, day, carb_g=None, sodium_mg=None, log=print) -> dict:
+def write_back(athlete_dir, day, carb_g=None, sodium_mg=None, log=print,
+               allow_clear: bool = False) -> dict:
     """Push the nutrition bot's in-session totals into session-log's own fields, so the
     coach's fuelling ramp keeps working when fuel is logged in the nutrition bot.
 
@@ -188,9 +189,21 @@ def write_back(athlete_dir, day, carb_g=None, sodium_mg=None, log=print) -> dict
 
     Returns {'written': bool, 'reason': ...}. A missing session is not an error: the
     activity may not have synced yet, and the caller can retry on the next log."""
-    if carb_g is None and sodium_mg is None:
-        return {"written": False, "reason": "nothing to write"}
     iso = _as_iso(day)
+    if carb_g is None and sodium_mg is None:
+        # A CORRECTION HAS TO BE ABLE TO UNDO THE WRITE.
+        #
+        # On 11 Aug the model flagged a bowl of breakfast oats as in-session, so 37 g went
+        # into session-log as in-run carbohydrate and fed the g/hr ramp. Moving the entry
+        # back out left the 37 g behind: with nothing in-session there was "nothing to
+        # write", so the erroneous figure was permanent and the fix was silently partial.
+        #
+        # Clearing is safe precisely because the bot stamps nutrition_source when it
+        # writes. Only rows it owns are touched; a figure the coach or the device put
+        # there is never erased.
+        if not allow_clear:
+            return {"written": False, "reason": "nothing to write"}
+        return _clear_bot_fuel(athlete_dir, iso, log=log)
     doc, rows = _load_session_log(athlete_dir)
     if doc is None:
         return {"written": False, "reason": "no session log"}
@@ -211,6 +224,32 @@ def write_back(athlete_dir, day, carb_g=None, sodium_mg=None, log=print) -> dict
         f"'nutrition_mg_sodium': {target.get('nutrition_mg_sodium')}}}")
     return {"written": True, "activity_id": target.get("activity_id"),
             "session": target.get("name"), "before": before}
+
+
+def _clear_bot_fuel(athlete_dir, iso: str, log=print) -> dict:
+    """Remove fuel figures THIS bot wrote for a day, and nothing else."""
+    doc, rows = _load_session_log(athlete_dir)
+    if doc is None:
+        return {"written": False, "reason": "no session log"}
+    cleared = []
+    for r in rows:
+        if not isinstance(r, dict) or (r.get("date") or "")[:10] != iso:
+            continue
+        if r.get("nutrition_source") != "nutrition_bot":
+            continue          # somebody else's figure; leave it alone
+        before = {"nutrition_g_carb": r.get("nutrition_g_carb"),
+                  "nutrition_mg_sodium": r.get("nutrition_mg_sodium")}
+        if before["nutrition_g_carb"] is None and before["nutrition_mg_sodium"] is None:
+            continue
+        r["nutrition_g_carb"] = None
+        r["nutrition_mg_sodium"] = None
+        r.pop("nutrition_source", None)
+        cleared.append({"session": r.get("name"), "before": before})
+    if not cleared:
+        return {"written": False, "reason": "nothing of ours to clear"}
+    _atomic_write(_session_log_path(athlete_dir), doc)
+    log(f"session-log fuel CLEARED for {iso}: {cleared}")
+    return {"written": True, "cleared": cleared}
 
 
 def _atomic_write(path: Path, payload) -> None:

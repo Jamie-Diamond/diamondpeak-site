@@ -462,6 +462,31 @@ for text in ("that was lovely", "that was 200g", "it was a long run",
 check("a meal tag never fires while something is pending, where yes/no is the answer",
       (NLU.fast_intent("that was breakfast", True) or {}).get("intent") != "set_meal")
 
+print("\n--- in-session needs evidence in the words ---")
+# The model flagged "M&s overnight oats salted caramel" as in-session with no session
+# mentioned. That put 37 g of breakfast into session-log as in-run carbohydrate and fed the
+# g/hr ramp the coach prescribes from, which is the one thing separating in-run from
+# out-of-run was meant to prevent.
+for text in ("gel during the ride", "took a gel mid-run", "two bottles on the bike",
+             "90g per hour on the long one", "a gel every 20 min", "in-session drink mix",
+             "energy drink whilst running", "gel on the move"):
+    check(f"{text!r} is evidence of in-session", NLU.during_session_evidence(text))
+for text in ("M&s overnight oats salted caramel", "Finished swim and having a protein bar",
+             "M&S Cookies and Cream Protein Bar", "chicken and rice for dinner",
+             "a gel", "post ride recovery shake", "before the run i had toast"):
+    check(f"{text!r} is NOT", not NLU.during_session_evidence(text))
+check("a post-session note is not a session",
+      not NLU.during_session_evidence("after the ride i had a shake"))
+
+print("\n--- and he can move one either way afterwards ---")
+for text, want in (("that was during the run", True), ("that was on the bike", True),
+                   ("that was mid-ride", True), ("that was in-session", True),
+                   ("that was after the run", False), ("that was before the ride", False),
+                   ("that was out of session", False)):
+    check(f"{text!r} -> in_session={want}", NLU.looks_like_session_tag(text) is want)
+for text in ("that was breakfast", "that was lovely", "chicken and rice"):
+    check(f"{text!r} is not a session tag", NLU.looks_like_session_tag(text) is None)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

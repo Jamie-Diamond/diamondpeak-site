@@ -336,6 +336,16 @@ class NutritionStore:
             return None
         return self._mutate_day(day, fn)
 
+    def set_in_session(self, day, entry_id: str, in_session: bool) -> dict | None:
+        """Move an entry in or out of session fuel after the fact."""
+        def fn(rec):
+            for e in rec.get("entries") or []:
+                if e.get("id") == entry_id:
+                    e["in_session"] = bool(in_session)
+                    return e
+            return None
+        return self._mutate_day(day, fn)
+
     def find_entry(self, day, text: str = "") -> dict | None:
         """The entry he means: named if he named one, otherwise the most recent.
 

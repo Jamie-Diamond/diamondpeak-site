@@ -652,7 +652,13 @@
     "vanilla pod",
     "vanilla extract"
    ],
-   "refined": []
+   "refined": [
+    "vanilla flavouring",
+    "natural vanilla flavouring",
+    "vanilla flavour",
+    "vanilla extract",
+    "vanillin"
+   ]
   },
   {
    "id": "vicia_faba",
@@ -801,7 +807,13 @@
     "soya protein",
     "soy flour",
     "soya flour",
-    "textured soy protein"
+    "textured soy protein",
+    "lecithin soya",
+    "lecithins soya",
+    "soya lecithins",
+    "emulsifier lecithins soya",
+    "hydrolysed soya protein",
+    "soya protein crisp"
    ]
   },
   {
@@ -922,7 +934,14 @@
    ],
    "refined": [
     "cocoa butter",
-    "white chocolate"
+    "white chocolate",
+    "cocoa mass",
+    "cocoa solids",
+    "milk chocolate",
+    "chocolate flavour",
+    "chocolate flavoured",
+    "cocoa powder reduced fat",
+    "fat reduced cocoa"
    ]
   },
   {
@@ -1472,7 +1491,9 @@
     "puffed rice",
     "rice milk",
     "rice starch",
-    "rice protein"
+    "rice protein",
+    "rice crisp",
+    "crisped rice"
    ]
   },
   {

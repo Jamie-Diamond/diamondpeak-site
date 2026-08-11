@@ -151,6 +151,29 @@ _MEAL_ALIAS = {"brunch": "breakfast", "supper": "dinner", "tea": "dinner",
                "snack": "snacks"}
 
 
+_SET_IN_SESSION = re.compile(
+    r"^(?:that|this|it|they|those)\s+(?:was|were|is|are)\s+(?:all\s+)?"
+    r"(?:in[-\s]session|during\s+the\s+\w+|on\s+the\s+(?:bike|ride|run|move)|"
+    r"mid[-\s]?\w+|in\s+the\s+(?:run|ride|swim|session))\b",
+    re.I)
+_SET_OUT_SESSION = re.compile(
+    r"^(?:that|this|it|they|those)\s+(?:was|were|is|are)\s+(?:not\s+in[-\s]session|"
+    r"out\s+of[-\s]session|before\s+the\s+\w+|after\s+the\s+\w+)\b", re.I)
+
+
+def looks_like_session_tag(text: str) -> bool | None:
+    """True/False when he is placing an entry in or out of a session; None otherwise.
+
+    Needed BECAUSE the flag now defaults to False on anything the words do not support -
+    so there has to be a way to say "that was during the run" and have it counted."""
+    t = (text or "").strip().rstrip(".!")
+    if _SET_OUT_SESSION.match(t):
+        return False
+    if _SET_IN_SESSION.match(t):
+        return True
+    return None
+
+
 def looks_like_meal_tag(text: str) -> dict | None:
     """{'meal': ..., 'item': ...} when he is naming which meal something was."""
     t = (text or "").strip().rstrip(".!")
@@ -199,6 +222,9 @@ def fast_intent(text: str, has_pending: bool) -> dict | None:
     tag = looks_like_meal_tag(t)
     if tag and not has_pending:
         return {"intent": "set_meal", **tag}
+    sess = looks_like_session_tag(t)
+    if sess is not None and not has_pending:
+        return {"intent": "set_in_session", "in_session": sess}
     return None
 
 
@@ -273,7 +299,13 @@ def parse_with_model(text: str, claude_bin: str, model: str, log=print,
         elif isinstance(it, dict) and it.get("text"):
             items.append({"text": str(it["text"]),
                           "portion_g": it.get("portion_g"),
-                          "in_session": bool(it.get("in_session"))})
+                          # CONFIRMED, not asserted: the model's flag only survives if
+                          # the words place the food in a session. Erring to False is the
+                          # safe direction - an out-of-session item counted in the day is
+                          # merely a day total, while a breakfast counted as in-run fuel
+                          # rewrites the fuelling history the coach prescribes from.
+                          "in_session": (bool(it.get("in_session"))
+                                         and during_session_evidence(text))})
     got["items"] = items
     return got
 
@@ -350,6 +382,37 @@ _SUPPLEMENT_FORM = re.compile(
 # A dose stated in milligrams or micrograms is nutritionally trivial as food. 400 mg of
 # anything is under 2 kcal, so reporting "kcal 1" as though it were a meal is noise.
 _TINY_DOSE = re.compile(r"\b(\d+(?:\.\d+)?)\s*(mg|mcg|ug|µg)\b", re.I)
+
+
+# Phrases that actually place food INSIDE a session. Nothing else counts.
+#
+# THE BUG THIS EXISTS FOR. "M&s overnight oats salted caramel" was flagged in_session by
+# the model, with no session mentioned anywhere in it. The prompt already said "true only
+# if eaten DURING a training session" and the model set it anyway. The consequence was not
+# cosmetic: in-session fuel is written back to session-log.json, so a bowl of breakfast
+# oats entered the fuelling history as 37 g of in-run carbohydrate and fed the g/hr ramp
+# the coach prescribes from.
+#
+# Jamie's whole reason for separating in-run from out-of-run was that a good day total must
+# not be able to hide an under-fuelled run. A flag the model can set on a hunch destroys
+# exactly that separation, so the model may now only CONFIRM what the words support.
+_DURING_SESSION = re.compile(
+    r"\b(?:"
+    r"during|whilst|while)\b[^.]{0,24}\b(?:ride|riding|run|running|swim|swimming|"
+    r"session|race|bike|turbo|long one|intervals)\b"
+    r"|\b(?:on|in)\s+the\s+(?:bike|ride|run|turbo|road|trail|race)\b"
+    r"|\bmid[-\s]?(?:ride|run|race|session|swim)\b"
+    r"|\bin[-\s]session\b"
+    r"|\bon\s+the\s+move\b"
+    r"|\bper\s+hour\b|\bg/?hr\b|\bg\s+an\s+hour\b"
+    r"|\bevery\s+\d+\s*(?:min|minutes|k|km)\b"
+    r"|\b(?:took|taking|had)\b[^.]{0,20}\b(?:out\s+there|en\s+route|on\s+course)\b",
+    re.I)
+
+
+def during_session_evidence(text: str) -> bool:
+    """True when the words themselves place this food inside a session."""
+    return bool(_DURING_SESSION.search(text or ""))
 
 
 def looks_like_supplement(text: str) -> bool:

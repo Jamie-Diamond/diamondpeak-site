@@ -225,6 +225,37 @@ check(f"a varied week approaches the 30 target (got {vdiv['unique_7d']})",
 check("no streak or score fields are exposed",
       not any(k in div for k in ("streak", "score", "grade", "percent", "passed")))
 
+print("\n--- additives are not plants ---")
+# Jamie, 11 Aug 2026: "a cookies and cream protein bar has no plants in it". It had been
+# credited with soy, cacao and vanilla - three species toward the 7-day count - off
+# "Lecithins (Soya)", "Cocoa Butter", "Cocoa Mass" and "Natural Vanilla Flavouring".
+BAR = ("Milk Chocolate with Sweetener (24%) (Sweetener: Maltitol, Cocoa Butter, Dried "
+       "Whole Milk, Cocoa Mass, Emulsifier: Lecithins (Soya), Natural Vanilla "
+       "Flavouring), Calcium Caseinate (Milk), Humectant: Glycerol, Hydrolysed Beef "
+       "Collagen, Polydextrose, Concentrated Whey Protein (Milk), Whey Protein Isolate")
+bar = T.match_text(BAR)
+counting = [s for s in bar["species"] if s["score"] > 0]
+check(f"the protein bar counts zero plants (got {len(counting)})", not counting)
+check("the species are still RECOGNISED, just scored zero",
+      len(bar["species"]) >= 3)
+for form, sid in (("soya lecithin", "glycine_max"), ("cocoa butter", "theobroma_cacao"),
+                  ("milk chocolate", "theobroma_cacao"),
+                  ("natural vanilla flavouring", "vanilla_planifolia"),
+                  ("maltodextrin", "zea_mays"), ("glucose syrup", "zea_mays"),
+                  ("palm oil", None)):
+    got = {x["id"]: x["score"] for x in T.match_text(form)["species"]}
+    if sid is None:
+        continue
+    check(f"{form} scores 0", got.get(sid) == 0.0)
+# And the real foods must be untouched, or the fix has eaten the metric.
+for food, sid in (("dark chocolate", "theobroma_cacao"), ("cocoa nibs", "theobroma_cacao"),
+                  ("edamame", "glycine_max"), ("tofu", "glycine_max"),
+                  ("miso", "glycine_max"), ("sweetcorn", "zea_mays"),
+                  ("brown rice", "oryza_sativa"),
+                  ("coconut flakes", "cocos_nucifera")):
+    got = {x["id"]: x["score"] for x in T.match_text(food)["species"]}
+    check(f"{food} still counts as a whole plant", got.get(sid) == 1.0)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

@@ -150,6 +150,37 @@ d8 = Path(tempfile.mkdtemp(prefix="nut-rc8-"))
     RIDE, {**SWIM, "nutrition_g_carb": 30}]))
 check("two fuelled sessions sum", RC.session_fuel_for_day(d8, TODAY)["carb_g"] == 230.0)
 
+print("\n--- a correction can undo the write-back ---")
+import tempfile as _tf  # noqa: E402
+
+cdir = Path(_tf.mkdtemp(prefix="clear-"))
+def _slog(rows):
+    (cdir / "session-log.json").write_text(json.dumps(rows))
+
+DAYX = "2026-08-11"
+# What the bug produced: 37 g of breakfast oats, stamped as ours.
+_slog([{"date": DAYX, "sport": "Swim", "name": "Swim", "duration_min": 42,
+        "nutrition_g_carb": 37, "nutrition_mg_sodium": 320,
+        "nutrition_source": "nutrition_bot"}])
+res = RC.write_back(cdir, DAYX, carb_g=None, sodium_mg=None, log=lambda *a: None)
+check("without allow_clear nothing happens, as before", res["written"] is False)
+res = RC.write_back(cdir, DAYX, carb_g=None, sodium_mg=None, log=lambda *a: None,
+                    allow_clear=True)
+check("with allow_clear the figure is removed", res["written"] is True)
+row = json.loads((cdir / "session-log.json").read_text())[0]
+check("carb is cleared", row["nutrition_g_carb"] is None)
+check("sodium is cleared too", row["nutrition_mg_sodium"] is None)
+check("and the ownership stamp goes with it", not row.get("nutrition_source"))
+
+# The line that makes clearing safe: somebody else's figure is never touched.
+_slog([{"date": DAYX, "sport": "Ride", "name": "Ride", "duration_min": 200,
+        "nutrition_g_carb": 240, "nutrition_mg_sodium": 1800}])
+res = RC.write_back(cdir, DAYX, carb_g=None, sodium_mg=None, log=lambda *a: None,
+                    allow_clear=True)
+check("a figure the bot did not write is left alone", res["written"] is False)
+check("and it is still there",
+      json.loads((cdir / "session-log.json").read_text())[0]["nutrition_g_carb"] == 240)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

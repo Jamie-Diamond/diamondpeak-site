@@ -870,6 +870,24 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                 log=log)
         return
 
+    if intent == "set_in_session":
+        entry = ctx.store.find_entry(day, "")
+        if not entry:
+            tg.send(token, chat_id, "Nothing logged today to move yet.", log=log)
+            return
+        done = ctx.store.set_in_session(day, entry["id"], got["in_session"])
+        # The coach's ramp reads session-log, so moving fuel in or out has to be pushed
+        # there as well or the two disagree about the same session.
+        fuel = RC.bot_in_session_totals(ctx.store, day)
+        RC.write_back(ctx.athlete_dir, day, carb_g=fuel["carb_g"],
+                      sodium_mg=fuel["sodium_mg"] or None, log=log, allow_clear=True)
+        publish_now(ctx)
+        tg.send(token, chat_id,
+                f"*{done.get('resolved_name')}* is now "
+                + ("in-session fuel." if got["in_session"]
+                   else "out-of-session, so it is off your in-run figures."), log=log)
+        return
+
     if intent == "log_weight":
         log_weight(ctx, got["weight_kg"], day, token, chat_id)
         return
@@ -1328,7 +1346,8 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
     if any(i.get("in_session") for i in batch):
         fuel = RC.bot_in_session_totals(ctx.store, day)
         res = RC.write_back(ctx.athlete_dir, day, carb_g=fuel["carb_g"],
-                            sodium_mg=fuel["sodium_mg"] or None, log=log)
+                            sodium_mg=fuel["sodium_mg"] or None, log=log,
+                            allow_clear=True)
         if not res["written"]:
             log(f"fuel write-back deferred: {res['reason']}")
     if wrote:
