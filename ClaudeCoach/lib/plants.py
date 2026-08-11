@@ -95,6 +95,36 @@ _NOISE = re.compile(r"[^a-z0-9\s]+")
 # Species are still RECORDED, scored zero, exactly as a refined derivative is, and the
 # reason is stored with them - auditable rather than a silent omission, which is the failure
 # mode this metric has had throughout.
+# --- a seasoning is not a portion ---------------------------------------------
+#
+# Jamie, 11 Aug 2026: "the plants thing is still comincal". It was. A Bang Bang dip lists 40
+# ingredients and was contributing ELEVEN species - ginger at position 34, soy at 19, paprika
+# at 18, garlic at 15, cumin at 14. A smear of garlic puree counted exactly as much as a
+# portion of spinach, which is how two logged days produced 29 plants.
+#
+# UK labels are ordered by descending weight, which makes position a real signal rather than a
+# heuristic: anything past the first handful of a list is present in grams or less. Those are
+# recorded as TRACES - they are genuinely in the food and it would be dishonest to drop them -
+# but they are reported apart from the headline instead of inflating it.
+TRACE_AFTER_INGREDIENT = 8
+SCORE_TRACE = 0.25
+
+
+def _ingredient_index(source: str, matched: str) -> int | None:
+    """Which listed ingredient a match sits in. None when it cannot be placed."""
+    if not source:
+        return None
+    parts = [x.strip().lower() for x in re.split(r"[,\u00b7;]|\s\u00b7\s", source)
+             if x.strip()]
+    needle = (matched or "").split()[-1][:6].lower() if matched else ""
+    if not needle:
+        return None
+    for i, part in enumerate(parts):
+        if needle in part:
+            return i
+    return None
+
+
 _UP_MARKERS = (
     "sweetener", "maltitol", "xylitol", "sorbitol", "erythritol", "aspartame",
     "sucralose", "acesulfame", "steviol", "saccharin",
@@ -197,6 +227,17 @@ class SpeciesTable:
         path and not the other. match_text stays the pure matcher the tests drive."""
         source = ingredients if ingredients is not None else text
         got = self.match_text(text)
+        # Position first: a species only present deep in a long list is a trace, and a
+        # trace is reported apart from the count rather than counted as a portion.
+        if ingredients:
+            for sp in got["species"]:
+                if sp.get("score", 0) <= SCORE_TRACE:
+                    continue
+                idx = _ingredient_index(ingredients, sp.get("matched") or "")
+                if idx is not None and idx >= TRACE_AFTER_INGREDIENT:
+                    sp["score"] = SCORE_TRACE
+                    sp["trace"] = True
+                    sp["ingredient_index"] = idx
         markers = processing_markers(source)
         if len(markers) >= UP_MARKER_THRESHOLD and got["species"]:
             got["species"] = [{**sp, "score": 0.0} for sp in got["species"]]
@@ -339,7 +380,21 @@ def diversity(days, table: SpeciesTable, on=None, window: int = 7) -> dict:
     # number. Anything logged since scores were stored counts correctly, so this clears
     # itself as real days accumulate.
     reportable = unscored == 0
+    # THE HEADLINE HAS TO MEAN SOMETHING. unique_7d counts every species with any score at
+    # all, so a pinch of cumin at ingredient 14 of a dip counted exactly like a portion of
+    # spinach - two logged days read 29 plants, which Jamie rightly called comical. whole_7d
+    # counts only species eaten as FOOD: whole form, and not a trace deep in a long label.
+    # Seasonings and traces are reported alongside, because they are genuinely in the food
+    # and dropping them would be its own dishonesty - they are just not portions.
+    whole = {i: sp for i, sp in window_species.items()
+             if (sp.get("score") if sp.get("score") is not None else 0) >= SCORE_WHOLE}
+    traces = {i: sp for i, sp in window_species.items()
+              if i not in whole and (sp.get("score") or 0) > 0}
     return {
+        "whole_7d": len(whole) if reportable else None,
+        "trace_7d": len(traces) if reportable else None,
+        "whole_species": sorted(sp["canonical"] for sp in whole.values()),
+        "trace_species": sorted(sp["canonical"] for sp in traces.values()),
         "unique_7d": len(window_species) if reportable else None,
         "unique_7d_upper_bound": len(window_species),
         "weighted_7d": weighted if reportable else None,

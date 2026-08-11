@@ -2602,14 +2602,20 @@
       '<div class="figures in-card">' +
       // No number while the scores are missing. A caveated wrong number gets read as
       // the number.
-      fig(p.unique_7d != null ? p.unique_7d : 'n/a', 'plant species',
-          p.unique_7d != null ? 'aiming around ' + (p.target || 30) : 'not yet countable',
-          p.unique_7d != null ? '' : 'flat') +
+      /* whole_7d, not unique_7d: the old headline counted a pinch of cumin at ingredient 14
+         of a dip exactly like a portion of spinach, so two logged days read 29. This counts
+         species eaten as FOOD, with seasonings and traces shown beside it rather than folded
+         into it - they are really in the food, they are just not portions. */
+      fig(p.whole_7d != null ? p.whole_7d : 'n/a', 'plant species',
+          p.whole_7d != null ? 'aiming around ' + (p.target || 30) : 'not yet countable',
+          p.whole_7d != null ? '' : 'flat') +
+      (p.trace_7d ? fig(p.trace_7d, 'seasonings + traces',
+                        'in the label, not a portion') : '') +
       fig(p.new_today != null ? p.new_today : '-', 'new today', 'variety, not a score') +
       fig((n.weight && n.weight.rolling_7d_mean_kg)
           ? n.weight.rolling_7d_mean_kg.toFixed(1) : '-', 'kg', 'morning 7-day mean') +
       '</div>' +
-      (p.unique_7d == null
+      (p.whole_7d == null
         ? '<p class="prov warn">No plant count yet. ' +
           esc(String(p.unscored_species)) + ' species in this window were logged before ' +
           'the matched score was stored, so refined derivatives such as sunflower oil, ' +
