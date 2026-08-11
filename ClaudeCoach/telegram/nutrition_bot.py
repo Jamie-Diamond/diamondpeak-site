@@ -888,6 +888,37 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         tg.send(token, chat_id, "Dropped it.", log=log)
         return
 
+    if intent == "delete_entry":
+        named = (got.get("item") or "").strip()
+        entry = ctx.store.find_entry(day, named)
+        # A NAMED delete must actually match that name. find_entry falls back to the most
+        # recent entry, which is right for "delete that" and catastrophic for "delete my
+        # account details" - it would silently bin whatever he logged last. So a name that
+        # matches nothing asks instead of guessing.
+        if named and entry and not _name_matches(named, entry.get("resolved_name") or ""):
+            names = [e.get("resolved_name") or "" for e
+                     in (ctx.store.get_day(day).get("entries") or [])][-6:]
+            tg.send(token, chat_id,
+                    f"I cannot see {named!r} in today’s log. Today has: "
+                    + ", ".join(n[:34] for n in names)
+                    + ". Name one of those, or say “delete that” for the most recent.", log=log)
+            return
+        if not entry:
+            tg.send(token, chat_id, "Nothing logged today to delete.", log=log)
+            return
+        ctx.store.remove_entry(day, entry["id"])
+        # In-session totals change if that entry was fuel, and session-log has to follow or
+        # the coach's ramp keeps counting food that no longer exists.
+        fuel = RC.bot_in_session_totals(ctx.store, day)
+        RC.write_back(ctx.athlete_dir, day, carb_g=fuel["carb_g"],
+                      sodium_mg=fuel["sodium_mg"] or None, log=log, allow_clear=True)
+        publish_now(ctx)
+        tg.send(token, chat_id,
+                f"Deleted *{entry.get('resolved_name')}* "
+                f"({round(entry.get('kcal') or 0)} kcal).\n\n" + today_block(ctx, day),
+                log=log)
+        return
+
     if intent == "set_meal":
         entry = ctx.store.find_entry(day, got.get("item") or "")
         if not entry:
@@ -931,8 +962,20 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # Re-parse from the combined text rather than patching the parsed result:
         # patching a misparse tends to preserve whatever else was wrong about it.
         if not pend:
-            tg.send(token, chat_id, "Nothing pending to correct. Tell me what you had "
-                                    "and I will look it up.", log=log)
+            # A correction after the fact used to be refused outright - "nothing pending" -
+            # which is how a wrong sandwich survived being corrected and then got logged a
+            # second time from the label. It now REPLACES the entry he is talking about.
+            target = ctx.store.find_entry(day, got.get("correction") or t)
+            if not target:
+                tg.send(token, chat_id, "Nothing logged today to correct. Tell me what you "
+                                        "had and I will look it up.", log=log)
+                return
+            combined = NLU.apply_correction(target.get("raw_text") or "",
+                                            got.get("correction") or t)
+            offer_items(ctx, [{"text": combined, "portion_g": None,
+                               "in_session": bool(target.get("in_session"))}],
+                        day, token, chat_id)
+            mark_pending_replaces(ctx, target["id"], target.get("resolved_name") or "")
             return
         combined = NLU.apply_correction(
             pend.get("_raw") or pend.get("raw_text") or "", got.get("correction") or t)
@@ -1364,6 +1407,28 @@ def publish_now(ctx: Context) -> None:
     threading.Thread(target=run, daemon=True).start()
 
 
+def _name_matches(named: str, resolved: str) -> bool:
+    """Does the thing he named share an identifying word with this entry?"""
+    import re as _re
+    stop = {"the", "one", "that", "this", "my", "and", "of", "a", "an", "it"}
+    want = {w for w in _re.split(r"[^a-z0-9]+", named.lower()) if len(w) > 2} - stop
+    have = {w for w in _re.split(r"[^a-z0-9]+", resolved.lower()) if len(w) > 2}
+    return bool(want & have)
+
+
+def mark_pending_replaces(ctx: Context, entry_id: str, name: str) -> None:
+    """Note that confirming this batch should REMOVE the entry it corrects.
+
+    Recorded on the pending record rather than acted on now, because nothing may be deleted
+    before he has confirmed the replacement - otherwise a declined correction has quietly
+    destroyed the original."""
+    pend = get_pending(ctx.store)
+    if not pend:
+        return
+    pend["_replaces"] = {"id": entry_id, "name": name}
+    set_pending(ctx.store, pend)
+
+
 def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
     """Write the pending batch. Called only after an explicit confirmation."""
     batch = pend.get("batch") or [pend]
@@ -1374,6 +1439,12 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
             continue
         commit_one(ctx, item, day)
         wrote += 1
+    # A confirmed replacement removes what it replaced - AFTER the new entry is written, and
+    # only if one was, so a declined or failed correction never destroys the original.
+    replaces = pend.get("_replaces") or {}
+    if wrote and replaces.get("id"):
+        gone = ctx.store.remove_entry(day, replaces["id"])
+        log(f"replaced entry {replaces['id']}: removed={bool(gone)}")
     clear_pending(ctx.store)
     # Push the day's in-session total into session-log so the coach's g/hr ramp keeps
     # being fed. Without this, logging fuel here silently starves recent_avg_g_hr and

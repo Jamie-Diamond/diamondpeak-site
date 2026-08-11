@@ -174,6 +174,42 @@ def looks_like_session_tag(text: str) -> bool | None:
     return None
 
 
+# "delete that", "remove the sandwich", "get rid of the coop one", "take that off".
+#
+# THE BUG THIS EXISTS FOR. He photographed a barcode, it resolved to the wrong product at 382
+# kcal, he said "Actually that's wrong" - and the reply was "Nothing pending to correct",
+# because correction only ever applied to an unconfirmed item. Nothing was removed, so when he
+# then sent the label the sandwich was logged TWICE. There was no way to delete a logged entry
+# except /undo, which only reaches the last one.
+_DELETE = (
+    re.compile(r"^(?:please\s+)?(?:delete|remove|bin|scrap|discard)\s+"
+               r"(?:that|this|it|them|those)\b", re.I),
+    re.compile(r"^(?:please\s+)?(?:delete|remove|bin|scrap|discard)\s+"
+               r"(?:the\s+)?(?P<item>.{2,60}?)\s*$", re.I),
+    re.compile(r"^(?:take|get)\s+(?:that|this|it|them|(?:the\s+)?(?P<item2>.{2,60}?))\s+"
+               r"(?:off|out|rid of)\b.*$", re.I),
+    re.compile(r"^get\s+rid\s+of\s+(?:that|this|it|(?:the\s+)?(?P<item3>.{2,60}?))\s*$",
+               re.I),
+)
+
+
+def looks_like_delete(text: str) -> dict | None:
+    """{'item': ...} when he is asking for something to be removed."""
+    t = (text or "").strip().rstrip(".!")
+    for rx in _DELETE:
+        m = rx.match(t)
+        if not m:
+            continue
+        item = ""
+        for key in ("item", "item2", "item3"):
+            if key in rx.groupindex:
+                item = (m.group(key) or "").strip()
+                if item:
+                    break
+        return {"item": item}
+    return None
+
+
 def looks_like_meal_tag(text: str) -> dict | None:
     """{'meal': ..., 'item': ...} when he is naming which meal something was."""
     t = (text or "").strip().rstrip(".!")
@@ -219,6 +255,9 @@ def fast_intent(text: str, has_pending: bool) -> dict | None:
     w = looks_like_weight(t)
     if w is not None:
         return {"intent": "log_weight", "weight_kg": w}
+    gone = looks_like_delete(t)
+    if gone is not None and not has_pending:
+        return {"intent": "delete_entry", **gone}
     tag = looks_like_meal_tag(t)
     if tag and not has_pending:
         return {"intent": "set_meal", **tag}
