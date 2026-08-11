@@ -46,6 +46,7 @@ sys.path.insert(0, str(BASE / "lib"))
 
 from primitives.planned_tss import (                            # noqa: E402
     planned_session_tss, tss_from_segments, render_workout, segment_if,
+    name_intensity_mismatch,
 )
 from primitives.load import (                                   # noqa: E402
     compute_required_tss,
@@ -1282,7 +1283,19 @@ def cmd_render_workout(args) -> dict:
         raise SystemExit(_err(f"--segments is not valid JSON: {e}"))
     if not args.sport:
         raise SystemExit(_err("--sport required (swim/run/bike)"))
-    r = render_workout(args.sport, segs, getattr(args, "name", "") or "")
+    name = getattr(args, "name", "") or ""
+    r = render_workout(args.sport, segs, name)
+    # Refuse to hand back a description whose steps don't back up the session NAME
+    # (validate_week and the daily audit both catch this, but only AFTER the mismatch
+    # has already reached push_workout / the athlete's watch). Checking here, before
+    # the CLI door hands the description off to be pushed, is the only point that can
+    # stop it rather than just report it next day.
+    mm = name_intensity_mismatch(args.sport, name, r["description"])
+    if mm:
+        raise SystemExit(_err(
+            f"name/steps mismatch: '{name}' claims {mm['claim']} but the hardest "
+            f"rendered step is {mm['found']}%, short of {mm['required']}% — fix the "
+            f"segments (or --name) before pushing"))
     r["how_to_push"] = ("pass description=<the description field above> to "
                         "icu_fetch.py push_workout (put coaching prose in description_raw)")
     return r
