@@ -62,7 +62,13 @@ CONFIG = Path(__file__).resolve().parent / "nutrition_config.json"
 ATHLETES = BASE / "config" / "athletes.json"
 LOG_FILE = Path(__file__).resolve().parent / "nutrition_bot.log"
 
-POLL_TIMEOUT = 50
+POLL_TIMEOUT = 30
+# 30, matching the coach bot, which polls the same way against the same 65 second
+# socket and has never dropped an update. At 60 there were five seconds of margin,
+# and every poll was expiring on the SOCKET before Telegram replied - failures
+# exactly 65 seconds apart, a valid token, a healthy network and a bot that heard
+# nothing. The socket timeout below is derived from this rather than inherited from
+# a default that lives in another file.
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "/usr/bin/claude")
 LLM_MODEL = "claude-sonnet-5"
 
@@ -1658,7 +1664,8 @@ def main():
         params = {"timeout": POLL_TIMEOUT}
         if offset is not None:
             params["offset"] = offset
-        res = tg.get(token, "getUpdates", params, log=log)
+        res = tg.get(token, "getUpdates", params, log=log,
+                     timeout=POLL_TIMEOUT + 20)
         for upd in res.get("result") or []:
             offset = upd["update_id"] + 1
             try:
