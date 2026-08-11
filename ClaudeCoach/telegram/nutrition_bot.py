@@ -989,6 +989,9 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                         day, token, chat_id)
             mark_pending_replaces(ctx, target["id"], target.get("resolved_name") or "")
             return
+        if correct_in_batch(ctx, pend, got.get("correction") or t, day, token, chat_id):
+            return
+        # Single pending item: the whole record IS the subject, so its own raw text is right.
         combined = NLU.apply_correction(
             pend.get("_raw") or pend.get("raw_text") or "", got.get("correction") or t)
         offer_items(ctx, [{"text": combined, "portion_g": None, "in_session": False}],
@@ -1439,6 +1442,70 @@ def mark_pending_replaces(ctx: Context, entry_id: str, name: str) -> None:
         return
     pend["_replaces"] = {"id": entry_id, "name": name}
     set_pending(ctx.store, pend)
+
+
+def correct_in_batch(ctx: Context, pend: dict, correction: str, day: date,
+                     token, chat_id) -> bool:
+    """Correct ONE item of a pending batch, keeping the rest. False if not applicable.
+
+    The item is chosen by the words he used, and re-resolved from ITS OWN raw text - not from
+    the batch record, which has no raw text of its own. Reading a batch as though it were a
+    single item is what turned a Nando's order into raw chicken breast and dropped three
+    other items on the floor."""
+    batch = pend.get("batch") or []
+    if len(batch) < 2:
+        return False
+    matches = [i for i, it in enumerate(batch)
+               if _name_matches(correction, (it.get("resolved_name") or "")
+                                + " " + (it.get("_raw") or ""))]
+    blocked = [i for i, it in enumerate(batch)
+               if it.get("needs_portion") or it.get("needs_input")]
+    # A BLOCKING match wins. "It's one chicken breast so find the weight of that" matched both
+    # the chicken butterfly and the 1/4 chicken on words alone, and taking the first would have
+    # corrected the wrong dish - while the item actually waiting on him was the other one. What
+    # he is answering is the question the bot just asked.
+    both = [i for i in matches if i in blocked]
+    idx = (both[0] if len(both) == 1
+           else matches[0] if len(matches) == 1
+           else None)
+    if idx is None:
+        # Nothing named, or an ambiguous name: fall back to the single blocking item.
+        if len(blocked) != 1:
+            names = ", ".join((it.get("resolved_name") or "?")[:30] for it in batch)
+            tg.send(token, chat_id,
+                    "Which one do you mean? I have " + names
+                    + ". Name it and I will redo just that one.", log=log)
+            return True
+        idx = blocked[0]
+
+    target = batch[idx]
+    combined = NLU.apply_correction(target.get("_raw") or target.get("raw_text") or "",
+                                    correction)
+    log(f"  correcting batch item {idx}: {combined[:70]!r}")
+    hint = {"canonical_name": combined, "search_terms": [combined],
+            "expect_macros": True}
+    fetchers = dict(ctx.fetchers)
+    deep = make_deep_fetch(log=log)
+    fetchers[NR.Rung.WEB] = lambda q, pg, _h=hint, _d=deep: _d(q, pg, hint=_h)
+    item = NR.resolve(combined, day=day, store=ctx.store, table=ctx.table,
+                      fetchers=fetchers, cofid=ctx.cofid, hint=hint,
+                      portion_g=target.get("portion_g"))
+    item["_raw"] = combined
+    item["in_session"] = bool(target.get("in_session"))
+    item["_supplement"] = bool(target.get("_supplement"))
+    item["_trivial"] = bool(target.get("_trivial"))
+    item["_dose_mg"] = target.get("_dose_mg")
+
+    fresh = list(batch)
+    fresh[idx] = item
+    set_pending(ctx.store, {**pend, "batch": fresh})
+    body = "\n\n".join(fmt_confirm(i) for i in fresh)
+    kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
+    tg.send(token, chat_id,
+            "Redone that one, the rest are unchanged.\n\n" + body
+            + "\n\nLog " + ("these?" if len(fresh) > 1 else "it?"),
+            reply_markup=kb, log=log)
+    return True
 
 
 def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
