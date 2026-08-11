@@ -369,25 +369,65 @@ def classify_from_day_rules(day, day_rules: dict) -> tuple[str, str]:
     return ("standard" if scheduled else "recovery"), "low_confidence"
 
 
-def net_session_kcal(sessions, rmr: float) -> tuple[float, str]:
+# Compendium MET values, for a session that is PLANNED and therefore carries no measured
+# energy. Deliberately mid-range rather than optimistic: this feeds a maintenance figure,
+# and over-estimating it would manufacture an intake target out of nothing.
+MET_BY_SPORT = {"run": 10.0, "ride": 8.0, "bike": 8.0, "virtualride": 8.0,
+                "swim": 8.0, "walk": 3.5, "hike": 6.0, "row": 7.0,
+                "strength": 3.5, "weighttraining": 3.5, "yoga": 2.5}
+
+
+def planned_session_kcal(session, weight_kg: float) -> float:
+    """Gross energy for a session with a duration but no measured calories.
+
+    kcal/min = MET x 3.5 x kg / 200, the standard form. Returns 0.0 when the sport is
+    unknown, so an unrecognised session contributes nothing rather than a guess."""
+    if not weight_kg:
+        return 0.0
+    raw = (session.get("type") or session.get("category") or session.get("sport") or "")
+    key = raw.strip().lower().replace(" ", "")
+    met = next((v for k, v in MET_BY_SPORT.items() if k in key), None)
+    if not met:
+        return 0.0
+    return met * 3.5 * float(weight_kg) / 200.0 * _duration_min(session)
+
+
+def net_session_kcal(sessions, rmr: float, weight_kg: float = None) -> tuple[float, str]:
     """Training energy above resting, plus a confidence label.
 
     'measured' only when every session contributing energy is power-metered;
     otherwise 'estimated', because ICU derives run and swim calories from heart
-    rate at roughly +/-15-20%."""
+    rate at roughly +/-15-20%.
+
+    A PLANNED session carries no calories, and the old loop still counted its HOURS - so
+    net = gross - hours x rmr/24 made it SUBTRACT energy. Adding a 33 km run to the day
+    lowered maintenance from 3,162 to 2,950, when the run alone is around 2,400 kcal: a day
+    that needed ~5,500 was being asked to live on under 3,000. Duration without energy is
+    now either estimated from a MET value or ignored entirely - never counted as resting
+    time he did not spend resting."""
     gross = hours = 0.0
     all_powered = True
+    estimated_any = False
     for s in sessions or []:
-        kcal = s.get("calories") or s.get("kcal") or 0
+        kcal = float(s.get("calories") or s.get("kcal") or 0)
         mins = _duration_min(s)
+        if not kcal and mins:
+            kcal = planned_session_kcal(s, weight_kg)
+            if not kcal:
+                # Unknown sport and no measured energy: contribute NOTHING, hours
+                # included. Counting the hours alone is what made a session cost him
+                # calories instead of earning them.
+                continue
+            estimated_any = True
         if not kcal and not mins:
             continue
-        gross += float(kcal or 0)
+        gross += kcal
         hours += mins / 60.0
         if kcal and not s.get("average_watts"):
             all_powered = False
     net = gross - (hours * rmr / 24.0)
-    return max(0.0, round(net, 1)), ("measured" if all_powered and gross else "estimated")
+    conf = "measured" if (all_powered and gross and not estimated_any) else "estimated"
+    return max(0.0, round(net, 1)), conf
 
 
 # --- the zone computation ---------------------------------------------------
@@ -411,7 +451,7 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
     if not rolling_weight:
         raise ValueError("rolling_weight is required; do not fall back to a single reading")
 
-    net, kcal_confidence = net_session_kcal(sessions, rmr)
+    net, kcal_confidence = net_session_kcal(sessions, rmr, weight_kg=rolling_weight)
     maintenance = base_tdee(rmr, tdee_multiplier) + net
     modifiers, warnings = [], []
     is_long = day_type in LONG_DAY_TYPES

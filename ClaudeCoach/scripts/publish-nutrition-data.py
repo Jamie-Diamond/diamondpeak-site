@@ -213,6 +213,18 @@ def build(slug: str, today: date) -> dict:
                       for f in (rec.get("flags") or [])],
             "requirement": requirement,
             "in_session": in_session,
+            # The carb target in TWO parts, because one number cannot answer both
+            # questions. 900 g on a long-run day is not 900 g of food: some of it is taken
+            # on the move at a prescribed RATE, and a rate cannot be made up at dinner.
+            "carb_plan": ({"total_low": (z["carb_g"]["low"] if z else None),
+                           "total_high": (z["carb_g"]["high"] if z else None),
+                           "in_session_planned_g": planned_fuel or None,
+                           "in_session_taken_g": taken_fuel or None,
+                           "out_of_session_low": (round(z["carb_g"]["low"] - planned_fuel)
+                                                  if z else None),
+                           "out_of_session_high": (round(z["carb_g"]["high"] - planned_fuel)
+                                                   if z else None)}
+                          if z and planned_fuel else None),
             "carb_split": carb_split,
             "meals": meals,
             # Only claim inference when something actually WAS inferred, so a day he has

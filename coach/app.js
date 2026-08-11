@@ -2361,6 +2361,21 @@
      Fibre. Distinct by construction. */
   var MACRO_SHORT = { protein_g: 'p', carb_g: 'c', fat_g: 'fat', fibre_g: 'fibre' };
 
+  /* The carb row has to distinguish the two, because one number cannot answer both
+     questions: 900 g on a long-run day is not 900 g of food. Before the session it names
+     what is reserved for it; afterwards, what was actually taken. */
+  function carbNote(day) {
+    var cp = day.carb_plan, split = day.carb_split;
+    if (split && split.in_session_g) {
+      return Math.round(split.in_session_g) + ' g in-run';
+    }
+    if (cp && cp.in_session_planned_g) {
+      return Math.round(cp.in_session_planned_g) + ' g in-run fuel, prescribed \u2013 ' +
+        Math.round(cp.out_of_session_low) + ' g from food';
+    }
+    return '';
+  }
+
   function renderFood() {
     var n = state.nutr;
     var host = $('#v-food');
@@ -2402,8 +2417,7 @@
       zoneRow('Protein', t.protein_g, z && z.protein_g, day.pace_pct,
               r && r.macros.protein_g) +
       zoneRow('Carbs', t.carb_g, z && z.carb_g, day.pace_pct, r && r.macros.carb_g,
-              day.carb_split && day.carb_split.in_session_g
-                ? Math.round(day.carb_split.in_session_g) + ' g in-run' : '') +
+              carbNote(day)) +
       zoneRow('Fat', t.fat_g, z && z.fat_g, day.pace_pct, r && r.macros.fat_g) +
       zoneRow('Fibre', t.fibre_g, z && z.fibre_g, day.pace_pct,
               r && r.macros.fibre_g) +
