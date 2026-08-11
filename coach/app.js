@@ -2414,18 +2414,63 @@
     return '';
   }
 
+  function dayLabel(iso) {
+    // Built from the ISO string, never from new Date(iso) alone: a bare date parses as UTC
+    // and renders as the previous day for anyone west of it.
+    var p = String(iso || '').split('-');
+    if (p.length !== 3) { return iso || ''; }
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return d.toLocaleDateString(undefined,
+      { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+
+  function stepFoodDay(dir) {
+    state.foodDayOffset = Math.max(0, (state.foodDayOffset || 0) + (dir === 'older' ? 1 : -1));
+    renderFood();
+  }
+
   function renderFood() {
     var n = state.nutr;
     var host = $('#v-food');
     if (!host) return;
+    // Delegated ONCE on the host, which renderFood replaces wholesale every call: a handler
+    // bound to the buttons themselves would be discarded on the next render.
+    if (!host.dataset.dayNav) {
+      host.dataset.dayNav = '1';
+      host.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-food-day]');
+        if (b && !b.disabled) { stepFoodDay(b.getAttribute('data-food-day')); }
+      });
+    }
     if (!n || !n.days || !n.days.length) {
       host.innerHTML = '<div class="card"><div class="empty">Nothing logged yet. ' +
         'Tell the nutrition bot what you ate and it appears here.</div></div>';
       return;
     }
-    var day = n.days[n.days.length - 1];
+    // The offset is clamped on every read rather than trusted: it survives in state across
+    // a data refresh, and a stale one would index past the array and blank the tab.
+    var logged = n.days.filter(function (d) { return (d.items || []).length; });
+    if (!logged.length) { logged = n.days.slice(-1); }
+    if (state.foodDayOffset == null) { state.foodDayOffset = 0; }
+    state.foodDayOffset = Math.max(0, Math.min(state.foodDayOffset, logged.length - 1));
+    var day = logged[logged.length - 1 - state.foodDayOffset];
+    var isToday = state.foodDayOffset === 0;
     var z = day.zones, t = day.totals || {}, r = day.requirement;
     var h = '';
+
+    /* Which day you are looking at, and how to move. Newest first, and only days with
+       something logged, because stepping through empty days to find one is not navigation. */
+    h += '<div class="card"><div class="meal-h">' +
+      '<b>' + esc(isToday ? 'Today' : dayLabel(day.date)) + '</b>' +
+      '<span>' +
+        '<button type="button" class="chg" data-food-day="older"' +
+        (state.foodDayOffset >= logged.length - 1 ? ' disabled' : '') + '>&larr; older</button> ' +
+        '<button type="button" class="chg" data-food-day="newer"' +
+        (isToday ? ' disabled' : '') + '>newer &rarr;</button>' +
+      '</span></div>' +
+      (isToday ? '' : '<div class="mut">' + esc(day.day_type || '') + ' \u00b7 ' +
+        Math.round((day.totals || {}).kcal || 0).toLocaleString() + ' kcal logged</div>') +
+      '</div>';
 
     /* 1. Reach for. First on the page and the whole point of it: what the next meal
           has to be, stated as an instruction rather than as a fault. Composed in
