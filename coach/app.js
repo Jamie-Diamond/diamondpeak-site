@@ -406,10 +406,17 @@
     bits.push(rest > 0 ? rest + ' rest day' + (rest === 1 ? '' : 's') + ' so far'
                        : 'no rest day yet this week');
 
-    if (w.summary && w.summary.energy_balance_kcal != null) {
-      var bal = w.summary.energy_balance_kcal;
-      bits.push((bal >= 0 ? '+' : '') + Math.round(bal).toLocaleString() +
-                ' kcal across ' + w.summary.days_logged + ' logged days');
+    if (w.summary && w.summary.mean_deficit_kcal_day != null) {
+      /* The rolling figure, not the day: an IM week swings from 2,500 to 5,400, so a daily
+         number is noise. Coverage is always stated with it - two logged days is not a week,
+         and an unlogged day is not a zero-intake day. */
+      var md = w.summary.mean_deficit_kcal_day;
+      bits.push((md >= 0 ? '+' : '') + Math.round(md).toLocaleString() +
+                ' kcal/day average · ' + esc(w.summary.deficit_coverage || ''));
+      if (w.summary.implied_kg_per_week != null) {
+        bits.push('implies ' + (w.summary.implied_kg_per_week > 0 ? '+' : '') +
+                  w.summary.implied_kg_per_week + ' kg/week');
+      }
     }
     return card('This week', '<div><p class="wsum">' + esc(bits.join(' · ')) + '</p>' +
       (target ? '<div class="bar' + (pct > 110 ? ' warn' : '') + '"><i style="width:' +

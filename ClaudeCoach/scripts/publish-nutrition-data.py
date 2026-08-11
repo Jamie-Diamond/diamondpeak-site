@@ -284,6 +284,13 @@ def build(slug: str, today: date) -> dict:
                 "flags": [f["type"] for f in (d.get("flags") or [])],
             })
         done = [r for r in rows if r["logged"]]
+        # A DAY IN PROGRESS CANNOT CONTRIBUTE TO A DEFICIT. Today is part-logged by
+        # definition - 743 kcal at mid-morning against a 5,356 target - and including it
+        # dragged the rolling average to -1,967 kcal/day, implying -1.8 kg a week off
+        # nothing but the clock. The deficit is computed over SETTLED days only: closed, or
+        # simply not today.
+        settled = [r for r in done
+                   if r.get("closed") or r["date"] < date.today().isoformat()]
         runs = [r for r in rows if r["in_run_verdict"]]
         return {
             "days": rows,
@@ -307,7 +314,28 @@ def build(slug: str, today: date) -> dict:
                 # published across the days actually logged - the number he is really
                 # judging by - rather than leaving the page to imply that today is a score.
                 "energy_balance_kcal": (round(sum((r["kcal"] or 0) - (r["kcal_target"] or 0)
-                                                  for r in done)) if done else None),
+                                                  for r in settled)) if settled else None),
+                # THE ROLLING DEFICIT, which is the figure that means anything in Ironman
+                # training. A single day swings by thousands - today's target is 5,356 and
+                # yesterday's was 2,491 - so a daily number is noise wearing a verdict.
+                #
+                # Averaged over the days LOGGED, never over the window. An unlogged day is
+                # not a zero-intake day; treating it as one would report a catastrophic
+                # deficit for a day he simply did not write down, and he logs to spot-check
+                # rather than daily. Coverage is published alongside so the figure can never
+                # be read as a full week when it is two days.
+                "mean_deficit_kcal_day": (round(sum((r["kcal"] or 0) - (r["kcal_target"] or 0)
+                                                    for r in settled) / len(settled))
+                                          if settled else None),
+                "deficit_coverage": (f"{len(settled)} of {len(rows)} settled days"
+                                     if rows else None),
+                # 7,700 kcal per kg of body mass, the standard figure. Stated as a rate so
+                # it can be checked against the ONLY measured quantity in the chain - the
+                # rolling morning weight - rather than believed on its own.
+                "implied_kg_per_week": (round(sum((r["kcal"] or 0) - (r["kcal_target"] or 0)
+                                                  for r in settled) / len(settled)
+                                                  * 7 / 7700.0, 2)
+                                        if settled else None),
                 "in_run_sessions": len(runs),
                 "in_run_on_target": sum(1 for r in runs
                                         if r["in_run_verdict"] in ("on_target",
