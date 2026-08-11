@@ -268,6 +268,45 @@ for food, sid in (("dark chocolate", "theobroma_cacao"), ("cocoa nibs", "theobro
         continue          # deliberately 0 now; asserted above
     check(f"{food} still counts as a whole plant", got.get(sid) == 1.0)
 
+print("\n--- only minimally processed food counts ---")
+# Jamie, 11 Aug 2026: "it doesnt feel right having any for that bar, need to be minimally
+# procees". Adding refined forms could not fix it: the bar was credited off the bare word
+# "cocoa", which IS a whole-food word - it is just doing nothing for him inside that bar.
+BAR2 = ("Milk Chocolate (Sweetener: Maltitol, Cocoa Butter, Cocoa Mass, Emulsifier: "
+        "Lecithins (Soya)), Calcium Caseinate (Milk), Humectant: Glycerol, Polydextrose, "
+        "Concentrated Whey Protein, Cocoa, Natural Flavouring")
+check("the bar is read as ultra-processed", P.is_ultra_processed(BAR2))
+check("and its markers are reported, not just the verdict",
+      len(P.processing_markers(BAR2)) >= 4)
+bar2 = T.match_food(BAR2, ingredients=BAR2)
+check("so it counts zero plants",
+      not [x for x in bar2["species"] if x["score"] > 0])
+check("the species are still recorded, with the reason",
+      bar2["species"] and bar2["species_suppressed"] == "ultra_processed")
+
+# The line that matters: real food must keep its plants, or the rule has eaten the metric.
+SMOOTHIE = ("Apple Juice, Apple Puree, Banana Puree, Red Grape Juice, Raspberry Puree, "
+            "Blackcurrant Puree, Blackcurrant Juice, Acidity Regulator: Citric Acid")
+sm = T.match_food(SMOOTHIE, ingredients=SMOOTHIE)
+check(f"a fruit smoothie keeps its plants "
+      f"(got {len([x for x in sm['species'] if x['score'] > 0])})",
+      len([x for x in sm["species"] if x["score"] > 0]) >= 3)
+check("and is not flagged", not sm.get("species_suppressed"))
+OATS = ("Water, Oats, Dates, Cocoa Nibs, Chia Seeds, Yogurt (Milk), Natural Flavouring, "
+        "Sea Salt")
+oats = T.match_food(OATS, ingredients=OATS)
+check("ONE marker does not disqualify an otherwise ordinary recipe",
+      not oats.get("species_suppressed")
+      and len([x for x in oats["species"] if x["score"] > 0]) >= 3)
+MEAL = ("Chicken Breast, Black Rice, Mango, Red Pepper, Spinach, Lime Juice, Coriander, "
+        "Peanuts, Ginger, Garlic")
+meal = T.match_food(MEAL, ingredients=MEAL)
+check("a ready meal of real ingredients keeps them",
+      not meal.get("species_suppressed")
+      and len([x for x in meal["species"] if x["score"] > 0]) >= 7)
+check("match_text stays the pure matcher, unaffected by the rule",
+      any(x["score"] > 0 for x in T.match_text(BAR2)["species"]))
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

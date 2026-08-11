@@ -79,6 +79,47 @@ _DEFAULT_TABLE = Path(__file__).resolve().parent.parent / "config" / "species.js
 _NOISE = re.compile(r"[^a-z0-9\s]+")
 
 
+# --- ultra-processed products contribute no species -------------------------
+#
+# Jamie, 11 Aug 2026: "it doesnt feel right having any for that bar, need to be minimally
+# procees". He is right, and it is a better rule than chasing forms one at a time. The
+# Cookies and Cream bar was still credited with cacao off the bare word "cocoa" in its
+# ingredient list, and no refined form fixes that: "cocoa" IS a whole-food word, it is just
+# doing nothing for him inside that bar.
+#
+# The evidence is the ingredient list itself, which is the NOVA group-4 reading: sweeteners,
+# emulsifiers, humectants, isolates, hydrolysed proteins and added flavourings mark an
+# industrial formulation rather than food. TWO markers is the bar, so one emulsifier in an
+# otherwise ordinary recipe does not disqualify a ready meal full of real vegetables.
+#
+# Species are still RECORDED, scored zero, exactly as a refined derivative is, and the
+# reason is stored with them - auditable rather than a silent omission, which is the failure
+# mode this metric has had throughout.
+_UP_MARKERS = (
+    "sweetener", "maltitol", "xylitol", "sorbitol", "erythritol", "aspartame",
+    "sucralose", "acesulfame", "steviol", "saccharin",
+    "emulsifier", "lecithin", "humectant", "glycerol", "polydextrose",
+    "isolate", "hydrolysed", "hydrolyzed", "caseinate", "concentrated whey",
+    "whey protein", "milk protein concentrate", "soy protein", "protein crisp",
+    "flavouring", "flavoring", "stabiliser", "stabilizer", "thickener",
+    "anti-caking", "raising agent", "preservative", "modified starch",
+    "maltodextrin", "invert sugar", "glucose-fructose", "high fructose",
+    "hydrogenated", "palm fat", "dextrose",
+)
+UP_MARKER_THRESHOLD = 2
+
+
+def processing_markers(ingredients: str) -> list:
+    """Which industrial-formulation markers appear in an ingredient list."""
+    low = (ingredients or "").lower()
+    return sorted({m for m in _UP_MARKERS if m in low})
+
+
+def is_ultra_processed(ingredients: str) -> bool:
+    """True when the list reads as an industrial formulation rather than as food."""
+    return len(processing_markers(ingredients)) >= UP_MARKER_THRESHOLD
+
+
 class SpeciesTable:
     """The canonicalisation table plus its compiled matcher.
 
@@ -145,6 +186,23 @@ class SpeciesTable:
 
     def normalise(self, text: str) -> str:
         return _NOISE.sub(" ", (text or "").lower()).strip()
+
+    def is_ultra_processed(self, ingredients: str) -> bool:
+        return is_ultra_processed(ingredients)
+
+    def match_food(self, text: str, ingredients: str = None) -> dict:
+        """Species credited for a FOOD, with the processing rule applied.
+
+        Every caller comes through here rather than match_text, or the rule lands in one
+        path and not the other. match_text stays the pure matcher the tests drive."""
+        source = ingredients if ingredients is not None else text
+        got = self.match_text(text)
+        markers = processing_markers(source)
+        if len(markers) >= UP_MARKER_THRESHOLD and got["species"]:
+            got["species"] = [{**sp, "score": 0.0} for sp in got["species"]]
+            got["species_suppressed"] = "ultra_processed"
+            got["processing_markers"] = markers
+        return got
 
     def match_text(self, text: str) -> dict:
         """Find every species in a free-text ingredient string.

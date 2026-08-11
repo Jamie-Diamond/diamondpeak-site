@@ -48,7 +48,7 @@ def retag_day(rec: dict, table: PL.SpeciesTable) -> list:
         text = e.get("ingredients") or e.get("resolved_name") or ""
         if not text or e.get("_supplement"):
             continue
-        got = table.match_text(text)
+        got = table.match_food(text, ingredients=e.get("ingredients") or None)
         before, after = species_key(e.get("species")), species_key(got["species"])
         if before == after:
             continue
@@ -60,6 +60,12 @@ def retag_day(rec: dict, table: PL.SpeciesTable) -> list:
         e["species_from"] = "ingredients" if e.get("ingredients") else "name"
         if got.get("unmatched"):
             e["species_unmatched"] = got["unmatched"]
+        if got.get("species_suppressed"):
+            e["species_suppressed"] = got["species_suppressed"]
+            e["processing_markers"] = got.get("processing_markers")
+        else:
+            e.pop("species_suppressed", None)
+            e.pop("processing_markers", None)
         changes.append((e.get("resolved_name") or "?", added, removed))
     return changes
 

@@ -721,7 +721,11 @@ def _finalise(got: dict, raw_text: str, rung: str, confidence: str, attempts, ta
         # "collagen capsules" because the resolver had matched the wrong product - a
         # plant he never ate, in the headline diversity count.
         subject = ingredients or raw_text
-        res = table.match_text(subject)
+        # match_food, not match_text: an ultra-processed product contributes no plants
+        # whatever its ingredient list name-drops. A protein bar listing "cocoa" is not a
+        # serving of cacao, and no refined form fixes that - "cocoa" is a genuine
+        # whole-food word doing nothing for him inside that bar.
+        res = table.match_food(subject, ingredients=ingredients or None)
         # id AND matched score: a refined form scores 0 and must stay 0 when read back.
         species = [{"id": s["id"], "score": s["score"]} for s in res["species"]]
         unmatched = res["unmatched"]
@@ -736,6 +740,10 @@ def _finalise(got: dict, raw_text: str, rung: str, confidence: str, attempts, ta
         "species": species,
         "species_from": "ingredients" if ingredients else "name",
         "species_unmatched": unmatched,
+        "species_suppressed": (res.get("species_suppressed") if table is not None
+                               else None),
+        "processing_markers": (res.get("processing_markers") if table is not None
+                               else None),
         "degraded": degraded,
         "attempts": attempts,
         "needs_input": False,
