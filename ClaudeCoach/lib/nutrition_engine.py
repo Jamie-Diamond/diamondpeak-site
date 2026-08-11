@@ -275,6 +275,10 @@ def _as_date(v):
     return None
 
 
+# The floor an ordinary day carries, used as the POST-session fibre target on a long day.
+EVERYDAY_FIBRE_G = DAY_TYPES.get("standard", {}).get("fibre_g") or (40, 45)
+
+
 def _zone(low, high, bias, basis="", confidence="normal") -> dict:
     """One macro's landing zone. `bias` decides warning direction, `basis` records
     whether the numbers are sourced or reasoned so the UI can be honest about it.
@@ -691,8 +695,26 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
         "carb_g": _zone(c_derived_low, c_high, BIAS_BAND,
                         "remainder after protein and fat; "
                         f"lands {c_per_kg_low:.1f}-{c_per_kg_high:.1f} g/kg"),
-        "fibre_g": _zone(fb_low, fb_high, fb_bias,
-                         "ceiling before long sessions: residue and splanchnic flow"),
+        # PHASED, because the ceiling is about TIMING and the day total cannot say so.
+        # Jamie: "can i have fibre after i have done my run? i understand low fibre before
+        # but need to get it back at sometpoint?" - yes, and the model knew it while the
+        # page did not: a 40 g dinner after the run read as 20 g over a ceiling, which is
+        # the app telling him off for doing the right thing. On a day with a long session
+        # of its own the ceiling applies UNTIL it is done; afterwards the ordinary floor
+        # returns, because fibre is a weekly job and the residue reason has expired.
+        "fibre_g": dict(_zone(fb_low, fb_high, fb_bias,
+                              "ceiling before long sessions: residue and splanchnic flow"),
+                        # An ORDINARY day's floor, not this day type's own entry: for a
+                        # long day that entry IS the ceiling, which produced a "floor" of
+                        # 0-20 - the same number twice, wearing the opposite label.
+                        **({"after_session": _zone(EVERYDAY_FIBRE_G[0],
+                                                   EVERYDAY_FIBRE_G[1],
+                                                   BIAS_FLOOR,
+                                                   "the residue reason expires once the "
+                                                   "session is done; fibre is a weekly job"),
+                            "phase_note": ("ceiling until the session is done, then back "
+                                           "to the floor")}
+                           if (is_long and not race_week) else {})),
         "modifiers": modifiers,
         "warnings": warnings,
         "sodium_basis": {"sweat_na_mg_l": [SWEAT_NA_ASSUMED_LOW, SWEAT_NA_ASSUMED_HIGH],

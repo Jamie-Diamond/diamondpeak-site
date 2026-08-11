@@ -2453,7 +2453,14 @@
       carbRows(day, t, z, r) +
       zoneRow('Fat', t.fat_g, z && z.fat_g, day.pace_pct, r && r.macros.fat_g) +
       zoneRow('Fibre', t.fibre_g, z && z.fibre_g, day.pace_pct,
-              r && r.macros.fibre_g) +
+              r && r.macros.fibre_g,
+              /* The ceiling is about TIMING. Saying so is the difference between a coach
+                 and a food diary: without it, a 40 g dinner after the run reads as 20 g
+                 over a limit, which is the app telling him off for doing it right. */
+              (z && z.fibre_g && z.fibre_g.after_session)
+                ? 'ceiling until the run \u2013 then ' +
+                  Math.round(z.fibre_g.after_session.low) + ' g floor after'
+                : '') +
       '</div>',
       );
 
