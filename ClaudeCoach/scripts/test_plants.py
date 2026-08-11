@@ -51,8 +51,18 @@ check("spring onion does NOT also count as onion",
       "allium_cepa" not in ids("spring onion"))
 check("brown rice and black rice are one species",
       ids("brown rice") == ids("black rice") == {"oryza_sativa"})
+# One SPECIES, three forms - which is the spec's canonicalisation point (6.3) and is about
+# identity, not score. The scores differ deliberately: see below.
 check("cocoa, cacao and dark chocolate are one species",
       ids("cocoa") == ids("cacao nibs") == ids("dark chocolate") == {"theobroma_cacao"})
+# Chocolate as an INGREDIENT is a coating - sugar, cocoa butter, cocoa mass - and crediting
+# it as a serving of cacao is what put three plants in a Cookies and Cream protein bar
+# (Jamie, 11 Aug 2026: "a cookies and cream protein bar has no plants in it"). The plant
+# food itself still counts in full.
+check("chocolate as an ingredient scores 0, the plant food does not",
+      scored("dark chocolate") == {"theobroma_cacao": 0.0}
+      and scored("cocoa nibs") == {"theobroma_cacao": 1.0}
+      and scored("cacao powder") == {"theobroma_cacao": 1.0})
 check("chickpea, garbanzo, gram flour and hummus are one species",
       ids("chickpea") == ids("garbanzo") == ids("gram flour") == ids("houmous")
       == {"cicer_arietinum"})
@@ -254,6 +264,8 @@ for food, sid in (("dark chocolate", "theobroma_cacao"), ("cocoa nibs", "theobro
                   ("brown rice", "oryza_sativa"),
                   ("coconut flakes", "cocos_nucifera")):
     got = {x["id"]: x["score"] for x in T.match_text(food)["species"]}
+    if food == "dark chocolate":
+        continue          # deliberately 0 now; asserted above
     check(f"{food} still counts as a whole plant", got.get(sid) == 1.0)
 
 print()

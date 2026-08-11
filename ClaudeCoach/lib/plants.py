@@ -103,8 +103,18 @@ class SpeciesTable:
                                  "score": base}
             for variant in s.get("synonyms", []):
                 entries.append((variant.strip().lower(), sid, base))
-            for variant in s.get("refined", []):
-                entries.append((variant.strip().lower(), sid, SCORE_REFINED))
+            refined = {v.strip().lower() for v in s.get("refined", [])}
+            # A variant in BOTH lists must resolve as REFINED, not as the whole plant.
+            #
+            # "vanilla extract" sat in the synonyms and was added to refined; both have the
+            # same word count, so the stable sort kept the synonym first, it matched, it
+            # consumed the span, and best-score-per-species locked in 0.25. The refined
+            # entry was dead on arrival and a Twix went on counting as a plant. Dropping
+            # the duplicate from the synonym side is what makes adding a refined form
+            # actually do something.
+            entries[:] = [e for e in entries if not (e[1] == sid and e[0] in refined)]
+            for variant in sorted(refined):
+                entries.append((variant, sid, SCORE_REFINED))
         # Longest phrase first: word count, then character length. This ordering is
         # load-bearing, not cosmetic - see the module docstring on span consumption.
         entries.sort(key=lambda e: (len(e[0].split()), len(e[0])), reverse=True)

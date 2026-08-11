@@ -793,7 +793,6 @@
     "tofu",
     "tempeh",
     "miso",
-    "soy sauce",
     "tamari",
     "soya mince"
    ],
@@ -813,7 +812,12 @@
     "soya lecithins",
     "emulsifier lecithins soya",
     "hydrolysed soya protein",
-    "soya protein crisp"
+    "soya protein crisp",
+    "soya bean oil",
+    "soy sauce",
+    "soya sauce",
+    "soy dressing",
+    "hydrolysed vegetable protein"
    ]
   },
   {
@@ -929,7 +933,6 @@
     "cacao",
     "cocoa nibs",
     "cacao nibs",
-    "dark chocolate",
     "cocoa powder"
    ],
    "refined": [
@@ -941,7 +944,11 @@
     "chocolate flavour",
     "chocolate flavoured",
     "cocoa powder reduced fat",
-    "fat reduced cocoa"
+    "fat reduced cocoa",
+    "dark chocolate",
+    "chocolate coating",
+    "chocolate chips",
+    "milk chocolate with sweetener"
    ]
   },
   {
@@ -1025,7 +1032,10 @@
     "sunflower oil",
     "sunflower lecithin",
     "sunflower seed oil",
-    "high oleic sunflower oil"
+    "high oleic sunflower oil",
+    "sunflower rapeseed",
+    "rapeseed sunflower",
+    "vegetable oil sunflower"
    ]
   },
   {
