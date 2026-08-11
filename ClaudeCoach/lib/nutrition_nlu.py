@@ -320,6 +320,74 @@ def tiny_dose_mg(text: str):
     return val if unit == "mg" else val / 1000.0
 
 
+CONVERSE_PROMPT = """You are this athlete's nutrition and fuelling coach, mid-conversation
+with him on Telegram. He is an experienced Ironman athlete - talk to him as a peer who
+knows the physiology, not as an app explaining itself.
+
+WHAT YOU KNOW (every figure here was computed from his logged food, his ICU calendar and
+the fuelling primitives his coach uses):
+%s
+
+THE CONVERSATION SO FAR (oldest first; yours are "coach"):
+%s
+
+HIS MESSAGE:
+%s
+
+How to answer:
+- Actually engage with what he asked. Reason about it. If he asks why, explain the
+  mechanism. If he is weighing options, have an opinion and say which you would pick.
+- Follow the thread. "why?" or "what about the other one?" refers to what was just said.
+- Go as deep as the question deserves and no deeper. A factual question gets a sentence;
+  "how should I fuel tomorrow" gets a real answer. Never pad, and never repeat numbers he
+  can already see on the app unless they carry the point.
+- You may ask him ONE question back when the answer genuinely turns on something you do
+  not know - what time he is running, how his gut handled the last long one. Do not
+  interrogate him. If you already asked something in the conversation above and he has
+  not answered it, do NOT ask again: he has decided it does not matter, so answer with a
+  stated assumption instead. Asking the same thing three turns running is what a form
+  does, not a coach.
+- It is fine to disagree with him, and fine to say "either is fine" when it is true.
+
+Rules that are not style preferences:
+- NEVER do arithmetic and never state a figure that is not in the facts above. Everything
+  there was computed deliberately; a number you produce yourself is indistinguishable
+  from a real one and it ends up in his training decisions. If you need something absent,
+  say what is missing.
+- Suggest food from `foods_he_actually_eats` where you can. He can act on a swap between
+  two things in his own fridge.
+- A zone is a landing area, not a rule. Never moralise about food, never use restriction
+  language, and never imply he has failed. He is lean, near his essential-fat floor, and
+  the job is adequate intake - not restraint.
+- Never suggest cutting anything marked in_session: that is fuel taken while training.
+- UK English, no headings, no bullet-point macro dumps.
+"""
+
+
+def converse(message: str, facts: dict, history: list, claude_bin: str, model: str,
+             log=print, runner=None, timeout: int = 150) -> str | None:
+    """A turn of actual conversation. None when the model is unavailable.
+
+    This replaced two single-shot prompts - one capped at "one or two sentences", the
+    other with no memory of the previous turn - which between them made the bot incapable
+    of a conversation however good the facts were."""
+    runner = runner or subprocess.run
+    convo = "\n".join(f"{t.get('role')}: {t.get('text')}" for t in (history or []))
+    try:
+        proc = runner([claude_bin, "--print", "--model", model],
+                      input=CONVERSE_PROMPT % (json.dumps(facts, indent=2, default=str),
+                                               convo or "(nothing yet)", message),
+                      capture_output=True, text=True, timeout=timeout)
+    except Exception as exc:
+        log(f"converse failed: {exc}")
+        return None
+    raw = ((getattr(proc, "stdout", "") or "").strip()) or None
+    if raw and model_unavailable(raw):
+        log(f"converse: MODEL UNAVAILABLE - {raw[:100]}")
+        return None
+    return raw
+
+
 ANSWER_PROMPT = """You are a nutrition logging assistant answering a short question \
 from the athlete. Be brief and conversational, one or two sentences, no bullet lists, \
 no markdown headings.

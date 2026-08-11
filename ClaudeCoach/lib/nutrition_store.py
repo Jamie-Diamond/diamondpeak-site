@@ -504,6 +504,45 @@ class NutritionStore:
 
     # --- resolved-item cache ------------------------------------------------
 
+    # --- conversation ------------------------------------------------------
+    #
+    # Kept because a coach who forgets the previous sentence is not having a conversation.
+    # "why?" and "what about the other one instead?" are the natural follow-ups and both
+    # are unanswerable without the turn before them.
+    #
+    # Deliberately SHORT and deliberately not permanent: enough to hold a thread, not a
+    # second record of what he ate. The log is the record; this is working memory.
+    CHAT_TURNS_KEPT = 16
+
+    def _chat_path(self) -> Path:
+        return self.dir / "chat.json"
+
+    def append_chat(self, role: str, text: str, when=None) -> None:
+        """One turn. Under the file lock, because the bot can be answering a message
+        while a photo callback writes another."""
+        if not (text or "").strip():
+            return
+        self.dir.mkdir(parents=True, exist_ok=True)
+        with self._file_lock("chat"):
+            p = self._chat_path()
+            try:
+                turns = json.loads(p.read_text()) if p.exists() else []
+            except (json.JSONDecodeError, OSError):
+                turns = []
+            turns.append({"role": role, "text": text[:2000],
+                          "at": (when or datetime.now()).isoformat(timespec="minutes")})
+            p.write_text(json.dumps(turns[-self.CHAT_TURNS_KEPT:], indent=1))
+
+    def recent_chat(self, limit: int = None) -> list:
+        p = self._chat_path()
+        if not p.exists():
+            return []
+        try:
+            turns = json.loads(p.read_text())
+        except (json.JSONDecodeError, OSError):
+            return []
+        return turns[-(limit or self.CHAT_TURNS_KEPT):]
+
     def _cache_path(self) -> Path:
         return self.dir / "cache.json"
 

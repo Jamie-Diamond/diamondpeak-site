@@ -875,12 +875,11 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         return
 
     if intent == "question":
-        answer = NLU.answer_question(got.get("question") or t,
-                                     facts_for_question(ctx, day),
-                                     CLAUDE_BIN, LLM_MODEL, log=log)
+        answer = converse_reply(ctx, got.get("question") or t, day, token, chat_id)
         # Falling back to the deterministic block rather than nothing: an unavailable
         # model must not mean an unanswered question.
-        tg.send(token, chat_id, answer or today_block(ctx, day), log=log)
+        if not answer:
+            tg.send(token, chat_id, today_block(ctx, day), log=log)
         return
 
     if intent in ("log_food", "log_supplement") and got.get("items"):
@@ -909,6 +908,11 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         return
 
     if intent == "smalltalk":
+        # "Tell me what you have eaten and I will log it" was the whole reply here, which
+        # is a form talking, not a coach. Anything that is not food, a command or a
+        # correction is now just conversation.
+        if converse_reply(ctx, t, day, token, chat_id):
+            return
         tg.send(token, chat_id, "Tell me what you have eaten and I will log it.", log=log)
         return
 
@@ -930,6 +934,24 @@ def log_weight(ctx: Context, kg: float, day: date, token, chat_id) -> None:
     tg.send(token, chat_id,
             f"{kg:.1f} kg logged."
             + (f" 7-day morning mean {mean:.1f} kg." if mean else "") + note, log=log)
+
+
+def converse_reply(ctx: Context, message: str, day: date, token, chat_id,
+                   extra_facts: dict = None) -> str | None:
+    """One conversational turn: facts in, an actual answer out, both ends remembered.
+
+    The transcript is recorded on BOTH sides. Storing only his messages would leave
+    "why?" pointing at nothing, which is most of what a follow-up is."""
+    facts = facts_for_question(ctx, day)
+    if extra_facts:
+        facts.update(extra_facts)
+    history = ctx.store.recent_chat()
+    out = NLU.converse(message, facts, history, CLAUDE_BIN, LLM_MODEL, log=log)
+    ctx.store.append_chat("athlete", message)
+    if out:
+        ctx.store.append_chat("coach", out)
+        tg.send(token, chat_id, out, log=log)
+    return out
 
 
 def debate(ctx: Context, got: dict, text: str, day: date, token, chat_id) -> None:
@@ -967,7 +989,14 @@ def debate(ctx: Context, got: dict, text: str, day: date, token, chat_id) -> Non
                         "if_eaten": landing})
     facts["options"] = options
     facts["in_session_items_are_protected"] = True
-    reply = NLU.advise(text, facts, CLAUDE_BIN, LLM_MODEL, log=log)
+    # The options are RESOLVED above, so they go in as facts and the
+    # discussion is a normal turn of the same conversation - with the
+    # thread behind it, rather than a standalone opinion.
+    reply = NLU.converse(text, {**facts, "options_on_the_table": options},
+                         ctx.store.recent_chat(), CLAUDE_BIN, LLM_MODEL, log=log)
+    ctx.store.append_chat("athlete", text)
+    if reply:
+        ctx.store.append_chat("coach", reply)
     ctx.store.cache_put("_last_options", {"options": [o["option"] for o in options],
                                           "day": day.isoformat()})
     tg.send(token, chat_id, reply or ("I could not reach the model to talk it through. "
