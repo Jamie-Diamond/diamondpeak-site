@@ -853,6 +853,23 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         tg.send(token, chat_id, "Dropped it.", log=log)
         return
 
+    if intent == "set_meal":
+        entry = ctx.store.find_entry(day, got.get("item") or "")
+        if not entry:
+            tg.send(token, chat_id, "Nothing logged today to put in a meal yet.", log=log)
+            return
+        done = ctx.store.set_meal(day, entry["id"], got["meal"])
+        if not done:
+            tg.send(token, chat_id,
+                    f"I can file things under breakfast, lunch, dinner or snacks - "
+                    f"{got['meal']} is not one I know.", log=log)
+            return
+        publish_now(ctx)
+        tg.send(token, chat_id,
+                f"Filed *{done.get('resolved_name')}* under {got['meal']}.",
+                log=log)
+        return
+
     if intent == "log_weight":
         log_weight(ctx, got["weight_kg"], day, token, chat_id)
         return

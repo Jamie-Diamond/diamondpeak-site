@@ -37,6 +37,7 @@ and lost the per-item provenance the confidence flag depends on.
 
 import json
 import re
+from re import error
 import subprocess
 
 INTENTS = ("log_food", "log_weight", "log_supplement", "question", "advice",
@@ -128,6 +129,51 @@ def looks_like_secret(text: str) -> bool:
     return any(p.search(t) for p in _SECRET_PATTERNS)
 
 
+# "that was breakfast", "the oats was breakfast", "log it as dinner". Deterministic on
+# purpose: this is a two-word instruction and sending it to the model to classify was how
+# it ended up as an unrecognised message.
+_MEAL_WORD = r"(breakfast|lunch|dinner|brunch|supper|tea|snack|snacks)"
+_SET_MEAL = (
+    re.compile(r"^(?:that|this|it|they|those)\s+(?:was|were|is|are)\s+(?:my\s+)?"
+               + _MEAL_WORD + r"$", re.I),
+    re.compile(r"^(?:the\s+)?(?P<item>.{2,60}?)\s+(?:was|were|is|are)\s+(?:my\s+)?"
+               + _MEAL_WORD + r"$", re.I),
+    re.compile(r"^(?:log|make|mark|put|move|count)\s+(?:that|this|it|them|"
+               r"(?:the\s+)?(?P<item2>.{2,60}?))\s+(?:as|for|to|into)\s+(?:my\s+)?"
+               + _MEAL_WORD + r"$", re.I),
+    # "make that a snack" - the article instead of "as", which is how people actually say
+    # it for snacks specifically.
+    re.compile(r"^(?:make|mark|count|call)\s+(?:that|this|it|them)\s+"
+               r"(?:a|an|my)?\s*" + _MEAL_WORD + r"$", re.I),
+)
+# Meal names people use that are not one of the four buckets.
+_MEAL_ALIAS = {"brunch": "breakfast", "supper": "dinner", "tea": "dinner",
+               "snack": "snacks"}
+
+
+def looks_like_meal_tag(text: str) -> dict | None:
+    """{'meal': ..., 'item': ...} when he is naming which meal something was."""
+    t = (text or "").strip().rstrip(".!")
+    for rx in _SET_MEAL:
+        m = rx.match(t)
+        if not m:
+            continue
+        meal = m.group(m.lastindex).lower()
+        meal = _MEAL_ALIAS.get(meal, meal)
+        item = ""
+        for key in ("item", "item2"):
+            try:
+                item = (m.group(key) or "") if key in rx.groupindex else ""
+            except (IndexError, error):
+                item = ""
+            if item:
+                break
+        # "chicken was lunch" is a meal tag; "that was lovely" is not, and the meal word
+        # is what separates them - so an unmatched meal word means this is not one.
+        return {"meal": meal, "item": item.strip()}
+    return None
+
+
 def fast_intent(text: str, has_pending: bool) -> dict | None:
     """Deterministic classification, no model call. None means "ask the model"."""
     t = (text or "").strip()
@@ -150,6 +196,9 @@ def fast_intent(text: str, has_pending: bool) -> dict | None:
     w = looks_like_weight(t)
     if w is not None:
         return {"intent": "log_weight", "weight_kg": w}
+    tag = looks_like_meal_tag(t)
+    if tag and not has_pending:
+        return {"intent": "set_meal", **tag}
     return None
 
 

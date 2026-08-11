@@ -44,6 +44,7 @@ completeness and must never enter a calculation or a trend chart.
 import contextlib
 import fcntl
 import json
+import re
 import os
 import sys
 import tempfile
@@ -253,7 +254,8 @@ class NutritionStore:
                   confidence: str = "estimate",
                   source_rung: str = "llm", source_url: str = "",
                   resolved_at=None, in_session: bool = False,
-                  species=None, ingredients: str = "", logged_at=None) -> dict:
+                  species=None, ingredients: str = "", logged_at=None,
+                  meal: str = "") -> dict:
         """Append one confirmed food entry. Returns the stored entry, including the
         `id` the bot needs for /undo and /edit.
 
@@ -288,6 +290,7 @@ class NutritionStore:
                 "source_url": source_url,
                 "resolved_at": _as_iso(resolved_at) if resolved_at else iso,
                 "in_session": bool(in_session),
+            "meal": (meal or "").strip().lower(),
                 # Each species is {"id", "score"}: the score is the one MATCHED, which
                 # is 0 for a refined derivative. Storing bare ids lost it and read the
                 # category default back, turning sunflower oil into sunflower.
@@ -304,6 +307,58 @@ class NutritionStore:
             return entry
 
         return self._mutate_day(iso, _add)
+
+    # The four buckets the app renders. "snacks" is the catch-all rather than an
+    # unlabelled fifth, so nothing can land nowhere.
+    MEALS = ("breakfast", "lunch", "dinner", "snacks")
+
+    def set_meal(self, day, entry_id: str, meal: str) -> dict | None:
+        """Say which meal an entry belongs to.
+
+        Meals were inferred from the clock alone, so an entry logged at 08:52 was
+        breakfast and one logged at 11:30 was lunch whatever it actually was - and there
+        was no way to correct it, because entries carried no meal at all. Telling the bot
+        "that was breakfast" had nowhere to land.
+
+        The STATED meal always wins over the clock: he knows when he ate, and a log
+        written up an hour later is normal."""
+        meal = (meal or "").strip().lower()
+        if meal in ("snack", "snacking"):
+            meal = "snacks"
+        if meal not in self.MEALS:
+            return None
+
+        def fn(rec):
+            for e in rec.get("entries") or []:
+                if e.get("id") == entry_id:
+                    e["meal"] = meal
+                    return e
+            return None
+        return self._mutate_day(day, fn)
+
+    def find_entry(self, day, text: str = "") -> dict | None:
+        """The entry he means: named if he named one, otherwise the most recent.
+
+        Matched on shared words rather than a substring, so "the oats" finds "M&S Salted
+        Caramel Overnight Oats" without "the bar" also matching every bar-shaped name it
+        appears inside."""
+        entries = self.get_day(day).get("entries") or []
+        if not entries:
+            return None
+        words = {w for w in re.split(r"[^a-z0-9]+", (text or "").lower())
+                 if len(w) > 2} - {"was", "the", "that", "this", "for", "had", "and"}
+        if words:
+            best, score = None, 0
+            for e in entries:
+                name = {w for w in re.split(r"[^a-z0-9]+",
+                                            (e.get("resolved_name") or "").lower())
+                        if len(w) > 2}
+                hit = len(words & name)
+                if hit > score:
+                    best, score = e, hit
+            if best is not None:
+                return best
+        return entries[-1]
 
     def undo_last(self, day) -> dict | None:
         """Remove the most recently logged entry. Returns it, or None if the day is

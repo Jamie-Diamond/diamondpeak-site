@@ -267,6 +267,36 @@ check("September entry lives in the September file",
 check("August day is untouched by the September write",
       len(store.get_day(TODAY)["entries"]) > 0)
 
+print("\n--- filing an entry under a meal ---")
+mstore = S.NutritionStore(Path(tempfile.mkdtemp(prefix="meal-")))
+MDAY = "2026-08-11"
+mstore.add_entry(MDAY, raw_text="protein bar", resolved_name="M&S Protein Bar",
+                 kcal=200, logged_at=MDAY + "T08:17")
+oats = mstore.add_entry(MDAY, raw_text="oats", resolved_name="M&S Overnight Oats",
+                        kcal=322, logged_at=MDAY + "T08:52")
+check("a new entry starts with no meal", not (oats.get("meal") or ""))
+found = mstore.find_entry(MDAY, "overnight oats")
+check("a named item is found by its words",
+      found and found["resolved_name"] == "M&S Overnight Oats")
+check("naming nothing picks the most recent",
+      mstore.find_entry(MDAY, "")["resolved_name"] == "M&S Overnight Oats")
+check("a name that matches nothing still falls back rather than failing",
+      mstore.find_entry(MDAY, "sausage roll") is not None)
+got = mstore.set_meal(MDAY, found["id"], "breakfast")
+check("the meal is stored", got and got["meal"] == "breakfast")
+check("and it persists",
+      [e for e in mstore.get_day(MDAY)["entries"]
+       if e["id"] == found["id"]][0]["meal"] == "breakfast")
+check("a snack singular is normalised to the bucket the app renders",
+      mstore.set_meal(MDAY, found["id"], "snack")["meal"] == "snacks")
+check("an unknown bucket is REFUSED rather than invented",
+      mstore.set_meal(MDAY, found["id"], "elevenses") is None)
+check("and the previous value survives the refusal",
+      [e for e in mstore.get_day(MDAY)["entries"]
+       if e["id"] == found["id"]][0]["meal"] == "snacks")
+check("an unknown entry id changes nothing",
+      mstore.set_meal(MDAY, "nope-999", "lunch") is None)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

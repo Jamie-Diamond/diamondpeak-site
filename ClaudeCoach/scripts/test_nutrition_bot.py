@@ -433,6 +433,35 @@ NB.subprocess = type("S", (), {"run": staticmethod(
 got = fetch("toast")
 check("JSON is extracted from surrounding prose", got and got["kcal"] == 160)
 
+print("\n--- naming which meal something was ---")
+# "That was breakfast" was answered as an unrecognised message, because meals existed only
+# as a clock inference and nothing could be told otherwise.
+for text, meal, item in (
+        ("That was breakfast", "breakfast", ""),
+        ("that was breakfast.", "breakfast", ""),
+        ("the overnight oats was breakfast", "breakfast", "overnight oats"),
+        ("put the twix as snacks", "snacks", "twix"),
+        ("log it as dinner", "dinner", ""),
+        ("make that a snack", "snacks", ""),
+        ("call that dinner", "dinner", ""),
+        # Words people use that are not one of the four buckets.
+        ("the oats was brunch", "breakfast", "oats"),
+        ("that was supper", "dinner", ""),
+        ("it was tea", "dinner", "")):
+    got = NLU.looks_like_meal_tag(text)
+    check(f"{text!r} is a meal tag",
+          got and got["meal"] == meal and got["item"] == item)
+    fi = NLU.fast_intent(text, False)
+    check(f"and routes without a model call", (fi or {}).get("intent") == "set_meal")
+
+# The negatives matter more: a false positive files food under the wrong meal silently.
+for text in ("that was lovely", "that was 200g", "it was a long run",
+             "how much protein have i had", "chicken and rice", "that was hard work",
+             "breakfast was good"):
+    check(f"{text!r} is NOT a meal tag", NLU.looks_like_meal_tag(text) is None)
+check("a meal tag never fires while something is pending, where yes/no is the answer",
+      (NLU.fast_intent("that was breakfast", True) or {}).get("intent") != "set_meal")
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

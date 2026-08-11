@@ -133,27 +133,37 @@ def build(slug: str, today: date) -> dict:
                 alert_g_hr=cfg.get("nutrition_alert_threshold_g_hr"),
                 sport=longest.get("sport") or "")
         carb_split = NE.split_carbs(totals)
-        # Meals are inferred from the clock, because nothing asks the athlete to
-        # categorise. Stated as inferred so an odd bucket is not read as a data error.
+        # A STATED meal wins; the clock is only the fallback. He knows when he ate, and
+        # writing the log up an hour later is normal - so "that was breakfast" has to be
+        # able to override an 11:30 timestamp rather than argue with it.
         meals = {"breakfast": [], "lunch": [], "snacks": [], "dinner": []}
+        inferred_any = False
         for e in entries:
             hhmm = (e.get("logged_at") or "")[11:16]
-            if e.get("in_session"):
+            stated = (e.get("meal") or "").strip().lower()
+            if stated in meals:
+                bucket = stated
+            elif e.get("in_session"):
                 bucket = "snacks"
+                inferred_any = True
             elif hhmm and hhmm < "11:00":
                 bucket = "breakfast"
+                inferred_any = True
             elif hhmm and hhmm < "15:00":
                 bucket = "lunch"
+                inferred_any = True
             elif hhmm and hhmm >= "17:00":
                 bucket = "dinner"
+                inferred_any = True
             else:
                 bucket = "snacks"
+                inferred_any = True
             meals[bucket].append({
                 "name": e.get("resolved_name"), "kcal": e.get("kcal"),
                 "protein_g": e.get("protein_g"), "carb_g": e.get("carb_g"),
                 "fat_g": e.get("fat_g"), "confidence": e.get("confidence"),
                 "rung": e.get("source_rung"), "in_session": bool(e.get("in_session")),
-                "logged_at": hhmm})
+                "logged_at": hhmm, "meal_stated": bool(stated)})
         days.append({
             "date": d,
             "day_type": rec.get("day_type"),
@@ -188,7 +198,9 @@ def build(slug: str, today: date) -> dict:
             "in_session": in_session,
             "carb_split": carb_split,
             "meals": meals,
-            "meals_inferred_from_clock": True,
+            # Only claim inference when something actually WAS inferred, so a day he has
+            # filed himself does not carry a caveat telling him not to trust it.
+            "meals_inferred_from_clock": inferred_any,
             # Pace: where each macro would sit if it tracked calories exactly. This
             # answers "what do I reach for", NEVER "am I in trouble" - only the
             # projection answers that, and the two must not be conflated. A macro can
