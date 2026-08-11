@@ -406,6 +406,11 @@
     bits.push(rest > 0 ? rest + ' rest day' + (rest === 1 ? '' : 's') + ' so far'
                        : 'no rest day yet this week');
 
+    if (w.summary && w.summary.energy_balance_kcal != null) {
+      var bal = w.summary.energy_balance_kcal;
+      bits.push((bal >= 0 ? '+' : '') + Math.round(bal).toLocaleString() +
+                ' kcal across ' + w.summary.days_logged + ' logged days');
+    }
     return card('This week', '<div><p class="wsum">' + esc(bits.join(' · ')) + '</p>' +
       (target ? '<div class="bar' + (pct > 110 ? ' warn' : '') + '"><i style="width:' +
         Math.min(100, pct || 0) + '%"></i></div>' : '') + '</div>',
@@ -2364,6 +2369,28 @@
   /* The carb row has to distinguish the two, because one number cannot answer both
      questions: 900 g on a long-run day is not 900 g of food. Before the session it names
      what is reserved for it; afterwards, what was actually taken. */
+  /* TWO GOALS, TWO ROWS. A note on one row was not clear enough, and the bar still
+     measured against the 897 g total - so the number he acts on when deciding what to eat
+     was the one he could not see. Food and in-run fuel are separate goals: the second is a
+     RATE taken on the move, and no amount of dinner substitutes for it. */
+  function carbRows(day, t, z, r) {
+    var cp = day.carb_plan;
+    if (!cp || !cp.in_session_planned_g || !z || !z.carb_g) {
+      return zoneRow('Carbs', t.carb_g, z && z.carb_g, day.pace_pct,
+                     r && r.macros.carb_g, carbNote(day));
+    }
+    var taken = (day.carb_split && day.carb_split.in_session_g) || 0;
+    var food = Math.max(0, (t.carb_g || 0) - taken);
+    return zoneRow('Carbs from food', food,
+                   { low: cp.out_of_session_low, high: cp.out_of_session_high,
+                     bias: z.carb_g.bias }, null, r && r.macros.carb_g,
+                   'out of session') +
+      zoneRow('Carbs in-run', taken,
+              { low: cp.in_session_planned_g, high: cp.in_session_planned_g,
+                bias: 'floor' }, null, null,
+              'prescribed for the session');
+  }
+
   function carbNote(day) {
     var cp = day.carb_plan, split = day.carb_split;
     if (split && split.in_session_g) {
@@ -2416,8 +2443,7 @@
       '<div class="zones">' +
       zoneRow('Protein', t.protein_g, z && z.protein_g, day.pace_pct,
               r && r.macros.protein_g) +
-      zoneRow('Carbs', t.carb_g, z && z.carb_g, day.pace_pct, r && r.macros.carb_g,
-              carbNote(day)) +
+      carbRows(day, t, z, r) +
       zoneRow('Fat', t.fat_g, z && z.fat_g, day.pace_pct, r && r.macros.fat_g) +
       zoneRow('Fibre', t.fibre_g, z && z.fibre_g, day.pace_pct,
               r && r.macros.fibre_g) +

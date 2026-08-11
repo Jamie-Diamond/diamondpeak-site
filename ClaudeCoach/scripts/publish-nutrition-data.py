@@ -302,6 +302,12 @@ def build(slug: str, today: date) -> dict:
                               if done else None),
                 "mean_target": (round(sum(r["kcal_target"] or 0 for r in done) / len(done))
                                 if done else None),
+                # Jamie: "over yersterday and tommorow it should balance out". A single day
+                # under target is not a verdict and never was one, so the rolling SUM is
+                # published across the days actually logged - the number he is really
+                # judging by - rather than leaving the page to imply that today is a score.
+                "energy_balance_kcal": (round(sum((r["kcal"] or 0) - (r["kcal_target"] or 0)
+                                                  for r in done)) if done else None),
                 "in_run_sessions": len(runs),
                 "in_run_on_target": sum(1 for r in runs
                                         if r["in_run_verdict"] in ("on_target",
