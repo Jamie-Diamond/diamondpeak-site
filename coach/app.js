@@ -406,16 +406,20 @@
     bits.push(rest > 0 ? rest + ' rest day' + (rest === 1 ? '' : 's') + ' so far'
                        : 'no rest day yet this week');
 
-    if (w.summary && w.summary.mean_deficit_kcal_day != null) {
-      /* The rolling figure, not the day: an IM week swings from 2,500 to 5,400, so a daily
-         number is noise. Coverage is always stated with it - two logged days is not a week,
-         and an unlogged day is not a zero-intake day. */
-      var md = w.summary.mean_deficit_kcal_day;
+    /* The rolling energy figure, when there IS nutrition data. Read off state.nutr
+       defensively: this is the TRAINING week card, nutrition loads AFTER the training data
+       and may never load at all for an athlete without the flag - so it is absent far more
+       often than present. An earlier cut of this dereferenced a `w` that does not exist in
+       this scope, which threw a ReferenceError and took the whole Today view down for every
+       athlete: blank, not degraded. */
+    var nsum = (state.nutr && state.nutr.week && state.nutr.week.summary) || null;
+    if (nsum && nsum.mean_deficit_kcal_day != null) {
+      var md = nsum.mean_deficit_kcal_day;
       bits.push((md >= 0 ? '+' : '') + Math.round(md).toLocaleString() +
-                ' kcal/day average · ' + esc(w.summary.deficit_coverage || ''));
-      if (w.summary.implied_kg_per_week != null) {
-        bits.push('implies ' + (w.summary.implied_kg_per_week > 0 ? '+' : '') +
-                  w.summary.implied_kg_per_week + ' kg/week');
+                ' kcal/day average · ' + esc(nsum.deficit_coverage || ''));
+      if (nsum.implied_kg_per_week != null) {
+        bits.push('implies ' + (nsum.implied_kg_per_week > 0 ? '+' : '') +
+                  nsum.implied_kg_per_week + ' kg/week');
       }
     }
     return card('This week', '<div><p class="wsum">' + esc(bits.join(' · ')) + '</p>' +
