@@ -429,6 +429,37 @@
               (d.refreshCadence ? '. Refreshes ' + d.refreshCadence + '.' : '.') }) + h;
   }
 
+  /* Detail for one session, hidden until its heading is tapped. Every field is emitted
+     only if PRESENT: a planned session has an aim and no numbers, a completed one has
+     numbers and often no aim, and printing a label with nothing after it reads as missing
+     data rather than as a field that does not apply here. */
+  function sessionDetail(s, si) {
+    var rows = [];
+    function add(label, value) {
+      if (value == null || value === '') { return; }
+      rows.push('<p class="hero-m"><span class="mut">' + esc(label) + '</span> ' +
+                esc(String(value)) + '</p>');
+    }
+    add('Planned load', s.tss != null ? Math.round(s.tss) + ' TSS' : null);
+    add('Duration', s.duration_min ? hhmm(s.duration_min) : null);
+    add('Distance', s.distance_km != null ? Number(s.distance_km).toFixed(1) + ' km' : null);
+    add('Status', s.status);
+    var aim = s.description || s.aim || s.notes;
+    if (aim) {
+      rows.push('<p class="hero-m">' + esc(String(aim).slice(0, 600)) + '</p>');
+    }
+    if (!rows.length) {
+      rows.push('<p class="hero-m mut">Nothing further recorded for this one yet.</p>');
+    }
+    return '<div class="sessdet" data-sessdet="' + si + '" hidden>' +
+      rows.join('') + '</div>';
+  }
+
+  function toggleSession(si) {
+    var el = document.querySelector('[data-sessdet="' + si + '"]');
+    if (el) { el.hidden = !el.hidden; }
+  }
+
   function renderToday() {
     var d = state.data, k = d.kpi || {};
     var t = todayISO();
@@ -445,13 +476,15 @@
     h += '<section class="hero">' +
       '<p class="hero-k">' + esc(dow(t)) + ' ' + dnum(t) + ' · today</p>' +
       (today.length
-        ? today.map(function (s) {
-            return '<h2 class="hero-t"><span class="sp ' + sportClass(s.sport) + '"></span>' +
+        ? today.map(function (s, si) {
+            return '<h2 class="hero-t" data-sess="' + si + '">' +
+              '<span class="sp ' + sportClass(s.sport) + '"></span>' +
               esc(s.name || s.sport) + '</h2>' +
               '<p class="hero-m">' + esc([hhmm(s.duration_min),
                 s.tss != null ? Math.round(s.tss) + ' tss' : null,
                 s.detail].filter(Boolean).join(' · ')) + '</p>' +
-              (s.status === 'completed' ? '<p class="hero-done">✓ Completed</p>' : '');
+              (s.status === 'completed' ? '<p class="hero-done">✓ Completed</p>' : '') +
+              sessionDetail(s, si);
           }).join('<hr class="hero-r">')
         : '<h2 class="hero-t">Rest day</h2><p class="hero-m">Nothing scheduled.</p>') +
       '</section>';
@@ -497,6 +530,18 @@
     }
 
     $('#v-today').innerHTML = h;
+    var th = $('#v-today');
+    if (th && !th.dataset.sessNav) {
+      th.dataset.sessNav = '1';
+      th.addEventListener('click', function (e) {
+        try {
+          var head = e.target.closest('[data-sess]');
+          if (head) { toggleSession(head.getAttribute('data-sess')); }
+        } catch (err) {
+          if (window.console) { console.error('[peak] session toggle:', err); }
+        }
+      });
+    }
   }
 
   /* ── Calendar (month grid) ───────────────────────────────────────────── */
