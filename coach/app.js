@@ -2603,10 +2603,14 @@
           '</span></td></tr>';
       }).join('');
       h += card('What the rest of today has to look like',
-        '<table class="tbl dtbl"><thead><tr><th>Macro</th><th>Still needed</th>' +
-        '<th>Share of remaining kcal <span class="mut">vs a normal meal</span></th>' +
+        '<div class="tblwrap"><table class="tbl dtbl"><thead><tr><th>Macro</th>' +
+        '<th>Still needed</th>' +
+        // Stacked, not stretched: on a phone this header was what pushed the table past
+        // the viewport - nowrap cells plus a long heading, with only vertical overflow
+        // handled anywhere. The comparison still has to be stated, just not on one line.
+        '<th>Share left<span class="mut nlbl">vs normal meal</span></th>' +
         '<th></th></tr></thead>' +
-        '<tbody>' + rows + '</tbody></table>');
+        '<tbody>' + rows + '</tbody></table></div>');
     }
 
     /* 5. The log, by meal. Unlogged meals stay visible and greyed: an empty Dinner

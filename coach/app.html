@@ -193,6 +193,9 @@ body{
   {text-align:right}
 .dtbl th:last-child,.dtbl td:last-child{text-align:right;width:1%}
 .dtbl td.nw{white-space:nowrap}
+.tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.dtbl th{white-space:normal}
+.nlbl{display:block;font-size:10px;line-height:1.2}
 .dens{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.1em;
   text-transform:uppercase;border:1px solid var(--rule);border-radius:2px;
   padding:2px 5px;white-space:nowrap;color:var(--ink-2)}
@@ -928,6 +931,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=34" defer></script>
+<script src="app.js?v=35" defer></script>
 </body>
 </html>
