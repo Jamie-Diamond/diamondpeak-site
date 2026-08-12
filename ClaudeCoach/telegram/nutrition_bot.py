@@ -385,11 +385,17 @@ Rules:
 - source_kind must be honest. Say "estimate" if you did not find the actual product.
 - Return {} rather than guessing at a product you could not find, or if the form does
   not match (a capsule is not a bar).
+- If the request names NO BRAND - "a ginger shot", "an oat drink" - do not pick a branded
+  product to stand in for it. "100ml ginger shot" was answered with James White on one
+  attempt and MOJU on the next: two brands, neither of them what he drank, and the first
+  was a 70 ml bottle against the 100 ml he stated. Give a GENERIC composition for that kind
+  of food with source_kind:"database", or return {} and let a lower rung answer. Naming a
+  brand he did not is worse than a generic figure, because it looks specific.
 
 Product: %s
 Form: %s
 Portion eaten: %s
-"""
+%s"""
 
 # Plausible energy density for real food, kcal per 100 g. Pure fat is ~900 and a
 # zero-calorie drink is ~0, so anything outside this is a units or basis error rather
@@ -401,6 +407,26 @@ SALT_TO_SODIUM_MG = 400.0          # 1 g salt = 400 mg sodium
 # Parsed chain menus live here for a week. The matrices are megabytes of HTML, so the
 # rows are cached and the HTML is thrown away; a cache older than the TTL is a miss.
 RESTAURANT_CACHE = BASE / "athletes" / "_shared" / "restaurant-cache"
+
+
+def _restaurant_note(hint: dict) -> str:
+    """Extra instructions when the thing is a dish from a named chain.
+
+    Without this the prompt above is purely retail-shaped - "prefer the manufacturer's page,
+    then a UK retailer listing (Ocado, Tesco, M&S)" - so for a Nando's dish it hunted
+    supermarket listings for something only Nando's publishes, and came back with an
+    estimate. Jamie found the same figures on the chain's own site in seconds, which is the
+    fairest possible criticism of a nutrition lookup."""
+    if not (hint and hint.get("category") == "restaurant_dish" and hint.get("brand")):
+        return ""
+    return (
+        "\nRESTAURANT DISH from " + str(hint.get("brand")) + ". Search THAT CHAIN'S OWN "
+        "site and its nutrition or allergen guide first - not supermarkets, and not a "
+        "third-party copy of the menu. UK chains must publish calories by law, so the "
+        "figures exist. A downloadable nutrition PDF is a good source; read it if you can.\n"
+        "Per-portion figures with NO gram weight are normal and usable here: the portion IS "
+        "the dish, so report per:\"portion\" with pack_g null rather than treating it as "
+        "unusable. source_kind:\"manufacturer\" only for the chain's own published data.\n")
 
 
 def make_deep_fetch(log=log):
@@ -415,8 +441,10 @@ def make_deep_fetch(log=log):
             proc = subprocess.run(
                 [CLAUDE_BIN, "--print", "--model", LLM_MODEL,
                  "--allowedTools", "WebSearch,WebFetch"],
-                input=DEEP_PROMPT % (text, hint.get("form") or "unknown",
-                                     (f"{portion_g} g" if portion_g else "as described")),
+                input=DEEP_PROMPT % (
+                    text, hint.get("form") or "unknown",
+                    (f"{portion_g} g" if portion_g else "as described"),
+                    _restaurant_note(hint)),
                 capture_output=True, text=True, timeout=180)
         except Exception as exc:
             log(f"web rung failed: {exc}")
