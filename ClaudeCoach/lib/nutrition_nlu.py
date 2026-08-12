@@ -193,9 +193,23 @@ _DELETE = (
 )
 
 
+# "Actually that's not the right product. Remove it" - the instruction arrives at the END,
+# after the reason. Anchoring the patterns to the start of the message meant this read as a
+# CORRECTION, so the bot looked the wrong product up again instead of removing it, and Jamie
+# had to send a second message to delete the thing he had just asked to be deleted.
+_DELETE_TRAILING = re.compile(
+    r"\b(?:remove|delete|bin|scrap|discard)\s+(?:it|that|this|them|those)\b\s*$"
+    r"|\b(?:get\s+rid\s+of|take\s+off)\s+(?:it|that|this|them)\b\s*$"
+    r"|\btake\s+(?:it|that|this|them)\s+off\b\s*$", re.I)
+
+
 def looks_like_delete(text: str) -> dict | None:
     """{'item': ...} when he is asking for something to be removed."""
     t = (text or "").strip().rstrip(".!")
+    # A trailing instruction wins over the sentence it follows: "that's not right, remove it"
+    # is a deletion with a reason attached, not a correction.
+    if _DELETE_TRAILING.search(t):
+        return {"item": ""}
     for rx in _DELETE:
         m = rx.match(t)
         if not m:
