@@ -199,6 +199,8 @@ body{
    display:block is what makes a table scroll rather than push the page. */
 @media (max-width:560px){table.tbl{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}}
 .dtbl th{white-space:normal}
+.wktbl tbody tr{cursor:pointer}
+.wktbl tbody tr.picked{background:var(--paper-2)}
 .nlbl{display:block;font-size:10px;line-height:1.2}
 .dens{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.1em;
   text-transform:uppercase;border:1px solid var(--rule);border-radius:2px;
@@ -935,6 +937,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=36" defer></script>
+<script src="app.js?v=37" defer></script>
 </body>
 </html>

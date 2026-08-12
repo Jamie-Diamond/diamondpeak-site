@@ -2483,6 +2483,12 @@
     if (!host.dataset.dayNav) {
       host.dataset.dayNav = '1';
       host.addEventListener('click', function (e) {
+        var row = e.target.closest('[data-food-date]');
+        if (row) {
+          state.foodDate = row.getAttribute('data-food-date');
+          renderFood();
+          return;
+        }
         var b = e.target.closest('[data-food-day]');
         if (b && !b.disabled) { stepFoodDay(b.getAttribute('data-food-day')); }
       });
@@ -2498,8 +2504,15 @@
     if (!logged.length) { logged = n.days.slice(-1); }
     if (state.foodDayOffset == null) { state.foodDayOffset = 0; }
     state.foodDayOffset = Math.max(0, Math.min(state.foodDayOffset, logged.length - 1));
-    var day = logged[logged.length - 1 - state.foodDayOffset];
-    var isToday = state.foodDayOffset === 0;
+    // A DATE, not an index: an index into a filtered list goes stale the moment the data
+    // refreshes and would quietly show a different day than the one he tapped. A date that
+    // is no longer present simply falls back to today.
+    var day = null;
+    if (state.foodDate) {
+      day = logged.filter(function (x) { return x.date === state.foodDate; })[0] || null;
+    }
+    if (!day) { day = logged[logged.length - 1 - state.foodDayOffset]; }
+    var isToday = day === logged[logged.length - 1];
     // The older/newer buttons are gone - Jamie would rather pick the day from the rolling
     // table than step one at a time. The offset itself stays, because that is what a row in
     // that table will set.
@@ -2652,7 +2665,8 @@
       var sm = wk.summary || {};
       var rows = wk.days.map(function (d) {
         if (!d.logged) {
-          return '<tr class="miss"><td class="lbl">' + esc(d.dow) + '</td>' +
+          return '<tr class="miss" data-food-date="' + esc(d.date) + '">' +
+            '<td class="lbl">' + esc(d.dow) + '</td>' +
             '<td colspan="4"><span class="mut">not sampled</span></td></tr>';
         }
         var pm = d.protein_met ? 'ok' : 'low';
@@ -2663,7 +2677,9 @@
           ? '<span class="dens ' + (d.in_run_verdict === 'under' ? 'avoid' : 'high') +
             '">' + Math.round(d.in_run_g_hr) + ' g/hr</span>'
           : '<span class="mut">-</span>';
-        return '<tr><td class="lbl">' + esc(d.dow) + '</td>' +
+        return '<tr data-food-date="' + esc(d.date) + '"' +
+          (d.date === day.date ? ' class="picked"' : '') + '>' +
+          '<td class="lbl">' + esc(d.dow) + '</td>' +
           '<td class="nw">' + Math.round(d.kcal || 0).toLocaleString() +
           '<span class="mut"> / ' + Math.round(d.kcal_target || 0).toLocaleString() +
           '</span></td>' +
