@@ -290,6 +290,15 @@ Keys:
   items: array (log_food/log_supplement only) of {text, portion_g, in_session}
          - text: a SINGLE food or supplement, self-contained enough to look up
          - portion_g: grams if stated or confidently inferable, else null
+         - ONE PRODUCT AND ITS CONTENTS IS ONE ITEM, NOT SEVERAL. "100ml ginger shot,
+           orange, apple" is a single 100 ml shot whose ingredients are ginger, orange and
+           apple - it is not a shot AND an orange AND an apple. This was split into three
+           and would have logged two pieces of fruit he never ate on top of the drink.
+           A comma-separated list following a NAMED product describes that product; use it
+           to identify the product and put the whole phrase in ONE item's text. Only emit
+           several items when they are separately EATEN things - "toast and a banana", "a
+           coffee and two biscuits". If genuinely unsure, emit ONE item: an over-split day
+           double counts, while an under-split one is a single figure he can correct.
          - in_session: true only if eaten DURING a training session (gel, drink mix,
            "on the bike", "mid-run")
   question: (question only) a short restatement of what they are asking
