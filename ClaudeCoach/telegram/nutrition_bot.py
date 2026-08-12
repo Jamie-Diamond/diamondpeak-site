@@ -1019,10 +1019,20 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
             return
         if correct_in_batch(ctx, pend, got.get("correction") or t, day, token, chat_id):
             return
-        # Single pending item: the whole record IS the subject, so its own raw text is right.
-        combined = NLU.apply_correction(
-            pend.get("_raw") or pend.get("raw_text") or "", got.get("correction") or t)
-        offer_items(ctx, [{"text": combined, "portion_g": None, "in_session": False}],
+        subject = pending_subject(pend)
+        combined = NLU.apply_correction(subject, got.get("correction") or t)
+        # A correction with no subject left in it is REFUSED. " (half the portion)" is not a
+        # food, and resolving it produced an LLM estimate named after the correction itself -
+        # the third time this shape has reached the log.
+        if not _has_subject(combined, got.get("correction") or t):
+            tg.send(token, chat_id,
+                    "I have lost track of what that refers to. Tell me the item and the "
+                    "change together - \u201chalf a bag of the M&S nut collection\u201d - and "
+                    "I will redo it.", log=log)
+            return
+        offer_items(ctx, [{"text": combined, "portion_g": None,
+                           "in_session": bool((pend.get("batch") or [{}])[0]
+                                              .get("in_session"))}],
                     day, token, chat_id)
         return
 
@@ -1470,6 +1480,33 @@ def mark_pending_replaces(ctx: Context, entry_id: str, name: str) -> None:
         return
     pend["_replaces"] = {"id": entry_id, "name": name}
     set_pending(ctx.store, pend)
+
+
+def _has_subject(combined: str, correction: str) -> bool:
+    """Is there any food left in the string, beyond the correction itself?"""
+    import re as _re
+
+    def words(x):
+        return {w for w in _re.split(r"[^a-z0-9]+", (x or "").lower()) if len(w) > 2}
+
+    stop = {"the", "had", "was", "one", "half", "portion", "bag", "actually", "just",
+            "some", "more", "less", "only", "double", "extra", "that", "this", "it"}
+    return bool(words(combined) - words(correction) - stop)
+
+
+def pending_subject(pend: dict) -> str:
+    """The raw text of what is pending, whatever shape the record is in.
+
+    Three shapes exist and only one of them was handled: a bare item with `_raw`, a batch of
+    one, and a batch of many. A batch of ONE fell through every guard and read pend["_raw"],
+    which a batch does not have - so the correction was applied to an empty string and the food
+    disappeared from it. Reading the subject in one place is what stops the next shape doing the
+    same thing."""
+    batch = pend.get("batch") or []
+    if len(batch) == 1:
+        it = batch[0]
+        return it.get("_raw") or it.get("raw_text") or it.get("resolved_name") or ""
+    return pend.get("_raw") or pend.get("raw_text") or ""
 
 
 def correct_in_batch(ctx: Context, pend: dict, correction: str, day: date,
