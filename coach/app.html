@@ -194,6 +194,10 @@ body{
 .dtbl th:last-child,.dtbl td:last-child{text-align:right;width:1%}
 .dtbl td.nw{white-space:nowrap}
 .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* Every table, not just the one reported. 13 of them are emitted and only 3
+   sat in a scroll container, so the same defect was waiting on other tabs.
+   display:block is what makes a table scroll rather than push the page. */
+@media (max-width:560px){table.tbl{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}}
 .dtbl th{white-space:normal}
 .nlbl{display:block;font-size:10px;line-height:1.2}
 .dens{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.1em;
@@ -931,6 +935,6 @@ body.drawn{overflow:hidden}
 <!-- ?v= is load-bearing: an older service worker still controlling this page
      serves app/app.js cache-first, and a stale script against this markup is a
      broken launch. A new URL cannot hit that cache entry. Bump on JS change. -->
-<script src="app.js?v=35" defer></script>
+<script src="app.js?v=36" defer></script>
 </body>
 </html>

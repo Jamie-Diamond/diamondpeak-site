@@ -2500,22 +2500,12 @@
     state.foodDayOffset = Math.max(0, Math.min(state.foodDayOffset, logged.length - 1));
     var day = logged[logged.length - 1 - state.foodDayOffset];
     var isToday = state.foodDayOffset === 0;
+    // The older/newer buttons are gone - Jamie would rather pick the day from the rolling
+    // table than step one at a time. The offset itself stays, because that is what a row in
+    // that table will set.
     var z = day.zones, t = day.totals || {}, r = day.requirement;
     var h = '';
 
-    /* Which day you are looking at, and how to move. Newest first, and only days with
-       something logged, because stepping through empty days to find one is not navigation. */
-    h += '<div class="card"><div class="meal-h">' +
-      '<b>' + esc(isToday ? 'Today' : dayLabel(day.date)) + '</b>' +
-      '<span>' +
-        '<button type="button" class="chg" data-food-day="older"' +
-        (state.foodDayOffset >= logged.length - 1 ? ' disabled' : '') + '>&larr; older</button> ' +
-        '<button type="button" class="chg" data-food-day="newer"' +
-        (isToday ? ' disabled' : '') + '>newer &rarr;</button>' +
-      '</span></div>' +
-      (isToday ? '' : '<div class="mut">' + esc(day.day_type || '') + ' \u00b7 ' +
-        Math.round((day.totals || {}).kcal || 0).toLocaleString() + ' kcal logged</div>') +
-      '</div>';
 
     /* 1. Reach for. First on the page and the whole point of it: what the next meal
           has to be, stated as an instruction rather than as a fault. Composed in
