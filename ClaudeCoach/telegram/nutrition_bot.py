@@ -39,6 +39,7 @@ as a progress bar and never emit a grade.
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -1330,6 +1331,61 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id) -> Non
             + ("these?" if len(batch) > 1 else "it?"), reply_markup=kb, log=log)
 
 
+_SAME_AS = re.compile(
+    r"\bsame\s+(?:as|one\s+as)\s+(?:before|last\s+time|yesterday|monday|tuesday|"
+    r"wednesday|thursday|friday|saturday|sunday|the\s+other\s+day)\b"
+    r"|\bas\s+(?:yesterday|before|last\s+time)\b"
+    r"|\bthe\s+usual\b|\bmy\s+usual\b", re.I)
+
+
+def from_history(ctx: Context, text: str, day: date, back_days: int = 30) -> dict | None:
+    """The entry he means when he says "same as yesterday". None if there is no clear match.
+
+    THE BUG THIS EXISTS FOR. He wrote "Fridge raiders (same as before)" and the bot asked him
+    how much - having logged that exact product the previous day at 94 kcal from its label. And
+    "Rubicon juice drink, same as yesterday" resolved to a 330 ml can at 66 kcal when yesterday's
+    was 15. Both answers were already in his log.
+
+    A figure he has already accepted beats anything a fresh search returns, so his history is
+    searched FIRST and a hit is used verbatim - product, portion, figures and provenance."""
+    if not _SAME_AS.search(text or ""):
+        return None
+    words = {w for w in re.split(r"[^a-z0-9]+", (text or "").lower()) if len(w) > 2}
+    words -= {"same", "before", "last", "time", "yesterday", "monday", "tuesday",
+              "wednesday", "thursday", "friday", "saturday", "sunday", "the", "usual",
+              "one", "other", "day", "and", "for", "with", "had"}
+    if not words:
+        return None
+    best, score, when = None, 0, None
+    for back in range(1, back_days + 1):          # most recent first
+        d = day - timedelta(days=back)
+        for e in ctx.store.get_day(d).get("entries") or []:
+            name = {w for w in re.split(r"[^a-z0-9]+",
+                                        ((e.get("resolved_name") or "") + " "
+                                         + (e.get("raw_text") or "")).lower())
+                    if len(w) > 2}
+            hit = len(words & name)
+            if hit > score:
+                best, score, when = e, hit, d
+        if best is not None:
+            break                                  # do not reach past a day that matched
+    if best is None or score < 1:
+        return None
+    log(f"  same-as: reusing {best.get('resolved_name')!r} from {when} "
+        f"({best.get('kcal')} kcal)")
+    item = {k: best.get(k) for k in
+            ("resolved_name", "kcal", "protein_g", "carb_g", "fat_g", "fibre_g",
+             "dietary_sodium_mg", "portion_g", "ingredients", "source_url", "confidence",
+             "source_rung", "species")}
+    item.update({"resolved_at": str(day)[:10], "degraded": False, "needs_input": False,
+                 "species_from": best.get("species_from") or "name",
+                 "species_unmatched": "", "attempts": [
+                     {"rung": "history", "outcome": "hit",
+                      "detail": f"same as {when}, as he said"}],
+                 "note": f"same as {when.isoformat()}, reusing that entry's figures"})
+    return item
+
+
 def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 supplement: bool = False, barcode: str = None,
                 trivial: bool = False, dose_mg: float = None) -> None:
@@ -1374,6 +1430,18 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
 
     resolved = []
     for it in items[:8]:
+        # HIS OWN LOG FIRST when he says "same as": no search can beat a figure he has
+        # already accepted, and asking him again for something he told the bot yesterday is
+        # what made lunch unloggable.
+        prior = from_history(ctx, it["text"], day)
+        if prior is not None:
+            prior["_raw"] = it["text"]
+            prior["in_session"] = bool(it.get("in_session"))
+            prior["_supplement"] = supplement
+            prior["_trivial"] = bool(trivial)
+            prior["_dose_mg"] = dose_mg
+            resolved.append(prior)
+            continue
         log(f"  resolving {it['text'][:60]!r} portion={it.get('portion_g')}")
         # A barcode short-circuits the text ladder: an exact product lookup beats any
         # name search, so it is tried before the ordinary rungs rather than as one.
