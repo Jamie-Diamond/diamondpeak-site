@@ -37,6 +37,7 @@ from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import acknowledgement as ack_lib   # §8.3 milestone triggers, evaluated in Python
 import ops_log
+import write_verify            # read-back verdicts for the Strava writes below
 import heat as heat_lib
 import profile_fields
 import claude_call
@@ -949,6 +950,47 @@ Output only the name or "ask". Nothing else."""
     return "ask"
 
 
+def _verified_strava_write(sc, slug: str, strava_id, field: str, value: str) -> bool:
+    """Write a Strava field, READ IT BACK, and retry once if it did not land.
+
+    Why (13 Aug audit): both writes below discarded the boolean from update_activity —
+    which is literally `r.status == 200`, so a non-200 that raises no HTTPError returned
+    False into nothing — and then printed "updated" unconditionally. The log said the
+    description was written on runs where Strava had taken nothing, which is how the bot
+    came to tell Jamie four times that it had updated Strava when it had not.
+
+    This is the absolute case for verification: we know the exact text we meant to store,
+    so the read-back is proof either way (see write_verify.strava_desc_verdict with
+    `expected`). Returns True only when the value is actually on Strava."""
+    for attempt in (1, 2):
+        try:
+            sc.update_activity(strava_id, **{field: value})
+        except Exception as exc:
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava {field} write attempt "
+                  f"{attempt} raised: {exc}", file=sys.stderr)
+        try:
+            back = (sc.get_activity_detail(strava_id) or {}).get(field) or ""
+        except Exception as exc:
+            # Read-back failed: the write may well have landed, so do NOT claim failure
+            # and do NOT retry into a possible duplicate. Say only what is known.
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava {field} read-back "
+                  f"failed — write UNVERIFIED ({strava_id}): {exc}", file=sys.stderr)
+            return False
+        if write_verify.strava_desc_verdict(back, expected=value) == "ok":
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava {field} verified on "
+                  f"{strava_id}" + (" (after retry)" if attempt == 2 else ""), file=sys.stderr)
+            return True
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava {field} did NOT land on "
+              f"{strava_id} (attempt {attempt})", file=sys.stderr)
+    try:
+        ops_log.alert("activity-watcher",
+                      f"Strava {field} write did not land after a retry (activity {strava_id}) — "
+                      f"the activity on Strava is unchanged", athlete=slug)
+    except Exception:
+        pass
+    return False
+
+
 def _rename_strava(slug: str, icu_id: str, new_name: str) -> bool:
     """Rename a Strava activity. Returns True on success."""
     try:
@@ -965,9 +1007,10 @@ def _rename_strava(slug: str, icu_id: str, new_name: str) -> bool:
         if not strava_id:
             return False
         sc = StravaClient(slug)
-        sc.update_activity(strava_id, name=new_name)
-        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava renamed {icu_id} → {new_name!r}", file=sys.stderr)
-        return True
+        ok = _verified_strava_write(sc, slug, strava_id, "name", new_name)
+        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava rename {icu_id} → "
+              f"{new_name!r}: {'done' if ok else 'NOT APPLIED'}", file=sys.stderr)
+        return ok
     except FileNotFoundError:
         return False
     except Exception as exc:
@@ -1033,8 +1076,7 @@ def _strava_update(slug: str, icu_activity_id: str, analysis: str,
             coaching_level=coaching_level,
         )
 
-        sc.update_description(strava_id, description)
-        print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}][{slug}] Strava description updated ({strava_id})", file=sys.stderr)
+        _verified_strava_write(sc, slug, strava_id, "description", description)
     except FileNotFoundError:
         pass  # no tokens yet — silently skip
     except Exception as exc:

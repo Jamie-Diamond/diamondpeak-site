@@ -58,6 +58,8 @@ import engine
 import ops_log                 # run-status + ops-alerts, for work that fails unattended
 import rules_capture
 import rule_registry
+import coach_facts             # per-turn computed FACTS block (superlatives/records/thresholds)
+import write_verify            # verify-after-write for Strava / ICU calendar claims
 from engine import call_claude, call_claude_with_image, stream_claude
 HEARTBEAT_FILE = BASE.parent / ".bot_heartbeat"  # touched each poll loop; watched by bot-watchdog.py
 try:
@@ -303,6 +305,17 @@ def _submit(worker, chat_id, *args):
 _PREFETCH_CACHE = {}            # slug -> (epoch, context_str)
 _PREFETCH_TTL = 150             # seconds
 _PREFETCH_GUARD = threading.Lock()
+
+# Side-products of the ONE live resolve prefetch_context already does, kept so the
+# per-turn FACTS block and the write-verifier don't each buy their own network calls:
+#   _THRESHOLD_CACHE - the get_thresholds dict. FACTS *owns* the threshold figures now
+#     (prefetch only points at them), so this is where they come from; a miss makes FACTS
+#     resolve for itself rather than state a stale number.
+#   _EVENTS_SNAPSHOT - fingerprint of the planned-event window as it was at the last
+#     resolve, the "before" side of verifying a claimed calendar write. Its AGE travels
+#     with it because a stale snapshot must disable the check, not drive a false accusation.
+_THRESHOLD_CACHE = {}           # slug -> (epoch, thresholds_dict)
+_EVENTS_SNAPSHOT = {}           # slug -> (epoch, frozenset fingerprint)
 
 
 def _invalidate_prefetch(slug):
@@ -1838,6 +1851,256 @@ def _verify_logged_reply(slug: str, before_ts: float, clean: str,
             "and flagged it for a fix. No need to resend.")
 
 
+# ── VERIFY-AFTER-WRITE (EXTERNAL) ────────────────────────────────────────────────────
+# _verify_logged_reply above covers LOCAL writes by mtime. It cannot see intervals.icu or
+# Strava, so a claimed description update or calendar push is still taken on trust — and
+# four times in May-June the answer to "did you actually update Strava or just say you
+# did?" was "No". Same philosophy, pointed outward. Verdict logic lives in
+# lib/write_verify.py (pure, tested); this side does the I/O and the honest follow-up.
+# Deliberately three-valued: only an "absent" verdict ever speaks to the athlete.
+_STRAVA_DESC_SEEN = {}          # slug -> (icu_id, normalised description at last check)
+# An ICU activity id as the model writes it ("i149586944"), so a claim about a specific
+# activity beats the "most recent" assumption.
+_ICU_ID_IN_REPLY_RE = re.compile(r"\bi\d{6,}\b")
+
+
+def _claim_activity_id(slug: str, reply: str) -> str | None:
+    """Which activity a Strava claim is about: an id named in the reply, else the activity
+    last debriefed (last_activity_state.json). None means we cannot tell — and an
+    unidentified target is a reason to skip the check, never to guess at one.
+
+    The fallback is bounded to the same 3h post-session window prefetch_context uses. An
+    unbounded fallback would point a Strava-flavoured reply days later at a stale activity,
+    and if that one happened to have an empty description the retry would overwrite it."""
+    m = _ICU_ID_IN_REPLY_RE.search(reply or "")
+    if m:
+        return m.group(0)
+    try:
+        st = json.loads((_athlete_dir(slug) / "last_activity_state.json").read_text())
+        last, notified = st.get("last_id"), st.get("notified_at")
+        if not last or not notified:
+            return None
+        if (datetime.now() - datetime.fromisoformat(notified)).total_seconds() > 10800:
+            return None
+        return str(last)
+    except Exception:
+        return None
+
+
+def _read_strava_description(slug: str, icu_id: str):
+    """(strava_id, description) for an ICU activity, or (None, None). Two reads, only ever
+    on the claim path — never on the happy path."""
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(BASE.parent / "lib"))
+        from icu_api import IcuClient
+        from strava_client import StravaClient
+        athletes = json.loads(ATHLETES_CONFIG.read_text())
+        a = athletes[slug]
+        icu = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+        detail = icu.get_activity_detail(icu_id if str(icu_id).startswith("i") else f"i{icu_id}")
+        strava_id = detail.get("strava_id")
+        if not strava_id:
+            return (None, None)
+        sd = StravaClient(slug).get_activity_detail(strava_id)
+        return (strava_id, sd.get("description") or "")
+    except Exception as e:
+        log(f"[{slug}] Strava read-back failed (verification skipped): {e}")
+        return (None, None)
+
+
+# The athlete raising Strava is the cue that this turn may write one. Read the description
+# BEFORE the model runs so the post-reply check has a genuine same-turn "before" to diff
+# against. Without this seed the leg is nearly toothless: activity-watcher already wrote a
+# description for every non-water activity, so "empty means absent" almost never fires, and
+# the fallback (claimed twice, byte-identical) needs two claims inside one process lifetime.
+_STRAVA_MENTION_RE = re.compile(r"\bstrava\b", re.IGNORECASE)
+
+
+def _seed_strava_baseline(slug: str, text: str) -> None:
+    """Record the current Strava description for the activity in play, when the athlete's
+    own message mentions Strava. Costs two reads on those turns only; silent on failure."""
+    if not text or not _STRAVA_MENTION_RE.search(text):
+        return
+    icu_id = _claim_activity_id(slug, "")
+    if not icu_id or not _description_allowed(slug, icu_id):
+        return
+    strava_id, desc = _read_strava_description(slug, icu_id)
+    if strava_id is not None and desc is not None:
+        _STRAVA_DESC_SEEN[slug] = (str(icu_id), desc)
+        log(f"[{slug}] Strava baseline seeded for {icu_id} ({len(desc)} chars)")
+
+
+def _verify_strava_claim(slug: str, reply: str) -> tuple:
+    """Check a claimed Strava description update. Returns (verdict, icu_id, description).
+
+    ASYMMETRY, stated plainly because callers must not over-read a pass: an empty
+    description proves the claim false; a non-empty one proves nothing unless it is
+    byte-identical to what we saw at the last check of the same activity (claimed twice,
+    never moved). Anything else is "unknown" and stays silent."""
+    icu_id = _claim_activity_id(slug, reply)
+    if not icu_id:
+        log(f"[{slug}] Strava claim seen but no activity identified — verification skipped")
+        return ("unknown", None, None)
+    if not _description_allowed(slug, icu_id):
+        # Water sports carry no description by policy, so an empty one is CORRECT and must
+        # not be read as a failed write.
+        log(f"[{slug}] Strava claim on no-description sport {icu_id} — verification skipped")
+        return ("unknown", icu_id, None)
+    strava_id, desc = _read_strava_description(slug, icu_id)
+    if strava_id is None:
+        return ("unknown", icu_id, None)
+    prev = _STRAVA_DESC_SEEN.get(slug)
+    before = prev[1] if (prev and prev[0] == icu_id) else None
+    verdict = write_verify.strava_desc_verdict(desc, before=before)
+    _STRAVA_DESC_SEEN[slug] = (icu_id, desc)
+    return (verdict, icu_id, desc)
+
+
+# Sailing and the other water sports are RENAMED only — never given a description or
+# coaching commentary (hard rule, confirmed by Jamie). A retry must not be the thing that
+# breaks that, so the write is gated on the sport whatever the claim said.
+_NO_DESCRIPTION_SPORTS = ("sail", "watersport", "windsurf", "kitesurf", "kiteboard")
+
+
+def _description_allowed(slug: str, icu_id: str) -> bool:
+    """False if this activity's sport must never carry a Strava description."""
+    try:
+        for e in json.loads((_athlete_dir(slug) / "session-log.json").read_text()):
+            if str(e.get("activity_id", "")) in (str(icu_id), str(icu_id).lstrip("i")):
+                sport = (e.get("sport") or "").lower()
+                return not any(w in sport for w in _NO_DESCRIPTION_SPORTS)
+    except Exception:
+        pass
+    return True
+
+
+def _retry_strava_description(slug: str, icu_id: str, before_desc) -> bool:
+    """Deterministic retry: re-run the bot's own description builder for that activity,
+    then read back. No model round-trip is needed to re-derive intent — the description is
+    generated from the activity and the session log, so the retry is exactly the write
+    that was claimed."""
+    if not _description_allowed(slug, icu_id):
+        log(f"[{slug}] Strava description retry skipped — {icu_id} is a no-description sport")
+        return False
+    try:
+        subprocess.run(
+            ["python3", str(BASE.parent / "scripts/strava-update-activity.py"),
+             "--athlete", slug, "--icu-id", str(icu_id)],
+            capture_output=True, text=True, cwd=str(PROJECT_DIR), timeout=120)
+    except Exception as e:
+        log(f"[{slug}] Strava retry subprocess failed: {e}")
+        return False
+    _, desc = _read_strava_description(slug, icu_id)
+    if desc is not None:
+        _STRAVA_DESC_SEEN[slug] = (str(icu_id), desc)
+    # Still empty, or still byte-identical to the text that was there when the claim was
+    # made: either way nothing about the activity on Strava changed, so the retry failed.
+    return (write_verify.strava_desc_verdict(desc, before=before_desc)
+            not in write_verify.ACTIONABLE and bool(desc))
+
+
+def _verify_icu_calendar_claim(slug: str) -> str:
+    """Check a claimed calendar write by re-fingerprinting the planned-event window and
+    diffing against the snapshot prefetch_context took this turn. Refuses to judge on a
+    stale or missing snapshot: an unrelated earlier write would look like this one's, so a
+    stale snapshot can only produce a wrong accusation."""
+    with _PREFETCH_GUARD:
+        snap = _EVENTS_SNAPSHOT.get(slug)
+    if not snap:
+        log(f"[{slug}] calendar claim seen but no event snapshot — verification skipped")
+        return "unknown"
+    age = time.time() - snap[0]
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(BASE.parent / "lib"))
+        from icu_api import IcuClient
+        athletes = json.loads(ATHLETES_CONFIG.read_text())
+        a = athletes[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+        today = date.today()
+        events = client.get_events(today.isoformat(), (today + timedelta(days=21)).isoformat())
+        after_fp = write_verify.events_fingerprint(events)
+    except Exception as e:
+        log(f"[{slug}] calendar read-back failed (verification skipped): {e}")
+        return "unknown"
+    verdict = write_verify.icu_events_verdict(snap[1], after_fp, age,
+                                              max_age_s=_PREFETCH_TTL + 60)
+    # Whatever the verdict, the window we just read is the freshest "before" available.
+    with _PREFETCH_GUARD:
+        _EVENTS_SNAPSHOT[slug] = (time.time(), after_fp)
+    return verdict
+
+
+def _verify_external_writes(token, chat_id, slug: str, clean: str, icu_retry=None) -> str:
+    """Post-reply check on the two external writes the logs caught the bot lying about.
+    Sends at most two extra one-line messages per kind (the honest "that didn't save" and
+    the true outcome) and returns the text appended to the transcript, so history matches
+    what the athlete actually saw. Never raises."""
+    appended = []
+    try:
+        kinds = write_verify.claim_kinds(clean)
+    except Exception as e:
+        log(f"[{slug}] claim detection failed (non-fatal): {e}")
+        return ""
+    for kind in sorted(kinds):
+        try:
+            if kind == "strava":
+                verdict, icu_id, desc = _verify_strava_claim(slug, clean)
+            else:
+                verdict, icu_id, desc = (_verify_icu_calendar_claim(slug), None, None)
+            log(f"[{slug}] external-write claim {kind}: verdict={verdict}")
+            if verdict not in write_verify.ACTIONABLE:
+                continue        # "ok" needs no message; "unknown" must NOT accuse
+            line = write_verify.retry_line(kind, verdict)
+            send(token, chat_id, line, disable_notification=True)
+            appended.append(line)
+            if kind == "strava":
+                ok = _retry_strava_description(slug, icu_id, desc)
+            else:
+                ok = False
+                if icu_retry is not None:
+                    try:
+                        icu_retry()
+                    except Exception as e:
+                        log(f"[{slug}] calendar retry errored: {e}")
+                    ok = _verify_icu_calendar_claim(slug) == "ok"
+            # This one NOTIFIES, against the one-push-per-turn convention and on purpose: a
+            # correction to an answer the athlete has already read and acted on is the one
+            # message that earns its own push, and the retry can take a minute or more.
+            result = write_verify.result_line(kind, ok)
+            send(token, chat_id, result)
+            appended.append(result)
+            if not ok:
+                log(f"[{slug}] WARN: external write ({kind}) still absent after retry")
+                try:
+                    ops_log.alert("write_verify",
+                                  f"claimed {kind} write did not land and the retry failed "
+                                  f"(activity {icu_id})", athlete=slug)
+                except Exception:
+                    pass
+        except Exception as e:
+            log(f"[{slug}] external-write verification ({kind}) errored: {e}")
+    return "\n\n".join(appended)
+
+
+def _make_calendar_retry(text, config, history, model, files, athlete_name, context):
+    """Re-ask the model to actually perform a calendar write it claimed. Unlike the Strava
+    description, the bot cannot re-derive WHICH event the athlete wanted changed, so this
+    one does need the model. Only ever called on an "absent" verdict."""
+    def _retry():
+        return call_claude(
+            "SYSTEM CHECK: your previous reply said a planned session was created, moved, "
+            "edited or deleted, but the intervals.icu calendar is unchanged. Perform that "
+            "calendar write NOW via icu_fetch push_workout/edit_workout/delete_workout, "
+            "then reply with one short line naming the event and its date. My message was: "
+            f"{text!r}",
+            config, history, model=model,
+            system_prompt_file=files["system_prompt"],
+            athlete_name=athlete_name, context=context)
+    return _retry
+
+
 _SESSION_REF_RE = re.compile(
     r"\b(today'?s|tomorrow'?s|this (morning|afternoon|evening)'?s)?\s*"
     r"(session|ride|run|swim|workout|brick|race|set|interval)\b", re.IGNORECASE)
@@ -1998,6 +2261,50 @@ def _load_profile(slug: str) -> dict:
         return json.loads(f.read_text()) if f.exists() else {}
     except Exception:
         return {}
+
+
+def _cached_thresholds(slug: str, max_age_s: float = _PREFETCH_TTL) -> dict | None:
+    """The thresholds dict prefetch_context resolved for this athlete, if it is fresh
+    enough to state. On a miss, resolve once here rather than let the FACTS block go out
+    with no thresholds — but NEVER return a stale dict: a stale threshold quoted as live
+    is the original bug (CSS 1:39 vs 1:41)."""
+    with _PREFETCH_GUARD:
+        hit = _THRESHOLD_CACHE.get(slug)
+    if hit and time.time() - hit[0] < max_age_s:
+        return hit[1]
+    try:
+        import thresholds as _th
+        athletes = json.loads(ATHLETES_CONFIG.read_text())
+        t = _th.get_thresholds(slug, athletes[slug])
+        with _PREFETCH_GUARD:
+            _THRESHOLD_CACHE[slug] = (time.time(), t)
+        return t
+    except Exception as e:
+        log(f"[{slug}] threshold resolve for FACTS failed (block will say so): {e}")
+        return None
+
+
+def _facts_block(slug: str) -> str:
+    """This turn's FACTS block: rebuilt from the athlete's files on EVERY turn (so a
+    session logged two messages ago is in it), with the thresholds taken from the single
+    live resolve. Returns "" on any failure — a turn must never be lost over this."""
+    try:
+        return coach_facts.build_facts_block(_athlete_dir(slug),
+                                             thresholds=_cached_thresholds(slug))
+    except Exception as e:
+        log(f"[{slug}] FACTS block build failed (non-fatal): {e}")
+        return ""
+
+
+def _with_facts(context: str, slug: str) -> str:
+    """Append the FACTS block to a turn's context. Called at the CONSUMER, never inside
+    prefetch_context: that block is cached per athlete for _PREFETCH_TTL, and FACTS folded
+    into the cache would be replayed stale on the next message — the same reasoning as the
+    capture note in _chat_reply_worker."""
+    facts = _facts_block(slug)
+    if not facts:
+        return context
+    return f"{context}\n\n{facts}".strip() if context else facts
 
 
 def _voice_mode_on(slug: str) -> bool:
@@ -3595,12 +3902,19 @@ def prefetch_context(slug: str) -> str:
         today = date.today()
         end_date = (today + timedelta(days=21)).isoformat()
 
-        wellness, events, sport, history_acts = client.fetch_all(
+        # get_sport_settings dropped from this fetch (13 Aug): its only consumer was the
+        # FTP figure on the fitness line, and thresholds now come from get_thresholds
+        # below, which reads sport-settings itself.
+        wellness, events, history_acts = client.fetch_all(
             ("get_wellness", 14),
             ("get_events", today.isoformat(), end_date),
-            ("get_sport_settings", "Ride"),
             ("get_training_history", 7),
         )
+        # "Before" side of verifying a claimed calendar write — free, the events are
+        # already here. Stored with its timestamp so the verifier can refuse to judge on
+        # a stale snapshot (see write_verify.icu_events_verdict).
+        with _PREFETCH_GUARD:
+            _EVENTS_SNAPSHOT[slug] = (now_epoch, write_verify.events_fingerprint(events))
 
         lines = [f"=== LIVE TRAINING DATA ({today.strftime('%A')} {today.isoformat()}) ==="]
 
@@ -3614,34 +3928,29 @@ def prefetch_context(slug: str) -> str:
             ctl = round(w.get("ctl") or 0, 1)
             atl = round(w.get("atl") or 0, 1)
             tsb = round((w.get("ctl") or 0) - (w.get("atl") or 0), 1)
-            ftp = sport.get("ftp") if isinstance(sport, dict) else None
-            sport_info = w.get("sportInfo") or []
-            eftp = next((si.get("eftp") for si in sport_info if si.get("type") in ("Ride", "VirtualRide", "Cycling")), None)
-            if eftp is None and sport_info:
-                eftp = sport_info[0].get("eftp")
+            # FTP/eFTP are deliberately NOT stated on this line any more (13 Aug): the
+            # FACTS block is the single owner of every threshold figure. Two blocks each
+            # naming an FTP — one 150s-cached here, one fresh — is how a stale CSS came
+            # to be quoted as live.
             # Intervals.icu keeps recomputing the latest day's CTL/ATL/Form until the
             # row settles (its `updated` date moves past the row's own date). Live
             # pulls quoted as final have been off ~10 points — mark it provisional.
             _prov = not w.get("wellness_finalized", False)
             lines.append(
                 f"Fitness {ctl}  Fatigue {atl}  Form {tsb}"
-                + (f"  FTP {ftp}W" if ftp else "")
-                + (f"  eFTP {round(eftp)}W" if eftp else "")
                 + ("  [PROVISIONAL: this is the latest day's CTL/ATL/Form, still settling on "
                    "Intervals.icu — it can shift several points as activities finish syncing. "
                    "Call it provisional, don't state it as final.]" if _prov else "")
             )
-            # Authoritative live thresholds (eFTP-first, m/s-correct) — the model must
-            # use THESE, never a hardcoded number from the system prompt.
+            # Thresholds are resolved HERE (one live call per prefetch, reusing this
+            # client) but STATED in the FACTS block, which is rebuilt every turn. Only a
+            # digit-free pointer goes in this cached block.
             try:
                 import thresholds as _th
                 _t = _th.get_thresholds(slug, athletes[slug], client)
-                _bits = [f"FTP {_t['ftp_watts']}W ({_t['ftp_source']})"]
-                if _t["run_threshold_per_km"]: _bits.append(f"run threshold {_t['run_threshold_per_km']}")
-                if _t["swim_css_per_100m"]:    _bits.append(f"swim CSS {_t['swim_css_per_100m']}")
-                lines.append("CURRENT THRESHOLDS (live, AUTHORITATIVE — use these, not any number "
-                             "in the prompt): " + " · ".join(_bits)
-                             + ("  [" + "; ".join(_t["notes"]) + "]" if _t["notes"] else ""))
+                with _PREFETCH_GUARD:
+                    _THRESHOLD_CACHE[slug] = (now_epoch, _t)
+                lines.append(coach_facts.PREFETCH_THRESHOLD_POINTER)
             except Exception as _e:
                 log(f"prefetch thresholds (non-fatal): {_e}")
             fields = []
@@ -4842,9 +5151,14 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             # athlete (see _PREFETCH_CACHE), and a note folded into the cache would be
             # replayed on the next, unrelated message.
             context = f"{context}\n\n{capture['note']}".strip() if context else capture["note"]
+        # FACTS last, so it is the closest thing to the question: computed fresh from the
+        # athlete's files every turn and the ONLY sanctioned basis for a superlative, a
+        # record, a threshold or an "N straight days" claim (13 Aug audit).
+        context = _with_facts(context, slug)
         model = select_model(text, history)
         before_ts = time.time()
         before_rules_text = _snapshot_rules_text(slug)
+        _seed_strava_baseline(slug, text)   # no-op unless the message mentions Strava
 
         if _voice_mode_on(slug):
             # Sticky voice mode: the TEXT stays the normal rich style (as it used
@@ -4881,7 +5195,13 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 except Exception as _ve:
                     log(f"[{slug}] voice synth failed (text already sent): {_ve}")
             log(f"[{slug}] Out (voice): {clean[:80]}")
-            history.append(_hist_entry(text, _capture_history_assistant(readback, clean)))
+            extra = _verify_external_writes(
+                token, chat_id, slug, clean,
+                icu_retry=_make_calendar_retry(text, config, history, model, files,
+                                               athlete_name, context))
+            history.append(_hist_entry(
+                text, _capture_history_assistant(readback, clean)
+                + (f"\n\n{extra}" if extra else "")))
             save_history(history, files["history"])
             return
 
@@ -4945,7 +5265,16 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             f"msg2_id={msg2_id} chars={len(clean)}")
         log(f"[{slug}] Out: {clean[:80]}")
 
-        history.append(_hist_entry(text, _capture_history_assistant(readback, clean)))
+        # AFTER delivery, never before: verification can cost two API reads and (on a
+        # false claim) a retry, and the reply must not wait on it. Any follow-up it sends
+        # is folded into this turn's transcript entry so history matches what was seen.
+        extra = _verify_external_writes(
+            token, chat_id, slug, clean,
+            icu_retry=_make_calendar_retry(text, config, history, model, files,
+                                           athlete_name, context))
+        history.append(_hist_entry(
+            text, _capture_history_assistant(readback, clean)
+            + (f"\n\n{extra}" if extra else "")))
         save_history(history, files["history"])
     except Exception as _reply_err:
         log(f"[{slug}] reply handling error for {chat_id}: {_reply_err}")
@@ -4978,7 +5307,9 @@ def _image_reply_worker(token, chat_id, file_id, caption, athlete_entry, config)
         files = athlete_files(slug)
         athlete_name = athlete_entry.get("name", slug).split()[0]
         history = load_history(files["history"])
-        context = prefetch_context(slug)
+        # FACTS here too: a photo of a watch screen or a gel wrapper invites exactly the
+        # same "that's your best ever" claim as a typed question does.
+        context = _with_facts(prefetch_context(slug), slug)
         response = call_claude_with_image(
             img_path, caption, config, history,
             system_prompt_file=files["system_prompt"],

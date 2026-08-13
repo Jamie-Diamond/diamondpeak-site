@@ -208,8 +208,14 @@ def main():
         # The activity's own name is exempt: it is already public and athlete-chosen.
         description = public_text_guard.assert_publishable(
             description, exempt=entry.get("name") or detail.get("name"))
-        sc.update_description(strava_id, description)
-        print(f"Updated Strava {strava_id} for {slug}/{icu_id}", file=sys.stderr)
+        # update_description returns `r.status == 200`; it used to be discarded and this
+        # line printed unconditionally, so the log claimed a write Strava had refused.
+        # (The bot's verify-after-write path re-reads the description independently.)
+        ok = sc.update_description(strava_id, description)
+        print(f"{'Updated' if ok else 'FAILED to update'} Strava {strava_id} for {slug}/{icu_id}",
+              file=sys.stderr)
+        if not ok:
+            sys.exit(1)
     except Exception as e:
         print(f"Update failed: {e}", file=sys.stderr)
         sys.exit(1)
