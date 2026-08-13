@@ -153,6 +153,11 @@ def prune(value, spec):
 # ── specs ────────────────────────────────────────────────────────────────────
 _SPORT_SERIES = {"Ride": SERIES, "Run": SERIES, "Swim": SERIES}
 
+# Same three sports plus a Total across everything logged, which is the counterpart of
+# overall CTL for the Hours chart. Total needs naming explicitly: this is a fixed-key
+# spec, so a bucket that is not listed is silently dropped rather than published.
+_DUR_SERIES = {"Total": SERIES, **_SPORT_SERIES}
+
 # Publishes "5:08" out of "5:08/km - DERIVED working estimate ...", and leaves an
 # already-clean value untouched.
 _PACE_ONLY = Derived(profile_fields.pace)
@@ -216,6 +221,12 @@ TRAINING_DATA_SPEC = {
     "fitnessPrev2": SERIES,
     "fitnessBySport": {
         "current": _SPORT_SERIES, "prev": _SPORT_SERIES, "prev2": _SPORT_SERIES,
+    },
+    # Rolling training hours/week, same three seasons and same per-sport split as
+    # fitnessBySport. Moving time is training volume, not a wellness measurement -
+    # the same class of data as the TSS already published in loadChart.
+    "durationBySport": {
+        "current": _DUR_SERIES, "prev": _DUR_SERIES, "prev2": _DUR_SERIES,
     },
 
     # sick_week is NOT named, so the illness window cannot pass.

@@ -289,22 +289,30 @@ def _np_curves(client, recent_acts, durations, today, p_from, p_to):
             pending or None)
 
 
+def _ctl_sport_family(raw):
+    """Ride/Run/Swim, or None for anything else.
+
+    Broader than _sport_normalise: catches every swim/bike/run variant
+    (OpenWaterSwim, VirtualRide, GravelRide, TrailRun, ...) so none are dropped.
+    Module-level rather than nested so the per-sport CTL series and the per-sport
+    duration series bucket an activity identically — two copies of this rule would
+    drift, and the chart pair would then disagree about which sport a ride was.
+    """
+    r = (raw or "").lower()
+    if "swim" in r:                                                   return "Swim"
+    if "run"  in r:                                                   return "Run"
+    if "ride" in r or "cycl" in r or "bik" in r or "velomobile" in r: return "Ride"
+    return None
+
+
 def _compute_per_sport_ctl(activities, start, today):
     """Per-sport CTL = 42-day EWMA of each sport's daily TSS, day by day from `start`
     to `today`. Returns {sport: [[date, ctl], ...]} for the three endurance sports."""
     SPORTS = ("Ride", "Run", "Swim")
-    def _ctl_sport(raw):
-        # broader than _sport_normalise: catch every swim/bike/run variant
-        # (OpenWaterSwim, VirtualRide, GravelRide, TrailRun, ...) so none are dropped.
-        r = (raw or "").lower()
-        if "swim" in r:                                                   return "Swim"
-        if "run"  in r:                                                   return "Run"
-        if "ride" in r or "cycl" in r or "bik" in r or "velomobile" in r: return "Ride"
-        return None
     daily = {s: {} for s in SPORTS}
     for a in activities or []:
         d  = (a.get("start_date_local") or "")[:10]
-        sp = _ctl_sport(a.get("type"))
+        sp = _ctl_sport_family(a.get("type"))
         if not d or sp is None:
             continue
         daily[sp][d] = daily[sp].get(d, 0.0) + float(a.get("icu_training_load") or 0)
@@ -315,6 +323,63 @@ def _compute_per_sport_ctl(activities, start, today):
             ds = cur.isoformat()
             ctl += (daily[s].get(ds, 0.0) - ctl) / 42.0
             out.append([ds, round(ctl, 1)])
+            cur += timedelta(days=1)
+        series[s] = out
+    return series
+
+
+# Duration uses the exact CTL constant, 1 - e^(-1/42), NOT the 1/42 in
+# _compute_per_sport_ctl above. The two are deliberately different: the per-sport CTL
+# series sits alongside intervals.icu's own CTL and matches the naive form the rest of
+# this file grew up with, whereas this series' peer is telegram/charts.py's
+# duration_chart, whose _duration_ewma_hours_per_week uses _K_CTL = 1 - e^(-1/42). The
+# same metric on two surfaces has to agree; the ~1% difference between the constants is
+# not worth changing a published CTL series over. Do not "unify" one to the other.
+_K_DUR = 1.0 - math.exp(-1.0 / 42.0)
+
+
+def _compute_per_sport_duration(activities, start, today):
+    """Rolling training HOURS PER WEEK, day by day from `start` to `today`.
+
+    Returns {"Total": [[date, hpw], ...], "Ride": ..., "Run": ..., "Swim": ...}: the
+    same 42-day EWMA shape as _compute_per_sport_ctl, run over MOVING TIME instead of
+    load, then scaled to hours/week (minutes/day * 7 / 60 — the unit athletes think in).
+
+    "Total" is every activity with a date and a moving time, sport or no sport, which
+    is what makes it the counterpart of overall CTL: strength, hikes and a one-off swim
+    are all training that happened. The three sport buckets use the same substring
+    matching as _compute_per_sport_ctl, so a series here and the CTL series for the same
+    sport always cover the same activities.
+
+    Seeded at zero, like the bot's chart, so the first ~6 weeks of any season ramp up
+    from an unfit-looking baseline. That artefact is identical in the current and prior
+    seasons *as long as both windows start on 1 January*, which is why the prior-season
+    window here is the CTL prev window (Jan 1 -> race day) and not the one
+    build-duration-prev-cache.py's docstring uses for the bot (an October base-phase
+    start). The app's overlay must be comparable with the CTL overlay drawn beside it;
+    the cost is that the bot's /duration "last season" curve can read differently from
+    this one in the first weeks of a season, where both are ramping from zero.
+    """
+    SPORTS = ("Ride", "Run", "Swim")
+    daily = {s: {} for s in ("Total",) + SPORTS}
+    for a in activities or []:
+        d = (a.get("start_date_local") or "")[:10]
+        if not d:
+            continue
+        mins = float(a.get("moving_time") or 0) / 60.0
+        if not mins:
+            continue
+        daily["Total"][d] = daily["Total"].get(d, 0.0) + mins
+        sp = _ctl_sport_family(a.get("type"))
+        if sp:
+            daily[sp][d] = daily[sp].get(d, 0.0) + mins
+    series = {}
+    for s in ("Total",) + SPORTS:
+        ewma, out, cur = 0.0, [], start
+        while cur <= today:
+            ds = cur.isoformat()
+            ewma += (daily[s].get(ds, 0.0) - ewma) * _K_DUR
+            out.append([ds, round(ewma * 7 / 60.0, 2)])
             cur += timedelta(days=1)
         series[s] = out
     return series
@@ -332,9 +397,15 @@ def _today_fingerprint(activities, today) -> str:
         if (a.get("start_date_local") or "")[:10] == d))
 
 
-def _per_sport_ctl_cached(slug, client, today, activities=None):
-    """Per-sport CTL for the fitness-by-sport chart. Returns
+def _per_sport_series_cached(slug, client, today, activities=None):
+    """Per-sport CTL and per-sport hours/week for the app's Fitness and Hours charts.
+
+    Returns (fitness_by_sport, duration_by_sport), each
     {"current": {sport: series}, "prev": {sport: series}, "prev2": {sport: series}}.
+    Both are derived from the SAME activity fetches — the fetch is the expensive part,
+    the two EWMAs over it are free — so the Hours chart costs no extra API call and can
+    never be computed over a different set of activities than the Fitness chart.
+
     Current season is recomputed at most once a day (the season activity fetch is heavy
     and refresh runs after every activity). The prior seasons are historical, so they are
     fetched once (a single heavier pull back to the earliest one) and cached forever.
@@ -343,7 +414,13 @@ def _per_sport_ctl_cached(slug, client, today, activities=None):
     so it lines up with the Barcelona '23 overlay. Both windows are per-ATHLETE: they
     were briefly a shared hard-coded date, which is a bug the module header of
     lib/zone_distribution.py would call inventing data. `prev2` is {} for athletes with
-    no prev2_race_date."""
+    no prev2_race_date.
+
+    The cache gained the dur_* keys on 13 Aug 2026. A cache written before that has
+    valid CTL and no duration, and both the daily-staleness check and the
+    prior-seasons "have we got it" gate treat a missing duration series as stale — or
+    an existing cache would serve CTL-only forever and the Hours tab would never
+    appear for an athlete whose cache predates this."""
     cache_f = BASE / f"athletes/{slug}/fitness-bysport-cache.json"
     cache = {}
     try:
@@ -366,21 +443,30 @@ def _per_sport_ctl_cached(slug, client, today, activities=None):
     # check costs no extra API call; without it the old date-only behaviour stands.
     fp = _today_fingerprint(activities, today) if activities is not None else None
     current = cache.get("current") or {}
+    dur_current = cache.get("dur_current") or {}
     stale = (fp is not None and cache.get("today_fp") != fp)
-    if cache.get("date") != today.isoformat() or not current or stale:
+    if cache.get("date") != today.isoformat() or not current or not dur_current or stale:
         start = date(today.year, 1, 1)
         try:
-            current = _compute_per_sport_ctl(
-                client.get_training_history((today - start).days + 1), start, today)
+            # One fetch, both series. On failure BOTH keep their previously cached
+            # values: computing one of the two and leaving the other empty would write
+            # a cache that reads as "this athlete has no duration data", which the app
+            # cannot tell from "this athlete has none" and would drop the tab.
+            acts_cur = client.get_training_history((today - start).days + 1)
+            current = _compute_per_sport_ctl(acts_cur, start, today)
+            dur_current = _compute_per_sport_duration(acts_cur, start, today)
         except Exception as e:
-            log(f"[{slug}] per-sport CTL (current) failed: {e}")
+            log(f"[{slug}] per-sport series (current) failed: {e}")
 
     # Prior seasons — one-time, cached. One fetch back to the earliest season we need,
     # then split into per-season windows.
     prev  = cache.get("prev")
     prev2 = cache.get("prev2")
+    dur_prev  = cache.get("dur_prev")
+    dur_prev2 = cache.get("dur_prev2")
     need_prev2 = bool(prev2_race)
-    if not prev or (need_prev2 and not prev2):
+    if (not prev or not dur_prev
+            or (need_prev2 and (not prev2 or not dur_prev2))):
         # The athlete's OWN last race, Jan 1 of that race's year to race day - NOT
         # date(today.year - 1, 9, 19), which was Jamie's 2026 race date applied to
         # every athlete and every prior season. See _prev_race_date().
@@ -406,19 +492,31 @@ def _per_sport_ctl_cached(slug, client, today, activities=None):
             def _win(s, e):
                 return [a for a in (acts or [])
                         if s.isoformat() <= (a.get("start_date_local") or "")[:10] <= e.isoformat()]
-            prev = _compute_per_sport_ctl(_win(p1s, p1e), p1s, p1e)
-            prev2 = _compute_per_sport_ctl(_win(p2s, p2e), p2s, p2e) if need_prev2 else {}
+            acts_p1 = _win(p1s, p1e)
+            prev = _compute_per_sport_ctl(acts_p1, p1s, p1e)
+            dur_prev = _compute_per_sport_duration(acts_p1, p1s, p1e)
+            if need_prev2:
+                acts_p2 = _win(p2s, p2e)
+                prev2 = _compute_per_sport_ctl(acts_p2, p2s, p2e)
+                dur_prev2 = _compute_per_sport_duration(acts_p2, p2s, p2e)
+            else:
+                prev2 = dur_prev2 = {}
         except Exception as e:
-            log(f"[{slug}] per-sport CTL (prior seasons) failed: {e}")
+            log(f"[{slug}] per-sport series (prior seasons) failed: {e}")
             prev = prev or {}; prev2 = prev2 or {}
+            dur_prev = dur_prev or {}; dur_prev2 = dur_prev2 or {}
 
     out = {"current": current, "prev": prev or {}, "prev2": prev2 or {}}
+    dur_out = {"current": dur_current,
+               "prev": dur_prev or {}, "prev2": dur_prev2 or {}}
     try:
-        cache_f.write_text(json.dumps({"date": today.isoformat(),
-                                       "today_fp": fp, **out}))
+        cache_f.write_text(json.dumps({
+            "date": today.isoformat(), "today_fp": fp, **out,
+            "dur_current": dur_out["current"], "dur_prev": dur_out["prev"],
+            "dur_prev2": dur_out["prev2"]}))
     except Exception:
         pass
-    return out
+    return out, dur_out
 
 
 def _build_jamie_data(client) -> dict:
@@ -663,11 +761,15 @@ def _build_jamie_data(client) -> dict:
             pass
     resolved_ftp = _resolve_ftp(_prof_ftp, fitness_ytd, SESSION_LOG)
 
+    fitness_by_sport, duration_by_sport = _per_sport_series_cached(
+        "jamie", client, today, history_21)
+
     return {
         "generated":    today.isoformat(),
         "kpi":          kpi,
         "fitnessThis":  fitness_this,
-        "fitnessBySport": _per_sport_ctl_cached("jamie", client, today, history_21),
+        "fitnessBySport": fitness_by_sport,
+        "durationBySport": duration_by_sport,
         "recent":       recent,
         "weekCalendar": week_calendar,
         "loadChart":    load_chart,
@@ -1504,11 +1606,15 @@ def _build_athlete_training_data(slug, athlete_cfg):
         except Exception:
             pass
 
+    fitness_by_sport, duration_by_sport = _per_sport_series_cached(
+        slug, client, today, history_49)
+
     data = {
         "generated":    today.isoformat(),
         "kpi":          kpi,
         "fitnessThis":  fitness_this,
-        "fitnessBySport": _per_sport_ctl_cached(slug, client, today, history_49),
+        "fitnessBySport": fitness_by_sport,
+        "durationBySport": duration_by_sport,
         "recent":       recent,
         "weekCalendar": week_calendar,
         "loadChart":    load_chart,
