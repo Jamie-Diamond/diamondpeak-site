@@ -99,22 +99,6 @@ def load(slug: str, base) -> dict[str, str]:
     return out
 
 
-def has_override(slug: str, base, sport_or_family: str, on: date | str) -> bool:
-    """True when this sport+date is ALREADY on the register.
-
-    Added 2026-08-13 after the bot asked the athlete to confirm `bike:2026-08-13` twice
-    inside three minutes (07:08:56, 07:11:33) and recorded it twice. A second ask is not
-    just noise: the athlete has already answered, so being asked again reads as the bot
-    not having heard them, and the repeat write pushes the same sport+weekday towards
-    validate_plan's `day_rules_drifted` count for a deviation that was directed ONCE.
-
-    Reads through `load`, so it inherits fail-closed: an unreadable register yields {} and
-    this returns False, i.e. the ask happens again rather than being silently suppressed.
-    Suppressing an ask on a register we could not read would be the wrong way round —
-    a duplicate question is cheap, a lost permission is not."""
-    return key(sport_or_family, on) in load(slug, base)
-
-
 def key(sport_or_family: str, on: date | str) -> str:
     fam = str(sport_or_family).strip().lower()
     fam = {"ride": "bike", "virtualride": "bike", "gravelride": "bike",
