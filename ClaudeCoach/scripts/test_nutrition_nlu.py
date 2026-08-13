@@ -303,7 +303,8 @@ got = NLU.classify("toast this morning", False, "claude", "m", log=lambda *a: No
 check("a vague time is dropped, never guessed at", got["items"][0]["at"] is None)
 check("the parse prompt forbids guessing a time",
       "NEVER guess" in NLU.PARSE_PROMPT
-      and "in_session, at}" in NLU.PARSE_PROMPT)
+      # `meal` joined the item keys, so the shape line moved with it.
+      and "in_session, at, meal}" in NLU.PARSE_PROMPT)
 check("the parse prompt keeps already-eaten-with-a-time as a log",
       "STILL log_food" in NLU.PARSE_PROMPT)
 check("the parse prompt routes flat statements about the log to correction",
@@ -328,6 +329,77 @@ for phrase in ("the initial rye bread was 830am", "a rego scoop is half a portio
           NLU.looks_like_weight(phrase) is None)
     check(f"and {phrase!r} is handed to the model",
           NLU.fast_intent(phrase, False) is None)
+
+print("\n--- the meal he NAMED, read out of the message itself ---")
+# Meals were a clock inference and nothing else, so "for breakfast I had porridge" typed at
+# 13:49 was filed under lunch. The model may now name the meal - but only when the message
+# names it, because a meal it asserts stops being questioned downstream.
+check("the parse prompt asks for a meal on each item",
+      "in_session, at, meal}" in NLU.PARSE_PROMPT
+      and '"breakfast" | "lunch" | "dinner" | "snacks", or null' in NLU.PARSE_PROMPT)
+check("and says a clock time is evidence, not proof",
+      "A CLOCK TIME IS EVIDENCE, NOT PROOF" in NLU.PARSE_PROMPT)
+check("with both sides of that distinction worked through",
+      '"rye bread at 8:30 this morning" -> {"at":"08:30","meal":null}' in NLU.PARSE_PROMPT
+      and '"rye bread for breakfast at 8:30" -> {"at":"08:30","meal":"breakfast"}'
+      in NLU.PARSE_PROMPT)
+check("in-session fuel is told it is not a meal", "never a meal" in NLU.PARSE_PROMPT)
+
+got = NLU.classify("for breakfast I had porridge", False, "claude", "m",
+                   log=lambda *a: None,
+                   runner=fixed_runner(
+                       '{"intent":"log_food","items":[{"text":"porridge","portion_g":null,'
+                       '"in_session":false,"at":null,"meal":"breakfast"}]}'))
+check("a stated meal reaches the item", got["items"][0]["meal"] == "breakfast")
+got = NLU.classify("chicken and rice for supper", False, "claude", "m",
+                   log=lambda *a: None,
+                   runner=fixed_runner(
+                       '{"intent":"log_food","items":[{"text":"chicken and rice",'
+                       '"in_session":false,"meal":"supper"}]}'))
+check("his own word for it is normalised to a bucket the app renders",
+      got["items"][0]["meal"] == "dinner")
+got = NLU.classify("some nuts mid-afternoon", False, "claude", "m", log=lambda *a: None,
+                   runner=fixed_runner(
+                       '{"intent":"log_food","items":[{"text":"nuts","in_session":false,'
+                       '"meal":"elevenses"}]}'))
+check("a bucket nothing renders is DROPPED, so the clock fallback decides instead",
+      got["items"][0]["meal"] == "")
+got = NLU.classify("toast at 8:30", False, "claude", "m", log=lambda *a: None,
+                   runner=fixed_runner(
+                       '{"intent":"log_food","items":[{"text":"toast","in_session":false,'
+                       '"at":"8:30","meal":null}]}'))
+check("a time with no meal named leaves the meal to the clock",
+      got["items"][0]["at"] == "08:30" and got["items"][0]["meal"] == "")
+# A gel is fuel, not lunch. The flag wins over any meal word on the same item, exactly as
+# it wins over a model-asserted in_session without evidence in the words.
+got = NLU.classify("gel on the bike", False, "claude", "m", log=lambda *a: None,
+                   runner=fixed_runner(
+                       '{"intent":"log_food","items":[{"text":"SiS GO gel",'
+                       '"in_session":true,"meal":"lunch"}]}'))
+check("in-session fuel carries no meal even when the model names one",
+      got["items"][0]["in_session"] is True and got["items"][0]["meal"] == "")
+got = NLU.classify("i had a banana", False, "claude", "m", log=lambda *a: None,
+                   runner=fixed_runner(
+                       '{"intent":"log_food","items":["banana"]}'))
+check("a bare string item still has the key, so no caller has to test for it",
+      got["items"][0]["meal"] == "")
+
+# interpret() is the parse that usually WINS, so a meal carried only on classify's items
+# would be lost in the common case - the same trap the stated time fell into.
+plan = NLU.interpret("for breakfast I had porridge", "claude", "m", log=lambda *a: None,
+                     runner=fixed_runner(
+                         '{"items":[{"canonical_name":"porridge",'
+                         '"search_terms":["porridge oats"],"meal":"breakfast"}]}'))
+check("interpret carries the meal too", plan["items"][0]["meal"] == "breakfast")
+plan = NLU.interpret("gel on the bike", "claude", "m", log=lambda *a: None,
+                     runner=fixed_runner(
+                         '{"items":[{"canonical_name":"SiS GO gel",'
+                         '"search_terms":["sis go gel"],"in_session":true,'
+                         '"meal":"lunch"}]}'))
+check("and drops it for in-session fuel on that path as well",
+      plan["items"][0]["meal"] == "")
+check("the interpret prompt asks for the meal on the same terms",
+      "A clock time is evidence" in NLU.INTERPRET_PROMPT)
 
 print()
 if FAILED:

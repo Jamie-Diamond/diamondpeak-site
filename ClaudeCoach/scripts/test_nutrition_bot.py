@@ -714,9 +714,15 @@ check("offer_planned passes the athlete's own wording in",
       "said=t" in inspect.getsource(NB.handle_text))
 # The model is now asked what a correction means even with NOTHING logged, because a fact
 # about a product is not a fact about an entry. That makes target_item None where it used
-# to be guaranteed, and the meal branch dereferences it.
-check("the meal branch still checks it has an entry to file",
-      'and not pend and target_item:' in inspect.getsource(NB.handle_text))
+# to be guaranteed, so whatever handles a meal correction has to cope with that.
+#
+# Was 'and not pend and target_item:' inline in handle_text. The `not pend` half of that
+# guard was the bug: it dropped the meal whenever an offer was still on the table. Both
+# cases now live in apply_meal_correction, which is tested against the store below.
+check("the meal branch handles a pending offer as well as a committed entry",
+      'apply_meal_correction(ctx, decision, pend, target_item, day,'
+      in inspect.getsource(NB.handle_text)
+      and 'target_item' in inspect.getsource(NB.apply_meal_correction))
 check("the model is consulted even when nothing is logged",
       "target_item or {}" in inspect.getsource(NB.handle_text))
 
@@ -885,6 +891,111 @@ check("the fact is stored and the entry rescaled in one go",
       and after["kcal"] == 100.0)
 check("the rescale is arithmetic on the entry, not a fresh search",
       after["resolved_name"] == "SiS REGO" and after["portion_used_g"] == 25.0)
+
+print("\n--- the meal reaches the store, or the clock decides and says it guessed ---")
+# Jamie, 13 Aug 2026: "improve time of meal logging, often added to wrong category." The
+# store owns the fallback; what is tested here is that the bot's hand-off does not drop the
+# meal on the floor, which is the recurring failure in this file.
+meal_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-meal-")))
+mctx = FakeCtxCommit(meal_store)
+base = {"raw_text": "porridge", "_raw": "porridge", "resolved_name": "Porridge",
+        "kcal": 250.0, "confidence": "label", "source_rung": "cofid"}
+NB.commit_pending(mctx, {"batch": [dict(base, _meal="breakfast", _at="13:49")]},
+                  TODAY, "token", 1)
+stated = meal_store.get_day(TODAY)["entries"][0]
+check("a meal he named is written with the entry and not marked as a guess",
+      stated["meal"] == "breakfast" and stated["meal_inferred"] is False)
+check("even though the clock would have said lunch",
+      stated["logged_at"].endswith("T13:49"))
+NB.commit_pending(mctx, {"batch": [dict(base, resolved_name="Rye bread", _at="08:30")]},
+                  TODAY, "token", 1)
+guessed = meal_store.get_day(TODAY)["entries"][1]
+check("with no meal named, the stated TIME files it and the guess is flagged",
+      guessed["meal"] == "breakfast" and guessed["meal_inferred"] is True)
+# The in-session guard, at the commit boundary rather than only in the store: fuel logged
+# at 13:00 must not appear under lunch on the app.
+NB.commit_pending(mctx, {"batch": [dict(base, resolved_name="SiS GO gel", _at="13:00",
+                                        in_session=True, _meal="lunch")]},
+                  TODAY, "token", 1)
+fuel = meal_store.get_day(TODAY)["entries"][2]
+check("in-session fuel commits with no meal at all",
+      fuel["in_session"] is True and fuel["meal"] == ""
+      and fuel["meal_inferred"] is False)
+
+# The wiring, asserted rather than assumed: a library that is right while the caller drops
+# the value is how the photo hint and the species score were both lost.
+for fn in (NB.offer_planned, NB.offer_items):
+    src = inspect.getsource(fn)
+    check(f"{fn.__name__} takes a message-level meal and puts it on every item",
+          "default_meal: str = None" in src and '"_meal"' in src
+          and 'or default_meal or ""' in src)
+check("handle_text reads the meal off the parsed items and passes it to both paths",
+      'stated_meal = next((i.get("meal")' in inspect.getsource(NB.handle_text)
+      and inspect.getsource(NB.handle_text).count("default_meal=stated_meal") == 2)
+check("commit_one hands it to the store", 'meal=item.get("_meal")'
+      in inspect.getsource(NB.commit_one))
+check("the offer says which meal it will use, before anything is written",
+      NB._stated_meal_note([{"_meal": "breakfast"}])
+      == ["_Filing under breakfast, as you said._"])
+check("and says nothing when the clock is doing the guessing",
+      NB._stated_meal_note([{"_meal": ""}]) == [] and NB._stated_meal_note([{}]) == [])
+
+print("\n--- “that was breakfast” works with an offer still on the table ---")
+# fast_intent deliberately keeps out of the way while a yes/no is outstanding, so this
+# arrives as a correction and the model returns {"kind":"meal"}. The branch that handled it
+# required `not pend`, so the meal was dropped exactly when he was still confirming the item
+# it belonged to - and applying it to the last COMMITTED entry instead would have filed the
+# wrong food.
+check("a meal tag does not fire on the fast path while something is pending",
+      (NLU.fast_intent("that was breakfast", True) or {}).get("intent") != "set_meal")
+decision = NLU.decide_correction(
+    "that was breakfast", {"resolved_name": "Rye bread"}, "claude", "m",
+    log=lambda *a: None,
+    runner=lambda *a, **k: type("P", (), {
+        "stdout": '{"kind":"meal","meal":"breakfast"}', "stderr": ""})())
+check("the model's decision comes back as a meal", decision == {"kind": "meal",
+                                                                "meal": "breakfast"})
+
+pend_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-pmeal-")))
+pctx = FakeCtxCommit(pend_store)
+offer = {"batch": [dict(base, resolved_name="Rye bread"),
+                   dict(base, resolved_name="Butter")]}
+NB.set_pending(pend_store, offer)
+sent_msgs.clear()
+handled = NB.apply_meal_correction(pctx, decision, NB.get_pending(pend_store), None,
+                                   TODAY, "token", 1)
+still = NB.get_pending(pend_store)
+check("the meal lands on the pending batch rather than being dropped",
+      handled and [i["_meal"] for i in still["batch"]] == ["breakfast", "breakfast"])
+check("the offer is still pending - nothing was written behind his back",
+      not pend_store.get_day(TODAY)["entries"] and "when you confirm" in sent_msgs[-1])
+NB.commit_pending(pctx, still, TODAY, "token", 1)
+check("and it commits with the meal he named",
+      [(e["meal"], e["meal_inferred"])
+       for e in pend_store.get_day(TODAY)["entries"]]
+      == [("breakfast", False), ("breakfast", False)])
+
+# With nothing pending it files the committed entry, and stops calling it a guess.
+sent_msgs.clear()
+done_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-cmeal-")))
+dctx = FakeCtxCommit(done_store)
+entry = done_store.add_entry(TODAY, raw_text="rye bread", resolved_name="Rye bread",
+                             kcal=83, confidence="label", source_rung="manual",
+                             logged_at=f"{TODAY.isoformat()}T13:49")
+check("it starts out guessed as lunch",
+      entry["meal"] == "lunch" and entry["meal_inferred"] is True)
+handled = NB.apply_meal_correction(dctx, {"kind": "meal", "meal": "breakfast"}, None,
+                                   entry, TODAY, "token", 1)
+after = done_store.get_day(TODAY)["entries"][0]
+check("a meal correction on a committed entry files it and clears the guess flag",
+      handled and after["meal"] == "breakfast" and after["meal_inferred"] is False)
+check("and it is confirmed in one line", "breakfast" in sent_msgs[-1])
+check("an unusable meal is refused rather than written",
+      NB.apply_meal_correction(dctx, {"kind": "meal", "meal": "elevenses"}, None,
+                               entry, TODAY, "token", 1) is False)
+check("and with neither an offer nor an entry it declines instead of failing",
+      NB.apply_meal_correction(dctx, {"kind": "meal", "meal": "breakfast"}, None,
+                               None, TODAY, "token", 1) is False)
 
 # Put the real functions back, so anything appended after this block tests the code rather
 # than the stubs.

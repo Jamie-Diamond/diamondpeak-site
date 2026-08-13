@@ -147,9 +147,24 @@ _SET_MEAL = (
     re.compile(r"^(?:make|mark|count|call)\s+(?:that|this|it|them)\s+"
                r"(?:a|an|my)?\s*" + _MEAL_WORD + r"$", re.I),
 )
-# Meal names people use that are not one of the four buckets.
-_MEAL_ALIAS = {"brunch": "breakfast", "supper": "dinner", "tea": "dinner",
-               "snack": "snacks"}
+# The four buckets the app renders, and the words he actually uses for them. Canonical
+# here rather than in the store because this is the lowest layer - the store imports it,
+# along with PRODUCT_FACT_FIELDS, for the same reason: a meal word this file accepts and
+# the store then drops fails silently.
+MEALS = ("breakfast", "lunch", "dinner", "snacks")
+MEAL_ALIASES = {"brunch": "breakfast", "supper": "dinner", "tea": "dinner",
+                "snack": "snacks", "snacking": "snacks"}
+
+
+def normalise_meal(meal) -> str:
+    """One of MEALS, or "" for anything that is not a meal name.
+
+    Every path arrives with his own word for it - the fast regex, the parse prompt, a
+    correction - and three copies of the alias table is how "supper" lands under snacks on
+    one path and dinner on another."""
+    m = str(meal or "").strip().lower()
+    m = MEAL_ALIASES.get(m, m)
+    return m if m in MEALS else ""
 
 
 _SET_IN_SESSION = re.compile(
@@ -232,8 +247,7 @@ def looks_like_meal_tag(text: str) -> dict | None:
         m = rx.match(t)
         if not m:
             continue
-        meal = m.group(m.lastindex).lower()
-        meal = _MEAL_ALIAS.get(meal, meal)
+        meal = normalise_meal(m.group(m.lastindex)) or m.group(m.lastindex).lower()
         item = ""
         for key in ("item", "item2"):
             try:
@@ -288,7 +302,7 @@ Classify the message and extract structure. Reply with ONLY a JSON object, no pr
 Keys:
   intent: one of log_food, log_supplement, question, advice, correction, smalltalk,
           unknown
-  items: array (log_food/log_supplement only) of {text, portion_g, in_session, at}
+  items: array (log_food/log_supplement only) of {text, portion_g, in_session, at, meal}
          - text: a SINGLE food or supplement, self-contained enough to look up
          - portion_g: grams if stated or confidently inferable, else null
          - at: "HH:MM" (24h) ONLY when the message states a clock time for this item -
@@ -305,8 +319,23 @@ Keys:
            several items when they are separately EATEN things - "toast and a banana", "a
            coffee and two biscuits". If genuinely unsure, emit ONE item: an over-split day
            double counts, while an under-split one is a single figure he can correct.
+         - meal: "breakfast" | "lunch" | "dinner" | "snacks", or null. Set it ONLY when
+           the message SAYS which meal this was, or so clearly implies it that there is
+           nothing to guess:
+             "for breakfast I had porridge"        -> meal "breakfast"
+             "porridge and a coffee, late lunch"   -> meal "lunch" on BOTH items
+             "had a curry with dinner"             -> meal "dinner"
+             "picked at some nuts mid-afternoon"   -> null (a time of day, not a meal)
+           A CLOCK TIME IS EVIDENCE, NOT PROOF, so a stated time alone gives null: the
+           logger files an untimed guess by the clock itself and marks it as a guess,
+           which is honest, whereas a meal named here is treated as HIS OWN word for it
+           and stops being questioned. "toast at 8:30" is `at` "08:30" and meal null.
+           Two worked examples of the difference:
+             "rye bread at 8:30 this morning" -> {"at":"08:30","meal":null}
+             "rye bread for breakfast at 8:30" -> {"at":"08:30","meal":"breakfast"}
          - in_session: true only if eaten DURING a training session (gel, drink mix,
-           "on the bike", "mid-run")
+           "on the bike", "mid-run"). In-session fuel is never a meal: if in_session is
+           true, meal is null.
   question: (question only) a short restatement of what they are asking
   options: (advice only) array of the candidate foods/meals being weighed up, as
            plain lookup-able strings. Include every option mentioned, even in
@@ -395,10 +424,18 @@ def parse_with_model(text: str, claude_bin: str, model: str, log=print,
     for it in got.get("items") or []:
         if isinstance(it, str):
             items.append({"text": it, "portion_g": None, "in_session": False,
-                          "at": None})
+                          "at": None, "meal": ""})
         elif isinstance(it, dict) and it.get("text"):
+            in_session = (bool(it.get("in_session"))
+                          and during_session_evidence(text))
             items.append({"text": str(it["text"]),
                           "portion_g": it.get("portion_g"),
+                          # The meal HE named. Validated to one of the four buckets and
+                          # otherwise dropped, like `at`: the logger's clock fallback is a
+                          # better answer than a bucket nothing renders. In-session fuel
+                          # is fuel, not a meal, so the flag wins over any meal word.
+                          "meal": ("" if in_session
+                                   else normalise_meal(it.get("meal"))),
                           # A STATED time only. "add the second slice of toast at 1350"
                           # was logged at the moment he typed it, so a log written up
                           # after the fact landed in the wrong meal on the app and there
@@ -409,8 +446,7 @@ def parse_with_model(text: str, claude_bin: str, model: str, log=print,
                           # safe direction - an out-of-session item counted in the day is
                           # merely a day total, while a breakfast counted as in-run fuel
                           # rewrites the fuelling history the coach prescribes from.
-                          "in_session": (bool(it.get("in_session"))
-                                         and during_session_evidence(text))})
+                          "in_session": in_session})
     got["items"] = items
     return got
 
@@ -1203,6 +1239,10 @@ each item actually IS and how to search for it. Reply with ONLY a JSON object.
   "in_session": true|false,
   "at": "<HH:MM in 24h ONLY if the message states a clock time for this item, else null.
          'at 1350' -> '13:50'. Never guess: 'this morning' is null>",
+  "meal": "<breakfast|lunch|dinner|snacks ONLY if the message names the meal - 'for
+           breakfast I had...', 'with dinner', 'late lunch'. A clock time is evidence,
+           not proof: 'toast at 8:30' is null and the logger files it by the clock.
+           Null for anything in_session - fuel is not a meal>",
   "search_terms": ["<best query first>", "<fallback>", "..."]
 }]}
 
@@ -1330,8 +1370,10 @@ def interpret(text: str, claude_bin: str, model: str, log=print, runner=None,
             # Carried on BOTH parse paths. interpret() returns None whenever the model
             # is unavailable, in which case the caller resolves classify()'s items
             # instead - so a stated time that only survived here would be lost exactly
-            # when the fallback ran.
+            # when the fallback ran. The meal he named travels for the same reason, and
+            # this is the path that usually wins, so it is the one that matters most.
             "at": normalise_hhmm(it.get("at")),
+            "meal": ("" if it.get("in_session") else normalise_meal(it.get("meal"))),
             "search_terms": terms[:4],
         })
     return {"items": out} if out else None

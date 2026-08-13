@@ -57,7 +57,7 @@ from nutrition_engine import NON_COUNTING_PROTEIN_SOURCES  # noqa: E402
 # Restating them here is the divergence trap this file already refuses for the
 # non-counting protein tokens: a field the model may return and the store will not keep
 # fails silently, which is the worst of both.
-from nutrition_nlu import PRODUCT_FACT_FIELDS  # noqa: E402
+from nutrition_nlu import MEALS, PRODUCT_FACT_FIELDS, normalise_meal  # noqa: E402,F401
 
 # `computed` is a real fourth level, not a shade of estimate: the M&S nut collection was
 # derived from an equal blend of four named nuts per the product listing, which is far
@@ -93,6 +93,34 @@ WEIGHT_TAGS = ("morning", "session_sweat")
 
 FLAG_TYPES = ("fat_frontload", "underfuel", "rhr_elevated", "low_variety",
               "carb_band", "fibre_ceiling_exceeded")
+
+# Clock bounds for the FALLBACK, when nothing he said named a meal. Named constants
+# because they are a judgement about his day, not a fact: he eats breakfast late on a
+# rest day and dinner is never before half five.
+MEAL_BREAKFAST_BEFORE = "11:00"
+MEAL_LUNCH_BEFORE = "15:00"
+MEAL_SNACKS_BEFORE = "17:30"      # from here on it is dinner
+
+
+def meal_from_clock(logged_at: str) -> str:
+    """Which meal a time of day implies, or "" if the time is unreadable.
+
+    THE FALLBACK, AND ONLY THE FALLBACK. It runs at LOG time rather than at publish
+    time, against the time the entry claims to have been eaten at - so an 08:30 slice of
+    rye bread written up at 13:49 is breakfast, which is the whole complaint (Jamie,
+    13 Aug 2026: "often added to wrong category"). Whatever it decides is marked
+    `meal_inferred`, because a guess that cannot be told from a statement is a guess the
+    athlete has no reason to check."""
+    hhmm = (logged_at or "")[11:16] if len(logged_at or "") > 11 else (logged_at or "")
+    if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", hhmm or ""):
+        return ""
+    if hhmm < MEAL_BREAKFAST_BEFORE:
+        return "breakfast"
+    if hhmm < MEAL_LUNCH_BEFORE:
+        return "lunch"
+    if hhmm < MEAL_SNACKS_BEFORE:
+        return "snacks"
+    return "dinner"
 
 
 def _atomic_write(path: Path, payload: dict) -> None:
@@ -276,11 +304,25 @@ class NutritionStore:
         if source_rung not in SOURCE_RUNGS:
             raise ValueError(f"source_rung must be one of {SOURCE_RUNGS}")
         iso = _as_iso(day)
+        stamp = logged_at or f"{iso}T00:00"
+        # WHICH MEAL, DECIDED HERE AND NOW rather than by the app when it renders. What he
+        # said wins; the clock is consulted only when he said nothing, and its answer is
+        # flagged as inferred so a correction and the app can both tell the two apart.
+        #
+        # In-session fuel is NOT a meal and never gets one, whatever arrived in `meal`: a
+        # gel taken at 13:00 is not lunch, and filing it as lunch is what makes a day's
+        # meals look like they contain the fuelling. Forced rather than refused - a
+        # mislabelled gel must not cost him the log.
+        chosen = "" if in_session else normalise_meal(meal)
+        inferred = False
+        if not chosen and not in_session:
+            chosen = meal_from_clock(stamp)
+            inferred = bool(chosen)
 
         def _add(rec):
             entry = {
                 "id": self._next_seq(rec, "next_seq", "", 3),
-                "logged_at": logged_at or f"{iso}T00:00",
+                "logged_at": stamp,
                 "raw_text": raw_text,
                 "resolved_name": resolved_name or raw_text,
                 "portion_g": portion_g,
@@ -295,7 +337,10 @@ class NutritionStore:
                 "source_url": source_url,
                 "resolved_at": _as_iso(resolved_at) if resolved_at else iso,
                 "in_session": bool(in_session),
-            "meal": (meal or "").strip().lower(),
+                "meal": chosen,
+                # True when the CLOCK chose that meal, not him. publish reads `meal` for
+                # the bucket and this for whether to caveat it.
+                "meal_inferred": inferred,
                 # Each species is {"id", "score"}: the score is the one MATCHED, which
                 # is 0 for a refined derivative. Storing bare ids lost it and read the
                 # category default back, turning sunflower oil into sunflower.
@@ -313,9 +358,9 @@ class NutritionStore:
 
         return self._mutate_day(iso, _add)
 
-    # The four buckets the app renders. "snacks" is the catch-all rather than an
-    # unlabelled fifth, so nothing can land nowhere.
-    MEALS = ("breakfast", "lunch", "dinner", "snacks")
+    # Kept as a class attribute for the callers that read store.MEALS; the list itself
+    # lives at module level with the aliases and the clock bounds it belongs beside.
+    MEALS = MEALS
 
     # `logged_at` and `meal` are patchable because WHEN he ate something is a fact he can
     # state after the fact and the app buckets entries into meals by the clock: an 08:30
@@ -324,7 +369,7 @@ class NutritionStore:
     UPDATABLE = ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g",
                  "dietary_sodium_mg", "portion_g", "portion_used_g",
                  "portion_estimated", "portion_assumed", "raw_text",
-                 "logged_at", "meal")
+                 "logged_at", "meal", "meal_inferred")
 
     def update_entry(self, day, entry_id: str, **fields) -> dict | None:
         """Patch an existing entry in place - the QUANTITY correction path.
@@ -343,6 +388,22 @@ class NutritionStore:
             for e in rec.get("entries") or []:
                 if e.get("id") == entry_id:
                     e.update(patch)
+                    # A RETIME MOVES A GUESSED MEAL WITH IT. Meals used to be re-derived
+                    # from logged_at every time the app was published, so retiming an
+                    # entry moved its bucket for free; freezing the meal at log time
+                    # silently took that away. "The initial rye bread was 830am" has to
+                    # take it out of lunch and into breakfast, or the retime verb fixes
+                    # the timestamp and leaves the visible mistake in place.
+                    #
+                    # A meal HE stated survives, deliberately: a late breakfast at 14:00
+                    # is a real thing, and it is exactly what this ticket is about.
+                    if ("logged_at" in patch and "meal" not in patch
+                            and not e.get("in_session")
+                            and (e.get("meal_inferred") or not e.get("meal"))):
+                        moved = meal_from_clock(e.get("logged_at") or "")
+                        if moved:
+                            e["meal"] = moved
+                            e["meal_inferred"] = True
                     return e
             return None
         return self._mutate_day(day, fn)
@@ -400,28 +461,43 @@ class NutritionStore:
         "that was breakfast" had nowhere to land.
 
         The STATED meal always wins over the clock: he knows when he ate, and a log
-        written up an hour later is normal."""
-        meal = (meal or "").strip().lower()
-        if meal in ("snack", "snacking"):
-            meal = "snacks"
-        if meal not in self.MEALS:
+        written up an hour later is normal. So this also clears `meal_inferred` - the
+        entry is now filed because he said so, and nothing downstream should keep
+        caveating it as a guess."""
+        meal = normalise_meal(meal)
+        if not meal:
             return None
 
         def fn(rec):
             for e in rec.get("entries") or []:
                 if e.get("id") == entry_id:
                     e["meal"] = meal
+                    e["meal_inferred"] = False
                     return e
             return None
         return self._mutate_day(day, fn)
 
     def set_in_session(self, day, entry_id: str, in_session: bool) -> dict | None:
-        """Move an entry in or out of session fuel after the fact."""
+        """Move an entry in or out of session fuel after the fact.
+
+        The meal follows the move, because in-session fuel is not a meal. Leaving a stale
+        `lunch` on a gel he has just told us was taken on the bike is not cosmetic: publish
+        buckets a STATED meal ahead of its in-session check, so the gel would keep
+        rendering under lunch while the flag beside it said in-session."""
         def fn(rec):
             for e in rec.get("entries") or []:
-                if e.get("id") == entry_id:
-                    e["in_session"] = bool(in_session)
-                    return e
+                if e.get("id") != entry_id:
+                    continue
+                e["in_session"] = bool(in_session)
+                if in_session:
+                    e["meal"] = ""
+                    e["meal_inferred"] = False
+                elif not e.get("meal"):
+                    # Back out of session, so it is food again and needs a bucket. The
+                    # clock is all there is to go on, and it says so.
+                    e["meal"] = meal_from_clock(e.get("logged_at") or "")
+                    e["meal_inferred"] = bool(e["meal"])
+                return e
             return None
         return self._mutate_day(day, fn)
 

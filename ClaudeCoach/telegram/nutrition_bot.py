@@ -1154,18 +1154,15 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                 if apply_quantity_correction(ctx, pend, {"whole_pack": True},
                                              day, token, chat_id):
                     return
-            # `target_item` again, because the model is now consulted even with nothing
-            # logged: this branch dereferences it, and it is None on an empty day.
-            elif kind == "meal" and decision.get("meal") and not pend and target_item:
-                # set_meal, never update_entry, even though `meal` is patchable now: the
-                # "snack" -> "snacks" normalisation and the MEALS validation live there
-                # and must stay on one path.
-                done = ctx.store.set_meal(day, target_item["id"], decision["meal"])
-                if done:
-                    publish_now(ctx)
-                    tg.send(token, chat_id,
-                            f"Filed *{done.get('resolved_name')}* under "
-                            f"{decision['meal']}.", log=log)
+            elif kind == "meal" and decision.get("meal"):
+                # BOTH with an offer on the table and without one. "That was breakfast"
+                # while something is pending reaches here rather than the set_meal fast
+                # path, because fast_intent deliberately keeps out of the way while a
+                # yes/no is outstanding - and the branch it landed in required `not pend`,
+                # so the meal was silently dropped exactly when he was still confirming
+                # the item it belonged to.
+                if apply_meal_correction(ctx, decision, pend, target_item, day,
+                                         token, chat_id):
                     return
             elif kind == "reidentify":
                 for phrase in decision.get("exclusions") or []:
@@ -1249,10 +1246,16 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # exactly the case where the classify items are the ones resolved.
         stated_at = next((i.get("at") for i in (got.get("items") or []) if i.get("at")),
                          None)
+        # And the MEAL he named, on the same terms. "For breakfast I had porridge and a
+        # coffee" names it once for the whole message, so it carries to every item in it
+        # that did not name its own - and it has to survive interpret() being the parse
+        # that gets resolved, which is the usual case.
+        stated_meal = next((i.get("meal") for i in (got.get("items") or [])
+                            if i.get("meal")), None)
         plan = NLU.interpret(t, CLAUDE_BIN, LLM_MODEL, log=log)
         if plan and plan.get("items"):
             offer_planned(ctx, plan["items"], day, token, chat_id, said=t,
-                          default_at=stated_at)
+                          default_at=stated_at, default_meal=stated_meal)
             return
         if got.get("nutritionally_trivial"):
             # Say it plainly rather than logging "kcal 1" and implying it counted.
@@ -1268,7 +1271,8 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                     supplement=(intent == "log_supplement"),
                     barcode=got.get("barcode"),
                     trivial=bool(got.get("nutritionally_trivial")),
-                    dose_mg=got.get("dose_mg"), said=t, default_at=stated_at)
+                    dose_mg=got.get("dose_mg"), said=t, default_at=stated_at,
+                    default_meal=stated_meal)
         return
 
     if intent == "smalltalk":
@@ -1501,7 +1505,8 @@ def download_photo(ctx: Context, file_id: str, token: str):
 
 
 def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
-                  said: str = "", default_at: str = None) -> None:
+                  said: str = "", default_at: str = None,
+                  default_meal: str = None) -> None:
     """Resolve each INTERPRETED item, with its form and search terms.
 
     The interpretation is what makes the ladder honest: it searches good queries, and it
@@ -1527,6 +1532,9 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
                 "degraded": False, "needs_input": False, "_supplement": True,
                 "_trivial": not it["expect_macros"], "_dose_mg": it.get("dose_mg"),
                 "in_session": it["in_session"], "_at": it.get("at") or default_at,
+                # Carried for shape only: add_supplement has no meal, and a dose is not
+                # a meal anyway. Kept so a batch item never has to be tested for the key.
+                "_meal": "",
                 **{f: None for f in NR.MACRO_FIELDS}})
             dose = (f"{it['dose_mg']:.0f} mg" if it.get("dose_mg")
                     else (f"{it['portion_g']} g" if it.get("portion_g") else "as stated"))
@@ -1550,6 +1558,10 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
         # A time he STATED, carried to the entry. Per item first, then the one stated for
         # the message as a whole, then nothing at all - and nothing means now-time.
         item["_at"] = it.get("at") or default_at
+        # Same precedence for the meal, and nothing means the store files it by the clock
+        # and marks that it guessed.
+        item["_meal"] = ("" if it.get("in_session")
+                         else (it.get("meal") or default_meal or ""))
         log(f"    -> {item.get('resolved_name')!r} {item.get('source_rung')}/"
             f"{item.get('confidence')} {item.get('kcal')} kcal")
         batch.append(item)
@@ -1557,7 +1569,7 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
     set_pending(ctx.store, {"batch": batch})
     if any(i.get("in_session") for i in batch):
         notes.append("_Tagged as in-session fuel, so it is protected from any trimming._")
-    notes += _stated_time_note(batch)
+    notes += _stated_time_note(batch) + _stated_meal_note(batch)
     if batch:
         _chat(ctx, "coach", _offer_summary(batch))
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
@@ -1645,10 +1657,24 @@ def _stated_time_note(batch: list) -> list:
     return [f"_Logging at {', '.join(times)}, as you said._"]
 
 
+def _stated_meal_note(batch: list) -> list:
+    """One line naming the meal the batch will be filed under, when HE named it.
+
+    Said before the write for the same reason the stated time is: a meal read out of his
+    sentence is the one thing here that stops being questioned afterwards, so a misread
+    one has to be visible while "No" is still an option. Silent when nothing was named -
+    the clock fallback is not worth a line every time he logs a snack."""
+    meals = sorted({i.get("_meal") for i in batch if i.get("_meal")})
+    if not meals:
+        return []
+    return [f"_Filing under {', '.join(meals)}, as you said._"]
+
+
 def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 supplement: bool = False, barcode: str = None,
                 trivial: bool = False, dose_mg: float = None,
-                said: str = "", default_at: str = None) -> None:
+                said: str = "", default_at: str = None,
+                default_meal: str = None) -> None:
     """Resolve each item separately and ask once for the batch.
 
     Per-item resolution matters: a whole sentence resolved as one string both
@@ -1675,6 +1701,7 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 "_supplement": True, "_trivial": bool(trivial), "_dose_mg": dose_mg,
                 "in_session": bool(it.get("in_session")),
                 "_at": it.get("at") or default_at,
+                "_meal": "",                    # a dose is not a meal
                 **{f: None for f in NR.MACRO_FIELDS},
             })
         set_pending(ctx.store, {"batch": batch})
@@ -1704,6 +1731,8 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
             prior["_trivial"] = bool(trivial)
             prior["_dose_mg"] = dose_mg
             prior["_at"] = it.get("at") or default_at
+            prior["_meal"] = ("" if it.get("in_session")
+                              else (it.get("meal") or default_meal or ""))
             resolved.append(prior)
             continue
         log(f"  resolving {it['text'][:60]!r} portion={it.get('portion_g')}")
@@ -1745,6 +1774,8 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         item["_trivial"] = bool(trivial)
         item["_dose_mg"] = dose_mg
         item["_at"] = it.get("at") or default_at
+        item["_meal"] = ("" if it.get("in_session")
+                         else (it.get("meal") or default_meal or ""))
         resolved.append(item)
     set_pending(ctx.store, {"batch": resolved})
     if resolved:
@@ -1752,7 +1783,7 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
     body = "\n\n".join(fmt_confirm(i) for i in resolved)
     if any(i.get("in_session") for i in resolved):
         body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
-    for line in _stated_time_note(resolved):
+    for line in _stated_time_note(resolved) + _stated_meal_note(resolved):
         body += "\n\n" + line
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
     tg.send(token, chat_id, body + "\n\nLog "
@@ -2133,6 +2164,55 @@ def apply_retime(ctx: Context, decision: dict, day: date, token, chat_id) -> boo
     return True
 
 
+def apply_meal_correction(ctx: Context, decision: dict, pend, target_item, day: date,
+                          token, chat_id) -> bool:
+    """File something under a meal he has just named. True once handled.
+
+    Two cases, and only the second one used to work:
+
+    PENDING OFFER. The meal lands on the batch so it is written WITH the entry, rather
+    than being applied to whatever was logged before it - which is what a set_meal here
+    would have done, since the item he is talking about does not exist yet. Every item in
+    the batch takes it: "that was breakfast" against a two-item offer means both, and a
+    matcher guessing which of two foods he meant would be wrong silently.
+
+    NOTHING PENDING. set_meal against the entry, which also clears the inferred flag: it
+    is his word for it now, not the clock's guess.
+
+    In-session items are skipped either way - fuel is not a meal."""
+    meal = NLU.normalise_meal(decision.get("meal"))
+    if not meal:
+        log(f"  meal correction with an unusable meal: {decision.get('meal')!r}")
+        return False
+    if pend:
+        batch = pend.get("batch") or []
+        touched = [i for i in batch if not i.get("_supplement")
+                   and not i.get("in_session")]
+        if not touched:
+            return False
+        for item in touched:
+            item["_meal"] = meal
+        set_pending(ctx.store, dict(pend, batch=batch))
+        tg.send(token, chat_id,
+                f"Noted - filing {'them' if len(touched) > 1 else 'it'} under {meal} "
+                f"when you confirm.", log=log)
+        return True
+    if not target_item:
+        return False
+    # set_meal, never update_entry, even though `meal` is patchable now: the alias
+    # normalisation, the validation and the clearing of `meal_inferred` live there and
+    # must stay on one path.
+    done = ctx.store.set_meal(day, target_item["id"], meal)
+    if not done:
+        return False
+    publish_now(ctx)
+    _chat(ctx, "coach", f"[log] filed {(done.get('resolved_name') or '')[:40]} "
+                        f"under {meal}")
+    tg.send(token, chat_id,
+            f"Filed *{done.get('resolved_name')}* under {meal}.", log=log)
+    return True
+
+
 def apply_rename(ctx: Context, decision: dict, day: date, token, chat_id) -> bool:
     """Correct an entry's NAME. True once handled, including by re-resolving instead.
 
@@ -2459,7 +2539,12 @@ def commit_one(ctx: Context, item: dict, day: date) -> None:
         # off in BST. "Add the second slice of toast at 1350" was stamped at whatever time
         # the message arrived, so the app filed it under the wrong meal.
         logged_at=(f"{day.isoformat()}T{item['_at']}" if item.get("_at")
-                   else datetime.now().isoformat(timespec="minutes")))
+                   else datetime.now().isoformat(timespec="minutes")),
+        # The meal he NAMED, or "" - and "" means the store files it by the clock and
+        # says it guessed. Meals were inferred at publish time from the log timestamp
+        # alone, so a breakfast written up at 13:49 read as lunch and nothing at log
+        # time ever asked or read the message (Jamie, 13 Aug 2026).
+        meal=item.get("_meal") or "")
     NR.cache_resolved(ctx.store, item)
 
 

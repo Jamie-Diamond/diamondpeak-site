@@ -274,7 +274,10 @@ mstore.add_entry(MDAY, raw_text="protein bar", resolved_name="M&S Protein Bar",
                  kcal=200, logged_at=MDAY + "T08:17")
 oats = mstore.add_entry(MDAY, raw_text="oats", resolved_name="M&S Overnight Oats",
                         kcal=322, logged_at=MDAY + "T08:52")
-check("a new entry starts with no meal", not (oats.get("meal") or ""))
+# Was "a new entry starts with no meal", when meals were derived at publish time. An
+# entry now lands in a bucket the moment it is written, and says the clock chose it.
+check("a new entry is filed by the clock, and says so",
+      oats.get("meal") == "breakfast" and oats.get("meal_inferred") is True)
 found = mstore.find_entry(MDAY, "overnight oats")
 check("a named item is found by its words",
       found and found["resolved_name"] == "M&S Overnight Oats")
@@ -461,6 +464,89 @@ with tempfile.TemporaryDirectory() as td:
     (st.dir / "product-facts.json").write_text("{not json")
     check("a corrupt facts file degrades to no facts, not a crash",
           st.product_facts() == {})
+
+print("\n--- which meal, decided at LOG time and honest about who decided ---")
+# Jamie, 13 Aug 2026: "improve time of meal logging, often added to wrong category."
+# Meals were derived when the app was published, from the log timestamp alone, so an 08:30
+# slice of rye bread written up at 13:49 was lunch and nothing at log time read the message.
+for hhmm, want in (("00:01", "breakfast"), ("08:30", "breakfast"), ("10:59", "breakfast"),
+                   ("11:00", "lunch"), ("13:49", "lunch"), ("14:59", "lunch"),
+                   ("15:00", "snacks"), ("17:29", "snacks"),
+                   ("17:30", "dinner"), ("21:15", "dinner")):
+    check(f"{hhmm} falls in {want}", S.meal_from_clock(f"2026-08-13T{hhmm}") == want)
+# A time it cannot read gives NO meal rather than a default one: a bucket chosen from
+# nothing is indistinguishable from a bucket chosen from the clock.
+for bad in ("", None, "2026-08-13", "2026-08-13T24:00", "2026-08-13Txx:yy"):
+    check(f"{bad!r} yields no meal at all", S.meal_from_clock(bad) == "")
+check("aliases normalise on one path only",
+      (S.normalise_meal("Supper"), S.normalise_meal("snack"),
+       S.normalise_meal("brunch"), S.normalise_meal("elevenses"))
+      == ("dinner", "snacks", "breakfast", ""))
+
+cstore = S.NutritionStore(Path(tempfile.mkdtemp(prefix="meal-clock-")))
+CDAY = "2026-08-13"
+# The exemplar: breakfast eaten at 08:30, written up at 13:49. The stated time is on the
+# entry, so the fallback reads THAT and not the moment he typed it.
+rye = cstore.add_entry(CDAY, raw_text="rye bread", resolved_name="Rye bread", kcal=83,
+                       logged_at=CDAY + "T08:30")
+check("a stated time files the entry by the time he ate, not the time he typed",
+      rye["meal"] == "breakfast" and rye["meal_inferred"] is True)
+said = cstore.add_entry(CDAY, raw_text="porridge", resolved_name="Porridge", kcal=250,
+                        logged_at=CDAY + "T13:49", meal="breakfast")
+check("a meal HE named beats the clock and is not marked as a guess",
+      said["meal"] == "breakfast" and said["meal_inferred"] is False)
+check("his own word for it is normalised, not rejected",
+      cstore.add_entry(CDAY, raw_text="curry", resolved_name="Curry", kcal=700,
+                       logged_at=CDAY + "T12:00", meal="Supper")["meal"] == "dinner")
+check("a meal word nothing renders falls back to the clock",
+      cstore.add_entry(CDAY, raw_text="crisps", resolved_name="Crisps", kcal=180,
+                       logged_at=CDAY + "T16:00", meal="elevenses")["meal"] == "snacks")
+
+# IN-SESSION FUEL IS NOT A MEAL. A gel taken at 13:00 is not lunch, and filing it as lunch
+# makes the day's meals look like they contain the fuelling. Forced rather than refused: a
+# mislabelled gel must not cost him the log.
+gel = cstore.add_entry(CDAY, raw_text="gel on the bike", resolved_name="SiS GO gel",
+                       kcal=87, logged_at=CDAY + "T13:00", in_session=True,
+                       meal="lunch")
+check("in-session fuel never gets a meal, whatever was passed",
+      gel["meal"] == "" and gel["meal_inferred"] is False)
+
+print("\n--- a retime moves a GUESSED meal with it, and leaves a stated one alone ---")
+# Meals used to be re-derived from logged_at on every publish, so retiming an entry moved
+# its bucket for free. Freezing the meal at log time silently took that away.
+late = cstore.add_entry(CDAY, raw_text="toast", resolved_name="Toast", kcal=180,
+                        logged_at=CDAY + "T13:49")
+check("it starts as lunch, by the clock", late["meal"] == "lunch")
+moved = cstore.update_entry(CDAY, late["id"], logged_at=CDAY + "T08:30")
+check("retiming it to 08:30 makes it breakfast",
+      moved["meal"] == "breakfast" and moved["meal_inferred"] is True)
+kept = cstore.update_entry(CDAY, said["id"], logged_at=CDAY + "T14:00")
+check("a meal he STATED survives a retime - a late breakfast is a real thing",
+      kept["meal"] == "breakfast" and kept["meal_inferred"] is False)
+check("and a retime does not hand a meal to in-session fuel",
+      cstore.update_entry(CDAY, gel["id"], logged_at=CDAY + "T09:00")["meal"] == "")
+check("an explicit meal in the same patch is not overruled by the clock",
+      cstore.update_entry(CDAY, late["id"], logged_at=CDAY + "T20:00",
+                          meal="breakfast")["meal"] == "breakfast")
+
+print("\n--- correcting the meal, and moving fuel in and out ---")
+told = cstore.set_meal(CDAY, late["id"], "snack")
+check("set_meal normalises and stops calling it a guess",
+      told["meal"] == "snacks" and told["meal_inferred"] is False)
+check("an unknown bucket is still refused", cstore.set_meal(CDAY, late["id"], "brunchy")
+      is None)
+# publish buckets a STATED meal ahead of its in-session check, so a stale meal on an entry
+# he has just called in-session fuel keeps rendering it under that meal.
+into = cstore.set_in_session(CDAY, late["id"], True)
+check("moving an entry into session strips its meal",
+      into["meal"] == "" and into["meal_inferred"] is False)
+out = cstore.set_in_session(CDAY, late["id"], False)
+# That entry now stands at 20:00 (retimed above), so the clock says dinner - the stated
+# "snacks" was stripped when it went in-session and is not resurrected. Out-of-session
+# food must land in SOME bucket, and the clock is all there is left to go on.
+check("and moving it back out gives it a bucket again, by the clock",
+      out["logged_at"].endswith("T20:00")
+      and out["meal"] == "dinner" and out["meal_inferred"] is True)
 
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
