@@ -200,6 +200,12 @@ def build(slug: str, today: date) -> dict:
                          "kcal_maintenance": z.get("kcal_maintenance"),
                          "deficit_applied_kcal": z.get("deficit_applied_kcal"),
                          "modifiers": z.get("modifiers") or [],
+                         # WHY the deficit is what it is. Without this a suppressed
+                         # deficit is SILENT: the page shows a target equal to
+                         # maintenance and nothing says the engine held it there
+                         # deliberately ("deficit suppressed: resting HR elevated").
+                         # Absent on days logged before the key existed.
+                         "warnings": z.get("warnings") or [],
                          "confidence": z.get("confidence")}) if z else None,
             # Names and confidence only: no raw_text, no notes, no source urls.
             "items": [{"name": e.get("resolved_name"), "kcal": e.get("kcal"),
@@ -268,9 +274,19 @@ def build(slug: str, today: date) -> dict:
                 "date": d["date"],
                 "dow": date.fromisoformat(d["date"]).strftime("%a"),
                 "logged": logged,
+                # Carried from the day, never re-derived: the day dict already knows
+                # whether it was explicitly closed, and _week() reading it means an
+                # athlete who closes today off gets today counted as settled.
+                "closed": bool(d.get("closed")),
                 "day_type": d.get("day_type"),
                 "kcal": t.get("kcal") if logged else None,
                 "kcal_target": z.get("kcal_target"),
+                # Maintenance, so energy BALANCE can be reported. The target is already
+                # deficit-adjusted, so intake against target answers "did I hit the
+                # plan", never "am I in a deficit" - the two are different questions and
+                # publishing only the first is what made the page label adherence as
+                # deficit, sign inverted.
+                "kcal_maintenance": z.get("kcal_maintenance"),
                 "protein_g": pro if logged else None,
                 "protein_floor": pz.get("low"),
                 "protein_met": (logged and pz and (pro or 0) >= pz["low"]) or None,
@@ -289,8 +305,29 @@ def build(slug: str, today: date) -> dict:
         # dragged the rolling average to -1,967 kcal/day, implying -1.8 kg a week off
         # nothing but the clock. The deficit is computed over SETTLED days only: closed, or
         # simply not today.
-        settled = [r for r in done
-                   if r.get("closed") or r["date"] < date.today().isoformat()]
+        # `today` from the caller, NOT date.today(): a backfill run for an earlier date
+        # would otherwise treat every day in its window as past and settle a day that was
+        # still in progress at the time the figures claim to describe.
+        settled = [r for r in done if r["closed"] or r["date"] < today.isoformat()]
+        # ONE DENOMINATOR PER FIGURE, and it is the days carrying BOTH halves of the
+        # subtraction. A day whose stored snapshot predates kcal_maintenance would, under
+        # `or 0`, contribute MINUS ITS WHOLE INTAKE and fabricate a multi-thousand-kcal
+        # deficit out of a missing key. Same for a logged day with no zones at all, which
+        # has no target either. Each mean therefore names its own basis and its own count,
+        # and an empty basis returns None rather than zero: no number is readable, a zero
+        # is a lie that looks like a measurement.
+        by_maint = [r for r in settled if r["kcal_maintenance"] is not None]
+        by_target = [r for r in settled if r["kcal_target"] is not None]
+        # POSITIVE MEANS A REAL DEFICIT: maintenance minus what was eaten. Unrounded here
+        # and rounded once at each use, so the kg figure is not derived from a rounded
+        # kcal figure.
+        deficit_vs_maint = (sum(r["kcal_maintenance"] - (r["kcal"] or 0) for r in by_maint)
+                            / len(by_maint)) if by_maint else None
+        # POSITIVE MEANS HE ATE OVER THE PLAN. Adherence to an already-deficit-adjusted
+        # target, which is a different question from the balance above and is named as
+        # such - the two were previously the SAME number wearing the deficit's label.
+        adherence = (sum((r["kcal"] or 0) - r["kcal_target"] for r in by_target)
+                     / len(by_target)) if by_target else None
         runs = [r for r in rows if r["in_run_verdict"]]
         return {
             "days": rows,
@@ -305,37 +342,49 @@ def build(slug: str, today: date) -> dict:
                 "days_unlogged": len(rows) - len(done),
                 "protein_met_days": sum(1 for r in done if r["protein_met"]),
                 "fibre_respected_days": sum(1 for r in done if r["fibre_ok"]),
-                "mean_kcal": (round(sum(r["kcal"] or 0 for r in done) / len(done))
-                              if done else None),
-                "mean_target": (round(sum(r["kcal_target"] or 0 for r in done) / len(done))
-                                if done else None),
-                # Jamie: "over yersterday and tommorow it should balance out". A single day
-                # under target is not a verdict and never was one, so the rolling SUM is
-                # published across the days actually logged - the number he is really
-                # judging by - rather than leaving the page to imply that today is a score.
-                "energy_balance_kcal": (round(sum((r["kcal"] or 0) - (r["kcal_target"] or 0)
-                                                  for r in settled)) if settled else None),
-                # THE ROLLING DEFICIT, which is the figure that means anything in Ironman
-                # training. A single day swings by thousands - today's target is 5,356 and
-                # yesterday's was 2,491 - so a daily number is noise wearing a verdict.
+                "settled_days": len(settled),
+                # SETTLED, not logged. These two sat beside the balance figures on one
+                # card while averaging over a different set of days, so the mean intake
+                # included today's part-logged 743 kcal and the balance beside it did not:
+                # two denominators, one card, no way to tell from the page.
+                "mean_kcal": (round(sum(r["kcal"] or 0 for r in settled) / len(settled))
+                              if settled else None),
+                "mean_target": (round(sum(r["kcal_target"] for r in by_target)
+                                      / len(by_target)) if by_target else None),
+                # THE ROLLING ENERGY BALANCE, which is the figure that means anything in
+                # Ironman training. A single day swings by thousands - one day's
+                # maintenance is 5,218 and the next is 2,491 - so a daily number is noise
+                # wearing a verdict.
                 #
-                # Averaged over the days LOGGED, never over the window. An unlogged day is
+                # Against MAINTENANCE, and POSITIVE MEANS A REAL DEFICIT. The figure this
+                # replaces was intake minus the deficit-adjusted target, so it measured
+                # adherence, reported the opposite sign to its own name, and read "+73
+                # kcal/day deficit" on a day he had eaten 73 over the plan.
+                #
+                # Averaged over the days SETTLED, never over the window. An unlogged day is
                 # not a zero-intake day; treating it as one would report a catastrophic
                 # deficit for a day he simply did not write down, and he logs to spot-check
                 # rather than daily. Coverage is published alongside so the figure can never
                 # be read as a full week when it is two days.
-                "mean_deficit_kcal_day": (round(sum((r["kcal"] or 0) - (r["kcal_target"] or 0)
-                                                    for r in settled) / len(settled))
-                                          if settled else None),
-                "deficit_coverage": (f"{len(settled)} of {len(rows)} settled days"
+                "mean_deficit_vs_maintenance_kcal_day": (round(deficit_vs_maint)
+                                                         if deficit_vs_maint is not None
+                                                         else None),
+                "maintenance_basis_days": len(by_maint),
+                # 7,700 kcal per kg of body mass, the standard figure. POSITIVE MEANS
+                # WEIGHT DOWN, because it is derived from the deficit above. Stated as a
+                # rate so it can be checked against the ONLY measured quantity in the
+                # chain - the rolling morning weight - rather than believed on its own.
+                "implied_kg_per_week": (round(deficit_vs_maint * 7 / 7700.0, 2)
+                                        if deficit_vs_maint is not None else None),
+                # A SEPARATE QUESTION, separately named: did he eat what the plan asked?
+                # Positive means over the target. Jamie: "over yersterday and tommorow it
+                # should balance out" - so this is a rolling mean and a single day under
+                # target is not a verdict.
+                "target_adherence_kcal_day": (round(adherence) if adherence is not None
+                                              else None),
+                "target_basis_days": len(by_target),
+                "deficit_coverage": (f"{len(by_maint)} of {len(rows)} settled days"
                                      if rows else None),
-                # 7,700 kcal per kg of body mass, the standard figure. Stated as a rate so
-                # it can be checked against the ONLY measured quantity in the chain - the
-                # rolling morning weight - rather than believed on its own.
-                "implied_kg_per_week": (round(sum((r["kcal"] or 0) - (r["kcal_target"] or 0)
-                                                  for r in settled) / len(settled)
-                                                  * 7 / 7700.0, 2)
-                                        if settled else None),
                 "in_run_sessions": len(runs),
                 "in_run_on_target": sum(1 for r in runs
                                         if r["in_run_verdict"] in ("on_target",

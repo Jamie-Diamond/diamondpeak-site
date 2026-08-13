@@ -406,22 +406,12 @@
     bits.push(rest > 0 ? rest + ' rest day' + (rest === 1 ? '' : 's') + ' so far'
                        : 'no rest day yet this week');
 
-    /* The rolling energy figure, when there IS nutrition data. Read off state.nutr
-       defensively: this is the TRAINING week card, nutrition loads AFTER the training data
-       and may never load at all for an athlete without the flag - so it is absent far more
-       often than present. An earlier cut of this dereferenced a `w` that does not exist in
-       this scope, which threw a ReferenceError and took the whole Today view down for every
-       athlete: blank, not degraded. */
-    var nsum = (state.nutr && state.nutr.week && state.nutr.week.summary) || null;
-    if (nsum && nsum.mean_deficit_kcal_day != null) {
-      var md = nsum.mean_deficit_kcal_day;
-      bits.push((md >= 0 ? '+' : '') + Math.round(md).toLocaleString() +
-                ' kcal/day average · ' + esc(nsum.deficit_coverage || ''));
-      if (nsum.implied_kg_per_week != null) {
-        bits.push('implies ' + (nsum.implied_kg_per_week > 0 ? '+' : '') +
-                  nsum.implied_kg_per_week + ' kg/week');
-      }
-    }
+    /* The rolling energy figure USED to be appended here, as "+73 kcal/day average"
+       against the day's deficit-adjusted target. It measured adherence, not balance, and
+       carried the opposite sign to the word beside it - so a day eaten 73 kcal OVER the
+       plan read as a deficit. It now lives on the Food tab, next to the calories it is
+       computed from, in the two places Jamie asked for it. Not restated here: a figure
+       repeated on a card that does not own it is how the two drift apart. */
     return card('This week', '<div><p class="wsum">' + esc(bits.join(' · ')) + '</p>' +
       (target ? '<div class="bar' + (pct > 110 ? ' warn' : '') + '"><i style="width:' +
         Math.min(100, pct || 0) + '%"></i></div>' : '') + '</div>',
@@ -2459,6 +2449,59 @@
     return '';
   }
 
+  /* THE ROLLING ENERGY BALANCE, stated in WORDS rather than in a sign. What this replaces
+     printed "+73 kcal/day average" under the word deficit, where the plus actually meant he
+     had eaten 73 OVER his target: the sign said one thing and the label said the opposite.
+     A surplus now reads as a surplus and a deficit as a deficit, so there is nothing left
+     to misread by sign.
+
+     Every read is guarded. JSON published before these keys existed carries none of them,
+     and then the line does not appear at all rather than printing NaN or undefined. No
+     arithmetic beyond picking the word and the direction: the figures, their denominators
+     and their coverage are all computed in publish-nutrition-data.py, which is the only
+     place that knows which days are settled. */
+  function balanceLine(wk, label, terse) {
+    var s = (wk && wk.summary) || null;
+    if (!s || s.mean_deficit_vs_maintenance_kcal_day == null) { return ''; }
+    // Positive is a real deficit, as published: maintenance less what was eaten.
+    var d = Math.round(s.mean_deficit_vs_maintenance_kcal_day);
+    // `terse` drops "vs maintenance" for the top of the day card, where this sits under a
+    // 34px headline in 10px mono and a long line wraps to a second row on a phone. The
+    // basis is still stated once on the page, in the Block card where there is room.
+    var bits = [label + ': ' + (d === 0
+      ? 'level with maintenance'
+      : (d > 0 ? 'deficit ' : 'surplus ') + Math.abs(d).toLocaleString() +
+        ' kcal/day' + (terse ? '' : ' vs maintenance'))];
+    var kg = s.implied_kg_per_week;
+    // Rounded to 0.00 is not a trend, and printing "0.00 kg/wk down" would give a
+    // direction to a number that has none.
+    if (kg != null && Math.abs(kg) >= 0.01) {
+      bits.push('about ' + Math.abs(kg).toFixed(2) + ' kg/wk ' + (kg > 0 ? 'down' : 'up'));
+    }
+    // Coverage travels WITH the figure and is published beside it, so a two-day average
+    // can never be read as a week.
+    if (s.deficit_coverage) { bits.push(s.deficit_coverage); }
+    return bits.join(' · ');
+  }
+
+  /* A ZEROED DEFICIT MUST NOT BE SILENT. When the engine holds the target at maintenance
+     it says why, and until now that sentence never left the VM: the page showed a target
+     equal to maintenance and no reason.
+
+     Gated on the WARNING, never on deficit_applied_kcal === 0. A deficit that was never
+     enabled is also zero - which is most of this athlete's days - and triggering on the
+     zero would have the app assert a suppression that did not happen. Only these two
+     messages are surfaced: "deficit capped at ..." is engine chatter about a deficit that
+     WAS applied, and belongs in the logs. */
+  var DEFICIT_HELD = /^deficit (suppressed|dropped)/;
+  function deficitHeldNote(z) {
+    var w = (z && z.warnings) || [];
+    for (var i = 0; i < w.length; i++) {
+      if (DEFICIT_HELD.test(w[i])) { return w[i]; }
+    }
+    return '';
+  }
+
   function dayLabel(iso) {
     // Built from the ISO string, never from new Date(iso) alone: a bare date parses as UTC
     // and renders as the previous day for anyone west of it.
@@ -2538,12 +2581,24 @@
       return '<span class="chip"><b>' + Math.round(t[k] || 0) + '</b>' +
         esc(MACRO_SHORT[k]) + '</span>';
     }).join('');
+    /* Jamie, 13 Aug 2026: "move this somewhere near the total cals at the top. can repeat
+       at the bottom with the weight tracking." The rolling figure belongs beside the
+       calories it is made of - one day's total is not a verdict, and this is the number he
+       is actually judging by. It is repeated once, in the Block card, and nowhere else. */
+    var bal = balanceLine(n.week, '7-day', true);
+    // ONLY for the day this card claims to describe. Any row in the Recent-days table can
+    // be selected, and the selection survives a refresh - so a day-scoped warning printed
+    // unconditionally would put Monday's "resting HR elevated" under a heading that says
+    // "So far today". The suppression belongs to a day, and the reader is told which.
+    var held = isToday ? deficitHeldNote(z) : '';
     h += card('So far today',
       '<div class="fnow"><span class="fnow-n">' +
       Math.round(t.kcal || 0).toLocaleString() + '</span>' +
       '<span class="fnow-u">kcal</span><div class="chips">' + chips + '</div>' +
       (r ? '<span class="fnow-r">' + Math.round(r.remaining_kcal).toLocaleString() +
-        ' kcal left</span>' : '') + '</div>' +
+        ' kcal left</span>' : '') +
+      (bal ? '<span class="fnow-r">' + esc(bal) + '</span>' : '') +
+      (held ? '<span class="fnow-r">' + esc(held) + '</span>' : '') + '</div>' +
       '<div class="zones">' +
       zoneRow('Protein', t.protein_g, z && z.protein_g, day.pace_pct,
               r && r.macros.protein_g) +
@@ -2755,6 +2810,19 @@
       blockBody += '<p class="proj miss">Reaching ' + w.race_target_kg +
         ' kg would need about ' + proj.required_daily_kcal_to_reach.toLocaleString() +
         ' kcal/day every day, which the safety limits block.</p>';
+    }
+    /* The same figure again, here beside the weight, because this is where it gets checked.
+       Named as IMPLIED and not as measured: it is arithmetic on a food log with a 10-15%
+       estimate band on some items, and the morning weight above is the only measured
+       quantity in the chain. No observed kg/week beside it - the published JSON carries the
+       morning series but no trend figure, and deriving one here would be the page doing its
+       own science, which is exactly how a plausible wrong number gets onto it. */
+    // The full wording here, basis included: this card has the room the day headline does
+    // not, and the basis has to be stated somewhere on the page.
+    var balFull = balanceLine(n.week, '7-day');
+    if (balFull) {
+      blockBody += '<p class="prov">' + esc(balFull) +
+        '. Implied by the food log; the morning weight is the measured check.</p>';
     }
     // No body-fat trend, and no note explaining its absence: nobody needs telling
     // what is not on a page. The reason lives in Settings.
