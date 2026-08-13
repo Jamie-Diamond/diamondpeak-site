@@ -36,6 +36,7 @@ sys.path.insert(0, str(BASE / "ironman-analysis"))
 from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import acknowledgement as ack_lib   # §8.3 milestone triggers, evaluated in Python
+import ask_gate                    # asked-and-answered + one-question-per-message gate
 import ops_log
 import write_verify            # read-back verdicts for the Strava writes below
 import heat as heat_lib
@@ -134,10 +135,13 @@ def _build_prompt(slug, first_name, ftp, injuries, profile=None, run_hr_cap=150,
         f" Your ANALYSIS must be formatted EXACTLY as multiple output lines — each on its own line:"
         f" Line 1 (header): NxDUR / Xmin walk · avg GAP X:XX/km · +/-Xsec vs threshold ({threshold_pace}/km){_thr_note}"
         f" Lines 2..N+1 (one per run rep, use gap_pace if present else pace): Rep N: DUR · GAP X:XX/km · AVGbpm/MAXbpm"
-        f" Final lines: % HR ≤{run_hr_cap} bpm cap adherence · decoupling % if >40 min | Injury pain during and this morning? (0-10)"
+        f" Final lines: % HR ≤{run_hr_cap} bpm cap adherence · decoupling % if >40 min | Injury pain score during? (0-10)"
         " Else (continuous run): Line 1 = distance + avg GAP pace vs threshold — state +/- sec/km."
         f" Line 2 = % time HR ≤{run_hr_cap} bpm + aerobic decoupling % if >40 min."
-        " Line 3 = \"Injury pain score during and this morning? (0-10)\""
+        " Line 3 = \"Injury pain score during? (0-10)\""
+        " — the DURING score only. Never ask about this morning or the next morning:"
+        " the morning score belongs to the morning check-in, which tracks its own"
+        " answers, and asking here is how it came to be asked twice."
         if injuries else
         f"- Run (walk-run): If Strava laps show alternating run/walk laps (walk laps: pace >8:00/km or duration ≤90s):"
         f" Your ANALYSIS must be formatted EXACTLY as multiple output lines — each on its own line:"
@@ -599,6 +603,13 @@ def _queue_evening_ask(slug, activity_id, sport, name, question, state=None,
         "sport": sport or "",
         "name": name or "",
         "question": question.strip(),
+        # WHICH question this is, so the 21:00 consumer can check the right field.
+        # evening-checkin._field_already_captured currently drops the entry if ANY
+        # of rpe / injury_pain_during / nutrition_g_carb / feel came in, which errs
+        # toward not asking (safe) but will drop a fuelling ask because an RPE
+        # arrived. With this stamp that check can become per-field; the consumer is
+        # in evening-checkin.py and is not changed here.
+        "kind": ask_gate.classify_question(question) or "",
         "ts": datetime.now().isoformat(timespec="seconds"),
     })
     try:
@@ -648,6 +659,90 @@ def _defer_trailing_question(analysis, slug, activity_id, sport, name, state=Non
     _queue_evening_ask(slug, activity_id, sport, name, " ".join(stripped),
                        state, state_file)
     return "\n".join(lines).rstrip()
+
+
+def _load_history(slug):
+    """The athlete's Telegram transcript, or [] — used only for the volunteered
+    scan, which is why a failed read degrades to 'not volunteered' (ask) rather
+    than to silence."""
+    hist_f = BASE / "athletes" / slug / "telegram" / "history.json"
+    try:
+        data = json.loads(hist_f.read_text()) if hist_f.exists() else []
+    except Exception:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _filter_debrief_questions(analysis, entry, slug, history=None):
+    """Drop or fold the debrief's trailing asks: nothing already answered, and at
+    most ONE question in the message.
+
+    `history` is injected for the tests (scripts/test_question_fatigue.py) and
+    read off the athlete's transcript when omitted.
+
+    Runs BEFORE `_defer_trailing_question` on purpose. That function queues the
+    trailing question for the 21:00 check-in, so a question suppressed here must
+    be suppressed first or the suppression just moves the nag three hours later.
+
+    Deterministic for the reason the whole prompt is: every per-sport format ends
+    its block with a question line, and a model told to sometimes omit one
+    reformats the rest (`lib/plan_builder.py:5-7`). It edits only segments that
+    carry a '?', and leaves any question it cannot classify untouched — a garbled
+    debrief is worse than an extra ask.
+    """
+    if not analysis or not isinstance(entry, dict):
+        return analysis
+
+    history = _load_history(slug) if history is None else history
+    since = ask_gate.entry_synced_at(entry)
+
+    # First pass: what is being asked, and what of it is already known. Both the
+    # session-log entry and the athlete's own chat turns count as answered.
+    asked, answered = [], {}
+    for line in analysis.split("\n"):
+        for seg in line.split("|"):
+            kind = ask_gate.classify_question(seg)
+            if not kind:
+                continue
+            if kind not in asked:
+                asked.append(kind)
+            if kind not in answered:
+                answered[kind] = ask_gate.already_answered(
+                    entry, kind, history=history, since=since)
+
+    unanswered = [k for k in asked if not answered.get(k)]
+    keep = ask_gate.pick_question(entry, unanswered)
+
+    out_lines = []
+    for line in analysis.split("\n"):
+        segs = line.split("|")
+        rebuilt, dropped_any = [], False
+        for seg in segs:
+            kind = ask_gate.classify_question(seg)
+            if kind is None:
+                rebuilt.append(seg)
+                continue
+            if answered.get(kind):
+                # Fold the value in instead of asking for it again. An empty fold
+                # (nothing quotable) just drops the ask.
+                fold = ask_gate.known_value_line(entry, kind)
+                dropped_any = True
+                if fold:
+                    rebuilt.append(f" {fold} " if len(segs) > 1 else fold)
+                continue
+            if kind != keep:
+                dropped_any = True      # rides along in the next natural exchange
+                continue
+            # The one surviving question. The compound ankle ask still loses its
+            # morning half: that score has one owner, the morning check-in.
+            rebuilt.append(ask_gate.strip_morning_half(seg) if kind == ask_gate.ANKLE
+                           else seg)
+        if dropped_any and not any(s.strip() for s in rebuilt):
+            continue                    # the whole line was asks that are gone
+        out_lines.append("|".join(rebuilt).strip(" |") if dropped_any
+                         else "|".join(rebuilt))
+
+    return "\n".join(out_lines).rstrip()
 
 
 def _chat_has_recent_feedback(slug, lookback_minutes=30):
@@ -726,20 +821,42 @@ def _send_followup_nudge(state, session_log_f, chat_id, injuries=None, state_fil
         age_hours = (now - logged_dt).total_seconds() / 3600
         if 2 <= age_hours <= 24:
             name = e.get("name", "")
+            # ONE question, chosen in Python. The old branch asked "RPE for the
+            # run? (1-10) — and how did the ankle feel this morning?": two
+            # questions in one nudge, and the morning half belongs to the morning
+            # check-in, which tracks its own answers. Per-kind asked-and-answered
+            # on top of the coarse _chat_has_recent_feedback gate above — that one
+            # is any-feedback-in-30-minutes, this one is THIS question since THIS
+            # activity synced, so neither subsumes the other.
+            _hist = _load_history(slug) if slug else []
+            _since = ask_gate.entry_synced_at(e)
+            wanted = []
             if sport == "Run" and has_injury:
-                # ANALYSIS already asked for injury score — ask for RPE here instead
-                msg = f"RPE for the {name or 'run'}? (1–10) — and how did the ankle feel this morning?"
-            elif sport == "Run":
-                msg = f"RPE for the {name or 'run'}? (1–10)"
+                wanted.append(ask_gate.ANKLE)
+            wanted.append(ask_gate.RPE)
+            if (e.get("duration_min") or 0) >= ask_gate.LONG_SESSION_MIN:
+                wanted.append(ask_gate.NUTRITION)
+            wanted = [k for k in wanted
+                      if not ask_gate.already_answered(e, k, history=_hist, since=_since)]
+            kind = ask_gate.pick_question(e, wanted)
+            if kind is None:
+                # Everything this nudge could ask for is already known. Mark it so
+                # the stub is not revisited every cycle.
+                nudged_ids.add(aid)
+                state["nudged_ids"] = list(nudged_ids)
+                if state_file:
+                    save_state(state, state_file)
+                continue
+            label = name or {"Run": "run", "Swim": "swim",
+                             "Ride": "ride"}.get(sport, "last session")
+            if kind == ask_gate.ANKLE:
+                msg = f"Ankle score during the {label}? (0–10)"
+            elif kind == ask_gate.NUTRITION:
+                msg = f"Fuelling check for the {label} — roughly g carbs/hr?"
             elif sport == "Swim":
-                msg = f"RPE for the {name or 'swim'}? And how did it feel overall?"
-            elif sport == "Ride" and (e.get("duration_min") or 0) >= 90:
-                if e.get("nutrition_g_carb") is None:
-                    msg = f"Fuelling check for the {name or 'ride'} — roughly g carbs/hr?"
-                else:
-                    msg = f"RPE for the {name or 'ride'}? (1–10)"
+                msg = f"How did the {label} feel? (RPE 1–10 if you have it)"
             else:
-                msg = f"RPE for {name or 'last session'}? (1–10)"
+                msg = f"RPE for the {label}? (1–10)"
             if slug and _in_evening_window():
                 # Inside the evening window this nudge is exactly the push being merged
                 # away: it would land between the 20:30 brief and the 21:00 check-in. Queue
@@ -1453,16 +1570,21 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     if not already_discussed and analysis and analysis != "none":
         # Evening window: the trailing question moves to the 21:00 check-in.
         _sport_now = ""
+        _entry_now = {}
         try:
             for _e in json.loads(session_log_f.read_text()):
                 if str(_e.get("activity_id", "")) == activity_id:
                     _sport_now = _e.get("sport", "") or ""
                     _name_now = _e.get("name", "") or ""
+                    _entry_now = _e
                     break
             else:
                 _name_now = ""
         except Exception:
             _name_now = ""
+        # Asked-and-answered, and one question at most. BEFORE the evening defer,
+        # so a suppressed ask is not queued for 21:00 instead of dropped.
+        analysis = _filter_debrief_questions(analysis, _entry_now, slug)
         analysis = _defer_trailing_question(analysis, slug, activity_id, _sport_now,
                                             _name_now, state=state, state_file=state_file)
         if not analysis:
@@ -1514,7 +1636,22 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
                     break
         except Exception:
             pass
-    if (new_entry and not already_discussed
+    # The keyboard is a SECOND message carrying a question, so it obeys the same
+    # asked-and-answered rule as the debrief: if everything it captures is already
+    # filled — the analysis fills these from chat when the athlete volunteered them
+    # — then offering the buttons is the re-ask in button form. Only when ALL of
+    # them are known: a long ride whose RPE is in but whose fuelling is not still
+    # gets the keyboard, because the carb buttons are the cheap way to answer.
+    _kb_kinds = [ask_gate.ANKLE if new_entry and new_entry.get("sport") == "Run" and injuries
+                 else ask_gate.RPE]
+    if new_entry and (new_entry.get("duration_min") or 0) >= ask_gate.LONG_SESSION_MIN \
+            and new_entry.get("sport") == "Ride":
+        _kb_kinds.append(ask_gate.NUTRITION)     # matches _quick_log_keyboard's carb row
+    _kb_known = bool(new_entry) and all(
+        ask_gate.already_answered(new_entry, _k, history=_load_history(slug),
+                                  since=ask_gate.entry_synced_at(new_entry))
+        for _k in _kb_kinds)
+    if (new_entry and not already_discussed and not _kb_known
             and new_entry.get("sport", "").lower() not in _WATER_SPORTS):
         sport = new_entry.get("sport", "")
         dur = new_entry.get("duration_min", 0) or 0

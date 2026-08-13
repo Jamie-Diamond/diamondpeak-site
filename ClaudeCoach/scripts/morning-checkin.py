@@ -17,6 +17,7 @@ sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "telegram"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 import claude_call
+import ask_gate                 # standing-ask backoff (weight, ankle score)
 from coaching_levels import level_block as _level_block
 import illness as illness_lib   # structured illness/compromised flag (surfacing gate)
 import weekly_availability     # per-week declared hours (Sunday ask + resolver)
@@ -30,7 +31,7 @@ import races as races_lib
 TOOLS = "Read,Bash"
 
 
-def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block=""):
+def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
 
@@ -55,21 +56,35 @@ def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries
                 "'period started yesterday') so cycle-aware planning stays accurate.\"\n"
             )
 
+    # WHICH QUESTION, DECIDED IN PYTHON. `ask_weight` and `ask_ankle` arrive already
+    # gated by lib/ask_gate: eligibility (a weight reading older than 3 days, a run
+    # stub still missing its morning score) AND the unanswered-twice backoff. The
+    # staleness check used to be the model's job — it read current-state.json and
+    # decided — which meant the backoff counter would have been counting a condition
+    # nothing could verify. Nothing here re-checks it.
     morning_pain_question = ""
-    if injuries and ask_morning_pain:
+    if injuries and ask_ankle and ask_morning_pain:
         morning_pain_question = (
             "- FIRST PRIORITY (overrides the questions below): ask \"Ankle score this morning? (0-10)\" "
             "— record the answer as injury_pain_next_morning on yesterday's run in session-log.json.\n"
         )
     injury_question = ""
-    if injuries and not ask_morning_pain:
+    if injuries and ask_ankle and not ask_morning_pain:
         # Suppressed when the morning-score question fires: at most ONE ankle question per card.
         injury_question = (
             "- If a run is planned today AND ankle.pain_next_morning in current-state.json is >0 "
             "(do NOT use pain_during — that is a run-specific score, not a morning score): "
             "ask \"Injury pain score before heading out? (0-10)\"\n"
         )
-    injury_question += "- Else if no weight reading in the last 3 days: ask \"Weight this morning?\""
+    if ask_weight:
+        # "Else" only when there is something to be else to: with the ankle branches
+        # gated off, a bare "- Else:" is an instruction with no antecedent.
+        _lead = "Else: ask" if (morning_pain_question or injury_question) else "Ask"
+        injury_question += (
+            f"- {_lead} \"Weight this morning?\" (the last-3-days staleness check is "
+            "ALREADY done — do not re-check it and do not skip the question because "
+            "current-state.json looks recent to you)"
+        )
     injury_question = cycle_question + morning_pain_question + injury_question
 
     injuries_note = (
@@ -162,9 +177,12 @@ Step 2 — Read:
 {"- ClaudeCoach/athletes/" + slug + "/heat-log.json (count entries in current ISO week to get sessions_this_week)" if heat_protocol else ""}
 - ClaudeCoach/athletes/{slug}/session-log.json — only if today's planned event is a Ride or Brick >90 min: extract the last 4 entries with sport Ride/GravelRide/Brick, duration_min ≥ 90, and nutrition_g_carb set. Compute each g_per_hr and the avg.
 
-Step 3 — Determine ONE question to ask (or none):
-{injury_question}
-- Else: no question
+Step 3 — The question. AT MOST ONE in the whole card, and ONLY from this list — the
+list is already filtered for what this athlete has recently answered and for questions
+they have stopped answering, so anything absent from it must NOT be asked, invented or
+reworded back in:
+{injury_question or "- (none authorised today)"}
+- Else: no question. A card with no question is a complete card.
 
 Step 4 — Output the morning card in Telegram Markdown (no preamble, no sign-off):
 
@@ -199,6 +217,8 @@ Rules:
 - If no planned session: say "Rest day" and skip the Today line.
 - Omit any section that has nothing to say — do not pad with dashes or "N/A".
 - Never ask for subjective mood, fatigue, or motivation scores.
+- Never put two questions in the card, and never re-ask something the athlete already
+  told you — if a value is in the data above, state it or leave it, don't ask for it.
 - The countdown line appears exactly once, at the end.
 Wrap your entire output in <telegram> and </telegram> tags. Output nothing outside those tags — no preamble, no reasoning, no tool commentary."""
 
@@ -566,6 +586,60 @@ def run_athlete(slug, athlete_cfg):
         except Exception:
             pass
 
+    # STANDING-ASK BACKOFF (lib/ask_gate). Weight was asked four mornings running with
+    # nothing coming back (13 Aug audit) because nothing counted the silence: the card
+    # is regenerated from scratch each day and the only gate was "no reading in 3 days",
+    # which an athlete who has stopped weighing in satisfies forever.
+    #
+    # Eligibility is computed here, in Python, so the counter has something real to
+    # count; the backoff record is persisted NOW, before the send, because the reset and
+    # the miss are facts about mornings that have already happened. What is deliberately
+    # NOT recorded yet is that the ask went out — the card is generative and the model can
+    # still drop the question, so `last_asked` is written after the send, from the text.
+    _cs_data, _sl_data = {}, []
+    try:
+        _cs_f = adir / "current-state.json"
+        if _cs_f.exists():
+            _cs_data = json.loads(_cs_f.read_text())
+    except Exception:
+        pass
+    try:
+        _sl_f2 = adir / "session-log.json"
+        if _sl_f2.exists():
+            _sl_data = json.loads(_sl_f2.read_text())
+    except Exception:
+        pass
+
+    ask_weight = False
+    ask_ankle = bool(injuries)
+    passive_lines = []
+    try:
+        _gate_state = ask_gate.load_state_from_dir(adir)
+        for _q, _eligible in ((ask_gate.WEIGHT,
+                               ask_gate.weight_reading_due(_cs_data, date.today())),
+                              (ask_gate.ANKLE_SCORE, bool(injuries))):
+            _gate_state, _dec = ask_gate.decide(
+                _gate_state, _q, today=date.today(),
+                answered_on=ask_gate.answer_date(_q, current_state=_cs_data,
+                                                 session_log=_sl_data))
+            if _q == ask_gate.WEIGHT:
+                ask_weight = _eligible and _dec["ask"]
+            else:
+                ask_ankle = _eligible and _dec["ask"]
+            # The passive line only makes sense for a question we would otherwise be
+            # asking: no point telling an athlete with no injury that ankle scores have
+            # gone quiet.
+            if _eligible and not _dec["ask"] and _dec["passive"]:
+                passive_lines.append((_q, _dec["passive"]))
+        ask_gate.save_state_in(adir, _gate_state)
+    except Exception as exc:
+        # Fail OPEN: an unreadable gate must not silence the card's only question.
+        print(f"[{slug}] standing-ask gate failed ({exc}) — asking as normal",
+              file=sys.stderr)
+        ask_weight = ask_gate.weight_reading_due(_cs_data, date.today())
+        ask_ankle = bool(injuries)
+        passive_lines = []
+
     # Wait for Garmin sync only if the athlete has a sleep device and it hasn't synced yet.
     # Athletes with no sleep device (sleepSecs always null) send immediately.
     if wellness_line is None and has_sleep_device and datetime.now().hour < 9:
@@ -621,6 +695,7 @@ def run_athlete(slug, athlete_cfg):
                            fuel_target_g_hr=_fuel_target_g_hr,
                            nutrition_race=int(athlete_cfg.get("nutrition_target_g_hr") or 90),
                            ask_morning_pain=needs_morning_pain_ask,
+                           ask_weight=ask_weight, ask_ankle=ask_ankle,
                            heat_accl_pct=heat_accl_pct, heat_accl_trend=heat_accl_trend,
                            long_run_cap_km=_long_run_cap_km,
                            wellness_finalized=wellness_finalized)
@@ -655,12 +730,14 @@ def run_athlete(slug, athlete_cfg):
     # the already-answered gate and the illness gate. The existing per-athlete daily
     # sentinel already guarantees once-per-day, so this needs no idempotence of its
     # own. Zero extra pushes: the morning card was going out anyway.
+    _hours_ask_appended = False
     if output and date.today().weekday() == 6:
         try:
             _ask = weekly_availability.sunday_hours_ask(
                 slug, date.today() + timedelta(days=1), coaching_level=coaching_level)
             if _ask:
                 output = f"{output}\n\n{_ask}"
+                _hours_ask_appended = True
                 # Record that the ask went out, so telegram/bot.py can attribute a later
                 # BARE number ("14") to it. The bot's contextual tier must rest on a
                 # recorded send rather than inferring one from the calendar: this branch
@@ -684,10 +761,36 @@ def run_athlete(slug, athlete_cfg):
                           f"to profile.max_hours_per_week for this athlete",
                           athlete=slug)
 
+    # BACKED-OFF ASK -> ONE PASSIVE LINE, appended in Python for the same reason the
+    # Sunday ask above is: the bookkeeping says it was said, so it has to actually be
+    # said. It is a statement, not a question — nothing is expected back, and an answer
+    # arriving anyway resets the counter through `answer_date` like any other.
+    # At most one per card, and never on a Sunday that already carries the hours ask:
+    # two appended lines is the pile-up this whole change exists to stop.
+    _passive_sent_for = None
+    if output and passive_lines and not _hours_ask_appended:
+        _passive_sent_for, _passive_text = passive_lines[0]
+        output = f"{output}\n\n_{_passive_text}_"
+
     sent = False
     if output:
         sent = notify(output, chat_id, slug=slug)
         if sent:
+            # RECORD FROM THE TEXT, NOT THE INTENT. The card is generative: Python
+            # authorising a question is not the same as the question shipping, and
+            # recording an ask that was never sent would count a miss against silence
+            # we caused ourselves and trip the backoff on an athlete who answers.
+            for _q in ask_gate.STANDING_QUESTIONS:
+                if ask_gate.asked_in_text(_q, output):
+                    try:
+                        ask_gate.note_asked_in(adir, _q, date.today())
+                    except Exception as exc:
+                        print(f"[{slug}] could not record {_q} ask: {exc}", file=sys.stderr)
+            if _passive_sent_for:
+                try:
+                    ask_gate.note_passive_in(adir, _passive_sent_for, date.today())
+                except Exception as exc:
+                    print(f"[{slug}] could not record passive line: {exc}", file=sys.stderr)
             ops_log.record_run("morning-checkin", athlete=slug, ok=True, detail="card sent")
             try:
                 _log_to_history(slug, output)
