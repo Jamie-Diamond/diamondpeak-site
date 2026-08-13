@@ -640,3 +640,261 @@ check("a real food still excludes",
 if FAILED:
     print(f"{len(FAILED)} FAILED"); sys.exit(1)
 print("all checks passed")
+
+
+# --- the log-editing verbs (13 Aug 2026) -----------------------------------------------
+# Four edits that had to go through a human operator. The three that touch the bot's own
+# wiring are checked here: remembered product facts reaching the LADDER, a stated time
+# reaching the STORE, and a named entry that matches nothing asking rather than guessing.
+
+print("\n--- remembered product facts reach the resolution ladder ---")
+# "A rego scoop is half a portion" is only worth storing if it is then consulted. The
+# injection is deterministic and code-side: a stored number, never a model guess at
+# logging time.
+facts = {"sis rego": {"scoop_g": 25.0}, "sis choco": {"means": "SiS GO Energy Choco Fudge bar"}}
+planned = [{"canonical_name": "SiS REGO Rapid Recovery", "portion_g": None, "count": None,
+            "search_terms": ["SiS REGO Rapid Recovery"]}]
+out = NB.apply_product_facts(facts, planned, said="1 scoop sis rego")
+check("a remembered scoop weight becomes the portion", out[0]["portion_g"] == 25.0)
+check("and says where the figure came from", "told me" in (out[0].get("portion_from_fact") or ""))
+# The word "scoop" is stripped by the interpretation, so the fact has to be matched
+# against HIS wording as well as the canonical name.
+check("the scoop word is read from what he actually said",
+      NB.apply_product_facts(facts, [{"canonical_name": "SiS REGO Rapid Recovery",
+                                      "portion_g": None,
+                                      "search_terms": ["sis rego"]}],
+                             said="sis rego, one scoop")[0]["portion_g"] == 25.0)
+check("two scoops is two of them",
+      NB.apply_product_facts(facts, [{"canonical_name": "sis rego", "portion_g": None,
+                                      "count": 2, "search_terms": ["sis rego"]}],
+                             said="2 scoops of rego")[0]["portion_g"] == 50.0)
+# A fact about a SCOOP is not a fact about a bar, and a stated amount outranks a
+# remembered one - the fact exists to fill a gap, not to overrule him.
+check("no scoop in the words means no injected portion",
+      NB.apply_product_facts(facts, [{"canonical_name": "sis rego bar",
+                                      "portion_g": None,
+                                      "search_terms": ["sis rego bar"]}],
+                             said="a sis rego bar")[0]["portion_g"] is None)
+check("a stated gram amount is never overwritten",
+      NB.apply_product_facts(facts, [{"canonical_name": "sis rego", "portion_g": 60,
+                                      "search_terms": ["sis rego"]}],
+                             said="60g scoop of sis rego")[0]["portion_g"] == 60)
+check("an unknown product is left entirely alone",
+      NB.apply_product_facts(facts, [{"canonical_name": "porridge", "portion_g": None,
+                                      "search_terms": ["porridge"]}],
+                             said="a scoop of porridge")[0]["portion_g"] is None)
+check("no facts at all is a no-op",
+      NB.apply_product_facts({}, [{"canonical_name": "sis rego", "portion_g": None}],
+                             said="a scoop")[0]["portion_g"] is None)
+
+aliased = NB.apply_product_facts(facts, [{"canonical_name": "sis choco",
+                                          "portion_g": None,
+                                          "search_terms": ["sis choco", "sis choco bar"]}],
+                                 said="had a sis choco")
+check("a means alias rewrites the canonical name",
+      aliased[0]["canonical_name"] == "SiS GO Energy Choco Fudge bar")
+# offer_planned passes queries=it["search_terms"] into the ladder, so an alias applied to
+# the name alone would never reach a search - the same computed-here-lost-at-the-hand-off
+# shape that dropped the photo hint.
+check("and rewrites the search terms, which are what the ladder actually searches",
+      aliased[0]["search_terms"]
+      == ["SiS GO Energy Choco Fudge bar", "SiS GO Energy Choco Fudge bar bar"])
+check("the alias also rewrites a plain text item, as offer_items gets them",
+      NB.apply_product_facts(facts, [{"text": "sis choco"}], said="sis choco")[0]["text"]
+      == "SiS GO Energy Choco Fudge bar")
+
+print("\n--- and the injection is wired into the call sites, not merely defined ---")
+# The library being right while the caller drops the value on the floor is the recurring
+# failure in this file, so the wiring is asserted rather than assumed.
+for fn in (NB.offer_planned, NB.offer_items):
+    src = inspect.getsource(fn)
+    check(f"{fn.__name__} applies the facts before resolving",
+          "apply_product_facts(remembered_facts(ctx)" in src)
+check("offer_planned passes the athlete's own wording in",
+      "said=t" in inspect.getsource(NB.handle_text))
+# The model is now asked what a correction means even with NOTHING logged, because a fact
+# about a product is not a fact about an entry. That makes target_item None where it used
+# to be guaranteed, and the meal branch dereferences it.
+check("the meal branch still checks it has an entry to file",
+      'and not pend and target_item:' in inspect.getsource(NB.handle_text))
+check("the model is consulted even when nothing is logged",
+      "target_item or {}" in inspect.getsource(NB.handle_text))
+
+print("\n--- a stated time reaches the store, built from the LOCAL day ---")
+# "Add second slice of toast with butter at 1350" was stamped with the moment the message
+# arrived, so the app filed it under the wrong meal.
+stated_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-at-")))
+
+
+class FakeCtxCommit:
+    """Only what commit_pending and commit_one touch. publish_now and the fuel write-back
+    are stubbed out at module level below, so nothing here reaches git or the network."""
+    slug = "test"
+    table = None
+    cofid = None
+    fetchers = {}
+
+    def __init__(self, store):
+        self.store = store
+        self.athlete_dir = store.dir.parent
+
+
+sent_msgs = []
+# NB.tg and NB.NR are the SAME module objects this file imported at the top, so these
+# stubs are global and are put back at the end of the file. The golden fixtures were
+# silently green for a while because a stub like this was left in place and every later
+# check ran against it instead of the real code.
+_REAL = {"send": NB.tg.send, "publish_now": NB.publish_now,
+         "today_block": NB.today_block, "cache_resolved": NB.NR.cache_resolved,
+         "_chat": NB._chat}
+NB.tg.send = lambda token, chat, text, **k: sent_msgs.append(text)
+NB.publish_now = lambda ctx: None
+NB.today_block = lambda ctx, day: "(totals)"
+NB.NR.cache_resolved = lambda store, item: None
+NB._chat = lambda ctx, role, text: None
+
+_ctx = FakeCtxCommit(stated_store)
+timed = {"raw_text": "second slice of toast with butter", "_raw": "toast with butter",
+         "resolved_name": "Toast with butter", "kcal": 180.0, "protein_g": 5.0,
+         "carb_g": 20.0, "fat_g": 9.0, "confidence": "label", "source_rung": "cofid",
+         "_at": "13:50"}
+NB.commit_pending(_ctx, {"batch": [timed]}, TODAY, "token", 1)
+entry = stated_store.get_day(TODAY)["entries"][0]
+check("the stated time becomes the entry's logged_at",
+      entry["logged_at"] == f"{TODAY.isoformat()}T13:50")
+check("which is the LOCAL day, not the server's clock",
+      entry["logged_at"].startswith(TODAY.isoformat()))
+# The default has to stay now-time, or every untimed log lands at midnight and reads as
+# breakfast.
+NB.commit_pending(_ctx, {"batch": [dict(timed, _at=None, resolved_name="Banana")]},
+                  TODAY, "token", 1)
+untimed = stated_store.get_day(TODAY)["entries"][1]
+check("an item with no stated time still gets a real clock time",
+      untimed["logged_at"][11:16] not in ("", "00:00"))
+check("the offer says which time it will use, before anything is written",
+      NB._stated_time_note([timed]) == ["_Logging at 13:50, as you said._"])
+check("and says nothing when no time was stated", NB._stated_time_note([{}]) == [])
+
+print("\n--- a named entry that matches nothing asks, rather than guessing ---")
+# find_entry falls back to the most recent entry, which is right for "that" and wrong for a
+# name it could not find: silently retiming the wrong entry looks entirely correct in the
+# reply. Same guard the delete branch already has.
+guard_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-which-")))
+guard_store.add_entry(TODAY, raw_text="rye bread", resolved_name="Rye bread", kcal=83,
+                      confidence="label", source_rung="manual")
+guard_store.add_entry(TODAY, raw_text="160g chicken", resolved_name="Chicken breast",
+                      kcal=265, confidence="label", source_rung="manual",
+                      portion_g=160)
+# A third entry AFTER the chicken, deliberately. With the chicken last, every check below
+# would also pass on find_entry's fall-back-to-latest, which matches resolved_name only -
+# so "the 160g" would have been green while a real day with anything logged afterwards
+# said "I cannot see 'the 160g'".
+guard_store.add_entry(TODAY, raw_text="flat white", resolved_name="Flat white", kcal=120,
+                      confidence="label", source_rung="cofid")
+gctx = FakeCtxCommit(guard_store)
+sent_msgs.clear()
+check("a name that matches nothing returns no entry",
+      NB.entry_he_means(gctx, TODAY, "the porridge", "retime", "token", 1) is None)
+check("and says so, listing what today actually has",
+      sent_msgs and "cannot see" in sent_msgs[-1] and "Rye bread" in sent_msgs[-1])
+check("a name that matches finds THAT entry, not the latest",
+      (NB.entry_he_means(gctx, TODAY, "initial rye bread", "retime", "token", 1) or {})
+      .get("resolved_name") == "Rye bread")
+check("no name at all means the most recent",
+      (NB.entry_he_means(gctx, TODAY, "", "retime", "token", 1) or {})
+      .get("resolved_name") == "Flat white")
+# "The initial rye bread" is the case where taking the newest match is wrong, and
+# "initial" is a word no matcher here understands - so two matches asks.
+guard_store.add_entry(TODAY, raw_text="rye bread again", resolved_name="Rye bread",
+                      kcal=83, confidence="label", source_rung="manual")
+sent_msgs.clear()
+check("two entries matching the same name asks which one",
+      NB.entry_he_means(gctx, TODAY, "initial rye bread", "retime", "token", 1) is None
+      and "Which one" in sent_msgs[-1])
+guard_store.remove_entry(TODAY, guard_store.get_day(TODAY)["entries"][-1]["id"])
+# "The 160g" names the AMOUNT. Matching only against resolved_name would have asked him
+# which entry he meant while pointing straight at it.
+check("an amount identifies an entry as well as a name does",
+      (NB.entry_he_means(gctx, TODAY, "the 160g", "rename", "token", 1) or {})
+      .get("resolved_name") == "Chicken breast")
+empty_ctx = FakeCtxCommit(S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-empty-"))))
+sent_msgs.clear()
+check("an empty day says nothing is logged rather than failing",
+      NB.entry_he_means(empty_ctx, TODAY, "", "retime", "token", 1) is None
+      and "Nothing logged today to retime" in sent_msgs[-1])
+
+print("\n--- retime and rename, end to end against the store ---")
+sent_msgs.clear()
+handled = NB.apply_retime(gctx, {"kind": "retime", "time": "08:30",
+                                 "which": "initial rye bread"}, TODAY, "token", 1)
+rye = [e for e in guard_store.get_day(TODAY)["entries"]
+       if e["resolved_name"] == "Rye bread"][0]
+check("retime moves the named entry's timestamp",
+      handled and rye["logged_at"] == f"{TODAY.isoformat()}T08:30")
+check("and confirms it in one line", "08:30" in sent_msgs[-1])
+check("the entry he did not name keeps its own timestamp",
+      guard_store.get_day(TODAY)["entries"][1]["logged_at"][11:16] != "08:30")
+
+sent_msgs.clear()
+handled = NB.apply_rename(gctx, {"kind": "rename", "name": "BBQ chicken, 160g pack",
+                                 "which": "the 160g"}, TODAY, "token", 1)
+renamed = guard_store.get_day(TODAY)["entries"][1]
+check("rename renames the entry he pointed at",
+      handled and renamed["resolved_name"] == "BBQ chicken, 160g pack")
+check("and keeps the figures he read off the pack", renamed["kcal"] == 265.0)
+check("the reply says the figures were kept", "Kept your figures" in sent_msgs[-1])
+
+print("\n--- remember stores the fact, and rescales when that is what it also fixes ---")
+sent_msgs.clear()
+rem_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-rem-")))
+rem_store.add_entry(TODAY, raw_text="1 scoop sis rego", resolved_name="SiS REGO",
+                    kcal=100, carb_g=23, confidence="label", source_rung="manual")
+rctx = FakeCtxCommit(rem_store)
+handled = NB.apply_remember(rctx, {"kind": "remember", "product": "sis rego",
+                                   "field": "scoop_g", "value": 25.0},
+                            None, TODAY, "token", 1)
+check("the fact is stored", handled
+      and rem_store.product_facts()["sis rego"]["scoop_g"] == 25.0)
+check("and the reply states exactly what was stored, so a wobble is visible",
+      "25 g" in sent_msgs[-1] and "sis rego" in sent_msgs[-1])
+handled = NB.apply_remember(rctx, {"kind": "remember", "product": "sis choco",
+                                   "field": "means",
+                                   "value": "SiS GO Energy Choco Fudge bar"},
+                            None, TODAY, "token", 1)
+check("an alias is confirmed in its own words",
+      handled and "SiS GO Energy Choco Fudge bar" in sent_msgs[-1])
+check("an unusable fact is refused rather than stored",
+      NB.apply_remember(rctx, {"kind": "remember", "product": "sis rego",
+                               "field": "kcal", "value": 80}, None, TODAY, "token", 1)
+      is False)
+
+# The REGO message does BOTH: remember that a scoop is 25 g, and fix this entry to 25 g.
+sent_msgs.clear()
+both_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-both-")))
+both_store.add_entry(TODAY, raw_text="1 scoop sis rego", resolved_name="SiS REGO",
+                     kcal=200, carb_g=46, confidence="label", source_rung="manual")
+bctx = FakeCtxCommit(both_store)
+both_store.update_entry(TODAY, both_store.get_day(TODAY)["entries"][0]["id"],
+                        portion_used_g=50.0)
+handled = NB.apply_remember(bctx, {"kind": "remember_and_rescale", "product": "sis rego",
+                                   "field": "scoop_g", "value": 25.0, "grams": 25.0},
+                            None, TODAY, "token", 1)
+after = both_store.get_day(TODAY)["entries"][0]
+check("the fact is stored and the entry rescaled in one go",
+      handled and both_store.product_facts()["sis rego"]["scoop_g"] == 25.0
+      and after["kcal"] == 100.0)
+check("the rescale is arithmetic on the entry, not a fresh search",
+      after["resolved_name"] == "SiS REGO" and after["portion_used_g"] == 25.0)
+
+# Put the real functions back, so anything appended after this block tests the code rather
+# than the stubs.
+NB.tg.send, NB.publish_now = _REAL["send"], _REAL["publish_now"]
+NB.today_block, NB._chat = _REAL["today_block"], _REAL["_chat"]
+NB.NR.cache_resolved = _REAL["cache_resolved"]
+check("the stubs are restored for whatever is appended next",
+      NB.tg.send is _REAL["send"] and NB.NR.cache_resolved is _REAL["cache_resolved"])
+
+print()
+if FAILED:
+    print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
+print("all checks passed")

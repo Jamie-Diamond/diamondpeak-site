@@ -349,3 +349,119 @@ with tempfile.TemporaryDirectory() as td:
 if FAILED:
     print(f"{len(FAILED)} FAILED"); sys.exit(1)
 print("all checks passed")
+
+
+# --- the log-editing verbs (13 Aug 2026) -----------------------------------------------
+# Retiming and renaming an entry, and remembering a lasting fact about a product. All
+# three were edits Jamie had to make through a human operator because the store had no
+# path for them.
+
+print("\n--- an entry's time and meal are patchable, its identity is not ---")
+D = date(2026, 8, 13)
+with tempfile.TemporaryDirectory() as td:
+    st = S.NutritionStore(Path(td))
+    e = st.add_entry(D, raw_text="rye bread", resolved_name="Rye bread", kcal=83,
+                     confidence="label", source_rung="manual",
+                     logged_at="2026-08-13T14:02")
+    # The app buckets entries into meals by the clock, so an 08:30 slice written up at
+    # 14:02 read as lunch and nothing could move it.
+    done = st.update_entry(D, e["id"], logged_at="2026-08-13T08:30")
+    check("logged_at is patchable", done["logged_at"] == "2026-08-13T08:30")
+    check("and it persists to the month file",
+          json.loads((st.dir / "2026-08.json").read_text())
+          ["days"]["2026-08-13"]["entries"][0]["logged_at"] == "2026-08-13T08:30")
+    check("meal is patchable too",
+          st.update_entry(D, e["id"], meal="breakfast")["meal"] == "breakfast")
+    check("identity is still refused, whatever else is in the same patch",
+          st.update_entry(D, e["id"], logged_at="2026-08-13T09:00",
+                          resolved_name="HACKED")["resolved_name"] == "Rye bread")
+    # Deliberately NOT re-sorted: /undo pops the tail and "delete that" reads the last
+    # entry, both meaning "the thing you logged most recently".
+    later = st.add_entry(D, raw_text="banana", resolved_name="Banana", kcal=95,
+                         confidence="label", source_rung="cofid",
+                         logged_at="2026-08-13T15:00")
+    st.update_entry(D, later["id"], logged_at="2026-08-13T06:00")
+    check("a retime does not reorder the day",
+          st.find_entry(D, "")["id"] == later["id"])
+
+print("\n--- rename keeps HIS figures, and only where they are his ---")
+with tempfile.TemporaryDirectory() as td:
+    st = S.NutritionStore(Path(td))
+    # "The 160g was a pack of bbq chicken": the figures came off the pack he was holding,
+    # so the name was the only thing wrong with the entry.
+    own = st.add_entry(D, raw_text="160g chicken", resolved_name="Chicken breast, raw",
+                       kcal=265, protein_g=50, confidence="label", source_rung="manual",
+                       ingredients="chicken breast", species=[{"id": "x", "score": 1}])
+    done = st.rename_entry(D, own["id"], "BBQ chicken, 160g pack")
+    check("a manual entry renames", done and done["resolved_name"] == "BBQ chicken, 160g pack")
+    check("and keeps the figures he read off the pack", done["kcal"] == 265.0)
+    check("the old name is kept as provenance",
+          done["renamed_from"] == "Chicken breast, raw")
+    # The old ingredients described a product this entry is not, and the plant count is
+    # built from them.
+    check("the wrong product's ingredients and species go with the wrong name",
+          done["ingredients"] == "" and done["species"] == [])
+    check("supplied ingredients are kept when there are some",
+          st.rename_entry(D, own["id"], "BBQ chicken", ingredients="chicken, bbq sauce")
+          ["ingredients"] == "chicken, bbq sauce")
+    check("a rename to nothing is refused", st.rename_entry(D, own["id"], "  ") is None)
+    check("an unknown id is refused", st.rename_entry(D, "nope", "x") is None)
+
+    # A lookup's figures are only as good as the name that produced them, so renaming one
+    # would leave a food wearing another food's macros. That is a reidentify, not a rename.
+    looked_up = st.add_entry(D, raw_text="chicken", resolved_name="Chicken, roasted",
+                             kcal=190, confidence="database", source_rung="usda")
+    check("a database entry refuses to be renamed",
+          st.rename_entry(D, looked_up["id"], "BBQ chicken") is None)
+    check("and is left untouched by the refusal",
+          st.get_day(D)["entries"][-1]["resolved_name"] == "Chicken, roasted")
+    est = st.add_entry(D, raw_text="chicken", resolved_name="Chicken, guessed",
+                      kcal=190, confidence="estimate", source_rung="llm")
+    check("an estimate refuses too", st.rename_entry(D, est["id"], "BBQ chicken") is None)
+    # CoFID and retailer listings are label-grade, and a name he corrects on one of those
+    # is the same case as his own pack reading: the figures stand.
+    cofid = st.add_entry(D, raw_text="butter", resolved_name="Butter, salted", kcal=37,
+                        confidence="label", source_rung="cofid")
+    check("a label-grade entry renames whatever rung produced it",
+          st.rename_entry(D, cofid["id"], "Kerrygold, salted") is not None)
+
+print("\n--- remembered product facts persist ---")
+# "A rego scoop is half a portion" was a fact the bot could hear and not keep, so every
+# scoop of REGO cost the same conversation again.
+with tempfile.TemporaryDirectory() as td:
+    st = S.NutritionStore(Path(td))
+    check("no file means no facts, not a crash", st.product_facts() == {})
+    rec = st.set_product_fact("SiS REGO", "scoop_g", 25)
+    check("a scoop weight is stored", rec and rec["scoop_g"] == 25.0)
+    check("the product key is lowercased",
+          list(st.product_facts()) == ["sis rego"])
+    check("and stamped so a stale fact is visible later",
+          st.product_facts()["sis rego"].get("set_at", "").startswith("20"))
+    st.set_product_fact("sis rego", "pack_g", 1600)
+    both = st.product_facts()["sis rego"]
+    check("a second field joins the same product rather than replacing it",
+          both["scoop_g"] == 25.0 and both["pack_g"] == 1600.0)
+    st.set_product_fact("SiS choco", "means", "SiS GO Energy Choco Fudge bar")
+    check("an alias is stored as text",
+          st.product_facts()["sis choco"]["means"] == "SiS GO Energy Choco Fudge bar")
+    check("the facts survive a fresh store on the same directory",
+          S.NutritionStore(Path(td)).product_facts()["sis rego"]["scoop_g"] == 25.0)
+    check("it is one file next to the cache, not a day record",
+          (st.dir / "product-facts.json").exists())
+    # PERMANENT and consulted deterministically, so the gate is at the write.
+    check("an unknown field is refused", st.set_product_fact("sis rego", "kcal", 80) is None)
+    check("a non-numeric weight is refused",
+          st.set_product_fact("sis rego", "scoop_g", "a scoop") is None)
+    check("a zero weight is refused", st.set_product_fact("sis rego", "pack_g", 0) is None)
+    check("a fact about no product is refused",
+          st.set_product_fact("   ", "scoop_g", 25) is None)
+    check("an empty alias is refused", st.set_product_fact("x", "means", " ") is None)
+    check("and none of the refusals wrote anything",
+          set(st.product_facts()) == {"sis rego", "sis choco"})
+    (st.dir / "product-facts.json").write_text("{not json")
+    check("a corrupt facts file degrades to no facts, not a crash",
+          st.product_facts() == {})
+
+if FAILED:
+    print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
+print("all checks passed")

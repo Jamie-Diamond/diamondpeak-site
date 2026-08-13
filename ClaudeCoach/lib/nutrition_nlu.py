@@ -288,9 +288,14 @@ Classify the message and extract structure. Reply with ONLY a JSON object, no pr
 Keys:
   intent: one of log_food, log_supplement, question, advice, correction, smalltalk,
           unknown
-  items: array (log_food/log_supplement only) of {text, portion_g, in_session}
+  items: array (log_food/log_supplement only) of {text, portion_g, in_session, at}
          - text: a SINGLE food or supplement, self-contained enough to look up
          - portion_g: grams if stated or confidently inferable, else null
+         - at: "HH:MM" (24h) ONLY when the message states a clock time for this item -
+           "at 1350" -> "13:50", "8:30am" -> "08:30", "at half seven tonight" -> "19:30".
+           NEVER guess: "this morning", "earlier", "before the ride" and anything else
+           without a clock give null, and the logger stamps it with now. A guessed time
+           is worse than no time, because the app files entries into meals by the clock.
          - ONE PRODUCT AND ITS CONTENTS IS ONE ITEM, NOT SEVERAL. "100ml ginger shot,
            orange, apple" is a single 100 ml shot whose ingredients are ginger, orange and
            apple - it is not a shot AND an orange AND an apple. This was split into three
@@ -319,11 +324,42 @@ Rules:
     tonight". Put every candidate in options.
   - Advice is NOT a log. Only move to log_food once they say what they actually had.
   - Only use log_food when they are telling you they ATE or DRANK something.
+  - FOOD ALREADY EATEN WITH A TIME ON IT IS STILL log_food. "add second slice of toast
+    with butter at 1350" is a log with at="13:50", not a correction and not a question.
   - If they are amending something just logged, use correction.
+  - A FLAT STATEMENT ABOUT THE LOG IS A CORRECTION, not smalltalk. These look like
+    remarks rather than instructions and were answered as unrecognised messages, so he
+    had to get a human to edit the file:
+      "the initial rye bread was 830am"      -> correction (it retimes an entry)
+      "the 160g was a pack of bbq chicken"   -> correction (it renames one)
+      "a rego scoop is half a portion"       -> correction (it states a lasting fact
+                                                about a product)
+    Anything that asserts something about an entry, a time, a name, or how big a
+    product's scoop/portion/pack is, is a correction. What it CHANGES is decided later.
   - NEVER invent nutrition numbers. You extract text and portions only.
 
 Message: %s
 """
+
+
+_HHMM = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
+
+
+def normalise_hhmm(value) -> str | None:
+    """"13:50" or a bare "1350" as "HH:MM", else None.
+
+    Validation of a model field, in the same spirit as the `intent not in INTENTS`
+    check: the model is asked for HH:MM, and anything that is not a real clock time is
+    DROPPED rather than repaired, so the entry falls back to now-time. A half-read time
+    is worse than no time - it files the entry into the wrong meal on the app and looks
+    like something he typed."""
+    s = str(value or "").strip()
+    if not s:
+        return None
+    if s.isdigit() and len(s) in (3, 4):
+        s = f"{s[:-2]}:{s[-2:]}"
+    m = _HHMM.match(s)
+    return f"{int(m.group(1)):02d}:{m.group(2)}" if m else None
 
 
 def parse_with_model(text: str, claude_bin: str, model: str, log=print,
@@ -358,10 +394,16 @@ def parse_with_model(text: str, claude_bin: str, model: str, log=print,
     items = []
     for it in got.get("items") or []:
         if isinstance(it, str):
-            items.append({"text": it, "portion_g": None, "in_session": False})
+            items.append({"text": it, "portion_g": None, "in_session": False,
+                          "at": None})
         elif isinstance(it, dict) and it.get("text"):
             items.append({"text": str(it["text"]),
                           "portion_g": it.get("portion_g"),
+                          # A STATED time only. "add the second slice of toast at 1350"
+                          # was logged at the moment he typed it, so a log written up
+                          # after the fact landed in the wrong meal on the app and there
+                          # was no verb to move it.
+                          "at": normalise_hhmm(it.get("at")),
                           # CONFIRMED, not asserted: the model's flag only survives if
                           # the words place the food in a session. Erring to False is the
                           # safe direction - an out-of-session item counted in the day is
@@ -668,7 +710,8 @@ CORRECTION_PROMPT = """You are deciding what a correction to a food log means. T
 athlete has an item in front of him (below) and has sent a correction. Reply with ONLY \
 a JSON object.
 
-THE ITEM (as currently resolved; per_100g is the label/table basis if known):
+THE ITEM (as currently resolved; per_100g is the label/table basis if known). This may
+be EMPTY, which means nothing is logged yet - a "remember" decision is still valid:
 %s
 
 HIS CORRECTION:
@@ -688,14 +731,40 @@ Decide which ONE of these he means and reply in that shape:
       - he is disputing WHAT the food is, with or without a new amount
   {"kind":"meal","meal":"breakfast|lunch|dinner|snacks"}
       - he is filing it under a meal, nothing else
+  {"kind":"retime","time":"HH:MM","which":"<words identifying the entry, or null>"}
+      - he is saying WHEN he ate it: "the initial rye bread was 830am" -> time "08:30",
+        which "initial rye bread". 24h, and null `which` means the latest entry.
+  {"kind":"rename","name":"<the correct name>","which":"<as above, or null>"}
+      - he is naming the product WITHOUT disputing the figures: "the 160g was a pack of
+        bbq chicken" against an entry whose confidence is label or manual. He read those
+        figures off the pack himself, so they stand and only the name was wrong.
+      - if the item's confidence is NOT label/manual the figures came from a lookup, so a
+        new name means the lookup was wrong: use reidentify instead.
+  {"kind":"remember","product":"<name>","field":"scoop_g|portion_g|pack_g|means",
+   "value":<number, or the text a `means` alias expands to>}
+      - he is telling you a LASTING fact about a product, to be applied every time it
+        comes up: "a rego scoop is half a portion" where a portion is 50 g is
+        {"product":"sis rego","field":"scoop_g","value":25}. Use `means` for an alias:
+        "sis choco is the go energy choco fudge bar" ->
+        {"product":"sis choco","field":"means","value":"SiS GO Energy Choco Fudge bar"}.
+  {"kind":"remember_and_rescale","product":...,"field":...,"value":...,"grams":<n>}
+      - the same fact, where it ALSO fixes the amount on the item in front of him. The
+        REGO one is this shape: remember that a scoop is 25 g, and this entry was 25 g.
   {"kind":"unclear"}
 
 Rules:
 - The decision is about MEANING, not keywords. "That's 100g I had 160g" names two
   numbers; only 160 is what he ate.
 - Do not compute any nutrition figures. Never return macros. The code does the maths.
+  Deriving a scoop weight from a stated portion weight is not a nutrition figure - it is
+  the fact he is asking you to store - but the portion weight must be one he or the item
+  states, never one you assume.
 - A correction that disputes the food AND gives an amount is reidentify (put the amount
   in the text, e.g. "20g of jam").
+- `which` is his words, not a guess: quote the part of the message that names the entry
+  ("initial rye bread", "the 160g"), or null if he did not name one. The code matches it
+  against the log and ASKS when it matches nothing, so a vague `which` is safe and an
+  invented one is not.
 """
 
 
@@ -711,10 +780,13 @@ def decide_correction(message: str, item: dict, claude_bin: str, model: str,
     macros stay deterministic. None when the model is unavailable, so the caller can
     fall back to the deterministic detectors."""
     runner = runner or subprocess.run
-    summary = {k: item.get(k) for k in
-               ("resolved_name", "kcal", "protein_g", "carb_g", "fat_g",
+    # `confidence` is in here because rename-versus-reidentify turns on it: his own label
+    # figures survive a renaming, a lookup's figures do not. The code checks it again
+    # before renaming - this is so the model reaches the right kind in the first place.
+    summary = {k: (item or {}).get(k) for k in
+               ("resolved_name", "confidence", "kcal", "protein_g", "carb_g", "fat_g",
                 "portion_used_g", "pack_g", "per_100g", "portion_assumed")
-               if item.get(k) is not None}
+               if (item or {}).get(k) is not None}
     try:
         proc = runner([claude_bin, "--print", "--model", model],
                       input=CORRECTION_PROMPT % (json.dumps(summary, default=str),
@@ -735,10 +807,69 @@ def decide_correction(message: str, item: dict, claude_bin: str, model: str,
     except (ValueError, TypeError):
         log(f"decide_correction unparseable: {raw[:80]}")
         return None
-    if got.get("kind") in ("rescale", "rescale_factor", "whole_pack",
-                           "reidentify", "meal", "unclear"):
+    kind = got.get("kind")
+    if kind in ("rescale", "rescale_factor", "whole_pack", "reidentify", "meal",
+                "unclear"):
         return got
+    if kind == "retime":
+        hhmm = normalise_hhmm(got.get("time"))
+        if not hhmm:
+            log(f"decide_correction: retime without a usable time: {got.get('time')!r}")
+            return None
+        return {"kind": "retime", "time": hhmm,
+                "which": (str(got.get("which")).strip() if got.get("which") else "")}
+    if kind == "rename":
+        name = str(got.get("name") or "").strip()
+        if not name:
+            return None
+        return {"kind": "rename", "name": name,
+                "which": (str(got.get("which")).strip() if got.get("which") else "")}
+    if kind in ("remember", "remember_and_rescale"):
+        fact = product_fact(got)
+        if not fact:
+            return None
+        out = {"kind": kind, **fact}
+        if kind == "remember_and_rescale":
+            # A remember that also fixes the entry still has to state the amount in
+            # grams; the code will not derive it from the fact, because the fact is
+            # about the product and the rescale is about this one entry.
+            try:
+                out["grams"] = float(got.get("grams"))
+            except (TypeError, ValueError):
+                log("decide_correction: remember_and_rescale without usable grams")
+                return {"kind": "remember", **fact}
+        return out
     return None
+
+
+# The fields a remembered product fact may set. A closed set on purpose: this file is
+# PERMANENT and per-athlete, unlike the day's exclusions, so an unrecognised field name
+# from a model wobble would sit there for ever being consulted by nothing.
+PRODUCT_FACT_FIELDS = ("scoop_g", "portion_g", "pack_g", "means")
+
+
+def product_fact(got: dict) -> dict | None:
+    """{'product','field','value'} from a remember decision, or None if unusable.
+
+    Weights are coerced to a number and a `means` alias must be real text, because the
+    injection that consults these facts is deterministic: whatever lands here is applied
+    to a lookup verbatim, every time, with no model in the loop to notice it is wrong."""
+    product = str(got.get("product") or "").strip().lower()
+    field = str(got.get("field") or "").strip()
+    if not product or field not in PRODUCT_FACT_FIELDS:
+        return None
+    if field == "means":
+        value = str(got.get("value") or "").strip()
+        if len(value) < 3:
+            return None
+    else:
+        try:
+            value = float(got.get("value"))
+        except (TypeError, ValueError):
+            return None
+        if not 0 < value <= 5000:
+            return None
+    return {"product": product, "field": field, "value": value}
 
 
 def apply_correction(original_text: str, correction: str) -> str:
@@ -1070,6 +1201,8 @@ each item actually IS and how to search for it. Reply with ONLY a JSON object.
   "dose_mg": <milligrams if stated in mg/mcg, else null>,
   "count": <number of units if stated, else null>,
   "in_session": true|false,
+  "at": "<HH:MM in 24h ONLY if the message states a clock time for this item, else null.
+         'at 1350' -> '13:50'. Never guess: 'this morning' is null>",
   "search_terms": ["<best query first>", "<fallback>", "..."]
 }]}
 
@@ -1194,6 +1327,11 @@ def interpret(text: str, claude_bin: str, model: str, log=print, runner=None,
             "dose_mg": it.get("dose_mg"),
             "count": it.get("count"),
             "in_session": bool(it.get("in_session")),
+            # Carried on BOTH parse paths. interpret() returns None whenever the model
+            # is unavailable, in which case the caller resolves classify()'s items
+            # instead - so a stated time that only survived here would be lost exactly
+            # when the fallback ran.
+            "at": normalise_hhmm(it.get("at")),
             "search_terms": terms[:4],
         })
     return {"items": out} if out else None

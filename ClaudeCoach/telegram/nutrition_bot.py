@@ -1082,12 +1082,29 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
             target_item = batch[0]
         else:
             target_item = ctx.store.find_entry(day, "") or None
-        decision = NLU.decide_correction(corr, target_item, CLAUDE_BIN, LLM_MODEL,
-                                         log=log) if target_item else None
+        # ASKED EVEN WITH NOTHING LOGGED. The model used to be consulted only when there
+        # was an item to correct, which made "a rego scoop is half a portion" on an empty
+        # day unanswerable - it fell through to "nothing logged today to correct", and
+        # that is one of the four edits Jamie had to route through a human on 13 Aug 2026.
+        # A fact about a product is not a fact about an entry.
+        decision = NLU.decide_correction(corr, target_item or {}, CLAUDE_BIN, LLM_MODEL,
+                                         log=log)
         if decision:
             kind = decision.get("kind")
             log(f"  correction decided: {kind} {decision}")
-            if kind == "rescale" and decision.get("grams"):
+            if kind in ("remember", "remember_and_rescale"):
+                if apply_remember(ctx, decision, pend, day, token, chat_id):
+                    return
+            elif kind == "retime" and not pend:
+                # Retiming is only meaningful for something already written: a pending
+                # offer has no entry yet, and a time stated on a NEW log arrives on the
+                # item instead (see offer_items' `default_at`).
+                if apply_retime(ctx, decision, day, token, chat_id):
+                    return
+            elif kind == "rename" and not pend:
+                if apply_rename(ctx, decision, day, token, chat_id):
+                    return
+            elif kind == "rescale" and decision.get("grams"):
                 if apply_quantity_correction(ctx, pend,
                                              {"grams": float(decision["grams"])},
                                              day, token, chat_id):
@@ -1101,7 +1118,12 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                 if apply_quantity_correction(ctx, pend, {"whole_pack": True},
                                              day, token, chat_id):
                     return
-            elif kind == "meal" and decision.get("meal") and not pend:
+            # `target_item` again, because the model is now consulted even with nothing
+            # logged: this branch dereferences it, and it is None on an empty day.
+            elif kind == "meal" and decision.get("meal") and not pend and target_item:
+                # set_meal, never update_entry, even though `meal` is patchable now: the
+                # "snack" -> "snacks" normalisation and the MEALS validation live there
+                # and must stay on one path.
                 done = ctx.store.set_meal(day, target_item["id"], decision["meal"])
                 if done:
                     publish_now(ctx)
@@ -1142,7 +1164,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                 "coach", f"[log] correction noted: {(got.get('correction') or t)[:60]}")
             offer_items(ctx, [{"text": combined, "portion_g": None,
                                "in_session": bool(target.get("in_session"))}],
-                        day, token, chat_id)
+                        day, token, chat_id, said=corr)
             mark_pending_replaces(ctx, target["id"], target.get("resolved_name") or "")
             return
         if correct_in_batch(ctx, pend, corr, day, token, chat_id):
@@ -1163,7 +1185,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         offer_items(ctx, [{"text": combined, "portion_g": None,
                            "in_session": bool((pend.get("batch") or [{}])[0]
                                               .get("in_session"))}],
-                    day, token, chat_id)
+                    day, token, chat_id, said=corr)
         return
 
     if intent == "advice":
@@ -1185,9 +1207,16 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # Interpret before resolving: work out what each thing IS and how to search for
         # it, then let the ladder search THAT rather than the athlete's sentence. The
         # model plans the lookup; it still never supplies a macro.
+        # A time stated for the MESSAGE carries to anything in it that did not carry its
+        # own. interpret() is a second model call and returns None when the model is
+        # unavailable, so a stated time that only survived on its items would be lost in
+        # exactly the case where the classify items are the ones resolved.
+        stated_at = next((i.get("at") for i in (got.get("items") or []) if i.get("at")),
+                         None)
         plan = NLU.interpret(t, CLAUDE_BIN, LLM_MODEL, log=log)
         if plan and plan.get("items"):
-            offer_planned(ctx, plan["items"], day, token, chat_id)
+            offer_planned(ctx, plan["items"], day, token, chat_id, said=t,
+                          default_at=stated_at)
             return
         if got.get("nutritionally_trivial"):
             # Say it plainly rather than logging "kcal 1" and implying it counted.
@@ -1203,7 +1232,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                     supplement=(intent == "log_supplement"),
                     barcode=got.get("barcode"),
                     trivial=bool(got.get("nutritionally_trivial")),
-                    dose_mg=got.get("dose_mg"))
+                    dose_mg=got.get("dose_mg"), said=t, default_at=stated_at)
         return
 
     if intent == "smalltalk":
@@ -1435,14 +1464,20 @@ def download_photo(ctx: Context, file_id: str, token: str):
     return Path(tmp)
 
 
-def offer_planned(ctx: Context, planned: list, day: date, token, chat_id) -> None:
+def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
+                  said: str = "", default_at: str = None) -> None:
     """Resolve each INTERPRETED item, with its form and search terms.
 
     The interpretation is what makes the ladder honest: it searches good queries, and it
     can throw out a hit whose form is wrong rather than accepting anything whose name
-    happens to share a word. A capsule and a protein bar share every meaningful token."""
+    happens to share a word. A capsule and a protein bar share every meaningful token.
+
+    `said` is his own wording, which the remembered product facts are matched against:
+    the interpretation strips quantities, so the word "scoop" is usually gone from the
+    canonical name by the time it gets here."""
     batch, notes = [], []
     exclude = _exclusions(ctx, day)
+    planned = apply_product_facts(remembered_facts(ctx), planned, said)
     for it in planned[:8]:
         name = it["canonical_name"]
         if it["is_supplement"] or not it["expect_macros"]:
@@ -1455,7 +1490,7 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id) -> Non
                               "detail": "supplements are not searched against food data"}],
                 "degraded": False, "needs_input": False, "_supplement": True,
                 "_trivial": not it["expect_macros"], "_dose_mg": it.get("dose_mg"),
-                "in_session": it["in_session"],
+                "in_session": it["in_session"], "_at": it.get("at") or default_at,
                 **{f: None for f in NR.MACRO_FIELDS}})
             dose = (f"{it['dose_mg']:.0f} mg" if it.get("dose_mg")
                     else (f"{it['portion_g']} g" if it.get("portion_g") else "as stated"))
@@ -1476,6 +1511,9 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id) -> Non
         item["_supplement"] = False
         item["_trivial"] = False
         item["_dose_mg"] = None
+        # A time he STATED, carried to the entry. Per item first, then the one stated for
+        # the message as a whole, then nothing at all - and nothing means now-time.
+        item["_at"] = it.get("at") or default_at
         log(f"    -> {item.get('resolved_name')!r} {item.get('source_rung')}/"
             f"{item.get('confidence')} {item.get('kcal')} kcal")
         batch.append(item)
@@ -1483,6 +1521,7 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id) -> Non
     set_pending(ctx.store, {"batch": batch})
     if any(i.get("in_session") for i in batch):
         notes.append("_Tagged as in-session fuel, so it is protected from any trimming._")
+    notes += _stated_time_note(batch)
     if batch:
         _chat(ctx, "coach", _offer_summary(batch))
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
@@ -1545,13 +1584,40 @@ def from_history(ctx: Context, text: str, day: date, back_days: int = 30) -> dic
     return item
 
 
+def remembered_facts(ctx: Context) -> dict:
+    """What he has told us about products, or {} if that cannot be read.
+
+    Wrapped because this sits in front of every resolution: a remembered scoop weight is
+    a convenience, and losing one must never be able to stop him logging his food."""
+    try:
+        return ctx.store.product_facts()
+    except Exception as exc:
+        log(f"product facts unavailable, continuing without them: {exc}")
+        return {}
+
+
+def _stated_time_note(batch: list) -> list:
+    """One line saying the offer will be stamped at the time he stated, so a wrong or
+    mis-read time is caught BEFORE it is written rather than after.
+
+    Supplements are skipped: add_supplement has no timestamp field, so promising a time
+    for one would be a claim the store cannot keep."""
+    times = sorted({i.get("_at") for i in batch
+                    if i.get("_at") and not i.get("_supplement")})
+    if not times:
+        return []
+    return [f"_Logging at {', '.join(times)}, as you said._"]
+
+
 def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 supplement: bool = False, barcode: str = None,
-                trivial: bool = False, dose_mg: float = None) -> None:
+                trivial: bool = False, dose_mg: float = None,
+                said: str = "", default_at: str = None) -> None:
     """Resolve each item separately and ask once for the batch.
 
     Per-item resolution matters: a whole sentence resolved as one string both
     mis-costs it and loses the per-item provenance the confidence flag depends on."""
+    items = apply_product_facts(remembered_facts(ctx), items, said)
     if supplement:
         # A supplement is a DOSE, not a food, so it never touches a food database.
         # Leaving it on the ladder is how "400mg of my protein collagen capsules"
@@ -1572,6 +1638,7 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 "degraded": False, "needs_input": False,
                 "_supplement": True, "_trivial": bool(trivial), "_dose_mg": dose_mg,
                 "in_session": bool(it.get("in_session")),
+                "_at": it.get("at") or default_at,
                 **{f: None for f in NR.MACRO_FIELDS},
             })
         set_pending(ctx.store, {"batch": batch})
@@ -1600,6 +1667,7 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
             prior["_supplement"] = supplement
             prior["_trivial"] = bool(trivial)
             prior["_dose_mg"] = dose_mg
+            prior["_at"] = it.get("at") or default_at
             resolved.append(prior)
             continue
         log(f"  resolving {it['text'][:60]!r} portion={it.get('portion_g')}")
@@ -1640,6 +1708,7 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         item["_supplement"] = supplement
         item["_trivial"] = bool(trivial)
         item["_dose_mg"] = dose_mg
+        item["_at"] = it.get("at") or default_at
         resolved.append(item)
     set_pending(ctx.store, {"batch": resolved})
     if resolved:
@@ -1647,6 +1716,8 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
     body = "\n\n".join(fmt_confirm(i) for i in resolved)
     if any(i.get("in_session") for i in resolved):
         body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
+    for line in _stated_time_note(resolved):
+        body += "\n\n" + line
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
     tg.send(token, chat_id, body + "\n\nLog "
             + ("these?" if len(resolved) > 1 else "it?"), reply_markup=kb, log=log)
@@ -1939,6 +2010,233 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
     return True
 
 
+def _entry_haystack(entry: dict) -> str:
+    """Everything about an entry that he might use to point at it.
+
+    The name alone is not enough: he says "the 160g", which names the AMOUNT. Matching
+    that against `resolved_name` only would have failed the guard below and asked him
+    which entry he meant while pointing straight at it."""
+    grams = entry.get("portion_used_g") or entry.get("portion_g")
+    parts = [entry.get("resolved_name") or "", entry.get("raw_text") or ""]
+    if grams:
+        try:
+            parts.append(f"{float(grams):.0f}g")
+        except (TypeError, ValueError):
+            pass
+    return " ".join(parts)
+
+
+def entry_he_means(ctx: Context, day: date, which: str, verb: str,
+                   token, chat_id) -> dict | None:
+    """The entry `which` names, or the latest when he named none. None once it has
+    already replied to him.
+
+    Same guard as the delete branch, for the same reason: a name it could not find must
+    ask, because silently retiming or renaming the wrong entry is worse than asking -
+    nothing in the reply would look wrong.
+
+    The SEARCH and the GUARD deliberately use one vocabulary. find_entry matches
+    `resolved_name` only and falls back to the latest entry, so pairing it with a guard
+    that also reads raw_text and the portion would let "the 160g" pass only when the 160 g
+    entry happened to be the last one logged - green in a two-entry fixture, wrong in a
+    real day. Two vocabularies for one lookup is the shape that took three athletes'
+    plans out in July.
+
+    An AMBIGUOUS name asks as well. "The initial rye bread" is exactly the case where
+    taking the newest match is wrong, and "initial" is a word no matcher here
+    understands."""
+    which = (which or "").strip()
+    entries = ctx.store.get_day(day).get("entries") or []
+    if not entries:
+        tg.send(token, chat_id, f"Nothing logged today to {verb}.", log=log)
+        return None
+    if not which:
+        return entries[-1]
+    hits = [e for e in entries if _name_matches(which, _entry_haystack(e))]
+    if len(hits) == 1:
+        return hits[0]
+    names = [e.get("resolved_name") or "" for e in entries][-6:]
+    if not hits:
+        tg.send(token, chat_id,
+                f"I cannot see {which!r} in today’s log. Today has: "
+                + ", ".join(n[:34] for n in names)
+                + f". Name one of those and I will {verb} it.", log=log)
+    else:
+        tg.send(token, chat_id,
+                f"Which one do you mean? I have "
+                + ", ".join((e.get("resolved_name") or "?")[:30] for e in hits)
+                + f". Name it and I will {verb} just that one.", log=log)
+    return None
+
+
+def apply_retime(ctx: Context, decision: dict, day: date, token, chat_id) -> bool:
+    """Move an entry's logged_at. True once handled, including by asking.
+
+    "The initial rye bread was 830am" had nowhere to land: entries carried a timestamp
+    written when he typed the message, and the app buckets entries into meals by that
+    clock, so a morning slice written up at lunchtime read as lunch and the only fix was
+    editing the month file by hand.
+
+    The stamp is built from `day` - the athlete's ICU local date - and never from the
+    server clock, which is the store's standing rule about who decides a local day."""
+    entry = entry_he_means(ctx, day, decision.get("which"), "retime", token, chat_id)
+    if entry is None:
+        return True
+    stamp = f"{day.isoformat()}T{decision['time']}"
+    done = ctx.store.update_entry(day, entry["id"], logged_at=stamp)
+    if not done:
+        return False
+    # Entries are deliberately NOT re-sorted: /undo pops the tail and "delete that" reads
+    # the last one, both meaning "the thing you logged most recently". Ordering by the
+    # stated time would repoint those at a different entry.
+    publish_now(ctx)
+    _chat(ctx, "coach", f"[log] retimed {(done.get('resolved_name') or '')[:40]} "
+                        f"to {decision['time']}")
+    tg.send(token, chat_id,
+            f"Moved *{done.get('resolved_name')}* to {decision['time']}.", log=log)
+    return True
+
+
+def apply_rename(ctx: Context, decision: dict, day: date, token, chat_id) -> bool:
+    """Correct an entry's NAME. True once handled, including by re-resolving instead.
+
+    "The 160g was a pack of bbq chicken" against figures he read off that pack himself:
+    the name was wrong and the numbers were his. Re-resolving would have thrown away the
+    label reading and searched for a name he had just typed, which is the failure that
+    made a whole class of correction unusable.
+
+    Where the figures came from a LOOKUP rather than his own label, the name is what
+    produced them, so a new name invalidates them - that falls through to re-resolution
+    against the entry we have already identified, rather than the fuzzy match the generic
+    correction path would make on a name that is deliberately new."""
+    name = decision.get("name") or ""
+    entry = entry_he_means(ctx, day, decision.get("which"), "rename", token, chat_id)
+    if entry is None:
+        return True
+    done = ctx.store.rename_entry(day, entry["id"], name)
+    if done:
+        publish_now(ctx)
+        _chat(ctx, "coach", f"[log] renamed {(done.get('renamed_from') or '')[:34]} "
+                            f"to {name[:34]}")
+        tg.send(token, chat_id,
+                f"Renamed it to *{name}*. Kept your figures - "
+                f"{round(done.get('kcal') or 0)} kcal"
+                + (f", {done['portion_used_g']:.0f} g" if done.get("portion_used_g")
+                   else "")
+                + " - since they came off the pack, not a lookup.", log=log)
+        return True
+    grams = entry.get("portion_used_g") or entry.get("portion_g")
+    tg.send(token, chat_id,
+            f"Those figures came from a lookup rather than your own label, so a new name "
+            f"means the lookup was wrong. Looking *{name}* up instead.", log=log)
+    offer_items(ctx, [{"text": name, "portion_g": grams,
+                       "in_session": bool(entry.get("in_session"))}],
+                day, token, chat_id)
+    mark_pending_replaces(ctx, entry["id"], entry.get("resolved_name") or "")
+    return True
+
+
+def apply_remember(ctx: Context, decision: dict, pend, day: date, token, chat_id) -> bool:
+    """Store a lasting fact about a product, and rescale the item if that is what it
+    also fixes. True once handled.
+
+    "A rego scoop is half a portion" was a fact the bot could hear and not keep, so every
+    scoop of REGO cost the same conversation again. Facts are consulted by
+    apply_product_facts on the resolution path, deterministically - a stored number, never
+    a model guess at logging time."""
+    fact = NLU.product_fact(decision)
+    if not fact:
+        return False
+    rec = ctx.store.set_product_fact(fact["product"], fact["field"], fact["value"],
+                                     note=str(decision.get("note") or "").strip())
+    if not rec:
+        return False
+    # State exactly what was stored. A fact is permanent and consulted silently, so a
+    # model wobble has to be visible on the spot rather than the next time he logs it.
+    if fact["field"] == "means":
+        line = (f"Noted - *{fact['product']}* means “{fact['value']}”. I will look that "
+                f"up whenever you say it.")
+    else:
+        unit = {"scoop_g": "scoop", "portion_g": "portion", "pack_g": "pack"}[fact["field"]]
+        line = (f"Noted - a *{fact['product']}* {unit} is {fact['value']:.0f} g. I will "
+                f"use that from now on.")
+    tg.send(token, chat_id, line, log=log)
+    _chat(ctx, "coach", f"[log] remembered: {fact['product']} "
+                        f"{fact['field']}={fact['value']}")
+    if decision.get("kind") == "remember_and_rescale" and decision.get("grams"):
+        if not apply_quantity_correction(ctx, pend, {"grams": float(decision["grams"])},
+                                        day, token, chat_id):
+            tg.send(token, chat_id,
+                    "I have kept the fact, but there is no per-100g basis on that item "
+                    "to rescale from - tell me what you had and I will redo it.", log=log)
+    return True
+
+
+# What his words have to say for a remembered scoop or portion weight to be used. A fact
+# about a scoop is not a fact about a bar: "a SiS REGO bar" must not pick up the scoop
+# weight just because REGO is the product named.
+_SAYS_SCOOP = re.compile(r"\bscoops?\b", re.I)
+_SAYS_PORTION = re.compile(r"\bportions?\b|\bservings?\b", re.I)
+
+
+def apply_product_facts(facts: dict, items: list, said: str = "") -> list:
+    """Apply what he has told us about a product BEFORE the ladder runs.
+
+    Two things, both deterministic and both code-side: a `means` alias is rewritten into
+    the lookup text, and a remembered scoop or portion weight becomes the item's
+    portion_g when his words asked for a scoop or a portion of that product.
+
+    Rewriting search_terms as well as the canonical name is the point. offer_planned
+    passes `queries=it["search_terms"]` into the ladder, so an alias applied to the name
+    alone would never reach a search - the same computed-here-lost-at-the-hand-off shape
+    that dropped the photo hint and the species score.
+
+    A gram amount he stated OUTRANKS a remembered weight: portion_g is only filled when
+    it is still empty."""
+    if not facts or not items:
+        return items
+    # Longest key first, so "sis rego chocolate" wins over "sis rego" when both are known.
+    keys = sorted((k for k in facts if k), key=len, reverse=True)
+    for it in items:
+        blob = " ".join(str(it.get(f) or "") for f in ("canonical_name", "text",
+                                                       "raw_text"))
+        blob += " " + " ".join(str(t) for t in (it.get("search_terms") or []))
+        low = f"{blob} {said}".lower()
+        key = next((k for k in keys if k in low), None)
+        if not key:
+            continue
+        rec = facts.get(key) or {}
+        alias = rec.get("means")
+        if alias:
+            pat = re.compile(re.escape(key), re.I)
+            for field in ("canonical_name", "text", "raw_text"):
+                if it.get(field):
+                    it[field] = pat.sub(str(alias), it[field])
+            if it.get("search_terms"):
+                it["search_terms"] = [pat.sub(str(alias), str(t))
+                                      for t in it["search_terms"]]
+            log(f"  product fact: {key!r} means {alias!r}")
+        if it.get("portion_g") in (None, ""):
+            words = f"{blob} {said}"
+            grams = None
+            if rec.get("scoop_g") and _SAYS_SCOOP.search(words):
+                grams = float(rec["scoop_g"])
+            elif rec.get("portion_g") and _SAYS_PORTION.search(words):
+                grams = float(rec["portion_g"])
+            if grams:
+                # "2 scoops" is two of them. count comes from the interpretation, so a
+                # bare number in the sentence cannot inflate it.
+                try:
+                    n = int(it.get("count") or 1)
+                except (TypeError, ValueError):
+                    n = 1
+                it["portion_g"] = round(grams * max(1, n), 1)
+                it["portion_from_fact"] = f"{it['portion_g']:.0f} g - you told me a " \
+                                          f"{key} scoop/portion weighs that"
+                log(f"  product fact: {key!r} portion_g={it['portion_g']}")
+    return items
+
+
 def record_exclusions(ctx: Context, day: date, text: str) -> list:
     """Store what he says it was not, for the rest of the day, before re-resolving."""
     found = exclusions_in(text)
@@ -2120,7 +2418,12 @@ def commit_one(ctx: Context, item: dict, day: date) -> None:
         resolved_at=item.get("resolved_at"), species=item.get("species") or [],
         ingredients=item.get("ingredients") or "",
         in_session=bool(item.get("in_session")),
-        logged_at=datetime.now().isoformat(timespec="minutes"))
+        # A time HE STATED wins over the moment he typed the message, and it is composed
+        # from `day` - the ICU local date - rather than the server clock, which is an hour
+        # off in BST. "Add the second slice of toast at 1350" was stamped at whatever time
+        # the message arrived, so the app filed it under the wrong meal.
+        logged_at=(f"{day.isoformat()}T{item['_at']}" if item.get("_at")
+                   else datetime.now().isoformat(timespec="minutes")))
     NR.cache_resolved(ctx.store, item)
 
 

@@ -53,6 +53,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nutrition_engine import NON_COUNTING_PROTEIN_SOURCES  # noqa: E402
+# The allowed fact fields live ONCE, where the decision that produces them is validated.
+# Restating them here is the divergence trap this file already refuses for the
+# non-counting protein tokens: a field the model may return and the store will not keep
+# fails silently, which is the worst of both.
+from nutrition_nlu import PRODUCT_FACT_FIELDS  # noqa: E402
 
 # `computed` is a real fourth level, not a shade of estimate: the M&S nut collection was
 # derived from an equal blend of four named nuts per the product listing, which is far
@@ -312,9 +317,14 @@ class NutritionStore:
     # unlabelled fifth, so nothing can land nowhere.
     MEALS = ("breakfast", "lunch", "dinner", "snacks")
 
+    # `logged_at` and `meal` are patchable because WHEN he ate something is a fact he can
+    # state after the fact and the app buckets entries into meals by the clock: an 08:30
+    # slice of rye bread written up at 14:00 read as lunch, and the only way to move it
+    # was to edit the month file by hand. Still not identity - see update_entry.
     UPDATABLE = ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g",
                  "dietary_sodium_mg", "portion_g", "portion_used_g",
-                 "portion_estimated", "portion_assumed", "raw_text")
+                 "portion_estimated", "portion_assumed", "raw_text",
+                 "logged_at", "meal")
 
     def update_entry(self, day, entry_id: str, **fields) -> dict | None:
         """Patch an existing entry in place - the QUANTITY correction path.
@@ -334,6 +344,50 @@ class NutritionStore:
                 if e.get("id") == entry_id:
                     e.update(patch)
                     return e
+            return None
+        return self._mutate_day(day, fn)
+
+    # Whose figures survive a renaming. A label or a manually-entered pack reading is HIS
+    # OWN measurement of the thing in his hand, so calling it by its right name does not
+    # make the numbers wrong. Anything from a lookup is the opposite case: the name IS
+    # what produced the figures, so a new name invalidates them and the item has to be
+    # re-resolved rather than relabelled.
+    RENAMEABLE_CONFIDENCE = ("label",)
+    RENAMEABLE_RUNGS = ("manual",)
+
+    def rename_entry(self, day, entry_id: str, name: str,
+                     ingredients: str = None) -> dict | None:
+        """Correct an entry's NAME while keeping its figures. None if refused.
+
+        A separate verb from update_entry rather than a widening of it: update_entry
+        deliberately blocks identity, and that block is what stops a quantity correction
+        turning into a different food. This is the one case where the athlete outranks
+        the ladder - "the 160g was a pack of bbq chicken" against figures he read off
+        that pack himself. Refuses on a database or estimate entry, where a new name
+        means the lookup was wrong and re-resolution is the honest answer.
+
+        The old ingredients and species go with the old name: they described a product
+        this entry is not, and leaving them would credit the plant-diversity count to a
+        food he never ate."""
+        name = (name or "").strip()
+        if not name:
+            return None
+
+        def fn(rec):
+            for e in rec.get("entries") or []:
+                if e.get("id") != entry_id:
+                    continue
+                if (e.get("confidence") not in self.RENAMEABLE_CONFIDENCE
+                        and e.get("source_rung") not in self.RENAMEABLE_RUNGS):
+                    return None
+                e["renamed_from"] = e.get("renamed_from") or e.get("resolved_name")
+                e["resolved_name"] = name
+                if ingredients is not None:
+                    e["ingredients"] = ingredients
+                    return e
+                e["ingredients"] = ""
+                e["species"] = []
+                return e
             return None
         return self._mutate_day(day, fn)
 
@@ -704,6 +758,68 @@ class NutritionStore:
                     cache = {}
             cache[key.strip().lower()] = payload
             _atomic_write(p, cache)
+
+    # --- remembered product facts -------------------------------------------
+    #
+    # athletes/<slug>/nutrition/product-facts.json
+    #   {"sis rego": {"scoop_g": 25, "note": "...", "set_at": "2026-08-13T14:02"}}
+    #
+    # WHAT THIS IS FOR. "A rego scoop is half a portion" was a fact the bot could hear and
+    # not keep, so every scoop of REGO was another round of him telling it the same thing.
+    # The cache next to this file remembers RESOLUTIONS - what a product's macros are. This
+    # remembers what the athlete has TOLD us about a product: how big its scoop is, what
+    # its pack weighs, what his shorthand for it means.
+    #
+    # PERMANENT and per-athlete, unlike the day's exclusions, which is why the fields are a
+    # closed set and the values are coerced before they land. It is consulted
+    # deterministically on every resolution, so a wrong entry here is a wrong entry for
+    # ever rather than for a day.
+
+    def _facts_path(self) -> Path:
+        return self.dir / "product-facts.json"
+
+    def product_facts(self) -> dict:
+        """Everything remembered about products. {} when the file is absent or broken -
+        a lost fact must degrade to asking him again, never to a crash mid-message."""
+        p = self._facts_path()
+        if not p.exists():
+            return {}
+        try:
+            got = json.loads(p.read_text() or "{}")
+        except (json.JSONDecodeError, OSError):
+            return {}
+        return got if isinstance(got, dict) else {}
+
+    def set_product_fact(self, product: str, field: str, value,
+                         note: str = "", when=None) -> dict | None:
+        """Remember one fact about one product. None if the field or value is unusable.
+
+        Read-modify-write under the same flock every other writer here takes: this is a
+        single shared file and the bot can be storing a fact while a cron reads it."""
+        key = (product or "").strip().lower()
+        if not key or field not in PRODUCT_FACT_FIELDS:
+            return None
+        if field == "means":
+            value = str(value or "").strip()
+            if not value:
+                return None
+        else:
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                return None
+            if value <= 0:
+                return None
+        with self._file_lock("product-facts"):
+            facts = self.product_facts()
+            rec = dict(facts.get(key) or {})
+            rec[field] = value
+            if note:
+                rec["note"] = note
+            rec["set_at"] = (when or datetime.now()).isoformat(timespec="minutes")
+            facts[key] = rec
+            _atomic_write(self._facts_path(), facts)
+        return facts[key]
 
     def log_unresolved(self, raw_text: str, day) -> None:
         """Record a string the ladder could not map, for the review queue.
