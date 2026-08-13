@@ -8,7 +8,7 @@ retained as cheap insurance but is no longer wired to any chart.
 """
 
 import json, logging, math, ssl, urllib.request
-from datetime import date as _date, datetime as _datetime
+from datetime import date as _date, datetime as _datetime, timedelta as _timedelta
 
 import matplotlib
 matplotlib.use("Agg")
@@ -1243,4 +1243,201 @@ def compliance_chart(payload, coaching_level="mid"):
         mpatches.Patch(facecolor=C_RED,   label="<70%"),
     ]
     ax.legend(handles=handles, loc="upper left", frameon=False, fontsize=9, ncol=2)
+    return _render(fig)
+
+
+# ── Duration chart (CTL-style rolling hours/week, with season overlay) ────────
+
+def _expand_daily(rows):
+    """rows: [[date_str, minutes], ...] (any order, may have gaps).
+
+    Returns (dates, minutes) — one entry per calendar day from the earliest to the
+    latest date in `rows`, with any day missing from `rows` filled in as 0 minutes.
+    This step matters: a rolling average must see every day, including rest days,
+    or a 2-week gap collapses into a single decay step instead of fourteen.
+    """
+    if not rows:
+        return [], []
+    parsed = sorted((_date.fromisoformat(str(d)[:10]), float(m or 0)) for d, m in rows)
+    by_date = {d: m for d, m in parsed}
+    lo, hi = parsed[0][0], parsed[-1][0]
+    dates = [lo + _timedelta(days=i) for i in range((hi - lo).days + 1)]
+    minutes = [by_date.get(d, 0.0) for d in dates]
+    return dates, minutes
+
+
+def _duration_ewma_hours_per_week(daily_minutes, k=None, seed=0.0):
+    """CTL-style rolling daily duration (same 42-day time-constant recursion CTL
+    uses elsewhere in this module: today = yesterday + (value - yesterday) * k),
+    converted to hours/week (rolling minutes/day * 7 / 60 — the unit athletes
+    actually think in).
+
+    Uses the module's canonical `_K_CTL = 1 - e^(-1/42)` rather than a naive 1/42,
+    for consistency with every other CTL-shaped series in this file (`_project_tsb`).
+    `seed` is the notional "yesterday" feeding day 0 — 0.0 by default, which means
+    the first ~6 weeks of a season ramp up from an unfit-looking baseline. That
+    ramp is a real, known artefact of a short-history CTL (same as ICU's own CTL
+    when an athlete's history is short) and, since it is identical in both the
+    current and previous season series, does not distort the season-to-season
+    comparison — only the absolute value in that early window. Pass a non-zero
+    `seed` (e.g. the athlete's duration level a few weeks before the plotted
+    window starts) if a true warm-up value is available.
+    """
+    if k is None:
+        k = _K_CTL
+    out = []
+    prev = seed
+    for m in daily_minutes:
+        prev = prev + (m - prev) * k
+        out.append(prev * 7 / 60.0)
+    return out
+
+
+_DUR_COL      = "#2e9c8e"   # teal — same series colour as CTL in fitness_chart
+_DUR_PREV_COL = "#9a9080"   # muted grey — "Last season"
+_DUR_PREV2_COL = "#1a5276"  # blue — the season before that
+
+
+def _duration_series(season, seed=0.0):
+    """season: {"race": "YYYY-MM-DD" (optional), "label": str, "days": [[date,min],...]}.
+    Returns (dates, hours_per_week) or (None, None) if there's no usable data."""
+    dates, minutes = _expand_daily(season.get("days") or [])
+    if not dates:
+        return None, None
+    return dates, _duration_ewma_hours_per_week(minutes, seed=seed)
+
+
+def duration_chart(payload, coaching_level="mid"):
+    """
+    payload: {
+      "today": "YYYY-MM-DD",
+      "race_date": "YYYY-MM-DD",              # this season's race (optional)
+      "current": [["YYYY-MM-DD", minutes], ...],
+      "prev":  {"race": "YYYY-MM-DD", "label": "Last season", "days": [[date,min],...]},
+      "prev2": {...},                          # optional, one season further back
+      "seed": 0.0,                             # optional EWMA seed, see _duration_ewma_hours_per_week
+    }
+    Rolling CTL-style duration (42-day time constant) in hours/week. Current season
+    prominent teal fill; previous seasons muted/blue dashed lines.
+
+    When `race_date` and a previous season's own `race` are both given, series are
+    aligned by DAYS TO RACE (race day = 0) — the same convention as
+    coach/app.js:chartFitness, and deliberately NOT calendar day-of-year: that repo
+    already tried calendar alignment for season overlays and dropped it, because
+    two race dates a few weeks apart puts one season's taper over another's
+    mid-build (see the comment at coach/app.js chartFitness). Tick labels are
+    still real calendar dates, read off the CURRENT season, matching that file.
+
+    Falls back to a plain calendar-date x-axis (current season only, no overlay)
+    if there's no race_date or no previous season to align against.
+    """
+    if not isinstance(payload, dict):
+        return None
+    if "level" in payload:
+        coaching_level = payload["level"]
+    current_rows = payload.get("current") or []
+    if not current_rows:
+        return None
+    today_str = payload.get("today")
+    race_date_str = payload.get("race_date")
+    seed = payload.get("seed", 0.0)
+
+    cur_dates, cur_minutes = _expand_daily(current_rows)
+    cur_hpw = _duration_ewma_hours_per_week(cur_minutes, seed=seed)
+
+    prev_specs = []
+    for key, colour in (("prev", _DUR_PREV_COL), ("prev2", _DUR_PREV2_COL)):
+        season = payload.get(key)
+        if not season or not season.get("race"):
+            continue
+        try:
+            season_race = _date.fromisoformat(season["race"])
+        except (ValueError, TypeError):
+            continue  # malformed race date — skip this season rather than crash
+        dates, hpw = _duration_series(season, seed=seed)
+        if dates is None:
+            continue
+        prev_specs.append({
+            "race": season_race,
+            "label": season.get("label") or key,
+            "colour": colour,
+            "dates": dates,
+            "hpw": hpw,
+        })
+
+    try:
+        race_date = _date.fromisoformat(race_date_str) if race_date_str else None
+    except (ValueError, TypeError):
+        race_date = None
+    use_race_axis = race_date is not None and bool(prev_specs)
+
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    _style_ax(ax)
+
+    if use_race_axis:
+        cur_x = [(d - race_date).days for d in cur_dates]
+        for spec in prev_specs:
+            spec["x"] = [(d - spec["race"]).days for d in spec["dates"]]
+
+        for spec in prev_specs:
+            ax.plot(spec["x"], spec["hpw"], color=_col(spec["colour"], 0.85), linewidth=1.4,
+                    linestyle=(0, (5, 4)), zorder=3, label=spec["label"])
+
+        ax.plot(cur_x, cur_hpw, color=_DUR_COL, linewidth=1.9, alpha=0.95, zorder=4,
+                label="This season")
+        ax.fill_between(cur_x, cur_hpw, 0, color=_DUR_COL, alpha=0.12, zorder=2)
+
+        all_x = cur_x + [v for spec in prev_specs for v in spec["x"]]
+        ax.set_xlim(min(all_x), max(all_x))
+        ax.axvline(0, color=_col(BRAND_SECOND, 0.4), linewidth=1.0, linestyle=(0, (3, 3)), zorder=1)
+        ax.text(0, 1.0, " Race", transform=ax.get_xaxis_transform(), ha="left", va="bottom",
+                fontsize=8.5, color=BRAND_MUTED)
+
+        # Tick labels: real calendar dates, always read off THIS season (so the
+        # axis has one honest meaning even though it plots three different years).
+        lo_x, hi_x = ax.get_xlim()
+        n_ticks = 8
+        tick_xs = [round(lo_x + i * (hi_x - lo_x) / (n_ticks - 1)) for i in range(n_ticks)]
+        ax.set_xticks(tick_xs)
+        ax.set_xticklabels([(race_date + _timedelta(days=x)).strftime("%d %b") for x in tick_xs],
+                            rotation=30, ha="right", fontsize=9, color=BRAND_MUTED)
+        ax.set_xlabel("")
+
+        if today_str:
+            today_d = _date.fromisoformat(today_str)
+            if today_d in cur_dates:
+                x_today = (today_d - race_date).days
+                y_today = cur_hpw[cur_dates.index(today_d)]
+                ax.axvline(x_today, color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=5)
+                ax.scatter([x_today], [y_today], s=42, color=_DUR_COL, zorder=6,
+                           edgecolors="white", linewidths=1)
+                ax.annotate(f"{y_today:.1f} h/wk", (x_today, y_today), textcoords="offset points",
+                            xytext=(0, 10), ha="center", fontsize=10, fontweight="bold",
+                            color=_DUR_COL, bbox=dict(boxstyle="round,pad=0.2", fc="white",
+                            ec="none", alpha=0.85), zorder=7)
+    else:
+        cur_dts = [_datetime.combine(d, _datetime.min.time()) for d in cur_dates]
+        ax.plot(cur_dts, cur_hpw, color=_DUR_COL, linewidth=1.9, alpha=0.95, zorder=4,
+                label="This season")
+        ax.fill_between(cur_dts, cur_hpw, 0, color=_DUR_COL, alpha=0.12, zorder=2)
+        _date_axis(ax, cur_dts)
+
+        if today_str:
+            today_d = _date.fromisoformat(today_str)
+            if today_d in cur_dates:
+                today_dt = _datetime.combine(today_d, _datetime.min.time())
+                y_today = cur_hpw[cur_dates.index(today_d)]
+                ax.axvline(today_dt, color=_col(BRAND_SECOND, 0.55), linewidth=1.3, zorder=5)
+                ax.scatter([today_dt], [y_today], s=42, color=_DUR_COL, zorder=6,
+                           edgecolors="white", linewidths=1)
+                ax.annotate(f"{y_today:.1f} h/wk", (today_dt, y_today), textcoords="offset points",
+                            xytext=(0, 10), ha="center", fontsize=10, fontweight="bold",
+                            color=_DUR_COL, bbox=dict(boxstyle="round,pad=0.2", fc="white",
+                            ec="none", alpha=0.85), zorder=7)
+
+    ax.set_ylim(0, max(cur_hpw + [v for spec in prev_specs for v in spec["hpw"]] + [1]) * 1.15)
+    ax.set_ylabel("Hours / week", fontsize=10.5, color=BRAND_MUTED)
+    ax.set_title("Duration — rolling training volume", fontsize=12.5, fontweight="bold",
+                 color=BRAND_INK)
+    ax.legend(loc="upper left", frameon=False, fontsize=9.5)
     return _render(fig)
