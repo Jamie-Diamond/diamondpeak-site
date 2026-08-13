@@ -3,7 +3,7 @@
 Check for new activities and send a brief analysis to Telegram.
 Run every 15 min via cron. Loops over all active athletes. Skips if already running.
 """
-import json, ssl, subprocess, sys, time, urllib.request
+import json, os, ssl, subprocess, sys, time, urllib.request
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
@@ -16,6 +16,13 @@ ATHLETES_CONFIG = BASE / "config/athletes.json"
 TG_CONFIG       = BASE / "telegram/config.json"
 
 TOOLS = "Read,Write,Bash"
+
+# The identity this job declares to lib/icu_fetch.py, on its own subprocess reads and in
+# every icu_fetch line of the prompt. icu_fetch refuses the four WRITE endpoints to this
+# caller: a watcher reads finished training and comments on it. It has never been asked to
+# create, change or remove a planned session, but holding Bash meant nothing stopped it,
+# and an unexplained missing week is the failure that has actually happened.
+CALLER = "activity-watcher"
 
 _WATER_SPORTS = {"sail", "watersport", "windsurf", "kitesurf", "kiteboard"}
 
@@ -163,10 +170,13 @@ Check for new activities for {first_name} and stub them into the session log.
 {ack_lib.PROMPT_NOTE}
 
 
-Step 1 — Fetch data via Bash:
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint profile
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint history --days 3
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
+Step 1 — Fetch data via Bash. EVERY icu_fetch.py call you make must carry
+`--caller activity-watcher`. This job reads training and talks about it; it does not write
+the calendar, and that flag is what makes the refusal automatic rather than a rule you have
+to remember:
+  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --caller activity-watcher --endpoint profile
+  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --caller activity-watcher --endpoint history --days 3
+  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --caller activity-watcher --endpoint events --start {today} --end {today}
 
 Step 2 — Read:
 - ClaudeCoach/athletes/_shared/persistent-rules.md (GLOBAL coaching rules - apply to every athlete; these govern debriefs and Strava descriptions)
@@ -176,9 +186,9 @@ Step 2 — Read:
 Step 3 — For the most recent activity that is NOT already in session-log.json:
   Duplicate upload guard: if multiple activities of the same sport on the same date are NOT in session-log.json, they are likely the same session uploaded from two sources (e.g. Garmin + Strava). Only process the one with the highest numeric ID. If that highest-ID activity is already in session-log.json (by ID, date, or both), output ACTIVITY_ID: none — the session is already logged.
 
-  - Fetch full detail via Bash: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint activity_detail --activity-id <id>
+  - Fetch full detail via Bash: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --caller activity-watcher --endpoint activity_detail --activity-id <id>
   - If sport is Run, VirtualRun, or Swim: also fetch extended metrics:
-    python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint extended_metrics --activity-id <id>
+    python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --caller activity-watcher --endpoint extended_metrics --activity-id <id>
   - If the activity has a strava_id field: fetch Strava laps and splits:
     python3 ClaudeCoach/lib/strava_fetch.py --athlete {slug} --strava-id <strava_id>
     If this fails or there is no strava_id, the athlete may not have Strava connected — proceed
@@ -345,7 +355,7 @@ def _credit_heat_exposure(slug: str, activity_id: str, profile: dict) -> None:
             return
         r = subprocess.run(
             ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug,
-             "--endpoint", "history", "--days", "3"],
+             "--caller", CALLER, "--endpoint", "history", "--days", "3"],
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
         )
         act = next((a for a in json.loads(r.stdout)
@@ -506,7 +516,8 @@ def _resolve_ftp(slug: str, profile: dict, session_log_f: Path) -> int:
     # No recent test — use ICU eFTP from fitness endpoint sportInfo
     try:
         r = subprocess.run(
-            ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug, "--endpoint", "fitness", "--days", "1"],
+            ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug,
+             "--caller", CALLER, "--endpoint", "fitness", "--days", "1"],
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
         )
         rows = json.loads(r.stdout)
@@ -531,7 +542,7 @@ def _has_new_activity(slug: str, existing_ids: set) -> bool:
     try:
         r = subprocess.run(
             ["python3", str(BASE / "lib/icu_fetch.py"), "--athlete", slug,
-             "--endpoint", "history", "--days", "3"],
+             "--caller", CALLER, "--endpoint", "history", "--days", "3"],
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=30,
         )
         if r.returncode != 0:
@@ -1221,7 +1232,7 @@ def _live_planned_load(slug: str, plan_name: str, days_back: int = 1) -> dict | 
         start = end - timedelta(days=max(0, days_back))
         r = subprocess.run(
             [sys.executable, str(BASE / "lib" / "icu_fetch.py"), "--athlete", slug,
-             "--endpoint", "events", "--start", start.isoformat(),
+             "--caller", CALLER, "--endpoint", "events", "--start", start.isoformat(),
              "--end", end.isoformat()],
             capture_output=True, text=True, timeout=90)
         if r.returncode != 0:
@@ -1373,6 +1384,10 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     result = claude_call.run_claude(
         prompt, model=claude_call.SONNET, allowed_tools=TOOLS,
         cwd=PROJECT_DIR, timeout=300, label=slug,
+        # Bound to this athlete for the same reason as the caller flag above: this
+        # run holds Bash, and the loop serves every athlete in turn, so a per-spawn
+        # env (never os.environ) keeps one athlete's scope out of the next one's run.
+        env={**os.environ, "CC_ATHLETE_SCOPE": slug},
     )
     if result.returncode == -1:
         # A single timeout is almost always transient (API/CPU contention — e.g. an

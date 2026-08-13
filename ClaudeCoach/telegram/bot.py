@@ -56,6 +56,7 @@ import day_overrides           # fail-closed register of directed day-rule devia
 import claude_call
 import engine
 import plan_lock              # per-athlete build lock: no two plan builds on one calendar
+import agreed_week            # the pinned days a plan build must not touch
 import ops_log                 # run-status + ops-alerts, for work that fails unattended
 import rules_capture
 import rule_registry
@@ -555,6 +556,128 @@ def save_history(history, history_file=None):
 # (lib/agreed_week.py, not yet built), not for a scrape of the transcript.
 
 
+# ── THE REPLAN CARD ──────────────────────────────────────────────────────────────────────
+# Two jobs, and the second is the one that was broken.
+#
+# 1. SAY WHAT IS PROTECTED. The old card was "⚠️ Replan will rebuild this week from scratch
+#    — confirm?" It named no week and listed nothing at risk, so an athlete with an agreed
+#    Thursday had no way to know from it that Thursday was in the firing line. The card
+#    CANNOT show a session-level diff — knowing what a rebuild would change means running
+#    the rebuild, which is three LLM attempts under `timeout 2700` — so it states what is
+#    protected instead, read straight from the pin record: instant, exact, no ICU call.
+#
+# 2. NAME THE WEEK THE BUILD WILL ACTUALLY PLAN. stage1-plan defaults to _next_monday(today),
+#    whose `(7 - weekday()) % 7 or 7` returns 7 on a Monday — so tapping replan on a Monday
+#    rebuilds NEXT week. The old copy and the /replan menu label both said "this week" and
+#    were therefore already wrong. Listing protections for one week while rebuilding another
+#    would be a fresh instance of the rage class this work exists to close.
+#
+#    So the Monday is computed ONCE here, named in the card, used for the pins read AND the
+#    release, and passed to the build as --week-start. The card cannot disagree with the
+#    build by construction, rather than by two copies of an expression staying in step.
+#    Whether replan SHOULD plan the current week on a Monday is a product question (design
+#    section 11.5) and is deliberately left open — this only stops the copy lying about it.
+
+def next_plan_monday(today: date) -> date:
+    """The Monday a plan build launched today will plan. Mirrors stage1-plan._next_monday.
+
+    `import stage1-plan` is a syntax error (the hyphen), so the expression cannot be shared.
+    It is instead made harmless: every caller here passes the result to the build as
+    --week-start, so if this ever drifted from stage1-plan's default the build would still
+    plan the week the card named. That is the invariant worth having — not identical
+    arithmetic, but arithmetic that cannot matter."""
+    return today + timedelta(days=(7 - today.weekday()) % 7 or 7)
+
+
+def duration_phrase(minutes) -> str:
+    """A session length as the athlete would say it: "45min", "4h", "3h30".
+
+    THE SAME FORMAT IS USED BY stage1-plan._agreed_day_phrases, which writes the "with Tue's
+    ride 4h fixed" clause on the week message. The card and that message describe the same
+    agreed session minutes apart, so two spellings of one duration ("4h" here, "4h00" there)
+    reads as two different sessions. Kept in step by hand: the two files cannot share a
+    helper (`import stage1-plan` is a syntax error) and lib/agreed_week is another ticket's."""
+    m = int(minutes or 0)
+    if m <= 0:
+        return ""
+    if m < 60:
+        return f"{m}min"
+    return f"{m // 60}h" + (f"{m % 60}" if m % 60 else "")
+
+
+def _pin_line(d: str, why: str, pin: dict | None) -> str:
+    """One protected day, in the athlete's terms: "Tue 18 — Long run 35km (agreed in chat,
+    11 Aug)". A pin with no session is a REST day and reads as "nothing"."""
+    dd = date.fromisoformat(d)
+    head = f"{dd.strftime('%a')} {dd.day}"
+    sess = (pin or {}).get("session") or {}
+    if sess:
+        what = str(sess.get("name") or "").strip() or str(sess.get("sport") or "session")
+        # A name that already carries a number ("Long run 35km", "4h endurance") states its
+        # own size; appending a duration would give the athlete two figures for one session.
+        dur = duration_phrase(sess.get("minutes"))
+        if dur and not any(ch.isdigit() for ch in what):
+            what += f" {dur}"
+    else:
+        what = "nothing"
+    when = ""
+    at = str((pin or {}).get("at") or "")[:10]
+    if at:
+        try:
+            _at = date.fromisoformat(at)
+            # Built from .day rather than a strftime directive on purpose: "%-d" (no
+            # zero-pad) is a glibc/BSD extension, and a libc without it does not raise — it
+            # returns the directive verbatim, so the failure mode is silently wrong copy that
+            # no try/except catches.
+            when = f", {_at.day} {_at.strftime('%b')}"
+        except (ValueError, TypeError):
+            when = ""
+    return f"  {head} — {what} ({why}{when})"
+
+
+def replan_card(week_start: date, pins: dict, protected: dict) -> tuple[str, list]:
+    """(card text, inline-keyboard rows) for a replan confirmation. PURE: no ICU call, no
+    config read, no clock — the week and both day sets are handed in, so this is drivable
+    from a test and cannot name a week other than the one the caller will build.
+
+    `pins` are the agreed days (each with its record, so the card can say what is on them);
+    `protected` is the wider set the build will not plan on — pins UNION the days the
+    athlete declared unavailable — which is what decides the "I will rebuild" list and the
+    day count on the first button. They are two sets on purpose (lib/agreed_week).
+
+    With nothing protected the card degrades to a single confirm button and no protected
+    block: no worse than what it replaced."""
+    wc = f"w/c {week_start.strftime('%a')} {week_start.day} {week_start.strftime('%b')}"
+    if not protected:
+        return (f"⚠️ Rebuilding {wc} from scratch — confirm?",
+                [[{"text": "✅ Rebuild the week", "callback_data": "__REPLAN_CONFIRM__"}],
+                 [{"text": "❌ Cancel", "callback_data": "__REPLAN_CANCEL__"}]])
+
+    lines = [f"⚠️ Rebuilding {wc}.", "", "I will *not* touch these:"]
+    lines += [_pin_line(d, why, pins.get(d)) for d, why in sorted(protected.items())]
+    rebuild = [(week_start + timedelta(days=i)).strftime("%a") for i in range(7)
+               if (week_start + timedelta(days=i)).isoformat() not in protected]
+    lines += ["", ("I will rebuild: " + ", ".join(rebuild) + "."
+                   if rebuild else
+                   # Every day protected. The build would then propose nothing and change
+                   # nothing, so offering "rebuild those 0 days" would be a button that
+                   # does not do anything. Say so and offer only the release.
+                   "That is the whole week — there is nothing left for me to rebuild.")]
+
+    rows = []
+    if rebuild:
+        rows.append([{"text": f"✅ Rebuild those {len(rebuild)} days",
+                      "callback_data": "__REPLAN_CONFIRM__"}])
+    if pins:
+        # Only offered when there is a PIN to release. release() releases pins, not declared
+        # unavailability, so on an availability-only week this button would claim to drop
+        # something it cannot drop.
+        rows.append([{"text": "🔓 Rebuild the whole week (drops what we agreed)",
+                      "callback_data": "__REPLAN_CONFIRM_RELEASE__"}])
+    rows.append([{"text": "❌ Cancel", "callback_data": "__REPLAN_CANCEL__"}])
+    return "\n".join(lines), rows
+
+
 def _hist_entry(user, assistant, kind="text"):
     """A history pair stamped with the local send time, so the bot can resolve
     time-referenced questions ("my 8:08 message") instead of claiming it can't see
@@ -974,8 +1097,16 @@ _FORM_CMD_RE     = re.compile(r'^/form\s*$', re.I)
 _RACE_CMD_RE     = re.compile(r'^/race\s*$', re.I)
 # (chat_id, callback_data) -> last-handled timestamp, for command-callback debounce
 _RECENT_CALLBACKS = {}
-# (chat_id) -> expiry timestamp; set when replan confirmation is pending
-_PENDING_REPLAN: dict[str, float] = {}
+# (chat_id) -> {"expiry": ts, "week_start": "YYYY-MM-DD"}; set when a replan confirmation
+# is pending. The WEEK is carried, not recomputed on the tap: the card named a Monday and
+# listed that Monday's protected days, so the confirm must build and release for exactly
+# that Monday even if the tap lands after midnight.
+_PENDING_REPLAN: dict[str, dict] = {}
+
+# How long a replan card stays live. 60s was sized for a two-button card with one line of
+# copy. The card now carries a protected list to read and three choices, and an expired card
+# reads to the athlete as a silent cancel, so it is worth more room.
+_REPLAN_CARD_TTL = 300
 
 _LOAD_CMD_RE     = re.compile(r'^/load\s*$', re.I)
 _FITNESS_CMD_RE  = re.compile(r'^/fitness\s*$', re.I)
@@ -1016,7 +1147,12 @@ BOT_COMMANDS = [
     ("fitness", "Fitness & Form charts"),
     ("load",    "Training-load chart (±8 days)"),
     ("graphs",  "All charts menu"),
-    ("replan",  "Rebuild this week's plan"),
+    # NOT "this week's plan". The build plans _next_monday(today), which on a Monday is the
+    # FOLLOWING Monday, so the old label promised the week the athlete is in and delivered a
+    # different one. A setMyCommands label is registered at startup and cannot carry a date,
+    # so it says which week it is NOT sure about and defers to the card, which names the real
+    # Monday (see replan_card).
+    ("replan",  "Rebuild an upcoming week (I'll say which)"),
     ("check",   "Check a recent activity"),
     ("voice",   "Toggle spoken replies on/off"),
     ("help",    "Commands & how to use"),
@@ -3878,27 +4014,68 @@ def _handle_dayrule_confirm(token, chat_id, data, message_id, athletes):
     return True
 
 
+_REPLAN_TOKENS = ("__REPLAN_CONFIRM__", "__REPLAN_CONFIRM_RELEASE__", "__REPLAN_CANCEL__")
+
+
 def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
-    """Handle replan confirmation/cancel callbacks. Returns True if handled."""
-    if data not in ("__REPLAN_CONFIRM__", "__REPLAN_CANCEL__"):
+    """Handle replan confirmation/release/cancel callbacks. Returns True if handled.
+
+    Three tokens now. `__REPLAN_CONFIRM_RELEASE__` is the athlete saying "drop what we
+    agreed and rebuild the lot": it RELEASES every pin for the card's week first — with its
+    own ops_log line, because "who dropped what we agreed, and when" was the unanswerable
+    question on 10 Aug — and then runs the ordinary build. Without that escape hatch a pin
+    is a trap the athlete cannot get out of, which is a new rage class rather than a fix for
+    the old one."""
+    if data not in _REPLAN_TOKENS:
         return False
     athlete = athletes.get(chat_id)
     if not athlete:
         return False
     slug = athlete["slug"]
-    expiry = _PENDING_REPLAN.pop(chat_id, None)
-    if data == "__REPLAN_CANCEL__" or expiry is None or time.time() > expiry:
+    pending = _PENDING_REPLAN.pop(chat_id, None) or {}
+    expiry = pending.get("expiry")
+    if (data == "__REPLAN_CANCEL__" or expiry is None or time.time() > expiry):
         if message_id:
             edit_keyboard_confirm(token, chat_id, message_id, "❌ Replan cancelled")
         return True
+    # The week the CARD named, never a fresh _next_monday: the athlete agreed to rebuild a
+    # named week having read that week's protected list, and a tap after midnight must not
+    # quietly retarget it.
+    week_start = str(pending.get("week_start") or "")
+    released = []
+    if data == "__REPLAN_CONFIRM_RELEASE__":
+        try:
+            released = agreed_week.release(slug, week_start, by="athlete tapped "
+                                          "'rebuild the whole week' on the replan card")
+        except Exception as e:
+            # A failed release means the pins still stand, so the build would honour days
+            # the athlete has just told us to drop. Stop rather than deliver the opposite of
+            # what was asked.
+            log(f"[{slug}] could NOT release pins for {week_start}: {e!r}")
+            if message_id:
+                edit_keyboard_confirm(token, chat_id, message_id, "⚠️ Couldn't do that")
+            send(token, chat_id,
+                 "I couldn't drop what we'd agreed for that week, so I've not rebuilt it - "
+                 "rebuilding now would have kept those days anyway. Try again, or tell me "
+                 "what you want the week to look like.",
+                 reply_markup=build_keyboard(slug))
+            return True
     if message_id:
-        edit_keyboard_confirm(token, chat_id, message_id, "✅ Replan confirmed — rebuilding week…")
+        edit_keyboard_confirm(
+            token, chat_id, message_id,
+            f"🔓 Dropped {len(released)} agreed day(s) — rebuilding…" if released
+            else "✅ Replan confirmed — rebuilding week…")
     try:
+        # --week-start explicitly: the card named this Monday and listed its protected days,
+        # so the build must plan that Monday and not re-derive one of its own.
         cmd = ["timeout", "2700", "python3", str(STAGE1_PLAN_SCRIPT),
                "--athlete", slug, "--push", "--notify"]
+        if week_start:
+            cmd += ["--week-start", week_start]
         proc = subprocess.Popen(cmd, cwd=str(PROJECT_DIR),
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        log(f"[{slug}] replan launched in background (confirmed)")
+        log(f"[{slug}] replan launched in background (confirmed, w/c {week_start or '?'}"
+            f"{f', {len(released)} pin(s) released' if released else ''})")
         _watch_replan(token, chat_id, slug, proc)
     except Exception as e:
         send(token, chat_id, f"Couldn't start replan: {e}", reply_markup=build_keyboard(slug))
@@ -5593,13 +5770,22 @@ def _route_text(token, chat_id, text, athletes, config):
                  reply_markup=build_keyboard(slug))
             log(f"[{slug}] replan card NOT armed — a build is already running")
             return
-        _PENDING_REPLAN[chat_id] = time.time() + 60
-        send(token, chat_id,
-             "⚠️ Replan will rebuild this week from scratch — confirm?",
-             reply_markup={"inline_keyboard": [[
-                 {"text": "✅ Yes, replan",  "callback_data": "__REPLAN_CONFIRM__"},
-                 {"text": "❌ Cancel",        "callback_data": "__REPLAN_CANCEL__"},
-             ]]})
+        # The week is resolved ONCE, here: named in the card, used for the pins read and the
+        # release, and passed to the build as --week-start on the confirm. The card can
+        # therefore never list protections for a week other than the one it rebuilds.
+        _ws = next_plan_monday(date.today())
+        try:
+            _pins = agreed_week.pins_for_week(slug, _ws)
+            _prot = agreed_week.protected_dates(slug, _ws)
+        except Exception as e:
+            # A card that cannot read the store must not claim nothing is protected — but it
+            # must still let the athlete replan. Show the no-pins card and say why.
+            log(f"[{slug}] could not read the agreed week for {_ws}: {e!r}")
+            _pins, _prot = {}, {}
+        _text, _rows = replan_card(_ws, _pins, _prot)
+        _PENDING_REPLAN[chat_id] = {"expiry": time.time() + _REPLAN_CARD_TTL,
+                                    "week_start": _ws.isoformat()}
+        send(token, chat_id, _text, reply_markup={"inline_keyboard": _rows})
         return
     if fast in ("__GENERATE_PLAN__", "__REPLAN__"):
         is_replan = fast == "__REPLAN__"

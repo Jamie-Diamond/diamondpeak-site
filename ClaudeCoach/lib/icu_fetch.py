@@ -31,6 +31,20 @@ own automated adjustment, not the athlete's agreement, and it is additionally bo
 editing/pushing TODAY and forbidden from deleting anything at all
 (scripts/daily-prescription.py is the caller).
 
+CALLER, AND WHY TWO JOBS ARE DENIED WRITES OUTRIGHT. `--caller` names the job whose prompt
+issued the command. Two of the four LLM jobs that hold Bash — scripts/activity-watcher.py
+and scripts/morning-checkin.py — have no reason whatever to write the calendar: one reads a
+finished activity and comments on it, the other asks how you slept. Neither is a planner
+and neither is asked to write, but nothing stopped them, and "nothing stopped it" is how a
+week goes missing with no line in any log naming what removed it. They now pass
+`--caller <their own name>` and the four WRITE endpoints refuse them. Reads are untouched,
+which is all either job actually does.
+
+Fail-open by design: a caller that passes no `--caller` is unrestricted, so every hand-run
+and every existing habit keeps working. This is an allowlist over jobs that VOLUNTEER their
+identity, not an authentication boundary — a model that wanted to write could simply omit
+the flag. It is a guard against accident, which is the failure that has actually happened.
+
   !! NEVER ROUTE lib/plan_builder.push THROUGH THIS CLI. !!
   Pin-on-write is safe only because plan_builder.push talks to IcuClient directly. Route
   the generator through here "for consistency" and every generated week would pin ITSELF,
@@ -83,6 +97,31 @@ def scope_violation(slug: str, endpoint: str, scope: str | None = None) -> str |
         return None
     return (f"ERROR: refusing to write to '{slug}' from a session scoped to '{scope}'. "
             f"Reads of another athlete are fine; writes are not.")
+
+
+# Jobs that may never write the calendar, keyed by the name they pass in --caller. Both
+# are watchers: they read training that has already happened (or has not started) and
+# talk about it. Adding a job here is a decision that it has no business writing events;
+# it is NOT a security boundary (see the module docstring on fail-open).
+NO_WRITE_CALLERS = frozenset({"activity-watcher", "morning-checkin"})
+
+
+def caller_violation(endpoint: str, caller: str | None) -> str | None:
+    """The refusal message when `caller` is a job with no business writing the calendar,
+    else None. Pure, so it can be tested without the network.
+
+    WRITE endpoints only. The two callers make plenty of legitimate READS through this same
+    CLI (profile, history, events, activity_detail, extended_metrics), so a blanket refusal
+    on the caller name would break both jobs outright rather than bounding them."""
+    c = (caller or "").strip()
+    if not c or endpoint not in WRITE_ENDPOINTS:
+        return None
+    if c not in NO_WRITE_CALLERS:
+        return None
+    return (f"ERROR: --caller {c} may not write the calendar. That job reads training and "
+            f"talks about it; creating, changing or removing planned sessions is the "
+            f"planner's job (scripts/stage1-plan.py) and the chat coach's. Reads through "
+            f"this CLI are unrestricted.")
 
 
 def payload_date(fields: dict) -> str | None:
@@ -265,6 +304,11 @@ def main():
                         "date is PINNED and no generator will rebuild it this week. "
                         "coach-auto: an automated same-day adjustment — writes today "
                         "only, never deletes, never pins.")
+    p.add_argument("--caller",      default=None,
+                   help="the job issuing this command (activity-watcher, morning-checkin, "
+                        "daily-prescription, chat, ...). Jobs with no business writing the "
+                        "calendar are refused the write endpoints; reads are unrestricted. "
+                        "Omitting it is unrestricted, so hand-runs keep working.")
     p.add_argument("--segments",    default=None,
                    help="JSON array of {minutes, zone} for the session being written. "
                         "Recorded into the pin so the validator can account for the day's "
@@ -279,6 +323,12 @@ def main():
     _viol = scope_violation(args.athlete, args.endpoint)
     if _viol:
         print(_viol, file=sys.stderr)
+        sys.exit(2)
+    # Same placement and the same reason: a job that may not write must not get as far as
+    # loading anyone's API key.
+    _cviol = caller_violation(args.endpoint, args.caller)
+    if _cviol:
+        print(_cviol, file=sys.stderr)
         sys.exit(2)
 
     ep = args.endpoint

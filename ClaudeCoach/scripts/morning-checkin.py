@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Morning briefing — polls every 15 min from 06:00–09:00 via VM crontab. Sends once per athlete per day, after Garmin sleep data syncs."""
-import fcntl, json, subprocess, sys, time
+import fcntl, json, os, subprocess, sys, time
 from datetime import datetime
 from datetime import date, timedelta
 from pathlib import Path
@@ -29,6 +29,12 @@ import menstrual as menstrual_lib
 import races as races_lib
 
 TOOLS = "Read,Bash"
+
+# The identity this job declares to lib/icu_fetch.py, in every icu_fetch line of the
+# prompt. icu_fetch refuses the four WRITE endpoints to this caller: a check-in asks how the
+# athlete slept and reads what is already planned. It has no business creating, changing or
+# removing a session, but it holds Bash, so until now nothing stopped it.
+CALLER = "morning-checkin"
 
 
 def _build_prompt(slug, first_name, race_name, race_date, days_to_race, injuries, recovery=None, wellness_line=None, heat_protocol=True, coaching_level="mid", planned_block="", cycle=None, fuel_target_g_hr=60, nutrition_race=90, heat_accl_pct=None, heat_accl_trend="", long_run_cap_km=None, wellness_finalized=True, ask_morning_pain=False, race_block="", ask_weight=False, ask_ankle=True):
@@ -165,8 +171,11 @@ You are generating the morning briefing for {first_name}'s training day.
 {_level_block(coaching_level)}
 {illness_lib.prompt_block(slug, first_name=first_name)}
 {recovery_block}{wellness_block}{cycle_block}{planned_section}{race_block}{long_run_cap_block}{heat_block}
-Step 1 — Fetch data via Bash:
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint events --start {today} --end {today}
+Step 1 — Fetch data via Bash. EVERY icu_fetch.py call you make must carry
+`--caller morning-checkin`. This job reads what is planned and asks how the athlete is; it
+does not write the calendar, and that flag is what makes the refusal automatic rather than a
+rule you have to remember:
+  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --caller morning-checkin --endpoint events --start {today} --end {today}
 
 Step 2 — Read:
 - ClaudeCoach/athletes/_shared/persistent-rules.md (GLOBAL coaching rules - apply to every athlete)
@@ -704,6 +713,10 @@ def run_athlete(slug, athlete_cfg):
         result = claude_call.run_claude(
             prompt, model=claude_call.SONNET, fallback=[claude_call.OPUS],
             allowed_tools=TOOLS, stderr=lf, cwd=PROJECT_DIR, timeout=180, label=slug,
+            # Bound to this athlete for the same reason as the caller flag above: this
+            # run holds Bash, and the loop serves every athlete in turn, so a per-spawn
+            # env (never os.environ) keeps one athlete's scope out of the next one's run.
+            env={**os.environ, "CC_ATHLETE_SCOPE": slug},
         )
 
     raw = (result.stdout or "").strip()

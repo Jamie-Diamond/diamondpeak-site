@@ -475,6 +475,68 @@ def _attempt_rank(brief: dict, built: dict, target, proposal: dict):
     return (load_off, round(band_dev, 1), round(mono, 2), round(tss_off, 1))
 
 
+# ── WHICH BLOCKERS ARE SAFETY, AND WHICH ARE MERELY WRONG SHAPE ──────────────────────────
+# One test decides membership, and it is not "how serious does this sound": does breaching
+# it make the week HARMFUL to train, or merely wrong-shaped? Ceilings and medical gates are
+# harmful. Floors, structure and day-pattern are wrong-shaped — and wrong-shaped is exactly
+# what the empty-week fallback in _plan() exists to tolerate, because a starting-point week
+# the athlete can correct beats the empty calendar all three athletes found on 9 Aug 2026.
+#
+# So NOT in here, deliberately: weekly_tss_floor (too light — that is the complaint the
+# fallback answers), no_rest_day, long_ride_missing, *_forbidden_day, day_rules_drifted,
+# name_intensity_mismatch, distance_duration_mismatch, strength_over_cap.
+_SAFETY_BLOCKER_CODES = frozenset({
+    "run_mileage_cap",          # weekly run volume over the athlete's ceiling
+    "long_run_cap",             # single long run over its ceiling
+    "run_quality_not_cleared",  # run intensity while the ankle protocol forbids it
+    "physio_not_cleared",       # a zone the physio has NOT cleared on a live injury
+    "ctl_ramp",                 # fitness ramp faster than is safe
+    "run_weekly_volume",        # validate_plan's own run-volume ceilings
+    "run_long_volume",
+    "weekly_tss_cap",           # week over the load ceiling
+    "long_ride_over_ceiling",   # ride longer than the athlete's stated maximum
+})
+
+
+def _msgs(entries) -> list:
+    """The prose of a blocking list. Blocking entries are {code, msg} dicts so the
+    fallback gate can test CODES rather than string-match prose that will be reworded;
+    everything that shows a human or the proposer a blocker goes through here.
+
+    This is the shape that crashed on 5 Jul 2026 when built["hard"]'s dicts were joined
+    raw into an athlete-facing message. Tolerating a bare string keeps that from being
+    fatal a second time if any path is missed."""
+    return [(e.get("msg") if isinstance(e, dict) else str(e)) for e in (entries or [])]
+
+
+def safety_blockers(blocking) -> list:
+    """The blocking entries whose codes are safety ceilings or medical gates.
+
+    An UNRECOGNISED code counts as NOT safety, and that direction is deliberate: failing
+    closed on unknown codes means the next hard rule anyone adds silently reinstates the
+    empty week this fallback exists to prevent. The unknown code is logged instead
+    (see _fallback_gate), so the list can be audited rather than guessed at."""
+    return [e for e in (blocking or [])
+            if isinstance(e, dict) and e.get("code") in _SAFETY_BLOCKER_CODES]
+
+
+def unknown_blocker_codes(blocking) -> list:
+    """Blocking codes this file does not classify. Reported, never acted on."""
+    known = _SAFETY_BLOCKER_CODES | {
+        "weekly_tss_floor", "no_rest_day", "no_rest_day_waived", "long_ride_missing",
+        "day_rules_drifted", "name_intensity_mismatch", "distance_duration_mismatch",
+        "strength_over_cap"}
+    out = []
+    for e in (blocking or []):
+        c = e.get("code") if isinstance(e, dict) else None
+        # `<sport>_forbidden_day` and `<sport>_directed_day` are generated per sport, so
+        # they cannot be enumerated — matched by suffix. Both are day-pattern, not safety.
+        if not c or c in known or c.endswith(("_forbidden_day", "_directed_day")):
+            continue
+        out.append(c)
+    return sorted(set(out))
+
+
 def audit_built(brief: dict, built: dict, target, proposal: dict):
     """Audit the built week. Returns (blocking, advisory).
 
@@ -482,7 +544,13 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     TSS caps, wrong-day rules, the ankle run-quality hard-stop, a missing long ride) -
     these prevent a push. ADVISORY = quality/shape/monotony nudges - they drive the
     iterate-to-clean loop as feedback but NEVER block the push (checks advise; only
-    safety ceilings block). Both lists are surfaced and fed back to the proposer."""
+    safety ceilings block). Both lists are surfaced and fed back to the proposer.
+
+    Blocking entries are {"code", "msg"} DICTS; advisory entries stay bare prose. The
+    asymmetry is load-bearing rather than untidy: only blocking is gated on (the
+    empty-week fallback in _plan() must distinguish "this week would hurt you" from
+    "this week is the wrong shape"), and a code is a promise to keep stable, which is not
+    worth making for a nudge nobody branches on. Render blocking prose with _msgs()."""
     import datetime as _dt
     blocking, advisory = [], []
 
@@ -496,7 +564,8 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     # Hard validate_week rules (wrong-day, TSS cap/floor, CTL ramp, run-volume caps,
     # distance/duration mismatch) are safety ceilings -> BLOCK. Soft ones (monotony,
     # intensity-distribution, strength cap) ADVISE.
-    blocking += [f"rule(hard): {v['msg']}" for v in built.get("hard", [])]
+    blocking += [{"code": v.get("code"), "msg": f"rule(hard): {v['msg']}"}
+                 for v in built.get("hard", [])]
     advisory += [f"rule(soft): {v['msg']}" for v in built.get("soft", [])]
 
     # swim_focus type on a focus day: advisory (a preference, not a safety ceiling).
@@ -517,17 +586,23 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     run_km = round(run_min / 5.3, 1)   # ~easy pace 5.3 min/km
     cap_km = brief.get("weekly_run_mileage_cap_km")   # MAX weekly run km ceiling
     if cap_km and run_km > cap_km:
-        blocking.append(f"run mileage ~{run_km}km EXCEEDS cap {cap_km}km (+10-15% max) - cut run durations")
+        blocking.append({"code": "run_mileage_cap",
+                         "msg": f"run mileage ~{run_km}km EXCEEDS cap {cap_km}km "
+                                f"(+10-15% max) - cut run durations"})
     rp = brief.get("run_protocol") or {}
     if rp.get("quality_allowed") is False:
         for s in proposal.get("sessions", []):
             if (s.get("sport") or "").lower() != "run":
                 continue
             if any((_seg_if("run", seg) or 0) >= _QUALITY_IF for seg in (s.get("segments") or [])):
-                blocking.append(f"run '{s.get('name')}' has quality intensity but run quality is NOT allowed (ankle)")
+                blocking.append({"code": "run_quality_not_cleared",
+                                 "msg": f"run '{s.get('name')}' has quality intensity but "
+                                        f"run quality is NOT allowed (ankle)"})
     lrc = brief.get("long_run_cap_min")   # MAX single long run
     if lrc and runs and max(s["duration_min"] for s in runs) > lrc:
-        blocking.append(f"long run {max(s['duration_min'] for s in runs)}min EXCEEDS cap {lrc}min (+10-15% max)")
+        blocking.append({"code": "long_run_cap",
+                         "msg": f"long run {max(s['duration_min'] for s in runs)}min "
+                                f"EXCEEDS cap {lrc}min (+10-15% max)"})
     lrt_run = brief.get("long_run_target_min")   # PROGRESSING target (configured athletes)
     if lrt_run and runs:
         _longest = max(s["duration_min"] for s in runs)
@@ -540,7 +615,9 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     rides = [s for s in built["sessions"] if s["sport"] in ("Ride", "Bike", "Brick")]
     if lrt and (not rides or max(s["duration_min"] for s in rides) < lrt * 0.85):
         have = max((s["duration_min"] for s in rides), default=0)
-        blocking.append(f"no protected long ride - longest ride {have}min < target ~{lrt}min")
+        blocking.append({"code": "long_ride_missing",
+                         "msg": f"no protected long ride - longest ride {have}min < "
+                                f"target ~{lrt}min"})
 
     # ── INTENSITY BUDGET (ADVISORY: drives the loop, never blocks) ──
     # The athlete's OVERALL phase TID (brief.tid_low_mod_high) is the intensity budget: the
@@ -570,9 +647,11 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
         _rw = per_sport_wk.get(_sp) or {}
         for _zn, _bd in _zs.items():
             if _bd.get("hard") and float(_rw.get(_pk.get(_zn, ""), 0) or 0) > 0.5:
-                blocking.append(f"{_sp} {'Z4-5/VO2' if _zn=='high' else 'Z3'} quality present "
-                                f"but NOT physio-cleared (injury cap 0) - keep that zone empty "
-                                f"until the physio raises the allowance")
+                blocking.append({"code": "physio_not_cleared",
+                                 "msg": f"{_sp} {'Z4-5/VO2' if _zn=='high' else 'Z3'} "
+                                        f"quality present but NOT physio-cleared (injury "
+                                        f"cap 0) - keep that zone empty until the physio "
+                                        f"raises the allowance"})
     _deload = (brief.get("week_type") or "").lower() in ("deload", "taper")
     try:
         from primitives.validate_plan import check_intensity_budget
@@ -916,7 +995,8 @@ def _plan(args):
         built = close_to_target(args.athlete, proposal, target, brief)
         blocking, advisory = audit_built(brief, built, target, proposal)
         attempts = [f"override: {len(blocking)} blocking / {len(advisory)} advisory"
-                    + (f" - {blocking + advisory}" if (blocking or advisory) else " - CLEAN")]
+                    + (f" - {_msgs(blocking) + advisory}" if (blocking or advisory)
+                       else " - CLEAN")]
         best = (built, blocking, advisory, proposal)
     else:
         # ITERATE UNTIL CLEAN (iterative planning is fine — Jamie 15 Jun): propose → load-close
@@ -945,7 +1025,7 @@ def _plan(args):
             # either way; the WHOLE-week audit that decides overall_ok runs post-splice.
             built = close_to_target(args.athlete, proposal, p_target, brief)
             blocking, advisory = audit_built(brief, built, p_target, proposal)
-            all_issues = blocking + advisory
+            all_issues = _msgs(blocking) + advisory
             _z3, _tot = _overall_z3plus(proposal)
             _z3pct = round(_z3 / _tot * 100) if _tot else 0
             attempts.append(f"attempt {attempt+1}: {len(blocking)} blocking / {len(advisory)} advisory "
@@ -1042,22 +1122,87 @@ def _plan(args):
             # notify branch: _beat() below reads `why`, so with --notify off, or an
             # athlete with no chat_id, this raised NameError on the one path whose whole
             # job is to report the failure.
-            why = (blocking[0] if blocking
+            why = (_msgs(blocking)[0] if blocking
                    else (f"load {load_pct_off}% off target" if not load_on_target else "audit failed"))
-            if args.notify and cfg.get("chat_id"):
-                # "Your existing plan is unchanged" was WRONG and reassuring in the worst
-                # way: on 9 Aug all three athletes had nothing on the calendar for the
-                # coming week, so there was no existing plan to leave alone. State only
-                # what is true - the week was not written - and name the day it covers.
-                _notify(cfg["chat_id"],
-                        f"⚠️ Couldn't build a clean week for {built['week_start']} ({why}). "
-                        f"Your calendar has NOT been updated for that week - tell me and "
-                        f"I'll build it with you.",
-                        athlete=args.athlete)
-            # A real deliverable failure, not silence-by-design: the athlete's week was
-            # not replaced. Recorded ok=False so it shows as a digest ✗ — and because an
-            # entry EXISTS, the gap check stays quiet and it is reported once, not twice.
-            _beat(False, f"no clean week pushed ({why})")
+            # ── EMPTY-WEEK FALLBACK (design section 6.1) ─────────────────────────────
+            # A wrong-shaped week beats an empty calendar; an UNSAFE week does not. Only
+            # attempted when the week holds nothing at all, so it can only ever ADD.
+            _unknown = unknown_blocker_codes(blocking)
+            if _unknown:
+                # An unclassified code was allowed through the safety gate. Say which, so
+                # the list in _SAFETY_BLOCKER_CODES gets audited rather than guessed at.
+                try:
+                    ops_log.alert("stage1-plan",
+                                  f"blocking code(s) {_unknown} are not classified as "
+                                  f"safety-or-shape in stage1-plan._SAFETY_BLOCKER_CODES "
+                                  f"— treated as SHAPE (the empty-week fallback may push "
+                                  f"a week breaching them). Classify them.",
+                                  athlete=args.athlete)
+                except Exception:
+                    pass
+            _empty = week_is_empty(args.athlete, week_start, cfg)
+            _may_fallback, _safety = fallback_gate(blocking, _empty)
+            summary["week_was_empty"] = _empty
+            summary["safety_blockers"] = _safety
+            summary["unclassified_blocker_codes"] = _unknown
+            if _may_fallback:
+                # replace=False: the week is empty so there is nothing to delete, and
+                # saying so in the call is the honest expression of "this can only add".
+                # push() skips pinned dates independently, so agreed days stay untouched.
+                summary["push_result"] = pb.push(args.athlete, built, replace=False)
+                summary["pushed"] = True
+                summary["reason"] = (f"week was EMPTY and no safety ceiling was breached "
+                                     f"— pushed the best attempt as a starting point ({why})")
+                # Bank the zones: this week IS what the athlete will train, so next week's
+                # rolling 2-week balance has to see it. NOT _advance_injury_ramp — moving a
+                # clinical progression forward off a week that failed its own audit is not
+                # something to do as a side effect.
+                _write_prior_zones(args.athlete, week_start, proposal)
+                if args.notify and cfg.get("chat_id"):
+                    _notify(cfg["chat_id"], _fallback_message(brief, built, why),
+                            athlete=args.athlete)
+                # Still ok=False and still exit 3: a week was delivered, but not a clean
+                # one, and weekly-plan.sh must keep seeing that. The detail says which.
+                _beat(False, f"pushed a FALLBACK week for {built['week_start']} into an "
+                             f"empty calendar ({why})")
+            else:
+                if args.notify and cfg.get("chat_id"):
+                    # "Your existing plan is unchanged" was WRONG and reassuring in the
+                    # worst way: on 9 Aug all three athletes had nothing on the calendar
+                    # for the coming week, so there was no existing plan to leave alone.
+                    # State only what is true - the week was not written - and name the
+                    # day it covers.
+                    _msg = (f"⚠️ Couldn't build a clean week for {built['week_start']} "
+                            f"({why}). Your calendar has NOT been updated for that week - "
+                            f"tell me and I'll build it with you.")
+                    if _safety and _empty is True:
+                        # The ONE case where writing something was possible and we chose not
+                        # to: the calendar is empty, the fallback existed, and a safety
+                        # ceiling stopped it. The athlete deserves to know that was a
+                        # decision. Gated on the week actually being empty — with sessions
+                        # already there, "I'd rather leave it empty" would be false and the
+                        # message above ("your calendar has not been updated") is the true one.
+                        _msg = (f"⚠️ I couldn't build a week for {built['week_start']} that "
+                                f"I'm willing to put in front of you - {why}. I'd rather "
+                                f"leave it empty than give you something that pushes past "
+                                f"a limit we've set. Tell me what's changed and we'll "
+                                f"build it together.")
+                    _notify(cfg["chat_id"], _msg, athlete=args.athlete)
+                if _safety:
+                    try:
+                        ops_log.alert("stage1-plan",
+                                      f"NOTHING pushed for {args.athlete} w/c "
+                                      f"{built['week_start']}: safety blocker(s) "
+                                      f"{[e.get('code') for e in _safety]} — the empty-week "
+                                      f"fallback was deliberately withheld"
+                                      + (" and the calendar is EMPTY" if _empty is True else ""),
+                                      athlete=args.athlete)
+                    except Exception:
+                        pass
+                # A real deliverable failure, not silence-by-design: the athlete's week was
+                # not replaced. Recorded ok=False so it shows as a digest ✗ — and because an
+                # entry EXISTS, the gap check stays quiet and it is reported once, not twice.
+                _beat(False, f"no clean week pushed ({why})")
         else:
             summary["push_result"] = pb.push(args.athlete, built)
             _write_prior_zones(args.athlete, week_start, proposal)   # Phase 5.4: bank for next week
@@ -1068,7 +1213,8 @@ def _plan(args):
                 except Exception:
                     pass
             if args.notify and cfg.get("chat_id"):
-                _notify(cfg["chat_id"], _week_message(brief, built), athlete=args.athlete)
+                _notify(cfg["chat_id"], _week_message(brief, built, pins),
+                        athlete=args.athlete)
             _beat(True, f"pushed week of {built['week_start']} ({built['total_tss']} TSS)")
     print(json.dumps(summary, indent=1, ensure_ascii=False))
     # Exit NON-ZERO when a --push run delivered no week. It exited 0 before, which is why
@@ -1081,7 +1227,123 @@ def _plan(args):
         sys.exit(3)
 
 
-def _week_message(brief: dict, built: dict) -> str:
+def week_is_empty(slug: str, week_start: date, cfg: dict) -> bool | None:
+    """True when the week holds no planned WORKOUT event at all, False when it holds one,
+    None when the calendar could not be read.
+
+    None is NOT "empty". The fallback below only ever fires on a confirmed-empty week,
+    because "we could not read the calendar" and "there is nothing there" are the two
+    states whose conflation would let a failed build write over a week that was fine."""
+    try:
+        from icu_api import IcuClient
+        c = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
+        events = c.get_events(week_start.isoformat(),
+                             (week_start + timedelta(days=6)).isoformat()) or []
+    except Exception as e:
+        print(f"[stage1-plan:{slug}] could not read the calendar to decide whether the "
+              f"week is empty ({e!r}) — treating it as UNKNOWN, not empty", file=sys.stderr)
+        return None
+    return not any(e.get("category") == "WORKOUT" and e.get("id") for e in events)
+
+
+def fallback_gate(blocking, week_empty) -> tuple[bool, list]:
+    """(may we push the best attempt into an empty week, the safety blockers that stop us).
+
+    Design section 6.1. The rule in one sentence: a week that is the WRONG SHAPE beats an
+    empty calendar, and a week that breaches a SAFETY ceiling does not.
+
+    9 Aug 2026 is the incident: all three athletes had nothing planned for the coming week,
+    every build had refused to write, and it was discovered because Jamie asked. A
+    starting-point week the athlete can argue with is strictly better than that. But it is
+    only better while the week is safe to train, so any safety blocker (safety_blockers())
+    stops the fallback dead and the athlete is told nothing was written.
+
+    Both other conditions are hard: the week must be CONFIRMED empty (True, never None —
+    see week_is_empty), so this path can only ever ADD to days that hold nothing."""
+    safety = safety_blockers(blocking)
+    return (week_empty is True and not safety), safety
+
+
+# A week this far from its target is worth explaining rather than leaving the athlete to
+# notice. Same 8% the audit's own load advisory uses, so the message fires exactly when the
+# system already thinks the number is off — and well inside the 12% push gate, so this
+# clause is about a week that WAS pushed.
+_AGREED_SHORTFALL_PCT = 8.0
+
+
+def _agreed_day_phrases(built: dict, pins: dict) -> list:
+    """The agreed days in the athlete's own terms — "Tue's 4h ride", "Thu off" — in date
+    order. Rest-day pins come from `pins`, not from `built`, because a rest day is the
+    absence of a session and there is nothing in the built week to read it off."""
+    import datetime as _dt
+
+    def _wd(d):
+        return _dt.date.fromisoformat(str(d)[:10]).strftime("%a")
+
+    def _dur(minutes) -> str:
+        """"45min", "4h", "3h30". MUST match telegram/bot.duration_phrase, which spells the
+        same agreed session on the replan card minutes before this message goes out — two
+        spellings of one duration reads as two different sessions. The two files cannot share
+        a helper: `import stage1-plan` is a syntax error."""
+        m = int(minutes or 0)
+        if m <= 0:
+            return ""
+        if m < 60:
+            return f"{m}min"
+        return f"{m // 60}h" + (f"{m % 60}" if m % 60 else "")
+
+    out = {}
+    for s in (built.get("sessions") or []):
+        if not s.get("pinned"):
+            continue
+        dur = _dur(s.get("duration_min"))
+        out[str(s["date"])[:10]] = (f"{_wd(s['date'])}'s {(s.get('sport') or '').lower()}"
+                                    + (f" {dur}" if dur else ""))
+    for d, p in (pins or {}).items():
+        if d in out:
+            continue
+        # A pin with no session is "nothing that day" — the athlete said so and the
+        # generator left the day alone. Naming it matters: an unexplained empty Thursday
+        # is what a missing session looks like.
+        out[d] = f"{_wd(d)} off" if not (p or {}).get("session") else f"{_wd(d)}'s session"
+    return [out[d] for d in sorted(out)]
+
+
+def agreed_shortfall_clause(brief: dict, built: dict, pins: dict) -> str:
+    """The "I could not honour everything" line, or "" when there is nothing to say.
+
+    THE CASE THIS MUST NEVER BE SILENT ABOUT. Agreed days are fixed, so once they are
+    spliced in the remaining days may not be able to reach the week's target — and the
+    generator will NOT shrink an agreed session to close the gap (close_to_target.flex()
+    refuses a pinned session, deliberately). That is the right behaviour and the wrong
+    thing to hide: an athlete who sees a week 78 Load light with no explanation reads it as
+    the coach getting it wrong, not as the coach keeping their word.
+
+    So: name the agreed days, state the number, say plainly that the agreed session was NOT
+    cut, and offer the trade back. Returns "" when there are no pins or the week landed on
+    target, so the ordinary week message is unchanged for everyone else."""
+    target = brief.get("weekly_tss_target")
+    total = built.get("total_tss")
+    if not pins or not target or total is None:
+        return ""
+    off = total - target
+    if abs(off) <= _AGREED_SHORTFALL_PCT / 100.0 * target:
+        return ""
+    days = _agreed_day_phrases(built, pins)
+    if not days:
+        return ""
+    with_ = (days[0] if len(days) == 1
+             else " and ".join([", ".join(days[:-1]), days[-1]]))
+    if off < 0:
+        return (f"_One thing: with {with_} fixed, the week only fits {total} of the "
+                f"{target} it wants. I haven't shortened anything we agreed. Tell me if "
+                f"you'd rather I did._")
+    return (f"_One thing: with {with_} fixed, the week comes to {total} against the "
+            f"{target} it wants. I haven't trimmed anything we agreed to bring it down. "
+            f"Tell me if you'd rather I did._")
+
+
+def _week_message(brief: dict, built: dict, pins: dict | None = None) -> str:
     import datetime as _dt
     target = brief.get("weekly_tss_target")
     header = f"*Week of {built['week_start']}* — {brief.get('phase','')} · {built['total_tss']} TSS"
@@ -1124,6 +1386,12 @@ def _week_message(brief: dict, built: dict) -> str:
                          f"will safely put in front of you at this stage, so fitness will "
                          f"climb a little slower than the plan assumes. Nothing for you to "
                          f"do — I am holding the week at that ceiling._")
+    # The agreed days constrained the week and we did NOT cut them to make the number.
+    # Sibling of the branch above rather than part of it: that one is about an HOURS
+    # ceiling the athlete may be able to lift, this one is about a promise we chose to keep.
+    _agreed = agreed_shortfall_clause(brief, built, pins or {})
+    if _agreed:
+        lines.append(_agreed)
     for s in built["sessions"]:
         wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
         dur = f" {s['duration_min']}min" if s["duration_min"] else ""
@@ -1137,6 +1405,43 @@ def _week_message(brief: dict, built: dict) -> str:
                      "(full gym / dumbbells-kettlebells / bodyweight only). "
                      "Reply and I'll tailor the sessions.")
     return "\n".join(lines)
+
+
+def _fallback_message(brief: dict, built: dict, why: str) -> str:
+    """The message for a week pushed by the empty-week fallback (design section 6.1).
+
+    Deliberately NOT the ordinary week message with a warning bolted on. The ordinary one
+    ends "_Synced to your calendar/Garmin._", which reads as "this is your week" — and this
+    is not that. It is the best of three failed attempts, written onto an empty calendar
+    because nothing at all was the worse option. Say so in the first line, name the reason
+    in the athlete's terms, and ask for the correction: the whole value of pushing an
+    imperfect week is that the athlete can now argue with something concrete."""
+    import datetime as _dt
+    lines = [f"*Week of {built['week_start']}* is on your calendar — "
+             f"{built['total_tss']} Load.",
+             "",
+             f"I'm *not* happy with it: {_athlete_reason(why)}. You had nothing at all "
+             f"planned for that week, and a starting point beats an empty calendar — so "
+             f"that is what this is, not a finished week.",
+             ""]
+    for s in built["sessions"]:
+        wd = _dt.date.fromisoformat(s["date"]).strftime("%a")
+        dur = f" {s['duration_min']}min" if s["duration_min"] else ""
+        lines.append(f"{wd}: {s['name']}{dur}")
+    lines.append("")
+    lines.append("Tell me what to change and I'll rebuild it with you.")
+    return "\n".join(lines)
+
+
+def _athlete_reason(why: str) -> str:
+    """The blocking prose, softened for the athlete. Best-effort: an unrecognised reason is
+    passed through rather than dropped — a vague explanation beats none, and this message
+    exists precisely to be honest about a week that is not right."""
+    w = str(why or "").strip()
+    for prefix in ("rule(hard): ", "rule(soft): "):
+        if w.startswith(prefix):
+            w = w[len(prefix):]
+    return w or "it does not hold together the way I want it to"
 
 
 def _advance_injury_ramp(slug, week_start, targets):
