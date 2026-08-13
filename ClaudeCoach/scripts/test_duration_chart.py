@@ -153,6 +153,96 @@ except Exception as e:
     check(f"a malformed previous-season race date doesn't crash duration_chart (raised {e!r})", False)
 
 
+
+# ── 5) build-duration-prev-cache.py's transform (fixture activities -> series) ────
+# Mirrors the by_day aggregation in build-duration-prev-cache.py's main() without
+# importing it directly (it exits via sys.exit on CLI errors and expects a live
+# IcuClient) — the aggregation loop is copied verbatim so a divergence here is a
+# divergence in the actual script's logic, not a different implementation.
+
+def _by_day_from_activities(activities):
+    by_day = {}
+    for act in activities:
+        d = (act.get("start_date_local") or "")[:10]
+        if not d:
+            continue
+        try:
+            date.fromisoformat(d)
+        except ValueError:
+            continue
+        by_day[d] = by_day.get(d, 0.0) + float(act.get("moving_time") or 0) / 60.0
+    return [[d, round(m, 1)] for d, m in sorted(by_day.items())]
+
+
+_fixture_activities = [
+    {"start_date_local": "2025-06-01T08:00:00", "moving_time": 3600},   # 60 min
+    {"start_date_local": "2025-06-01T17:00:00", "moving_time": 1800},   # + 30 min same day
+    {"start_date_local": "2025-06-03T07:00:00", "moving_time": 5400},   # 90 min
+    {"start_date_local": "", "moving_time": 1200},                      # no date -> dropped
+    {"start_date_local": "not-a-date", "moving_time": 1200},            # bad date -> dropped
+]
+_series = _by_day_from_activities(_fixture_activities)
+check("cache-builder transform sums same-day activities' moving_time into minutes",
+      _series == [["2025-06-01", 90.0], ["2025-06-03", 90.0]])
+check("cache-builder transform drops rows with no date or an unparseable date",
+      len(_series) == 2)
+
+check("cache-builder transform on no usable activities returns an empty series",
+      _by_day_from_activities([{"start_date_local": "", "moving_time": 100}]) == [])
+
+
+# ── 6) payload assembly from stubbed activity data (no network) ──────────────────
+# Mirrors _duration_chart_quick's _rows()/seed logic in telegram/bot.py.
+
+def _rows(by_day, lo, hi):
+    out, d = [], lo
+    while d <= hi:
+        out.append([d.isoformat(), round(by_day.get(d.isoformat(), 0.0), 1)])
+        d += timedelta(days=1)
+    return out
+
+
+_plan_start = date(2026, 6, 1)
+_today2 = date(2026, 6, 10)
+_seed_start = _plan_start - timedelta(days=42)
+_by_day_stub = {(_seed_start + timedelta(days=i)).isoformat(): 50.0 for i in range(42)}
+_by_day_stub.update({(_plan_start + timedelta(days=i)).isoformat(): 70.0 for i in range(10)})
+
+_current_rows2 = _rows(_by_day_stub, _plan_start, _today2)
+check("payload assembly builds one row per day in [plan_start, today], no gaps",
+      len(_current_rows2) == 10 and _current_rows2[0][0] == "2026-06-01"
+      and _current_rows2[-1][0] == "2026-06-10")
+check("payload assembly rows pick up the stubbed activity minutes",
+      all(m == 70.0 for _, m in _current_rows2))
+
+_seed_rows2 = _rows(_by_day_stub, _seed_start, _plan_start - timedelta(days=1))
+_, _seed_minutes2 = C._expand_daily(_seed_rows2)
+_hpw_seed = C._duration_ewma_hours_per_week(_seed_minutes2, seed=0.0)[-1]
+_seed2 = _hpw_seed * 60.0 / 7.0
+# 42 days is exactly the recursion's own time constant, so a zero-seeded warm-up at a
+# constant 50 min/day reaches 1 - e^-1 (~63%) of the way there, not the full 50 —
+# matches _duration_ewma_hours_per_week's own day-0-step maths (test group 1 above).
+_expected_seed2 = 50.0 * (1 - math.exp(-42 / 42))
+check("warm-up seed matches the EWMA's own maths for a 42-day zero-seeded constant ramp",
+      abs(_seed2 - _expected_seed2) < 0.5)
+
+_payload2 = {"today": _today2.isoformat(), "race_date": None, "current": _current_rows2,
+             "seed": round(_seed2, 1)}
+_png2 = C.duration_chart(_payload2)
+check("assembled payload (no race_date/prev, real seed) renders without crashing",
+      isinstance(_png2, bytes) and len(_png2) > 500)
+
+# With a cache entry present, the payload should carry it straight through as "prev".
+_cache_stub = {"prev": {"race": "2025-08-30", "label": "2025 season",
+                        "days": rows("2025-05-15", [55.0] * 90)}}
+_payload3 = dict(_payload2, race_date="2026-08-30")
+if _cache_stub.get("prev"):
+    _payload3["prev"] = _cache_stub["prev"]
+_png3 = C.duration_chart(_payload3)
+check("assembled payload with a cache 'prev' season plugged straight in renders a season overlay",
+      isinstance(_png3, bytes) and len(_png3) > 500)
+
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: {FAILED}")

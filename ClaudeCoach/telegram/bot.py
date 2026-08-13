@@ -979,6 +979,7 @@ _PENDING_REPLAN: dict[str, float] = {}
 
 _LOAD_CMD_RE     = re.compile(r'^/load\s*$', re.I)
 _FITNESS_CMD_RE  = re.compile(r'^/fitness\s*$', re.I)
+_DURATION_CMD_RE = re.compile(r'^/duration\s*$', re.I)
 _ACTIVITY_CMD_RE = re.compile(r'^/?activity(?:\s+check)?\s*$', re.I)
 _GRAPHS_RE       = re.compile(r'^/?graphs\s*$', re.I)
 _DURABILITY_RE   = re.compile(r'^/?durability\s*$', re.I)
@@ -1471,6 +1472,96 @@ def _fitness_charts_quick(token, chat_id, slug):
             send(token, chat_id, "Could not generate charts.", reply_markup=build_keyboard(slug))
     except Exception as e:
         log(f"fitness charts quick error: {e}")
+        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
+
+
+def _duration_chart_quick(token, chat_id, slug):
+    """Rolling hours/week (CTL-style duration, see charts.duration_chart) for this
+    season, overlaid with any previous seasons in duration-prev-cache.json built by
+    scripts/build-duration-prev-cache.py — no Claude round-trip."""
+    if _charts is None:
+        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug)); return
+    try:
+        sys.path.insert(0, str(BASE.parent / "lib"))
+        from icu_api import IcuClient
+        a = json.loads(ATHLETES_CONFIG.read_text())[slug]
+        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+
+        today = date.today()
+        race_date_str = a.get("race_date") or None
+        plan_start_str = a.get("plan_start")
+        plan_start = date.fromisoformat(plan_start_str) if plan_start_str else (today - timedelta(days=180))
+        if plan_start > today:
+            plan_start = today - timedelta(days=180)
+
+        # One fetch covers both the plotted window and the 6-week warm-up before it
+        # (get_training_history only takes a days-back-from-today window), so the EWMA
+        # seed below needs no second round-trip.
+        seed_start = plan_start - timedelta(days=42)
+        fetch_days = (today - seed_start).days + 1
+        history = client.get_training_history(max(fetch_days, 1)) or []
+
+        by_day = {}
+        for act in history:
+            d = (act.get("start_date_local") or "")[:10]
+            if not d:
+                continue
+            by_day[d] = by_day.get(d, 0.0) + float(act.get("moving_time") or 0) / 60.0
+
+        def _rows(lo, hi):
+            out, d = [], lo
+            while d <= hi:
+                out.append([d.isoformat(), round(by_day.get(d.isoformat(), 0.0), 1)])
+                d += timedelta(days=1)
+            return out
+
+        current_rows = _rows(plan_start, today)
+        if not current_rows:
+            send(token, chat_id, "No training-duration data available yet.", reply_markup=build_keyboard(slug)); return
+
+        # Seed the EWMA from the warm-up window, converted back from hours/week to the
+        # minutes/day units _duration_ewma_hours_per_week's recursion actually runs in —
+        # so the early-season ramp reads true instead of climbing from an unfit-looking 0.
+        seed = 0.0
+        seed_rows = _rows(seed_start, plan_start - timedelta(days=1))
+        if seed_rows:
+            _, seed_minutes = _charts._expand_daily(seed_rows)
+            if seed_minutes:
+                hpw = _charts._duration_ewma_hours_per_week(seed_minutes, seed=0.0)[-1]
+                seed = hpw * 60.0 / 7.0
+
+        cache_path = BASE.parent / "athletes" / slug / "duration-prev-cache.json"
+        cache = {}
+        if cache_path.exists():
+            try:
+                cache = json.loads(cache_path.read_text())
+            except Exception:
+                cache = {}
+
+        payload = {
+            "today": today.isoformat(),
+            "race_date": race_date_str,
+            "current": current_rows,
+            "seed": round(seed, 1),
+        }
+        if cache.get("prev"):
+            payload["prev"] = cache["prev"]
+        if cache.get("prev2"):
+            payload["prev2"] = cache["prev2"]
+
+        log(f"duration chart (quick): {len(current_rows)} days, seed={round(seed, 1)}, "
+            f"prev_seasons={[k for k in ('prev', 'prev2') if cache.get(k)]}")
+        png = _charts.duration_chart(payload, coaching_level=_profile_coaching_level(slug))
+        if png:
+            send_photo(token, chat_id, png)
+            _, cur_minutes = _charts._expand_daily(current_rows)
+            last_hpw = _charts._duration_ewma_hours_per_week(cur_minutes, seed=seed)[-1]
+            send(token, chat_id, f"Rolling *{round(last_hpw, 1)}* h/wk",
+                 reply_markup=build_keyboard(slug))
+        else:
+            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
+    except Exception as e:
+        log(f"duration chart error: {e}")
         send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
 
 
@@ -2375,6 +2466,9 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
 
     if _FITNESS_CMD_RE.match(txt):
         return "__FITNESS_CHARTS__"
+
+    if _DURATION_CMD_RE.match(txt):
+        return "__DURATION_CHART__"
 
     if _ACTIVITY_CMD_RE.match(txt):
         return "__ACTIVITY_CHECK__"
@@ -5561,10 +5655,16 @@ def _route_text(token, chat_id, text, athletes, config):
         log(f"[{slug}] Out (fast): fitness charts")
         _fitness_charts_quick(token, chat_id, slug)
         return
+    elif fast == "__DURATION_CHART__":
+        typing(token, chat_id)
+        log(f"[{slug}] Out (fast): duration chart")
+        _duration_chart_quick(token, chat_id, slug)
+        return
     elif fast == "__GRAPHS__":
         send(token, chat_id, "*Graphs* — pick one:", reply_markup={"inline_keyboard": [
             [{"text": "📈 Fitness & Form", "callback_data": "/fitness"}],
             [{"text": "🔋 Load",            "callback_data": "/load"}],
+            [{"text": "⏱️ Duration",        "callback_data": "/duration"}],
             [{"text": "💪 Durability",       "callback_data": "/durability"}],
             [{"text": "😴 Recovery",         "callback_data": "/recovery"}],
             [{"text": "✅ Compliance",       "callback_data": "/compliance"}],

@@ -1282,6 +1282,13 @@ def _duration_ewma_hours_per_week(daily_minutes, k=None, seed=0.0):
     comparison — only the absolute value in that early window. Pass a non-zero
     `seed` (e.g. the athlete's duration level a few weeks before the plotted
     window starts) if a true warm-up value is available.
+
+    UNIT TRAP: despite this function's name, `seed` is in MINUTES PER DAY, not
+    hours per week — it is the notional "yesterday" mixed directly into the
+    recursion alongside each day's minutes. A warm-up level computed in h/wk
+    must be converted back (* 60 / 7) before seeding, which is exactly what
+    bot.py's _duration_chart_quick does. Seeding with an h/wk figure silently
+    understates the whole early curve by a factor of ~8.6 (13 Aug 2026).
     """
     if k is None:
         k = _K_CTL
