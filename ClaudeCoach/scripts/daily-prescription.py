@@ -169,9 +169,16 @@ Step 5 — Call the modulation engine:
   python3 /Users/diamondpeakconsulting/diamondpeak-site/ClaudeCoach/ironman-analysis/scripts/modulate.py '<json with planned and readiness keys>' '''}
 
 Step 6 — If modified or swapped_to_z2: push the adjusted session to Intervals.icu via Bash:
-  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --endpoint push_workout --payload '{{"sport":"...", "date":"{today}", "name":"...", "description":"...", "planned_training_load": N}}'
+  python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --authority coach-auto --endpoint push_workout --payload '{{"sport":"...", "event_date":"{today}", "name":"...", "description":"...", "planned_training_load": N}}'
   If go == false: push a recovery note workout with description "BLOCKED: [R1 reason from reasoning trail]".
   If no rules fired: no push needed.
+  --authority coach-auto is REQUIRED and its limits are enforced in code, not just here:
+  this run adjusts TODAY'S session ({today}) and nothing else. You may push or edit today;
+  you may NOT write any other date, and you may NOT delete a calendar event — a session
+  the athlete agreed in conversation is not yours to remove, and removing a day is the
+  planner's job. If a session must go, replace it in place with the blocked/recovery note
+  above and say so in the card. coach-auto also means this write does NOT count as the
+  athlete's agreement, so it will not stop the weekly planner rebuilding that day.
 
 Step 7 — Output the prescription card in exactly this format:
 

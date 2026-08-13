@@ -200,6 +200,11 @@ def build_sessions(slug: str, proposal: dict) -> dict:
         date_s = s.get("date")
         notes = (s.get("notes") or "").strip()
         segs = s.get("segments") or []
+        # PINNED = an agreed day, spliced in from athletes/<slug>/agreed-plan.json by
+        # stage1-plan. It is already on the calendar and will NOT be pushed (see push()).
+        # It is built and validated anyway because the week's totals, ramp, run volume and
+        # zone distribution must include it or the validator judges a fiction.
+        pinned = bool(s.get("pinned"))
         if segs and sport not in ("Strength", "WeightTraining"):
             # NAME passed in: it disambiguates a coarse TID band label (the library gives
             # both tempo and sweetspot the label Z3), so "Sweetspot 2x20" renders at 88-94%
@@ -214,8 +219,21 @@ def build_sessions(slug: str, proposal: dict) -> dict:
             load = planned_session_tss({"type": sport, "name": s.get("name", ""),
                                         "moving_time": dur * 60})["tss"]
             desc = ""
-        # fuel note for long rides
-        if sport in _LONG_FUEL_SPORTS and dur >= 90:
+        if pinned:
+            # THE AGREED FIGURE WINS. The load on the calendar is the load the athlete
+            # agreed to; re-deriving it here (from a coarse pin's single segment, or from
+            # sport+duration) would put a number in the week's total that disagrees with
+            # the calendar, and the load gate would then judge a week nobody has.
+            # Duration likewise comes from the record when the pin carries no segments.
+            if s.get("load_target"):
+                load = int(s["load_target"])
+            if not segs:
+                dur = int(s.get("minutes") or s.get("duration_min") or dur or 0)
+        # fuel note for long rides. Skipped for a pinned session: it is never pushed, so
+        # the note would reach nobody, and it must not appear to change an agreed session.
+        if pinned:
+            pass
+        elif sport in _LONG_FUEL_SPORTS and dur >= 90:
             notes = (notes + f"\nFuel {fuel} g CHO/hr (progress toward "
                      f"{int(cfg.get('nutrition_target_g_hr') or 90)} race target); "
                      "eat from 15 min, every 25 min.").strip()
@@ -229,10 +247,11 @@ def build_sessions(slug: str, proposal: dict) -> dict:
                      "g/hr); start by 20 min, then every 20-25 min. Log what you took.").strip()
         built.append({"date": date_s, "sport": sport, "name": s.get("name", ""),
                       "duration_min": dur, "load_target": load,
-                      "description": desc, "description_raw": notes})
+                      "description": desc, "description_raw": notes,
+                      "pinned": pinned})
         events.append({"start_date_local": f"{date_s}T00:00:00", "type": sport,
                        "category": "WORKOUT", "load_target": load,
-                       "moving_time": dur * 60,
+                       "moving_time": dur * 60, "pinned": pinned,
                        # `description` = the RENDERED steps, so validate_week can check
                        # the name's intensity claim against the structure. Without it
                        # that check silently no-ops (4 Aug 2026).
@@ -307,14 +326,73 @@ def build_sessions(slug: str, proposal: dict) -> dict:
             "sessions": built}
 
 
+def pinned_dates_for(slug: str, built: dict) -> set:
+    """The dates in this week that are AGREED and must not be written or deleted.
+
+    Read back from lib/agreed_week rather than derived from built["sessions"], for one
+    reason that matters: a REST-DAY pin ("nothing on Friday") has no session to derive a
+    flag from, and it needs protecting most of all — the whole point is that the day stays
+    empty and nothing gets pushed onto it. The union with the pinned session dates is
+    belt-and-braces: protecting a day we already validated as pinned can only ever be
+    safe, while missing one destroys an agreement.
+
+    PINS ONLY. weekly_availability's `unavailable_days` are deliberately NOT included: a
+    declared-unavailable day means "put nothing here", so a stale event sitting on it must
+    still be DELETED. Protecting it from deletion would leave a session on a day the
+    athlete told us they cannot train. agreed_week.protected_dates() is the wider set and
+    belongs to the proposer, not here.
+
+    READ AT PUSH TIME, deliberately, even though stage1-plan already read the pins ~45
+    minutes earlier when the build started. A pin created DURING the build is then still
+    honoured on the delete list, so the agreed session survives; the cost is that the same
+    date can also receive a new push (the day was not pinned when the week was spliced), so
+    that one day can end up with two events. That is the right way round: a duplicate is
+    visible and one tap to fix, while deleting a session the athlete agreed forty minutes
+    ago is the failure this whole ticket exists to stop."""
+    out = {str(s.get("date"))[:10] for s in built.get("sessions", []) if s.get("pinned")}
+    try:
+        import agreed_week
+        out |= set(agreed_week.pinned_dates(slug, built["week_start"]))
+    except Exception as e:
+        print(f"[plan_builder:{slug}] WARN could not read agreed-plan.json ({e!r}) — "
+              f"only the pins already spliced into this build are protected", file=sys.stderr)
+    return {d for d in out if d}
+
+
+def assert_deletable(slug: str, event_id, event_date: str, pinned) -> None:
+    """Raise unless `event_id` on `event_date` may be deleted. Called immediately before
+    every single delete in push().
+
+    Deliberately a RAISE, not an `assert`: python -O strips asserts, and this is the last
+    thing standing between a bug in the filter above and an agreed session being destroyed.
+
+    Reaching here with a pinned date is a BUG, not a condition to handle, so it stops the
+    run rather than skipping the delete — a silent skip would leave a doubled week and no
+    signal. It fires BEFORE anything is destroyed, and the new events are already pushed, so
+    the athlete is left with a duplicate to tidy rather than a hole."""
+    if str(event_date)[:10] in (pinned or set()):
+        raise RuntimeError(
+            f"[plan_builder:{slug}] REFUSING to delete event {event_id} on {event_date}: "
+            f"that day is AGREED with the athlete. Reaching this line means the "
+            f"pinned-date filter in push() was bypassed — fix that, do not relax this.")
+
+
 def push(slug: str, built: dict, replace: bool = True):
     """Push the built week. replace=True first DELETES existing planned WORKOUT events
-    in the target week so we don't duplicate the old plan. Returns {deleted, pushed}."""
+    in the target week so we don't duplicate the old plan. Returns {deleted, pushed}.
+
+    AGREED DAYS ARE UNTOUCHABLE HERE. Pinned dates are skipped on the push list (those
+    sessions are already on the calendar; re-pushing would churn ICU ids and re-sync
+    Garmin for no reason) AND on the delete list, with an explicit check before every
+    single delete. That check is the last line of defence before something irreversible,
+    so it raises rather than asserting — `python -O` strips asserts, and this must survive
+    any interpreter flag."""
     from icu_api import IcuClient
     from datetime import date as _d, timedelta as _td
     cfg = _cfg(slug)
     c = IcuClient(cfg["icu_athlete_id"], cfg["icu_api_key"])
     ws = _d.fromisoformat(built["week_start"])
+    pinned = pinned_dates_for(slug, built)
     # Map proposal sports to valid intervals.icu event types (Bike/Brick/Strength are NOT
     # valid ICU types — Brick pushes as a Ride; the run leg is in description_raw).
     icu_type = {"Bike": "Ride", "Brick": "Ride", "Strength": "WeightTraining",
@@ -322,12 +400,20 @@ def push(slug: str, built: dict, replace: bool = True):
     # SAFE ORDERING: capture the OLD events, PUSH the new ones FIRST, and only delete the
     # old ones once every new push succeeded. If a push fails the old plan is left intact
     # (worst case: transient duplicates), so a failure can NEVER empty the week.
-    old_ids = []
+    old_ids = []          # [(event_id, date)] — the date is carried so the pre-delete
+                          # check below can be made against the event itself, not against
+                          # a set computed somewhere else and trusted.
     if replace:
-        old_ids = [e["id"] for e in c.get_events(ws.isoformat(), (ws + _td(days=6)).isoformat())
-                   if e.get("category") == "WORKOUT" and e.get("id")]
+        old_ids = [(e["id"], str(e.get("start_date_local") or "")[:10])
+                   for e in c.get_events(ws.isoformat(), (ws + _td(days=6)).isoformat())
+                   if e.get("category") == "WORKOUT" and e.get("id")
+                   and str(e.get("start_date_local") or "")[:10] not in pinned]
     pushed = []
     for s in built["sessions"]:
+        if s.get("pinned"):
+            # Already on the calendar, by the athlete's agreement. Re-pushing it would
+            # duplicate or churn it and re-sync Garmin for no reason.
+            continue
         payload = {"sport": icu_type.get(s["sport"], s["sport"]),
                    "event_date": s["date"], "name": s["name"],
                    "description": s["description"], "description_raw": s["description_raw"],
@@ -336,7 +422,8 @@ def push(slug: str, built: dict, replace: bool = True):
         pushed.append(r.get("id"))
     deleted = []
     failed = []
-    for eid in old_ids:                       # only reached if ALL pushes succeeded
+    for eid, edate in old_ids:                # only reached if ALL pushes succeeded
+        assert_deletable(slug, eid, edate, pinned)   # raises before anything irreversible
         try:
             c.delete_workout(eid); deleted.append(eid)
         except Exception as e:
@@ -346,7 +433,10 @@ def push(slug: str, built: dict, replace: bool = True):
             failed.append(eid)
             print(f"[plan_builder:{slug}] delete of old event {eid} FAILED "
                   f"({e!r}) - it stays on the calendar as a duplicate", file=sys.stderr)
-    return {"deleted": deleted, "pushed": pushed, "delete_failed": failed}
+    return {"deleted": deleted, "pushed": pushed, "delete_failed": failed,
+            # Named in the result so "why is Thursday not in the push list?" is answerable
+            # from the run output alone.
+            "agreed_days_left_alone": sorted(pinned)}
 
 
 def main():

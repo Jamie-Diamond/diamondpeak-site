@@ -27,6 +27,7 @@ BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 
+import agreed_week                    # noqa: E402
 import claude_call                    # noqa: E402
 import plan_lock                      # noqa: E402
 import weekly_availability            # noqa: E402
@@ -62,6 +63,20 @@ def _set_total_minutes(sess: dict, target_min: int):
         f = target_min / cur
         for s in segs:
             s["minutes"] = max(5, round(s["minutes"] * f))
+
+
+def _pinned(s) -> bool:
+    """An AGREED day, spliced in from athletes/<slug>/agreed-plan.json.
+
+    Every shaping lever in this file must leave one alone. The design names only flex()
+    (the TSS-closing stretch), but the invariant it states is stronger — "pinned days'
+    content survives every failure path" — and close_to_target's step 1 would otherwise
+    put a pinned long ride through _set_total_minutes and silently rescale a session the
+    athlete agreed, while _clamp_runs_to_cap could scale or even DROP a pinned run. What
+    reaches ICU would be unchanged (push() skips pinned dates), but the week that got
+    validated would no longer be the week on the calendar, which is exactly the fiction
+    the pin record exists to prevent."""
+    return bool(s.get("pinned"))
 
 
 def _is_long_run(s):
@@ -100,11 +115,20 @@ def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: floa
     mileage is a MAX), then re-clamp the long run to its own cap. Prefers the explicit
     minute cap (what validate_week enforces) over km x pace, so the closure lever and
     the validator can never drift (the km and minute caps use different implied paces)."""
+    # PINNED runs count toward the ceiling but are NEVER scaled or dropped: their minutes
+    # are on the calendar by agreement. They are therefore fixed load, deducted from the
+    # room available to the runs that can move — the same treatment a protected long run
+    # gets below. Keeping them in `run_sessions` is what makes _tot() (and so the cap
+    # arithmetic) honest.
     run_sessions = [s for s in proposal["sessions"] if (s.get("sport") or "").lower() == "run"]
     if not run_sessions:
         return
     def _tot():
         return sum(sum(sg.get("minutes", 0) for sg in s.get("segments", [])) for s in run_sessions)
+    def _mins(ss):
+        return sum(sum(sg.get("minutes", 0) for sg in s.get("segments", [])) for s in ss)
+    pinned_runs = [s for s in run_sessions if _pinned(s)]
+    pinned_min = _mins(pinned_runs)
     # Clamp to the STRICTER of the minute cap (validate_week) and the km cap turned
     # into minutes at the same pace audit_built uses (run_min/pace <= cap_km); their
     # floors diverge at low volume, so honouring only one can still breach the other.
@@ -114,18 +138,25 @@ def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: floa
     cur_min = _tot()
     if cap_min and cur_min > cap_min and cur_min > 0:
         long_min = sum(sum(sg.get("minutes", 0) for sg in s.get("segments", []))
-                       for s in run_sessions if _is_long_run(s))
-        nonlong = [s for s in run_sessions if not _is_long_run(s)]
-        nonlong_min = sum(sum(sg.get("minutes", 0) for sg in s.get("segments", [])) for s in nonlong)
-        room = cap_min - long_min
+                       for s in run_sessions if _is_long_run(s) and not _pinned(s))
+        nonlong = [s for s in run_sessions if not _is_long_run(s) and not _pinned(s)]
+        nonlong_min = _mins(nonlong)
+        # Both branches scale only what MAY move, and both subtract the agreed minutes
+        # from the room first — a pinned run cannot be shrunk to make the ceiling hold.
+        room = cap_min - long_min - pinned_min
         if protect_long and room >= 0 and nonlong_min > room and nonlong_min > 0:
             # protect a PROGRESSING long run: shrink only the easy runs to fit the ceiling
             f = room / nonlong_min
             _scale_or_drop_runs(proposal, run_sessions, nonlong, f)
         else:
-            f = cap_min / cur_min
-            _scale_or_drop_runs(proposal, run_sessions, list(run_sessions), f)
+            movable = [s for s in run_sessions if not _pinned(s)]
+            movable_min = _mins(movable)
+            if movable_min > 0:
+                f = max(0.0, (cap_min - pinned_min)) / movable_min
+                _scale_or_drop_runs(proposal, run_sessions, movable, f)
     for s in run_sessions:
+        if _pinned(s):
+            continue
         if _is_long_run(s) and lr_cap:
             cur = sum(seg.get("minutes", 0) for seg in s.get("segments", []))
             if cur > lr_cap:
@@ -137,7 +168,7 @@ def _clamp_runs_to_cap(proposal: dict, mileage_cap_km: float, lr_cap, pace: floa
         guard = 0
         while _tot() > cap_min and guard < 100:
             guard += 1
-            cand = [s for s in run_sessions if not _is_long_run(s)
+            cand = [s for s in run_sessions if not _is_long_run(s) and not _pinned(s)
                     and sum(sg.get("minutes", 0) for sg in s.get("segments", [])) > 0]
             if not cand:
                 break
@@ -173,6 +204,8 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
     #    so it CLIMBS instead of plateauing short; otherwise just clamp DOWN to the cap
     #    (never up) - unchanged for athletes without a target.
     for s in proposal["sessions"]:
+        if _pinned(s):
+            continue          # agreed: not ours to resize, in either direction
         if _is_long_ride(s) and lrd_min:
             _set_total_minutes(s, lrd_min)
         elif _is_long_run(s):
@@ -200,6 +233,12 @@ def close_to_target(athlete: str, proposal: dict, target, brief: dict, tol=0.06,
             (sg.get("if") if sg.get("if") is not None else segment_if(sess.get("sport", ""), sg.get("zone")))
             <= _FLEX_IF for sg in segs)
     def flex(s):
+        if _pinned(s):
+            # A pinned session is NEVER stretched to close a TSS gap. It is what the
+            # athlete agreed; the gap is closed with the days the generator owns, and if
+            # it cannot be closed the week is reported off-target and the athlete is told
+            # (that is the correct outcome, not a bug to engineer away).
+            return False
         sport = (s.get("sport") or "").lower()
         if sport in ("bike", "ride"):
             # bike lever stays TRUE Z2 only (never stretch bike tempo into the grey zone
@@ -549,6 +588,30 @@ def audit_built(brief: dict, built: dict, target, proposal: dict):
     return blocking, advisory
 
 
+def proposer_brief(brief: dict, protected: dict, proposer_target) -> dict:
+    """A SHALLOW COPY of the brief for the prompt only, carrying the agreed days and the
+    target for the days the proposer OWNS.
+
+    Two reasons this is a copy rather than an edit of `brief`:
+      - `weekly_tss_target` here is the REDUCED number (whole week minus the load already
+        on the agreed days), because the proposer is filling the days it owns. Every
+        whole-week reader must keep seeing the whole-week figure: the load_on_target +/-12%
+        gate, close_to_target's tolerance and _week_message's header (which is what the
+        athlete reads). Getting that backwards produces a systematically light or heavy
+        week — design section 10 names it as the main risk in this increment.
+      - The keys are set ONLY when something is protected, so an empty list is never
+        serialised into the prompt. Same rule the declared_hours block applies below: a
+        config-shaped key with a null value is one paraphrase away from the athlete."""
+    if not protected:
+        return brief
+    b = dict(brief)
+    b["agreed_days"] = sorted(protected)
+    b["_agreed_clause"] = agreed_week.brief_clause(protected)
+    if proposer_target:
+        b["weekly_tss_target"] = proposer_target
+    return b
+
+
 def build_prompt(slug: str, brief: dict, week_start: date, feedback: str = "") -> str:
     grid = "\n".join(f"  {(week_start + timedelta(days=i)).isoformat()} = "
                      f"{(week_start + timedelta(days=i)).strftime('%A')}" for i in range(7))
@@ -686,7 +749,7 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
 
 DATE GRID:
 {grid}
-{roll}{quality}{feedback}
+{brief.get("_agreed_clause") or ""}{roll}{quality}{feedback}
 PLANNING BRIEF (authoritative, deterministic):
 {json.dumps({k: v for k, v in brief.items() if not k.startswith("_")}, indent=1)}
 """
@@ -788,6 +851,17 @@ def _plan(args):
         brief["declared_hours"] = _declared_hours
     if _declared_constraints:
         brief["declared_constraints"] = _declared_constraints
+    # ── AGREED DAYS (design sections 3-4) ────────────────────────────────────────────
+    # Read HERE, ONCE, in _plan — never inside build_sessions or close_to_target.
+    # build_sessions runs up to max_iter(5) times per attempt inside close_to_target, and
+    # up to max_attempts(3) attempts, so a read down there is a 15x multiplier on the file
+    # read AND 15 chances for the record to change halfway through one build.
+    #   pins      -> the agreed days themselves; what gets spliced in and what push() will
+    #                not touch.
+    #   protected -> pins UNION this week's declared unavailable_days; what the proposer is
+    #                told to leave alone. Wider than `pins` on purpose (lib/agreed_week).
+    pins = agreed_week.pins_for_week(args.athlete, week_start)
+    protected = agreed_week.protected_dates(args.athlete, week_start)
     if brief.get("event_unknown"):
         print(json.dumps({"error": f"event unknown for {args.athlete} — cannot plan"}))
         _beat(False, "event unknown — cannot plan")
@@ -832,6 +906,10 @@ def _plan(args):
                 brief["standing_hours"] = _standing
         target = int(tss_cap)
         brief["weekly_tss_target"] = target
+    # `target` from here on is the WHOLE WEEK's, including the agreed days, and every gate
+    # below reads it. `p_target` is only ever handed to the proposer and to the shaping of
+    # the days the proposer owns (see proposer_brief).
+    p_target = agreed_week.reduced_target(target, pins)
     override_path = Path(args.override_json) if args.override_json else None
     if override_path and override_path.exists():
         proposal = json.loads(override_path.read_text())
@@ -848,7 +926,9 @@ def _plan(args):
         best_rank = None
         attempts = []
         for attempt in range(args.max_attempts):
-            prompt = build_prompt(args.athlete, brief, week_start, feedback)
+            prompt = build_prompt(args.athlete,
+                                  proposer_brief(brief, protected, p_target),
+                                  week_start, feedback)
             proc = claude_call.run_claude(
                 prompt, model=args.model, fallback=[claude_call.OPUS],
                 cwd=PROJECT_DIR, timeout=840, label=args.athlete,
@@ -858,8 +938,13 @@ def _plan(args):
             except Exception as e:
                 attempts.append(f"attempt {attempt+1}: parse error {e}")
                 continue
-            built = close_to_target(args.athlete, proposal, target, brief)
-            blocking, advisory = audit_built(brief, built, target, proposal)
+            # p_target, not target: this proposal covers only the days the proposer owns
+            # (the agreed days are spliced in after the winner is picked), so shaping it to
+            # the whole-week number would stretch those days to cover load that is already
+            # on the calendar. Ranking is comparative between attempts, so it is consistent
+            # either way; the WHOLE-week audit that decides overall_ok runs post-splice.
+            built = close_to_target(args.athlete, proposal, p_target, brief)
+            blocking, advisory = audit_built(brief, built, p_target, proposal)
             all_issues = blocking + advisory
             _z3, _tot = _overall_z3plus(proposal)
             _z3pct = round(_z3 / _tot * 100) if _tot else 0
@@ -869,7 +954,7 @@ def _plan(args):
             # smallest |week Z3+ - phase budget|, then lowest monotony, then closest-to-target
             # TSS - so an in-budget attempt beats an over-budget one when both are equally
             # (un)blocked, instead of just keeping the first 0-blocking attempt.
-            rank = (len(blocking),) + _attempt_rank(brief, built, target, proposal)
+            rank = (len(blocking),) + _attempt_rank(brief, built, p_target, proposal)
             if best is None or rank < best_rank:
                 best, best_rank = (built, blocking, advisory, proposal), rank
             if not all_issues:
@@ -883,6 +968,18 @@ def _plan(args):
             _beat(False, f"no parseable proposal after {args.max_attempts} attempts")
             sys.exit(1)
     built, blocking, advisory, proposal = best
+    # ── SPLICE THE AGREED DAYS IN ────────────────────────────────────────────────────
+    # Immediately after the winner is picked and BEFORE quality injection. Order matters:
+    # quality_inject exists to pull per-sport per-zone distribution toward target, so
+    # running it on a proposal that EXCLUDES the agreed days sizes the quality dose against
+    # a partial week and over-injects into the days it owns. Splicing first means injection,
+    # close_to_target and audit_built all see the whole week, and no separate revalidation
+    # pass is needed. From here the target is the WHOLE-week one again.
+    if pins:
+        proposal, _sp = agreed_week.splice_pinned(proposal, pins)
+        attempts += [f"agreed-days: {n}" for n in _sp]
+        built = close_to_target(args.athlete, proposal, target, brief)
+        blocking, advisory = audit_built(brief, built, target, proposal)
     # Phase 5.7: DETERMINISTIC quality injection on the winning proposal (no LLM). Brings each
     # sport's per-zone distribution toward its target midpoint (2-week rolling, injury-aware),
     # conservatively placed; re-runs close_to_target (holds TSS, protects long sessions) + audit.
@@ -891,6 +988,18 @@ def _plan(args):
         import quality_inject as _qi
         proposal, _inj = _qi.inject_quality(proposal, brief, args.athlete, target,
                                             build_fn=close_to_target, audit_fn=audit_built, seg_if_fn=_seg_if)
+        if pins:
+            # RE-SPLICE, unconditionally. inject_quality picks its own candidate sessions
+            # and knows nothing about pins, so it can convert easy minutes inside an AGREED
+            # session (and rename it). splice_pinned is idempotent, so calling it again
+            # restores the pin records verbatim. Doing it here rather than teaching
+            # quality_inject about pins keeps the invariant local to this path and out of a
+            # file this ticket does not own.
+            _pre = [s for s in (proposal.get("sessions") or []) if s.get("pinned")]
+            proposal, _ = agreed_week.splice_pinned(proposal, pins)
+            if _pre != [s for s in proposal["sessions"] if s.get("pinned")]:
+                _inj = list(_inj) + ["reached into an agreed day — REVERTED (that day is "
+                                     "the athlete's, not the injector's)"]
         if _inj:
             built = close_to_target(args.athlete, proposal, target, brief)
             blocking, advisory = audit_built(brief, built, target, proposal)
@@ -913,7 +1022,14 @@ def _plan(args):
         "blocking_issues": blocking, "advisories": advisory,
         "sessions": [{"date": s["date"], "sport": s["sport"], "name": s["name"],
                       "load": s["load_target"], "min": s["duration_min"],
-                      "structured": bool(s["description"])} for s in built["sessions"]],
+                      "structured": bool(s["description"]),
+                      "pinned": bool(s.get("pinned"))} for s in built["sessions"]],
+        # The agreed week, stated in the run output so a dry-run can be diffed against the
+        # pins by eye (scripts/shadow-week-check.sh) without opening the store.
+        "agreed_days": {d: w for d, w in sorted(protected.items())},
+        "pinned_days": sorted(pins),
+        "pinned_load": agreed_week.pinned_load(pins),
+        "proposer_target_tss": p_target,
     }
     not_pushed = False
     if args.push:
