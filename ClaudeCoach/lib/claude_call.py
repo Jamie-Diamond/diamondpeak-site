@@ -182,7 +182,7 @@ class ClaudeResult:
 
 def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
                extra_args=None, cwd=None, timeout=300,
-               no_session_persistence=True, stderr=None, label=""):
+               no_session_persistence=True, stderr=None, label="", env=None):
     """Run `claude -p`, retrying down the fallback chain on a limit/overload.
 
     prompt              : the prompt, piped to the CLI on stdin (not argv)
@@ -194,6 +194,11 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
     no_session_persistence : append --no-session-persistence (default True)
     stderr              : optional file object for stderr (else captured)
     label               : athlete/script label for ops_log alerts
+    env                 : environment for the spawned CLI; None inherits this process's
+                          (never pass {}). Callers serving one athlete should pass
+                          {**os.environ, "CC_ATHLETE_SCOPE": slug} so lib/icu_fetch.py
+                          refuses calendar writes to any other athlete. Per-spawn by
+                          design — os.environ must not be mutated for this.
 
     Returns a ClaudeResult. On a fully-capped chain, returns the last (limited)
     result so callers can still inspect/relay it.
@@ -221,7 +226,7 @@ def run_claude(prompt, model=SONNET, *, fallback=None, allowed_tools=None,
                 input=prompt,
                 stdout=subprocess.PIPE,
                 stderr=(stderr if stderr is not None else subprocess.PIPE),
-                text=True, cwd=cwd, timeout=timeout,
+                text=True, cwd=cwd, timeout=timeout, env=env,
             )
             out = r.stdout or ""
             err = r.stderr or ""

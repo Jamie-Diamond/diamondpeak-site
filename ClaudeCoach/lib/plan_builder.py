@@ -335,12 +335,18 @@ def push(slug: str, built: dict, replace: bool = True):
         r = c.push_workout(**payload)        # raises before any delete if a payload is bad
         pushed.append(r.get("id"))
     deleted = []
+    failed = []
     for eid in old_ids:                       # only reached if ALL pushes succeeded
         try:
             c.delete_workout(eid); deleted.append(eid)
-        except Exception:
-            pass
-    return {"deleted": deleted, "pushed": pushed}
+        except Exception as e:
+            # A swallowed delete is benign ONCE (worst case a duplicate event), but a
+            # systematically failing delete doubles the week silently, which is how the
+            # 22 Jun doubled week went unnoticed. Keep the swallow, name the casualty.
+            failed.append(eid)
+            print(f"[plan_builder:{slug}] delete of old event {eid} FAILED "
+                  f"({e!r}) - it stays on the calendar as a duplicate", file=sys.stderr)
+    return {"deleted": deleted, "pushed": pushed, "delete_failed": failed}
 
 
 def main():

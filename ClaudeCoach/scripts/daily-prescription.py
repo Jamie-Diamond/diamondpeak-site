@@ -811,6 +811,11 @@ def run_for_athlete(slug: str, cfg: dict) -> str | None:
             open(prompt_file).read(),
             model=claude_call.SONNET, fallback=[claude_call.OPUS],
             allowed_tools=TOOLS, cwd=PROJECT_DIR, timeout=None, label=slug,
+            # This run holds Bash and its prompt instructs a push_workout for today, so
+            # bound it to this athlete: lib/icu_fetch.py refuses calendar WRITES to any
+            # other slug (reads are unrestricted). Per-spawn env; the loop runs every
+            # athlete in turn, so mutating os.environ would leak the previous one's scope.
+            env={**os.environ, "CC_ATHLETE_SCOPE": slug},
         )
         output = result.stdout.strip()
         stderr = result.stderr.strip()

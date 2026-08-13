@@ -494,13 +494,28 @@ def _turn_index(st) -> int:
 # Generation entry points
 # ---------------------------------------------------------------------------
 
-def _run_once(prompt, model, extra_args, cwd, timeout=300):
+def scoped_env(sp_file):
+    """Environment for a spawned claude, carrying CC_ATHLETE_SCOPE so lib/icu_fetch.py
+    refuses calendar WRITES to any athlete but this one (reads are unrestricted).
+
+    The slug comes from the system-prompt path — athletes/<slug>/system_prompt.txt — which
+    is the one thing every spawn site already has and which cannot disagree with the
+    athlete whose rules and history were just assembled into the prompt.
+
+    Built PER SPAWN and passed as `env=`; os.environ is never mutated. bot.py serves three
+    athletes from a ThreadPoolExecutor, so a process-global scope would race and could
+    scope Jamie's turn to Kathryn."""
+    slug = Path(sp_file).parent.name
+    return {**os.environ, "CC_ATHLETE_SCOPE": slug}
+
+
+def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None):
     """One non-streaming claude invocation with JSON output so the session id
     is capturable. Returns (text, session_id, returncode)."""
     r = subprocess.run(
         claude_cmd(model, ["--output-format", "json"] + extra_args),
         input=prompt,
-        capture_output=True, text=True, cwd=cwd, timeout=timeout,
+        capture_output=True, text=True, cwd=cwd, timeout=timeout, env=env,
     )
     text, session_id = "", None
     try:
@@ -517,21 +532,24 @@ def call_claude(user_message, config, history, model=MODEL_OPUS,
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
     extra, prompt, mode, st = _plan_session(user_message, config, history,
                                             sp_file, athlete_name, context)
+    env = scoped_env(sp_file)
     t0 = time.time()
     try:
-        text, sid, rc = _run_once(prompt, model, extra, config["project_dir"])
+        text, sid, rc = _run_once(prompt, model, extra, config["project_dir"], env=env)
         if (rc != 0 or not text) and mode == "resume":
             log(f"[session] resume failed rc={rc} — retrying with fresh session")
             _clear_session(sp_file)
             extra, prompt, mode, st = _plan_session(user_message, config, history,
                                                     sp_file, athlete_name, context)
-            text, sid, rc = _run_once(prompt, model, extra, config["project_dir"])
+            text, sid, rc = _run_once(prompt, model, extra, config["project_dir"], env=env)
         if _is_limit_message(text) and model != MODEL_SONNET:
             # Opus is primary now: a capped bucket must not surface a rate-limit
             # notice to the athlete while Sonnet 5 still has headroom, so fall
             # DOWN to Sonnet so the bot still answers.
             log(f"[limit] {model} capped - retrying on {MODEL_SONNET}")
-            text, sid, rc = _run_once(prompt, MODEL_SONNET, extra, config["project_dir"])
+            # env= on the fallback too: a rate-limited turn must not run unscoped.
+            text, sid, rc = _run_once(prompt, MODEL_SONNET, extra, config["project_dir"],
+                                      env=env)
             model = MODEL_SONNET
         # Read the turn index BEFORE _finish_session, which increments st["turns"]
         # IN PLACE - reading it afterwards logs the NEXT turn, not the one just served.
@@ -567,7 +585,7 @@ def _tool_input_summary(inp):
     return ""
 
 
-def _stream_once(prompt, model, extra_args, cwd):
+def _stream_once(prompt, model, extra_args, cwd, env=None):
     """One streaming claude invocation. Yields ('chunk', snapshot) and, when a
     tool_use block appears, ('status', tool_name, input_summary). Returns
     (final, streamed, session_id, returncode, t_init, t_first). Never raises —
@@ -582,7 +600,7 @@ def _stream_once(prompt, model, extra_args, cwd):
             claude_cmd(model,
                        ["--output-format", "stream-json", "--verbose"] + extra_args),
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            stdin=subprocess.PIPE, text=True, cwd=cwd,
+            stdin=subprocess.PIPE, text=True, cwd=cwd, env=env,
         )
         _feed_stdin(proc, prompt)
         for raw_line in proc.stdout:
@@ -649,9 +667,10 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
     sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
     extra, prompt, mode, st = _plan_session(user_message, config, history,
                                             sp_file, athlete_name, context)
+    env = scoped_env(sp_file)
     t0 = time.time()
     final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
-        prompt, model, extra, config["project_dir"])
+        prompt, model, extra, config["project_dir"], env=env)
 
     # A dead resume fails before any text streams — fall back to a fresh session.
     if mode == "resume" and rc != 0 and not (final or streamed.strip()):
@@ -660,15 +679,16 @@ def stream_claude(user_message, config, history, model=MODEL_OPUS,
         extra, prompt, mode, st = _plan_session(user_message, config, history,
                                                 sp_file, athlete_name, context)
         final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
-            prompt, model, extra, config["project_dir"])
+            prompt, model, extra, config["project_dir"], env=env)
 
     text = (final if final is not None else streamed).strip()
     if _is_limit_message(text) and model != MODEL_SONNET:
         # Opus is primary now: fall DOWN to Sonnet 5 on a cap so the athlete
         # still gets an answer rather than a rate-limit notice.
         log(f"[limit] {model} capped - retrying on {MODEL_SONNET}")
+        # env= on the fallback too: a rate-limited turn must not run unscoped.
         final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
-            prompt, MODEL_SONNET, extra, config["project_dir"])
+            prompt, MODEL_SONNET, extra, config["project_dir"], env=env)
         text = (final if final is not None else streamed).strip()
         model = MODEL_SONNET
 
@@ -725,6 +745,7 @@ def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
             input=full_prompt,
             capture_output=True, text=True,
             cwd=config["project_dir"], timeout=300,
+            env=scoped_env(sp_file),
         )
         _log_timing("image", model, "stateless", t0, None, None)
         return result.stdout.strip() or result.stderr.strip() or "(no response)"

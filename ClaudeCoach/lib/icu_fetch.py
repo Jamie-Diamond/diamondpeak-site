@@ -11,10 +11,20 @@ Usage:
   python3 icu_fetch.py --athlete jamie --endpoint sport_settings --sport Ride
 
 Outputs JSON to stdout. Exits non-zero on error.
+
+CROSS-ATHLETE SCOPE. load_client resolves ANY slug in config/athletes.json for ANY
+caller, so a chat session serving one athlete could write to another's calendar just by
+typing their slug (the softer half of the 15 Jun cross-contamination incident; the MCP
+half was closed by excluding the single-account IcuSync tools from the bot). When the
+spawning process sets CC_ATHLETE_SCOPE, the four WRITE endpoints refuse a mismatched
+--athlete. READS stay unrestricted: comparing athletes is legitimate coaching work and a
+read cannot damage anyone. Absent the variable, behaviour is exactly as before, so
+hand-runs and CLI use keep working.
 """
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -24,6 +34,29 @@ sys.path.insert(0, str(ROOT / "lib"))
 from icu_api import IcuClient
 
 CONFIG = ROOT / "config" / "athletes.json"
+
+# The mutating endpoints. edit_activity belongs here too — renaming another athlete's
+# activity is cross-contamination even though it touches no planned event.
+WRITE_ENDPOINTS = frozenset({"push_workout", "edit_workout", "edit_activity",
+                             "delete_workout"})
+
+
+def scope_violation(slug: str, endpoint: str, scope: str | None = None) -> str | None:
+    """The refusal message when `endpoint` would write to `slug` from a session scoped to
+    another athlete, else None. Pure, so it can be tested without the network.
+
+    scope defaults to CC_ATHLETE_SCOPE. An unset OR EMPTY variable means unscoped —
+    an empty string must not read as "a scope that matches nobody", which would break
+    every hand-run that happens to export it blank."""
+    if scope is None:
+        scope = os.environ.get("CC_ATHLETE_SCOPE", "")
+    scope = (scope or "").strip()
+    if not scope or endpoint not in WRITE_ENDPOINTS:
+        return None
+    if slug == scope:
+        return None
+    return (f"ERROR: refusing to write to '{slug}' from a session scoped to '{scope}'. "
+            f"Reads of another athlete are fine; writes are not.")
 
 
 def load_client(slug: str) -> IcuClient:
@@ -55,6 +88,13 @@ def main():
     p.add_argument("--payload",     default=None,
                    help="JSON string for push_workout / edit_workout fields")
     args = p.parse_args()
+
+    # Refuse BEFORE load_client: a session scoped to one athlete must never even load
+    # another athlete's API key.
+    _viol = scope_violation(args.athlete, args.endpoint)
+    if _viol:
+        print(_viol, file=sys.stderr)
+        sys.exit(2)
 
     client = load_client(args.athlete)
 

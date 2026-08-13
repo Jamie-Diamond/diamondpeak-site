@@ -28,6 +28,7 @@ sys.path.insert(0, str(BASE / "lib"))
 sys.path.insert(0, str(BASE / "ironman-analysis"))
 
 import claude_call                    # noqa: E402
+import plan_lock                      # noqa: E402
 import weekly_availability            # noqa: E402
 import ops_log                        # noqa: E402
 import session_library as sl          # noqa: E402
@@ -698,7 +699,7 @@ def extract_json(text: str) -> dict:
     return json.loads(m.group(0))
 
 
-def main():
+def _parse_args(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--athlete", required=True)
     ap.add_argument("--push", action="store_true")
@@ -714,8 +715,34 @@ def main():
     ap.add_argument("--availability", metavar="PATH",
                     help="this week's availability JSON to flex day_rules (Phase 5a); "
                          "defaults to athletes/<slug>/this-week-availability.json if present")
-    args = ap.parse_args()
+    return ap.parse_args(argv)
 
+
+def main():
+    args = _parse_args()
+    if not args.push:
+        # Dry-runs write nothing, so they need no lock and must not be able to block a
+        # real build by holding one.
+        return _plan(args)
+    # ONE BUILD PER ATHLETE AT A TIME. Held across generation AND push, not just the push:
+    # locking only the push still lets two builds generate and then push in turn, which is
+    # the 22 Jun doubled week (see lib/plan_lock.py).
+    with plan_lock.PlanLock(args.athlete) as lk:
+        if lk.state == plan_lock.BUSY:
+            print(json.dumps({"error": "a plan build is already running for "
+                                       f"{args.athlete} — not starting a second one",
+                              "athlete": args.athlete, "pushed": False}))
+            # No ops_log heartbeat here: standing down correctly is not a failed
+            # deliverable, and an ok=False entry would put a spurious ✗ in the digest.
+            # The build that DOES hold the lock writes this athlete's entry.
+            sys.exit(plan_lock.BUSY_EXIT)
+        if lk.state == plan_lock.UNLOCKED:
+            print(f"[stage1-plan:{args.athlete}] WARNING: {plan_lock.lock_path(args.athlete)} "
+                  f"unusable — building WITHOUT the double-launch lock", file=sys.stderr)
+        return _plan(args)
+
+
+def _plan(args):
     # HEARTBEAT, gated on --push. This script is also run by hand for dry-runs, and a
     # dry-run must NOT satisfy the weekly gap check — otherwise a Wednesday experiment
     # would mask the Sunday cron never running, which is the exact blindness being
@@ -932,6 +959,8 @@ def main():
     # weekly-plan.sh's `rc=$?` was decorative and a total failure for all three athletes
     # (9 Aug 2026) was visible only to whoever went and read the log. 3, not 1, so the
     # shell can tell "built nothing at all" (1) from "built a week I would not push" (3).
+    # 4 is a fourth thing again — "another build for this athlete is already running", set
+    # in main() before any work happens (lib/plan_lock.py).
     if not_pushed:
         sys.exit(3)
 

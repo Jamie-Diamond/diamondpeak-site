@@ -55,6 +55,7 @@ import open_actions            # the single open-actions store (close/defer/drop
 import day_overrides           # fail-closed register of directed day-rule deviations
 import claude_call
 import engine
+import plan_lock              # per-athlete build lock: no two plan builds on one calendar
 import ops_log                 # run-status + ops-alerts, for work that fails unattended
 import rules_capture
 import rule_registry
@@ -536,36 +537,22 @@ def save_history(history, history_file=None):
     f.write_text(json.dumps(history[-MAX_HISTORY_PAIRS:], indent=2))
 
 
-def _extract_plan_override(slug: str) -> dict | None:
-    """Scan recent conversation history for a conversation-agreed JSON session plan.
-    Returns the parsed plan dict (with a valid 'sessions' list) if found, else None.
-    Used to bypass LLM generation when a plan was already agreed in chat."""
-    files = athlete_files(slug)
-    history = load_history(files["history"])
-    for entry in reversed(history[-10:]):
-        text = entry.get("assistant") or ""
-        if '"sessions"' not in text:
-            continue
-        m = re.search(r'\{.*\}', text, re.S)
-        if not m:
-            continue
-        try:
-            plan = json.loads(m.group(0))
-        except Exception:
-            continue
-        sessions = plan.get("sessions")
-        if (isinstance(sessions, list) and sessions
-                and all(isinstance(s, dict) and "date" in s and "sport" in s
-                        for s in sessions[:3])):
-            return plan
-    return None
-
-
-def _write_plan_override(slug: str, plan: dict) -> str:
-    """Serialise a plan dict to a temp file for stage1-plan.py --override-json. Returns path."""
-    path = f"/tmp/replan_override_{slug}.json"
-    Path(path).write_text(json.dumps(plan))
-    return path
+# RETIRED 13 Aug 2026: _extract_plan_override / _write_plan_override.
+#
+# They scanned the last 10 assistant turns for any JSON blob containing "sessions" and
+# handed it to stage1-plan.py --override-json. Three faults, and the first destroys a week:
+#   * NO WEEK CHECK. build_sessions derives the target week from the blob's own session
+#     dates and push() then deletes THAT week's events - while the brief, phase, TSS target
+#     and ceiling were all assembled for next Monday. A stale blob about last week rebuilt
+#     last week against next week's numbers and deleted what was there.
+#   * It only fired if the model had emitted raw JSON into the chat, which the athlete sees.
+#   * A plan the model PROPOSED and the athlete REJECTED parsed identically to an agreed one.
+#
+# The replan / generate-plan paths now simply do not pass --override-json, so stage1-plan
+# always plans the week it was briefed for. stage1-plan's --override-json flag stays: it is
+# still the right hand-run and plan_builder.main escape hatch. Recording what the athlete
+# actually agreed is a job for the pin record in increment 2 of the plan-authority design
+# (lib/agreed_week.py, not yet built), not for a scrape of the transcript.
 
 
 def _hist_entry(user, assistant, kind="text"):
@@ -3815,11 +3802,6 @@ def _handle_replan_confirm(token, chat_id, data, message_id, athletes):
     try:
         cmd = ["timeout", "2700", "python3", str(STAGE1_PLAN_SCRIPT),
                "--athlete", slug, "--push", "--notify"]
-        override = _extract_plan_override(slug)
-        if override:
-            override_path = _write_plan_override(slug, override)
-            cmd += ["--override-json", override_path]
-            log(f"[{slug}] replan using conversation-agreed plan override")
         proc = subprocess.Popen(cmd, cwd=str(PROJECT_DIR),
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         log(f"[{slug}] replan launched in background (confirmed)")
@@ -3858,6 +3840,20 @@ def _watch_replan(token, chat_id, slug, proc) -> None:
             return
         if rc in _REPLAN_SELF_REPORTS:
             log(f"[{slug}] replan finished rc={rc} (stage1 reported to the athlete)")
+            return
+        if rc == plan_lock.BUSY_EXIT:
+            # Deliberately NOT in _REPLAN_SELF_REPORTS: that tuple means "stage1 already
+            # told the athlete", and this exit tells nobody. It also is not a failure —
+            # nothing was changed or lost, and the build that holds the lock will deliver
+            # the week and send its own message. Say exactly that.
+            log(f"[{slug}] replan stood down rc={rc} (another build holds the lock)")
+            try:
+                send(token, chat_id,
+                     "A rebuild for your week is already running - I'll message you when "
+                     "it lands. Nothing has been lost.",
+                     reply_markup=build_keyboard(slug))
+            except Exception as e:
+                log(f"[{slug}] could not tell the athlete a build was already running: {e}")
             return
         why = ("it ran out of time" if rc == 124
                else "it could not build a usable week at all")
@@ -5490,6 +5486,19 @@ def _route_text(token, chat_id, text, athletes, config):
 
     fast = fast_path(text, slug=slug, athlete_cfg=athlete)
     if fast == "__REPLAN__":
+        # Don't arm a second confirm card while a build for this athlete is running.
+        # Typing `replan` twice used to arm two cards, and two confirms launched two
+        # detached builds against one calendar (the 22 Jun doubled week). The flock in
+        # stage1-plan is the real guard; this stops the athlete being invited into the
+        # race in the first place. No _PENDING_REPLAN write on this branch — a pending
+        # left behind an honest refusal would be armed by the next stray tap.
+        if plan_lock.build_running(slug):
+            send(token, chat_id,
+                 "A rebuild for your week is already running - I'll message you when it "
+                 "lands. Tell me what you want changed and I'll fold it in.",
+                 reply_markup=build_keyboard(slug))
+            log(f"[{slug}] replan card NOT armed — a build is already running")
+            return
         _PENDING_REPLAN[chat_id] = time.time() + 60
         send(token, chat_id,
              "⚠️ Replan will rebuild this week from scratch — confirm?",
@@ -5516,11 +5525,6 @@ def _route_text(token, chat_id, text, athletes, config):
             # completion). Replaces the old generate-plan for replan/generate.
             cmd = ["timeout", "2700", "python3", str(STAGE1_PLAN_SCRIPT),
                    "--athlete", slug, "--push", "--notify"]
-            override = _extract_plan_override(slug)
-            if override:
-                override_path = _write_plan_override(slug, override)
-                cmd += ["--override-json", override_path]
-                log(f"[{slug}] plan using conversation-agreed plan override")
             subprocess.Popen(
                 cmd, cwd=str(PROJECT_DIR),
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
