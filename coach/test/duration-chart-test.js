@@ -1,13 +1,14 @@
-// Duration ("Hours") trend tab: does the tab appear only when the data carries it, do
-// the sport chips filter the right series, and do the season overlays land on race day.
+// The Fitness card's TSS/Duration toggle: is the control offered only when the data
+// carries hours, does the sport chip survive a switch of metric, do the sport chips
+// filter the right series, and do the season overlays land on race day.
 //
-// WHY THIS EXISTS. The chart reads durationBySport, a key refresh-site-data.py only
+// WHY THIS EXISTS. Duration reads durationBySport, a key refresh-site-data.py only
 // started publishing on 13 Aug 2026. Two failure modes are worth a test:
 //
 //   * a published file WITHOUT the key (every file in ClaudeCoach/public/ at the time
-//     of writing) must render with the tab simply absent, not throw and not draw an
-//     empty chart under a lit chip. render-test.js covers "does not throw"; this covers
-//     "the tab is actually gone";
+//     of writing) must render with the toggle simply absent and CTL showing, not throw
+//     and not draw an empty chart under a lit chip. render-test.js covers "does not
+//     throw"; this covers "the control is actually gone";
 //   * the previous-season overlay is aligned by DAYS TO RACE, which is only correct if
 //     each season's series is mapped against ITS OWN race date. Getting that wrong puts
 //     last season's taper over this season's mid-build and the comparison is worthless,
@@ -87,17 +88,21 @@ const real = JSON.parse(fs.readFileSync(
 delete real.durationBySport;   // defensive: the fixture below must be the only source
 peak.state.slug = 'jamie';
 peak.state.data = real;
-peak.state.trend = 'dur';      // as if left selected from a previous session
-peak.state.durSport = 'Ride';
+peak.state.trend = 'fit';
+peak.state.fitMetric = 'dur';  // as if left selected from a previous session
+peak.renderTrends();
+const oldHtml = registry['#v-trends'].innerHTML;
 
-check('old data drops the Hours tab',
+check('old data offers no metric toggle', oldHtml.indexOf('id="fitMetric"') < 0);
+check('old data falls back to the TSS metric', peak.state.fitMetric === 'tss',
+  'fitMetric=' + peak.state.fitMetric);
+peak.drawTrend();
+check('old data still draws CTL',
+  lastChart.options.scales.y.title.text === 'CTL',
+  lastChart.options.scales.y.title.text);
+check('there is no separate Hours tab in the picker',
   !peak.trendTabs().some((t) => t.id === 'dur'),
   peak.trendTabs().map((t) => t.id).join(','));
-peak.renderTrends();
-check('old data falls back off the Hours tab', peak.state.trend === 'fit',
-  'trend=' + peak.state.trend);
-check('old data resets the Hours sport chip', peak.state.durSport === 'all',
-  'durSport=' + peak.state.durSport);
 
 /* ── 2. fixture with durationBySport ─────────────────────────────────────── */
 // Real profile, so the race dates driving the alignment are the real ones. Flat series
@@ -131,18 +136,25 @@ fx.durationBySport = {
   prev2: season('2023-01-01', fx.profile.prev2_race_date, 0.8),
 };
 peak.state.data = fx;
-peak.state.trend = 'dur';
-peak.state.durSport = 'all';
-
-check('fixture shows the Hours tab',
-  peak.trendTabs().some((t) => t.id === 'dur'));
+peak.state.trend = 'fit';
+peak.state.fitMetric = 'dur';
+peak.state.fitSport = 'all';
 
 peak.renderTrends();
 const html = registry['#v-trends'].innerHTML;
-check('Hours tab stays selected', peak.state.trend === 'dur');
+check('the metric toggle is offered', html.indexOf('id="fitMetric"') >= 0);
+check('the toggle offers exactly TSS and Duration',
+  html.indexOf('>TSS<') >= 0 && html.indexOf('>Duration<') >= 0);
+// The metric sits above the sport chips, which is where Jamie asked for it: "under
+// fitness and above the sports".
+check('the metric sits above the sport chips',
+  html.indexOf('id="fitMetric"') < html.indexOf('id="fitSport"'));
+check('both controls sit above the chart',
+  html.indexOf('id="fitSport"') < html.indexOf('id="c-now"'));
+check('Duration metric stays selected', peak.state.fitMetric === 'dur');
 // Scoped to the chip bar: 'Total' legitimately appears further down, in the extras
 // card, and a whole-page search would pass on that instead of on the chips.
-const chipBar = (html.match(/<div class="seg sub" id="durSport">([\s\S]*?)<\/div>/) ||
+const chipBar = (html.match(/<div class="seg sub" id="fitSport">([\s\S]*?)<\/div>/) ||
                  [, ''])[1];
 check('chips offer All + the three sports',
   ['All', 'Ride', 'Run', 'Swim'].every((s) => chipBar.indexOf('>' + s + '<') >= 0),
@@ -175,8 +187,8 @@ check('last season is aligned on its own race day',
 check('last season is muted and dashed',
   byLabel['Last season'].borderDash && byLabel['Last season'].borderWidth === 1);
 
-/* ── 3. the chip actually filters ────────────────────────────────────────── */
-peak.state.durSport = 'Swim';
+/* ── 3. the chip actually filters, and survives a switch of metric ───────── */
+peak.state.fitSport = 'Swim';
 peak.renderTrends();
 peak.drawTrend();
 const swim = lastChart.data.datasets.find((s) => s.label === 'This season').data;
@@ -185,17 +197,43 @@ check('Swim chip reads the Swim series', swim[swim.length - 1].y === 1.5,
 check('chip is named in the card title',
   registry['#v-trends'].innerHTML.indexOf('· Swim') >= 0);
 
+// Switching metric with a sport selected: the sport must come with it, in both
+// directions. This is the "remembering the selection across toggles" requirement, and
+// the reason both charts read one state.fitSport rather than a field each.
+peak.state.fitMetric = 'tss';
+peak.renderTrends();
+peak.drawTrend();
+check('the sport chip survives the switch to TSS',
+  peak.state.fitSport === 'Swim' &&
+  lastChart.options.scales.y.title.text === 'CTL',
+  'sport=' + peak.state.fitSport);
+const swimCtl = lastChart.data.datasets.find((s) => s.label === 'This season').data;
+check('TSS with a sport chip reads the per-sport CTL series',
+  swimCtl.length > 0 && swimCtl[swimCtl.length - 1].y !==
+    fx.fitnessThis[fx.fitnessThis.length - 1][1]);
+peak.state.fitMetric = 'dur';
+peak.renderTrends();
+peak.drawTrend();
+check('and survives the switch back to Duration',
+  peak.state.fitSport === 'Swim' &&
+  lastChart.data.datasets.find((s) => s.label === 'This season')
+    .data.slice(-1)[0].y === 1.5);
+
 /* ── 4. the Fitness chart still works ────────────────────────────────────── */
 // seasonRaces(), relToRace() and raceAxisLabel() were lifted OUT of chartFitness so the
-// two charts share one alignment rule. render-test.js leaves Chart undefined, so it
+// two renderings share one alignment rule. render-test.js leaves Chart undefined, so it
 // never runs either chart function: without this block the refactor of the chart Jamie
 // reads daily would be covered by nothing but node --check.
 peak.state.data = fx;
 peak.state.trend = 'fit';
+peak.state.fitMetric = 'tss';
 peak.state.fitSport = 'all';
 peak.renderTrends();
 check('Fitness chips still render',
   registry['#v-trends'].innerHTML.indexOf('id="fitSport"') >= 0);
+check('Fitness extras still show the CTL split, not the hours one',
+  registry['#v-trends'].innerHTML.indexOf('Fitness by sport') >= 0 &&
+  registry['#v-trends'].innerHTML.indexOf('Hours by sport') < 0);
 peak.drawTrend();
 const fitBy = {};
 lastChart.data.datasets.forEach((s) => { fitBy[s.label] = s; });
@@ -211,14 +249,14 @@ check('Fitness last season is still aligned on its own race day',
 check('Fitness still carries the blueprint-only layers the Hours chart omits',
   ['Target band', '_band-lo', 'Planned', 'Milestones'].every((l) => fitBy[l]),
   Object.keys(fitBy).join(','));
-peak.state.trend = 'dur';
 
 /* ── 5. a season with no race date drops rather than mis-aligns ──────────── */
 const fx2 = JSON.parse(JSON.stringify(fx));
 delete fx2.profile.prev_race;
 delete fx2.profile.prev_race_date;
 peak.state.data = fx2;
-peak.state.durSport = 'all';
+peak.state.fitMetric = 'dur';
+peak.state.fitSport = 'all';
 peak.renderTrends();
 peak.drawTrend();
 check('season without a race date is dropped',

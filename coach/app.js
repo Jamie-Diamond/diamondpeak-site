@@ -75,11 +75,11 @@
 
   // Each entry is one chart plus the numbers that belong with it.
   var TRENDS = [
+    // Fitness carries TWO metrics behind one tab, switched by the TSS/Duration control
+    // above the sport chips: CTL says how hard the training was, hours say how much of
+    // it there was. They share the seasons, the sport chips and the race alignment, so
+    // they are one view of one thing rather than two tabs (Jamie, 13 Aug 2026).
     { id: 'fit',  label: 'Fitness' },
-    // Volume next to fitness, deliberately adjacent: CTL says how hard the training
-    // was, hours say how much of it there was, and the pair is read together. Same
-    // seasons, same sport chips, same race alignment - see chartDuration.
-    { id: 'dur',  label: 'Hours' },
     { id: 'load', label: '±7 days' },
     { id: 'heat', label: 'Heat' },
     { id: 'fuel', label: 'Fuel' },
@@ -100,7 +100,9 @@
 
   var state = {
     slug: 'jamie', tab: 'today', data: null, lib: null,
-    chart: null, todayChart: null, trend: 'fit', fitSport: 'all', durSport: 'all',
+    // fitMetric is 'tss' (CTL) or 'dur' (hours/week). fitSport is shared by both, so
+    // the discipline you were looking at survives a switch of metric.
+    chart: null, todayChart: null, trend: 'fit', fitSport: 'all', fitMetric: 'tss',
     calMonth: null, calDay: null, libGroup: null,
     lrMode: 'long', pcMode: 'avg', zoneWin: 'week'
   };
@@ -723,14 +725,15 @@
     };
   }
 
-  /* Rolling hours/week, published as durationBySport by refresh-site-data.py in the
-   * same {current,prev,prev2} x {Total,Ride,Run,Swim} shape as fitnessBySport. 'Total'
-   * is every activity logged, so it is the counterpart of overall CTL rather than a
-   * fourth sport, and durSports() keeps it out of the chip list.
+  /* ── the two Fitness metrics ──────────────────────────────────────────────
+   * CTL comes from fitnessThis / fitnessBySport; hours/week from durationBySport,
+   * published in the same {current,prev,prev2} x sport shape. durationBySport also
+   * carries 'Total' - every activity logged, the counterpart of overall CTL rather
+   * than a fourth sport - which is why it answers the 'all' chip and never appears as
+   * one itself.
    *
-   * A published file written before this existed has no durationBySport at all, hence
-   * the guards: with no data the Hours tab leaves the sub-nav entirely, exactly as
-   * 'Run km' does for an athlete who does not run. */
+   * A published file written before durationBySport existed has none of it, so the
+   * TSS/Duration control is not offered at all rather than offered with a dead half. */
   function durBySport(d) { return (d || state.data || {}).durationBySport || {}; }
 
   function durSeries(d, which, sport) {
@@ -743,14 +746,23 @@
     return Object.keys(cur).some(function (k) { return (cur[k] || []).length > 0; });
   }
 
-  // Chip-able sports: the three disciplines this athlete is focused on, whichever of
-  // them the data actually carries. Total is excluded by name, not by relying on it
-  // failing the focus test.
-  function durSports(d) {
+  // Which metric the Fitness card is actually showing. Asking for hours when none are
+  // published falls back to CTL, so every read of the metric agrees with what the
+  // control offered.
+  function fitMetric() {
+    return (state.fitMetric === 'dur' && hasDuration(state.data)) ? 'dur' : 'tss';
+  }
+
+  // The sports the chips can offer FOR THE CURRENT METRIC: the athlete's focus sports,
+  // whichever of them that metric's data carries. Total is excluded by name, not by
+  // relying on it failing the focus test.
+  function fitChipSports(d) {
     var fs = focusSports();
-    return Object.keys(durBySport(d).current || {}).filter(function (s) {
-      return s !== 'Total' && (durSeries(d, 'current', s) || []).length &&
-             fs.indexOf(family(s)) >= 0;
+    var src = fitMetric() === 'dur'
+      ? durBySport(d).current || {}
+      : ((d || state.data || {}).fitnessBySport || {}).current || {};
+    return Object.keys(src).filter(function (s) {
+      return s !== 'Total' && (src[s] || []).length && fs.indexOf(family(s)) >= 0;
     });
   }
 
@@ -759,7 +771,6 @@
   function trendTabs() {
     var fs = focusSports();
     return TRENDS.filter(function (t) {
-      if (t.id === 'dur') return hasDuration(state.data);
       return t.id !== 'longrun' || fs.indexOf('run') >= 0;
     });
   }
@@ -768,16 +779,14 @@
   // re-rendering, so a selection left pointing at a dropped tab has to be corrected in
   // one place or the chart and the sub-nav disagree.
   function normaliseTrend() {
-    var fs = focusSports();
     if (!trendTabs().some(function (t) { return t.id === state.trend; })) state.trend = 'fit';
-    if (state.fitSport !== 'all' && fs.indexOf(family(state.fitSport)) < 0) {
+    // The metric first, because which sports are chip-able depends on it.
+    state.fitMetric = fitMetric();
+    // A chip can be left pointing at a sport the current metric has no series for -
+    // by switching athlete, by dropping a sport from focus, or by switching metric -
+    // and that would draw an empty chart under a lit chip.
+    if (state.fitSport !== 'all' && fitChipSports().indexOf(state.fitSport) < 0) {
       state.fitSport = 'all';
-    }
-    // Same correction for the Hours chips, and additionally for a sport the duration
-    // data does not carry - switching athlete can leave a chip selected that the new
-    // athlete has no series for, which would draw an empty chart under a lit chip.
-    if (state.durSport !== 'all' && durSports().indexOf(state.durSport) < 0) {
-      state.durSport = 'all';
     }
   }
 
@@ -792,12 +801,13 @@
     }).join('') + '</div>';
 
     var META = {
-      fit:  { title: 'Fitness · three seasons',
-              foot: 'CTL by calendar date. Pinch, scroll or drag to zoom; the shaded band is the race-day target.' },
-      dur:  { title: 'Hours · three seasons',
-              foot: 'Rolling training hours per week, smoothed on the same 42-day ' +
-                    'constant as CTL and aligned on race day. Volume, not intensity: ' +
-                    'read it next to Fitness, not instead of it.' },
+      fit:  fitMetric() === 'dur'
+        ? { title: 'Hours · three seasons',
+            foot: 'Rolling training hours per week, smoothed on the same 42-day ' +
+                  'constant as CTL and aligned on race day. This is volume, not ' +
+                  'intensity: switch to TSS for the load that came with it.' }
+        : { title: 'Fitness · three seasons',
+            foot: 'CTL by calendar date. Pinch, scroll or drag to zoom; the shaded band is the race-day target.' },
       load: { title: 'Seven days either side',
               foot: 'Bars are daily TSS, faded where still planned. The line is form (TSB).' },
       heat: { title: 'Heat acclimation',
@@ -820,25 +830,22 @@
                      'for the current phase.' }
     }[sel];
 
-    // Overall CTL or one discipline. fitnessBySport carries Ride/Run/Swim for all
-    // three seasons, so the whole chart - seasons, race alignment and all - just
-    // switches which series it reads.
+    // Which metric, then which discipline. Both series sets are published per sport for
+    // all three seasons, so the whole chart - seasons, race alignment and all - just
+    // switches which series it reads, and the sport survives a change of metric.
+    var metricBar = '';
     var sportBar = '';
     if (sel === 'fit') {
-      var fs = focusSports();
-      var avail = Object.keys((d.fitnessBySport || {}).current || {}).filter(function (s) {
-        return fs.indexOf(family(s)) >= 0;
-      });
+      // Offered only when there is an hours series to switch TO. A two-state control
+      // with a dead state says the data exists when it does not.
+      if (hasDuration(d)) {
+        metricBar = subSeg('fitMetric', fitMetric(),
+          [['tss', 'TSS'], ['dur', 'Duration']]);
+      }
+      var avail = fitChipSports(d);
       if (avail.length) {
         sportBar = subSeg('fitSport', state.fitSport,
           [['all', 'All']].concat(avail.map(function (x) { return [x, x]; })));
-      }
-    }
-    if (sel === 'dur') {
-      var dsports = durSports(d);
-      if (dsports.length) {
-        sportBar = subSeg('durSport', state.durSport,
-          [['all', 'All']].concat(dsports.map(function (x) { return [x, x]; })));
       }
     }
     if (sel === 'longrun') {
@@ -853,13 +860,14 @@
       if (wins.length) sportBar = subSeg('zoneWin', zoneWinSel(d), wins);
     }
 
-    var zoomable = (sel === 'fit' || sel === 'dur' || sel === 'heat');
+    var zoomable = (sel === 'fit' || sel === 'heat');
     var action = zoomable
       ? '<button type="button" class="card-a" id="zreset">Reset zoom</button>' : '';
 
-    var h = seg + sportBar + card(META.title +
-      (sel === 'fit' && state.fitSport !== 'all' ? ' · ' + state.fitSport : '') +
-      (sel === 'dur' && state.durSport !== 'all' ? ' · ' + state.durSport : ''),
+    // Metric above the sport chips, both above the chart, which is where Jamie asked
+    // for the switch: "under fitness and above the sports".
+    var h = seg + metricBar + sportBar + card(META.title +
+      (sel === 'fit' && state.fitSport !== 'all' ? ' · ' + state.fitSport : ''),
       '<div class="readout" id="ro"><b>—</b><span></span></div>' +
       '<div class="chartbox tall"><canvas id="c-now"></canvas></div>',
       { action: action, foot: META.foot });
@@ -875,7 +883,7 @@
       drawTrend();
     };
     // Every sub-segment writes the state field its container id names.
-    ['fitSport', 'durSport', 'lrMode', 'pcMode', 'zoneWin'].forEach(function (key) {
+    ['fitMetric', 'fitSport', 'lrMode', 'pcMode', 'zoneWin'].forEach(function (key) {
       var el = $('#' + key);
       if (!el) return;
       el.onclick = function (e) {
@@ -896,10 +904,44 @@
   function trendExtras(sel, d) {
     var h = '';
 
+    if (sel === 'fit' && fitMetric() === 'dur') {
+      // Replaces 'Fitness by sport' while the Duration metric is showing: the same
+      // block in hours instead of CTL, where the volume sits now against this season's
+      // own peak, per sport. Total is included here (unlike the chips, where it is the
+      // 'All' state) because the split only reads as a split next to its own total.
+      var dbs = durBySport(d).current || {};
+      var rows = ['Total'].concat(fitChipSports(d)).filter(function (s) {
+        return (dbs[s] || []).length;
+      });
+      if (rows.length) {
+        var peakAll = rows.reduce(function (m, s) {
+          return (dbs[s] || []).reduce(function (mm, r) { return Math.max(mm, r[1]); }, m);
+        }, 0.1);
+        h += card('Hours by sport', '<div class="body-flush">' + rows.map(function (s) {
+          var series = dbs[s] || [];
+          var last = series.length ? series[series.length - 1][1] : 0;
+          var peak = series.reduce(function (m, r) { return Math.max(m, r[1]); }, 0);
+          // One shared scale, so the bars compare sports rather than each sport
+          // against itself - a 3h/wk swim must not draw as long as a 9h/wk bike.
+          return '<div class="sesh"><span class="tick">' +
+            (s === 'Total' ? '<b>Σ</b>' : '<span class="sp ' + sportClass(s) +
+              '" style="margin:0"></span>') +
+            '</span><span class="body"><span class="nm">' + esc(s) +
+            '</span><div class="bar"><i style="width:' + (last / peakAll * 100).toFixed(0) +
+            '%"></i></div></span><span class="rt"><b>' + Number(last).toFixed(1) +
+            'h</b>peak ' + Number(peak).toFixed(1) + 'h</span></div>';
+        }).join('') + '</div>', { flush: true,
+          foot: 'Hours per week now, and the highest this season, on the same 42-day ' +
+                'smoothing as the chart. Total counts every activity logged, including ' +
+                'strength and anything outside the three disciplines.' });
+      }
+    }
+
     if (sel === 'fit') {
       var fs = focusSports();
       var bs = (d.fitnessBySport || {}).current || {};
-      var sports = Object.keys(bs).filter(function (s) { return fs.indexOf(family(s)) >= 0; });
+      var sports = fitMetric() === 'dur' ? []
+        : Object.keys(bs).filter(function (s) { return fs.indexOf(family(s)) >= 0; });
       if (sports.length) {
         h += card('Fitness by sport', '<div class="body-flush">' + sports.map(function (s) {
           var series = bs[s] || [];
@@ -971,39 +1013,6 @@
           }
         }
         h += card('Power curve', body, { flush: true, foot: pcFoot });
-      }
-    }
-
-    if (sel === 'dur') {
-      // The same block the fitness tab carries, in hours instead of CTL: where the
-      // volume sits now against this season's own peak, per sport. Total is included
-      // here (unlike the chips, where it is the 'All' state) because the split only
-      // reads as a split next to what it adds up to.
-      var dbs = durBySport(d).current || {};
-      var rows = ['Total'].concat(durSports(d)).filter(function (s) {
-        return (dbs[s] || []).length;
-      });
-      if (rows.length) {
-        var peakAll = rows.reduce(function (m, s) {
-          return (dbs[s] || []).reduce(function (mm, r) { return Math.max(mm, r[1]); }, m);
-        }, 0.1);
-        h += card('Hours by sport', '<div class="body-flush">' + rows.map(function (s) {
-          var series = dbs[s] || [];
-          var last = series.length ? series[series.length - 1][1] : 0;
-          var peak = series.reduce(function (m, r) { return Math.max(m, r[1]); }, 0);
-          // One shared scale, so the bars compare sports rather than each sport
-          // against itself - a 3h/wk swim must not draw as long as a 9h/wk bike.
-          return '<div class="sesh"><span class="tick">' +
-            (s === 'Total' ? '<b>Σ</b>' : '<span class="sp ' + sportClass(s) +
-              '" style="margin:0"></span>') +
-            '</span><span class="body"><span class="nm">' + esc(s) +
-            '</span><div class="bar"><i style="width:' + (last / peakAll * 100).toFixed(0) +
-            '%"></i></div></span><span class="rt"><b>' + Number(last).toFixed(1) +
-            'h</b>peak ' + Number(peak).toFixed(1) + 'h</span></div>';
-        }).join('') + '</div>', { flush: true,
-          foot: 'Hours per week now, and the highest this season, on the same 42-day ' +
-                'smoothing as the chart. Total counts every activity logged, including ' +
-                'strength and anything outside the three disciplines.' });
       }
     }
 
@@ -1331,7 +1340,9 @@
     if (!el) return;
     if (state.chart) { state.chart.destroy(); state.chart = null; }
     normaliseTrend();
-    var fn = { fit: chartFitness, dur: chartDuration, load: chartLoad, heat: chartHeat,
+    // One entry for Fitness, two renderings: the TSS/Duration control picks which.
+    var fn = { fit: fitMetric() === 'dur' ? chartDuration : chartFitness,
+               load: chartLoad, heat: chartHeat,
                fuel: chartFuel, plan: chartPlan, longrun: chartLongRun,
                zones: chartZones }[state.trend];
     if (fn) state.chart = fn(el, state.data);
@@ -1490,11 +1501,13 @@
     return new Chart(el, { type: 'line', data: { datasets: ds }, options: o, plugins: [vlines] });
   }
 
-  /* Rolling training hours per week, three seasons, same interaction grammar as
-   * chartFitness: the same chips, the same days-to-race x axis, the same muted dashed
-   * overlays. What it deliberately does NOT carry is the target band, the planned build
-   * and the milestones - those are CTL targets from the blueprint, and there is no
-   * published hours target to draw against. Inventing one would be inventing data.
+  /* Rolling training hours per week: the Duration state of the Fitness card, drawn with
+   * the same grammar as chartFitness - the SAME sport chips (state.fitSport, shared so
+   * the discipline survives a switch of metric), the same days-to-race x axis, the same
+   * muted dashed overlays. What it deliberately does NOT carry is the target band, the
+   * planned build and the milestones: those are CTL targets from the blueprint, and
+   * there is no published hours target to draw against. Inventing one would be
+   * inventing data.
    *
    * The smoothing is already done: refresh-site-data.py publishes hours/week per day,
    * matching where chartFitness gets its CTL from, so neither chart smooths in the app
@@ -1502,7 +1515,7 @@
   function chartDuration(el, d) {
     var p = d.profile || {};
     var races = seasonRaces(d);
-    var sport = state.durSport;
+    var sport = state.fitSport;
 
     var ds = [];
     if (relToRace(durSeries(d, 'prev2', sport), races.prev2).length) {
