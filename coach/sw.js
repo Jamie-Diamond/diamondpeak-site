@@ -16,7 +16,7 @@
  *
  * Bump CACHE on every deploy that changes a precached file.
  */
-const CACHE = 'peak-v39';
+const CACHE = 'peak-v40';
 
 // SHELL paths are relative to /coach/, where this worker actually lives - the app moved
 // out of /coach/app/ and these entries were left pointing at the old tree. addAll's
@@ -137,4 +137,15 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(networkFirst(request));
+});
+
+
+// The Settings "App version" row asks the running worker who it actually is.
+// Answering with CACHE (not a separate constant) means the row can never disagree
+// with what this worker serves - the drift between "deployed" and "installed" is
+// the exact thing the row exists to reveal (Jamie, 13 Aug 2026).
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'version' && event.ports && event.ports[0]) {
+    event.ports[0].postMessage({ cache: CACHE });
+  }
 });

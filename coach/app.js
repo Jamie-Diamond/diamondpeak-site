@@ -3026,6 +3026,37 @@
 
   /* ── Settings ────────────────────────────────────────────────────────── */
 
+  /* The version row asks the RUNNING service worker for its cache name rather than
+     trusting a constant in this file: app.js and sw.js deploy together, but a client
+     can hold an old worker for days, and the whole point of the row is telling those
+     two states apart. "syncing…" = a new worker is waiting; reload once to swap. */
+  function fillAppVersion() {
+    var cell = $('#appVersion');
+    if (!cell) return;
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+      cell.textContent = 'no service worker (first load?)';
+      return;
+    }
+    var ch = new MessageChannel();
+    var done = false;
+    ch.port1.onmessage = function (ev) {
+      done = true;
+      var v = (ev.data && ev.data.cache) || 'unknown';
+      navigator.serviceWorker.getRegistration().then(function (reg) {
+        cell.textContent = v + (reg && (reg.waiting || reg.installing)
+          ? ' — update syncing, reload to finish' : '');
+      }).catch(function () { cell.textContent = v; });
+    };
+    try {
+      navigator.serviceWorker.controller.postMessage({ type: 'version' }, [ch.port2]);
+    } catch (err) { cell.textContent = 'unknown'; return; }
+    // An old worker without the version handler never replies - say so rather than
+    // leaving "checking…" forever, because that IS the stale state he is asking about.
+    setTimeout(function () {
+      if (!done && cell.isConnected) cell.textContent = 'pre-v40 (stale — reload twice)';
+    }, 1500);
+  }
+
   function renderSettings() {
     var d = state.data || {};
     var p = d.profile || {};
@@ -3100,6 +3131,12 @@
     }
 
     h += card('Data', '<table class="tbl"><tbody>' +
+      // The version the RUNNING service worker answers with, not a constant in this
+      // file — a constant here can lie about what is actually installed, which is the
+      // one question this row exists to answer ("am I stale or just syncing?",
+      // Jamie, 13 Aug 2026). Filled in async below; "syncing…" means a new worker is
+      // installing and a reload will finish the swap.
+      '<tr><td class="lbl">App version</td><td class="t" id="appVersion">checking…</td></tr>' +
       '<tr><td class="lbl">Last refreshed</td><td class="t">' +
       esc(d.generated || '—') + '</td></tr>' +
       (d.refreshCadence
@@ -3181,6 +3218,7 @@
       '<span class="gate-go">→</span></button></div>', { flush: true });
 
     $('#v-set').innerHTML = h;
+    fillAppVersion();
     // Scoped to the view, not to the first .body-flush: several cards use that class
     // now, and binding to the first one silently stops working when a card is added
     // above it.
