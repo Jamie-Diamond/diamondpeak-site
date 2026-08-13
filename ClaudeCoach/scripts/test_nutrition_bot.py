@@ -598,3 +598,45 @@ if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))
     sys.exit(1)
 print("all checks passed")
+
+
+# --- quantity corrections are arithmetic, never a search (13 Aug 2026) ----------------
+
+qc = NB.quantity_correction("That's 100g I had 160g")
+check("two numbers: the amount EATEN wins", qc == {"grams": 160.0})
+check("whole pack detected", NB.quantity_correction("But I had the whole pack")
+      == {"whole_pack": True})
+check("half of it is a factor", NB.quantity_correction("only had half of it")
+      == {"factor": 0.5})
+check("identity dispute is NOT a quantity correction",
+      NB.quantity_correction("not peanut butter, it was 20g of jam") is None)
+check("kg converts to grams", NB.quantity_correction("I had 1.5kg")
+      == {"grams": 1500.0})
+
+item = {"resolved_name": "Spanish omelette", "kcal": 120.0, "carb_g": 10.0,
+        "fat_g": 5.0, "per_100g": {"kcal": 120.0, "carb_g": 10.0, "fat_g": 5.0},
+        "portion_used_g": 100.0}
+new = NB.rescale_item(item, grams=160)
+check("rescale from per-100g basis", new["kcal"] == 192.0 and new["carb_g"] == 16.0)
+check("rescale records the stated amount", new["portion_used_g"] == 160
+      and new["portion_estimated"] is False)
+new = NB.rescale_item({"kcal": 100.0, "portion_used_g": 50.0}, grams=75)
+check("rescale falls back to portion ratio", new["kcal"] == 150.0)
+new = NB.rescale_item({"kcal": 100.0}, factor=0.5)
+check("rescale by bare factor", new["kcal"] == 50.0)
+check("no basis at all refuses", NB.rescale_item({"resolved_name": "x"}, grams=50)
+      is None)
+check("identity never touched by rescale",
+      NB.rescale_item(item, grams=160)["resolved_name"] == "Spanish omelette")
+
+# --- exclusions must name a food, never an amount --------------------------------------
+check("'100g' never becomes an exclusion",
+      NB.exclusions_in("That's 100g I had 160g") == [])
+check("'whole pack' never becomes an exclusion",
+      NB.exclusions_in("no, I had the whole pack") == [])
+check("a real food still excludes",
+      "peanut butter" in NB.exclusions_in("I never said peanut butter"))
+
+if FAILED:
+    print(f"{len(FAILED)} FAILED"); sys.exit(1)
+print("all checks passed")

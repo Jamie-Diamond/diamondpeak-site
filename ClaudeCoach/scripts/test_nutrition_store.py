@@ -331,3 +331,21 @@ if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))
     sys.exit(1)
 print("all checks passed")
+
+
+# --- update_entry patches amounts, never identity (13 Aug 2026) -------------------------
+with tempfile.TemporaryDirectory() as td:
+    st = S.NutritionStore(Path(td))
+    e = st.add_entry(date(2026, 8, 13), raw_text="omelette", resolved_name="Spanish omelette",
+                     kcal=120, carb_g=10, confidence="label", source_rung="manual")
+    done = st.update_entry(date(2026, 8, 13), e["id"], kcal=192.0, carb_g=16.0,
+                           portion_used_g=160, resolved_name="HACKED")
+    check("update_entry patches amounts", done and done["kcal"] == 192.0)
+    check("update_entry cannot change identity",
+          done["resolved_name"] == "Spanish omelette")
+    check("update_entry with nothing patchable is a no-op",
+          st.update_entry(date(2026, 8, 13), e["id"], species=["x"]) is None)
+
+if FAILED:
+    print(f"{len(FAILED)} FAILED"); sys.exit(1)
+print("all checks passed")

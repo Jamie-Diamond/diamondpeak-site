@@ -92,3 +92,75 @@ if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))
     sys.exit(1)
 print("all checks passed")
+
+
+# --- decide_correction: the model decides, the code executes -------------------------
+# (13 Aug 2026: regex detectors registered '100g' as an excluded food and re-searched a
+# label the bot was holding. The decision is now the model's; these checks are that the
+# prompt carries the item basis, that valid decisions pass through, and that garbage or
+# an unavailable model degrade to None so the deterministic fallback can run.)
+
+def fixed_runner(reply, sink=None):
+    def run(cmd, input=None, **kwargs):
+        if sink is not None:
+            sink.append(input)
+        return type("P", (), {"stdout": reply, "stderr": ""})()
+    return run
+
+
+_item = {"resolved_name": "Spanish omelette", "kcal": 120.0, "carb_g": 10.0,
+         "per_100g": {"kcal": 120.0, "carb_g": 10.0}, "portion_used_g": 100.0,
+         "pack_g": 380.0}
+
+sink = []
+got = NLU.decide_correction("That's 100g I had 160g", _item, "claude", "m",
+                            log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"rescale","grams":160}', sink))
+check("rescale decision passes through", got == {"kind": "rescale", "grams": 160})
+check("prompt carries the per-100g basis", "per_100g" in (sink[0] or ""))
+check("prompt carries the pack weight", "pack_g" in (sink[0] or ""))
+check("prompt forbids the model computing macros",
+      "Never return macros" in (sink[0] or ""))
+
+got = NLU.decide_correction("not peanut butter, plain butter", _item, "claude", "m",
+                            log=lambda *a: None,
+                            runner=fixed_runner(
+                                '{"kind":"reidentify","text":"salted butter",'
+                                '"exclusions":["peanut butter"]}'))
+check("reidentify decision passes through", got and got["kind"] == "reidentify"
+      and got["exclusions"] == ["peanut butter"])
+
+got = NLU.decide_correction("whatever", _item, "claude", "m", log=lambda *a: None,
+                            runner=fixed_runner("I think he means more food?"))
+check("prose instead of JSON degrades to None", got is None)
+
+got = NLU.decide_correction("whatever", _item, "claude", "m", log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"invent_numbers"}'))
+check("unknown decision kind degrades to None", got is None)
+
+
+# --- label_to_item keeps the basis that makes corrections arithmetic ------------------
+lbl = NLU.label_to_item({"per": "100g", "portion_g": None, "kcal": 120, "carb_g": 10,
+                         "fat_g": 5, "pack_g": 380, "product": "Spanish omelette"})
+check("label item keeps per-100g basis", lbl.get("per_100g", {}).get("kcal") == 120.0)
+check("label item keeps pack weight", lbl.get("pack_g") == 380.0)
+
+lbl = NLU.label_to_item({"per": "portion", "portion_g": 40, "kcal": 100, "carb_g": 26,
+                         "product": "bar"})
+check("per-portion label derives per-100g basis",
+      lbl.get("per_100g", {}).get("kcal") == 250.0)
+check("per-portion label records the portion", lbl.get("portion_used_g") == 40.0)
+
+
+# --- a scoop of a macro-carrying drink mix is food, not a dose -------------------------
+got = NLU.classify("1 scoop sis rego chocolate", False, "claude", "m",
+                   log=lambda *a: None,
+                   runner=fixed_runner('{"intent":"log_food","items":'
+                                       '[{"text":"sis rego chocolate","portion_g":null,'
+                                       '"in_session":false}]}'))
+check("REGO stays food despite the scoop", got.get("intent") == "log_food")
+
+print()
+if FAILED:
+    print(f"{len(FAILED)} FAILED"); sys.exit(1)
+print("all checks passed")

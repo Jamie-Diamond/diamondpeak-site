@@ -1069,21 +1069,75 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # only in the pending record - which is how the chat model came to be blind to
         # what he had just disputed.
         _chat(ctx, "athlete", t)
+        corr = got.get("correction") or t
+        # WHAT THE CORRECTION MEANS IS THE MODEL'S CALL; the code only executes it.
+        # (Jamie, 13 Aug 2026: "why are we relying so much on python when just using
+        # any LLM ... would do better".) A pile of regexes reverse-engineering that
+        # judgement is what registered '100g' as an excluded food and re-searched a
+        # label it was holding. The model decides rescale/reidentify/meal; every
+        # NUMBER is still computed here - the model never returns macros.
+        target_item = None
+        batch = (pend or {}).get("batch") or []
+        if len(batch) == 1:
+            target_item = batch[0]
+        else:
+            target_item = ctx.store.find_entry(day, "") or None
+        decision = NLU.decide_correction(corr, target_item, CLAUDE_BIN, LLM_MODEL,
+                                         log=log) if target_item else None
+        if decision:
+            kind = decision.get("kind")
+            log(f"  correction decided: {kind} {decision}")
+            if kind == "rescale" and decision.get("grams"):
+                if apply_quantity_correction(ctx, pend,
+                                             {"grams": float(decision["grams"])},
+                                             day, token, chat_id):
+                    return
+            elif kind == "rescale_factor" and decision.get("factor"):
+                if apply_quantity_correction(ctx, pend,
+                                             {"factor": float(decision["factor"])},
+                                             day, token, chat_id):
+                    return
+            elif kind == "whole_pack":
+                if apply_quantity_correction(ctx, pend, {"whole_pack": True},
+                                             day, token, chat_id):
+                    return
+            elif kind == "meal" and decision.get("meal") and not pend:
+                done = ctx.store.set_meal(day, target_item["id"], decision["meal"])
+                if done:
+                    publish_now(ctx)
+                    tg.send(token, chat_id,
+                            f"Filed *{done.get('resolved_name')}* under "
+                            f"{decision['meal']}.", log=log)
+                    return
+            elif kind == "reidentify":
+                for phrase in decision.get("exclusions") or []:
+                    ctx.store.add_exclusion(day, phrase)
+                # falls through to the re-resolution path below, which now carries
+                # the exclusions and the model's cleaned-up lookup text
+                if decision.get("text"):
+                    corr = decision["text"]
+            # "unclear" and anything unhandled: fall through unchanged.
+        else:
+            # Model unavailable: the deterministic detectors are the FALLBACK, not
+            # the decider - offline beats broken, but they never override the model.
+            qc = quantity_correction(corr)
+            if qc and apply_quantity_correction(ctx, pend, qc, day, token, chat_id):
+                return
         # Register what he says it was NOT before anything is re-resolved. The ladder is
         # deterministic, so a re-resolution with no memory of the rejected candidate returns
         # it again - six times, on 12 Aug 2026, twice after he had said so explicitly.
-        record_exclusions(ctx, day, got.get("correction") or t)
+        record_exclusions(ctx, day, corr)
         if not pend:
             # A correction after the fact used to be refused outright - "nothing pending" -
             # which is how a wrong sandwich survived being corrected and then got logged a
             # second time from the label. It now REPLACES the entry he is talking about.
-            target = ctx.store.find_entry(day, got.get("correction") or t)
+            target = ctx.store.find_entry(day, corr)
             if not target:
                 tg.send(token, chat_id, "Nothing logged today to correct. Tell me what you "
                                         "had and I will look it up.", log=log)
                 return
             combined = NLU.apply_correction(target.get("raw_text") or "",
-                                            got.get("correction") or t)
+                                            corr)
             _chat(ctx, 
                 "coach", f"[log] correction noted: {(got.get('correction') or t)[:60]}")
             offer_items(ctx, [{"text": combined, "portion_g": None,
@@ -1091,14 +1145,14 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                         day, token, chat_id)
             mark_pending_replaces(ctx, target["id"], target.get("resolved_name") or "")
             return
-        if correct_in_batch(ctx, pend, got.get("correction") or t, day, token, chat_id):
+        if correct_in_batch(ctx, pend, corr, day, token, chat_id):
             return
         subject = pending_subject(pend)
-        combined = NLU.apply_correction(subject, got.get("correction") or t)
+        combined = NLU.apply_correction(subject, corr)
         # A correction with no subject left in it is REFUSED. " (half the portion)" is not a
         # food, and resolving it produced an LLM estimate named after the correction itself -
         # the third time this shape has reached the log.
-        if not _has_subject(combined, got.get("correction") or t):
+        if not _has_subject(combined, corr):
             tg.send(token, chat_id,
                     "I have lost track of what that refers to. Tell me the item and the "
                     "change together - \u201chalf a bag of the M&S nut collection\u201d - and "
@@ -1697,7 +1751,15 @@ _EXCLUDE_FILLER = {"the", "a", "an", "any", "some", "my", "that", "this", "it", 
                    # matches nothing at all - it fails silently, which is the one outcome
                    # this feature cannot have.
                    "today", "tonight", "yesterday", "earlier", "morning", "afternoon",
-                   "evening", "either", "anything", "never", "twice", "times", "again"}
+                   "evening", "either", "anything", "never", "twice", "times", "again",
+                   # amounts, never identities (see the quantity guard below)
+                   "whole", "pack", "packet", "portion", "partial", "gram", "grams",
+                   "half", "bigger", "smaller", "more", "less"}
+
+# Quantity words that pass the three-letter test but still name an amount. A phrase
+# made only of these is a quantity correction wearing exclusion clothes.
+_EXCLUDE_QUANTITY = {"gram", "grams", "pack", "packet", "portion", "partial", "whole",
+                     "half", "quarter", "double", "large", "small", "medium", "big"}
 
 
 def exclusions_in(text: str) -> list:
@@ -1724,9 +1786,157 @@ def exclusions_in(text: str) -> list:
             if len(kept) == 4:
                 break
         phrase = " ".join(kept)
+        # An exclusion must name a FOOD. "That's 100g I had 160g" produced the
+        # exclusion '100g' and "But I had the whole pack" produced 'partial portion'
+        # (13 Aug 2026) - quantity words, which no product name contains, so they
+        # match nothing and silently bloat the day's list. A phrase with no token of
+        # three or more letters is an amount, not an identity.
+        if not any(re.search(r"[a-z]{3}", w) and w not in _EXCLUDE_QUANTITY
+                   for w in kept):
+            continue
         if phrase and phrase not in out:
             out.append(phrase)
     return out
+
+
+# --- quantity corrections: arithmetic, never a search ------------------------
+#
+# THE BUG THIS EXISTS FOR (13 Aug 2026, the tortilla label). He photographed a
+# nutrition panel - manufacturer figures, the best data this bot ever holds - then
+# said "That's 100g I had 160g". The correction path re-ran the LADDER on the string
+# "item from label photo", throwing away the label to search for it. Then "But I had
+# the whole pack" dead-ended on "needs a portion" with the pack weight printed on the
+# very photo it had just read. A correction that only changes HOW MUCH is a
+# multiplication against the item in hand; re-identifying the food is the one thing
+# it must never do.
+
+_QTY_UNIT = r"(g|grams?|kg|ml|l|litres?)"
+_QTY_ANCHORED = re.compile(
+    rf"\b(?:had|ate|was|about|closer\s+to|more\s+like)\s+(\d+(?:\.\d+)?)\s*{_QTY_UNIT}\b",
+    re.I)
+_QTY_ANY = re.compile(rf"\b(\d+(?:\.\d+)?)\s*{_QTY_UNIT}\b", re.I)
+_QTY_WHOLE = re.compile(r"\b(?:whole|entire|all\s+of\s+the|full)\s+"
+                        r"(?:pack(?:et)?|bag|tub|bar|box|bottle|pot|tin|can|thing|it)\b",
+                        re.I)
+_QTY_FACTOR = ((re.compile(r"\bhalf\b", re.I), 0.5),
+               (re.compile(r"\b(?:twice|two\s+of\s+them|x\s*2|double)\b", re.I), 2.0))
+
+
+def _qty_grams(m) -> float:
+    n, unit = float(m.group(1)), m.group(2).lower()
+    return n * 1000 if unit in ("kg", "l", "litre", "litres") else n
+
+
+def quantity_correction(text: str):
+    """{'grams': x} | {'whole_pack': True} | {'factor': f} | None.
+
+    None whenever the correction also disputes WHAT the food was - "not peanut butter,
+    it was 20g of jam" must go down the re-resolve path with its exclusion, not be
+    rescaled into more of the wrong thing. exclusions_in() finding anything is the
+    signal for that: an identity dispute names a food, a quantity dispute cannot."""
+    t = text or ""
+    if exclusions_in(t):
+        return None
+    m = _QTY_ANCHORED.search(t)
+    if m:
+        return {"grams": _qty_grams(m)}
+    ms = list(_QTY_ANY.finditer(t))
+    if ms:
+        # Two bare numbers is "that's 100g I had 160g" shaped: the amount he ATE is
+        # stated last, the label's basis first. Taking the first would re-log the basis.
+        return {"grams": _qty_grams(ms[-1])}
+    if _QTY_WHOLE.search(t):
+        return {"whole_pack": True}
+    for pat, f in _QTY_FACTOR:
+        if pat.search(t):
+            return {"factor": f}
+    return None
+
+
+_RESCALE_FIELDS = ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g",
+                   "dietary_sodium_mg")
+
+
+def rescale_item(item: dict, grams: float = None, factor: float = None):
+    """The same item at a different amount, or None when there is no basis to scale
+    from. Prefers the per-100g basis (exact, from the label or table); falls back to
+    scaling the current figures by the ratio of portions. Never touches identity."""
+    out = dict(item)
+    per = item.get("per_100g") or {}
+    if grams is not None and per:
+        for f in _RESCALE_FIELDS:
+            if per.get(f) is not None:
+                out[f] = round(float(per[f]) * grams / 100.0, 1)
+    elif grams is not None and item.get("portion_used_g"):
+        ratio = grams / float(item["portion_used_g"])
+        for f in _RESCALE_FIELDS:
+            if item.get(f) is not None:
+                out[f] = round(float(item[f]) * ratio, 1)
+    elif factor is not None:
+        for f in _RESCALE_FIELDS:
+            if item.get(f) is not None:
+                out[f] = round(float(item[f]) * factor, 1)
+        if item.get("portion_used_g"):
+            grams = float(item["portion_used_g"]) * factor
+    else:
+        return None
+    if out.get("dietary_sodium_mg") is not None:
+        out["dietary_sodium_mg"] = round(out["dietary_sodium_mg"])
+    if grams is not None:
+        out["portion_used_g"] = grams
+        out["portion_assumed"] = f"{grams:.0f} g - as stated"
+    # A STATED amount is not an assumption - the flag exists to mark guesses.
+    out["portion_estimated"] = False
+    return out
+
+
+def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
+                              token, chat_id) -> bool:
+    """Handle a pure-quantity correction against the pending offer or the latest
+    entry. Returns True when handled (including by asking for the pack size)."""
+    batch = (pend or {}).get("batch") or []
+    item = batch[0] if len(batch) == 1 else None
+    target = None
+    if item is None:
+        target = ctx.store.find_entry(day, "")
+        if not target:
+            return False
+        item = target
+    grams, factor = qc.get("grams"), qc.get("factor")
+    if qc.get("whole_pack"):
+        pack = item.get("pack_g")
+        if not pack:
+            tg.send(token, chat_id,
+                    "How many grams is the whole pack? It is not printed on what I "
+                    "have - reply e.g. “380g” and I will scale it.", log=log)
+            _chat(ctx, "coach", "[log] asked for pack size to scale a whole-pack claim")
+            return True
+        grams = float(pack)
+    new = rescale_item(item, grams=grams, factor=factor)
+    if new is None:
+        return False              # no basis to scale from: let re-resolution handle it
+    if target is None:
+        batch[0] = new
+        set_pending(ctx.store, {**pend, "batch": batch})
+        kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
+        tg.send(token, chat_id, fmt_confirm(new) + "\n\nLog it?",
+                reply_markup=kb, log=log)
+        _chat(ctx, "coach", f"[log] rescaled offer to "
+                            f"{new.get('portion_used_g') or '?'} g - awaiting confirm")
+    else:
+        patch = {f: new.get(f) for f in _RESCALE_FIELDS if new.get(f) is not None}
+        patch.update({"portion_used_g": new.get("portion_used_g"),
+                      "portion_estimated": False,
+                      "portion_assumed": new.get("portion_assumed")})
+        ctx.store.update_entry(day, target["id"], **patch)
+        publish_now(ctx)
+        tg.send(token, chat_id,
+                f"Rescaled *{target.get('resolved_name')}* to "
+                f"{new.get('portion_used_g'):.0f} g: {round(new.get('kcal') or 0)} kcal."
+                + "\n\n" + today_block(ctx, day), log=log)
+        _chat(ctx, "coach", f"[log] rescaled {target.get('resolved_name')} to "
+                            f"{new.get('portion_used_g'):.0f} g")
+    return True
 
 
 def record_exclusions(ctx: Context, day: date, text: str) -> list:

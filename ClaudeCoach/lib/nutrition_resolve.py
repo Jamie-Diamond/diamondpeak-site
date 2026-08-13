@@ -905,7 +905,10 @@ PASSTHROUGH_FIELDS = ("note", "vendor", "components", "swaps", "modifiers_unacco
                       # An ASSUMED portion has to reach the offer text, or the assumption
                       # is made silently - which is the thing the default was allowed on
                       # condition of never doing.
-                      "portion_estimated", "portion_assumed")
+                      "portion_estimated", "portion_assumed",
+                      # The per-100g basis is what makes "I had 160g" a multiplication
+                      # instead of a fresh search (13 Aug 2026, the tortilla label).
+                      "per_100g")
 
 
 def _finalise(got: dict, raw_text: str, rung: str, confidence: str, attempts, table,

@@ -312,6 +312,31 @@ class NutritionStore:
     # unlabelled fifth, so nothing can land nowhere.
     MEALS = ("breakfast", "lunch", "dinner", "snacks")
 
+    UPDATABLE = ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g",
+                 "dietary_sodium_mg", "portion_g", "portion_used_g",
+                 "portion_estimated", "portion_assumed", "raw_text")
+
+    def update_entry(self, day, entry_id: str, **fields) -> dict | None:
+        """Patch an existing entry in place - the QUANTITY correction path.
+
+        Added 13 Aug 2026: "that's 100g, I had 160g" against a committed entry had no
+        way to land except delete-and-relog, and the relog re-ran the ladder, which is
+        how a correction that is pure arithmetic came back as a different food. Only
+        amount-shaped fields are patchable: identity (resolved_name, source, species)
+        stays immutable here, because changing WHAT it was is a re-resolution, not a
+        patch."""
+        patch = {k: v for k, v in fields.items() if k in self.UPDATABLE}
+        if not patch:
+            return None
+
+        def fn(rec):
+            for e in rec.get("entries") or []:
+                if e.get("id") == entry_id:
+                    e.update(patch)
+                    return e
+            return None
+        return self._mutate_day(day, fn)
+
     def set_meal(self, day, entry_id: str, meal: str) -> dict | None:
         """Say which meal an entry belongs to.
 

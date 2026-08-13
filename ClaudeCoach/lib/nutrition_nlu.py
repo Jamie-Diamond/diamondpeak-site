@@ -400,6 +400,17 @@ def classify(text: str, has_pending: bool, claude_bin: str, model: str, log=prin
     if got.get("intent") == "log_food" and looks_like_supplement(text):
         got["intent"] = "log_supplement"
         got["form_detected"] = True
+    # A SCOOP of something with real macros is food, whatever the spoon is called.
+    # "1 scoop sis rego chocolate" was forced to the supplement path by the word
+    # "scoop" and never got macros; he had to say "It's a food" and got nowhere
+    # (13 Aug 2026). Recovery/carb/protein drink mixes carry meaningful energy and
+    # belong on the ladder.
+    if got.get("intent") == "log_supplement" and re.search(
+            r"\b(whey|protein\s+powder|rego|recovery\s+(?:drink|shake|mix)|"
+            r"carb(?:ohydrate)?\s+(?:drink|mix|powder)|maurten|beta\s+fuel|"
+            r"drink\s+mix|mass\s+gainer|meal\s+replacement)\b", text or "", re.I):
+        got["intent"] = "log_food"
+        got["form_detected"] = False
     if got.get("intent") in ("log_food", "log_supplement"):
         mg = tiny_dose_mg(text)
         if mg is not None:
@@ -653,6 +664,83 @@ def answer_question(question: str, facts: dict, claude_bin: str, model: str,
     return out or None
 
 
+CORRECTION_PROMPT = """You are deciding what a correction to a food log means. The \
+athlete has an item in front of him (below) and has sent a correction. Reply with ONLY \
+a JSON object.
+
+THE ITEM (as currently resolved; per_100g is the label/table basis if known):
+%s
+
+HIS CORRECTION:
+%s
+
+Decide which ONE of these he means and reply in that shape:
+  {"kind":"rescale","grams":<number>}
+      - he is changing HOW MUCH, and states or implies an amount in grams/ml
+        ("that's 100g, I had 160g" -> 160; "only had half" of a known 40g portion -> 20)
+  {"kind":"rescale_factor","factor":<number>}
+      - he is changing how much by a ratio with no known base amount ("half of it" -> 0.5,
+        "I had two of them" -> 2)
+  {"kind":"whole_pack"}
+      - he ate the whole pack/bag/tub (use the item's pack_g; the code will ask if unknown)
+  {"kind":"reidentify","text":"<what to look up instead>","exclusions":["<food he says it
+        was NOT, if any>"]}
+      - he is disputing WHAT the food is, with or without a new amount
+  {"kind":"meal","meal":"breakfast|lunch|dinner|snacks"}
+      - he is filing it under a meal, nothing else
+  {"kind":"unclear"}
+
+Rules:
+- The decision is about MEANING, not keywords. "That's 100g I had 160g" names two
+  numbers; only 160 is what he ate.
+- Do not compute any nutrition figures. Never return macros. The code does the maths.
+- A correction that disputes the food AND gives an amount is reidentify (put the amount
+  in the text, e.g. "20g of jam").
+"""
+
+
+def decide_correction(message: str, item: dict, claude_bin: str, model: str,
+                      log=print, runner=None, timeout: int = 45) -> dict | None:
+    """What the correction MEANS, decided by the model; the code only executes it.
+
+    This replaced a growing pile of regexes (quantity detectors, exclusion
+    extractors, unit tables) that each existed to reverse-engineer one judgement the
+    model makes natively. The failure mode of the pile was 13 Aug 2026: '100g'
+    registered as an excluded food, a label's own figures re-searched instead of
+    scaled. The model returns a decision, never a number the code could compute -
+    macros stay deterministic. None when the model is unavailable, so the caller can
+    fall back to the deterministic detectors."""
+    runner = runner or subprocess.run
+    summary = {k: item.get(k) for k in
+               ("resolved_name", "kcal", "protein_g", "carb_g", "fat_g",
+                "portion_used_g", "pack_g", "per_100g", "portion_assumed")
+               if item.get(k) is not None}
+    try:
+        proc = runner([claude_bin, "--print", "--model", model],
+                      input=CORRECTION_PROMPT % (json.dumps(summary, default=str),
+                                                 message),
+                      capture_output=True, text=True, timeout=timeout)
+    except Exception as exc:
+        log(f"decide_correction failed: {exc}")
+        return None
+    raw = (getattr(proc, "stdout", "") or "").strip()
+    if not raw or model_unavailable(raw):
+        return None
+    start, end = raw.find("{"), raw.rfind("}")
+    if start == -1 or end <= start:
+        log(f"decide_correction unparseable: {raw[:80]}")
+        return None
+    try:
+        got = json.loads(raw[start:end + 1])
+    except (ValueError, TypeError):
+        log(f"decide_correction unparseable: {raw[:80]}")
+        return None
+    if got.get("kind") in ("rescale", "rescale_factor", "whole_pack",
+                           "reidentify", "meal", "unclear"):
+        return got
+    return None
+
+
 def apply_correction(original_text: str, correction: str) -> str:
     """Fold a correction into the original text and RE-PARSE, rather than patching the
     parsed result.
@@ -768,9 +856,12 @@ If it is a NUTRITION LABEL or ingredients panel:
   {"kind":"nutrition_label","per":"100g"|"portion","portion_g":<grams or null>,
    "kcal":n,"protein_g":n,"carb_g":n,"fat_g":n,"fibre_g":n,
    "dietary_sodium_mg":n or null,"salt_g":n or null,
+   "pack_g":<the pack's total net weight in grams if printed anywhere (e.g. "380g",
+             "Net wt 250g"), else null>,
    "product":"<name if visible>","ingredients":"<the ingredients list, verbatim>"}
   Transcribe the printed figures EXACTLY. Do not convert, round or estimate them.
   Report salt_g separately if the panel gives salt rather than sodium; do not convert.
+  pack_g matters: "I had the whole pack" is only answerable if you read it now.
 
 If it is an ORDER, RECEIPT or MENU screenshot (Deliveroo, Just Eat, Uber Eats, a
 restaurant bill or menu):
@@ -928,15 +1019,34 @@ def label_to_item(label: dict) -> dict:
     if (label.get("per") or "100g").startswith("100") and portion:
         factor = float(portion) / 100.0
     out = {}
+    per_100 = {}
     for f in fields:
         v = label.get(f)
         if v not in (None, ""):
             try:
                 out[f] = round(float(v) * factor, 1)
+                if (label.get("per") or "100g").startswith("100"):
+                    per_100[f] = float(v)
+                elif portion:
+                    per_100[f] = round(float(v) * 100.0 / float(portion), 2)
             except (TypeError, ValueError):
                 pass
     if "dietary_sodium_mg" in out:
         out["dietary_sodium_mg"] = round(out["dietary_sodium_mg"])
+    # The per-100g BASIS travels with the item. "That's 100g, I had 160g" against a
+    # label whose figures were sitting right there was answered by re-running the whole
+    # ladder on the string "item from label photo" (13 Aug 2026) - the basis had been
+    # scaled away, so the only correction available was to start again. With the basis
+    # kept, a quantity correction is a multiplication, not a search.
+    if per_100:
+        out["per_100g"] = per_100
+    if portion:
+        out["portion_used_g"] = float(portion)
+    if label.get("pack_g"):
+        try:
+            out["pack_g"] = float(label["pack_g"])
+        except (TypeError, ValueError):
+            pass
     out["resolved_name"] = label.get("product") or "item from label photo"
     out["ingredients"] = label.get("ingredients") or ""
     out["source_url"] = "photo of the product label"
