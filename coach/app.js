@@ -3041,7 +3041,7 @@
     var done = false;
     ch.port1.onmessage = function (ev) {
       done = true;
-      var v = (ev.data && ev.data.cache) || 'unknown';
+      var v = (ev.data && (ev.data.version || ev.data.cache)) || 'unknown';
       navigator.serviceWorker.getRegistration().then(function (reg) {
         cell.textContent = v + (reg && (reg.waiting || reg.installing)
           ? ' — update syncing, reload to finish' : '');
@@ -3053,7 +3053,7 @@
     // An old worker without the version handler never replies - say so rather than
     // leaving "checking…" forever, because that IS the stale state he is asking about.
     setTimeout(function () {
-      if (!done && cell.isConnected) cell.textContent = 'pre-v40 (stale — reload twice)';
+      if (!done && cell.isConnected) cell.textContent = 'pre-2.40 (stale — close the app fully and reopen)';
     }, 1500);
   }
 

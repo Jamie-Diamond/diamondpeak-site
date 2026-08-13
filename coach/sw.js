@@ -16,7 +16,11 @@
  *
  * Bump CACHE on every deploy that changes a precached file.
  */
-const CACHE = 'peak-v40';
+// APP_VERSION is what the athlete sees in Settings; CACHE is the precache key.
+// Bump BOTH on every deploy that changes a precached file - the visible number
+// exists so Jamie can tell current from syncing from stale at a glance.
+const APP_VERSION = '2.40';
+const CACHE = 'peak-v41';
 
 // SHELL paths are relative to /coach/, where this worker actually lives - the app moved
 // out of /coach/app/ and these entries were left pointing at the old tree. addAll's
@@ -146,6 +150,6 @@ self.addEventListener('fetch', (event) => {
 // the exact thing the row exists to reveal (Jamie, 13 Aug 2026).
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'version' && event.ports && event.ports[0]) {
-    event.ports[0].postMessage({ cache: CACHE });
+    event.ports[0].postMessage({ cache: CACHE, version: APP_VERSION });
   }
 });
