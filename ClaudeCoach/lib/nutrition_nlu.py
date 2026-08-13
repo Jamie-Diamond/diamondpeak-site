@@ -37,6 +37,7 @@ and lost the per-item provenance the confidence flag depends on.
 
 import json
 import re
+from datetime import datetime
 from re import error
 import subprocess
 
@@ -502,13 +503,21 @@ WHAT YOU KNOW (every figure here was computed from his logged food, his ICU cale
 the fuelling primitives his coach uses):
 %s
 
-THE CONVERSATION SO FAR (oldest first; yours are "coach"):
+NOW: %s
+
+THE CONVERSATION SO FAR (oldest first, each line timed; yours are "coach"). These
+timestamps are real. If the previous exchange is hours or days old, it is stale
+background, not a live thread - answer the new message on TODAY's facts above, not on
+whatever was being discussed back then:
 %s
 
 HIS MESSAGE:
 %s
 
 How to answer:
+- You are talking TO him, not about him. Always address him directly as "you". Never
+  write about him in the third person - "he wants" or "he's not answering" - your entire
+  reply is sent to him verbatim, so there is no notes-to-self register to slip into.
 - Actually engage with what he asked. Reason about it. If he asks why, explain the
   mechanism. If he is weighing options, have an opinion and say which you would pick.
 - Follow the thread. "why?" or "what about the other one?" refers to what was just said.
@@ -567,14 +576,23 @@ def wants_options(message: str) -> bool:
 
 
 def converse(message: str, facts: dict, history: list, claude_bin: str, model: str,
-             log=print, runner=None, timeout: int = 150) -> str | None:
+             log=print, runner=None, timeout: int = 150, now_iso: str = None) -> str | None:
     """A turn of actual conversation. None when the model is unavailable.
 
     This replaced two single-shot prompts - one capped at "one or two sentences", the
     other with no memory of the previous turn - which between them made the bot incapable
-    of a conversation however good the facts were."""
+    of a conversation however good the facts were.
+
+    now_iso is passed IN by the caller rather than read here: the bot flattened
+    "role: text" with no timestamps and no notion of the current time, so a two-day-old
+    exchange read back as though it were still live. A stub runner in a test has no clock
+    of its own to fake, so the current time has to arrive as a parameter."""
     runner = runner or subprocess.run
-    convo = "\n".join(f"{t.get('role')}: {t.get('text')}" for t in (history or []))
+    now_iso = now_iso or datetime.now().strftime("%Y-%m-%dT%H:%M")
+    convo = "\n".join(
+        f"{t['at']} {t.get('role')}: {t.get('text')}" if t.get("at")
+        else f"{t.get('role')}: {t.get('text')}"
+        for t in (history or []))
     # WEB TOOLS ONLY WHEN HE IS ASKING WHAT TO EAT. "what shall I eat" and "options on
     # Deliveroo" cannot be answered from his own log alone - a takeaway menu is not in it -
     # and a tool-less model would either invent a restaurant or fall back to "have some lean
@@ -587,7 +605,7 @@ def converse(message: str, facts: dict, history: list, claude_bin: str, model: s
     try:
         proc = runner(cmd,
                       input=CONVERSE_PROMPT % (json.dumps(facts, indent=2, default=str),
-                                               convo or "(nothing yet)", message),
+                                               now_iso, convo or "(nothing yet)", message),
                       capture_output=True, text=True, timeout=timeout)
     except Exception as exc:
         log(f"converse failed: {exc}")

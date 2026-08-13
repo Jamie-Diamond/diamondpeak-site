@@ -882,10 +882,10 @@ Coaching analysis: {clean_analysis}
 {laps_block}{splits_block}{prs_block}
 IMPORTANT: The "Coaching analysis" may contain auto-detected interval efforts from the device — these are NOT training targets. The Aim must always reflect what was PLANNED (see "Planned:" above), not auto-detected efforts. If no plan is listed, use the sport type and duration to infer a sensible aim (e.g. "Z2 base ride").
 
-Write exactly 3 lines, plain text, no markdown, no hashtags, no exclamation marks:
+Write exactly 2 lines, plain text, no markdown, no hashtags, no exclamation marks:
 Line 1 — "Aim: [one plain sentence on what the session was PLANNED to target — from the Planned block, not the analysis]"
-Line 2 — {line2_instruction}
-Line 3 — "ClaudeCoach" [append " 🏆" if any segment PRs were set]
+Line 2 — {line2_instruction} [append " 🏆" if any segment PRs were set]
+Never sign the description or mention ClaudeCoach anywhere in it (Jamie, 13 Aug 2026 — descriptions are his public Strava, not the coach's).
 
 The tone must be neutral and factual throughout — describe what was done using the data. No jokes, no wit, no sarcasm, no commentary on how the session compared to plan, nothing that implies the athlete fell short or quit.
 
@@ -910,8 +910,9 @@ Total under 300 characters. Output nothing else."""
         pass
 
     # Fallback: deterministic factual-only summary — never derived from clean_analysis,
-    # which may contain private coaching content (RPE, pain, questions).
-    return f"{sport_line}.\n\nClaudeCoach"
+    # which may contain private coaching content (RPE, pain, questions). No sign-off:
+    # descriptions are the athlete's public Strava, not the coach's (Jamie, 13 Aug 2026).
+    return f"{sport_line}."
 
 
 def _derive_activity_name(slug: str, activity_date: str, sport: str, icu_id: str) -> str:

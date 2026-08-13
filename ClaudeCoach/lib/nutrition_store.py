@@ -370,6 +370,36 @@ class NutritionStore:
                 return best
         return entries[-1]
 
+    # --- rejected candidates ------------------------------------------------
+
+    def add_exclusion(self, day, phrase: str) -> list:
+        """Remember that the athlete has REJECTED a resolution, for the rest of the day.
+
+        THE BUG THIS EXISTS FOR. "butter" resolved to "Peanut butter, smooth" six times
+        on 12 Aug 2026, including twice after he said "I never said peanut butter" - a
+        correction re-ran the ladder from scratch, the ladder is deterministic, so it
+        returned the same wrong thing and asked him to confirm it again. A correction has
+        to leave a mark or the loop is unbreakable by design.
+
+        Stored per DAY rather than forever: he is rejecting this match for this item, not
+        telling the app that peanut butter is never food. A standing blocklist would need
+        managing, and nobody manages one."""
+        phrase = (phrase or "").strip().strip(".,;:!?\"'").lower()
+        if not phrase:
+            return []
+
+        def _add(rec):
+            out = list(rec.get("exclusions") or [])
+            if phrase not in out:
+                out.append(phrase)
+            rec["exclusions"] = out
+            return out
+        return self._mutate_day(day, _add)
+
+    def get_exclusions(self, day) -> list:
+        """Phrases the athlete has rejected today. Passed to the resolution ladder."""
+        return list(self.get_day(day).get("exclusions") or [])
+
     def undo_last(self, day) -> dict | None:
         """Remove the most recently logged entry. Returns it, or None if the day is
         empty. Corrections re-parse rather than patch, per the bot contract, so this

@@ -482,6 +482,29 @@ class CofidTable:
                 nt = _tokens(name)
                 if not nt:
                     continue
+                # COVERAGE HAS TO BE TESTED BOTH WAYS ROUND. Everything above measures
+                # how much of the QUERY the row explains, and nothing measured whether
+                # the query asked for the row at all - so a one-token query matched any
+                # row containing that token. "butter" resolved to "Peanut butter, smooth"
+                # six times on 12 Aug 2026, twice after the athlete said "I never said
+                # peanut butter": {butter} shares a token with the row, leaves nothing
+                # unexplained, and sailed through every check below.
+                #
+                # A row's IDENTITY is the first comma-segment of its published name -
+                # what the thing IS, before the qualifiers. PHE names are written that
+                # way throughout: "Peanut butter, smooth" -> {peanut, butter},
+                # "Apple, eating, flesh and skin" -> {apple}, "Bread, wholemeal" ->
+                # {bread}. Every identity token must appear in the query, so "butter"
+                # cannot reach peanut butter while "peanut butter" still can, and a
+                # qualifier the query adds ("eating apple") is still free to be ignored.
+                #
+                # Read off the CANONICAL name, not the alias this key came in under: the
+                # alias is a search convenience and may carry words the published name
+                # does not ("tinned tuna"), which would reject a query that names the
+                # food correctly. Exact and alias dict hits never reach here at all.
+                identity = _tokens((f.get("name") or "").split(",")[0])
+                if identity and not identity <= qt:
+                    continue
                 shared = qt & nt
                 if len(qt - nt) > COFID_MAX_UNEXPLAINED_TOKENS:
                     continue
@@ -557,9 +580,131 @@ def _hint_conflict(hint: dict, name: str) -> bool:
     return False
 
 
+# ASSUMED PORTIONS, for the case where the figures are good and the AMOUNT is the only
+# thing missing. "How much did you have?" is the right question for a prepared meal off a
+# per-100g label, and the wrong one for a teaspoon of butter: he told us the amount in the
+# words he used, in the units people use for that food. Refusing to convert them is how a
+# resolution with perfect label data dead-ended at kcal None.
+#
+# Every figure here is a stated ASSUMPTION, never a silent one: the offer says which
+# default was applied so a wrong one is corrected in one message. That is the whole
+# difference between this and the 100 g guess the web rung is forbidden from making - a
+# guess at how much of an unknown pack he ate is undetectable afterwards, whereas
+# "assumed 5 g - a teaspoon" is either right or obviously wrong.
+#
+# (word pattern, grams PER UNIT, the unit's name, food words it needs)
+_UNIT_PORTIONS = (
+    (r"\btea\s?spoons?\b|\btsps?\b", 5, "teaspoon", ()),
+    (r"\btable\s?spoons?\b|\btbsps?\b", 15, "tablespoon", ()),
+    (r"\bknobs?\b", 10, "knob", ()),
+    # A handful is only a portion for things eaten by the handful. A handful of chicken is
+    # not a unit anybody means, so it falls through to the question rather than to 30 g.
+    (r"\bhandfuls?\b", 30, "handful", ("nut", "almond", "cashew", "walnut", "peanut",
+                                       "pistachio", "raisin", "sultana", "sweet",
+                                       "haribo", "crisp", "seed")),
+    # A slice is bread-sized ONLY for bread. A slice of cake and a slice of ham are
+    # different foods with nothing in common but the word.
+    (r"\bslices?\b", 36, "slice", ("bread", "toast", "loaf", "bap", "bagel")),
+    (r"\bsmall\b[\w\s]{0,12}\bbananas?\b", 90, "small banana", ()),
+    (r"\blarge\b[\w\s]{0,12}\bbananas?\b", 136, "large banana", ()),
+)
+
+# Per-PIECE defaults, for a whole item counted rather than weighed.
+_PIECE_PORTIONS = (("banana", 118, "medium banana"),
+                   ("apple", 180, "medium apple"),
+                   ("orange", 130, "medium orange"),
+                   ("egg", 50, "egg"))
+
+# How many of them, when he said. A unit default multiplied by a stated count rather than
+# applied once: "two slices of toast" assumed as one slice halves the entry, and it does it
+# quietly, which is the failure mode this whole module is arranged against.
+_COUNT_WORDS = {"one": 1, "a": 1, "an": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                "six": 6, "couple": 2,
+                # "half a large banana" is the file's own worked example of a query this
+                # table is for, and reading it as a whole one doubles the entry. A fraction
+                # is a count like any other.
+                "half": 0.5, "quarter": 0.25}
+_COUNT_BEFORE = re.compile(r"(\d+|one|two|three|four|five|six|couple|half|quarter|a|an)"
+                           r"\s+(?:\w+\s+){0,2}$")
+
+
+def _stated_count(said: str, at: int) -> float:
+    """The number in front of the unit word, or 1. Anything unparseable is 1: an assumed
+    portion is stated in the reply, so being wrong about the count is correctable, whereas
+    refusing to read "two" is a dead end."""
+    m = _COUNT_BEFORE.search(said[:at])
+    if not m:
+        return 1
+    tok = m.group(1)
+    n = int(tok) if tok.isdigit() else _COUNT_WORDS.get(tok, 1)
+    return n if 0.25 <= n <= 12 else 1
+
+
+def _plural(noun: str, n: float) -> str:
+    """"a teaspoon" / "2 teaspoons" / "half a slice". The article is chosen on the vowel so
+    the assumption reads like a sentence - he is being asked to check it, so it has to be
+    readable."""
+    article = ("an " if noun[:1] in "aeiou" else "a ") + noun
+    if n == 1:
+        return article
+    if n < 1:
+        return {0.5: "half ", 0.25: "a quarter of "}.get(n, f"{n} of ") + article
+    return f"{n:g} {noun}s"
+
+
+def _default_portion(raw_text: str, resolved_name: str):
+    """(grams, how it reads back) for the amount his words imply, or (None, "").
+
+    The UNIT comes from what he said - a resolved product name never says "teaspoon" - but
+    the FOOD may be named on either side, because "a slice of it" only becomes bread once
+    the row is known."""
+    said = (raw_text or "").lower()
+    subject = said + " " + (resolved_name or "").lower()
+    for pattern, grams, noun, needs in _UNIT_PORTIONS:
+        m = re.search(pattern, said)
+        if not m:
+            continue
+        if needs and not any(re.search(rf"\b{w}", subject) for w in needs):
+            continue
+        n = _stated_count(said, m.start())
+        return float(grams) * n, _plural(noun, n)
+    for word, grams, noun in _PIECE_PORTIONS:
+        m = re.search(rf"\b{word}s?\b", subject)
+        if not m:
+            continue
+        n = _stated_count(subject, m.start())
+        if n == 1 and m.group(0).endswith("s"):
+            # A bare plural is a COUNT QUESTION, not a piece: "bananas" could be two or
+            # five, and answering it with one banana's weight understates the entry
+            # silently. One named piece is the only case this rule is safe for.
+            continue
+        return float(grams) * n, _plural(noun, n)
+    return None, ""
+
+
+def default_portion_g(raw_text: str, resolved_name: str = "") -> float | None:
+    """The assumed portion in grams, or None when nothing here applies."""
+    return _default_portion(raw_text, resolved_name)[0]
+
+
+def _excluded_by(candidate_name: str, exclude) -> str:
+    """The rejected phrase this candidate matches, or "".
+
+    Matched on IDENTIFYING TOKENS rather than as a substring, in both directions of the
+    problem. "peanut butter" has to block "Peanut butter, smooth" (which a bare substring
+    test would miss on the comma and the case) and must NOT block "Butter, salted" - the
+    athlete rejected peanut butter, not butter, and blocking the thing he actually ate
+    would be the same bug wearing the opposite sign."""
+    for phrase in exclude or ():
+        want = _tokens(phrase)
+        if want and want <= _tokens(candidate_name):
+            return phrase
+    return ""
+
+
 def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             table=None, fetchers: dict = None, cofid: CofidTable = None,
-            hint: dict = None, queries=None, on: date = None) -> dict:
+            hint: dict = None, queries=None, on: date = None, exclude=()) -> dict:
     """Walk the ladder and return one resolved item plus a full attempt log.
 
     `fetchers` maps a rung name to a callable (text, portion_g) -> dict|None. Any
@@ -587,12 +732,21 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
     # cache first, and a hit short-circuits everything below it
     if store is not None:
         hit = store.cache_get(key, on=on)
-        if hit:
+        rejected = _excluded_by(hit.get("resolved_name") or "", exclude) if hit else ""
+        if hit and rejected:
+            # The cache is the rung most likely to hold the thing he just rejected: it is
+            # keyed on his own words, and a wrong answer he once confirmed is exactly what
+            # gets re-served for a year. Skipping it here re-walks the ladder rather than
+            # handing back the same mistake instantly.
+            record(Rung.CACHE, "excluded_by_athlete",
+                   f"{hit.get('resolved_name')!r} matches {rejected!r}")
+        elif hit:
             record(Rung.CACHE, "hit", f"resolved_at {hit.get('resolved_at')}")
             return _finalise(dict(hit), raw_text, Rung.CACHE,
                              hit.get("confidence", "estimate"), attempts, table, day,
                              degraded=False)
-        record(Rung.CACHE, "miss", f"absent or older than {CACHE_MAX_AGE_DAYS} days")
+        else:
+            record(Rung.CACHE, "miss", f"absent or older than {CACHE_MAX_AGE_DAYS} days")
 
     # CoFID is a local table, so wire it in automatically when present
     if Rung.COFID not in fetchers:
@@ -628,6 +782,15 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
                 if not cand:
                     continue
                 cname = cand.get("resolved_name") or ""
+                # A REJECTED CANDIDATE IS A MISS, on every rung, and this check comes
+                # FIRST. Checked before needs_portion in particular: a per-100g peanut
+                # butter with no pack size would otherwise stop the ladder to ask "how
+                # much?" about the very thing he had just said twice he never ate.
+                rejected = _excluded_by(cname, exclude)
+                if rejected:
+                    record(rung, "excluded_by_athlete",
+                           f"{cname!r} matches {rejected!r}, which he ruled out today")
+                    continue
                 if _hint_conflict(hint, cname):
                     record(rung, "wrong_form",
                            f"{cname!r} is not a {hint.get('form')}")
@@ -658,6 +821,26 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             degraded = True
             continue
         if got and got.get("needs_portion"):
+            per_100 = {k: v for k, v in (got.get("per_100g") or {}).items()
+                       if v not in (None, "")}
+            assumed, phrase = _default_portion(raw_text, got.get("resolved_name") or "")
+            if assumed and per_100:
+                # HE ALREADY SAID HOW MUCH, in the units that food is eaten in. Asking
+                # "how much butter, in grams?" after "one teaspoon of butter" is the
+                # question that left this resolution at kcal None with a perfectly good
+                # label behind it. The confidence is NOT downgraded: the figures are still
+                # the label's, and only the amount is assumed - which the offer states, so
+                # a wrong default costs one message rather than being invisible.
+                record(rung, "portion_assumed", f"{phrase}, {assumed:.0f} g")
+                conf = got.get("confidence") or RUNG_CONFIDENCE[rung]
+                if conf not in CONFIDENCE_LEVELS:
+                    conf = RUNG_CONFIDENCE[rung]
+                return _finalise({**got, **_scale(per_100, assumed),
+                                  "portion_used_g": assumed,
+                                  "portion_estimated": True,
+                                  "portion_assumed": f"{assumed:.0f} g - {phrase}"},
+                                 raw_text, rung, conf, attempts, table, day,
+                                 degraded=degraded)
             # A rung found the right product but cannot know how much was eaten. That is
             # a question, not a result: it is recorded and the ladder stops, because a
             # lower rung guessing would overwrite a good label with a worse guess.
@@ -671,6 +854,26 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             return out
         if got:
             record(rung, "hit", got.get("source_kind") or "")
+            if rung == Rung.COFID and portion_g is None:
+                # A CoFID hit with no portion IS per-100g wearing a finished look:
+                # CofidTable._scale leaves the figures unscaled when portion_g is None,
+                # so "one teaspoon of butter" without an interpreted portion would log
+                # 100 g of butter (744 kcal) without anyone having said so. Same
+                # assumption as the needs_portion path above: if his words name the
+                # amount in the units the food is eaten in, scale to it and say so.
+                assumed, phrase = _default_portion(raw_text,
+                                                   got.get("resolved_name") or "")
+                if assumed:
+                    record(rung, "portion_assumed", f"{phrase}, {assumed:.0f} g")
+                    factor = assumed / 100.0
+                    scaled = {k: round(got[k] * factor, 1)
+                              for k in MACRO_FIELDS if got.get(k) is not None}
+                    if got.get("dietary_sodium_mg") is not None:
+                        scaled["dietary_sodium_mg"] = round(
+                            got["dietary_sodium_mg"] * factor)
+                    got = {**got, **scaled, "portion_used_g": assumed,
+                           "portion_estimated": True,
+                           "portion_assumed": f"{assumed:.0f} g - {phrase}"}
             # A rung may declare its own confidence: `web` is label data when it lands on
             # a manufacturer or retailer page and an estimate when it does not.
             conf = got.get("confidence") or RUNG_CONFIDENCE[rung]
@@ -698,7 +901,11 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
 # Naming them in one place makes the next addition a one-line change instead of a
 # silent loss.
 PASSTHROUGH_FIELDS = ("note", "vendor", "components", "swaps", "modifiers_unaccounted",
-                      "per", "pack_g", "portion_used_g", "sodium_from_salt")
+                      "per", "pack_g", "portion_used_g", "sodium_from_salt",
+                      # An ASSUMED portion has to reach the offer text, or the assumption
+                      # is made silently - which is the thing the default was allowed on
+                      # condition of never doing.
+                      "portion_estimated", "portion_assumed")
 
 
 def _finalise(got: dict, raw_text: str, rung: str, confidence: str, attempts, table,
@@ -776,6 +983,16 @@ def cache_resolved(store, item: dict) -> None:
                     "source_url": item.get("source_url", ""),
                     "species": item.get("species", []),
                     "resolved_at": item.get("resolved_at")})
+    if item.get("portion_estimated"):
+        # AN ASSUMED PORTION HAS TO SURVIVE THE CACHE. The macros here were scaled by a
+        # default, and the cache payload is an allowlist, so without these three keys the
+        # second time he says "a teaspoon of butter" the cache hit renders as plain label
+        # data with the assumption silently dropped - which is the one thing the default
+        # portions were allowed on condition of never doing. Same allowlist trap as the
+        # dropped species score and the dropped vendor note.
+        payload.update({"portion_estimated": True,
+                        "portion_assumed": item.get("portion_assumed"),
+                        "portion_used_g": item.get("portion_used_g")})
     store.cache_put((item.get("raw_text") or "").strip().lower(), payload)
 
 

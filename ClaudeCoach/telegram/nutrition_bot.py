@@ -193,6 +193,13 @@ def fmt_confirm(item: dict) -> str:
         (("kcal", "kcal"), ("P", "protein_g"), ("C", "carb_g"), ("F", "fat_g"))
         if item.get(k) is not None)
     bits.append(macros)
+    if item.get("portion_estimated"):
+        # An ASSUMED amount is stated on the line he reads before confirming, never only in
+        # the stored record. That is the condition the default portions were added on: a
+        # teaspoon is a fair reading of "one teaspoon", but he has to be able to see it was
+        # a reading and not a measurement.
+        bits.append(f"_assumed {item.get('portion_assumed') or 'a standard portion'}; "
+                    f"correct me if wrong._")
     if item.get("fibre_g"):
         bits.append(f"fibre {round(item['fibre_g'])} g")
     if item.get("species"):
@@ -300,9 +307,17 @@ def classify_today_and_tomorrow(icu: IcuClient, today: date, day_rules: dict):
     # run because the plan was invisible costs him the session.
     planned_today = for_date(events, start)
     seen_ids = {(a.get("id") or a.get("activity_id")) for a in done}
-    today_sessions = done + [e for e in planned_today
-                             if (e.get("id") or e.get("activity_id")) not in seen_ids
-                             and not e.get("paired_activity_id")]
+    # "_done" is tagged here, not re-derived downstream: it is the ONLY place that still
+    # knows which list a session came from once the two are merged, and today_brief needs
+    # that to say "done" vs "still to come" rather than presenting both as identical.
+    for a in done:
+        a["_done"] = True
+    remaining_today = [e for e in planned_today
+                       if (e.get("id") or e.get("activity_id")) not in seen_ids
+                       and not e.get("paired_activity_id")]
+    for e in remaining_today:
+        e["_done"] = False
+    today_sessions = done + remaining_today
     tomorrow_sessions = for_date(events, end)
 
     confidence = "normal"
@@ -688,6 +703,11 @@ class Context:
          tomorrow_sessions) = classify_today_and_tomorrow(self.icu, day, rules)
         self._tomorrow_sessions = tomorrow_sessions
         self._tomorrow_type = tomorrow_type
+        # TODAY'S sessions too, cached alongside tomorrow's for the same reason: they are
+        # computed here (completed activities preferred, falling back to planned) and were
+        # otherwise dropped, leaving today_brief() with no calendar to read from.
+        self._today_sessions = sessions
+        self._today_type = today_type
         yesterday_type = None
         try:
             prev = [a for a in (self.icu.get_training_history(days=3) or [])
@@ -749,6 +769,39 @@ class Context:
 
 
 # --- message handling -------------------------------------------------------
+
+def today_brief(ctx: Context, day: date) -> dict:
+    """What is actually happening TODAY, so the chat model can see the calendar it is
+    talking about rather than only tomorrow's.
+
+    A 240-minute ride sitting on today's calendar with a 60-minute ride on tomorrow's is
+    exactly the shape that broke this: facts_for_question injected tomorrow_brief and
+    nothing about today, so the model told him about tomorrow's ride and reported no run
+    "today or tomorrow" while the 240-minute session sat there unread. Completed activities
+    are preferred and the rest of the day falls back to planned - the same sessions and the
+    same _done tag classify_today_and_tomorrow already computed, read via the cache
+    zones_for populates as a side effect rather than fetched again."""
+    zones = ctx.zones_for(day)              # populates the cached sessions as a side effect
+    sessions = getattr(ctx, "_today_sessions", None) or []
+    out = {"date": day.isoformat(), "sessions": []}
+    total_min = 0.0
+    for ev in sessions:
+        mins = ((ev.get("moving_time") or ev.get("icu_training_load_time")
+                 or ev.get("duration") or 0) or 0) / 60.0
+        if not mins and ev.get("time"):
+            mins = float(ev["time"]) / 60.0
+        total_min += mins
+        out["sessions"].append({
+            "sport": ev.get("type") or ev.get("category") or "unknown",
+            "name": (ev.get("name") or "")[:80],
+            "minutes": round(mins) or None,
+            "planned_load": ev.get("icu_training_load") or ev.get("load_target"),
+            "aim": (ev.get("description") or "")[:400] or None,
+            "done": bool(ev.get("_done")),
+        })
+    out["total_minutes"] = round(total_min) or None
+    return out
+
 
 def tomorrow_brief(ctx: Context, day: date) -> dict:
     """What tomorrow actually is, and what it needs. Numbers only, no phrasing.
@@ -882,6 +935,7 @@ def facts_for_question(ctx: Context, day: date) -> dict:
         "location": (json.loads((BASE / "athletes" / ctx.slug / "profile.json").read_text())
                      .get("city") if (BASE / "athletes" / ctx.slug / "profile.json").exists()
                      else None),
+        "today_sessions": today_brief(ctx, day),
         "tomorrow": tomorrow_brief(ctx, day),
         "foods_he_actually_eats": eating_levers(ctx, day),
     }
@@ -921,6 +975,9 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         return
 
     if intent == "confirm" and pend:
+        # The chat model reads recent_chat() and had no idea a food argument had just
+        # happened - the whole exchange lived in the pending record, invisible to it.
+        _chat(ctx, "athlete", t)
         commit_pending(ctx, pend, day, token, chat_id)
         return
 
@@ -954,6 +1011,11 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         RC.write_back(ctx.athlete_dir, day, carb_g=fuel["carb_g"],
                       sodium_mg=fuel["sodium_mg"] or None, log=log, allow_clear=True)
         publish_now(ctx)
+        # The delete itself never reached the chat store, so a follow-up question about
+        # today's log had no idea an entry had gone.
+        _chat(ctx, "athlete", t)
+        _chat(ctx, 
+            "coach", f"[log] deleted: {(entry.get('resolved_name') or named)[:60]}")
         tg.send(token, chat_id,
                 f"Deleted *{entry.get('resolved_name')}* "
                 f"({round(entry.get('kcal') or 0)} kcal).\n\n" + today_block(ctx, day),
@@ -1002,6 +1064,15 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
     if intent == "correction":
         # Re-parse from the combined text rather than patching the parsed result:
         # patching a misparse tends to preserve whatever else was wrong about it.
+        #
+        # Chat had no idea an argument like this had just happened - both were logged
+        # only in the pending record - which is how the chat model came to be blind to
+        # what he had just disputed.
+        _chat(ctx, "athlete", t)
+        # Register what he says it was NOT before anything is re-resolved. The ladder is
+        # deterministic, so a re-resolution with no memory of the rejected candidate returns
+        # it again - six times, on 12 Aug 2026, twice after he had said so explicitly.
+        record_exclusions(ctx, day, got.get("correction") or t)
         if not pend:
             # A correction after the fact used to be refused outright - "nothing pending" -
             # which is how a wrong sandwich survived being corrected and then got logged a
@@ -1013,6 +1084,8 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                 return
             combined = NLU.apply_correction(target.get("raw_text") or "",
                                             got.get("correction") or t)
+            _chat(ctx, 
+                "coach", f"[log] correction noted: {(got.get('correction') or t)[:60]}")
             offer_items(ctx, [{"text": combined, "portion_g": None,
                                "in_session": bool(target.get("in_session"))}],
                         day, token, chat_id)
@@ -1031,6 +1104,8 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                     "change together - \u201chalf a bag of the M&S nut collection\u201d - and "
                     "I will redo it.", log=log)
             return
+        _chat(ctx, 
+            "coach", f"[log] correction noted: {(got.get('correction') or t)[:60]}")
         offer_items(ctx, [{"text": combined, "portion_g": None,
                            "in_session": bool((pend.get("batch") or [{}])[0]
                                               .get("in_session"))}],
@@ -1050,6 +1125,9 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         return
 
     if intent in ("log_food", "log_supplement") and got.get("items"):
+        # Food-logging never reached the chat store, so the chat model was blind to a
+        # meal he had just argued about with the bot two messages before this one.
+        _chat(ctx, "athlete", t)
         # Interpret before resolving: work out what each thing IS and how to search for
         # it, then let the ladder search THAT rather than the athlete's sentence. The
         # model plans the lookup; it still never supplies a macro.
@@ -1113,12 +1191,33 @@ def converse_reply(ctx: Context, message: str, day: date, token, chat_id,
     if extra_facts:
         facts.update(extra_facts)
     history = ctx.store.recent_chat()
-    out = NLU.converse(message, facts, history, CLAUDE_BIN, LLM_MODEL, log=log)
-    ctx.store.append_chat("athlete", message)
+    out = NLU.converse(message, facts, history, CLAUDE_BIN, LLM_MODEL, log=log,
+                       now_iso=datetime.now().strftime("%Y-%m-%dT%H:%M"))
+    _chat(ctx, "athlete", message)
     if out:
-        ctx.store.append_chat("coach", out)
+        _chat(ctx, "coach", out)
         tg.send(token, chat_id, out, log=log)
     return out
+
+
+def _chat(ctx: Context, role: str, text: str) -> None:
+    """Append a chat turn when there is a store to hold it. Tests drive these paths
+    with a bare ctx (store=None); a missing store means the transcript is simply not
+    kept, never a crash."""
+    store = getattr(ctx, "store", None)
+    if store is not None and hasattr(store, "append_chat"):
+        store.append_chat(role, text)
+
+
+def _exclusions(ctx: Context, day: date) -> list:
+    """The athlete's rejected-candidate phrases for the day, or [] when there is no
+    store to ask. Tests drive offer paths with a bare ctx (store=None), and a missing
+    store must mean "no exclusions", not a crash — the exclusion feature is a filter,
+    never a prerequisite."""
+    store = getattr(ctx, "store", None)
+    if store is None or not hasattr(store, "get_exclusions"):
+        return []
+    return store.get_exclusions(day)
 
 
 def debate(ctx: Context, got: dict, text: str, day: date, token, chat_id) -> None:
@@ -1133,9 +1232,10 @@ def debate(ctx: Context, got: dict, text: str, day: date, token, chat_id) -> Non
     z = ctx.zones_for(day)
     totals = RC.merged_totals(ctx.store, ctx.athlete_dir, day)
     options = []
+    exclude = _exclusions(ctx, day)
     for opt in (got.get("options") or [])[:5]:
         item = NR.resolve(opt, day=day, store=ctx.store, table=ctx.table,
-                          fetchers=ctx.fetchers, cofid=ctx.cofid)
+                          fetchers=ctx.fetchers, cofid=ctx.cofid, exclude=exclude)
         landing = {}
         for key, macro in (("kcal", "kcal"), ("protein_g", "protein_g"),
                            ("carb_g", "carb_g"), ("fat_g", "fat_g"),
@@ -1160,10 +1260,11 @@ def debate(ctx: Context, got: dict, text: str, day: date, token, chat_id) -> Non
     # discussion is a normal turn of the same conversation - with the
     # thread behind it, rather than a standalone opinion.
     reply = NLU.converse(text, {**facts, "options_on_the_table": options},
-                         ctx.store.recent_chat(), CLAUDE_BIN, LLM_MODEL, log=log)
-    ctx.store.append_chat("athlete", text)
+                         ctx.store.recent_chat(), CLAUDE_BIN, LLM_MODEL, log=log,
+                         now_iso=datetime.now().strftime("%Y-%m-%dT%H:%M"))
+    _chat(ctx, "athlete", text)
     if reply:
-        ctx.store.append_chat("coach", reply)
+        _chat(ctx, "coach", reply)
     ctx.store.cache_put("_last_options", {"options": [o["option"] for o in options],
                                           "day": day.isoformat()})
     tg.send(token, chat_id, reply or ("I could not reach the model to talk it through. "
@@ -1287,6 +1388,7 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id) -> Non
     can throw out a hit whose form is wrong rather than accepting anything whose name
     happens to share a word. A capsule and a protein bar share every meaningful token."""
     batch, notes = [], []
+    exclude = _exclusions(ctx, day)
     for it in planned[:8]:
         name = it["canonical_name"]
         if it["is_supplement"] or not it["expect_macros"]:
@@ -1313,7 +1415,8 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id) -> Non
         fetchers[NR.Rung.WEB] = lambda q, p, _h=it, _d=deep: _d(q, p, hint=_h)
         item = NR.resolve(name, day=day, store=ctx.store, table=ctx.table,
                           portion_g=it.get("portion_g"), fetchers=fetchers,
-                          cofid=ctx.cofid, hint=it, queries=it["search_terms"])
+                          cofid=ctx.cofid, hint=it, queries=it["search_terms"],
+                          exclude=exclude)
         item["_raw"] = name
         item["in_session"] = it["in_session"]
         item["_supplement"] = False
@@ -1326,6 +1429,8 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id) -> Non
     set_pending(ctx.store, {"batch": batch})
     if any(i.get("in_session") for i in batch):
         notes.append("_Tagged as in-session fuel, so it is protected from any trimming._")
+    if batch:
+        _chat(ctx, "coach", _offer_summary(batch))
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
     tg.send(token, chat_id, "\n\n".join(notes) + "\n\nLog "
             + ("these?" if len(batch) > 1 else "it?"), reply_markup=kb, log=log)
@@ -1416,6 +1521,7 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 **{f: None for f in NR.MACRO_FIELDS},
             })
         set_pending(ctx.store, {"batch": batch})
+        _chat(ctx, "coach", _offer_summary(batch))
         dose = (f"{dose_mg:.0f} mg" if dose_mg
                 else (f"{items[0].get('portion_g')} g" if items[0].get("portion_g")
                       else "dose as stated"))
@@ -1473,7 +1579,8 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         item = NR.resolve(it["text"], day=day, store=ctx.store, table=ctx.table,
                           portion_g=it.get("portion_g"), fetchers=fetchers,
                           cofid=ctx.cofid, hint=hint,
-                          queries=hint.get("search_terms"))
+                          queries=hint.get("search_terms"),
+                          exclude=_exclusions(ctx, day))
         item["_raw"] = it["text"]
         item["in_session"] = bool(it.get("in_session"))
         item["_supplement"] = supplement
@@ -1481,6 +1588,8 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         item["_dose_mg"] = dose_mg
         resolved.append(item)
     set_pending(ctx.store, {"batch": resolved})
+    if resolved:
+        _chat(ctx, "coach", _offer_summary(resolved))
     body = "\n\n".join(fmt_confirm(i) for i in resolved)
     if any(i.get("in_session") for i in resolved):
         body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
@@ -1528,6 +1637,18 @@ def publish_now(ctx: Context) -> None:
     threading.Thread(target=run, daemon=True).start()
 
 
+def _offer_summary(batch: list) -> str:
+    """One terse line for the chat store: what was just offered, not the full confirm
+    text - recent_chat() keeps only a handful of turns, and the full fmt_confirm block
+    would push everything else out of it within a couple of exchanges."""
+    if len(batch) == 1:
+        name = (batch[0].get("resolved_name") or batch[0].get("_raw") or "that")[:50]
+        kcal = batch[0].get("kcal")
+        return (f"[log] offered: {name} ({round(kcal)} kcal) — awaiting confirm"
+                if kcal else f"[log] offered: {name} — awaiting confirm")
+    return f"[log] offered {len(batch)} items — awaiting confirm"
+
+
 def _name_matches(named: str, resolved: str) -> bool:
     """Does the thing he named share an identifying word with this entry?"""
     import re as _re
@@ -1548,6 +1669,74 @@ def mark_pending_replaces(ctx: Context, entry_id: str, name: str) -> None:
         return
     pend["_replaces"] = {"id": entry_id, "name": name}
     set_pending(ctx.store, pend)
+
+
+# WHAT HE SAID IT WAS NOT. Read with regexes rather than by asking the model: this has to
+# work on the message that is already the SECOND time he has said it, so it cannot depend
+# on a model call that may time out, and a correction that silently fails to register is
+# the whole bug. Four shapes cover every real example from 12 Aug 2026 - "not peanut
+# butter", "it wasn't peanut butter", "I never said peanut butter", "remove the peanut
+# butter".
+_EXCLUDE_PATTERNS = (
+    re.compile(r"\bnever\s+(?:said|had|mentioned|ate|asked\s+for)\s+(.{1,60})", re.I),
+    re.compile(r"\b(?:it\s+)?(?:was\s+not|wasn'?t|isn'?t|is\s+not|are\s+not|aren'?t)"
+               r"\s+(.{1,60})", re.I),
+    re.compile(r"\bremove\s+(.{1,60})", re.I),
+    re.compile(r"\bnot\s+(.{1,60})", re.I),          # last: the loosest of the four
+)
+# Words that are not the food. A phrase is cut at the first of these AFTER its first real
+# word, so "peanut butter at all" and "peanut butter, it was just butter" both reduce to
+# "peanut butter" rather than swallowing the rest of the sentence.
+_EXCLUDE_FILLER = {"the", "a", "an", "any", "some", "my", "that", "this", "it", "its",
+                   "was", "were", "is", "are", "just", "actually", "really", "even",
+                   "ever", "at", "all", "and", "but", "or", "then", "again", "said",
+                   "had", "have", "no", "not", "i", "you", "we", "to", "of", "in", "on",
+                   "for", "with", "what", "did", "do", "please", "thing", "stuff",
+                   # WHEN, never WHAT. "never had peanut butter today" left "today" on the
+                   # phrase, and an exclusion carrying a word no product name contains
+                   # matches nothing at all - it fails silently, which is the one outcome
+                   # this feature cannot have.
+                   "today", "tonight", "yesterday", "earlier", "morning", "afternoon",
+                   "evening", "either", "anything", "never", "twice", "times", "again"}
+
+
+def exclusions_in(text: str) -> list:
+    """The phrases this correction rules out, longest-first, at most 4 words each.
+
+    THE BUG THIS EXISTS FOR. "butter" resolved to "Peanut butter, smooth" six times on
+    12 Aug 2026, and twice of those were AFTER "I never said peanut butter". A correction
+    re-runs a deterministic ladder, so without a memory of what was rejected it returns the
+    same wrong answer and asks him to confirm it again. There is no number of corrections
+    that breaks that loop, which is why the memory is the fix and not better matching."""
+    out = []
+    for pat in _EXCLUDE_PATTERNS:
+        m = pat.search(text or "")
+        if not m:
+            continue
+        words = re.findall(r"[a-z0-9'-]+", m.group(1).lower())
+        kept = []
+        for w in words:
+            if w in _EXCLUDE_FILLER:
+                if kept:
+                    break                # the food has ended; the sentence carries on
+                continue                 # leading filler: "not THE peanut butter"
+            kept.append(w)
+            if len(kept) == 4:
+                break
+        phrase = " ".join(kept)
+        if phrase and phrase not in out:
+            out.append(phrase)
+    return out
+
+
+def record_exclusions(ctx: Context, day: date, text: str) -> list:
+    """Store what he says it was not, for the rest of the day, before re-resolving."""
+    found = exclusions_in(text)
+    for phrase in found:
+        ctx.store.add_exclusion(day, phrase)
+    if found:
+        log(f"  excluded for {day}: {found}")
+    return found
 
 
 def _has_subject(combined: str, correction: str) -> bool:
@@ -1622,7 +1811,8 @@ def correct_in_batch(ctx: Context, pend: dict, correction: str, day: date,
     fetchers[NR.Rung.WEB] = lambda q, pg, _h=hint, _d=deep: _d(q, pg, hint=_h)
     item = NR.resolve(combined, day=day, store=ctx.store, table=ctx.table,
                       fetchers=fetchers, cofid=ctx.cofid, hint=hint,
-                      portion_g=target.get("portion_g"))
+                      portion_g=target.get("portion_g"),
+                      exclude=_exclusions(ctx, day))
     item["_raw"] = combined
     item["in_session"] = bool(target.get("in_session"))
     item["_supplement"] = bool(target.get("_supplement"))
@@ -1670,6 +1860,16 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
             log(f"fuel write-back deferred: {res['reason']}")
     if wrote:
         publish_now(ctx)
+        committed = [i for i in batch if not i.get("needs_input")]
+        if len(committed) == 1:
+            it = committed[0]
+            name = (it.get("resolved_name") or it.get("_raw") or "that")[:50]
+            kcal = it.get("kcal")
+            _chat(ctx, 
+                "coach", f"[log] committed: {name}"
+                + (f", {round(kcal)} kcal" if kcal else ""))
+        else:
+            _chat(ctx, "coach", f"[log] committed: {wrote} items")
     msg = (f"Logged{'' if wrote == 1 else f' {wrote} items'}.\n\n"
            + today_block(ctx, day)) if wrote else ""
     if asked:

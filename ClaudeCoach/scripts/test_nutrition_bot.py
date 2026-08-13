@@ -487,6 +487,112 @@ for text, want in (("that was during the run", True), ("that was on the bike", T
 for text in ("that was breakfast", "that was lovely", "chicken and rice"):
     check(f"{text!r} is not a session tag", NLU.looks_like_session_tag(text) is None)
 
+print("\n--- TODAY's sessions reach facts, not only tomorrow's ---")
+# THE BUG THIS EXISTS FOR, 13 Aug 2026. The bot told him "no run showing today or
+# tomorrow, just tomorrow's 60-minute ride" while a 240-minute ride sat on TODAY's
+# calendar, because facts_for_question injected tomorrow_brief() and nothing about
+# today. today_brief mirrors it for the day in progress.
+class FakeCtxToday:
+    """Only what today_brief touches: zones_for as the side-effecting cache populator,
+    exactly the shape zones_for leaves on a real Context."""
+    def __init__(self, sessions):
+        self._today_sessions = sessions
+
+    def zones_for(self, day):
+        return {}
+
+
+ride_today = [{"type": "Ride", "name": "Long steady ride", "moving_time": 14400,
+              "icu_training_load": 180, "description": "steady endurance, Z2",
+              "_done": False}]
+tb = NB.today_brief(FakeCtxToday(ride_today), TODAY)
+check("today_brief reports today's date", tb["date"] == TODAY.isoformat())
+check("today_brief carries the session's duration", tb["sessions"][0]["minutes"] == 240)
+check("today_brief carries the coach's aim line",
+      tb["sessions"][0]["aim"] == "steady endurance, Z2")
+check("a still-to-come session is not marked done", tb["sessions"][0]["done"] is False)
+check("total_minutes sums the day's sessions", tb["total_minutes"] == 240)
+
+completed_swim = [{"id": "a1", "type": "Swim", "name": "Morning swim",
+                   "moving_time": 2400, "_done": True}]
+tb2 = NB.today_brief(FakeCtxToday(completed_swim), TODAY)
+check("a completed activity is marked done", tb2["sessions"][0]["done"] is True)
+
+empty = NB.today_brief(FakeCtxToday([]), TODAY)
+check("an empty calendar reports no sessions and no total",
+      empty["sessions"] == [] and empty["total_minutes"] is None)
+
+# facts_for_question is the wiring point: without "today_sessions" in what it returns,
+# today_brief exists but the chat model never sees it, which is exactly how this bug
+# reached production despite tomorrow_brief working correctly.
+import inspect
+check("facts_for_question wires today_brief into the facts dict",
+      'today_brief(ctx, day)' in inspect.getsource(NB.facts_for_question)
+      and '"today_sessions"' in inspect.getsource(NB.facts_for_question))
+
+print("\n--- logging exchanges reach the chat store ---")
+# Food-logging never reached the chat store, so the chat model was blind to arguments
+# the athlete had just had about what he ate.
+store2 = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-chat-")))
+batch_one = [{"resolved_name": "Rye bread", "kcal": 83, "_raw": "rye bread"}]
+NB.set_pending(store2, {"batch": batch_one})
+store2.append_chat("coach", NB._offer_summary(batch_one))
+chat = store2.recent_chat()
+check("an offered single item names it and its kcal",
+      "Rye bread" in chat[-1]["text"] and "83 kcal" in chat[-1]["text"]
+      and "awaiting confirm" in chat[-1]["text"])
+check("the offer summary line stays short enough not to bloat recent_chat()",
+      len(chat[-1]["text"]) < 90)
+
+batch_many = [{"resolved_name": "Toast", "kcal": 150}, {"resolved_name": "Eggs", "kcal": 140}]
+check("an offered batch of several is summarised by count, not spelled out",
+      NB._offer_summary(batch_many) == "[log] offered 2 items — awaiting confirm")
+
+print("\n--- reading what he says it was NOT ---")
+# "butter" came back as "Peanut butter, smooth" six times on 12 Aug 2026, twice AFTER "I
+# never said peanut butter". Read with regexes rather than by asking the model: this runs on
+# the message that is already the second complaint, so it cannot depend on a model call.
+for text, want in (
+        ("I never said peanut butter", "peanut butter"),
+        ("i never said peanut butter!", "peanut butter"),
+        ("not peanut butter", "peanut butter"),
+        ("not the peanut butter", "peanut butter"),
+        ("it was not peanut butter, it was just butter", "peanut butter"),
+        ("it wasn't peanut butter at all", "peanut butter"),
+        ("that isn't peanut butter", "peanut butter"),
+        ("remove the peanut butter", "peanut butter"),
+        ("never had peanut butter today", "peanut butter"),
+        ("I never mentioned peanut butter", "peanut butter")):
+    got = NB.exclusions_in(text)
+    check(f"{text[:38]!r} rules out peanut butter", want in got)
+check("the phrase is cut at four words, not the rest of the sentence",
+      all(len(p.split()) <= 4 for p in
+          NB.exclusions_in("it was not peanut butter and I have told you this twice now")))
+check("a correction that names nothing rules out nothing",
+      NB.exclusions_in("half the portion") == []
+      and NB.exclusions_in("actually it was 200g") == [])
+check("an ordinary log is not read as a rejection",
+      NB.exclusions_in("porridge with blueberries and a flat white") == [])
+# The exclusion has to survive as tokens, so it blocks the row it names and not its
+# neighbour: rejecting peanut butter must not block the butter he actually ate.
+check("the stored phrase blocks the row he rejected",
+      NR._excluded_by("Peanut butter, smooth", NB.exclusions_in("not peanut butter"))
+      == "peanut butter")
+check("and leaves the one he ate alone",
+      NR._excluded_by("Butter, salted", NB.exclusions_in("not peanut butter")) == "")
+
+print("\n--- an assumed portion is stated, never silent ---")
+assumed = {"resolved_name": "Butter, salted", "kcal": 37, "protein_g": 0, "carb_g": 0,
+           "fat_g": 4, "confidence": "label", "source_rung": NR.Rung.WEB,
+           "species": [], "attempts": [], "degraded": False,
+           "portion_estimated": True, "portion_assumed": "5 g - a teaspoon"}
+ca = NB.fmt_confirm(assumed)
+check("the offer says what portion was assumed", "assumed 5 g - a teaspoon" in ca)
+check("and invites the correction", "correct me if wrong" in ca)
+check("a measured portion says nothing about assumptions",
+      "assumed" not in NB.fmt_confirm(dict(assumed, portion_estimated=False,
+                                           portion_assumed=None)))
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

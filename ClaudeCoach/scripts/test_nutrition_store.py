@@ -297,6 +297,35 @@ check("and the previous value survives the refusal",
 check("an unknown entry id changes nothing",
       mstore.set_meal(MDAY, "nope-999", "lunch") is None)
 
+print("\n--- remembering what he says it was NOT ---")
+# A correction re-runs a deterministic ladder, so with no memory of the rejected candidate
+# it returns the same wrong product: "butter" came back as "Peanut butter, smooth" six
+# times on 12 Aug 2026, twice after he had said he never said peanut butter.
+estore = S.NutritionStore(Path(tempfile.mkdtemp(prefix="excl-")))
+EDAY = "2026-08-12"
+check("a fresh day excludes nothing", estore.get_exclusions(EDAY) == [])
+estore.add_exclusion(EDAY, "Peanut Butter")
+check("an exclusion is stored lowercased", estore.get_exclusions(EDAY) == ["peanut butter"])
+estore.add_exclusion(EDAY, "peanut butter")
+check("the same phrase twice is stored once",
+      estore.get_exclusions(EDAY) == ["peanut butter"])
+estore.add_exclusion(EDAY, "cashew butter.")
+check("trailing punctuation is stripped before storing",
+      estore.get_exclusions(EDAY) == ["peanut butter", "cashew butter"])
+check("an empty phrase is ignored rather than stored",
+      estore.add_exclusion(EDAY, "  ") == [] and len(estore.get_exclusions(EDAY)) == 2)
+check("exclusions persist to the month file",
+      json.loads((estore.dir / "2026-08.json").read_text())["days"][EDAY]["exclusions"]
+      == ["peanut butter", "cashew butter"])
+# Per DAY, deliberately: he is rejecting this match for this item, not telling the app that
+# peanut butter is never food.
+check("tomorrow starts clean", estore.get_exclusions("2026-08-13") == [])
+estore.add_entry(EDAY, raw_text="butter", kcal=37, confidence="label",
+                 source_rung="cofid")
+check("an exclusion does not disturb the day's entries",
+      len(estore.get_day(EDAY)["entries"]) == 1
+      and estore.get_exclusions(EDAY) == ["peanut butter", "cashew butter"])
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

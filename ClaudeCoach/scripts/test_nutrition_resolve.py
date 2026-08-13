@@ -466,6 +466,152 @@ check("with no hint at all CoFID is still tried",
       R.resolve("porridge oats", day=TODAY, store=new_store(), table=TABLE,
                 fetchers={})["source_rung"] == R.Rung.COFID)
 
+# 21) IDENTITY COVERAGE. "butter" resolved to "Peanut butter, smooth" six times on 12 Aug
+#     2026, twice after he had said "I never said peanut butter". Coverage was only ever
+#     tested one way round - how much of the QUERY the row explained - so a single-token
+#     query matched any row containing that token.
+BUTTER_ONLY = R.CofidTable(data={"foods": [
+    {"name": "Peanut butter, smooth", "aliases": ["peanut butter"],
+     "kcal": 609, "protein_g": 22.6, "carb_g": 13.1, "fat_g": 51.8}]})
+check("a one-word query no longer matches a two-word identity",
+      BUTTER_ONLY.lookup("butter", 100) is None)
+check("and the food he DID name still hits, on the alias",
+      (BUTTER_ONLY.lookup("peanut butter", 100) or {})["resolved_name"]
+      == "Peanut butter, smooth")
+check("the same holds for the published name",
+      BUTTER_ONLY.lookup("peanut butter, smooth", 100) is not None)
+check("a portion word does not smuggle the query past the identity rule",
+      BUTTER_ONLY.lookup("one teaspoon of butter", 100) is None)
+check("nor does the shipped table answer 'butter' with peanut butter",
+      "peanut" not in ((C.lookup("butter", 100) or {}).get("resolved_name") or "").lower())
+# The identity rule must not be what rejects a query that NAMES the food and only ADDS
+# qualifiers. A variety name ("medium pink lady apple") is refused by the older coverage
+# cap, not by this rule - see the note beside COFID_MAX_UNEXPLAINED_TOKENS - and that is
+# left alone deliberately: widening the cap is what let a Wagamama rice bowl match raw
+# brown rice.
+check("a variety-qualified query satisfies the identity rule",
+      R._tokens("Apple") <= R._tokens("medium pink lady apple"))
+check("identity does not reject a query that adds one qualifier",
+      R._tokens("Apple") <= R._tokens("medium pink apple"))
+for q in ("porridge oats", "brown rice", "chicken breast", "greek yoghurt",
+          "a handful of almonds", "half a large banana", "extra virgin olive oil",
+          "wholemeal bread", "tinned chickpeas", "baby spinach"):
+    check(f"identity coverage does not cost an existing hit: {q[:26]}",
+          C.lookup(q, 100) is not None)
+check("and the composite dish is still refused",
+      C.lookup("satay chicken with black rice and mango", 100) is None)
+
+# 22) A REJECTED CANDIDATE IS A MISS, on every rung. Corrections carried no memory, so a
+#     re-resolution walked the same deterministic ladder and returned the same wrong
+#     product - which is why saying it twice changed nothing.
+PB = {"kcal": 609, "resolved_name": "Peanut butter, smooth", "protein_g": 22.6}
+SALTED = {"kcal": 744, "resolved_name": "Butter, salted", "protein_g": 0.6}
+ex = R.resolve("butter", day=TODAY, store=new_store(), table=TABLE, cofid=EMPTY_COFID,
+               exclude=["peanut butter"],
+               fetchers={R.Rung.OFF: lambda t, p: PB,
+                         R.Rung.WEB: lambda t, p: dict(SALTED, source_kind="manufacturer",
+                                                       confidence="label")})
+check("an excluded candidate is skipped and the ladder continues",
+      ex["source_rung"] == R.Rung.WEB and ex["resolved_name"] == "Butter, salted")
+check("the skip is recorded as excluded_by_athlete, not as a miss",
+      outcome(ex, R.Rung.OFF) == "excluded_by_athlete")
+check("the attempt says which phrase ruled it out",
+      "peanut butter" in next(a["detail"] for a in ex["attempts"]
+                              if a["outcome"] == "excluded_by_athlete"))
+check("with no exclusions the same fetcher still wins",
+      R.resolve("butter", day=TODAY, store=new_store(), table=TABLE, cofid=EMPTY_COFID,
+                fetchers={R.Rung.OFF: lambda t, p: PB})["resolved_name"]
+      == "Peanut butter, smooth")
+# THE OPPOSITE SIGN OF THE SAME BUG. Blocking the thing he actually ate would be no better
+# than serving the thing he did not.
+check("'peanut butter' does NOT block plain butter",
+      R._excluded_by("Butter, salted", ["peanut butter"]) == "")
+check("'peanut butter' blocks the smooth peanut butter row",
+      R._excluded_by("Peanut butter, smooth", ["peanut butter"]) == "peanut butter")
+check("an empty exclusion list blocks nothing",
+      R._excluded_by("Peanut butter, smooth", []) == "")
+# The CACHE is the rung most likely to hold what he just rejected: it is keyed on his own
+# words, so a wrong answer once confirmed is exactly what gets re-served.
+st22 = new_store()
+st22.cache_put("butter", {"kcal": 609, "resolved_name": "Peanut butter, smooth",
+                          "confidence": "label", "resolved_at": TODAY.isoformat()})
+cached = R.resolve("butter", day=TODAY, store=st22, table=TABLE, cofid=EMPTY_COFID,
+                   exclude=["peanut butter"],
+                   fetchers={R.Rung.WEB: lambda t, p: dict(SALTED, confidence="label",
+                                                           source_kind="manufacturer")})
+check("an excluded CACHE hit is bypassed too",
+      cached["source_rung"] == R.Rung.WEB
+      and outcome(cached, R.Rung.CACHE) == "excluded_by_athlete")
+
+# 23) DEFAULT PORTIONS. A per-100g label with no derivable pack size dead-ended at kcal
+#     None, so "one teaspoon of butter" was answered with "how much, in grams?" - a question
+#     he had already answered in the units that food is eaten in.
+PER_100 = {"needs_portion": True, "resolved_name": "Butter, salted",
+           "per_100g": {"kcal": 744, "protein_g": 0.6, "carb_g": 0.6, "fat_g": 82.2},
+           "confidence": "label", "source_kind": "manufacturer"}
+tsp = R.resolve("one teaspoon of butter", day=TODAY, store=new_store(), table=TABLE,
+                cofid=EMPTY_COFID, fetchers={R.Rung.WEB: lambda t, p: PER_100})
+check("a teaspoon is assumed rather than asked about", tsp["needs_input"] is False)
+check("the per-100g figures are scaled to 5 g", tsp["kcal"] == 37.2)
+check("the assumption is flagged on the item", tsp["portion_estimated"] is True)
+check("the portion used is recorded", tsp["portion_used_g"] == 5.0)
+check("the assumption is stated in words for the offer",
+      "teaspoon" in tsp["portion_assumed"] and "5 g" in tsp["portion_assumed"])
+check("an assumed AMOUNT does not downgrade the label figures",
+      tsp["confidence"] == "label")
+check("the assumption is recorded in the attempt log",
+      outcome(tsp, R.Rung.WEB) == "portion_assumed")
+# A count is honoured, or two slices of toast log as one.
+two = R.resolve("two slices of wholemeal bread", day=TODAY, store=new_store(), table=TABLE,
+                cofid=EMPTY_COFID,
+                fetchers={R.Rung.WEB: lambda t, p: dict(
+                    PER_100, resolved_name="Bread, wholemeal",
+                    per_100g={"kcal": 217})})
+check("a stated count multiplies the unit default", two["portion_used_g"] == 72.0)
+# A fraction is a count too. "half a large banana" is the query this table is FOR, and
+# reading it as a whole one doubles the entry.
+check("half of something is half the default",
+      R.default_portion_g("half a slice of toast", "Bread, wholemeal") == 18.0)
+check("and it reads back as half, not as 0.5 slices",
+      "half" in R._default_portion("half a slice of toast", "Bread, wholemeal")[1])
+# THE ASSUMPTION HAS TO SURVIVE THE CACHE. The cache payload is an allowlist, so without
+# the portion keys the second time he says "a teaspoon of butter" the cache hit renders as
+# plain label data and the assumption is dropped in silence - which is the one thing the
+# defaults were allowed on condition of never doing.
+st23 = new_store()
+R.cache_resolved(st23, R.resolve("one teaspoon of butter", day=TODAY, store=st23,
+                                table=TABLE, cofid=EMPTY_COFID,
+                                fetchers={R.Rung.WEB: lambda t, p: PER_100}))
+again = R.resolve("one teaspoon of butter", day=TODAY, store=st23, table=TABLE,
+                  cofid=EMPTY_COFID, fetchers={})
+check("the second time is a cache hit", again["source_rung"] == R.Rung.CACHE)
+check("and the cached hit still declares the assumption",
+      again.get("portion_estimated") is True
+      and "teaspoon" in (again.get("portion_assumed") or ""))
+check("a measured resolution caches no assumption flag",
+      "portion_estimated" not in (st6.cache_get("m&s nut collection", on=TODAY) or {}))
+# And where nothing applies, the behaviour is unchanged: it ASKS.
+ask = R.resolve("that pot of skyr", day=TODAY, store=new_store(), table=TABLE,
+                cofid=EMPTY_COFID,
+                fetchers={R.Rung.WEB: lambda t, p: dict(PER_100,
+                                                        resolved_name="Skyr, natural")})
+check("with no unit word it still asks rather than guessing",
+      ask["needs_portion"] is True and ask["needs_input"] is True)
+check("and its macros stay None rather than a 100 g guess",
+      all(ask[f] is None for f in R.MACRO_FIELDS))
+for raw, want in (("one teaspoon of butter", 5.0), ("a tbsp of peanut butter", 15.0),
+                  ("a knob of butter", 10.0), ("a handful of almonds", 30.0),
+                  ("a small banana", 90.0), ("a medium banana", 118.0),
+                  ("a large banana", 136.0), ("an apple", 180.0),
+                  ("a medium orange", 130.0), ("an egg", 50.0)):
+    check(f"default portion for {raw!r} is {want} g",
+          R.default_portion_g(raw, "") == want)
+for raw in ("a handful of chicken", "a slice of ham", "chicken breast", "bananas",
+            "that pot of the new stuff"):
+    check(f"no default is invented for {raw!r}", R.default_portion_g(raw, "") is None)
+check("a slice is bread-sized once the row names bread",
+      R.default_portion_g("a slice of it", "Bread, wholemeal") == 36.0)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))
