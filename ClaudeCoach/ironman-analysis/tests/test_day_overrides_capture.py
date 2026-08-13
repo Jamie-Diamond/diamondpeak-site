@@ -185,17 +185,27 @@ class TestCrossFireWithOtherCaptures:
         # verb in open_actions. The detectors cannot be made disjoint without crippling one
         # of them, so the overlap is real and is resolved by which handler runs first.
         msg = "move the swim to Wednesday"
-        assert oa.looks_like_action_instruction(msg)          # both fire...
         assert do.parse_directed_day(msg, MON)["family"] == "swim"
+        # open_actions has since grown its own guard for this exact phrasing (a plan day +
+        # a session word that parses as a day directive is not an action instruction), so
+        # it now stands DOWN rather than relying on dispatch order. Asserted as the primary
+        # defence; the source order below is the backstop if that guard is ever relaxed.
+        assert not oa.looks_like_action_instruction(msg)
 
         # ...and telegram/bot.py routes the day-rule handler FIRST, because it is the more
         # specific of the two: it demands a sport, an unambiguous date and a genuinely
         # off-pattern day, where action capture needs only a substring of a label. Assert
-        # the order in the source, since only one handler can run (each returns True and
-        # routing stops) and a future reorder would silently send this phrasing elsewhere.
+        # the order in the source, since only ONE capture may fire per message and a future
+        # reorder would silently send this phrasing elsewhere.
+        #
+        # Updated 13 Aug 2026: the four captures now dispatch from a tuple in _route_text
+        # rather than a chain of `if handler(...): return`. The ordering guarantee is the
+        # same (the loop breaks on the first capture that fires) but a fired capture no
+        # longer STOPS the message — it returns a note and the message still reaches the
+        # model, so the athlete's instruction gets carried out as well as recorded.
         bot = (Path(__file__).resolve().parents[2] / "telegram/bot.py").read_text()
-        day_at = bot.index("if _handle_dayrule_capture(token, chat_id, text, athletes):")
-        act_at = bot.index("if _handle_action_capture(token, chat_id, text, athletes):")
+        day_at = bot.index("_handle_dayrule_capture,   #")
+        act_at = bot.index("_handle_action_capture):   #")
         assert day_at < act_at, "day-rule capture must dispatch before action capture"
 
     def test_a_day_direction_with_no_deferral_verb_is_not_an_action_instruction(self):

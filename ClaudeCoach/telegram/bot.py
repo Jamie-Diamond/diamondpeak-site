@@ -270,13 +270,25 @@ def _chat_lock(chat_id):
         return lk
 
 
+# Which chat's lock the CURRENT thread already holds. threading.Lock is not reentrant, so
+# code that runs inside a pool worker (a voice note is transcribed there and then routed
+# like a typed message) must not try to take the lock a second time — it would fail its
+# acquire and silently skip the write it came to do.
+_HELD_LOCK = threading.local()
+
+
 def _submit(worker, chat_id, *args):
     """Run worker(*args) on the reply pool under the chat's lock. A failed
     worker must never kill its thread silently — log and move on."""
     def _runner():
         try:
             with _chat_lock(chat_id):
-                worker(*args)
+                prev = getattr(_HELD_LOCK, "chat_id", None)
+                _HELD_LOCK.chat_id = chat_id
+                try:
+                    worker(*args)
+                finally:
+                    _HELD_LOCK.chat_id = prev
         except Exception as e:
             log(f"reply worker error for {chat_id}: {e}")
     _REPLY_EXECUTOR.submit(_runner)
@@ -552,6 +564,130 @@ def _hist_entry(user, assistant, kind="text"):
     photo (the swim-splits misdiagnosis)."""
     return {"user": user, "assistant": assistant, "kind": kind,
             "ts": datetime.now().isoformat(timespec="seconds")}
+
+
+# --- Capture pass-through ----------------------------------------------------
+# A "capture" is one of the four deterministic parsers that run BEFORE the model
+# (race, weekly hours, directed day-rule, open action). Until 13 Aug 2026 a capture
+# that fired CONSUMED the message: it returned True, routing stopped, and three things
+# followed that were all observed live on 13 Aug.
+#
+#   1. THE INSTRUCTION WAS NEVER CARRIED OUT. Jamie said the ride was moving to another
+#      day. The day-rule capture asked him to confirm, he tapped Yes — twice — and all
+#      that happened was a bookkeeping entry saying "don't flag this deviation". The
+#      CALENDAR WAS NEVER TOUCHED, because only the model has the tools to touch it and
+#      the model never saw the message.
+#   2. THE MODEL WENT BLIND. A swallowed message never reached history.json, so his next
+#      message ("Now") had no antecedent and was answered as if the exchange never
+#      happened.
+#   3. THE COPY LIED. The button said "Yes, that's the plan" for a write that changes no
+#      plan.
+#
+# The fix, in three parts, is what these helpers exist for:
+#   * a fired capture returns a NOTE instead of True. Truthy still means "one capture has
+#     claimed this message, don't run the others" — that ordering is load-bearing (see
+#     _route_text) — but it no longer stops the message reaching the model.
+#   * the note is appended to the model turn's context block, so the reply is written in
+#     the knowledge that a deterministic read-back has already been sent AND that the
+#     underlying change is still outstanding.
+#   * the capture exchange is transcripted, so the next turn can see it.
+_CAPTURE_KINDS = {
+    "race":    "a race",
+    "hours":   "a weekly-hours declaration",
+    "dayshape": "a day-shape declaration for a week",
+    "dayrule": "a day-rule override (a note that an off-pattern session is deliberate)",
+    "action":  "an open-action status change",
+}
+
+
+def capture_context_note(kind: str, detail: str, question: str = "") -> str:
+    """The block appended to the model turn's context when a capture has just fired.
+
+    Its whole job is to stop the two failure modes of letting the message through: the
+    model repeating a read-back the athlete has already been sent, and the model treating
+    the bookkeeping write as if the athlete's request were now done. So it states what was
+    written, states plainly that nothing else moved, and hands the instruction back.
+
+    Pure and side-effect free so it can be tested without a bot: scripts/test_captures.py.
+    """
+    what = _CAPTURE_KINDS.get(kind, kind)
+    lines = [
+        "## Just recorded from the message below, before you were called",
+        f"A deterministic capture stored {what}: {detail}.",
+        "",
+        "This was a BOOKKEEPING write only: nothing on the athlete's calendar has moved, "
+        "and no session has been created, changed or deleted by it. If their message asks "
+        "for something to CHANGE, that change is still outstanding and is yours to make — "
+        "treat the message as a live instruction, not as something already handled.",
+    ]
+    if question:
+        lines += ["",
+                  "The athlete has ALREADY been sent this line, so do not repeat it:",
+                  f"> {question.strip()}"]
+    return "\n".join(lines)
+
+
+def _capture(kind: str, detail: str, question: str = "") -> dict:
+    """What a fired capture hands back to the router: the note for the model turn, and the
+    read-back already sent to the athlete so the same turn's transcript entry can include
+    it. Truthy by construction (a non-empty dict), so `if capture:` still reads as "one
+    capture has claimed this message"."""
+    return {"note": capture_context_note(kind, detail, question), "msg": question}
+
+
+def _capture_history_assistant(question: str, reply: str) -> str:
+    """One transcript entry for a turn that had BOTH a capture read-back and a model
+    reply. The athlete saw two bot messages for one of theirs, so this is what actually
+    happened — and folding them into a single entry keeps the athlete's message appearing
+    ONCE in history. A second entry with the same `user` text would read as the
+    instruction having been given twice, which is precisely the misreading that made the
+    13 Aug "Now" reply wrong."""
+    q = (question or "").strip()
+    r = (reply or "").strip()
+    if q and r:
+        return f"{q}\n\n{r}"
+    return q or r
+
+
+def _append_capture_history(chat_id, slug, user, assistant, kind="capture"):
+    """Append one capture exchange to the athlete's history.json.
+
+    Used where no reply worker will run for this message — a button callback, or a capture
+    whose message is then consumed by a fast path. The normal case is handled inside
+    _chat_reply_worker, which already holds the chat lock.
+
+    Takes the chat lock with a SHORT timeout and, if it cannot get it, writes nothing and
+    says so. save_history is a plain write_text and load_history has no guard around
+    json.loads, so an unlocked read-modify-write racing the reply worker could hand the
+    worker a torn file — and that surfaces to the athlete as a failed reply. Losing one
+    transcript line is the behaviour we already had; a broken reply would be new damage."""
+    def _write():
+        files = athlete_files(slug)
+        history = load_history(files["history"])
+        history.append(_hist_entry(user, assistant, kind=kind))
+        save_history(history, files["history"])
+
+    # Already inside a pool worker for THIS chat (voice notes route from there): the lock is
+    # held by this very thread, and a second acquire on a non-reentrant Lock can only fail.
+    if getattr(_HELD_LOCK, "chat_id", None) == chat_id:
+        try:
+            _write()
+            return True
+        except Exception as e:
+            log(f"[{slug}] capture transcript failed: {e}")
+            return False
+    lk = _chat_lock(chat_id)
+    if not lk.acquire(timeout=1.5):
+        log(f"[{slug}] capture transcript skipped (chat busy): {str(assistant)[:60]}")
+        return False
+    try:
+        _write()
+        return True
+    except Exception as e:
+        log(f"[{slug}] capture transcript failed: {e}")
+        return False
+    finally:
+        lk.release()
 
 
 def tg_post(token, method, payload):
@@ -891,6 +1027,22 @@ _SLASH_QUESTION = {
     "/today":   "What's today's session?",
     "/looking": "How am I looking?",
 }
+
+
+def logs_via_fast_path(text) -> bool:
+    """True when this message is one of the anchored fast-path LOGS — a pain score, a
+    weight, a heat session, a threshold, a cycle date.
+
+    Exists for the weekly-hours TIER 2 gate. That tier fires on a bare figure while the
+    Sunday hours ask is outstanding, and `looks_like_hours_reply("heat 30")` is True. While
+    a fired capture consumed the message that was merely a lost heat log; now that the
+    message carries on, it would ALSO leave "is that 30 hours of training next week?" on
+    screen under the heat confirmation with 30 h sitting in _PENDING_HOURS, one reflex tap
+    from becoming the week's Load ceiling. Same family as the 3 Aug bug where "came off at
+    15-20k" became 15 hours, so the tier stands down on these instead."""
+    t = (text or "").strip()
+    return any(rx.match(t) for rx in (_HEAT_RE, _ANKLE_RE, _WEIGHT_RE, _CSS_RE, _LTHR_RE,
+                                      _FTP_RE, _PERIOD_RE, _CYCLE_DAY_RE))
 _STRENGTH_RE     = re.compile(
     r'^(?:strength(?:\s+session)?|gym(?:\s+session)?|lift(?:ing)?|'
     r'what(?:\'s|\s+is)\s+(?:today\'?s?\s+)?(?:strength|gym)(?:\s+session)?)\s*$',
@@ -2628,7 +2780,10 @@ _RACE_CAPTURE_TTL = 900          # 15 min to answer the priority question
 
 
 def _handle_race_capture(token, chat_id, text, athletes):
-    """Turn "I'm racing X on Saturday" into a registry entry. Returns True if handled.
+    """Turn "I'm racing X on Saturday" into a registry entry. Returns a capture note (see
+    capture_context_note) when it fired, else False — a note is NOT "message handled":
+    routing continues to the model, which is what makes the athlete's actual request
+    (usually "so plan around it") get answered as well as recorded.
 
     Mirrors the existing ask-and-confirm shape (_handle_test_confirm /
     _handle_replan_confirm): parse, ask with an inline keyboard, write only on the
@@ -2652,23 +2807,29 @@ def _handle_race_capture(token, chat_id, text, athletes):
         race = races_lib.add_race(athlete["slug"], parsed["name"], parsed["date"],
                                   priority=parsed["priority"], source="told me in chat")
         _after = _a_race_date(athlete["slug"])
-        send(token, chat_id,
-             _race_confirmation(race, when, _after if _after != _before else ""),
-             reply_markup=build_keyboard(athlete["slug"])) 
-        return True
+        msg = _race_confirmation(race, when, _after if _after != _before else "")
+        send(token, chat_id, msg, reply_markup=build_keyboard(athlete["slug"]))
+        return _capture(
+            "race", f"{race['name']} on {race['date']}, "
+                    f"priority {race['priority'] or 'not set'}", msg)
 
     _PENDING_RACE[chat_id] = {"parsed": parsed, "expiry": time.time() + _RACE_CAPTURE_TTL}
-    send(token, chat_id,
-         f"Got it — *{parsed['name']}*, {when}.\n\n"
-         "How does it rank? A is the one everything is built around, B is a tune-up you "
-         "want to go well, C is a training day with a number on. I won't guess this one.",
+    msg = (f"Got it — *{parsed['name']}*, {when}.\n\n"
+           "How does it rank? A is the one everything is built around, B is a tune-up you "
+           "want to go well, C is a training day with a number on. I won't guess this one.")
+    send(token, chat_id, msg,
          reply_markup={"inline_keyboard": [[
              {"text": "A", "callback_data": "__RACE_PRI_A__"},
              {"text": "B", "callback_data": "__RACE_PRI_B__"},
              {"text": "C", "callback_data": "__RACE_PRI_C__"},
              {"text": "Not sure yet", "callback_data": "__RACE_PRI_SKIP__"},
          ]]})
-    return True
+    # The race is NOT on file yet — the tap writes it. Said explicitly, or the reply is
+    # written as though the registry already knew about it.
+    return _capture(
+        "race", f"{parsed['name']} on {parsed['date']} — parsed but NOT yet written; "
+                "the athlete has been asked for its A/B/C priority and the write happens "
+                "when they tap", msg)
 
 
 def _a_race_date(slug):
@@ -2724,8 +2885,12 @@ def _handle_race_priority(token, chat_id, data, message_id, athletes):
         edit_keyboard_confirm(token, chat_id, message_id,
                               f"Race saved — {race['priority'] or 'priority open'}")
     _after = _a_race_date(athlete["slug"])
-    send(token, chat_id, _race_confirmation(race, when, _after if _after != _before else ""),
-         reply_markup=build_keyboard(athlete["slug"]))
+    msg = _race_confirmation(race, when, _after if _after != _before else "")
+    send(token, chat_id, msg, reply_markup=build_keyboard(athlete["slug"]))
+    # Transcript: a button tap is a real turn. Without it the register changes and the
+    # conversation shows nothing, so the next reply is written blind to the answer.
+    _append_capture_history(chat_id, athlete["slug"],
+                            f"[tapped: {pri or 'Not sure yet'}]", msg)
     return True
 
 
@@ -2791,8 +2956,9 @@ def _write_hours(slug, week_start, hours, constraints, coaching_level):
 
 
 def _handle_hours_capture(token, chat_id, text, athletes):
-    """Turn "14h next week" into a declaration the Sunday build reads. Returns True if
-    handled.
+    """Turn "14h next week" into a declaration the Sunday build reads. Returns a capture
+    note when it fired, else False; a note claims the message against the other captures
+    but does NOT stop it reaching the model.
 
     Deliberately placed AFTER race capture and BEFORE the generative reply: a
     deterministic read-back of what was stored beats a model's paraphrase of it for the
@@ -2814,7 +2980,11 @@ def _handle_hours_capture(token, chat_id, text, athletes):
         parsed = weekly_availability.parse_hours_message(text)
         reply, _ok = _write_hours(slug, ws, parsed["hours"], parsed["constraints"], level)
         send(token, chat_id, reply, reply_markup=build_keyboard(slug))
-        return True
+        return _capture(
+            "hours",
+            (f"{parsed['hours']:g} h for w/c {ws.isoformat()}" if _ok
+             else f"nothing — the figure ({parsed['hours']:g} h) was refused"),
+            reply)
 
     # TIER 1b — a DAY-SHAPE declaration: which sports fall on which days, with no hours
     # figure anywhere in it. Added 2026-08-03. This is the write that was missing: Jamie's
@@ -2858,12 +3028,17 @@ def _handle_hours_capture(token, chat_id, text, athletes):
         # Write first, then restate what was saved in one line (shared rule S38). The week
         # is named because day_shape_target_week can still read it wrong: a wrong week is
         # then one message away from being fixed instead of silently planned.
-        send(token, chat_id,
-             f"Recorded for w/c {ws_shape.isoformat()} - "
-             f"*{weekly_availability.day_shape_summary(p)}*. "
-             f"That is what the plan will be built to; tell me if any of it is wrong.",
-             reply_markup=build_keyboard(slug))
-        return True
+        msg = (f"Recorded for w/c {ws_shape.isoformat()} - "
+               f"*{weekly_availability.day_shape_summary(p)}*. "
+               f"That is what the plan will be built to; tell me if any of it is wrong.")
+        send(token, chat_id, msg, reply_markup=build_keyboard(slug))
+        # "what the plan WILL be built to" — the declaration steers the NEXT build; it does
+        # not rewrite sessions already on the calendar, so the note keeps that distinction.
+        return _capture(
+            "dayshape",
+            f"w/c {ws_shape.isoformat()} — {weekly_availability.day_shape_summary(p)}. "
+            "This steers the next build; sessions already on the calendar are unchanged",
+            msg)
 
     # TIER 1c — a whole-week SPORT EXCLUSION ("no cycling this week"). The negative form
     # of 1b, which needs 3+ named days and so cannot see this. Kathryn, 12 Jul 2026:
@@ -2898,12 +3073,16 @@ def _handle_hours_capture(token, chat_id, text, athletes):
         except Exception as e:
             log(f"sport-exclusion capture failed for {slug}: {e}")
             return False
-        send(token, chat_id,
-             f"Recorded for w/c {ws.isoformat()} — "
-             f"*{weekly_availability.sport_exclusion_summary(p['excluded'])}*. "
-             f"The plan for that week will be built without it; tell me if that is wrong.",
-             reply_markup=build_keyboard(slug))
-        return True
+        msg = (f"Recorded for w/c {ws.isoformat()} — "
+               f"*{weekly_availability.sport_exclusion_summary(p['excluded'])}*. "
+               f"The plan for that week will be built without it; tell me if that is wrong.")
+        send(token, chat_id, msg, reply_markup=build_keyboard(slug))
+        return _capture(
+            "dayshape",
+            f"w/c {ws.isoformat()} — "
+            f"{weekly_availability.sport_exclusion_summary(p['excluded'])}. "
+            "This steers the next build; sessions already on the calendar are unchanged",
+            msg)
 
     # TIER 2 — ambiguous figure, and only while the ask is genuinely outstanding (sent,
     # unanswered, inside its window). `ask_outstanding` is a recorded fact, not an
@@ -2911,6 +3090,11 @@ def _handle_hours_capture(token, chat_id, text, athletes):
     # is up, and offering to record an unrelated number as hours in that state would be
     # the bot inventing a conversation it never had.
     if not weekly_availability.ask_outstanding(slug, ws):
+        return False
+    # A message that is really a LOG ("heat 30", "ankle 3") is not an answer to the hours
+    # ask. Stand down WITHOUT consuming the ask: the fast path below logs it, and the ask
+    # stays live for the real answer. Deliberately before consume_ask for that reason.
+    if logs_via_fast_path(text):
         return False
     if not weekly_availability.looks_like_hours_reply(text):
         # The athlete has spoken since the ask went out and this was not an hours figure,
@@ -2931,14 +3115,20 @@ def _handle_hours_capture(token, chat_id, text, athletes):
                                "week_start": ws.isoformat(),
                                "expiry": time.time() + _HOURS_CAPTURE_TTL}
     cons = f" ({parsed['constraints']})" if parsed["constraints"] else ""
-    send(token, chat_id,
-         f"Just so I've got this right — is that *{parsed['hours']:g} hours* of training "
-         f"for next week{cons}?",
+    msg = (f"Just so I've got this right — is that *{parsed['hours']:g} hours* of training "
+           f"for next week{cons}?")
+    send(token, chat_id, msg,
          reply_markup={"inline_keyboard": [[
              {"text": "Yes, that's my week", "callback_data": "__HOURS_YES__"},
              {"text": "No", "callback_data": "__HOURS_NO__"},
          ]]})
-    return True
+    # Nothing written on this tier — the tap writes. And this is the tier that fires on a
+    # BARE figure, so the reply must not assume the number was about hours at all.
+    return _capture(
+        "hours",
+        f"nothing yet — {parsed['hours']:g} h for w/c {ws.isoformat()} is only a guess at "
+        "what an ambiguous figure meant, and is written when the athlete confirms",
+        msg)
 
 
 def _handle_hours_confirm(token, chat_id, data, message_id, athletes):
@@ -2958,10 +3148,10 @@ def _handle_hours_confirm(token, chat_id, data, message_id, athletes):
     if data == "__HOURS_NO__":
         if message_id:
             edit_keyboard_confirm(token, chat_id, message_id, "Nothing saved.")
-        send(token, chat_id,
-             "No problem — nothing saved. Tell me the number when you have it "
-             "(_\"14 hours next week\"_ works), or I'll use your usual week.",
-             reply_markup=build_keyboard(athlete["slug"]))
+        msg = ("No problem — nothing saved. Tell me the number when you have it "
+               "(_\"14 hours next week\"_ works), or I'll use your usual week.")
+        send(token, chat_id, msg, reply_markup=build_keyboard(athlete["slug"]))
+        _append_capture_history(chat_id, athlete["slug"], "[tapped: No]", msg)
         return True
     slug = athlete["slug"]
     reply, ok = _write_hours(slug, pending["week_start"], pending["hours"],
@@ -2970,6 +3160,7 @@ def _handle_hours_confirm(token, chat_id, data, message_id, athletes):
         edit_keyboard_confirm(token, chat_id, message_id,
                               f"✅ {pending['hours']:g} h" if ok else "Not saved")
     send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+    _append_capture_history(chat_id, slug, "[tapped: Yes, that's my week]", reply)
     return True
 
 
@@ -2993,7 +3184,9 @@ _ACTION_CAPTURE_TTL = 900
 
 
 def _handle_action_capture(token, chat_id, text, athletes):
-    """Close, defer or drop an open action from chat. Returns True if handled."""
+    """Close, defer or drop an open action from chat. Returns a capture note when it fired,
+    else False; a note claims the message against the other captures but does NOT stop it
+    reaching the model."""
     athlete = athletes.get(chat_id)
     if not athlete:
         return False
@@ -3009,11 +3202,14 @@ def _handle_action_capture(token, chat_id, text, athletes):
         cands = open_actions.candidates(items, parsed["subject"])
         if not cands:
             return False
-        send(token, chat_id,
-             f"Happy to push *{cands[0]['action']}* back — until when? "
-             "Give me a date (or _next week_) and I'll move it.",
-             reply_markup=build_keyboard(slug))
-        return True
+        msg = (f"Happy to push *{cands[0]['action']}* back — until when? "
+               "Give me a date (or _next week_) and I'll move it.")
+        send(token, chat_id, msg, reply_markup=build_keyboard(slug))
+        return _capture(
+            "action",
+            f"nothing — the athlete asked to defer '{cands[0]['action']}' but named no new "
+            "date, so they have been asked for one",
+            msg)
     if not parsed["status"]:
         return False
 
@@ -3039,7 +3235,11 @@ def _handle_action_capture(token, chat_id, text, athletes):
     else:
         prompt = f"Which one is {verb}?"
     send(token, chat_id, prompt, reply_markup={"inline_keyboard": rows})
-    return True
+    return _capture(
+        "action",
+        f"nothing yet — the athlete looks to have marked something {verb} and has been "
+        f"asked which of {len(cands)} open action(s) they meant; the tap writes it",
+        prompt)
 
 
 def _handle_action_confirm(token, chat_id, data, message_id, athletes):
@@ -3056,8 +3256,9 @@ def _handle_action_confirm(token, chat_id, data, message_id, athletes):
     if data == "__ACT_CANCEL__":
         if message_id:
             edit_keyboard_confirm(token, chat_id, message_id, "Nothing changed.")
-        send(token, chat_id, "Fair enough — nothing changed. Which one did you mean?",
-             reply_markup=build_keyboard(athlete["slug"]))
+        msg = "Fair enough — nothing changed. Which one did you mean?"
+        send(token, chat_id, msg, reply_markup=build_keyboard(athlete["slug"]))
+        _append_capture_history(chat_id, athlete["slug"], "[tapped: None of those]", msg)
         return True
     try:
         idx = int(data[len("__ACT_"):-2])
@@ -3104,6 +3305,7 @@ def _handle_action_confirm(token, chat_id, data, message_id, athletes):
     if message_id:
         edit_keyboard_confirm(token, chat_id, message_id, "✅ Updated")
     send(token, chat_id, reply, reply_markup=build_keyboard(slug))
+    _append_capture_history(chat_id, slug, f"[tapped: {action[:60]}]", reply)
     return True
 
 
@@ -3133,8 +3335,69 @@ def _athlete_day_rules(slug):
         return None
 
 
+def dayrule_repeat_reason(family, on, recorded: bool, pending: dict | None,
+                          now: float | None = None) -> str:
+    """Why this sport+date must NOT be asked about again, or '' when asking is fine.
+
+    Two gates, because either alone leaves the observed bug open. On 13 Aug the same
+    `bike:2026-08-13` confirmation was asked and recorded twice inside three minutes:
+      * `recorded` catches the repeat once the register has the entry;
+      * `pending` catches the repeat while the FIRST question is still unanswered, which
+        the register cannot see — nothing is written until the tap.
+    Matched on family+date, never on mere presence: a pending confirmation for a DIFFERENT
+    session must not suppress a legitimate question about this one.
+
+    Pure, so the dedupe is testable without a bot: scripts/test_captures.py."""
+    if recorded:
+        return "already on the register"
+    if (pending and pending.get("family") == family and pending.get("date") == str(on)
+            and (now or time.time()) <= pending.get("expiry", 0)):
+        return "already asked, answer outstanding"
+    return ""
+
+
+def dayrule_question(family, when) -> str:
+    """The confirmation question. Says what the write DOES.
+
+    The old wording asked "you want a *bike* on *Thu 13 Aug*…?" over a button reading
+    "Yes, that's the plan" — and tapping it changed no plan. It records one line saying an
+    off-pattern session is deliberate so the audit stops flagging it. An athlete who taps a
+    button labelled "that's the plan" reasonably believes their calendar has been dealt
+    with, which is exactly what happened on 13 Aug: two taps, ride unmoved.
+
+    The resolved ABSOLUTE date is echoed, because a misread weekday is otherwise invisible
+    — the same reason race capture spells the date out."""
+    return (f"That's not one of your usual *{family}* days — is a *{family}* on *{when}* "
+            f"deliberate, so I don't flag it as off-plan?")
+
+
+def dayrule_recorded_message(family, when) -> str:
+    """What the athlete is told AFTER tapping yes. Says what it did in plain terms at every
+    coaching level: no `[hard]`/`[soft]` tags, no check names. What matters to them is that
+    it is allowed once, not adopted — AND that it is only a note.
+
+    The last sentence is the 13 Aug fix. The old wording stopped at "so I won't flag it",
+    which was read as the session having been moved; it had not been, and nothing in this
+    path can move one."""
+    return (f"Noted — a *{family}* on *{when}* is deliberate, so I won't flag it as "
+            f"off-plan. That's a note to myself about the day only: your usual {family} "
+            f"days are unchanged, and it doesn't by itself move anything in your calendar.")
+
+
+DAYRULE_BUTTONS = {"inline_keyboard": [[
+    {"text": "Yes — don't flag it", "callback_data": "__DAYRULE_YES__"},
+    {"text": "No", "callback_data": "__DAYRULE_NO__"},
+]]}
+
+
 def _handle_dayrule_capture(token, chat_id, text, athletes):
-    """Record a coach-directed off-pattern session. Returns True if handled.
+    """Record a coach-directed off-pattern session. Returns a capture note when it fired,
+    else False.
+
+    A note claims the message against the other captures but does NOT stop it reaching the
+    model, and here that matters more than anywhere else: this handler fires on exactly the
+    phrasings that ASK FOR A SESSION TO MOVE ("move the ride to Thursday"), while all it
+    can do itself is silence an audit check. The move is the model's to make.
 
     Returns False - silently, letting the normal reply happen - on every doubt. A message
     this handler declines is NOT a message that goes unanswered; it just does not become a
@@ -3155,18 +3418,33 @@ def _handle_dayrule_capture(token, chat_id, text, athletes):
         return False
 
     when = date.fromisoformat(parsed["date"]).strftime("%a %-d %b")
+    repeat = dayrule_repeat_reason(
+        parsed["family"], parsed["date"],
+        day_overrides.has_override(slug, BASE.parent, parsed["family"], parsed["date"]),
+        _PENDING_DAYRULE.get(chat_id))
+    if repeat:
+        # Ask NOTHING and send nothing — but still claim the message and tell the model
+        # why. A repeated instruction with the bookkeeping already done is the signature of
+        # the athlete not having got what they asked for the first time, which is the most
+        # useful thing the reply could know.
+        log(f"[{slug}] day override ask suppressed ({repeat}): "
+            f"{parsed['family']}:{parsed['date']}")
+        return _capture(
+            "dayrule",
+            f"{parsed['family']} on {parsed['date']} — {repeat}. The athlete is saying this "
+            "AGAIN, so assume the change they asked for has not actually been made yet and "
+            "deal with it now")
+
     _PENDING_DAYRULE[chat_id] = {"family": parsed["family"], "date": parsed["date"],
                                  "expiry": time.time() + _DAYRULE_CAPTURE_TTL}
-    # The resolved ABSOLUTE date is echoed, because a misread weekday is otherwise
-    # invisible — the same reason race capture spells the date out.
-    send(token, chat_id,
-         f"Just to be sure — you want a *{parsed['family']}* on *{when}*, which is not one "
-         f"of your usual {parsed['family']} days?",
-         reply_markup={"inline_keyboard": [[
-             {"text": "Yes, that's the plan", "callback_data": "__DAYRULE_YES__"},
-             {"text": "No", "callback_data": "__DAYRULE_NO__"},
-         ]]})
-    return True
+    msg = dayrule_question(parsed["family"], when)
+    send(token, chat_id, msg, reply_markup=DAYRULE_BUTTONS)
+    return _capture(
+        "dayrule",
+        f"nothing yet — the athlete has been asked to confirm that a {parsed['family']} on "
+        f"{parsed['date']} is deliberate. Even once they confirm, that write only stops the "
+        "plan audit flagging the day",
+        msg)
 
 
 def _handle_dayrule_confirm(token, chat_id, data, message_id, athletes):
@@ -3184,8 +3462,9 @@ def _handle_dayrule_confirm(token, chat_id, data, message_id, athletes):
         # Fail closed: nothing recorded, so the day-rule check stays HARD for that session.
         if message_id:
             edit_keyboard_confirm(token, chat_id, message_id, "Left as it was.")
-        send(token, chat_id, "Understood — I've not changed anything.",
-             reply_markup=build_keyboard(athlete["slug"]))
+        msg = "Understood — I've not recorded anything against that day."
+        send(token, chat_id, msg, reply_markup=build_keyboard(athlete["slug"]))
+        _append_capture_history(chat_id, athlete["slug"], "[tapped: No]", msg)
         return True
 
     slug = athlete["slug"]
@@ -3204,12 +3483,9 @@ def _handle_dayrule_confirm(token, chat_id, data, message_id, athletes):
     when = date.fromisoformat(pending["date"]).strftime("%a %-d %b")
     if message_id:
         edit_keyboard_confirm(token, chat_id, message_id, "✅ Noted")
-    # Says what it did in plain terms at every coaching level: no `[hard]`/`[soft]` tags, no
-    # check names. What matters to the athlete is that it is allowed once and not adopted.
-    send(token, chat_id,
-         f"Noted — a *{pending['family']}* on *{when}* is deliberate, so I won't flag it. "
-         f"It applies to that day only; your usual {pending['family']} days are unchanged.",
-         reply_markup=build_keyboard(slug))
+    msg = dayrule_recorded_message(pending["family"], when)
+    send(token, chat_id, msg, reply_markup=build_keyboard(slug))
+    _append_capture_history(chat_id, slug, "[tapped: Yes — don't flag it]", msg)
     log(f"[{slug}] day override recorded: {key}")
     return True
 
@@ -4541,12 +4817,31 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     return (final if final is not None else "(no response)", summary)
 
 
-def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slug, text):
+def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slug, text,
+                       capture=None):
     """The slow text-chat generation path, run off the poll loop on the reply
-    pool (under the chat lock). Mirrors the old inline try-block exactly."""
+    pool (under the chat lock). Mirrors the old inline try-block exactly.
+
+    `capture` is set when one of the four deterministic captures fired on this message (see
+    _route_text). It carries the note that tells the model what was written and that the
+    athlete's underlying request is still outstanding, plus the read-back already sent."""
     try:
         history = load_history(files["history"])
         context = prefetch_context(slug)
+        # The capture's read-back was transcripted in the poll loop so it could not be lost;
+        # take it back out and carry it in this turn's single entry instead, so the athlete's
+        # message appears in history once. Two entries with the same `user` text would read
+        # as the instruction having been given twice — the misreading that made the 13 Aug
+        # "Now" reply wrong in the first place.
+        readback = ""
+        if capture:
+            if (history and history[-1].get("kind") == "capture"
+                    and history[-1].get("user") == text):
+                readback = history.pop().get("assistant") or ""
+            # Concatenated HERE, never inside prefetch_context: that block is cached per
+            # athlete (see _PREFETCH_CACHE), and a note folded into the cache would be
+            # replayed on the next, unrelated message.
+            context = f"{context}\n\n{capture['note']}".strip() if context else capture["note"]
         model = select_model(text, history)
         before_ts = time.time()
         before_rules_text = _snapshot_rules_text(slug)
@@ -4586,7 +4881,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 except Exception as _ve:
                     log(f"[{slug}] voice synth failed (text already sent): {_ve}")
             log(f"[{slug}] Out (voice): {clean[:80]}")
-            history.append(_hist_entry(text, clean))
+            history.append(_hist_entry(text, _capture_history_assistant(readback, clean)))
             save_history(history, files["history"])
             return
 
@@ -4650,7 +4945,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             f"msg2_id={msg2_id} chars={len(clean)}")
         log(f"[{slug}] Out: {clean[:80]}")
 
-        history.append(_hist_entry(text, clean))
+        history.append(_hist_entry(text, _capture_history_assistant(readback, clean)))
         save_history(history, files["history"])
     except Exception as _reply_err:
         log(f"[{slug}] reply handling error for {chat_id}: {_reply_err}")
@@ -4764,36 +5059,42 @@ def _route_text(token, chat_id, text, athletes, config):
                          cwd=config.get("project_dir"), start_new_session=True)
         return
 
-    # Race capture: "I'm racing X on Saturday" becomes structured data rather than
-    # prose in current-state.md. Placed before the generative reply so the athlete gets a
-    # deterministic confirmation of what was recorded, not a model's paraphrase of it.
-    if _handle_race_capture(token, chat_id, text, athletes):
-        return
-
-    # Weekly hours capture: the answer to Sunday's "how many hours have you got?"
-    # becomes the week's Load ceiling at the 18:00 build. Deterministic read-back for
-    # the same reason race capture has one — the model must not paraphrase this figure.
-    if _handle_hours_capture(token, chat_id, text, athletes):
-        return
-
-    # Directed day-rule deviation: "swim Wednesday this week" lands in the fail-closed
-    # register instead of leaving the audit permanently red on day_rules.
+    # CAPTURES. Four deterministic parsers, each of which does its own write or asks its
+    # own confirming question, run before the model so the athlete gets an exact read-back
+    # of what was stored rather than a paraphrase of it.
     #
-    # BEFORE action capture, and the order is load-bearing. "move the swim to Wednesday"
-    # satisfies BOTH detectors — "move ... to" is a deferral verb in open_actions — and
-    # only one handler can run, since each returns True and routing stops. The more
-    # SPECIFIC one wins: this handler demands a sport, an unambiguous date and a day
-    # that is genuinely off-pattern, so when it fires it is far more likely to be right
-    # than a substring match against an action label. It also declines silently on any
-    # doubt, so putting it first costs action capture nothing.
-    if _handle_dayrule_capture(token, chat_id, text, athletes):
-        return
+    # A capture NO LONGER CONSUMES THE MESSAGE (13 Aug 2026). It returns a note; the note
+    # claims the message against the OTHER captures — only one may fire, see below — and is
+    # then handed to the model turn, which still runs. Before this, a fired capture returned
+    # and routing stopped, so the message never reached the only component that can act on
+    # it: on 13 Aug the day-rule capture asked Jamie to confirm a ride was moving, he tapped
+    # Yes twice, one audit-silencing line was written, the ride never moved, and the whole
+    # exchange was absent from history when his next message arrived.
+    #
+    # ONLY ONE CAPTURE MAY FIRE, and the order below is load-bearing. "move the swim to
+    # Wednesday" satisfies both the day-rule and open-action detectors ("move … to" is a
+    # deferral verb in open_actions), and two confirmation questions for one message is a
+    # worse outcome than the less specific parser standing down. The more SPECIFIC one wins:
+    # the day-rule handler demands a sport, an unambiguous date and a day that is genuinely
+    # off-pattern, and declines silently on any doubt, so putting it first costs action
+    # capture nothing.
+    capture = None
+    for _cap in (_handle_race_capture,      # "I'm racing X on Saturday" -> the race registry
+                 _handle_hours_capture,     # "14h next week" -> the week's Load ceiling
+                 _handle_dayrule_capture,   # "swim Wednesday" -> the fail-closed register
+                 _handle_action_capture):   # "sweat test is booked" -> the actions store
+        capture = _cap(token, chat_id, text, athletes) or None
+        if capture:
+            break
 
-    # Open-action capture: "sweat test is booked" writes the single store instead of
-    # leaving a status cell nobody can change from a phone. After the day-rule handler
-    # above, which is the stricter of the two where their phrasings overlap.
-    if _handle_action_capture(token, chat_id, text, athletes):
-        return
+    # Transcript NOW, before the rest of the routing, for two reasons. It must survive the
+    # case where a fast path below consumes the message and no reply worker runs at all
+    # ("heat 30" is both a heat log and, while the Sunday hours ask is outstanding, an hours
+    # figure). And writing it here means the reply worker's own load_history sees it, so it
+    # can FOLD it into the single entry for this turn — the athlete's message then appears
+    # in history once, not twice.
+    if capture and capture["msg"]:
+        _append_capture_history(chat_id, slug, text, capture["msg"])
 
     # Sticky voice-reply toggle: /voice [on|off] or the 🎙 menu button.
     _vt = text.strip().lower()
@@ -4989,7 +5290,7 @@ def _route_text(token, chat_id, text, athletes, config):
     # never blocks the others. The per-chat lock (in _submit) serialises
     # this athlete's own messages so history.json can't be corrupted.
     _submit(_chat_reply_worker, chat_id,
-            token, chat_id, config, athlete, files, athlete_name, slug, text)
+            token, chat_id, config, athlete, files, athlete_name, slug, text, capture)
 
 
 def _voice_reply_worker(token, chat_id, file_id, athletes, config):
