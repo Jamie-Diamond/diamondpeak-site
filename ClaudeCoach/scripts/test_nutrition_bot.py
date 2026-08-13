@@ -9,7 +9,7 @@ rendered like label data corrupts trust in the whole record. Those are tested he
 import importlib.util
 import sys
 import tempfile
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
@@ -1004,6 +1004,204 @@ NB.today_block, NB._chat = _REAL["today_block"], _REAL["_chat"]
 NB.NR.cache_resolved = _REAL["cache_resolved"]
 check("the stubs are restored for whatever is appended next",
       NB.tg.send is _REAL["send"] and NB.NR.cache_resolved is _REAL["cache_resolved"])
+
+print("\n--- what he actually eats, with enough about it to CHOOSE ---")
+# 13 Aug 2026. "What should I eat?" was answered with the day's remaining kcal and a
+# category ("something carb-forward"), because the facts could only support checking a
+# suggestion after the fact, never reaching one: foods_he_actually_eats was 25 names and
+# their macros, with nothing saying what each food IS or when he eats it. macro_lean and
+# usual_meal are computed here, deterministically, so a named meal can answer a named gap.
+check("a potato is carbohydrate",
+      NB.macro_lean({"carb_g": 60, "protein_g": 5, "fat_g": 1}) == "carb-heavy")
+check("tuna is protein",
+      NB.macro_lean({"carb_g": 0, "protein_g": 30, "fat_g": 1}) == "protein-heavy")
+check("olive oil is fat",
+      NB.macro_lean({"carb_g": 0, "protein_g": 0, "fat_g": 14}) == "fat-heavy")
+# Shares are of the macros' OWN energy: dividing by a label's stated kcal puts the 50%
+# threshold at the mercy of the few per cent by which the two routinely disagree.
+check("fat counts at 9 kcal a gram, so 20 g of it beats 30 g of carbohydrate",
+      NB.macro_lean({"carb_g": 30, "protein_g": 2, "fat_g": 20}) == "fat-heavy")
+check("a mixed meal is not forced into a category",
+      NB.macro_lean({"carb_g": 40, "protein_g": 25, "fat_g": 12}) == "mixed")
+check("a splash of milk has no character to report",
+      NB.macro_lean({"carb_g": 1, "protein_g": 0.7, "fat_g": 0.5}) is None)
+check("and an entry with no macros at all does not crash it",
+      NB.macro_lean({}) is None and NB.macro_lean({"kcal": 200}) is None)
+
+lever_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-levers-")))
+
+
+def _log(day, name, meal, **macros):
+    lever_store.add_entry(day, raw_text=name.lower(), resolved_name=name,
+                          confidence="label", source_rung="manual",
+                          logged_at=f"{day.isoformat()}T19:30", meal=meal, **macros)
+
+
+# Three weeks of a plausible repertoire: the potato eaten most, at dinner every time.
+for n, back in enumerate((14, 11, 8, 5, 2)):
+    _log(TODAY - timedelta(days=back), "Jacket potato", "dinner",
+         kcal=290, carb_g=62, protein_g=7, fat_g=1, fibre_g=6)
+for back in (11, 5):
+    _log(TODAY - timedelta(days=back), "Tuna in spring water", "dinner",
+         kcal=110, carb_g=0, protein_g=25, fat_g=1)
+_log(TODAY - timedelta(days=9), "Peanut butter", "breakfast",
+     kcal=190, carb_g=6, protein_g=8, fat_g=16)
+# Same food at two different meals, breakfast the more common: the modal slot wins, and it
+# must not depend on which one the store happened to write first.
+for back in (12, 6):
+    _log(TODAY - timedelta(days=back), "Overnight oats", "lunch",
+         kcal=380, carb_g=52, protein_g=18, fat_g=10)
+for back in (10, 7, 3):
+    _log(TODAY - timedelta(days=back), "Overnight oats", "breakfast",
+         kcal=380, carb_g=52, protein_g=18, fat_g=10)
+# In-session fuel: kept, because it is the right answer to "how do I get carbohydrate in
+# before tomorrow", and tagged, because it is the wrong answer to "what is for dinner".
+lever_store.add_entry(TODAY - timedelta(days=4), raw_text="gel on the bike",
+                      resolved_name="SiS GO gel", kcal=87, carb_g=22, protein_g=0,
+                      fat_g=0, confidence="label", source_rung="manual",
+                      in_session=True, logged_at=f"{(TODAY - timedelta(days=4)).isoformat()}T10:00")
+# Outside the window entirely: three weeks back is deliberate, and 40 days ago is not what
+# he eats now.
+_log(TODAY - timedelta(days=40), "Christmas pudding", "dinner",
+     kcal=400, carb_g=70, protein_g=4, fat_g=12)
+
+
+class FakeCtxLevers:
+    def __init__(self, store):
+        self.store = store
+
+
+levers = NB.eating_levers(FakeCtxLevers(lever_store), TODAY)
+by_name = {r["name"]: r for r in levers}
+check("the most-eaten food comes first", levers[0]["name"] == "Jacket potato")
+check("and it is counted, not just listed", by_name["Jacket potato"]["times"] == 5)
+check("a food outside the 21-day window is not in his current repertoire",
+      "Christmas pudding" not in by_name)
+check("each food says what it mostly IS",
+      [by_name[n]["lean"] for n in ("Jacket potato", "Tuna in spring water",
+                                    "Peanut butter", "Overnight oats")]
+      == ["carb-heavy", "protein-heavy", "fat-heavy", "carb-heavy"])
+check("the meal he usually has it at is the modal one, not the first logged",
+      by_name["Overnight oats"]["usual_meal"] == "breakfast")
+check("a food only ever eaten at one meal reports that meal",
+      by_name["Jacket potato"]["usual_meal"] == "dinner")
+check("the label figures come through for the swap arithmetic the CODE does",
+      (by_name["Tuna in spring water"]["protein_g"],
+       by_name["Tuna in spring water"]["kcal"]) == (25, 110))
+check("training fuel is present but tagged as fuel, not as a meal",
+      by_name["SiS GO gel"]["in_session_fuel"] is True
+      and by_name["SiS GO gel"]["usual_meal"] is None)
+check("ordinary food is not tagged as fuel",
+      by_name["Jacket potato"]["in_session_fuel"] is False)
+check("the last time he had it is the LATEST, not the first seen",
+      by_name["Jacket potato"]["last_eaten"] == (TODAY - timedelta(days=2)).isoformat())
+check("the internal meal tally is not leaked into the prompt",
+      all("_meals" not in r for r in levers))
+# This list is injected into a prompt verbatim. Two calls that differ mean two different
+# prompts from the same log, which is a bug that only ever shows up as an odd reply.
+check("the same log produces the same list twice",
+      NB.eating_levers(FakeCtxLevers(lever_store), TODAY) == levers)
+
+print("\n--- the facts say WHY, not just how much ---")
+# The zones moved to demand-based fuelling: 8-10 g/kg of carbohydrate is not a diet, it is
+# tomorrow's long ride arriving. demand_ahead and the basis strings were computed, published
+# by the engine, and then dropped on the floor here - so the model could read the number and
+# not the reason, and "what should I eat" could only ever come back as a budget report.
+class FakeCtxFacts:
+    """Everything facts_for_question touches, and nothing else. zones_for returns a REAL
+    engine snapshot: a stub dict would let the wiring pass while the values it carries are
+    all None, which is the failure this is here to catch."""
+    slug = "nobody-real"
+    # The plant table is a large file this test has no interest in loading; the species
+    # count is not what is under test here.
+    table = type("NoSpecies", (), {
+        "match_text": staticmethod(lambda text: {"species": [], "unmatched": ""})})()
+
+    def __init__(self, store, zones):
+        self.store = store
+        self.athlete_dir = store.dir.parent
+        self._zones = zones
+
+    def zones_for(self, day):
+        return self._zones
+
+
+facts = NB.facts_for_question(FakeCtxFacts(lever_store, Z_PRELONG), TODAY)
+check("demand_ahead reaches the facts with its tier and its sessions intact",
+      (facts["demand_ahead"] or {}).get("tier") == NE.DEMAND_LONG
+      and facts["demand_ahead"]["when"] == "tomorrow")
+check("and it names the window in words the reply can use",
+      "long session tomorrow" in (facts["demand_ahead"]["label"] or ""))
+check("the carbohydrate g/kg the demand asked for is there to be quoted",
+      facts["demand_ahead"]["carb_g_per_kg"] == [8, 10])
+check("carb_basis and fat_basis arrive as the engine's own sentences",
+      isinstance(facts["carb_basis"], str) and len(facts["carb_basis"]) > 20
+      and facts["fat_basis"] == Z_PRELONG["fat_g"]["basis"])
+check("each macro carries the basis for its own bound",
+      all(facts["macros"][k]["basis"] for k in
+          ("protein_g", "carb_g", "fat_g", "fibre_g")))
+check("carbohydrate and fat carry their bound and their share of the day's energy",
+      all(facts["macros"][k].get("bound") and len(facts["macros"][k]["kcal_share"]) == 2
+          for k in ("carb_g", "fat_g")))
+check("protein and fibre have neither, and say so by absence rather than by a null",
+      all("kcal_share" not in facts["macros"][k] and "bound" not in facts["macros"][k]
+          for k in ("protein_g", "fibre_g")))
+
+# THE GAP, computed HERE. The prompt forbids the model doing arithmetic, so a "why" with a
+# size in it is only possible if the size is already in the facts.
+check("the gap to the bottom of the zone is precomputed for every macro",
+      all("gap_to_low_g" in facts["macros"][k] for k in
+          ("protein_g", "carb_g", "fat_g", "fibre_g")))
+carb = facts["macros"]["carb_g"]
+check("with nothing logged the whole zone is still open",
+      carb["gap_to_low_g"] == carb["low"] and carb["room_to_high_g"] == carb["high"])
+_over = NB.macro_fact({"carb_g": {"low": 300, "high": 400, "bias": "band"}}, 450, "carb_g")
+check("past the top of the zone the gap closes to zero and the room goes negative",
+      _over["gap_to_low_g"] == 0 and _over["room_to_high_g"] == -50)
+_short = NB.macro_fact({"carb_g": {"low": 300, "high": 400, "bias": "band"}}, 180, "carb_g")
+check("and short of it the gap is the size of the shortfall",
+      _short["gap_to_low_g"] == 120 and _short["room_to_high_g"] == 220)
+check("a macro with nothing consumed reports no gap rather than a fabricated one",
+      "gap_to_low_g" not in NB.macro_fact({"carb_g": {"low": 300, "high": 400}}, None,
+                                          "carb_g"))
+# Each bound guarded on its own presence. Defaulting a missing high to zero would report
+# "over by 180 g" against a top that does not exist - a breach of nothing, and the model has
+# no way to tell it is fictional.
+_nohigh = NB.macro_fact({"protein_g": {"low": 150, "bias": "floor"}}, 180, "protein_g")
+check("a zone with a floor and no top reports the gap and no room figure",
+      _nohigh["gap_to_low_g"] == 0 and "room_to_high_g" not in _nohigh)
+
+# The fibre PHASE, which the prompt has always told the model to respect and which the old
+# comprehension dropped: the instruction was unreachable from the facts.
+Z_LONGTODAY = NE.zones(day_type="long_ride", rolling_weight=W, rmr=RMR,
+                       sessions=[{"type": "Ride", "moving_time": 18000,
+                                  "name": "Long endurance ride", "calories": 3000}],
+                       calendar_known=True, deficit_enabled=True)
+phased = NB.facts_for_question(FakeCtxFacts(lever_store, Z_LONGTODAY), TODAY)["macros"]
+check("on a long day the fibre ceiling arrives with the phase that expires it",
+      phased["fibre_g"]["after_session"]["low"] > 0
+      and "then back to the floor" in phased["fibre_g"]["phase_note"])
+check("and on a day with no session of its own there is no phase to report",
+      "after_session" not in facts["macros"]["fibre_g"])
+
+# Old snapshots. set_targets stores the zone dict as it was on the day, so a day recorded
+# before the demand model existed comes back without any of these keys.
+legacy = NB.macro_fact({}, 100, "carb_g")
+check("a snapshot from before the demand model degrades instead of raising",
+      legacy["low"] is None and "gap_to_low_g" not in legacy)
+
+
+class FakeCtxLegacy(FakeCtxFacts):
+    def zones_for(self, day):
+        return {"day_type": "standard", "kcal_target": 3000, "kcal_maintenance": 3000,
+                "deficit_applied_kcal": 0, "kcal_confidence": "estimate",
+                "weight_basis_kg": W}
+
+
+old = NB.facts_for_question(FakeCtxLegacy(lever_store, None), TODAY)
+check("and the whole facts dict still builds, with the why simply absent",
+      old["demand_ahead"] is None and old["carb_basis"] is None
+      and old["macros"]["carb_g"]["low"] is None)
 
 print()
 if FAILED:

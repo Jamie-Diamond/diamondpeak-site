@@ -906,15 +906,45 @@ def tomorrow_brief(ctx: Context, day: date) -> dict:
     return out
 
 
+def macro_lean(entry: dict) -> str | None:
+    """Which macro this food mostly IS, from its own energy split. None when there is
+    not enough of it to say.
+
+    Computed here rather than described by a model, because it is what makes a named
+    suggestion answer a named gap: "jacket potato + tuna" is only the right answer to an
+    open carbohydrate gap if something knows the potato is carbohydrate. Shares are of
+    the macros' OWN energy, never of the entry's stated kcal - a label's kcal figure
+    routinely disagrees with its macros by a few per cent, and dividing by it puts the
+    dominance threshold at the mercy of that rounding."""
+    p = (entry.get("protein_g") or 0) * 4
+    c = (entry.get("carb_g") or 0) * 4
+    f = (entry.get("fat_g") or 0) * 9
+    total = p + c + f
+    if total < 20:                          # a condiment or a splash of milk: no character
+        return None
+    share = {"protein-heavy": p / total, "carb-heavy": c / total, "fat-heavy": f / total}
+    top, frac = max(share.items(), key=lambda kv: kv[1])
+    return top if frac >= 0.5 else "mixed"
+
+
 def eating_levers(ctx: Context, day: date, back_days: int = 21) -> list:
     """What he ACTUALLY eats, with real figures, most-used first.
 
     Suggestions have to come from his own shopping. Advice to "add some lean protein" is
     worthless; "swap the Twix for the M&S protein bar, 170 kcal less and 15 g more
     protein" is actionable, and only possible because both are in his own log with label
-    figures behind them."""
+    figures behind them.
+
+    Each item now also carries what it IS (`lean`), when he usually eats it (`usual_meal`)
+    and whether it is training fuel (`in_session_fuel`). Without those the list is 25
+    names and a wall of macros: enough for the model to check a suggestion afterwards, not
+    enough to REACH one, so it kept inventing a meal and then quoting his food at it.
+    In-session fuel stays in the list but is tagged, because his gels and drink mix are
+    the right answer to "how do I get carbohydrate in before tomorrow" and the wrong
+    answer to "what shall I have for dinner", and only a tag can tell those apart."""
     seen = {}
     for rec in ctx.store.get_range(day - timedelta(days=back_days), day):
+        on = rec.get("date")
         for e in rec.get("entries") or []:
             name = e.get("resolved_name") or ""
             if not name or e.get("_supplement"):
@@ -925,9 +955,58 @@ def eating_levers(ctx: Context, day: date, back_days: int = 21) -> list:
                                          "carb_g": e.get("carb_g"),
                                          "fat_g": e.get("fat_g"),
                                          "fibre_g": e.get("fibre_g"),
-                                         "confidence": e.get("confidence")})
+                                         "confidence": e.get("confidence"),
+                                         "lean": macro_lean(e),
+                                         "in_session_fuel": bool(e.get("in_session")),
+                                         "_meals": {}, "last_eaten": None})
             row["times"] += 1
-    return sorted(seen.values(), key=lambda r: -r["times"])[:25]
+            if on and (row["last_eaten"] or "") < on:
+                row["last_eaten"] = on
+            meal = e.get("meal") or ""
+            if meal:
+                row["_meals"][meal] = row["_meals"].get(meal, 0) + 1
+    out = []
+    for row in seen.values():
+        meals = row.pop("_meals")
+        # Ties broken by NAME, not by whichever meal the dict happened to see first:
+        # this whole list is injected into a prompt and has to be the same list twice.
+        row["usual_meal"] = (max(sorted(meals), key=lambda m: meals[m]) if meals else None)
+        out.append(row)
+    return sorted(out, key=lambda r: (-r["times"], r["name"]))[:25]
+
+
+def macro_fact(z: dict, consumed, key: str) -> dict:
+    """One macro's zone, its gap, and WHY the zone is where it is.
+
+    Two things were missing and both cost the same thing - the ability to say why. The
+    GAP was not here at all, so a reply could only name a gap by subtracting low from
+    consumed, which the prompt forbids outright: the model is not allowed to do
+    arithmetic, so with no gap in the facts it either broke that rule or gave a why with
+    no size to it. And `basis` - the engine's own sentence explaining the bound, "demand
+    band 8-10 g/kg (long session tomorrow)" - was computed, published and then dropped
+    here, so the numbers arrived with their reason stripped off.
+
+    Signs are fixed and stated rather than left to the reader: `gap_to_low_g` is how much
+    MORE is wanted and never negative, `room_to_high_g` is what is left before the top and
+    goes negative once he is past it."""
+    zone = z.get(key) or {}
+    out = {"consumed": consumed, "low": zone.get("low"), "high": zone.get("high"),
+           "bias": zone.get("bias"), "basis": zone.get("basis")}
+    if consumed is not None and zone.get("low") is not None:
+        out["gap_to_low_g"] = round(max(0.0, zone["low"] - consumed), 1)
+    # Each bound guarded on ITS OWN presence. Defaulting a missing high to zero would
+    # publish room_to_high_g as minus everything he has eaten, which reads as a breach of
+    # a zone that does not exist. The prompt is told that this figure only means anything
+    # on a ceiling or a band: on a floor, being past the top is right.
+    if consumed is not None and zone.get("high") is not None:
+        out["room_to_high_g"] = round(zone["high"] - consumed, 1)
+    # bound / kcal_share exist on carbohydrate and fat only, and the fibre PHASE only on a
+    # day whose own session is still to come. Copied when present rather than defaulted:
+    # a null `after_session` reads as "no phase" and is indistinguishable from a real one.
+    for extra in ("bound", "kcal_share", "after_session", "phase_note"):
+        if zone.get(extra) is not None:
+            out[extra] = zone[extra]
+    return out
 
 
 def facts_for_question(ctx: Context, day: date) -> dict:
@@ -950,9 +1029,18 @@ def facts_for_question(ctx: Context, day: date) -> dict:
                    "maintenance_kcal": z["kcal_maintenance"],
                    "deficit_applied_kcal": z["deficit_applied_kcal"],
                    "estimate_quality": z["kcal_confidence"]},
-        "macros": {k: {"consumed": totals.get(k), "low": z[k]["low"],
-                       "high": z[k]["high"], "bias": z[k]["bias"]}
+        "macros": {k: macro_fact(z, totals.get(k), k)
                    for k in ("protein_g", "carb_g", "fat_g", "fibre_g")},
+        # WHAT THE FOOD IS FOR. The engine fuels for the work required, so the zones are
+        # a consequence of the window ahead and unreadable without it: 8-10 g/kg of
+        # carbohydrate is not a diet, it is Thursday's long ride arriving. This is the
+        # difference between "you have 120 g of carbohydrate left" and "tonight is a
+        # carb-forward night because the long ride is tomorrow" - same number, and only
+        # the second one tells him what to cook. Guarded because a snapshot written
+        # before the demand model existed has none of these keys.
+        "demand_ahead": z.get("demand_ahead"),
+        "carb_basis": z.get("carb_basis") or (z.get("carb_g") or {}).get("basis"),
+        "fat_basis": z.get("fat_basis") or (z.get("fat_g") or {}).get("basis"),
         "collagen_protein_not_counted_g": totals.get("non_counting_protein_g"),
         "dietary_sodium_mg": totals.get("dietary_sodium_mg"),
         "sodium_note": "no sweat test done, so there is no personal sodium target",

@@ -401,6 +401,80 @@ check("and drops it for in-session fuel on that path as well",
 check("the interpret prompt asks for the meal on the same terms",
       "A clock time is evidence" in NLU.INTERPRET_PROMPT)
 
+# --- "what should I eat" leads with NAMED MEALS, not numbers -------------------------
+# 13 Aug 2026, Jamie: a good answer to "what should I eat?" opens with food he could put
+# on a plate, each option tagged with the gap it closes, and only then the figures. The old
+# section asked for "two or three CONCRETE options" but said nothing about ORDER, and the
+# replies opened with the day's remaining kcal and worked down to a suggestion - a budget
+# report with food at the bottom. What the model does with the instruction cannot be tested
+# offline; that the instruction is there, and in the right order, can.
+print("\n--- WHAT TO EAT: named meals first, numbers second ---")
+_wte = NLU.CONVERSE_PROMPT[NLU.CONVERSE_PROMPT.index("WHAT TO EAT"):]
+check("the section is headed named-meals-first",
+      "NAMED MEALS FIRST" in NLU.CONVERSE_PROMPT)
+check("it demands named options with nothing before them",
+      "nothing before them" in _wte and "No\n  preamble" in _wte)
+check("each option must carry a one-clause why naming the gap",
+      "one-clause WHY" in _wte and "the gap or the demand it answers" in _wte)
+check("the why is sourced from demand_ahead and the basis strings, not invented",
+      all(k in _wte for k in ("demand_ahead", "carb_basis", "fat_basis")))
+check("the gap fields are named so their size never has to be worked out",
+      "gap_to_low_g" in _wte and "room_to_high_g" in _wte)
+check("the sign of each gap field is stated, so 'over' is not read as 'short'",
+      "how much more is wanted" in _wte and "negative\n  when he is past it" in _wte)
+# A negative room_to_high_g is NEW information: before this the model could not compute an
+# overage, because arithmetic is banned. On protein it means he has cleared a floor, which
+# is the thing that was wanted - so the same field that helps on carbohydrate is a fresh
+# invitation to moralise on protein unless it is tied to `bias`.
+check("a negative room figure is tied to the bias, so clearing a floor is not a breach",
+      "only means\n  something where that macro's `bias` is a ceiling or a band" in _wte
+      and "being past the top is exactly right" in _wte)
+check("and no smaller option is offered because a floor was cleared",
+      "never\n  offer a smaller option because of it" in _wte)
+check("options come from his own foods before anything invented",
+      "`foods_he_actually_eats` BEFORE anything invented" in _wte)
+check("the new eating_levers fields are named so they can be used to CHOOSE",
+      "`lean`" in _wte and "`usual_meal`" in _wte)
+check("training fuel is not offered as dinner",
+      "in_session_fuel" in _wte and "never as dinner" in _wte)
+check("numbers are capped at one line and explicitly follow the food",
+      "at most ONE line of numbers" in _wte
+      and "Numbers support the choice; they never lead it." in _wte)
+check("and the coach still says which one he would pick",
+      "which single option you would pick" in _wte)
+
+# The rules the rewrite had to carry across rather than replace.
+check("the estimate-labelling rule survived the rewrite",
+      "are ESTIMATES and must be labelled as such" in _wte)
+check("the city/delivery rule survived the rewrite",
+      "His city is in the facts" in _wte and "rather than naming a chain" in _wte)
+check("the fibre PHASE anchor survived the rewrite",
+      "fibre PHASE" in _wte and "the ceiling has expired" in _wte)
+check("no arithmetic, no moralising and in_session protection are still in force",
+      "NEVER do arithmetic" in NLU.CONVERSE_PROMPT
+      and "Never moralise about food, never use restriction" in NLU.CONVERSE_PROMPT
+      and "Never suggest cutting anything marked in_session" in NLU.CONVERSE_PROMPT)
+
+# Option debates arrive through converse(), NOT through advise(): debate() resolves the
+# options and then calls converse with `options_on_the_table`. A reply shape fixed only in
+# ADVICE_PROMPT would change nothing he sees, so the pick-first shape has to be here too.
+check("converse handles a resolved option debate in its own right",
+      "options_on_the_table" in NLU.CONVERSE_PROMPT and "if_eaten" in NLU.CONVERSE_PROMPT)
+check("and that debate leads with the pick and the gap, not the arithmetic",
+      "Lead\nwith your PICK and the gap it closes" in NLU.CONVERSE_PROMPT)
+
+# ADVICE_PROMPT is currently reached by nothing but these tests; fixed anyway so the two
+# do not diverge if it is ever wired up again.
+check("the advice prompt leads with the pick, in the first sentence",
+      "Your PICK, named, in the first sentence" in NLU.ADVICE_PROMPT)
+check("the advice prompt sources the why from the demand and the gap",
+      "demand_ahead" in NLU.ADVICE_PROMPT and "gap_to_low_g" in NLU.ADVICE_PROMPT)
+check("the advice prompt puts numbers last",
+      "Numbers LAST" in NLU.ADVICE_PROMPT)
+check("the advice prompt keeps its in_session protection and its no-moralising rule",
+      "Never suggest reducing anything marked in_session" in NLU.ADVICE_PROMPT
+      and "do not use restriction language" in NLU.ADVICE_PROMPT)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
