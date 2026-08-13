@@ -34,6 +34,41 @@ approximation rather than a third estimated correction stacked on two others; th
 closed loop in deficit_correction is the answer to accumulated estimate error, not
 more estimating.
 
+FUEL FOR THE WORK REQUIRED (Option B, Jamie's call 13 Aug 2026)
+The day's carbohydrate is now prescribed from the DEMAND of the loading window - the
+sessions still to come or already done today, plus tomorrow's planned ones - not from
+the day type alone and not from the calorie residual. See classify_demand and
+DEMAND_CARB_G_PER_KG. Three things follow, and each replaces a rule that read the
+calendar too coarsely:
+
+  1. `day_type` no longer decides whether the day is a LONG one for fuelling. It
+     could not: classify_day's 240-minute ride cliff called a 230-minute ride
+     `standard`, so 13 Aug 2026 was fuelled off a 5-6 g/kg reference band while the
+     day actually needed 8-12, and the carb cross-check warned about the day's own
+     targets. The demand tiers use 150 min ride / 90 min run / 150 planned load, and
+     `is_long` inside zones() is now "a long session TODAY" per those tiers.
+     classify_day survives unchanged for protein, fibre and the stored day label.
+  2. Intensity counts, not just duration. A threshold or VO2 session is a glycogen
+     demand a 60-minute duration cannot express, so any session the coach flags as
+     quality - or names as one - lifts the window to KEY.
+  3. The deficit gate collapses from a list of five special cases to one rule: a
+     deficit is only ever available when the tier ahead is EASY or REST.
+
+THE PRESCRIPTION CAN EXCEED THE DAY'S ENERGY, AND THAT IS REPORTED, NOT RESOLVED
+A rest day before a long run has ~2,500 kcal of maintenance and a 8-10 g/kg carb
+prescription worth ~2,700 kcal of carbohydrate alone. Those cannot both be true. The
+model does NOT quietly pick a winner: the safety floors hold (protein, the essential
+fat floor, the fat zone's width), so carbs land at what the energy allows, and the
+gap is stated. Which list it lands in depends on the CAUSE, because a warning that
+fires every pre-long day is a warning the athlete learns to ignore:
+  - energy short of the prescription: a MODIFIER, beside the carb-easing line. The
+    activity calories are fine; the day structurally cannot hold the load at
+    maintenance. Only race week is allowed to let energy follow the carbs into a
+    surplus, and that stays a deliberate exception.
+  - energy far ABOVE the prescription: a WARNING naming the activity calories,
+    because a 5,000 kcal day with nothing key or long in the window means the
+    session energy is wrong, not the band.
+
 THE DEFICIT IS PROPORTIONAL AND SELF-LIMITING (Jamie's call, 10 Aug 2026)
   deficit = min(deficit_pct × maintenance, headroom)
   headroom = maintenance − (protein_floor + fat_floor + carb_band_minimum)
@@ -54,16 +89,14 @@ the work required". The orthodox inverse (bigger cut on easy days) is arithmetic
 impossible here because easy days have no headroom, so proportional wins by
 default, not on merit.
 
-Two limits hold regardless of deficit_pct, as safety ceilings rather than
-preferences:
-  1. never on long_run or long_ride days
-  2. suppressed entirely while the RHR guard is active - a deficit stacked on an
-     unresolved illness signal is the failure mode §10.2 exists to prevent, and it
-     already happened once in early August
-  3. never the day BEFORE a long session (it would fight the glycogen top-up the
-     pre-long modifier has just prescribed) and never during race-week carb loading
-The low-energy-availability flag (§10.1) fires whether or not the deficit is
-deliberate.
+ONE RULE now decides availability (13 Aug 2026): a deficit exists only when the tier
+ahead is EASY or REST. That single test subsumes the four special cases it replaces -
+long day, day before a long day, quality session ahead, race-week loading are all
+"not EASY or REST" - and it closes the gap the list had, which was a threshold session
+tomorrow. The RHR guard remains a separate veto on top: a deficit stacked on an
+unresolved illness signal is the failure mode §10.2 exists to prevent, and it already
+happened once in early August. The low-energy-availability flag (§10.1) fires whether
+or not the deficit is deliberate.
 
 FAT IS BIDIRECTIONAL AND ITS CEILING IS DERIVED, NOT LITERATURE (v0.2 §3.3)
 Two mechanisms bind on opposite days. Calorie crowding binds on low-energy days:
@@ -78,15 +111,21 @@ g is not a sane target and would compromise GI on the day it matters most. The f
 ceiling is practice, and the pre-long (90 g) and race-week (80 g) tightenings are
 reasoning. `basis` says which on every zone returned.
 
-CARBS ARE THE REMAINDER, NOT A PRESCRIBED BAND (reverting v0.2 to v0.1 here)
-Carbs are the day's shock absorber: they take whatever energy is left once protein
-and fat are paid for. v0.2 made them a prescribed g/kg band, and the day then did
-not add up - on a long ride day, protein plus fat capped at 1.2 g/kg plus carbs at
-the top of the 8-9 g/kg band left 824 kcal unallocated with nothing to absorb it.
-The day-type g/kg figures survive as (a) a safety FLOOR and (b) a cross-check that
-warns when the landing is far outside the reference band, which is usually a signal
-that the activity calories are wrong. Commercial practice does the same: Fuelin sets
-protein and fat per kg and leaves carbs emergent, classifying them after the fact.
+CARBS ARE PRESCRIBED FROM THE DEMAND, AND THE RESIDUAL BECOMES THE CROSS-CHECK
+v0.2 prescribed a carb band and the day did not add up: on a long ride day, protein
+plus fat capped at 1.2 g/kg plus carbs at the top of the 8-9 g/kg band left 824 kcal
+unallocated with nothing to absorb it. v0.3 reverted to a residual. Option B restores
+the prescription with the two mechanisms that were missing:
+  - the bands are indexed to the DEMAND AHEAD rather than to the day type, so a long
+    day's own band reaches 12 g/kg and the top of the band no longer sits far below
+    the day's energy, and
+  - fat's ceiling is energy-aware on easy and rest windows (FAT_SHARE_TARGET), so
+    what carbs decline to take has somewhere to go on a big day.
+Where they still cannot be reconciled the residual arithmetic is kept as a stated
+cross-check rather than a silent override - see the section above on which list the
+disagreement lands in. The physiological carb floors in DAY_TYPES survive as the
+bound on how far the prescription may be eased, which is what stops an impossible day
+being made to "fit" by starving carbohydrate.
 
 Race week inverts this. A 10-12 g/kg load is a PRESCRIPTION and at 83 kg it is
 3,300-4,000 kcal of carbohydrate alone, so it cannot fit inside a maintenance
@@ -138,6 +177,7 @@ sodium is new. In-session carb g/hr targets live in
 ironman-analysis/primitives/nutrition.py and are read, never restated here.
 """
 
+import re
 from datetime import date, datetime, timedelta
 
 # --- constants ---------------------------------------------------------------
@@ -166,6 +206,16 @@ PROTEIN_DEFICIT_BUMP_G_PER_KG = 0.1
 PROTEIN_POST_LONG_FLOOR_G_PER_KG = 2.2   # yesterday was a long ride
 
 FAT_FLOOR_G_PER_KG = 0.9               # well sourced; also Fuelin's floor exactly
+# Fat's ceiling is energy-aware on EASY and REST windows, as a share of the day's
+# energy. 1.2 g/kg is 100 g at 83 kg, which is 900 kcal - fine on a 3,000 kcal day and
+# absurdly tight on a 5,200 kcal one, where holding fat at 100 g while carbs are capped
+# at their prescribed band strands over a thousand calories with nowhere to go. The
+# share term is what gives that energy a home on days with no GI reason to refuse it.
+# FAT_SHARE_MAX is the outer limit: fat is never allowed past a 0.35 share of the day,
+# which is the crowding argument in reverse and binds on small days where 1.2 g/kg
+# would otherwise be over a third of the day's energy.
+FAT_SHARE_TARGET = 0.25
+FAT_SHARE_MAX = 0.35
 # Fat now has a HARD ceiling in g/kg rather than taking whatever residual calorie
 # space remains. Deriving it from the residual gave 75-229 g on a long ride day:
 # 229 g is not a sane target and would compromise GI on the day it matters most.
@@ -254,10 +304,98 @@ LONG_DAY_TYPES = ("long_run", "long_ride")
 
 CARB_LOAD_G_PER_KG = (10, 12)
 LOW_RESIDUE_CEILING_G = 20
+FIBRE_CEILING_KEY_AHEAD_G = 30         # looser than pre-long: see the fibre step
 RACE_WEEK_FIBRE_G = (10, 15)
+
+# How far the prescribed carb band and the energy residual may diverge before the day
+# says so. A tolerance rather than a strict "outside the band" test: the residual sitting
+# a little inside the band is the normal state of an ordinary day, and warning on that
+# would fire on nearly every day and mean nothing.
+CARB_DEMAND_TOLERANCE = 0.20
+
+# How much of the day's energy may sit ABOVE the top of every zone before the day is
+# called incoherent. With carbs prescribed rather than emergent, a small amount routinely
+# does - the protein and fat ranges absorb it, and a 2-hour ride day leaves ~120 kcal
+# unallocated at 4-6 g/kg, which is inside the error on the activity calories anyway. A
+# fifth of the day is different in kind and means the session energy is wrong.
+DAY_UNALLOCATED_WARN_FRACTION = 0.10
 
 RIDE_SPORTS = ("Ride", "VirtualRide", "GravelRide", "MountainBikeRide")
 RUN_SPORTS = ("Run", "VirtualRun", "TrailRun")
+
+# --- the demand ahead (Option B, 13 Aug 2026) --------------------------------
+
+DEMAND_KEY, DEMAND_LONG, DEMAND_EASY, DEMAND_REST = "key", "long", "easy", "rest"
+
+# The BANDS, which are the tier plus WHEN it falls. A long session today and a long
+# session tomorrow are different fuelling problems: today's band is the higher one
+# because the in-session fuel is counted inside the day it is taken, so the day total
+# has to carry it. Tomorrow's is a top-up, not a top-up plus the session itself.
+BAND_LONG_TODAY = "long_today"
+BAND_LONG_AHEAD = "long_ahead"
+BAND_KEY_AHEAD = "key_ahead"
+BAND_EASY_AHEAD = "easy_ahead"
+BAND_REST_AHEAD = "rest_ahead"
+
+DEMAND_CARB_G_PER_KG = {
+    BAND_LONG_TODAY: (8, 12),
+    BAND_LONG_AHEAD: (8, 10),
+    BAND_KEY_AHEAD:  (6, 8),
+    BAND_EASY_AHEAD: (4, 6),
+    BAND_REST_AHEAD: (3, 5),
+}
+BAND_LABEL = {
+    BAND_LONG_TODAY: "long session today",
+    BAND_LONG_AHEAD: "long session tomorrow",
+    BAND_KEY_AHEAD:  "quality session in the window",
+    BAND_EASY_AHEAD: "easy window",
+    BAND_REST_AHEAD: "rest window",
+}
+
+# What makes a session LONG for fuelling. These REPLACE classify_day's 240-minute ride
+# cliff for demand purposes - see the module docstring on 13 Aug. The load trigger is
+# not a nicety: planned ICU events frequently carry no duration at all, so a threshold
+# ride can arrive as a load figure and nothing else.
+LONG_RIDE_MIN = 150
+LONG_RUN_MIN = 90
+LONG_PLANNED_LOAD = 150
+
+# The coach's own quality vocabulary (primitives/modulation.py _QUALITY_TYPES, plus
+# brick, which modulation also treats as quality). Read from the session dict when the
+# caller has already classified it - the bot does, using the shared classifier - so the
+# two cannot drift. `brick` is included because a bike-to-run brick is a glycogen
+# demand whatever its duration.
+QUALITY_SESSION_TYPES = ("bike_threshold", "bike_vo2", "bike_race_pace",
+                         "run_quality", "brick")
+# The coach's classifier is EXHAUSTIVE for bike and run - every such session lands in a
+# quality bucket or one of these - so for those an easy verdict is final. It is not
+# exhaustive for swims and strength work: everything in the pool comes back `swim`
+# whether it is a recovery float or a CSS test, so those fall through to the text.
+EASY_SESSION_TYPES = ("bike_z2", "run_easy", "run_long")
+
+# FALLBACK only, for callers with no access to the coach's classifier (the publish
+# step, the tests). Mirrors modulation's keyword list and adds the swim CSS test, which
+# modulation has no bucket for but which is unambiguously a key session here.
+#
+# Unlike modulation this reads the AIM TEXT as well as the name. modulation matches the
+# name alone, having measured that coaching prose false-matches on words like
+# "intervals"; that asymmetry is deliberate rather than an oversight. A false KEY here
+# costs a slightly higher carb band and a suppressed deficit for one day; a missed KEY
+# under-fuels a session, and under-fuelling is the costlier error.
+# Word-boundary matched, as modulation does: a substring match on a short token that is
+# also an ordinary English word reads coaching prose as a prescription. "race" was the
+# one that bit - an Endurance ride whose aim said "building toward race day" came back
+# KEY, which would suppress the deficit on an easy day for no reason. So the bare "race"
+# token is matched against the session NAME only, where it means the session IS a race;
+# in the aim text only the compound forms count.
+_KEY_TOKENS = (r"threshold", r"sweet ?spot", r"vo ?2", r"v02", r"ftp", r"intervals?",
+               r"over[/ -]?unders?", r"tempo", r"fartlek", r"hill repeats?",
+               r"race ?pace", r"race rehearsal", r"race sim\w*", r"css", r"brick",
+               r"reps?")
+KEY_SESSION_RE = re.compile(r"\b(?:" + "|".join(_KEY_TOKENS + (r"race",)) + r")\b")
+KEY_AIM_RE = re.compile(r"\b(?:" + "|".join(_KEY_TOKENS) + r")\b")
+
+
 
 
 def _as_date(v):
@@ -277,6 +415,16 @@ def _as_date(v):
 
 # The floor an ordinary day carries, used as the POST-session fibre target on a long day.
 EVERYDAY_FIBRE_G = DAY_TYPES.get("standard", {}).get("fibre_g") or (40, 45)
+
+
+def _kcal_share(low, high, kcal_per_g, target_kcal) -> list:
+    """A macro zone as a share of the day's energy. Grams are not comparable across a
+    recovery day and a long-ride day; shares are, and the shares are what the fat
+    ceiling and the crowding argument are actually about."""
+    if not target_kcal:
+        return [0.0, 0.0]
+    return [round(low * kcal_per_g / target_kcal, 3),
+            round(high * kcal_per_g / target_kcal, 3)]
 
 
 def _zone(low, high, bias, basis="", confidence="normal") -> dict:
@@ -412,6 +560,123 @@ def classify_from_day_rules(day, day_rules: dict) -> tuple[str, str]:
     return ("standard" if scheduled else "recovery"), "low_confidence"
 
 
+def _planned_load(s) -> float:
+    """Planned or actual training load. ICU spells it `icu_training_load`; the coach's
+    own proposals use `load_target`."""
+    for key in ("icu_training_load", "load_target", "planned_load", "training_load"):
+        v = s.get(key)
+        if v:
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return 0.0
+    return 0.0
+
+
+def is_long_session(s) -> bool:
+    """Long for FUELLING purposes: 150 min on the bike, 90 min running, or 150 load."""
+    sport = _sport(s)
+    mins = _duration_min(s)
+    if sport in RIDE_SPORTS and mins >= LONG_RIDE_MIN:
+        return True
+    if sport in RUN_SPORTS and mins >= LONG_RUN_MIN:
+        return True
+    return _planned_load(s) >= LONG_PLANNED_LOAD
+
+
+def is_key_session(s) -> bool:
+    """Intensity, not duration. Prefers the caller's own classification."""
+    stype = (s.get("session_type") or "").strip().lower()
+    if stype in QUALITY_SESSION_TYPES:
+        return True
+    if stype in EASY_SESSION_TYPES:
+        # The caller's easy verdict is final for bike and run: a `bike_z2` session whose
+        # aim text mentions intervals is an easy session, and second-guessing it here is
+        # how two vocabularies for the same thing start.
+        return False
+    name = " ".join(str(s.get(k) or "") for k in ("name", "title", "type")).lower()
+    aim = " ".join(str(s.get(k) or "") for k in ("aim", "description")).lower()
+    return bool(KEY_SESSION_RE.search(name) or KEY_AIM_RE.search(aim))
+
+
+def _session_label(s) -> str:
+    name = (s.get("name") or s.get("title") or "").strip()
+    if name:
+        return name[:60]
+    mins = _duration_min(s)
+    sport = _sport(s) or "session"
+    return f"{sport} {mins:.0f} min" if mins else sport
+
+
+def classify_demand(*, today_sessions=None, tomorrow_sessions=None,
+                    day_type: str | None = None, tomorrow_type: str | None = None,
+                    calendar_known: bool | None = None) -> dict:
+    """The demand of the loading window: today's sessions plus tomorrow's planned ones.
+
+    Returns tier, band, when, the sessions that decided it, and a confidence. The BAND
+    is what the carb prescription reads; the tier is what a human reads.
+
+    Precedence is long-today, long-tomorrow, key, easy, rest. Long outranks key because
+    the two bands overlap and the long one is higher: a day with a threshold session and
+    a long ride in it is fuelled for the ride.
+
+    NO CALENDAR IS EASY, NOT REST. An empty result from a failed or absent calendar is
+    treated as an easy window rather than a rest one, and says so. The two bands differ
+    by 1 g/kg at the floor, and getting it wrong in the rest direction under-fuels a day
+    that may have had a session in it - which is the costlier error, the same asymmetry
+    classify_from_day_rules already applies to the day type.
+
+    `day_type` and `tomorrow_type` are read as LEGACY signals only: callers that predate
+    Option B pass classifications rather than sessions (race_weight_projection passes
+    neither), and a `long_ride` label must keep behaving like a long day for them."""
+    today = [s for s in (today_sessions or []) if s]
+    tomorrow = [s for s in (tomorrow_sessions or []) if s]
+    known = calendar_known if calendar_known is not None else bool(today or tomorrow)
+
+    long_today = [s for s in today if is_long_session(s)]
+    long_ahead = [s for s in tomorrow if is_long_session(s)]
+    key_today = [s for s in today if is_key_session(s)]
+    key_ahead = [s for s in tomorrow if is_key_session(s)]
+    legacy_long_today = day_type in LONG_DAY_TYPES
+    legacy_long_ahead = tomorrow_type in LONG_DAY_TYPES
+
+    note, confidence = "", "normal"
+    if long_today or legacy_long_today:
+        band, tier, when = BAND_LONG_TODAY, DEMAND_LONG, "today"
+        driving = long_today or [{"name": f"{day_type} (day type)"}]
+    elif long_ahead or legacy_long_ahead:
+        band, tier, when = BAND_LONG_AHEAD, DEMAND_LONG, "tomorrow"
+        driving = long_ahead or [{"name": f"{tomorrow_type} (day type)"}]
+    elif key_today or key_ahead:
+        band, tier = BAND_KEY_AHEAD, DEMAND_KEY
+        when = "today" if key_today else "tomorrow"
+        driving = key_today + key_ahead
+    elif not known:
+        band, tier, when, driving = BAND_EASY_AHEAD, DEMAND_EASY, None, []
+        confidence = "low_confidence"
+        note = ("no calendar data: assuming an easy window rather than a rest one, "
+                "because under-fuelling is the costlier error")
+    elif today or tomorrow:
+        band, tier, when = BAND_EASY_AHEAD, DEMAND_EASY, ("today" if today else "tomorrow")
+        driving = today + tomorrow
+    else:
+        band, tier, when, driving = BAND_REST_AHEAD, DEMAND_REST, None, []
+
+    labels = []
+    for s in driving:
+        label = _session_label(s)
+        if s in tomorrow and s not in today:
+            label += " (tomorrow)"
+        if label not in labels:
+            labels.append(label)
+    return {"tier": tier, "band": band, "when": when, "sessions": labels,
+            "key_in_window": bool(key_today or key_ahead),
+            "long_in_window": bool(long_today or long_ahead
+                                   or legacy_long_today or legacy_long_ahead),
+            "calendar_known": bool(known), "confidence": confidence, "note": note,
+            "carb_g_per_kg": list(DEMAND_CARB_G_PER_KG[band])}
+
+
 # Compendium MET values, for a session that is PLANNED and therefore carries no measured
 # energy. Deliberately mid-range rather than optimistic: this feeds a maintenance figure,
 # and over-estimating it would manufacture an intake target out of nothing.
@@ -478,6 +743,7 @@ def net_session_kcal(sessions, rmr: float, weight_kg: float = None) -> tuple[flo
 def zones(*, day_type: str, rolling_weight: float, rmr: float,
           sessions=None, tomorrow_type: str | None = None,
           yesterday_type: str | None = None, days_to_race: int | None = None,
+          tomorrow_sessions=None, calendar_known: bool | None = None,
           deficit_enabled: bool = False, deficit_pct: float = DEFICIT_PCT_DEFAULT,
           rhr_guard_active: bool = False, day_confidence: str = "normal",
           correction_kcal: float = 0.0,
@@ -485,10 +751,16 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
     """The day's landing zones, the modifiers applied, and any warning the inputs
     justify.
 
-    Order matters: protein and carbs are priced first, the deficit is then capped by
-    what remains above those floors, and fat's ceiling is whatever residual calorie
-    space is left. Computing fat before the deficit would let a deficit eat into the
-    carbs that fuel the session instead of into fat."""
+    Order matters: protein and the PRESCRIBED carbs are priced first, the deficit is
+    then capped by what remains above those floors, and fat takes the energy left
+    between its own floor and its ceiling. Computing fat before the deficit would let a
+    deficit eat into the carbs that fuel the session instead of into fat.
+
+    `sessions` is today's (completed and still-planned); `tomorrow_sessions` is
+    tomorrow's planned. Together they are the loading window the carb prescription is
+    read from. `calendar_known` says whether the calendar was actually readable, which
+    an empty session list cannot: a genuine rest day and a failed ICU call look
+    identical from here, and they must not be fuelled identically."""
     if day_type not in DAY_TYPES:
         raise ValueError(f"unknown day_type {day_type!r}")
     if not rolling_weight:
@@ -497,9 +769,37 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
     net, kcal_confidence = net_session_kcal(sessions, rmr, weight_kg=rolling_weight)
     maintenance = base_tdee(rmr, tdee_multiplier) + net
     modifiers, warnings = [], []
-    is_long = day_type in LONG_DAY_TYPES
-    pre_long = tomorrow_type in LONG_DAY_TYPES
     race_week = days_to_race is not None and 0 <= days_to_race <= 3
+
+    demand = classify_demand(today_sessions=sessions, tomorrow_sessions=tomorrow_sessions,
+                             day_type=day_type, tomorrow_type=tomorrow_type,
+                             calendar_known=calendar_known)
+    if race_week and demand["band"] in (BAND_EASY_AHEAD, BAND_REST_AHEAD):
+        # Race week is a KEY window by construction, and the calendar cannot be relied
+        # on to say so - the race is often not an ICU event at all, and the taper
+        # sessions around it read as easy. Correcting the band here rather than adding
+        # a second deficit gate is what keeps the deficit rule a single test.
+        demand = dict(demand, band=BAND_KEY_AHEAD, tier=DEMAND_KEY, when="today",
+                      note="race week: the race is the key session ahead")
+    band = demand["band"]
+    # is_long means "a long session TODAY", from the demand tiers rather than from
+    # day_type. day_type's 240-minute ride cliff called a 230-minute ride standard and
+    # left the fibre ceiling and the fat GI cap off on a day that needed both.
+    is_long = band == BAND_LONG_TODAY
+    pre_long = band == BAND_LONG_AHEAD
+    key_ahead = band == BAND_KEY_AHEAD
+    # A hard session TODAY, long or quality. It is what decides whether the fibre ceiling
+    # is PHASED: the residue reason expires when the session is done, and a ceiling that
+    # ran all day told him off for eating his fibre after the work - the exact complaint
+    # that produced the phasing in the first place. A quality session earns the same
+    # treatment as a long one; only the ceiling's height differs.
+    session_today = (is_long or key_ahead) and demand["when"] == "today"
+    if demand["note"] and demand["confidence"] == "low_confidence":
+        # Only when the demand was GUESSED, not merely when the session lists were empty:
+        # a caller that passes a `long_ride` tomorrow_type and no session dicts has told
+        # us what we need. A guess is a warning rather than a modifier because it is the
+        # one input the athlete can correct - he can tell the bot what he is doing.
+        warnings.append("demand could not be classified: " + demand["note"])
 
     # 1. protein: a g/kg band that flexes with load, the deficit, and yesterday.
     #    The deficit bump is applied only if a deficit will ACTUALLY be applied, which
@@ -509,8 +809,10 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
     #    deficit" with no deficit in it. Two passes, because the bump feeds back into
     #    the headroom that decides whether it should have been applied at all.
     p_lo_kg, p_hi_kg = PROTEIN_G_PER_KG[day_type]
-    deficit_possible = (deficit_enabled and not is_long and not rhr_guard_active
-                        and not pre_long and not race_week)
+    # ONE RULE: a deficit exists only when the window ahead is EASY or REST. The RHR
+    # guard is a separate veto, not part of the tier test - it is a safety ceiling.
+    deficit_tier_ok = band in (BAND_EASY_AHEAD, BAND_REST_AHEAD)
+    deficit_possible = deficit_enabled and deficit_tier_ok and not rhr_guard_active
     if deficit_possible:
         # Probe with the BUMPED floor, not the base one: the question is whether a
         # deficit survives once the bump is paid for. Probing with the base floor
@@ -529,35 +831,39 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
         modifiers.append("protein floor raised: yesterday was a long ride")
     p_low, p_high = p_lo_kg * rolling_weight, p_hi_kg * rolling_weight
 
-    # 2. carbs: the SAFETY FLOOR only. The upper end is derived at step 5 from
-    #    whatever energy is left, because carbs are the day's shock absorber - see
-    #    the module docstring on why they cannot be a prescribed band.
+    # 2. carbs: PRESCRIBED from the demand ahead. Race week keeps its own, higher
+    #    prescription, which also overrides the demand band rather than adding to it.
     if race_week:
         c_lo_kg, c_hi_kg = CARB_LOAD_G_PER_KG
         modifiers.append("carb load: within 3 days of the race")
     else:
-        c_lo_kg, c_hi_kg = DAY_TYPES[day_type]["carb_g_per_kg"]
-    # 3. fat floor is known before the carb floor moves, because the carb lift below
+        c_lo_kg, c_hi_kg = DEMAND_CARB_G_PER_KG[band]
+        detail = (f" ({', '.join(demand['sessions'][:2])})" if demand["sessions"] else "")
+        modifiers.append(f"carbs prescribed {c_lo_kg}-{c_hi_kg} g/kg: "
+                         f"{BAND_LABEL[band]}{detail}")
+    # 3. fat floor is known before the carb floor moves, because the carb easing below
     #    has to respect it.
     f_floor = FAT_FLOOR_G_PER_KG * rolling_weight
 
     c_low = c_lo_kg * rolling_weight
-    if pre_long and not race_week:
-        # Topping glycogen before the session: lift the floor toward the band midpoint.
-        c_low = (c_low + c_hi_kg * rolling_weight) / 2
-        modifiers.append("carb floor lifted: long session tomorrow")
+    carb_bound = "prescription"
 
-    # The carb SAFETY FLOOR must never squeeze the fat zone flat. This cap is general,
-    # not pre-long-only: the same collapse appeared three times in three different
-    # places before it was generalised - once from the deficit taking the full
-    # headroom, once from the pre-long carb lift, and once from the post-long-ride
-    # protein floor rising to 2.2 g/kg on a low-energy day (fat 75-84, nine grams of
-    # range). Carbs are explicitly the day's shock absorber and the day-type g/kg
-    # figures are only a cross-check, so carbs yield here and the dip below the
-    # reference floor is REPORTED rather than hidden.
+    # The carb floor must never squeeze the fat zone flat. This cap is general, not
+    # pre-long-only: the same collapse appeared three times in three different places
+    # before it was generalised - once from the deficit taking the full headroom, once
+    # from the pre-long carb lift, and once from the post-long-ride protein floor rising
+    # to 2.2 g/kg on a low-energy day (fat 75-84, nine grams of range).
+    #
+    # What the easing may NOT go below is the day type's own physiological floor in
+    # DAY_TYPES, discounted by CARB_EASE_FLOOR_FRACTION - not a fraction of the
+    # prescription. The prescription is a demand target and on a low-energy day it can
+    # sit two to three times above what the day's energy holds; bounding the easing at
+    # 80% of THAT would leave a floor the day cannot pay for, and the arithmetic
+    # downstream then produces a negative fat residual rather than a usable zone.
     if not race_week:
         cap = (maintenance - p_low * 4 - (f_floor + FAT_ZONE_MIN_WIDTH_G) * 9) / 4
-        hard_min = c_lo_kg * rolling_weight * CARB_EASE_FLOOR_FRACTION
+        hard_min = (DAY_TYPES[day_type]["carb_g_per_kg"][0] * rolling_weight
+                    * CARB_EASE_FLOOR_FRACTION)
         if c_low > cap:
             eased = max(cap, hard_min)
             if eased < c_low:
@@ -565,6 +871,7 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
                     f"carb floor eased to {eased / rolling_weight:.1f} g/kg to leave "
                     f"fat some room")
                 c_low = eased
+                carb_bound = "energy"
             if cap < hard_min:
                 # Easing stopped at its own limit, so the day genuinely does not fit.
                 # Say so rather than starving carbs until the arithmetic closes.
@@ -580,17 +887,24 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
 
     deficit = 0.0
     if deficit_enabled:
-        if is_long:
-            warnings.append("deficit suppressed: long session day, fuelling takes priority")
-        elif rhr_guard_active:
+        # The reason is derived from the ONE rule, not from a second list of gates. It
+        # must always be present when deficit_enabled and the deficit is nil, or the
+        # athlete sees a deficit setting that silently does nothing.
+        if rhr_guard_active:
             warnings.append("deficit suppressed: resting HR elevated, holding maintenance")
         elif race_week:
             warnings.append("deficit suppressed: carb loading for the race")
+        elif is_long:
+            warnings.append("deficit suppressed: long session day, fuelling takes priority")
         elif pre_long:
-            # A deficit here fights the modifier already applied: carbs have just
-            # been pushed to the upper half to arrive at tomorrow's session
-            # glycogen-loaded. Cutting calories on the same day works against it.
+            # A deficit here fights the prescription already applied: carbs have been
+            # set at 8-10 g/kg to arrive at tomorrow's session glycogen-loaded, and
+            # cutting calories on the same day works against it.
             warnings.append("deficit suppressed: topping glycogen for tomorrow's long session")
+        elif key_ahead:
+            named = (f" ({demand['sessions'][0]})" if demand["sessions"] else "")
+            warnings.append(f"deficit suppressed: quality session in the window"
+                            f"{named}, fuelling takes priority")
         else:
             uncapped = deficit_pct * maintenance
             deficit = min(uncapped, allowable) + correction_kcal
@@ -622,48 +936,119 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
             f"target driven by the carb load, not maintenance: "
             f"{carb_load_surplus:+d} kcal against maintenance")
 
-    # 4. fat ceiling: a g/kg band, tightened for GI on pre-long and race days, and
-    #    then limited by whatever energy is actually left. The g/kg cap is what stops
-    #    the old residual approach quoting 229 g on a long ride.
+    # 4. the carbs the day's ENERGY can hold at the floors. This is the old residual
+    #    figure, kept as the cross-check rather than as the answer.
+    carbs_energy_allows = (target_kcal - p_low * 4 - f_floor * 9) / 4
+
+    # 5. fat: floor sourced, ceiling either GI-bound, g/kg, energy-share or residual -
+    #    and the basis has to say WHICH, because four different mechanisms can produce
+    #    the same number and the athlete cannot tell them apart from the figure alone.
+    #
+    #    GI governs whenever there is a hard session in the window, today or tomorrow:
+    #    fat slows gastric emptying and the carbohydrate is the point of those days. On
+    #    easy and rest windows there is no GI reason to refuse fat, and holding it at
+    #    1.2 g/kg on a large day strands energy nothing else can take.
+    gi_governs = is_long or pre_long or key_ahead or race_week
     f_ceiling = FAT_CEILING_G_PER_KG * rolling_weight
-    fat_basis = f"{FAT_FLOOR_G_PER_KG}-{FAT_CEILING_G_PER_KG} g/kg (floor sourced, ceiling practice)"
+    fat_bound = "g-kg"
+    fat_basis = (f"g-kg bound: {FAT_FLOOR_G_PER_KG}-{FAT_CEILING_G_PER_KG} g/kg "
+                 f"(floor sourced, ceiling practice)")
     if race_week and f_ceiling > FAT_CEILING_RACE_WEEK_G:
-        f_ceiling = FAT_CEILING_RACE_WEEK_G
-        fat_basis = "race week ceiling (GI, reasoned)"
+        f_ceiling, fat_bound = FAT_CEILING_RACE_WEEK_G, "GI"
+        fat_basis = "GI bound: race week ceiling (reasoned)"
         modifiers.append("fat ceiling tightened: race week")
-    elif pre_long and f_ceiling > FAT_CEILING_PRE_LONG_G:
-        f_ceiling = FAT_CEILING_PRE_LONG_G
-        fat_basis = "pre-long-session ceiling (GI, reasoned)"
-        modifiers.append("fat ceiling tightened: long session tomorrow")
-    # Energy left for fat once protein and the carb safety floor are paid for.
+    elif (pre_long or key_ahead) and f_ceiling > FAT_CEILING_PRE_LONG_G:
+        # Applies to a quality session ahead as well as a long one. The GI argument does
+        # not care which kind of hard session it is, and the pre_long flag alone missed
+        # every threshold and VO2 day.
+        f_ceiling, fat_bound = FAT_CEILING_PRE_LONG_G, "GI"
+        fat_basis = f"GI bound: {FAT_CEILING_PRE_LONG_G} g with a hard session ahead (reasoned)"
+        modifiers.append(f"fat ceiling tightened: {BAND_LABEL[band]}")
+    elif not gi_governs:
+        share_ceiling = FAT_SHARE_TARGET * target_kcal / 9
+        if share_ceiling > f_ceiling:
+            f_ceiling, fat_bound = share_ceiling, "share"
+            fat_basis = (f"share bound: {FAT_SHARE_TARGET:.0%} of the "
+                         f"{target_kcal:.0f} kcal target, above the "
+                         f"{FAT_CEILING_G_PER_KG} g/kg figure")
+        # And never past FAT_SHARE_MAX of the day, which is the crowding argument: on a
+        # small day 1.2 g/kg is itself more than a third of the energy. Never below the
+        # floor, which is a safety figure and not subject to the share argument.
+        share_cap = max(f_floor, FAT_SHARE_MAX * target_kcal / 9)
+        if share_cap < f_ceiling:
+            f_ceiling, fat_bound = share_cap, "share"
+            fat_basis = (f"share bound: capped at {FAT_SHARE_MAX:.0%} of the "
+                         f"{target_kcal:.0f} kcal target")
+
+    # Energy left for fat once protein and the PRESCRIBED carb floor are paid for.
     fat_room_g = (target_kcal - p_low * 4 - c_low * 4) / 9
     f_high = max(f_floor, min(f_ceiling, fat_room_g))
+    if fat_room_g < f_ceiling - 0.05:
+        fat_bound = "residual"
+        fat_basis = (f"residual bound: {max(0.0, fat_room_g):.0f} g of energy left after "
+                     f"protein and the prescribed carbs, under the {f_ceiling:.0f} g ceiling")
     if fat_room_g < f_floor:
         warnings.append(
             f"no calorie room for the fat floor: the protein and carb floors leave "
             f"{fat_room_g:.0f} g against a {f_floor:.0f} g floor")
 
-    # 5. carbs absorb the remainder. The zone spans the two extremes of the protein
-    #    and fat ranges, so the day CLOSES at both ends of every zone. A prescribed
-    #    carb band cannot do that: on a long ride day, protein plus capped fat plus
-    #    carbs at the top of the 8-9 g/kg band left 824 kcal unallocated. The
-    #    day-type g/kg figures survive only as a cross-check that warns.
-    c_high = max(c_low, (target_kcal - p_low * 4 - f_floor * 9) / 4)
-    c_derived_low = max(c_low, (target_kcal - p_high * 4 - f_high * 9) / 4)
+    # 6. the carb ZONE. The low is the prescription (eased above if the day's energy
+    #    could not hold it); the high is the prescription's high, clamped to what the
+    #    energy allows so the top of the zone is reachable without breaching the fat
+    #    floor. Carbs are no longer the shock absorber, so the day does not close by
+    #    construction at the top - the cross-check below is what makes that visible
+    #    instead of silent.
+    c_high = max(c_low, min(c_hi_kg * rolling_weight, carbs_energy_allows))
+    c_derived_low = c_low
     if race_week:
-        # Race week is the one case where carbs are PRESCRIBED, not emergent: the
-        # load is the point of the day and protein and fat yield to it.
+        # Race week is the one case where the energy follows the carbs rather than the
+        # reverse, so the prescription's high stands whatever the residual says.
         c_high = max(c_high, c_hi_kg * rolling_weight)
-        c_derived_low = c_low
     c_per_kg_low = c_derived_low / rolling_weight
     c_per_kg_high = c_high / rolling_weight
-    if not race_week and not (c_lo_kg * 0.8 <= c_per_kg_high <= c_hi_kg * 1.35):
-        warnings.append(
-            f"carbs land at {c_per_kg_low:.1f}-{c_per_kg_high:.1f} g/kg against the "
-            f"{day_type} reference band {c_lo_kg}-{c_hi_kg} g/kg; check activity calories")
+    carb_basis = (f"demand band {c_lo_kg}-{c_hi_kg} g/kg ({BAND_LABEL[band]}); "
+                  f"lands {c_per_kg_low:.1f}-{c_per_kg_high:.1f} g/kg")
+    if race_week:
+        carb_basis = (f"race-week load {c_lo_kg}-{c_hi_kg} g/kg (prescription); "
+                      f"lands {c_per_kg_low:.1f}-{c_per_kg_high:.1f} g/kg")
+    elif carb_bound == "energy":
+        carb_basis = (f"energy bound: the demand band wanted {c_lo_kg}-{c_hi_kg} g/kg, "
+                      f"the day holds {c_per_kg_low:.1f}-{c_per_kg_high:.1f} g/kg")
 
-    # 5. fibre: a target most days, a CEILING before long sessions and at the race.
-    #    Same day type can carry opposite bias, decided purely by the lookahead.
+    # 7. the cross-check, in two directions with two different causes - and therefore two
+    #    different lists, because a warning that fires on every pre-long recovery day is a
+    #    warning the athlete learns to ignore.
+    # Measured against the protein FLOOR, not its high. Protein's high is not a ceiling -
+    # eating past it is explicitly not an event - so counting it as absorbing capacity
+    # would let a day claim to add up only on the assumption that he eats 208 g of protein
+    # rather than the 183 g he was actually asked for. The floors are the instruction.
+    unallocated = target_kcal - (p_low * 4 + c_high * 4 + f_high * 9)
+    if not race_week:
+        want_low = c_lo_kg * rolling_weight
+        if carbs_energy_allows < want_low * (1 - CARB_DEMAND_TOLERANCE):
+            # The day cannot hold its own prescription. Not an input error: a rest day
+            # before a long ride has ~2,500 kcal of maintenance and the band wants
+            # ~2,700 kcal of carbohydrate alone. A MODIFIER, beside the easing line.
+            modifiers.append(
+                f"energy maths and demand bands disagree by "
+                f"{(want_low - carbs_energy_allows) * 4:.0f} kcal: the {BAND_LABEL[band]} "
+                f"band wants {c_lo_kg}-{c_hi_kg} g/kg and this day's energy holds "
+                f"{carbs_energy_allows / rolling_weight:.1f} g/kg at maintenance")
+        elif unallocated > DAY_UNALLOCATED_WARN_FRACTION * target_kcal:
+            # The other direction, and tested across the WHOLE day rather than on carbs
+            # alone: with carbs prescribed rather than emergent, some energy routinely
+            # sits above the carb band and the protein and fat ranges absorb it. That is
+            # ordinary. What is NOT ordinary is a day whose energy cannot be allocated
+            # even at the top of every zone, and the cause is near enough always the
+            # session energy: a day with this much training in it does not have an easy
+            # window ahead of it.
+            warnings.append(
+                f"energy maths and demand bands disagree by {unallocated:.0f} kcal; check "
+                f"activity calories - {maintenance:.0f} kcal of maintenance against "
+                f"{BAND_LABEL[band]} carbs of {c_lo_kg}-{c_hi_kg} g/kg")
+
+    # 8. fibre: a target most days, a CEILING before hard sessions and at the race.
+    #    Same day type can carry opposite bias, decided purely by the demand ahead.
     if race_week:
         fb_low, fb_high, fb_bias = RACE_WEEK_FIBRE_G[0], RACE_WEEK_FIBRE_G[1], BIAS_CEILING
         modifiers.append("fibre ceiling: race week")
@@ -672,6 +1057,13 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
         modifiers.append("fibre flipped to a ceiling: long session tomorrow")
     elif is_long:
         fb_low, fb_high, fb_bias = 0, LOW_RESIDUE_CEILING_G, BIAS_CEILING
+    elif key_ahead:
+        # Looser than the pre-long ceiling on purpose. A threshold session is an hour of
+        # hard work, not five hours of splanchnic hypoperfusion, so the residue argument
+        # is real but weaker - and fibre is a weekly job that a 20 g ceiling twice a week
+        # would quietly make unreachable.
+        fb_low, fb_high, fb_bias = 0, FIBRE_CEILING_KEY_AHEAD_G, BIAS_CEILING
+        modifiers.append("fibre flipped to a ceiling: quality session in the window")
     else:
         fb_low, fb_high = DAY_TYPES[day_type]["fibre_g"]
         fb_bias = BIAS_FLOOR
@@ -691,10 +1083,22 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
         "carb_load_surplus_kcal": carb_load_surplus,
         "protein_g": _zone(p_low, p_high, BIAS_FLOOR,
                            f"{p_lo_kg:.1f}-{p_hi_kg:.1f} g/kg bodyweight, flexing with load"),
-        "fat_g": _zone(f_floor, f_high, BIAS_BAND, fat_basis),
-        "carb_g": _zone(c_derived_low, c_high, BIAS_BAND,
-                        "remainder after protein and fat; "
-                        f"lands {c_per_kg_low:.1f}-{c_per_kg_high:.1f} g/kg"),
+        "fat_g": dict(_zone(f_floor, f_high, BIAS_BAND, fat_basis),
+                      bound=fat_bound,
+                      kcal_share=_kcal_share(f_floor, f_high, 9, target_kcal)),
+        "carb_g": dict(_zone(c_derived_low, c_high, BIAS_BAND, carb_basis),
+                       bound=carb_bound,
+                       kcal_share=_kcal_share(c_derived_low, c_high, 4, target_kcal)),
+        # What the window ahead actually is, and which sessions decided it. The zone
+        # numbers are unreadable without it: 8-12 g/kg of carbohydrate and a suppressed
+        # deficit only make sense once the page can name the session they are for.
+        "demand_ahead": {"tier": demand["tier"], "band": band, "when": demand["when"],
+                         "sessions": demand["sessions"],
+                         "carb_g_per_kg": [c_lo_kg, c_hi_kg],
+                         "calendar_known": demand["calendar_known"],
+                         "label": BAND_LABEL[band]},
+        "carb_basis": carb_basis,
+        "fat_basis": fat_basis,
         # PHASED, because the ceiling is about TIMING and the day total cannot say so.
         # Jamie: "can i have fibre after i have done my run? i understand low fibre before
         # but need to get it back at sometpoint?" - yes, and the model knew it while the
@@ -714,7 +1118,7 @@ def zones(*, day_type: str, rolling_weight: float, rmr: float,
                                                    "session is done; fibre is a weekly job"),
                             "phase_note": ("ceiling until the session is done, then back "
                                            "to the floor")}
-                           if (is_long and not race_week) else {})),
+                           if (session_today and not race_week) else {})),
         "modifiers": modifiers,
         "warnings": warnings,
         "sodium_basis": {"sweat_na_mg_l": [SWEAT_NA_ASSUMED_LOW, SWEAT_NA_ASSUMED_HIGH],

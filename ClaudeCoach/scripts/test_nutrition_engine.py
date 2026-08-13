@@ -78,10 +78,25 @@ zz = z(day_type="standard", sessions=RIDE2H)
 check("protein is a floor", zz["protein_g"]["bias"] == N.BIAS_FLOOR)
 check("calories are a band", zz["kcal"]["bias"] == N.BIAS_BAND)
 check("fibre on a normal day is a floor", zz["fibre_g"]["bias"] == N.BIAS_FLOOR)
-check("fat zone declares which end is sourced and which is practice",
-      "sourced" in zz["fat_g"]["basis"] and "practice" in zz["fat_g"]["basis"])
 check("protein zone states its g/kg basis", "g/kg" in zz["protein_g"]["basis"])
-check("carb zone says it is the remainder", "remainder" in zz["carb_g"]["basis"])
+# UPDATED for Option B (13 Aug 2026). Four mechanisms can now set the fat ceiling and
+# two can set the carb zone, and they produce indistinguishable numbers, so the zone
+# must name WHICH bound it. The old assertions checked for one specific wording, which
+# only held while there was one mechanism.
+check(f"fat zone names the bound that set it (got {zz['fat_g']['bound']})",
+      zz["fat_g"]["bound"] in ("g-kg", "GI", "share", "residual")
+      and zz["fat_g"]["bound"] in zz["fat_g"]["basis"])
+check(f"carb zone names its bound (got {zz['carb_g']['bound']})",
+      zz["carb_g"]["bound"] in ("prescription", "energy"))
+check("carb zone states the demand band it came from",
+      "g/kg" in zz["carb_g"]["basis"]
+      and ("demand band" in zz["carb_g"]["basis"] or "energy bound" in zz["carb_g"]["basis"]))
+_gkg = z(day_type="long_ride", sessions=LONGRIDE)["fat_g"]
+check("the g/kg fat basis still declares which end is sourced and which is practice",
+      _gkg["bound"] == "g-kg"
+      and "sourced" in _gkg["basis"] and "practice" in _gkg["basis"])
+check("both bands publish their share of the day's energy",
+      len(zz["fat_g"]["kcal_share"]) == 2 and 0 < zz["carb_g"]["kcal_share"][1] < 1)
 check("calorie band is +/-5%",
       abs(zz["kcal"]["high"] - zz["kcal"]["low"] - 0.1 * zz["kcal_target"]) < 2)
 
@@ -152,18 +167,37 @@ off = z(day_type="standard", sessions=RIDE2H)
 check("deficit off by default", off["deficit_applied_kcal"] == 0)
 check("deficit lowers the target", off["kcal_target"] > std["kcal_target"])
 
-# 7b) The day must CLOSE: protein floor + fat floor + carb high == the target. A
-#     prescribed carb band left 824 kcal unallocated on long days.
-#     NOTE this is close to an identity while the carb safety floor does not bind,
-#     which is the point: the check that earns its keep is 7b-ii below, where the
-#     floor DOES bind and max() would otherwise paper over an unsatisfiable day.
+# 7b) The day must be SATISFIABLE at both ends: the floors fit under the target, and
+#     the tops of the zones cover it. UPDATED for Option B - the old form asserted an
+#     identity (protein floor + fat floor + carb high == target) which held only while
+#     carbs were the residual and therefore took whatever was left by construction. With
+#     carbs prescribed that identity is false by design, and asserting it would force the
+#     residual model back. What still MUST hold is that the athlete can land inside every
+#     zone at once, which is the property the old check was standing in for, and it is a
+#     stronger statement: it uses the protein and fat ranges rather than their floors.
 for label, zc in (("recovery", rec), ("standard", std), ("long_ride", lng),
                   ("pre-long", pre)):
-    total = zc["protein_g"]["low"] * 4 + zc["fat_g"]["low"] * 9 + zc["carb_g"]["high"] * 4
-    check(f"{label} day closes to its target (got {total:.0f} vs {zc['kcal_target']})",
-          abs(total - zc["kcal_target"]) <= 2)
+    lows = (zc["protein_g"]["low"] * 4 + zc["fat_g"]["low"] * 9
+            + zc["carb_g"]["low"] * 4)
+    # The protein FLOOR, deliberately: protein's high is not a ceiling, so counting it as
+    # absorbing capacity would let a day close only by assuming he eats past what he was
+    # asked for. This is the pessimistic reading, which is the right one for a check whose
+    # job is to notice a day that does not add up.
+    highs = (zc["protein_g"]["low"] * 4 + zc["fat_g"]["high"] * 9
+             + zc["carb_g"]["high"] * 4)
+    check(f"{label} floors fit inside the target ({lows:.0f} vs {zc['kcal_target']})",
+          lows <= zc["kcal_target"] + 2)
+    check(f"{label} zone tops reach the target ({highs:.0f} vs {zc['kcal_target']})",
+          highs >= zc["kcal_target"] - 2)
     check(f"{label} carb high is not below its safety floor",
           zc["carb_g"]["high"] >= zc["carb_g"]["low"] - 0.5)
+    # And the day may not strand a large share of its energy above every zone without
+    # saying so. That was v0.2's failure - 824 kcal unallocated on a long ride day with
+    # nothing to absorb it and no warning either.
+    unallocated = zc["kcal_target"] - highs
+    check(f"{label} strands no energy silently ({unallocated:.0f} kcal)",
+          unallocated <= N.DAY_UNALLOCATED_WARN_FRACTION * zc["kcal_target"]
+          or any("disagree" in w for w in zc["warnings"]))
 
 # 7b-ii) When the floors genuinely exceed the day's energy, the engine must SAY so
 #        rather than let max() hide it. Forced with an implausibly low RMR, because
@@ -232,8 +266,22 @@ check("race week is a 10-15 g fibre ceiling",
       race["fibre_g"]["bias"] == N.BIAS_CEILING and race["fibre_g"]["high"] <= 15)
 check("race week loads carbs to 10-12 g/kg",
       race["carb_g"]["low"] >= 10 * W - 1)
-check("carbs go to the upper half before a long session",
-      flip["carb_g"]["low"] > plain["carb_g"]["low"])
+# UPDATED for Option B. The old check compared two RECOVERY days, one before a long
+# ride, and asserted the carb floor was lifted. Under the demand bands a rest day before
+# a long session is prescribed 8-10 g/kg - about 2,700 kcal of carbohydrate against a
+# 2,491 kcal maintenance - so the lift is not physically available on that day and the
+# model reports the disagreement instead of pretending. The lift is asserted on a day
+# that HAS the energy for it, which is where the behaviour is real.
+check("a rest day cannot hold the pre-long prescription, and says so",
+      flip["carb_g"]["bound"] == "energy"
+      and any("disagree" in m for m in flip["modifiers"]))
+check("and the shortfall is a modifier, not a warning: the inputs are fine",
+      not any("disagree" in w for w in flip["warnings"]))
+lift_plain = z(day_type="standard", sessions=RIDE2H)
+lift_pre = z(day_type="standard", sessions=RIDE2H, tomorrow_type="long_ride")
+check(f"carbs go to the upper half before a long session when the day can hold it "
+      f"(got {lift_pre['carb_g']['low']:.0f} vs {lift_plain['carb_g']['low']:.0f} g)",
+      lift_pre["carb_g"]["low"] > lift_plain["carb_g"]["low"] * 1.5)
 
 # 10) Post-long-ride protein modifier.
 post = z(day_type="recovery", yesterday_type="long_ride")
@@ -691,6 +739,259 @@ check("a FLOOR is one-sided on purpose and left alone",
       N._zone(180.0, 180.0, N.BIAS_FLOOR, "test")["high"] == 180.0)
 check("so is a CEILING",
       N._zone(0.0, 20.0, N.BIAS_CEILING, "test")["high"] == 20.0)
+
+print("\n--- fuel for the work required: the demand ahead (Option B, 13 Aug 2026) ---")
+# The tier classifier, one trigger at a time. These are the thresholds that REPLACE
+# classify_day's 240-minute ride cliff for fuelling purposes, and the cliff is exactly
+# what they exist to fix: a 230-minute ride was fuelled as a `standard` day.
+d = N.classify_demand
+check("a 150 min ride is LONG today",
+      d(today_sessions=[{"type": "Ride", "moving_time": 150 * 60}])["band"]
+      == N.BAND_LONG_TODAY)
+check("a 149 min ride is not",
+      d(today_sessions=[{"type": "Ride", "moving_time": 149 * 60}])["band"]
+      == N.BAND_EASY_AHEAD)
+check("THE CLIFF: a 230 min ride is LONG, where classify_day still says standard",
+      d(today_sessions=[{"type": "Ride", "moving_time": 230 * 60}])["tier"] == N.DEMAND_LONG
+      and N.classify_day([{"type": "Ride", "moving_time": 230 * 60}]) == "standard")
+check("a 90 min run is LONG today",
+      d(today_sessions=[{"type": "Run", "moving_time": 90 * 60}])["band"]
+      == N.BAND_LONG_TODAY)
+check("planned load alone can make a session LONG, with no duration at all",
+      d(today_sessions=[{"type": "Ride", "icu_training_load": 160}])["band"]
+      == N.BAND_LONG_TODAY)
+check("the coach's own load key is read too",
+      d(today_sessions=[{"type": "Run", "load_target": 150}])["band"] == N.BAND_LONG_TODAY)
+check("tomorrow's long session is LONG AHEAD, a different band from today's",
+      d(tomorrow_sessions=[{"type": "Ride", "moving_time": 240 * 60}])["band"]
+      == N.BAND_LONG_AHEAD)
+check("a 60 min threshold ride is KEY on its name alone",
+      d(today_sessions=[{"type": "Ride", "moving_time": 3600,
+                         "name": "Build ride (3x20 sweet spot)"}])["tier"] == N.DEMAND_KEY)
+check("so is a VO2 session tomorrow",
+      d(tomorrow_sessions=[{"type": "Run", "moving_time": 3600,
+                            "name": "VO2 intervals"}])["band"] == N.BAND_KEY_AHEAD)
+check("and a swim CSS test, which the coach's classifier has no bucket for",
+      d(today_sessions=[{"type": "Swim", "moving_time": 3600, "name": "CSS test",
+                         "session_type": "swim"}])["tier"] == N.DEMAND_KEY)
+check("the coach's own quality verdict is honoured when it is supplied",
+      d(today_sessions=[{"type": "Ride", "moving_time": 3600, "name": "Wednesday ride",
+                         "session_type": "bike_vo2"}])["tier"] == N.DEMAND_KEY)
+check("and its EASY verdict overrides prose that merely mentions intervals",
+      d(today_sessions=[{"type": "Ride", "moving_time": 3600, "name": "Endurance ride",
+                         "session_type": "bike_z2",
+                         "description": "steady, no intervals today"}])["tier"]
+      == N.DEMAND_EASY)
+check("LONG outranks KEY: the day is fuelled for the long session",
+      d(today_sessions=[{"type": "Ride", "moving_time": 200 * 60, "name": "Long ride"},
+                        {"type": "Run", "moving_time": 1800,
+                         "name": "Tempo run"}])["band"] == N.BAND_LONG_TODAY)
+check("a known-empty calendar is a REST window",
+      d(today_sessions=[], tomorrow_sessions=[], calendar_known=True)["band"]
+      == N.BAND_REST_AHEAD)
+# The fallback. Guessing rest would UNDER-fuel a day that may have had a session in it,
+# and under-fuelling is the costlier error - the same asymmetry classify_from_day_rules
+# applies to the day type.
+nc = d(calendar_known=False)
+check("no calendar data assumes EASY, never REST", nc["band"] == N.BAND_EASY_AHEAD)
+check("and marks itself a guess", nc["confidence"] == "low_confidence" and nc["note"])
+check("the guess reaches the athlete as a warning he can correct",
+      any("demand could not be classified" in w
+          for w in z(day_type="recovery")["warnings"]))
+check("a legacy caller passing only tomorrow_type still gets the long band",
+      d(tomorrow_type="long_ride")["band"] == N.BAND_LONG_AHEAD)
+check("and one passing only day_type still gets long TODAY",
+      d(day_type="long_ride")["band"] == N.BAND_LONG_TODAY)
+# REGRESSION: the fallback token match is word-bounded, and the bare "race" token reads
+# the session NAME only. An Endurance ride whose aim said "building toward race day" came
+# back KEY, which suppresses the deficit on an easy day for no reason at all.
+check("coaching prose about race day does not make an easy ride a key session",
+      not N.is_key_session({"type": "Ride", "name": "Endurance ride",
+                            "description": "steady Z2, building toward race day"}))
+check("nor does a description that NEGATES intensity",
+      not N.is_key_session({"type": "Swim", "name": "Easy swim",
+                            "description": "recovery float, no racing this block"}))
+check("but a session named as a race still counts",
+      N.is_key_session({"type": "Ride", "name": "Sunday race"}))
+check("and a compound race form counts in the aim text too",
+      N.is_key_session({"type": "Ride", "name": "Wednesday ride",
+                        "description": "3x15 at race pace"}))
+check("the driving sessions are named, not just counted",
+      d(tomorrow_sessions=[{"type": "Ride", "moving_time": 240 * 60,
+                            "name": "Long Z2 ride"}])["sessions"]
+      == ["Long Z2 ride (tomorrow)"])
+
+print("\n--- the deficit is ONE rule: EASY or REST ahead ---")
+SESS_EASY = [{"type": "Ride", "moving_time": 3600, "name": "Easy spin",
+              "session_type": "bike_z2", "calories": 600, "average_watts": 150}]
+SESS_KEY = [{"type": "Ride", "moving_time": 3600, "name": "Threshold 3x12",
+             "session_type": "bike_threshold"}]
+
+
+def dz(**kw):
+    kw.setdefault("day_type", "standard")
+    kw.setdefault("sessions", SESS_EASY)
+    kw.setdefault("calendar_known", True)
+    kw.setdefault("deficit_enabled", True)
+    return z(**kw)
+
+
+easy_ahead = dz()
+check(f"EASY ahead allows a deficit (got {easy_ahead['deficit_applied_kcal']})",
+      easy_ahead["deficit_applied_kcal"] > 0)
+key_tomorrow = dz(tomorrow_sessions=SESS_KEY)
+check("a threshold session TOMORROW suppresses it - the gap the old gate list had",
+      key_tomorrow["deficit_applied_kcal"] == 0)
+check("and the reason is stated, not silent",
+      any("quality session" in w for w in key_tomorrow["warnings"]))
+check("a threshold session LATER TODAY suppresses it too",
+      dz(sessions=SESS_EASY + SESS_KEY)["deficit_applied_kcal"] == 0)
+check("a long session today suppresses it",
+      dz(sessions=[{"type": "Ride", "moving_time": 200 * 60, "calories": 2600,
+                    "average_watts": 200}])["deficit_applied_kcal"] == 0)
+check("the RHR guard still suppresses it on an otherwise easy day",
+      dz(rhr_guard_active=True)["deficit_applied_kcal"] == 0)
+check("and says why",
+      any("resting HR" in w for w in dz(rhr_guard_active=True)["warnings"]))
+rest_win = dz(day_type="recovery", sessions=[], calendar_known=True, tomorrow_sessions=[])
+check(f"a rest window is never suppressed by the tier rule (band "
+      f"{rest_win['demand_ahead']['band']})",
+      rest_win["demand_ahead"]["band"] == N.BAND_REST_AHEAD
+      and not any("suppressed" in w for w in rest_win["warnings"]))
+check("every suppressed day carries its reason when the deficit is enabled",
+      all(any("suppressed" in w for w in zc["warnings"])
+          for zc in (key_tomorrow, dz(rhr_guard_active=True),
+                     dz(days_to_race=2), dz(tomorrow_type="long_ride"))))
+check("race week is a KEY window by construction, even with an easy calendar",
+      dz(days_to_race=2)["demand_ahead"]["tier"] == N.DEMAND_KEY
+      and dz(days_to_race=2)["deficit_applied_kcal"] == 0)
+
+print("\n--- the four published days, reconstructed (10-13 Aug 2026) ---")
+# Inputs are reconstructed from public/nutrition-jamie.json: the maintenance figures in
+# the file fix each day's net session energy exactly (net = maintenance - 1.35 x RMR),
+# and the day types and in-session carb totals fix the sessions' shape.
+D11, D12, D13 = date(2026, 8, 11), date(2026, 8, 12), date(2026, 8, 13)
+
+
+def _rmr(d):
+    return N.mifflin_st_jeor(W, 1.86, DOB, "M", on=d)
+
+
+def _gross(net, mins, d):
+    """Device calories that net to `net` after the resting subtraction."""
+    return round(net + (mins / 60.0) * _rmr(d) / 24.0)
+
+
+RUN_11AUG = [{"type": "Run", "moving_time": 165 * 60, "icu_training_load": 260,
+              "name": "Long run 33km with tempo finish",
+              "calories": _gross(2985, 165, D11)}]
+RIDE_13AUG = [{"type": "Ride", "moving_time": 230 * 60, "icu_training_load": 230,
+               "name": "Long endurance ride", "average_watts": 205,
+               "calories": _gross(2727, 230, D13)}]
+SPIN_12AUG = [{"type": "Ride", "moving_time": 45 * 60, "name": "Recovery spin",
+               "session_type": "bike_z2", "average_watts": 120,
+               "calories": _gross(534, 45, D12)}]
+
+g11 = N.zones(day_type="long_run", rolling_weight=W, rmr=_rmr(D11), sessions=RUN_11AUG,
+              calendar_known=True, deficit_enabled=True)
+check(f"(i) 11 Aug classifies LONG today (got {g11['demand_ahead']['band']})",
+      g11["demand_ahead"]["band"] == N.BAND_LONG_TODAY)
+check(f"(i) and its maintenance still reconstructs the published 5476 "
+      f"(got {g11['kcal_maintenance']})", abs(g11["kcal_maintenance"] - 5476) <= 2)
+lo11, hi11 = g11["carb_g"]["low"] / W, g11["carb_g"]["high"] / W
+check(f"(i) carbs land inside 8-12 g/kg at 83.3 kg (got {lo11:.1f}-{hi11:.1f})",
+      7.95 <= lo11 and hi11 <= 12.05 and hi11 - lo11 > 1)
+check("(i) no deficit on the day of the long run", g11["deficit_applied_kcal"] == 0)
+
+g13 = N.zones(day_type="standard", rolling_weight=W, rmr=_rmr(D13), sessions=RIDE_13AUG,
+              calendar_known=True, deficit_enabled=True)
+check(f"(ii) 13 Aug's 230 min ride now classifies LONG today, not standard-with-a-cliff "
+      f"(got {g13['demand_ahead']['band']}, day_type still {g13['day_type']})",
+      g13["demand_ahead"]["band"] == N.BAND_LONG_TODAY and g13["day_type"] == "standard")
+check(f"(ii) carbs land 8-11.5 g/kg rather than the published 10.5-11.5 against a 5-6 "
+      f"reference (got {g13['carb_g']['low'] / W:.1f}-{g13['carb_g']['high'] / W:.1f})",
+      7.95 <= g13["carb_g"]["low"] / W and g13["carb_g"]["high"] / W <= 12.05)
+check("(ii) and the day no longer warns about its own carb targets",
+      not any("reference band" in w for w in g13["warnings"]))
+check("(ii) fibre is a ceiling with an after-session floor, which the cliff had missed",
+      g13["fibre_g"]["bias"] == N.BIAS_CEILING and "after_session" in g13["fibre_g"])
+
+# (iii) The small day is UNTOUCHED by the share term: 25% of a 2,842 kcal target is 79 g,
+# under the 100 g that 1.2 g/kg already allows, so the residual still binds at 90 g.
+g12 = N.zones(day_type="recovery", rolling_weight=W, rmr=_rmr(D12), sessions=SPIN_12AUG,
+              tomorrow_sessions=[{"type": "Ride", "moving_time": 3600, "name": "Easy spin",
+                                  "session_type": "bike_z2"}],
+              yesterday_type="long_run", calendar_known=True, deficit_enabled=True)
+check(f"(iii) 12 Aug keeps a deficit with a long run behind it and an easy day ahead "
+      f"(got {g12['deficit_applied_kcal']})", g12["deficit_applied_kcal"] > 0)
+check(f"(iii) fat's ceiling stays at 100 or below on a {g12['kcal_target']} kcal day "
+      f"(got {g12['fat_g']['high']}, bound by {g12['fat_g']['bound']})",
+      g12["fat_g"]["high"] <= N.FAT_CEILING_G_PER_KG * W + 0.5
+      and g12["fat_g"]["bound"] in ("residual", "g-kg"))
+check("(iii) the share term cannot lift a small day's fat ceiling",
+      N.FAT_SHARE_TARGET * g12["kcal_target"] / 9 < N.FAT_CEILING_G_PER_KG * W)
+# The same day against the REAL calendar, where the 230-minute ride is tomorrow: it is
+# now visible as a long session, so 12 Aug loses its deficit entirely. Worth pinning,
+# because it is the behaviour change with the largest effect on the weight programme.
+g12_real = N.zones(day_type="recovery", rolling_weight=W, rmr=_rmr(D12),
+                   sessions=SPIN_12AUG, tomorrow_sessions=RIDE_13AUG,
+                   yesterday_type="long_run", calendar_known=True, deficit_enabled=True)
+check("(iii) with the 230 min ride visible tomorrow, 12 Aug's deficit goes entirely",
+      g12_real["deficit_applied_kcal"] == 0
+      and any("glycogen" in w for w in g12_real["warnings"]))
+
+# (iv) A big EASY day is where the share term earns its keep: holding fat at 100 g there
+# strands over a thousand calories that carbs have declined to take.
+g_big = N.zones(day_type="standard", rolling_weight=W, rmr=_rmr(D13), calendar_known=True,
+                sessions=[{"type": "Ride", "moving_time": 120 * 60, "name": "Easy spin",
+                           "session_type": "bike_z2", "average_watts": 205,
+                           "calories": _gross(2727, 120, D13)}],
+                tomorrow_sessions=[{"type": "Ride", "moving_time": 3600,
+                                    "name": "Easy spin", "session_type": "bike_z2"}])
+check(f"(iv) a ~5200 kcal EASY-ahead day gets a ~144 g fat ceiling from the share term "
+      f"(got {g_big['fat_g']['high']}, bound by {g_big['fat_g']['bound']})",
+      g_big["fat_g"]["bound"] == "share" and 140 <= g_big["fat_g"]["high"] <= 150)
+check("(iv) which is a quarter of the day's energy, as the constant says",
+      abs(g_big["fat_g"]["kcal_share"][1] - N.FAT_SHARE_TARGET) < 0.01)
+check("(iv) and an easy day carrying that much training energy is still called out",
+      any("check activity calories" in w for w in g_big["warnings"]))
+
+print("\n--- fat: which bound bound, and the GI cap on hard days ---")
+check("a quality session ahead caps fat at 90 g even though pre_long never fired",
+      dz(tomorrow_sessions=SESS_KEY)["fat_g"]["high"] <= N.FAT_CEILING_PRE_LONG_G
+      and dz(tomorrow_sessions=SESS_KEY)["fat_g"]["bound"] in ("GI", "residual"))
+check("an ordinary easy day is not GI-capped",
+      easy_ahead["fat_g"]["bound"] in ("g-kg", "share", "residual"))
+check("the fat floor is never subject to the share argument",
+      all(abs(zc["fat_g"]["low"] - N.FAT_FLOOR_G_PER_KG * W) < 0.6
+          for zc in (g11, g12, g13, g_big)))
+check("fibre flips to a 30 g ceiling with a quality session ahead, looser than pre-long",
+      dz(tomorrow_sessions=SESS_KEY)["fibre_g"]["high"] == N.FIBRE_CEILING_KEY_AHEAD_G
+      and dz(tomorrow_sessions=SESS_KEY)["fibre_g"]["bias"] == N.BIAS_CEILING)
+check("and floors are untouched on easy and rest windows",
+      easy_ahead["fibre_g"]["bias"] == N.BIAS_FLOOR)
+# The ceiling is PHASED when the hard session is today, whichever kind it is: the residue
+# reason expires once the work is done, and a ceiling that runs all day tells him off for
+# eating his fibre afterwards. Tomorrow's session gets no phase - the ceiling applies to
+# the whole day, because the session is not in it.
+key_today = dz(sessions=SESS_EASY + SESS_KEY)
+check("a quality session TODAY phases the fibre ceiling, as a long one does",
+      "after_session" in key_today["fibre_g"]
+      and key_today["fibre_g"]["after_session"]["bias"] == N.BIAS_FLOOR)
+check("a quality session TOMORROW does not: the ceiling holds all day",
+      "after_session" not in dz(tomorrow_sessions=SESS_KEY)["fibre_g"])
+
+print("\n--- what the page is given ---")
+for key in ("demand_ahead", "carb_basis", "fat_basis"):
+    check(f"zones() exposes {key}", key in g13)
+check("demand_ahead names the tier and the sessions behind it",
+      g13["demand_ahead"]["tier"] == N.DEMAND_LONG
+      and g13["demand_ahead"]["sessions"] == ["Long endurance ride"])
+check("the bases are the same strings the zones carry, not a second rendering",
+      g13["carb_basis"] == g13["carb_g"]["basis"]
+      and g13["fat_basis"] == g13["fat_g"]["basis"])
+check("carbs and fat both publish a kcal_share pair",
+      all(len(g13[k]["kcal_share"]) == 2 for k in ("carb_g", "fat_g")))
 
 print()
 if FAILED:

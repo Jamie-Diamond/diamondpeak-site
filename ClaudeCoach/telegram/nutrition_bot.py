@@ -697,6 +697,28 @@ class Context:
                            "source": "intervals.icu"})
         return merged
 
+    def _tag_session_types(self, sessions) -> None:
+        """Annotate sessions in place with the coach's session_type, if it is reachable.
+
+        Best-effort by design: a missing primitive must not cost the athlete his targets,
+        and the engine's own token match covers the same ground less precisely. Logged
+        rather than swallowed, because silently falling back would mean quality sessions
+        were being fuelled as easy ones with nothing to say so."""
+        if not sessions:
+            return
+        try:
+            sys.path.insert(0, str(BASE / "ironman-analysis"))
+            from primitives.modulation import classify_session_type
+        except Exception as exc:
+            log(f"session classifier unavailable, using the engine's own tokens: {exc}")
+            return
+        for s in sessions:
+            if s.get("session_type"):
+                continue
+            s["session_type"] = classify_session_type(
+                s.get("type") or s.get("category") or "",
+                s.get("name") or "", s.get("description") or "")
+
     def zones_for(self, day: date) -> dict:
         rules = self.athlete.get("day_rules") or {}
         (today_type, tomorrow_type, conf, sessions,
@@ -738,8 +760,22 @@ class Context:
         race = self.athlete.get("race_date")
         days_to_race = ((date.fromisoformat(race) - day).days if race else None)
 
+        # Tag every session with the COACH's own session_type before the engine sees it.
+        # The demand tiers need to know which sessions are quality, and the classifier for
+        # that already exists and is the one the plan validator and the modulation rules
+        # use. Restating its keyword list inside nutrition_engine would give the same
+        # session two classifications, which is how a threshold ride ends up fuelled as an
+        # easy one. The engine's own token match stays as the fallback for callers that
+        # cannot reach the primitives.
+        self._tag_session_types(sessions)
+        self._tag_session_types(tomorrow_sessions)
+
         z = NE.zones(day_type=today_type, rolling_weight=weight, rmr=rmr,
                      sessions=sessions, tomorrow_type=tomorrow_type,
+                     tomorrow_sessions=tomorrow_sessions,
+                     # An empty calendar and an unreadable one are different: the engine
+                     # assumes an easy window when it cannot tell, and says so.
+                     calendar_known=bool(sessions or tomorrow_sessions),
                      yesterday_type=yesterday_type, days_to_race=days_to_race,
                      deficit_enabled=bool(prof.get("deficit_enabled", True)),
                      rhr_guard_active=bool(guard.get("active")),
