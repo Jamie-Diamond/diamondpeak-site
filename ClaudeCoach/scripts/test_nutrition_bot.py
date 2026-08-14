@@ -929,9 +929,11 @@ for fn in (NB.offer_planned, NB.offer_items):
     check(f"{fn.__name__} takes a message-level meal and puts it on every item",
           "default_meal: str = None" in src and '"_meal"' in src
           and 'or default_meal or ""' in src)
-check("handle_text reads the meal off the parsed items and passes it to both paths",
+check("handle_text reads the meal off the parsed items and passes it to every offer path",
       'stated_meal = next((i.get("meal")' in inspect.getsource(NB.handle_text)
-      and inspect.getsource(NB.handle_text).count("default_meal=stated_meal") == 2)
+      # Four paths now: the costed meal, the athlete-supplied figures, the interpreted plan
+      # and the raw classify items. A path that forgot the meal would drop it silently.
+      and inspect.getsource(NB.handle_text).count("default_meal=stated_meal") == 4)
 check("commit_one hands it to the store", 'meal=item.get("_meal")'
       in inspect.getsource(NB.commit_one))
 check("the offer says which meal it will use, before anything is written",
@@ -996,6 +998,474 @@ check("an unusable meal is refused rather than written",
 check("and with neither an offer nor an entry it declines instead of failing",
       NB.apply_meal_correction(dctx, {"kind": "meal", "meal": "breakfast"}, None,
                                None, TODAY, "token", 1) is False)
+
+print("\n--- REPLAY: his pasted macro table logs HIS figures (14 Aug 2026) ---")
+# THE DEFECT. After the bot had twice mis-priced a stir-fry, he pasted a complete
+# breakdown - a ~980 kcal total and a row per component. Every row went down the ladder as
+# a fresh lookup and the meal came back at 2,400 kcal: the dried-noodle row scaled wrong,
+# and 100 g of oil at 899 kcal. He had given the answer and was argued with using worse
+# data. His figures are now copied verbatim and no rung is walked.
+PASTED = ("Large stir-fry bowl ~980 kcal\n"
+          "Egg noodles (300g cooked) 380 kcal, 12P, 75C, 3F\n"
+          "Steak (100g) 220 kcal, 26P, 0C, 13F\n"
+          "Soy/ginger/garlic sauce 80 kcal, 2P, 8C, 4F\n"
+          "Vegetables (200g) 90 kcal, 4P, 15C, 1F\n"
+          "Oil 210 kcal, 0P, 0C, 23F")
+_PARSED_TABLE = (
+    '{"intent":"log_food","items":[{"text":"large stir-fry bowl with egg noodles, steak, '
+    'soy ginger garlic sauce, vegetables and oil","portion_g":null,"in_session":false,'
+    '"at":null,"meal":null,"stated":{"kcal":980,"protein_g":44,"carb_g":98,"fat_g":44,'
+    '"basis":"estimate","components":["Egg noodles (300g cooked) 380 kcal, 12P, 75C, 3F",'
+    '"Steak (100g) 220 kcal, 26P, 0C, 13F","Soy/ginger/garlic sauce 80 kcal, 2P, 8C, 4F",'
+    '"Vegetables (200g) 90 kcal, 4P, 15C, 1F","Oil 210 kcal, 0P, 0C, 23F"]}}]}')
+
+# THE LADDER MUST NOT RUN AT ALL, so it is replaced by something that fails loudly rather
+# than merely asserted about afterwards. A number that happens to be right while a lookup
+# still happened is the bug one edit away from returning.
+_ladder_calls = []
+
+
+def _exploding_resolve(*a, **k):
+    _ladder_calls.append(a)
+    raise AssertionError("the resolution ladder ran on figures the athlete supplied")
+
+
+class FakeCtxHandle(FakeCtxCommit):
+    """handle_text needs the athlete's local day; nothing else here touches ICU."""
+
+    def local_today(self):
+        return TODAY
+
+
+table_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-stated-")))
+tctx = FakeCtxHandle(table_store)
+# NB.NLU and NB.NR are the same module objects this file imported, so the real functions
+# have to be captured BEFORE they are replaced - reading them back off the module at the
+# end would restore the stub over itself.
+_real_resolve, _real_interpret = NB.NR.resolve, NB.NLU.interpret
+_real_classify, _real_parse = NB.NLU.classify, NB.NLU.parse_with_model
+_real_decide = NB.NLU.decide_correction
+NB.NR.resolve = _exploding_resolve
+NB.NLU.interpret = lambda *a, **k: (_ladder_calls.append(("interpret",)) or None)
+NB.NLU.classify = lambda text, pending, *a, **k: _real_parse(
+    text, "claude", "m", log=lambda *x: None,
+    runner=lambda *c, **kw: type("P", (), {"stdout": _PARSED_TABLE, "stderr": ""})())
+sent_msgs.clear()
+NB.handle_text(tctx, PASTED, "token", 1)
+check("no lookup of any kind ran on his own figures", _ladder_calls == [])
+pend = NB.get_pending(table_store)
+check("the pasted table becomes ONE pending item, not five",
+      pend and len(pend["batch"]) == 1)
+_meal = pend["batch"][0]
+check("980 kcal stays 980 kcal, exactly", _meal["kcal"] == 980.0)
+check("and every stated macro is his, to the number",
+      (_meal["protein_g"], _meal["carb_g"], _meal["fat_g"]) == (44.0, 98.0, 44.0))
+check("the rung says a person supplied it", _meal["source_rung"] == NB.NR.Rung.MANUAL)
+check("his reckoning is recorded as an estimate, not as label data",
+      _meal["confidence"] == "estimate")
+check("his own rows are kept as the breakdown",
+      "Egg noodles (300g cooked) 380 kcal" in _meal["ingredients"]
+      and len(_meal["_components"]) == 5)
+check("the offer tells him they are his figures, not a source's",
+      "Your figures, logged exactly as you gave them." in sent_msgs[-1])
+check("and it is offered for confirmation like anything else, once",
+      "Log it?" in sent_msgs[-1] and len(sent_msgs) == 1)
+NB.commit_pending(tctx, pend, TODAY, "token", 1)
+logged = table_store.get_day(TODAY)["entries"][-1]
+check("it commits with his total intact",
+      logged["kcal"] == 980.0 and logged["protein_g"] == 44.0
+      and logged["source_rung"] == "manual")
+check("the pending offer is cleared once written",
+      NB.get_pending(table_store) is None)
+NB.NR.resolve, NB.NLU.interpret = _real_resolve, _real_interpret
+NB.NLU.classify = _real_classify
+def _code_of(fn):
+    """Source with the docstring dropped, so a function that only MENTIONS the ladder in
+    its rationale is not mistaken for one that calls it."""
+    src = inspect.getsource(fn)
+    parts = src.split('"""')
+    return parts[0] + "".join(parts[2:]) if len(parts) > 2 else src
+
+
+check("the stated path is structurally incapable of resolving",
+      "NR.resolve" not in _code_of(NB.offer_stated)
+      and "NR.resolve" not in _code_of(NB.stated_item))
+check("and handle_text checks for stated figures BEFORE it plans any lookup",
+      inspect.getsource(NB.handle_text).index('offer_stated(')
+      < inspect.getsource(NB.handle_text).index("NLU.interpret("))
+
+print("\n--- REPLAY: the stir-fry, costed whole by one capable model (14 Aug 2026) ---")
+# THE DEFECT. "a large stir fry with egg noodles, a small steak, soy ginger garlic sauce and
+# veg" was broken into four components, each looked up separately, and offered as 447 kcal
+# of raw and dried 100 g parts. Jamie got a correct table by asking a generic Opus 5 himself.
+# The composition tables hold ingredients, not dinners, so a cooked meal is now costed in ONE
+# call and the ladder never runs on it.
+STIR_FRY = ("a large stir fry with egg noodles, a small steak, soy ginger garlic sauce "
+            "and veg")
+MEAL_TABLE = """{"meal_name":"Large beef stir-fry with egg noodles",
+ "components":[
+  {"name":"egg noodles, cooked","portion_g":300,"portion_basis":"a large bowl",
+   "kcal":420,"protein_g":14,"carb_g":80,"fat_g":4,"fibre_g":4},
+  {"name":"rump steak, grilled","portion_g":120,"portion_basis":"a small steak",
+   "kcal":210,"protein_g":37,"carb_g":0,"fat_g":7,"fibre_g":0},
+  {"name":"soy, ginger and garlic sauce","portion_g":45,"portion_basis":"2 tbsp",
+   "kcal":60,"protein_g":2,"carb_g":10,"fat_g":1,"fibre_g":0},
+  {"name":"stir-fried mixed vegetables","portion_g":200,"portion_basis":"a handful",
+   "kcal":110,"protein_g":4,"carb_g":12,"fat_g":5,"fibre_g":5},
+  {"name":"vegetable oil for the pan","portion_g":15,"portion_basis":"1 tbsp",
+   "kcal":135,"protein_g":0,"carb_g":0,"fat_g":15,"fibre_g":0}],
+ "total":{"kcal":935,"protein_g":57,"carb_g":102,"fat_g":32,"fibre_g":9},
+ "error_band_pct":18,
+ "plants":["wheat","garlic","ginger","soya","onion","red pepper","broccoli"],
+ "assumptions":["Large bowl taken as 300g cooked noodles","1 tbsp oil in the pan"]}"""
+_PARSED_COMPOSED = ('{"intent":"log_food","composed_meal":true,"items":[{"text":'
+                    '"large stir fry with egg noodles, steak, sauce and veg",'
+                    '"portion_g":null,"in_session":false,"at":null,"meal":"dinner"}]}')
+
+_meal_asks = []
+
+
+def _meal_runner(reply):
+    """Records the prompt and which MODEL was asked, so the routing is checked and not
+    assumed: the whole point of this path is that it goes to the best model available."""
+    def run(cmd, input=None, **kwargs):
+        _meal_asks.append({"cmd": list(cmd), "prompt": input})
+        return type("P", (), {"stdout": reply, "stderr": ""})()
+    return run
+
+
+class FakeCtxMeal(FakeCtxHandle):
+    """A ctx WITH the plant table: a costed meal's species come from the deterministic
+    matcher, and a stub with table=None would hide that the wiring exists."""
+    table = PL.SpeciesTable()
+
+
+meal_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-meal-")))
+mctx = FakeCtxMeal(meal_store)
+_ladder_calls.clear()
+_meal_asks.clear()
+NB.NR.resolve = _exploding_resolve
+NB.NLU.interpret = lambda *a, **k: (_ladder_calls.append(("interpret",)) or None)
+NB.NLU.classify = lambda text, pending, *a, **k: _real_parse(
+    text, "claude", "m", log=lambda *x: None,
+    runner=lambda *c, **kw: type("P", (), {"stdout": _PARSED_COMPOSED, "stderr": ""})())
+_real_subprocess_run = NB.NLU.subprocess.run
+NB.NLU.subprocess.run = _meal_runner(MEAL_TABLE)
+sent_msgs.clear()
+NB.handle_text(mctx, STIR_FRY, "token", 1)
+check("the ladder never ran on a meal he cooked", _ladder_calls == [])
+check("and it was costed by Opus explicitly, not the config default",
+      _meal_asks and "claude-opus-5" in _meal_asks[0]["cmd"]
+      and NB.MEAL_MODEL == "claude-opus-5")
+check("his own words are what the model was given",
+      "a large stir fry with egg noodles" in (_meal_asks[0]["prompt"] or ""))
+pend = NB.get_pending(meal_store)
+check("the meal is ONE pending entry, not five", pend and len(pend["batch"]) == 1)
+_m = pend["batch"][0]
+check("its total is the sum of the costed components",
+      _m["kcal"] == 935.0 and _m["protein_g"] == 57.0 and _m["carb_g"] == 102.0)
+check("which is a real dinner rather than the 447 kcal he was offered",
+      700 < _m["kcal"] < 1300)
+check("it is labelled an estimate and carries the model's error band",
+      _m["confidence"] == "estimate" and _m["_error_band_pct"] == 18
+      and "+/-18%" in (_m.get("note") or ""))
+check("the components are kept on the entry, with their portions",
+      len(_m["_components_detail"]) == 5
+      and _m["_components_detail"][0]["portion_g"] == 300.0)
+check("the plants it named are tagged by the deterministic matcher",
+      len(_m["species"]) >= 4 and all(isinstance(s.get("id"), str)
+                                      for s in _m["species"]))
+check("the whole entry is an assumed portion, and says so",
+      _m["portion_estimated"] is True and _m["portion_assumed"])
+check("the meal he named still reaches the entry", _m["_meal"] == "dinner")
+# The offer he reads: the table, then the total, then the assumptions he corrects.
+_offer = sent_msgs[-1]
+check("the offer shows the table, component by component",
+      "300g egg noodles, cooked" in _offer and "420 kcal" in _offer
+      and "vegetable oil for the pan" in _offer)
+check("with the total and the band",
+      "*Total* kcal 935" in _offer and "+/-18%" in _offer)
+check("and every assumption stated where he can see it",
+      "assumed: Large bowl taken as 300g cooked noodles" in _offer
+      and "assumed: 1 tbsp oil in the pan" in _offer)
+check("and it is one confirm message, not five",
+      _offer.count("Log it?") == 1 and len(sent_msgs) == 1)
+NB.commit_pending(mctx, pend, TODAY, "token", 1)
+_logged = meal_store.get_day(TODAY)["entries"][-1]
+check("it commits as one entry at the costed total",
+      _logged["kcal"] == 935.0 and _logged["source_rung"] == "llm"
+      and _logged["confidence"] == "estimate")
+check("with the components kept as its ingredients",
+      "egg noodles, cooked" in _logged["ingredients"]
+      and "ginger" in _logged["ingredients"])
+
+# A CORRECTION RE-TABLES, it does not re-search. "The noodles were 400g" is a fact about one
+# row of a table built from his description, so the meal is re-costed with that fact added.
+RETABLED = MEAL_TABLE.replace('"portion_g":300', '"portion_g":400').replace(
+    '"kcal":420', '"kcal":560').replace('"total":{"kcal":935', '"total":{"kcal":1075')
+NB.set_pending(meal_store, {"batch": [dict(_m)]})
+NB.NLU.classify = lambda text, pending, *a, **k: {"intent": "correction",
+                                                 "correction": text}
+NB.NLU.decide_correction = lambda *a, **k: {"kind": "unclear"}
+NB.NLU.subprocess.run = _meal_runner(RETABLED)
+_meal_asks.clear()
+_ladder_calls.clear()
+sent_msgs.clear()
+NB.handle_text(mctx, "the noodles were 400g", "token", 1)
+check("a correction re-tables the meal instead of re-resolving it",
+      _ladder_calls == [] and _meal_asks
+      and "the noodles were 400g" in (_meal_asks[-1]["prompt"] or ""))
+check("and his original description goes with it, so nothing is lost",
+      "large stir fry" in (_meal_asks[-1]["prompt"] or ""))
+_re = NB.get_pending(meal_store)["batch"][0]
+check("the re-costed meal replaces the offer at the new total",
+      _re["kcal"] == 1075.0
+      and _re["_components_detail"][0]["portion_g"] == 400.0)
+check("nothing was written while he was still correcting it",
+      len(meal_store.get_day(TODAY)["entries"]) == 1)
+
+# AN UNREACHABLE MODEL MUST NOT MEAN AN UNLOGGABLE DINNER: the interpret-and-resolve path is
+# a poor second to a costed table and far better than a refusal.
+NB.clear_pending(meal_store)
+NB.NLU.classify = lambda text, pending, *a, **k: _real_parse(
+    text, "claude", "m", log=lambda *x: None,
+    runner=lambda *c, **kw: type("P", (), {"stdout": _PARSED_COMPOSED, "stderr": ""})())
+NB.NLU.subprocess.run = _meal_runner("API Error: 401 OAuth access token has expired")
+# The ladder is EXPECTED to run here, so it records instead of exploding: the fallback's
+# whole purpose is that his dinner is still loggable when the meal model is down.
+NB.NR.resolve = lambda text, **k: (_ladder_calls.append(("resolve", text)) or {
+    "resolved_name": text, "kcal": 200.0, "confidence": "estimate",
+    "source_rung": "llm", "attempts": [], "species": []})
+_ladder_calls.clear()
+sent_msgs.clear()
+NB.handle_text(mctx, STIR_FRY, "token", 1)
+check("an unreachable meal model falls back to the ladder rather than refusing",
+      ("interpret",) in _ladder_calls
+      and any(c[0] == "resolve" for c in _ladder_calls))
+check("and he still gets an offer he can confirm", "Log it?" in sent_msgs[-1])
+NB.NR.resolve = _exploding_resolve
+check("and offer_composed reports the failure rather than offering half a meal",
+      NB.offer_composed(mctx, STIR_FRY, TODAY, "token", 1) is False)
+NB.NLU.subprocess.run = _real_subprocess_run
+NB.NR.resolve, NB.NLU.interpret = _real_resolve, _real_interpret
+NB.NLU.classify, NB.NLU.decide_correction = _real_classify, _real_decide
+check("the composed path cannot reach the ladder either",
+      "NR.resolve" not in _code_of(NB.offer_composed)
+      and "NR.resolve" not in _code_of(NB.composed_item))
+check("a barcode keeps its exact-product path, whatever else the message looks like",
+      'not got.get("barcode")' in inspect.getsource(NB.handle_text))
+# A whole dinner must not become in-run fuel because a gel earlier in the same message was:
+# fuel counted in the session rewrites the g/hr history the coach prescribes from.
+check("the meal's own in-session flag decides, not the message's",
+      'in_session=bool((got.get("items") or [{}])[0]' in inspect.getsource(NB.handle_text))
+
+# A COSTED MEAL AND ITS OWN COMPONENT ROWS MUST NEVER DISAGREE. rescale_item moves the
+# entry's totals and knows nothing about _components_detail, so scaling in place would leave
+# a 1,402 kcal entry whose rows still sum to 935 - and those rows are what the next
+# correction is applied to. It would also re-render through fmt_confirm, dropping the table.
+_composed_pend = {"batch": [dict(_m)]}
+check("a ratio against a costed meal is declined, so it goes to the re-table path",
+      NB.apply_batch_rescale(mctx, _composed_pend,
+                             {"kind": "rescale_all", "factor": 1.5}, TODAY, "token", 1)
+      is False)
+check("and a grams correction against one is declined for the same reason",
+      NB.apply_quantity_correction(mctx, _composed_pend, {"grams": 400.0},
+                                   TODAY, "token", 1) is False)
+check("so the entry and its component rows still agree",
+      _composed_pend["batch"][0]["kcal"]
+      == sum(c["kcal"] for c in _composed_pend["batch"][0]["_components_detail"]))
+# His pasted rows are TEXT, so scaling the entry cannot scale them: leaving them on shows
+# "Egg noodles 380 kcal" under a 1,470 kcal heading.
+_scaled_stated = NB.drop_stale_breakdown(
+    {"resolved_name": "Stir-fry bowl", "kcal": 1470.0, "_stated": True,
+     "_components": ["Egg noodles 380 kcal"], "ingredients": "Egg noodles 380 kcal"})
+check("a rescaled stated entry drops a breakdown that no longer adds up",
+      "_components" not in _scaled_stated
+      and _scaled_stated["ingredients"] == "Stir-fry bowl")
+check("and an item with no breakdown is untouched",
+      NB.drop_stale_breakdown({"kcal": 100.0}) == {"kcal": 100.0})
+
+print("\n--- REPLAY: per-component rescaling of a pending meal (14 Aug 2026) ---")
+# "Make the noodles, steak and sauce 1.5x and the vegetables 3x" had no shape to be
+# expressed in, "do all of that X1.5" was decided correctly and applied to nothing, and
+# "it was a whole meal" was decided against a brookie he had committed hours earlier.
+def _meal_batch():
+    """The four components as they were actually offered: per-100g bases, small portions."""
+    return [{"resolved_name": "Noodles, egg, medium, dried, boiled in unsalted water",
+             "_raw": "egg noodles, cooked", "kcal": 166.0, "protein_g": 5.0,
+             "carb_g": 33.0, "fat_g": 0.5, "portion_used_g": 100.0,
+             "per_100g": {"kcal": 166.0, "protein_g": 5.0, "carb_g": 33.0, "fat_g": 0.5},
+             "confidence": "label", "source_rung": "cofid"},
+            {"resolved_name": "Beef, rump steak, grilled, lean only", "_raw": "steak",
+             "kcal": 177.0, "protein_g": 31.0, "carb_g": 0.0, "fat_g": 5.9,
+             "portion_used_g": 100.0,
+             "per_100g": {"kcal": 177.0, "protein_g": 31.0, "carb_g": 0.0, "fat_g": 5.9},
+             "confidence": "label", "source_rung": "cofid"},
+            {"resolved_name": "Soy sauce", "_raw": "soy ginger garlic sauce",
+             "kcal": 43.0, "protein_g": 3.0, "carb_g": 8.2, "fat_g": 0.0,
+             "portion_used_g": 100.0,
+             "per_100g": {"kcal": 43.0, "protein_g": 3.0, "carb_g": 8.2, "fat_g": 0.0},
+             "confidence": "label", "source_rung": "cofid"},
+            {"resolved_name": "Vegetables, stir-fried", "_raw": "vegetables",
+             "kcal": 52.0, "protein_g": 2.0, "carb_g": 4.0, "fat_g": 3.2,
+             "portion_used_g": 100.0,
+             "per_100g": {"kcal": 52.0, "protein_g": 2.0, "carb_g": 4.0, "fat_g": 3.2},
+             "confidence": "label", "source_rung": "cofid"}]
+
+
+rs_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-rescale-")))
+rctx = FakeCtxCommit(rs_store)
+NB.set_pending(rs_store, {"batch": _meal_batch()})
+sent_msgs.clear()
+handled = NB.apply_batch_rescale(
+    rctx, NB.get_pending(rs_store),
+    {"kind": "rescale_items", "items": [{"index": 0, "factor": 1.5},
+                                        {"index": 1, "factor": 1.5},
+                                        {"index": 2, "factor": 1.5},
+                                        {"index": 3, "factor": 3.0}]},
+    TODAY, "token", 1)
+after = NB.get_pending(rs_store)["batch"]
+# Expected per item from ITS OWN per-100g basis at rescale_item's 1 dp, not from the total.
+check("three at 1.5x and one at 3x, each from its own basis",
+      handled and [i["kcal"] for i in after] == [249.0, 265.5, 64.5, 156.0])
+check("and the macros scale with them",
+      [i["protein_g"] for i in after] == [7.5, 46.5, 4.5, 6.0])
+check("portions move with the figures",
+      [i["portion_used_g"] for i in after] == [150.0, 150.0, 150.0, 300.0])
+check("nothing was written - it is re-offered for confirmation",
+      not rs_store.get_day(TODAY)["entries"] and "Log these?" in sent_msgs[-1])
+check("the new total is stated on the offer",
+      f"*Total* {round(249.0 + 265.5 + 64.5 + 156.0)} kcal" in sent_msgs[-1])
+check("a factor he gave is not presented as an assumption",
+      all(i["portion_estimated"] is False for i in after))
+
+# "Do all of that X1.5": one factor, every component.
+NB.set_pending(rs_store, {"batch": _meal_batch()})
+sent_msgs.clear()
+NB.apply_batch_rescale(rctx, NB.get_pending(rs_store),
+                       {"kind": "rescale_all", "factor": 1.5}, TODAY, "token", 1)
+check("rescale_all reaches every component",
+      [i["kcal"] for i in NB.get_pending(rs_store)["batch"]]
+      == [249.0, 265.5, 64.5, 78.0])
+
+# "It was a whole meal, work it out": the model sizes the portions, the code prices them,
+# and every one is declared an estimate on the message he confirms.
+NB.set_pending(rs_store, {"batch": _meal_batch()})
+sent_msgs.clear()
+NB.apply_batch_rescale(
+    rctx, NB.get_pending(rs_store),
+    {"kind": "meal_portions", "items": [{"index": 0, "grams": 300},
+                                        {"index": 1, "grams": 150},
+                                        {"index": 2, "grams": 40},
+                                        {"index": 3, "grams": 200}]},
+    TODAY, "token", 1)
+sized = NB.get_pending(rs_store)["batch"]
+check("a meal-sized offer prices each portion from its own per-100g basis",
+      [i["kcal"] for i in sized] == [498.0, 265.5, 17.2, 104.0])
+check("which is a real dinner rather than the 447 kcal he was offered",
+      800 < sum(i["kcal"] for i in sized) < 1100)
+check("EVERY sized portion is flagged as an estimate",
+      all(i["portion_estimated"] is True for i in sized))
+check("and the offer says so, per component and in the lead",
+      "my estimate of the portion" in sent_msgs[-1]
+      and "every portion below is my estimate" in sent_msgs[-1])
+
+# A component with no basis at all is NAMED, never silently left at its old figure inside a
+# rescaled meal: a wrong total he cannot see is worse than a question.
+NB.set_pending(rs_store, {"batch": _meal_batch()[:1] + [
+    {"resolved_name": "Homemade sauce", "_raw": "sauce", "kcal": 60.0,
+     "confidence": "estimate", "source_rung": "llm"}]})
+sent_msgs.clear()
+NB.apply_batch_rescale(rctx, NB.get_pending(rs_store),
+                       {"kind": "meal_portions",
+                        "items": [{"index": 0, "grams": 300}, {"index": 1, "grams": 40}]},
+                       TODAY, "token", 1)
+check("a component with no basis is named in the reply",
+      "could not scale Homemade sauce" in sent_msgs[-1]
+      and NB.get_pending(rs_store)["batch"][1]["kcal"] == 60.0)
+check("while the ones that could be scaled still were",
+      NB.get_pending(rs_store)["batch"][0]["kcal"] == 498.0)
+# An item still waiting on its figures has NOTHING to multiply, and the factor branch would
+# pass it through untouched - so the reply would have claimed to scale it.
+check("and with nothing scalable at all it declines rather than pretending",
+      NB.apply_batch_rescale(rctx, {"batch": [{"resolved_name": "x",
+                                              "needs_input": True}]},
+                             {"kind": "rescale_all", "factor": 2}, TODAY, "token", 1)
+      is False)
+
+print("\n--- a pending batch is the ONLY thing a correction can be about ---")
+# The wrong-target bug: `batch[0] if len(batch) == 1 else find_entry(day, "")` meant a
+# correction aimed at a four-component meal was decided against the last COMMITTED entry.
+_ht = inspect.getsource(NB.handle_text)
+check("with a batch pending, no committed entry is fetched as the target",
+      "None if batch" in _ht and 'else ctx.store.find_entry(day, "") or None' in _ht)
+check("and the whole batch is what the model is shown",
+      "batch=batch or None" in _ht)
+check("the batch kinds are executed before any single-item branch",
+      _ht.index('kind in ("rescale_all"') < _ht.index('kind == "rescale" and'))
+# apply_quantity_correction had the same trap: with a four-component offer pending it fell
+# through to find_entry and would have rescaled something he logged earlier.
+qc_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-qcguard-")))
+qctx = FakeCtxCommit(qc_store)
+_earlier = qc_store.add_entry(TODAY, raw_text="brookie", resolved_name="Brookie",
+                              kcal=450.0, confidence="estimate", source_rung="llm",
+                              portion_g=100)
+check("a single-item rescale is declined while a whole meal is pending",
+      NB.apply_quantity_correction(qctx, {"batch": _meal_batch()}, {"factor": 1.5},
+                                   TODAY, "token", 1) is False)
+check("and the entry he logged earlier is untouched",
+      qc_store.get_day(TODAY)["entries"][0]["kcal"] == 450.0)
+check("while a single pending item still rescales as it always did",
+      NB.apply_quantity_correction(qctx, {"batch": _meal_batch()[:1]}, {"factor": 1.5},
+                                   TODAY, "token", 1) is True)
+
+print("\n--- a correction against HIS figures never re-runs the ladder ---")
+# The last door out of the correction branch re-resolves the pending subject's raw text,
+# which for a stated offer is his own pasted table - so an unexecuted decision would have
+# re-priced the 980 kcal meal all over again, the reported defect one level down.
+st_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-stcorr-")))
+sctx = FakeCtxHandle(st_store)
+_ladder_calls.clear()
+NB.NR.resolve = _exploding_resolve
+NB.NLU.interpret = lambda *a, **k: (_ladder_calls.append(("interpret",)) or None)
+NB.NLU.classify = lambda text, pending, *a, **k: {"intent": "correction",
+                                                 "correction": text}
+for _unexecuted in ({"kind": "unclear"},
+                    {"kind": "reidentify", "text": "stir fry", "exclusions": []},
+                    None):
+    NB.set_pending(st_store, {"batch": [NB.stated_item(
+        {"text": "large stir-fry bowl", "stated": {"kcal": 980.0, "protein_g": 44.0,
+                                                   "components": ["Egg noodles 380 kcal"]}},
+        TODAY)]})
+    NB.NLU.decide_correction = lambda *a, _d=_unexecuted, **k: _d
+    sent_msgs.clear()
+    NB.handle_text(sctx, "that's not right", "token", 1)
+    check(f"a {_unexecuted['kind'] if _unexecuted else 'failed'} decision does not "
+          f"re-resolve his figures",
+          _ladder_calls == [] and "will not go looking them up again" in sent_msgs[-1])
+    check("and his pending figures are left exactly as he gave them",
+          NB.get_pending(st_store)["batch"][0]["kcal"] == 980.0)
+NB.NR.resolve, NB.NLU.interpret = _real_resolve, _real_interpret
+NB.NLU.classify, NB.NLU.decide_correction = _real_classify, _real_decide
+
+print("\n--- an interpreted portion is HIS or OURS, and the offer says which ---")
+# correct_in_batch re-resolves one component by name. A resolved item carries
+# portion_used_g, not portion_g, so with the meal now sized this dropped that component
+# back to a per-100g basis inside a portioned dinner.
+check("re-resolving one component keeps the portion it was sized to",
+      'target.get("portion_used_g")' in inspect.getsource(NB.correct_in_batch))
+# resolve() takes a caller-supplied portion as stated fact, so a portion the interpreter
+# reasoned out for "a large stir fry" would read on the offer exactly like a weight he gave.
+_op = inspect.getsource(NB.offer_planned)
+check("offer_planned reads the estimated-portion flag off the plan",
+      'it.get("portion_estimated")' in _op and "my estimate for a portion" in _op)
+check("and never overwrites an assumption resolve already made",
+      'not item.get("portion_estimated")' in _op)
+check("fmt_confirm states an assumed portion on the line he confirms",
+      "assumed" in NB.fmt_confirm(
+          {"resolved_name": "Egg noodles", "kcal": 498.0, "source_rung": "cofid",
+           "confidence": "label", "portion_estimated": True,
+           "portion_assumed": "300 g - my estimate for a portion this size"}))
 
 # Put the real functions back, so anything appended after this block tests the code rather
 # than the stubs.

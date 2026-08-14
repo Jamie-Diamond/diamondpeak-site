@@ -303,8 +303,10 @@ got = NLU.classify("toast this morning", False, "claude", "m", log=lambda *a: No
 check("a vague time is dropped, never guessed at", got["items"][0]["at"] is None)
 check("the parse prompt forbids guessing a time",
       "NEVER guess" in NLU.PARSE_PROMPT
-      # `meal` joined the item keys, so the shape line moved with it.
-      and "in_session, at, meal}" in NLU.PARSE_PROMPT)
+      # `meal` joined the item keys, then `stated`, so the shape line moved twice. Asserted
+      # on the keys rather than the whole line: the point is that each is asked for.
+      and "in_session, at, meal," in NLU.PARSE_PROMPT
+      and "stated}" in NLU.PARSE_PROMPT)
 check("the parse prompt keeps already-eaten-with-a-time as a log",
       "STILL log_food" in NLU.PARSE_PROMPT)
 check("the parse prompt routes flat statements about the log to correction",
@@ -335,7 +337,7 @@ print("\n--- the meal he NAMED, read out of the message itself ---")
 # 13:49 was filed under lunch. The model may now name the meal - but only when the message
 # names it, because a meal it asserts stops being questioned downstream.
 check("the parse prompt asks for a meal on each item",
-      "in_session, at, meal}" in NLU.PARSE_PROMPT
+      "in_session, at, meal," in NLU.PARSE_PROMPT
       and '"breakfast" | "lunch" | "dinner" | "snacks", or null' in NLU.PARSE_PROMPT)
 check("and says a clock time is evidence, not proof",
       "A CLOCK TIME IS EVIDENCE, NOT PROOF" in NLU.PARSE_PROMPT)
@@ -474,6 +476,316 @@ check("the advice prompt puts numbers last",
 check("the advice prompt keeps its in_session protection and its no-moralising rule",
       "Never suggest reducing anything marked in_session" in NLU.ADVICE_PROMPT
       and "do not use restriction language" in NLU.ADVICE_PROMPT)
+
+print("\n--- his own figures are law, not a starting point (14 Aug 2026) ---")
+# He pasted a complete macro table for a stir-fry and every row was re-searched, re-pricing
+# a 980 kcal meal at 2,400. stated_macros' whole contract is pass-through-or-refuse.
+_table = {"kcal": 980, "protein_g": 44, "carb_g": 98, "fat_g": 44,
+          "components": ["Egg noodles (300g cooked) 380 kcal", "Steak (100g) 220 kcal"]}
+_st = NLU.stated_macros(_table)
+check("a stated total survives verbatim", _st["kcal"] == 980.0)
+check("stated macros survive verbatim",
+      (_st["protein_g"], _st["carb_g"], _st["fat_g"]) == (44.0, 98.0, 44.0))
+check("his own rows are kept as text, not as lookups", len(_st["components"]) == 2)
+check("his own reckoning is an estimate unless he says label",
+      _st["basis"] == "estimate"
+      and NLU.stated_macros({"kcal": 300, "basis": "label"})["basis"] == "label")
+# The model's field names vary; dropping one silently loses HIS data, and there is no
+# invention risk in accepting a synonym for a number he supplied.
+_alias = NLU.stated_macros({"calories": 500, "protein": 30, "carbs": 60, "fat": 12,
+                            "fiber": 5, "sodium_mg": 800})
+check("field-name synonyms are mapped rather than dropped",
+      _alias["kcal"] == 500.0 and _alias["protein_g"] == 30.0
+      and _alias["carb_g"] == 60.0 and _alias["fibre_g"] == 5.0
+      and _alias["dietary_sodium_mg"] == 800.0)
+check("no energy figure is not a specification, so it goes back on the ladder",
+      NLU.stated_macros({"protein_g": 40}) is None
+      and NLU.stated_macros({"kcal": 0}) is None
+      and NLU.stated_macros(None) is None and NLU.stated_macros("980 kcal") is None)
+check("a mis-typed decimal point is refused, never clamped",
+      NLU.stated_macros({"kcal": 98000}) is None
+      and "protein_g" not in NLU.stated_macros({"kcal": 500, "protein_g": -4}))
+# The parse path rebuilds items from an allowlist, so a field it does not name is dropped
+# in silence - the same hand-off bug that lost the photo hint and the species score.
+_stated_parse = NLU.parse_with_model(
+    "large stir-fry bowl, about 980 kcal, 44P 98C 44F", "claude", "m",
+    log=lambda *a: None,
+    runner=fixed_runner('{"intent":"log_food","items":[{"text":"large stir-fry bowl",'
+                        '"portion_g":null,"stated":{"kcal":980,"protein_g":44,'
+                        '"carb_g":98,"fat_g":44}}]}'))
+check("parse_with_model carries the stated block through to the item",
+      (_stated_parse["items"][0].get("stated") or {}).get("kcal") == 980.0)
+# A macro table quotes sodium in mg, which tiny_dose_mg reads as a supplement dose - so
+# classify would have called a 980 kcal dinner nutritionally negligible.
+_stated_cls = NLU.classify(
+    "stir fry, 980 kcal, 44P 98C 44F, sodium 800mg", False, "claude", "m",
+    log=lambda *a: None,
+    runner=fixed_runner('{"intent":"log_food","items":[{"text":"stir fry",'
+                        '"stated":{"kcal":980,"protein_g":44}}]}'))
+check("a message stating figures stays food and is never called a trivial dose",
+      _stated_cls["intent"] == "log_food" and _stated_cls.get("stated") is True
+      and not _stated_cls.get("nutritionally_trivial"))
+check("the parse prompt carries the pasted-table worked example",
+      "A PASTED TABLE IS ONE MEAL, NOT N LOOKUPS" in NLU.PARSE_PROMPT
+      and "Large stir-fry bowl ~980 kcal" in NLU.PARSE_PROMPT
+      and '"stated":{"kcal":980' in NLU.PARSE_PROMPT)
+check("and tells it his headline total beats the sum of his rows",
+      "HIS HEADLINE TOTAL WINS" in NLU.PARSE_PROMPT
+      and "kcal is 980" in NLU.PARSE_PROMPT)
+
+print("\n--- corrections are decided against the WHOLE pending meal ---")
+# decide_correction was shown ONE item: with a four-component meal pending, the caller had
+# no rule for which, so it showed the last COMMITTED entry - a brookie - and the model was
+# asked what "it was a whole meal" meant about a biscuit.
+_batch = [{"resolved_name": "Noodles, egg, dried, raw", "kcal": 169.0,
+           "per_100g": {"kcal": 338.0}},
+          {"resolved_name": "Beef, rump steak, raw, lean", "kcal": 125.0,
+           "per_100g": {"kcal": 125.0}},
+          {"resolved_name": "Soy sauce", "kcal": 43.0, "per_100g": {"kcal": 43.0}},
+          {"resolved_name": "Vegetables, stir-fried", "kcal": 52.0,
+           "per_100g": {"kcal": 52.0}}]
+bsink = []
+NLU.decide_correction("it was a whole meal", {}, "claude", "m", log=lambda *a: None,
+                      runner=fixed_runner('{"kind":"unclear"}', bsink), batch=_batch)
+_bp = bsink[0] or ""
+check("every component reaches the prompt, numbered",
+      '"index": 0' in _bp and '"index": 3' in _bp
+      and "Noodles, egg, dried, raw" in _bp and "Vegetables, stir-fried" in _bp)
+check("and each one says whether there is a basis to scale it from",
+      _bp.count("has_per_100g_basis") == 4)
+check("the summaries are compact, not the resolved items",
+      "attempts" not in _bp and "source_rung" not in _bp)
+check("the prompt explains that an array is a meal awaiting confirmation",
+      "A JSON ARRAY is a whole meal awaiting his" in NLU.CORRECTION_PROMPT
+      and "valid ONLY when you are shown" in NLU.CORRECTION_PROMPT)
+
+_all = NLU.decide_correction("do all of that x1.5", {}, "claude", "m",
+                             log=lambda *a: None,
+                             runner=fixed_runner('{"kind":"rescale_all","factor":1.5}'),
+                             batch=_batch)
+check("rescale_all passes through", _all == {"kind": "rescale_all", "factor": 1.5})
+_items = NLU.decide_correction(
+    "make the noodles, steak and sauce 1.5x and the vegetables 3x", {}, "claude", "m",
+    log=lambda *a: None,
+    runner=fixed_runner('{"kind":"rescale_items","items":['
+                        '{"index":0,"factor":1.5},{"index":1,"factor":1.5},'
+                        '{"index":2,"factor":1.5},{"index":3,"factor":3}]}'),
+    batch=_batch)
+check("rescale_items passes through per component",
+      _items["kind"] == "rescale_items"
+      and [s["factor"] for s in _items["items"]] == [1.5, 1.5, 1.5, 3.0])
+_mp = NLU.decide_correction(
+    "it was a whole meal, work it out", {}, "claude", "m", log=lambda *a: None,
+    runner=fixed_runner('{"kind":"meal_portions","items":['
+                        '{"index":0,"grams":300},{"index":1,"grams":150},'
+                        '{"index":2,"grams":40},{"index":3,"grams":200}]}'),
+    batch=_batch)
+check("meal_portions passes through as grams per component",
+      _mp["kind"] == "meal_portions"
+      and [s["grams"] for s in _mp["items"]] == [300.0, 150.0, 40.0, 200.0])
+
+# GRAMS ONLY. The model may size a portion; it may never price one, because a kcal figure
+# it supplied would overwrite one scaled from a real basis and read back as sourced data.
+for why, reply in (
+        ("a component carrying kcal is refused",
+         '{"kind":"meal_portions","items":[{"index":0,"grams":300,"kcal":900}]}'),
+        ("a component carrying macros is refused",
+         '{"kind":"rescale_items","items":[{"index":0,"factor":2,"protein_g":30}]}'),
+        ("a decision carrying macros at the top level is refused",
+         '{"kind":"rescale_all","factor":1.5,"kcal":1400}')):
+    check(why, NLU.decide_correction("x", {}, "claude", "m", log=lambda *a: None,
+                                     runner=fixed_runner(reply),
+                                     batch=_batch) == {"kind": "unclear"})
+# An index the model was not shown means it was not reading the batch, so nothing it said
+# about that batch is usable - and a PARTIAL application would leave him confirming a total
+# that is wrong in a way he cannot see.
+for why, reply in (
+        ("an out-of-range index refuses the whole decision",
+         '{"kind":"rescale_items","items":[{"index":0,"factor":2},{"index":9,"factor":2}]}'),
+        ("an index with neither grams nor factor refuses it",
+         '{"kind":"rescale_items","items":[{"index":0}]}'),
+        ("meal_portions with a ratio instead of grams refuses it",
+         '{"kind":"meal_portions","items":[{"index":0,"factor":3}]}'),
+        ("an implausible factor refuses it",
+         '{"kind":"rescale_all","factor":400}'),
+        ("an implausible portion refuses it",
+         '{"kind":"meal_portions","items":[{"index":0,"grams":9000}]}')):
+    check(why, NLU.decide_correction("x", {}, "claude", "m", log=lambda *a: None,
+                                     runner=fixed_runner(reply),
+                                     batch=_batch) == {"kind": "unclear"})
+# UNVALIDATED IS NOT UNAVAILABLE. None means "the model could not be reached" and sends the
+# caller to its regex fallback, which for "noodles 1.5x, veg 3x" applies one wrong number
+# to one wrong item. A batch kind with no batch has to say `unclear` instead.
+check("a batch decision with nothing pending degrades to unclear, not to None",
+      NLU.decide_correction("x", {}, "claude", "m", log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"rescale_all","factor":1.5}'))
+      == {"kind": "unclear"})
+check("the single-item kinds are unaffected by the batch argument",
+      NLU.decide_correction("half of it", _item, "claude", "m", log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"rescale_factor","factor":0.5}'))
+      == {"kind": "rescale_factor", "factor": 0.5})
+check("the prompt names grams as the only quantity the model may estimate",
+      "THIS IS THE ONE PLACE YOU MAY ESTIMATE A QUANTITY" in NLU.CORRECTION_PROMPT
+      and "GRAMS ONLY" in NLU.CORRECTION_PROMPT)
+
+print("\n--- a meal he cooked is costed whole, by one capable model (14 Aug 2026) ---")
+# Jamie: "I literally went on a generic Opus 5 and told it what I ate and it gave me that
+# table... we have access to any Claude model and we can't do shit". The composition tables
+# hold ingredients, not dinners, so a described meal is costed in ONE call and the ladder
+# never runs on it.
+MEAL_TABLE = """{"meal_name":"Large beef stir-fry with egg noodles",
+ "components":[
+  {"name":"egg noodles, cooked","portion_g":300,"portion_basis":"a large bowl",
+   "kcal":420,"protein_g":14,"carb_g":80,"fat_g":4,"fibre_g":4},
+  {"name":"rump steak, grilled","portion_g":120,"portion_basis":"a small steak",
+   "kcal":210,"protein_g":37,"carb_g":0,"fat_g":7,"fibre_g":0},
+  {"name":"soy, ginger and garlic sauce","portion_g":45,"portion_basis":"2 tbsp",
+   "kcal":60,"protein_g":2,"carb_g":10,"fat_g":1,"fibre_g":0},
+  {"name":"stir-fried mixed vegetables","portion_g":200,"portion_basis":"a handful",
+   "kcal":110,"protein_g":4,"carb_g":12,"fat_g":5,"fibre_g":5},
+  {"name":"vegetable oil for the pan","portion_g":15,"portion_basis":"1 tbsp",
+   "kcal":135,"protein_g":0,"carb_g":0,"fat_g":15,"fibre_g":0}],
+ "total":{"kcal":935,"protein_g":57,"carb_g":102,"fat_g":32,"fibre_g":9},
+ "error_band_pct":18,
+ "plants":["wheat","garlic","ginger","soya","onion","red pepper","broccoli"],
+ "assumptions":["Large bowl taken as 300g cooked noodles","1 tbsp oil in the pan"]}"""
+
+msink = []
+meal = NLU.describe_meal(
+    "a large stir fry with egg noodles, a small steak, soy ginger garlic sauce and veg",
+    "claude", "claude-opus-5", log=lambda *a: None,
+    runner=fixed_runner(MEAL_TABLE, msink))
+check("the whole meal comes back as one table", meal and len(meal["components"]) == 5)
+check("each component carries a portion and its own figures",
+      [c["portion_g"] for c in meal["components"]] == [300.0, 120.0, 45.0, 200.0, 15.0]
+      and all(c.get("kcal") for c in meal["components"]))
+# THE ARITHMETIC IS STILL THE CODE'S. A model's addition is not a source of truth, and the
+# components are what a correction is applied to, so the entry total has to be their sum.
+check("the total is the SUM of the components, computed here",
+      meal["total"]["kcal"] == 935.0
+      and meal["total"]["kcal"] == sum(c["kcal"] for c in meal["components"]))
+check("and the macros total the same way",
+      (meal["total"]["protein_g"], meal["total"]["carb_g"], meal["total"]["fat_g"])
+      == (57.0, 102.0, 32.0))
+check("the model's own error band survives", meal["error_band_pct"] == 18)
+check("the plants it named are carried for the diversity count",
+      "ginger" in meal["plants"] and "garlic" in meal["plants"])
+check("and every assumption is carried, because that is what he corrects",
+      len(meal["assumptions"]) == 2
+      and "300g cooked noodles" in meal["assumptions"][0])
+_mp = msink[0] or ""
+check("the prompt asks for the food AS EATEN",
+      "COOK THE FOOD" in _mp and "Dried noodles are" in _mp)
+check("and for the size to come from his words",
+      "SIZE IT FROM HIS WORDS" in _mp and "300 g cooked" in _mp)
+check("and for what cooking adds, without padding the meal",
+      "INCLUDE WHAT COOKING ADDS" in _mp and "DO NOT PAD THE MEAL" in _mp)
+check("and for the assumptions and an honest band",
+      "SAY WHAT YOU ASSUMED" in _mp and "+/-15-20%" in _mp)
+check("and it is his own description that is sent, not a cleaned-up query",
+      "a large stir fry with egg noodles, a small steak" in _mp)
+
+# A table whose own total is far from the sum of its rows is REFUSED, not reconciled: it is
+# not a table any single line of which can be corrected.
+check("an internally inconsistent table is refused",
+      NLU.describe_meal("x", "claude", "m", log=lambda *a: None,
+                        runner=fixed_runner(
+                            '{"meal_name":"x","components":[{"name":"rice","kcal":200}],'
+                            '"total":{"kcal":900}}')) is None)
+check("a table with no usable component is refused",
+      NLU.describe_meal("x", "claude", "m", log=lambda *a: None,
+                        runner=fixed_runner('{"meal_name":"x","components":[]}')) is None
+      and NLU.describe_meal("x", "claude", "m", log=lambda *a: None,
+                            runner=fixed_runner(
+                                '{"components":[{"name":"rice"}]}')) is None)
+check("prose instead of a table is refused",
+      NLU.describe_meal("x", "claude", "m", log=lambda *a: None,
+                        runner=fixed_runner("That sounds like about 900 calories."))
+      is None)
+check("an outage is refused rather than logged as a meal",
+      NLU.describe_meal("x", "claude", "m", log=lambda *a: None,
+                        runner=fixed_runner("API Error: 401 OAuth token has expired"))
+      is None)
+check("an absurd figure is dropped rather than believed",
+      NLU.describe_meal("x", "claude", "m", log=lambda *a: None,
+                        runner=fixed_runner(
+                            '{"meal_name":"x","components":[{"name":"rice","kcal":90000},'
+                            '{"name":"peas","kcal":80}]}'))["total"]["kcal"] == 80.0)
+# A band of zero is a claim of precision this rung does not have.
+check("the error band has a floor and a ceiling",
+      NLU.describe_meal("x", "claude", "m", log=lambda *a: None,
+                        runner=fixed_runner(
+                            '{"meal_name":"x","error_band_pct":0,'
+                            '"components":[{"name":"rice","kcal":200}]}')
+                        )["error_band_pct"] == 10
+      and NLU.describe_meal("x", "claude", "m", log=lambda *a: None,
+                            runner=fixed_runner(
+                                '{"meal_name":"x","error_band_pct":90,'
+                                '"components":[{"name":"rice","kcal":200}]}')
+                            )["error_band_pct"] == 40)
+
+# THE ROUTING. A meal nobody published figures for goes to the model; everything with a real
+# published figure keeps the deterministic path, where the ladder genuinely wins.
+check("the parse prompt asks which messages are composed meals",
+      "A COMPOSED MEAL IS ONE MEAL, AND NO DATABASE KNOWS IT" in NLU.PARSE_PROMPT
+      and "composed_meal: (log_food only)" in NLU.PARSE_PROMPT)
+check("and lists what is NOT one, so branded and single foods keep the ladder",
+      "composed_meal is FALSE for" in NLU.PARSE_PROMPT
+      and "a branded or packaged product" in NLU.PARSE_PROMPT
+      and "a single whole food" in NLU.PARSE_PROMPT
+      and "a restaurant or takeaway order" in NLU.PARSE_PROMPT)
+check("and says the whole meal goes in ONE item, in his own words",
+      "put the WHOLE meal in ONE item's text" in NLU.PARSE_PROMPT)
+_composed = NLU.classify(
+    "a large stir fry with egg noodles, a small steak, soy ginger garlic and veg",
+    False, "claude", "m", log=lambda *a: None,
+    runner=fixed_runner('{"intent":"log_food","composed_meal":true,'
+                        '"items":[{"text":"large stir fry with egg noodles, steak, '
+                        'soy ginger garlic sauce and veg"}]}'))
+check("classify carries the composed-meal flag out to the caller",
+      _composed.get("composed_meal") is True and _composed["intent"] == "log_food")
+check("and a branded product does not carry it",
+      not NLU.classify("a nakd bar", False, "claude", "m", log=lambda *a: None,
+                       runner=fixed_runner('{"intent":"log_food","composed_meal":false,'
+                                           '"items":[{"text":"nakd bar"}]}')
+                       ).get("composed_meal"))
+
+print("\n--- a described meal is planned in the state he ate it (14 Aug 2026) ---")
+# The FALLBACK path, for when the meal model cannot be reached: still cooked states and
+# as-eaten portions, which is a poor second to a costed table and far better than refusing
+# to log his dinner.
+# Four components came back at per-100g with no portion and from the RAW and DRIED rows -
+# dried noodles, raw steak - and were offered as 447 kcal for a ~980 kcal dinner.
+check("the interpret prompt demands the as-eaten state",
+      "SEARCH FOR THE STATE HE ATE IT IN" in NLU.INTERPRET_PROMPT
+      and '"egg noodles, cooked"' in NLU.INTERPRET_PROMPT
+      and "THE STATE HE ATE IT IN IS THE ONLY STATE THAT EVER BELONGS IN A FOOD LOG"
+      in NLU.INTERPRET_PROMPT)
+check("and a portion on every component, scaled to the size he described",
+      "GIVE EVERY COMPONENT A PORTION" in NLU.INTERPRET_PROMPT
+      and "portion_estimated" in NLU.INTERPRET_PROMPT
+      and "noodles/pasta/rice 300 g cooked" in NLU.INTERPRET_PROMPT)
+check("with oil kept to what a stir-fry actually uses",
+      "never a 100 g portion of oil" in NLU.INTERPRET_PROMPT)
+_plan = NLU.interpret(
+    "a large stir fry with egg noodles, a small steak, soy ginger garlic sauce and veg",
+    "claude", "m", log=lambda *a: None,
+    runner=fixed_runner('{"items":[{"canonical_name":"egg noodles, cooked",'
+                        '"search_terms":["egg noodles, cooked"],"portion_g":300,'
+                        '"portion_estimated":true},'
+                        '{"canonical_name":"rump steak, grilled",'
+                        '"search_terms":["rump steak, grilled"],"portion_g":100,'
+                        '"portion_estimated":true}]}'))
+check("interpret carries the estimated-portion flag through its item rebuild",
+      _plan["items"][0]["portion_g"] == 300
+      and _plan["items"][0]["portion_estimated"] is True
+      and _plan["items"][1]["portion_estimated"] is True)
+check("and a portion the athlete stated is not flagged as a guess",
+      NLU.interpret("300g of egg noodles", "claude", "m", log=lambda *a: None,
+                    runner=fixed_runner('{"items":[{"canonical_name":"egg noodles, '
+                                        'cooked","search_terms":["egg noodles"],'
+                                        '"portion_g":300}]}')
+                    )["items"][0]["portion_estimated"] is False)
 
 print()
 if FAILED:

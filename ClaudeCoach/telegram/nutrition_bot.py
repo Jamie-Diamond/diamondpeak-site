@@ -72,6 +72,14 @@ POLL_TIMEOUT = 30
 # a default that lives in another file.
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "/usr/bin/claude")
 LLM_MODEL = "claude-sonnet-5"
+# COSTING A COOKED MEAL GETS THE BEST MODEL AVAILABLE, and it is named here rather than
+# taken from LLM_MODEL on purpose (Jamie, 14 Aug 2026: "I literally went on a generic
+# Opus 5 and told it what I ate and it gave me that table... we have access to any Claude
+# model and we can't do shit"). Every other call in this file is classification or
+# extraction, where the faster model is the right trade. This one is the whole answer for a
+# meal no database holds, it happens a few times a day, and a cheaper model costing his
+# dinner badly is what the ladder was already doing.
+MEAL_MODEL = "claude-opus-5"
 
 HELP = (
     "Just talk to me normally. Some examples:\n\n"
@@ -178,7 +186,17 @@ def fmt_flags(flags: list, limit: int = 1) -> str:
 
 def fmt_confirm(item: dict) -> str:
     """The confirm prompt. States the rung every time."""
-    bits = [f"*{item['resolved_name']}*", NR.describe_provenance(item)]
+    # HIS OWN FIGURES SAY SO IN HIS OWN TERMS. describe_provenance renders the MANUAL rung
+    # as "from the pack, as you gave it", which is wrong for a meal he reckoned up himself,
+    # and an `estimate` confidence would add "roughly +/-10-15%" to numbers whose accuracy
+    # is his business rather than ours.
+    bits = [f"*{item['resolved_name']}*",
+            ("Your figures, logged exactly as you gave them."
+             if item.get("_stated")
+             # describe_provenance returns the rung name itself for a rung it has no phrase
+             # for, which is None when an item carries no rung at all - and a None in here
+             # raises inside the join, so he gets NO reply rather than a slightly vague one.
+             else NR.describe_provenance(item) or "source not recorded")]
     if item.get("needs_portion"):
         per = item.get("per_100g") or {}
         k = per.get("kcal")
@@ -202,6 +220,10 @@ def fmt_confirm(item: dict) -> str:
                     f"correct me if wrong._")
     if item.get("fibre_g"):
         bits.append(f"fibre {round(item['fibre_g'])} g")
+    if item.get("_components"):
+        # His breakdown, echoed back so he can see the rows were kept rather than
+        # re-interpreted. Capped: this is a confirm message, not a spreadsheet.
+        bits.append("_" + "; ".join(c[:60] for c in item["_components"][:6]) + "_")
     if item.get("species"):
         bits.append(f"{len(item['species'])} plant"
                     f"{'s' if len(item['species']) != 1 else ''}")
@@ -1200,22 +1222,28 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # judgement is what registered '100g' as an excluded food and re-searched a
         # label it was holding. The model decides rescale/reidentify/meal; every
         # NUMBER is still computed here - the model never returns macros.
-        target_item = None
         batch = (pend or {}).get("batch") or []
-        if len(batch) == 1:
-            target_item = batch[0]
-        else:
-            target_item = ctx.store.find_entry(day, "") or None
+        # WITH AN OFFER ON THE TABLE, A COMMITTED ENTRY IS NEVER THE TARGET. The old rule
+        # was `batch[0] if len(batch) == 1 else find_entry(day, "")`, so a correction aimed
+        # at a four-component meal awaiting confirmation was decided against the last thing
+        # he had LOGGED - on 14 Aug 2026 a brookie from earlier in the day. He said "it was
+        # a whole meal" about his stir-fry and got an answer about a biscuit.
+        target_item = (batch[0] if len(batch) == 1
+                       else None if batch
+                       else ctx.store.find_entry(day, "") or None)
         # ASKED EVEN WITH NOTHING LOGGED. The model used to be consulted only when there
         # was an item to correct, which made "a rego scoop is half a portion" on an empty
         # day unanswerable - it fell through to "nothing logged today to correct", and
         # that is one of the four edits Jamie had to route through a human on 13 Aug 2026.
         # A fact about a product is not a fact about an entry.
         decision = NLU.decide_correction(corr, target_item or {}, CLAUDE_BIN, LLM_MODEL,
-                                         log=log)
+                                         log=log, batch=batch or None)
         if decision:
             kind = decision.get("kind")
             log(f"  correction decided: {kind} {decision}")
+            if kind in ("rescale_all", "rescale_items", "meal_portions"):
+                if apply_batch_rescale(ctx, pend, decision, day, token, chat_id):
+                    return
             if kind in ("remember", "remember_and_rescale"):
                 if apply_remember(ctx, decision, pend, day, token, chat_id):
                     return
@@ -1288,6 +1316,43 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                         day, token, chat_id, said=corr)
             mark_pending_replaces(ctx, target["id"], target.get("resolved_name") or "")
             return
+        # A COSTED MEAL IS RE-TABLED, NEVER RE-SEARCHED. "The noodles were 400g" is a fact
+        # about one row of a table the model built from his description, so the whole meal is
+        # re-costed with that fact added - which keeps the assumptions and the components
+        # consistent with each other. Sending it down the ladder instead would break a
+        # coherent dinner into ingredient lookups again, which is the defect this path exists
+        # to remove. Pure arithmetic (x1.5, per-component ratios) was already executed above
+        # and never reaches here.
+        if all(i.get("_composed") for i in (pend.get("batch") or [{}])):
+            said = pending_subject(pend)
+            if offer_composed(ctx, said, day, token, chat_id,
+                              default_at=(pend["batch"][0].get("_at")),
+                              default_meal=(pend["batch"][0].get("_meal")),
+                              in_session=bool(pend["batch"][0].get("in_session")),
+                              extra=corr):
+                _chat(ctx, "coach", f"[log] re-tabled the meal: {corr[:60]}")
+                return
+            tg.send(token, chat_id,
+                    "I could not reach the model to redo that table. The offer is "
+                    "unchanged - say no if you would rather drop it and tell me again.",
+                    log=log)
+            return
+        # FIGURES HE SUPPLIED ARE NEVER RE-RESOLVED, and this is the last door out of the
+        # correction branch: everything below re-searches the pending subject's raw text,
+        # which for a stated offer is his own pasted table. A decision that reached here
+        # unexecuted - `unclear`, or a reidentify - would have sent that table back down the
+        # ladder and re-priced his 980 kcal meal all over again, which is the reported defect
+        # recurring one level down. Asking is the only honest move: the code cannot know
+        # which of his numbers he means to change.
+        if all(i.get("_stated") for i in (pend.get("batch") or [{}])):
+            tg.send(token, chat_id,
+                    "Those are your own figures, so I will not go looking them up again. "
+                    "Tell me the number to change and what to - “make it 1,100 kcal” "
+                    "or “all of that x1.5” - or say no and send the whole thing "
+                    "again.", log=log)
+            _chat(ctx, "coach",
+                  "[log] declined to re-resolve figures the athlete supplied")
+            return
         if correct_in_batch(ctx, pend, corr, day, token, chat_id):
             return
         subject = pending_subject(pend)
@@ -1340,6 +1405,35 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # that gets resolved, which is the usual case.
         stated_meal = next((i.get("meal") for i in (got.get("items") or [])
                             if i.get("meal")), None)
+        # HIS OWN FIGURES SHORT-CIRCUIT EVERYTHING, and this check has to sit ABOVE the
+        # interpret call rather than inside the offer. interpret() is a lookup PLANNER: hand
+        # it a message that already contains the answer and it dutifully plans five searches
+        # for the five rows of his table, which is how a 980 kcal meal he had already
+        # costed came back at 2,400 (14 Aug 2026). There is nothing to plan.
+        if any((i.get("stated") or {}).get("kcal") for i in got.get("items") or []):
+            offer_stated(ctx, got["items"], day, token, chat_id,
+                         default_at=stated_at, default_meal=stated_meal)
+            return
+        # A MEAL HE COOKED IS COSTED WHOLE, BY THE BEST MODEL, AND THE LADDER NEVER RUNS ON
+        # IT. The composition tables hold ingredients, not dinners, so breaking a stir-fry
+        # into four rows and looking each one up loses the portion, the cooking and the oil
+        # every time - 447 kcal for a 980 kcal meal. Only for food nobody published figures
+        # for: branded, barcoded, labelled and single-whole-food items keep the deterministic
+        # path, where the ladder genuinely beats an estimate.
+        if (got.get("composed_meal") and intent == "log_food"
+                and not got.get("barcode")):
+            # THE MEAL'S OWN FLAG, not the message's. `any()` here would tag a whole dinner as
+            # in-run fuel because a gel earlier in the same message was, and fuel counted in
+            # the session rewrites the g/hr history the coach prescribes from - which this
+            # file already treats as worse than a wrong day total.
+            if offer_composed(ctx, t, day, token, chat_id, default_at=stated_at,
+                              default_meal=stated_meal,
+                              in_session=bool((got.get("items") or [{}])[0]
+                                              .get("in_session"))):
+                return
+            # Fell through: the model was unreachable. The interpret path below still asks
+            # for cooked states and as-eaten portions, which is a poor second to a costed
+            # table and far better than refusing to log his dinner.
         plan = NLU.interpret(t, CLAUDE_BIN, LLM_MODEL, log=log)
         if plan and plan.get("items"):
             offer_planned(ctx, plan["items"], day, token, chat_id, said=t,
@@ -1639,6 +1733,18 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
                           cofid=ctx.cofid, hint=it, queries=it["search_terms"],
                           exclude=exclude)
         item["_raw"] = name
+        # WHOSE NUMBER THE PORTION WAS. resolve() takes a caller-supplied portion as stated
+        # fact and flags nothing, which is right when the athlete gave the grams and wrong
+        # when the interpreter sized a described meal for him ("a large stir fry" -> 300 g of
+        # noodles). Unflagged, an invented portion reads on the offer exactly like a weight
+        # he supplied, and the assumption he is meant to be checking is invisible. Only set
+        # when resolve did not already flag an assumption of its own.
+        if (it.get("portion_estimated") and not item.get("portion_estimated")
+                and item.get("portion_used_g") and not item.get("needs_input")):
+            item["portion_estimated"] = True
+            item["portion_assumed"] = (
+                f"{float(item['portion_used_g']):.0f} g - my estimate for a portion "
+                f"this size")
         item["in_session"] = it["in_session"]
         item["_supplement"] = False
         item["_trivial"] = False
@@ -1756,6 +1862,226 @@ def _stated_meal_note(batch: list) -> list:
     if not meals:
         return []
     return [f"_Filing under {', '.join(meals)}, as you said._"]
+
+
+def stated_item(it: dict, day: date, default_at: str = None,
+                default_meal: str = None) -> dict:
+    """One batch item built from figures the ATHLETE gave, with no lookup at all.
+
+    THE DEFECT THIS EXISTS FOR (14 Aug 2026). He pasted a complete macro table for a
+    stir-fry - a total and a row per component - after the bot had mis-priced the meal
+    twice. Every row was sent down the resolution ladder as a fresh search, which re-priced
+    his 980 kcal dinner at 2,400: the dried-noodle row scaled wrong, and 100 g of oil at
+    899 kcal. He had given the answer and was argued with using worse data.
+
+    His figures are the most authoritative source in this system. Nobody knows more about
+    what was on his plate than he does, so they are copied VERBATIM - no scaling, no
+    rounding, no reconciliation of the total against the rows - and the ladder is not
+    walked. The rung is MANUAL, which is what MANUAL has always meant: figures a person
+    supplied rather than a source we searched."""
+    stated = it.get("stated") or {}
+    name = (it.get("text") or "").strip()[:120] or "meal as you described it"
+    components = stated.get("components") or []
+    macros = {f: stated.get(f) for f in NR.MACRO_FIELDS}
+    item = {
+        "raw_text": it.get("text") or name,
+        "_raw": it.get("text") or name,
+        "resolved_name": name,
+        # An estimate unless he says he read it off a label. His own reckoning of a meal is
+        # careful, not measured, and the log distinguishes the two everywhere else.
+        "confidence": "label" if stated.get("basis") == "label" else "estimate",
+        "source_rung": NR.Rung.MANUAL,
+        "resolved_at": str(day)[:10],
+        "species": [],
+        "attempts": [{"rung": "manual", "outcome": "stated by the athlete",
+                      "detail": "his own figures, used exactly as given; no lookup ran"}],
+        "degraded": False,
+        "needs_input": False,
+        "_supplement": False,
+        "_trivial": False,
+        "_dose_mg": None,
+        # The marker the offer text reads. Named with the batch-item underscore convention
+        # because it is about how this item was OBTAINED, not part of the stored record.
+        "_stated": True,
+        "in_session": bool(it.get("in_session")),
+        "_at": it.get("at") or default_at,
+        "_meal": "" if it.get("in_session") else (it.get("meal") or default_meal or ""),
+        # His own per-part rows, kept as text. They are what he wrote, so they belong in the
+        # record - but as a breakdown, never as items that were looked up.
+        "ingredients": "; ".join(components) if components else name,
+        "_components": components,
+        # No per_100g basis: there is no basis, because there was no lookup. That is the
+        # honest answer and it also makes a later "x1.5" scale his total by ratio, which is
+        # the only correct way to scale a figure he stated.
+        **{f: v for f, v in macros.items()},
+    }
+    if it.get("portion_g"):
+        try:
+            item["portion_used_g"] = float(it["portion_g"])
+        except (TypeError, ValueError):
+            pass
+    return item
+
+
+def offer_stated(ctx: Context, items: list, day: date, token, chat_id,
+                 default_at: str = None, default_meal: str = None) -> None:
+    """Offer figures the athlete supplied, once, with his totals intact.
+
+    Separate from offer_items on purpose rather than as a flag inside it: this path must be
+    incapable of reaching NR.resolve. A branch inside the resolving function is one edit
+    away from resolving anyway, which is exactly how the ladder came to be re-pricing his
+    own table."""
+    batch = [stated_item(it, day, default_at, default_meal)
+             for it in items[:8] if (it.get("stated") or {}).get("kcal")]
+    if not batch:
+        return
+    set_pending(ctx.store, {"batch": batch})
+    _chat(ctx, "coach", _offer_summary(batch))
+    body = "\n\n".join(fmt_confirm(i) for i in batch)
+    if len(batch) > 1:
+        body += f"\n\n*Total* {round(sum(i.get('kcal') or 0 for i in batch))} kcal"
+    if any(i.get("in_session") for i in batch):
+        body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
+    for line in _stated_time_note(batch) + _stated_meal_note(batch):
+        body += "\n\n" + line
+    log(f"  stated figures accepted verbatim: "
+        f"{[round(i.get('kcal') or 0) for i in batch]} kcal, no lookup")
+    kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
+    tg.send(token, chat_id, body + "\n\nLog "
+            + ("these?" if len(batch) > 1 else "it?"), reply_markup=kb, log=log)
+
+
+def composed_item(ctx: Context, table: dict, said: str, day: date,
+                  default_at: str = None, default_meal: str = None,
+                  in_session: bool = False) -> dict:
+    """ONE batch item for a whole cooked meal, from the meal table.
+
+    The components are kept on the item, with their portions and their own figures, for two
+    reasons. They are what he reads before confirming - an assumption he cannot see is the
+    real failure mode here, not an inaccurate gram - and they are what a later correction is
+    applied to, so "the noodles were 400 g" is arithmetic on one row rather than a fresh
+    guess at the whole dinner.
+
+    Species are tagged by the DETERMINISTIC matcher from the plants the model named, not
+    taken from it: the model is good at spotting the ginger in a stir-fry and has no idea
+    which canonical species the diversity count uses, and the plant table is the thing that
+    knows refined forms score nothing."""
+    total = table.get("total") or {}
+    plants = table.get("plants") or []
+    components = table.get("components") or []
+    # The ingredient string the species matcher reads: the plants he was told about, plus
+    # the component names, so a plant named only inside a component still counts.
+    ingredients = ", ".join(plants + [c["name"] for c in components])
+    species, unmatched = [], ""
+    if ctx.table is not None:
+        try:
+            res = ctx.table.match_food(ingredients, ingredients=ingredients)
+            species = [{"id": s["id"], "score": s["score"]} for s in res["species"]]
+            unmatched = res.get("unmatched") or ""
+        except Exception as exc:
+            # A meal must remain loggable when the plant table cannot be read.
+            log(f"species tagging unavailable for this meal: {exc}")
+    band = table.get("error_band_pct") or 15
+    item = {
+        "raw_text": said,
+        "_raw": said,
+        "resolved_name": table.get("meal_name") or "meal as you described it",
+        # A DECLARED ESTIMATE. It carries a real error band and every assumption behind it,
+        # which is what separates this from a figure wearing a database's authority.
+        "confidence": "estimate",
+        "source_rung": NR.Rung.LLM,
+        "source_url": "",
+        "resolved_at": str(day)[:10],
+        "species": species,
+        "species_from": "ingredients",
+        "species_unmatched": unmatched,
+        "attempts": [{"rung": "meal_model", "outcome": "costed as a whole meal",
+                      "detail": f"described meal costed by {MEAL_MODEL}; no rung was "
+                                f"walked, because no food table holds a cooked dinner"}],
+        "degraded": False,
+        "needs_input": False,
+        "_supplement": False,
+        "_trivial": False,
+        "_dose_mg": None,
+        # Marks the offer text and, later, the correction route: a composed meal is
+        # re-tabled rather than re-searched.
+        "_composed": True,
+        "_components_detail": components,
+        "_assumptions": table.get("assumptions") or [],
+        "_error_band_pct": band,
+        "note": f"a described meal, so roughly +/-{band}%",
+        "in_session": bool(in_session),
+        "_at": default_at,
+        "_meal": "" if in_session else (default_meal or ""),
+        "ingredients": ingredients,
+        # Every portion in here was reasoned from his words, so the whole entry is an
+        # assumed portion and the confirm line says so.
+        "portion_used_g": (round(sum(c["portion_g"] for c in components
+                                     if c.get("portion_g")), 1) or None),
+        "portion_estimated": True,
+        "portion_assumed": "portions worked out from your description",
+        **{f: total.get(f) for f in NR.MACRO_FIELDS},
+    }
+    return item
+
+
+def fmt_meal_confirm(item: dict) -> str:
+    """The confirm block for a costed meal: the table, then the total, then the assumptions.
+
+    He gets what he would have got by asking a model himself, which is the standard this
+    path was held to. The assumptions are not an appendix - they are the part he corrects."""
+    lines = [f"*{item['resolved_name']}*",
+             f"Costed as a whole meal, roughly +/-{item.get('_error_band_pct') or 15}%."]
+    for c in item.get("_components_detail") or []:
+        grams = f"{c['portion_g']:.0f}g " if c.get("portion_g") else ""
+        lines.append(f"· {grams}{c['name']} — {round(c['kcal'])} kcal"
+                     + (f", {round(c['protein_g'])}P" if c.get("protein_g") is not None
+                        else "")
+                     + (f" {round(c['carb_g'])}C" if c.get("carb_g") is not None else "")
+                     + (f" {round(c['fat_g'])}F" if c.get("fat_g") is not None else ""))
+    lines.append(" · ".join(
+        f"{lbl} {round(item[k])}" for lbl, k in
+        (("*Total* kcal", "kcal"), ("P", "protein_g"), ("C", "carb_g"), ("F", "fat_g"))
+        if item.get(k) is not None))
+    if item.get("fibre_g"):
+        lines.append(f"fibre {round(item['fibre_g'])} g")
+    if item.get("species"):
+        lines.append(f"{len(item['species'])} plant"
+                     f"{'s' if len(item['species']) != 1 else ''}")
+    for a in (item.get("_assumptions") or [])[:6]:
+        lines.append(f"_assumed: {a}_")
+    lines.append("_Correct any of that and I will redo the table._")
+    return "\n".join(lines)
+
+
+def offer_composed(ctx: Context, said: str, day: date, token, chat_id,
+                   default_at: str = None, default_meal: str = None,
+                   in_session: bool = False, extra: str = "") -> bool:
+    """Cost a described meal in ONE call and offer it as ONE entry. False if that failed.
+
+    Returns False rather than degrading in place, so the caller can fall back to the
+    interpret-and-resolve path: a cooked-state, portioned ladder answer is a poor second to
+    this and a great deal better than nothing, and an unreachable model must never mean an
+    unloggable dinner."""
+    ask = f"{said.strip()} ({extra.strip()})" if extra else said
+    table = NLU.describe_meal(ask, CLAUDE_BIN, MEAL_MODEL, log=log)
+    if not table:
+        log("  meal table unavailable, falling back to the ladder")
+        return False
+    item = composed_item(ctx, table, said, day, default_at=default_at,
+                         default_meal=default_meal, in_session=in_session)
+    set_pending(ctx.store, {"batch": [item]})
+    _chat(ctx, "coach", _offer_summary([item]))
+    body = fmt_meal_confirm(item)
+    if in_session:
+        body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
+    for line in _stated_time_note([item]) + _stated_meal_note([item]):
+        body += "\n\n" + line
+    log(f"  meal costed by {MEAL_MODEL}: {round(item.get('kcal') or 0)} kcal across "
+        f"{len(item.get('_components_detail') or [])} components, no rung walked")
+    kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
+    tg.send(token, chat_id, body + "\n\nLog it?", reply_markup=kb, log=log)
+    return True
 
 
 def offer_items(ctx: Context, items: list, day: date, token, chat_id,
@@ -2083,10 +2409,17 @@ _RESCALE_FIELDS = ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g",
                    "dietary_sodium_mg")
 
 
-def rescale_item(item: dict, grams: float = None, factor: float = None):
+def rescale_item(item: dict, grams: float = None, factor: float = None,
+                 estimated: bool = False, why: str = ""):
     """The same item at a different amount, or None when there is no basis to scale
     from. Prefers the per-100g basis (exact, from the label or table); falls back to
-    scaling the current figures by the ratio of portions. Never touches identity."""
+    scaling the current figures by the ratio of portions. Never touches identity.
+
+    `estimated` says WHOSE number the new amount is. It defaults to False because almost
+    every caller is executing an amount the athlete stated, but the meal-sizing path is
+    not: there the grams are the model's reading of "it was a whole meal", and presenting
+    those as "as stated" would put words in his mouth and hide the assumption from the one
+    message where he can still say no."""
     out = dict(item)
     per = item.get("per_100g") or {}
     if grams is not None and per:
@@ -2110,9 +2443,25 @@ def rescale_item(item: dict, grams: float = None, factor: float = None):
         out["dietary_sodium_mg"] = round(out["dietary_sodium_mg"])
     if grams is not None:
         out["portion_used_g"] = grams
-        out["portion_assumed"] = f"{grams:.0f} g - as stated"
+        out["portion_assumed"] = (f"{grams:.0f} g - {why or 'an estimated portion'}"
+                                 if estimated else f"{grams:.0f} g - as stated")
     # A STATED amount is not an assumption - the flag exists to mark guesses.
-    out["portion_estimated"] = False
+    out["portion_estimated"] = bool(estimated)
+    return out
+
+
+def drop_stale_breakdown(item: dict) -> dict:
+    """Forget a component breakdown whose figures no longer add up to the entry.
+
+    His pasted rows are TEXT, so scaling the entry's totals cannot scale them - and leaving
+    them on a rescaled item shows him "Egg noodles 380 kcal" under a 1,470 kcal heading. The
+    breakdown was his description of the original amount and it stops being true the moment
+    the amount changes; dropping it loses nothing that is still correct."""
+    if not item.get("_components"):
+        return item
+    out = dict(item)
+    out.pop("_components", None)
+    out["ingredients"] = out.get("resolved_name") or out.get("ingredients") or ""
     return out
 
 
@@ -2121,9 +2470,21 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
     """Handle a pure-quantity correction against the pending offer or the latest
     entry. Returns True when handled (including by asking for the pack size)."""
     batch = (pend or {}).get("batch") or []
+    if any(i.get("_composed") for i in batch):
+        # Same reason as apply_batch_rescale: scaling a costed meal's totals would leave its
+        # component rows contradicting them, and re-render without the table.
+        log("  quantity correction declined: a costed meal is re-tabled instead")
+        return False
     item = batch[0] if len(batch) == 1 else None
     target = None
     if item is None:
+        if batch:
+            # A MULTI-COMPONENT OFFER IS NOT A COMMITTED ENTRY. The same wrong-target trap as
+            # the correction branch had: falling through to find_entry here would rescale
+            # something he logged earlier because the thing in front of him has four parts.
+            # A single ratio for a whole meal is rescale_all, which is handled before this.
+            log(f"  quantity correction declined: {len(batch)} items are pending")
+            return False
         target = ctx.store.find_entry(day, "")
         if not target:
             return False
@@ -2142,7 +2503,7 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
     if new is None:
         return False              # no basis to scale from: let re-resolution handle it
     if target is None:
-        batch[0] = new
+        batch[0] = drop_stale_breakdown(new)
         set_pending(ctx.store, {**pend, "batch": batch})
         kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
         tg.send(token, chat_id, fmt_confirm(new) + "\n\nLog it?",
@@ -2162,6 +2523,90 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
                 + "\n\n" + today_block(ctx, day), log=log)
         _chat(ctx, "coach", f"[log] rescaled {target.get('resolved_name')} to "
                             f"{new.get('portion_used_g'):.0f} g")
+    return True
+
+
+def apply_batch_rescale(ctx: Context, pend, decision: dict, day: date,
+                        token, chat_id) -> bool:
+    """Rescale some or all of a pending batch and re-offer it. True once handled.
+
+    THE THREE FAILURES THIS ANSWERS, all from the same evening (14 Aug 2026). "Do all of
+    that x1.5" was decided correctly as a factor and then applied to nothing, because the
+    only executor took a single item. "Make the noodles, steak and sauce 1.5x and the
+    vegetables 3x" had no shape to be expressed in at all. And "it was a whole meal" had no
+    way to put a portion on four components at once.
+
+    EVERY NUMBER HERE IS COMPUTED BY rescale_item, from each component's own basis. The
+    model supplied only a factor or a portion, which is the invariant the whole module rests
+    on: it decides meaning and quantity, the code does arithmetic."""
+    batch = list((pend or {}).get("batch") or [])
+    if not batch:
+        return False
+    # A COSTED MEAL IS NEVER SCALED IN PLACE. rescale_item moves the entry's totals and knows
+    # nothing about _components_detail, so "all of that x1.5" would leave a 1,402 kcal entry
+    # whose own rows still sum to 935 - and those rows are what the NEXT correction is applied
+    # to. It would also re-render through fmt_confirm, losing the table and the assumptions
+    # and stating a different error band from the one on the item. Declining sends it to the
+    # re-table branch, which is one model call and keeps the meal internally consistent.
+    if any(i.get("_composed") for i in batch):
+        log("  batch rescale declined: a costed meal is re-tabled, not scaled in place")
+        return False
+    kind = decision.get("kind")
+    if kind == "rescale_all":
+        factor = decision.get("factor")
+        specs = [{"index": i, "factor": factor} for i in range(len(batch))]
+    else:
+        specs = decision.get("items") or []
+    if not specs:
+        return False
+    # A portion the MODEL sized is flagged as an estimate and stated on the offer; a factor
+    # or a weight he gave is not. meal_portions is the only kind where the grams are ours.
+    estimated = (kind == "meal_portions")
+    why = "my estimate of the portion for a meal that size"
+    fresh, changed, refused = list(batch), [], []
+    for spec in specs:
+        idx = spec["index"]
+        # NOTHING TO SCALE IS NOT THE SAME AS SCALED. rescale_item's factor branch multiplies
+        # whatever macro fields are present, so an item with none - one still waiting on
+        # figures - passes through it unchanged and would be counted as done, and the reply
+        # would claim to have scaled all of them.
+        has_basis = (bool(fresh[idx].get("per_100g"))
+                     or any(fresh[idx].get(f) is not None for f in _RESCALE_FIELDS))
+        scaled = rescale_item(fresh[idx], grams=spec.get("grams"),
+                              factor=spec.get("factor"),
+                              estimated=estimated, why=why) if has_basis else None
+        if scaled is None:
+            # No per-100g basis and no current portion, so there is nothing to scale FROM.
+            # Named in the reply rather than skipped in silence: a component that quietly
+            # kept its old figure inside a rescaled meal is a wrong total he cannot see.
+            refused.append(fresh[idx].get("resolved_name")
+                           or fresh[idx].get("_raw") or f"item {idx + 1}")
+            continue
+        fresh[idx] = drop_stale_breakdown(scaled)
+        changed.append(idx)
+    if not changed:
+        log(f"  batch rescale had no basis to work from: {refused}")
+        return False
+    set_pending(ctx.store, {**pend, "batch": fresh})
+    body = "\n\n".join(fmt_confirm(i) for i in fresh)
+    total = round(sum(i.get("kcal") or 0 for i in fresh))
+    lead = {"rescale_all": f"Scaled all {len(fresh)} of them.",
+            "rescale_items": f"Scaled {len(changed)} of them, the rest are unchanged.",
+            "meal_portions": "Sized it as a meal - every portion below is my estimate, "
+                             "so correct any that look wrong."}[kind]
+    if refused:
+        lead += (" I could not scale " + ", ".join(r[:40] for r in refused)
+                 + ": there is no portion or per-100g basis behind "
+                 + ("it" if len(refused) == 1 else "them")
+                 + ", so tell me the grams and I will redo "
+                 + ("it." if len(refused) == 1 else "them."))
+    if len(fresh) > 1:
+        body += f"\n\n*Total* {total} kcal"
+    kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
+    tg.send(token, chat_id, lead + "\n\n" + body + "\n\nLog "
+            + ("these?" if len(fresh) > 1 else "it?"), reply_markup=kb, log=log)
+    _chat(ctx, "coach", f"[log] rescaled {len(changed)} of {len(fresh)} offered items "
+                        f"to {total} kcal - awaiting confirm")
     return True
 
 
@@ -2523,7 +2968,13 @@ def correct_in_batch(ctx: Context, pend: dict, correction: str, day: date,
     fetchers[NR.Rung.WEB] = lambda q, pg, _h=hint, _d=deep: _d(q, pg, hint=_h)
     item = NR.resolve(combined, day=day, store=ctx.store, table=ctx.table,
                       fetchers=fetchers, cofid=ctx.cofid, hint=hint,
-                      portion_g=target.get("portion_g"),
+                      # portion_used_g FIRST. A resolved item does not carry `portion_g` -
+                      # it is not in PASSTHROUGH_FIELDS, so this was always None - and with
+                      # components now sized to a meal, re-resolving one by name dropped it
+                      # back to a per-100g basis inside a portioned dinner. A wrong total he
+                      # cannot see, which is what every other path here refuses to produce.
+                      portion_g=(target.get("portion_used_g")
+                                 or target.get("portion_g")),
                       exclude=_exclusions(ctx, day))
     item["_raw"] = combined
     item["in_session"] = bool(target.get("in_session"))

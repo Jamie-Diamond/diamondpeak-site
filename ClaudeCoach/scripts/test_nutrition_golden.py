@@ -340,6 +340,215 @@ got = NLU.read_photo("/tmp/x.jpg", "claude", "m", log=lambda *a: None,
 check("read_photo flags the outage instead of blaming the photo",
       got.get("model_unavailable") is True, got)
 
+# --- 10. the composed meal, costed whole by one capable model ---------------
+
+# 14 AUG 2026, from the bot log. "a large stir fry with egg noodles, a small steak, soy
+# ginger garlic [sauce], [veg]" was broken into four components, each looked up separately,
+# and offered as 447 kcal of raw and dried 100 g parts for a meal of about 980. Jamie got a
+# correct table by asking a generic Opus 5 himself, and was right that we should be able to:
+# the composition tables hold INGREDIENTS, not dinners. So a described meal is now costed in
+# one full-intelligence call and the ladder never runs on it.
+print("\n--- the stir-fry, costed as one meal ---")
+
+STIR_FRY_MSG = ("a large stir fry with egg noodles, a small steak, soy ginger garlic sauce "
+                "and veg")
+
+# The table, RECORDED as a fixture exactly like the Deliveroo response: what a capable model
+# returns for that sentence. It pins the CONTRACT - cooked states, a portion and a basis per
+# component, a total, a band, the plants, the assumptions - not what a live model says today.
+RECORDED_MEAL = """Here is the breakdown.
+{"meal_name":"Large beef stir-fry with egg noodles",
+ "components":[
+  {"name":"egg noodles, cooked","portion_g":300,"portion_basis":"a large bowl of cooked noodles","kcal":420,"protein_g":14,"carb_g":80,"fat_g":4,"fibre_g":4},
+  {"name":"rump steak, grilled","portion_g":120,"portion_basis":"a small steak",
+   "kcal":210,"protein_g":37,"carb_g":0,"fat_g":7,"fibre_g":0},
+  {"name":"soy, ginger and garlic sauce","portion_g":45,"portion_basis":"2 tbsp",
+   "kcal":60,"protein_g":2,"carb_g":10,"fat_g":1,"fibre_g":0},
+  {"name":"stir-fried mixed vegetables","portion_g":200,"portion_basis":"a generous handful","kcal":110,"protein_g":4,"carb_g":12,"fat_g":5,"fibre_g":5},
+  {"name":"vegetable oil for the pan","portion_g":15,"portion_basis":"1 tbsp",
+   "kcal":135,"protein_g":0,"carb_g":0,"fat_g":15,"fibre_g":0}],
+ "total":{"kcal":935,"protein_g":57,"carb_g":102,"fat_g":32,"fibre_g":9},
+ "error_band_pct":18,
+ "plants":["wheat","garlic","ginger","soya","onion","red pepper","broccoli"],
+ "assumptions":["Large bowl taken as 300 g cooked noodles","1 tbsp oil in the pan",
+                "Small steak taken as 120 g raw, grilled"]}"""
+
+meal = NLU.describe_meal(STIR_FRY_MSG, "claude", "claude-opus-5", log=lambda *a: None,
+                         runner=lambda *a, **k: _Proc(RECORDED_MEAL))
+check("the meal is costed as one table, not four lookups",
+      meal is not None and len(meal["components"]) == 5, meal and len(meal["components"]))
+check("THE BUG: the total is a real dinner, not 447 kcal",
+      700 < meal["total"]["kcal"] < 1300, meal["total"]["kcal"])
+check("and it is the SUM of the components, computed by the code",
+      meal["total"]["kcal"] == sum(c["kcal"] for c in meal["components"]),
+      meal["total"]["kcal"])
+check("every component is in the state he ATE it",
+      not any(w in c["name"].lower() for c in meal["components"]
+              for w in ("dried", " raw")),
+      [c["name"] for c in meal["components"]])
+check("every component has an as-eaten portion and a stated basis for it",
+      all(c["portion_g"] and c["portion_basis"] for c in meal["components"]),
+      [(c["portion_g"], c["portion_basis"]) for c in meal["components"]])
+check("the cooking oil the ladder always missed is in the meal",
+      any("oil" in c["name"].lower() for c in meal["components"]))
+check("but it is the teaspoons that went in the pan, not 100 g of oil",
+      all(c["portion_g"] <= 30 for c in meal["components"]
+          if "oil" in c["name"].lower()))
+check("it declares an honest error band", 10 <= meal["error_band_pct"] <= 40)
+check("and every assumption is stated, because that is what he corrects",
+      len(meal["assumptions"]) == 3)
+
+# THE CALLER, through the real bot: an item a library got right and the caller mangled is the
+# shape of every hand-off bug in this file.
+_sent = []
+nb.tg.send = lambda token, chat, text, **k: _sent.append(text)
+nb.tg.inline = lambda rows: None
+_pend = {}
+nb.set_pending = lambda store, item: _pend.update(item)
+nb._chat = lambda ctx, role, text: None
+# nb.NLU is this file's NLU, so this stub is GLOBAL and is put back below.
+_real_meal_run = nb.NLU.subprocess.run
+nb.NLU.subprocess.run = lambda *a, **k: _Proc(RECORDED_MEAL)
+
+
+class _MealCtx:
+    store, table, cofid, fetchers = None, TABLE, EMPTY_COFID, {}
+
+
+_offered = nb.offer_composed(_MealCtx(), STIR_FRY_MSG, TODAY, "token", 1,
+                             default_meal="dinner")
+_item = (_pend.get("batch") or [{}])[0]
+check("the bot offers it as ONE entry", _offered and len(_pend.get("batch") or []) == 1)
+check("at the costed total", _item.get("kcal") == 935.0, _item.get("kcal"))
+check("labelled an estimate, with the band on the line he reads",
+      _item.get("confidence") == "estimate" and "+/-18%" in _sent[-1])
+check("the plants in it are credited to the diversity count",
+      len(_item.get("species") or []) >= 4,
+      [s["id"] for s in _item.get("species") or []])
+check("the table and its assumptions are in the confirm message",
+      "300g egg noodles, cooked" in _sent[-1]
+      and "assumed: 1 tbsp oil in the pan" in _sent[-1])
+check("and it asks once", _sent[-1].count("Log it?") == 1)
+# Put it back. A stub left in place is how this file was silently green once already: the
+# fixtures below pass an explicit runner, so nothing would have complained.
+nb.NLU.subprocess.run = _real_meal_run
+check("the meal-model stub is restored for the fixtures below",
+      nb.NLU.subprocess.run is _real_meal_run)
+
+# --- 11. the interpret fallback, for when the meal model is down ------------
+
+# SECOND BEST, AND IT HAS TO BE GOOD. When the meal model cannot be reached, the same
+# message goes down the interpret-and-resolve path, and that path was where the original
+# 447 kcal came from: four components at per-100g, no portions, priced off "Noodles, egg,
+# dried, raw" and a raw steak row. A fallback nobody fixed is a fallback that ships the
+# original bug on the first outage, so it gets cooked states, as-eaten portions, and a CoFID
+# that prefers a cooked row over a raw one.
+print("\n--- the fallback path: cooked and portioned, when the meal model is down ---")
+
+STIR_FRY = ("a large stir fry with egg noodles, a small steak, soy ginger garlic sauce "
+            "and veg")
+
+# What the interpreter now returns for it: cooked search terms, an as-eaten portion per
+# component, and every portion declared a guess. Recorded here as a fixture, exactly like
+# the Deliveroo response, so the fixture pins the CONTRACT between the two model calls and
+# the ladder rather than what a live model says today.
+PLANNED_STIR_FRY = """{"items":[
+ {"canonical_name":"egg noodles, cooked","brand":null,"form":"whole_food",
+  "category":"whole_food","is_supplement":false,"expect_macros":true,"portion_g":300,
+  "portion_estimated":true,"in_session":false,"at":null,"meal":"dinner",
+  "search_terms":["egg noodles, cooked","noodles, egg, boiled"]},
+ {"canonical_name":"rump steak, grilled","brand":null,"form":"whole_food",
+  "category":"whole_food","is_supplement":false,"expect_macros":true,"portion_g":100,
+  "portion_estimated":true,"in_session":false,"at":null,"meal":"dinner",
+  "search_terms":["beef, rump steak, grilled, lean"]},
+ {"canonical_name":"soy sauce","brand":null,"form":"other","category":"whole_food",
+  "is_supplement":false,"expect_macros":true,"portion_g":30,"portion_estimated":true,
+  "in_session":false,"at":null,"meal":"dinner","search_terms":["soy sauce"]},
+ {"canonical_name":"vegetables, stir-fried","brand":null,"form":"whole_food",
+  "category":"whole_food","is_supplement":false,"expect_macros":true,"portion_g":200,
+  "portion_estimated":true,"in_session":false,"at":null,"meal":"dinner",
+  "search_terms":["vegetables, stir-fried"]}]}"""
+
+plan = NLU.interpret(STIR_FRY, "claude", "m", log=lambda *a: None,
+                     runner=lambda *a, **k: _Proc(PLANNED_STIR_FRY))
+check("all four components are planned", len(plan["items"]) == 4, len(plan["items"]))
+# The three components the table holds in more than one state. A sauce has no cooked form
+# and must not be made to claim one - the rule is that the state he ate it in is the state
+# searched for, not that every string carries a cooking verb.
+check("each component that HAS a raw form is searched in its cooked one",
+      all(any(w in t for t in plan["items"][i]["search_terms"] for w in
+              ("cooked", "boiled", "grilled", "stir-fried"))
+          for i in (0, 1, 3)),
+      [i["search_terms"] for i in plan["items"]])
+check("and none of them asks for a raw or dried row",
+      not any("raw" in t or "dried" in t
+              for i in plan["items"] for t in i["search_terms"]),
+      [i["search_terms"] for i in plan["items"]])
+check("every component carries a portion, scaled to a LARGE stir fry",
+      [i["portion_g"] for i in plan["items"]] == [300, 100, 30, 200],
+      [i["portion_g"] for i in plan["items"]])
+check("and every portion is declared a guess, not a measurement",
+      all(i["portion_estimated"] is True for i in plan["items"]))
+
+# THE LOOKUP, against the real published table. The raw row wins on overlap and coverage
+# alone - it is the shortest name, so it adds least - which is exactly how it beat the
+# boiled one.
+check("THE BUG: cooked egg noodles are no longer the dried, raw row",
+      REAL_COFID.lookup("egg noodles, cooked", 100)["resolved_name"]
+      != "Noodles, egg, dried, raw",
+      REAL_COFID.lookup("egg noodles, cooked", 100)["resolved_name"])
+check("they are a boiled row, at roughly half the energy of the dried one",
+      "boiled" in REAL_COFID.lookup("egg noodles, cooked", 100)["resolved_name"]
+      and REAL_COFID.lookup("egg noodles, cooked", 100)["kcal"] < 200,
+      REAL_COFID.lookup("egg noodles, cooked", 100)["kcal"])
+check("a query that ASKS for a dried food still gets one",
+      REAL_COFID.lookup("dried apricots", 100)["resolved_name"] == "Apricots, dried")
+check("and a raw food eaten raw is untouched",
+      "raw" in REAL_COFID.lookup("raw carrot", 100)["resolved_name"])
+# The basis has to travel with the figures or a later "x1.5" has nothing to scale from and
+# "300 g of that" cannot be applied at all.
+_noodles = REAL_COFID.lookup("egg noodles, cooked", 300)
+check("a CoFID hit carries the per-100g basis it scaled from",
+      (_noodles.get("per_100g") or {}).get("kcal") is not None
+      and _noodles["portion_used_g"] == 300.0)
+check("and the portion is priced from that basis",
+      round(_noodles["kcal"]) == round(_noodles["per_100g"]["kcal"] * 3),
+      _noodles["kcal"])
+
+# THE CALLER, with the real ladder and the real table: a library that is right while
+# offer_planned drops the flag is the shape of every hand-off bug in this file.
+nb.tg.send = lambda token, chat, text, **k: _offered.append(text)
+_offered = []
+_pending = {}
+nb.set_pending = lambda store, item: _pending.update(item)
+
+
+class _MealCtx:
+    store, table, cofid, fetchers = None, TABLE, REAL_COFID, {}
+
+
+nb.offer_planned(_MealCtx(), plan["items"], TODAY, "token", 1, said=STIR_FRY)
+batch = _pending.get("batch") or []
+check("the offer carries all four components", len(batch) == 4, len(batch))
+check("none of them is a raw or dried row",
+      not any("raw" in (i.get("resolved_name") or "").lower()
+              and "boiled" not in (i.get("resolved_name") or "").lower()
+              for i in batch),
+      [i.get("resolved_name") for i in batch])
+check("every component has the portion the interpreter sized",
+      [i.get("portion_used_g") for i in batch] == [300.0, 100.0, 30.0, 200.0],
+      [i.get("portion_used_g") for i in batch])
+check("and every estimated portion says so on the message he confirms",
+      all(i.get("portion_estimated") is True for i in batch)
+      and _offered and _offered[-1].count("assumed") == 4,
+      [i.get("portion_assumed") for i in batch])
+_total = sum(i.get("kcal") or 0 for i in batch)
+check("the total is a plausible dinner, not the 447 kcal he was offered",
+      700 < _total < 1300, round(_total))
+check("each component keeps a basis, so it can still be rescaled",
+      all(i.get("per_100g") for i in batch),
+      [bool(i.get("per_100g")) for i in batch])
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

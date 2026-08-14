@@ -151,6 +151,42 @@ def _form_conflict(query: str, name: str) -> bool:
                 or (n & _DOSE_FORMS and q & _FOOD_FORMS))
 
 
+# How a composition row states that it is NOT the food as eaten, and how a query states
+# that it is. Matched against the raw name string rather than through _tokens, because
+# "raw" is a stopword there and therefore invisible to the tokeniser.
+#
+# "dried" is a raw-state word for a food that is REHYDRATED by cooking, and PHE writes the
+# cooked rows as "dried, boiled in unsalted water" - so a cooked word anywhere in the name
+# settles it, and only a row with no cooked word at all counts as raw. That also keeps
+# genuinely dried foods reachable: "dried apricots" names no cooked state, so nothing here
+# applies to it.
+_RAW_STATE_WORDS = ("raw", "dried", "uncooked", "dry weight", "as purchased")
+_COOKED_STATE_WORDS = (
+    "cooked", "boiled", "steamed", "fried", "grilled", "griddled", "roast", "baked",
+    "poached", "barbecued", "braised", "casseroled", "stewed", "microwaved", "toasted",
+    "as served", "as eaten", "takeaway", "homemade", "slow cooked", "reheated")
+
+
+def _has_word(text: str, words) -> bool:
+    low = (text or "").lower()
+    return any(w in low for w in words)
+
+
+def _is_raw_row(name: str) -> bool:
+    """True when this table row is the food BEFORE it was cooked."""
+    return (_has_word(name, _RAW_STATE_WORDS)
+            and not _has_word(name, _COOKED_STATE_WORDS))
+
+
+def _wants_cooked(query: str) -> bool:
+    """True when the query asks for a cooked food and does not ask for a raw one.
+
+    A query that says "dried" or "raw" itself is asking for exactly that and must be left
+    alone - "dried apricots" and "raw carrot" are things people eat."""
+    return (_has_word(query, _COOKED_STATE_WORDS)
+            and not _has_word(query, _RAW_STATE_WORDS))
+
+
 def _relevant(query: str, name: str) -> bool:
     """Does this database hit actually correspond to what was asked for?
 
@@ -455,6 +491,14 @@ class CofidTable:
         if not q:
             return None
         food = self.foods.get(q)
+        # THE STATE HE ATE IT IN. PHE holds a row per state and they are different foods:
+        # "Noodles, egg, dried, raw" is 338 kcal per 100 g, the boiled row 166. On
+        # 14 Aug 2026 a stir-fry was priced from the DRIED noodle row and a RAW steak row,
+        # which is not a meal anyone has ever eaten. An exact or alias hit is normally
+        # authoritative and skips the candidate loop entirely, so a raw row reached by name
+        # has to be sent back through it to look for a cooked sibling of the same food.
+        if food is not None and _wants_cooked(q) and _is_raw_row(food.get("name")):
+            food = None
         if food is None:
             # Substring matching alone was the bug: "chicken" appears inside "satay
             # chicken with black rice and mango", so a five-word branded dish matched raw
@@ -477,6 +521,7 @@ class CofidTable:
             # sort: applied to the winner it would let a high-overlap, poor-coverage row
             # shadow a lower-overlap row that actually covers the query.
             qt = _tokens(q)
+            cooked_wanted = _wants_cooked(q)
             hits = []
             for name, f in self.foods.items():
                 nt = _tokens(name)
@@ -518,14 +563,28 @@ class CofidTable:
                 # unexplained and never reaches here.
                 if (len(shared) >= 2 or (name in q and len(nt) >= 2)
                         or (shared and not (qt - nt))):
-                    hits.append((len(shared), -len(nt - qt), name, f))
+                    # STATE OUTRANKS EVERY OTHER PREFERENCE for a query that names a cooked
+                    # food. On overlap and coverage alone the raw row WINS - it is the
+                    # shortest name, so it adds least - which is precisely how the dried
+                    # noodle row beat the boiled one. The cooked row's extra words
+                    # ("boiled in unsalted water") count against it under every other
+                    # measure here, so the preference has to sort ahead of them.
+                    cooked_ok = 0 if (cooked_wanted and _is_raw_row(f.get("name"))) else 1
+                    hits.append((cooked_ok, len(shared), -len(nt - qt), name, f))
             if not hits:
                 return None
-            # Best row: most of the query explained, then the row that adds the LEAST the
-            # query did not ask for. Preferring the longest name instead picked the most
-            # embellished row, so a bare "almonds" could land on a roasted salted one.
+            # Best row: the right state, then most of the query explained, then the row that
+            # adds the LEAST the query did not ask for. Preferring the longest name instead
+            # picked the most embellished row, so a bare "almonds" could land on a roasted
+            # salted one.
             hits.sort(reverse=True)
-            food = hits[0][3]
+            food = hits[0][4]
+            if cooked_wanted and _is_raw_row(food.get("name")):
+                # He ate it cooked and this table has only the raw form. Returning it would
+                # put a raw figure in a food log wearing `label` confidence; falling through
+                # sends the query to the web rung, which can find a cooked figure. A missing
+                # rung is recoverable, a confidently wrong one is not.
+                return None
             if not _relevant(query, food.get("name") or ""):
                 return None
         per_100 = {f: food.get(f) for f in MACRO_FIELDS if food.get(f) is not None}
@@ -533,6 +592,18 @@ class CofidTable:
         out = _scale(per_100, portion_g)
         if sodium is not None:
             out["dietary_sodium_mg"] = round(sodium * ((portion_g or 100.0) / 100.0))
+        # THE BASIS TRAVELS WITH THE FIGURES. Every other rung that scales a portion hands
+        # back the per-100g row it scaled from, and this one did not - so a whole food had no
+        # basis at all, and "make the noodles 1.5x" could only be applied as a blind ratio
+        # while "300 g of that" could not be applied at all (rescale_item returns None with
+        # neither a basis nor a portion). It also lets the offer say what portion it used.
+        if per_100 or sodium is not None:
+            basis = dict(per_100)
+            if sodium is not None:
+                basis["dietary_sodium_mg"] = sodium
+            out["per_100g"] = basis
+        if portion_g:
+            out["portion_used_g"] = float(portion_g)
         return {**out, "resolved_name": food["name"],
                 "ingredients": food.get("ingredients", food["name"]),
                 "source_url": food.get("source_url",

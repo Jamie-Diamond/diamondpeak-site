@@ -302,9 +302,13 @@ Classify the message and extract structure. Reply with ONLY a JSON object, no pr
 Keys:
   intent: one of log_food, log_supplement, question, advice, correction, smalltalk,
           unknown
-  items: array (log_food/log_supplement only) of {text, portion_g, in_session, at, meal}
+  items: array (log_food/log_supplement only) of {text, portion_g, in_session, at, meal,
+         stated}
          - text: a SINGLE food or supplement, self-contained enough to look up
          - portion_g: grams if stated or confidently inferable, else null
+         - stated: HIS OWN NUMBERS, when he has given them. Normally null. See
+           "WHEN HE STATES THE NUMBERS" below - this is the one field where numbers are
+           allowed, because they are his, not yours.
          - at: "HH:MM" (24h) ONLY when the message states a clock time for this item -
            "at 1350" -> "13:50", "8:30am" -> "08:30", "at half seven tonight" -> "19:30".
            NEVER guess: "this morning", "earlier", "before the ride" and anything else
@@ -336,6 +340,8 @@ Keys:
          - in_session: true only if eaten DURING a training session (gel, drink mix,
            "on the bike", "mid-run"). In-session fuel is never a meal: if in_session is
            true, meal is null.
+  composed_meal: (log_food only) true when this is a MEAL SOMEBODY COOKED rather than a
+          product with figures somewhere. See "A COMPOSED MEAL" below.
   question: (question only) a short restatement of what they are asking
   options: (advice only) array of the candidate foods/meals being weighed up, as
            plain lookup-able strings. Include every option mentioned, even in
@@ -367,8 +373,133 @@ Rules:
     product's scoop/portion/pack is, is a correction. What it CHANGES is decided later.
   - NEVER invent nutrition numbers. You extract text and portions only.
 
+A COMPOSED MEAL IS ONE MEAL, AND NO DATABASE KNOWS IT.
+Set composed_meal true when he describes food that was COOKED FROM PARTS - "a large stir
+fry with egg noodles, a small steak, soy ginger garlic sauce and veg", "chilli con carne
+with rice", "a fry-up", "chicken salad I made". Several things cooked or assembled
+together, with no brand, no barcode and no label anywhere in it.
+
+composed_meal is FALSE for:
+  - a branded or packaged product, or anything with a barcode or a label ("M&S satay
+    chicken", "a Nakd bar", "500ml Rubicon") - those have real published figures
+  - a single whole food ("a banana", "200g chicken breast", "a handful of almonds") - the
+    composition tables are authoritative for those and better than any estimate
+  - a restaurant or takeaway order - the chain publishes its own nutrition
+  - a supplement or a dose of anything
+Items are still split as usual, because a message can hold a composed meal AND a coffee.
+When composed_meal is true, put the WHOLE meal in ONE item's text, exactly as he described
+it, wording and size words intact: a full-intelligence model reads that description and
+tables the meal, and every word he used is evidence it needs.
+
+WHEN HE STATES THE NUMBERS, THE NUMBERS ARE THE ANSWER.
+  If the message carries an explicit energy figure with macros - "roughly 700 kcal, 40g
+  protein, 60g carbs" - or a table of components with kcal against them, then he has
+  already done the work and there is nothing to look up. Put his figures in `stated` and
+  they are logged verbatim. Do not restate them differently, do not round them, do not
+  reconcile a total against its parts, and do not convert anything.
+
+  `stated` shape (omit any figure he did not give; kcal is required or it is not a
+  specification at all):
+    {"kcal": n, "protein_g": n, "carb_g": n, "fat_g": n, "fibre_g": n,
+     "dietary_sodium_mg": n, "basis": "estimate"|"label", "components": ["<his rows>"]}
+  basis is "label" ONLY when he says he read it off a pack or a label; his own reckoning,
+  however detailed, is "estimate". `components` is his own per-part lines, copied as text,
+  so the log keeps the breakdown without pretending each part was looked up.
+
+  A PASTED TABLE IS ONE MEAL, NOT N LOOKUPS. This is the failure this rule exists for
+  (14 Aug 2026): he pasted a full breakdown of a stir-fry, and it was read as five foods
+  to search for - which re-priced his own meal at 2,400 kcal, including 100 g of oil at
+  899 kcal. Emit ONE item for the meal, carrying HIS total, with the rows in
+  `components`. Worked example:
+
+    "Large stir-fry bowl ~980 kcal
+     Egg noodles (300g cooked) 380 kcal, 12P, 75C, 3F
+     Steak (100g) 220 kcal, 26P, 0C, 13F
+     Soy/ginger/garlic sauce 80 kcal, 2P, 8C, 4F
+     Vegetables (200g) 90 kcal, 4P, 15C, 1F
+     Oil 210 kcal, 0P, 0C, 23F"
+  ->
+    {"intent":"log_food","items":[{"text":"large stir-fry bowl with egg noodles, steak,
+      soy ginger garlic sauce, vegetables and oil","portion_g":null,"in_session":false,
+      "at":null,"meal":null,
+      "stated":{"kcal":980,"protein_g":44,"carb_g":98,"fat_g":44,"basis":"estimate",
+        "components":["Egg noodles (300g cooked) 380 kcal, 12P, 75C, 3F",
+                      "Steak (100g) 220 kcal, 26P, 0C, 13F",
+                      "Soy/ginger/garlic sauce 80 kcal, 2P, 8C, 4F",
+                      "Vegetables (200g) 90 kcal, 4P, 15C, 1F",
+                      "Oil 210 kcal, 0P, 0C, 23F"]}}]}
+
+  HIS HEADLINE TOTAL WINS over the sum of his rows. If the rows add to 968 and he wrote
+  980, kcal is 980: he is telling you what the meal was, not setting an arithmetic
+  exercise. Only add the rows up when he gave no total at all.
+  Per-macro totals: use his stated totals when he gives them, otherwise the sum of the
+  rows for that macro, otherwise omit the field.
+  A bare "about 600 calories" with no macros is still `stated` - kcal only.
+  A message that states its own figures is log_food EVEN WHEN it reads like a correction
+  of something you just offered ("no - it was 980 kcal, 44P 98C 44F"). His figures replace
+  the offer wholesale, so there is nothing to correct: it is a fresh, authoritative log.
+
 Message: %s
 """
+
+
+# The fields a stated specification may carry, with the largest value each may hold. A
+# ceiling rather than a plausibility judgement: these are HIS figures and the code's only
+# job is to catch a mis-read decimal point before it becomes a 40,000 kcal day.
+_STATED_BOUNDS = {"kcal": 20000, "protein_g": 2000, "carb_g": 3000, "fat_g": 2000,
+                  "fibre_g": 500, "dietary_sodium_mg": 40000}
+
+# What the model might call each field if it does not use the store's own name. Mapped
+# rather than dropped: every value here is one the athlete supplied, so losing one to a
+# spelling is a silent loss of his own data, and there is no invention risk in accepting
+# "carbs" for "carb_g".
+_STATED_ALIASES = {
+    "calories": "kcal", "cals": "kcal", "energy_kcal": "kcal", "energy": "kcal",
+    "protein": "protein_g", "carbs": "carb_g", "carb": "carb_g",
+    "carbohydrate": "carb_g", "carbohydrates": "carb_g", "carbs_g": "carb_g",
+    "fat": "fat_g", "fats": "fat_g", "fibre": "fibre_g", "fiber": "fibre_g",
+    "fiber_g": "fibre_g", "sodium": "dietary_sodium_mg",
+    "sodium_mg": "dietary_sodium_mg",
+}
+
+
+def stated_macros(block) -> dict | None:
+    """HIS OWN figures, validated but never recomputed, or None if this is not one.
+
+    THE DEFECT THIS EXISTS FOR (14 Aug 2026). He pasted a complete macro table for a
+    stir-fry - a total and a row per component - and every row was sent down the
+    resolution ladder as a fresh lookup, which re-priced his 980 kcal meal at 2,400. A
+    figure the athlete states is the most authoritative source there is: he ate it, and no
+    composition table knows more about his dinner than he does.
+
+    So this validator's whole contract is that it either passes his numbers through
+    UNTOUCHED or refuses them. It does not derive kcal from macros, does not reconcile a
+    total against its rows and does not round: a "corrected" figure here would be
+    indistinguishable, in the log, from one he gave. kcal is required, because a
+    specification with no energy figure is a description, and a description belongs on the
+    ladder."""
+    if not isinstance(block, dict):
+        return None
+    out = {}
+    for key, raw in block.items():
+        field = _STATED_ALIASES.get(str(key).strip().lower(), str(key).strip().lower())
+        if field not in _STATED_BOUNDS:
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        # A negative or out-of-range figure is DROPPED, not clamped: clamping would
+        # invent a number and then present it as his.
+        if 0 <= value <= _STATED_BOUNDS[field]:
+            out[field] = value
+    if not out.get("kcal"):
+        return None
+    basis = str(block.get("basis") or "").strip().lower()
+    out["basis"] = "label" if basis == "label" else "estimate"
+    out["components"] = [str(c).strip() for c in (block.get("components") or [])
+                         if str(c or "").strip()][:20]
+    return out
 
 
 _HHMM = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
@@ -446,7 +577,13 @@ def parse_with_model(text: str, claude_bin: str, model: str, log=print,
                           # safe direction - an out-of-session item counted in the day is
                           # merely a day total, while a breakfast counted as in-run fuel
                           # rewrites the fuelling history the coach prescribes from.
-                          "in_session": in_session})
+                          "in_session": in_session,
+                          # HIS FIGURES, if he gave any. Named here explicitly because
+                          # this rebuild is an allowlist: a field the model returns and
+                          # this loop does not copy is dropped in silence, which is the
+                          # same hand-off bug that lost the photo hint and the species
+                          # score. Validated, never recomputed.
+                          "stated": stated_macros(it.get("stated"))})
     got["items"] = items
     return got
 
@@ -472,6 +609,14 @@ def classify(text: str, has_pending: bool, claude_bin: str, model: str, log=prin
             return {"intent": "question", "question": text}
         return got
     got = parse_with_model(text, claude_bin, model, log=log, runner=runner)
+    # A MESSAGE CARRYING HIS OWN FIGURES IS FOOD, and none of the reroutes below apply to
+    # it. A pasted macro table mentions milligrams of sodium, which tiny_dose_mg reads as a
+    # supplement dose and would have announced as "nutritionally negligible" about a
+    # 980 kcal dinner.
+    if any((i.get("stated") or {}).get("kcal") for i in got.get("items") or []):
+        got["intent"] = "log_food"
+        got["stated"] = True
+        return got
     # A dose form overrides a log_food classification. The model reads "had 400mg of my
     # collagen capsules" as eating, which it is, but the SUPPLEMENT path is the one that
     # records a dose and keeps collagen out of the protein target.
@@ -771,8 +916,12 @@ CORRECTION_PROMPT = """You are deciding what a correction to a food log means. T
 athlete has an item in front of him (below) and has sent a correction. Reply with ONLY \
 a JSON object.
 
-THE ITEM (as currently resolved; per_100g is the label/table basis if known). This may
-be EMPTY, which means nothing is logged yet - a "remember" decision is still valid:
+WHAT IS IN FRONT OF HIM (as currently resolved; per_100g is the label/table basis if
+known). This may be EMPTY, which means nothing is logged yet - a "remember" decision is
+still valid. A JSON OBJECT is one item. A JSON ARRAY is a whole meal awaiting his
+confirmation, numbered by `index`, and every component of it is his to correct - the
+index-carrying decisions below exist for that case and are valid ONLY when you are shown
+an array:
 %s
 
 HIS CORRECTION:
@@ -811,6 +960,27 @@ Decide which ONE of these he means and reply in that shape:
   {"kind":"remember_and_rescale","product":...,"field":...,"value":...,"grams":<n>}
       - the same fact, where it ALSO fixes the amount on the item in front of him. The
         REGO one is this shape: remember that a scoop is 25 g, and this entry was 25 g.
+  {"kind":"rescale_all","factor":<number>}
+      - EVERYTHING in front of him changes by one ratio: "do all of that x1.5", "it was
+        half of what you have there", "double the lot". Use this rather than repeating one
+        factor across every index.
+  {"kind":"rescale_items","items":[{"index":i,"factor":<n>} or {"index":i,"grams":<n>}]}
+      - DIFFERENT components change differently: "make the noodles, steak and sauce 1.5x
+        and the vegetables 3x" is three items at factor 1.5 and one at factor 3. Give
+        grams when he states an amount for that component, factor when he gives a ratio.
+        Name only the components he is changing; the rest stay as they are.
+  {"kind":"meal_portions","items":[{"index":i,"grams":<n>}]}
+      - HE IS TELLING YOU IT WAS A REAL MEAL AND ASKING YOU TO SIZE IT: "it was a whole
+        meal", "that was a full dinner plate, work it out". The components were priced per
+        100 g with no portion, which is not a meal, and he should not have to weigh his
+        dinner retrospectively to fix that.
+        THIS IS THE ONE PLACE YOU MAY ESTIMATE A QUANTITY. Give every component a
+        plausible as-eaten weight in GRAMS - noodles/pasta/rice around 300 g cooked for a
+        large serving, meat 150 g, vegetables 200 g, sauce 40 g, oil 15 g, scaled to any
+        size word he used. GRAMS ONLY: never a kcal or macro figure, because the code
+        scales those from each component's own per-100g basis, and a number you supplied
+        would silently replace a sourced one. Every component gets a portion, and the
+        offer will tell him each one was your estimate.
   {"kind":"unclear"}
 
 Rules:
@@ -822,6 +992,9 @@ Rules:
   states, never one you assume.
 - A correction that disputes the food AND gives an amount is reidentify (put the amount
   in the text, e.g. "20g of jam").
+- An `index` is one you were SHOWN. Never invent one, never use an index when you were
+  given a single object rather than an array, and match his words to the component names in
+  the array rather than to their order in his sentence.
 - `which` is his words, not a guess: quote the part of the message that names the entry
   ("initial rye bread", "the 160g"), or null if he did not name one. The code matches it
   against the log and ASKS when it matches nothing, so a vague `which` is safe and an
@@ -829,8 +1002,115 @@ Rules:
 """
 
 
+# Keys that make a scaling decision a MACRO decision, which the model is never allowed to
+# make. Checked by name against everything it returns for a component, because the harm is
+# silent: a kcal figure the model supplied would overwrite one scaled from a real per-100g
+# basis and read back as sourced data.
+_FORBIDDEN_IN_DECISION = {
+    "kcal", "calories", "cals", "energy", "protein", "protein_g", "carb", "carbs",
+    "carb_g", "carbohydrate", "carbohydrates", "fat", "fat_g", "fibre", "fibre_g",
+    "fiber", "fiber_g", "sodium", "sodium_mg", "dietary_sodium_mg", "per_100g",
+}
+
+
+def _carries_macros(spec) -> bool:
+    """True if this decision tries to hand back a nutrition figure."""
+    if not isinstance(spec, dict):
+        return False
+    return any(str(k).strip().lower() in _FORBIDDEN_IN_DECISION for k in spec)
+
+
+def batch_summaries(batch: list) -> list:
+    """The compact per-item view the model is shown for a pending meal.
+
+    Deliberately NOT the resolved items themselves: those carry attempt logs, ingredient
+    strings and provenance that would crowd out the correction itself, and the only things
+    a scaling decision needs are which component is which, how big each currently is, and
+    whether there is a per-100g basis to scale from."""
+    out = []
+    for i, it in enumerate(batch or []):
+        out.append({
+            "index": i,
+            "name": (it.get("resolved_name") or it.get("_raw") or "")[:70],
+            "kcal": it.get("kcal"),
+            "portion_used_g": it.get("portion_used_g"),
+            # Stated as a fact rather than as figures: with a basis, a portion becomes a
+            # multiplication; without one, only a ratio can be applied.
+            "has_per_100g_basis": bool(it.get("per_100g")),
+        })
+    return out
+
+
+def _scale_specs(got: dict, n: int, log) -> list | None:
+    """Validated [{'index':i,'factor':f}|{'index':i,'grams':g}], or None to refuse.
+
+    REFUSES THE WHOLE DECISION on any bad component rather than applying the good ones. A
+    partial application is the worst outcome available here: he would be shown a meal in
+    which some components moved and some did not, with nothing saying which, and the
+    arithmetic he is being asked to confirm would be wrong in a way he cannot see."""
+    specs = got.get("items")
+    if not isinstance(specs, list) or not specs:
+        log("decide_correction: per-item decision with no items")
+        return None
+    out = []
+    for spec in specs:
+        if not isinstance(spec, dict):
+            return None
+        if _carries_macros(spec):
+            # The model may size a portion; it may never price one.
+            log(f"decide_correction: refused a decision carrying macros: {spec}")
+            return None
+        try:
+            idx = int(spec["index"])
+        except (KeyError, TypeError, ValueError):
+            log(f"decide_correction: component with no usable index: {spec}")
+            return None
+        if not 0 <= idx < n:
+            # An out-of-range index means the model was not reading the batch it was
+            # shown, so nothing it said about that batch can be trusted.
+            log(f"decide_correction: index {idx} is not one of the {n} items shown")
+            return None
+        if spec.get("grams") is not None:
+            try:
+                grams = float(spec["grams"])
+            except (TypeError, ValueError):
+                return None
+            if not 0 < grams <= MAX_PORTION_G:
+                log(f"decide_correction: implausible portion {grams}")
+                return None
+            out.append({"index": idx, "grams": grams})
+        elif spec.get("factor") is not None:
+            factor = _usable_factor(spec.get("factor"), log)
+            if factor is None:
+                return None
+            out.append({"index": idx, "factor": factor})
+        else:
+            log(f"decide_correction: component with neither grams nor factor: {spec}")
+            return None
+    return out
+
+
+# Bounds on what the code will execute, not judgements about what he ate. A factor of 40
+# or a 9 kg portion is a mis-read decision rather than a meal, and executing one silently
+# rewrites his day.
+MAX_RESCALE_FACTOR = 20
+MAX_PORTION_G = 5000
+
+
+def _usable_factor(value, log) -> float | None:
+    try:
+        factor = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not 0 < factor <= MAX_RESCALE_FACTOR:
+        log(f"decide_correction: implausible factor {value!r}")
+        return None
+    return factor
+
+
 def decide_correction(message: str, item: dict, claude_bin: str, model: str,
-                      log=print, runner=None, timeout: int = 45) -> dict | None:
+                      log=print, runner=None, timeout: int = 45,
+                      batch: list = None) -> dict | None:
     """What the correction MEANS, decided by the model; the code only executes it.
 
     This replaced a growing pile of regexes (quantity detectors, exclusion
@@ -848,6 +1128,15 @@ def decide_correction(message: str, item: dict, claude_bin: str, model: str,
                ("resolved_name", "confidence", "kcal", "protein_g", "carb_g", "fat_g",
                 "portion_used_g", "pack_g", "per_100g", "portion_assumed")
                if (item or {}).get(k) is not None}
+    # THE WHOLE MEAL, when there is one on the table. Showing a single item was the defect
+    # of 14 Aug 2026: with a four-component stir-fry awaiting confirmation, the caller had
+    # no rule for which component to show, so it showed the last thing he had COMMITTED -
+    # a brookie from earlier - and the model was asked to interpret "it was a whole meal"
+    # against a food that had nothing to do with it. With a batch shown, a committed entry
+    # can no longer be the target of a correction at all.
+    n = len(batch or [])
+    if n:
+        summary = batch_summaries(batch)
     try:
         proc = runner([claude_bin, "--print", "--model", model],
                       input=CORRECTION_PROMPT % (json.dumps(summary, default=str),
@@ -872,6 +1161,30 @@ def decide_correction(message: str, item: dict, claude_bin: str, model: str,
     if kind in ("rescale", "rescale_factor", "whole_pack", "reidentify", "meal",
                 "unclear"):
         return got
+    if kind in ("rescale_all", "rescale_items", "meal_portions"):
+        # UNVALIDATED IS NOT THE SAME AS UNAVAILABLE. Returning None here would be read by
+        # the caller as "the model could not be reached" and would run the regex fallback
+        # against the message, which for "make the noodles 1.5x and the veg 3x" produces
+        # one wrong number applied to one wrong item. `unclear` says so honestly instead.
+        if not n:
+            log(f"decide_correction: {kind} with no batch to apply it to")
+            return {"kind": "unclear"}
+        if _carries_macros(got):
+            log(f"decide_correction: refused a {kind} carrying macros")
+            return {"kind": "unclear"}
+        if kind == "rescale_all":
+            factor = _usable_factor(got.get("factor"), log)
+            return ({"kind": "rescale_all", "factor": factor} if factor
+                    else {"kind": "unclear"})
+        specs = _scale_specs(got, n, log)
+        if not specs:
+            return {"kind": "unclear"}
+        if kind == "meal_portions" and any("grams" not in s for s in specs):
+            # Sizing a meal is a GRAMS judgement. A ratio here would be scaling something
+            # by a number with no basis, which is the shape that produced 447 kcal.
+            log("decide_correction: meal_portions must be grams for every component")
+            return {"kind": "unclear"}
+        return {"kind": kind, "items": specs}
     if kind == "retime":
         hhmm = normalise_hhmm(got.get("time"))
         if not hhmm:
@@ -1271,6 +1584,7 @@ each item actually IS and how to search for it. Reply with ONLY a JSON object.
   "is_supplement": true|false,
   "expect_macros": true|false,
   "portion_g": <grams as eaten, or null>,
+  "portion_estimated": true|false,
   "dose_mg": <milligrams if stated in mg/mcg, else null>,
   "count": <number of units if stated, else null>,
   "in_session": true|false,
@@ -1298,8 +1612,219 @@ Rules that matter:
   out wrong matches.
 - Split multiple items. Keep each one self-contained.
 
+A COMPOSED MEAL: COOKED STATES AND A PORTION FOR EVERY COMPONENT.
+"a large stir fry with egg noodles, a small steak, soy ginger garlic sauce and veg" is a
+plate of food, and each component needs two things it was not getting (14 Aug 2026: this
+returned four components at no portion at all, priced from the RAW and DRIED rows - dried
+noodles and raw steak - and offered 447 kcal for a 980 kcal dinner).
+
+1. SEARCH FOR THE STATE HE ATE IT IN. Food databases hold a row per state, and the raw or
+   dried row is a different food from the one on the plate: dried egg noodles are 338 kcal
+   per 100 g, boiled ones 166. So search_terms and canonical_name must name the state:
+     "egg noodles, cooked"   NEVER "egg noodles, dried" or "egg noodles, raw"
+     "steak, grilled"        NEVER "beef steak, raw"
+     "vegetables, stir-fried"
+   THE STATE HE ATE IT IN IS THE ONLY STATE THAT EVER BELONGS IN A FOOD LOG. Say "raw" or
+   "dried" only when he ate it that way, which for meat and noodles he did not.
+   If the cooking method is not stated, use the one the dish implies: a stir-fry is
+   stir-fried, a curry is cooked, a steak is grilled.
+2. GIVE EVERY COMPONENT A PORTION, scaled to the size he described, and say it is a guess
+   by setting portion_estimated true. A per-100g figure with no portion is not an answer,
+   and "large" and "small" are real information: a large bowl of noodles is not 100 g.
+   Ordinary as-eaten weights for a LARGE serving: noodles/pasta/rice 300 g cooked,
+   meat 150 g, vegetables 200 g, sauce 40 g, cooking oil 15 g. For a SMALL serving take
+   roughly half, for an unqualified one roughly two thirds. Cooking oil is a component of
+   a stir-fry whether or not he mentioned it, but keep it to the teaspoons actually used -
+   never a 100 g portion of oil.
+   portion_estimated is false ONLY when the grams come from HIS words ("300g of noodles").
+   The logger states every estimate on the line he confirms, so a wrong guess costs one
+   message; a missing portion costs the whole meal.
+
 Message: %s
 """
+
+# --- composed meals: one full-intelligence call, no ladder ------------------
+
+MEAL_TABLE_PROMPT = """You are a sports nutritionist costing ONE meal that this athlete \
+cooked and ate. He has described it in his own words. Produce the table.
+
+Reply with ONLY a JSON object:
+
+{"meal_name": "<short plain name for the meal, e.g. 'Large beef stir-fry with egg
+                noodles'>",
+ "components": [
+   {"name": "<the component, in the state it was EATEN: 'egg noodles, cooked', not
+             'dried'>",
+    "portion_g": <as-eaten grams>,
+    "portion_basis": "<how you arrived at that weight, in a few words: 'a large bowl of
+                      cooked noodles', 'his words: 300g', '2 tsp for the pan'>",
+    "kcal": <n>, "protein_g": <n>, "carb_g": <n>, "fat_g": <n>, "fibre_g": <n>}],
+ "total": {"kcal": <n>, "protein_g": <n>, "carb_g": <n>, "fat_g": <n>, "fibre_g": <n>},
+ "error_band_pct": <your honest uncertainty on the total energy, as a percentage>,
+ "plants": ["<each distinct plant species in the meal, named plainly: 'garlic', 'ginger',
+             'onion', 'red pepper', 'wheat'>"],
+ "assumptions": ["<each thing you had to assume, one per line, in plain English>"]}
+
+How to do it well:
+- COOK THE FOOD. Every weight and every figure is for the food AS EATEN. Dried noodles are
+  338 kcal per 100 g and boiled ones 166; raw steak and grilled steak are different foods.
+  A log records what went in his mouth.
+- SIZE IT FROM HIS WORDS. "Large", "small", "a bowl of", "a bit of" are real information.
+  Ordinary as-eaten weights for a LARGE serving: noodles/pasta/rice around 300 g cooked,
+  meat 150 g, vegetables 200 g, sauce 40 g. Roughly half that for a small one, two thirds
+  for an unqualified one.
+- INCLUDE WHAT COOKING ADDS. A stir-fry has oil in it whether or not he mentioned it, and
+  it is the single biggest thing missed when a meal is costed component by component - but
+  it is the teaspoons that went in the pan, not a 100 g portion of oil.
+- DO NOT PAD THE MEAL. Components he did not describe and the cooking does not require are
+  not in his dinner.
+- SAY WHAT YOU ASSUMED. Every portion you inferred and every ingredient you added belongs
+  in `assumptions`, in his language, because he reads them and corrects the ones that are
+  wrong. An unstated assumption is the failure mode here, not an inaccurate gram.
+- BE HONEST ABOUT THE BAND. A described home-cooked meal is typically +/-15-20%%. Say so
+  rather than implying precision you do not have.
+- `plants` is every distinct plant species that was really in it, whole foods and the herbs
+  and spices, named simply. Not brands, not dishes, not "vegetables".
+- Component figures must be for the portion_g you stated, NOT per 100 g.
+- The total is the sum of the components. Do not round it to something tidy.
+
+His description: %s
+"""
+
+
+# What a costed meal may contain, and the most any one figure may be. Bounds rather than
+# judgements: this rung is a model estimate, so the code's job is to catch a table that is
+# arithmetically absurd before it becomes a day's food record.
+_MEAL_BOUNDS = {"kcal": 8000, "protein_g": 600, "carb_g": 1200, "fat_g": 600,
+                "fibre_g": 200}
+MEAL_MAX_COMPONENTS = 16
+# Above this, the model's own total and the sum of its components disagree enough that the
+# table is not internally consistent, and the entry would not survive being corrected
+# component by component.
+MEAL_TOTAL_TOLERANCE = 0.10
+
+
+def _meal_figures(block, bounds=None) -> dict:
+    """The macro fields of one row, coerced and bounded. {} if there is nothing usable."""
+    out = {}
+    for field, ceiling in (bounds or _MEAL_BOUNDS).items():
+        raw = block.get(field)
+        if raw is None:
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= value <= ceiling:
+            out[field] = round(value, 1)
+    return out
+
+
+def describe_meal(text: str, claude_bin: str, model: str, log=print, runner=None,
+                  timeout: int = 120) -> dict | None:
+    """Cost one composed meal with a single full-intelligence call. None if unusable.
+
+    JAMIE, 14 AUG 2026, AND HE IS RIGHT: "I literally went on a generic Opus 5 and told it
+    what I ate and it gave me that table... we have access to any Claude model and we can't
+    do shit". A described home-cooked meal is the one thing this whole ladder cannot do. The
+    composition tables hold ingredients, not dinners, so a meal had to be broken into parts,
+    each part looked up separately, and the answer assembled from four rows that each missed
+    the portion, the cooking and the oil - 447 kcal for a 980 kcal dinner.
+
+    So this path does not walk the ladder at all. It hands the athlete's own words to a
+    capable model and asks for the table he would have got by asking one himself.
+
+    THIS DELIBERATELY BREAKS THE MODULE'S OLDEST INVARIANT - that the model decides meaning
+    and the code does every number - and the exception is scoped as narrowly as it can be.
+    It applies ONLY to meals no database can know: anything branded, barcoded, labelled, or
+    a single whole food keeps its deterministic path, because for those the ladder is
+    genuinely better. What is returned is labelled an ESTIMATE, carries the model's own
+    error band, and states every assumption on the message he confirms - so it is a
+    declared estimate rather than a figure wearing a source's authority.
+
+    The arithmetic stays the code's: the entry total is the SUM of the components, computed
+    here, and a table whose own total disagrees with its parts is rejected rather than
+    reconciled. That keeps a per-component correction ("the noodles were 400 g") exact."""
+    runner = runner or subprocess.run
+    try:
+        proc = runner([claude_bin, "--print", "--model", model],
+                      input=MEAL_TABLE_PROMPT % text, capture_output=True, text=True,
+                      timeout=timeout)
+    except Exception as exc:
+        log(f"describe_meal failed: {exc}")
+        return None
+    raw = (getattr(proc, "stdout", "") or "").strip()
+    if not raw or model_unavailable(raw):
+        log("describe_meal: model unavailable")
+        return None
+    a, b = raw.find("{"), raw.rfind("}")
+    if a < 0 or b <= a:
+        log(f"describe_meal: no JSON; out={raw[:140]!r}")
+        return None
+    try:
+        got = json.loads(raw[a:b + 1])
+    except json.JSONDecodeError:
+        log("describe_meal: unparseable JSON")
+        return None
+    components = []
+    for row in (got.get("components") or [])[:MEAL_MAX_COMPONENTS]:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()
+        figures = _meal_figures(row)
+        # A row with no name or no energy is not a component of anything. Dropped rather
+        # than defaulted: a zero-kcal component reads as a measurement.
+        if not name or not figures.get("kcal"):
+            continue
+        portion = None
+        try:
+            portion = round(float(row.get("portion_g")), 1)
+        except (TypeError, ValueError):
+            portion = None
+        if portion is not None and not 0 < portion <= MAX_PORTION_G:
+            portion = None
+        components.append({"name": name[:80], "portion_g": portion,
+                           "portion_basis": str(row.get("portion_basis") or "").strip()[:90],
+                           **figures})
+    if not components:
+        log("describe_meal: a meal with no usable components")
+        return None
+    # THE SUM IS THE TOTAL, computed here. A model's addition is not a source of truth, and
+    # the components are what a correction is applied to - so if the entry total came from
+    # somewhere else, rescaling one component would leave the two disagreeing.
+    total = {}
+    for field in _MEAL_BOUNDS:
+        parts = [c[field] for c in components if c.get(field) is not None]
+        if parts:
+            total[field] = round(sum(parts), 1)
+    stated = _meal_figures(got.get("total") or {})
+    if stated.get("kcal") and total.get("kcal"):
+        drift = abs(stated["kcal"] - total["kcal"]) / total["kcal"]
+        if drift > MEAL_TOTAL_TOLERANCE:
+            # Not reconciled, REFUSED. A table whose own total is 20% from the sum of its
+            # rows is not a table anyone can correct a line of, and quietly preferring one
+            # number over the other would hide that from him.
+            log(f"describe_meal: total {stated['kcal']} is {drift:.0%} from the sum of its "
+                f"components ({total['kcal']}); refusing the table")
+            return None
+    try:
+        band = float(got.get("error_band_pct"))
+    except (TypeError, ValueError):
+        band = 0.0
+    return {
+        "meal_name": (str(got.get("meal_name") or "").strip()[:90]
+                      or "meal as you described it"),
+        "components": components,
+        "total": total,
+        # Bounded to something sayable. A band of 0 is the model claiming precision it does
+        # not have, so a floor is applied rather than repeating the claim.
+        "error_band_pct": round(min(max(band, 10.0), 40.0)),
+        "plants": [str(p).strip()[:40] for p in (got.get("plants") or [])
+                   if str(p or "").strip()][:30],
+        "assumptions": [str(a).strip()[:140] for a in (got.get("assumptions") or [])
+                        if str(a or "").strip()][:12],
+    }
+
 
 _FORM_FAMILIES = {
     "dose": {"capsule", "tablet", "softgel", "powder"},
@@ -1401,6 +1926,11 @@ def interpret(text: str, claude_bin: str, model: str, log=print, runner=None,
             "is_supplement": bool(it.get("is_supplement")),
             "expect_macros": it.get("expect_macros", True) is not False,
             "portion_g": it.get("portion_g"),
+            # WHOSE NUMBER THE PORTION IS. resolve() treats a portion the caller hands it
+            # as stated fact and flags nothing, so a portion the model reasoned out for a
+            # described meal ("a large stir fry" -> 300 g of noodles) would reach the offer
+            # looking like a weight he gave. The offer has to be able to say it guessed.
+            "portion_estimated": bool(it.get("portion_estimated")),
             "dose_mg": it.get("dose_mg"),
             "count": it.get("count"),
             "in_session": bool(it.get("in_session")),
