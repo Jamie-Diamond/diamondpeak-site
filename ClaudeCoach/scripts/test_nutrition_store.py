@@ -548,6 +548,68 @@ check("and moving it back out gives it a bucket again, by the clock",
       out["logged_at"].endswith("T20:00")
       and out["meal"] == "dinner" and out["meal_inferred"] is True)
 
+print("\n--- a photographed label supersedes an entry's lookup figures (14 Aug 2026) ---")
+# He logged "Coop Chianti beef pizza" by name at a web figure of 1,147 kcal and then sent the
+# pack's label. Applying it has to move the FIGURES and the name together: a label is the
+# manufacturer's own panel, so keeping the lookup's name beside the pack's numbers would
+# leave an entry describing neither.
+with tempfile.TemporaryDirectory() as td:
+    st = S.NutritionStore(Path(td))
+    pizza = st.add_entry(D, raw_text="coop chianti beef pizza",
+                         resolved_name="Coop Chianti beef pizza", kcal=1147, protein_g=52,
+                         carb_g=130, fat_g=44, confidence="database", source_rung="web",
+                         ingredients="wheat flour, tomato, beef",
+                         species=[{"id": "wheat", "score": 1}])
+    done = st.apply_label_to_entry(D, pizza["id"], {
+        "resolved_name": "Chianti beef pizza, stone baked", "kcal": 482.0,
+        "protein_g": 22.0, "carb_g": 58.0, "fat_g": 17.0, "dietary_sodium_mg": 640.4,
+        "per_100g": {"kcal": 241.0}, "portion_used_g": 200.0, "pack_g": 400.0,
+        "ingredients": "wheat flour, mozzarella, beef", "source_url": "photo of the product label"})
+    check("the label's figures replace the lookup's", done["kcal"] == 482.0
+          and done["protein_g"] == 22.0 and done["fat_g"] == 17.0)
+    check("sodium is rounded to the milligram like everywhere else",
+          done["dietary_sodium_mg"] == 640)
+    check("the entry is now label data, from the pack he was holding",
+          done["confidence"] == "label" and done["source_rung"] == "manual"
+          and "label" in done["source_url"])
+    check("the per-100g basis travels, so the next 'I had 160g' is arithmetic",
+          done["per_100g"]["kcal"] == 241.0 and done["pack_g"] == 400.0)
+    check("the portion is the label's, and not flagged as a guess",
+          done["portion_used_g"] == 200.0 and done["portion_estimated"] is False
+          and "from the label" in done["portion_assumed"])
+    check("the pack's own name wins, with the lookup's kept as provenance",
+          done["resolved_name"] == "Chianti beef pizza, stone baked"
+          and done["renamed_from"] == "Coop Chianti beef pizza")
+    check("and the wrong product's species go with its name",
+          done["species"] == [] and "mozzarella" in done["ingredients"])
+    check("it is ONE entry, which is the whole point",
+          len(st.get_day(D)["entries"]) == 1)
+    check("an id that is not there is refused rather than written blind",
+          st.apply_label_to_entry(D, "nope", {"kcal": 100}) is None)
+    check("and a label that is not a dict is refused",
+          st.apply_label_to_entry(D, pizza["id"], None) is None)
+    # A COSTED MEAL'S COMPONENT ROWS LIVE IN `ingredients`, and the app renders them under
+    # the entry's total. With the total replaced by a pack's panel those rows contradict the
+    # heading above them, so a label that restates no ingredients drops them - the same rule
+    # the bot's drop_stale_breakdown follows for a pending offer.
+    meal = st.add_entry(D, raw_text="a large stir fry",
+                        resolved_name="Large beef stir-fry with egg noodles", kcal=935,
+                        confidence="estimate", source_rung="llm",
+                        ingredients="egg noodles, cooked; rump steak, grilled; soy sauce",
+                        species=[{"id": "wheat", "score": 1}])
+    swapped = st.apply_label_to_entry(D, meal["id"], {"kcal": 480.0})
+    check("a breakdown that no longer adds up goes with the figures it described",
+          swapped["kcal"] == 480.0
+          and swapped["ingredients"] == "Large beef stir-fry with egg noodles")
+    check("but the plants it was credited stay, being their own field and the same food",
+          swapped["species"] == [{"id": "wheat", "score": 1}])
+    # And a label that DOES restate the ingredients simply uses them.
+    same = st.apply_label_to_entry(D, pizza["id"],
+                                   {"resolved_name": "Chianti beef pizza, stone baked",
+                                    "kcal": 500.0, "ingredients": "wheat flour, mozzarella"})
+    check("a label that restates the ingredients keeps them",
+          same["kcal"] == 500.0 and "mozzarella" in same["ingredients"])
+
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
 print("all checks passed")

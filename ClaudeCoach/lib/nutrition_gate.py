@@ -18,6 +18,13 @@ None of those is a bad number in isolation. Each is a reply that does not FIT it
 which is a judgement no amount of range-checking makes, and it is the last thing a person
 can be asked to do for a bot that is meant to save him effort.
 
+THE FIFTH CLASS, from 15:25 the same day, and the one this gate first let through. "You've
+added the pizza twice" was decided as `unclear`, fell into a re-resolution, and the reply
+went out saying the duplicate had been "noted and removed" - with nothing removed. Every
+figure in it was plausible, which is all this gate was judging, so it passed. A reply that
+lies about what the code DID cannot be caught by reading the reply: it needs the list of
+what actually happened beside it, which is `actions_this_turn` in the context below.
+
 THE LINE, AND IT IS THE SAME LINE THE REST OF THIS SYSTEM DRAWS. The gate judges
 PLAUSIBILITY and COHERENCE only. It never rewrites a stored figure, never supplies a macro
 and never hands back a corrected reply: the only things read off its answer are a verdict,
@@ -31,8 +38,10 @@ any it catches: he is standing in a kitchen with his dinner going cold.
 
 BIAS TO SEND. The realistic failure of an LLM judge is not missing the 447 kcal stir-fry,
 it is objecting to a terse-but-correct confirmation until the whole gate gets turned off.
-The prompt therefore names the four classes worth blocking and says, in as many words, not
-to block for tone, brevity or a missing detail.
+The prompt therefore names the five classes worth blocking and says, in as many words, not
+to block for tone, brevity or a missing detail. `false_claim` is written the same way round:
+block a claim that is ABSENT from the action list, never "unless every claim is listed" -
+the second reading would apologise for work that really happened.
 """
 
 import json
@@ -52,9 +61,10 @@ GATE_TIMEOUT_S = 20
 GATE_CONTEXT_CHARS = 4000
 
 # A closed set, so the log is greppable and the built fallback has something to name. The
-# four are the catalogued failures above; `other` exists so an honest block is never forced
+# five are the catalogued failures above; `other` exists so an honest block is never forced
 # into the wrong bucket.
-REASON_CLASSES = ("magnitude", "off_topic", "contradicts_input", "stale_context", "other")
+REASON_CLASSES = ("magnitude", "off_topic", "contradicts_input", "stale_context",
+                  "false_claim", "other")
 
 # What to say when the gate blocked something and gave no usable fallback of its own. Per
 # class, because "I could not produce a sensible answer" with no hint of why is the kind of
@@ -71,6 +81,10 @@ FALLBACK_BY_CLASS = {
     "stale_context": ("I could not produce a sensible answer for that - I was answering an "
                       "older part of the conversation. Ask me again and I will answer on "
                       "today."),
+    "false_claim": ("I could not produce a sensible answer for that - what I had said I "
+                    "had changed your log when I had not, so I have not sent it and "
+                    "nothing has been changed. Tell me again what to do and I will do it "
+                    "and say so."),
     "other": ("I could not produce a sensible answer for that. Tell me again and I will "
               "have another go."),
 }
@@ -87,7 +101,11 @@ WHAT HE SAID:
 
 CONTEXT (recent conversation with timestamps, the offer on the table and the figures
 behind the proposed reply, where there are any). The timestamps are real: an exchange
-hours or days old is stale background, not a live thread:
+hours or days old is stale background, not a live thread.
+
+`actions_this_turn` is the COMPLETE list of what the code actually did to his log while
+handling this message - every entry added, updated or removed. An empty list means the log
+was not touched at all:
 %s
 
 THE EXACT TEXT ABOUT TO BE SENT:
@@ -105,6 +123,12 @@ BLOCK it only for one of these, which are the failures this check exists for:
   - stale_context: the reply treats a finished or old event as live - advice about a run
     that happened two days ago, or asking again for something he has already answered or
     just told you to stop asking about.
+  - false_claim: the reply claims to have DONE something to his log that is absent from
+    `actions_this_turn`. "Duplicate noted and removed" with nothing removed. "I have
+    updated that to 900 kcal" with nothing updated. "Logged" with nothing added. Block when
+    the reply claims an action the list does not contain; a reply that promises nothing, or
+    describes what it is about to offer him, claims no action and is fine. Only the CLAIM
+    matters here, not whether the action was the right one to take.
 
 SEND it otherwise. Bias hard to send. In particular do NOT block for:
   - tone, style, brevity, phrasing, formatting, markdown or house voice
@@ -118,8 +142,9 @@ case is a send.
 
 WHEN HIS MESSAGE IS A MARKER rather than words - "[sent a photo of a barcode]", "[tapped
 Log it]" - he named nothing, so there is nothing for the reply to be off-topic about or to
-contradict. Judge the FIGURES only: block such a reply for magnitude alone, and send it
-otherwise.
+contradict. Judge the FIGURES and the ACTION CLAIMS only: block such a reply for magnitude
+or false_claim, and send it otherwise. A photographed label that corrects an entry is one
+of these turns, and a confirmation of it is exactly the kind of claim worth checking.
 
 YOU NEVER SUPPLY OR CORRECT A FIGURE. Do not rewrite the message, do not offer better
 macros, do not restate his totals. Your entire output is the JSON below.

@@ -815,6 +815,13 @@ Rules that are not style preferences:
   language, and never imply he has failed. He is lean, near his essential-fat floor, and
   the job is adequate intake - not restraint.
 - Never suggest cutting anything marked in_session: that is fuel taken while training.
+- YOU CANNOT CHANGE HIS LOG FROM HERE, so never say that you have. No "removed that", no
+  "I have updated it", no "duplicate noted and removed" - on 14 Aug 2026 that exact
+  sentence went out while both copies of a pizza sat in the log, and he had to have it
+  cleared out by hand. Adding, correcting and removing are done by the code on their own
+  paths, which report themselves. If he is asking for one, say what you understood and let
+  it happen - "say that again as 'delete the second pizza'" - or answer the question he
+  asked and nothing more.
 - UK English, no headings, no bullet-point macro dumps.
 """
 
@@ -981,6 +988,13 @@ Decide which ONE of these he means and reply in that shape:
         scales those from each component's own per-100g basis, and a number you supplied
         would silently replace a sourced one. Every component gets a portion, and the
         offer will tell him each one was your estimate.
+  {"kind":"delete_duplicate","which":"<his words for the food that is in there twice>"}
+      - he is saying THE SAME FOOD IS LOGGED MORE THAN ONCE and one copy should go:
+        "you've added the pizza twice", "that bar is in there two times", "there are two
+        entries for the porridge". Nothing about it is wrong except that there are two of
+        them, so no figure changes and nothing is looked up again.
+      - NOT this when he is deleting a single thing he did eat ("remove the crisps"), and
+        not when the SECOND helping was real ("I had another one") - that is an addition.
   {"kind":"unclear"}
 
 Rules:
@@ -1185,6 +1199,13 @@ def decide_correction(message: str, item: dict, claude_bin: str, model: str,
             log("decide_correction: meal_portions must be grams for every component")
             return {"kind": "unclear"}
         return {"kind": kind, "items": specs}
+    if kind == "delete_duplicate":
+        # `unclear`, never None, on anything unusable here. None means "the model could not
+        # be reached" to the caller, which runs the quantity regexes against the message -
+        # and against "you've added the pizza twice" those find nothing while the reply
+        # falls through to a re-resolution that offers him a THIRD pizza.
+        return {"kind": "delete_duplicate",
+                "which": (str(got.get("which")).strip() if got.get("which") else "")}
     if kind == "retime":
         hhmm = normalise_hhmm(got.get("time"))
         if not hhmm:
@@ -1568,6 +1589,97 @@ def label_to_item(label: dict) -> dict:
     out["ingredients"] = label.get("ingredients") or ""
     out["source_url"] = "photo of the product label"
     return out
+
+
+LABEL_TARGET_PROMPT = """A nutrition logger has just read a photographed nutrition \
+label. Decide whether the label is a CORRECTION to something already on today's log, or a \
+NEW item. Reply with ONLY a JSON object.
+
+THE LABEL, as transcribed from the pack:
+%s
+
+WHAT IS ALREADY ON TODAY'S LOG. `state` says whether it is written or still awaiting his
+confirmation; `entry_id` is the handle you must quote back:
+%s
+
+Decide which ONE:
+  {"kind":"replace","entry_id":"<one of the entry_ids above, exactly>"}
+      - the label is plainly the SAME FOOD as that item. He logged it by name, got a
+        looked-up figure, and has now photographed the pack to correct it: "Coop Chianti
+        beef pizza" logged, and a pizza label arrives. The label is the manufacturer's own
+        panel, so it supersedes the lookup.
+  {"kind":"new"}
+      - the label is a DIFFERENT food from everything listed, or you cannot tell. A second
+        thing he ate is the normal case and it is the safe answer.
+
+Rules:
+- Same FOOD, not merely the same shape of food. A pizza label against a logged pizza is a
+  replacement; a pizza label against a logged pasta bake is a new item.
+- One helping does not correct another. If the listed item is a portion and he has plainly
+  eaten a second one, that is `new` - you are only deciding whether these are the SAME
+  eating, priced twice.
+- Quote an entry_id from the list exactly. Never invent one, and never guess `replace` to
+  be helpful: a wrong replacement overwrites a real entry's figures, while a wrong `new`
+  costs him one correction he can make in a sentence.
+- Return no figures of any kind. The code applies the label's own numbers.
+"""
+
+
+def decide_label_target(label: dict, candidates: list, claude_bin: str, model: str,
+                        log=print, runner=None, timeout: int = 45) -> dict | None:
+    """{'kind':'replace','entry_id':...} | {'kind':'new'} | None when unavailable.
+
+    A LABEL PHOTO CAN BE A CORRECTION (14 Aug 2026). Every label was offered as a new item,
+    so photographing the pack to fix a figure logged the food a second time - and the
+    second one went in at the pack's numbers, which is the worse outcome: the correction he
+    made is indistinguishable from a meal he ate.
+
+    Whether two descriptions are the same food is a judgement, so the model makes it; the
+    code executes it and validates the id against the ones it showed. None on an
+    unreachable model, and the caller's fallback for None is to offer the label as new -
+    which is the behaviour that existed before this function, so an outage costs him a
+    correction rather than a wrong write."""
+    if not candidates:
+        return {"kind": "new"}
+    runner = runner or subprocess.run
+    shown = {str(c.get("entry_id")) for c in candidates if c.get("entry_id")}
+    summary = {k: label.get(k) for k in
+               ("resolved_name", "kcal", "protein_g", "carb_g", "fat_g",
+                "portion_used_g", "pack_g", "ingredients")
+               if label.get(k) is not None}
+    if isinstance(summary.get("ingredients"), str):
+        summary["ingredients"] = summary["ingredients"][:200]
+    try:
+        proc = runner([claude_bin, "--print", "--model", model],
+                      input=LABEL_TARGET_PROMPT % (
+                          json.dumps(summary, default=str),
+                          json.dumps(candidates, default=str)),
+                      capture_output=True, text=True, timeout=timeout)
+    except Exception as exc:
+        log(f"decide_label_target failed: {exc}")
+        return None
+    raw = (getattr(proc, "stdout", "") or "").strip()
+    if not raw or model_unavailable(raw):
+        return None
+    start, end = raw.find("{"), raw.rfind("}")
+    if start == -1 or end <= start:
+        log(f"decide_label_target unparseable: {raw[:80]}")
+        return None
+    try:
+        got = json.loads(raw[start:end + 1])
+    except (ValueError, TypeError):
+        log(f"decide_label_target unparseable: {raw[:80]}")
+        return None
+    if got.get("kind") != "replace":
+        return {"kind": "new"}
+    entry_id = str(got.get("entry_id") or "").strip()
+    if entry_id not in shown:
+        # An id it was not shown means it was not reading the list, so nothing it says
+        # about that list can be trusted. `new` rather than None: the model IS reachable,
+        # and None would tell the caller otherwise.
+        log(f"decide_label_target: {entry_id!r} is not one of the {len(shown)} shown")
+        return {"kind": "new"}
+    return {"kind": "replace", "entry_id": entry_id}
 
 
 # --- interpret first, resolve second (Jamie's design, 10 Aug 2026) ------------

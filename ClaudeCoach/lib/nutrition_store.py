@@ -452,6 +452,81 @@ class NutritionStore:
             return None
         return self._mutate_day(day, fn)
 
+    # The figure fields a label supersedes. Kept beside RENAMEABLE_CONFIDENCE because the
+    # two answer the same question from opposite ends: that one is when a NAME may change
+    # without the figures, this is when the FIGURES may change - and the name with them.
+    LABEL_FIGURE_FIELDS = ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g",
+                           "dietary_sodium_mg")
+
+    def apply_label_to_entry(self, day, entry_id: str, label: dict) -> dict | None:
+        """Replace an entry's figures with a photographed label's. None if not found.
+
+        THE BUG THIS EXISTS FOR (14 Aug 2026). He logged "Coop Chianti beef pizza" by name,
+        got a web figure of 1,147 kcal, then photographed the pack to correct it - and the
+        label path treats every panel as a NEW item, so the pizza was offered a second time
+        and logged twice. A label is the manufacturer's own printed panel: the best rung
+        this bot ever holds, and against an entry priced off a lookup it is a correction,
+        not a second dinner.
+
+        A separate verb from both update_entry and rename_entry, and the ONE place identity
+        may move with the figures: a label supersedes the lookup that produced the old name,
+        so keeping "Chianti beef pizza" while writing the pack's figures would leave an
+        entry describing neither. That is not the rename guard's concern - that guard exists
+        to stop a NAME change silently keeping figures a lookup produced for a different
+        food, which is the opposite direction."""
+        if not isinstance(label, dict):
+            return None
+
+        def fn(rec):
+            for e in rec.get("entries") or []:
+                if e.get("id") != entry_id:
+                    continue
+                for f in self.LABEL_FIGURE_FIELDS:
+                    v = label.get(f)
+                    if v is None:
+                        continue
+                    e[f] = (round(float(v)) if f == "dietary_sodium_mg"
+                            else round(float(v), 1))
+                grams = label.get("portion_used_g") or label.get("portion_g")
+                if grams:
+                    e["portion_g"] = float(grams)
+                    e["portion_used_g"] = float(grams)
+                    e["portion_estimated"] = False
+                    e["portion_assumed"] = f"{float(grams):.0f} g - from the label"
+                # THE BASIS TRAVELS, so the next "I had 160g" is a multiplication rather
+                # than a fresh search - the whole reason label_to_item keeps it.
+                if label.get("per_100g"):
+                    e["per_100g"] = label["per_100g"]
+                if label.get("pack_g"):
+                    e["pack_g"] = float(label["pack_g"])
+                name = (label.get("resolved_name") or "").strip()
+                if name and name != e.get("resolved_name"):
+                    e["renamed_from"] = e.get("renamed_from") or e.get("resolved_name")
+                    e["resolved_name"] = name
+                    # The old ingredients and species described the food the LOOKUP found.
+                    # Same rule as rename_entry: they go with the old name, or the plant
+                    # count keeps crediting something he never ate.
+                    e["species"] = []
+                    e["ingredients"] = label.get("ingredients") or ""
+                elif label.get("ingredients"):
+                    e["ingredients"] = label["ingredients"]
+                else:
+                    # A BREAKDOWN THAT NO LONGER ADDS UP GOES, even when the name is
+                    # unchanged. A costed meal commits its component rows into
+                    # `ingredients`, and the app renders them under the entry's total: with
+                    # the total replaced by a pack's panel, those rows contradict the
+                    # heading they sit beneath. Same rule as the bot's drop_stale_breakdown,
+                    # for the same reason - the rows described the old figures and stop
+                    # being true the moment the figures move. `species` stays, because it
+                    # is stored in its own field and the food itself has not changed.
+                    e["ingredients"] = e.get("resolved_name") or ""
+                e["confidence"] = "label"
+                e["source_rung"] = "manual"
+                e["source_url"] = label.get("source_url") or "photo of the product label"
+                return e
+            return None
+        return self._mutate_day(day, fn)
+
     def set_meal(self, day, entry_id: str, meal: str) -> dict | None:
         """Say which meal an entry belongs to.
 

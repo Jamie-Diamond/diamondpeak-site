@@ -1683,6 +1683,356 @@ check("every path that returns True to handle_text still returns True when block
                     NB.apply_batch_rescale, NB.correct_in_batch,
                     NB.apply_quantity_correction)))
 
+print("\n--- REPLAY: the pizza, logged by name and then corrected by its LABEL (14 Aug 2026) ---")
+# THE DEFECT, end to end. He logged "Coop Chianti beef pizza" by name and got a web figure of
+# 1,147 kcal. He then photographed the pack to correct it - and every label was offered as a
+# NEW item, so after rescaling it to the whole pizza he confirmed a SECOND pizza at 964 kcal
+# and the duplicate had to be cleared out of his store by hand.
+LABEL_PHOTO = {"kind": "nutrition_label", "per": "100g", "portion_g": 200, "kcal": 241,
+               "protein_g": 11, "carb_g": 29, "fat_g": 8.5, "fibre_g": 2, "pack_g": 400,
+               "product": "Chianti beef pizza, stone baked",
+               "ingredients": "wheat flour, mozzarella, beef, tomato"}
+_real_read_photo, _real_download = NB.NLU.read_photo, NB.download_photo
+_real_label_target = NB.NLU.decide_label_target
+_real_write_back, _real_fuel = NB.RC.write_back, NB.RC.bot_in_session_totals
+NB.NLU.read_photo = lambda *a, **k: dict(LABEL_PHOTO)
+NB.download_photo = lambda ctx, file_id, token: Path("/tmp/nb-test-label.jpg")
+# The fuel write-back reaches the coach's session-log, which is not what these checks are
+# about and does not exist in a tmpdir.
+NB.RC.write_back = lambda *a, **k: {"written": False, "reason": "test"}
+NB.RC.bot_in_session_totals = lambda *a, **k: {"carb_g": 0, "sodium_mg": 0}
+
+pz_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-pizza-")))
+pctx = FakeCtxHandle(pz_store)
+pizza = pz_store.add_entry(TODAY, raw_text="coop chianti beef pizza",
+                           resolved_name="Coop Chianti beef pizza", kcal=1147,
+                           protein_g=52, carb_g=130, fat_g=44, confidence="database",
+                           source_rung="web")
+_label_shown = []
+NB.NLU.decide_label_target = lambda label, cands, *a, **k: (
+    _label_shown.append(cands) or {"kind": "replace", "entry_id": cands[0]["entry_id"]})
+sent_msgs.clear(); gate_calls.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("the label is compared against what is already on today's log",
+      _label_shown and _label_shown[0][0]["entry_id"] == pizza["id"]
+      and _label_shown[0][0]["kcal"] == 1147.0
+      and _label_shown[0][0]["figures_from"] == "web")
+_pend = NB.get_pending(pz_store)
+check("a label that matches a logged item is offered as a REPLACEMENT",
+      (_pend.get("_apply_label_to") or {}).get("id") == pizza["id"])
+check("the offer states both figures, so he can see what changes",
+      "1147" in sent_msgs[-1] and "482" in sent_msgs[-1]
+      and "Replace it?" in sent_msgs[-1])
+check("and nothing is written until he says yes",
+      len(pz_store.get_day(TODAY)["entries"]) == 1
+      and pz_store.get_day(TODAY)["entries"][0]["kcal"] == 1147.0)
+check("the offer claims no action, so the gate saw an empty ledger",
+      '"actions_this_turn": []' in gate_calls[-1])
+
+# "The whole pizza is two portions" - the rescale that produced the second entry. It has to
+# land on the PENDING REPLACEMENT and stay a replacement.
+_real_classify3, _real_decide3 = NB.NLU.classify, NB.NLU.decide_correction
+NB.NLU.classify = lambda *a, **k: {"intent": "correction",
+                                   "correction": "that was the whole pizza, so double it"}
+NB.NLU.decide_correction = lambda *a, **k: {"kind": "rescale_factor", "factor": 2.0}
+sent_msgs.clear()
+NB.handle_text(pctx, "that was the whole pizza, so double it", "token", 1)
+_pend = NB.get_pending(pz_store)
+check("rescaling the label keeps it a replacement rather than a new item",
+      (_pend.get("_apply_label_to") or {}).get("id") == pizza["id"]
+      and _pend["batch"][0]["kcal"] == 964.0
+      and _pend["batch"][0]["portion_used_g"] == 400.0)
+check("and the re-offer says so, so 'Log it' cannot read as a second pizza",
+      "replac" in sent_msgs[-1].lower())
+check("still nothing written", len(pz_store.get_day(TODAY)["entries"]) == 1)
+
+sent_msgs.clear(); gate_calls.clear()
+NB.set_inbound(pctx, "[tapped Log it]")
+NB.commit_pending(pctx, NB.get_pending(pz_store), TODAY, "token", 1)
+_entries = pz_store.get_day(TODAY)["entries"]
+check("confirming leaves ONE pizza, not two", len(_entries) == 1)
+check("and it is the entry he logged in the first place, updated",
+      _entries[0]["id"] == pizza["id"])
+check("at the label's figures, rescaled to the whole pack",
+      _entries[0]["kcal"] == 964.0 and _entries[0]["portion_used_g"] == 400.0)
+check("with the pack's provenance and its per-100g basis",
+      _entries[0]["confidence"] == "label" and _entries[0]["source_rung"] == "manual"
+      and _entries[0]["per_100g"]["kcal"] == 241.0)
+check("the confirmation is built from the store's result, and claims no new log",
+      "Replaced" in sent_msgs[-1] and "One entry, not two" in sent_msgs[-1])
+check("and the gate was shown the update the reply claims",
+      any("updated entry" in c for c in gate_calls[-1:] if c)
+      and '"actions_this_turn": []' not in gate_calls[-1])
+check("the pending record is cleared", NB.get_pending(pz_store) is None)
+# A replacement OFFER and a label CORRECTION are two different marks on the same record, and
+# the label branch returns before commit_pending's own removal. They cannot coexist today -
+# offer_label_as_correction writes a fresh record - but an orphan left by a future path would
+# sit in the log under a reply that says "One entry, not two".
+NB.set_pending(pz_store, {"batch": [{"resolved_name": "old pizza"}],
+                          "_replaces": {"id": "x", "name": "y"}})
+NB.NLU.decide_label_target = lambda label, cands, *a, **k: {
+    "kind": "replace", "entry_id": next(c["entry_id"] for c in cands
+                                        if not str(c["entry_id"]).startswith("pending"))}
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("offering a label as a correction leaves no replacement mark behind",
+      "_replaces" not in (NB.get_pending(pz_store) or {}))
+_orphan = pz_store.add_entry(TODAY, raw_text="stray", resolved_name="Stray pizza",
+                             kcal=100, confidence="estimate", source_rung="llm")
+_both = dict(NB.get_pending(pz_store), _replaces={"id": _orphan["id"], "name": "Stray"})
+NB.set_pending(pz_store, _both)
+NB.commit_pending(pctx, NB.get_pending(pz_store), TODAY, "token", 1)
+check("and if both marks ever did arrive together, the replaced entry still goes",
+      all(e["id"] != _orphan["id"] for e in pz_store.get_day(TODAY)["entries"]))
+NB.clear_pending(pz_store)
+
+# A LABEL FOR SOMETHING ELSE IS STILL A NEW ITEM, which is the normal case and the safe one.
+NB.NLU.decide_label_target = lambda *a, **k: {"kind": "new"}
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+_pend = NB.get_pending(pz_store)
+check("a label the model calls new is offered as today's own item",
+      _pend and "_apply_label_to" not in _pend and len(_pend["batch"]) == 1
+      and _pend["batch"][0]["kcal"] == 482.0 and "Log it?" in sent_msgs[-1])
+# An unreachable model returns None, and the fallback is the behaviour that existed before
+# this path: offer it as new. An outage costs him a correction, never a wrong write.
+NB.NLU.decide_label_target = lambda *a, **k: None
+NB.clear_pending(pz_store)
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("and an unreachable decider offers it as new rather than guessing a replacement",
+      "_apply_label_to" not in (NB.get_pending(pz_store) or {}))
+
+# A PENDING ITEM COUNTS. He photographs the pack while the offer is still on the table more
+# often than after confirming it, and a second offer there is the same double-log one message
+# earlier.
+NB.set_pending(pz_store, {"batch": [{"resolved_name": "Chianti beef pizza", "_raw": "pizza",
+                                     "kcal": 1147.0, "confidence": "database",
+                                     "source_rung": "web", "_meal": "dinner"}]})
+NB.NLU.decide_label_target = lambda label, cands, *a, **k: (
+    _label_shown.append(cands) or {"kind": "replace", "entry_id": cands[0]["entry_id"]})
+_label_shown.clear(); sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+_pend = NB.get_pending(pz_store)
+check("the pending item is offered to the decider with a pending id",
+      _label_shown and _label_shown[0][0]["entry_id"] == "pending:0")
+check("a label for a pending item replaces ITS figures, still one offer",
+      len(_pend["batch"]) == 1 and _pend["batch"][0]["kcal"] == 482.0
+      and "_apply_label_to" not in _pend)
+check("and the meal he had already named survives the swap",
+      _pend["batch"][0]["_meal"] == "dinner")
+check("the message says it used the pack's figures rather than offering it twice",
+      "rather than offering it twice" in sent_msgs[-1])
+NB.clear_pending(pz_store)
+
+print("\n--- REPLAY 15:25: 'you've added the pizza twice' (14 Aug 2026) ---")
+# It was decided `unclear`, fell into a re-resolution, and the reply said the duplicate had
+# been "noted and removed" while both copies sat in the log and a THIRD was being offered.
+dd_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-dupe-")))
+dctx = FakeCtxHandle(dd_store)
+
+
+def _two_pizzas():
+    """The store as it actually was: a web figure and the label copy of the same pizza."""
+    for e in list(dd_store.get_day(TODAY).get("entries") or []):
+        dd_store.remove_entry(TODAY, e["id"])
+    web = dd_store.add_entry(TODAY, raw_text="coop chianti beef pizza",
+                             resolved_name="Coop Chianti beef pizza", kcal=1147,
+                             confidence="database", source_rung="web")
+    lab = dd_store.add_entry(TODAY, raw_text="pizza label",
+                             resolved_name="Chianti beef pizza, stone baked", kcal=964,
+                             confidence="label", source_rung="manual",
+                             source_url="photo of the product label")
+    return web, lab
+
+
+web, lab = _two_pizzas()
+check("provenance is read off the entry, label above a web lookup",
+      NB.provenance_bucket(lab) == "label" and NB.provenance_bucket(web) == "web"
+      and NB.DEDUP_KEEP_ORDER.index("label") < NB.DEDUP_KEEP_ORDER.index("web"))
+NB.set_inbound(dctx, "you've added the pizza twice")
+sent_msgs.clear(); gate_calls.clear()
+check("a duplicate complaint is always handled, never fallen through",
+      NB.apply_delete_duplicate(dctx, {"kind": "delete_duplicate", "which": "the pizza"},
+                                TODAY, "token", 1) is True)
+_left = dd_store.get_day(TODAY)["entries"]
+check("one copy is gone", len(_left) == 1)
+check("and it is the WORSE one, so the correction he made survives",
+      _left[0]["id"] == lab["id"] and _left[0]["kcal"] == 964.0)
+check("the reply names what went, what stayed and the new day total",
+      "Removed the duplicate" in sent_msgs[-1]
+      and "Coop Chianti beef pizza" in sent_msgs[-1]
+      and "964 kcal" in sent_msgs[-1] and "Today is now 964 kcal" in sent_msgs[-1])
+check("and it is code-built: no model composes a correction outcome",
+      "NLU." not in _code_of(NB.apply_delete_duplicate))
+check("the removal is on the ledger the gate checks claims against",
+      any("removed entry" in a for a in getattr(dctx, "_actions", []))
+      and "removed entry" in (gate_calls[-1] or ""))
+
+# AMBIGUITY ASKS, WITH IDS. Three copies, or two different pairs, and picking one would be a
+# silent wrong deletion that reads perfectly in the reply.
+_two_pizzas()
+third = dd_store.add_entry(TODAY, raw_text="another pizza",
+                           resolved_name="Chianti beef pizza", kcal=900,
+                           confidence="estimate", source_rung="llm")
+sent_msgs.clear()
+check("three of something asks rather than choosing",
+      NB.apply_delete_duplicate(dctx, {"kind": "delete_duplicate", "which": "pizza"},
+                                TODAY, "token", 1) is True)
+check("nothing was removed", len(dd_store.get_day(TODAY)["entries"]) == 3)
+check("and the question carries the ids he can name",
+      "not removed anything" in sent_msgs[-1] and third["id"] in sent_msgs[-1]
+      and "which id" in sent_msgs[-1].lower())
+# Nothing logged twice at all: one message, no re-resolution, and never a fresh offer.
+solo = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-solo-")))
+sctx2 = FakeCtxHandle(solo)
+solo.add_entry(TODAY, raw_text="porridge", resolved_name="Porridge", kcal=320,
+               confidence="label", source_rung="cofid")
+sent_msgs.clear()
+check("no duplicate found still returns handled",
+      NB.apply_delete_duplicate(sctx2, {"kind": "delete_duplicate", "which": "the pizza"},
+                                TODAY, "token", 1) is True)
+check("and says what today actually has instead of offering him something",
+      "cannot see the same thing logged twice" in sent_msgs[-1]
+      and "Porridge" in sent_msgs[-1] and "Log it?" not in sent_msgs[-1])
+check("an empty day is answered rather than crashed",
+      NB.apply_delete_duplicate(
+          FakeCtxHandle(S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-none-")))),
+          {"kind": "delete_duplicate", "which": ""}, TODAY, "token", 1) is True)
+# The routing: a delete_duplicate decision must reach the handler and return, offer on the
+# table or not, or it falls into the re-resolution that produced the false claim.
+check("handle_text dispatches the verb and returns on it",
+      'kind == "delete_duplicate"' in inspect.getsource(NB.handle_text)
+      and "apply_delete_duplicate(ctx, decision" in inspect.getsource(NB.handle_text))
+
+print("\n--- HIS OWN figures are not quietly overruled by a pack ---")
+# The strongest rule in this file is that figures he supplied are never re-priced behind his
+# back. A pack IS better data than his reckoning of a plate, and a label correcting a lookup
+# is the whole point of the path - but a label landing on numbers he typed has to say so on
+# the message he confirms. `manual` covers both his typed figures and a pack he read out, so
+# the confidence separates them: his reckoning is an estimate, a pack reading is label data.
+check("a lookup's figures are the unremarkable case",
+      NB.whose_figures({"source_rung": "web", "confidence": "database"}) == "a lookup"
+      and NB._whose_note("a lookup") == "")
+check("figures he typed himself are recognised as his",
+      NB.whose_figures({"source_rung": "manual", "confidence": "estimate"}) == "your own"
+      and NB.whose_figures({"_stated": True}) == "your own")
+check("a pack HE read out is label data, not his reckoning",
+      NB.whose_figures({"source_rung": "manual", "confidence": "label"}) == "a lookup")
+check("and a costed meal is named as the model's table",
+      NB.whose_figures({"_composed": True}) == "my costed table"
+      and NB.whose_figures({"source_rung": "llm"}) == "my costed table")
+his = pz_store.add_entry(TODAY, raw_text="my pizza, about 1100 kcal",
+                         resolved_name="Chianti beef pizza (my figures)", kcal=1100,
+                         confidence="estimate", source_rung="manual")
+NB.NLU.decide_label_target = lambda label, cands, *a, **k: {"kind": "replace",
+                                                            "entry_id": his["id"]}
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("a label offered against his own figures says whose they were",
+      "Those were YOUR figures" in sent_msgs[-1]
+      and "leave yours exactly as they are" in sent_msgs[-1])
+check("and it is still only an offer - nothing overwritten yet",
+      pz_store.get_day(TODAY)["entries"][-1]["kcal"] == 1100.0)
+NB.clear_pending(pz_store)
+# The same on a PENDING item, where his pasted table or a costed meal is what gets swapped.
+NB.set_pending(pz_store, {"batch": [{"resolved_name": "Stir-fry bowl", "_raw": "stir fry",
+                                     "kcal": 980.0, "_stated": True,
+                                     "source_rung": "manual", "confidence": "estimate"}]})
+NB.NLU.decide_label_target = lambda label, cands, *a, **k: {"kind": "replace",
+                                                            "entry_id": "pending:0"}
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("swapping a stated offer for a label names whose figures went",
+      "Those were YOUR figures" in sent_msgs[-1])
+check("and the label item carries none of the old offer's markers, so nothing desyncs",
+      all(k not in NB.get_pending(pz_store)["batch"][0]
+          for k in ("_stated", "_composed", "_components", "_components_detail")))
+NB.clear_pending(pz_store)
+
+print("\n--- an outcome is never CLAIMED without the store result behind it ---")
+# The gate is fail-open by design: a slow or unreachable Opus sends the original text. So the
+# truth of an action claim cannot rest on the gate - it rests on the confirmation being built
+# from what the store actually returned, with the gate as the second net.
+# CLAUDE_BIN, not "NLU.": every model call in this file passes the binary, while
+# NLU.normalise_meal is a string helper an executor is entitled to use. Banning the module
+# would ban the helper and pass a function that spawned a model some other way.
+check("no outcome message is composed by a model",
+      all("CLAUDE_BIN" not in _code_of(f)
+          for f in (NB.apply_delete_duplicate, NB.apply_retime, NB.apply_rename,
+                    NB.apply_quantity_correction, NB.apply_meal_correction,
+                    NB.commit_pending)))
+_two_pizzas()
+_real_remove = S.NutritionStore.remove_entry
+S.NutritionStore.remove_entry = lambda self, day, entry_id: None
+NB.set_inbound(dctx, "you've added the pizza twice")
+sent_msgs.clear()
+check("a removal that the store refused is still handled",
+      NB.apply_delete_duplicate(dctx, {"kind": "delete_duplicate", "which": "the pizza"},
+                                TODAY, "token", 1) is True)
+check("but nothing claims a removal",
+      "Removed" not in sent_msgs[-1] and "could not remove" in sent_msgs[-1]
+      and "nothing has changed" in sent_msgs[-1])
+check("and the ledger stays empty, so the gate would catch a claim anyway",
+      getattr(dctx, "_actions") == [])
+S.NutritionStore.remove_entry = _real_remove
+_real_apply_label = S.NutritionStore.apply_label_to_entry
+S.NutritionStore.apply_label_to_entry = lambda self, day, entry_id, label: None
+NB.set_inbound(pctx, "[tapped Replace]")
+NB.set_pending(pz_store, {"batch": [{"resolved_name": "Chianti beef pizza", "kcal": 482.0}],
+                          "_apply_label_to": {"id": "gone", "name": "Gone", "kcal": 1147}})
+sent_msgs.clear()
+NB.commit_pending(pctx, NB.get_pending(pz_store), TODAY, "token", 1)
+check("a label the store could not apply never reports a replacement",
+      "Replaced" not in sent_msgs[-1] and "not there any more" in sent_msgs[-1]
+      and getattr(pctx, "_actions") == [])
+check("and the offer is cleared rather than left confirmable against a missing entry",
+      NB.get_pending(pz_store) is None)
+S.NutritionStore.apply_label_to_entry = _real_apply_label
+
+print("\n--- an action claim the code did not perform is blocked (15:25, 14 Aug 2026) ---")
+# The gate passed "duplicate noted and removed" because every figure in it was plausible,
+# which was all it was judging. It is now shown what the code actually did.
+NB.GATE_RUNNER = gate_says('{"verdict":"block","reason_class":"false_claim",'
+                           '"reason":"claims a removal that is not in actions_this_turn",'
+                           '"fallback":null}')
+claim_ctx = FakeCtxHandle(solo)
+NB.set_inbound(claim_ctx, "you've added the pizza twice")
+gate_calls.clear(); sent_msgs.clear()
+_went = NB.send_verified(claim_ctx, "token", 1,
+                         "Duplicate noted and removed. You are on 3,050 kcal for the day.",
+                         kind="correction")
+check("the gate is told the log was not touched this turn",
+      '"actions_this_turn": []' in gate_calls[-1])
+check("the false claim never reaches him", _went is False
+      and "removed" not in sent_msgs[-1])
+check("and he gets the honest line for that class instead",
+      sent_msgs[-1] == NB.NG.built_fallback("false_claim"))
+# The other half: a confirmation of work that DID happen must go out, or the bot apologises
+# for a correction it made correctly.
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
+NB.record_action(claim_ctx, "removed entry 2026-08-10-001 Porridge (320 kcal) as a duplicate")
+gate_calls.clear(); sent_msgs.clear()
+check("an executed action's confirmation goes out",
+      NB.send_verified(claim_ctx, "token", 1, "Removed the duplicate *Porridge*.",
+                       kind="correction") is True
+      and "Removed the duplicate" in sent_msgs[-1])
+check("and the ledger it was checked against named that removal",
+      "removed entry 2026-08-10-001" in gate_calls[-1])
+# The ledger is per MESSAGE. Context outlives one, so actions left over from the last turn
+# would substantiate a false claim in this one.
+NB.set_inbound(claim_ctx, "how much protein have I had?")
+check("a new inbound message starts with an empty ledger",
+      getattr(claim_ctx, "_actions") == [])
+check("and every action is recorded where the store call happens, not where the sentence is",
+      all("record_action" in inspect.getsource(f)
+          for f in (NB.apply_delete_duplicate, NB.apply_retime, NB.apply_rename,
+                    NB.apply_quantity_correction, NB.commit_pending,
+                    NB.apply_meal_correction)))
+
+NB.NLU.read_photo, NB.download_photo = _real_read_photo, _real_download
+NB.NLU.decide_label_target = _real_label_target
+NB.NLU.classify, NB.NLU.decide_correction = _real_classify3, _real_decide3
+NB.RC.write_back, NB.RC.bot_in_session_totals = _real_write_back, _real_fuel
+
 NB.tg.send, NB.log = _section_send, _section_log
 NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
 

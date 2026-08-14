@@ -673,6 +673,32 @@ def set_inbound(ctx, text: str) -> None:
     the whole process, so an unset field is not empty, it is the PREVIOUS message - and the
     gate would then judge a commit confirmation against something he typed an hour ago."""
     setattr(ctx, "_inbound", (text or "").strip())
+    # A NEW MESSAGE STARTS WITH AN EMPTY LEDGER, for the same reason: Context outlives a
+    # message, so actions left over from the last turn would make a false claim in this one
+    # look substantiated. Reset here rather than in each handler, because this is the one
+    # function every inbound path already has to call.
+    setattr(ctx, "_actions", [])
+
+
+def record_action(ctx, text: str) -> None:
+    """Record something the code ACTUALLY did to his log this turn.
+
+    THE LEDGER THE GATE CHECKS CLAIMS AGAINST (15:25, 14 Aug 2026). "You've added the pizza
+    twice" fell into a re-resolution and the outgoing reply said the duplicate had been
+    "noted and removed" while nothing had been removed. The gate passed it because every
+    figure in it was plausible, which is all it could see. It is now shown this list, and a
+    reply claiming an action absent from it is blocked.
+
+    Written at the point of the store call, never at the point of the sentence: an entry
+    appended here by the code that composes the reply would substantiate itself."""
+    if not text:
+        return
+    actions = getattr(ctx, "_actions", None)
+    if actions is None:
+        actions = []
+        setattr(ctx, "_actions", actions)
+    actions.append(str(text)[:120])
+    log(f"  [action] {str(text)[:100]}")
 
 
 def _gate_numbers(batch: list) -> list:
@@ -722,7 +748,11 @@ def gate_context(ctx, kind: str, numbers: list = None) -> dict:
         except Exception:
             numbers = []
     return {"reply_kind": kind, "recent_conversation": turns,
-            "figures_behind_this_reply": numbers or []}
+            "figures_behind_this_reply": numbers or [],
+            # WHAT THE CODE DID, so the gate can catch a reply that claims something else.
+            # An empty list is meaningful and is sent as one: it says the log was not
+            # touched, which is what makes "duplicate removed" checkable.
+            "actions_this_turn": list(getattr(ctx, "_actions", []) or [])}
 
 
 def send_verified(ctx, token, chat_id, text: str, kind: str = "reply",
@@ -1314,6 +1344,8 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
             tg.send(token, chat_id, "Nothing logged today to delete.", log=log)
             return
         ctx.store.remove_entry(day, entry["id"])
+        record_action(ctx, f"removed entry {entry['id']} {entry.get('resolved_name')} "
+                           f"({round(entry.get('kcal') or 0)} kcal)")
         # In-session totals change if that entry was fuel, and session-log has to follow or
         # the coach's ramp keeps counting food that no longer exists.
         fuel = RC.bot_in_session_totals(ctx.store, day)
@@ -1343,6 +1375,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                     f"I can file things under breakfast, lunch, dinner or snacks - "
                     f"{got['meal']} is not one I know.", log=log)
             return
+        record_action(ctx, f"updated entry {done['id']}: filed under {got['meal']}")
         publish_now(ctx)
         send_verified(ctx, token, chat_id,
                       f"Filed *{done.get('resolved_name')}* under {got['meal']}.",
@@ -1355,6 +1388,8 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
             tg.send(token, chat_id, "Nothing logged today to move yet.", log=log)
             return
         done = ctx.store.set_in_session(day, entry["id"], got["in_session"])
+        record_action(ctx, f"updated entry {entry['id']}: in_session="
+                           f"{bool(got['in_session'])}")
         # The coach's ramp reads session-log, so moving fuel in or out has to be pushed
         # there as well or the two disagree about the same session.
         fuel = RC.bot_in_session_totals(ctx.store, day)
@@ -1411,6 +1446,12 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                     return
             if kind in ("remember", "remember_and_rescale"):
                 if apply_remember(ctx, decision, pend, day, token, chat_id):
+                    return
+            elif kind == "delete_duplicate":
+                # ALWAYS handled, offer on the table or not. Falling through is what sent
+                # "you've added the pizza twice" into a re-resolution and produced a reply
+                # claiming a removal that never happened (15:25, 14 Aug 2026).
+                if apply_delete_duplicate(ctx, decision, day, token, chat_id):
                     return
             elif kind == "retime" and not pend:
                 # Retiming is only meaningful for something already written: a pending
@@ -1641,6 +1682,7 @@ def log_weight(ctx: Context, kg: float, day: date, token, chat_id) -> None:
     m = ctx.store.add_measurement(
         day, type="weight", value=kg,
         logged_at=datetime.now().isoformat(timespec="minutes"), source="telegram")
+    record_action(ctx, f"added a weight measurement of {kg:.1f} kg")
     mean = NE.rolling_weight_kg(
         ctx.store.measurements_range(day - timedelta(days=6), day), on=day)
     note = ("" if m["tag"] == "morning" else
@@ -1798,6 +1840,10 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
         item["_raw"] = caption or base["resolved_name"]
         if got.get("sodium_from_salt"):
             item["_note"] = "sodium derived from the printed salt figure (salt / 2.5)"
+        # A LABEL CAN BE A CORRECTION, not only a new item. See offer_label_as_correction:
+        # treating every panel as new is what logged his pizza twice on 14 Aug 2026.
+        if offer_label_as_correction(ctx, item, day, token, chat_id):
+            return
         set_pending(ctx.store, {"batch": [item]})
         extra = ("\n_Sodium came from the salt figure on the pack, divided by 2.5._"
                  if got.get("sodium_from_salt") else "")
@@ -1847,6 +1893,164 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
     tg.send(token, chat_id,
             "I could not read that. A barcode or the nutrition panel works best; a "
             "plate is fine too, just tell me roughly what is on it.", log=log)
+
+
+# How much of today the label is compared against. TODAY'S ENTRIES, not a clock window: the
+# stamps on entries are the athlete's LOCAL day and datetime.now() on the VM is an hour off
+# in BST, so "the last six hours" would be a comparison against the wrong six hours. The
+# same rule the delete guard and entry_he_means already follow.
+LABEL_CANDIDATES = 6
+
+
+def label_candidates(ctx: Context, day: date) -> list:
+    """What a photographed label might be correcting: today's recent items, pending first.
+
+    A PENDING ITEM COUNTS. He photographs the pack while the offer is still on the table
+    more often than after confirming it, and a label that lands as a second offer there is
+    the same double-log one message earlier."""
+    out = []
+    for i, it in enumerate((get_pending(ctx.store) or {}).get("batch") or []):
+        if it.get("_supplement"):
+            continue
+        out.append({"entry_id": f"pending:{i}",
+                    "name": (it.get("resolved_name") or it.get("_raw") or "")[:70],
+                    "kcal": it.get("kcal"),
+                    "portion_used_g": it.get("portion_used_g"),
+                    "figures_from": it.get("source_rung"),
+                    "state": "awaiting his confirmation, nothing written yet"})
+    for e in (ctx.store.get_day(day).get("entries") or [])[-LABEL_CANDIDATES:]:
+        out.append({"entry_id": e.get("id"),
+                    "name": (e.get("resolved_name") or e.get("raw_text") or "")[:70],
+                    "kcal": e.get("kcal"),
+                    "portion_used_g": e.get("portion_used_g") or e.get("portion_g"),
+                    "figures_from": e.get("source_rung"),
+                    "logged_at": e.get("logged_at"), "state": "logged"})
+    return out
+
+
+def whose_figures(row: dict) -> str:
+    """Who produced the figures a label is about to replace: him, the meal model, or a
+    lookup.
+
+    THE RULE THIS EXISTS TO KEEP (14 Aug 2026, and it is the strongest rule in this file):
+    figures HE supplied are never quietly re-priced. A photographed pack is better data than
+    his own reckoning of a plate, and a label correcting a lookup is the whole point of this
+    path - but a label landing on numbers he typed himself has to SAY so on the message he
+    confirms, or the pack silently overrules the person holding it. `manual` covers both his
+    typed figures and a pack he read out loud, so the confidence is what separates them: his
+    own reckoning is an estimate, a pack reading is label data."""
+    if row.get("_stated"):
+        return "your own"
+    if row.get("_composed"):
+        return "my costed table"
+    rung = (row.get("source_rung") or "").strip().lower()
+    if rung == "manual" and (row.get("confidence") or "").strip().lower() != "label":
+        return "your own"
+    if rung == "llm":
+        return "my costed table"
+    return "a lookup"
+
+
+def _whose_note(whose: str) -> str:
+    """The sentence that says whose figures are being replaced, or nothing when a lookup's
+    figures are being corrected - which is the unremarkable case."""
+    if whose == "your own":
+        return ("\n\n_Those were YOUR figures, not a lookup's. The pack's panel is better "
+                "data, but say no and I will leave yours exactly as they are._")
+    if whose == "my costed table":
+        return ("\n\n_That entry was my costed estimate of the whole meal, so the pack "
+                "replaces the table and its component rows with the printed panel._")
+    return ""
+
+
+def offer_label_as_correction(ctx: Context, item: dict, day: date, token,
+                              chat_id) -> bool:
+    """Offer a photographed label as a CORRECTION to something already there. False when
+    it is a new item, which is the normal case and the safe one.
+
+    THE DEFECT (14 Aug 2026). He logged "Coop Chianti beef pizza" by name at a web figure of
+    1,147 kcal, then sent the label to fix it. Every label was offered as a new item, so
+    after rescaling it to the whole pizza he confirmed a SECOND pizza at 964 kcal, and the
+    duplicate had to be cleared out of his store by hand.
+
+    NOTHING IS WRITTEN HERE. The replacement is offered and recorded on the pending record,
+    so a label the model has misread costs him a "no" rather than an entry's figures - the
+    same rule mark_pending_replaces follows."""
+    cands = label_candidates(ctx, day)
+    if not cands:
+        return False
+    decision = NLU.decide_label_target(item, cands, CLAUDE_BIN, LLM_MODEL, log=log)
+    if not decision or decision.get("kind") != "replace":
+        # Including an unreachable model: offering the label as a new item is what happened
+        # before this path existed, so an outage costs him one correction, not a wrong write.
+        return False
+    target_id = str(decision.get("entry_id") or "")
+    log(f"  label decided as a correction to {target_id}")
+    if target_id.startswith("pending:"):
+        return replace_pending_with_label(ctx, item, target_id, token, chat_id)
+    entry = next((e for e in (ctx.store.get_day(day).get("entries") or [])
+                  if e.get("id") == target_id), None)
+    if entry is None:
+        return False
+    was = round(entry.get("kcal") or 0)
+    now = round(item.get("kcal") or 0)
+    set_pending(ctx.store, {"batch": [item],
+                            "_apply_label_to": {"id": entry["id"],
+                                                "name": entry.get("resolved_name") or "",
+                                                "kcal": entry.get("kcal")}})
+    kb = tg.inline([[("Replace", "confirm"), ("No", "cancel")]])
+    send_verified(ctx, token, chat_id,
+                  f"That label looks like the *{entry.get('resolved_name')}* you have "
+                  f"already logged, rather than a second one. Replacing its figures with "
+                  f"the pack's takes it from {was} to {now} kcal:\n\n"
+                  + fmt_confirm(item)
+                  + "\n\nReplace it? Say no and I will log the label as a separate item."
+                  + _whose_note(whose_figures(entry)),
+                  kind="offer", numbers=_gate_numbers([item]), reply_markup=kb)
+    _chat(ctx, "coach", f"[log] offered to replace {(entry.get('resolved_name') or '')[:40]}"
+                        f" with its label - awaiting confirm")
+    return True
+
+
+def replace_pending_with_label(ctx: Context, item: dict, target_id: str, token,
+                               chat_id) -> bool:
+    """Swap a PENDING item's figures for the label's and re-offer. False if it cannot.
+
+    Nothing is written either way here - the item was never committed - so this is a
+    straight re-offer rather than a second offer, which is the whole point: two offers is
+    how a label became a second entry."""
+    pend = get_pending(ctx.store) or {}
+    batch = list(pend.get("batch") or [])
+    try:
+        idx = int(target_id.split(":", 1)[1])
+    except (IndexError, ValueError):
+        return False
+    if not 0 <= idx < len(batch):
+        return False
+    old = batch[idx]
+    fresh = dict(item)
+    # The time, the meal and the in-session flag are facts about the EATING, which the
+    # label knows nothing about. They were established when he logged it and they survive.
+    for key in ("_at", "_meal", "in_session", "_supplement"):
+        if old.get(key) is not None:
+            fresh[key] = old[key]
+    batch[idx] = fresh
+    set_pending(ctx.store, {**pend, "batch": batch})
+    body = "\n\n".join(fmt_confirm(i) for i in batch)
+    kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
+    was = (old.get("resolved_name") or old.get("_raw") or "item")[:60]
+    send_verified(ctx, token, chat_id,
+                  f"That is the label for the *{was}* "
+                  f"you have not confirmed yet, so I have used the pack's figures for it "
+                  f"rather than offering it twice.\n\n" + body
+                  + "\n\nLog " + ("these?" if len(batch) > 1 else "it?")
+                  # A pending offer can be his own pasted figures or a costed table, and
+                  # both outrank a lookup: the swap has to name whose numbers went.
+                  + _whose_note(whose_figures(old)),
+                  kind="offer", numbers=_gate_numbers(batch), reply_markup=kb)
+    _chat(ctx, "coach", "[log] replaced the pending item's figures with its label "
+                        "- awaiting confirm")
+    return True
 
 
 def download_photo(ctx: Context, file_id: str, token: str):
@@ -2703,7 +2907,13 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
         batch[0] = drop_stale_breakdown(new)
         set_pending(ctx.store, {**pend, "batch": batch})
         kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-        send_verified(ctx, token, chat_id, fmt_confirm(new) + "\n\nLog it?",
+        # AN OFFER THAT REPLACES AN ENTRY STILL SAYS SO after a rescale. "Log it?" on its own
+        # reads as a second helping, which is the exact misreading that logged his pizza
+        # twice - and the confirmation genuinely does update rather than add.
+        replaces = ((pend or {}).get("_apply_label_to") or {}).get("name")
+        lead = (f"Still replacing *{replaces}*'s figures, at the new amount:\n\n"
+                if replaces else "")
+        send_verified(ctx, token, chat_id, lead + fmt_confirm(new) + "\n\nLog it?",
                       kind="offer", numbers=_gate_numbers([new]), reply_markup=kb)
         _chat(ctx, "coach", f"[log] rescaled offer to "
                             f"{new.get('portion_used_g') or '?'} g - awaiting confirm")
@@ -2713,6 +2923,9 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
                       "portion_estimated": False,
                       "portion_assumed": new.get("portion_assumed")})
         ctx.store.update_entry(day, target["id"], **patch)
+        record_action(ctx, f"updated entry {target['id']} {target.get('resolved_name')} to "
+                           f"{new.get('portion_used_g'):.0f} g, "
+                           f"{round(new.get('kcal') or 0)} kcal")
         publish_now(ctx)
         send_verified(ctx, token, chat_id,
                       f"Rescaled *{target.get('resolved_name')}* to "
@@ -2886,6 +3099,8 @@ def apply_retime(ctx: Context, decision: dict, day: date, token, chat_id) -> boo
     done = ctx.store.update_entry(day, entry["id"], logged_at=stamp)
     if not done:
         return False
+    record_action(ctx, f"updated entry {entry['id']} {done.get('resolved_name')}: "
+                       f"logged_at={decision['time']}")
     # Entries are deliberately NOT re-sorted: /undo pops the tail and "delete that" reads
     # the last one, both meaning "the thing you logged most recently". Ordering by the
     # stated time would repoint those at a different entry.
@@ -2940,12 +3155,148 @@ def apply_meal_correction(ctx: Context, decision: dict, pend, target_item, day: 
     done = ctx.store.set_meal(day, target_item["id"], meal)
     if not done:
         return False
+    record_action(ctx, f"updated entry {target_item['id']} {done.get('resolved_name')}: "
+                       f"filed under {meal}")
     publish_now(ctx)
     _chat(ctx, "coach", f"[log] filed {(done.get('resolved_name') or '')[:40]} "
                         f"under {meal}")
     send_verified(ctx, token, chat_id,
                   f"Filed *{done.get('resolved_name')}* under {meal}.", kind="correction",
                   numbers=_gate_numbers([done]))
+    return True
+
+
+# WHOSE COPY SURVIVES A DE-DUPLICATION, best first. A label is the manufacturer's own panel;
+# `manual` is what he read off a pack or typed himself; then a web figure for the actual
+# product, then a composition-table match for something like it, then a model estimate. The
+# order matters because the two copies of one food are usually NOT equally good - the whole
+# reason the second one exists is that he was correcting the first - and binning the label
+# copy to keep a lookup would undo the correction while reporting success.
+DEDUP_KEEP_ORDER = ("label", "manual", "web", "cofid", "estimate")
+
+
+def provenance_bucket(entry: dict) -> str:
+    """Which rung of DEDUP_KEEP_ORDER this entry's figures came from."""
+    rung = (entry.get("source_rung") or "").strip().lower()
+    if "label" in (entry.get("source_url") or "").lower():
+        return "label"                      # photographed panel, however it was rung
+    if rung == "manual":
+        return "manual"
+    if rung in ("vendor", "retailer", "web", "nutritionix", "openfoodfacts", "usda"):
+        return "web"
+    if rung in ("cofid", "cache", "computed"):
+        return "cofid"
+    return "estimate"
+
+
+def _identity_tokens(text: str) -> set:
+    """The words that NAME a food, for deciding whether two entries are the same thing."""
+    stop = {"the", "one", "that", "this", "my", "and", "of", "a", "an", "it", "with",
+            "from", "for", "was", "had"}
+    return {w for w in re.split(r"[^a-z0-9]+", (text or "").lower())
+            if len(w) > 2} - stop
+
+
+def duplicate_sets(entries: list, which: str = "") -> list:
+    """Groups of today's entries that name the same food. Only groups of two or more.
+
+    Matched on shared identity tokens, the same vocabulary find_entry and _name_matches use,
+    because a duplicate is created by logging one food twice and the two copies rarely have
+    identical names - "Coop Chianti beef pizza" and "Chianti pizza, stone baked" are the
+    reported pair. `which` narrows the pool to what he pointed at; with nothing named, every
+    group in the day is a candidate and more than one of them ASKS rather than guessing."""
+    pool = [e for e in entries
+            if not which or _name_matches(which, _entry_haystack(e))]
+    groups = []
+    for e in pool:
+        tokens = _identity_tokens(_entry_haystack(e))
+        if not tokens:
+            continue
+        for g in groups:
+            if any(tokens & _identity_tokens(_entry_haystack(m)) for m in g):
+                g.append(e)
+                break
+        else:
+            groups.append([e])
+    return [g for g in groups if len(g) > 1]
+
+
+def apply_delete_duplicate(ctx: Context, decision: dict, day: date, token,
+                           chat_id) -> bool:
+    """Remove one copy of a food that is in the log twice. ALWAYS True once called.
+
+    THE DEFECT (15:25, 14 Aug 2026). "You've added the pizza twice" had no verb to land on,
+    so it was decided as `unclear`, fell through to the re-resolution path, and the reply he
+    got said the duplicate had been "noted and removed" - while both entries sat there and a
+    third pizza was being offered. Nothing in the reply was implausible, which is why the
+    gate passed it.
+
+    TRUE ON EVERY BRANCH, including the ones that only ask him something. A False here falls
+    back into that same re-resolution and offers him another one, which is the defect rather
+    than a degraded version of the fix. Every message it sends is built from the store's own
+    result: no model writes a word of the outcome."""
+    which = (decision.get("which") or "").strip()
+    entries = ctx.store.get_day(day).get("entries") or []
+    pend = get_pending(ctx.store)
+    if not entries:
+        tg.send(token, chat_id,
+                "Nothing is logged today, so there is nothing in there twice."
+                + (" The offer on the table is not logged yet - say no and I will drop it."
+                   if pend else ""), log=log)
+        return True
+    sets_ = duplicate_sets(entries, which)
+    if not sets_:
+        names = [(e.get("resolved_name") or "")[:34] for e in entries][-6:]
+        tg.send(token, chat_id,
+                "I cannot see the same thing logged twice today. Today has: "
+                + ", ".join(names)
+                + ("." if not pend else ". The item I offered you is not logged yet, so it "
+                                        "is not a duplicate - say no to drop it.")
+                + " Name the two you mean and I will remove one.", log=log)
+        return True
+    if len(sets_) > 1 or len(sets_[0]) > 2:
+        # AMBIGUOUS ASKS, WITH IDS. More than one pair, or three of something, and there is
+        # no way to know which copy he means - and picking one would be a silent wrong
+        # deletion that reads perfectly in the reply.
+        lines = []
+        for g in sets_:
+            lines.append("; ".join(f"{e.get('id')} {(e.get('resolved_name') or '')[:34]} "
+                                   f"({round(e.get('kcal') or 0)} kcal)" for e in g))
+        tg.send(token, chat_id,
+                "More than one thing could be the duplicate, so I have not removed "
+                "anything. I have:\n" + "\n".join(f"• {l}" for l in lines)
+                + "\n\nTell me which id to remove.", log=log)
+        return True
+    pair = sets_[0]
+    # Best provenance wins; on a tie the NEWER copy stays, because the later one is the one
+    # that embodies whatever correction he was making when he logged it again.
+    ranked = sorted(enumerate(pair),
+                    key=lambda p: (DEDUP_KEEP_ORDER.index(provenance_bucket(p[1])), -p[0]))
+    keep, drop = ranked[0][1], ranked[-1][1]
+    gone = ctx.store.remove_entry(day, drop["id"])
+    if not gone:
+        tg.send(token, chat_id,
+                "I could not remove that entry - nothing has changed. Try “delete "
+                f"{(drop.get('resolved_name') or '')[:34]}”.", log=log)
+        return True
+    record_action(ctx, f"removed entry {gone['id']} {gone.get('resolved_name')} "
+                       f"({round(gone.get('kcal') or 0)} kcal) as a duplicate")
+    # In-session totals move if the duplicate was fuel, and the coach's ramp reads them.
+    fuel = RC.bot_in_session_totals(ctx.store, day)
+    RC.write_back(ctx.athlete_dir, day, carb_g=fuel["carb_g"],
+                  sodium_mg=fuel["sodium_mg"] or None, log=log, allow_clear=True)
+    publish_now(ctx)
+    _chat(ctx, "coach", f"[log] removed a duplicate: {(gone.get('resolved_name') or '')[:40]}")
+    left = ctx.store.get_day(day).get("entries") or []
+    total = round(sum(e.get("kcal") or 0 for e in left))
+    send_verified(ctx, token, chat_id,
+                  f"Removed the duplicate *{gone.get('resolved_name')}* "
+                  f"({round(gone.get('kcal') or 0)} kcal) and kept "
+                  f"*{keep.get('resolved_name')}* ({round(keep.get('kcal') or 0)} kcal, "
+                  f"{provenance_bucket(keep)} figures). Today is now {total} kcal across "
+                  f"{len(left)} item{'s' if len(left) != 1 else ''}.\n\n"
+                  + today_block(ctx, day),
+                  kind="correction", numbers=_gate_numbers([gone, keep]))
     return True
 
 
@@ -2967,6 +3318,7 @@ def apply_rename(ctx: Context, decision: dict, day: date, token, chat_id) -> boo
         return True
     done = ctx.store.rename_entry(day, entry["id"], name)
     if done:
+        record_action(ctx, f"updated entry {entry['id']}: renamed to {name[:50]}")
         publish_now(ctx)
         _chat(ctx, "coach", f"[log] renamed {(done.get('renamed_from') or '')[:34]} "
                             f"to {name[:34]}")
@@ -3004,6 +3356,8 @@ def apply_remember(ctx: Context, decision: dict, pend, day: date, token, chat_id
                                      note=str(decision.get("note") or "").strip())
     if not rec:
         return False
+    record_action(ctx, f"remembered a product fact: {fact['product']} "
+                       f"{fact['field']}={fact['value']}")
     # State exactly what was stored. A fact is permanent and consulted silently, so a
     # model wobble has to be visible on the spot rather than the next time he logs it.
     if fact["field"] == "means":
@@ -3212,6 +3566,46 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
                 "showed it to you properly. Tell me what it was, or your own figures, "
                 "and I will log that instead.", log=log)
         return
+    # A LABEL CORRECTING AN ENTRY UPDATES IT; it does not write a second one. Handled here
+    # rather than in the photo path because this is the only place a confirmation lands -
+    # both the typed "yes" and the button come through here - and because the update must
+    # not happen until he has confirmed it. Delete-and-relog would have been the easier
+    # wiring and it is the shape update_entry exists to avoid: it loses the entry's id, its
+    # place in the day and anything already corrected on it.
+    label_for = (pend or {}).get("_apply_label_to") or {}
+    if label_for.get("id"):
+        item = (pend.get("batch") or [{}])[0]
+        done = ctx.store.apply_label_to_entry(day, label_for["id"], item)
+        clear_pending(ctx.store)
+        if not done:
+            tg.send(token, chat_id,
+                    "That entry is not there any more, so there was nothing to correct. "
+                    "Send the label again and I will log it as its own item.", log=log)
+            return
+        record_action(ctx, f"updated entry {done['id']} to the label's figures: "
+                           f"{done.get('resolved_name')} {round(done.get('kcal') or 0)} kcal")
+        # BOTH MARKS AT ONCE cannot happen today - offer_label_as_correction writes a fresh
+        # record, so a `_replaces` from an earlier offer is gone - but this branch returns
+        # before the removal below, and an orphan left by a future path would sit in the log
+        # under a reply that says "One entry, not two". Cheaper to honour it here.
+        orphan = ((pend.get("_replaces") or {}).get("id") or "")
+        if orphan and orphan != done["id"]:
+            was = ctx.store.remove_entry(day, orphan)
+            if was:
+                record_action(ctx, f"removed entry {was['id']} {was.get('resolved_name')}, "
+                                   f"replaced by the label correction")
+        publish_now(ctx)
+        _chat(ctx, "coach",
+              f"[log] applied the label to {(done.get('resolved_name') or '')[:40]}")
+        was = round(float(label_for.get("kcal") or 0))
+        send_verified(ctx, token, chat_id,
+                      f"Replaced *{done.get('resolved_name')}*'s figures with the label's: "
+                      f"{was} to {round(done.get('kcal') or 0)} kcal"
+                      + (f", {done['portion_used_g']:.0f} g"
+                         if done.get("portion_used_g") else "")
+                      + ". One entry, not two.\n\n" + today_block(ctx, day),
+                      kind="confirmation", numbers=_gate_numbers([done]))
+        return
     batch = pend.get("batch") or [pend]
     wrote, asked = 0, []
     for item in batch:
@@ -3219,6 +3613,10 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
             asked.append(item.get("resolved_name") or item.get("_raw") or "that one")
             continue
         commit_one(ctx, item, day)
+        record_action(ctx, "added "
+                      + ("supplement " if item.get("_supplement") else "entry ")
+                      + f"{(item.get('resolved_name') or item.get('_raw') or '')[:50]}"
+                      + (f" ({round(item['kcal'])} kcal)" if item.get("kcal") else ""))
         wrote += 1
     # A confirmed replacement removes what it replaced - AFTER the new entry is written, and
     # only if one was, so a declined or failed correction never destroys the original.
@@ -3226,6 +3624,9 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
     if wrote and replaces.get("id"):
         gone = ctx.store.remove_entry(day, replaces["id"])
         log(f"replaced entry {replaces['id']}: removed={bool(gone)}")
+        if gone:
+            record_action(ctx, f"removed entry {gone['id']} {gone.get('resolved_name')}, "
+                               f"replaced by what was just added")
     clear_pending(ctx.store)
     # Push the day's in-session total into session-log so the coach's g/hr ramp keeps
     # being fed. Without this, logging fuel here silently starves recent_avg_g_hr and
@@ -3399,11 +3800,16 @@ def handle_command(ctx: Context, cmd: str, day: date, token, chat_id) -> None:
                 log=log)
     elif cmd.startswith("/undo"):
         gone = store.undo_last(day)
+        if gone:
+            record_action(ctx, f"removed entry {gone['id']} {gone.get('resolved_name')}")
         tg.send(token, chat_id,
                 (f"Removed {gone['resolved_name']}." if gone else "Nothing to undo."),
                 log=log)
     elif cmd.startswith("/edit"):
         gone = store.undo_last(day)
+        if gone:
+            record_action(ctx, f"removed entry {gone['id']} {gone.get('resolved_name')} "
+                               f"for a re-parse")
         tg.send(token, chat_id,
                 (f"Removed {gone['resolved_name']}. Send it again and I will re-parse it."
                  if gone else "Nothing to edit."), log=log)
@@ -3416,6 +3822,7 @@ def handle_command(ctx: Context, cmd: str, day: date, token, chat_id) -> None:
         if merged.get("in_session_from_coach"):
             entries = entries + [{"kcal": merged["in_session_kcal"], "in_session": True}]
         store.close_day(day, when=datetime.now().isoformat(timespec="minutes"))
+        record_action(ctx, f"closed the day {day.isoformat()}")
         under = NE.underfuel_flag(entries, z, z["kcal_maintenance"] / NE.NEAT_TEF_MULTIPLIER)
         msg = "Day closed.\n\n" + fmt_totals(
             RC.merged_totals(store, ctx.athlete_dir, day), z)

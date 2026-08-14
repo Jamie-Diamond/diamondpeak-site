@@ -787,6 +787,94 @@ check("and a portion the athlete stated is not flagged as a guess",
                                         '"portion_g":300}]}')
                     )["items"][0]["portion_estimated"] is False)
 
+print("\n--- a photographed label can be a CORRECTION, not a second dinner (14 Aug 2026) ---")
+# He logged "Coop Chianti beef pizza" by name at a web figure of 1,147 kcal, then sent the
+# pack's label to fix it. Every label was offered as a NEW item, so the pizza went in twice.
+_CANDS = [{"entry_id": "2026-08-14-003", "name": "Coop Chianti beef pizza", "kcal": 1147.0,
+           "figures_from": "web", "state": "logged"},
+          {"entry_id": "2026-08-14-002", "name": "Porridge with blueberries", "kcal": 320.0,
+           "figures_from": "cofid", "state": "logged"}]
+_LABEL = {"resolved_name": "Chianti beef pizza, stone baked", "kcal": 482.0,
+          "protein_g": 22.0, "per_100g": {"kcal": 241.0}, "portion_used_g": 200.0,
+          "pack_g": 400.0}
+sink = []
+got = NLU.decide_label_target(_LABEL, _CANDS, "claude", "m", log=lambda *a: None,
+                              runner=fixed_runner(
+                                  '{"kind":"replace","entry_id":"2026-08-14-003"}', sink))
+check("a label that matches a logged item is a replacement",
+      got == {"kind": "replace", "entry_id": "2026-08-14-003"})
+check("the prompt shows the label and every candidate it may point at",
+      "Chianti beef pizza, stone baked" in (sink[0] or "")
+      and "2026-08-14-003" in (sink[0] or "") and "Porridge" in (sink[0] or ""))
+check("and says which state each candidate is in, written or awaiting confirmation",
+      "awaiting his confirmation" in NLU.LABEL_TARGET_PROMPT
+      or "state" in (sink[0] or ""))
+check("a label matching nothing is a new item",
+      NLU.decide_label_target(_LABEL, _CANDS, "claude", "m", log=lambda *a: None,
+                              runner=fixed_runner('{"kind":"new"}')) == {"kind": "new"})
+check("an entry_id it was never shown is refused, and becomes a new item",
+      NLU.decide_label_target(_LABEL, _CANDS, "claude", "m", log=lambda *a: None,
+                              runner=fixed_runner('{"kind":"replace",'
+                                                  '"entry_id":"2026-08-14-099"}'))
+      == {"kind": "new"})
+check("a pending item is a valid target, because he photographs the pack mid-offer",
+      NLU.decide_label_target(
+          _LABEL, [{"entry_id": "pending:0", "name": "Chianti beef pizza",
+                    "state": "awaiting his confirmation, nothing written yet"}],
+          "claude", "m", log=lambda *a: None,
+          runner=fixed_runner('{"kind":"replace","entry_id":"pending:0"}'))
+      == {"kind": "replace", "entry_id": "pending:0"})
+check("nothing on the log means nothing to correct, with no model call at all",
+      NLU.decide_label_target(_LABEL, [], "claude", "m", log=lambda *a: None,
+                              runner=fixed_runner("boom")) == {"kind": "new"})
+# None, not `new`: the caller distinguishes "the model says this is new" from "there was no
+# model", and both end up offering the label as a new item - which is what happened before
+# this function existed, so an outage costs a correction rather than a wrong write.
+check("an unreachable model is None, so the caller knows it never decided",
+      NLU.decide_label_target(_LABEL, _CANDS, "claude", "m", log=lambda *a: None,
+                              runner=fixed_runner(
+                                  "API Error: 401 OAuth token has expired")) is None)
+check("and prose instead of JSON is None as well",
+      NLU.decide_label_target(_LABEL, _CANDS, "claude", "m", log=lambda *a: None,
+                              runner=fixed_runner("looks like the pizza to me")) is None)
+_lt = " ".join(NLU.LABEL_TARGET_PROMPT.split())   # unwrapped: a line break in the prompt
+#                                                  must not fail a check about its wording
+check("the prompt refuses a guessed replacement and asks for no figures",
+      "never guess `replace` to be helpful" in _lt
+      and "Return no figures of any kind" in _lt)
+
+print("\n--- delete_duplicate: 'you've added the pizza twice' (15:25, 14 Aug 2026) ---")
+# There was no verb for this, so the decision came back `unclear`, fell into a
+# re-resolution, and the reply claimed a removal that never happened.
+got = NLU.decide_correction("you've added the pizza twice", _item, "claude", "m",
+                            log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"delete_duplicate",'
+                                                '"which":"the pizza"}'))
+check("a duplicate complaint has a verb of its own",
+      got == {"kind": "delete_duplicate", "which": "the pizza"})
+check("with no words for it, `which` is empty rather than invented",
+      NLU.decide_correction("that's in there twice", _item, "claude", "m",
+                            log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"delete_duplicate"}'))
+      == {"kind": "delete_duplicate", "which": ""})
+# None here would be read as "the model is down" and would run the quantity regexes against
+# the message, which find nothing - and the reply falls through to a fresh offer.
+check("a malformed delete_duplicate is never None",
+      NLU.decide_correction("x", _item, "claude", "m", log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"delete_duplicate",'
+                                                '"which":null}')) is not None)
+check("the prompt separates a duplicate from a second helping",
+      "same food is logged more than once" in NLU.CORRECTION_PROMPT.lower()
+      and "I had another one" in NLU.CORRECTION_PROMPT)
+
+print("\n--- the chat model may not claim to have changed the log ---")
+# The 15:25 sentence was prose, and prose cannot know what the code did. Corrections,
+# deletions and replacements report themselves from the store's own result.
+_conv = NLU.CONVERSE_PROMPT
+check("converse is told plainly that it cannot change the log",
+      "YOU CANNOT CHANGE HIS LOG FROM HERE" in _conv
+      and "duplicate noted and removed" in _conv)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)

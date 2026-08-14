@@ -182,16 +182,62 @@ print("\n--- the prompt biases to send, or the gate gets turned off ---")
 # terse-but-correct confirmation until every real answer is replaced by an apology.
 low = " ".join(NG.GATE_PROMPT.lower().split())      # unwrapped, so a line break in the
 #                                                    prompt cannot fail a check about it
-check("it names the four blocking classes and nothing else",
+check("it names the five blocking classes and nothing else",
       all(c in low for c in ("magnitude", "off_topic", "contradicts_input",
-                             "stale_context")))
+                             "stale_context", "false_claim")))
 check("it says plainly not to block for style or brevity",
       "do not block for" in low and "brevity" in low and "tone" in low)
 check("and that a marginal case is a send", "marginal case is a send" in low)
 # A barcode photo or a tapped button names no food, so "does it address what he said" has
-# no answer and off_topic would be available on every photo-derived offer.
-check("a marker message is judged on its figures alone",
-      "when his message is a marker" in low and "magnitude alone" in low)
+# no answer and off_topic would be available on every photo-derived offer. It is judged on
+# its FIGURES and its ACTION CLAIMS: a photographed label that corrects an entry is one of
+# these turns, so exempting them from false_claim would exempt the path that most needs it.
+check("a marker message is judged on its figures and its claims",
+      "when his message is a marker" in low
+      and "magnitude or false_claim" in low)
+
+print("\n--- REPLAY 15:25, 14 Aug 2026: a reply that claimed a removal that never happened ---")
+# "You've added the pizza twice" produced "duplicate noted and removed" while both copies sat
+# in the log. Every figure in it was plausible, which was all this gate was judging - so it
+# passed, and the store had to be deduped by hand. The fix is not a better reading of the
+# sentence: it is the LIST of what the code actually did, beside the reply.
+check("the prompt explains what an empty action list means",
+      "actions_this_turn" in low and "empty list means the log was not touched" in low)
+check("and says to block a claim the list does not contain, not one it fails to prove",
+      "claims to have done something to his log that is absent" in low
+      and "block when the reply claims an action the list does not contain" in low)
+check("with the reported sentence named as the example",
+      "duplicate noted and removed" in low)
+seen = []
+INCIDENT_CTX = {"reply_kind": "correction", "actions_this_turn": [],
+                "figures_behind_this_reply": [{"name": "Chianti beef pizza", "kcal": 964}]}
+got = NG.verify_reply(
+    "you've added the pizza twice",
+    "Duplicate noted and removed. You are on 3,050 kcal for the day.", INCIDENT_CTX,
+    "claude", log=quiet,
+    runner=runner_saying('{"verdict":"block","reason_class":"false_claim",'
+                         '"reason":"claims a removal that is not in actions_this_turn",'
+                         '"fallback":null}', seen))
+check("the gate is shown that nothing was done", '"actions_this_turn": []' in seen[0]["input"])
+check("and the claim it has to judge", "Duplicate noted and removed" in seen[0]["input"])
+check("a false claim is a first-class block, not coerced into 'other'",
+      got["verdict"] == "block" and got["reason_class"] == "false_claim")
+check("and it has an honest line of its own to send instead",
+      "false_claim" in NG.FALLBACK_BY_CLASS
+      and "nothing has been changed" in NG.built_fallback("false_claim"))
+# The other half of the same rule: a confirmation of work that DID happen must go out, or
+# the athlete is apologised to for a correction the bot made correctly.
+seen = []
+got = NG.verify_reply(
+    "you've added the pizza twice",
+    "Removed the duplicate *Chianti beef pizza* (1,147 kcal) and kept the label figures.",
+    {"reply_kind": "correction",
+     "actions_this_turn": ["removed entry 2026-08-14-004 Chianti beef pizza (1147 kcal) "
+                           "as a duplicate"]},
+    "claude", log=quiet, runner=runner_saying('{"verdict":"send","reason":"fine"}', seen))
+check("a claim the list substantiates is sent", got["verdict"] == "send")
+check("and the gate could see the action it names",
+      "removed entry 2026-08-14-004" in seen[0]["input"])
 
 print()
 if FAILED:
