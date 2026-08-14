@@ -50,6 +50,7 @@ BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "lib"))
 
 import nutrition_engine as NE       # noqa: E402
+import nutrition_gate as NG         # noqa: E402
 import nutrition_nlu as NLU         # noqa: E402
 import nutrition_reconcile as RC
 import nutrition_resolve as NR      # noqa: E402
@@ -607,6 +608,12 @@ def pending_path(store: NutritionStore) -> Path:
 
 def set_pending(store: NutritionStore, item: dict) -> None:
     store.dir.mkdir(parents=True, exist_ok=True)
+    # A FRESH OFFER IS NEVER A BLOCKED ONE. Every re-offer path rebuilds the record with
+    # `{**pend, "batch": fresh}`, which would carry a stale gate block onto an offer he can
+    # now see - and a blocked offer refuses to commit. Dropped here, in the one place every
+    # offer goes through, rather than remembered in each caller; the gate re-marks the
+    # record itself if it blocks the new text too.
+    item = {k: v for k, v in (item or {}).items() if k != "_gate_blocked"}
     pending_path(store).write_text(json.dumps(item, indent=2))
 
 
@@ -624,6 +631,161 @@ def clear_pending(store: NutritionStore) -> None:
     p = pending_path(store)
     if p.exists():
         p.unlink()
+
+
+# --- the pre-send gate ------------------------------------------------------
+#
+# ONE CHOKE POINT for every reply that carries model- or ladder-derived content. Jamie,
+# 14 Aug 2026: "everything should be verified by opus to make sure the output is sensible
+# against the input and makes sense as a reply and isn't just crap."
+#
+# A wrapper rather than a call at each of the fifteen sites, for the reason this file has
+# learned the hard way in every other hand-off: a rule applied by fifteen callers is a rule
+# three of them will drop. The sites that stay OUTSIDE it are listed at EXEMPT_SENDS, with
+# why, because an exemption nobody can see is the same failure.
+#
+# ONE GATE CALL PER INBOUND MESSAGE is the design constraint. The gate reads the FINAL
+# composed message, never a fragment, and the mechanical one-liners that share a turn with
+# a real reply ("Looking at that...", the trivial-dose note) are exempt so a single message
+# cannot cost two Opus calls.
+
+GATE_MODEL = "claude-opus-5"
+# The test seam, and the only way this module is driven offline. None means the real CLI.
+GATE_RUNNER = None
+# Sends that never go through the gate. Kept as text so the reasoning is readable, and
+# asserted by the tests so it cannot rot into a list of what somebody forgot to wire:
+#   help/start text, "Dropped it.", "Looking at that...", "Looking at tomorrow...",
+#   "Barcode NNN, looking it up...", the photo-download failure, the "nothing logged today
+#   to X" refusals, the "I could not reach the model" notices, the credential warning, the
+#   which-one-do-you-mean list, the deterministic today/target/plants/week/undo/edit/close
+#   blocks, the trivial-dose note, the gate's own fallbacks and the blocked-offer refusal.
+# Each is either a FIXED STRING or a straight read of the store, so there is no model or
+# ladder figure in it to be insane, and two of them exist precisely to report that a model
+# call failed - gating those would let a broken verifier silence the outage notice.
+EXEMPT_SENDS = "see the comment above; asserted in test_nutrition_bot.py"
+
+
+def set_inbound(ctx, text: str) -> None:
+    """Record what the athlete just sent, for the gate to judge the reply against.
+
+    Stashed on the per-message context rather than threaded through fifteen signatures.
+    It MUST be set on every inbound path, including the inline buttons: Context lives for
+    the whole process, so an unset field is not empty, it is the PREVIOUS message - and the
+    gate would then judge a commit confirmation against something he typed an hour ago."""
+    setattr(ctx, "_inbound", (text or "").strip())
+
+
+def _gate_numbers(batch: list) -> list:
+    """The figures behind an offer, compact enough to sit in every gate prompt.
+
+    NLU.batch_summaries alone is not enough here: a costed meal's absurdity lives in its
+    component ROWS - 447 kcal for a stir fry is only visibly wrong next to "100 g steak,
+    raw" - and a stated meal's authority lives in the rows he typed."""
+    out = []
+    for i, it in enumerate((batch or [])[:8]):
+        row = {"index": i,
+               "name": (it.get("resolved_name") or it.get("_raw") or "")[:70],
+               "kcal": it.get("kcal"), "protein_g": it.get("protein_g"),
+               "carb_g": it.get("carb_g"), "fat_g": it.get("fat_g"),
+               "portion_used_g": it.get("portion_used_g"),
+               "confidence": it.get("confidence")}
+        if it.get("_stated"):
+            row["figures_are_his_own"] = True
+            row["his_rows"] = [str(c)[:80] for c in (it.get("_components") or [])[:12]]
+        if it.get("_composed"):
+            row["costed_as_a_whole_meal"] = True
+            row["components"] = [
+                {"name": str(c.get("name"))[:50], "portion_g": c.get("portion_g"),
+                 "kcal": c.get("kcal")}
+                for c in (it.get("_components_detail") or [])[:12]]
+        out.append(row)
+    return out
+
+
+def gate_context(ctx, kind: str, numbers: list = None) -> dict:
+    """What the gate is shown besides the message and the reply.
+
+    Deliberately NOT facts_for_question: that dict is the day's whole model and none of it
+    helps decide whether a sentence answers a question. Recent turns, the offer on the
+    table, and the figures behind this reply."""
+    turns = []
+    store = getattr(ctx, "store", None)
+    try:
+        for t in (store.recent_chat() or [])[-6:]:
+            turns.append({"at": t.get("at"), "role": t.get("role"),
+                          "text": str(t.get("text") or "")[:200]})
+    except Exception:
+        turns = []
+    if numbers is None:
+        try:
+            numbers = _gate_numbers((get_pending(store) or {}).get("batch") or [])
+        except Exception:
+            numbers = []
+    return {"reply_kind": kind, "recent_conversation": turns,
+            "figures_behind_this_reply": numbers or []}
+
+
+def send_verified(ctx, token, chat_id, text: str, kind: str = "reply",
+                  numbers: list = None, reply_markup=None) -> bool:
+    """Send `text`, but only if Opus agrees it is a sensible reply to what he just said.
+
+    Returns True when the original text went out (verified or unverified), False when it
+    was blocked and a fallback was sent instead. The return value is about WHAT was sent -
+    every caller still counts the message as handled, or a block would fall through to a
+    second reply and a second gate call.
+
+    On a block the athlete always gets something honest: the gate's own fallback if it gave
+    a usable one, otherwise the built line for the reason class. Never the crap, and never
+    silence."""
+    body = (text or "").strip()
+    inbound = getattr(ctx, "_inbound", "") or ""
+    if not body or not inbound:
+        # Nothing to judge, or nothing to judge it against - a cron or startup send has no
+        # inbound message and coherence is undefined for it.
+        if body:
+            log("[gate] skipped: no inbound message to check against")
+        tg.send(token, chat_id, text, reply_markup=reply_markup, log=log)
+        return True
+    got = NG.verify_reply(inbound, body, gate_context(ctx, kind, numbers), CLAUDE_BIN,
+                          model=GATE_MODEL, log=log, runner=GATE_RUNNER,
+                          model_unavailable=NLU.model_unavailable)
+    reason = (got.get("reason") or "")[:160]
+    log(f"[gate] {got['verdict']} {got.get('ms')}ms kind={kind} "
+        f"class={got.get('reason_class')} reason={reason!r}")
+    if got.get("unverified"):
+        log("[gate] unavailable - sent unverified")
+    if got["verdict"] != "block":
+        tg.send(token, chat_id, text, reply_markup=reply_markup, log=log)
+        return True
+    log(f"[gate] blocked: {reason}")
+    fallback = got.get("fallback") or NG.built_fallback(got.get("reason_class"))
+    if kind == "offer":
+        # THE OFFER SURVIVES, BUT IT IS NOT CONFIRMABLE. Keeping the pending record intact
+        # is what lets "it was 980 kcal" land on the thing he was arguing with. Leaving it
+        # CONFIRMABLE would mean a "yes" to the honest line above commits the very figures
+        # the gate just called absurd - one tap from the defect it exists to catch. So the
+        # record is marked and commit_pending refuses it; any re-offer clears the mark,
+        # because set_pending drops the key.
+        _mark_pending_gate_blocked(ctx, reason or got.get("reason_class") or "blocked")
+        reply_markup = None      # no "Log it" button on something he has not seen
+    _chat(ctx, "coach", f"[gate] blocked a reply: {reason[:80]}")
+    tg.send(token, chat_id, fallback, reply_markup=reply_markup, log=log)
+    return False
+
+
+def _mark_pending_gate_blocked(ctx, reason: str) -> None:
+    """Flag the pending offer as one he was never shown."""
+    store = getattr(ctx, "store", None)
+    if store is None:
+        return
+    try:
+        pend = get_pending(store)
+        if not pend:
+            return
+        pending_path(store).write_text(json.dumps({**pend, "_gate_blocked": reason},
+                                                  indent=2))
+    except Exception as exc:
+        log(f"[gate] could not mark the pending offer: {exc}")
 
 
 # --- the runtime context ----------------------------------------------------
@@ -1095,6 +1257,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
     logging. Intent is now decided first."""
     day = ctx.local_today()
     t = (text or "").strip()
+    set_inbound(ctx, t)
     pend = get_pending(ctx.store)
     log(f"msg {t[:70]!r} pending={bool(pend)}")
 
@@ -1162,10 +1325,11 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         _chat(ctx, "athlete", t)
         _chat(ctx, 
             "coach", f"[log] deleted: {(entry.get('resolved_name') or named)[:60]}")
-        tg.send(token, chat_id,
-                f"Deleted *{entry.get('resolved_name')}* "
-                f"({round(entry.get('kcal') or 0)} kcal).\n\n" + today_block(ctx, day),
-                log=log)
+        send_verified(ctx, token, chat_id,
+                      f"Deleted *{entry.get('resolved_name')}* "
+                      f"({round(entry.get('kcal') or 0)} kcal).\n\n"
+                      + today_block(ctx, day), kind="confirmation",
+                      numbers=_gate_numbers([entry]))
         return
 
     if intent == "set_meal":
@@ -1180,9 +1344,9 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                     f"{got['meal']} is not one I know.", log=log)
             return
         publish_now(ctx)
-        tg.send(token, chat_id,
-                f"Filed *{done.get('resolved_name')}* under {got['meal']}.",
-                log=log)
+        send_verified(ctx, token, chat_id,
+                      f"Filed *{done.get('resolved_name')}* under {got['meal']}.",
+                      kind="correction", numbers=_gate_numbers([done]))
         return
 
     if intent == "set_in_session":
@@ -1197,10 +1361,11 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         RC.write_back(ctx.athlete_dir, day, carb_g=fuel["carb_g"],
                       sodium_mg=fuel["sodium_mg"] or None, log=log, allow_clear=True)
         publish_now(ctx)
-        tg.send(token, chat_id,
-                f"*{done.get('resolved_name')}* is now "
-                + ("in-session fuel." if got["in_session"]
-                   else "out-of-session, so it is off your in-run figures."), log=log)
+        send_verified(ctx, token, chat_id,
+                      f"*{done.get('resolved_name')}* is now "
+                      + ("in-session fuel." if got["in_session"]
+                         else "out-of-session, so it is off your in-run figures."),
+                      kind="correction", numbers=_gate_numbers([done]))
         return
 
     if intent == "log_weight":
@@ -1500,8 +1665,12 @@ def converse_reply(ctx: Context, message: str, day: date, token, chat_id,
                        now_iso=datetime.now().strftime("%Y-%m-%dT%H:%M"))
     _chat(ctx, "athlete", message)
     if out:
-        _chat(ctx, "coach", out)
-        tg.send(token, chat_id, out, log=log)
+        # RECORDED ONLY IF HE GOT IT. The turn used to be stored before the send, which with
+        # a gate in front means a reply the gate rejected would sit in the transcript as
+        # something the coach said - and the next turn reads that history back and follows a
+        # thread he never saw. send_verified logs the block and stores its own marker.
+        if send_verified(ctx, token, chat_id, out, kind="reply"):
+            _chat(ctx, "coach", out)
     return out
 
 
@@ -1568,13 +1737,18 @@ def debate(ctx: Context, got: dict, text: str, day: date, token, chat_id) -> Non
                          ctx.store.recent_chat(), CLAUDE_BIN, LLM_MODEL, log=log,
                          now_iso=datetime.now().strftime("%Y-%m-%dT%H:%M"))
     _chat(ctx, "athlete", text)
-    if reply:
-        _chat(ctx, "coach", reply)
     ctx.store.cache_put("_last_options", {"options": [o["option"] for o in options],
                                           "day": day.isoformat()})
-    tg.send(token, chat_id, reply or ("I could not reach the model to talk it through. "
-                                      "Here is where you are:\n\n"
-                                      + today_block(ctx, day)), log=log)
+    if reply:
+        # Stored only once it has actually gone out, for the same reason as converse_reply.
+        if send_verified(ctx, token, chat_id, reply, kind="reply"):
+            _chat(ctx, "coach", reply)
+    else:
+        # Exempt: a fixed notice that the model could not be reached, plus the
+        # deterministic block. Gating it would let a broken verifier hide the outage.
+        tg.send(token, chat_id, "I could not reach the model to talk it through. "
+                                "Here is where you are:\n\n" + today_block(ctx, day),
+                log=log)
 
 
 def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
@@ -1588,6 +1762,8 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
 
     A photo of a plate is an estimate and a photo of the printed panel is label data.
     Conflating them would put label-grade confidence on a guess."""
+    set_inbound(ctx, f"[sent a photo] {caption}".strip() if caption
+                else "[sent a photo, no caption]")
     tg.send(token, chat_id, "Looking at that...", log=log)
     path = download_photo(ctx, file_id, token)
     if not path:
@@ -1595,6 +1771,15 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
         return
     got = NLU.read_photo(str(path), CLAUDE_BIN, LLM_MODEL, log=log)
     kind = got.get("kind")
+    # WHAT THE PHOTO WAS, not merely that there was one. "[sent a photo]" is an input the
+    # gate cannot judge coherence against - nothing is named in it - so an offer derived
+    # from a barcode would be arguably off-topic by construction. Refined once the photo has
+    # been read, and it carries his caption because that is often the only wording there is.
+    set_inbound(ctx, f"[sent a photo of a {kind.replace('_', ' ')}"
+                     + (f", captioned {caption!r}]" if caption else "]")
+                if kind and kind != "unknown"
+                else f"[sent a photo I could not read"
+                     + (f", captioned {caption!r}]" if caption else "]"))
     log(f"photo {path.name} kind={kind} vendor={got.get('vendor')!r} "
         f"items={[i['text'][:40] for i in (got.get('items') or [])]}")
 
@@ -1617,8 +1802,8 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
         extra = ("\n_Sodium came from the salt figure on the pack, divided by 2.5._"
                  if got.get("sodium_from_salt") else "")
         kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-        tg.send(token, chat_id, fmt_confirm(item) + extra + "\n\nLog it?",
-                reply_markup=kb, log=log)
+        send_verified(ctx, token, chat_id, fmt_confirm(item) + extra + "\n\nLog it?",
+                      kind="offer", numbers=_gate_numbers([item]), reply_markup=kb)
         return
 
     if kind == "order":
@@ -1767,8 +1952,9 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
     if batch:
         _chat(ctx, "coach", _offer_summary(batch))
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-    tg.send(token, chat_id, "\n\n".join(notes) + "\n\nLog "
-            + ("these?" if len(batch) > 1 else "it?"), reply_markup=kb, log=log)
+    send_verified(ctx, token, chat_id, "\n\n".join(notes) + "\n\nLog "
+                  + ("these?" if len(batch) > 1 else "it?"), kind="offer",
+                  numbers=_gate_numbers(batch), reply_markup=kb)
 
 
 _SAME_AS = re.compile(
@@ -1947,8 +2133,9 @@ def offer_stated(ctx: Context, items: list, day: date, token, chat_id,
     log(f"  stated figures accepted verbatim: "
         f"{[round(i.get('kcal') or 0) for i in batch]} kcal, no lookup")
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-    tg.send(token, chat_id, body + "\n\nLog "
-            + ("these?" if len(batch) > 1 else "it?"), reply_markup=kb, log=log)
+    send_verified(ctx, token, chat_id, body + "\n\nLog "
+                  + ("these?" if len(batch) > 1 else "it?"), kind="offer",
+                  numbers=_gate_numbers(batch), reply_markup=kb)
 
 
 def composed_item(ctx: Context, table: dict, said: str, day: date,
@@ -2080,7 +2267,8 @@ def offer_composed(ctx: Context, said: str, day: date, token, chat_id,
     log(f"  meal costed by {MEAL_MODEL}: {round(item.get('kcal') or 0)} kcal across "
         f"{len(item.get('_components_detail') or [])} components, no rung walked")
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-    tg.send(token, chat_id, body + "\n\nLog it?", reply_markup=kb, log=log)
+    send_verified(ctx, token, chat_id, body + "\n\nLog it?", kind="offer",
+                  numbers=_gate_numbers([item]), reply_markup=kb)
     return True
 
 
@@ -2124,12 +2312,13 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 else (f"{items[0].get('portion_g')} g" if items[0].get("portion_g")
                       else "dose as stated"))
         kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-        tg.send(token, chat_id,
-                f"*{items[0]['text']}*\nSupplement, {dose}. Recorded as a dose, not "
-                f"looked up against food data, and it does not touch your macros."
-                + ("\n_Tell me the label figures if you want them counted._"
-                   if not trivial else "")
-                + "\n\nLog it?", reply_markup=kb, log=log)
+        send_verified(ctx, token, chat_id,
+                      f"*{items[0]['text']}*\nSupplement, {dose}. Recorded as a dose, not "
+                      f"looked up against food data, and it does not touch your macros."
+                      + ("\n_Tell me the label figures if you want them counted._"
+                         if not trivial else "")
+                      + "\n\nLog it?", kind="offer",
+                      numbers=_gate_numbers(batch), reply_markup=kb)
         return
 
     resolved = []
@@ -2200,8 +2389,9 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
     for line in _stated_time_note(resolved) + _stated_meal_note(resolved):
         body += "\n\n" + line
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-    tg.send(token, chat_id, body + "\n\nLog "
-            + ("these?" if len(resolved) > 1 else "it?"), reply_markup=kb, log=log)
+    send_verified(ctx, token, chat_id, body + "\n\nLog "
+                  + ("these?" if len(resolved) > 1 else "it?"), kind="offer",
+                  numbers=_gate_numbers(resolved), reply_markup=kb)
 
 
 def publish_now(ctx: Context) -> None:
@@ -2274,7 +2464,14 @@ def mark_pending_replaces(ctx: Context, entry_id: str, name: str) -> None:
     if not pend:
         return
     pend["_replaces"] = {"id": entry_id, "name": name}
+    # A gate block SURVIVES this. set_pending drops the mark, which is right for a re-offer
+    # and wrong here: this is an annotation on the offer that was just sent, and it runs
+    # AFTER it - so without re-marking, an offer the gate blocked would quietly become
+    # confirmable again on exactly the two paths that replace an existing entry.
+    blocked = pend.pop("_gate_blocked", "")
     set_pending(ctx.store, pend)
+    if blocked:
+        _mark_pending_gate_blocked(ctx, blocked)
 
 
 # WHAT HE SAID IT WAS NOT. Read with regexes rather than by asking the model: this has to
@@ -2506,8 +2703,8 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
         batch[0] = drop_stale_breakdown(new)
         set_pending(ctx.store, {**pend, "batch": batch})
         kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-        tg.send(token, chat_id, fmt_confirm(new) + "\n\nLog it?",
-                reply_markup=kb, log=log)
+        send_verified(ctx, token, chat_id, fmt_confirm(new) + "\n\nLog it?",
+                      kind="offer", numbers=_gate_numbers([new]), reply_markup=kb)
         _chat(ctx, "coach", f"[log] rescaled offer to "
                             f"{new.get('portion_used_g') or '?'} g - awaiting confirm")
     else:
@@ -2517,10 +2714,12 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
                       "portion_assumed": new.get("portion_assumed")})
         ctx.store.update_entry(day, target["id"], **patch)
         publish_now(ctx)
-        tg.send(token, chat_id,
-                f"Rescaled *{target.get('resolved_name')}* to "
-                f"{new.get('portion_used_g'):.0f} g: {round(new.get('kcal') or 0)} kcal."
-                + "\n\n" + today_block(ctx, day), log=log)
+        send_verified(ctx, token, chat_id,
+                      f"Rescaled *{target.get('resolved_name')}* to "
+                      f"{new.get('portion_used_g'):.0f} g: "
+                      f"{round(new.get('kcal') or 0)} kcal."
+                      + "\n\n" + today_block(ctx, day), kind="correction",
+                      numbers=_gate_numbers([new]))
         _chat(ctx, "coach", f"[log] rescaled {target.get('resolved_name')} to "
                             f"{new.get('portion_used_g'):.0f} g")
     return True
@@ -2603,8 +2802,9 @@ def apply_batch_rescale(ctx: Context, pend, decision: dict, day: date,
     if len(fresh) > 1:
         body += f"\n\n*Total* {total} kcal"
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-    tg.send(token, chat_id, lead + "\n\n" + body + "\n\nLog "
-            + ("these?" if len(fresh) > 1 else "it?"), reply_markup=kb, log=log)
+    send_verified(ctx, token, chat_id, lead + "\n\n" + body + "\n\nLog "
+                  + ("these?" if len(fresh) > 1 else "it?"), kind="offer",
+                  numbers=_gate_numbers(fresh), reply_markup=kb)
     _chat(ctx, "coach", f"[log] rescaled {len(changed)} of {len(fresh)} offered items "
                         f"to {total} kcal - awaiting confirm")
     return True
@@ -2692,8 +2892,9 @@ def apply_retime(ctx: Context, decision: dict, day: date, token, chat_id) -> boo
     publish_now(ctx)
     _chat(ctx, "coach", f"[log] retimed {(done.get('resolved_name') or '')[:40]} "
                         f"to {decision['time']}")
-    tg.send(token, chat_id,
-            f"Moved *{done.get('resolved_name')}* to {decision['time']}.", log=log)
+    send_verified(ctx, token, chat_id,
+                  f"Moved *{done.get('resolved_name')}* to {decision['time']}.",
+                  kind="correction", numbers=_gate_numbers([done]))
     return True
 
 
@@ -2726,9 +2927,10 @@ def apply_meal_correction(ctx: Context, decision: dict, pend, target_item, day: 
         for item in touched:
             item["_meal"] = meal
         set_pending(ctx.store, dict(pend, batch=batch))
-        tg.send(token, chat_id,
-                f"Noted - filing {'them' if len(touched) > 1 else 'it'} under {meal} "
-                f"when you confirm.", log=log)
+        send_verified(ctx, token, chat_id,
+                      f"Noted - filing {'them' if len(touched) > 1 else 'it'} under "
+                      f"{meal} when you confirm.", kind="correction",
+                      numbers=_gate_numbers(touched))
         return True
     if not target_item:
         return False
@@ -2741,8 +2943,9 @@ def apply_meal_correction(ctx: Context, decision: dict, pend, target_item, day: 
     publish_now(ctx)
     _chat(ctx, "coach", f"[log] filed {(done.get('resolved_name') or '')[:40]} "
                         f"under {meal}")
-    tg.send(token, chat_id,
-            f"Filed *{done.get('resolved_name')}* under {meal}.", log=log)
+    send_verified(ctx, token, chat_id,
+                  f"Filed *{done.get('resolved_name')}* under {meal}.", kind="correction",
+                  numbers=_gate_numbers([done]))
     return True
 
 
@@ -2767,12 +2970,13 @@ def apply_rename(ctx: Context, decision: dict, day: date, token, chat_id) -> boo
         publish_now(ctx)
         _chat(ctx, "coach", f"[log] renamed {(done.get('renamed_from') or '')[:34]} "
                             f"to {name[:34]}")
-        tg.send(token, chat_id,
-                f"Renamed it to *{name}*. Kept your figures - "
-                f"{round(done.get('kcal') or 0)} kcal"
-                + (f", {done['portion_used_g']:.0f} g" if done.get("portion_used_g")
-                   else "")
-                + " - since they came off the pack, not a lookup.", log=log)
+        send_verified(ctx, token, chat_id,
+                      f"Renamed it to *{name}*. Kept your figures - "
+                      f"{round(done.get('kcal') or 0)} kcal"
+                      + (f", {done['portion_used_g']:.0f} g"
+                         if done.get("portion_used_g") else "")
+                      + " - since they came off the pack, not a lookup.",
+                      kind="correction", numbers=_gate_numbers([done]))
         return True
     grams = entry.get("portion_used_g") or entry.get("portion_g")
     tg.send(token, chat_id,
@@ -2987,15 +3191,27 @@ def correct_in_batch(ctx: Context, pend: dict, correction: str, day: date,
     set_pending(ctx.store, {**pend, "batch": fresh})
     body = "\n\n".join(fmt_confirm(i) for i in fresh)
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-    tg.send(token, chat_id,
-            "Redone that one, the rest are unchanged.\n\n" + body
-            + "\n\nLog " + ("these?" if len(fresh) > 1 else "it?"),
-            reply_markup=kb, log=log)
+    send_verified(ctx, token, chat_id,
+                  "Redone that one, the rest are unchanged.\n\n" + body
+                  + "\n\nLog " + ("these?" if len(fresh) > 1 else "it?"),
+                  kind="offer", numbers=_gate_numbers(fresh), reply_markup=kb)
     return True
 
 
 def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
     """Write the pending batch. Called only after an explicit confirmation."""
+    # AN OFFER HE WAS NEVER SHOWN IS NOT CONFIRMABLE. The gate blocked its text, so the
+    # figures below are ones it judged absurd; a bare "ok" - or the "Log it" button on an
+    # older message - would otherwise write them, one tap from the defect the gate exists
+    # to catch. The record itself is kept, so a correction can still land on it, and any
+    # re-offer clears the mark. Exempt from the gate: a fixed refusal with no figures.
+    if (pend or {}).get("_gate_blocked"):
+        log(f"[gate] refused to commit a blocked offer: {pend['_gate_blocked'][:120]}")
+        tg.send(token, chat_id,
+                "I am not logging that one - I could not make sense of it and never "
+                "showed it to you properly. Tell me what it was, or your own figures, "
+                "and I will log that instead.", log=log)
+        return
     batch = pend.get("batch") or [pend]
     wrote, asked = 0, []
     for item in batch:
@@ -3039,7 +3255,8 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
         msg = ((msg + "\n\n") if msg else "") + (
             "I could not find figures for " + ", ".join(asked)
             + ". Send me the pack values and I will log them as label data.")
-    tg.send(token, chat_id, msg, log=log)
+    send_verified(ctx, token, chat_id, msg, kind="confirmation",
+                  numbers=_gate_numbers([i for i in batch if not i.get("needs_input")]))
 
 
 def commit_one(ctx: Context, item: dict, day: date) -> None:
@@ -3167,7 +3384,7 @@ def handle_command(ctx: Context, cmd: str, day: date, token, chat_id) -> None:
         facts = facts_for_question(ctx, day)
         brief = NLU.coach_brief(facts, CLAUDE_BIN, LLM_MODEL, log=log)
         if brief:
-            tg.send(token, chat_id, brief, log=log)
+            send_verified(ctx, token, chat_id, brief, kind="reply")
         else:
             # Never silence. The deterministic brief is worse prose and the same numbers.
             tg.send(token, chat_id, fmt_tomorrow(facts), log=log)
@@ -3249,6 +3466,12 @@ def main():
                         continue
                     tg.answer_callback(token, cq["id"], log=log)
                     pend = get_pending(ctx.store)
+                    # The gate judges the reply against what he DID, and a tap is what he
+                    # did. Left unset, Context outlives the message and the field would
+                    # still hold whatever he last typed, so a commit confirmation would be
+                    # checked against an unrelated sentence.
+                    set_inbound(ctx, "[tapped Log it]"
+                                if cq.get("data") == "confirm" else "[tapped No]")
                     if cq.get("data") == "confirm" and pend:
                         commit_pending(ctx, pend, ctx.local_today(), token, chat_id)
                     elif cq.get("data") == "cancel":

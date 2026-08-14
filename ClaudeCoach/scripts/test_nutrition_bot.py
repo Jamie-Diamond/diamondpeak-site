@@ -752,8 +752,24 @@ sent_msgs = []
 # check ran against it instead of the real code.
 _REAL = {"send": NB.tg.send, "publish_now": NB.publish_now,
          "today_block": NB.today_block, "cache_resolved": NB.NR.cache_resolved,
-         "_chat": NB._chat}
+         "_chat": NB._chat, "gate_runner": NB.GATE_RUNNER}
 NB.tg.send = lambda token, chat, text, **k: sent_msgs.append(text)
+# THE PRE-SEND GATE, stubbed to a plain "send" for every check in this file that is about
+# something else. Registered in _REAL and restored with the rest: this file's own comment
+# above says a leftover stub is how fixtures went silently green, and a gate stub left in
+# place would make the restore assertion below meaningless. Without it, every offer in this
+# file would try to spawn the real CLI.
+gate_calls = []
+
+
+def gate_says(reply):
+    def run(cmd, input=None, **kwargs):
+        gate_calls.append(input)
+        return type("P", (), {"stdout": reply, "stderr": ""})()
+    return run
+
+
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
 NB.publish_now = lambda ctx: None
 NB.today_block = lambda ctx, day: "(totals)"
 NB.NR.cache_resolved = lambda store, item: None
@@ -1467,11 +1483,215 @@ check("fmt_confirm states an assumed portion on the line he confirms",
            "confidence": "label", "portion_estimated": True,
            "portion_assumed": "300 g - my estimate for a portion this size"}))
 
+print("\n--- the pre-send gate: nothing model-derived leaves unread ---")
+# Jamie, 14 Aug 2026: "everything should be verified by opus to make sure the output is
+# sensible against the input". These check the WIRING; nutrition_gate's own contract is
+# tested in test_nutrition_gate.py.
+gate_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-gate-")))
+gctx2 = FakeCtxHandle(gate_store)
+sent_full = []
+_section_send = NB.tg.send
+NB.tg.send = lambda token, chat, text, **k: (sent_msgs.append(text),
+                                            sent_full.append((text,
+                                                              k.get("reply_markup"))))
+gate_lines = []
+_section_log = NB.log
+NB.log = lambda msg: gate_lines.append(str(msg))
+
+STATED = [{"text": "large stir fry with steak and noodles", "portion_g": None,
+           "in_session": False, "at": None, "meal": None,
+           "stated": {"kcal": 980.0, "protein_g": 44.0, "carb_g": 98.0, "fat_g": 44.0,
+                      "basis": "estimate", "components": ["Steak (100g) 220 kcal"]}}]
+
+# 1) A BLOCK. The reply he would have got is replaced by an honest line, the offer survives
+#    so a correction can still land on it, and it stops being confirmable.
+NB.GATE_RUNNER = gate_says(
+    '{"verdict":"block","reason_class":"magnitude",'
+    '"reason":"447 kcal is not plausible for that meal",'
+    '"fallback":"I could not produce a sensible answer for that - tell me the portions."}')
+NB.set_inbound(gctx2, "large stir fry with steak and noodles")
+sent_msgs.clear(); sent_full.clear(); gate_lines.clear()
+NB.offer_stated(gctx2, STATED, TODAY, "token", 1)
+check("a blocked reply is replaced by the gate's fallback",
+      len(sent_msgs) == 1 and sent_msgs[-1].startswith("I could not produce"))
+check("and the crap it replaced never went out", "980" not in sent_msgs[-1])
+check("the block is logged on one line with its reason",
+      any(l.startswith("[gate] blocked:") and "not plausible" in l for l in gate_lines))
+check("with the verdict, the milliseconds and the reason class",
+      any(l.startswith("[gate] block ") and "ms kind=offer" in l and "class=magnitude" in l
+          for l in gate_lines))
+check("the pending offer is kept intact, so a correction can still land on it",
+      (NB.get_pending(gate_store) or {})["batch"][0]["kcal"] == 980.0)
+check("it is marked as one he was never shown",
+      "not plausible" in NB.get_pending(gate_store)["_gate_blocked"])
+check("and it is offered with no Log it button", sent_full[-1][1] is None)
+
+# The reader for that mark. Without it the gate is one "ok" away from being decorative:
+# fast_intent sees a pending record and returns confirm, and commit_pending writes the very
+# figures the gate called absurd.
+sent_msgs.clear()
+NB.commit_pending(gctx2, NB.get_pending(gate_store), TODAY, "token", 1)
+check("a blocked offer refuses to commit",
+      not (gate_store.get_day(TODAY).get("entries") or [])
+      and "not logging that one" in sent_msgs[-1])
+check("and says so without gating the refusal itself",
+      not any("kind=confirmation" in l for l in gate_lines[-2:]))
+
+# 2) A re-offer clears the mark, or a corrected offer he HAS seen would stay unloggable.
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
+sent_msgs.clear()
+NB.offer_stated(gctx2, STATED, TODAY, "token", 1)
+check("re-offering clears the block", "_gate_blocked" not in NB.get_pending(gate_store))
+check("and a verified offer passes through untouched, figures and button intact",
+      "980" in sent_msgs[-1] and sent_full[-1][1] is not None)
+NB.commit_pending(gctx2, NB.get_pending(gate_store), TODAY, "token", 1)
+check("so the same offer, verified, commits normally",
+      (gate_store.get_day(TODAY).get("entries") or [{}])[0].get("kcal") == 980.0)
+
+# 2b) ...but an ANNOTATION on the offer that was just sent must not clear it. This runs
+#     after the offer on both replace-an-entry paths, so a stripped mark here would hand the
+#     blocked figures back to the next "yes".
+NB.GATE_RUNNER = gate_says('{"verdict":"block","reason_class":"magnitude",'
+                           '"reason":"implausible","fallback":null}')
+sent_msgs.clear()
+NB.offer_stated(gctx2, STATED, TODAY, "token", 1)
+NB.mark_pending_replaces(gctx2, "some-entry-id", "Brookie")
+_after = NB.get_pending(gate_store)
+check("noting a replacement keeps the gate's block on that offer",
+      _after["_gate_blocked"] == "implausible"
+      and _after["_replaces"]["id"] == "some-entry-id")
+check("and a block with no fallback of its own still sends an honest line",
+      sent_msgs[-1] == NB.NG.built_fallback("magnitude"))
+
+# 3) What the gate is shown. A verifier handed the reply but not the message cannot judge
+#    coherence, and one handed no figures cannot judge magnitude.
+gate_calls.clear(); sent_msgs.clear()
+NB.offer_stated(gctx2, STATED, TODAY, "token", 1)
+check("the prompt carries what he said, the exact reply, and the figures behind it",
+      len(gate_calls) == 1
+      and "large stir fry with steak and noodles" in gate_calls[0]
+      and "Log it?" in gate_calls[0] and '"kcal": 980' in gate_calls[0])
+check("and the rows he typed himself, which is where an absurd total shows",
+      "Steak (100g) 220 kcal" in gate_calls[0])
+
+# 4) FAIL OPEN. The bot must never go mute because the verifier is down.
+def gate_down(*a, **k):
+    raise FileNotFoundError("no claude binary")
+
+
+NB.GATE_RUNNER = gate_down
+sent_msgs.clear(); gate_lines.clear()
+NB.offer_stated(gctx2, STATED, TODAY, "token", 1)
+check("an unreachable gate sends the original anyway", "980" in sent_msgs[-1])
+check("and says so in the log, which is the only way anyone would know",
+      any("[gate] unavailable - sent unverified" in l for l in gate_lines))
+check("an unverified offer is still confirmable",
+      "_gate_blocked" not in NB.get_pending(gate_store))
+
+# 5) A gate reply trying to write nutrition data into the chat is ignored: the wrapper reads
+#    a verdict and a fallback, never a rewrite.
+NB.GATE_RUNNER = gate_says(
+    '{"verdict":"block","reason_class":"magnitude","reason":"too low",'
+    '"corrected_reply":"*Stir fry* 2400 kcal. Log it?","kcal":2400,'
+    '"fallback":"That should be about 2,400 kcal."}')
+sent_msgs.clear()
+NB.offer_stated(gctx2, STATED, TODAY, "token", 1)
+check("neither its rewrite nor its figures reach him",
+      "2400" not in sent_msgs[-1] and "2,400" not in sent_msgs[-1])
+check("he gets the built honest line for the reason class instead",
+      sent_msgs[-1] == NB.NG.built_fallback("magnitude"))
+
+# 6) ONE GATE CALL PER INBOUND MESSAGE. The gate costs one Opus call; a path that gates two
+#    fragments of the same turn doubles that for nothing, and this is the check that catches
+#    a future edit adding a second gated send.
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
+_real_classify2, _real_interpret2 = NB.NLU.classify, NB.NLU.interpret
+_real_resolve2 = NB.NR.resolve
+NB.NLU.classify = lambda *a, **k: {
+    "intent": "log_food", "items": [{"text": "handful of nuts", "portion_g": None,
+                                     "in_session": False}],
+    "degraded": True, "nutritionally_trivial": True, "dose_mg": 400.0}
+NB.NLU.interpret = lambda *a, **k: None
+NB.NR.resolve = lambda text, **k: {
+    "resolved_name": "Mixed nuts", "kcal": 180.0, "protein_g": 6.0, "carb_g": 4.0,
+    "fat_g": 16.0, "confidence": "estimate", "source_rung": "cofid", "species": [],
+    "attempts": [], "degraded": False, "needs_input": False}
+gate_calls.clear(); sent_msgs.clear()
+NB.handle_text(gctx2, "handful of nuts", "token", 1)
+check("a turn that sends three messages still costs exactly one gate call",
+      len(gate_calls) == 1 and len(sent_msgs) == 3)
+check("and the one that was checked is the offer, not a mechanical note",
+      "Mixed nuts" in gate_calls[0])
+NB.NLU.classify, NB.NLU.interpret = _real_classify2, _real_interpret2
+NB.NR.resolve = _real_resolve2
+
+# 7) THE EXEMPT LIST, asserted rather than described. Each of these is a fixed string or a
+#    straight read of the store, with no model or ladder figure in it to be insane - and two
+#    of them exist to report that a model call failed, which a broken verifier must not be
+#    able to silence.
+gate_calls.clear(); sent_msgs.clear()
+NB.handle_text(gctx2, "help", "token", 1)
+NB.NLU.classify = lambda *a, **k: {"intent": "cancel"}
+NB.handle_text(gctx2, "no", "token", 1)
+NB.NLU.classify = lambda *a, **k: {"intent": "secret"}
+NB.handle_text(gctx2, "sk-" + "x" * 40, "token", 1)
+NB.NLU.classify = lambda *a, **k: {"intent": "unknown"}
+NB.handle_text(gctx2, "hmmmm", "token", 1)
+NB.NLU.classify = _real_classify2
+check("help, Dropped it., the credential warning and the fallback are all ungated",
+      gate_calls == [] and len(sent_msgs) == 4)
+check("and they were sent, not swallowed",
+      any("Dropped it." == m for m in sent_msgs)
+      and any("could not tell whether that was food" in m for m in sent_msgs))
+_gate_src = (BASE / "telegram" / "nutrition_bot.py").read_text()
+check("the exemptions are written down where the wiring is",
+      "EXEMPT_SENDS" in _gate_src and "Looking at that" in _gate_src)
+
+# 8) No inbound message means nothing to judge coherence AGAINST, so the gate is skipped
+#    rather than run on an empty question - and Context outlives a message, so the stash is
+#    set on every inbound path including the buttons.
+gate_calls.clear(); sent_msgs.clear()
+NB.set_inbound(gctx2, "")
+NB.offer_stated(gctx2, STATED, TODAY, "token", 1)
+check("a send with no inbound message goes out ungated and says so",
+      gate_calls == [] and "980" in sent_msgs[-1]
+      and any("[gate] skipped: no inbound message" in l for l in gate_lines))
+_main_src = inspect.getsource(NB.main)
+check("the button path stashes what he tapped, so a commit is judged against that",
+      "set_inbound(ctx," in _main_src and "[tapped Log it]" in _main_src)
+_photo_src = inspect.getsource(NB.handle_photo)
+check("and the photo path stashes the photo and its caption",
+      "set_inbound(ctx," in _photo_src)
+check("naming what the photo turned out to BE, which a bare marker does not",
+      "[sent a photo of a {kind" in _photo_src)
+# 9) A reply the gate blocked is not remembered as something the coach said. Stored before
+#    the send, it would sit in the transcript as a thread he never saw and the next turn
+#    would follow it.
+_conv, _deb = inspect.getsource(NB.converse_reply), inspect.getsource(NB.debate)
+check("a converse reply reaches the transcript only once it has actually gone out",
+      "if send_verified(ctx, token, chat_id, out, kind=\"reply\"):" in _conv
+      and _conv.index("send_verified") < _conv.index('_chat(ctx, "coach", out)'))
+check("and a debate reply on the same terms",
+      "if send_verified(ctx, token, chat_id, reply, kind=\"reply\"):" in _deb
+      and _deb.index("send_verified") < _deb.index('_chat(ctx, "coach", reply)'))
+check("every path that returns True to handle_text still returns True when blocked",
+      # send_verified's False is about WHAT was sent, never about whether the caller
+      # handled it: a block that returned False would fall through to a second reply and a
+      # second gate call.
+      all("if send_verified" not in inspect.getsource(f)
+          for f in (NB.apply_retime, NB.apply_rename, NB.apply_meal_correction,
+                    NB.apply_batch_rescale, NB.correct_in_batch,
+                    NB.apply_quantity_correction)))
+
+NB.tg.send, NB.log = _section_send, _section_log
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
+
 # Put the real functions back, so anything appended after this block tests the code rather
 # than the stubs.
 NB.tg.send, NB.publish_now = _REAL["send"], _REAL["publish_now"]
 NB.today_block, NB._chat = _REAL["today_block"], _REAL["_chat"]
 NB.NR.cache_resolved = _REAL["cache_resolved"]
+NB.GATE_RUNNER = _REAL["gate_runner"]
 check("the stubs are restored for whatever is appended next",
       NB.tg.send is _REAL["send"] and NB.NR.cache_resolved is _REAL["cache_resolved"])
 
