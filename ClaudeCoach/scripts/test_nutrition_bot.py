@@ -1917,9 +1917,27 @@ check("figures he typed himself are recognised as his",
       and NB.whose_figures({"_stated": True}) == "your own")
 check("a pack HE read out is label data, not his reckoning",
       NB.whose_figures({"source_rung": "manual", "confidence": "label"}) == "a lookup")
-check("and a costed meal is named as the model's table",
-      NB.whose_figures({"_composed": True}) == "my costed table"
-      and NB.whose_figures({"source_rung": "llm"}) == "my costed table")
+check("a costed meal is named as the model's table only while it is PENDING",
+      NB.whose_figures({"_composed": True}) == "my costed table")
+# A costed meal commits at rung `llm` with confidence `estimate` - the identical pair a bare
+# ladder estimate commits with - and neither `note` nor `attempts` reaches add_entry, so
+# nothing distinguishing survives the write. Naming the costed table about a committed entry
+# would assert a provenance the store cannot support: the same class of untrue claim as a
+# false removal, and the reason the committed wording is the vaguer one.
+check("but a committed llm estimate is only ever called an estimate",
+      NB.whose_figures({"source_rung": "llm", "confidence": "estimate"}) == "an estimate"
+      and "costed" not in NB._whose_note("an estimate")
+      and "an estimate rather than a pack reading" in NB._whose_note("an estimate"))
+check("and the store genuinely cannot tell the two apart, which is why",
+      "note" not in inspect.signature(S.NutritionStore.add_entry).parameters
+      and "attempts" not in inspect.signature(S.NutritionStore.add_entry).parameters
+      and S.RUNG_CONFIDENCE["llm"] == "estimate")
+# RUNG_CONFIDENCE maps `manual` to `label`, but that table is the resolver's: inheriting from
+# it here would call his own typed figures a pack reading and drop the warning meant for them.
+check("the committed branch reads the entry, not the rung table",
+      S.RUNG_CONFIDENCE["manual"] == "label"
+      and NB.whose_figures({"source_rung": "manual", "confidence": "estimate"})
+      == "your own")
 his = pz_store.add_entry(TODAY, raw_text="my pizza, about 1100 kcal",
                          resolved_name="Chianti beef pizza (my figures)", kcal=1100,
                          confidence="estimate", source_rung="manual")

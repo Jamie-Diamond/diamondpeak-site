@@ -1942,12 +1942,22 @@ def whose_figures(row: dict) -> str:
     if row.get("_stated"):
         return "your own"
     if row.get("_composed"):
+        # PENDING ONLY, and that is the whole reason this branch is above the rung check. A
+        # costed meal commits at rung `llm` with confidence `estimate` - the identical pair a
+        # bare ladder estimate commits with - and neither `note` nor `attempts` reaches
+        # add_entry, so nothing distinguishing survives the write. Naming the costed table
+        # about a COMMITTED entry would be asserting a provenance the store cannot support,
+        # which is the same class of untrue claim as a false removal.
         return "my costed table"
     rung = (row.get("source_rung") or "").strip().lower()
+    # manual + estimate is his own reckoning; manual + label is a pack he read out. Read from
+    # the entry rather than through RUNG_CONFIDENCE, which maps `manual` to `label`: that
+    # table is the resolver's, and inheriting from it here would call his own typed figures a
+    # pack reading and drop the warning that exists for them.
     if rung == "manual" and (row.get("confidence") or "").strip().lower() != "label":
         return "your own"
     if rung == "llm":
-        return "my costed table"
+        return "an estimate"
     return "a lookup"
 
 
@@ -1958,8 +1968,14 @@ def _whose_note(whose: str) -> str:
         return ("\n\n_Those were YOUR figures, not a lookup's. The pack's panel is better "
                 "data, but say no and I will leave yours exactly as they are._")
     if whose == "my costed table":
-        return ("\n\n_That entry was my costed estimate of the whole meal, so the pack "
+        return ("\n\n_That offer was my costed estimate of the whole meal, so the pack "
                 "replaces the table and its component rows with the printed panel._")
+    if whose == "an estimate":
+        # Deliberately vaguer than the pending line, because a committed llm+estimate entry
+        # could be either a costed meal or a bare estimate and the store cannot say which.
+        # True of both, which is the most this can honestly claim.
+        return ("\n\n_Those figures were an estimate rather than a pack reading, so the "
+                "printed panel is better data._")
     return ""
 
 
