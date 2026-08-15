@@ -1400,10 +1400,18 @@
     };
 
     var rel = relToRace;
+    // Carries planned_load through as the tooltip's `lbl` where the row has one, so
+    // a point on the plan segment says which day's prescription moved the line.
     var relObj = function (rows, race) {
       if (!race) return [];
       var r0 = doy0(race);
-      return (rows || []).map(function (x) { return { x: doy0(x.date) - r0, y: x.ctl }; });
+      return (rows || []).map(function (x) {
+        var pt = { x: doy0(x.date) - r0, y: x.ctl };
+        if (x.planned_load != null) {
+          pt.lbl = x.planned_load ? x.planned_load + ' TSS planned' : 'rest day';
+        }
+        return pt;
+      });
     };
 
     var ds = [];
@@ -1438,7 +1446,52 @@
         borderDash: [2, 3], pointRadius: 0, tension: 0.3, fill: false
       });
     }
-    if ((cp.planned_build || []).length && state.fitSport === 'all') {
+    /* Forward of today, in two regimes the eye can tell apart. 'Planned' is this
+     * week's booked sessions put through the CTL recursion - a real forecast, so it
+     * is drawn at nearly the weight of the actual line. 'Projected' is the straight
+     * ramp beyond the calendar, where nothing is booked and the number is an
+     * extrapolation, so it is thinner, fainter and dashed longer. Both are TOTAL
+     * CTL: the publisher has no reliable per-sport split of a planned session, so a
+     * sport filter drops them rather than drawing an invented one.
+     *
+     * planned_build is the older whole-season curve. It stays as the fallback for a
+     * payload published before `projection` existed, but never alongside - two
+     * accent-dashed "planned" lines on one chart read as a bug. */
+    var pj = cp.projection || {};
+    var pjPlan = pj.plan || [], pjLinear = pj.linear || [];
+    var hasProj = (pjPlan.length || pjLinear.length) && state.fitSport === 'all';
+    if (hasProj) {
+      if (pjLinear.length) {
+        // The ramp is named in the legend because a straight line with no stated
+        // slope invites the reader to assume it is a target. It is not: it is the
+        // athlete's own last four weeks, the figure /form quotes, carried forward.
+        // A clamped-to-zero ramp is a real state (a flat or falling four weeks), but
+        // "(0.0/wk)" beside a flat line reads as a broken number rather than a
+        // statement, so it is worded instead.
+        var slope = pj.linear_slope_per_week;
+        var slopeTxt = slope == null ? '' : slope > 0
+          ? ' (+' + Number(slope).toFixed(1) + '/wk)' : ' (flat)';
+        // Two datasets are two strokes, so the tail has to REPEAT the plan's last
+        // point or the join shows as a one-day break in what is meant to read as one
+        // continuous curve. The repeat is a drawing join only - the published series
+        // do not overlap, and the tooltip's nearest-point mode picks one of them.
+        var lastPlan = pjPlan[pjPlan.length - 1];
+        var tail = lastPlan ? [{ date: lastPlan.date, ctl: lastPlan.ctl }].concat(pjLinear)
+                            : pjLinear;
+        ds.push({
+          label: 'Projected' + slopeTxt, order: 4,
+          data: relObj(tail, raceThis), borderColor: 'rgba(16,101,107,.45)',
+          borderWidth: 1.1, borderDash: [2, 5], pointRadius: 0, tension: 0, fill: false
+        });
+      }
+      if (pjPlan.length) {
+        ds.push({
+          label: 'Planned', order: 3,
+          data: relObj(pjPlan, raceThis), borderColor: C.accent, borderWidth: 1.8,
+          borderDash: [4, 3], pointRadius: 0, tension: 0.25, fill: false
+        });
+      }
+    } else if ((cp.planned_build || []).length && state.fitSport === 'all') {
       ds.push({
         label: 'Planned', order: 3,
         data: relObj(cp.planned_build, raceThis), borderColor: C.accent, borderWidth: 1.4,

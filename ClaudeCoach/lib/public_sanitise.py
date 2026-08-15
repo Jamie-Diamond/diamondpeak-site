@@ -238,6 +238,19 @@ TRAINING_DATA_SPEC = {
         "race_date":         S,
         "target_ctl_min":    S,
         "target_ctl_max":    S,
+        # Forward projection drawn on the Fitness chart. planned_load is prescribed
+        # session TSS off the calendar and the ramp figures are CTL rates - training
+        # load, the same class as loadChart, with no wellness field among them.
+        "projection": {
+            "plan":                  Records({"date": S, "ctl": S, "planned_load": S}),
+            "plan_days":             S,
+            "linear":                _CTL_POINT,
+            "linear_slope_per_week": S,
+            "ramp_4wk_per_week":     S,
+            "ramp_cap_per_week":     S,
+            "extend_to":             S,
+            "basis":                 S,
+        },
     },
 
     "loadChart": Records({

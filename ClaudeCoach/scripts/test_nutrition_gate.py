@@ -168,8 +168,12 @@ print("\n--- the context block is capped, because the gate is on every reply ---
 seen = []
 NG.verify_reply("x", "y", {"junk": ["z" * 200] * 200}, "claude", log=quiet,
                 runner=runner_saying('{"verdict":"send"}', seen))
+# MEASURED AGAINST THE PROMPT ITSELF, not against a constant that happened to be bigger
+# than it. The slack used to be a flat 4,000 characters, so adding a paragraph to
+# GATE_PROMPT failed a check about trimming the CONTEXT - which is a false alarm about the
+# wrong thing, and the kind that gets a real assertion deleted.
 check("an oversized context is trimmed rather than sent whole",
-      len(seen[0]["input"]) < NG.GATE_CONTEXT_CHARS + 4000
+      len(seen[0]["input"]) < len(NG.GATE_PROMPT) + NG.GATE_CONTEXT_CHARS + 400
       and "context trimmed" in seen[0]["input"])
 seen = []
 NG.verify_reply("x", "y", {"unserialisable": object()}, "claude", log=quiet,

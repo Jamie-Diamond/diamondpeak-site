@@ -906,11 +906,15 @@ def _heat_accl_series(slug):
         return None
 
 
-def _ctl_project(start_ctl, daily_tss_fn, days):
-    """Project CTL forward using exponential decay: CTL_new = CTL + (TSS - CTL) / 42."""
+def _ctl_project(start_ctl, daily_tss_fn, days, today=None):
+    """Project CTL forward using exponential decay: CTL_new = CTL + (TSS - CTL) / 42.
+
+    `today` is injectable so the projection maths can be tested against fixtures
+    on a fixed date; it defaults to the real today for every caller in this file.
+    """
     ctl = start_ctl
     series = []
-    today = date.today()
+    today = today or date.today()
     for i in range(days):
         d = today + timedelta(days=i)
         tss = daily_tss_fn(d)
@@ -960,6 +964,134 @@ def _ctl_target_milestones(athlete_cfg, current_ctl, today):
         ms[race_dt.isoformat()] = {"date": race_dt.isoformat(),
                                    "ctl": int(race_ctl), "label": "Race day"}
     return sorted(ms.values(), key=lambda m: m["date"]) or None
+
+
+def _ramp_4wk_per_week(fitness_series, current_ctl):
+    """The athlete's observed 4-week CTL ramp, /wk — the SAME figure /form quotes.
+
+    Deliberately the identical arithmetic to telegram/bot.py's "4-wk ramp" line
+    (`(ctl - history[-28][1]) / 4`, current CTL from the KPI, not from the series
+    tail), so the app and the bot can never show the athlete two different ramps
+    for the same day. Returns None when there is under four weeks of history.
+    """
+    if not fitness_series or len(fitness_series) < 28 or current_ctl is None:
+        return None
+    old = fitness_series[-28]
+    old_ctl = old[1] if isinstance(old, (list, tuple)) else old.get("ctl")
+    if old_ctl is None:
+        return None
+    return round((float(current_ctl) - float(old_ctl)) / 4.0, 2)
+
+
+def _projection_block(current_ctl, week_calendar, fitness_series, milestones,
+                      ramp_cap, today, plan_days=7):
+    """Forward CTL for the app's Fitness chart: the booked plan, then a straight line.
+
+    TWO REGIMES, kept separate because they are known to different standards and
+    the chart draws them differently.
+
+      * `plan` — plan[0] is an ANCHOR: today, at today's actual CTL, carrying no
+        planned_load. plan[1..plan_days] are the next plan_days days run through the
+        42-day CTL recursion over the TSS of the sessions actually on the calendar.
+        That is a real forecast of what this week's plan does to fitness. It is
+        truncated to the last date weekCalendar actually reaches: past that there is
+        nothing booked, and recursing on zeros plots a "what if you never train
+        again" decay that reads as a forecast.
+
+        THE ANCHOR IS NOT DECORATION. Recursing today as day 0 applies a day of decay
+        to a CTL that already contains today's training, so the projection started
+        ~2.5 CTL BELOW the actual line at the same x and the chart showed a step down
+        at today. The cost of anchoring instead is that a session planned for today
+        but not yet done contributes nothing to the curve; that is one day at the
+        very left of a ~190-day axis, and it is the conservative direction.
+      * `linear` — beyond the calendar there is nothing to recurse over, so the tail
+        is a straight line at the athlete's OWN ramp, joined to the last `plan`
+        value (NOT to today's CTL, which would put a step in the line).
+
+    WHY THE TAIL STOPS AT PEAK. Extended to race day at a positive ramp it would run
+    straight through the taper, where CTL falls by design, and finish above the
+    "Race day" milestone plotted on these same axes — the chart contradicting its own
+    markers. It therefore ends on the Peak milestone's date and is capped at the Peak
+    milestone's CTL, which are the numbers already drawn. Once peak is behind the
+    athlete there is no build left to draw and the tail is omitted, not faked.
+
+    Degrades in named steps rather than guessing: `basis` says which regimes are
+    real, and the app renders only what is present.
+    """
+    planned_tss_by_date, completed_dates, wc_dates = {}, set(), []
+    for e in week_calendar or []:
+        d_str = e.get("date") or ""
+        if not d_str:
+            continue
+        wc_dates.append(d_str)
+        if e.get("status") == "completed":
+            completed_dates.add(d_str)
+        elif e.get("status") == "planned":
+            planned_tss_by_date[d_str] = planned_tss_by_date.get(d_str, 0) + (e.get("tss") or 0)
+
+    def _planned_tss(d):
+        d_str = d.isoformat()
+        # A date that already has a completed session is inside current_ctl; adding
+        # its planned twin on top would count the same training twice.
+        if d_str in completed_dates:
+            return 0
+        return planned_tss_by_date.get(d_str, 0)
+
+    # How many booked days lie AHEAD of today, capped at plan_days.
+    last_known = max((date.fromisoformat(x) for x in wc_dates), default=today)
+    horizon = min(plan_days, max(0, (last_known - today).days))
+    if not planned_tss_by_date:
+        horizon = 0        # nothing booked: no plan regime at all
+    plan = []
+    if horizon > 0:
+        plan = [{"date": today.isoformat(), "ctl": round(float(current_ctl), 1)}]
+        plan += _ctl_project(current_ctl, _planned_tss, horizon,
+                             today=today + timedelta(days=1))
+        for pt in plan[1:]:
+            pt["planned_load"] = _planned_tss(date.fromisoformat(pt["date"]))
+
+    ramp = _ramp_4wk_per_week(fitness_series, current_ctl)
+    # Clamped at 0 below (a negative ramp is not a build; the flat line says "no
+    # further gain from here", which is the honest read) and at the athlete's own
+    # max_ctl_ramp_per_week above, so a freak 4-week block cannot project a ramp
+    # the blueprint would refuse to prescribe.
+    slope = 0.0 if ramp is None else round(max(0.0, min(ramp, float(ramp_cap))), 2)
+
+    peak = None
+    for m in milestones or []:
+        if str(m.get("label", "")).lower().startswith("peak") and m.get("ctl") is not None:
+            peak = m
+            break
+
+    linear, extend_to = [], None
+    join_ctl = plan[-1]["ctl"] if plan else current_ctl
+    join_date = date.fromisoformat(plan[-1]["date"]) if plan else today
+    if peak and ramp is not None:
+        peak_date = date.fromisoformat(peak["date"])
+        cap_ctl = float(peak["ctl"])
+        n_days = (peak_date - join_date).days
+        if n_days > 0:
+            extend_to = peak["date"]
+            for i in range(1, n_days + 1):
+                ctl = min(join_ctl + slope * (i / 7.0), cap_ctl)
+                linear.append({"date": (join_date + timedelta(days=i)).isoformat(),
+                               "ctl": round(ctl, 1)})
+
+    basis = ("plan+ramp" if plan and linear else
+             "plan-only" if plan else
+             "ramp-only" if linear else "none")
+    return {
+        "plan": plan,
+        # Projected days only — plan[0] is the anchor at today's actual CTL, so this
+        # is len(plan) - 1 whenever there is a plan at all.
+        "plan_days": max(0, len(plan) - 1),
+        "linear": linear,
+        "linear_slope_per_week": slope,
+        "ramp_4wk_per_week": ramp,
+        "ramp_cap_per_week": round(float(ramp_cap), 2),
+        "extend_to": extend_to,
+        "basis": basis,
+    }
 
 
 # Race predictor moved to lib/race_predictor.py (5 Jul 2026) so /race and the
@@ -1148,15 +1280,22 @@ def post_process(data):
         _jamie_cfg = json.loads((BASE / "config/athletes.json").read_text()).get("jamie", {})
     except Exception:
         _jamie_cfg = {}
+    _milestones = _ctl_target_milestones(_jamie_cfg, current_ctl, today)
     data["ctlProjection"] = {
         "current_trend":    _ctl_project(current_ctl, current_trend_tss, days_to_race),
         "planned_build":    _ctl_project(current_ctl, _phase_daily_tss_projection, days_to_race),
         "planned_sessions": _ctl_project(current_ctl, planned_sessions_tss, days_to_race)[:planned_sessions_horizon_days],
         "sick_week":        _ctl_project(current_ctl, sick_week_tss, days_to_race),
-        "target_milestones": _ctl_target_milestones(_jamie_cfg, current_ctl, today),
+        "target_milestones": _milestones,
         "race_date": RACE_DATE.isoformat(),
         "target_ctl_min": 105,
         "target_ctl_max": 115,
+        # What the app's Fitness chart draws forward of today: this week's booked
+        # sessions run through the CTL recursion, then a straight line at the ramp
+        # /form quotes. See _projection_block for why the tail stops at peak.
+        "projection": _projection_block(
+            current_ctl, data.get("weekCalendar", []), data.get("fitnessThis", []),
+            _milestones, _jamie_cfg.get("max_ctl_ramp_per_week", 5.0), today),
     }
 
     # Race predictor — Now / Race day / Target, from IF ∝ √CTL (see _race_predictor).
@@ -1777,6 +1916,12 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 "race_date":        race_dt.isoformat(),
                 "target_ctl_min":   ctl_targets.get("race_min", 60),
                 "target_ctl_max":   ctl_targets.get("race_max", 80),
+                # Same forward projection every athlete's chart draws — the booked
+                # plan first, then the observed ramp. Same helper as Jamie's path so
+                # the two cannot drift.
+                "projection": _projection_block(
+                    current_ctl, data.get("weekCalendar", []), data.get("fitnessThis", []),
+                    target_milestones, max_ramp, today),
             }
     except Exception as exc:
         log(f"[{slug}] ctlProjection skipped: {exc}")
