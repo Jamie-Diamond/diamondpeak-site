@@ -9,7 +9,7 @@ rendered like label data corrupts trust in the whole record. Those are tested he
 import importlib.util
 import sys
 import tempfile
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
@@ -544,9 +544,20 @@ check("an offered single item names it and its kcal",
 check("the offer summary line stays short enough not to bloat recent_chat()",
       len(chat[-1]["text"]) < 90)
 
+# EVERY ITEM IS NAMED, which reverses the old expectation that a batch was summarised by
+# COUNT. That saved a few characters until an offer was lost: on 15 Aug 2026 a four-item
+# batch was overwritten by the next offer and the only surviving record of it read
+# "offered 6 items", so neither the athlete nor the model could say what had been in it.
+# The names are what reconstructable_offer reads back.
 batch_many = [{"resolved_name": "Toast", "kcal": 150}, {"resolved_name": "Eggs", "kcal": 140}]
-check("an offered batch of several is summarised by count, not spelled out",
-      NB._offer_summary(batch_many) == "[log] offered 2 items — awaiting confirm")
+check("an offered batch names every item, so a lost offer can be reconstructed",
+      NB._offer_summary(batch_many)
+      == "[log] offered: Toast | Eggs — awaiting confirm")
+check("names are pipe-separated, because a resolved name is full of commas",
+      NB._offer_summary([{"resolved_name": "Beans, edamame, frozen, boiled"},
+                         {"resolved_name": "Milk, semi-skimmed"}])
+      == "[log] offered: Beans, edamame, frozen, boiled | Milk, semi-skimmed "
+         "— awaiting confirm")
 
 print("\n--- reading what he says it was NOT ---")
 # "butter" came back as "Peanut butter, smooth" six times on 12 Aug 2026, twice AFTER "I
@@ -1669,11 +1680,16 @@ check("naming what the photo turned out to BE, which a bare marker does not",
 #    would follow it.
 _conv, _deb = inspect.getsource(NB.converse_reply), inspect.getsource(NB.debate)
 check("a converse reply reaches the transcript only once it has actually gone out",
-      "if send_verified(ctx, token, chat_id, out, kind=\"reply\"):" in _conv
-      and _conv.index("send_verified") < _conv.index('_chat(ctx, "coach", out)'))
+      "if send_verified(ctx, token, chat_id, out, kind=\"reply\"" in _conv
+      and _conv.index("send_verified") < _conv.index('_chat(ctx, "coach"'))
 check("and a debate reply on the same terms",
-      "if send_verified(ctx, token, chat_id, reply, kind=\"reply\"):" in _deb
-      and _deb.index("send_verified") < _deb.index('_chat(ctx, "coach", reply)'))
+      "if send_verified(ctx, token, chat_id, reply, kind=\"reply\"" in _deb
+      and _deb.index("send_verified") < _deb.index('_chat(ctx, "coach"'))
+# AND AS HE GOT IT. With a retry in front of the gate the text that went out may be the
+# SECOND draft, so recording the first would put a sentence in the transcript that was
+# never sent - the same defect one step along.
+check("the transcript takes the draft that was actually sent",
+      '_last_sent' in _conv and '_last_sent' in _deb)
 check("every path that returns True to handle_text still returns True when blocked",
       # send_verified's False is about WHAT was sent, never about whether the caller
       # handled it: a block that returned False would fall through to a second reply and a
@@ -2260,6 +2276,424 @@ old = NB.facts_for_question(FakeCtxLegacy(lever_store, None), TODAY)
 check("and the whole facts dict still builds, with the why simply absent",
       old["demand_ahead"] is None and old["carb_basis"] is None
       and old["macros"]["carb_g"]["low"] is None)
+
+print("\n--- 15 Aug 2026: confirm and commit friction ---")
+# The exchange, from the raw log. 13:03 offered four items. 13:05 "all correct except
+# protein and collagen are food as well as supplement" -> unclear, twice. 13:06 his re-log
+# of the protein REPLACED the four-item batch, silently. 13:33-13:44 four orders to commit,
+# classified question/unknown/unknown/unknown, one of which produced a reply saying "logging
+# now" with nothing logged. He hand-committed the lot afterwards.
+friction_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-friction-")))
+fctx = FakeCtxHandle(friction_store)
+friction_sent = []
+_f_real = {"send": NB.tg.send, "publish": NB.publish_now, "today": NB.today_block,
+           "cache": NB.NR.cache_resolved, "gate": NB.GATE_RUNNER, "log": NB.log,
+           "classify": NB.NLU.classify, "decide": NB.NLU.decide_correction,
+           "resolve": NB.NR.resolve, "interpret": NB.NLU.interpret,
+           "write_back": NB.RC.write_back, "fuel": NB.RC.bot_in_session_totals,
+           "converse": NB.NLU.converse, "from_history": NB.from_history}
+friction_log = []
+NB.tg.send = lambda token, chat, text, **k: friction_sent.append(text)
+NB.log = lambda msg: friction_log.append(str(msg))
+NB.publish_now = lambda ctx: None
+NB.today_block = lambda ctx, day: "(totals)"
+NB.NR.cache_resolved = lambda store, item: None
+NB.RC.write_back = lambda *a, **k: {"written": False, "reason": "stubbed"}
+NB.RC.bot_in_session_totals = lambda *a, **k: {"carb_g": 0, "sodium_mg": 0}
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
+
+
+def _fake_item(name, kcal=100.0, raw=None):
+    return {"raw_text": raw or name, "_raw": raw or name, "resolved_name": name,
+            "kcal": kcal, "protein_g": 5.0, "carb_g": 10.0, "fat_g": 2.0,
+            "confidence": "label", "source_rung": NB.NR.Rung.MANUAL, "species": [],
+            "resolved_at": str(TODAY), "attempts": [], "degraded": False,
+            "needs_input": False, "_supplement": False, "in_session": False,
+            "_at": None, "_meal": ""}
+
+
+# 1) UNKNOWN IS NEVER SILENCE, AND NEVER UNRECORDED. This is the hole the whole 13:35-13:44
+#    stretch fell into: the boilerplate went out, but there was no log line and neither side
+#    of the exchange reached the chat store, so the next turn could not see he had already
+#    ordered a commit twice.
+NB.NLU.classify = lambda text, pending, *a, **k: {"intent": "unknown"}
+friction_sent.clear()
+NB.handle_text(fctx, "hmmmm", "token", 1)
+check("an unknown message always gets an answer", len(friction_sent) == 1)
+check("and the answer says plainly that nothing was done",
+      "done nothing with it" in friction_sent[-1])
+_chat_now = friction_store.recent_chat()
+check("the unknown turn is recorded on BOTH sides, so the next turn can see it",
+      _chat_now[-2]["role"] == "athlete" and _chat_now[-2]["text"] == "hmmmm"
+      and _chat_now[-1]["role"] == "coach")
+check("and it is logged, so the raw log does not just stop at the intent",
+      any("unknown intent" in line for line in friction_log))
+
+# 2) AN ORDER TO COMMIT, WITH NOTHING TO COMMIT. It must not say "logging now" - it cannot -
+#    and it must not be silence either. It re-offers what the transcript still names.
+NB.NLU.classify = _f_real["classify"]
+friction_store.append_chat("coach", "[log] offered: Salt and vinegar crisps | Beans, "
+                                    "edamame, frozen | Milk, semi-skimmed "
+                                    "— awaiting confirm")
+check("the last unconfirmed offer is reconstructable from the transcript",
+      NB.reconstructable_offer(fctx)
+      == ["Salt and vinegar crisps", "Beans, edamame, frozen", "Milk, semi-skimmed"])
+_offered = []
+_f_real["offer_items"] = NB.offer_items
+NB.offer_items = lambda ctx, items, *a, **k: _offered.append([i["text"] for i in items])
+friction_sent.clear()
+NB.handle_text(fctx, "Log the bloody food", "token", 1)
+check("an order with nothing pending re-offers what was lost",
+      _offered == [["Salt and vinegar crisps", "Beans, edamame, frozen",
+                    "Milk, semi-skimmed"]])
+check("and says plainly that nothing has been added",
+      "nothing has been added" in friction_sent[-1])
+check("it never claims to be logging", "logging now" not in " ".join(friction_sent))
+check("nothing was written to the day",
+      not friction_store.get_day(TODAY).get("entries"))
+NB.offer_items = _f_real["offer_items"]
+# A commit ordered after a committed offer reconstructs nothing: that batch is in the log.
+friction_store.append_chat("coach", "[log] committed: 3 items")
+check("a committed offer is not re-offered", NB.reconstructable_offer(fctx) == [])
+# Nor is one from another conversation hours ago.
+friction_store.append_chat("coach", "[log] offered: Toast — awaiting confirm")
+check("and an offer from hours ago is left alone",
+      NB.reconstructable_offer(fctx, now=datetime.now() + timedelta(hours=9)) == [])
+
+# 3) A NEW OFFER DOES NOT SILENTLY DESTROY AN UNCONFIRMED ONE. This is how the edamame was
+#    lost: he was mid-argument about the protein, his re-log produced a new offer, and
+#    set_pending overwrote the four items with no mention of them anywhere.
+NB.set_pending(friction_store, {"batch": [_fake_item("Salt and vinegar crisps", 165),
+                                          _fake_item("Beans, edamame", 213),
+                                          _fake_item("Soy sauce", 5),
+                                          _fake_item("Milk, semi-skimmed", 71)]})
+merged, carried, dropped = NB.carry_pending_batch(fctx, [_fake_item("Whey protein", 120)])
+check("an unconfirmed batch survives a new offer", len(merged) == 5 and not dropped)
+check("the carried items come first and keep their order",
+      [i["resolved_name"] for i in merged][:4]
+      == ["Salt and vinegar crisps", "Beans, edamame", "Soy sauce",
+          "Milk, semi-skimmed"])
+check("and he is told they are in the list", "edamame" in NB.carried_note(carried))
+# The 13:06 and 13:12 offers overlapped, so a naive merge would have logged collagen twice.
+again, carried2, _ = NB.carry_pending_batch(
+    fctx, [_fake_item("Beans, edamame", 250), _fake_item("Whey protein", 120)])
+check("a fresh resolution of the same food replaces it rather than duplicating it",
+      [i["resolved_name"] for i in again].count("Beans, edamame") == 1
+      and next(i for i in again if i["resolved_name"] == "Beans, edamame")["kcal"] == 250)
+# A correction offer carries an entry id that belongs to its batch as a unit. Merging an
+# unrelated food into one would apply a label to the wrong entry, so it is refused OUT LOUD.
+NB.set_pending(friction_store, {"batch": [_fake_item("Coop pizza", 964)],
+                                "_apply_label_to": {"id": "e1", "name": "pizza",
+                                                    "kcal": 1147}})
+_m3, _c3, dropped3 = NB.carry_pending_batch(fctx, [_fake_item("Toast", 90)])
+check("a label correction is never merged into", len(_m3) == 1 and not _c3)
+check("but the athlete is told it went", "correction" in dropped3 and "pizza" in dropped3)
+# THE CAP CUTS THE OLD, NOT THE NEW. Truncating the other way loses the food he has just
+# typed, and the carried note would not mention it - the original silent loss, at the
+# boundary instead of the beginning.
+NB.set_pending(friction_store, {"batch": [_fake_item(f"Old {n}") for n in range(6)]})
+full, kept, cut_note = NB.carry_pending_batch(
+    fctx, [_fake_item(f"New {n}") for n in range(4)])
+check("a full batch never truncates what he has just sent",
+      len(full) == NB.MAX_PENDING_ITEMS
+      and [i["resolved_name"] for i in full][-4:]
+      == ["New 0", "New 1", "New 2", "New 3"])
+check("only the oldest come off, and they are named when they do",
+      len(kept) == 4 and "Old 4" in cut_note and "as many as I can hold" in cut_note)
+# AN OFFER THE GATE BLOCKED IS NOT LAUNDERED INTO A CONFIRMABLE LIST. set_pending drops the
+# mark, so carrying those items into an offer that passes on the strength of the fresh ones
+# would make figures the gate called absurd writable with one tap.
+NB.set_pending(friction_store, {"batch": [_fake_item("Absurd stir fry", 9000)]})
+NB._mark_pending_gate_blocked(fctx, "447 kcal for a stir fry")
+_m4, _c4, dropped4 = NB.carry_pending_batch(fctx, [_fake_item("Toast", 90)])
+check("blocked figures are never carried into a fresh offer",
+      len(_m4) == 1 and not _c4)
+check("and he is told why, with an invitation to send it again",
+      "never showed them to you properly" in dropped4 and "Absurd" in dropped4)
+# The gate is told WHY an offer lists food he did not name in this message, or a merged
+# offer reads as a non-sequitur - and an offer, unlike prose, gets no second draft.
+NB.set_pending(friction_store, {"batch": [_fake_item("Beans, edamame", 213)]})
+NB.set_inbound(fctx, "1 scoop of whey")
+NB.carry_pending_batch(fctx, [_fake_item("Whey protein", 120)])
+check("the gate can see which items were carried and why",
+      NB.gate_context(fctx, "offer")["carried_from_an_earlier_unconfirmed_offer"]
+      == ["Beans, edamame"])
+NB.set_inbound(fctx, "something else")
+check("and a new message starts that list empty, like the action ledger",
+      NB.gate_context(fctx, "offer")["carried_from_an_earlier_unconfirmed_offer"] == [])
+check("the gate prompt says a carried item is not off_topic",
+      "carried_from_an_earlier_unconfirmed_offer" in NB.NG.GATE_PROMPT)
+
+# AN ORDER MUST NOT MEET THE SAME REFUSAL TWICE. commit_pending rightly will not write an
+# offer the gate blocked, but answering "I am not logging that one" to a man who has told
+# the bot four times to log his food is the 15 Aug loop with a politer sentence.
+NB.set_pending(friction_store, {"batch": [_fake_item("Mystery meal", 9000,
+                                                     raw="whatever that was")]})
+NB._mark_pending_gate_blocked(fctx, "figures are absurd")
+_reoffered = []
+NB.offer_items = lambda ctx, items, *a, **k: _reoffered.append([i["text"] for i in items])
+friction_sent.clear()
+_before = len(friction_store.get_day(TODAY).get("entries") or [])
+NB.handle_text(fctx, "Log the bloody food", "token", 1)
+check("an ordered commit on a blocked offer re-prices it instead of refusing again",
+      _reoffered == [["whatever that was"]])
+check("nothing is written on the way through",
+      len(friction_store.get_day(TODAY).get("entries") or []) == _before)
+check("and the pending is cleared first, so the re-offer cannot duplicate it",
+      NB.get_pending(friction_store) is None)
+check("he is told plainly why it is being priced again",
+      "will not log it blind" in friction_sent[-1])
+NB.offer_items = _f_real["offer_items"]
+
+# 4) PARTIAL CONFIRM. Commit what he accepted; hold what he is arguing about.
+NB.clear_pending(friction_store)
+part_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-partial-")))
+pctx = FakeCtxHandle(part_store)
+batch6 = [_fake_item("Salt and vinegar crisps", 165), _fake_item("Beans, edamame", 213),
+          _fake_item("Soy sauce", 5), _fake_item("Milk, semi-skimmed", 71),
+          _fake_item("Whey protein", 120), _fake_item("Collagen", 40)]
+NB.set_pending(part_store, {"batch": batch6})
+pend6 = NB.get_pending(part_store)
+friction_sent.clear()
+done = NB.apply_confirm_except(
+    pctx, pend6, {"kind": "confirm_except", "commit_indexes": [0, 1, 2, 3],
+                  "fix": {"index": 4, "what": "they are food and need macros"}},
+    TODAY, "token", 1)
+names = [e["resolved_name"] for e in part_store.get_day(TODAY)["entries"]]
+check("the four he accepted are written immediately", done and len(names) == 4)
+check("and they are the right four",
+      names == ["Salt and vinegar crisps", "Beans, edamame", "Soy sauce",
+                "Milk, semi-skimmed"])
+held = NB.get_pending(part_store)
+check("the two he disputed stay on the table",
+      [i["resolved_name"] for i in held["batch"]] == ["Whey protein", "Collagen"])
+check("the reply names what was logged and what is still held",
+      "Logged" in friction_sent[-1] and "Whey protein" in friction_sent[-1]
+      and "they are food and need macros" in friction_sent[-1])
+# Accepting everything is a plain confirmation, and commit_pending is the one place a whole
+# batch is written - including the replacement rule this function does not reimplement.
+NB.set_pending(part_store, {"batch": [_fake_item("Toast", 90),
+                                      _fake_item("Butter", 74)]})
+NB.apply_confirm_except(pctx, NB.get_pending(part_store),
+                        {"kind": "confirm_except", "commit_indexes": [0, 1]},
+                        TODAY, "token", 1)
+check("accepting all of it commits all of it and clears the offer",
+      len(part_store.get_day(TODAY)["entries"]) == 6
+      and NB.get_pending(part_store) is None)
+# A REPLACEMENT IS ALL OR NOTHING. `_replaces` says confirming this batch removes that
+# entry, and half a batch is not a confirmation of it.
+NB.set_pending(part_store, {"batch": [_fake_item("Rye bread", 83),
+                                      _fake_item("Jam", 40)],
+                            "_replaces": {"id": "old-1", "name": "bread"}})
+NB.apply_confirm_except(pctx, NB.get_pending(part_store),
+                        {"kind": "confirm_except", "commit_indexes": [0],
+                         "fix": {"index": 1, "what": "wrong jam"}},
+                        TODAY, "token", 1)
+check("a partial commit keeps the replacement pending with the remainder",
+      (NB.get_pending(part_store) or {}).get("_replaces", {}).get("id") == "old-1")
+# An offer the gate blocked is one he never saw, and no route may write it.
+NB.set_pending(part_store, {"batch": [_fake_item("Nonsense", 9000),
+                                      _fake_item("More nonsense", 9000)]})
+NB._mark_pending_gate_blocked(pctx, "figures are absurd")
+friction_sent.clear()
+before = len(part_store.get_day(TODAY)["entries"])
+NB.apply_confirm_except(pctx, NB.get_pending(part_store),
+                        {"kind": "confirm_except", "commit_indexes": [0]},
+                        TODAY, "token", 1)
+check("a partial confirm cannot commit an offer the gate blocked",
+      len(part_store.get_day(TODAY)["entries"]) == before
+      and "not logging any of that" in friction_sent[-1])
+
+# 5) A GATE BLOCK IS FED BACK, ONCE. Blocking the same wrong stance three times stopped the
+#    sentence and never corrected it.
+gate_verdicts = ["block", "send"]
+gate_prompts = []
+
+
+def _two_stage_gate(cmd, input=None, **kwargs):
+    gate_prompts.append(input)
+    verdict = gate_verdicts.pop(0) if gate_verdicts else "send"
+    if verdict == "block":
+        return type("P", (), {"stdout": '{"verdict":"block",'
+                                        '"reason_class":"contradicts_input",'
+                                        '"reason":"he said collagen counts"}',
+                              "stderr": ""})()
+    return type("P", (), {"stdout": '{"verdict":"send","reason":"fine"}', "stderr": ""})()
+
+
+NB.GATE_RUNNER = _two_stage_gate
+retry_reasons = []
+friction_sent.clear()
+NB.set_inbound(fctx, "protein and collagen are food")
+ok = NB.send_verified(fctx, "token", 1, "collagen is a supplement and has no macros",
+                      kind="reply",
+                      regenerate=lambda reason: (retry_reasons.append(reason)
+                                                 or "understood - both counted as food"))
+check("a blocked prose reply is composed again with the reason in hand",
+      retry_reasons == ["he said collagen counts"])
+check("and the corrected draft is what he receives",
+      ok and friction_sent[-1] == "understood - both counted as food")
+check("exactly two gate calls: the draft and its replacement", len(gate_prompts) == 2)
+# Twice blocked is the end of it: he gets the honest line, not a third attempt.
+gate_verdicts[:] = ["block", "block"]
+gate_prompts.clear()
+tries = []
+friction_sent.clear()
+ok2 = NB.send_verified(fctx, "token", 1, "collagen is a supplement", kind="reply",
+                       regenerate=lambda reason: (tries.append(reason)
+                                                  or "collagen is still a supplement"))
+check("a second block falls back, and does not retry again",
+      not ok2 and len(tries) == 1 and len(gate_prompts) == 2)
+check("the fallback is the honest line for the class",
+      "contradicted the figures you gave me" in friction_sent[-1])
+# An OFFER is not recomposed: its figures are the code's, and rewording them is the back
+# door this whole module exists to keep shut.
+check("only prose is ever regenerated - offers pass no regenerate",
+      "regenerate=" not in inspect.getsource(NB.offer_items)
+      and "regenerate=" not in inspect.getsource(NB.offer_planned)
+      and "regenerate=again" in inspect.getsource(NB.converse_reply))
+check("both drafts are logged, which is what diagnosing 15 Aug needed",
+      any("blocked draft" in line for line in friction_log))
+
+# 6) THE REPLAY, END TO END. Individually correct fixes are not the deliverable: what he
+#    needed on 15 Aug was for the sequence to finish with his food in the log. This drives
+#    handle_text through the real messages, with the model calls stubbed and every decision
+#    - intent, powder classification, partial confirm - taken by the real code.
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
+replay_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-replay-")))
+rctx = FakeCtxHandle(replay_store)
+friction_sent.clear()
+
+CRISPS = ("Also add 1/2 a small bag of salt and vinegar crisps. 150g edamame with soy "
+          "sauce. 200ml milk")
+POWDERS = "Bulk pure whey and bulk collagen and vit c 1 scope of both"
+EXCEPT = "All correct except protein and collagen are food as well as supplement"
+_PARSES = {
+    CRISPS: ('{"intent":"log_food","items":[{"text":"salt and vinegar crisps"},'
+             '{"text":"edamame"},{"text":"soy sauce"},{"text":"milk"}]}'),
+    POWDERS: ('{"intent":"log_food","items":[{"text":"bulk pure whey"},'
+              '{"text":"bulk collagen"},{"text":"vitamin c"}]}'),
+    EXCEPT: '{"intent":"correction","correction":"all correct except the powders"}',
+}
+# What interpret() would return for the powders: the model calling them supplements, which
+# is what it did on the day. The backstop in interpret is what must overrule it.
+_PLANS = {
+    CRISPS: ('{"items":[{"canonical_name":"salt and vinegar crisps","form":"other",'
+             '"category":"branded_packaged","is_supplement":false,"expect_macros":true,'
+             '"search_terms":["salt and vinegar crisps"]},'
+             '{"canonical_name":"edamame beans, boiled","form":"whole_food",'
+             '"category":"whole_food","is_supplement":false,"expect_macros":true,'
+             '"search_terms":["edamame"]},'
+             '{"canonical_name":"soy sauce","form":"liquid","category":"branded_packaged",'
+             '"is_supplement":false,"expect_macros":true,"search_terms":["soy sauce"]},'
+             '{"canonical_name":"semi-skimmed milk","form":"dairy","category":"whole_food",'
+             '"is_supplement":false,"expect_macros":true,"search_terms":["milk"]}]}'),
+    POWDERS: ('{"items":[{"canonical_name":"bulk pure whey protein","form":"powder",'
+              '"category":"supplement","is_supplement":true,"expect_macros":false,'
+              '"search_terms":["whey protein powder"]},'
+              '{"canonical_name":"bulk collagen powder","form":"powder",'
+              '"category":"supplement","is_supplement":true,"expect_macros":false,'
+              '"search_terms":["collagen peptides"]},'
+              '{"canonical_name":"vitamin C","form":"tablet","category":"supplement",'
+              '"is_supplement":true,"expect_macros":false,'
+              '"search_terms":["vitamin c"]}]}'),
+}
+_inbox = []
+
+
+def _replay_classify(text, pending, *a, **k):
+    _inbox.append(text)
+    return _real_classify(text, pending, "claude", "m", log=lambda *x: None,
+                          runner=fixed_runner(_PARSES.get(text,
+                                                          '{"intent":"unknown"}')))
+
+
+def _replay_interpret(text, *a, **k):
+    reply = _PLANS.get(text)
+    return (_real_interpret(text, "claude", "m", log=lambda *x: None,
+                            runner=fixed_runner(reply)) if reply else None)
+
+
+def _replay_resolve(text, **k):
+    return _fake_item(text.title(), kcal=120.0, raw=text)
+
+
+def _replay_decide(message, item, *a, **k):
+    return {"kind": "confirm_except", "commit_indexes": [0, 1, 2, 3], "fix": None}
+
+
+def fixed_runner(reply):
+    def run(cmd, input=None, **kwargs):
+        return type("P", (), {"stdout": reply, "stderr": ""})()
+    return run
+
+
+NB.NLU.classify = _replay_classify
+NB.NLU.interpret = _replay_interpret
+NB.NR.resolve = _replay_resolve
+NB.NLU.decide_correction = _replay_decide
+NB.from_history = lambda ctx, text, day, **k: None
+
+# 13:03 - four items offered.
+NB.handle_text(rctx, CRISPS, "token", 1)
+pend_a = NB.get_pending(replay_store)
+check("replay: the four items are offered", pend_a and len(pend_a["batch"]) == 4)
+
+# 13:05 - "all correct except..." Everything in THIS batch is accepted, so it commits.
+NB.handle_text(rctx, EXCEPT, "token", 1)
+check("replay: an acceptance logs the items instead of returning `unclear`",
+      len(replay_store.get_day(TODAY)["entries"]) == 4)
+check("replay: and the edamame is one of them",
+      any("edamame" in (e.get("resolved_name") or "").lower()
+          for e in replay_store.get_day(TODAY)["entries"]))
+
+# 13:12 - the powders. The interpretation calls them dose-only supplements; the code does
+# not, so they are looked up and carry macros.
+NB.handle_text(rctx, POWDERS, "token", 1)
+pend_b = NB.get_pending(replay_store)
+check("replay: the powders are offered as food, with macros",
+      pend_b and len(pend_b["batch"]) == 3
+      and all(i.get("kcal") for i in pend_b["batch"][:2])
+      and not any(i.get("_supplement") for i in pend_b["batch"][:2]))
+# The dose sentence is still right for the vitamin, and it is the one item it may attach
+# to. What must never happen again is that sentence landing on his whey.
+_offer_text = friction_sent[-1]
+_dose_para = next((p for p in _offer_text.split("\n\n")
+                   if "does not touch your macros" in p), "")
+check("replay: nothing tells him his protein does not touch his macros",
+      "whey" not in _dose_para.lower() and "collagen" not in _dose_para.lower())
+check("replay: and that sentence belongs to the vitamin",
+      "vitamin" in _dose_para.lower())
+check("replay: the vitamin is still a dose",
+      pend_b["batch"][2].get("_supplement") is True)
+
+# 13:42 - "Log the bloody food". This is the message that got no useful answer for eleven
+# minutes. It is a confirmation now, and it finishes the job.
+friction_sent.clear()
+NB.handle_text(rctx, "Log the bloody food", "token", 1)
+entries = replay_store.get_day(TODAY)["entries"]
+check("REPLAY ENDS IN THE FOOD BEING LOGGED", len(entries) == 6)
+check("and the reply says so", friction_sent and "Logged" in friction_sent[-1])
+check("with nothing left on the table", NB.get_pending(replay_store) is None)
+check("and the supplement went in as a dose, not as food",
+      len(replay_store.get_day(TODAY).get("supplements") or []) == 1)
+
+NB.tg.send, NB.log = _f_real["send"], _f_real["log"]
+NB.publish_now, NB.today_block = _f_real["publish"], _f_real["today"]
+NB.NR.cache_resolved, NB.GATE_RUNNER = _f_real["cache"], _f_real["gate"]
+NB.NLU.classify, NB.NLU.decide_correction = _f_real["classify"], _f_real["decide"]
+NB.NR.resolve, NB.NLU.interpret = _f_real["resolve"], _f_real["interpret"]
+NB.RC.write_back = _f_real["write_back"]
+NB.RC.bot_in_session_totals = _f_real["fuel"]
+NB.NLU.converse = _f_real["converse"]
+NB.offer_items, NB.from_history = _f_real["offer_items"], _f_real["from_history"]
+# This file's own warning, from the top: a stub left behind is how a whole section went
+# silently green against itself. Every name this section replaced is checked back.
+check("every stub this section installed is put back",
+      NB.tg.send is _f_real["send"] and NB.offer_items is _f_real["offer_items"]
+      and NB.NLU.classify is _f_real["classify"]
+      and NB.NR.resolve is _f_real["resolve"]
+      and NB.from_history is _f_real["from_history"])
 
 print()
 if FAILED:

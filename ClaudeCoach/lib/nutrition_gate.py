@@ -140,6 +140,13 @@ SEND it otherwise. Bias hard to send. In particular do NOT block for:
 A blocked reply costs him a real answer and replaces it with an apology, so a marginal
 case is a send.
 
+AN OFFER MAY LIST FOOD HE NAMED EARLIER. When the context carries
+`carried_from_an_earlier_unconfirmed_offer`, those items are food he told the bot about in a
+previous message and never confirmed; the bot is holding them so one confirmation covers
+everything, rather than dropping them the moment he mentions something else. That is NOT
+off_topic - it is the fix for a batch that used to be destroyed silently. Judge those items
+on their figures like any others, and judge the reply against the food he has just named.
+
 WHEN HIS MESSAGE IS A MARKER rather than words - "[sent a photo of a barcode]", "[tapped
 Log it]" - he named nothing, so there is nothing for the reply to be off-topic about or to
 contradict. Judge the FIGURES and the ACTION CLAIMS only: block such a reply for magnitude

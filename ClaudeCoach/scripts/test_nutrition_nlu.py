@@ -875,6 +875,142 @@ check("converse is told plainly that it cannot change the log",
       "YOU CANNOT CHANGE HIS LOG FROM HERE" in _conv
       and "duplicate noted and removed" in _conv)
 
+print("\n--- an order to commit always parses (15 Aug 2026) ---")
+# THE EXCHANGE. Four consecutive instructions to log a batch that was sitting on the table:
+# one was classified `question`, three `unknown`, and nothing was logged for eleven minutes.
+# None of them could reach YES, which is an exact match on the whole message.
+ORDERS = ("Log those items.",
+          "Log the bloody food",
+          "Ok shall I say it another 3 times to make sure. Log those items.",
+          "I'm telling you to add it, how many time would you like me to tell you first?",
+          "We got so close to logging the food then you failed. Log the food we had",
+          "how many times - add it",
+          "yes do it",
+          "log it all now")
+for phrase in ORDERS:
+    check(f"with an offer waiting, {phrase[:38]!r} is a confirm",
+          NLU.fast_intent(phrase, True) == {"intent": "confirm", "ordered": True})
+    check(f"with nothing waiting, {phrase[:38]!r} is commit_context",
+          NLU.fast_intent(phrase, False)["intent"] == "commit_context")
+check("commit_context is a real intent, or parse_with_model coerces it to unknown",
+      "commit_context" in NLU.INTENTS)
+# THE OTHER SIDE OF THE LINE, and the reason the match is by OBJECT rather than by verb.
+# This is a real message of his (11 Aug) and it is an imperative to add, too.
+for phrase in ("Add 500ml.of the same Rubicon as yesterday",
+               "add 2 eggs and a slice of toast",
+               "log my breakfast of porridge and blueberries",
+               "put the chicken down as lunch",
+               "I had a coffee"):
+    check(f"a named food is still a log: {phrase[:34]!r}",
+          not NLU.looks_like_commit_order(phrase))
+# No model call is made for any of them: fast_intent decides, so a 60-second parse that
+# came back `unknown` three times cannot be in the path at all.
+_never = fixed_runner('{"intent":"unknown"}')
+check("an order is decided without the model",
+      NLU.classify("Log the bloody food", True, "claude", "m", log=lambda *a: None,
+                   runner=_never)["intent"] == "confirm")
+check("and 'how many times - add it' does not go down the question path",
+      NLU.classify("how many times - add it", True, "claude", "m", log=lambda *a: None,
+                   runner=_never)["intent"] == "confirm")
+check("the parse prompt teaches the same distinction to the model",
+      "commit_context" in NLU.PARSE_PROMPT
+      and "log the bloody food" in NLU.PARSE_PROMPT.lower())
+
+print("\n--- a powder with macros is food, whatever the spoon is called ---")
+# HIS RULING, twice on 15 Aug 2026: "protein and collagen are food as well as supplements,
+# so count towards macros". The bot said the opposite three times and logged nothing.
+for phrase in ("Bulk pure whey and bulk collagen and vit c 1 scope of both",
+               "1 scoop of whey", "a scoop of collagen powder",
+               "1 scoop sis rego chocolate", "protein shake after the ride"):
+    check(f"a macro-carrying powder: {phrase[:34]!r}", NLU.macro_carrying_powder(phrase))
+for phrase in ("vitamin d 4000iu", "400mg of my collagen capsules",
+               "two magnesium tablets", "an electrolyte tab"):
+    check(f"a micronutrient dose is not: {phrase[:34]!r}",
+          not NLU.macro_carrying_powder(phrase))
+# The form-word override is DEMOTED: it may only fire at mg scale, where nothing it could
+# reclassify carries macros worth counting.
+check("a scoop of whey the model called food STAYS food",
+      NLU.classify("1 scoop of whey", False, "claude", "m", log=lambda *a: None,
+                   runner=fixed_runner('{"intent":"log_food","items":'
+                                       '[{"text":"whey protein"}]}'))["intent"]
+      == "log_food")
+check("and a 400 mg capsule is still a dose",
+      NLU.classify("400mg of my vitamin d capsules", False, "claude", "m",
+                   log=lambda *a: None,
+                   runner=fixed_runner('{"intent":"log_food","items":'
+                                       '[{"text":"vitamin d"}]}'))["intent"]
+      == "log_supplement")
+# interpret() is where the 15 Aug stance actually came from: is_supplement sends the item
+# down a branch that never looks anything up and says in as many words that it does not
+# touch his macros. The prompt now says so, and the backstop only ever pushes towards food.
+_planned = NLU.interpret(
+    "1 scoop of bulk pure whey", "claude", "m", log=lambda *a: None,
+    runner=fixed_runner('{"items":[{"canonical_name":"whey protein powder",'
+                        '"form":"powder","category":"supplement","is_supplement":true,'
+                        '"expect_macros":false,"search_terms":["whey protein powder"]}]}'))
+check("interpret refuses to record whey as a macro-less dose",
+      _planned["items"][0]["is_supplement"] is False
+      and _planned["items"][0]["expect_macros"] is True)
+_dose = NLU.interpret(
+    "vitamin d 4000iu", "claude", "m", log=lambda *a: None,
+    runner=fixed_runner('{"items":[{"canonical_name":"vitamin D",'
+                        '"form":"capsule","category":"supplement","is_supplement":true,'
+                        '"expect_macros":false,"search_terms":["vitamin d"]}]}'))
+check("and leaves a real dose alone", _dose["items"][0]["is_supplement"] is True)
+check("the interpret prompt no longer calls a scoop a dose form",
+      "measured scoop taken" not in NLU.INTERPRET_PROMPT
+      and "count towards macros" in NLU.INTERPRET_PROMPT)
+
+print("\n--- confirm these, fix that one ---")
+# "All correct except protein and collagen are food as well as supplement" was decided
+# `unclear` twice: there was no decision meaning "commit most of it". Four correct items
+# stayed unlogged for forty minutes over a dispute about two others.
+_batch6 = [{"resolved_name": n} for n in
+           ("crisps", "edamame", "soy sauce", "milk", "whey protein", "collagen")]
+_ce = NLU.decide_correction(
+    "All correct except protein and collagen are food as well as supplement",
+    {}, "claude", "m", log=lambda *a: None, batch=_batch6,
+    runner=fixed_runner('{"kind":"confirm_except","commit_indexes":[0,1,2,3],'
+                        '"fix":{"index":4,"what":"they are food, they need macros"}}'))
+check("a partial acceptance is a decision now",
+      _ce == {"kind": "confirm_except", "commit_indexes": [0, 1, 2, 3],
+              "fix": {"index": 4, "what": "they are food, they need macros"}})
+check("an index outside the batch refuses the whole decision",
+      NLU.decide_correction("x", {}, "claude", "m", log=lambda *a: None, batch=_batch6,
+                            runner=fixed_runner('{"kind":"confirm_except",'
+                                                '"commit_indexes":[0,99]}')
+                            ) == {"kind": "unclear"})
+check("a fix pointing at something he just accepted is refused",
+      NLU.decide_correction("x", {}, "claude", "m", log=lambda *a: None, batch=_batch6,
+                            runner=fixed_runner('{"kind":"confirm_except",'
+                                                '"commit_indexes":[0,1],'
+                                                '"fix":{"index":1,"what":"no"}}')
+                            ) == {"kind": "unclear"})
+check("with no batch it is unclear, never None - None means the model was unreachable",
+      NLU.decide_correction("x", {}, "claude", "m", log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"confirm_except",'
+                                                '"commit_indexes":[0]}')
+                            ) == {"kind": "unclear"})
+check("the correction prompt describes it in his own words",
+      "confirm_except" in NLU.CORRECTION_PROMPT
+      and "the rest was right" in NLU.CORRECTION_PROMPT)
+
+print("\n--- a gate block is fed back into the next draft ---")
+# The gate blocked the same wrong stance three times. Blocking stopped it being sent and
+# taught it nothing, so the next turn composed it again.
+_seen = []
+NLU.converse("and?", {"kcal": 1}, [], "claude", "m", log=lambda *a: None,
+             runner=fixed_runner("fine", sink=_seen),
+             blocked_reason="he twice said collagen counts towards macros")
+check("the reason reaches the model that has to do better",
+      "he twice said collagen counts towards macros" in _seen[-1]
+      and "BLOCKED BEFORE IT WAS SENT" in _seen[-1])
+_clean = []
+NLU.converse("and?", {"kcal": 1}, [], "claude", "m", log=lambda *a: None,
+             runner=fixed_runner("fine", sink=_clean))
+check("and an ordinary turn carries no such note",
+      "BLOCKED BEFORE IT WAS SENT" not in _clean[-1])
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)

@@ -617,6 +617,121 @@ def set_pending(store: NutritionStore, item: dict) -> None:
     pending_path(store).write_text(json.dumps(item, indent=2))
 
 
+def _offer_key(item: dict) -> str:
+    """What makes two offered items the same food, for the merge below."""
+    raw = (item.get("_raw") or item.get("raw_text") or "").strip().lower()
+    name = (item.get("resolved_name") or "").strip().lower()
+    return raw or name
+
+
+# A pending batch may hold at most this many items, matching offer_items' own cap and
+# _gate_numbers' window. A merge is the one path that can push a batch past it, and an
+# item past the cap would be invisible on the offer and in the gate's figures while still
+# being written on confirm.
+MAX_PENDING_ITEMS = 8
+
+
+def carry_pending_batch(ctx, fresh: list) -> tuple:
+    """Fold a NEW offer into an unconfirmed one. Returns (batch, carried, note).
+
+    THE DEFECT THIS EXISTS FOR (15 Aug 2026, 13:03-13:06). Four items - crisps, edamame,
+    soy sauce and milk - were offered and never confirmed, because he was busy telling the
+    bot that his protein and collagen were food. His next message about the protein produced
+    a new offer, `set_pending` overwrote the record, and the four items were gone. Nothing
+    said so. He asked half an hour later whether the edamame had been logged, which is the
+    question a person asks when the bot has silently dropped their dinner.
+
+    MERGE IS THE DEFAULT because it is what he would have to do by hand otherwise: one list,
+    one confirmation, everything logged. Items already offered come FIRST and keep their
+    order; a fresh item naming the same food replaces the carried one, because the newer
+    resolution is the one he has just been talking about - and offering both is the
+    duplicate-entry class this file already carries a delete verb for.
+
+    NOT MERGED, and said out loud instead: a pending record that is a CORRECTION to
+    something (`_apply_label_to`, `_replaces`). Those carry an entry id and commit_pending
+    reads batch[0] against it, so folding an unrelated food into one would apply a label to
+    the wrong entry - a silent wrong write, which is worse than the loss this fixes."""
+    fresh = list(fresh)
+    store = getattr(ctx, "store", None)
+    pend = get_pending(store) if store is not None else None
+    old = list((pend or {}).get("batch") or [])
+    setattr(ctx, "_carried", [])
+    if not old:
+        return fresh, [], ""
+
+    def named(items, limit=4):
+        return ", ".join((i.get("resolved_name") or i.get("_raw") or "that one")[:40]
+                         for i in items[:limit])
+
+    if (pend or {}).get("_apply_label_to") or (pend or {}).get("_replaces"):
+        log(f"  not merging into a correction offer; dropped: {named(old)[:80]}")
+        return fresh, [], (
+            f"_I was still holding a correction to {named(old)}, which this replaces. "
+            f"Send it again if you still want it._")
+    if (pend or {}).get("_gate_blocked"):
+        # FIGURES THE GATE REFUSED ARE NOT LAUNDERED INTO A CONFIRMABLE LIST. The mark says
+        # he was never properly shown those numbers, and commit_pending refuses them for
+        # that reason - but set_pending drops the mark, so carrying the items verbatim into
+        # an offer that passes on the strength of the FRESH ones would make them writable
+        # with one tap. That is the defect the gate exists to catch, arriving by the back
+        # door this merge opened. Said out loud instead; the re-price route is an explicit
+        # order to log, which sends them back down the ladder rather than reusing them.
+        log(f"  not merging a blocked offer; dropped: {named(old)[:80]}")
+        return fresh, [], (
+            f"_I was also holding {named(old)}, but I could not make sense of those "
+            f"figures and never showed them to you properly, so I have not carried them "
+            f"over. Tell me that one again and I will price it fresh._")
+    fresh_keys = {_offer_key(i) for i in fresh if _offer_key(i)}
+    keep = [i for i in old if _offer_key(i) not in fresh_keys]
+    # THE CAP CUTS THE OLD ITEMS, NEVER THE NEW ONES. The other way round truncates what he
+    # has just typed, and the note below only ever names carried items - so his newest food
+    # would vanish with nothing said about it, which is the silent loss this whole function
+    # exists to end, moved to the boundary.
+    room = max(0, MAX_PENDING_ITEMS - len(fresh))
+    carried, cut = keep[:room], keep[room:]
+    batch = carried + fresh[:MAX_PENDING_ITEMS]
+    if carried:
+        log(f"  merged {len(carried)} unconfirmed item(s) into the new offer")
+    if len(keep) != len(old):
+        log(f"  {len(old) - len(keep)} pending item(s) superseded by this offer")
+    setattr(ctx, "_carried", [(i.get("resolved_name") or i.get("_raw") or "")[:50]
+                              for i in carried])
+    if cut:
+        # Named, because an item dropped for room is still an item he told the bot about.
+        log(f"  no room for {len(cut)} pending item(s): {named(cut)[:80]}")
+        return batch, carried, (
+            f"_That is as many as I can hold at once, so {named(cut)} has come off the "
+            f"list. Send it again once this lot is logged._")
+    return batch, carried, ""
+
+
+def carried_note(carried: list) -> str:
+    """The line that says an older offer is still in this list. "" when nothing was."""
+    if not carried:
+        return ""
+    names = ", ".join((i.get("resolved_name") or i.get("_raw") or "that one")[:40]
+                      for i in carried[:4])
+    return (f"_You still had {names} unconfirmed, so it is in this list too - one "
+            f"confirmation covers the lot._" if len(carried) == 1 else
+            f"_You still had these unconfirmed: {names}. They are in this list too - one "
+            f"confirmation covers the lot._")
+
+
+def fmt_offer_line(item: dict) -> str:
+    """One item as it appears in an offer, dose items included.
+
+    A supplement has no macros, so fmt_confirm renders it as a name and an empty line. That
+    is fine for an item the surrounding text is already describing and wrong for one carried
+    in from an earlier offer, which has no surrounding text of its own."""
+    if item.get("_supplement"):
+        dose = (f"{item['_dose_mg']:.0f} mg" if item.get("_dose_mg")
+                else (f"{item['portion_used_g']:.0f} g" if item.get("portion_used_g")
+                      else "dose as stated"))
+        return (f"*{item.get('resolved_name') or item.get('_raw') or 'supplement'}*\n"
+                f"Supplement, {dose}. Recorded as a dose, not looked up against food data.")
+    return fmt_confirm(item)
+
+
 def get_pending(store: NutritionStore):
     p = pending_path(store)
     if not p.exists():
@@ -644,10 +759,13 @@ def clear_pending(store: NutritionStore) -> None:
 # three of them will drop. The sites that stay OUTSIDE it are listed at EXEMPT_SENDS, with
 # why, because an exemption nobody can see is the same failure.
 #
-# ONE GATE CALL PER INBOUND MESSAGE is the design constraint. The gate reads the FINAL
+# ONE GATE CALL PER INBOUND MESSAGE, plus at most one retry. The gate reads the FINAL
 # composed message, never a fragment, and the mechanical one-liners that share a turn with
 # a real reply ("Looking at that...", the trivial-dose note) are exempt so a single message
-# cannot cost two Opus calls.
+# cannot cost two Opus calls for no benefit. The one exception is a BLOCKED reply that the
+# caller can recompose: that costs a second gate call and it buys the thing a block on its
+# own never bought, which is a corrected reply rather than an apology. Capped at one, and
+# both attempts are logged with their draft text.
 
 GATE_MODEL = "claude-opus-5"
 # The test seam, and the only way this module is driven offline. None means the real CLI.
@@ -658,7 +776,10 @@ GATE_RUNNER = None
 #   "Barcode NNN, looking it up...", the photo-download failure, the "nothing logged today
 #   to X" refusals, the "I could not reach the model" notices, the credential warning, the
 #   which-one-do-you-mean list, the deterministic today/target/plants/week/undo/edit/close
-#   blocks, the trivial-dose note, the gate's own fallbacks and the blocked-offer refusal.
+#   blocks, the trivial-dose note, the gate's own fallbacks and the blocked-offer refusal,
+#   the unknown-intent line, and the two "nothing was logged, here it is again" notices that
+#   precede a re-offer (commit ordered with nothing pending, and commit ordered on an offer
+#   the gate blocked) - the offer that follows each one is gated in the ordinary way.
 # Each is either a FIXED STRING or a straight read of the store, so there is no model or
 # ladder figure in it to be insane, and two of them exist precisely to report that a model
 # call failed - gating those would let a broken verifier silence the outage notice.
@@ -678,6 +799,9 @@ def set_inbound(ctx, text: str) -> None:
     # look substantiated. Reset here rather than in each handler, because this is the one
     # function every inbound path already has to call.
     setattr(ctx, "_actions", [])
+    # And the same for what an offer carried over from an earlier one: Context outlives a
+    # message, so last turn's carried list would explain items that are not in this reply.
+    setattr(ctx, "_carried", [])
 
 
 def record_action(ctx, text: str) -> None:
@@ -749,6 +873,14 @@ def gate_context(ctx, kind: str, numbers: list = None) -> dict:
             numbers = []
     return {"reply_kind": kind, "recent_conversation": turns,
             "figures_behind_this_reply": numbers or [],
+            # ITEMS HE DID NOT NAME IN THIS MESSAGE, and why they are in the offer anyway.
+            # An offer that merges in an unconfirmed batch legitimately lists food from an
+            # earlier message; without this the judge sees a reply about edamame answering
+            # a message about whey, which is exactly what off_topic is for. An offer cannot
+            # be recomposed - its figures are the code's - so a wrong block here is a
+            # dead end for him rather than a second draft.
+            "carried_from_an_earlier_unconfirmed_offer":
+                list(getattr(ctx, "_carried", []) or []),
             # WHAT THE CODE DID, so the gate can catch a reply that claims something else.
             # An empty list is meaningful and is sent as one: it says the log was not
             # touched, which is what makes "duplicate removed" checkable.
@@ -756,7 +888,7 @@ def gate_context(ctx, kind: str, numbers: list = None) -> dict:
 
 
 def send_verified(ctx, token, chat_id, text: str, kind: str = "reply",
-                  numbers: list = None, reply_markup=None) -> bool:
+                  numbers: list = None, reply_markup=None, regenerate=None) -> bool:
     """Send `text`, but only if Opus agrees it is a sensible reply to what he just said.
 
     Returns True when the original text went out (verified or unverified), False when it
@@ -766,15 +898,30 @@ def send_verified(ctx, token, chat_id, text: str, kind: str = "reply",
 
     On a block the athlete always gets something honest: the gate's own fallback if it gave
     a usable one, otherwise the built line for the reason class. Never the crap, and never
-    silence."""
+    silence.
+
+    `regenerate` turns the gate from a wall into a corrector. A BLOCK IS INFORMATION AND IT
+    WAS BEING THROWN AWAY: on 15 Aug 2026 the gate correctly blocked three replies insisting
+    that protein and collagen were dose-only supplements, and because nothing fed the reason
+    back, the same stance was composed again on the next turn and the one after. Given a
+    callable, the reply is composed ONCE more with the gate's reason in front of the model,
+    and that draft is gated in turn; a second block sends the honest fallback as before.
+
+    ONE RETRY, AND ONLY FOR PROSE. Every attempt costs an Opus call while he waits, and a
+    figure the code built cannot be improved by rewording it - an offer blocked for
+    magnitude needs different arithmetic, not a better sentence, and inviting a model to
+    rewrite it is the back door nutrition_nlu exists to keep shut. So callers pass
+    `regenerate` only where the text came from the model in the first place."""
     body = (text or "").strip()
     inbound = getattr(ctx, "_inbound", "") or ""
+    setattr(ctx, "_last_sent", None)
     if not body or not inbound:
         # Nothing to judge, or nothing to judge it against - a cron or startup send has no
         # inbound message and coherence is undefined for it.
         if body:
             log("[gate] skipped: no inbound message to check against")
         tg.send(token, chat_id, text, reply_markup=reply_markup, log=log)
+        setattr(ctx, "_last_sent", body)
         return True
     got = NG.verify_reply(inbound, body, gate_context(ctx, kind, numbers), CLAUDE_BIN,
                           model=GATE_MODEL, log=log, runner=GATE_RUNNER,
@@ -786,8 +933,34 @@ def send_verified(ctx, token, chat_id, text: str, kind: str = "reply",
         log("[gate] unavailable - sent unverified")
     if got["verdict"] != "block":
         tg.send(token, chat_id, text, reply_markup=reply_markup, log=log)
+        setattr(ctx, "_last_sent", body)
         return True
+    # THE DRAFT ITSELF, not only the verdict. Diagnosing 15 Aug meant knowing what the bot
+    # had tried to say, and the log held only the gate's summary of it.
     log(f"[gate] blocked: {reason}")
+    log(f"[gate] blocked draft: {body[:300]!r}")
+    if regenerate is not None:
+        second = None
+        try:
+            second = regenerate(reason or got.get("reason_class") or "blocked")
+        except Exception as exc:
+            log(f"[gate] regeneration failed: {type(exc).__name__}: {exc}")
+        second = (second or "").strip()
+        if second and second != body:
+            again = NG.verify_reply(inbound, second, gate_context(ctx, kind, numbers),
+                                    CLAUDE_BIN, model=GATE_MODEL, log=log,
+                                    runner=GATE_RUNNER,
+                                    model_unavailable=NLU.model_unavailable)
+            log(f"[gate] retry {again['verdict']} {again.get('ms')}ms kind={kind} "
+                f"class={again.get('reason_class')} "
+                f"reason={(again.get('reason') or '')[:160]!r}")
+            if again["verdict"] != "block":
+                tg.send(token, chat_id, second, reply_markup=reply_markup, log=log)
+                setattr(ctx, "_last_sent", second)
+                return True
+            log(f"[gate] retry blocked draft: {second[:300]!r}")
+        else:
+            log("[gate] regeneration produced nothing new")
     fallback = got.get("fallback") or NG.built_fallback(got.get("reason_class"))
     if kind == "offer":
         # THE OFFER SURVIVES, BUT IT IS NOT CONFIRMABLE. Keeping the pending record intact
@@ -1317,7 +1490,65 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # The chat model reads recent_chat() and had no idea a food argument had just
         # happened - the whole exchange lived in the pending record, invisible to it.
         _chat(ctx, "athlete", t)
+        if pend.get("_gate_blocked") and got.get("ordered"):
+            # AN ORDER MUST NOT MEET THE SAME REFUSAL TWICE. commit_pending rightly will not
+            # write an offer the gate blocked - he was never properly shown those figures -
+            # but answering "I am not logging that one" to a man who has now told the bot
+            # four times to log his food is the loop of 15 Aug 2026 with a politer sentence.
+            # Nothing is written: the same food goes back down the ladder and comes back as
+            # a fresh offer, which the gate judges on its own merits.
+            raws = [(i.get("_raw") or i.get("raw_text") or "")
+                    for i in (pend.get("batch") or [])]
+            raws = [r for r in raws if r]
+            if raws:
+                log(f"  commit ordered on a blocked offer; re-pricing {len(raws)} item(s)")
+                # CLEARED FIRST, and not left to the merge's de-duplication to sort out.
+                # offer_items rewrites an item's text when a remembered `means` alias
+                # matches it, so the fresh item's key is not reliably the old one - and a
+                # key that fails to match would offer him both copies. Nothing is lost by
+                # clearing: every raw text is in hand and is about to be resolved again.
+                clear_pending(ctx.store)
+                tg.send(token, chat_id,
+                        "I could not make sense of that offer, so I never showed it to you "
+                        "properly and I will not log it blind. Same food, priced again:",
+                        log=log)
+                offer_items(ctx, [{"text": r, "portion_g": None, "in_session": False}
+                                  for r in raws], day, token, chat_id, said=t)
+                return
         commit_pending(ctx, pend, day, token, chat_id)
+        return
+
+    if intent == "confirm" and not pend:
+        # He confirmed something that is no longer there. Same answer as an explicit order
+        # to commit, and it must never be silence: `confirm` used to fall all the way
+        # through to the "I could not tell whether that was food" line.
+        intent = "commit_context"
+
+    if intent == "commit_context":
+        # HE HAS ORDERED A COMMIT AND THERE IS NOTHING TO COMMIT. The one thing this must
+        # not do is say "logging now" - it cannot log what it is not holding, and that exact
+        # sentence is what the gate blocked at 13:34 on 15 Aug with an empty action list. So
+        # the reply says what is actually on the table, and then does the only useful thing
+        # available: puts the names from the last unconfirmed offer back down the ladder as
+        # a fresh, confirmable offer. One message, and a button at the end of it.
+        _chat(ctx, "athlete", t)
+        names = reconstructable_offer(ctx)
+        log(f"  commit ordered with nothing pending; reconstructable={names}")
+        if names:
+            tg.send(token, chat_id,
+                    "I am not holding that offer any more, so there was nothing for me to "
+                    "log - nothing has been added. Here it is again, priced fresh:", log=log)
+            offer_items(ctx, [{"text": n, "portion_g": None, "in_session": False}
+                              for n in names], day, token, chat_id, said=t)
+            return
+        eaten = [(e.get("resolved_name") or "")[:34]
+                 for e in (ctx.store.get_day(day).get("entries") or [])][-6:]
+        tg.send(token, chat_id,
+                "There is nothing waiting to be logged - I am not holding an offer, so "
+                "there is nothing I can confirm, and I have added nothing. "
+                + ("Today has: " + ", ".join(eaten) + ". " if eaten else "Today is empty. ")
+                + "Tell me the food again and I will price it and log it.", log=log)
+        _chat(ctx, "coach", "[log] asked to commit with nothing pending; nothing was added")
         return
 
     if intent == "cancel":
@@ -1443,6 +1674,12 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
             log(f"  correction decided: {kind} {decision}")
             if kind in ("rescale_all", "rescale_items", "meal_portions"):
                 if apply_batch_rescale(ctx, pend, decision, day, token, chat_id):
+                    return
+            if kind == "confirm_except":
+                # BEFORE the rest, because it is the only decision that WRITES part of the
+                # batch. Falling through it into a re-resolution would re-price items he
+                # has just said were correct.
+                if apply_confirm_except(ctx, pend, decision, day, token, chat_id):
                     return
             if kind in ("remember", "remember_and_rescale"):
                 if apply_remember(ctx, decision, pend, day, token, chat_id):
@@ -1672,10 +1909,22 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         tg.send(token, chat_id, "Tell me what you have eaten and I will log it.", log=log)
         return
 
-    tg.send(token, chat_id,
-            "I could not tell whether that was food, a weight or a question. "
-            "Try telling me what you ate, or ask me something like "
-            "\"how much protein have I had?\"", log=log)
+    # UNKNOWN IS NEVER SILENCE, AND NEVER UNRECORDED. This was a bare tg.send with no log
+    # line and no transcript entry, which is why 15 Aug 2026 reads as three messages that
+    # got no answer at all: the boilerplate went out, but the bot log stopped at
+    # "intent=unknown", neither side of the exchange reached the chat store, and the next
+    # conversational turn therefore could not see that he had already ordered a commit
+    # twice. A turn nothing records is a turn the coach cannot learn from, which is worse
+    # than a poor answer.
+    log(f"  unknown intent, answering honestly: {t[:70]!r}")
+    _chat(ctx, "athlete", t)
+    reply = ("I could not tell whether that was food, a weight or a question, so I have "
+             "done nothing with it. "
+             + ("You have an offer waiting - say “yes” to log it, or tell me what "
+                "to change." if pend else
+                "Tell me what you ate and I will price it and log it."))
+    tg.send(token, chat_id, reply, log=log)
+    _chat(ctx, "coach", reply)
 
 
 def log_weight(ctx: Context, kg: float, day: date, token, chat_id) -> None:
@@ -1703,16 +1952,23 @@ def converse_reply(ctx: Context, message: str, day: date, token, chat_id,
     if extra_facts:
         facts.update(extra_facts)
     history = ctx.store.recent_chat()
+    def again(reason):
+        return NLU.converse(message, facts, history, CLAUDE_BIN, LLM_MODEL, log=log,
+                            now_iso=datetime.now().strftime("%Y-%m-%dT%H:%M"),
+                            blocked_reason=reason)
+
     out = NLU.converse(message, facts, history, CLAUDE_BIN, LLM_MODEL, log=log,
                        now_iso=datetime.now().strftime("%Y-%m-%dT%H:%M"))
     _chat(ctx, "athlete", message)
     if out:
-        # RECORDED ONLY IF HE GOT IT. The turn used to be stored before the send, which with
-        # a gate in front means a reply the gate rejected would sit in the transcript as
-        # something the coach said - and the next turn reads that history back and follows a
-        # thread he never saw. send_verified logs the block and stores its own marker.
-        if send_verified(ctx, token, chat_id, out, kind="reply"):
-            _chat(ctx, "coach", out)
+        # RECORDED ONLY IF HE GOT IT, AND EXACTLY AS HE GOT IT. The turn used to be stored
+        # before the send, which with a gate in front means a reply the gate rejected would
+        # sit in the transcript as something the coach said - and the next turn reads that
+        # history back and follows a thread he never saw. With a retry in front of it the
+        # text that went out may be the SECOND draft, so the transcript takes what
+        # send_verified reports it sent rather than the first attempt.
+        if send_verified(ctx, token, chat_id, out, kind="reply", regenerate=again):
+            _chat(ctx, "coach", getattr(ctx, "_last_sent", None) or out)
     return out
 
 
@@ -1775,16 +2031,21 @@ def debate(ctx: Context, got: dict, text: str, day: date, token, chat_id) -> Non
     # The options are RESOLVED above, so they go in as facts and the
     # discussion is a normal turn of the same conversation - with the
     # thread behind it, rather than a standalone opinion.
-    reply = NLU.converse(text, {**facts, "options_on_the_table": options},
-                         ctx.store.recent_chat(), CLAUDE_BIN, LLM_MODEL, log=log,
-                         now_iso=datetime.now().strftime("%Y-%m-%dT%H:%M"))
+    def compose(blocked_reason=None):
+        return NLU.converse(text, {**facts, "options_on_the_table": options},
+                            ctx.store.recent_chat(), CLAUDE_BIN, LLM_MODEL, log=log,
+                            now_iso=datetime.now().strftime("%Y-%m-%dT%H:%M"),
+                            blocked_reason=blocked_reason)
+
+    reply = compose()
     _chat(ctx, "athlete", text)
     ctx.store.cache_put("_last_options", {"options": [o["option"] for o in options],
                                           "day": day.isoformat()})
     if reply:
-        # Stored only once it has actually gone out, for the same reason as converse_reply.
-        if send_verified(ctx, token, chat_id, reply, kind="reply"):
-            _chat(ctx, "coach", reply)
+        # Stored only once it has actually gone out, and as whichever draft went, for the
+        # same reasons as converse_reply.
+        if send_verified(ctx, token, chat_id, reply, kind="reply", regenerate=compose):
+            _chat(ctx, "coach", getattr(ctx, "_last_sent", None) or reply)
     else:
         # Exempt: a fixed notice that the model could not be reached, plus the
         # deterministic block. Gating it would let a broken verifier hide the outage.
@@ -1844,12 +2105,20 @@ def handle_photo(ctx: Context, file_id: str, caption: str, day: date, token,
         # treating every panel as new is what logged his pizza twice on 14 Aug 2026.
         if offer_label_as_correction(ctx, item, day, token, chat_id):
             return
-        set_pending(ctx.store, {"batch": [item]})
+        merged, carried, dropped = carry_pending_batch(ctx, [item])
+        set_pending(ctx.store, {"batch": merged})
         extra = ("\n_Sodium came from the salt figure on the pack, divided by 2.5._"
                  if got.get("sodium_from_salt") else "")
+        for line in (carried_note(carried), dropped):
+            if line:
+                extra += "\n\n" + line
         kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-        send_verified(ctx, token, chat_id, fmt_confirm(item) + extra + "\n\nLog it?",
-                      kind="offer", numbers=_gate_numbers([item]), reply_markup=kb)
+        send_verified(ctx, token, chat_id,
+                      "\n\n".join([fmt_offer_line(i) for i in carried]
+                                  + [fmt_confirm(item)])
+                      + extra + "\n\nLog "
+                      + ("these?" if len(merged) > 1 else "it?"),
+                      kind="offer", numbers=_gate_numbers(merged), reply_markup=kb)
         return
 
     if kind == "order":
@@ -2165,16 +2434,19 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
             f"{item.get('confidence')} {item.get('kcal')} kcal")
         batch.append(item)
         notes.append(fmt_confirm(item))
-    set_pending(ctx.store, {"batch": batch})
-    if any(i.get("in_session") for i in batch):
+    merged, carried, dropped = carry_pending_batch(ctx, batch)
+    set_pending(ctx.store, {"batch": merged})
+    notes = [fmt_offer_line(i) for i in carried] + notes
+    if any(i.get("in_session") for i in merged):
         notes.append("_Tagged as in-session fuel, so it is protected from any trimming._")
     notes += _stated_time_note(batch) + _stated_meal_note(batch)
-    if batch:
-        _chat(ctx, "coach", _offer_summary(batch))
+    notes += [line for line in (carried_note(carried), dropped) if line]
+    if merged:
+        _chat(ctx, "coach", _offer_summary(merged))
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
     send_verified(ctx, token, chat_id, "\n\n".join(notes) + "\n\nLog "
-                  + ("these?" if len(batch) > 1 else "it?"), kind="offer",
-                  numbers=_gate_numbers(batch), reply_markup=kb)
+                  + ("these?" if len(merged) > 1 else "it?"), kind="offer",
+                  numbers=_gate_numbers(merged), reply_markup=kb)
 
 
 _SAME_AS = re.compile(
@@ -2341,21 +2613,27 @@ def offer_stated(ctx: Context, items: list, day: date, token, chat_id,
              for it in items[:8] if (it.get("stated") or {}).get("kcal")]
     if not batch:
         return
-    set_pending(ctx.store, {"batch": batch})
-    _chat(ctx, "coach", _offer_summary(batch))
-    body = "\n\n".join(fmt_confirm(i) for i in batch)
+    merged, carried, dropped = carry_pending_batch(ctx, batch)
+    set_pending(ctx.store, {"batch": merged})
+    _chat(ctx, "coach", _offer_summary(merged))
+    body = "\n\n".join([fmt_offer_line(i) for i in carried]
+                       + [fmt_confirm(i) for i in batch])
     if len(batch) > 1:
+        # HIS total, over the items he stated - never over the carried ones, which he did
+        # not add up and whose figures came from somewhere else.
         body += f"\n\n*Total* {round(sum(i.get('kcal') or 0 for i in batch))} kcal"
-    if any(i.get("in_session") for i in batch):
+    if any(i.get("in_session") for i in merged):
         body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
-    for line in _stated_time_note(batch) + _stated_meal_note(batch):
-        body += "\n\n" + line
+    for line in (_stated_time_note(batch) + _stated_meal_note(batch)
+                 + [carried_note(carried), dropped]):
+        if line:
+            body += "\n\n" + line
     log(f"  stated figures accepted verbatim: "
         f"{[round(i.get('kcal') or 0) for i in batch]} kcal, no lookup")
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
     send_verified(ctx, token, chat_id, body + "\n\nLog "
-                  + ("these?" if len(batch) > 1 else "it?"), kind="offer",
-                  numbers=_gate_numbers(batch), reply_markup=kb)
+                  + ("these?" if len(merged) > 1 else "it?"), kind="offer",
+                  numbers=_gate_numbers(merged), reply_markup=kb)
 
 
 def composed_item(ctx: Context, table: dict, said: str, day: date,
@@ -2477,18 +2755,25 @@ def offer_composed(ctx: Context, said: str, day: date, token, chat_id,
         return False
     item = composed_item(ctx, table, said, day, default_at=default_at,
                          default_meal=default_meal, in_session=in_session)
-    set_pending(ctx.store, {"batch": [item]})
-    _chat(ctx, "coach", _offer_summary([item]))
-    body = fmt_meal_confirm(item)
+    # A RE-TABLE IS NOT A SECOND MEAL. The correction path calls this with the pending
+    # meal's own raw text as `said`, so the fresh item carries the same merge key as the one
+    # on the table and replaces it rather than joining it.
+    merged, carried, dropped = carry_pending_batch(ctx, [item])
+    set_pending(ctx.store, {"batch": merged})
+    _chat(ctx, "coach", _offer_summary(merged))
+    body = "\n\n".join([fmt_offer_line(i) for i in carried] + [fmt_meal_confirm(item)])
     if in_session:
         body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
-    for line in _stated_time_note([item]) + _stated_meal_note([item]):
-        body += "\n\n" + line
+    for line in (_stated_time_note([item]) + _stated_meal_note([item])
+                 + [carried_note(carried), dropped]):
+        if line:
+            body += "\n\n" + line
     log(f"  meal costed by {MEAL_MODEL}: {round(item.get('kcal') or 0)} kcal across "
         f"{len(item.get('_components_detail') or [])} components, no rung walked")
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
-    send_verified(ctx, token, chat_id, body + "\n\nLog it?", kind="offer",
-                  numbers=_gate_numbers([item]), reply_markup=kb)
+    send_verified(ctx, token, chat_id,
+                  body + "\n\nLog " + ("these?" if len(merged) > 1 else "it?"),
+                  kind="offer", numbers=_gate_numbers(merged), reply_markup=kb)
     return True
 
 
@@ -2526,19 +2811,25 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 "_meal": "",                    # a dose is not a meal
                 **{f: None for f in NR.MACRO_FIELDS},
             })
-        set_pending(ctx.store, {"batch": batch})
-        _chat(ctx, "coach", _offer_summary(batch))
+        merged, carried, dropped = carry_pending_batch(ctx, batch)
+        set_pending(ctx.store, {"batch": merged})
+        _chat(ctx, "coach", _offer_summary(merged))
         dose = (f"{dose_mg:.0f} mg" if dose_mg
                 else (f"{items[0].get('portion_g')} g" if items[0].get("portion_g")
                       else "dose as stated"))
         kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
+        body = (f"*{items[0]['text']}*\nSupplement, {dose}. Recorded as a dose, not "
+                f"looked up against food data, and it does not touch your macros."
+                + ("\n_Tell me the label figures if you want them counted._"
+                   if not trivial else ""))
+        if carried:
+            body = "\n\n".join([fmt_offer_line(i) for i in carried] + [body])
+        for line in (carried_note(carried), dropped):
+            if line:
+                body += "\n\n" + line
         send_verified(ctx, token, chat_id,
-                      f"*{items[0]['text']}*\nSupplement, {dose}. Recorded as a dose, not "
-                      f"looked up against food data, and it does not touch your macros."
-                      + ("\n_Tell me the label figures if you want them counted._"
-                         if not trivial else "")
-                      + "\n\nLog it?", kind="offer",
-                      numbers=_gate_numbers(batch), reply_markup=kb)
+                      body + "\n\nLog " + ("these?" if len(merged) > 1 else "it?"),
+                      kind="offer", numbers=_gate_numbers(merged), reply_markup=kb)
         return
 
     resolved = []
@@ -2600,18 +2891,23 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         item["_meal"] = ("" if it.get("in_session")
                          else (it.get("meal") or default_meal or ""))
         resolved.append(item)
-    set_pending(ctx.store, {"batch": resolved})
-    if resolved:
-        _chat(ctx, "coach", _offer_summary(resolved))
-    body = "\n\n".join(fmt_confirm(i) for i in resolved)
-    if any(i.get("in_session") for i in resolved):
+    batch, carried, dropped = carry_pending_batch(ctx, resolved)
+    set_pending(ctx.store, {"batch": batch})
+    if batch:
+        _chat(ctx, "coach", _offer_summary(batch))
+    body = "\n\n".join([fmt_offer_line(i) for i in carried]
+                       + [fmt_confirm(i) for i in resolved])
+    if any(i.get("in_session") for i in batch):
         body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
     for line in _stated_time_note(resolved) + _stated_meal_note(resolved):
         body += "\n\n" + line
+    for line in (carried_note(carried), dropped):
+        if line:
+            body += "\n\n" + line
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
     send_verified(ctx, token, chat_id, body + "\n\nLog "
-                  + ("these?" if len(resolved) > 1 else "it?"), kind="offer",
-                  numbers=_gate_numbers(resolved), reply_markup=kb)
+                  + ("these?" if len(batch) > 1 else "it?"), kind="offer",
+                  numbers=_gate_numbers(batch), reply_markup=kb)
 
 
 def publish_now(ctx: Context) -> None:
@@ -2656,13 +2952,72 @@ def publish_now(ctx: Context) -> None:
 def _offer_summary(batch: list) -> str:
     """One terse line for the chat store: what was just offered, not the full confirm
     text - recent_chat() keeps only a handful of turns, and the full fmt_confirm block
-    would push everything else out of it within a couple of exchanges."""
+    would push everything else out of it within a couple of exchanges.
+
+    EVERY ITEM IS NAMED, however many there are. This line used to collapse to "offered 3
+    items", which cost nothing until an offer was lost: on 15 Aug 2026 a four-item batch was
+    overwritten, and the only record left of what had been in it said "6 items". The names
+    are what make a lost offer reconstructable - see reconstructable_offer - and they are
+    what let the conversation model answer "did the edamame go in?" at all."""
+    names = [(i.get("resolved_name") or i.get("_raw") or "that")[:50] for i in batch[:8]]
     if len(batch) == 1:
-        name = (batch[0].get("resolved_name") or batch[0].get("_raw") or "that")[:50]
         kcal = batch[0].get("kcal")
-        return (f"[log] offered: {name} ({round(kcal)} kcal) — awaiting confirm"
-                if kcal else f"[log] offered: {name} — awaiting confirm")
-    return f"[log] offered {len(batch)} items — awaiting confirm"
+        return (f"[log] offered: {names[0]} ({round(kcal)} kcal) — awaiting confirm"
+                if kcal else f"[log] offered: {names[0]} — awaiting confirm")
+    # PIPE-SEPARATED, because a resolved name is full of commas: "Beans, edamame, frozen,
+    # boiled in unsalted water" is ONE food, and a comma-split reconstruction would send
+    # four fragments of it down the ladder as four separate things to log.
+    return "[log] offered: " + " | ".join(names) + " — awaiting confirm"
+
+
+# How far back an offer may be and still be the one he means when he says "log those
+# items". Beyond this it is a different conversation, and re-offering yesterday's food
+# because he typed "add it" is the kind of write nobody asked for.
+OFFER_RECALL_HOURS = 6
+
+
+def reconstructable_offer(ctx, now: datetime = None) -> list:
+    """Food names from the most recent offer in the transcript that was never committed.
+
+    THE HOLE THIS FILLS (15 Aug 2026, 13:35 onwards). He ordered a commit four times with
+    nothing pending, because the batch had been overwritten half an hour earlier. The bot
+    had no way to answer except "I could not tell whether that was food". The names are in
+    the transcript, so the honest reply is to put them back through the ladder and offer
+    them again properly - which is a real offer he can confirm, not a claim about a log.
+
+    NAMES ONLY. Nothing here reuses a stored figure: the reconstructed items go down the
+    normal resolution path, so a reconstruction is a fresh offer he confirms, never a
+    silent write of something he was shown once."""
+    now = now or datetime.now()
+    turns = []
+    store = getattr(ctx, "store", None)
+    try:
+        turns = list(store.recent_chat() or [])
+    except Exception:
+        return []
+    for turn in reversed(turns):
+        text = str(turn.get("text") or "")
+        if not text.startswith("[log] "):
+            continue
+        # A commit, a delete or a cancellation after the offer settles it: whatever was on
+        # the table then is not what he is asking for now.
+        if not text.startswith("[log] offered"):
+            return []
+        if ":" not in text:
+            return []
+        at = str(turn.get("at") or "")
+        try:
+            when = datetime.fromisoformat(at)
+        except ValueError:
+            when = None
+        if when and (now - when).total_seconds() > OFFER_RECALL_HOURS * 3600:
+            log(f"  last offer was {at}, too old to reconstruct")
+            return []
+        body = text.split(":", 1)[1].split("—")[0]
+        names = [re.sub(r"\s*\([^)]*\)\s*$", "", n).strip()
+                 for n in body.split(" | ")]
+        return [n for n in names if n][:MAX_PENDING_ITEMS]
+    return []
 
 
 def _name_matches(named: str, resolved: str) -> bool:
@@ -3565,6 +3920,93 @@ def correct_in_batch(ctx: Context, pend: dict, correction: str, day: date,
                   "Redone that one, the rest are unchanged.\n\n" + body
                   + "\n\nLog " + ("these?" if len(fresh) > 1 else "it?"),
                   kind="offer", numbers=_gate_numbers(fresh), reply_markup=kb)
+    return True
+
+
+def apply_confirm_except(ctx: Context, pend, decision: dict, day: date, token,
+                         chat_id) -> bool:
+    """Commit the items he accepted and keep the disputed ones pending. False if it cannot.
+
+    THE TURN THIS EXISTS FOR (15 Aug 2026, 13:05). Four items were right and two were being
+    argued about, and there was no verb for "commit these, fix those" - decide_correction
+    returned `unclear` twice and the four correct items sat unlogged for the next forty
+    minutes while the argument ran. A partial acceptance is the commonest thing a person
+    says to a list, and it was the one thing this bot could not do.
+
+    ALL-OR-NOTHING IS STILL THE RULE FOR EVERYTHING ELSE ON THE RECORD. A batch that
+    replaces an entry, or applies a label to one, is committed whole by commit_pending or
+    not at all: those carry an entry id that belongs to the batch as a unit, and honouring
+    half of one would delete an entry that its replacement had not been written for."""
+    batch = list((pend or {}).get("batch") or [])
+    if len(batch) < 2:
+        return False
+    if (pend or {}).get("_apply_label_to"):
+        # One item, one entry, one decision. There is no subset of it to accept.
+        return False
+    if (pend or {}).get("_gate_blocked"):
+        # Same refusal as commit_pending, and for the same reason: these are figures he was
+        # never properly shown, so no route may write them. Exempt from the gate - a fixed
+        # line with no figures in it.
+        log(f"[gate] refused a partial commit of a blocked offer: "
+            f"{pend['_gate_blocked'][:120]}")
+        tg.send(token, chat_id,
+                "I am not logging any of that one - I could not make sense of it and never "
+                "showed it to you properly. Tell me what it was and I will log that "
+                "instead.", log=log)
+        return True
+    commit = [i for i in (decision.get("commit_indexes") or []) if 0 <= i < len(batch)]
+    if not commit:
+        return False
+    hold = [i for i in range(len(batch)) if i not in commit]
+    if not hold:
+        # He accepted everything. That is a confirmation, and commit_pending is the one
+        # place a whole batch is written - including the replacement and fuel write-back
+        # rules this function deliberately does not reimplement.
+        commit_pending(ctx, pend, day, token, chat_id)
+        return True
+    # An item still waiting on a figure cannot be committed by accepting it. It stays on the
+    # table with the disputed one, which is honest: he accepted a name, not a macro.
+    unresolved = [i for i in commit if batch[i].get("needs_input")]
+    commit = [i for i in commit if i not in unresolved]
+    hold = sorted(hold + unresolved)
+    if not commit:
+        return False
+    wrote = []
+    for i in commit:
+        commit_one(ctx, batch[i], day)
+        item = batch[i]
+        record_action(ctx, "added "
+                      + ("supplement " if item.get("_supplement") else "entry ")
+                      + f"{(item.get('resolved_name') or item.get('_raw') or '')[:50]}"
+                      + (f" ({round(item['kcal'])} kcal)" if item.get("kcal") else ""))
+        wrote.append(item)
+    # THE REPLACEMENT SURVIVES WITH THE REMAINDER. `_replaces` says "confirming this batch
+    # removes that entry", and the batch is not confirmed yet - so the entry stays until the
+    # rest of it is. Dropping it here would leave the original in the log for ever; acting
+    # on it here would delete an entry whose replacement is still being argued about.
+    rest = {k: v for k, v in (pend or {}).items() if k != "batch"}
+    set_pending(ctx.store, {**rest, "batch": [batch[i] for i in hold]})
+    if any(i.get("in_session") for i in wrote):
+        fuel = RC.bot_in_session_totals(ctx.store, day)
+        res = RC.write_back(ctx.athlete_dir, day, carb_g=fuel["carb_g"],
+                            sodium_mg=fuel["sodium_mg"] or None, log=log, allow_clear=True)
+        if not res["written"]:
+            log(f"fuel write-back deferred: {res['reason']}")
+    publish_now(ctx)
+    names = ", ".join((i.get("resolved_name") or i.get("_raw") or "that")[:40]
+                      for i in wrote)
+    held = ", ".join((batch[i].get("resolved_name") or batch[i].get("_raw") or "that")[:40]
+                     for i in hold)
+    _chat(ctx, "coach", f"[log] committed: {names}")
+    _chat(ctx, "coach", _offer_summary([batch[i] for i in hold]))
+    said = ((decision.get("fix") or {}).get("what") or "").strip()
+    log(f"  partial confirm: wrote {len(wrote)}, holding {len(hold)}")
+    send_verified(ctx, token, chat_id,
+                  f"Logged {names}.\n\nStill holding *{held}* - "
+                  + (f"you said {said}. " if said else "")
+                  + "Tell me what it should be and I will redo just that one.\n\n"
+                  + today_block(ctx, day),
+                  kind="confirmation", numbers=_gate_numbers(wrote))
     return True
 
 

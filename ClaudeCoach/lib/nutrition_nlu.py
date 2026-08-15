@@ -42,13 +42,68 @@ from re import error
 import subprocess
 
 INTENTS = ("log_food", "log_weight", "log_supplement", "question", "advice",
-           "correction", "command", "confirm", "cancel", "smalltalk", "secret",
-           "unknown")
+           "correction", "command", "confirm", "cancel", "commit_context",
+           "smalltalk", "secret", "unknown")
 
 YES = {"y", "yes", "yep", "yeah", "ok", "okay", "sure", "go on", "do it", "log it",
        "confirm", "correct", "that's right", "thats right", "aye", "please do"}
 NO = {"n", "no", "nope", "cancel", "nah", "forget it", "drop it", "leave it",
       "don't", "dont"}
+
+# AN ORDER TO COMMIT WHAT HAS ALREADY BEEN DISCUSSED, matched deterministically.
+#
+# THE FAILURE THIS EXISTS FOR (15 Aug 2026, 13:33-13:44). He said "I'm telling you to add
+# it", "Log those items.", "Log the bloody food" and "Log the food we had" - four
+# instructions to commit a batch that was sitting right there. The first was classified
+# `question`, the other three `unknown`, and the exchange stalled for eleven minutes.
+# `YES` could not catch them because it is an EXACT match on the whole message, so anything
+# with a word of exasperation in front of it missed.
+#
+# DETERMINISTIC ON PURPOSE, rather than another line in PARSE_PROMPT. The three that failed
+# were classified by the model, and a man typing "log the bloody food" for the third time is
+# the last person who should be waiting on a 60-second model call to be understood - or
+# depending on it to come back right this time. It also has to beat `_QUESTION_HINT`, which
+# matches "how many times..." and would otherwise route an order into the question path.
+#
+# NARROW BY OBJECT, which is what stops it eating a real log. "Add 500ml of the same Rubicon
+# as yesterday" (11 Aug) is an imperative to add too, and the ONLY thing separating it from
+# "add it" is that its object is a named food rather than a pronoun. So the object must come
+# from the generic set below, and the whole CLAUSE must be the order and nothing else - a
+# clause naming a food does not match, however it starts.
+_ORDER_PREFIX = (r"(?:ok|okay|so|now|right|well|then|and|please|just|come\s+on|yes|yeah|"
+                 r"again|for\s+the\s+last\s+time|can\s+you|could\s+you|will\s+you|"
+                 r"would\s+you|you\s+(?:need\s+to|can|should|must)|"
+                 r"i(?:'m|m|\s+am)?\s+telling\s+you\s+to)")
+_ORDER_VERB = r"(?:log|add|commit|save|record|enter|put|do)"
+# The generic objects. Anything else - a food, a weight, a brand - is not this.
+_ORDER_OBJECT = (r"(?:it|them|that|those|these|all|everything|the\s+lot|"
+                 r"(?:the|those|these|all\s+the|all\s+of\s+the)\s+"
+                 r"(?:bloody\s+|damn\s+|fucking\s+|whole\s+|remaining\s+|"
+                 r"rest\s+of\s+the\s+)?"
+                 r"(?:foods?|items?|lot|batch|entries|entry|stuff|meals?|list|order|ones))")
+# Words that may trail the object without changing what it means: "the food we had", "those
+# items you listed". A food name here would not be in this set, so the clause still fails.
+_ORDER_TAIL = (r"(?:\s+(?:all|in|down|now|then|please|already|today|ffs|for\s+me|"
+               r"to\s+the\s+log|to\s+my\s+log|we|you|i|had|have|were|was|listed|above|"
+               r"discussed|earlier|before|offered|mentioned|talked|about|agreed|from|"
+               r"the|ones|items?|there|here|in\s+there)){0,6}")
+_ORDER_CLAUSE = re.compile(
+    r"^(?:" + _ORDER_PREFIX + r"\s+)*" + _ORDER_VERB + r"\s+" + _ORDER_OBJECT
+    + _ORDER_TAIL + r"$", re.I)
+# Clause boundaries, including the dash he uses as one ("how many times - add it").
+_CLAUSE_SPLIT = re.compile(r"[.;,?!\n]+|\s+[-–—]\s+")
+
+
+def looks_like_commit_order(text: str) -> bool:
+    """True when he is telling the bot to log what has already been discussed.
+
+    Clause by clause, and each clause must be the order ALONE. "Log those items." is one;
+    "Add 500ml of the same Rubicon as yesterday" is not, because its object is a food."""
+    for clause in _CLAUSE_SPLIT.split(text or ""):
+        clause = " ".join(clause.split()).strip(" '\"")
+        if clause and _ORDER_CLAUSE.match(clause):
+            return True
+    return False
 
 _WEIGHT_RE = re.compile(
     r"(?:^|\b)(?:weigh(?:ed|t|ing)?(?:\s+in)?(?:\s+at)?|i(?:'m| am)|scales?(?:\s+said)?)?"
@@ -277,6 +332,14 @@ def fast_intent(text: str, has_pending: bool) -> dict | None:
         return {"intent": "confirm"}
     if has_pending and low in NO:
         return {"intent": "cancel"}
+    # AN ORDER TO COMMIT ALWAYS PARSES, whether or not there is anything to commit. With an
+    # offer on the table it is a confirmation; without one the bot has been asked to log
+    # something it may no longer be holding, and `commit_context` is the honest name for
+    # that - it must say what it still has rather than claim a log it cannot perform, which
+    # is exactly the reply the gate blocked at 13:34.
+    if looks_like_commit_order(t):
+        return {"intent": "confirm" if has_pending else "commit_context",
+                "ordered": True}
     code = looks_like_barcode(t)
     if code:
         return {"intent": "log_food", "barcode": code,
@@ -300,8 +363,8 @@ PARSE_PROMPT = """You are the message parser for a personal nutrition logging bo
 Classify the message and extract structure. Reply with ONLY a JSON object, no prose.
 
 Keys:
-  intent: one of log_food, log_supplement, question, advice, correction, smalltalk,
-          unknown
+  intent: one of log_food, log_supplement, question, advice, correction, confirm,
+          commit_context, smalltalk, unknown
   items: array (log_food/log_supplement only) of {text, portion_g, in_session, at, meal,
          stated}
          - text: a SINGLE food or supplement, self-contained enough to look up
@@ -372,6 +435,32 @@ Rules:
     Anything that asserts something about an entry, a time, a name, or how big a
     product's scoop/portion/pack is, is a correction. What it CHANGES is decided later.
   - NEVER invent nutrition numbers. You extract text and portions only.
+
+AN ORDER TO LOG WHAT HAS ALREADY BEEN DISCUSSED IS NOT A NEW LOG.
+"log those items", "log the bloody food", "add it", "yes do it", "how many times - add
+it", "log the food we talked about" name no food: they tell the bot to commit what is
+already on the table. Use `confirm` for these. If you can see nothing on the table, use
+`commit_context` - it means "he has ordered a commit and there may be nothing to commit",
+and the bot will tell him what it still has instead of pretending to log something.
+Only use log_food when he NAMES the food, however cross he sounds. "Add 500ml of the same
+Rubicon as yesterday" names a food and is a log; "add it" does not and is a confirm.
+This is the failure the two intents exist for (15 Aug 2026): four consecutive instructions
+to log a batch that was sitting there were read as a question and three unknowns, and the
+exchange stalled for eleven minutes with his food unlogged.
+
+A POWDER WITH REAL MACROS IS FOOD, NOT A SUPPLEMENT.
+His own standing statement, twice on 15 Aug 2026: "protein and collagen are food as well
+as supplements, so count towards macros" and "Protein and collagen need macros". He is
+right, and he is the authority on his own log. So:
+  - whey, protein powder, collagen powder, recovery/carb drink mixes, meal replacements
+    and mass gainers are log_food, whatever the spoon is called. A scoop of whey is
+    ~20 g of protein and it belongs in the day's macros. (Collagen's protein is counted
+    separately by the engine from the product NAME, so logging it as food loses nothing.)
+  - a MICRONUTRIENT dose is still log_supplement: vitamins, minerals, electrolyte tabs,
+    anything measured in mg or mcg. Those carry no meaningful energy and recording a dose
+    is the honest answer.
+  - the form word is not the decision. "Scoop", "sachet" and "powder" appear on both
+    sides of that line; the MACROS are what separate them.
 
 A COMPOSED MEAL IS ONE MEAL, AND NO DATABASE KNOWS IT.
 Set composed_meal true when he describes food that was COOKED FROM PARTS - "a large stir
@@ -617,10 +706,15 @@ def classify(text: str, has_pending: bool, claude_bin: str, model: str, log=prin
         got["intent"] = "log_food"
         got["stated"] = True
         return got
-    # A dose form overrides a log_food classification. The model reads "had 400mg of my
-    # collagen capsules" as eating, which it is, but the SUPPLEMENT path is the one that
-    # records a dose and keeps collagen out of the protein target.
-    if got.get("intent") == "log_food" and looks_like_supplement(text):
+    # A dose form overrides a log_food classification ONLY AT MG SCALE. It used to override
+    # on the form word alone, which meant the word "scoop" or "sachet" could turn a scoop of
+    # whey into a macro-less dose - and that is the stance he had to argue with three times
+    # on 15 Aug 2026. The model decides food-versus-supplement now; this stays as the narrow
+    # backstop for what the form word genuinely settles, which is a capsule holding 400 mg
+    # of something. Nothing at mg scale carries macros worth counting, so the override cannot
+    # cost him a figure - and the tiny_dose test is what confines it to that case.
+    if (got.get("intent") == "log_food" and looks_like_supplement(text)
+            and tiny_dose_mg(text) is not None):
         got["intent"] = "log_supplement"
         got["form_detected"] = True
     # A SCOOP of something with real macros is food, whatever the spoon is called.
@@ -628,10 +722,7 @@ def classify(text: str, has_pending: bool, claude_bin: str, model: str, log=prin
     # "scoop" and never got macros; he had to say "It's a food" and got nowhere
     # (13 Aug 2026). Recovery/carb/protein drink mixes carry meaningful energy and
     # belong on the ladder.
-    if got.get("intent") == "log_supplement" and re.search(
-            r"\b(whey|protein\s+powder|rego|recovery\s+(?:drink|shake|mix)|"
-            r"carb(?:ohydrate)?\s+(?:drink|mix|powder)|maurten|beta\s+fuel|"
-            r"drink\s+mix|mass\s+gainer|meal\s+replacement)\b", text or "", re.I):
+    if got.get("intent") == "log_supplement" and macro_carrying_powder(text):
         got["intent"] = "log_food"
         got["form_detected"] = False
     if got.get("intent") in ("log_food", "log_supplement"):
@@ -714,6 +805,39 @@ def during_session_evidence(text: str) -> bool:
 
 def looks_like_supplement(text: str) -> bool:
     return bool(_SUPPLEMENT_FORM.search(text or ""))
+
+
+# POWDERS THAT ARE FOOD. Every one of these carries macros in the tens of grams, so
+# recording it as a dose loses real protein and real carbohydrate out of the day.
+#
+# HIS RULING, 15 Aug 2026, twice: "protein and collagen are food as well as supplements, so
+# count towards macros" and "Protein and collagen need macros, the rest was right". The bot
+# kept regenerating the opposite stance and the gate blocked it three times, which stopped
+# the wrong sentence being sent without ever getting the food logged.
+#
+# A BACKSTOP, NOT THE DECIDER. The judgement belongs to the model, in INTERPRET_PROMPT and
+# PARSE_PROMPT. This list only ever pushes in the FOOD direction, for the named products
+# whose macros are not in doubt: the failure it guards against costs him a logged meal,
+# while its own failure mode - sending a whey scoop down the ladder - costs a lookup.
+_MACRO_POWDER = re.compile(
+    r"\b(whey|casein|protein\s+(?:powder|shake|isolate|blend)|collagen(?:\s+(?:powder|"
+    r"peptides|protein))?|rego|recovery\s+(?:drink|shake|mix|powder)|"
+    r"carb(?:ohydrate)?\s+(?:drink|mix|powder)|maurten|beta\s+fuel|drink\s+mix|"
+    r"mass\s+gainer|meal\s+replacement|greens\s+powder)\b", re.I)
+
+
+def macro_carrying_powder(text: str) -> bool:
+    """True for a powder or mix with macros worth counting, at any dose the word implies.
+
+    Deliberately blind to the form word: "scoop", "sachet" and "powder" sit on both sides
+    of the food/supplement line and it is the MACROS that separate them."""
+    t = text or ""
+    if not _MACRO_POWDER.search(t):
+        return False
+    # A capsule of collagen at 400 mg is still a dose. The product name is not enough on
+    # its own when the amount he stated is milligrams - that is a pill, not a shake.
+    mg = tiny_dose_mg(t)
+    return mg is None or mg >= 2000
 
 
 def tiny_dose_mg(text: str):
@@ -841,8 +965,22 @@ def wants_options(message: str) -> bool:
     return bool(_WANTS_OPTIONS.search(message or ""))
 
 
+RETRY_NOTE = """
+A PREVIOUS DRAFT OF THIS REPLY WAS BLOCKED BEFORE IT WAS SENT. He never saw it. The check
+said:
+  %s
+
+Write a different reply that does not repeat that fault. Take what he actually said as
+settled fact - if he has told you what something is, or given you a figure, that is the
+answer and you do not argue with it - and claim no action on his log that you have not
+been told was performed. If you cannot answer without the fault, say plainly what you
+need from him instead.
+"""
+
+
 def converse(message: str, facts: dict, history: list, claude_bin: str, model: str,
-             log=print, runner=None, timeout: int = 150, now_iso: str = None) -> str | None:
+             log=print, runner=None, timeout: int = 150, now_iso: str = None,
+             blocked_reason: str = None) -> str | None:
     """A turn of actual conversation. None when the model is unavailable.
 
     This replaced two single-shot prompts - one capped at "one or two sentences", the
@@ -852,7 +990,13 @@ def converse(message: str, facts: dict, history: list, claude_bin: str, model: s
     now_iso is passed IN by the caller rather than read here: the bot flattened
     "role: text" with no timestamps and no notion of the current time, so a two-day-old
     exchange read back as though it were still live. A stub runner in a test has no clock
-    of its own to fake, so the current time has to arrive as a parameter."""
+    of its own to fake, so the current time has to arrive as a parameter.
+
+    `blocked_reason` is the gate's own words about a draft it has just refused, fed back in
+    so the second attempt corrects the fault instead of reproducing it. On 15 Aug 2026 the
+    gate correctly blocked three replies insisting that protein and collagen were dose-only
+    supplements - and with no feedback the same stance came back on the next turn, and the
+    one after. A block that teaches nothing is a wall, not a check."""
     runner = runner or subprocess.run
     now_iso = now_iso or datetime.now().strftime("%Y-%m-%dT%H:%M")
     convo = "\n".join(
@@ -868,10 +1012,15 @@ def converse(message: str, facts: dict, history: list, claude_bin: str, model: s
     cmd = [claude_bin, "--print", "--model", model]
     if wants_options(message):
         cmd += ["--allowedTools", "WebSearch,WebFetch"]
+    body = CONVERSE_PROMPT % (json.dumps(facts, indent=2, default=str),
+                              now_iso, convo or "(nothing yet)", message)
+    if blocked_reason:
+        # APPENDED, so it is the last thing read and cannot be buried under the style
+        # rules. It carries no figures and no replacement text: the gate says what was
+        # wrong, the model writes the reply, and the numbers stay where they were.
+        body += RETRY_NOTE % str(blocked_reason)[:300]
     try:
-        proc = runner(cmd,
-                      input=CONVERSE_PROMPT % (json.dumps(facts, indent=2, default=str),
-                                               now_iso, convo or "(nothing yet)", message),
+        proc = runner(cmd, input=body,
                       capture_output=True, text=True, timeout=timeout)
     except Exception as exc:
         log(f"converse failed: {exc}")
@@ -995,6 +1144,20 @@ Decide which ONE of these he means and reply in that shape:
         them, so no figure changes and nothing is looked up again.
       - NOT this when he is deleting a single thing he did eat ("remove the crisps"), and
         not when the SECOND helping was real ("I had another one") - that is an addition.
+  {"kind":"confirm_except","commit_indexes":[i, ...],
+   "fix":{"index":i,"what":"<his words about that one>"}}
+      - HE IS ACCEPTING MOST OF THE BATCH AND DISPUTING PART OF IT: "all correct except
+        the protein and collagen", "the rest was right", "yes apart from the milk". Put
+        every index he ACCEPTED in commit_indexes and the one he is disputing in `fix`,
+        with his own words for what is wrong with it in `what`.
+      - Only when you were shown an ARRAY, and only when the accepted part is a real
+        subset: if he accepts everything, this is not the decision you want.
+      - `what` is quoted from him, not interpreted. The code holds that item back and
+        asks about it; nothing about it is decided here.
+      - THIS IS WHY IT EXISTS (15 Aug 2026). "All correct except protein and collagen are
+        food as well as supplement" was decided `unclear` twice, because there was no
+        decision meaning "commit these, fix that one". Four correct items sat unlogged for
+        forty minutes over a dispute about two others.
   {"kind":"unclear"}
 
 Rules:
@@ -1104,6 +1267,31 @@ def _scale_specs(got: dict, n: int, log) -> list | None:
     return out
 
 
+def _commit_indexes(raw, n: int, log) -> list | None:
+    """The accepted indexes of a confirm_except, de-duplicated and in order, or None.
+
+    REFUSES THE WHOLE DECISION on a bad index, like _scale_specs and for a sharper reason:
+    these indexes decide what gets WRITTEN to his log. An index the model invented would
+    commit a component he never accepted, and he would have no way to see that it was not
+    one of the ones he said were right."""
+    if not isinstance(raw, list) or not raw:
+        log("decide_correction: confirm_except with no commit_indexes")
+        return None
+    out = []
+    for value in raw:
+        try:
+            idx = int(value)
+        except (TypeError, ValueError):
+            log(f"decide_correction: unusable commit index {value!r}")
+            return None
+        if not 0 <= idx < n:
+            log(f"decide_correction: commit index {idx} is not one of the {n} items shown")
+            return None
+        if idx not in out:
+            out.append(idx)
+    return sorted(out)
+
+
 # Bounds on what the code will execute, not judgements about what he ate. A factor of 40
 # or a 9 kg portion is a mis-read decision rather than a meal, and executing one silently
 # rewrites his day.
@@ -1199,6 +1387,31 @@ def decide_correction(message: str, item: dict, claude_bin: str, model: str,
             log("decide_correction: meal_portions must be grams for every component")
             return {"kind": "unclear"}
         return {"kind": kind, "items": specs}
+    if kind == "confirm_except":
+        # Same house rule as the batch kinds: `unclear` rather than None on anything
+        # unusable, because None means "the model could not be reached" to the caller and
+        # sends the message to the quantity regexes.
+        if not n:
+            log("decide_correction: confirm_except with no batch to apply it to")
+            return {"kind": "unclear"}
+        commit = _commit_indexes(got.get("commit_indexes"), n, log)
+        if not commit:
+            return {"kind": "unclear"}
+        fix = got.get("fix") if isinstance(got.get("fix"), dict) else {}
+        out = {"kind": "confirm_except", "commit_indexes": commit, "fix": None}
+        if fix:
+            try:
+                idx = int(fix.get("index"))
+            except (TypeError, ValueError):
+                idx = None
+            # A `fix` pointing at something he just ACCEPTED is a self-contradiction, and
+            # executing half of it would commit the item and then ask about it.
+            if idx is None or not 0 <= idx < n or idx in commit:
+                log(f"decide_correction: confirm_except with an unusable fix: {fix}")
+                return {"kind": "unclear"}
+            out["fix"] = {"index": idx,
+                          "what": str(fix.get("what") or "").strip()[:200]}
+        return out
     if kind == "delete_duplicate":
         # `unclear`, never None, on anything unusable here. None means "the model could not
         # be reached" to the caller, which runs the quantity regexes against the message -
@@ -1717,8 +1930,19 @@ Rules that matter:
   "collagen peptides", not as the original sentence.
 - expect_macros is false when the amount is nutritionally trivial, e.g. a 400 mg
   capsule or an electrolyte tablet. Say false and the logger will record a dose only.
-- is_supplement true for anything in a capsule, tablet, softgel or measured scoop taken
-  for a nutrient rather than eaten as food.
+- is_supplement true for a MICRONUTRIENT DOSE: a capsule, tablet, softgel or electrolyte
+  tab taken for a nutrient, typically measured in mg or mcg.
+- is_supplement is FALSE, and expect_macros TRUE, for a MACRO-CARRYING POWDER OR MIX -
+  whey, casein, protein powder, collagen powder or peptides, recovery and carbohydrate
+  drink mixes, mass gainers, meal replacements. A scoop of whey is about 20 g of protein
+  and a scoop of collagen about 10 g: that is food, and it has to reach the day's macros.
+  THE ATHLETE HAS RULED ON THIS HIMSELF, twice on 15 Aug 2026: "protein and collagen are
+  food as well as supplements, so count towards macros" and "Protein and collagen need
+  macros, the rest was right". It is his log. The bot had said the opposite three times
+  and left an hour's food unlogged while it argued.
+  A SCOOP IS NOT A DOSE FORM. "Measured scoop" used to sit in this rule and it is what
+  produced that argument: the spoon says nothing about whether the powder carries macros.
+  Judge the macros, not the container. Collagen in a 400 mg CAPSULE is still a dose.
 - form is what the product physically IS. A collagen capsule is "capsule". A collagen
   protein bar is "bar". These are different products and the logger uses this to throw
   out wrong matches.
@@ -2028,6 +2252,19 @@ def interpret(text: str, claude_bin: str, model: str, log=print, runner=None,
         name = (it.get("canonical_name") or (terms[0] if terms else "")).strip()
         if not terms:
             terms = [name]
+        # A MACRO-CARRYING POWDER IS FOOD EVEN IF THIS CALL SAID OTHERWISE. is_supplement
+        # sends the item down offer_planned's dose branch, which never looks anything up and
+        # tells him in as many words that it "does not touch your macros" - the sentence the
+        # gate blocked twice on 15 Aug while his whey and collagen went unlogged. The prompt
+        # above now decides this properly; the check is repeated here because the same prompt
+        # already carried a rule the model read the other way, and a rule that has been
+        # misread once will be misread again. ONE DIRECTION ONLY: this can turn a supplement
+        # into food, never food into a supplement.
+        is_supp = bool(it.get("is_supplement"))
+        expect = it.get("expect_macros", True) is not False
+        if (is_supp or not expect) and macro_carrying_powder(name + " " + " ".join(terms)):
+            log(f"interpret: {name[:40]!r} is a powder with macros - logging it as food")
+            is_supp, expect = False, True
         out.append({
             "canonical_name": name,
             # A brand is only ever what the athlete said. A model-invented brand is how a
@@ -2035,8 +2272,8 @@ def interpret(text: str, claude_bin: str, model: str, log=print, runner=None,
             "brand": (it.get("brand") or None),
             "form": (it.get("form") or "other").lower(),
             "category": (it.get("category") or "other").lower(),
-            "is_supplement": bool(it.get("is_supplement")),
-            "expect_macros": it.get("expect_macros", True) is not False,
+            "is_supplement": is_supp,
+            "expect_macros": expect,
             "portion_g": it.get("portion_g"),
             # WHOSE NUMBER THE PORTION IS. resolve() treats a portion the caller hands it
             # as stated fact and flags nothing, so a portion the model reasoned out for a
