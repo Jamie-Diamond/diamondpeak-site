@@ -42,6 +42,7 @@ completeness and must never enter a calculation or a trend chart.
 """
 
 import contextlib
+import copy
 import fcntl
 import json
 import re
@@ -636,6 +637,64 @@ class NutritionStore:
         is the whole of /undo."""
         return self._mutate_day(day, lambda rec: rec["entries"].pop()
                                 if rec["entries"] else None)
+
+    def move_entry(self, from_day, entry_id: str, to_day, logged_at=None,
+                   meal: str = None) -> dict | None:
+        """Move one entry to ANOTHER DAY. Returns {"moved", "removed"}, or None when the
+        entry is not on `from_day` to begin with.
+
+        THE DEFECT THIS EXISTS FOR (16 Aug 2026). "Dinner last night was a big salad" was
+        costed correctly and written to today, and his correction - "that was for
+        yesterday's dinner" - had nowhere to land: retime could move an entry's clock time
+        and nothing could move it across days. The entry was moved by hand in the month
+        file, which is the outcome this whole module exists to make unnecessary.
+
+        A DEEP COPY, NOT A RE-ADD. Routing this through add_entry would look tidier and
+        would quietly rebuild the entry: it re-derives the meal from the clock, re-rounds
+        every macro, rebuilds `species` from whatever it was handed, and its literal names
+        no `portion_used_g`, `portion_estimated`, `portion_assumed`, `species_from` or
+        `species_unmatched` at all, so a moved entry would come out shorter than it went
+        in. Provenance is the point of this record; a move must not cost any of it. Only
+        the id changes - the target day hands out its own, because ids carry their date -
+        plus logged_at and meal when the caller says so.
+
+        TARGET FIRST, THEN THE SOURCE. The month lock is per month file, so a move from
+        the 1st to the 31st of the month before is two lock acquisitions and cannot be
+        atomic. Written in this order, a failure between them leaves a duplicate he can
+        see and delete rather than an entry that no longer exists anywhere - the same rule
+        the bot already follows when a confirmed replacement removes what it replaced."""
+        from_iso, to_iso = _as_iso(from_day), _as_iso(to_day)
+        original = next((e for e in self.get_day(from_iso).get("entries") or []
+                         if e.get("id") == entry_id), None)
+        if original is None:
+            return None
+        if from_iso == to_iso:
+            # Not a move. Refused rather than performed as a copy-and-delete, which would
+            # hand the entry a new id for no reason and repoint /undo at it.
+            return None
+        moved = copy.deepcopy(original)
+        if logged_at:
+            moved["logged_at"] = logged_at
+        elif len(str(moved.get("logged_at") or "")) >= 16:
+            # KEEP HIS TIME OF DAY, change only the date. "That was yesterday's dinner"
+            # says nothing about the clock, and re-stamping it would move the entry out of
+            # dinner as a side effect of moving it out of today.
+            moved["logged_at"] = f"{to_iso}T{str(moved['logged_at'])[11:16]}"
+        else:
+            moved["logged_at"] = f"{to_iso}T00:00"
+        if meal:
+            moved["meal"] = normalise_meal(meal) or moved.get("meal") or ""
+            moved["meal_inferred"] = False
+        moved["resolved_at"] = moved.get("resolved_at") or to_iso
+
+        def _put(rec):
+            moved["id"] = self._next_seq(rec, "next_seq", "", 3)
+            rec["entries"].append(moved)
+            return moved
+
+        written = self._mutate_day(to_iso, _put)
+        removed = self.remove_entry(from_iso, entry_id)
+        return {"moved": written, "removed": removed}
 
     def remove_entry(self, day, entry_id: str) -> dict | None:
         def _rm(rec):

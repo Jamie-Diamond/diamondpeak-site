@@ -179,11 +179,12 @@ got = NLU.decide_correction("the initial rye bread was 830am", _item, "claude", 
                                 '{"kind":"retime","time":"08:30",'
                                 '"which":"initial rye bread"}'))
 check("retime decision passes through",
-      got == {"kind": "retime", "time": "08:30", "which": "initial rye bread"})
+      got == {"kind": "retime", "time": "08:30", "day": "",
+              "which": "initial rye bread"})
 got = NLU.decide_correction("it was at 1350", _item, "claude", "m", log=lambda *a: None,
                             runner=fixed_runner('{"kind":"retime","time":"1350"}'))
 check("a bare HHMM time is normalised, and no `which` means the latest",
-      got == {"kind": "retime", "time": "13:50", "which": ""})
+      got == {"kind": "retime", "time": "13:50", "day": "", "which": ""})
 check("a retime with an impossible time degrades to None",
       NLU.decide_correction("x", _item, "claude", "m", log=lambda *a: None,
                             runner=fixed_runner('{"kind":"retime","time":"29:99"}'))
@@ -303,9 +304,10 @@ got = NLU.classify("toast this morning", False, "claude", "m", log=lambda *a: No
 check("a vague time is dropped, never guessed at", got["items"][0]["at"] is None)
 check("the parse prompt forbids guessing a time",
       "NEVER guess" in NLU.PARSE_PROMPT
-      # `meal` joined the item keys, then `stated`, so the shape line moved twice. Asserted
-      # on the keys rather than the whole line: the point is that each is asked for.
-      and "in_session, at, meal," in NLU.PARSE_PROMPT
+      # `meal` joined the item keys, then `stated`, then `day`, so the shape line has
+      # moved three times. Asserted on the keys rather than the whole line: the point is
+      # that each is asked for.
+      and "in_session, at, day," in NLU.PARSE_PROMPT
       and "stated}" in NLU.PARSE_PROMPT)
 check("the parse prompt keeps already-eaten-with-a-time as a log",
       "STILL log_food" in NLU.PARSE_PROMPT)
@@ -337,7 +339,7 @@ print("\n--- the meal he NAMED, read out of the message itself ---")
 # 13:49 was filed under lunch. The model may now name the meal - but only when the message
 # names it, because a meal it asserts stops being questioned downstream.
 check("the parse prompt asks for a meal on each item",
-      "in_session, at, meal," in NLU.PARSE_PROMPT
+      "in_session, at, day," in NLU.PARSE_PROMPT and "meal," in NLU.PARSE_PROMPT
       and '"breakfast" | "lunch" | "dinner" | "snacks", or null' in NLU.PARSE_PROMPT)
 check("and says a clock time is evidence, not proof",
       "A CLOCK TIME IS EVIDENCE, NOT PROOF" in NLU.PARSE_PROMPT)
@@ -1010,6 +1012,110 @@ NLU.converse("and?", {"kcal": 1}, [], "claude", "m", log=lambda *a: None,
              runner=fixed_runner("fine", sink=_clean))
 check("and an ordinary turn carries no such note",
       "BLOCKED BEFORE IT WAS SENT" not in _clean[-1])
+
+print("\n--- the day he STATED (16 Aug 2026) ---")
+# "Dinner LAST NIGHT was a big salad..." was costed correctly at 1,352 kcal and written to
+# TODAY, because an item could say what time it was eaten and had no way to say what day.
+# His correction was decided `unclear`, the meal was re-offered, and it was committed to
+# today a second time. The operator moved it by hand.
+from datetime import date as _date  # noqa: E402
+
+_SUN = _date(2026, 8, 16)           # the day of the failure; a Sunday
+check("a stated day survives the parse",
+      NLU.classify("dinner last night was a big salad", False, "claude", "m",
+                   log=lambda *a: None,
+                   runner=fixed_runner(
+                       '{"intent":"log_food","items":[{"text":"big salad",'
+                       '"portion_g":null,"in_session":false,"day":"yesterday",'
+                       '"meal":"dinner"}]}'))["items"][0]["day"] == "yesterday")
+check("and a message that names no day says so with an empty string",
+      NLU.classify("a banana", False, "claude", "m", log=lambda *a: None,
+                   runner=fixed_runner(
+                       '{"intent":"log_food","items":[{"text":"banana",'
+                       '"portion_g":120,"in_session":false}]}'))["items"][0]["day"] == "")
+# A word outside the vocabulary is KEPT, not dropped. Dropping it would be silent
+# agreement that the food happened today, which is the defect itself.
+check("an unrecognised day word survives the parse rather than being dropped",
+      NLU.classify("I had a curry a couple of weeks back", False, "claude", "m",
+                   log=lambda *a: None,
+                   runner=fixed_runner(
+                       '{"intent":"log_food","items":[{"text":"curry","portion_g":null,'
+                       '"in_session":false,"day":"a couple of weeks back"}]}')
+                   )["items"][0]["day"] == "a couple of weeks back")
+check("the lookup planner carries the day too, because it is the path that usually wins",
+      (NLU.interpret("dinner last night was a big salad", "claude", "m",
+                     log=lambda *a: None,
+                     runner=fixed_runner(
+                         '{"items":[{"canonical_name":"mixed salad","brand":null,'
+                         '"form":"whole_food","category":"homemade",'
+                         '"is_supplement":false,"expect_macros":true,'
+                         '"day":"yesterday","meal":"dinner",'
+                         '"search_terms":["mixed salad"]}]}')) or {}
+       ).get("items", [{}])[0].get("day") == "yesterday")
+check("the parse prompt asks for the day and names the failure it exists for",
+      '"YYYY-MM-DD"' in NLU.PARSE_PROMPT
+      and "day: WHICH DAY he ate it" in NLU.PARSE_PROMPT
+      and "16 Aug 2026" in NLU.PARSE_PROMPT)
+
+print("\n--- resolving a stated day to a date ---")
+check("yesterday is the day before his local today",
+      NLU.resolve_stated_day("yesterday", _SUN)["day"] == _date(2026, 8, 15))
+check("today resolves to today", NLU.resolve_stated_day("today", _SUN)["day"] == _SUN)
+check("nothing stated is not a problem, it is just today's log",
+      NLU.resolve_stated_day("", _SUN) == {"day": None, "problem": ""})
+# A weekday is the most recent PAST one. Friday, from a Sunday, is two days back.
+check("a weekday name picks the most recent PAST occurrence",
+      NLU.resolve_stated_day("friday", _SUN)["day"] == _date(2026, 8, 14))
+check("and a case-carrying weekday resolves the same way",
+      NLU.resolve_stated_day("Friday", _SUN)["day"] == _date(2026, 8, 14))
+# Minus seven would evade the future guard while being wrong by a week, and "on Sunday I
+# had" said on a Sunday means this morning.
+check("the same weekday as today is TODAY, not a week ago",
+      NLU.resolve_stated_day("sunday", _SUN)["day"] == _SUN)
+check("an explicit ISO date is taken as given",
+      NLU.resolve_stated_day("2026-08-04", _SUN)["day"] == _date(2026, 8, 4))
+check("an ISO date further back than a week is allowed, because he spelled it out",
+      NLU.resolve_stated_day("2026-07-01", _SUN)["day"] == _date(2026, 7, 1))
+check("a day in the future is refused, never rounded to today",
+      NLU.resolve_stated_day("2026-08-17", _SUN)
+      == {"day": None, "problem": "future"})
+check("a fuzzy day the model could not pin down asks rather than guessing",
+      NLU.resolve_stated_day("a couple of weeks back", _SUN)["problem"] == "unclear")
+check("and so does 'last tuesday', which has several candidate dates",
+      NLU.resolve_stated_day("last tuesday", _SUN)["problem"] == "unclear")
+check("a mistyped year is refused rather than written into a dead month",
+      NLU.resolve_stated_day("2019-08-15", _SUN)["problem"] == "unclear")
+check("an ISO-shaped string that is not a date is refused",
+      NLU.resolve_stated_day("2026-13-45", _SUN)["problem"] == "unclear")
+# The guard has to be REACHABLE. A weekday resolves within six days by construction, so if
+# fuzzy text were dropped at normalise time nothing could ever reach the ask, and the
+# fixture above would be green against a branch no real input hits.
+check("the fuzzy branch is reachable from what the parser actually returns",
+      NLU.normalise_stated_day("a couple of weeks back") == "a couple of weeks back")
+
+print("\n--- the redate verb: 'That was for yesterday's dinner' ---")
+got = NLU.decide_correction("that was for yesterday's dinner", _item, "claude", "m",
+                            log=lambda *a: None,
+                            runner=fixed_runner(
+                                '{"kind":"retime","day":"yesterday","time":null,'
+                                '"which":"the salad"}'))
+check("a retime carrying only a day passes through",
+      got == {"kind": "retime", "time": None, "day": "yesterday",
+              "which": "the salad"})
+check("a retime may carry both a day and a time",
+      NLU.decide_correction("it was 8pm on Friday", _item, "claude", "m",
+                            log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"retime","day":"friday",'
+                                                '"time":"2000"}'))
+      == {"kind": "retime", "time": "20:00", "day": "friday", "which": ""})
+check("a retime with neither a day nor a usable time still degrades to None",
+      NLU.decide_correction("x", _item, "claude", "m", log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"retime","time":"29:99"}'))
+      is None)
+check("the correction prompt offers the day and names the failure",
+      '"kind":"retime"' in NLU.CORRECTION_PROMPT
+      and "that was for yesterday's dinner" in NLU.CORRECTION_PROMPT
+      and "16 Aug 2026" in NLU.CORRECTION_PROMPT)
 
 print()
 if FAILED:

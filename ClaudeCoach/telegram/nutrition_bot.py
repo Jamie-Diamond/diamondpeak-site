@@ -58,7 +58,7 @@ import plants as PL                 # noqa: E402
 import restaurants as RS            # noqa: E402
 import tg                           # noqa: E402
 from icu_api import IcuClient       # noqa: E402
-from nutrition_store import NutritionStore  # noqa: E402
+from nutrition_store import NutritionStore, meal_from_clock  # noqa: E402
 
 CONFIG = Path(__file__).resolve().parent / "nutrition_config.json"
 ATHLETES = BASE / "config" / "athletes.json"
@@ -1690,11 +1690,17 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                 # claiming a removal that never happened (15:25, 14 Aug 2026).
                 if apply_delete_duplicate(ctx, decision, day, token, chat_id):
                     return
-            elif kind == "retime" and not pend:
-                # Retiming is only meaningful for something already written: a pending
-                # offer has no entry yet, and a time stated on a NEW log arrives on the
-                # item instead (see offer_items' `default_at`).
-                if apply_retime(ctx, decision, day, token, chat_id):
+            elif kind == "retime":
+                # HANDLED WITH AN OFFER ON THE TABLE TOO. This branch used to require
+                # `not pend`, on the reasoning that a pending offer has no entry to move -
+                # true, and it made the correction disappear instead: "that was for
+                # yesterday's dinner" fell through to a re-resolution, which re-offered
+                # the same meal and let him confirm it onto today a second time. Same
+                # mistake, same shape, as the `not pend` the meal branch below documents.
+                if pend:
+                    if apply_retime_to_pending(ctx, decision, pend, day, token, chat_id):
+                        return
+                elif apply_retime(ctx, decision, day, token, chat_id):
                     return
             elif kind == "rename" and not pend:
                 if apply_rename(ctx, decision, day, token, chat_id):
@@ -1771,6 +1777,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
             if offer_composed(ctx, said, day, token, chat_id,
                               default_at=(pend["batch"][0].get("_at")),
                               default_meal=(pend["batch"][0].get("_meal")),
+                              default_day=(pend["batch"][0].get("_day") or ""),
                               in_session=bool(pend["batch"][0].get("in_session")),
                               extra=corr):
                 _chat(ctx, "coach", f"[log] re-tabled the meal: {corr[:60]}")
@@ -1848,6 +1855,41 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # that gets resolved, which is the usual case.
         stated_meal = next((i.get("meal") for i in (got.get("items") or [])
                             if i.get("meal")), None)
+        # AND THE DAY, on the same terms. "Dinner last night was a big salad" names the
+        # day once for the whole message, and the item that carries it may not be the one
+        # the interpret pass returns.
+        stated_day = next((i.get("day") for i in (got.get("items") or [])
+                           if i.get("day")), "")
+        # REFUSED BEFORE ANYTHING IS COSTED, not silently rounded to today. A day that
+        # resolves into the future is a mis-read, and a fuzzy one further back than a week
+        # ("last Tuesday", three weeks on) has several candidate dates and no way to
+        # choose. Asking costs one message; guessing writes a real meal into a day he did
+        # not eat it, where nothing in the reply looks wrong.
+        # EVERY day in the message, not just the one that will be the default. A message
+        # whose first item says "yesterday" and whose second says something unpinnable
+        # would otherwise pass this guard on the first and file the second silently.
+        bad = next(((d, NLU.resolve_stated_day(d, day)["problem"])
+                    for d in [stated_day] + [i.get("day") for i in got.get("items") or []]
+                    if d and NLU.resolve_stated_day(d, day)["problem"]), (stated_day, ""))
+        stated_day, problem = (bad[0], bad[1]) if bad[1] else (stated_day, "")
+        if problem:
+            tg.send(token, chat_id,
+                    (f"I have {stated_day!r} as the day, which is in the future - I have "
+                     f"not logged anything. Tell me the date and I will log it there."
+                     if problem == "future" else
+                     f"I cannot pin {stated_day!r} to a date, so I have not logged "
+                     f"anything yet. Give me the date - “2026-08-04” or “yesterday” - "
+                     f"and I will log it to that day."), log=log)
+            log(f"  refused a stated day: {stated_day!r} ({problem})")
+            return
+        # PINNED TO A DATE HERE, NOT AT COMMIT TIME. An offer can sit on the table across
+        # midnight: sent at 23:55 and confirmed at 00:05, a `_day` of "yesterday" would be
+        # resolved against the NEW local today and land a day later than the offer he read
+        # said it would. The offer text naming the date is the whole guard against a
+        # misread day, and it is worth nothing if the write can disagree with it.
+        stated_day = _pin_day(stated_day, day)
+        for it in got.get("items") or []:
+            it["day"] = _pin_day(it.get("day") or "", day)
         # HIS OWN FIGURES SHORT-CIRCUIT EVERYTHING, and this check has to sit ABOVE the
         # interpret call rather than inside the offer. interpret() is a lookup PLANNER: hand
         # it a message that already contains the answer and it dutifully plans five searches
@@ -1855,7 +1897,8 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # costed came back at 2,400 (14 Aug 2026). There is nothing to plan.
         if any((i.get("stated") or {}).get("kcal") for i in got.get("items") or []):
             offer_stated(ctx, got["items"], day, token, chat_id,
-                         default_at=stated_at, default_meal=stated_meal)
+                         default_at=stated_at, default_meal=stated_meal,
+                         default_day=stated_day)
             return
         # A MEAL HE COOKED IS COSTED WHOLE, BY THE BEST MODEL, AND THE LADDER NEVER RUNS ON
         # IT. The composition tables hold ingredients, not dinners, so breaking a stir-fry
@@ -1870,7 +1913,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
             # the session rewrites the g/hr history the coach prescribes from - which this
             # file already treats as worse than a wrong day total.
             if offer_composed(ctx, t, day, token, chat_id, default_at=stated_at,
-                              default_meal=stated_meal,
+                              default_meal=stated_meal, default_day=stated_day,
                               in_session=bool((got.get("items") or [{}])[0]
                                               .get("in_session"))):
                 return
@@ -1879,8 +1922,14 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
             # table and far better than refusing to log his dinner.
         plan = NLU.interpret(t, CLAUDE_BIN, LLM_MODEL, log=log)
         if plan and plan.get("items"):
+            # Pinned on this path too. offer_planned reads each item's day from the PLAN,
+            # not from the classify items pinned above, so a day left as a word here would
+            # be the one that survives - and this is the path most messages take.
+            for it in plan["items"]:
+                it["day"] = _pin_day(it.get("day") or "", day)
             offer_planned(ctx, plan["items"], day, token, chat_id, said=t,
-                          default_at=stated_at, default_meal=stated_meal)
+                          default_at=stated_at, default_meal=stated_meal,
+                          default_day=stated_day)
             return
         if got.get("nutritionally_trivial"):
             # Say it plainly rather than logging "kcal 1" and implying it counted.
@@ -1897,7 +1946,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                     barcode=got.get("barcode"),
                     trivial=bool(got.get("nutritionally_trivial")),
                     dose_mg=got.get("dose_mg"), said=t, default_at=stated_at,
-                    default_meal=stated_meal)
+                    default_meal=stated_meal, default_day=stated_day)
         return
 
     if intent == "smalltalk":
@@ -2362,7 +2411,7 @@ def download_photo(ctx: Context, file_id: str, token: str):
 
 def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
                   said: str = "", default_at: str = None,
-                  default_meal: str = None) -> None:
+                  default_meal: str = None, default_day: str = "") -> None:
     """Resolve each INTERPRETED item, with its form and search terms.
 
     The interpretation is what makes the ladder honest: it searches good queries, and it
@@ -2388,6 +2437,9 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
                 "degraded": False, "needs_input": False, "_supplement": True,
                 "_trivial": not it["expect_macros"], "_dose_mg": it.get("dose_mg"),
                 "in_session": it["in_session"], "_at": it.get("at") or default_at,
+                # The day is real even for a dose - it decides which record this is
+                # written into - unlike the meal below, which is carried for shape only.
+                "_day": it.get("day") or default_day or "",
                 # Carried for shape only: add_supplement has no meal, and a dose is not
                 # a meal anyway. Kept so a batch item never has to be tested for the key.
                 "_meal": "",
@@ -2426,6 +2478,10 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
         # A time he STATED, carried to the entry. Per item first, then the one stated for
         # the message as a whole, then nothing at all - and nothing means now-time.
         item["_at"] = it.get("at") or default_at
+        # And the DAY, on the same precedence. This is the path a plain "dinner last night
+        # was a big salad" takes once the meal model is unreachable, so a day carried only
+        # by the composed path would be lost exactly on the fallback.
+        item["_day"] = it.get("day") or default_day or ""
         # Same precedence for the meal, and nothing means the store files it by the clock
         # and marks that it guessed.
         item["_meal"] = ("" if it.get("in_session")
@@ -2439,7 +2495,8 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
     notes = [fmt_offer_line(i) for i in carried] + notes
     if any(i.get("in_session") for i in merged):
         notes.append("_Tagged as in-session fuel, so it is protected from any trimming._")
-    notes += _stated_time_note(batch) + _stated_meal_note(batch)
+    notes += (_stated_day_note(batch, day) + _stated_time_note(batch)
+              + _stated_meal_note(batch))
     notes += [line for line in (carried_note(carried), dropped) if line]
     if merged:
         _chat(ctx, "coach", _offer_summary(merged))
@@ -2529,6 +2586,98 @@ def _stated_time_note(batch: list) -> list:
     return [f"_Logging at {', '.join(times)}, as you said._"]
 
 
+# WHAT TIME A MEAL HAPPENED, on a day that is not today. Every one of these sits inside
+# the band meal_from_clock uses for that meal, so an entry written to yesterday's dinner
+# reads back as dinner instead of being re-bucketed by the clock that placed it. There is
+# no honest way to know he ate at 20:00 rather than 19:30, and the alternative - midnight,
+# or the time he happens to be typing the next morning - files last night's dinner under
+# yesterday's breakfast, which is a second wrong answer on top of the one being fixed.
+MEAL_DEFAULT_TIMES = {"breakfast": "08:00", "lunch": "13:00", "dinner": "20:00",
+                      "snacks": "16:00"}
+
+
+def _pin_day(token: str, day: date) -> str:
+    """A stated day token as an ISO date, decided against the day the OFFER was composed
+    under. "" when he stated none, and "" for anything unusable - the handler refuses
+    those before this is reached, so silence here is the safe direction.
+
+    Everything downstream stores what this returns, which is what makes the day the offer
+    NAMED the day the confirmation writes to, however long the offer sits there."""
+    got = NLU.resolve_stated_day(token or "", day)["day"]
+    return got.isoformat() if got else ""
+
+
+def item_day(item: dict, day: date) -> date:
+    """The day THIS item belongs to - the one he stated, or the log's day.
+
+    An unusable token resolves to the log's day rather than raising: the handler refuses
+    the whole message before it can get this far, and a batch item that somehow carried
+    one must still be loggable somewhere he can see it."""
+    return NLU.resolve_stated_day(item.get("_day") or "", day)["day"] or day
+
+
+def item_logged_at(item: dict, target: date, today: date) -> str:
+    """The timestamp an item is written with, composed on ITS OWN day.
+
+    Today is unchanged from how it has always worked: a stated clock time, else the
+    moment he typed it. A PAST day has no "now" to fall back on - the clock says 07:39 on
+    the morning after, and stamping last night's dinner with that files it as yesterday's
+    breakfast. So the meal chooses the hour, and when he named no meal either, his current
+    time of day is the least-invented answer left and the store marks the meal inferred."""
+    if item.get("_at"):
+        return f"{target.isoformat()}T{item['_at']}"
+    if target == today:
+        return datetime.now().isoformat(timespec="minutes")
+    meal = NLU.normalise_meal(item.get("_meal") or "")
+    return (f"{target.isoformat()}T"
+            f"{MEAL_DEFAULT_TIMES.get(meal) or datetime.now().strftime('%H:%M')}")
+
+
+def day_phrase(target: date, today: date, cap: bool = False) -> str:
+    """How a day is named to him: "yesterday, 15 Aug", "Friday, 14 Aug", "2 Aug".
+
+    Always carries the DATE as well as the word. "Yesterday" alone is exactly the claim he
+    cannot check at a glance the morning after a late dinner, and the whole point of
+    saying it before the write is that a misread day is visible while "No" is an option.
+
+    `cap` raises the first letter for a heading, and does it by hand: str.capitalize()
+    lowercases everything after it, which turns "yesterday, 15 Aug" into "15 aug"."""
+    delta = (today - target).days
+    if delta == 0:
+        said = "today"
+    elif delta == 1:
+        said = f"yesterday, {target.day} {target:%b}"
+    elif 2 <= delta <= 6:
+        said = f"{target:%A}, {target.day} {target:%b}"
+    else:
+        said = f"{target.day} {target:%b} {target.year}"
+    return (said[0].upper() + said[1:]) if cap else said
+
+
+def _stated_day_note(batch: list, day: date) -> list:
+    """One line per stated day, naming the DATE and the meal the entry will land in.
+
+    Read off the items he just sent, never off a carried batch: an item merged in from an
+    earlier unconfirmed offer said nothing about a day and is going to today, and listing
+    it here would claim otherwise.
+
+    Supplements ARE included, unlike the time note. That note skips them because
+    add_supplement has no timestamp to promise; the day is a different matter, because a
+    supplement is still written into one particular day's record."""
+    out = []
+    for target in sorted({item_day(i, day) for i in batch if i.get("_day")}):
+        if target == day:
+            continue
+        meals = sorted({(NLU.normalise_meal(i.get("_meal") or "")
+                         or meal_from_clock(item_logged_at(i, target, day)))
+                        for i in batch if i.get("_day")
+                        and not i.get("_supplement") and item_day(i, day) == target})
+        named = [m for m in meals if m]
+        as_meal = f", as {' and '.join(named)}" if named else ""
+        out.append(f"_Logging to {day_phrase(target, day)}{as_meal}, not today._")
+    return out
+
+
 def _stated_meal_note(batch: list) -> list:
     """One line naming the meal the batch will be filed under, when HE named it.
 
@@ -2543,7 +2692,7 @@ def _stated_meal_note(batch: list) -> list:
 
 
 def stated_item(it: dict, day: date, default_at: str = None,
-                default_meal: str = None) -> dict:
+                default_meal: str = None, default_day: str = "") -> dict:
     """One batch item built from figures the ATHLETE gave, with no lookup at all.
 
     THE DEFECT THIS EXISTS FOR (14 Aug 2026). He pasted a complete macro table for a
@@ -2583,6 +2732,11 @@ def stated_item(it: dict, day: date, default_at: str = None,
         "_stated": True,
         "in_session": bool(it.get("in_session")),
         "_at": it.get("at") or default_at,
+        # WHICH DAY, as an ISO date already pinned by the handler against the day this
+        # offer was composed under. A vocabulary word kept this far would be re-resolved
+        # at commit time, and an offer sent at 23:55 and confirmed at 00:05 would land a
+        # day later than the offer he read said it would.
+        "_day": it.get("day") or default_day or "",
         "_meal": "" if it.get("in_session") else (it.get("meal") or default_meal or ""),
         # His own per-part rows, kept as text. They are what he wrote, so they belong in the
         # record - but as a breakdown, never as items that were looked up.
@@ -2602,14 +2756,15 @@ def stated_item(it: dict, day: date, default_at: str = None,
 
 
 def offer_stated(ctx: Context, items: list, day: date, token, chat_id,
-                 default_at: str = None, default_meal: str = None) -> None:
+                 default_at: str = None, default_meal: str = None,
+                 default_day: str = "") -> None:
     """Offer figures the athlete supplied, once, with his totals intact.
 
     Separate from offer_items on purpose rather than as a flag inside it: this path must be
     incapable of reaching NR.resolve. A branch inside the resolving function is one edit
     away from resolving anyway, which is exactly how the ladder came to be re-pricing his
     own table."""
-    batch = [stated_item(it, day, default_at, default_meal)
+    batch = [stated_item(it, day, default_at, default_meal, default_day)
              for it in items[:8] if (it.get("stated") or {}).get("kcal")]
     if not batch:
         return
@@ -2624,8 +2779,8 @@ def offer_stated(ctx: Context, items: list, day: date, token, chat_id,
         body += f"\n\n*Total* {round(sum(i.get('kcal') or 0 for i in batch))} kcal"
     if any(i.get("in_session") for i in merged):
         body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
-    for line in (_stated_time_note(batch) + _stated_meal_note(batch)
-                 + [carried_note(carried), dropped]):
+    for line in (_stated_day_note(batch, day) + _stated_time_note(batch)
+                 + _stated_meal_note(batch) + [carried_note(carried), dropped]):
         if line:
             body += "\n\n" + line
     log(f"  stated figures accepted verbatim: "
@@ -2638,7 +2793,7 @@ def offer_stated(ctx: Context, items: list, day: date, token, chat_id,
 
 def composed_item(ctx: Context, table: dict, said: str, day: date,
                   default_at: str = None, default_meal: str = None,
-                  in_session: bool = False) -> dict:
+                  in_session: bool = False, default_day: str = "") -> dict:
     """ONE batch item for a whole cooked meal, from the meal table.
 
     The components are kept on the item, with their portions and their own figures, for two
@@ -2697,6 +2852,11 @@ def composed_item(ctx: Context, table: dict, said: str, day: date,
         "note": f"a described meal, so roughly +/-{band}%",
         "in_session": bool(in_session),
         "_at": default_at,
+        # THE DAY HE SAID, on the path that failed. A costed meal is one item built from
+        # the whole message, so unlike the ladder items there is no per-item day to prefer
+        # - the message's own day is the only one there is, and dropping it here is what
+        # put a 1,352 kcal salad eaten last night into today's log (16 Aug 2026).
+        "_day": default_day or "",
         "_meal": "" if in_session else (default_meal or ""),
         "ingredients": ingredients,
         # Every portion in here was reasoned from his words, so the whole entry is an
@@ -2741,7 +2901,8 @@ def fmt_meal_confirm(item: dict) -> str:
 
 def offer_composed(ctx: Context, said: str, day: date, token, chat_id,
                    default_at: str = None, default_meal: str = None,
-                   in_session: bool = False, extra: str = "") -> bool:
+                   in_session: bool = False, extra: str = "",
+                   default_day: str = "") -> bool:
     """Cost a described meal in ONE call and offer it as ONE entry. False if that failed.
 
     Returns False rather than degrading in place, so the caller can fall back to the
@@ -2754,7 +2915,8 @@ def offer_composed(ctx: Context, said: str, day: date, token, chat_id,
         log("  meal table unavailable, falling back to the ladder")
         return False
     item = composed_item(ctx, table, said, day, default_at=default_at,
-                         default_meal=default_meal, in_session=in_session)
+                         default_meal=default_meal, in_session=in_session,
+                         default_day=default_day)
     # A RE-TABLE IS NOT A SECOND MEAL. The correction path calls this with the pending
     # meal's own raw text as `said`, so the fresh item carries the same merge key as the one
     # on the table and replaces it rather than joining it.
@@ -2764,7 +2926,8 @@ def offer_composed(ctx: Context, said: str, day: date, token, chat_id,
     body = "\n\n".join([fmt_offer_line(i) for i in carried] + [fmt_meal_confirm(item)])
     if in_session:
         body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
-    for line in (_stated_time_note([item]) + _stated_meal_note([item])
+    for line in (_stated_day_note([item], day) + _stated_time_note([item])
+                 + _stated_meal_note([item])
                  + [carried_note(carried), dropped]):
         if line:
             body += "\n\n" + line
@@ -2781,7 +2944,7 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 supplement: bool = False, barcode: str = None,
                 trivial: bool = False, dose_mg: float = None,
                 said: str = "", default_at: str = None,
-                default_meal: str = None) -> None:
+                default_meal: str = None, default_day: str = "") -> None:
     """Resolve each item separately and ask once for the batch.
 
     Per-item resolution matters: a whole sentence resolved as one string both
@@ -2808,6 +2971,10 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 "_supplement": True, "_trivial": bool(trivial), "_dose_mg": dose_mg,
                 "in_session": bool(it.get("in_session")),
                 "_at": it.get("at") or default_at,
+                # Carried even though a supplement has no timestamp of its own: the day it
+                # is written to is still a real choice, and "yesterday I took..." must not
+                # land on today's record.
+                "_day": it.get("day") or default_day or "",
                 "_meal": "",                    # a dose is not a meal
                 **{f: None for f in NR.MACRO_FIELDS},
             })
@@ -2824,7 +2991,8 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                    if not trivial else ""))
         if carried:
             body = "\n\n".join([fmt_offer_line(i) for i in carried] + [body])
-        for line in (carried_note(carried), dropped):
+        for line in (_stated_day_note(batch, day)
+                     + [carried_note(carried), dropped]):
             if line:
                 body += "\n\n" + line
         send_verified(ctx, token, chat_id,
@@ -2845,6 +3013,7 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
             prior["_trivial"] = bool(trivial)
             prior["_dose_mg"] = dose_mg
             prior["_at"] = it.get("at") or default_at
+            prior["_day"] = it.get("day") or default_day or ""
             prior["_meal"] = ("" if it.get("in_session")
                               else (it.get("meal") or default_meal or ""))
             resolved.append(prior)
@@ -2888,6 +3057,7 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
         item["_trivial"] = bool(trivial)
         item["_dose_mg"] = dose_mg
         item["_at"] = it.get("at") or default_at
+        item["_day"] = it.get("day") or default_day or ""
         item["_meal"] = ("" if it.get("in_session")
                          else (it.get("meal") or default_meal or ""))
         resolved.append(item)
@@ -2899,7 +3069,8 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                        + [fmt_confirm(i) for i in resolved])
     if any(i.get("in_session") for i in batch):
         body += "\n\n_Tagged as in-session fuel, so it is protected from any trimming._"
-    for line in _stated_time_note(resolved) + _stated_meal_note(resolved):
+    for line in (_stated_day_note(resolved, day) + _stated_time_note(resolved)
+                 + _stated_meal_note(resolved)):
         body += "\n\n" + line
     for line in (carried_note(carried), dropped):
         if line:
@@ -3463,24 +3634,118 @@ def apply_retime(ctx: Context, decision: dict, day: date, token, chat_id) -> boo
 
     The stamp is built from `day` - the athlete's ICU local date - and never from the
     server clock, which is the store's standing rule about who decides a local day."""
+    got = NLU.resolve_stated_day(decision.get("day") or "", day)
+    if got["problem"]:
+        tg.send(token, chat_id,
+                (f"That day is in the future, so I have not moved anything. Give me the "
+                 f"date and I will move it there."
+                 if got["problem"] == "future" else
+                 f"I cannot pin {decision.get('day')!r} to a date, so I have not moved "
+                 f"anything. Give me the date - “2026-08-04” or “yesterday” - and I "
+                 f"will move it."), log=log)
+        return True
     entry = entry_he_means(ctx, day, decision.get("which"), "retime", token, chat_id)
     if entry is None:
         return True
-    stamp = f"{day.isoformat()}T{decision['time']}"
+    target = got["day"] or day
+    hhmm = decision.get("time")
+    if target != day:
+        return _apply_redate(ctx, entry, day, target, hhmm, token, chat_id)
+    if not hhmm:
+        # A day that resolved to today with no time is not a change to anything. Said
+        # plainly rather than performed as a no-op move that reports success.
+        tg.send(token, chat_id,
+                f"That is already on today, so there is nothing to move. Tell me the "
+                f"time or the day you meant.", log=log)
+        return True
+    stamp = f"{day.isoformat()}T{hhmm}"
     done = ctx.store.update_entry(day, entry["id"], logged_at=stamp)
     if not done:
         return False
     record_action(ctx, f"updated entry {entry['id']} {done.get('resolved_name')}: "
-                       f"logged_at={decision['time']}")
+                       f"logged_at={hhmm} on {day.isoformat()}")
     # Entries are deliberately NOT re-sorted: /undo pops the tail and "delete that" reads
     # the last one, both meaning "the thing you logged most recently". Ordering by the
     # stated time would repoint those at a different entry.
     publish_now(ctx)
     _chat(ctx, "coach", f"[log] retimed {(done.get('resolved_name') or '')[:40]} "
-                        f"to {decision['time']}")
+                        f"to {hhmm}")
     send_verified(ctx, token, chat_id,
-                  f"Moved *{done.get('resolved_name')}* to {decision['time']}.",
+                  f"Moved *{done.get('resolved_name')}* to {hhmm}.",
                   kind="correction", numbers=_gate_numbers([done]))
+    return True
+
+
+def apply_retime_to_pending(ctx: Context, decision: dict, pend, day: date,
+                            token, chat_id) -> bool:
+    """Stamp a day or a time onto an offer he has NOT confirmed yet. True once handled.
+
+    An offer has no entry to move, so a retime arriving while one is on the table used to
+    fall straight through into a re-resolution. That is how "that was for yesterday's
+    dinner" produced a second offer of the same meal, which he then confirmed onto today
+    for a second time. The meal branch carries a comment about the identical mistake -
+    `not pend` on a correction verb silently drops the correction exactly while he is
+    still looking at the thing it is about."""
+    got = NLU.resolve_stated_day(decision.get("day") or "", day)
+    if got["problem"]:
+        tg.send(token, chat_id,
+                f"I cannot pin that to a date, so the offer is unchanged. Give me the "
+                f"day - “yesterday” or “2026-08-04” - and I will log it there.", log=log)
+        return True
+    batch = (pend or {}).get("batch") or []
+    if not batch:
+        return False
+    target, hhmm = got["day"], decision.get("time")
+    if not target and not hhmm:
+        return False
+    for item in batch:
+        if target:
+            item["_day"] = target.isoformat()
+        if hhmm:
+            item["_at"] = hhmm
+    set_pending(ctx.store, dict(pend, batch=batch))
+    where = (f" to {day_phrase(target, day)}" if target and target != day else "")
+    when = (f" at {hhmm}" if hhmm else "")
+    note = _stated_day_note(batch, day)
+    send_verified(ctx, token, chat_id,
+                  f"Noted - logging {'them' if len(batch) > 1 else 'it'}{where}{when} "
+                  f"when you confirm." + ("\n\n" + "\n\n".join(note) if note else ""),
+                  kind="correction", numbers=_gate_numbers(batch))
+    return True
+
+
+def _apply_redate(ctx: Context, entry: dict, day: date, target: date, hhmm,
+                  token, chat_id) -> bool:
+    """Move a committed entry to ANOTHER day, and say what both days now come to.
+
+    THE FAILURE THIS CLOSES (16 Aug 2026). "Dinner last night was a big salad" was costed
+    correctly and written to today. He said "That was for yesterday's dinner", which the
+    correction model could only read as a clock-time change, so it came back unclear, the
+    same dinner was offered again and committed to today for a second time. The entry was
+    moved by hand.
+
+    Both days' totals are stated because a move changes TWO of them, and only one of them
+    is the day he is looking at. A confirmation naming one is half an answer."""
+    stamp = (f"{target.isoformat()}T{hhmm}" if hhmm else None)
+    moved = ctx.store.move_entry(day, entry["id"], target, logged_at=stamp)
+    if not moved:
+        return False
+    was, now = moved["moved"], moved["removed"]
+    name = (was.get("resolved_name") or was.get("raw_text") or "that")[:50]
+    # NAMES BOTH DAYS. The gate blocks a claim it cannot find in this ledger, and "moved
+    # it to yesterday" is only checkable against an entry that says which two days moved.
+    record_action(ctx, f"moved entry {entry['id']} {name} from {day.isoformat()} to "
+                       f"{target.isoformat()} as {was['id']}"
+                       + ("" if now else " (the original could not be removed)"))
+    publish_now(ctx)
+    _chat(ctx, "coach", f"[log] moved {name} to {target.isoformat()}")
+    send_verified(
+        ctx, token, chat_id,
+        f"Moved *{name}* to {day_phrase(target, day)}"
+        + (f", at {hhmm}" if hhmm else "")
+        + f".\n\n*{day_phrase(target, day, cap=True)}*\n" + today_block(ctx, target)
+        + "\n\n*Today*\n" + today_block(ctx, day),
+        kind="correction", numbers=_gate_numbers([was]))
     return True
 
 
@@ -3971,14 +4236,21 @@ def apply_confirm_except(ctx: Context, pend, decision: dict, day: date, token,
     hold = sorted(hold + unresolved)
     if not commit:
         return False
-    wrote = []
+    wrote, days_written = [], []
     for i in commit:
-        commit_one(ctx, batch[i], day)
         item = batch[i]
+        # The stated day travels with the item, so accepting part of a batch he logged to
+        # yesterday writes that part to yesterday - not half the meal into each day.
+        target = item_day(item, day)
+        commit_one(ctx, item, target, today=day)
+        if target not in days_written:
+            days_written.append(target)
         record_action(ctx, "added "
                       + ("supplement " if item.get("_supplement") else "entry ")
                       + f"{(item.get('resolved_name') or item.get('_raw') or '')[:50]}"
-                      + (f" ({round(item['kcal'])} kcal)" if item.get("kcal") else ""))
+                      + (f" ({round(item['kcal'])} kcal)" if item.get("kcal") else "")
+                      + f" to {target.isoformat()}"
+                      + ("" if target == day else " (not today)"))
         wrote.append(item)
     # THE REPLACEMENT SURVIVES WITH THE REMAINDER. `_replaces` says "confirming this batch
     # removes that entry", and the batch is not confirmed yet - so the entry stays until the
@@ -3986,12 +4258,14 @@ def apply_confirm_except(ctx: Context, pend, decision: dict, day: date, token,
     # on it here would delete an entry whose replacement is still being argued about.
     rest = {k: v for k, v in (pend or {}).items() if k != "batch"}
     set_pending(ctx.store, {**rest, "batch": [batch[i] for i in hold]})
-    if any(i.get("in_session") for i in wrote):
-        fuel = RC.bot_in_session_totals(ctx.store, day)
-        res = RC.write_back(ctx.athlete_dir, day, carb_g=fuel["carb_g"],
+    for target in days_written:
+        if not any(i.get("in_session") and item_day(i, day) == target for i in wrote):
+            continue
+        fuel = RC.bot_in_session_totals(ctx.store, target)
+        res = RC.write_back(ctx.athlete_dir, target, carb_g=fuel["carb_g"],
                             sodium_mg=fuel["sodium_mg"] or None, log=log, allow_clear=True)
         if not res["written"]:
-            log(f"fuel write-back deferred: {res['reason']}")
+            log(f"fuel write-back deferred for {target}: {res['reason']}")
     publish_now(ctx)
     names = ", ".join((i.get("resolved_name") or i.get("_raw") or "that")[:40]
                       for i in wrote)
@@ -4066,15 +4340,27 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
         return
     batch = pend.get("batch") or [pend]
     wrote, asked = 0, []
+    # Every day this commit touched, in the order they were written. `day` is not assumed
+    # to be one of them: a batch can be entirely last night's dinner.
+    days_written = []
     for item in batch:
         if item.get("needs_input"):
             asked.append(item.get("resolved_name") or item.get("_raw") or "that one")
             continue
-        commit_one(ctx, item, day)
+        target = item_day(item, day)
+        commit_one(ctx, item, target, today=day)
+        if target not in days_written:
+            days_written.append(target)
+        # THE DAY IS PART OF THE CLAIM. The gate checks the outgoing reply against this
+        # ledger, and a reply that says "logged to yesterday, 15 Aug" is only checkable if
+        # the ledger says which day was written - otherwise a move to the wrong day reads
+        # as substantiated by an entry that says nothing about days at all.
         record_action(ctx, "added "
                       + ("supplement " if item.get("_supplement") else "entry ")
                       + f"{(item.get('resolved_name') or item.get('_raw') or '')[:50]}"
-                      + (f" ({round(item['kcal'])} kcal)" if item.get("kcal") else ""))
+                      + (f" ({round(item['kcal'])} kcal)" if item.get("kcal") else "")
+                      + f" to {target.isoformat()}"
+                      + ("" if target == day else " (not today)"))
         wrote += 1
     # A confirmed replacement removes what it replaced - AFTER the new entry is written, and
     # only if one was, so a declined or failed correction never destroys the original.
@@ -4089,13 +4375,18 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
     # Push the day's in-session total into session-log so the coach's g/hr ramp keeps
     # being fed. Without this, logging fuel here silently starves recent_avg_g_hr and
     # the race-fuelling prescription goes blind.
-    if any(i.get("in_session") for i in batch):
-        fuel = RC.bot_in_session_totals(ctx.store, day)
-        res = RC.write_back(ctx.athlete_dir, day, carb_g=fuel["carb_g"],
+    # PER DAY THAT WAS ACTUALLY WRITTEN, not per `day`. Fuel logged to yesterday used to
+    # push today's totals at today's session-log and leave yesterday's untouched, so the
+    # g/hr history the coach prescribes from would be wrong at both ends.
+    for target in days_written:
+        if not any(i.get("in_session") and item_day(i, day) == target for i in batch):
+            continue
+        fuel = RC.bot_in_session_totals(ctx.store, target)
+        res = RC.write_back(ctx.athlete_dir, target, carb_g=fuel["carb_g"],
                             sodium_mg=fuel["sodium_mg"] or None, log=log,
                             allow_clear=True)
         if not res["written"]:
-            log(f"fuel write-back deferred: {res['reason']}")
+            log(f"fuel write-back deferred for {target}: {res['reason']}")
     if wrote:
         publish_now(ctx)
         committed = [i for i in batch if not i.get("needs_input")]
@@ -4108,8 +4399,19 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
                 + (f", {round(kcal)} kcal" if kcal else ""))
         else:
             _chat(ctx, "coach", f"[log] committed: {wrote} items")
-    msg = (f"Logged{'' if wrote == 1 else f' {wrote} items'}.\n\n"
-           + today_block(ctx, day)) if wrote else ""
+    # WHICH DAY, IN THE WORD "LOGGED" ITSELF, and that day's totals underneath it. A
+    # past-day commit reporting today's unchanged totals under "Logged" is the shape the
+    # gate exists to catch: every figure is true and the sentence is not.
+    elsewhere = [d for d in days_written if d != day]
+    msg = ""
+    if wrote:
+        msg = f"Logged{'' if wrote == 1 else f' {wrote} items'}"
+        msg += (f" to {day_phrase(elsewhere[0], day)}"
+                if len(elsewhere) == 1 and len(days_written) == 1 else "")
+        msg += ".\n\n" + "\n\n".join(
+            (today_block(ctx, d) if d == day
+             else f"*{day_phrase(d, day, cap=True)}*\n" + today_block(ctx, d))
+            for d in (days_written or [day]))
     if asked:
         msg = ((msg + "\n\n") if msg else "") + (
             "I could not find figures for " + ", ".join(asked)
@@ -4118,9 +4420,16 @@ def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
                   numbers=_gate_numbers([i for i in batch if not i.get("needs_input")]))
 
 
-def commit_one(ctx: Context, item: dict, day: date) -> None:
+def commit_one(ctx: Context, item: dict, day: date, today: date = None) -> None:
+    """Write one item to `day` - which is the day HE stated when he stated one, not
+    necessarily the day the message arrived on.
+
+    `today` is his local today, needed only to tell a same-day write (stamped with the
+    clock, as it always has been) from a past-day one (stamped from the meal). Defaults to
+    `day`, which is what every caller meant before a day could be stated."""
     if item.get("needs_input"):
         return
+    today = today or day
     if item.get("_supplement"):
         # Supplements record a DOSE. Macros are only carried when they are meaningful:
         # a 400 mg capsule contributes nothing and a nominal 1 kcal reads as data.
@@ -4150,11 +4459,12 @@ def commit_one(ctx: Context, item: dict, day: date) -> None:
         ingredients=item.get("ingredients") or "",
         in_session=bool(item.get("in_session")),
         # A time HE STATED wins over the moment he typed the message, and it is composed
-        # from `day` - the ICU local date - rather than the server clock, which is an hour
-        # off in BST. "Add the second slice of toast at 1350" was stamped at whatever time
-        # the message arrived, so the app filed it under the wrong meal.
-        logged_at=(f"{day.isoformat()}T{item['_at']}" if item.get("_at")
-                   else datetime.now().isoformat(timespec="minutes")),
+        # on the entry's OWN day - the ICU local date, or the day he named - rather than
+        # from the server clock, which is an hour off in BST. "Add the second slice of
+        # toast at 1350" was stamped at whatever time the message arrived, so the app
+        # filed it under the wrong meal; "dinner last night" was stamped on the wrong day
+        # entirely.
+        logged_at=item_logged_at(item, day, today),
         # The meal he NAMED, or "" - and "" means the store files it by the clock and
         # says it guessed. Meals were inferred at publish time from the log timestamp
         # alone, so a breakfast written up at 13:49 read as lunch and nothing at log

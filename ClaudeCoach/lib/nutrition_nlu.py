@@ -37,7 +37,7 @@ and lost the per-item provenance the confidence flag depends on.
 
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from re import error
 import subprocess
 
@@ -365,8 +365,8 @@ Classify the message and extract structure. Reply with ONLY a JSON object, no pr
 Keys:
   intent: one of log_food, log_supplement, question, advice, correction, confirm,
           commit_context, smalltalk, unknown
-  items: array (log_food/log_supplement only) of {text, portion_g, in_session, at, meal,
-         stated}
+  items: array (log_food/log_supplement only) of {text, portion_g, in_session, at, day,
+         meal, stated}
          - text: a SINGLE food or supplement, self-contained enough to look up
          - portion_g: grams if stated or confidently inferable, else null
          - stated: HIS OWN NUMBERS, when he has given them. Normally null. See
@@ -377,6 +377,30 @@ Keys:
            NEVER guess: "this morning", "earlier", "before the ride" and anything else
            without a clock give null, and the logger stamps it with now. A guessed time
            is worse than no time, because the app files entries into meals by the clock.
+         - day: WHICH DAY he ate it, when the message says so. Null otherwise, and null is
+           the normal answer - almost everything he sends is about today.
+             "yesterday" | "today" | a weekday name ("friday") | "YYYY-MM-DD"
+           Set it ONLY on words that name a day:
+             "dinner last night was a big salad"   -> day "yesterday"
+             "yesterday's lunch was a wrap"        -> day "yesterday"
+             "on Friday I had fish and chips"      -> day "friday"
+             "on the 12th I had..."                -> "2026-08-12" if the year and month
+                                                      are unambiguous, else the plain
+                                                      words he used
+             "this morning I had porridge"         -> null (today, so nothing to say)
+             "earlier", "before the ride"          -> null
+           `at` and `day` are INDEPENDENT and a message can carry either or both: "dinner
+           last night" is day "yesterday" with at null, and the logger picks a sensible
+           dinner-time on that date.
+           THIS IS THE FAILURE THE FIELD EXISTS FOR (16 Aug 2026, 07:39). "Dinner LAST
+           NIGHT was a big salad..." was costed correctly at 1,352 kcal and written to
+           TODAY, because an item could say what time it was eaten and had no way to say
+           what day. His correction re-offered the same meal and logged it to today
+           again, and the entry had to be moved by hand.
+           A weekday name is always the most recent PAST one; never a day in the future.
+           If you cannot tell which day he means, put HIS OWN WORDS in the field rather
+           than picking one - the bot asks him, and asking is cheap next to a meal filed
+           into the wrong 24 hours.
          - ONE PRODUCT AND ITS CONTENTS IS ONE ITEM, NOT SEVERAL. "100ml ginger shot,
            orange, apple" is a single 100 ml shot whose ingredients are ginger, orange and
            apple - it is not a shot AND an orange AND an apple. This was split into three
@@ -510,7 +534,7 @@ WHEN HE STATES THE NUMBERS, THE NUMBERS ARE THE ANSWER.
   ->
     {"intent":"log_food","items":[{"text":"large stir-fry bowl with egg noodles, steak,
       soy ginger garlic sauce, vegetables and oil","portion_g":null,"in_session":false,
-      "at":null,"meal":null,
+      "at":null,"day":null,"meal":null,
       "stated":{"kcal":980,"protein_g":44,"carb_g":98,"fat_g":44,"basis":"estimate",
         "components":["Egg noodles (300g cooked) 380 kcal, 12P, 75C, 3F",
                       "Steak (100g) 220 kcal, 26P, 0C, 13F",
@@ -611,6 +635,85 @@ def normalise_hhmm(value) -> str | None:
     return f"{int(m.group(1)):02d}:{m.group(2)}" if m else None
 
 
+# The whole day vocabulary. A CLOSED SET, for the same reason normalise_hhmm drops a
+# half-read clock time: a day is the one field here that silently files a meal into the
+# wrong 24 hours, where nothing in the reply looks wrong and the app shows two days that
+# are each quietly false. Anything outside this set is not repaired - it is handed back as
+# written so the caller asks him, once.
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+             "sunday")
+_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# A FUZZY DAY IS REFUSED OUTRIGHT rather than bounded to a week: the vocabulary makes a
+# week the furthest any of it reaches anyway - "yesterday" is one day and a weekday name
+# six at most - so anything further back has to be an ISO date the model read out of his
+# own message. "Last Tuesday", three weeks later, is a guess with a 1-in-3 chance, and
+# there is no distance at which it stops being one. There is deliberately no constant for
+# this; a live one would read as a threshold something consults.
+#
+# How far back an ISO date may reach. Not a plausibility judgement about his memory:
+# a mistyped year is the failure this catches, and it would otherwise write a meal into a
+# month file nothing ever reads again.
+MAX_STATED_DAYS_BACK = 400
+
+
+def normalise_stated_day(value) -> str:
+    """The day token the model stated: "" when it stated none, one of the vocabulary
+    words, or the raw text when it is outside the vocabulary.
+
+    Deliberately NOT resolved to a date here. This module has no idea what the athlete's
+    local today is - that comes off the ICU profile - so resolution belongs with the
+    caller that knows it, and this is only the validation half.
+
+    Unrecognised text is RETURNED rather than dropped. Dropping it would be silent
+    agreement that the food happened today, which is the exact defect: "dinner last night"
+    logged at 07:39 the next morning under today's date. Handed back, it reaches
+    resolve_stated_day, which says `unclear` and the bot asks."""
+    s = str(value or "").strip().lower()
+    if not s:
+        return ""
+    if s in ("today", "yesterday") or s in _WEEKDAYS or _ISO_DAY.match(s):
+        return s
+    return s[:40]
+
+
+def resolve_stated_day(token: str, today: date) -> dict:
+    """{"day": date|None, "problem": ""|"future"|"unclear"} for a stated day token.
+
+    `problem` is what the caller ASKS about; a None day with no problem simply means he
+    stated nothing and the log belongs to today, as it always has.
+
+    Three rules, each stated rather than left to the arithmetic:
+      - a weekday name is the most recent PAST occurrence, and the same weekday as today
+        is TODAY. Minus seven would evade the future guard while being wrong by a week,
+        and "on Sunday I had" said on a Sunday means this morning.
+      - nothing ever resolves into the future. Only an ISO date can get there at all, and
+        a future date is a mis-read rather than a plan he ate in advance.
+      - a fuzzy token further back than a week is refused, not guessed. "Last Tuesday"
+        three weeks on has three candidate dates and no way to choose between them."""
+    token = normalise_stated_day(token)
+    if not token:
+        return {"day": None, "problem": ""}
+    if token == "today":
+        return {"day": today, "problem": ""}
+    if token == "yesterday":
+        return {"day": today - timedelta(days=1), "problem": ""}
+    if token in _WEEKDAYS:
+        back = (today.weekday() - _WEEKDAYS.index(token)) % 7
+        return {"day": today - timedelta(days=back), "problem": ""}
+    if _ISO_DAY.match(token):
+        try:
+            got = date.fromisoformat(token)
+        except ValueError:
+            return {"day": None, "problem": "unclear"}
+        if got > today:
+            return {"day": None, "problem": "future"}
+        if (today - got).days > MAX_STATED_DAYS_BACK:
+            return {"day": None, "problem": "unclear"}
+        return {"day": got, "problem": ""}
+    return {"day": None, "problem": "unclear"}
+
+
 def parse_with_model(text: str, claude_bin: str, model: str, log=print,
                      timeout: int = 60, runner=None) -> dict:
     """Ask the model what the message means. Returns {'intent': 'unknown'} on any
@@ -644,7 +747,7 @@ def parse_with_model(text: str, claude_bin: str, model: str, log=print,
     for it in got.get("items") or []:
         if isinstance(it, str):
             items.append({"text": it, "portion_g": None, "in_session": False,
-                          "at": None, "meal": ""})
+                          "at": None, "day": "", "meal": ""})
         elif isinstance(it, dict) and it.get("text"):
             in_session = (bool(it.get("in_session"))
                           and during_session_evidence(text))
@@ -661,6 +764,11 @@ def parse_with_model(text: str, claude_bin: str, model: str, log=print,
                           # after the fact landed in the wrong meal on the app and there
                           # was no verb to move it.
                           "at": normalise_hhmm(it.get("at")),
+                          # WHICH DAY, when he said. Validated rather than resolved -
+                          # this module does not know his local today - and an
+                          # unrecognised word survives on purpose so the bot can ask
+                          # instead of silently agreeing the food happened today.
+                          "day": normalise_stated_day(it.get("day")),
                           # CONFIRMED, not asserted: the model's flag only survives if
                           # the words place the food in a session. Erring to False is the
                           # safe direction - an out-of-session item counted in the day is
@@ -1097,9 +1205,22 @@ Decide which ONE of these he means and reply in that shape:
       - he is disputing WHAT the food is, with or without a new amount
   {"kind":"meal","meal":"breakfast|lunch|dinner|snacks"}
       - he is filing it under a meal, nothing else
-  {"kind":"retime","time":"HH:MM","which":"<words identifying the entry, or null>"}
+  {"kind":"retime","time":"HH:MM or null","day":"<day word, or null>",
+   "which":"<words identifying the entry, or null>"}
       - he is saying WHEN he ate it: "the initial rye bread was 830am" -> time "08:30",
         which "initial rye bread". 24h, and null `which` means the latest entry.
+      - `day` moves the entry to ANOTHER DAY: "yesterday" | "today" | a weekday name |
+        "YYYY-MM-DD", and null when he is only changing the clock time. Give EITHER or
+        BOTH - a retime with a day and no time keeps the entry's own time of day, and one
+        with a time and no day stays where it is.
+          "that was for yesterday's dinner"  -> {"day":"yesterday","time":null}
+          "no, I had that on Friday"         -> {"day":"friday","time":null}
+          "the rye bread was 830am"          -> {"day":null,"time":"08:30"}
+      - THIS IS WHY `day` IS HERE (16 Aug 2026). A dinner logged to the wrong day was
+        corrected with "That was for yesterday's dinner", there was no verb for moving an
+        entry across days, so this was decided `unclear`, the meal was offered again and
+        committed to today a second time.
+      - A weekday is the most recent PAST one. Never a future day.
   {"kind":"rename","name":"<the correct name>","which":"<as above, or null>"}
       - he is naming the product WITHOUT disputing the figures: "the 160g was a pack of
         bbq chicken" against an entry whose confidence is label or manual. He read those
@@ -1421,10 +1542,18 @@ def decide_correction(message: str, item: dict, claude_bin: str, model: str,
                 "which": (str(got.get("which")).strip() if got.get("which") else "")}
     if kind == "retime":
         hhmm = normalise_hhmm(got.get("time"))
-        if not hhmm:
-            log(f"decide_correction: retime without a usable time: {got.get('time')!r}")
+        # A RETIME MAY CARRY A DAY, A TIME, OR BOTH, and a day alone is now the common
+        # case: "that was for yesterday's dinner" names no clock time at all. Requiring a
+        # time here is what made that message unanswerable - it fell out as None, the
+        # caller read None as "the model could not be reached", ran the quantity regexes
+        # against it and re-offered the same dinner, which was then committed to today for
+        # a second time (16 Aug 2026).
+        day = normalise_stated_day(got.get("day"))
+        if not hhmm and not day:
+            log(f"decide_correction: retime with neither a time nor a day: "
+                f"{got.get('time')!r} {got.get('day')!r}")
             return None
-        return {"kind": "retime", "time": hhmm,
+        return {"kind": "retime", "time": hhmm, "day": day,
                 "which": (str(got.get("which")).strip() if got.get("which") else "")}
     if kind == "rename":
         name = str(got.get("name") or "").strip()
@@ -1915,6 +2044,11 @@ each item actually IS and how to search for it. Reply with ONLY a JSON object.
   "in_session": true|false,
   "at": "<HH:MM in 24h ONLY if the message states a clock time for this item, else null.
          'at 1350' -> '13:50'. Never guess: 'this morning' is null>",
+  "day": "<WHICH DAY he ate it, ONLY if the message says: 'yesterday' | 'today' | a
+          weekday name | 'YYYY-MM-DD'. Null otherwise, and null is the normal answer.
+          'dinner last night' -> 'yesterday'; 'on Friday I had' -> 'friday'; 'this
+          morning' -> null. A weekday is always the most recent PAST one, never a future
+          day. If you cannot tell which day, give his own words and the bot will ask>",
   "meal": "<breakfast|lunch|dinner|snacks ONLY if the message names the meal - 'for
            breakfast I had...', 'with dinner', 'late lunch'. A clock time is evidence,
            not proof: 'toast at 8:30' is null and the logger files it by the clock.
@@ -2289,6 +2423,9 @@ def interpret(text: str, claude_bin: str, model: str, log=print, runner=None,
             # when the fallback ran. The meal he named travels for the same reason, and
             # this is the path that usually wins, so it is the one that matters most.
             "at": normalise_hhmm(it.get("at")),
+            # The stated DAY travels on this path for exactly the same reason, and this
+            # is the path a plain "dinner last night was a big salad" actually takes.
+            "day": normalise_stated_day(it.get("day")),
             "meal": ("" if it.get("in_session") else normalise_meal(it.get("meal"))),
             "search_terms": terms[:4],
         })

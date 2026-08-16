@@ -2678,6 +2678,208 @@ check("with nothing left on the table", NB.get_pending(replay_store) is None)
 check("and the supplement went in as a dose, not as food",
       len(replay_store.get_day(TODAY).get("supplements") or []) == 1)
 
+print("\n--- 16 Aug 2026: 'Dinner LAST NIGHT was a big salad' ---")
+# The composed-meal coster worked - 1,352 kcal, the right meal - and the commit stamped it
+# TODAY, because an item could carry a stated TIME and had no way to carry a stated DAY.
+# His correction, "That was for yesterday's dinner", was decided unclear (retime was
+# HH:MM-only), so the fallback re-offered the same meal and committed it to today again.
+YDAY = TODAY - timedelta(days=1)
+day_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-statedday-")))
+dctx = FakeCtxHandle(day_store)
+_SALAD = ("Dinner last night was a big salad with chicken, avocado, seeds, olive oil "
+          "and a hunk of sourdough")
+NB.NLU.classify = lambda text, pending, *a, **k: {
+    "intent": "log_food", "composed_meal": True,
+    "items": [{"text": _SALAD, "portion_g": None, "in_session": False, "at": None,
+               "day": "yesterday", "meal": "dinner", "stated": None}]}
+NB.NLU.describe_meal = lambda *a, **k: {
+    "meal_name": "Large chicken and avocado salad with sourdough",
+    "total": {"kcal": 1352.0, "protein_g": 78.0, "carb_g": 41.0, "fat_g": 92.0,
+              "fibre_g": 14.0, "dietary_sodium_mg": 1100.0},
+    "components": [{"name": "chicken breast", "portion_g": 180, "kcal": 300,
+                    "protein_g": 56, "carb_g": 0, "fat_g": 7},
+                   {"name": "avocado", "portion_g": 150, "kcal": 240, "protein_g": 3,
+                    "carb_g": 12, "fat_g": 22},
+                   {"name": "sourdough", "portion_g": 90, "kcal": 240, "protein_g": 9,
+                    "carb_g": 45, "fat_g": 2}],
+    "plants": ["avocado", "sunflower seed"], "assumptions": ["a large bowl"],
+    "error_band_pct": 15}
+friction_sent.clear()
+NB.handle_text(dctx, _SALAD, "token", 1)
+pend_day = NB.get_pending(day_store)
+# PINNED TO A DATE at offer time, not kept as the word "yesterday". An offer can sit on
+# the table across midnight - sent at 23:55, confirmed at 00:05 - and a word re-resolved
+# against the new local today would land a day later than the offer he read promised.
+check("the stated day reaches the pending item, as a date",
+      pend_day and pend_day["batch"][0].get("_day") == YDAY.isoformat())
+check("the meal was still costed as one meal, as it was on the day",
+      pend_day and round(pend_day["batch"][0]["kcal"]) == 1352)
+# The offer has to SAY the day, with the date on it. "Yesterday" alone is exactly the
+# claim he cannot check at a glance the morning after a late dinner.
+_day_offer = friction_sent[-1]
+check("the offer names the day it will log to, with the date",
+      "Logging to yesterday" in _day_offer and f"{YDAY.day} {YDAY:%b}" in _day_offer)
+check("and names the meal it will land in",
+      "as dinner" in _day_offer and "not today" in _day_offer)
+
+friction_sent.clear()
+NB.commit_pending(dctx, pend_day, TODAY, "token", 1)
+check("THE ENTRY LANDS ON YESTERDAY, not today",
+      len(day_store.get_day(YDAY)["entries"]) == 1
+      and day_store.get_day(TODAY)["entries"] == [])
+_landed = day_store.get_day(YDAY)["entries"][0]
+check("at a dinner-time on that date, not midnight and not this morning's clock",
+      _landed["logged_at"] == f"{YDAY.isoformat()}T20:00")
+check("and it is filed as dinner, as he said, not inferred from the clock",
+      _landed["meal"] == "dinner" and _landed["meal_inferred"] is False)
+check("the confirmation says which day it went to",
+      "Logged to yesterday" in friction_sent[-1])
+# The gate blocks a claim it cannot find in the ledger, so "logged to yesterday" has to be
+# substantiated by an action that names the day.
+check("and the action ledger names the day, so that claim is checkable",
+      any(YDAY.isoformat() in a and "not today" in a
+          for a in (getattr(dctx, "_actions", []) or [])))
+# THE OFFER'S DAY SURVIVES MIDNIGHT. Same batch, confirmed after the local day has rolled
+# over: it must land where the offer said, not one day further back.
+midnight_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-midnight-")))
+mctx = FakeCtxHandle(midnight_store)
+NB.set_pending(midnight_store, {"batch": [dict(pend_day["batch"][0])]})
+NB.commit_pending(mctx, NB.get_pending(midnight_store), TODAY + timedelta(days=1),
+                  "token", 1)
+check("an offer confirmed after midnight lands on the day the offer NAMED",
+      len(midnight_store.get_day(YDAY)["entries"]) == 1
+      and midnight_store.get_day(TODAY)["entries"] == [])
+
+# A DAY THAT CANNOT BE PINNED DOWN STOPS THE WHOLE MESSAGE, before anything is costed.
+# Checked on every item, not just the first: a message whose first item says "yesterday"
+# and whose second says something fuzzy would otherwise pass on the first and file the
+# second into today in silence, which is the defect wearing a different hat.
+NB.NLU.classify = lambda text, pending, *a, **k: {
+    "intent": "log_food", "composed_meal": False,
+    "items": [{"text": "a banana", "portion_g": 120, "in_session": False, "at": None,
+               "day": "yesterday", "meal": "", "stated": None},
+              {"text": "a curry", "portion_g": None, "in_session": False, "at": None,
+               "day": "a couple of weeks back", "meal": "", "stated": None}]}
+friction_sent.clear()
+NB.handle_text(dctx, "a banana yesterday and a curry a couple of weeks back", "token", 1)
+check("an unpinnable day on ANY item asks, in one message",
+      len(friction_sent) == 1 and "cannot pin" in friction_sent[-1])
+check("and nothing was costed, offered or written",
+      NB.get_pending(day_store) is None
+      and day_store.get_day(TODAY)["entries"] == []
+      and len(day_store.get_day(YDAY)["entries"]) == 1)
+
+print("\n--- the meal-default times, and when they apply ---")
+# Each sits inside meal_from_clock's own band for that meal, or an entry written to
+# yesterday's dinner would be re-bucketed by the clock that placed it.
+for meal, hhmm in NB.MEAL_DEFAULT_TIMES.items():
+    check(f"a past-day {meal} is stamped {hhmm}, which reads back as {meal}",
+          NB.item_logged_at({"_meal": meal}, YDAY, TODAY) == f"{YDAY.isoformat()}T{hhmm}"
+          and NB.meal_from_clock(f"{YDAY.isoformat()}T{hhmm}") == meal)
+check("a stated clock time beats the meal default, on whatever day",
+      NB.item_logged_at({"_meal": "dinner", "_at": "21:40"}, YDAY, TODAY)
+      == f"{YDAY.isoformat()}T21:40")
+# Byte-identical to what commit_one did before a day could be stated: the wall clock,
+# including its date. (That date is the SERVER's, which is a pre-existing wrinkle - after
+# midnight UTC in BST it disagrees with the ICU local day - and deliberately not changed
+# here, because every same-day log in the suite is pinned to this behaviour.)
+_now_stamp = NB.datetime.now().isoformat(timespec="minutes")
+check("today with no stated time is still stamped now, exactly as before",
+      NB.item_logged_at({"_meal": "dinner"}, TODAY, TODAY)[:13] == _now_stamp[:13]
+      and NB.item_logged_at({}, TODAY, TODAY)[11:16] not in ("", "00:00"))
+# No meal named and a past day: his current time of day is the least invented answer
+# left, and the store marks the meal it derives from it as a guess.
+check("a past day with no meal named takes his time of day, not midnight",
+      NB.item_logged_at({}, YDAY, TODAY)[11:16] not in ("", "00:00"))
+check("a weekday resolves to the past occurrence when the item is committed",
+      NB.item_day({"_day": (TODAY - timedelta(days=3)).strftime("%A").lower()}, TODAY)
+      == TODAY - timedelta(days=3))
+check("and an item with no stated day is simply today's",
+      NB.item_day({}, TODAY) == TODAY and NB.item_day({"_day": ""}, TODAY) == TODAY)
+
+print("\n--- 'That was for yesterday's dinner': the redate verb ---")
+# Same exchange, but with the entry already committed to the wrong day - which is exactly
+# where he was at 07:47 on 16 Aug.
+redate_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-redate-")))
+rdctx = FakeCtxHandle(redate_store)
+wrong = redate_store.add_entry(
+    TODAY, raw_text=_SALAD, resolved_name="Large chicken and avocado salad",
+    kcal=1352, protein_g=78, carb_g=41, fat_g=92, confidence="estimate",
+    source_rung="llm", logged_at=f"{TODAY.isoformat()}T07:41", meal="dinner",
+    species=[{"id": "avocado", "score": 1}])
+redate_store.add_entry(TODAY, raw_text="flat white", resolved_name="Flat white",
+                       kcal=120, confidence="label", source_rung="cofid")
+friction_sent.clear()
+handled = NB.apply_retime(rdctx, {"kind": "retime", "time": None, "day": "yesterday",
+                                  "which": "big salad"}, TODAY, "token", 1)
+check("the salad moves to yesterday",
+      handled and len(redate_store.get_day(YDAY)["entries"]) == 1
+      and round(redate_store.get_day(YDAY)["entries"][0]["kcal"]) == 1352)
+check("and today keeps only the coffee",
+      [e["resolved_name"] for e in redate_store.get_day(TODAY)["entries"]]
+      == ["Flat white"])
+check("the move keeps its provenance and its species",
+      redate_store.get_day(YDAY)["entries"][0]["source_rung"] == "llm"
+      and redate_store.get_day(YDAY)["entries"][0]["species"]
+      == [{"id": "avocado", "score": 1}])
+check("the confirmation names both days",
+      "yesterday" in friction_sent[-1].lower() and "Today" in friction_sent[-1])
+# A heading is capitalised by hand: str.capitalize() would lowercase everything after the
+# first letter and print "Yesterday, 15 aug" under the totals it belongs to.
+check("and the day heading keeps the month's capital",
+      f"*Yesterday, {YDAY.day} {YDAY:%b}*" in friction_sent[-1])
+check("and the ledger names both, so a false 'moved it' is still blockable",
+      any(f"from {TODAY.isoformat()} to {YDAY.isoformat()}" in a
+          for a in (getattr(rdctx, "_actions", []) or [])))
+# SAME-DAY RETIME, UNCHANGED. The verb that already worked must keep working.
+friction_sent.clear()
+handled = NB.apply_retime(rdctx, {"kind": "retime", "time": "08:30", "day": "",
+                                  "which": "flat white"}, TODAY, "token", 1)
+_coffee = redate_store.get_day(TODAY)["entries"][0]
+check("a retime with no day still just moves the clock, on the same day",
+      handled and _coffee["logged_at"] == f"{TODAY.isoformat()}T08:30"
+      and len(redate_store.get_day(TODAY)["entries"]) == 1)
+# A day that cannot be pinned down, or one in the future, asks rather than writing.
+friction_sent.clear()
+check("a future day is refused and nothing moves",
+      NB.apply_retime(rdctx, {"kind": "retime", "time": None,
+                              "day": (TODAY + timedelta(days=1)).isoformat(),
+                              "which": "flat white"}, TODAY, "token", 1)
+      and "future" in friction_sent[-1]
+      and len(redate_store.get_day(TODAY)["entries"]) == 1)
+friction_sent.clear()
+check("and a fuzzy day asks, in one message",
+      NB.apply_retime(rdctx, {"kind": "retime", "time": None, "day": "last tuesday",
+                              "which": "flat white"}, TODAY, "token", 1)
+      and len(friction_sent) == 1 and "cannot pin" in friction_sent[-1]
+      and len(redate_store.get_day(TODAY)["entries"]) == 1)
+
+print("\n--- a redate while the offer is still on the table ---")
+# The branch used to require `not pend`, so this correction was dropped exactly while he
+# was looking at the thing it was about - and the fallback re-offered and re-committed.
+pend_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-redate-pend-")))
+pctx = FakeCtxHandle(pend_store)
+_pending_salad = dict(_fake_item("Large chicken and avocado salad", 1352.0),
+                      _meal="dinner")
+NB.set_pending(pend_store, {"batch": [_pending_salad]})
+friction_sent.clear()
+handled = NB.apply_retime_to_pending(
+    pctx, {"kind": "retime", "time": None, "day": "yesterday", "which": None},
+    NB.get_pending(pend_store), TODAY, "token", 1)
+check("the pending item takes the day rather than being re-resolved",
+      handled
+      and NB.get_pending(pend_store)["batch"][0]["_day"] == YDAY.isoformat())
+check("and he is told where it will go, before he confirms",
+      "yesterday" in friction_sent[-1] and f"{YDAY.day} {YDAY:%b}" in friction_sent[-1])
+check("nothing was written by a correction to an unconfirmed offer",
+      pend_store.get_day(TODAY)["entries"] == []
+      and pend_store.get_day(YDAY)["entries"] == [])
+friction_sent.clear()
+NB.commit_pending(pctx, NB.get_pending(pend_store), TODAY, "token", 1)
+check("and confirming it lands on yesterday, not today",
+      len(pend_store.get_day(YDAY)["entries"]) == 1
+      and pend_store.get_day(TODAY)["entries"] == [])
+
 NB.tg.send, NB.log = _f_real["send"], _f_real["log"]
 NB.publish_now, NB.today_block = _f_real["publish"], _f_real["today"]
 NB.NR.cache_resolved, NB.GATE_RUNNER = _f_real["cache"], _f_real["gate"]

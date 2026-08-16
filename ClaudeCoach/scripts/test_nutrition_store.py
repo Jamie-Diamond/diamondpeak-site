@@ -610,6 +610,67 @@ with tempfile.TemporaryDirectory() as td:
     check("a label that restates the ingredients keeps them",
           same["kcal"] == 500.0 and "mozzarella" in same["ingredients"])
 
+print("\n--- move_entry: an entry filed on the wrong day (16 Aug 2026) ---")
+# "Dinner last night was a big salad" was costed correctly and written to TODAY, and there
+# was no verb for moving it: retime could change an entry's clock time and nothing could
+# change its date. The entry was moved by hand in the month file.
+mv = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nut-move-")))
+_TOD, _YDAY = date(2026, 8, 16), date(2026, 8, 15)
+salad = mv.add_entry(_TOD, raw_text="big salad with chicken and avocado",
+                     resolved_name="Large chicken and avocado salad", kcal=1352,
+                     protein_g=78, carb_g=41, fat_g=92, fibre_g=14,
+                     dietary_sodium_mg=1100, portion_g=650, confidence="estimate",
+                     source_rung="llm", logged_at=f"{_TOD.isoformat()}T07:41",
+                     meal="dinner", ingredients="chicken, avocado, rocket, tomato",
+                     species=[{"id": "avocado", "score": 1},
+                              {"id": "tomato", "score": 1}])
+# A second entry that must not move, and a portion field add_entry does not name - which
+# is the whole reason this is a deep copy rather than a re-add through add_entry.
+mv.update_entry(_TOD, salad["id"], portion_used_g=650.0, portion_estimated=True,
+                portion_assumed="portions worked out from your description")
+mv.add_entry(_TOD, raw_text="flat white", resolved_name="Flat white", kcal=120,
+             confidence="label", source_rung="cofid")
+before = dict(mv.get_day(_TOD)["entries"][0])
+res = mv.move_entry(_TOD, salad["id"], _YDAY)
+moved, removed = res["moved"], res["removed"]
+check("the entry lands on the target day",
+      [e["id"] for e in mv.get_day(_YDAY)["entries"]] == [moved["id"]])
+check("and is gone from the day it was on",
+      removed is not None
+      and salad["id"] not in [e["id"] for e in mv.get_day(_TOD)["entries"]])
+check("the entry it was logged beside is untouched",
+      [e["resolved_name"] for e in mv.get_day(_TOD)["entries"]] == ["Flat white"])
+check("every field survives the move, including the ones add_entry never names",
+      all(moved.get(k) == before.get(k) for k in before if k not in ("id", "logged_at")))
+check("provenance and species come with it",
+      moved["source_rung"] == "llm" and moved["confidence"] == "estimate"
+      and moved["species"] == [{"id": "avocado", "score": 1},
+                               {"id": "tomato", "score": 1}])
+check("his time of day is kept and only the date changes",
+      moved["logged_at"] == f"{_YDAY.isoformat()}T07:41")
+check("the id is the target day's own, because ids carry their date",
+      moved["id"].startswith(_YDAY.isoformat()) and moved["id"] != salad["id"])
+check("and the totals moved with it",
+      round(mv.day_totals(_YDAY)["kcal"]) == 1352
+      and round(mv.day_totals(_TOD)["kcal"]) == 120)
+# A stated time replaces the clock; the meal comes with it as HIS word, not a guess.
+res2 = mv.move_entry(_YDAY, moved["id"], _TOD,
+                     logged_at=f"{_TOD.isoformat()}T20:00", meal="dinner")
+check("a supplied stamp and meal are applied on arrival",
+      res2["moved"]["logged_at"] == f"{_TOD.isoformat()}T20:00"
+      and res2["moved"]["meal"] == "dinner"
+      and res2["moved"]["meal_inferred"] is False)
+check("an entry that is not on the source day is refused, not invented",
+      mv.move_entry(_YDAY, "nope-001", _TOD) is None)
+check("and a move to the day it is already on is refused rather than re-idded",
+      mv.move_entry(_TOD, res2["moved"]["id"], _TOD) is None)
+# The month lock is per month FILE, so this is two acquisitions and cannot be atomic.
+_prev = date(2026, 7, 31)
+res3 = mv.move_entry(_TOD, res2["moved"]["id"], _prev)
+check("a move across a month boundary lands in the other month file",
+      res3 and [e["id"] for e in mv.get_day(_prev)["entries"]] == [res3["moved"]["id"]]
+      and (mv.dir / "2026-07.json").exists())
+
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
 print("all checks passed")
