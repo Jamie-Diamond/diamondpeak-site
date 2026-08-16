@@ -71,9 +71,9 @@ Output a JSON object with these fields (omit a field entirely if not mentioned):
   "feel": string (qualitative description in athlete's own words)
   "injury_pain_during": integer 1-10  (runs only, if injury is tracked)
   "injury_pain_next_morning": integer 1-10  (runs only, if injury is tracked)
-  "nutrition_g_carb": integer grams  (rides only)
-  "hydration_ml": integer ml  (rides only)
-  "nutrition_mg_sodium": integer mg  (rides only). Total sodium taken on, in
+  "nutrition_g_carb": integer grams  (any session where fuel taken is stated)
+  "hydration_ml": integer ml  (any session where fluid taken is stated)
+  "nutrition_mg_sodium": integer mg (any session where stated). Total sodium taken, in
       milligrams. Athletes state this in several forms - convert to a total:
       an explicit total ("1500mg sodium"), a rate ("about 700mg an hour" x the
       session duration), or a count of products whose sodium content you know

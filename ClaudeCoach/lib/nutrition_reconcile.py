@@ -90,8 +90,12 @@ def session_fuel_for_day(athlete_dir, day) -> dict:
     for r in rows:
         if not isinstance(r, dict) or (r.get("date") or "")[:10] != iso:
             continue
-        c, s, h = (r.get("nutrition_g_carb"), r.get("nutrition_mg_sodium"),
-                   r.get("hydration_ml"))
+        # Sodium lived under "sodium_mg" before the key was standardised on
+        # 3 Aug 2026; old records were written that way and must still count.
+        c, h = r.get("nutrition_g_carb"), r.get("hydration_ml")
+        s = r.get("nutrition_mg_sodium")
+        if s is None:
+            s = r.get("sodium_mg")
         if c is None and s is None and h is None:
             continue
         sessions.append({"activity_id": r.get("activity_id"), "name": r.get("name"),
