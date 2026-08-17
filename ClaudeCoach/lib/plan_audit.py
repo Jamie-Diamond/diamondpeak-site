@@ -283,6 +283,33 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
         # separate check and validate_week emits no skip line for it, so it would go
         # from invisible to hard-failing with no before-state to compare against.
         tss_floor = req.get("weekly_tss_floor") if req else None
+        # A WEEK THAT HAS NOT BEEN BUILT YET IS NOT AN UNDER-TRAINED WEEK (17 Aug 2026).
+        # scripts/weekly-plan.sh runs on cron at Sunday 18:00 and builds only the COMING
+        # week, so the second week of this 14-day window is legitimately empty from Monday
+        # morning until that Sunday-evening run. The armed floor had no notion of "not
+        # generated yet", so every 06:25 run scored that empty future week as
+        # "UNDER-TRAINING: planned 0 TSS ... this week DETRAINS the athlete": the week of
+        # 2026-08-17 was flagged on 16 consecutive runs and is now fully planned, and one
+        # run flagged all three athletes for the week of 24 Aug. Since eb5b2dbe a hard fail
+        # messages Jamie, so the artefact would page him once per athlete per future week,
+        # for ever, on the same channel that carries the real hard fails - which is exactly
+        # the "alarm the reader learns to dismiss" that notify_hard_fail() exists to avoid.
+        # So a FUTURE week with ZERO planned sessions declares no floor (0 is the
+        # primitive's own "explicitly no floor"; validate_plan stays pure and knows nothing
+        # about generation timing) and says so in a note instead. Deliberately NOT in
+        # `fails`: counts()/signature() fingerprint `fails`, so an advisory in there would
+        # raise the baseline and spend an alert on a week nobody has built yet.
+        # Narrow on purpose. The CURRENT week is checked exactly as before, because an
+        # empty current week at Monday 06:25 is a REAL failure twelve hours after the
+        # generator should have run, and a future week that HAS sessions summing under the
+        # floor still hard-fails. Only the zero-session case is suppressed.
+        if tss_floor and not wk_evs and ws > win_start:      # win_start IS this Monday
+            notes.append(
+                f"week {ws}: NOT GENERATED YET - zero planned sessions, so the "
+                f"{tss_floor:.0f} TSS floor is not asserted against it. The weekly "
+                f"generator builds this week on Sunday evening; if it is still empty "
+                f"after that run, that is the failure worth reporting")
+            tss_floor = 0
         try:
             run_cap = pt.run_caps(client, ws,
                                   run_protocol=cfg.get("run_protocol")).get("weekly_min_cap")
