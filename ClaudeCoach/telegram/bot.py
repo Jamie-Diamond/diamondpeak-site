@@ -2647,6 +2647,44 @@ def _verify_session_preview(slug: str, clean: str) -> str:
     return clean
 
 
+# 'Never cite background-range Form/TSB (-10 to -20) as a reason for anything' is already a
+# confirmed persistent-rules.md rule (confirmed 21 Jul 2026, REINFORCED 30 Jul 2026 after a
+# second breach — Form -8.3 listed as a contributing reason for flat legs). Two confirmations
+# of a correct prose rule and it still recurs, so — same philosophy as _verify_session_preview
+# above — this is a generation-compliance gap, not a missing rule, and gets a deterministic
+# pre-send check rather than a third reminder.
+_FORM_TSB_WORD_RE = re.compile(r"\b(?:form|tsb)\b", re.IGNORECASE)
+_FORM_TSB_VALUE_RE = re.compile(r"-\s?(\d{1,2}(?:\.\d+)?)")
+_FORM_TSB_CAUSAL_RE = re.compile(
+    r"\b(because|due to|contributing|as a factor|explains?|explanation|"
+    r"caused by|reason (?:for|why|behind)|responsible for)\b", re.IGNORECASE)
+
+
+def _strip_form_excuse(slug: str, clean: str) -> str:
+    """Deterministic backstop for the Form/TSB-as-excuse rule. Only fires on a sentence
+    that BOTH names Form/TSB with a value in the -10..-20 background range AND uses causal
+    language ('because', 'due to', 'contributing', 'as a factor', ...) to blame something on
+    it — that sentence is dropped before send. A plain Form/TSB readout (no causal framing)
+    and causal language about something unrelated to Form/TSB are both left untouched."""
+    dropped = False
+    out_lines = []
+    for line in clean.split("\n"):
+        sentences = re.split(r"(?<=[.!?])\s+", line)
+        kept = []
+        for s in sentences:
+            if _FORM_TSB_WORD_RE.search(s) and _FORM_TSB_CAUSAL_RE.search(s):
+                vals = [abs(float(v)) for v in _FORM_TSB_VALUE_RE.findall(s)]
+                if any(10 <= v <= 20 for v in vals):
+                    log(f"[{slug}] form-excuse guard: dropped sentence citing "
+                        f"background-range Form/TSB as a reason: {s!r}")
+                    dropped = True
+                    continue
+            kept.append(s)
+        out_lines.append(" ".join(kept))
+    if not dropped:
+        return clean
+    return "\n".join(out_lines).strip()
+
 
 def _load_profile(slug: str) -> dict:
     f = _athlete_dir(slug) / "profile.json"
@@ -6106,6 +6144,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                                           athlete_name, context),
                 over_cap=over_cap)
             clean = _verify_session_preview(slug, clean)
+            clean = _strip_form_excuse(slug, clean)
             clean = _strip_model_countdown(clean, athlete)
             final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
             # Send the text reply FIRST so the athlete sees the answer immediately —
@@ -6232,6 +6271,7 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         # moment it stops describing the text (17 Aug 2026). Fails open, never closed.
         gate_summary = summary if clean == pre_capture_guard else None
         clean = _verify_session_preview(slug, clean)
+        clean = _strip_form_excuse(slug, clean)
         clean = _strip_model_countdown(clean, athlete)
         final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
 
