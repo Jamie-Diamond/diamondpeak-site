@@ -20,7 +20,7 @@ and are invalidated when the system prompt / persistent rules change
 the worst case is exactly the old behaviour. Disable with "session_resume":
 false in config.json.
 """
-import hashlib, json, subprocess, sys, threading, time, shutil, os
+import hashlib, json, subprocess, sys, threading, time, shutil, os, uuid
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -291,7 +291,14 @@ def build_prompt(user_message, history, system_prompt, athlete_name, context,
 
 def _feed_stdin(proc, prompt):
     """Write `prompt` to proc.stdin and close it, on a daemon thread so a prompt
-    larger than the pipe buffer cannot block the reader before it drains."""
+    larger than the pipe buffer cannot block the reader before it drains.
+
+    The bare except is load-bearing since cancellation landed (17 Aug 2026): a
+    cancel kills the CLI while this thread may still be pushing an 80KB prompt
+    into the pipe, so BrokenPipeError (or ValueError on an already-closed stdin)
+    is now an ORDINARY outcome here, not a fault. It must stay silent - the
+    cancelling athlete gets their acknowledgement from the transport, and a
+    traceback on a daemon thread would only muddy bot.log."""
     def _w():
         try:
             proc.stdin.write(prompt)
@@ -491,6 +498,157 @@ def _turn_index(st) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Cancelling an in-flight run (bug #30, 17 Aug 2026)
+# ---------------------------------------------------------------------------
+#
+# Kathryn said "2.5 hours" meaning ONE DAY. The bot read it as a week-wide
+# constraint and set off replanning her whole week, and she had to sit and watch
+# it. Coach turns measured 100 to 500s on 17 Aug (one totalled 526s), so "sit and
+# watch it" is minutes of a wrong answer being produced with no way out.
+#
+# The killable thing is the subprocess, and the subprocess lives here, so this is
+# where cancellation belongs - the transports only ever get to ASK. Killing the
+# CLI closes its stdout, which ends the `for raw_line in proc.stdout` loop in
+# _stream_once, so the read loop needs no polling and no timeout: the kill IS the
+# signal.
+#
+# THE RACE THIS IS SHAPED AROUND. The cancel arrives on a different thread from
+# the one streaming (bot.py runs replies on a ThreadPoolExecutor under a per-chat
+# lock), and it can arrive LATE: the turn the athlete wanted stopped finishes on
+# its own, a new turn for the same chat starts, and the cancel lands on the new
+# one. Killing the athlete's fresh, CORRECT request silently is worse than the
+# bug being fixed here. So the registry is keyed by a run id that is unique per
+# run and NEVER reused, and cancel_run only ever acts on an exact key match:
+# a cancel naming a run that has already finished finds nothing and is a no-op.
+# There is deliberately no "cancel whatever is running for this chat" call, and
+# there must never be one - that is precisely the API that kills the wrong run.
+
+# Terminate first, and only reach for SIGKILL if the CLI is still there after
+# this long. Polite first because the CLI flushes and tidies on SIGTERM; short
+# because the athlete is waiting and has already told us they want out.
+CANCEL_GRACE_S = 2.0
+
+_RUNS = {}                       # run_id -> _Run, guarded by _RUNS_LOCK
+_RUNS_LOCK = threading.Lock()
+
+
+class _Run:
+    """One in-flight generation. `cancelled` is sticky for the WHOLE turn, not
+    just the current subprocess: stream_claude can spawn up to three processes
+    (initial, dead-resume fallback, rate-limit fallback) and a cancelled turn
+    must not roll into the next one. `proc` is the process currently running,
+    or None between/outside spawns."""
+    __slots__ = ("run_id", "owner", "cancelled", "proc")
+
+    def __init__(self, run_id, owner=None):
+        self.run_id = run_id
+        self.owner = owner
+        self.cancelled = False
+        self.proc = None
+
+
+def new_run_id() -> str:
+    """A fresh run id. Unique and never reused - that property is the whole
+    defence against a late cancel killing the next turn, so do not replace this
+    with anything derived from the chat id."""
+    return uuid.uuid4().hex
+
+
+def _register_run(run_id, owner=None) -> _Run:
+    run = _Run(run_id, owner)
+    with _RUNS_LOCK:
+        if run_id in _RUNS:
+            # A caller reusing an id is a bug on their side, but the failure mode
+            # matters: clobbering would leave the older run unkillable and point
+            # the id at the newer one. Give the newcomer a fresh id instead, so
+            # the worst case is a cancel that does nothing rather than a cancel
+            # that stops the wrong turn.
+            log(f"[cancel] run id {run_id} already in flight - reissuing")
+            run.run_id = run_id = new_run_id()
+        _RUNS[run_id] = run
+    return run
+
+
+def _deregister_run(run) -> None:
+    """Remove the entry, but only if it is still OURS. Identity, not key, so a
+    duplicate id can never make one run's teardown unregister another's."""
+    if run is None:
+        return
+    with _RUNS_LOCK:
+        if _RUNS.get(run.run_id) is run:
+            del _RUNS[run.run_id]
+
+
+def _terminate_then_kill(proc, grace=None) -> None:
+    """SIGTERM now, SIGKILL later if it is ignored. The escalation waits on a
+    daemon thread because the caller is a Telegram poll loop or a web request:
+    it must get its "stopping..." back immediately, not `grace` seconds later."""
+    if proc is None:
+        return
+    try:
+        proc.terminate()
+    except Exception:
+        pass
+
+    def _escalate():
+        try:
+            proc.wait(timeout=CANCEL_GRACE_S if grace is None else grace)
+        except Exception:
+            # TimeoutExpired (still alive) or anything odd - either way we have
+            # already asked nicely, so stop asking.
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    threading.Thread(target=_escalate, daemon=True).start()
+
+
+def cancel_run(run_id, owner=None, grace=None) -> bool:
+    """Stop the in-flight run with EXACTLY this id. Returns True if a live run
+    matched and has been told to stop, False otherwise.
+
+    Safe to call from any thread, and safe to call late: a run that has already
+    finished is gone from the registry, so this returns False and does nothing.
+    Calling it twice for the same run is fine - the second call re-signals a
+    process that is on its way out.
+
+    `owner` is an optional second key (the chat id, say). When given it must
+    equal the owner the run registered with or the cancel is refused; it is a
+    belt-and-braces check on top of the unique id, not a substitute for it.
+    There is no lookup BY owner on purpose (see the note above this section).
+
+    Never raises - a cancel that fails must not take the caller down with it."""
+    if not run_id:
+        return False
+    with _RUNS_LOCK:
+        run = _RUNS.get(run_id)
+        if run is None:
+            return False
+        if owner is not None and run.owner != owner:
+            log(f"[cancel] refused {run_id}: owner {owner!r} != {run.owner!r}")
+            return False
+        run.cancelled = True
+        proc = run.proc          # may be None: the spawn has not happened yet
+    # Outside the lock: terminate() is a syscall and the escalation spawns a
+    # thread, neither of which should be holding up another chat's registration.
+    _terminate_then_kill(proc, grace)
+    log(f"[cancel] run {run_id} cancelled"
+        + ("" if proc is not None else " before it spawned"))
+    return True
+
+
+def active_run_ids(owner=None) -> list:
+    """DIAGNOSTICS ONLY - which runs are in flight, optionally for one owner.
+    Do NOT use this to choose a run to cancel: reading it and then cancelling is
+    exactly the two-step that lets a newly started turn be killed in place of the
+    one the athlete meant. Cancel by the id you were given when you started the
+    run."""
+    with _RUNS_LOCK:
+        return [rid for rid, run in _RUNS.items()
+                if owner is None or run.owner == owner]
+
+
+# ---------------------------------------------------------------------------
 # Generation entry points
 # ---------------------------------------------------------------------------
 
@@ -585,23 +743,48 @@ def _tool_input_summary(inp):
     return ""
 
 
-def _stream_once(prompt, model, extra_args, cwd, env=None):
+def _stream_once(prompt, model, extra_args, cwd, env=None, run=None):
     """One streaming claude invocation. Yields ('chunk', snapshot) and, when a
     tool_use block appears, ('status', tool_name, input_summary). Returns
     (final, streamed, session_id, returncode, t_init, t_first). Never raises —
-    errors are logged and reported through the return tuple."""
+    errors are logged and reported through the return tuple.
+
+    `run` is the optional _Run handle for this turn (bug #30, 17 Aug 2026). It is
+    how a cancel on another thread reaches THIS process: we publish the Popen
+    onto it, and cancel_run terminates what it finds there. Passed explicitly
+    rather than stashed on a thread-local because the only failure mode of an
+    implicit hand-off is a cancel that silently does nothing, and this ships
+    ahead of its own UI - nobody would notice until an athlete pressed stop and
+    watched the wrong answer keep coming. The return contract is UNCHANGED:
+    cancellation is reported through `run`, not through a seventh tuple slot."""
     streamed = ""
     final = None
     session_id = None
     t_init = t_first = None
     rc = -1
     try:
+        # Cancel landed between registering the run and getting here (prompt
+        # assembly reads a dozen files and can take a moment). Never spawn: a
+        # process started after the athlete said stop is a process nobody is
+        # waiting for.
+        if run is not None and run.cancelled:
+            return (final, streamed, session_id, rc, t_init, t_first)
         proc = subprocess.Popen(
             claude_cmd(model,
                        ["--output-format", "stream-json", "--verbose"] + extra_args),
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             stdin=subprocess.PIPE, text=True, cwd=cwd, env=env,
         )
+        if run is not None:
+            # Publish and re-check under the SAME lock cancel_run takes. Without
+            # the re-check there is a window: a cancel that read run.proc as None
+            # a microsecond before this line would signal nothing and leave the
+            # process it was meant to stop running to completion.
+            with _RUNS_LOCK:
+                run.proc = proc
+                missed = run.cancelled
+            if missed:
+                _terminate_then_kill(proc)
         _feed_stdin(proc, prompt)
         for raw_line in proc.stdout:
             raw_line = raw_line.strip()
@@ -651,54 +834,102 @@ def _stream_once(prompt, model, extra_args, cwd, env=None):
         rc = proc.returncode
     except Exception as e:
         log(f"Claude stream error: {e}")
+    finally:
+        # Nothing in here may yield or raise: it runs on the ordinary path, on
+        # the error path, and on GeneratorExit if the consumer walks away. A
+        # stale proc reference would have a later cancel signalling a dead pid.
+        if run is not None:
+            with _RUNS_LOCK:
+                run.proc = None
     return (final, streamed, session_id, rc, t_init, t_first)
 
 
 def stream_claude(user_message, config, history, model=MODEL_OPUS,
-                  system_prompt_file=None, athlete_name="Jamie", context=""):
+                  system_prompt_file=None, athlete_name="Jamie", context="",
+                  run_id=None, run_owner=None):
     """Generator over a streaming Claude run. Yields:
       ('chunk', snapshot)                 — growing reply to display live (transport throttles edits)
       ('status', tool_name, input_hint)   — a tool_use block appeared; transport may show a status line
       ('final', full)                     — authoritative full reply, emitted exactly once at the end
+      ('cancelled', partial)              — the athlete stopped this run; emitted INSTEAD of ('final',...)
     Only ('chunk',...) and ('final',...) carry reply text; ('status',...) is purely
     for the live UI and must never be logged or treated as the reply.
     assistant events are full snapshots (replace); content_block_delta events are
-    incremental (append); result replaces all. Transport-agnostic by design."""
-    sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
-    extra, prompt, mode, st = _plan_session(user_message, config, history,
-                                            sp_file, athlete_name, context)
-    env = scoped_env(sp_file)
-    t0 = time.time()
-    final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
-        prompt, model, extra, config["project_dir"], env=env)
+    incremental (append); result replaces all. Transport-agnostic by design.
 
-    # A dead resume fails before any text streams — fall back to a fresh session.
-    if mode == "resume" and rc != 0 and not (final or streamed.strip()):
-        log(f"[session] resume failed rc={rc} — falling back to fresh session")
-        _clear_session(sp_file)
+    CANCELLATION (bug #30, 17 Aug 2026). Pass `run_id` (from new_run_id(), or any
+    id you know to be unique and never reused) and optionally `run_owner` (the
+    chat id) to make this turn cancellable: another thread calls
+    cancel_run(run_id, owner=run_owner) and the CLI is killed under us. The turn
+    then ends with ('cancelled', partial) and NOT with ('final', ...). That
+    distinction is the point of the event: a cancelled turn must not be posted to
+    the athlete and must not be written to history, whereas a crash still ends in
+    ('final', ...) and keeps its existing error handling. `partial` is whatever
+    text had been generated when the kill landed - it is there for logging what
+    was thrown away, never for display. A cancelled turn also skips
+    _finish_session: the CLI session was killed part-way and its server-side
+    state is not something to resume from.
+
+    Pass no run_id and NOTHING changes: the run is still registered (so ops can
+    see it) but no one can name it, and the event stream is exactly what it was."""
+    run = _register_run(run_id or new_run_id(), run_owner)
+    try:
+        sp_file = Path(system_prompt_file) if system_prompt_file else SYSTEM_PROMPT_FILE
         extra, prompt, mode, st = _plan_session(user_message, config, history,
                                                 sp_file, athlete_name, context)
+        env = scoped_env(sp_file)
+        t0 = time.time()
         final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
-            prompt, model, extra, config["project_dir"], env=env)
+            prompt, model, extra, config["project_dir"], env=env, run=run)
 
-    text = (final if final is not None else streamed).strip()
-    if _is_limit_message(text) and model != MODEL_SONNET:
-        # Opus is primary now: fall DOWN to Sonnet 5 on a cap so the athlete
-        # still gets an answer rather than a rate-limit notice.
-        log(f"[limit] {model} capped - retrying on {MODEL_SONNET}")
-        # env= on the fallback too: a rate-limited turn must not run unscoped.
-        final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
-            prompt, MODEL_SONNET, extra, config["project_dir"], env=env)
+        # A dead resume fails before any text streams — fall back to a fresh session.
+        # `not run.cancelled` first: a killed process looks EXACTLY like a dead
+        # resume (non-zero rc, no text), so without this guard stopping a turn
+        # would immediately spawn a second one and the athlete would watch the
+        # wrong answer start over.
+        if not run.cancelled and mode == "resume" and rc != 0 and not (final or streamed.strip()):
+            log(f"[session] resume failed rc={rc} — falling back to fresh session")
+            _clear_session(sp_file)
+            extra, prompt, mode, st = _plan_session(user_message, config, history,
+                                                    sp_file, athlete_name, context)
+            final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
+                prompt, model, extra, config["project_dir"], env=env, run=run)
+
         text = (final if final is not None else streamed).strip()
-        model = MODEL_SONNET
+        if not run.cancelled and _is_limit_message(text) and model != MODEL_SONNET:
+            # Opus is primary now: fall DOWN to Sonnet 5 on a cap so the athlete
+            # still gets an answer rather than a rate-limit notice. Same guard as
+            # above - a cancelled turn does not get retried on another model.
+            log(f"[limit] {model} capped - retrying on {MODEL_SONNET}")
+            # env= on the fallback too: a rate-limited turn must not run unscoped.
+            final, streamed, sid, rc, t_init, t_first = yield from _stream_once(
+                prompt, MODEL_SONNET, extra, config["project_dir"], env=env, run=run)
+            text = (final if final is not None else streamed).strip()
+            model = MODEL_SONNET
 
-    # Before _finish_session: it increments st["turns"] in place (see call_claude).
-    turn_idx = _turn_index(st)
-    if rc == 0 and text:
-        _finish_session(sp_file, mode, st, sid)
-    _log_timing("stream", model, mode, t0, t_init, t_first,
-                turns=turn_idx, prompt_bytes=len(prompt or ""))
-    yield ("final", text or "(no response)")
+        # Before _finish_session: it increments st["turns"] in place (see call_claude).
+        turn_idx = _turn_index(st)
+        # `not run.cancelled` is explicit rather than leaning on rc: a kill that
+        # lands in the last moments of a turn can still find rc==0 and a complete
+        # answer, and the athlete asked for that answer to be dropped. The cost is
+        # a session whose turn counter did not advance, which only means it
+        # rotates a turn early.
+        if rc == 0 and text and not run.cancelled:
+            _finish_session(sp_file, mode, st, sid)
+        _log_timing("stream", model, mode, t0, t_init, t_first,
+                    turns=turn_idx, prompt_bytes=len(prompt or ""))
+        if run.cancelled:
+            log(f"[cancel] run {run.run_id} stopped, {len(text)} chars discarded")
+            yield ("cancelled", text)
+            return
+        yield ("final", text or "(no response)")
+    finally:
+        # finally, not a trailing call: the consumer breaks out of its loop on
+        # ('final',...) rather than draining us, so the generator is CLOSED at a
+        # yield and this is the only teardown that runs. It also covers the path
+        # where _plan_session throws - an entry left behind would be a run nobody
+        # can ever cancel and a slow leak in a process that runs for weeks.
+        _deregister_run(run)
 
 
 def call_claude_with_image(img_path, caption, config, history, model=MODEL_OPUS,
