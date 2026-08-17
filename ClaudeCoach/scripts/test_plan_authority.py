@@ -509,8 +509,104 @@ check("the fallback banks the zones for next week's rolling balance",
       < _s1_src.index("_write_prior_zones(args.athlete, week_start, proposal)\n                if args.notify"))
 check("the fallback does NOT advance the injury ramp off a week that failed its own audit",
       _s1_src.count("_advance_injury_ramp(args.athlete") == 1)
-check("the fallback still exits 3 so weekly-plan.sh sees 'not clean'",
-      "not_pushed = True" in _s1_src and "sys.exit(3)" in _s1_src)
+# THE EXIT CONTRACT. This block replaces "the fallback still exits 3 so weekly-plan.sh
+# sees 'not clean'", which encoded the 16 Aug 2026 bug as the requirement: the fallback
+# pushed calum three events and exited 3 anyway, so weekly-plan.sh alerted "NO WEEK PUSHED
+# for calum" about a week that was on his calendar. 3 means NOTHING WAS PUSHED, and the
+# only thing allowed to decide it is whether anything was pushed. Driven on the real
+# function rather than the source text, because a text assertion cannot catch a helper
+# that returns the wrong number.
+check("a --push run that pushed a clean week exits 0",
+      S1.exit_code_for({"pushed": True, "push_result": {"pushed": [1, 2, 3]}}, True) == 0)
+check("the empty-week FALLBACK pushed a week, so it exits 0 too (16 Aug 2026)",
+      S1.exit_code_for({"pushed": True, "week_was_empty": True,
+                        "push_result": {"pushed": [129564388, 129564389, 129564390]}},
+                       True) == 0)
+check("a --push run that genuinely pushed nothing still exits 3",
+      S1.exit_code_for({"pushed": False, "reason": "not ready"}, True) == 3)
+# A dry run writes no "pushed" key at all (summary["pushed"] is only set under --push), so
+# reading the field without the args.push gate would make every hand-run and every
+# scripts/shadow-week-check.sh run exit 3 for doing exactly what it is meant to do.
+check("a DRY RUN exits 0, having pushed nothing on purpose",
+      S1.exit_code_for({"ready_to_push": False}, False) == 0)
+check("the exit code is derived from the same field the summary prints, not a parallel flag",
+      "not_pushed" not in _s1_src)
+# THE HEARTBEAT half of the same false report. `stage1-plan` defaults to FAILURE in
+# coach_alert.OUTCOME_CLASS, ops-digest._saw() treats a FAILURE heartbeat as "the
+# deliverable did not happen", and the weekly plan is telegram=True, so the fallback's
+# ok=False beat told Jamie there was no week for calum, on the one channel that reaches
+# him. FINDING keeps the digest line and drops the false claim.
+import coach_alert  # noqa: E402
+import ops_log      # noqa: E402
+check("an unstamped stage1-plan ok=False line is a FAILURE (why the stamp is needed)",
+      coach_alert.classify({"script": "stage1-plan", "ok": False, "detail": "x"})
+      == coach_alert.FAILURE)
+# Stamped with ops_log.FINDING, which is the value stage1-plan actually writes, not with
+# coach_alert's own name for it. classify() only honours a stamp that is IN (FAILURE,
+# FINDING) as coach_alert spells them, so if the two ever stop being the same string the
+# stamp goes inert, the line classifies back to FAILURE and the false "no weekly plan for
+# calum" alert returns with every test still green. Asserting the shipped value is what
+# makes that impossible.
+check("ops_log and coach_alert agree on what FINDING is spelled",
+      ops_log.FINDING == coach_alert.FINDING)
+check("a FINDING-stamped one is not, so the gap check still counts the run as delivered",
+      coach_alert.classify({"script": "stage1-plan", "ok": False, "detail": "x",
+                            "outcome": ops_log.FINDING}) == coach_alert.FINDING)
+check("the fallback beat is FINDING-stamped, and it is the ONLY beat that is",
+      _s1_src.count("outcome=ops_log.FINDING") == 1
+      and "empty calendar ({why})\", outcome=ops_log.FINDING)" in _s1_src)
+
+# EVERY CODE THE SCRIPT CAN EMIT HAS A WORD IN weekly-plan.sh. The wrapper's `what` lookup
+# falls back to f"exited {rc}", which is not a lie but tells the reader nothing: 4 (stood
+# down, another build holds the lock) sat in that fallback until 17 Aug 2026. Codes are
+# read out of the AST, so adding a fifth exit to stage1-plan.py fails this check instead of
+# quietly landing in the digest as "exited 5".
+def _emittable_codes(path):
+    """Non-zero exit codes stage1-plan.py can produce. `unhandled` is any sys.exit()
+    argument shape this reader does not understand. Never silently ignored, because an
+    unread exit is exactly the gap this check exists to close."""
+    tree = ast.parse(path.read_text(), filename=str(path))
+    codes, unhandled = set(), []
+    # Every int anywhere inside a `return` in exit_code_for, not just a bare
+    # `return <int>`: a `return 0 if x else 3` hides the 3 one node down, and missing it
+    # would have this check pass while claiming 3 is unreachable.
+    returned = {c.value
+                for f in ast.walk(tree)
+                if isinstance(f, ast.FunctionDef) and f.name == "exit_code_for"
+                for n in ast.walk(f) if isinstance(n, ast.Return) and n.value is not None
+                for c in ast.walk(n.value)
+                if isinstance(c, ast.Constant) and isinstance(c.value, int)}
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute) and node.func.attr == "exit"
+                and node.args):
+            continue
+        a = node.args[0]
+        if isinstance(a, ast.Constant) and isinstance(a.value, int):
+            codes.add(a.value)
+        elif isinstance(a, ast.Attribute) and a.attr == "BUSY_EXIT":
+            codes.add(plan_lock.BUSY_EXIT)
+        elif isinstance(a, ast.Name) and a.id == "rc":
+            codes |= returned          # sys.exit(rc), rc from exit_code_for
+        else:
+            unhandled.append(ast.dump(a))
+    return {c for c in codes if c}, unhandled
+
+
+_codes, _unread = _emittable_codes(BASE / "scripts" / "stage1-plan.py")
+check("every sys.exit() in stage1-plan.py is readable by this check", not _unread)
+check("the exit codes are the documented four (1 built nothing, 3 pushed nothing, "
+      "4 stood down; 124 comes from `timeout`, not the script)",
+      _codes == {1, 3, 4})
+import re  # noqa: E402
+
+_wp_src = (BASE / "scripts" / "weekly-plan.sh").read_text()
+_mapped = {int(c) for c in re.findall(r'"(\d+)":', _wp_src)}
+check(f"weekly-plan.sh maps every emittable code {sorted(_codes)} plus 124, mapped="
+      f"{sorted(_mapped)}", _codes | {124} <= _mapped)
+check("weekly-plan.sh does NOT tell Jamie the calendar is empty when the build stood down "
+      "(rc=4: the build holding the lock delivers the week)",
+      'tail = ("" if rc == "4" else' in _wp_src)
 check("the fallback message does NOT claim the calendar was left alone",
       "Your calendar has NOT been updated" not in S1._fallback_message(
           {"phase": "build"},
