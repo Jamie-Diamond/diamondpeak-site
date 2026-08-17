@@ -513,12 +513,17 @@ class TestActivityWatcherRollingWindow:
 
 
 class TestCoachAlertRouting:
-    """Only the two approved reasons may Telegram; everything else is refused."""
+    """Only the approved reasons may Telegram; everything else is refused."""
 
-    def test_two_reasons_only(self):
+    def test_the_approved_reasons_and_no_others(self):
+        # Was two (28 Jul 2026). PLAN_HARD_FAIL joined them 17 Aug 2026 after a
+        # correct hard fail on a live calendar produced nothing but a log line for
+        # ten days; Jamie's sign-off on the third condition is still outstanding, so
+        # this list is the place it is reviewed rather than a detail of plan_audit.
         import coach_alert
         assert set(coach_alert.REASONS) == {coach_alert.DELIVERABLE_MISSING,
-                                           coach_alert.CLAUDE_AUTH_FAILED}
+                                           coach_alert.CLAUDE_AUTH_FAILED,
+                                           coach_alert.PLAN_HARD_FAIL}
 
     def test_unapproved_reason_refused(self, logs, monkeypatch):
         import coach_alert

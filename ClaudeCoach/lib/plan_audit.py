@@ -19,14 +19,20 @@ Usage:
   python3 plan_audit.py --athlete jamie            # current + next week
   python3 plan_audit.py --all                      # every active athlete
 Exit code 0 = clean, 1 = at least one hard invariant failed (for cron alerting).
+
+A HARD fail also alerts the coach on Telegram, once per distinct finding — see
+notify_hard_fail(). Soft findings stay log-only. Until 17 Aug 2026 everything
+here was log-only, which is how three correct hard fails on a live calendar
+produced no consequence for ten days.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
@@ -43,6 +49,7 @@ from plan_builder import _weekly_tss_cap                       # noqa: E402
 # lower bound is computed in exactly one place. See its docstring for why.
 from macro_projection import binding_constraint                # noqa: E402
 import ops_log                                                 # noqa: E402
+import coach_alert                                             # noqa: E402
 import day_overrides                                           # noqa: E402
 import weekly_availability                                     # noqa: E402
 
@@ -63,6 +70,37 @@ BASELINE = BASE / "config" / "plan-audit-baseline.json"
 # owns that directory's sidecars. Best-effort: a missing/corrupt file just means no
 # streaks yet, never a failed audit.
 STREAKS = BASE / "config" / "plan-audit-streaks.json"
+# Which hard findings the coach has ALREADY been told about, keyed on the finding's
+# own identity (athlete + week + rule code) and not on a timestamp. This is what
+# stops the 06:25 run alerting every morning about the same unfixed week while
+# still alerting the moment a finding is new or changed. Under LOG_DIR, alongside
+# coach-alert-state.json: it is per-machine send state, not configuration, and it
+# must not produce a commit every day.
+ALERTED = ops_log.LOG_DIR / "plan-audit-alerted.json"
+
+
+def _load_alerted(slug: str) -> dict:
+    try:
+        return (json.loads(ALERTED.read_text()).get("athletes", {}).get(slug) or {})
+    except Exception:
+        return {}
+
+
+def _save_alerted(slug: str, ids: dict) -> None:
+    try:
+        blob = json.loads(ALERTED.read_text()) if ALERTED.exists() else {}
+    except Exception:
+        blob = {}
+    blob.setdefault("_note", "Hard plan_audit findings already alerted to the coach, "
+                             "per athlete: identity -> when first alerted. An identity "
+                             "no longer on the calendar is dropped, so a finding that is "
+                             "fixed and later re-broken alerts again.")
+    blob.setdefault("athletes", {})[slug] = ids
+    try:
+        ALERTED.parent.mkdir(parents=True, exist_ok=True)
+        ALERTED.write_text(json.dumps(blob, indent=1, sort_keys=True) + "\n")
+    except Exception:
+        pass
 
 
 def _load_streaks(slug: str) -> dict:
@@ -158,15 +196,23 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
     # get(cat,-1) rejects every run and alerts daily.
     fails = {"STRUCTURE": [], "FUELLING": [], "LONG_RIDE": [], "WEEKLY_LOAD": [], "RULES": [],
              "DISTRIBUTION": [], "SKIPPED": [], "DIRECTED": []}
+    # Stable identity per HARD finding, built where the finding is raised rather than
+    # re-parsed out of the prose afterwards. Deliberately NOT the counts fingerprint
+    # counts()/signature() build: the baseline needs a key that does not move week to
+    # week, and the alert dedup needs the opposite — the week IS the identity, so next
+    # week's recurrence of the same rule is a new finding and alerts again.
+    hard_ids: list[str] = []
 
     for e in events:
         sport = e.get("type") or ""
         nm = (e.get("name") or "")[:48]
+        day = (e.get("start_date_local") or "")[:10]
         steps = len((e.get("workout_doc") or {}).get("steps") or [])
         desc = e.get("description") or ""
         dur = _dur_min(e)
         if sport in _STRUCTURED_SPORTS and steps == 0:
             fails["STRUCTURE"].append(f"{nm} ({sport}) — no structured steps")
+            hard_ids.append(f"STRUCTURE:{day}:no_structured_steps:{nm}")
         # Named hard, built easy. validate_week blocks this at plan time, but a
         # session can also reach the calendar by chat edit or a hand push, so the
         # daily audit checks what is actually ON the calendar (4 Aug 2026).
@@ -175,6 +221,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
             fails["STRUCTURE"].append(
                 f"{nm} ({sport}) — name claims {mm['claim']} but hardest step is "
                 f"{mm['found']}%, short of {mm['required']}%")
+            hard_ids.append(f"STRUCTURE:{day}:name_intensity_mismatch:{nm}")
         if sport in _FUEL_SPORTS and dur >= 90:
             g = re.findall(r"(\d+)\s*g\s*(?:CHO\s*)?/?\s*hr", desc, re.I)
             if not g:
@@ -298,6 +345,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
                 fails["DIRECTED"].append(f"week {ws}: {v}")
             elif v.severity == "hard":
                 fails["RULES"].append(f"week {ws}: {v}")
+                hard_ids.append(f"RULES:{ws}:{v.code}")
             elif v.code.startswith("intensity_distribution"):
                 # SOFT distribution signals belong in their own warn category. They
                 # used to be appended to RULES to make them visible, but `hard` is
@@ -317,7 +365,7 @@ def audit_athlete(slug: str, cfg: dict, weeks: int = 2) -> dict:
     return {"athlete": slug, "window": f"{win_start}..{win_end}", "fuel_target": fuel,
             "long_ride_ceiling_min": lr_ceiling, "ok": not any(fails.values()),
             "hard_fail": hard, "fails": {k: v for k, v in fails.items() if v},
-            "notes": notes}
+            "hard_ids": sorted(hard_ids), "notes": notes}
 
 
 def counts(report: dict) -> dict:
@@ -356,6 +404,100 @@ def within_baseline(report: dict, accepted: dict | None) -> bool:
     if not accepted:
         return False
     return all(n <= int(accepted.get(cat, -1)) for cat, n in counts(report).items())
+
+
+_MAX_ALERT_FINDINGS = 6
+_MAX_FINDING_CHARS = 320
+
+
+def hard_lines(report: dict) -> list[str]:
+    """The BLOCKING findings verbatim, in the validator's own words.
+
+    Only _HARD_CATEGORIES, so the soft categories a warning lives in (DISTRIBUTION,
+    FUELLING, WEEKLY_LOAD, SKIPPED, DIRECTED) can never reach a message: the whole
+    point of the 4 Aug split was that a warning does not block, and a warning that
+    interrupts the coach is the same defect wearing a different coat.
+    """
+    out = []
+    for cat in _HARD_CATEGORIES:
+        for item in (report.get("fails") or {}).get(cat, []):
+            # "[hard]" is the validator's severity marker for the log; the message
+            # already says these are the blocking ones.
+            txt = item.replace("[hard] ", "")
+            out.append(txt if txt.startswith("week ") else f"{cat.lower()}: {txt}")
+    return out
+
+
+def alert_text(report: dict) -> str:
+    """The coach-facing message: which athlete, which week, which rules.
+
+    A bare "audit failed" is what a log line already is. This names the thing to
+    change, because the athlete is following the calendar literally every morning
+    until someone changes it.
+    """
+    slug = str(report.get("athlete") or "?")
+    lines = hard_lines(report)
+    head = (f"⚠️ {slug.title()}'s live plan breaks {len(lines)} hard "
+            f"planning rule{'s' if len(lines) != 1 else ''}. That calendar is what "
+            f"they are training to now, so it needs a plan change, not a log entry.")
+    shown = [ln if len(ln) <= _MAX_FINDING_CHARS else ln[:_MAX_FINDING_CHARS - 1] + "…"
+             for ln in lines[:_MAX_ALERT_FINDINGS]]
+    body = "\n".join(f"• {ln}" for ln in shown)
+    if len(lines) > _MAX_ALERT_FINDINGS:
+        body += f"\n• and {len(lines) - _MAX_ALERT_FINDINGS} more"
+    tail = "Full detail: plan-audit.log on the VM."
+    # Coach-facing text: house style is no em-dashes, and the validator's details
+    # are written for the log.
+    return f"{head}\n{body}\n{tail}".replace("—", "-").replace("–", "-")
+
+
+def _fingerprint(ids: list[str]) -> str:
+    return hashlib.sha1("|".join(sorted(ids)).encode()).hexdigest()[:12]
+
+
+def notify_hard_fail(report: dict) -> str:
+    """Alert the coach about a hard fail, at most once per distinct finding.
+
+    Dedup is on the findings' IDENTITIES (athlete + week + rule), not on when they
+    were seen: the 06:25 cron re-detects an unfixed week every morning, and an alarm
+    that repeats daily is one the reader learns to dismiss — which is how a real
+    hard fail (Kathryn, 17 Aug 2026) went ten days without a human seeing it.
+    A NEW or CHANGED finding has an identity nobody has been told about, so it
+    alerts immediately.
+
+    Identities no longer on the calendar are DROPPED, so a finding that is fixed
+    and later re-broken is new again rather than silenced for ever. Nothing is
+    recorded on "send-failed": a Telegram error must leave the finding unreported
+    so the next run retries it, the same reasoning as coach_alert.send()'s own
+    refusal to bank a cooldown for a message that did not go.
+
+    Returns the action taken, or "known" when every current finding has already
+    been alerted.
+    """
+    slug = report["athlete"]
+    # An audit that could NOT RUN carries hard_fail=True so the cron exit code stays
+    # honest, but it is not a breached rule: there is nothing for the coach to change,
+    # and an intervals.icu blip or a DNS hiccup would message him for nothing. A run
+    # that failed to do its job is FAILURE-class digest material, which the
+    # ops_log.alert above this call has already written.
+    if report.get("error"):
+        return "error"
+    ids = sorted(report.get("hard_ids") or [])
+    if not ids:
+        # hard_fail with no identity recorded: a hard category gaining items without
+        # an id. Fall back to the signature so a blocking finding can never be
+        # dropped by the dedup itself.
+        ids = [f"signature:{report.get('signature')}"]
+    seen = _load_alerted(slug)
+    if all(i in seen for i in ids):
+        _save_alerted(slug, {i: seen[i] for i in ids})
+        return "known"
+    action = coach_alert.send(coach_alert.PLAN_HARD_FAIL, alert_text(report),
+                              key=f"{slug}|{_fingerprint(ids)}")
+    if action in ("sent", "dry-run", "cooldown"):
+        now = datetime.now().isoformat(timespec="seconds")
+        _save_alerted(slug, {i: seen.get(i, now) for i in ids})
+    return action
 
 
 def main():
@@ -401,6 +543,27 @@ def main():
                               athlete=slug)
         else:
             ops_log.record_run("plan_audit", athlete=slug, ok=True)
+        # Then, and separately, TELL SOMEONE. Everything above this point writes to
+        # disk; on 17 Aug 2026 that was the entire consequence of three correct hard
+        # fails on Kathryn's live calendar. Deliberately NOT gated on the baseline
+        # signature: the baseline is a count per category, so a hard breach inside an
+        # accepted count would stay silent, and the identity dedup below is the
+        # anti-spam mechanism the baseline was being stretched to provide.
+        if r.get("hard_fail"):
+            try:
+                action = notify_hard_fail(r)
+                print(f"coach-alert plan_hard_fail:{slug}: {action}", file=sys.stderr)
+            except coach_alert.TelegramSendBlocked:
+                # The guard that fails a test which would have messaged the coach for
+                # real. Never swallowed.
+                raise
+            except Exception as e:
+                # The audit's own output is the primary artefact: alerting must not be
+                # able to break it. "coach-alert" means the alarm could not reach
+                # Jamie, which is what this is.
+                ops_log.alert("coach-alert", f"plan_audit hard fail for {slug} could "
+                                             f"NOT be alerted: {type(e).__name__}: {e}",
+                              athlete=slug)
     if args.write_baseline:
         BASELINE.write_text(json.dumps(
             {"_note": "Accepted plan_audit failure counts per category. A run at or "

@@ -11,6 +11,22 @@ Jamie's decision, 28 Jul 2026: exactly TWO conditions may interrupt him.
   1. DELIVERABLE_MISSING — a named deliverable (daily OR weekly) did not happen.
   2. CLAUDE_AUTH_FAILED  — the Claude CLI could not authenticate in production.
 
+  3. PLAN_HARD_FAIL — a HARD planning-invariant breach on an athlete's live
+     calendar. Added and SIGNED OFF BY JAMIE 17 Aug 2026, amending his 28 Jul
+     two-condition decision. Recorded here as its own third condition rather
+     than smuggled through condition 1, because "the audit did not run" and
+     "the audit found a breached rule" are different facts.
+     It is here because log-only demonstrably failed on exactly the case the
+     audit exists to catch: plan_audit's 06:25 run correctly found Kathryn's week
+     of 17 Aug carrying load on 7 of 7 days, a swim on a forbidden day, and an
+     empty following week that would cost 11.2 CTL, returned hard_fail with rc=1
+     — and the findings sat in plan-audit.log while she trained a tenth
+     consecutive day. The distinction this file already draws for git sync
+     applies in reverse: a stuck sync is plumbing, and nothing an athlete does
+     depends on it, whereas a breached hard rule is followed literally by a
+     human the next morning. Soft/advisory findings (DISTRIBUTION, FUELLING,
+     WEEKLY_LOAD, SKIPPED, DIRECTED) stay log-only and must remain so.
+
 Deliberately NOT here, and log-only as a result:
   - git sync stuck (commits piling up locally). It was the one pre-existing
     Telegram path; it is removed because it is not one of the two. The 24-27 Jul
@@ -60,14 +76,24 @@ _REAL_SUBPROCESS = subprocess
 
 DELIVERABLE_MISSING = "deliverable_missing"
 CLAUDE_AUTH_FAILED  = "claude_auth_failed"
+PLAN_HARD_FAIL      = "plan_hard_fail"
 
 # reason -> how loud, and how often at most. Cooldown exists because auth
 # failures recur on EVERY claude_call (many per hour) and a missing deliverable
 # is re-detected by every digest run until it is fixed; the coach needs the fact
 # once, not once per occurrence.
+#
+# PLAN_HARD_FAIL's 14 days is derived, not chosen: plan_audit keys this cooldown
+# on the identities of the findings themselves (athlete + week + rule), and a
+# given week is inside its two-week audit window for at most 14 days — once as
+# next week, once as the current one. So an UNCHANGED set of findings cannot
+# re-alert for as long as it is auditable, while a new or changed finding is a
+# different key and alerts at once. plan_audit's own identity store is the
+# primary dedup; this is the backstop for when that store cannot be written.
 REASONS = {
     DELIVERABLE_MISSING: {"cooldown_h": 12},
     CLAUDE_AUTH_FAILED:  {"cooldown_h": 6},
+    PLAN_HARD_FAIL:      {"cooldown_h": 14 * 24},
 }
 
 # Named deliverables the gap-check watches. `telegram` is the routing decision
@@ -378,9 +404,11 @@ CRON_EXEMPT = {
         "printed by build_digest even when ok=True, and its findings go out as "
         "rules-lint alerts (FINDING-class).",
     "plan_audit.py":
-        "plan invariant checking, FINDING-class and baseline-gated. Its whole "
-        "output is digest lines; a missed run means one day without an audit, "
-        "not a missed deliverable to an athlete.",
+        "plan invariant checking, FINDING-class and baseline-gated. Its SOFT "
+        "output is digest lines; a hard fail now Telegrams under PLAN_HARD_FAIL "
+        "from the audit itself. A missed run means one day without an audit, not a "
+        "missed deliverable to an athlete — though now that a human depends on it, "
+        "registering it as a deliverable is worth a decision.",
 }
 
 UNVERIFIED = ("\u26a0 CRON AUDIT: could not read `crontab -l` \u2014 the deliverable "

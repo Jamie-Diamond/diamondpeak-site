@@ -33,7 +33,7 @@ and `lib/ops_log.py` has no notify path at all any more.
 |---|---|
 | git sync stuck / flapping | Not one of the two. Now detected properly (see below) and loud in the digest, but silent on Telegram. **This is the 24-27 Jul incident: it would still not reach him.** One `REASONS` entry flips it. |
 | session-sync, watchdog gaps | Internal plumbing and nudges, not deliverables. (`capture-reminder` was retired on 28 Jul and deregistered — its work is now covered by `evening-checkin`, see below.) |
-| `plan_audit` hard fails, under-training, everything else | Digest lines. |
+| `plan_audit` SOFT findings (distribution, fuelling, weekly load, skipped, directed), under-training, everything else | Digest lines. `plan_audit` **hard** fails are the exception since 17 Aug 2026 — see "Hard plan fails reach Jamie" below. |
 
 ## Heartbeats: silence vs absence
 
@@ -343,8 +343,8 @@ would ask it to detect its own absence), `cc-gitpull.sh` and `bot-watchdog.py`
 for), `refresh-public-data.py` and `refresh-site-data.py` (site data
 regeneration, no `ops_log` instrumentation, nothing delivered to an athlete or
 the coach), `bug-fixer.py` (everything it does is already a digest line by
-construction) and `plan_audit.py` (`FINDING`-class, baseline-gated, its whole
-output *is* digest lines).
+construction) and `plan_audit.py` (`FINDING`-class, baseline-gated; its soft
+output *is* digest lines, and its hard fails Telegram from the audit itself).
 
 **Closed, 28 Jul 2026 (follow-up ticket).** The two live jobs the audit found
 unregistered and unexempt on its first run are now both `coach_alert.
@@ -502,6 +502,41 @@ than an exact signature so that partly fixing a defect does not page you.
 Regenerate with `python3 lib/plan_audit.py --all --write-baseline`, or shrink
 the numbers by hand as defects are fixed. `sys.exit(1 if any_hard else 0)` is
 unchanged and still honest.
+
+## Hard plan fails reach Jamie (17 Aug 2026)
+
+Baseline gating fixed the store-poisoning, and left the alarm silent. On 17 Aug
+2026 the 06:25 audit correctly reported Kathryn's week of 17 Aug carrying load on
+7 of 7 days, a swim on a forbidden day, and a following week at 0 TSS that would
+cost 11.2 CTL — `hard_fail: true`, `rc=1` — and the only consequence was a line
+in `plan-audit.log`. She trained a tenth consecutive day. A hard rule that raises
+no alarm is indistinguishable from no rule.
+
+`coach_alert.PLAN_HARD_FAIL` is therefore a THIRD approved Telegram condition
+(**Jamie's sign-off outstanding**), sent by `plan_audit.notify_hard_fail()`:
+
+- **Only hard.** The message body is built from `_HARD_CATEGORIES` only
+  (`STRUCTURE`, `LONG_RIDE`, `RULES`), so a `[soft]` finding cannot travel with
+  it — the 4 Aug defect in reverse.
+- **Actionable.** It names the athlete, the week and each failing rule in the
+  validator's own words, not "audit failed".
+- **Deduplicated on identity, not time.** `athlete + week + rule code` is
+  recorded per finding in `~/Library/Logs/ClaudeCoach/plan-audit-alerted.json`.
+  The daily re-detection of an unfixed week is silent; a new or changed finding
+  alerts at once; a partial fix does not page anyone; an identity that leaves the
+  calendar is dropped, so a re-broken week is news again. `REASONS`' 14-day
+  cooldown on the same identity hash is the backstop for an unwritable store.
+- **NOT baseline-gated.** The baseline is counts per category, so a hard breach
+  inside an accepted count would stay silent — jamie's `RULES: 6` allowance
+  covers three live forbidden-day breaches today. The identity dedup is the
+  anti-spam mechanism the baseline was being stretched to provide. The existing
+  `ops_log` baseline branch is untouched.
+- **Fail-soft.** The alert is wrapped; an alerting failure logs under
+  `coach-alert` (the alarm could not reach Jamie) and the audit's own output and
+  exit code are unaffected. `TelegramSendBlocked` is deliberately re-raised.
+
+Open decision: `plan_audit.py` is still `CRON_EXEMPT`, so a dead audit is now a
+silent single point of failure for this alarm.
 
 ## Testing it without messaging anyone
 

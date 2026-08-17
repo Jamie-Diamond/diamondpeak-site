@@ -76,6 +76,12 @@ DRIFT_WINDOW_DAYS = 28
 DRIFT_THRESHOLD = 3
 _OVERRIDE_KEY_RE = re.compile(r"^(swim|bike|run):(\d{4}-\d{2}-\d{2})$")
 
+# Rest days every week must carry. THE policy figure: validate_week's `rest_days_min`
+# default points here, and anything that RESERVES a rest day during construction
+# (lib/rest_day.py) reads the same name, so the constraint applied while a week is
+# built and the check applied to the finished week cannot disagree about the count.
+REST_DAYS_MIN = 1
+
 
 def _to_weekday(name) -> int | None:
     return _DOW.get(str(name).strip().lower())
@@ -864,7 +870,7 @@ def validate_week(
     monotony_threshold: float = 2.0,
     distribution: dict | None = None,
     dist_tolerance_pp: float = DIST_TOLERANCE_PP,
-    rest_days_min: int = 1,
+    rest_days_min: int = REST_DAYS_MIN,
     rest_day_waiver: str | None = None,
     long_ride_max_min: int | None = None,
 ) -> WeekReport:
