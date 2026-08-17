@@ -2331,14 +2331,26 @@ def _verify_icu_calendar_claim(slug: str) -> str:
     return verdict
 
 
-def _verify_external_writes(token, chat_id, slug: str, clean: str, icu_retry=None) -> str:
+def _verify_external_writes(token, chat_id, slug: str, clean: str, icu_retry=None,
+                            tool_summary=None) -> str:
     """Post-reply check on the two external writes the logs caught the bot lying about.
     Sends at most two extra one-line messages per kind (the honest "that didn't save" and
     the true outcome) and returns the text appended to the transcript, so history matches
-    what the athlete actually saw. Never raises."""
+    what the athlete actually saw. Never raises.
+
+    `tool_summary` (17 Aug 2026) is the one-line tool-collapse summary of the model call
+    that produced `clean`, when the caller has one. It lets write_verify prove from the
+    tools that ACTUALLY RAN that no external write was possible this turn, and so suppress
+    a reply that merely reports an earlier write ("the week I pushed earlier is still on
+    the calendar") instead of accusing the bot of losing a write it never attempted.
+
+    None means "no summary available" and the gate then fails open to the prose patterns:
+    unchanged behaviour, which is why the callers that cannot supply one are safe to leave
+    it out. It must be the summary of the call that produced THIS text - see the
+    gate_summary note at the streaming call site."""
     appended = []
     try:
-        kinds = write_verify.claim_kinds(clean)
+        kinds = write_verify.claim_kinds(clean, tool_summary=tool_summary)
     except Exception as e:
         log(f"[{slug}] claim detection failed (non-fatal): {e}")
         return ""
@@ -2354,28 +2366,63 @@ def _verify_external_writes(token, chat_id, slug: str, clean: str, icu_retry=Non
             line = write_verify.retry_line(kind, verdict)
             send(token, chat_id, line, disable_notification=True)
             appended.append(line)
+            # `post` is the POST-retry verdict, kept rather than immediately crushed to a
+            # bool (17 Aug 2026). The old `ok = _verify_icu_calendar_claim(slug) == "ok"`
+            # folded "unknown" in with "absent", so a network hiccup on the read-back,
+            # after a retry that may well have SUCCEEDED, still told Jamie "Treat your
+            # calendar as unchanged". Accusing on unknown is the one thing write_verify's
+            # docstring forbids outright, and it is how an athlete learns to distrust the
+            # confirmations that were true.
+            post = None
             if kind == "strava":
+                # Left on a bool, and the copy therefore hedges (write_verify.result_line
+                # treats verdict=None as unproved). That is the right default here:
+                # _retry_strava_description returns False on paths with no proof behind
+                # them - the read-back itself failing, and the early return after the 120s
+                # subprocess timeout, which may have written before it died. Giving this
+                # branch a real verdict means changing that function to return
+                # (ok, verdict); deliberately not done here, because doing it half way for
+                # one rare branch is worse than not at all.
                 ok = _retry_strava_description(slug, icu_id, desc)
             else:
-                ok = False
                 if icu_retry is not None:
                     try:
                         icu_retry()
                     except Exception as e:
                         log(f"[{slug}] calendar retry errored: {e}")
-                    ok = _verify_icu_calendar_claim(slug) == "ok"
+                    # Read back even when the retry raised: it may have applied part way.
+                    post = _verify_icu_calendar_claim(slug)
+                else:
+                    # No retry was even attempted, so the ORIGINAL verdict still stands,
+                    # and only a PROVED verdict reaches this far (see the ACTIONABLE test
+                    # above). Passing it keeps the assertive copy honest rather than
+                    # hedging on something we did establish.
+                    post = verdict
+                ok = post == "ok"
             # This one NOTIFIES, against the one-push-per-turn convention and on purpose: a
             # correction to an answer the athlete has already read and acted on is the one
             # message that earns its own push, and the retry can take a minute or more.
-            result = write_verify.result_line(kind, ok)
+            result = write_verify.result_line(kind, ok, verdict=post)
             send(token, chat_id, result)
             appended.append(result)
             if not ok:
-                log(f"[{slug}] WARN: external write ({kind}) still absent after retry")
+                # The internal log and the ops alert hedge for the same reason the athlete
+                # copy does: on an unproved outcome we do not know the write failed, only
+                # that we could not confirm it, and an alert that overstates its evidence
+                # sends somebody hunting a bug that may not exist.
+                proved = post in write_verify.ACTIONABLE
+                if proved:
+                    log(f"[{slug}] WARN: external write ({kind}) still absent after retry")
+                else:
+                    log(f"[{slug}] WARN: external write ({kind}) could not be confirmed "
+                        "after retry (read-back inconclusive)")
                 try:
+                    detail = ("did not land and the retry failed" if proved
+                              else "could not be confirmed after the retry "
+                                   "(read-back inconclusive)")
                     ops_log.alert("write_verify",
-                                  f"claimed {kind} write did not land and the retry failed "
-                                  f"(activity {icu_id})", athlete=slug)
+                                  f"claimed {kind} write {detail} (activity {icu_id})",
+                                  athlete=slug)
                 except Exception:
                     pass
         except Exception as e:
@@ -5548,6 +5595,16 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 except Exception as _ve:
                     log(f"[{slug}] voice synth failed (text already sent): {_ve}")
             log(f"[{slug}] Out (voice): {clean[:80]}")
+            # NO tool_summary here, on purpose (17 Aug 2026). The voice path answers with
+            # the non-streaming call_claude above, which returns text only and never builds
+            # a tool-collapse summary, so there is nothing honest to pass. `summary` itself
+            # is not merely unset here, it is UNBINDABLE: it is first assigned further down
+            # this same function, which makes it a function-local, so naming it at this
+            # point raises UnboundLocalError before this branch returns. The voice path
+            # therefore stays prose-only, which keeps today's behaviour including A's
+            # retrospective-prose fix. Fixing it properly means giving the voice path a
+            # real summary (streaming, or threading tool events out of call_claude), not
+            # moving this line.
             extra = _verify_external_writes(
                 token, chat_id, slug, clean,
                 icu_retry=_make_calendar_retry(text, config, history, model, files,
@@ -5580,18 +5637,32 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             )
         else:
             # msg1 send failed (rare API error): fall back to a non-streaming call so
-            # the reply is still produced and delivered below.
+            # the reply is still produced and delivered below. `summary` stays None, and
+            # the tool-summary gate then fails open to the prose patterns. That branch is
+            # UNCHANGED, not unguarded - do NOT "fix" it by inventing a summary here, as a
+            # fabricated summary is the one input that could make the gate suppress a
+            # claim that was true.
             response = call_claude(text, config, history, model=model,
                                    system_prompt_file=files["system_prompt"],
                                    athlete_name=athlete_name, context=context)
 
         over_cap = _apply_rule_capture_guard(slug, before_rules_text)
         clean = process_charts(token, chat_id, response, slug=slug)
+        pre_capture_guard = clean
         clean = _verify_logged_reply(
             slug, before_ts, clean, text=text,
             retry=_make_capture_retry(text, config, history, model, files,
                                       athlete_name, context),
             over_cap=over_cap)
+        # `summary` describes the tools of the model call that produced `response`. On the
+        # capture-retry path _verify_logged_reply REPLACES the reply with text from a
+        # SECOND, separate call_claude whose tools never reach `summary` - and that
+        # replacement text can itself claim an external write ("Noted - and I pushed Friday
+        # swim to your calendar." starts with a capture verb, is under 200 chars, and reads
+        # as a calendar claim). Gating that text on the first call's summary could suppress
+        # a claim we verify correctly today, so the summary stops counting as evidence the
+        # moment it stops describing the text (17 Aug 2026). Fails open, never closed.
+        gate_summary = summary if clean == pre_capture_guard else None
         clean = _verify_session_preview(slug, clean)
         clean = _strip_model_countdown(clean, athlete)
         final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
@@ -5622,10 +5693,16 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         # AFTER delivery, never before: verification can cost two API reads and (on a
         # false claim) a retry, and the reply must not wait on it. Any follow-up it sends
         # is folded into this turn's transcript entry so history matches what was seen.
+        # Handing this turn's summary to the verifier is the tool-summary gate (17 Aug
+        # 2026): the tools actually invoked settle whether an external write was even
+        # possible far more reliably than the reply's prose can. It is the SECOND line of
+        # defence - write_verify's retrospective-prose fix catches the 16 Aug incident on
+        # its own, and still does on every path that reaches here with gate_summary None.
         extra = _verify_external_writes(
             token, chat_id, slug, clean,
             icu_retry=_make_calendar_retry(text, config, history, model, files,
-                                           athlete_name, context))
+                                           athlete_name, context),
+            tool_summary=gate_summary)
         history.append(_hist_entry(
             text, _capture_history_assistant(readback, clean)
             + (f"\n\n{extra}" if extra else "")))

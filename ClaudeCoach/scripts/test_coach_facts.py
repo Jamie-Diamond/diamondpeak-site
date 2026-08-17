@@ -201,6 +201,20 @@ check("a reply claiming both writes reports both",
       V.claim_kinds("Updated your Strava description and pushed Friday's swim to your calendar.")
       == {"strava", "icu"})
 check("empty text claims nothing", V.claim_kinds("") == set() and V.claim_kinds(None) == set())
+# The tool-summary gate, in one line each. The detail lives in
+# ironman-analysis/tests/test_write_verify.py; these two are here because this script is
+# the one that runs on the VM before a deploy.
+check("tools that provably cannot write externally suppress the prose claim",
+      V.claim_kinds("Pushed Thursday's ride to your calendar.",
+                    tool_summary="Checked your data, saved your data") == set())
+check("anything the tool summary cannot settle falls back to the prose",
+      V.claim_kinds("Pushed Thursday's ride to your calendar.",
+                    tool_summary="Checked your data, updated intervals.icu") == {"icu"}
+      and V.claim_kinds("Pushed Thursday's ride to your calendar.",
+                        tool_summary="Did something brand new") == {"icu"}
+      # Never an intersection: a Strava-only tool run must not silence an ICU claim.
+      and V.claim_kinds("Pushed Thursday's ride to your calendar.",
+                        tool_summary="Updated it on Strava") == {"icu"})
 
 # --- 6) Strava verdicts — absent means retry, unknown means stay quiet -----------------
 check("an empty description proves the claim false",
@@ -281,6 +295,22 @@ check("a failed retry tells the athlete nothing was written, once it is proved",
 check("an unproved failure does not assert the state of the athlete's calendar",
       "couldn't confirm" in V.result_line("icu", False)
       and "Treat your calendar as unchanged" not in V.result_line("icu", False))
+# An explicit "unknown" is the case bot's calendar branch now passes through: the retry may
+# well have landed and the read-back simply failed. It must not assert either outcome.
+check("an explicit unknown verdict asserts neither failure nor success",
+      "Treat your calendar as unchanged" not in V.result_line("icu", False, verdict="unknown")
+      and "Nothing was written" not in V.result_line("strava", False, verdict="unknown")
+      and "Saved" not in V.result_line("icu", False, verdict="unknown"))
+check("the 'unchanged' verdict is proved too, so it keeps the strong wording",
+      "Nothing was written" in V.result_line("strava", False, verdict="unchanged")
+      and "Treat your calendar as unchanged" in V.result_line("icu", False,
+                                                              verdict="unchanged"))
+check("every verdict the athlete path can see yields a one-line string, never a crash",
+      all(isinstance(V.result_line(k, ok, verdict=vd), str)
+          and "\n" not in V.result_line(k, ok, verdict=vd)
+          for k in ("icu", "strava", "something else")
+          for ok in (True, False)
+          for vd in ("absent", "unchanged", "unknown", "ok", None)))
 check("a successful retry says so without overclaiming",
       V.result_line("strava", True) == "Saved to Strava this time.")
 check("an unknown kind still yields honest copy, never a crash",

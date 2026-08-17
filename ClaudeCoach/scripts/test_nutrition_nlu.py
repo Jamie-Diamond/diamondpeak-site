@@ -1162,6 +1162,73 @@ check("and the prompt gives that exchange as the example",
       "salted caramel" in NLU.CORRECTION_PROMPT
       and "macro field of your own" in NLU.CORRECTION_PROMPT)
 
+print("\n--- his stated macro crosses interpret's re-plan, but only when it is safe ---")
+# interpret rebuilds every item from its own allowlist, so `stated` never survived the
+# hand-off and the whole overlay in resolve() was unreachable from a live message. Carrying
+# it is an n:m join between two independent model calls, and attaching his 21 g of protein
+# to the wrong food is a silent corruption worse than losing it - so ONE food in, ONE food
+# out is the only shape that carries.
+_SALAD = '{"items":[{"canonical_name":"chicken salad",' \
+         '"search_terms":["chicken salad"],"form":"prepared"}]}'
+_TWO_PLAN = '{"items":[{"canonical_name":"chicken salad",' \
+            '"search_terms":["chicken salad"]},' \
+            '{"canonical_name":"banana","search_terms":["banana"]}]}'
+_BLOCK = {"protein_g": 21.0, "basis": "estimate", "components": []}
+_log = []
+_one = NLU.interpret("chicken salad with 21g protein", "claude", "m",
+                     log=_log.append, runner=fixed_runner(_SALAD),
+                     classified=[{"text": "chicken salad with 21g protein",
+                                  "stated": dict(_BLOCK)}])
+check("one item in and one item out carries his figure onto the planned item",
+      _one["items"][0]["stated"]["protein_g"] == 21.0)
+check("and says so, because a figure of his moving between parses is worth a line",
+      any("carried his own figures" in m for m in _log))
+
+# ONE classify item, TWO planned: which of them is the 21 g about? Unanswerable.
+_log.clear()
+_1m = NLU.interpret("chicken salad with 21g protein and a banana", "claude", "m",
+                    log=_log.append, runner=fixed_runner(_TWO_PLAN),
+                    classified=[{"text": "chicken salad with 21g protein and a banana",
+                                 "stated": dict(_BLOCK)}])
+check("one classify item planned as two carries the figure to NEITHER",
+      all("stated" not in i for i in _1m["items"]))
+check("and the drop is logged rather than silent",
+      any("DROPPED 1 stated macro block" in m and "1 item(s) and planned as 2" in m
+          for m in _log))
+
+# TWO classify items, ONE planned: the plan merged them, so the block has no owner.
+_log.clear()
+_m1 = NLU.interpret("chicken salad with 21g protein and a banana", "claude", "m",
+                    log=_log.append, runner=fixed_runner(_SALAD),
+                    classified=[{"text": "chicken salad with 21g protein",
+                                 "stated": dict(_BLOCK)},
+                                {"text": "a banana", "stated": None}])
+check("two classify items planned as one carries the figure to neither",
+      "stated" not in _m1["items"][0])
+check("and that drop is logged too",
+      any("DROPPED 1 stated macro block" in m and "2 item(s) and planned as 1" in m
+          for m in _log))
+
+# The overwhelmingly common case: nobody stated anything. Nothing added, nothing logged.
+_log.clear()
+_none = NLU.interpret("chicken salad", "claude", "m", log=_log.append,
+                      runner=fixed_runner(_SALAD),
+                      classified=[{"text": "chicken salad"}])
+check("a message with no stated figure is untouched and unremarked",
+      "stated" not in _none["items"][0] and not _log)
+check("and so is a call that was passed no classify items at all",
+      "stated" not in NLU.interpret("chicken salad", "claude", "m",
+                                    log=lambda *a: None,
+                                    runner=fixed_runner(_SALAD))["items"][0])
+# The planner must never become a source of figures itself.
+check("interpret's own model cannot supply a stated block through the allowlist",
+      "stated" not in NLU.interpret(
+          "chicken salad", "claude", "m", log=lambda *a: None,
+          runner=fixed_runner('{"items":[{"canonical_name":"chicken salad",'
+                              '"search_terms":["chicken salad"],'
+                              '"stated":{"kcal":900,"protein_g":80}}]}'),
+          classified=[{"text": "chicken salad"}])["items"][0])
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
