@@ -289,7 +289,7 @@ class NutritionStore:
                   source_rung: str = "llm", source_url: str = "",
                   resolved_at=None, in_session: bool = False,
                   species=None, ingredients: str = "", logged_at=None,
-                  meal: str = "") -> dict:
+                  meal: str = "", stated_fields=None) -> dict:
         """Append one confirmed food entry. Returns the stored entry, including the
         `id` the bot needs for /undo and /edit.
 
@@ -299,7 +299,10 @@ class NutritionStore:
         `dietary_sodium_mg` is distinct from the existing in-session
         `nutrition_mg_sodium` upstream: this is salt eaten as food, that is salt
         taken on during a session. They are not interchangeable and must never be
-        summed into one figure."""
+        summed into one figure.
+
+        `stated_fields` names the figures above that came from HIM rather than from a
+        lookup - see the note beside the entry dict."""
         if confidence not in CONFIDENCE_LEVELS:
             raise ValueError(f"confidence must be one of {CONFIDENCE_LEVELS}")
         if source_rung not in SOURCE_RUNGS:
@@ -319,6 +322,13 @@ class NutritionStore:
         if not chosen and not in_session:
             chosen = meal_from_clock(stamp)
             inferred = bool(chosen)
+        # Normalised to plain strings and no further. The store deliberately does NOT check
+        # these names against a field list: rescale_item already ignores anything outside
+        # its own `_RESCALE_FIELDS` and skips a None, so a stray name is inert, whereas a
+        # second definition here of "which figures count" would drift from that one and from
+        # `MACRO_FIELDS`. Different case from `confidence` and `source_rung`, which are
+        # closed enums this module owns and so are validated above.
+        his = [str(f) for f in (stated_fields or ())]
 
         def _add(rec):
             entry = {
@@ -354,6 +364,25 @@ class NutritionStore:
                 # actually name, never instead of it.
                 "plants_claimed": plants_claimed,
             }
+            # WHICH OF THE FIGURES ABOVE ARE HIS (17 Aug 2026). resolve() can lay a macro the
+            # athlete stated over whatever the ladder found - "chicken salad with 21g protein"
+            # keeps his 21 g - and rescale_item reads this list to know what it may not
+            # recompute when he later answers "how much was it?". This signature had no such
+            # keyword, so the flag died at the commit and only the flag did: the 21 g went into
+            # the record looking exactly like a figure a lookup produced. The very next
+            # correction against that row multiplied it, and the reply showed him 42 g of
+            # protein under his own name. His feedback log already carries an invented RPE 8
+            # and an invented 300 mg of sodium; this is the same class and he escalated both.
+            #
+            # WRITTEN ONLY WHEN THERE IS SOMETHING TO SAY. These month files are a
+            # longitudinal record he keeps and reads, and an entry nobody stated a figure for
+            # - still almost every entry - stays byte-for-byte the shape it has always been,
+            # rather than growing a `"stated_fields": []` that means nothing. Rows written
+            # before today simply do not have the key, which is the same absence, so no
+            # migration is needed and every reader already spells it
+            # `.get("stated_fields") or ()`.
+            if his:
+                entry["stated_fields"] = his
             rec["entries"].append(entry)
             return entry
 
@@ -367,10 +396,20 @@ class NutritionStore:
     # state after the fact and the app buckets entries into meals by the clock: an 08:30
     # slice of rye bread written up at 14:00 read as lunch, and the only way to move it
     # was to edit the month file by hand. Still not identity - see update_entry.
+    #
+    # `stated_fields` is patchable for the same reason it is stored at all (17 Aug 2026):
+    # it is the only thing that tells a later rescale which of the row's figures are not
+    # ours to recompute, and a row that lost it silently starts multiplying his own number.
+    # It is not a figure, so it does not belong with the six above; it is the note saying
+    # which of them he gave us. Note that add_entry omits the key entirely when he stated
+    # nothing, and this list does not restore that: passing `stated_fields=None` here sets
+    # the key to None rather than removing it. Harmless, because every reader spells it
+    # `.get("stated_fields") or ()`, but it is why the label path below pops the key instead
+    # of patching it.
     UPDATABLE = ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g",
                  "dietary_sodium_mg", "portion_g", "portion_used_g",
                  "portion_estimated", "portion_assumed", "raw_text",
-                 "logged_at", "meal", "meal_inferred")
+                 "logged_at", "meal", "meal_inferred", "stated_fields")
 
     def update_entry(self, day, entry_id: str, **fields) -> dict | None:
         """Patch an existing entry in place - the QUANTITY correction path.
@@ -482,12 +521,35 @@ class NutritionStore:
             for e in rec.get("entries") or []:
                 if e.get("id") != entry_id:
                     continue
+                replaced = []
                 for f in self.LABEL_FIGURE_FIELDS:
                     v = label.get(f)
                     if v is None:
                         continue
                     e[f] = (round(float(v)) if f == "dietary_sodium_mg"
                             else round(float(v), 1))
+                    replaced.append(f)
+                # A FIGURE THE PANEL JUST OVERWROTE IS NO LONGER HIS (17 Aug 2026). New here
+                # only because entries carry `stated_fields` from today: before that, a
+                # stored row could not claim his authorship of anything. Now it can, and the
+                # loop above has just replaced the number the claim was about with the
+                # manufacturer's. Left alone, the row would say the pack's protein came from
+                # him - the next rescale would refuse to scale it and fmt_confirm would
+                # caption it "your own figure", which is the same fabricated attribution
+                # this whole change exists to stop, only pointing the other way.
+                #
+                # Same argument the function already makes two paragraphs down for scrubbing
+                # `species` and `ingredients`: what described the old figures stops being
+                # true the moment the figures move. Only the fields the label actually
+                # carried are dropped - a panel with no fibre row does not disturb a fibre
+                # figure he gave. The key is popped rather than set empty, to leave the row
+                # in the shape add_entry would have written.
+                if e.get("stated_fields") and replaced:
+                    kept = [f for f in e["stated_fields"] if f not in replaced]
+                    if kept:
+                        e["stated_fields"] = kept
+                    else:
+                        e.pop("stated_fields", None)
                 grams = label.get("portion_used_g") or label.get("portion_g")
                 if grams:
                     e["portion_g"] = float(grams)
