@@ -863,9 +863,11 @@ def tg_post(token, method, payload):
                 _b429 = (e429.read().decode("utf-8", "replace")[:300] if hasattr(e429, "read") else "")
                 log(f"tg_post {method} 429 retry failed: {e429}; body: {_b429}")
                 return {}
-        # Telegram expires a callback query about 15s after the tap. Replies here routinely
-        # take 100-500s, so by the time the work finishes the ack is refused: a dead end,
-        # not a failure worth reporting. Logged once per query id so a retry stays quiet.
+        # Telegram expires a callback query about 15s after the tap. Once refused there is
+        # nothing left to acknowledge: a dead end, not a failure worth reporting. Logged
+        # once per query id so a retry stays quiet. Since 17 Aug 2026 the ack fires on
+        # receipt of the batch (ack_callbacks), so a stale query now means the tap reached
+        # us late - the loop was blocked in a handler - not that we acked late.
         if method == "answerCallbackQuery" and _code == 400 and (
                 "query is too old" in _body.lower() or "query id is invalid" in _body.lower()):
             cbid = str(payload.get("callback_query_id") or "")
@@ -925,6 +927,41 @@ def typing(token, chat_id):
 
 def answer_callback(token, callback_query_id):
     tg_post(token, "answerCallbackQuery", {"callback_query_id": callback_query_id})
+
+
+def ack_callbacks(token, updates):
+    """Ack EVERY callback query in a freshly fetched batch, before any of that batch is
+    processed. The only place a tap is acknowledged.
+
+    Added 17 Aug 2026. Telegram expires a callback query id roughly 15 SECONDS after the
+    tap, and work here runs far longer than that (measured 17 Aug: time-to-first-text 128s,
+    125s, 233s, 427s; one turn 526s), so the ack was being refused with "query is too old"
+    and the button kept spinning until the athlete re-tapped. The per-callback ack in the
+    dispatch branch was already the FIRST thing that branch did, so the ack was not what was
+    late: RECEIPT was. getUpdates hands back a batch, the loop works through it one update
+    at a time, and a tap sitting behind a slow update in the same batch was not acked until
+    that update had finished. Doing the whole batch here closes that gap - the button stops
+    spinning as soon as the batch lands, whatever is queued in front of it.
+
+    What this does NOT fix, stated plainly: a tap made while the loop is already blocked
+    inside a handler (_handle_drill calls call_claude inline, so do several others). The bot
+    does not call getUpdates again until that returns, so the query can be minutes old
+    before this function ever sees it. That one is the blocking poll loop, open task #18
+    (coach-bot latency), and moving those handlers onto the reply pool changes ordering in
+    the live bot, so it is deliberately not attempted here.
+
+    An ack failure must never cost us the batch. This runs BEFORE any real work, so a raise
+    escaping here would drop genuine updates on the floor - much worse than a spinning
+    button. Caught and logged per update. (tg_post already swallows its own errors; the
+    guard is for anything it does not, and for a malformed update.)"""
+    for u in updates or []:
+        try:
+            cq = (u or {}).get("callback_query") or {}
+            cbid = cq.get("id")
+            if cbid:
+                answer_callback(token, cbid)
+        except Exception as e:
+            log(f"ack for callback batch entry failed (continuing): {e}")
 
 
 def edit_keyboard_confirm(token, chat_id, message_id, text):
@@ -6035,14 +6072,20 @@ def main():
         athletes = load_athletes()
 
         data = get_updates(token, offset)
-        for update in data.get("result", []):
+        updates = data.get("result", []) or []
+        # Acknowledge every tap in this batch before ANY of it is handled - see
+        # ack_callbacks for why the old per-branch ack was still too late (17 Aug 2026).
+        ack_callbacks(token, updates)
+        for update in updates:
             offset = update["update_id"] + 1
 
             if "callback_query" in update:
                 cq = update["callback_query"]
                 chat_id = str(cq.get("message", {}).get("chat", {}).get("id", ""))
                 text = cq.get("data", "").strip()
-                answer_callback(token, cq["id"])
+                # Already acked in ack_callbacks above, on receipt of the batch. Do not
+                # re-ack here: the second call is refused as an already-answered query and
+                # only stays quiet because tg_post string-matches Telegram's error text.
                 msg_id = cq.get("message", {}).get("message_id")
                 # 🔊 Speak: re-render the last reply as a voice note on demand,
                 # regardless of voice mode (feature req 2026-06-21).

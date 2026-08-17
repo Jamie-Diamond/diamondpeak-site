@@ -36,8 +36,10 @@ import urllib.request
 SSL_CONTEXT = ssl.create_default_context()
 API = "https://api.telegram.org"
 
-# Query IDs already reported as stale, so a caller that has not yet moved its ack
-# earlier does not fill the log with the same line on every retry.
+# Query IDs already reported as stale, so a repeated attempt on the same tap does not
+# fill the log with the same line. Since 17 Aug 2026 the nutrition bot acks the whole
+# getUpdates batch on receipt, so a stale query here means the tap reached the bot late
+# (the poll loop was busy), not that the ack was sent late.
 _STALE_CALLBACKS_LOGGED = set()
 
 _real_getaddrinfo = socket.getaddrinfo
@@ -157,7 +159,12 @@ def answer_callback(token: str, callback_query_id: str, text: str = "", log=prin
     query ID expires. A caller doing real work (100-500s in the logs here) must call
     this THE MOMENT the callback is received, THEN do the work and edit the message
     separately - answering after the work completes is what was timing out. A stale
-    or already-answered query is handled in post() as a benign no-op, not an error."""
+    or already-answered query is handled in post() as a benign no-op, not an error.
+
+    "The moment it is received" means the moment the BATCH is received, not the moment
+    that update's turn comes round: getUpdates hands back several updates and a tap sitting
+    behind a slow one waits for it. The nutrition bot's ack_callbacks does the whole batch
+    up front (17 Aug 2026) and is the only caller of this."""
     return post(token, "answerCallbackQuery",
                {"callback_query_id": callback_query_id, "text": text}, log=log)
 
