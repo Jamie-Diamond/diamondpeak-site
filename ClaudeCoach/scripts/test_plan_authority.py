@@ -710,6 +710,28 @@ check("nothing imports push_kathryn_plan any more",
               + [BASE / "telegram" / "bot.py"]))
 
 
+# --- 10b) the Stop button cannot outlive its run, and cannot be found by chat -------------
+# Bug #30, 17 Aug 2026. The behaviour lives in ironman-analysis/tests/test_cancel_turn.py;
+# these are the two structural claims a behavioural test cannot make, because they are
+# about what the source may NOT contain.
+check("bot.py never looks a run up by owner to cancel it (active_run_ids is diagnostics "
+      "only - a lookup by chat id kills the athlete's NEXT, correct question)",
+      "active_run_ids" not in _bot_src)
+check("the Stop tap is handled inline, never through _submit (which takes the per-chat "
+      "lock held by the very reply it is cancelling)",
+      "_submit(" not in _bot_src[_bot_src.index("def _handle_stop("):
+                                 _bot_src.index("\n# --- Undo")])
+check("the status ticker carries reply_markup on every edit (Telegram strips an inline "
+      "keyboard on any editMessageText that omits it)",
+      'if self.reply_markup is not None:\n            payload["reply_markup"] = self.reply_markup'
+      in _bot_src)
+check("the end-of-turn collapse of msg1 removes the keyboard EXPLICITLY",
+      '"text": summary or "Done",\n                     "reply_markup": {"inline_keyboard": []}'
+      in _bot_src)
+check("a cancelled turn returns None, never the '(no response)' crash fallback",
+      "return (None, summary, True)" in _bot_src)
+
+
 # --- 11) every touched file still parses --------------------------------------------------
 for rel in ("lib/icu_fetch.py", "lib/engine.py", "lib/claude_call.py",
             "lib/plan_builder.py", "lib/plan_lock.py", "scripts/stage1-plan.py",

@@ -463,3 +463,99 @@ def result_line(kind: str, ok: bool, verdict: str | None = None) -> str:
         return _RESULT_OK.get(kind, "Saved this time.")
     table = _RESULT_FAIL_PROVED if verdict in ACTIONABLE else _RESULT_FAIL_UNPROVED
     return table.get(kind, "Still not saving - logged for a fix.")
+
+
+# ---------------------------------------------------------------------------
+# Naming what changed, for a turn that was STOPPED part-way (bug #30, 17 Aug 2026)
+# ---------------------------------------------------------------------------
+#
+# Everything above answers "did the write the bot CLAIMED actually land?". A cancelled
+# turn asks the harder-sounding but simpler question: the bot never got to claim anything,
+# so what, if anything, did it manage to do before it was killed?
+#
+# Jamie's instruction when asked how strong the guarantee had to be: "It doesn't have to
+# guarantee it, but it should be aware of what it hasn't changed so it knows how to rectify
+# it." A kill mid-turn cannot be atomic - the model may already have pushed one session of
+# a three-session replan - so the deliverable is not "nothing happened", it is an HONEST
+# account plus, where the change is cleanly reversible, the means to reverse it.
+#
+# icu_events_verdict is the wrong tool for that job and deliberately stays as it is: it
+# collapses the whole window to one frozenset and answers yes/no. Naming a day and a
+# session needs the events themselves, so these functions take event LISTS. They are pure -
+# no network, no transport - because the athlete-facing wording is the part most worth
+# testing and the part most easily got wrong.
+
+
+def _event_key(e) -> str:
+    return str((e or {}).get("id") or "")
+
+
+def _event_shape(e) -> tuple:
+    """The comparable part of one event. Same fields as events_fingerprint, minus the id,
+    so two versions of the SAME event can be compared for "did it move/rename/rescale"."""
+    e = e or {}
+    return (
+        (e.get("start_date_local") or "")[:10],
+        e.get("type") or "",
+        (e.get("name") or "").strip(),
+        e.get("icu_training_load") or e.get("load_target") or 0,
+        round((e.get("moving_time") or 0) / 60),
+    )
+
+
+def events_diff(before_events, after_events) -> dict:
+    """What moved between two reads of the planned-event window.
+
+    Returns {"created": [event], "deleted": [event], "edited": [(before, after)]}.
+
+    Classified on ID SET MEMBERSHIP, not on tuple equality of the fingerprint. The
+    fingerprint carries the id, so an edited event shows up there as one tuple leaving and
+    another arriving - i.e. indistinguishable from a delete plus an unrelated create, which
+    is precisely the misreading that would have an undo delete a session the athlete
+    wanted. Same id on both sides means it was EDITED, and an edit is the case we refuse to
+    reverse (see bot._undo_cancelled_change)."""
+    before = {_event_key(e): e for e in (before_events or []) if _event_key(e)}
+    after = {_event_key(e): e for e in (after_events or []) if _event_key(e)}
+    created = [after[k] for k in after if k not in before]
+    deleted = [before[k] for k in before if k not in after]
+    edited = [(before[k], after[k]) for k in before
+              if k in after and _event_shape(before[k]) != _event_shape(after[k])]
+    for bucket in (created, deleted):
+        bucket.sort(key=lambda e: ((e.get("start_date_local") or ""), _event_key(e)))
+    edited.sort(key=lambda p: ((p[0].get("start_date_local") or ""), _event_key(p[0])))
+    return {"created": created, "deleted": deleted, "edited": edited}
+
+
+def diff_is_empty(diff) -> bool:
+    return not any((diff or {}).get(k) for k in ("created", "deleted", "edited"))
+
+
+def describe_event(e) -> str:
+    """One event in the athlete's terms: the DAY first, because the day is what they
+    recognise and the day is what they need to go and look at. No event ids - the athlete
+    has never seen one and quoting it reads as the bot talking to itself."""
+    e = e or {}
+    day = (e.get("start_date_local") or "")[:10]
+    try:
+        from datetime import date as _date
+        when = _date.fromisoformat(day).strftime("%a %-d %b")
+    except Exception:
+        when = day or "an unknown day"
+    name = (e.get("name") or "").strip() or (e.get("type") or "session")
+    load = e.get("icu_training_load") or e.get("load_target") or 0
+    tail = f" ({int(load)} TSS)" if load else ""
+    return f"{when}: {name}{tail}"
+
+
+def describe_diff(diff) -> list:
+    """The change, as the lines the athlete is shown. One bullet per event, grouped by what
+    happened to it, so a three-session replan that got one session in reads as one line and
+    not as a paragraph of hedging."""
+    lines = []
+    for e in (diff or {}).get("created", []):
+        lines.append(f"• added {describe_event(e)}")
+    for e in (diff or {}).get("deleted", []):
+        lines.append(f"• removed {describe_event(e)}")
+    for b, a in (diff or {}).get("edited", []):
+        lines.append(f"• changed {describe_event(b)} → {describe_event(a)}")
+    return lines

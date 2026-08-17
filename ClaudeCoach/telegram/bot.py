@@ -5,7 +5,7 @@ Polls Telegram for messages, passes them to claude CLI, sends responses back.
 Run: python3 bot.py
 """
 
-import json, re, subprocess, sys, time, ssl, os, shutil
+import json, re, subprocess, sys, time, ssl, os, shutil, uuid
 import socket
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -313,11 +313,42 @@ _PREFETCH_GUARD = threading.Lock()
 #   _THRESHOLD_CACHE - the get_thresholds dict. FACTS *owns* the threshold figures now
 #     (prefetch only points at them), so this is where they come from; a miss makes FACTS
 #     resolve for itself rather than state a stale number.
-#   _EVENTS_SNAPSHOT - fingerprint of the planned-event window as it was at the last
-#     resolve, the "before" side of verifying a claimed calendar write. Its AGE travels
-#     with it because a stale snapshot must disable the check, not drive a false accusation.
+#   _EVENTS_SNAPSHOT - the planned-event window as it was at the last resolve, the "before"
+#     side of verifying a claimed calendar write. Its AGE travels with it because a stale
+#     snapshot must disable the check, not drive a false accusation.
+#
+# _EVENTS_SNAPSHOT carries the FULL EVENT OBJECTS as well as their fingerprint since
+# 17 Aug 2026 (bug #30). The fingerprint answers "did anything change"; it cannot answer
+# "what, and can we put it back", and a turn the athlete STOPPED part-way needs both.
+# One tuple rather than a second parallel dict on purpose: the fingerprint that decides
+# there was a change and the events an undo restores from MUST come from the same fetch.
+# Two dicts can drift by one turn, and an undo that restores turn N-1's calendar because it
+# diffed turn N is a worse outcome than offering no undo at all.
+#
+# Older entries can be 2-tuples in a process that was mid-turn across a reload, so every
+# reader goes through _events_snapshot()/_set_events_snapshot() rather than indexing raw.
 _THRESHOLD_CACHE = {}           # slug -> (epoch, thresholds_dict)
-_EVENTS_SNAPSHOT = {}           # slug -> (epoch, frozenset fingerprint)
+_EVENTS_SNAPSHOT = {}           # slug -> (epoch, frozenset fingerprint, [event dicts])
+
+
+def _set_events_snapshot(slug, epoch, events, fingerprint=None):
+    """Record the planned-event window as the "before" for the next verification."""
+    fp = write_verify.events_fingerprint(events) if fingerprint is None else fingerprint
+    with _PREFETCH_GUARD:
+        _EVENTS_SNAPSHOT[slug] = (epoch, fp, list(events or []))
+
+
+def _events_snapshot(slug):
+    """(epoch, fingerprint, events) or None. `events` may be None on an entry written
+    before the widening - callers must treat that as "cannot offer an undo", never as
+    "the window was empty"."""
+    with _PREFETCH_GUARD:
+        snap = _EVENTS_SNAPSHOT.get(slug)
+    if not snap:
+        return None
+    if len(snap) >= 3:
+        return (snap[0], snap[1], snap[2])
+    return (snap[0], snap[1], None)
 
 
 def _invalidate_prefetch(slug):
@@ -2299,35 +2330,51 @@ def _retry_strava_description(slug: str, icu_id: str, before_desc) -> bool:
             not in write_verify.ACTIONABLE and bool(desc))
 
 
+def _icu_client(slug: str):
+    """The athlete's Intervals.icu client. Extracted 17 Aug 2026 so the read-back has ONE
+    construction site: the cancel-report path (bug #30) needs exactly the client this
+    function returns, and a test that cannot substitute it would be testing the network.
+    The import stays deferred - icu_api pulls in requests, and the bot must still start on
+    a box where that is missing."""
+    import sys as _sys
+    _sys.path.insert(0, str(BASE.parent / "lib"))
+    from icu_api import IcuClient
+    a = json.loads(ATHLETES_CONFIG.read_text())[slug]
+    return IcuClient(a["icu_athlete_id"], a["icu_api_key"])
+
+
+def _read_planned_window(slug: str):
+    """The planned-event window both the verifier and the cancel report diff against:
+    today to +21d, the same span prefetch_context snapshots. Returns None on any failure,
+    which every caller must read as "we do not know", never as "the window is empty"."""
+    try:
+        client = _icu_client(slug)
+        today = date.today()
+        return client.get_events(today.isoformat(),
+                                 (today + timedelta(days=21)).isoformat())
+    except Exception as e:
+        log(f"[{slug}] calendar read-back failed: {e}")
+        return None
+
+
 def _verify_icu_calendar_claim(slug: str) -> str:
     """Check a claimed calendar write by re-fingerprinting the planned-event window and
     diffing against the snapshot prefetch_context took this turn. Refuses to judge on a
     stale or missing snapshot: an unrelated earlier write would look like this one's, so a
     stale snapshot can only produce a wrong accusation."""
-    with _PREFETCH_GUARD:
-        snap = _EVENTS_SNAPSHOT.get(slug)
+    snap = _events_snapshot(slug)
     if not snap:
         log(f"[{slug}] calendar claim seen but no event snapshot — verification skipped")
         return "unknown"
     age = time.time() - snap[0]
-    try:
-        import sys as _sys
-        _sys.path.insert(0, str(BASE.parent / "lib"))
-        from icu_api import IcuClient
-        athletes = json.loads(ATHLETES_CONFIG.read_text())
-        a = athletes[slug]
-        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
-        today = date.today()
-        events = client.get_events(today.isoformat(), (today + timedelta(days=21)).isoformat())
-        after_fp = write_verify.events_fingerprint(events)
-    except Exception as e:
-        log(f"[{slug}] calendar read-back failed (verification skipped): {e}")
+    events = _read_planned_window(slug)
+    if events is None:
         return "unknown"
+    after_fp = write_verify.events_fingerprint(events)
     verdict = write_verify.icu_events_verdict(snap[1], after_fp, age,
                                               max_age_s=_PREFETCH_TTL + 60)
     # Whatever the verdict, the window we just read is the freshest "before" available.
-    with _PREFETCH_GUARD:
-        _EVENTS_SNAPSHOT[slug] = (time.time(), after_fp)
+    _set_events_snapshot(slug, time.time(), events, fingerprint=after_fp)
     return verdict
 
 
@@ -4311,9 +4358,11 @@ def prefetch_context(slug: str) -> str:
         )
         # "Before" side of verifying a claimed calendar write — free, the events are
         # already here. Stored with its timestamp so the verifier can refuse to judge on
-        # a stale snapshot (see write_verify.icu_events_verdict).
-        with _PREFETCH_GUARD:
-            _EVENTS_SNAPSHOT[slug] = (now_epoch, write_verify.events_fingerprint(events))
+        # a stale snapshot (see write_verify.icu_events_verdict), and since 17 Aug 2026
+        # with the event objects themselves, so a turn the athlete STOPS part-way can be
+        # told what landed and offered it back. No extra fetch was needed for that: this
+        # is the same `events` the context block is built from, one call up.
+        _set_events_snapshot(slug, now_epoch, events)
 
         lines = [f"=== LIVE TRAINING DATA ({today.strftime('%A')} {today.isoformat()}) ==="]
 
@@ -5381,6 +5430,371 @@ def _classify_tool(name, hint):
 
     return ("work", "Working on it", "crunched the numbers")
 
+
+# ---------------------------------------------------------------------------
+# Stopping a turn the athlete never meant to start (bug #30, 17 Aug 2026)
+# ---------------------------------------------------------------------------
+#
+# Kathryn said "2.5 hours" meaning ONE DAY. The bot read it as a constraint on the whole
+# week and set off replanning all of it, and there was nothing she could do but watch.
+# Turns measured 100-500s that same day (one hit 526s), so "watch" means minutes of a
+# wrong answer being built in front of her.
+#
+# THE SHAPE, AND WHY IT IS NOT A GUARANTEE. Jamie, asked how strong this had to be:
+# "It doesn't have to guarantee it, but it should be aware of what it hasn't changed so
+# it knows how to rectify it." A process-group kill that tries to prove nothing was
+# written was considered and rejected as its own separate piece of work - it changes how
+# every subprocess is spawned. So a kill here is best-effort by design, and the second
+# half of the feature carries the honesty: stop, then go and LOOK at the calendar, say
+# precisely what did land, and offer it back where it can be given back safely.
+#
+# WHAT LIVES WHERE. The killable thing is the CLI subprocess and it lives in lib/engine.py,
+# so cancellation itself is engine.cancel_run(run_id, owner=chat_id) and everything here is
+# transport. The run id is minted in _chat_reply_worker BEFORE msg1 is sent, because the
+# Stop button's callback_data has to carry it and the button goes on msg1 at send time.
+#
+# THERE IS NO BOT-SIDE REGISTRY OF WHICH RUN BELONGS TO WHICH CHAT, on purpose. The engine
+# keys by a run id that is unique and never reused; a lookup by chat id is the exact API
+# that kills the athlete's NEXT, correct question when a late tap lands. The two dicts
+# below are both keyed by run id and neither can be searched by chat.
+#
+# THE TAP MUST NOT GO THROUGH _submit. _submit takes the per-chat lock, which is held by
+# the very reply the tap is meant to kill, so a queued cancel would run after the thing it
+# was cancelling finished. _handle_stop is called inline from the poll loop's callback
+# branch, which is un-locked, and does no network at all on the common path.
+
+_STOP_PREFIX = "stop:"
+_UNDO_PREFIX = "undo:"
+
+# How long to let the dust settle after the kill before reading the calendar back. The CLI
+# gets SIGTERM and may have an intervals.icu POST already on the wire; reading the instant
+# it dies can miss that write and then tell the athlete nothing landed. Comfortably longer
+# than engine.CANCEL_GRACE_S so the SIGKILL escalation has also happened by the time we look.
+_CANCEL_SETTLE_S = 2.5
+
+# run_id -> (phase, epoch). "want-cancel" = tapped before the engine had registered the
+# run; "done" = the turn ended, so a tap now is a no-op we can answer honestly.
+_RUN_PHASE = {}
+_RUN_PHASE_GUARD = threading.Lock()
+_RUN_PHASE_TTL = 3600           # a turn that has not ended in an hour is not coming back
+
+
+def _prune_run_phase(now=None):
+    """Bounded by age, not by size. This lives in a process that runs for weeks (the
+    engine's own registry carries the same warning), and an unbounded dict of dead run
+    ids is a slow leak that nobody would ever notice."""
+    now = time.time() if now is None else now
+    for rid in [r for r, (_p, ts) in _RUN_PHASE.items() if now - ts > _RUN_PHASE_TTL]:
+        _RUN_PHASE.pop(rid, None)
+
+
+def _mark_run_done(run_id):
+    """The turn is over, however it ended. Set from the worker's finally so a later tap
+    gets "that had already finished" instead of silence."""
+    if not run_id:
+        return
+    with _RUN_PHASE_GUARD:
+        _prune_run_phase()
+        _RUN_PHASE[run_id] = ("done", time.time())
+
+
+def _request_cancel_before_start(run_id):
+    """Remember a tap that arrived before the engine knew the run. Returns False if the
+    turn has already ended, in which case there is nothing to remember."""
+    with _RUN_PHASE_GUARD:
+        _prune_run_phase()
+        if (_RUN_PHASE.get(run_id) or ("", 0))[0] == "done":
+            return False
+        _RUN_PHASE[run_id] = ("want-cancel", time.time())
+        return True
+
+
+def _take_cancel_request(run_id):
+    """Consume a pre-start tap. Pop, so it can only ever be honoured once: leaving it in
+    place would let a tap meant for this turn cancel the next one, which is the whole
+    failure mode the unique run id exists to prevent."""
+    with _RUN_PHASE_GUARD:
+        phase = _RUN_PHASE.get(run_id)
+        if phase and phase[0] == "want-cancel":
+            del _RUN_PHASE[run_id]
+            return True
+        return False
+
+
+def _stop_keyboard(run_id):
+    """The Stop button for one specific run. The run id IS the token - uuid4().hex is 32
+    chars, so "stop:<id>" is 37 bytes against Telegram's 64-byte callback_data limit, and
+    carrying it directly means there is no second mapping to fall out of step with the
+    engine's registry."""
+    return {"inline_keyboard": [[
+        {"text": "⏹ Stop", "callback_data": f"{_STOP_PREFIX}{run_id}"}]]}
+
+
+def _handle_stop(token, chat_id, data, message_id):
+    """The Stop tap. Returns True if handled.
+
+    Runs INLINE in the poll loop (see the note above): it must not be queued behind the
+    reply it is cancelling. It does not ack - ack_callbacks already did that for the whole
+    batch on receipt - and on the two live paths it sends nothing at all, because the
+    worker owns every message this turn produces and two writers on one turn is how a
+    "Stopped" arrives after the answer it was meant to replace.
+
+    Three timings, all of which must be safe:
+      during the run   - the engine matches the id and kills the CLI; the worker's
+                         ('cancelled', ...) branch reports and tidies msg1.
+      before it starts - stream_claude is a GENERATOR, so nothing is registered until the
+                         first event is pulled. cancel_run finds nothing, so the tap is
+                         parked by id and the worker honours it instead of spawning.
+      after it ended   - cancel_run finds nothing and never will. Say so, and strip the
+                         button, rather than leaving a tap that visibly did nothing."""
+    if not data.startswith(_STOP_PREFIX):
+        return False
+    run_id = data[len(_STOP_PREFIX):].strip()
+    if not run_id:
+        return True
+    if engine.cancel_run(run_id, owner=chat_id):
+        log(f"[{chat_id}] stop tapped for run {run_id} - cancelling")
+        return True
+    if _request_cancel_before_start(run_id):
+        log(f"[{chat_id}] stop tapped for run {run_id} before it started - parked")
+        return True
+    # Already finished. Strip the keyboard with editMessageReplyMarkup rather than
+    # editMessageText: msg1 has been collapsed to this turn's tool summary by now, and
+    # rewriting its text would throw that away to say something the athlete can already see.
+    log(f"[{chat_id}] stop tapped for run {run_id} - already finished, no-op")
+    if message_id:
+        tg_post(token, "editMessageReplyMarkup", {
+            "chat_id": chat_id, "message_id": message_id,
+            "reply_markup": {"inline_keyboard": []}})
+    send(token, chat_id, "That one had already finished - nothing was interrupted.",
+         disable_notification=True)
+    return True
+
+
+# --- Undo: putting back what the stopped turn managed to write ----------------
+#
+# Keyed by its own single-use token rather than by chat: the events to restore are the ones
+# named in THAT message, and a second tap (or a tap on yesterday's card) must not replay a
+# restore against a calendar that has moved on since.
+_PENDING_UNDO = {}
+_PENDING_UNDO_GUARD = threading.Lock()
+_PENDING_UNDO_TTL = 1800        # 30 min: long enough to go and look, short enough to be safe
+
+
+def _park_undo(chat_id, slug, diff):
+    with _PENDING_UNDO_GUARD:
+        now = time.time()
+        for tok in [t for t, v in _PENDING_UNDO.items() if now - v["created"] > _PENDING_UNDO_TTL]:
+            _PENDING_UNDO.pop(tok, None)
+        token_id = uuid.uuid4().hex[:12]
+        _PENDING_UNDO[token_id] = {"chat_id": chat_id, "slug": slug, "diff": diff,
+                                   "created": now}
+    return token_id
+
+
+def _take_undo(token_id, chat_id):
+    """Pop, and only for the chat that was offered it. Single-use: a restore that ran once
+    has already changed the calendar it was computed against."""
+    with _PENDING_UNDO_GUARD:
+        pending = _PENDING_UNDO.get(token_id)
+        if not pending or pending["chat_id"] != chat_id:
+            return None
+        if time.time() - pending["created"] > _PENDING_UNDO_TTL:
+            _PENDING_UNDO.pop(token_id, None)
+            return None
+        return _PENDING_UNDO.pop(token_id)
+
+
+def _reversible(diff):
+    """The part of a diff an undo can put back WITHOUT guessing.
+
+    An event that was CREATED is deleted again, and one that was REMOVED is pushed back
+    from the object we kept. An EDIT is refused outright: the snapshot fingerprints day,
+    type, name, load and duration, so "restoring" an edited event would rewrite those five
+    fields and silently keep whatever else the model changed - the structured description,
+    the steps, the tags. Half a restore presented as a restore is worse than no restore,
+    and this is the same reasoning that stops write_verify accusing on "unknown".
+
+    A removed event is only re-creatable if it was an ordinary WORKOUT: icu_api.push_workout
+    hardcodes category=WORKOUT, so a deleted NOTE or race entry would come back as the wrong
+    kind of thing. Those are named to the athlete instead."""
+    created = list((diff or {}).get("created", []))
+    restorable, unrestorable = [], []
+    for e in (diff or {}).get("deleted", []):
+        cat = (e.get("category") or "WORKOUT").upper()
+        (restorable if cat == "WORKOUT" else unrestorable).append(e)
+    return {"delete": created, "recreate": restorable,
+            "manual": unrestorable + [b for b, _a in (diff or {}).get("edited", [])]}
+
+
+def _undo_keyboard(token_id):
+    return {"inline_keyboard": [[
+        {"text": "↩️ Undo that", "callback_data": f"{_UNDO_PREFIX}{token_id}"}]]}
+
+
+def _report_cancelled_turn(token, chat_id, slug, placeholder_id, summary):
+    """Say what the stopped turn did and did not do, and offer the undo where there is one.
+
+    Runs on the reply pool, after the stream has ended - never in the poll loop. Never
+    raises: this is the message that replaces the answer, so it failing silently would put
+    the athlete back where bug #30 left them, staring at a dead status line.
+
+    The settle wait is not politeness. cancel_run SIGTERMs and the CLI may have an
+    intervals.icu POST already on the wire; reading the calendar the instant the process
+    dies can miss a write by a few hundred milliseconds and then tell the athlete nothing
+    landed. It is a couple of seconds off the poll loop and it buys the sentence its
+    accuracy - but it is a settle, not a guarantee, which is why the wording below says
+    what I can see rather than what is definitely true."""
+    # msg1 first: collapse it and take the Stop button away in the SAME edit, so the button
+    # cannot outlive the run it names. reply_markup is explicit rather than omitted -
+    # Telegram drops a keyboard on any editMessageText that leaves it out, and relying on
+    # that by accident is how the button came back the moment the ticker was fixed to carry it.
+    if placeholder_id:
+        tg_post(token, "editMessageText", {
+            "chat_id": chat_id, "message_id": placeholder_id,
+            "text": (summary or "Stopped") + " - stopped",
+            "reply_markup": {"inline_keyboard": []}})
+
+    snap = _events_snapshot(slug)
+    time.sleep(_CANCEL_SETTLE_S)
+    after = _read_planned_window(slug)
+
+    if snap is None or snap[2] is None or after is None:
+        # No usable before, or the read-back failed. This is write_verify's "unknown" and
+        # it gets write_verify's discipline: state the uncertainty, do not manufacture
+        # either reassurance or an accusation out of it.
+        log(f"[{slug}] cancelled turn: cannot diff the calendar "
+            f"(snapshot={'yes' if snap else 'no'}, read_back={'ok' if after is not None else 'failed'})")
+        send(token, chat_id,
+             "Stopped. I couldn't check your calendar just then, so I can't tell you "
+             "whether anything had already landed - worth a look before you rely on it.",
+             reply_markup=_reply_inline(slug))
+        return
+
+    diff = write_verify.events_diff(snap[2], after)
+    # The window just read is the freshest "before" for the next turn either way. Done
+    # BEFORE the undo is parked, and the undo keeps its own copy of the diff, so a restore
+    # can never be computed from a snapshot that has since moved.
+    _set_events_snapshot(slug, time.time(), after)
+
+    if write_verify.diff_is_empty(diff):
+        log(f"[{slug}] cancelled turn: calendar unchanged")
+        send(token, chat_id, "Stopped. Nothing reached your calendar.",
+             reply_markup=_reply_inline(slug))
+        return
+
+    plan = _reversible(diff)
+    lines = ["Stopped - but part of it had already landed:"]
+    lines += write_verify.describe_diff(diff)
+    log(f"[{slug}] cancelled turn: calendar changed "
+        f"(+{len(diff['created'])} -{len(diff['deleted'])} ~{len(diff['edited'])})")
+
+    if plan["manual"]:
+        lines.append("")
+        lines.append("I can't safely reverse " + (
+            "these" if len(plan["manual"]) > 1 else "this") + ", so check " + (
+            "them" if len(plan["manual"]) > 1 else "it") + " yourself:")
+        lines += [f"• {write_verify.describe_event(e)}" for e in plan["manual"]]
+
+    if plan["delete"] or plan["recreate"]:
+        lines.append("")
+        lines.append("Want me to put it back?")
+        token_id = _park_undo(chat_id, slug, diff)
+        send(token, chat_id, "\n".join(lines), reply_markup=_undo_keyboard(token_id))
+    else:
+        send(token, chat_id, "\n".join(lines), reply_markup=_reply_inline(slug))
+
+
+def _undo_worker(token, chat_id, slug, pending, message_id):
+    """Restore the calendar to the snapshot the stopped turn started from.
+
+    Runs on the reply pool under the chat lock, unlike the Stop tap: the turn is over, so
+    the lock is free, and this does real writes that must not race the athlete's next
+    message. Uses icu_api's own push_workout/delete_workout - there is no second write path
+    into that calendar and this is not the place to invent one."""
+    plan = _reversible(pending["diff"])
+    undone, failed = [], []
+    try:
+        client = _icu_client(slug)
+    except Exception as e:
+        log(f"[{slug}] undo could not reach intervals.icu: {e}")
+        send(token, chat_id,
+             "I couldn't reach your calendar to undo that - nothing has been changed "
+             "again, so it is still as the stopped turn left it.",
+             reply_markup=_reply_inline(slug))
+        return
+
+    for e in plan["delete"]:
+        try:
+            client.delete_workout(e.get("id"))
+            undone.append(f"removed {write_verify.describe_event(e)}")
+        except Exception as ex:
+            log(f"[{slug}] undo delete {e.get('id')} failed: {ex}")
+            failed.append(write_verify.describe_event(e))
+    for e in plan["recreate"]:
+        try:
+            extra = {}
+            if e.get("moving_time"):
+                extra["moving_time"] = e["moving_time"]
+            client.push_workout(
+                sport=e.get("type") or "Other",
+                event_date=(e.get("start_date_local") or "")[:10],
+                name=(e.get("name") or "").strip() or "Session",
+                description=e.get("description") or "",
+                description_raw=e.get("description_raw") or "",
+                planned_training_load=int(e.get("load_target")
+                                          or e.get("icu_training_load") or 0),
+                **extra)
+            undone.append(f"put back {write_verify.describe_event(e)}")
+        except Exception as ex:
+            log(f"[{slug}] undo recreate {e.get('id')} failed: {ex}")
+            failed.append(write_verify.describe_event(e))
+
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id, "↩️ Undone")
+
+    lines = ["Put back:" if undone else "I couldn't undo any of that."]
+    lines += [f"• {u}" for u in undone]
+    if failed:
+        lines.append("")
+        lines.append("These would not go back, so check them yourself:")
+        lines += [f"• {f}" for f in failed]
+    if plan["manual"]:
+        lines.append("")
+        lines.append("Still as the stopped turn left " + (
+            "them" if len(plan["manual"]) > 1 else "it") + ", as I said:")
+        lines += [f"• {write_verify.describe_event(e)}" for e in plan["manual"]]
+    send(token, chat_id, "\n".join(lines), reply_markup=_reply_inline(slug))
+
+    # The calendar has moved again, so the old "before" is a lie. Re-read rather than
+    # assume the restore produced exactly the snapshot: a re-created event has a NEW id.
+    after = _read_planned_window(slug)
+    if after is not None:
+        _set_events_snapshot(slug, time.time(), after)
+    _invalidate_prefetch(slug)
+    log(f"[{slug}] undo complete: {len(undone)} restored, {len(failed)} failed")
+
+
+def _handle_undo(token, chat_id, data, message_id, athletes):
+    """The undo tap. Returns True if handled. Unlike the Stop tap this DOES go through
+    _submit - the turn it belongs to is over, the chat lock is free, and the writes below
+    must be serialised against whatever the athlete says next."""
+    if not data.startswith(_UNDO_PREFIX):
+        return False
+    athlete = athletes.get(chat_id)
+    pending = _take_undo(data[len(_UNDO_PREFIX):].strip(), chat_id)
+    if not athlete or not pending:
+        if message_id:
+            edit_keyboard_confirm(token, chat_id, message_id,
+                                  "That undo has expired - your calendar is unchanged "
+                                  "from when I last described it.")
+        return True
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id, "↩️ Putting it back…")
+    _submit(_undo_worker, chat_id, token, chat_id, pending["slug"], pending, message_id)
+    return True
+
+
 class _StatusTicker:
     """Owns msg1 (the status message). A single background thread performs ALL
     edits of msg1, so the main stream loop and the elapsed-time counter never
@@ -5389,13 +5803,22 @@ class _StatusTicker:
     the caller reuses the placeholder as the reply target (pre-Phase-3 single-
     message behaviour) - no pointless status flash on an instant/resumed answer.
     While one tool runs with no new events, the thread appends an elapsed-time
-    suffix so a long wait (e.g. a race-plan subprocess) does not look frozen."""
+    suffix so a long wait (e.g. a race-plan subprocess) does not look frozen.
 
-    def __init__(self, token, chat_id, msg_id, not_before):
+    `reply_markup` is carried on EVERY edit (17 Aug 2026, bug #30). Telegram removes a
+    message's inline keyboard on any editMessageText that omits reply_markup, and this
+    thread rewrites msg1 about once a second - so the Stop button attached when msg1 was
+    sent used to vanish within one tick of the turn starting, which is the one second an
+    athlete is least likely to be reading. Pass it here and it survives the whole turn.
+    Omitting it stays the way msg1's keyboard is deliberately REMOVED at the end of the
+    turn; that removal is now explicit at the collapse edit rather than incidental."""
+
+    def __init__(self, token, chat_id, msg_id, not_before, reply_markup=None):
         self.token = token
         self.chat_id = chat_id
         self.msg_id = msg_id
         self.not_before = not_before
+        self.reply_markup = reply_markup
         self._text = ""
         self._text_since = time.time()
         self._lock = threading.Lock()
@@ -5424,12 +5847,22 @@ class _StatusTicker:
     def _edit(self, text):
         if text is None or text == self._last_sent:
             return
+        # Re-checked here and not only in the loop condition: stop() waits 3s for this
+        # thread, and one tg_post can outlast that (10s socket timeout, plus up to a 5s
+        # 429 back-off). An edit that lands after the caller has collapsed msg1 would put
+        # the status text - and, since 17 Aug 2026, the Stop button - back on a finished
+        # turn. This narrows that window from a whole tick to the syscall itself. It does
+        # not close it, which is why a tap on a stale Stop button is handled honestly by
+        # _handle_stop rather than assumed impossible.
+        if self._stop.is_set():
+            return
         self._last_sent = text
         self.shown = True
         # Plain text: status lines never carry Markdown, so no parse_mode.
-        tg_post(self.token, "editMessageText", {
-            "chat_id": self.chat_id, "message_id": self.msg_id, "text": text,
-        })
+        payload = {"chat_id": self.chat_id, "message_id": self.msg_id, "text": text}
+        if self.reply_markup is not None:
+            payload["reply_markup"] = self.reply_markup
+        tg_post(self.token, "editMessageText", payload)
 
     def _run(self):
         # Wait out the grace period; bail immediately if the reply already started.
@@ -5448,7 +5881,8 @@ class _StatusTicker:
 
 def call_claude_streaming(token, chat_id, placeholder_id,
                           user_message, config, history, model=MODEL_OPUS,
-                          system_prompt_file=None, athlete_name="Jamie", context=""):
+                          system_prompt_file=None, athlete_name="Jamie", context="",
+                          run_id=None):
     """Telegram wrapper over engine.stream_claude driving ONLY msg1, the silent
     live-status message (Phase 3c). All generation lives in lib/engine.py; this
     only does transport.
@@ -5466,34 +5900,80 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     answer and its preview reads as the real reply, never a placeholder. Phase 3c
     removes the old born-as-placeholder streamed reply that pushed early as "...".
 
-    Returns (response, summary):
-      response - the final assistant text (post-processing happens in the caller);
-      summary  - the one-line collapse text the caller ALWAYS writes onto msg1
-                 (Phase 3d: a tool summary like "Checked intervals.icu, built the
-                 session" if any tool ran, else "Thought for Ns"). msg1 is never
-                 deleted, so a thinking message is a consistent part of every turn.
-    No reply message is sent here: the caller owns reply delivery."""
+    Returns (response, summary, cancelled):
+      response  - the final assistant text (post-processing happens in the caller), or
+                  None if the turn was cancelled;
+      summary   - the one-line collapse text the caller ALWAYS writes onto msg1
+                  (Phase 3d: a tool summary like "Checked intervals.icu, built the
+                  session" if any tool ran, else "Thought for Ns"). msg1 is never
+                  deleted, so a thinking message is a consistent part of every turn.
+      cancelled - True if the athlete tapped Stop (bug #30, 17 Aug 2026).
+    No reply message is sent here: the caller owns reply delivery.
+
+    `cancelled` is a THIRD RETURN VALUE rather than a sentinel in `response`, because the
+    two failure modes must not be confused. A crash still ends in ('final', ...) and comes
+    back through the "(no response)" fallback below, which the caller SENDS. A cancelled
+    turn must send nothing of the kind: the athlete already knows why there is no answer,
+    and "(no response)" posted after a Stop reads as the bot having tried and failed. The
+    caller branches on this flag before it touches the reply or history.
+
+    `run_id` makes the turn cancellable. Pass the id the CALLER minted (it needs it before
+    this is called, to put it in the Stop button's callback_data on msg1) and this hands it
+    to stream_claude along with run_owner=chat_id. Pass nothing and the turn is exactly
+    what it was: uncancellable, and no code path below behaves differently."""
     t_start = time.time()
     not_before = t_start + 1.5
     tools_seen = []          # ordered, deduped (key, past) for the collapse line
     final = None
+    cancelled = False
 
     # msg1 ALWAYS shows a live status (Phase 3d): start the ticker up front on
     # "Thinking..." so a tool-free turn still gets a live "Thinking... (Ns)" line,
     # not a bare "…". Tool events replace the text with the specific step below.
-    ticker = _StatusTicker(token, chat_id, placeholder_id, not_before)
+    # The ticker carries the Stop keyboard so its ~1/sec rewrite does not strip it.
+    ticker = _StatusTicker(token, chat_id, placeholder_id, not_before,
+                           reply_markup=_stop_keyboard(run_id) if run_id else None)
     ticker.set_status("Thinking...")
+
+    # A tap that landed before the run existed. stream_claude is a GENERATOR: nothing is
+    # registered with the engine until the first event is pulled below, so cancel_run had
+    # nothing to match and _handle_stop parked the request by id instead. Honour it here
+    # and the CLI is never spawned at all - the cheapest possible cancel.
+    if run_id and _take_cancel_request(run_id):
+        ticker.stop()
+        log(f"[{chat_id}] run {run_id} cancelled before it started")
+        return (None, "Stopped", True)
 
     # try/finally guarantees the background ticker is always torn down - an
     # orphaned ticker thread would keep editing msg1 every second forever.
     try:
+        first = True
         for event in stream_claude(
             user_message, config, history, model=model,
             system_prompt_file=system_prompt_file, athlete_name=athlete_name, context=context,
+            run_id=run_id, run_owner=chat_id if run_id else None,
         ):
+            if first:
+                first = False
+                # The generator has run, so the engine now knows this id. Re-take the
+                # parked request: the check above closed the window up to the `for`, this
+                # one closes what is left of it. Two pops are safe - _take_cancel_request
+                # removes the entry, so only one of them can ever see it.
+                if run_id and _take_cancel_request(run_id):
+                    engine.cancel_run(run_id, owner=chat_id)
+
             kind = event[0]
             if kind == "final":
                 final = event[1]
+                break
+
+            if kind == "cancelled":
+                # `partial` is whatever text was in flight when the kill landed. It is
+                # logged for the record and DISCARDED - half an answer to a question the
+                # athlete has just withdrawn is not an answer.
+                cancelled = True
+                log(f"[{chat_id}] run {run_id} cancelled, "
+                    f"{len(event[1] or '')} chars discarded")
                 break
 
             if kind == "status":
@@ -5522,7 +6002,11 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     else:
         summary = f"Thought for {max(1, int(round(time.time() - t_start)))}s"
 
-    return (final if final is not None else "(no response)", summary)
+    if cancelled:
+        # NOT the "(no response)" fallback. That string is the caller's reply text on a
+        # crash, and a cancelled turn must never send it - see the note in the docstring.
+        return (None, summary, True)
+    return (final if final is not None else "(no response)", summary, False)
 
 
 def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slug, text,
@@ -5565,6 +6049,14 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             # rich reply, show it, then speak a short conversational rewrite of it.
             # Charts still go out as images. Any TTS failure falls through to the
             # rich text send - a reply is never dropped.
+            #
+            # NO STOP BUTTON on this path, on purpose (bug #30, 17 Aug 2026). It answers
+            # with the non-streaming call_claude, which is not a generator, registers no
+            # run and has no msg1 to hang a button on - there is no placeholder in this
+            # branch at all. Wiring it means giving call_claude the run plumbing
+            # stream_claude has and inventing a message to carry the keyboard, which is a
+            # separate change with its own risk to a path that currently works. Left as it
+            # is, deliberately, the same call made about `summary` a few lines down.
             tg_post(token, "sendChatAction", {"chat_id": chat_id, "action": "record_voice"})
             response = call_claude(
                 text, config, history, model=model,
@@ -5616,6 +6108,12 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             return
 
         typing(token, chat_id)
+        # The run id is minted HERE, before msg1 is sent, and not inside
+        # call_claude_streaming: the Stop button's callback_data has to carry it and the
+        # button goes on msg1 at send time (bug #30, 17 Aug 2026). It is unique and never
+        # reused, which is the whole defence against a late tap killing the athlete's next,
+        # correct question - see the section above _handle_stop.
+        run_id = engine.new_run_id()
         # msg1: the SILENT (disable_notification) live-status / "thinking" placeholder.
         # It reports what the bot is doing and must NEVER fire a push - the single push
         # per turn lands on the complete reply (msg2) sent below, once generation has
@@ -5624,17 +6122,27 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         placeholder = tg_post(token, "sendMessage", {
             "chat_id": chat_id, "text": "…", "parse_mode": "Markdown",
             "disable_notification": True,
+            "reply_markup": _stop_keyboard(run_id),
         })
         placeholder_id = (placeholder.get("result") or {}).get("message_id")
 
         summary = None
+        cancelled = False
         if placeholder_id:
-            response, summary = call_claude_streaming(
-                token, chat_id, placeholder_id,
-                text, config, history, model=model,
-                system_prompt_file=files["system_prompt"],
-                athlete_name=athlete_name, context=context,
-            )
+            try:
+                response, summary, cancelled = call_claude_streaming(
+                    token, chat_id, placeholder_id,
+                    text, config, history, model=model,
+                    system_prompt_file=files["system_prompt"],
+                    athlete_name=athlete_name, context=context,
+                    run_id=run_id,
+                )
+            finally:
+                # However this turn ended, it has ended. Marking it lets a later tap on a
+                # Stop button the client still shows be answered honestly instead of doing
+                # nothing visible. In the finally so a raise cannot leave the id looking
+                # live forever.
+                _mark_run_done(run_id)
         else:
             # msg1 send failed (rare API error): fall back to a non-streaming call so
             # the reply is still produced and delivered below. `summary` stays None, and
@@ -5642,11 +6150,35 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             # UNCHANGED, not unguarded - do NOT "fix" it by inventing a summary here, as a
             # fabricated summary is the one input that could make the gate suppress a
             # claim that was true.
+            #
+            # Deliberately NOT cancellable either (17 Aug 2026). call_claude is not a
+            # generator and has no run to name, and there is no message to hang a Stop
+            # button on - msg1 is the thing that failed to send. Wiring cancellation here
+            # means giving call_claude the same run plumbing stream_claude has, which is
+            # real work and not a line to slip into this branch. Same discipline as the
+            # tool-summary gate above: wire what is safe, say what was left.
+            _mark_run_done(run_id)
             response = call_claude(text, config, history, model=model,
                                    system_prompt_file=files["system_prompt"],
                                    athlete_name=athlete_name, context=context)
 
+        # The rules guard runs on a cancelled turn TOO, and runs before the report. The
+        # model may have edited persistent-rules.md in the seconds before the kill, and the
+        # fold-on-write invariant is not optional just because the athlete changed their
+        # mind - a half-written rule left in place is a rule that outlives the turn. Any
+        # over-cap drops are logged rather than sent: the athlete is about to be told the
+        # turn was stopped, and _verify_logged_reply's correction only makes sense against
+        # a reply that claimed something, which a cancelled turn never got to do.
         over_cap = _apply_rule_capture_guard(slug, before_rules_text)
+        if cancelled:
+            if over_cap:
+                log(f"[{slug}] cancelled turn also dropped {len(over_cap)} over-cap rule(s)")
+            # No reply, no history entry, no "(no response)". The athlete withdrew the
+            # question; writing it to history would have the next turn answer it anyway.
+            _report_cancelled_turn(token, chat_id, slug, placeholder_id, summary)
+            log(f"[{slug}] turn cancelled by the athlete - no reply sent, history untouched")
+            return
+
         clean = process_charts(token, chat_id, response, slug=slug)
         pre_capture_guard = clean
         clean = _verify_logged_reply(
@@ -5681,10 +6213,18 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         # (tool summary if tools ran, else "Thought for Ns"); NEVER delete it, so a
         # thinking message is a consistent part of every turn (Phase 3d). It stays
         # silent - editMessageText never pings - so the reply is still the only push.
+        #
+        # The empty reply_markup is EXPLICIT and load-bearing (17 Aug 2026). This edit used
+        # to strip the Stop button by accident, because Telegram removes a keyboard on any
+        # editMessageText that omits reply_markup - which is exactly the accident that was
+        # killing the button one second into every turn until the ticker was fixed to carry
+        # it. Relying on the same accident to end the button's life would be one careless
+        # edit away from a Stop button that outlives its run.
         if placeholder_id:
             tg_post(token, "editMessageText",
                     {"chat_id": chat_id, "message_id": placeholder_id,
-                     "text": summary or "Done"})
+                     "text": summary or "Done",
+                     "reply_markup": {"inline_keyboard": []}})
 
         log(f"[{slug}] reply delivered: msg1_summary={summary!r} "
             f"msg2_id={msg2_id} chars={len(clean)}")
@@ -6164,6 +6704,20 @@ def main():
                 # re-ack here: the second call is refused as an already-answered query and
                 # only stays quiet because tg_post string-matches Telegram's error text.
                 msg_id = cq.get("message", {}).get("message_id")
+                # ⏹ Stop: FIRST, and inline. The athlete is watching a reply they never
+                # meant to trigger being built (bug #30). Every other branch below is
+                # cheaper to be late for, and this one must not go through _submit at all -
+                # that takes the per-chat lock, which is held by the very reply the tap is
+                # meant to kill, so a queued cancel would only run once its target had
+                # finished. This branch is un-locked and, on the two live paths, does no
+                # network: it names a run id to the engine and returns.
+                if _handle_stop(token, chat_id, text, msg_id):
+                    continue
+                # ↩️ Undo: putting back what the stopped turn had already written. This one
+                # DOES go through _submit (inside the handler) - the turn is over, so the
+                # lock is free, and calendar writes must be serialised with the next message.
+                if _handle_undo(token, chat_id, text, msg_id, athletes):
+                    continue
                 # 🔊 Speak: re-render the last reply as a voice note on demand,
                 # regardless of voice mode (feature req 2026-06-21).
                 if text == "__SPEAK_LAST__":
