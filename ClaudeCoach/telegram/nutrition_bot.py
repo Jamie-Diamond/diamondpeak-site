@@ -3701,10 +3701,21 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
         patch.update({"portion_used_g": new.get("portion_used_g"),
                       "portion_estimated": False,
                       "portion_assumed": new.get("portion_assumed")})
+        # SAY THE AMOUNT SAFELY, AND SETTLE IT BEFORE THE WRITE (17 Aug 2026). All three
+        # lines below formatted portion_used_g with :.0f, but rescale_item's FACTOR branch
+        # only sets that field when the row ALREADY had one, and a freshly committed row
+        # does not: commit_one passes no portion and add_entry stores no per_100g. So "x1.5"
+        # against a committed entry patched the store on the line above and then died on
+        # None.__format__ before a single word reached him. The write landed, the reply
+        # never came, and his log changed without him being told. A silent mutation of the
+        # record is the one failure this file exists to prevent, so the phrase is resolved
+        # up here where a mistake cannot strand a completed write.
+        _g = new.get("portion_used_g")
+        amount = (f"{_g:.0f} g" if _g is not None
+                  else f"x{factor:g}" if factor else "a new amount")
         ctx.store.update_entry(day, target["id"], **patch)
         record_action(ctx, f"updated entry {target['id']} {target.get('resolved_name')} to "
-                           f"{new.get('portion_used_g'):.0f} g, "
-                           f"{round(new.get('kcal') or 0)} kcal")
+                           f"{amount}, {round(new.get('kcal') or 0)} kcal")
         publish_now(ctx)
         # AND IT SAYS WHAT IT HELD, like the offer branch above does (17 Aug 2026). This
         # reply is composed here rather than by fmt_confirm, so the held-figure sentence
@@ -3717,13 +3728,12 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
         held = _held_note(new)
         send_verified(ctx, token, chat_id,
                       f"Rescaled *{target.get('resolved_name')}* to "
-                      f"{new.get('portion_used_g'):.0f} g: "
+                      f"{amount}: "
                       f"{round(new.get('kcal') or 0)} kcal."
                       + (f"\n{held}" if held else "")
                       + "\n\n" + today_block(ctx, day), kind="correction",
                       numbers=_gate_numbers([new]))
-        _chat(ctx, "coach", f"[log] rescaled {target.get('resolved_name')} to "
-                            f"{new.get('portion_used_g'):.0f} g")
+        _chat(ctx, "coach", f"[log] rescaled {target.get('resolved_name')} to {amount}")
     return True
 
 

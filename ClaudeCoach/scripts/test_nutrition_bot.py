@@ -3449,6 +3449,31 @@ NB.apply_quantity_correction(_cctx, None, {"grams": 300}, TODAY, "token", 1)
 check("an ordinary rescale reply says nothing about held figures",
       "Flat white" in _c_sent[-1] and "your figure" not in _c_sent[-1]
       and _cs.get_day(TODAY)["entries"][1]["kcal"] == 180.0)
+# A FACTOR CORRECTION AGAINST A ROW WITH NO GRAMS BASIS (17 Aug 2026). rescale_item's
+# factor branch leaves portion_used_g None when the row never had one, and all three
+# reporting lines formatted it with :.0f. The store write happens FIRST, so "x1.5" wrote
+# the patch and then raised TypeError on None.__format__: the log changed and he was told
+# nothing. The reply must survive and must not invent a gram count it does not have.
+NB.commit_one(_cctx, {"resolved_name": "Cashews", "raw_text": "handful of cashews",
+                      "kcal": 240.0, "protein_g": 8.0,
+                      "confidence": "estimate", "source_rung": "cofid"},
+              TODAY)
+_c_nuts = _cs.get_day(TODAY)["entries"][2]
+check("the bare committed row genuinely has no grams basis to scale from",
+      _c_nuts.get("portion_used_g") is None and _c_nuts.get("per_100g") is None)
+_c_before = len(_c_sent)
+try:
+    NB.apply_quantity_correction(_cctx, None, {"factor": 1.5}, TODAY, "token", 1)
+    _c_raised = ""
+except Exception as exc:
+    _c_raised = f"{type(exc).__name__}: {exc}"
+check(f"a factor correction on a row with no grams does not raise (got {_c_raised or 'no raise'})",
+      _c_raised == "")
+check("and he is actually told, rather than the write landing in silence",
+      len(_c_sent) > _c_before)
+check("the reply names the factor instead of inventing a gram count",
+      "x1.5" in _c_sent[-1] and " g:" not in _c_sent[-1])
+
 NB.tg.send, NB.publish_now = _c_real["send"], _c_real["publish"]
 NB.today_block, NB._chat = _c_real["today"], _c_real["chat"]
 NB.NR.cache_resolved, NB.GATE_RUNNER = _c_real["cache"], _c_real["gate"]
