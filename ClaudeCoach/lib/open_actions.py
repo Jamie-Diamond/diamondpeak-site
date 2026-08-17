@@ -589,8 +589,20 @@ def looks_like_action_instruction(text: str) -> bool:
         return False
     if not any(re.search(rx, t, re.I) for _, rx in _INTENTS):
         return False
-    if (_PLAN_DAY_RE.search(t) and _PLAN_SESSION_RE.search(t)
-            and not day_overrides.parse_directed_day(t)["family"]):
+    # A plan day AND a session word ("move the swim to Wednesday", "cancel the Friday
+    # run") is the day-rule handler's message, not ours: stand down so the athlete's
+    # session move is not swallowed as a deferral on an unrelated open action.
+    #
+    # 17 Aug 2026: this clause also tested `not parse_directed_day(t)["family"]`, which
+    # was the exact inverse of what it documented. It stood down only when the day parse
+    # FAILED, so the one phrasing it was written for ("move the swim to Wednesday",
+    # family="swim") sailed straight through as an action instruction. Merely flipping
+    # the `not` fixes that case but regresses two others in the opposite direction:
+    # "cancel the Friday run" and "done with the swim on Wednesday" both refuse the day
+    # parse, and both would newly become action instructions. Neither is one. The parse
+    # result does not discriminate here, so the clause is dropped and the day+session
+    # pair alone decides. Exactly one message class changes behaviour: the target case.
+    if _PLAN_DAY_RE.search(t) and _PLAN_SESSION_RE.search(t):
         return False
     return bool(_match_tokens(_strip_intent(t)))
 

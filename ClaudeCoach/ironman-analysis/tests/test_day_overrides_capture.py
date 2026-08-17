@@ -213,6 +213,20 @@ class TestCrossFireWithOtherCaptures:
                     "I told it this week to swim on wed"):
             assert not oa.looks_like_action_instruction(msg), msg
 
+    @pytest.mark.parametrize("msg", ["cancel the Friday run",
+                                     "done with the swim on Wednesday",
+                                     "forget the swim on Wed"])
+    def test_a_plan_day_plus_session_stands_down_even_when_the_day_parse_refuses(self, msg):
+        # The guard in looks_like_action_instruction once qualified itself on
+        # `not parse_directed_day(t)["family"]`, the inverse of what it documented, so
+        # "move the swim to Wednesday" fell through as an action instruction (#32).
+        # These three go the OTHER way: each pairs a plan day with a session word but
+        # REFUSES the day parse, so merely flipping that `not` would have turned them
+        # into action instructions and let a plan change close an unrelated open item.
+        # The clause was dropped rather than flipped; these pin that decision down.
+        assert do.parse_directed_day(msg, MON)["refused"], msg
+        assert not oa.looks_like_action_instruction(msg), msg
+
     @pytest.mark.parametrize("msg", [
         "14h next week", "12 hours this week, nothing long Mon-Thu", "20, big week",
     ])
