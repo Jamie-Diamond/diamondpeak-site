@@ -612,6 +612,147 @@ for raw in ("a handful of chicken", "a slice of ham", "chicken breast", "bananas
 check("a slice is bread-sized once the row names bread",
       R.default_portion_g("a slice of it", "Bread, wholemeal") == 36.0)
 
+# 24) A MACRO HE STATED WITHOUT A KCAL FIGURE (17 Aug 2026). "chicken salad with 21g
+#     protein" gives one number and describes the rest, and the whole block was thrown
+#     away because it carried no total - so the ladder answered with a table's protein
+#     where he had given his own. Athlete-stated figures are law: the ladder still runs,
+#     and his figures go over the top of what it finds.
+SALAD = {"kcal": 300, "protein_g": 12.0, "carb_g": 30.0, "fat_g": 9.0, "fibre_g": 4.0,
+         "dietary_sodium_mg": 400, "resolved_name": "Chicken salad",
+         "source_url": "https://example/salad"}
+
+
+def stated_outcomes(item):
+    return [a["outcome"] for a in item["attempts"] if a["outcome"] == "stated_override"]
+
+
+part = R.resolve("chicken salad with 21g protein", day=TODAY, store=new_store(),
+                 table=TABLE, cofid=EMPTY_COFID,
+                 fetchers={R.Rung.WEB: lambda t, p: dict(SALAD)},
+                 stated={"protein_g": 21})
+check("his stated protein beats the lookup's", part["protein_g"] == 21.0)
+check("the macros he said nothing about are left alone",
+      part["kcal"] == 300 and part["carb_g"] == 30.0 and part["fat_g"] == 9.0
+      and part["fibre_g"] == 4.0)
+check("which figures were his is recorded on the item",
+      part["stated_fields"] == ["protein_g"])
+check("and the overlay is in the attempt log, not just in the numbers",
+      stated_outcomes(part) == ["stated_override"])
+check("the rung is still the rung that answered", part["source_rung"] == R.Rung.WEB)
+# Precedent is the assumed-portion guard, which does not downgrade because the figures are
+# still the source's. It runs the other way too: one figure of his off a pack does not make
+# the database's kcal and carbs label data.
+check("an overlaid figure does not move the confidence", part["confidence"] == "database")
+label_basis = R.resolve("chicken salad with 21g protein", day=TODAY, store=new_store(),
+                        table=TABLE, cofid=EMPTY_COFID,
+                        fetchers={R.Rung.WEB: lambda t, p: dict(SALAD)},
+                        stated={"protein_g": 21, "basis": "label"})
+check("nor does his saying he read it off a pack",
+      label_basis["confidence"] == "database" and "basis" not in label_basis)
+# SODIUM IS THE ONE FIGURE THE OVERLAY COULD OVERSTATE. It carries its own confidence
+# because it is the figure that goes wrong quietly, and a label-grade CoFID row that
+# returned no sodium at all would otherwise have lent its grade to his own reckoning.
+salty = R.resolve("chicken salad, about 800mg of salt in it", day=TODAY,
+                  store=new_store(), table=TABLE, cofid=EMPTY_COFID,
+                  fetchers={R.Rung.COFID: lambda t, p: dict(SALAD)},
+                  stated={"dietary_sodium_mg": 800})
+check("a sodium figure of his is his own reckoning, not the rung's grade",
+      salty["confidence"] == "label" and salty["sodium_confidence"] == "estimate"
+      and salty["dietary_sodium_mg"] == 800.0)
+check("and a lookup's own sodium is graded as it always was",
+      R.resolve("chicken salad with 21g protein", day=TODAY, store=new_store(),
+                table=TABLE, cofid=EMPTY_COFID,
+                fetchers={R.Rung.WEB: lambda t, p: dict(SALAD,
+                                                        dietary_sodium_mg=400)},
+                stated={"protein_g": 21})["sodium_confidence"] == "database")
+check("he reads on the confirm line which figure was his",
+      "your own figure: protein 21 g" in R.describe_provenance(part))
+# NO ATWATER. A kcal computed from his protein would be indistinguishable, a week later,
+# from a total he gave - the same objection this file already makes to rounding his rows.
+missed = R.resolve("something homemade with 21g protein", day=TODAY, store=new_store(),
+                   table=TABLE, cofid=EMPTY_COFID, fetchers={},
+                   stated={"protein_g": 21})
+check("with every rung missing, his figure is still the one figure there is",
+      missed["protein_g"] == 21.0)
+check("and no kcal is invented from it", missed["kcal"] is None)
+check("the item still asks, because a protein figure is not a meal",
+      missed["needs_input"] is True)
+check("and the question says what it already has",
+      "protein 21 g" in R.describe_provenance(missed))
+# Read back in the order the macros are quoted in, not alphabetically: "sodium, protein"
+# is not how anybody says it, and this list is a sentence he reads.
+two_of_his = R.resolve("mystery bar", day=TODAY, store=new_store(), table=TABLE,
+                       cofid=EMPTY_COFID, fetchers={},
+                       stated={"dietary_sodium_mg": 800, "protein_g": 21})
+check("several figures of his read back in macro order",
+      two_of_his["stated_fields"] == ["protein_g", "dietary_sodium_mg"]
+      and "protein 21 g, sodium 800 mg" in R.describe_provenance(two_of_his))
+# The needs_portion dead end: the lookup is per-100g and unusable until he says how much,
+# but what he stated is for the food he actually ate and does not depend on that answer.
+NO_SIZE = {"needs_portion": True, "resolved_name": "Skyr, natural",
+           "per_100g": {"kcal": 63, "protein_g": 10.3}, "confidence": "label",
+           "source_kind": "manufacturer"}
+asked = R.resolve("that pot of skyr, 21g protein in it", day=TODAY, store=new_store(),
+                  table=TABLE, cofid=EMPTY_COFID,
+                  fetchers={R.Rung.WEB: lambda t, p: dict(NO_SIZE)},
+                  stated={"protein_g": 21})
+check("a portion question does not blank the figure he gave",
+      asked["protein_g"] == 21.0 and asked["needs_portion"] is True)
+check("and the rest of the row is still cleared, as it was",
+      asked["kcal"] is None and asked["carb_g"] is None)
+# A zero is two different things depending on the field. Zero energy is an absence and
+# would wipe a real lookup; zero fat is something he can truthfully say about a food.
+zeroes = R.resolve("chicken salad", day=TODAY, store=new_store(), table=TABLE,
+                   cofid=EMPTY_COFID, fetchers={R.Rung.WEB: lambda t, p: dict(SALAD)},
+                   stated={"kcal": 0, "fat_g": 0})
+check("a stated zero kcal is dropped rather than zeroing the lookup",
+      zeroes["kcal"] == 300 and "kcal" not in zeroes["stated_fields"])
+check("a stated zero for another macro is a figure and is kept",
+      zeroes["fat_g"] == 0.0 and "fat_g" in zeroes["stated_fields"])
+check("a negative figure is dropped, never clamped",
+      R.resolve("chicken salad", day=TODAY, store=new_store(), table=TABLE,
+                cofid=EMPTY_COFID, fetchers={R.Rung.WEB: lambda t, p: dict(SALAD)},
+                stated={"protein_g": -4})["protein_g"] == 12.0)
+check("a field that is not a macro is not smuggled onto the item",
+      "components" not in R.resolve(
+          "chicken salad", day=TODAY, store=new_store(), table=TABLE, cofid=EMPTY_COFID,
+          fetchers={R.Rung.WEB: lambda t, p: dict(SALAD)},
+          stated={"components": ["a row"], "protein_g": 21}))
+# HIS FIGURE MUST NOT BE CACHED. The cache is keyed on his words and stamped with the
+# rung's confidence, so caching this would re-serve his 21 g for a year against sentences
+# in which he stated nothing - the same objection that keeps LLM estimates out of it.
+st24 = new_store()
+R.cache_resolved(st24, R.resolve("chicken salad with 21g protein", day=TODAY, store=st24,
+                                 table=TABLE, cofid=EMPTY_COFID,
+                                 fetchers={R.Rung.WEB: lambda t, p: dict(SALAD)},
+                                 stated={"protein_g": 21}))
+check("an overlaid resolution is never written to the cache",
+      st24.cache_get("chicken salad with 21g protein", on=TODAY) is None)
+# And where he states nothing the item is exactly what it was, with no new key on it -
+# the marker is what the cache and the confirm line branch on.
+st24c = new_store()
+plain = R.resolve("chicken salad", day=TODAY, store=st24c, table=TABLE,
+                  cofid=EMPTY_COFID, fetchers={R.Rung.WEB: lambda t, p: dict(SALAD)})
+check("an ordinary resolution carries no stated marker",
+      "stated_fields" not in plain and not stated_outcomes(plain))
+check("nothing of his is claimed on its confirm line",
+      "your own" not in R.describe_provenance(plain))
+R.cache_resolved(st24c, plain)
+check("and it still caches, as it always did",
+      (st24c.cache_get("chicken salad", on=TODAY) or {}).get("protein_g") == 12.0)
+# A CACHE HIT IS A RUNG LIKE ANY OTHER, and it is the rung most likely to answer the
+# second time he says this. An overlay that only ran on a fresh lookup would honour his
+# figure today and quietly drop it tomorrow.
+st24b = new_store()
+R.cache_resolved(st24b, R.resolve("chicken salad", day=TODAY, store=st24b, table=TABLE,
+                                  cofid=EMPTY_COFID,
+                                  fetchers={R.Rung.WEB: lambda t, p: dict(SALAD)}))
+cached_part = R.resolve("chicken salad", day=TODAY, store=st24b, table=TABLE,
+                        cofid=EMPTY_COFID, fetchers={}, stated={"protein_g": 21})
+check("a cache hit takes the overlay too",
+      cached_part["source_rung"] == R.Rung.CACHE and cached_part["protein_g"] == 21.0
+      and cached_part["kcal"] == 300)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

@@ -511,8 +511,7 @@ WHEN HE STATES THE NUMBERS, THE NUMBERS ARE THE ANSWER.
   they are logged verbatim. Do not restate them differently, do not round them, do not
   reconcile a total against its parts, and do not convert anything.
 
-  `stated` shape (omit any figure he did not give; kcal is required or it is not a
-  specification at all):
+  `stated` shape (omit any figure he did not give):
     {"kcal": n, "protein_g": n, "carb_g": n, "fat_g": n, "fibre_g": n,
      "dietary_sodium_mg": n, "basis": "estimate"|"label", "components": ["<his rows>"]}
   basis is "label" ONLY when he says he read it off a pack or a label; his own reckoning,
@@ -548,6 +547,11 @@ WHEN HE STATES THE NUMBERS, THE NUMBERS ARE THE ANSWER.
   Per-macro totals: use his stated totals when he gives them, otherwise the sum of the
   rows for that macro, otherwise omit the field.
   A bare "about 600 calories" with no macros is still `stated` - kcal only.
+  A figure with NO kcal at all - "chicken salad, 21g protein" - is still `stated`, that
+  one macro and nothing else. It is not a full specification, so the item is STILL looked
+  up in the ordinary way; his figure is kept and laid over whatever the lookup returns.
+  Never invent the kcal from the macros, and never leave the figure out because there is
+  no total to go with it.
   A message that states its own figures is log_food EVEN WHEN it reads like a correction
   of something you just offered ("no - it was 980 kcal, 44P 98C 44F"). His figures replace
   the offer wholesale, so there is nothing to correct: it is a fresh, authoritative log.
@@ -588,9 +592,23 @@ def stated_macros(block) -> dict | None:
     So this validator's whole contract is that it either passes his numbers through
     UNTOUCHED or refuses them. It does not derive kcal from macros, does not reconcile a
     total against its rows and does not round: a "corrected" figure here would be
-    indistinguishable, in the log, from one he gave. kcal is required, because a
-    specification with no energy figure is a description, and a description belongs on the
-    ladder."""
+    indistinguishable, in the log, from one he gave.
+
+    A PARTIAL STATEMENT IS STILL HIS FIGURE (17 Aug 2026). kcal used to be REQUIRED here,
+    and a block without one was discarded whole - so "chicken salad with 21g protein" was
+    answered with a composition table's protein and his own number vanished without a
+    trace. Two rules had been tangled into that one test. The first is right and survives:
+    a block with no energy figure must not take the verbatim, no-lookup path, because
+    there is no total to log - it is a description, and a description belongs on the
+    ladder. That rule now lives with the callers that route to that path, every one of
+    which tests `kcal` for itself. The second - throwing the rest away - was the bug. What
+    he gave now comes back, for nutrition_resolve.resolve to lay over what the ladder
+    finds, and the ladder still runs.
+
+    A kcal of 0 is the one figure read as an ABSENCE rather than a statement. Nobody
+    specifies a meal at zero energy, and letting one through would zero a real lookup -
+    the failure the whole resolver is arranged against, because a zero looks like data.
+    A zero for any other macro is a real thing to say about a food and is kept."""
     if not isinstance(block, dict):
         return None
     out = {}
@@ -606,7 +624,11 @@ def stated_macros(block) -> dict | None:
         # invent a number and then present it as his.
         if 0 <= value <= _STATED_BOUNDS[field]:
             out[field] = value
+    # Dropped rather than refused, so a "0 kcal" alongside a real protein figure costs him
+    # the zero and not the protein.
     if not out.get("kcal"):
+        out.pop("kcal", None)
+    if not out:
         return None
     basis = str(block.get("basis") or "").strip().lower()
     out["basis"] = "label" if basis == "label" else "estimate"
