@@ -189,8 +189,10 @@ Step 3 — For the most recent activity that is NOT already in session-log.json:
   - Fetch full detail via Bash: python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --caller activity-watcher --endpoint activity_detail --activity-id <id>
   - If sport is Run, VirtualRun, or Swim: also fetch extended metrics:
     python3 ClaudeCoach/lib/icu_fetch.py --athlete {slug} --caller activity-watcher --endpoint extended_metrics --activity-id <id>
-  - If the activity has a strava_id field: fetch Strava laps and splits:
+  - If the activity has a strava_id field: fetch Strava laps, splits, and gear:
     python3 ClaudeCoach/lib/strava_fetch.py --athlete {slug} --strava-id <strava_id>
+    This is the only sanctioned source for gear (gear_name/gear_id in its output) — ICU's
+    gear.id/gear.name fields are stale and must never be read or reported.
     If this fails or there is no strava_id, the athlete may not have Strava connected — proceed
     without it (do NOT retry or troubleshoot) and use the documented fallbacks.
   - Add a stub entry to ClaudeCoach/athletes/{slug}/session-log.json (prepend to array, most recent first).
