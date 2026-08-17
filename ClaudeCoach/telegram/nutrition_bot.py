@@ -4854,7 +4854,14 @@ def main():
             try:
                 if "callback_query" in upd:
                     cq = upd["callback_query"]
-                    chat_id = cq["message"]["chat"]["id"]
+                    # .get chains, matching the plain-message path below. Telegram omits
+                    # `message` on an inline-mode callback and on a tap against a message
+                    # older than 48h, and the subscript raised KeyError there. That lands
+                    # in the generic handler, which tells Jamie "Something went wrong
+                    # logging that" for a tap that was never ours to handle - and it fires
+                    # BEFORE the allowed-chat test, so a stranger's malformed callback
+                    # could message him too. None simply fails the test below (17 Aug 2026).
+                    chat_id = ((cq.get("message") or {}).get("chat") or {}).get("id")
                     if str(chat_id) != allowed:
                         continue
                     # Already acked in ack_callbacks above, on receipt of the batch. Do not
