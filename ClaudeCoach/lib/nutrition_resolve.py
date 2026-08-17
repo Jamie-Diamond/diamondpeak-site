@@ -773,9 +773,59 @@ def _excluded_by(candidate_name: str, exclude) -> str:
     return ""
 
 
+# A MACRO HE STATED WITHOUT A KCAL FIGURE (17 Aug 2026). "chicken salad with 21g protein"
+# gives one number and describes the rest, and it was answered with a composition table's
+# protein: his own figure discarded in silence, which is the one rule this whole area
+# exists to keep. Two separate rules had been tangled into one test for kcal.
+#
+# The rule that was RIGHT: a block with no energy figure must not take the verbatim path.
+# There is no total to log, so it is a description, and a description belongs on the
+# ladder. That rule now lives with the callers that route to that path, which test kcal
+# themselves. The rule that was WRONG: throwing the figures away. So the ladder still
+# runs, and his numbers are laid over the top of whatever it found.
+#
+# Nothing is invented on the way. No kcal is derived from macros by Atwater factors - a
+# computed total is indistinguishable, a week later, from one he gave, which is the same
+# objection stated_macros already makes about rounding - and no macro he said nothing
+# about is touched, so the lookup keeps the rest of its row.
+#
+# Three things the overlay must NOT do, each of them a way of trading this bug for a
+# quieter one:
+#   - a stated kcal of 0 is an ABSENCE, not a statement, and is dropped. Zeroing a real
+#     lookup's energy is the "a zero-calorie entry looks like data" failure this module's
+#     docstring is arranged against. A zero for any OTHER macro is a real figure: "no fat
+#     in it" is something he can truthfully say, and there is nothing to lose by taking it.
+#   - the rung and the confidence are UNCHANGED, in BOTH directions. Precedent is the
+#     assumed-portion guard: the rest of the figures are still the source's. His "21 g off
+#     the pack" must not relabel the table's kcal and carbs as label data either.
+#   - an overlaid item is NEVER CACHED (see cache_resolved), or his 21 g comes back a week
+#     later against words he stated nothing about, wearing the source's confidence.
+def _stated_overlay(stated) -> dict:
+    """The macro fields the ATHLETE supplied, cleaned, or {} when he supplied none.
+
+    Deliberately re-checked here rather than trusted from the caller: resolve is the last
+    place that can tell a figure of his from a figure of ours, and a bad value reaching
+    the overlay would be written over good data instead of merely being dropped."""
+    out = {}
+    for field, raw in (stated or {}).items():
+        if field not in MACRO_FIELDS:
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        # Negative is nonsense and zero energy is an absence. Neither is clamped or
+        # repaired - a "corrected" figure here would read, in the log, as one he gave.
+        if value < 0 or (field == "kcal" and not value):
+            continue
+        out[field] = value
+    return out
+
+
 def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             table=None, fetchers: dict = None, cofid: CofidTable = None,
-            hint: dict = None, queries=None, on: date = None, exclude=()) -> dict:
+            hint: dict = None, queries=None, on: date = None, exclude=(),
+            stated: dict = None) -> dict:
     """Walk the ladder and return one resolved item plus a full attempt log.
 
     `fetchers` maps a rung name to a callable (text, portion_g) -> dict|None. Any
@@ -784,11 +834,16 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
     dates the review-queue entry, and this module never decides the local day itself
     (a UTC-dated write after 23:00 London lands on the wrong day).
 
+    `stated` is any macro figure the ATHLETE gave for this item without giving a full
+    specification. The ladder is walked exactly as it would be without it, and his
+    figures are laid over the result at the end - see `_stated_overlay`.
+
     Never returns a bare failure. If every rung fails the result is still a usable
     record with `confidence: estimate`, macros None and `needs_input: True`, so the
     bot asks rather than logging zeroes - a zero-calorie entry is far more damaging
     to the record than an absent one, because it looks like data."""
     attempts = []
+    overlay = _stated_overlay(stated)
     fetchers = dict(fetchers or {})
     hint = hint or {}
     # Search the INTERPRETED terms, not the athlete's sentence. "400mg of my protein
@@ -815,7 +870,7 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             record(Rung.CACHE, "hit", f"resolved_at {hit.get('resolved_at')}")
             return _finalise(dict(hit), raw_text, Rung.CACHE,
                              hit.get("confidence", "estimate"), attempts, table, day,
-                             degraded=False)
+                             degraded=False, stated=overlay)
         else:
             record(Rung.CACHE, "miss", f"absent or older than {CACHE_MAX_AGE_DAYS} days")
 
@@ -911,14 +966,18 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
                                   "portion_estimated": True,
                                   "portion_assumed": f"{assumed:.0f} g - {phrase}"},
                                  raw_text, rung, conf, attempts, table, day,
-                                 degraded=degraded)
+                                 degraded=degraded, stated=overlay)
             # A rung found the right product but cannot know how much was eaten. That is
             # a question, not a result: it is recorded and the ladder stops, because a
             # lower rung guessing would overwrite a good label with a worse guess.
             record(rung, "needs_portion", got.get("resolved_name") or "")
             out = _finalise(got, raw_text, rung, "label", attempts, table, day,
-                            degraded=degraded)
-            out.update({f: None for f in MACRO_FIELDS})
+                            degraded=degraded, stated=overlay)
+            # Everything the ladder found is per-100g and unusable until he says how much,
+            # so it is cleared - but a figure HE gave is for what he actually ate and does
+            # not depend on the answer to that question. Blanking it here would discard
+            # his number in exactly the case where it is one of the few we have.
+            out.update({f: None for f in MACRO_FIELDS if f not in overlay})
             out["needs_input"] = True
             out["needs_portion"] = True
             out["per_100g"] = got.get("per_100g") or {}
@@ -951,15 +1010,19 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             if conf not in CONFIDENCE_LEVELS:
                 conf = RUNG_CONFIDENCE[rung]
             return _finalise(got, raw_text, rung, conf, attempts,
-                             table, day, degraded=degraded)
+                             table, day, degraded=degraded, stated=overlay)
         record(rung, "no_match")
 
     if store is not None:
         store.log_unresolved(raw_text, day=day)
     out = _finalise({}, raw_text, Rung.LLM, "estimate", attempts, table, day,
-                    degraded=degraded)
+                    degraded=degraded, stated=overlay)
     out["needs_input"] = True
-    out.update({f: None for f in MACRO_FIELDS})
+    # THE CASE HIS FIGURE MATTERS MOST IN. Every rung missed, so the only number anybody
+    # has for this food is the one he gave, and an overlay applied on the success path
+    # alone would lose it precisely here. The item still asks - a protein figure is not a
+    # meal - but it asks while holding his 21 g rather than instead of it.
+    out.update({f: None for f in MACRO_FIELDS if f not in overlay})
     return out
 
 
@@ -983,9 +1046,14 @@ PASSTHROUGH_FIELDS = ("note", "vendor", "components", "swaps", "modifiers_unacco
 
 
 def _finalise(got: dict, raw_text: str, rung: str, confidence: str, attempts, table,
-              day, degraded: bool) -> dict:
+              day, degraded: bool, stated: dict = None) -> dict:
     """Shape one resolved item, tag species from its INGREDIENTS, and state how good
-    the figures are."""
+    the figures are.
+
+    `stated` is the athlete's own figures for individual macros, already cleaned by
+    `_stated_overlay`. Applied HERE, at the single point every path out of resolve goes
+    through, rather than at each return: an overlay wired into the hits and forgotten on
+    the miss would lose his number in the case it is most needed."""
     if confidence not in CONFIDENCE_LEVELS:
         raise ValueError(f"bad confidence {confidence!r}")
     if rung not in SOURCE_RUNGS:
@@ -1036,6 +1104,37 @@ def _finalise(got: dict, raw_text: str, rung: str, confidence: str, attempts, ta
     for f in PASSTHROUGH_FIELDS:
         if got.get(f) is not None:
             out[f] = got[f]
+    if stated:
+        # HIS FIGURES GO ON LAST, over everything the ladder produced, including any
+        # portion scaling above: what he stated is what he ate, not a per-100g basis to
+        # be multiplied by an assumed teaspoon.
+        out.update(stated)
+        # WHICH of them were his. Without this the item is indistinguishable from a clean
+        # lookup, and three things downstream need to tell them apart: the confirm line he
+        # reads, the cache (which must refuse it), and anyone reading the record later.
+        # Set on `out` directly rather than through PASSTHROUGH_FIELDS - it describes how
+        # the item was obtained, not something a fetcher returned. Ordered as MACRO_FIELDS
+        # is, not alphabetically: this list is read back to him in words, and "sodium,
+        # protein" is not how anybody says it.
+        out["stated_fields"] = [f for f in MACRO_FIELDS if f in stated]
+        if "dietary_sodium_mg" in stated:
+            # A sodium figure of his is a figure rather than an unknown, and it is HIS
+            # RECKONING - graded as an estimate, never at the rung's grade. Sodium has its
+            # own confidence field precisely because it is the figure that goes wrong
+            # quietly, so this is the one place the overlay could overstate provenance:
+            # taking `confidence` here would have made "about 800mg of salt in it" read as
+            # label data off the back of a CoFID hit that returned no sodium at all.
+            # `_stated_overlay` drops `basis` deliberately, so there is no way to know he
+            # read it off a pack, and the safe direction is the modest one.
+            out["sodium_confidence"] = "estimate"
+        # Rule one of this module: the rung used is RECORDED on every entry. An overlay is
+        # the one thing that can change a figure after the rung has answered, so it is in
+        # the attempt log too, or the log would show a clean CoFID hit and a protein
+        # figure CoFID never returned.
+        attempts.append({"rung": rung, "outcome": "stated_override",
+                         "detail": ", ".join(f"{f} {stated[f]:g}"
+                                             for f in out["stated_fields"])
+                                   + " - his own figures, kept over the lookup"})
     return out
 
 
@@ -1048,6 +1147,14 @@ def cache_resolved(store, item: dict) -> None:
     if item.get("confidence") not in ("label", "database"):
         return
     if item.get("needs_input"):
+        return
+    if item.get("stated_fields"):
+        # AN OVERLAID FIGURE IS HIS, ABOUT ONE MEAL, AND MUST NOT BE RE-SERVED (17 Aug
+        # 2026). The cache is keyed on his words and stamped with the rung's confidence,
+        # so caching "chicken salad with 21g protein" would hand back his 21 g for a year,
+        # against a sentence in which he stated nothing, dressed as the source's own
+        # figure. The same reasoning that keeps LLM estimates out of the cache: what gets
+        # frozen here has to be a lookup, not a one-off.
         return
     payload = {f: item.get(f) for f in MACRO_FIELDS}
     payload.update({"resolved_name": item.get("resolved_name"),
@@ -1070,11 +1177,37 @@ def cache_resolved(store, item: dict) -> None:
     store.cache_put((item.get("raw_text") or "").strip().lower(), payload)
 
 
+# How a stated macro reads back to him. His own words for the macro, and the unit it is
+# quoted in, so the line says "your own figure: protein 21 g" rather than "protein_g 21".
+_STATED_LABELS = {"kcal": ("kcal", ""), "protein_g": ("protein", " g"),
+                  "carb_g": ("carbs", " g"), "fat_g": ("fat", " g"),
+                  "fibre_g": ("fibre", " g"), "dietary_sodium_mg": ("sodium", " mg")}
+
+
+def _stated_phrase(item: dict) -> str:
+    """"your own figure: protein 21 g", or "" when nothing was overlaid."""
+    bits = []
+    for f in item.get("stated_fields") or ():
+        name, unit = _STATED_LABELS.get(f, (f, ""))
+        value = item.get(f)
+        bits.append(f"{name} {value:g}{unit}" if value is not None else name)
+    if not bits:
+        return ""
+    return ("your own " + ("figures: " if len(bits) > 1 else "figure: ")
+            + ", ".join(bits))
+
+
 def describe_provenance(item: dict) -> str:
     """One short line for the bot's confirm message. The rung is always stated: an
     estimate must never look like label data, and a degraded resolution must say so."""
     if item.get("needs_input"):
-        return "Could not resolve this one. Give me the pack figures?"
+        # SAY WHAT SURVIVED. Nothing resolved, but if he gave a figure it is on the item
+        # and asking as though he had said nothing invites him to repeat himself - and
+        # makes him doubt, reasonably, that his number was heard at all.
+        kept = _stated_phrase(item)
+        return ("Could not resolve this one"
+                + (f", though I have {kept}" if kept else "")
+                + ". Give me the pack figures?")
     label = {Rung.VENDOR: ("from " + (item.get("vendor") or "the chain")
                            + "'s published nutrition"),
              Rung.CACHE: "from your saved items",
@@ -1092,6 +1225,12 @@ def describe_provenance(item: dict) -> str:
              Rung.WEB: "found online, from the product's own published figures",
              Rung.LLM: "estimated"}.get(item.get("source_rung"), item.get("source_rung"))
     bits = [label]
+    if item.get("stated_fields"):
+        # A MIXED ITEM HAS TO SAY SO. Most of this row came from the rung named above, one
+        # figure came from him, and the line he confirms is the only place that difference
+        # is ever visible - the stored entry carries one confidence for the whole row.
+        # Named first among the qualifiers because it is the part he can actually check.
+        bits.append(_stated_phrase(item) + ", kept as you gave it")
     if item.get("confidence") == "estimate":
         bits.append("roughly +/-10-15%")
     if item.get("note"):

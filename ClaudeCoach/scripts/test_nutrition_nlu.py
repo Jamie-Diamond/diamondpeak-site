@@ -500,10 +500,27 @@ check("field-name synonyms are mapped rather than dropped",
       _alias["kcal"] == 500.0 and _alias["protein_g"] == 30.0
       and _alias["carb_g"] == 60.0 and _alias["fibre_g"] == 5.0
       and _alias["dietary_sodium_mg"] == 800.0)
-check("no energy figure is not a specification, so it goes back on the ladder",
-      NLU.stated_macros({"protein_g": 40}) is None
-      and NLU.stated_macros({"kcal": 0}) is None
+check("a zero energy figure is an absence, not a statement",
+      NLU.stated_macros({"kcal": 0}) is None
       and NLU.stated_macros(None) is None and NLU.stated_macros("980 kcal") is None)
+# 17 Aug 2026. kcal was REQUIRED, so a block without one was discarded whole and "chicken
+# salad with 21g protein" came back with a composition table's protein instead of his. The
+# rule that survives is the OTHER one: with no energy figure there is nothing to log
+# verbatim, so the item still goes down the ladder - and every caller that takes the
+# verbatim path tests kcal itself, which is where that rule now lives.
+_partial = NLU.stated_macros({"protein_g": 40})
+check("a macro stated without kcal is kept, not discarded",
+      _partial["protein_g"] == 40.0 and "kcal" not in _partial)
+check("but a partial statement still cannot take the verbatim path",
+      not _partial.get("kcal"))
+check("a zero kcal costs him the zero, never the macro beside it",
+      NLU.stated_macros({"kcal": 0, "protein_g": 21})["protein_g"] == 21.0
+      and "kcal" not in NLU.stated_macros({"kcal": 0, "protein_g": 21}))
+check("a zero for a macro that is not energy is a real figure he gave",
+      NLU.stated_macros({"protein_g": 21, "fat_g": 0})["fat_g"] == 0.0)
+check("a block with no figures at all in it is still nothing",
+      NLU.stated_macros({"basis": "label", "components": ["a row"]}) is None
+      and NLU.stated_macros({"vitamin_c_mg": 60}) is None)
 check("a mis-typed decimal point is refused, never clamped",
       NLU.stated_macros({"kcal": 98000}) is None
       and "protein_g" not in NLU.stated_macros({"kcal": 500, "protein_g": -4}))
