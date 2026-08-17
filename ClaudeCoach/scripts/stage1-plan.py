@@ -785,10 +785,11 @@ HARD RULES — you propose the SHAPE only; code computes all load/fuelling/struc
 - ONE FULL REST DAY, EVERY WEEK. Exactly what it says: at least one day of the seven
   carries NO session at all. This is not "an easy day" and not "a short swim" — a day
   with any load on it is not a rest day. Choose the day that costs the week least and
-  leave it empty. A seven-day week is REJECTED by the validator (no_rest_day, hard), so
-  a plan without a rest day does not reach the athlete. Zero-load mobility/stretching is
-  the one thing that may sit on it. If the week genuinely cannot carry a rest day, you
-  must say why in the plan notes — the reason is recorded, not assumed.
+  leave it empty. If you do NOT leave one, code will clear your cheapest un-agreed day
+  for you and the week loses whatever you put there — so choose deliberately rather than
+  handing back seven days and letting the choice be made for you. Zero-load
+  mobility/stretching is the one thing that may sit on a rest day. If the week genuinely
+  cannot carry one, say why in the plan notes — the reason is recorded, not assumed.
 - Aim the week near the WEEKLY TSS TARGET **and actively deliver the QUALITY PRESCRIPTION below** — hit each sport's per-zone target (Z3 + Z4-5), not just the overall TSS/TID. A week that only hits TSS with easy volume is WRONG on a build/specific week.
 - PROTECT THE LONG RIDE: include one Ride of ~long_ride_target_min as the week's KEY session.
 - RUNS: total run mileage must NOT exceed weekly_run_mileage_cap_km (≈ minutes/5.3 km) and the
@@ -918,6 +919,11 @@ def _plan(args):
         _avail = weekly_availability.day_shape(args.athlete, week_start)
     _declared_hours = weekly_availability.hours_for_week(args.athlete, week_start)
     _declared_constraints = weekly_availability.constraints_for_week(args.athlete, week_start)
+    # The recorded reason this week may train through its rest day, if there is one. Read
+    # here with the other per-week declarations and NOT inside the shaping loop: it decides
+    # whether a day gets cleared, and re-reading it per attempt would let the answer change
+    # halfway through one build.
+    _rest_waiver = weekly_availability.rest_day_waiver_for_week(args.athlete, week_start)
     brief = sl.planning_brief(args.athlete, cfg, today=week_start, plan_start=week_start,
                               availability=_avail)
     brief["_prior_zones"] = _load_prior_zones(args.athlete, week_start)   # Phase 5.4 rolling window
@@ -1086,6 +1092,48 @@ def _plan(args):
             attempts.append('quality-injection: ' + '; '.join(_inj))
     except Exception as _e:
         attempts.append(f'quality-injection skipped ({_e!r})')
+    # ── RESERVE THE REST DAY (lib/rest_day) ──────────────────────────────────────────
+    # LAST of the shaping steps, and the ordering is the point rather than tidiness:
+    # quality_inject and close_to_target both PLACE load, so reserving before them lets
+    # injection put load straight back onto the reserved day and the week validates 7/7
+    # again. Nothing below adds a session, so the day reserved here is the day that
+    # reaches the athlete.
+    #
+    # A failure here leaves the week as it was, and validate_week's hard `no_rest_day`
+    # is still the backstop on the ordinary push path — but NOT on the empty-week
+    # fallback, which permits shape blockers by design (_SAFETY_BLOCKER_CODES). So a
+    # broken reserver plus an empty calendar can still deliver a 7/7 starting-point
+    # week; that is the pre-existing fallback trade, named here so it is not a surprise.
+    try:
+        import rest_day as _rd
+        proposal, _reserved, _rest_notes = _rd.reserve(
+            # week_start CONFINES the count to the seven days being planned. The Stage-1
+            # model writes the session dates and nothing on this path checks them against
+            # the DATE GRID, so a stray eighth date would otherwise make the rest
+            # arithmetic negative and reserve two days to fix a week needing one.
+            proposal, built, pins, week_start=week_start, waiver=_rest_waiver,
+            # KEY = what the shaping levers already refuse to spend: the long ride and
+            # long run (clamped, never used to absorb TSS) plus any session carrying a
+            # QUALITY main set (_is_endurance is False), because dose is prescribed by the
+            # phase and cannot be recovered by stretching easy volume. Reusing both
+            # existing predicates rather than inventing a third notion of "valuable" is
+            # what stops them disagreeing about which day is protected. A session with no
+            # segments at all (Strength) is deliberately NOT key — _is_endurance returns
+            # False for it too, and calling it key would protect the one thing on the week
+            # that is cheapest to move.
+            is_key_fn=lambda s: (_is_long_ride(s) or _is_long_run(s)
+                                 or (bool(s.get("segments")) and not _is_endurance(s))))
+        if _reserved:
+            built = close_to_target(args.athlete, proposal, target, brief)
+            blocking, advisory = audit_built(brief, built, target, proposal)
+        if _rest_notes:
+            # Advisory, not blocking: reserving the day is done by then, and the case that
+            # could NOT be resolved (every loaded day agreed with the athlete) is a thing
+            # to tell them, not a further reason to deliver nothing.
+            advisory += [f"rest-day: {n}" for n in _rest_notes]
+            attempts.append("rest-day: " + "; ".join(_rest_notes))
+    except Exception as _e:
+        attempts.append(f"rest-day reservation skipped ({_e!r})")
     n_blocking = len(blocking)
 
     load_pct_off = (round((built["total_tss"] - target) / target * 100, 1) if target else None)

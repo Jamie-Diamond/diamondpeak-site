@@ -209,6 +209,25 @@ def constraints_for_week(slug: str, week_start: date | str | None,
     return str((d or {}).get("constraints") or "").strip()
 
 
+def rest_day_waiver_for_week(slug: str, week_start: date | str | None,
+                             base: Path | str | None = None) -> str | None:
+    """The stated reason this week trains through its rest day, or None.
+
+    The rest-day rule's escape hatch: `validate_week` downgrades `no_rest_day` to a soft
+    `no_rest_day_waived` when it is given a reason, and lib/rest_day stands down rather
+    than clearing a day. So this is the one input that can turn off a hard safety-adjacent
+    check, and it is deliberately its OWN key rather than being read out of
+    `constraints` — a week where the athlete happened to mention a travel block would
+    otherwise waive their rest day without anyone deciding to.
+
+    FAILS CLOSED. Anything that is not a non-blank string is None, i.e. the week keeps
+    its hard requirement. A waiver that cannot be read is not a waiver.
+    """
+    d = for_week(slug, week_start, base)
+    w = (d or {}).get("rest_day_waiver")
+    return w.strip() if isinstance(w, str) and w.strip() else None
+
+
 def day_shape(slug: str, week_start: date | str | None,
               base: Path | str | None = None) -> dict | None:
     """The day-shape keys session_library.reconcile_day_rules consumes, or None.
@@ -240,12 +259,17 @@ def _atomic_write(p: Path, payload: dict) -> None:
 
 
 def record(slug: str, week_start: date | str, *, hours=None, constraints: str = "",
-           source: str = "manual", base: Path | str | None = None,
-           **day_keys) -> dict:
+           rest_day_waiver: str = "", source: str = "manual",
+           base: Path | str | None = None, **day_keys) -> dict:
     """Write (or replace) the declaration for one week. Returns the stored record.
 
     Raises ValueError on an out-of-band `hours`, rather than storing a figure that
     would silently become somebody's training ceiling.
+
+    `rest_day_waiver` is its own named parameter and not one of `**day_keys` because it
+    is the only input here that can stand a hard check down (see
+    rest_day_waiver_for_week): a caller has to ask for it by name, and a typo lands as an
+    unknown kwarg rather than quietly waiving a rest day.
     """
     ws = date.fromisoformat(week_start) if isinstance(week_start, str) else week_start
     ws = _monday(ws)
@@ -259,6 +283,8 @@ def record(slug: str, week_start: date | str, *, hours=None, constraints: str = 
         rec["hours"] = h
     if constraints:
         rec["constraints"] = str(constraints).strip()
+    if str(rest_day_waiver or "").strip():
+        rec["rest_day_waiver"] = str(rest_day_waiver).strip()
     for k in DAY_SHAPE_KEYS:
         v = day_keys.get(k)
         if isinstance(v, list):

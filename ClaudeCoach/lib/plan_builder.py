@@ -298,7 +298,16 @@ def build_sessions(slug: str, proposal: dict) -> dict:
                                       last_week_tss=_lw).get("weekly_tss_floor")
         except Exception:
             _floor = None
+    # The rest-day escape hatch, reaching the validator for the first time: without it
+    # `rest_day_waiver` defaulted to None on every build, so a week the athlete had a
+    # recorded reason to train through still hard-failed and the hatch existed only in
+    # the validator's signature. Fails closed — no declaration, no waiver, still hard.
+    try:
+        _rest_waiver = weekly_availability.rest_day_waiver_for_week(slug, ws)
+    except Exception:
+        _rest_waiver = None
     rep = validate_week(events, ws, day_rules=dr,
+                        rest_day_waiver=_rest_waiver,
                         weekly_tss_cap=_weekly_tss_cap(slug, phase, week_start=ws),
                         weekly_tss_floor=_floor,
                         run_week_min_cap=_caps.get("weekly_min_cap"),
