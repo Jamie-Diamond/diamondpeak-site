@@ -671,6 +671,75 @@ check("a move across a month boundary lands in the other month file",
       res3 and [e["id"] for e in mv.get_day(_prev)["entries"]] == [res3["moved"]["id"]]
       and (mv.dir / "2026-07.json").exists())
 
+print("\n--- stated_fields survives the commit (17 Aug 2026) ---")
+# rescale_item refuses to recompute a macro the athlete gave, and it reads `stated_fields`
+# off the item to know which. add_entry had no such keyword, so the flag was dropped at the
+# commit and the stored row could not tell his 21 g of protein from a lookup's. Reproduced
+# end to end at 21.0 -> 42.0 -> 63.0 over two corrections against the committed row.
+sf = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nut-stated-")))
+_SD = date(2026, 8, 12)
+his = sf.add_entry(_SD, raw_text="chicken salad with 21g protein",
+                   resolved_name="Chicken salad", kcal=240, protein_g=21, carb_g=12,
+                   fat_g=14, confidence="estimate", source_rung="llm",
+                   stated_fields=["protein_g"])
+check("the figures he stated are named on the returned entry",
+      his["stated_fields"] == ["protein_g"])
+check("and are there when the month file is read back",
+      sf.get_day(_SD)["entries"][0]["stated_fields"] == ["protein_g"])
+check("they survive a round trip through the JSON on disk",
+      json.loads((sf.dir / "2026-08.json").read_text())["days"][_SD.isoformat()]
+      ["entries"][0]["stated_fields"] == ["protein_g"])
+
+# THE SHAPE OF EVERY OTHER ROW IS UNCHANGED. These month files are a record he keeps, and
+# almost no entry has a stated figure: the key is written only when there is something to
+# say, rather than a `[]` on every row from today onwards.
+plain = sf.add_entry(_SD, raw_text="flat white", resolved_name="Flat white", kcal=120,
+                     confidence="label", source_rung="cofid")
+check("an entry with no stated figure does not grow the key at all",
+      "stated_fields" not in plain)
+check("and neither does one handed an empty list",
+      "stated_fields" not in sf.add_entry(_SD, raw_text="oat milk", kcal=40,
+                                          stated_fields=[]))
+# A row written before today has no key either, which is the same absence - so there is
+# nothing to migrate and nothing that reads back wrong.
+old = sf.get_day(_SD)["entries"][1]
+check("an old row lacking the key reads back as no stated figures",
+      (old.get("stated_fields") or ()) == ())
+check("and can still be patched like any other",
+      sf.update_entry(_SD, old["id"], kcal=130)["kcal"] == 130.0)
+
+check("stated_fields is patchable, or a row that lost it starts multiplying his number",
+      sf.update_entry(_SD, old["id"], stated_fields=["kcal"])["stated_fields"] == ["kcal"])
+check("and a patch that says nothing about it leaves his figures named",
+      sf.update_entry(_SD, his["id"], kcal=300)["stated_fields"] == ["protein_g"])
+check("a move carries it to the new day, like every other field",
+      sf.move_entry(_SD, his["id"], date(2026, 8, 13))["moved"]["stated_fields"]
+      == ["protein_g"])
+sf.move_entry(date(2026, 8, 13), sf.get_day(date(2026, 8, 13))["entries"][0]["id"], _SD)
+
+print("\n--- a label supersedes his figure and the claim to it (17 Aug 2026) ---")
+# Reachable only because entries carry `stated_fields` from today. The label loop replaces
+# the number his claim was about with the manufacturer's, so a row left claiming it would
+# have the next rescale hold the PACK's protein and fmt_confirm caption it "your own
+# figure" - the same fabricated attribution, pointing the other way.
+lb = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nut-stated-lb-")))
+row = lb.add_entry(_SD, raw_text="chicken salad with 21g protein and 3g fibre",
+                   resolved_name="Chicken salad", kcal=240, protein_g=21, fibre_g=3,
+                   confidence="estimate", source_rung="llm",
+                   stated_fields=["protein_g", "fibre_g"])
+part = lb.apply_label_to_entry(_SD, row["id"], {"kcal": 310.0, "protein_g": 26.0})
+check("the field the panel replaced stops being his",
+      part["protein_g"] == 26.0 and "protein_g" not in part["stated_fields"])
+check("but a field the panel said nothing about is still his",
+      part["fibre_g"] == 3.0 and part["stated_fields"] == ["fibre_g"])
+whole = lb.apply_label_to_entry(_SD, row["id"], {"fibre_g": 5.5})
+check("and when the panel has replaced them all the key goes, not an empty list",
+      whole["fibre_g"] == 5.5 and "stated_fields" not in whole)
+bare = lb.add_entry(_SD, raw_text="pack of nuts", kcal=200, confidence="label",
+                    source_rung="manual")
+check("a label against a row that never claimed anything is untouched by all this",
+      "stated_fields" not in lb.apply_label_to_entry(_SD, bare["id"], {"kcal": 235.0}))
+
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
 print("all checks passed")

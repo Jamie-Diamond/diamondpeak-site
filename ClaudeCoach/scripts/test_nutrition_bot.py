@@ -3365,6 +3365,96 @@ NB.GATE_RUNNER = _s_real["gate"]
 check("and this section's stubs are put back too",
       NB.NR.resolve is _s_real["resolve"] and NB.GATE_RUNNER is _s_real["gate"])
 
+print("\n--- his figure survives the COMMIT, not just the offer (17 Aug 2026) ---")
+# The guard added earlier today held for exactly as long as the offer sat pending.
+# commit_one sent no `stated_fields` and add_entry had no keyword for one, so the stored
+# row could not tell his 21 g from a lookup's, and the next correction multiplied it. Run
+# against the real store, the real commit_one and the real apply_quantity_correction:
+# observed 21.0 while pending, then 42.0 and 63.0 once committed.
+_c_real = {"send": NB.tg.send, "publish": NB.publish_now, "today": NB.today_block,
+           "chat": NB._chat, "gate": NB.GATE_RUNNER, "cache": NB.NR.cache_resolved}
+_c_sent = []
+NB.tg.send = lambda token, chat, text, **k: _c_sent.append(text)
+NB.publish_now = lambda ctx: None
+NB.today_block = lambda ctx, day: "(totals)"
+NB._chat = lambda ctx, role, text: None
+NB.NR.cache_resolved = lambda store, item: None
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
+_cs = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-commit-stated-")))
+_cctx = FakeCtxCommit(_cs)
+_salad = {"resolved_name": "Chicken salad", "_raw": "chicken salad with 21g protein",
+          "raw_text": "chicken salad with 21g protein",
+          "kcal": 240.0, "protein_g": 21.0, "carb_g": 12.0, "fat_g": 14.0,
+          "fibre_g": 3.0, "dietary_sodium_mg": 400, "portion_used_g": 200.0,
+          "per_100g": {"kcal": 120.0, "protein_g": 8.25, "carb_g": 6.0, "fat_g": 7.0,
+                       "fibre_g": 1.5, "dietary_sodium_mg": 200.0},
+          "stated_fields": ["protein_g"],
+          "confidence": "label", "source_rung": "cofid"}
+NB.set_pending(_cs, {"batch": [dict(_salad)]})
+NB.apply_quantity_correction(_cctx, NB.get_pending(_cs), {"grams": 250}, TODAY, "token", 1)
+_c_pend = NB.get_pending(_cs)["batch"][0]
+check(f"held while the offer is pending, as it already was (protein "
+      f"{_c_pend['protein_g']})", _c_pend["protein_g"] == 21.0)
+NB.commit_one(_cctx, _c_pend, TODAY)
+_c_row = _cs.get_day(TODAY)["entries"][0]
+# THE WHOLE POINT, ASSERTED ON WHAT CAME BACK OUT OF THE STORE rather than on add_entry's
+# signature. A keyword nothing passes is how the resolve(stated=) overlay sat inert for
+# hours this morning while looking complete.
+check("the commit carries which figures are his into the record",
+      _c_row.get("stated_fields") == ["protein_g"])
+# A freshly committed row has no per-100g row and no portion_used_g - commit_one writes
+# neither - so there is nothing for a grams correction to scale FROM and it is declined.
+# In production the basis arrives with a label photo or a previous correction's patch;
+# seeded directly here so the two corrections below exercise the ratio branch for real.
+check("a grams correction against a bare committed row is declined, not guessed at",
+      NB.apply_quantity_correction(_cctx, None, {"grams": 500}, TODAY, "token", 1) is False)
+_cs.update_entry(TODAY, _c_row["id"], portion_used_g=250.0)
+NB.apply_quantity_correction(_cctx, None, {"grams": 500}, TODAY, "token", 1)
+_c1 = _cs.get_day(TODAY)["entries"][0]
+check(f"correction one against the committed row holds it (protein "
+      f"{_c1['protein_g']}, was 42.0)", _c1["protein_g"] == 21.0)
+NB.apply_quantity_correction(_cctx, None, {"grams": 750}, TODAY, "token", 1)
+_c2 = _cs.get_day(TODAY)["entries"][0]
+check(f"and so does correction two, which is where the flag used to be gone for good "
+      f"(protein {_c2['protein_g']}, was 63.0)", _c2["protein_g"] == 21.0)
+check("everything he said nothing about scaled all the way through",
+      (_c1["kcal"], _c2["kcal"]) == (600.0, 900.0)
+      and _c2["portion_used_g"] == 750.0)
+check("and the row still names his figure after both, or the third would invent one",
+      _c2.get("stated_fields") == ["protein_g"])
+check("the reply quotes the kcal it actually moved",
+      "750 g: 900 kcal" in _c_sent[-1])
+# The correction reply is composed by hand rather than by fmt_confirm, so holding his
+# figure correctly and saying nothing about it is the failure this branch could newly have:
+# kcal moving to 900 in the totals with protein still at 21 and no explanation.
+check("and says which figure it held, in fmt_confirm's own words",
+      "protein 21 g is your figure" in _c_sent[-1]
+      and "should scale too" in _c_sent[-1])
+check("the one wording is shared, not restated",
+      NB._held_note({"_stated_held": ["protein_g"], "protein_g": 21.0})
+      in NB.fmt_confirm({"resolved_name": "Chicken salad", "kcal": 600.0,
+                         "protein_g": 21.0, "_stated_held": ["protein_g"],
+                         "stated_fields": ["protein_g"], "source_rung": "cofid"}))
+check("and it is empty when a rescale held nothing", NB._held_note({"kcal": 100.0}) == "")
+# An ordinary commit writes the row it always wrote.
+NB.commit_one(_cctx, {"resolved_name": "Flat white", "raw_text": "flat white",
+                      "kcal": 120.0, "confidence": "label", "source_rung": "cofid"},
+              TODAY)
+check("an item with no stated figure commits without growing the key",
+      "stated_fields" not in _cs.get_day(TODAY)["entries"][1])
+# And that row's own correction reply is the plain sentence it has always been.
+_c_flat = _cs.get_day(TODAY)["entries"][1]
+_cs.update_entry(TODAY, _c_flat["id"], portion_used_g=200.0)
+NB.apply_quantity_correction(_cctx, None, {"grams": 300}, TODAY, "token", 1)
+check("an ordinary rescale reply says nothing about held figures",
+      "Flat white" in _c_sent[-1] and "your figure" not in _c_sent[-1]
+      and _cs.get_day(TODAY)["entries"][1]["kcal"] == 180.0)
+NB.tg.send, NB.publish_now = _c_real["send"], _c_real["publish"]
+NB.today_block, NB._chat = _c_real["today"], _c_real["chat"]
+NB.NR.cache_resolved, NB.GATE_RUNNER = _c_real["cache"], _c_real["gate"]
+check("and this section's stubs are put back",
+      NB.tg.send is _c_real["send"] and NB.GATE_RUNNER is _c_real["gate"])
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)

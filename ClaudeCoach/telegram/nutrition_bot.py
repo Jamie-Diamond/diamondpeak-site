@@ -205,6 +205,36 @@ def _held_phrase(item: dict) -> str:
     return ", ".join(bits)
 
 
+def _held_note(item: dict) -> str:
+    """The whole sentence, italicised, or "" when the rescale held nothing.
+
+    SAY WHAT DID NOT MOVE (17 Aug 2026). rescale_item holds a figure he stated while
+    scaling the rest, which is right but leaves a panel that does not add up: his protein
+    sitting beside a kcal worked out from a per-100g row and a portion. An unexplained
+    inconsistency reads as a broken calculator, not as deference, and he would be right to
+    distrust the numbers either way. Same argument as the assumed-portion line in
+    fmt_confirm - the assumption is named on the one message where saying "no, scale that
+    too" still costs him nothing.
+
+    Worded so it does not repeat describe_provenance, which has already said the figure is
+    his. The new information is only that the RESCALE did not touch it.
+
+    A function of its own, and not part of fmt_confirm, because there are two replies that
+    have to carry it and only one of them is built by fmt_confirm: a correction against a
+    COMMITTED entry composes its own text. That second reply went quiet the moment
+    `stated_fields` began surviving the commit - it started holding his figure correctly
+    and saying nothing about it, which is the same unexplained panel with the explanation
+    removed. One wording rather than two, or the second one drifts."""
+    kept = _held_phrase(item)
+    if not kept:
+        return ""
+    many = len(item.get("_stated_held") or ()) > 1
+    return (f"_{kept} {'are' if many else 'is'} your "
+            f"{'figures' if many else 'figure'}, so the rescale left "
+            f"{'them' if many else 'it'} alone and scaled the rest. Say if "
+            f"{'they' if many else 'it'} should scale too._")
+
+
 def fmt_confirm(item: dict) -> str:
     """The confirm prompt. States the rung every time."""
     # HIS OWN FIGURES SAY SO IN HIS OWN TERMS. describe_provenance renders the MANUAL rung
@@ -239,22 +269,9 @@ def fmt_confirm(item: dict) -> str:
         # a reading and not a measurement.
         bits.append(f"_assumed {item.get('portion_assumed') or 'a standard portion'}; "
                     f"correct me if wrong._")
-    kept = _held_phrase(item)
-    if kept:
-        # SAY WHAT DID NOT MOVE (17 Aug 2026). rescale_item holds a figure he stated while
-        # scaling the rest, which is right but leaves a panel that does not add up: his
-        # protein sitting beside a kcal worked out from a per-100g row and a portion. An
-        # unexplained inconsistency reads as a broken calculator, not as deference, and he
-        # would be right to distrust the numbers either way. Same argument as the
-        # assumed-portion line above - the assumption is named on the one message where
-        # saying "no, scale that too" still costs him nothing.
-        # Worded so it does not repeat describe_provenance, which has already said the
-        # figure is his. The new information is only that the RESCALE did not touch it.
-        many = len(item.get("_stated_held") or ()) > 1
-        bits.append(f"_{kept} {'are' if many else 'is'} your "
-                    f"{'figures' if many else 'figure'}, so the rescale left "
-                    f"{'them' if many else 'it'} alone and scaled the rest. Say if "
-                    f"{'they' if many else 'it'} should scale too._")
+    held = _held_note(item)
+    if held:
+        bits.append(held)
     if item.get("fibre_g"):
         bits.append(f"fibre {round(item['fibre_g'])} g")
     if item.get("_components"):
@@ -3689,10 +3706,20 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
                            f"{new.get('portion_used_g'):.0f} g, "
                            f"{round(new.get('kcal') or 0)} kcal")
         publish_now(ctx)
+        # AND IT SAYS WHAT IT HELD, like the offer branch above does (17 Aug 2026). This
+        # reply is composed here rather than by fmt_confirm, so the held-figure sentence
+        # was not on it - and until this morning that did not matter, because a committed
+        # row could not carry `stated_fields` and this branch always scaled everything.
+        # Now it defers correctly and, without this, silently: he sees kcal move 600 -> 900
+        # in the totals underneath while his protein sits at 21, with nothing saying why.
+        # Deference he cannot see is indistinguishable from a broken calculator, which is
+        # the argument fmt_confirm already makes for the same sentence.
+        held = _held_note(new)
         send_verified(ctx, token, chat_id,
                       f"Rescaled *{target.get('resolved_name')}* to "
                       f"{new.get('portion_used_g'):.0f} g: "
                       f"{round(new.get('kcal') or 0)} kcal."
+                      + (f"\n{held}" if held else "")
                       + "\n\n" + today_block(ctx, day), kind="correction",
                       numbers=_gate_numbers([new]))
         _chat(ctx, "coach", f"[log] rescaled {target.get('resolved_name')} to "
@@ -4789,7 +4816,20 @@ def commit_one(ctx: Context, item: dict, day: date, today: date = None) -> None:
         # says it guessed. Meals were inferred at publish time from the log timestamp
         # alone, so a breakfast written up at 13:49 read as lunch and nothing at log
         # time ever asked or read the message (Jamie, 13 Aug 2026).
-        meal=item.get("_meal") or "")
+        meal=item.get("_meal") or "",
+        # WHICH FIGURES ABOVE ARE HIS, CARRIED OVER THE COMMIT (17 Aug 2026). rescale_item
+        # learned this morning not to recompute a macro he stated, and it reads
+        # `stated_fields` off the item to know which. The guard therefore held for exactly
+        # as long as the offer sat pending: add_entry had no such keyword, the flag was
+        # dropped here, and the stored row could not tell his 21 g of protein from a
+        # lookup's. The very next "make that 500g" multiplied it and told him he had eaten
+        # 42 g of protein, sourced to himself.
+        #
+        # Passed explicitly rather than left to a **kwargs widening of add_entry: an item
+        # dict in this module carries transient notes (`_stated_held`, `_components`) that
+        # have no business in the longitudinal record, and an allowlist is what keeps them
+        # out. `or None` so an item with an empty list writes the same row it always did.
+        stated_fields=item.get("stated_fields") or None)
     NR.cache_resolved(ctx.store, item)
 
 
