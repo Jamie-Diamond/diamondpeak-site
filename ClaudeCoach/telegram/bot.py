@@ -5632,7 +5632,7 @@ def _undo_keyboard(token_id):
         {"text": "↩️ Undo that", "callback_data": f"{_UNDO_PREFIX}{token_id}"}]]}
 
 
-def _report_cancelled_turn(token, chat_id, slug, placeholder_id, summary):
+def _report_cancelled_turn(token, chat_id, slug, placeholder_id, summary, turn_started):
     """Say what the stopped turn did and did not do, and offer the undo where there is one.
 
     Runs on the reply pool, after the stream has ended - never in the poll loop. Never
@@ -5644,7 +5644,25 @@ def _report_cancelled_turn(token, chat_id, slug, placeholder_id, summary):
     dies can miss a write by a few hundred milliseconds and then tell the athlete nothing
     landed. It is a couple of seconds off the poll loop and it buys the sentence its
     accuracy - but it is a settle, not a guarantee, which is why the wording below says
-    what I can see rather than what is definitely true."""
+    what I can see rather than what is definitely true.
+
+    `turn_started` is the wall clock from the TOP of this turn's worker, and the snapshot
+    is refused unless it was taken after that. This is not paranoia and it is not the same
+    check icu_events_verdict makes:
+
+      prefetch_context returns early on a _PREFETCH_CACHE hit (150s TTL) WITHOUT retaking
+      the snapshot, and _verify_icu_calendar_claim only refreshes it on a turn whose reply
+      claimed a calendar write. So a "before" can comfortably predate this turn and be
+      missing the PREVIOUS turn's perfectly legitimate push. Diffed naively, that push
+      reads as something THIS stopped turn did - and an Undo button on it would delete a
+      session the athlete asked for. A stale snapshot buys a false accusation everywhere
+      else in write_verify; here it would buy a destructive write.
+
+    Deliberately a turn boundary rather than a max_age_s. Cancelled turns are by definition
+    the long ones (100-500s on 17 Aug), so any fixed age would reject the valid same-turn
+    snapshots on exactly the replans this feature exists for. The cost is stated plainly:
+    after a prefetch cache hit this reports "I couldn't check" rather than diffing. That is
+    the honest answer, and cheaper than buying an events fetch on every turn's hot path."""
     # msg1 first: collapse it and take the Stop button away in the SAME edit, so the button
     # cannot outlive the run it names. reply_markup is explicit rather than omitted -
     # Telegram drops a keyboard on any editMessageText that leaves it out, and relying on
@@ -5659,12 +5677,17 @@ def _report_cancelled_turn(token, chat_id, slug, placeholder_id, summary):
     time.sleep(_CANCEL_SETTLE_S)
     after = _read_planned_window(slug)
 
-    if snap is None or snap[2] is None or after is None:
+    # Usable means: it exists, it kept the events (not a pre-widening 2-tuple), and it was
+    # taken during THIS turn. See the docstring for why the last one is a turn boundary.
+    usable = (snap is not None and snap[2] is not None
+              and turn_started is not None and snap[0] >= turn_started)
+    if not usable or after is None:
         # No usable before, or the read-back failed. This is write_verify's "unknown" and
         # it gets write_verify's discipline: state the uncertainty, do not manufacture
         # either reassurance or an accusation out of it.
-        log(f"[{slug}] cancelled turn: cannot diff the calendar "
-            f"(snapshot={'yes' if snap else 'no'}, read_back={'ok' if after is not None else 'failed'})")
+        log(f"[{slug}] cancelled turn: cannot diff the calendar (snapshot="
+            f"{'this turn' if usable else 'missing or from an earlier turn'}, "
+            f"read_back={'ok' if after is not None else 'failed'})")
         send(token, chat_id,
              "Stopped. I couldn't check your calendar just then, so I can't tell you "
              "whether anything had already landed - worth a look before you rely on it.",
@@ -6024,6 +6047,12 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
     _route_text). It carries the note that tells the model what was written and that the
     athlete's underlying request is still outstanding, plus the read-back already sent."""
     try:
+        # The turn boundary, captured BEFORE prefetch_context so the event snapshot that
+        # call takes falls inside it. Deliberately not `before_ts` below, which is assigned
+        # AFTER the prefetch: reusing that would put every valid snapshot on the wrong side
+        # of the comparison and quietly reduce every cancel report to "I couldn't check".
+        # Read _report_cancelled_turn's docstring for what this is defending (17 Aug 2026).
+        turn_started = time.time()
         history = load_history(files["history"])
         context = prefetch_context(slug)
         # The capture's read-back was transcripted in the poll loop so it could not be lost;
@@ -6181,7 +6210,8 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 log(f"[{slug}] cancelled turn also dropped {len(over_cap)} over-cap rule(s)")
             # No reply, no history entry, no "(no response)". The athlete withdrew the
             # question; writing it to history would have the next turn answer it anyway.
-            _report_cancelled_turn(token, chat_id, slug, placeholder_id, summary)
+            _report_cancelled_turn(token, chat_id, slug, placeholder_id, summary,
+                                   turn_started)
             log(f"[{slug}] turn cancelled by the athlete - no reply sent, history untouched")
             return
 

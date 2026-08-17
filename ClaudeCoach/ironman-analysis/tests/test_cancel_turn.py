@@ -409,6 +409,9 @@ def test_a_cancelled_turn_sends_no_reply_and_writes_no_history(monkeypatch):
     assert "(no response)" not in tg.sent_text()
     assert len(reports) == 1
     assert reports[0][2] == SLUG
+    # ...and it is handed the turn boundary, without which it cannot tell this turn's
+    # snapshot from the previous turn's and must not offer an undo at all.
+    assert len(reports[0]) == 6 and isinstance(reports[0][5], float)
 
 
 def test_an_uncancelled_turn_still_replies_and_saves(monkeypatch):
@@ -443,14 +446,16 @@ def test_the_run_is_marked_done_so_a_later_tap_is_answered(monkeypatch):
 # 7. The report: diff the calendar and say what you find
 # ---------------------------------------------------------------------------
 
-def _report(monkeypatch, before, after, tg=None):
+def _report(monkeypatch, before, after, tg=None, snapshot_age=0.0):
     tg = tg or FakeTelegram().install(monkeypatch)
     monkeypatch.setattr(bot, "_CANCEL_SETTLE_S", 0)
     monkeypatch.setattr(bot, "_reply_inline", lambda slug=None: {"inline_keyboard": []})
+    turn_started = time.time()
     if before is not None:
-        bot._set_events_snapshot(SLUG, time.time(), before)
+        bot._set_events_snapshot(SLUG, turn_started + 0.01 - snapshot_age, before)
     monkeypatch.setattr(bot, "_read_planned_window", lambda slug: after)
-    bot._report_cancelled_turn("tok", CHAT, SLUG, 901, "Updated intervals.icu")
+    bot._report_cancelled_turn("tok", CHAT, SLUG, 901, "Updated intervals.icu",
+                               turn_started)
     return tg
 
 
@@ -505,6 +510,29 @@ def test_a_missing_snapshot_produces_honesty_not_reassurance(monkeypatch):
 def test_a_failed_read_back_produces_honesty_not_reassurance(monkeypatch):
     tg = _report(monkeypatch, [ev(1, "2026-08-18")], None)
     assert "couldn't check your calendar" in tg.sent_text()
+
+
+def test_a_snapshot_from_an_earlier_turn_never_drives_an_undo(monkeypatch):
+    """The destructive version of write_verify's stale-snapshot rule.
+
+    prefetch_context returns early on a _PREFETCH_CACHE hit (150s TTL) WITHOUT retaking the
+    snapshot, and _verify_icu_calendar_claim only refreshes it when the reply claimed a
+    calendar write. So a "before" can predate this turn and be missing the PREVIOUS turn's
+    perfectly legitimate push. Diffed naively that push reads as "this stopped turn added
+    Wed 19 Aug" - and an Undo button on it would delete a session the athlete asked for.
+    Offering to destroy the athlete's own work is a long way worse than the false
+    accusation icu_events_verdict's max_age_s exists to prevent."""
+    before = [ev(1, "2026-08-18")]
+    after = before + [ev(7, "2026-08-19", name="Threshold 3x12")]
+    tg = _report(monkeypatch, before, after, snapshot_age=300.0)
+    text = tg.sent_text()
+    assert "couldn't check your calendar" in text
+    assert "Threshold 3x12" not in text, "a change we cannot attribute must not be described"
+    kb = tg.sends[0][1] or {}
+    rows = kb.get("inline_keyboard") or []
+    assert not any("undo:" in b.get("callback_data", "")
+                   for row in rows for b in row), \
+        "no undo may be offered against a snapshot that is not this turn's"
 
 
 def test_the_report_collapses_msg1_and_takes_the_button_with_it(monkeypatch):
@@ -694,6 +722,16 @@ def test_the_stop_branch_does_not_ack_a_second_time():
     src = BOT_SRC[BOT_SRC.index("def _handle_stop("):]
     src = src[:src.index("\n# --- Undo")]
     assert "answer_callback(" not in src
+
+
+def test_the_turn_boundary_is_taken_before_the_prefetch():
+    """prefetch_context is what takes the event snapshot, so the boundary the report
+    compares it against must be read BEFORE that call. Taken after - e.g. by reusing
+    `before_ts`, which is assigned further down - every valid snapshot would fall on the
+    wrong side of the comparison and every cancel would silently degrade to "I couldn't
+    check your calendar"."""
+    body = BOT_SRC[BOT_SRC.index("def _chat_reply_worker("):]
+    assert body.index("turn_started = time.time()") < body.index("context = prefetch_context(slug)")
 
 
 def test_cancellation_is_never_looked_up_by_chat_id():
