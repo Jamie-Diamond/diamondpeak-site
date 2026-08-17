@@ -4792,6 +4792,43 @@ def handle_command(ctx: Context, cmd: str, day: date, token, chat_id) -> None:
 
 # --- poll loop --------------------------------------------------------------
 
+def ack_callbacks(token, updates, allowed):
+    """Ack EVERY tap in a freshly fetched batch, before any of that batch is processed.
+    The only place a callback query is acknowledged.
+
+    Added 17 Aug 2026. Telegram expires a callback query id about 15 SECONDS after the tap.
+    The ack in the dispatch branch below was already the first thing that branch did, so the
+    ack itself was never what was late - RECEIPT was. tg.get returns a BATCH, the loop walks
+    it one update at a time, and a "Log it" tap queued behind a typed message was not acked
+    until that message's resolve, gate (45s on its own) and reply had all finished. By then
+    Telegram refuses the ack, the button spins on, and he taps again. Acking the whole batch
+    here closes that gap.
+
+    THE ALLOWED-CHAT FILTER IS KEPT. The dispatch branch drops a foreign chat before acking
+    and this must not quietly move that boundary: an unacked stranger is the point.
+
+    Not fixed by this, and worth being straight about: a tap made while the loop is already
+    inside handle_text. No tg.get happens until that returns, so the query can already be
+    long dead when it arrives. That needs the slow work off the poll loop, which is a design
+    change, not an ack move.
+
+    An ack failure must never cost the batch - this runs ahead of real work, so a raise here
+    would drop updates that have nothing to do with the tap. Caught and logged per update."""
+    for upd in updates or []:
+        try:
+            cq = (upd or {}).get("callback_query") or {}
+            cbid = cq.get("id")
+            if not cbid:
+                continue
+            chat_id = ((cq.get("message") or {}).get("chat") or {}).get("id")
+            if str(chat_id) != str(allowed):
+                continue
+            tg.answer_callback(token, cbid, log=log)
+        except Exception as exc:
+            log(f"ack for callback batch entry failed (continuing): "
+                f"{type(exc).__name__}: {exc}")
+
+
 def main():
     cfg = load_config()
     token = cfg["bot_token"]
@@ -4808,7 +4845,11 @@ def main():
             params["offset"] = offset
         res = tg.get(token, "getUpdates", params, log=log,
                      timeout=POLL_TIMEOUT + 20)
-        for upd in res.get("result") or []:
+        updates = res.get("result") or []
+        # Acknowledge every tap in this batch before ANY of it is handled - see
+        # ack_callbacks for why the old per-branch ack was still too late (17 Aug 2026).
+        ack_callbacks(token, updates, allowed)
+        for upd in updates:
             offset = upd["update_id"] + 1
             try:
                 if "callback_query" in upd:
@@ -4816,7 +4857,9 @@ def main():
                     chat_id = cq["message"]["chat"]["id"]
                     if str(chat_id) != allowed:
                         continue
-                    tg.answer_callback(token, cq["id"], log=log)
+                    # Already acked in ack_callbacks above, on receipt of the batch. Do not
+                    # re-ack: the second call is refused as an already-answered query and
+                    # is only quiet because lib/tg matches Telegram's error text for it.
                     pend = get_pending(ctx.store)
                     # The gate judges the reply against what he DID, and a tap is what he
                     # did. Left unset, Context outlives the message and the field would
