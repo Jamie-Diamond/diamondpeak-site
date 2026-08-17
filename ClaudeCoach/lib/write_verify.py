@@ -157,79 +157,166 @@ _STRAVA_DESC_RE = re.compile(r"\b(description|write-?up|notes?|summary)\b", re.I
 # write three seconds earlier logged "... updated intervals.icu ...". The evidence was
 # sitting in the same function and the verifier never asked for it.
 #
-# This is the tool-derived half. It is DELIBERATELY three-valued in the same spirit as the
-# verdicts above, and the third value is what makes it safe:
+# This is the tool-derived half, and it is the SECOND line of defence, not the first: the
+# prose fix above catches the incident on its own, and every caller that cannot supply a
+# summary keeps that protection. Losing either half is a regression.
+#
+# It is DELIBERATELY three-valued in the same spirit as the verdicts above, and the third
+# value is what makes it safe:
 #   a set()      - every tool that ran is provably local (a file read, a file write, a
-#                  maths helper) or no tool ran at all, so no external write is possible.
-#   a set of kinds - a tool that CAN write externally ran.
+#                  maths helper, a read-only API call) or no tool ran at all, so no
+#                  external write is possible. THE ONLY VALUE THAT SUPPRESSES.
+#   a set of kinds - a tool that CAN write externally ran. Fail open to the prose.
 #   None         - the summary cannot settle it. Fail open to the prose, which is exactly
 #                  today's behaviour, so nothing regresses.
 #
-# None is also what an UNRECOGNISED fragment returns, and that matters more than the lists
-# themselves: these strings are the past-tense fragments from bot._classify_tool, so this
-# module is coupled to another file by string literal. When that file's wording drifts, the
-# fragment stops matching, this returns None, and the gate quietly stops gating. Drift
-# degrades to the status quo rather than to silence, which is the only acceptable direction
-# for a guard whose whole job is catching a lie.
+# The non-empty set and None behave IDENTICALLY at the call site. The distinction is kept
+# because it is the honest one and because the kinds are worth logging. Do NOT be tempted
+# to intersect the non-empty set with the prose kinds: _classify_tool is coarse string
+# matching over a truncated command hint, and an intersection would let ONE misclassified
+# fragment silence a TRUE claim, which is the failure this module exists to prevent.
+#
+# THE MEMBERSHIP RULE, which matters more than the lists themselves:
+#   _TOOL_LOCAL membership is a CLAIM OF PROOF. Omission is the safe default, because
+#   omission yields None and None fails open to exactly today's behaviour. If you cannot
+#   prove from bot._classify_tool's branch that the fragment forecloses an external write,
+#   leave it out. Adding a fragment wrongly is the only way to make this gate HARMFUL: it
+#   would suppress verification of a genuine write.
+#
+# "LOCAL" means "provably no external WRITE". It does NOT mean "no network". The
+# intervals.icu READ fragments below are in the list on purpose: they cost a round trip but
+# cannot change anything at the far end. A reader who takes LOCAL to mean "offline" will
+# delete them and quietly halve the gate's coverage.
+#
+# KNOWN LIMITATION, compound Bash commands (17 Aug 2026, verified against
+# engine._tool_input_summary). One tool_use event yields one fragment, and the hint is the
+# whole Bash command truncated to 80 chars. bot._classify_tool tests "plan_tools" in the
+# blob BEFORE the intervals.icu branch, so a single chained command of the shape
+# `plan_tools.py session-for-load ... && icu_fetch.py push_workout ...` collapses to the
+# local fragment "built the session" while genuinely pushing to the calendar, and the gate
+# would suppress a true claim. Not fixed here: the fix belongs in _classify_tool (a hint
+# that mentions push_workout should classify as the write whatever else it mentions), which
+# is a change to a 40-branch function shared with the athlete-facing status line. Logged as
+# a finding; pinned by a test below so it stays visible.
+#
+# These strings are the past-tense fragments from bot._classify_tool, so this module is
+# coupled to another file by string literal. That is fragile and known to be; the
+# alternative is a fourth element on all ~40 of _classify_tool's return sites, for a guard
+# that has to stay easy to reason about. Tests assert the literals are still emitted, so a
+# reworded status line fails a test rather than silently turning the gate into a no-op.
+# When wording does drift the fragment stops matching, this returns None, and the gate
+# quietly stops gating: degradation to the status quo rather than to silence, which is the
+# only acceptable direction for a guard whose whole job is catching a lie.
 _TOOL_WRITES = {
+    # Values are SETS so one fragment can name more than one destination if a future tool
+    # ever does both. Combined with |=, never .add().
     "updated intervals.icu": {"icu"},     # push_workout / edit_workout / delete_workout
-    "wrote the workout": {"icu"},         # plan_tools render-workout writes to intervals.icu
-    "rebuilt your plan": {"icu"},         # plan generation pushes the week to the calendar
-    "updated it on strava": {"strava"},
+    "updated it on strava": {"strava"},   # scripts/strava-update-activity.py
+    # generate-blueprint.py:340 calls IcuClient.push_workout and stage1-plan.py:1339
+    # builds an IcuClient: plan generation really does push the week to the calendar.
+    "rebuilt your plan": {"icu"},
+    # A REAL TRAP. The status line reads like a local note, but plan_tools log-strength
+    # (lib/plan_tools.py:1266) calls IcuClient.create_manual_activity: a genuine ICU write.
+    # This is exactly the fragment somebody would wave into _TOOL_LOCAL.
+    "logged your strength work": {"icu"},
+    # plan_tools render-workout is in fact a PURE renderer: lib/plan_tools.py:1276 returns
+    # a description string plus a "how_to_push" note, and primitives/planned_tss.py:348
+    # says the result is what push_workout sends separately. Listed as a write ANYWAY, so
+    # the gate fails open: the athlete-facing status line says "Writing the workout to
+    # intervals.icu" and the model is told to follow it immediately with push_workout.
+    # Either reading forbids treating it as proof that nothing was written, which is the
+    # only thing this list has to get right.
+    "wrote the workout": {"icu"},
 }
-# Provably incapable of an external write: file reads, local file writes, pure maths.
-_TOOL_LOCAL = (
+# Provably incapable of an external write. Each entry is a claim of proof; the evidence is
+# the branch of bot._classify_tool that emits it.
+_TOOL_LOCAL = frozenset({
+    # Claude's own file tools. The strongest proof in the list: _classify_tool reaches
+    # these branches only when the TOOL NAME is read/grep/glob or write/edit/multiedit,
+    # and those tools cannot reach the network at all. "checked your data" and "saved your
+    # data" are the two fragments from the 16 Aug incident turn.
     "checked your data", "saved your data", "checked your recent training",
     "checked your session log", "read your blueprint", "checked your heat log",
     "checked your notes", "read your plan",
     "updated your session log", "saved your preference", "updated your plan",
-    "logged your heat dose", "checked your wellness", "read your fitness",
-    "read the session detail", "checked your activities", "checked your heat dose",
+    "logged your heat dose",
+    # intervals.icu READS. Network, but read-only endpoints.
+    "checked your wellness", "read your fitness",
+    "read the session detail", "checked your activities",
+    # scripts/heat_accl.py: 64 lines, reads the heat log through lib/heat.py and prints an
+    # ASCII trend. lib/heat.py's only network calls are open-meteo GETs. No write anywhere.
+    "checked your heat dose",
+    # plan_tools.py subcommands that are pure calculation or read-only, each checked
+    # against lib/plan_tools.py rather than inferred from the status line.
     "built the session", "read the session load", "added up your week",
     "worked out your load target", "projected your fitness", "sense-checked the week",
     "predicted your race", "worked out your fuelling", "worked out your sweat rate",
     "checked the wetsuit call", "worked out the load",
-)
-# Everything else is UNKNOWN on purpose. "crunched the numbers" is the catch-all for any
-# unmapped tool including a bare Bash command, "checked intervals.icu" is the catch-all for
-# an unrecognised icu_fetch subcommand, and "built your race plan" / "synced your log" /
-# "logged your strength work" run scripts that may or may not push. None of those can be
-# used to rule a write OUT.
-_TOOL_NO_TOOLS_RE = re.compile(r"^thought for \d+s$", re.IGNORECASE)
+})
+# Deliberately in NEITHER list, so they fail open: "crunched the numbers" (the unmapped-tool
+# catch-all, which could be anything including a bare Bash command), "checked intervals.icu"
+# and "crunched your plan" (the fallbacks inside their own branches, reached by an endpoint
+# or subcommand nobody enumerated), and "synced your log" / "built your race plan" (whole
+# scripts not audited line by line for a push). None of those can rule a write OUT.
+
+# The zero-tool collapse line, built by bot.call_claude_streaming when no tool ran at all.
+# The purest case the gate has: nothing ran, so nothing external happened, so any claim of
+# a write in the prose is retrospective. Exactly the incident shape.
+_THOUGHT_ONLY_RE = re.compile(r"^thought for \d+\s*s$", re.IGNORECASE)
 
 
 def tool_summary_kinds(tool_summary) -> set | None:
     """Which external writes the tools that ACTUALLY ran this turn could have performed.
 
-    `tool_summary` is bot.call_claude_streaming's collapse line, e.g. "Checked your data,
-    saved your data". Returns None when it cannot be settled - see the note above; None is
-    the safe answer and the caller must fall back to the prose."""
-    text = (tool_summary or "").strip().rstrip(".")
-    if not text:
+    `tool_summary` is bot.call_claude_streaming's collapse line, ", ".join(past-tense
+    fragments) with character zero upper-cased, e.g. "Checked your data, saved your data".
+    Returns set() (provably none), a non-empty subset of {"strava", "icu"}, or None for
+    "cannot settle". Only set() suppresses; see the note above.
+
+    It splits on the comma rather than substring-searching the whole line, because a
+    substring search cannot tell "every fragment is local" from "one fragment is local and
+    another is unrecognised", and that difference is the entire three-valued design."""
+    if tool_summary is None:
         return None
-    if _TOOL_NO_TOOLS_RE.match(text):
+    text = str(tool_summary).strip().rstrip(".")
+    if not text:
+        return None                   # no summary at all: settles nothing
+    if _THOUGHT_ONLY_RE.match(text):
         return set()                  # no tool ran, so nothing external was touched
     kinds = set()
+    unrecognised = False
     for fragment in text.split(","):
-        f = fragment.strip().lower()
+        f = fragment.strip().rstrip(".").lower()
         if not f:
             continue
         if f in _TOOL_WRITES:
             kinds |= _TOOL_WRITES[f]
         elif f not in _TOOL_LOCAL:
-            return None               # unrecognised: cannot rule a write out
-    return kinds
+            unrecognised = True       # keep scanning: a later fragment may name a writer
+    if kinds:
+        return kinds                  # a writer ran: fail open to the prose
+    return None if unrecognised else set()
 
 
 def claim_kinds(reply: str, tool_summary=None) -> set:
     """Which external writes this reply asserts as DONE: subset of {"strava", "icu"}.
     "strava" means a DESCRIPTION claim specifically — see _STRAVA_NAME_ONLY_RE.
 
-    `tool_summary`, when the caller can supply it, is the stronger evidence and narrows the
-    result to writes the tools that ran could actually have performed. Omitted, the prose
-    stands alone (see tool_summary_kinds)."""
+    `tool_summary` is bot's one-line tool-collapse summary for the SAME model call that
+    produced `reply`, when the caller has it. It can only ever SUBTRACT, and only on proof
+    that no tool capable of an external write ran. Omit it and behaviour is unchanged,
+    which is why every caller that cannot supply one is free to leave it None."""
     if not reply:
         return set()
+    # The gate runs FIRST and returns early: if no tool this turn could have written
+    # anything, no amount of prose makes a write have happened, and the two network reads
+    # the prose path would provoke are pure waste. Note what is NOT here: no intersection
+    # of tool kinds with prose kinds. A non-empty gate and an unsettled gate both fall
+    # straight through to the prose.
+    if tool_summary is not None:
+        gate = tool_summary_kinds(tool_summary)
+        if gate is not None and not gate:
+            return set()
     kinds = set()
     for sentence in re.split(r"(?<=[.!?\n])\s+", reply):
         if _INTENT_RE.search(sentence):
@@ -239,8 +326,7 @@ def claim_kinds(reply: str, tool_summary=None) -> set:
             kinds.add("strava")
         if _asserts_now(sentence, _ICU_CLAIM_RE):
             kinds.add("icu")
-    possible = tool_summary_kinds(tool_summary)
-    return kinds if possible is None else (kinds & possible)
+    return kinds
 
 
 def _norm(text) -> str:
@@ -330,17 +416,26 @@ _RESULT_OK = {
 # turn where nothing was being written and his calendar was perfectly fine.
 #
 # The hallucinated claim is fixed above, but there is a second, independent way to reach
-# that line with no evidence behind it. bot._verify_external_writes computes the retry's
-# outcome as `ok = _verify_icu_calendar_claim(slug) == "ok"`, which folds "unknown" (the
-# read-back failed, we know nothing) in with "absent" (proved nothing is there). So a
-# post-retry network hiccup, on a retry that may well have worked, still asserts the
-# calendar is unchanged. That is the exact accusation-on-unknown this module's own
-# docstring forbids.
+# that line with no evidence behind it. bot._verify_external_writes used to compute the
+# retry's outcome as `ok = _verify_icu_calendar_claim(slug) == "ok"`, which folds "unknown"
+# (the read-back failed, we know nothing) in with "absent" (proved nothing is there). So a
+# post-retry network hiccup, on a retry that may well have worked, still asserted the
+# calendar was unchanged. That is the exact accusation-on-unknown this module's own
+# docstring forbids. bot now keeps the post-retry verdict and passes it as `verdict=`.
 #
-# So the DEFAULT wording now states only what holds under both readings: the save was not
-# confirmed, go and look. `verdict` restores the absolute wording for a caller that can
-# prove the negative. Nothing passes it yet - the fix belongs in bot.py, out of scope here.
-_RESULT_FAIL = {
+# WHICH WAY THE DEFAULT LEANS, and why it is not the other way. The absolute wording needs
+# a PROVED verdict ("absent"/"unchanged") behind it; everything else, INCLUDING verdict=None,
+# gets the hedge. It is tempting to argue the opposite - that a caller with no verdict to
+# give has already proved the failure in its bool - and that argument is wrong on the one
+# caller it would apply to. bot's Strava branch reduces the retry to a bool, and
+# _retry_strava_description returns False on at least two paths with no proof at all:
+# when the read-back itself fails (desc is None, which strava_desc_verdict scores "absent"
+# purely because the text it never received is empty), and on the early return after the
+# 120s subprocess timeout, which may have written before it died. Defaulting to the
+# assertive copy would put "Nothing was written" on both. Hedging costs an under-claim on a
+# proved Strava failure; the alternative costs a false accusation, which is the thing this
+# module exists to prevent.
+_RESULT_FAIL_UNPROVED = {
     "strava": "Still not saving to Strava, and I've logged it for a fix. I couldn't confirm "
               "the description landed, so check the activity before relying on it.",
     "icu": "Still not saving to your calendar, and I've logged it for a fix. I couldn't "
@@ -362,9 +457,9 @@ def retry_line(kind: str, verdict: str = "absent") -> str:
 
 def result_line(kind: str, ok: bool, verdict: str | None = None) -> str:
     """The line sent after the retry. `verdict` is the verdict of the read-back AFTER the
-    retry: pass it only when the failure is PROVED ("absent"/"unchanged"), never on
-    "unknown" - see above. Omitted, the wording hedges, which is always safe."""
+    retry. Pass it whenever you have it: only "absent"/"unchanged" unlock the absolute
+    wording. "unknown", and an omitted verdict, both hedge - see above."""
     if ok:
         return _RESULT_OK.get(kind, "Saved this time.")
-    table = _RESULT_FAIL_PROVED if verdict in ACTIONABLE else _RESULT_FAIL
+    table = _RESULT_FAIL_PROVED if verdict in ACTIONABLE else _RESULT_FAIL_UNPROVED
     return table.get(kind, "Still not saving - logged for a fix.")
