@@ -1084,6 +1084,12 @@ def describe_provenance(item: dict) -> str:
              Rung.USDA: "from USDA FoodData Central",
              Rung.OFF: "from Open Food Facts",
              Rung.NUTRITIONIX: "from Nutritionix",
+             # The WEB rung had no phrase of its own, so a searched-out figure rendered as
+             # the bare rung name - "web" - on the line he reads before confirming. Every
+             # other rung says where it came from in words; this one is a real source (a
+             # vendor page, a retailer listing, a published table) found by searching, and
+             # saying so is the difference between a sourced figure and an unexplained one.
+             Rung.WEB: "found online, from the product's own published figures",
              Rung.LLM: "estimated"}.get(item.get("source_rung"), item.get("source_rung"))
     bits = [label]
     if item.get("confidence") == "estimate":

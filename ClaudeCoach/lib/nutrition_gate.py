@@ -49,11 +49,12 @@ import re
 import subprocess
 import time
 
-# One constant, because it is the knob that will need turning. UNVALIDATED against real
-# Opus-via-CLI latency: the ms on every gate log line is the instrument for setting it, and
-# a cap set too tight is the bad outcome - all of the latency and none of the benefit, with
-# only the log to say so.
-GATE_TIMEOUT_S = 20
+# VALIDATED against real Opus-via-CLI latency, 17 Aug 2026: healthy gate calls in the live
+# log run 4-13s, with one outlier at 20s that timed out and shipped unverified because the
+# old cap of 20s left it almost no headroom. 45s keeps that spread's outlier inside the cap
+# with real margin, without holding a genuinely hung call open for long. The ms on every
+# gate log line remains the instrument for re-tuning this if the spread moves.
+GATE_TIMEOUT_S = 45
 
 # The whole context block is trimmed to this before it is sent. A gate call is on the path
 # of every reply, so its input has to stay small: the day's facts dict is thousands of

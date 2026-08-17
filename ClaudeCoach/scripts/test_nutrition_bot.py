@@ -1233,7 +1233,12 @@ RETABLED = MEAL_TABLE.replace('"portion_g":300', '"portion_g":400').replace(
 NB.set_pending(meal_store, {"batch": [dict(_m)]})
 NB.NLU.classify = lambda text, pending, *a, **k: {"intent": "correction",
                                                  "correction": text}
-NB.NLU.decide_correction = lambda *a, **k: {"kind": "unclear"}
+# `reidentify` rather than `unclear` as the stand-in for "reached here unexecuted": both do,
+# and since 17 Aug 2026 `unclear` is answered with a question instead, so it can no longer
+# stand for a decision that carries content. The property under test is unchanged.
+NB.NLU.decide_correction = lambda *a, **k: {"kind": "reidentify",
+                                           "text": "the noodles were 400g",
+                                           "exclusions": []}
 NB.NLU.subprocess.run = _meal_runner(RETABLED)
 _meal_asks.clear()
 _ladder_calls.clear()
@@ -2896,6 +2901,270 @@ check("every stub this section installed is put back",
       and NB.NLU.classify is _f_real["classify"]
       and NB.NR.resolve is _f_real["resolve"]
       and NB.from_history is _f_real["from_history"])
+
+print("\n--- REPLAY: an unclear correction ASKS, it never invents (17 Aug 2026) ---")
+# THE DEFECT, three times in one morning. `unclear` fell out of the decision block into the
+# re-resolution path below it, so a correction the model could not read was answered with a
+# fresh lookup. 09:50 "And the cookie needs correcting!" - which says only that something is
+# wrong - produced a GENERIC cookie at 488 kcal/100g, offered as though it answered him.
+# 09:47 and 16 Aug 07:46 were readable corrections (a brand with a stated macro, and a day)
+# also returned unclear: each was re-resolved into a NEW entry with the original removed.
+u_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-unclear-")))
+uctx = FakeCtxHandle(u_store)
+u_sent = []
+_u_real = {"send": NB.tg.send, "log": NB.log, "classify": NB.NLU.classify,
+           "decide": NB.NLU.decide_correction, "resolve": NB.NR.resolve,
+           "interpret": NB.NLU.interpret, "offer_items": NB.offer_items,
+           "publish": NB.publish_now}
+u_log = []
+NB.tg.send = lambda token, chat, text, **k: u_sent.append(text)
+NB.log = lambda msg: u_log.append(str(msg))
+NB.publish_now = lambda ctx: None
+# THE LADDER AND THE OFFER BOTH FAIL LOUDLY rather than being asserted about afterwards: the
+# defect was not a wrong number, it was that a lookup happened at all. A reply that reads
+# well while a generic cookie was still priced is the bug one edit away from returning.
+NB.NR.resolve = _exploding_resolve
+NB.NLU.interpret = lambda *a, **k: (_ladder_calls.append(("interpret",)) or None)
+
+
+def _exploding_offer(*a, **k):
+    raise AssertionError("an unclear correction offered him a figure")
+
+
+NB.offer_items = _exploding_offer
+NB.NLU.classify = lambda text, pending, *a, **k: {"intent": "correction",
+                                                 "correction": text}
+NB.NLU.decide_correction = lambda *a, **k: {"kind": "unclear"}
+u_store.add_entry(TODAY, raw_text="a cookie", resolved_name="Cookie, chocolate",
+                  kcal=210, confidence="estimate", source_rung="llm",
+                  logged_at=f"{TODAY.isoformat()}T09:30")
+# TWO ENTRIES, AND THE COOKIE IS NOT THE LATEST - as on the real morning, where the oats were
+# logged at 09:47 and the cookie complaint came at 09:50. With one entry in the store this
+# section would be green against a reply that always names whatever was logged last, which is
+# the same confidently-wrong answer one step further on.
+u_store.add_entry(TODAY, raw_text="overnight oats", resolved_name="Oats, overnight",
+                  kcal=340, confidence="label", source_rung="manual",
+                  logged_at=f"{TODAY.isoformat()}T09:47")
+for _msg, _want in (("And the cookie needs correcting!", "Cookie, chocolate"),
+                    ("Sorry the oats are the m&s salted caramel ones with 21g protein",
+                     "Oats, overnight"),
+                    # This one names no food, so the latest entry is the honest guess and
+                    # either name is defensible. What is not defensible is naming none.
+                    ("That was for yesterday's dinner", None)):
+    _ladder_calls.clear()
+    u_sent.clear()
+    NB.handle_text(uctx, _msg, "token", 1)
+    check(f"{_msg[:34]!r} is answered with a question, not a lookup",
+          _ladder_calls == [] and len(u_sent) == 1 and "?" in u_sent[-1])
+    check("and the question names the entry HIS WORDS point at",
+          (_want in u_sent[-1]) if _want
+          else ("Cookie, chocolate" in u_sent[-1] or "Oats, overnight" in u_sent[-1]))
+    check("and it says nothing has been changed yet",
+          "not changed anything" in u_sent[-1])
+    # A FABRICATED FIGURE IS THE REPORTED DEFECT: 488 kcal/100g for a cookie nobody looked
+    # at. No number belongs in a reply to a correction that was not understood.
+    check("and it quotes no figure at all",
+          not any(c.isdigit() for c in u_sent[-1]))
+check("the entries he was correcting are untouched, and no third one appeared",
+      [(e["resolved_name"], e["kcal"]) for e in u_store.get_day(TODAY)["entries"]]
+      == [("Cookie, chocolate", 210.0), ("Oats, overnight", 340.0)])
+# DEFECT 2, and it is the same defect one door along: the live log stored
+# `excluded for 2026-08-17: ['logged']`, a word that names no food, which then narrows every
+# resolution for the rest of the day. An unclear correction never reaches record_exclusions.
+check("and nothing was added to the day's exclusions",
+      not u_store.get_exclusions(TODAY)
+      and not any("excluded for" in m for m in u_log))
+# A BATCH ON THE TABLE: the question has to name the components, because "which one" is the
+# only thing the code does not know and the only thing he can answer in one word.
+NB.set_pending(u_store, {"batch": [_fake_item("Porridge oats"),
+                                   _fake_item("Whey protein")]})
+u_sent.clear()
+NB.handle_text(uctx, "one of those needs correcting", "token", 1)
+check("with a batch pending it asks WHICH, naming the components",
+      "Porridge oats" in u_sent[-1] and "Whey protein" in u_sent[-1]
+      and "which one" in u_sent[-1].lower())
+check("and the offer is still on the table, unpriced and unwritten",
+      len(NB.get_pending(u_store)["batch"]) == 2
+      and len(u_store.get_day(TODAY)["entries"]) == 2)
+NB.clear_pending(u_store)
+NB.tg.send, NB.log = _u_real["send"], _u_real["log"]
+NB.NLU.classify, NB.NLU.decide_correction = _u_real["classify"], _u_real["decide"]
+NB.NR.resolve, NB.NLU.interpret = _u_real["resolve"], _u_real["interpret"]
+NB.offer_items, NB.publish_now = _u_real["offer_items"], _u_real["publish"]
+check("every stub this section installed is put back",
+      NB.tg.send is _u_real["send"] and NB.offer_items is _u_real["offer_items"]
+      and NB.NR.resolve is _u_real["resolve"]
+      and NB.NLU.decide_correction is _u_real["decide"])
+
+print("\n--- an exclusion must name a FOOD, not the act of logging ---")
+# The live line was `excluded for 2026-08-17: ['logged']`. Every shape of that complaint has
+# to come back empty, including the ones that carry a real food word: "not logged the cookie"
+# is not a rejection of cookie, and storing it would block cookie for the rest of the day -
+# strictly worse than the junk token it replaced.
+for _junk in ("not logged", "that is not logged right", "the cookie was not logged correctly",
+              "that was not logged properly", "I have not logged the cookie",
+              "that's not right", "that entry is not correct", "the count is not right"):
+    check(f"{_junk[:38]!r} rules out nothing", NB.exclusions_in(_junk) == [])
+check("a real rejection still registers alongside them",
+      NB.exclusions_in("it was not peanut butter") == ["peanut butter"])
+check("and 'added' is left alone, because it names food",
+      NB.exclusions_in("not the added sugar one") == ["added sugar one"])
+check("usable_exclusion is the one gate, so the model's own exclusions pass through it",
+      NB.usable_exclusion("peanut butter") and not NB.usable_exclusion("logged")
+      and not NB.usable_exclusion("100g") and not NB.usable_exclusion("")
+      and "usable_exclusion" in inspect.getsource(NB.handle_text))
+# THE TWO PHRASES HAND-CLEARED FROM HIS LIVE STORE, 17 Aug 2026: a bare stop word on
+# 2026-08-17 and a whole sentence fragment on 2026-08-15. Both shapes have to come back
+# empty, and the fragment is the one a length or token-count rule would have let through.
+check("the bare stop word he had to hand-clear cannot be stored again",
+      NB.exclusions_in("that is not logged") == [] and not NB.usable_exclusion("logged"))
+check("nor can the sentence fragment from the supplements argument",
+      NB.exclusions_in("protein and collagen should not be logged as supplements") == []
+      and not NB.usable_exclusion("be logged as supplements"))
+# THE GUARD IS STRUCTURAL, NOT ADVISORY. The prompt was strengthened too, but a model that
+# says `unclear` about something readable must still be unable to reach a lookup, so the
+# return on that branch is unconditional and ask_unclear_correction returns nothing that
+# could be read as permission to carry on.
+_uc_src = inspect.getsource(NB.handle_text)
+_uc_at = _uc_src.index('if kind == "unclear":')
+check("the unclear branch returns unconditionally, never `if ask(...): return`",
+      "ask_unclear_correction(ctx, pend, target_item, corr, day, token, chat_id)\n"
+      in _uc_src[_uc_at:] and "if ask_unclear_correction" not in _uc_src)
+check("and the asking function returns nothing, so there is no value to branch on",
+      NB.ask_unclear_correction.__annotations__.get("return") is None
+      and "return True" not in inspect.getsource(NB.ask_unclear_correction))
+
+print("\n--- a rejection is not a day-long ban on a food ---")
+# THE OVER-REACH. A rejection is stored for the rest of the day, which is what breaks a loop
+# the ladder cannot leave on its own: "butter" resolved to "Peanut butter, smooth" six times
+# on 12 Aug 2026, twice after "I never said peanut butter". Applied to every later lookup,
+# the same memory blocks food he really did eat - reject chicken at lunch and a chicken
+# dinner cannot resolve, with nothing on screen to say why.
+#
+# The rule needs no new state: he rejected a RESOLUTION, not a food, so a rejection is void
+# for a lookup whose own words name the thing rejected.
+check("a rejection is void once he asks for that food by name",
+      NB.exclusions_for_request(["chicken"], "chicken thighs for dinner") == [])
+check("and the 12 Aug loop stays broken, because butter is not peanut butter",
+      NB.exclusions_for_request(["peanut butter"], "butter on toast")
+      == ["peanut butter"])
+check("it is directional, like the ladder's own test",
+      # Asking for butter must not unblock peanut butter, and rejecting peanut butter must
+      # not block butter - the two halves of the same 12 Aug defect.
+      NB.exclusions_for_request(["peanut butter"], "peanut butter on toast") == []
+      and NR._excluded_by("Butter, salted", ["peanut butter"]) == "")
+check("an unrelated rejection still stands",
+      NB.exclusions_for_request(["chicken"], "turkey salad") == ["chicken"])
+check("and a partial word match is not a request",
+      # "chick peas" shares no whole token with "chicken", so the rejection survives.
+      NB.exclusions_for_request(["chicken"], "chick peas and rice") == ["chicken"])
+check("several rejections are judged one at a time",
+      NB.exclusions_for_request(["chicken", "peanut butter"], "chicken and butter")
+      == ["peanut butter"])
+
+# END TO END, against the ticket's own scenario. The rejection is stored at lunch and the
+# dinner still resolves.
+excl_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-excl-")))
+excl_store.add_exclusion(TODAY, "chicken")
+
+
+class FakeCtxExcl:
+    slug = "test"
+    table = None
+    cofid = None
+    fetchers = {}
+
+    def __init__(self, store):
+        self.store = store
+        self.athlete_dir = store.dir.parent
+
+
+ectx = FakeCtxExcl(excl_store)
+check("the day still remembers the rejection",
+      excl_store.get_exclusions(TODAY) == ["chicken"])
+check("but a chicken dinner is no longer filtered by it",
+      NB._exclusions(ectx, TODAY, "roast chicken thighs") == [])
+check("while a lookup that does not name it still is",
+      NB._exclusions(ectx, TODAY, "turkey escalope") == ["chicken"])
+check("and asking with no request text at all applies everything, as a correction does",
+      NB._exclusions(ectx, TODAY) == ["chicken"])
+# A CORRECTION IS THE ONE PLACE THE MEMORY IS ABSOLUTE. `combined` carries both the food he
+# rejected and his rejection of it - "chicken salad (not chicken, it was turkey)" - so
+# measuring against it would void the rejection the correction had just created and hand
+# back the same wrong answer: the 12 Aug loop, restored by its own fix.
+check("a corrected string never voids the rejection it just created",
+      NB.exclusions_for_request(["chicken"],
+                                "chicken salad (not chicken, it was turkey)") == []
+      and "if correcting else" in inspect.getsource(NB.offer_items))
+_ht = inspect.getsource(NB.handle_text)
+check("both correction re-offers say so, rather than relying on the wording",
+      _ht.count("correcting=True") == 2)
+check("and correct_in_batch is passed no request either",
+      "exclude=_exclusions(ctx, day))" in inspect.getsource(NB.correct_in_batch))
+# The fresh-log paths judge per ITEM, not once for the whole message: one message can hold
+# a food he rejected and another he did not.
+for fn in (NB.offer_items, NB.offer_planned, NB.debate):
+    src = inspect.getsource(fn)
+    check(f"{fn.__name__} judges rejections per item",
+          "_exclusions(ctx, day" in src and "exclude = _exclusions(ctx, day)" not in src)
+
+# AND IT REACHES THE LADDER. Everything above tests the filter; this tests the wiring,
+# which is the half that breaks - the per-item value is threaded through a keyword argument
+# and the assertions that it is there are source strings, which have already broken once on
+# a line wrap. Two items in one message, one naming a rejected food and one not: the two
+# resolve calls must be given different exclusion lists.
+_seen_excludes = []
+
+
+def _recording_resolve(text, **k):
+    _seen_excludes.append((text, list(k.get("exclude") or [])))
+    return _fake_item(text.title(), kcal=100.0, raw=text)
+
+
+_w_real = {"resolve": NB.NR.resolve, "send": NB.tg.send, "publish": NB.publish_now,
+           "today": NB.today_block, "cache": NB.NR.cache_resolved, "gate": NB.GATE_RUNNER,
+           "chat": NB._chat, "history": NB.from_history}
+NB.NR.resolve = _recording_resolve
+NB.tg.send = lambda token, chat, text, **k: None
+NB.publish_now = lambda ctx: None
+NB.today_block = lambda ctx, day: "(totals)"
+NB.NR.cache_resolved = lambda store, item: None
+NB._chat = lambda ctx, role, text: None
+NB.from_history = lambda ctx, text, day, **k: None
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
+NB.set_inbound(ectx, "roast chicken thighs and a turkey escalope")
+NB.offer_items(ectx, [{"text": "roast chicken thighs", "portion_g": None,
+                       "in_session": False},
+                      {"text": "turkey escalope", "portion_g": None,
+                       "in_session": False}],
+               TODAY, "token", 1)
+_by_text = dict(_seen_excludes)
+check("the ladder is given no rejection for the food he named",
+      _by_text.get("roast chicken thighs") == [])
+check("and still gets it for the item that does not name it",
+      _by_text.get("turkey escalope") == ["chicken"])
+# The same call, marked as a correction, keeps the rejection absolute.
+_seen_excludes.clear()
+NB.offer_items(ectx, [{"text": "chicken salad (not chicken, it was turkey)",
+                       "portion_g": None, "in_session": False}],
+               TODAY, "token", 1, correcting=True)
+check("a correction is passed the rejection even though its text names the food",
+      _seen_excludes and _seen_excludes[0][1] == ["chicken"])
+NB.NR.resolve, NB.tg.send = _w_real["resolve"], _w_real["send"]
+NB.publish_now, NB.today_block = _w_real["publish"], _w_real["today"]
+NB.NR.cache_resolved, NB._chat = _w_real["cache"], _w_real["chat"]
+NB.GATE_RUNNER, NB.from_history = _w_real["gate"], _w_real["history"]
+check("and this section's stubs are put back too",
+      NB.NR.resolve is _w_real["resolve"] and NB.tg.send is _w_real["send"])
+
+print("\n--- a searched-out figure says where it came from ---")
+# Every other rung renders a sentence; WEB had none, so a real sourced figure appeared on
+# the confirm line as the bare rung name, "web".
+check("the web rung names its source in words",
+      NR.describe_provenance({"source_rung": NR.Rung.WEB})
+      == "found online, from the product's own published figures")
+check("and it is not the raw rung name any more",
+      NR.describe_provenance({"source_rung": NR.Rung.WEB}) != NR.Rung.WEB)
 
 print()
 if FAILED:

@@ -13,7 +13,11 @@ whole write to `before_text`. Also covers the pre-existing append-guard behaviou
 
 Run: python3 ClaudeCoach/scripts/test_rules_capture.py
 """
+import contextlib
+import io
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -466,6 +470,104 @@ class MergeClassificationTests(unittest.TestCase):
         verdict, guarded, drops = rc.classify_merge_proposal(before, after, [])
         self.assertEqual(verdict, "escalate")
         self.assertEqual(drops, [])   # guard itself didn't object — the merge check did
+
+
+class OverCapSpillTests(unittest.TestCase):
+    """NO SILENT LOSS for the per-rule token cap (17 Aug 2026).
+
+    The cap dropped two hard-won permanent rules (~432 and ~571 tokens) in one day and the
+    text survived nowhere but a log line. The cap stays - it is what stopped the pile
+    growing - but the rule it refuses must be spilled to the athlete's feedback-log.json,
+    which is where the cap's own message says the evidence belongs.
+
+    Only this gate spills. The discriminating test below is the CEILING one: a count or
+    surface drop is a "prune something first" signal on an otherwise fine rule, and a lossy
+    fold reverts with every original line still on file, so neither loses text and neither
+    should write a record.
+
+    These are the only tests here that pass a `slug`, which is what enables the disk write;
+    every other test in this file stays slug-less and disk-free by design."""
+
+    SLUG = "test-athlete"
+    LONG = "[perm] " + ("Evidence-laden case note with dates and quotes. " * 40)
+    SHORT = "[perm] An existing short rule"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._real_base = rc._BASE
+        rc._BASE = Path(self._tmp.name)
+        self.flog = rc._BASE / "athletes" / self.SLUG / "feedback-log.json"
+
+    def tearDown(self):
+        rc._BASE = self._real_base
+        self._tmp.cleanup()
+
+    def _records(self):
+        return json.loads(self.flog.read_text()) if self.flog.exists() else []
+
+    def test_over_cap_append_is_spilled_verbatim(self):
+        """The rule must leave the file AND land in the feedback log, in full."""
+        before = _lines(self.SHORT)
+        after = _lines(self.SHORT, self.LONG)
+        new_text, drops = rc.enforce_rule_guards(before, after, [], slug=self.SLUG)
+        self.assertNotIn("Evidence-laden", new_text)
+        self.assertTrue(drops[0][0].startswith(rc.OVER_CAP_PREFIX))
+        recs = self._records()
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0]["type"], "rule-overflow")
+        self.assertEqual(recs[0]["message"], self.LONG.strip())
+        self.assertIn("per-rule cap", recs[0]["reason"])
+        self.assertTrue(recs[0]["logged_at"])
+
+    def test_ceiling_drop_does_not_spill(self):
+        """The discriminator. A ceiling drop must write no record - if this fails, the
+        spill is keyed off "was something dropped" rather than off the token-cap gate."""
+        before = _lines(*[f"[perm] Standing rule number {i}" for i in range(rc.CEILING)])
+        after = before + "[perm] One rule too many\n"
+        new_text, drops = rc.enforce_rule_guards(before, after, [], slug=self.SLUG)
+        self.assertEqual(new_text, before)
+        self.assertIn("ceiling", drops[0][0])
+        self.assertEqual(self._records(), [])
+
+    def test_lossy_fold_abort_does_not_spill(self):
+        """An ABORT keeps every original line on file, so there is nothing to rescue."""
+        before = _lines("[perm] Long run progression: +10% weekly, cap at 22 miles")
+        after = _lines("[perm] Long run progression: +10% weekly")
+        new_text, drops = rc.enforce_rule_guards(before, after, [], slug=self.SLUG)
+        self.assertEqual(new_text, before)
+        self.assertTrue(drops[0][0].startswith("ABORT"))
+        self.assertEqual(self._records(), [])
+
+    def test_the_same_over_cap_rule_is_not_spilled_twice(self):
+        """session-sync re-scans history.json hourly and re-appends the same over-cap rule
+        until it is shortened, so without the dedupe the log gains a record every hour."""
+        before = _lines(self.SHORT)
+        after = _lines(self.SHORT, self.LONG)
+        for _ in range(3):
+            rc.enforce_rule_guards(before, after, [], slug=self.SLUG)
+        self.assertEqual(len(self._records()), 1)
+
+    def test_a_failed_spill_neither_raises_nor_changes_the_verdict(self):
+        """The spill runs inline on a live chat reply: an unwritable log must cost a stderr
+        line, never the reply."""
+        rc._BASE = Path(self._tmp.name) / "blocked"
+        rc._BASE.write_text("")          # a FILE where the tree must go, so mkdir cannot win
+        before = _lines(self.SHORT)
+        after = _lines(self.SHORT, self.LONG)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            new_text, drops = rc.enforce_rule_guards(before, after, [], slug=self.SLUG)
+        self.assertNotIn("Evidence-laden", new_text)
+        self.assertTrue(drops[0][0].startswith(rc.OVER_CAP_PREFIX))
+        self.assertIn("spill failed", err.getvalue())
+
+    def test_a_short_append_spills_nothing(self):
+        before = _lines(self.SHORT)
+        after = _lines(self.SHORT, "[perm] Prefers metric splits over pace-per-mile")
+        new_text, drops = rc.enforce_rule_guards(before, after, [], slug=self.SLUG)
+        self.assertEqual(new_text, after)
+        self.assertEqual(drops, [])
+        self.assertEqual(self._records(), [])
 
 
 if __name__ == "__main__":

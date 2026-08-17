@@ -36,6 +36,10 @@ import urllib.request
 SSL_CONTEXT = ssl.create_default_context()
 API = "https://api.telegram.org"
 
+# Query IDs already reported as stale, so a caller that has not yet moved its ack
+# earlier does not fill the log with the same line on every retry.
+_STALE_CALLBACKS_LOGGED = set()
+
 _real_getaddrinfo = socket.getaddrinfo
 
 
@@ -74,6 +78,19 @@ def post(token: str, method: str, payload: dict, log=print, timeout: int = 10) -
             # The edit already matches what is displayed. Benign.
             return {"ok": True, "result": {}}
 
+        if method == "answerCallbackQuery" and code == 400 and (
+                "query is too old" in body or "query id is invalid" in body.lower()):
+            # The ~15s Telegram gives to answer a callback has passed, or it was
+            # already answered. The tap has already been seen; there is nothing left
+            # to acknowledge and nothing for the athlete to be told about. Logged once
+            # per query ID rather than on every occurrence, which is all a caller that
+            # has moved the ack earlier still needs to know about.
+            cbid = payload.get("callback_query_id")
+            if cbid not in _STALE_CALLBACKS_LOGGED:
+                _STALE_CALLBACKS_LOGGED.add(cbid)
+                log(f"tg answerCallbackQuery: stale callback {cbid}, ignored")
+            return {"ok": True, "result": True, "stale": True}
+
         if code == 429:
             retry_after = 0.0
             try:
@@ -108,7 +125,7 @@ def post(token: str, method: str, payload: dict, log=print, timeout: int = 10) -
                 return {"ok": False, "error": str(exc3)}
 
         log(f"tg {method} failed: {code} {exc} {body[:160]}")
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": str(exc), "body": body}
 
 
 def get(token: str, method: str, params: dict, log=print, timeout: int = 65) -> dict:
@@ -134,8 +151,15 @@ def send(token: str, chat_id, text: str, reply_markup=None, parse_mode="Markdown
 
 
 def answer_callback(token: str, callback_query_id: str, text: str = "", log=print):
+    """Ack a Telegram callback query.
+
+    Telegram gives roughly 15 SECONDS from the button tap to answer this before the
+    query ID expires. A caller doing real work (100-500s in the logs here) must call
+    this THE MOMENT the callback is received, THEN do the work and edit the message
+    separately - answering after the work completes is what was timing out. A stale
+    or already-answered query is handled in post() as a benign no-op, not an error."""
     return post(token, "answerCallbackQuery",
-                {"callback_query_id": callback_query_id, "text": text}, log=log)
+               {"callback_query_id": callback_query_id, "text": text}, log=log)
 
 
 def edit_text(token: str, chat_id, message_id, text: str, reply_markup=None,

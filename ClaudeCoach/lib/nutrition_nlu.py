@@ -1203,6 +1203,11 @@ Decide which ONE of these he means and reply in that shape:
   {"kind":"reidentify","text":"<what to look up instead>","exclusions":["<food he says it
         was NOT, if any>"]}
       - he is disputing WHAT the food is, with or without a new amount
+      - A BRAND OR VARIANT NAMED AFTER THE FACT IS THIS, not `unclear`: "sorry the oats
+        are the M&S salted caramel ones with 21g protein" is
+        {"text":"M&S salted caramel oats with 21g protein","exclusions":[]}. Any figure he
+        quotes off the pack goes INSIDE `text`, where the lookup can use it - never as a
+        macro field of your own, and never a reason to give up on the decision.
   {"kind":"meal","meal":"breakfast|lunch|dinner|snacks"}
       - he is filing it under a meal, nothing else
   {"kind":"retime","time":"HH:MM or null","day":"<day word, or null>",
@@ -1280,6 +1285,13 @@ Decide which ONE of these he means and reply in that shape:
         decision meaning "commit these, fix that one". Four correct items sat unlogged for
         forty minutes over a dispute about two others.
   {"kind":"unclear"}
+      - you genuinely cannot tell WHICH of the above he means. The code then ASKS him,
+        naming the entry it thinks he means; it never looks anything up on an unclear
+        decision. "And the cookie needs correcting!" is this: it says something is wrong
+        and not what.
+      - so `unclear` is honest and cheap, but it is not a resting place. A correction that
+        names a brand, a day, a time, a meal or an amount is one of the decisions above,
+        and 17 Aug 2026 has three examples of readable corrections returned unclear.
 
 Rules:
 - The decision is about MEANING, not keywords. "That's 100g I had 160g" names two

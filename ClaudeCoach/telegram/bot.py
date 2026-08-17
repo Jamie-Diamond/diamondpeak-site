@@ -813,6 +813,9 @@ def _append_capture_history(chat_id, slug, user, assistant, kind="capture"):
         lk.release()
 
 
+_STALE_CALLBACKS_LOGGED = set()
+
+
 def tg_post(token, method, payload):
     url = f"https://api.telegram.org/bot{token}/{method}"
     data = json.dumps(payload).encode()
@@ -860,6 +863,16 @@ def tg_post(token, method, payload):
                 _b429 = (e429.read().decode("utf-8", "replace")[:300] if hasattr(e429, "read") else "")
                 log(f"tg_post {method} 429 retry failed: {e429}; body: {_b429}")
                 return {}
+        # Telegram expires a callback query about 15s after the tap. Replies here routinely
+        # take 100-500s, so by the time the work finishes the ack is refused: a dead end,
+        # not a failure worth reporting. Logged once per query id so a retry stays quiet.
+        if method == "answerCallbackQuery" and _code == 400 and (
+                "query is too old" in _body.lower() or "query id is invalid" in _body.lower()):
+            cbid = str(payload.get("callback_query_id") or "")
+            if cbid not in _STALE_CALLBACKS_LOGGED:
+                _STALE_CALLBACKS_LOGGED.add(cbid)
+                log(f"tg_post answerCallbackQuery: stale callback {cbid}, ignored")
+            return {"ok": True, "result": True, "stale": True}
         # Genuine legacy-Markdown parse failure -> retry ONCE as plain text so the reply is
         # never dropped. Skip MESSAGE_TOO_LONG: a plain-text edit cannot shorten it; the
         # caller send() fallback chunks it instead.
@@ -1992,7 +2005,18 @@ def _snapshot_rules_text(slug: str) -> str:
     return f.read_text() if f.exists() else ""
 
 
-def _apply_rule_capture_guard(slug: str, before_text: str) -> None:
+# What the athlete is told when the capture guard refused a rule for length. The rule is
+# NOT a standing rule, so the reply must not say it is; the text itself is safe in
+# feedback-log.json (rules_capture._spill_over_cap_rule), so the reply must not imply it
+# was lost either.
+_OVER_CAP_HONEST = (
+    "That was too long to store as a permanent rule, so I have not saved it as one. "
+    "The full text is in your feedback log, so nothing is lost; shorten it to a single "
+    "instruction and it will stick."
+)
+
+
+def _apply_rule_capture_guard(slug: str, before_text: str) -> list:
     """TIER A capture guard for the LIVE chat path — the same fold-on-write invariant
     session-sync.py applies hourly, via the shared lib/rules_capture.enforce_rule_guards
     (see that module's docstring for the full invariant). Runs once per turn, after the
@@ -2005,37 +2029,61 @@ def _apply_rule_capture_guard(slug: str, before_text: str) -> None:
     figure, a touched confirmed preference), where the whole write reverts to
     `before_text`. Reverting here never permanently loses the athlete's message:
     session-sync re-scans history.json hourly and will re-capture a genuine
-    refinement the guard had to revert."""
+    refinement the guard had to revert.
+
+    Returns the rules dropped for breaching the PER-RULE TOKEN CAP (verbatim, already
+    spilled to feedback-log.json by the guard). Those are the drops the athlete must hear
+    about: on 2026-08-17 two over-cap rules were dropped while the reply said "Logged as a
+    permanent rule", so _verify_logged_reply takes this list and corrects the claim."""
     f = _rules_file(slug)
     after_text = f.read_text() if f.exists() else ""
     if after_text == before_text:
-        return
+        return []
     try:
         prefs = rules_capture.confirmed_preferences(slug)
         guarded, drops = rules_capture.enforce_rule_guards(before_text, after_text, prefs, slug=slug)
     except Exception as e:
         log(f"[{slug}] rule capture guard errored (leaving file as the model wrote it): {e}")
-        return
+        return []
+    over_cap = []
     if drops:
         if guarded != after_text:
             f.write_text(guarded)
         for reason, dline in drops:
             log(f"[{slug}] rule capture guard dropped — {reason}: {dline}")
+            if reason.startswith(rules_capture.OVER_CAP_PREFIX):
+                over_cap.append(dline)
     # IDENTITY: assign a stable ID + default type to whatever survived the guard
     # (sidecar registry only — never edits persistent-rules.md). Never raises.
     rule_registry.register_after_write(BASE.parent, slug)
+    return over_cap
 
 
 def _verify_logged_reply(slug: str, before_ts: float, clean: str,
-                         text: str = None, retry=None) -> str:
+                         text: str = None, retry=None, over_cap: list = None) -> str:
     """Guard against silent write failures: never tell the athlete something was
     saved unless a capture file was actually written.
 
     If the reply asserts a save but nothing was written, retry the write once (via
     `retry`, a no-arg callable returning the new reply text); if that still writes
     nothing, deterministically stash the raw message so it is never lost and return
-    an honest confirmation rather than a false success."""
+    an honest confirmation rather than a false success.
+
+    `over_cap` (from _apply_rule_capture_guard) is the other way a save claim goes false:
+    the model's write DID land, so the mtime check below sees a successful capture, but the
+    guard then took an over-cap rule back out of the file."""
     stripped = clean.strip()
+    # An over-cap drop is PROOF a rule write was refused, not an inference from mtime, so
+    # this branch acts on it whatever the reply looks like. When the reply is just the
+    # short claim, replace it; otherwise the claim sits inside a real answer the anchored
+    # 140-char gate cannot isolate, so append the correction rather than discard the answer.
+    if over_cap:
+        log(f"[{slug}] reply corrected: {len(over_cap)} rule(s) refused by the per-rule cap")
+        if not stripped:
+            return _OVER_CAP_HONEST
+        if _CAPTURE_CONFIRM_RE.match(stripped) and len(stripped) <= 140:
+            return _OVER_CAP_HONEST
+        return f"{stripped}\n\n{_OVER_CAP_HONEST}"
     if not _CAPTURE_CONFIRM_RE.match(stripped) or len(stripped) > 140:
         return clean
     if _capture_written_since(slug, before_ts):
@@ -5439,12 +5487,13 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                 system_prompt_file=files["system_prompt"], athlete_name=athlete_name,
                 context=context,
             )
-            _apply_rule_capture_guard(slug, before_rules_text)
+            over_cap = _apply_rule_capture_guard(slug, before_rules_text)
             clean = process_charts(token, chat_id, response, slug=slug)
             clean = _verify_logged_reply(
                 slug, before_ts, clean, text=text,
                 retry=_make_capture_retry(text, config, history, model, files,
-                                          athlete_name, context))
+                                          athlete_name, context),
+                over_cap=over_cap)
             clean = _verify_session_preview(slug, clean)
             clean = _strip_model_countdown(clean, athlete)
             final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()
@@ -5499,12 +5548,13 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
                                    system_prompt_file=files["system_prompt"],
                                    athlete_name=athlete_name, context=context)
 
-        _apply_rule_capture_guard(slug, before_rules_text)
+        over_cap = _apply_rule_capture_guard(slug, before_rules_text)
         clean = process_charts(token, chat_id, response, slug=slug)
         clean = _verify_logged_reply(
             slug, before_ts, clean, text=text,
             retry=_make_capture_retry(text, config, history, model, files,
-                                      athlete_name, context))
+                                      athlete_name, context),
+            over_cap=over_cap)
         clean = _verify_session_preview(slug, clean)
         clean = _strip_model_countdown(clean, athlete)
         final = (clean + response_footer(model, slug=slug, athlete_cfg=athlete)).strip()

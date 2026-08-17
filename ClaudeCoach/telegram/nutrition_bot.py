@@ -1730,13 +1730,35 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                                          token, chat_id):
                     return
             elif kind == "reidentify":
+                # Through the same identity check as the deterministic extractor. These
+                # arrive from the model rather than a regex, but they land in the same
+                # per-day list and are consulted by the same deterministic ladder, so a
+                # wobble here narrows every later resolution for the day just as '100g'
+                # and 'logged' did.
                 for phrase in decision.get("exclusions") or []:
-                    ctx.store.add_exclusion(day, phrase)
+                    if usable_exclusion(str(phrase)):
+                        ctx.store.add_exclusion(day, phrase)
+                    else:
+                        log(f"  exclusion names no food, not stored: {phrase!r}")
                 # falls through to the re-resolution path below, which now carries
                 # the exclusions and the model's cleaned-up lookup text
                 if decision.get("text"):
                     corr = decision["text"]
-            # "unclear" and anything unhandled: fall through unchanged.
+            if kind == "unclear":
+                # ASKED, NEVER GUESSED, and this is the guard rather than a better prompt:
+                # everything below re-resolves, and re-resolving a correction nobody could
+                # read is how "the cookie needs correcting" became a generic 488 kcal/100g
+                # cookie he was then asked to confirm (17 Aug 2026). The prompt was
+                # strengthened for the two shapes that should not have been unclear at all,
+                # but it holds whatever the model returns next.
+                # The return is UNCONDITIONAL, not `if ask(...): return`. Every other branch
+                # here is allowed to decline and fall through, and that is right for them -
+                # they either execute or they do not. This one has nothing to fall through
+                # to except the re-resolution that is the defect, so there is no value the
+                # asking function could return that should let the code carry on.
+                ask_unclear_correction(ctx, pend, target_item, corr, day, token, chat_id)
+                return
+            # Anything unhandled: fall through unchanged.
         else:
             # Model unavailable: the deterministic detectors are the FALLBACK, not
             # the decider - offline beats broken, but they never override the model.
@@ -1746,6 +1768,12 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # Register what he says it was NOT before anything is re-resolved. The ladder is
         # deterministic, so a re-resolution with no memory of the rejected candidate returns
         # it again - six times, on 12 Aug 2026, twice after he had said so explicitly.
+        #
+        # What gets STORED is gated by usable_exclusion, which keeps the junk the extractor
+        # reads out of a complaint ('logged', '100g', 'partial portion') out of the day's
+        # list. What gets APPLIED is gated per item by exclusions_for_request below: the two
+        # are different questions - is this a food, and is he asking for it - and each has
+        # exactly one place it is answered.
         record_exclusions(ctx, day, corr)
         if not pend:
             # A correction after the fact used to be refused outright - "nothing pending" -
@@ -1762,7 +1790,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                 "coach", f"[log] correction noted: {(got.get('correction') or t)[:60]}")
             offer_items(ctx, [{"text": combined, "portion_g": None,
                                "in_session": bool(target.get("in_session"))}],
-                        day, token, chat_id, said=corr)
+                        day, token, chat_id, said=corr, correcting=True)
             mark_pending_replaces(ctx, target["id"], target.get("resolved_name") or "")
             return
         # A COSTED MEAL IS RE-TABLED, NEVER RE-SEARCHED. "The noodles were 400g" is a fact
@@ -1821,7 +1849,7 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         offer_items(ctx, [{"text": combined, "portion_g": None,
                            "in_session": bool((pend.get("batch") or [{}])[0]
                                               .get("in_session"))}],
-                    day, token, chat_id, said=corr)
+                    day, token, chat_id, said=corr, correcting=True)
         return
 
     if intent == "advice":
@@ -2030,15 +2058,57 @@ def _chat(ctx: Context, role: str, text: str) -> None:
         store.append_chat(role, text)
 
 
-def _exclusions(ctx: Context, day: date) -> list:
+def exclusions_for_request(phrases, request: str) -> list:
+    """The day's rejections, minus any the athlete is now ASKING FOR by name.
+
+    THE OVER-REACH THIS ENDS. A rejection is stored for the rest of the day, which is what
+    breaks the loop the ladder is otherwise incapable of leaving: "butter" resolved to
+    "Peanut butter, smooth" six times on 12 Aug 2026, twice after he had said "I never said
+    peanut butter". But the same memory, applied to every later lookup, blocks food he
+    really did eat - reject chicken at lunch ("not chicken, it was turkey") and a chicken
+    dinner cannot resolve for the rest of the day. He would have no way of knowing why.
+
+    THE RULE, AND IT NEEDS NO NEW STATE. He rejected a RESOLUTION, never a food. So a
+    rejection is void for a lookup whose own words name the thing rejected: if every token
+    of the phrase is in what he asked for, he is asking for it deliberately and there is
+    nothing left to protect him from.
+      "chicken" against "chicken thighs"     -> void, the dinner resolves
+      "peanut butter" against "butter on toast" -> stands, the 12 Aug loop stays broken
+    Directional, like _excluded_by: rejecting peanut butter must not block butter, and
+    asking for butter must not unblock peanut butter.
+
+    THE LADDER'S OWN TOKENISER, deliberately, and this is the part that has to be exact.
+    NR._tokens drops words under three letters, drops stopwords and singularises - so
+    "co op treat brookie" is {treat, brookie} to the ladder and would block a candidate on
+    those two words alone. A tokeniser of our own here that kept "co" and "op" would refuse
+    to void the rejection for a request the ladder still blocks: over-reach surviving its own
+    fix, and invisible, because the two rules would disagree while both looking right.
+    Sharing the function makes the property exact - a rejection is void for a request the
+    ladder's blocking test would itself have matched."""
+    words = NR._tokens(request or "")
+    out = []
+    for phrase in phrases or ():
+        want = NR._tokens(phrase or "")
+        if want and want <= words:
+            log(f"  rejection {phrase!r} does not apply: he asked for it by name")
+            continue
+        out.append(phrase)
+    return out
+
+
+def _exclusions(ctx: Context, day: date, request: str = "") -> list:
     """The athlete's rejected-candidate phrases for the day, or [] when there is no
     store to ask. Tests drive offer paths with a bare ctx (store=None), and a missing
     store must mean "no exclusions", not a crash — the exclusion feature is a filter,
-    never a prerequisite."""
+    never a prerequisite.
+
+    `request` is the text about to be looked up. Passed per ITEM, because that is the
+    granularity the judgement belongs at: one message can hold a food he has rejected and
+    another he has not."""
     store = getattr(ctx, "store", None)
     if store is None or not hasattr(store, "get_exclusions"):
         return []
-    return store.get_exclusions(day)
+    return exclusions_for_request(store.get_exclusions(day), request)
 
 
 def debate(ctx: Context, got: dict, text: str, day: date, token, chat_id) -> None:
@@ -2053,10 +2123,13 @@ def debate(ctx: Context, got: dict, text: str, day: date, token, chat_id) -> Non
     z = ctx.zones_for(day)
     totals = RC.merged_totals(ctx.store, ctx.athlete_dir, day)
     options = []
-    exclude = _exclusions(ctx, day)
     for opt in (got.get("options") or [])[:5]:
         item = NR.resolve(opt, day=day, store=ctx.store, table=ctx.table,
-                          fetchers=ctx.fetchers, cofid=ctx.cofid, exclude=exclude)
+                          fetchers=ctx.fetchers, cofid=ctx.cofid,
+                          # PER OPTION. He is weighing named dishes, and one of them being
+                          # something he rejected earlier is exactly the case where the
+                          # rejection must not silently remove it from the discussion.
+                          exclude=_exclusions(ctx, day, opt))
         landing = {}
         for key, macro in (("kcal", "kcal"), ("protein_g", "protein_g"),
                            ("carb_g", "carb_g"), ("fat_g", "fat_g"),
@@ -2422,7 +2495,6 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
     the interpretation strips quantities, so the word "scoop" is usually gone from the
     canonical name by the time it gets here."""
     batch, notes = [], []
-    exclude = _exclusions(ctx, day)
     planned = apply_product_facts(remembered_facts(ctx), planned, said)
     for it in planned[:8]:
         name = it["canonical_name"]
@@ -2457,7 +2529,14 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
         item = NR.resolve(name, day=day, store=ctx.store, table=ctx.table,
                           portion_g=it.get("portion_g"), fetchers=fetchers,
                           cofid=ctx.cofid, hint=it, queries=it["search_terms"],
-                          exclude=exclude)
+                          # HIS OWN MESSAGE, not the interpretation. Voiding a rejection is
+                          # justified only by HIM asking for the food, and `canonical_name`
+                          # and `search_terms` are the interpreter's invention - it rewrites
+                          # "my protein collagen capsules" to search as "collagen peptides",
+                          # which would cancel a rejection of collagen he never withdrew.
+                          # Computed inside the loop, because the day-wide read above it is
+                          # what made this a filter on everything he ate afterwards.
+                          exclude=_exclusions(ctx, day, said))
         item["_raw"] = name
         # WHOSE NUMBER THE PORTION WAS. resolve() takes a caller-supplied portion as stated
         # fact and flags nothing, which is right when the athlete gave the grams and wrong
@@ -2944,11 +3023,19 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                 supplement: bool = False, barcode: str = None,
                 trivial: bool = False, dose_mg: float = None,
                 said: str = "", default_at: str = None,
-                default_meal: str = None, default_day: str = "") -> None:
+                default_meal: str = None, default_day: str = "",
+                correcting: bool = False) -> None:
     """Resolve each item separately and ask once for the batch.
 
     Per-item resolution matters: a whole sentence resolved as one string both
-    mis-costs it and loses the per-item provenance the confidence flag depends on."""
+    mis-costs it and loses the per-item provenance the confidence flag depends on.
+
+    `correcting` says this text came out of a CORRECTION rather than a fresh log, which
+    changes one thing: a rejection is never voided against it. exclusions_for_request drops a
+    rejection whose words are in the request, and a corrected string carries both the food
+    he rejected and his rejection of it - "chicken salad (not chicken, it was turkey)" -
+    so measuring against it would cancel the memory that the correction just created and
+    hand him back the same wrong answer."""
     items = apply_product_facts(remembered_facts(ctx), items, said)
     if supplement:
         # A supplement is a DOSE, not a food, so it never touches a food database.
@@ -3050,7 +3137,11 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                           portion_g=it.get("portion_g"), fetchers=fetchers,
                           cofid=ctx.cofid, hint=hint,
                           queries=hint.get("search_terms"),
-                          exclude=_exclusions(ctx, day))
+                          # HIS OWN WORDS FOR THIS ITEM, so a rejection he made about
+                          # something else - or about this food, before he asked for it by
+                          # name - is judged per item rather than across the whole day.
+                          exclude=_exclusions(ctx, day,
+                                              "" if correcting else it["text"]))
         item["_raw"] = it["text"]
         item["in_session"] = bool(it.get("in_session"))
         item["_supplement"] = supplement
@@ -3256,6 +3347,31 @@ _EXCLUDE_FILLER = {"the", "a", "an", "any", "some", "my", "that", "this", "it", 
 _EXCLUDE_QUANTITY = {"gram", "grams", "pack", "packet", "portion", "partial", "whole",
                      "half", "quarter", "double", "large", "small", "medium", "big"}
 
+# Words about the ACT of logging, which no food is ever called. These are not filler:
+# filler is skipped when it leads, so treating them as filler would reduce "not logged the
+# cookie" to 'cookie' and block cookie for the rest of the day - worse than the junk it
+# replaced. A phrase carrying any of these is dropped ENTIRELY, because a complaint about
+# the record ("that is not logged right", 17 Aug 2026, which stored 'logged') names no
+# rejected identity at all, and an exclusion that names no food can only do harm.
+_EXCLUDE_PROCESS = {"log", "logged", "logging", "logs", "entry", "entries", "record",
+                    "recorded", "count", "counted", "correct", "corrected", "correcting",
+                    "correction", "correctly", "properly", "right", "wrong", "mistake",
+                    "updated", "changed", "showing", "shows"}
+
+
+def usable_exclusion(phrase: str) -> bool:
+    """Does this phrase name a FOOD, and so earn a place in the day's exclusions?
+
+    Two shapes have reached the day's list without naming one: an amount ('100g',
+    'partial portion', 13 Aug 2026) and a complaint about the logging itself ('logged',
+    17 Aug 2026). Both match no product name, so they fail silently while narrowing every
+    later resolution for that day. Recording nothing is the safe outcome; recording a junk
+    token is not, which is why this is a whitelist of identity and not a blacklist."""
+    kept = re.findall(r"[a-z0-9'-]+", (phrase or "").lower())
+    if any(w in _EXCLUDE_PROCESS for w in kept):
+        return False
+    return any(re.search(r"[a-z]{3}", w) and w not in _EXCLUDE_QUANTITY for w in kept)
+
 
 def exclusions_in(text: str) -> list:
     """The phrases this correction rules out, longest-first, at most 4 words each.
@@ -3281,13 +3397,7 @@ def exclusions_in(text: str) -> list:
             if len(kept) == 4:
                 break
         phrase = " ".join(kept)
-        # An exclusion must name a FOOD. "That's 100g I had 160g" produced the
-        # exclusion '100g' and "But I had the whole pack" produced 'partial portion'
-        # (13 Aug 2026) - quantity words, which no product name contains, so they
-        # match nothing and silently bloat the day's list. A phrase with no token of
-        # three or more letters is an amount, not an identity.
-        if not any(re.search(r"[a-z]{3}", w) and w not in _EXCLUDE_QUANTITY
-                   for w in kept):
+        if not usable_exclusion(phrase):
             continue
         if phrase and phrase not in out:
             out.append(phrase)
@@ -4081,13 +4191,71 @@ def apply_product_facts(facts: dict, items: list, said: str = "") -> list:
 
 
 def record_exclusions(ctx: Context, day: date, text: str) -> list:
-    """Store what he says it was not, for the rest of the day, before re-resolving."""
+    """Store what he says it was not, for the rest of the day, before re-resolving.
+
+    What may be stored is decided by usable_exclusion, inside exclusions_in: a phrase has to
+    name a food. What that memory then BLOCKS is decided per lookup by
+    exclusions_for_request, because a rejection stored for the day must not quietly narrow
+    every later item in it."""
     found = exclusions_in(text)
     for phrase in found:
         ctx.store.add_exclusion(day, phrase)
     if found:
         log(f"  excluded for {day}: {found}")
     return found
+
+
+def ask_unclear_correction(ctx: Context, pend: dict, target_item: dict, corr: str,
+                           day: date, token, chat_id) -> None:
+    """Ask what needs correcting, naming what we think he means.
+
+    Returns NOTHING on purpose. A bool would invite `if ask(...): return` at the call site,
+    and the one thing that must not be conditional here is the return.
+
+    THE DEFECT THIS EXISTS FOR (17 Aug 2026). `unclear` fell through the decision block
+    into the re-resolution path, so a correction the model could not read became a fresh
+    lookup and a made-up figure. "And the cookie needs correcting!" - which says only that
+    something is wrong - produced a generic cookie at 488 kcal/100g, offered as though it
+    answered him. Twice more the same day a correction that WAS readable ("that was for
+    yesterday's dinner", "the oats are the M&S salted caramel ones") came back unclear and
+    was re-resolved into a new entry with the original removed; the outcome was right by
+    luck and the path was wrong every time.
+
+    So `unclear` asks, and it is the model's own word for "I could not tell" - never None,
+    which means the model was unreachable. Nothing is resolved, re-priced or written here,
+    and record_exclusions is deliberately NOT reached: a message that names no food cannot
+    rule one out, which is the same defect one door along (it stored 'logged')."""
+    batch = (pend or {}).get("batch") or []
+    names = [str(it.get("resolved_name") or it.get("_raw") or "").strip()
+             for it in batch]
+    names = [n for n in names if n]
+    # NAMED FROM HIS WORDS, NOT FROM THE CLOCK. `target_item` with no offer on the table is
+    # find_entry(day, ""), the LATEST entry - so "the cookie needs correcting" at 09:50, with
+    # oats logged at 09:47, would have asked confidently about the oats. A confidently wrong
+    # name is the defect this branch exists to stop, one step further on. find_entry matches
+    # his words against the day's names, and is the matcher the correction path below already
+    # uses for exactly this question.
+    named = None if batch else ctx.store.find_entry(day, corr)
+    subject = (names[0] if names
+               else str((named or target_item or {}).get("resolved_name") or "").strip())
+    if batch and all(it.get("_stated") for it in batch):
+        # HIS OWN FIGURES: the wording the stated path already uses, because the answer is
+        # the same one - name the number and what to change it to.
+        line = ("Those are your own figures, so I will not go looking them up again. "
+                "Tell me the number to change and what to - “make it 1,100 kcal” "
+                "or “all of that x1.5” - or say no and send the whole thing "
+                "again.")
+    elif len(names) > 1:
+        line = (f"I am not sure what to change there. On the table I have "
+                f"{', '.join(names[:6])} - which one is wrong, and what should it be?")
+    elif subject:
+        line = (f"What needs correcting about *{subject}* - the food, the amount, the time "
+                f"or the meal? I have not changed anything yet.")
+    else:
+        line = ("I am not sure what that refers to. Tell me the item and what is wrong "
+                "with it and I will fix it.")
+    tg.send(token, chat_id, line, log=log)
+    _chat(ctx, "coach", f"[log] asked what to correct: {corr[:60]}")
 
 
 def _has_subject(combined: str, correction: str) -> bool:
@@ -4169,6 +4337,15 @@ def correct_in_batch(ctx: Context, pend: dict, correction: str, day: date,
                       # cannot see, which is what every other path here refuses to produce.
                       portion_g=(target.get("portion_used_g")
                                  or target.get("portion_g")),
+                      # NOTHING IS VOIDED INSIDE A CORRECTION. exclusions_for_request drops a
+                      # rejection whose words appear in the request, which is right for a
+                      # fresh log and wrong here twice over: `combined` is "chicken salad
+                      # (not chicken, it was turkey)", so both the food he is rejecting AND
+                      # his rejection of it are in the text. Judged against that, the
+                      # rejection this very correction created would be void and the ladder
+                      # would hand back the same wrong answer - the 12 Aug loop, restored by
+                      # its own fix. A correction is the one place the memory must be
+                      # absolute, so it is passed no request to be measured against.
                       exclude=_exclusions(ctx, day))
     item["_raw"] = combined
     item["in_session"] = bool(target.get("in_session"))

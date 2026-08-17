@@ -25,11 +25,16 @@ the nightly triage already enforces, now also checked at the moment a rule is wr
 
 Callers are responsible for snapshotting `before_text` themselves (before the model
 runs) and re-reading `after_text` (after it has had a chance to edit the file); this
-module only judges the diff and never touches disk.
+module judges the diff and never writes persistent-rules.md itself. It touches disk in
+exactly one place: `_spill_over_cap_rule` appends a discarded over-cap rule to the
+athlete's feedback-log.json, so a size brake never destroys the athlete's words.
 """
 import importlib.util
+import json
 import re
+import sys
 from collections import Counter
+from datetime import date, datetime
 from pathlib import Path
 
 _LIB_DIR    = Path(__file__).parent            # ClaudeCoach/lib/
@@ -46,6 +51,14 @@ _bf_spec.loader.exec_module(bug_fixer)
 
 CEILING = bug_fixer.RULE_COUNT_CEILING
 SURFACE_TOKEN_BUDGET = bug_fixer.SURFACE_TOKEN_BUDGET
+
+# Reason prefix marking a drop caused by the PER-RULE TOKEN CAP, mirroring the 'ABORT'
+# sentinel below: `drops` is a list of (reason, line) tuples, so a prefix is how a caller
+# tells the four gates apart. telegram/bot.py keys the athlete-facing correction off this -
+# a rule refused for length must never be reported as permanently saved. Do not fold it
+# into a substring test on the rest of the reason: the gate that set the entry is the
+# discriminator, not the wording.
+OVER_CAP_PREFIX = "OVER-CAP: "
 
 # A [perm] standing rule (the append-only lines that bloated); [expires:] lines carry a date.
 _PERM_RE    = re.compile(r"^\s*\[perm\]", re.I)
@@ -165,6 +178,48 @@ def _absorbs(removed_line: str, surviving_line: str) -> bool:
     return missing <= allowed
 
 
+def _spill_over_cap_rule(slug: str, line: str, reason: str) -> None:
+    """Persist a rule the PER-RULE TOKEN CAP is about to discard, appending a
+    'rule-overflow' record to the athlete's feedback-log.json in that file's existing
+    record shape.
+
+    On 2026-08-17 the cap dropped two hard-won permanent rules (~432 and ~571 tokens) and
+    the text existed nowhere afterwards but a log line. The cap itself is right - it is why
+    the pile stopped growing - but refusing the RULE must not also destroy the EVIDENCE,
+    and feedback-log.json is exactly where the cap's own message says the evidence belongs.
+
+    Only the token cap spills here. A count-ceiling or surface-budget drop is a "prune
+    something first" signal on a rule that is otherwise fine, and a lossy fold reverts the
+    whole write with every original line still on file, so neither loses text.
+
+    Best-effort by design: this runs inline on a live chat reply, so it must never raise
+    and never block the reply. A repeat of the same verbatim line is skipped, because
+    session-sync re-scans history.json hourly and re-appends the same over-cap rule until
+    it is shortened, which would otherwise spill a duplicate record every hour."""
+    f = _BASE / "athletes" / slug / "feedback-log.json"
+    try:
+        entries = json.loads(f.read_text()) if f.exists() else []
+        if not isinstance(entries, list):
+            entries = []
+        for e in entries:
+            if (isinstance(e, dict) and e.get("type") == "rule-overflow"
+                    and e.get("message") == line):
+                return
+        entries.append({
+            "date": date.today().isoformat(),
+            "type": "rule-overflow",
+            "message": line,
+            "reason": reason,
+            "logged_at": datetime.now().isoformat(timespec="seconds"),
+            "status": "open",
+            "resolution_commit": None,
+        })
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(entries, indent=2))
+    except Exception as e:
+        print(f"[rules_capture] over-cap spill failed for {slug}: {e}", file=sys.stderr)
+
+
 def _line_conflicts(line: str, prefs: list) -> str:
     """Return the confirmed preference a [perm] line contradicts, else ''. Mirrors
     bug-fixer._rule_conflict's deterministic backstop: a line that ASSERTS terms a confirmed
@@ -213,7 +268,9 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: st
         routing that judgement to the human-reviewed merge.
 
     Returns (new_text, drops); a drops entry whose reason starts 'ABORT' means nothing written
-    (new_text == before_text)."""
+    (new_text == before_text), and one whose reason starts OVER_CAP_PREFIX means the line
+    breached the per-rule token cap and its full text was spilled to the athlete's
+    feedback-log.json (see `_spill_over_cap_rule`) rather than discarded."""
     before_perm = [l for l in before_text.splitlines(keepends=True) if _PERM_RE.match(l)]
     after_lines = after_text.splitlines(keepends=True)
     perm_idx    = [i for i, l in enumerate(after_lines) if _PERM_RE.match(l)]
@@ -309,6 +366,7 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: st
     # count_tokens: this runs inline on a live chat reply, so it must be instant and must
     # never fail open. The cap does not need single-token precision.
     # Applies ONLY to appends, so existing long rules are left for the coach to prune.
+    over_cap_idx = []                                 # the gate that spills; see below
     for i in list(appended_idx):
         if i in dropped or _is_fold_result(i):
             continue
@@ -316,9 +374,10 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: st
         if _PERM_RE.match(line) or _EXPIRES_RE.match(line):
             est = int(round(len(line) / bug_fixer.BYTES_PER_TOKEN))
             if est > bug_fixer.RULE_MAX_TOKENS:
-                dropped[i] = (f"rule is ~{est} tokens, over the "
+                dropped[i] = (f"{OVER_CAP_PREFIX}rule is ~{est} tokens, over the "
                               f"{bug_fixer.RULE_MAX_TOKENS}-token per-rule cap - state the "
                               f"instruction only and leave the evidence in the feedback log")
+                over_cap_idx.append(i)
 
     def _standing_count():
         kept = [l for j, l in enumerate(after_lines) if j not in dropped]
@@ -357,6 +416,15 @@ def enforce_rule_guards(before_text: str, after_text: str, prefs: list, slug: st
         return after_text, []
 
     new_text = "".join(l for j, l in enumerate(after_lines) if j not in dropped)
+
+    # NO SILENT LOSS. An over-cap rule leaves the file here and exists nowhere else, so
+    # spill it before returning - ahead of the re-verify below, which can revert the whole
+    # write and would otherwise skip the spill on the one path where the text is just as
+    # gone. Needs a slug to know whose log to write; callers without one (unit tests, a
+    # diff with no known athlete) skip this exactly as they skip the surface axis.
+    if slug:
+        for i in over_cap_idx:
+            _spill_over_cap_rule(slug, after_lines[i].strip(), dropped[i])
 
     # Re-verify the fold invariant after dropping bad appends (dropping a pure-new line cannot
     # orphan a folded rule, since fold results are exempt above — but assert it, cheaply).

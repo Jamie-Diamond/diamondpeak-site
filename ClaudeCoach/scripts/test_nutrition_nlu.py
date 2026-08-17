@@ -1117,6 +1117,34 @@ check("the correction prompt offers the day and names the failure",
       and "that was for yesterday's dinner" in NLU.CORRECTION_PROMPT
       and "16 Aug 2026" in NLU.CORRECTION_PROMPT)
 
+print("\n--- `unclear` is the model's own word, and the caller asks on it (17 Aug 2026) ---")
+# The caller's guard turns `unclear` into a question and never a lookup, so the DISTINCTION
+# from None is load-bearing: None means the model was unreachable and runs the deterministic
+# fallback instead. An `unclear` degraded to None would put the fabricating path back.
+check("an unclear decision comes back as unclear, never as None",
+      NLU.decide_correction("and the cookie needs correcting!", _item, "claude", "m",
+                            log=lambda *a: None,
+                            runner=fixed_runner('{"kind":"unclear"}'))
+      == {"kind": "unclear"})
+check("and the prompt says what the code does with it, so it is not a resting place",
+      "naming the entry it thinks he means" in NLU.CORRECTION_PROMPT
+      and "the cookie needs correcting" in NLU.CORRECTION_PROMPT)
+# 09:47, 17 Aug 2026: a brand named after the fact came back `unclear`, was re-resolved from
+# scratch and replaced the entry. It is a reidentify, and the figure he read off the pack
+# belongs INSIDE the lookup text - the model returning it as a macro field is the one thing
+# this file's other fixtures exist to prevent.
+_oats = NLU.decide_correction(
+    "Sorry the oats are the m&s salted caramel ones with 21g protein", _item, "claude", "m",
+    log=lambda *a: None,
+    runner=fixed_runner('{"kind":"reidentify","text":"M&S salted caramel oats with 21g '
+                        'protein","exclusions":[]}'))
+check("a brand named after the fact is a reidentify carrying his own words",
+      _oats["kind"] == "reidentify" and "salted caramel" in _oats["text"]
+      and "21g protein" in _oats["text"])
+check("and the prompt gives that exchange as the example",
+      "salted caramel" in NLU.CORRECTION_PROMPT
+      and "macro field of your own" in NLU.CORRECTION_PROMPT)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
