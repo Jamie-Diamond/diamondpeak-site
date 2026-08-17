@@ -891,9 +891,14 @@ def _plan(args):
     # would mask the Sunday cron never running, which is the exact blindness being
     # fixed. weekly-plan.sh (the Sunday cron) always passes --push, so the heartbeat
     # tracks the real deliverable and nothing else.
-    def _beat(ok: bool, detail: str) -> None:
+    # `outcome` is passed through ONLY when a call site sets it, so every existing
+    # heartbeat line stays byte-identical to the six weeks already on disk (ops_log's
+    # own note asks for exactly that). See the fallback branch for the one caller that
+    # sets it and why.
+    def _beat(ok: bool, detail: str, outcome: str = None) -> None:
         if args.push:
-            ops_log.record_run("stage1-plan", athlete=args.athlete, ok=ok, detail=detail)
+            ops_log.record_run("stage1-plan", athlete=args.athlete, ok=ok, detail=detail,
+                               **({"outcome": outcome} if outcome else {}))
 
     cfg = json.loads((BASE / "config" / "athletes.json").read_text())[args.athlete]
     today = date.today()
@@ -1159,10 +1164,8 @@ def _plan(args):
         "pinned_load": agreed_week.pinned_load(pins),
         "proposer_target_tss": p_target,
     }
-    not_pushed = False
     if args.push:
         if not overall_ok:
-            not_pushed = True
             summary["pushed"] = False
             summary["reason"] = f"not ready (rules_ok={built['ok']}, load_on_target={load_on_target}) — not pushing"
             # hard entries are {code, msg} dicts — joining them raw crashed here
@@ -1209,10 +1212,21 @@ def _plan(args):
                 if args.notify and cfg.get("chat_id"):
                     _notify(cfg["chat_id"], _fallback_message(brief, built, why),
                             athlete=args.athlete)
-                # Still ok=False and still exit 3: a week was delivered, but not a clean
-                # one, and weekly-plan.sh must keep seeing that. The detail says which.
+                # ok=False, because a week that failed its own audit is not good news and
+                # must still show as a digest line. FINDING-stamped, and that stamp is the
+                # 17 Aug 2026 fix, not decoration: `stage1-plan` defaults to FAILURE in
+                # coach_alert.OUTCOME_CLASS, ops-digest._saw() reads a FAILURE heartbeat as
+                # "this deliverable did not happen", and stage1-plan is one of the two
+                # weekly deliverables with telegram=True. So the beat below used to tell
+                # Jamie "no successful weekly plan for calum in 7 days" about a week that
+                # WAS on calum's calendar (16 Aug 2026: three events pushed, three false
+                # NO-WEEK reports: this one, weekly-plan.sh's, and the exit code). FINDING
+                # says what actually happened: the run did its job, and what it delivered
+                # is worth reading. Deliberately NOT ops_log.alert() as well - alert()
+                # writes its own UNSTAMPED ok=False line, which classifies back to FAILURE
+                # and would reinstate the same false claim beside this one.
                 _beat(False, f"pushed a FALLBACK week for {built['week_start']} into an "
-                             f"empty calendar ({why})")
+                             f"empty calendar ({why})", outcome=ops_log.FINDING)
             else:
                 if args.notify and cfg.get("chat_id"):
                     # "Your existing plan is unchanged" was WRONG and reassuring in the
@@ -1253,6 +1267,10 @@ def _plan(args):
                 _beat(False, f"no clean week pushed ({why})")
         else:
             summary["push_result"] = pb.push(args.athlete, built)
+            # State it, rather than leaving the clean path as the one push that says
+            # nothing about whether it pushed. exit_code_for() reads this field, so the
+            # exit code and the printed summary cannot disagree (17 Aug 2026).
+            summary["pushed"] = True
             _write_prior_zones(args.athlete, week_start, proposal)   # Phase 5.4: bank for next week
             _advance_injury_ramp(args.athlete, week_start, brief.get("distribution_targets"))  # Phase 5.6
             if override_path and override_path.exists():
@@ -1265,14 +1283,48 @@ def _plan(args):
                         athlete=args.athlete)
             _beat(True, f"pushed week of {built['week_start']} ({built['total_tss']} TSS)")
     print(json.dumps(summary, indent=1, ensure_ascii=False))
-    # Exit NON-ZERO when a --push run delivered no week. It exited 0 before, which is why
-    # weekly-plan.sh's `rc=$?` was decorative and a total failure for all three athletes
-    # (9 Aug 2026) was visible only to whoever went and read the log. 3, not 1, so the
-    # shell can tell "built nothing at all" (1) from "built a week I would not push" (3).
-    # 4 is a fourth thing again — "another build for this athlete is already running", set
-    # in main() before any work happens (lib/plan_lock.py).
-    if not_pushed:
-        sys.exit(3)
+    rc = exit_code_for(summary, bool(args.push))
+    if rc:
+        sys.exit(rc)
+
+
+def exit_code_for(summary: dict, pushed_run: bool) -> int:
+    """3 when a --push run delivered no week, 0 when it delivered one (or was a dry run).
+
+    Exit NON-ZERO when a --push run delivered no week. It exited 0 before, which is why
+    weekly-plan.sh's `rc=$?` was decorative and a total failure for all three athletes
+    (9 Aug 2026) was visible only to whoever went and read the log. 3, not 1, so the
+    shell can tell "built nothing at all" (1) from "built a week I would not push" (3).
+    4 is a fourth thing again — "another build for this athlete is already running", set
+    in main() before any work happens (lib/plan_lock.py).
+
+    17 Aug 2026, and the reason this is a function reading `summary` rather than a flag:
+    the EMPTY-WEEK FALLBACK pushed and still exited 3. On 16 Aug calum's build printed
+    "pushed": true with three event ids in push_result, and the same run exited 3, so
+    weekly-plan.sh alerted "NO WEEK PUSHED for calum ... their calendar has no plan for
+    the coming week" while his calendar held the week it had just written (the next
+    day's plan audit read it back as 380 TSS). The flag and the printed summary were two
+    records of one fact and they disagreed; deriving the code from the field that is
+    printed is what stops them disagreeing again.
+
+    NOT a new exit code for the fallback, which was the obvious alternative. telegram/
+    bot.py launches this script for a confirmed replan and treats rc in (0, 3) as "stage1
+    has already told the athlete" and ANY other code as "it died silently", messaging the
+    athlete "it could not build a usable week at all". The fallback path does notify (it
+    sends _fallback_message), so 0 is the accurate answer for that tuple and a fifth code
+    would only move the false alarm onto the athlete's own thread. The week's shortfall
+    reaches Jamie through the FINDING heartbeat above instead, which can say "pushed, and
+    here is what is wrong with it", something an exit code cannot.
+
+    `pushed_run` is args.push, and it is checked FIRST because a dry run writes no
+    "pushed" key at all: without the gate every dry run (scripts/shadow-week-check.sh,
+    every hand experiment) would exit 3 for having pushed nothing, which is its job.
+    """
+    if not pushed_run:
+        return 0
+    if summary.get("pushed"):
+        return 0
+    return 3
 
 
 def week_is_empty(slug: str, week_start: date, cfg: dict) -> bool | None:

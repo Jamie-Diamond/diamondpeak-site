@@ -18,6 +18,18 @@ timeout 300 python3 "$R/lib/thresholds.py" --all --sync-ftp --apply --notify >> 
 # logged "rc=0" three times, and the first anyone knew was Jamie asking "What's the plan
 # this week?" the next morning. stage1-plan now exits 3 when it pushed nothing, 1 when it
 # could not build at all, and a non-zero rc here raises a real alert.
+#
+# 17 Aug 2026, the other half of that: the alert has to be TRUE as well as loud. On
+# Sunday 16 Aug calum's build took the empty-week fallback, pushed three events onto his
+# calendar (push_result listed the ids, and the next day's plan audit read the week back
+# as 380 TSS), and still exited 3, so this loop reported "NO WEEK PUSHED for calum" for
+# a week that was there. stage1-plan now derives its code from whether it actually pushed:
+# the fallback exits 0 like any other delivered week, and the fact that it is off target
+# reaches Jamie as a FINDING heartbeat in the evening digest instead of as a missing
+# deliverable. Every code the script can emit is now named in the lookup below, which 4
+# was not: 1 built nothing, 3 built a week and would not push it, 4 stood down because
+# another build held this athlete's lock (plan_lock.BUSY_EXIT), 124 the `timeout` above
+# killed it. 0 never reaches the lookup.
 FAILED=""
 for A in jamie kathryn calum; do
   echo "--- $A $(date) ---" >> "$LOG"
@@ -33,10 +45,17 @@ import ops_log
 athlete, rc = sys.argv[1], sys.argv[2]
 what = {"3": "built a week but it failed the gate, so nothing was pushed",
         "1": "could not build a week at all",
+        "4": "stood down because another build for this athlete was already running",
         "124": "TIMED OUT after 45 min"}.get(rc, f"exited {rc}")
-ops_log.alert("weekly-plan",
-              f"NO WEEK PUSHED for {athlete}: {what}. Their calendar has no plan for the "
-              f"coming week until someone builds one.", athlete=athlete)
+# 4 had no entry until 17 Aug 2026 and fell through to "exited 4". It is also the one
+# code here that is not a missed deliverable: the build holding the lock pushes the week
+# and sends the athlete's message, which is why stage1-plan writes no heartbeat for it.
+# So it keeps the alert (this run did push nothing, and a Sunday collision is worth
+# knowing about) and loses the closing sentence, which would be false.
+tail = ("" if rc == "4" else
+        " Their calendar has no plan for the coming week until someone builds one.")
+ops_log.alert("weekly-plan", f"NO WEEK PUSHED for {athlete}: {what}." + tail,
+              athlete=athlete)
 PY
   fi
 done
