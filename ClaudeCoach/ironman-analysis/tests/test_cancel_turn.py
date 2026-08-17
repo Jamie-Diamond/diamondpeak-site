@@ -239,6 +239,7 @@ def test_a_tap_before_the_run_starts_is_parked_and_honoured(monkeypatch):
     response, summary, cancelled = bot.call_claude_streaming(
         "tok", CHAT, 901, "replan my week", {}, [], run_id=rid)
     assert (response, cancelled) == (None, True)
+    assert summary is None, "nothing ran, so msg1 must not collapse to invented work"
     assert rid not in bot._RUN_PHASE, "the parked request must be consumed, not left to fire twice"
 
 
@@ -582,6 +583,9 @@ def test_undo_reports_a_write_that_would_not_go_back(monkeypatch):
     text = tg.sent_text()
     assert "couldn't undo any of that" in text
     assert "Threshold 3x12" in text
+    # And the card must not claim otherwise: "Undone" over a restore that wrote nothing is
+    # the same lie as a claimed calendar push that never landed.
+    assert "Couldn't undo that" in tg.edits()[-1]["text"]
 
 
 def test_an_undo_token_is_single_use_and_chat_scoped(monkeypatch):

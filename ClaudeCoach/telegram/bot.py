@@ -5652,7 +5652,7 @@ def _report_cancelled_turn(token, chat_id, slug, placeholder_id, summary):
     if placeholder_id:
         tg_post(token, "editMessageText", {
             "chat_id": chat_id, "message_id": placeholder_id,
-            "text": (summary or "Stopped") + " - stopped",
+            "text": f"{summary} - stopped" if summary else "Stopped",
             "reply_markup": {"inline_keyboard": []}})
 
     snap = _events_snapshot(slug)
@@ -5751,7 +5751,11 @@ def _undo_worker(token, chat_id, slug, pending, message_id):
             failed.append(write_verify.describe_event(e))
 
     if message_id:
-        edit_keyboard_confirm(token, chat_id, message_id, "↩️ Undone")
+        # The card's own wording tracks what actually happened. "Undone" over a restore
+        # that failed every write is the same class of lie as a claimed calendar push that
+        # never landed, which is the thing write_verify exists to stop.
+        edit_keyboard_confirm(token, chat_id, message_id,
+                              "↩️ Undone" if undone else "⚠️ Couldn't undo that")
 
     lines = ["Put back:" if undone else "I couldn't undo any of that."]
     lines += [f"• {u}" for u in undone]
@@ -5942,7 +5946,9 @@ def call_claude_streaming(token, chat_id, placeholder_id,
     if run_id and _take_cancel_request(run_id):
         ticker.stop()
         log(f"[{chat_id}] run {run_id} cancelled before it started")
-        return (None, "Stopped", True)
+        # No summary: nothing ran, so there is nothing to summarise, and inventing one
+        # would have msg1 collapse to a description of work that never happened.
+        return (None, None, True)
 
     # try/finally guarantees the background ticker is always torn down - an
     # orphaned ticker thread would keep editing msg1 every second forever.
