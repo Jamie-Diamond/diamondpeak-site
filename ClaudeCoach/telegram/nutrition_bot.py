@@ -185,6 +185,26 @@ def fmt_flags(flags: list, limit: int = 1) -> str:
     return f"\n_{macro} is {round(f['distance'])} over its ceiling._"
 
 
+# What a HELD macro is called in the one line he reads. Spelled out here rather than
+# borrowed from the resolver's own label table (17 Aug 2026): the rescale guard has to
+# stand on its own, and a rescale that fabricated his protein because an import moved is
+# precisely the defect it exists to prevent.
+_HELD_LABELS = {"kcal": ("kcal", ""), "protein_g": ("protein", " g"),
+                "carb_g": ("carbs", " g"), "fat_g": ("fat", " g"),
+                "fibre_g": ("fibre", " g"), "dietary_sodium_mg": ("sodium", " mg")}
+
+
+def _held_phrase(item: dict) -> str:
+    """"protein 21 g" - the figures a rescale left alone, or "" when it left none."""
+    bits = []
+    for f in item.get("_stated_held") or ():
+        name, unit = _HELD_LABELS.get(f, (f, ""))
+        value = item.get(f)
+        if value is not None:
+            bits.append(f"{name} {value:g}{unit}")
+    return ", ".join(bits)
+
+
 def fmt_confirm(item: dict) -> str:
     """The confirm prompt. States the rung every time."""
     # HIS OWN FIGURES SAY SO IN HIS OWN TERMS. describe_provenance renders the MANUAL rung
@@ -219,6 +239,21 @@ def fmt_confirm(item: dict) -> str:
         # a reading and not a measurement.
         bits.append(f"_assumed {item.get('portion_assumed') or 'a standard portion'}; "
                     f"correct me if wrong._")
+    kept = _held_phrase(item)
+    if kept:
+        # SAY WHAT DID NOT MOVE (17 Aug 2026). rescale_item holds a figure he stated while
+        # scaling the rest, which is right but leaves a panel that does not add up: his
+        # protein sitting beside a kcal worked out from a per-100g row and a portion. An
+        # unexplained inconsistency reads as a broken calculator, not as deference, and he
+        # would be right to distrust the numbers either way. Same argument as the
+        # assumed-portion line above - the assumption is named on the one message where
+        # saying "no, scale that too" still costs him nothing.
+        many = len(item.get("_stated_held") or ()) > 1
+        bits.append(f"_{kept} {'are' if many else 'is'} your own "
+                    f"{'figures' if many else 'figure'}, so I left "
+                    f"{'them' if many else 'it'} as you gave "
+                    f"{'them' if many else 'it'} and scaled the rest. Say if "
+                    f"{'they' if many else 'it'} should scale too._")
     if item.get("fibre_g"):
         bits.append(f"fibre {round(item['fibre_g'])} g")
     if item.get("_components"):
@@ -842,6 +877,13 @@ def _gate_numbers(batch: list) -> list:
         if it.get("_stated"):
             row["figures_are_his_own"] = True
             row["his_rows"] = [str(c)[:80] for c in (it.get("_components") or [])[:12]]
+        if it.get("_stated_held"):
+            # WHY THIS ROW DOES NOT RECONCILE (17 Aug 2026). A rescale holds a figure he
+            # stated and scales everything else, so the protein no longer follows from the
+            # kcal and the portion - which is the exact shape the gate is asked to catch.
+            # Named, or the gate blocks the message for the one thing about it that is
+            # deliberate, and he gets silence instead of his own number back.
+            row["his_own_figures_held_unscaled"] = list(it["_stated_held"])
         if it.get("_composed"):
             row["costed_as_a_whole_meal"] = True
             row["components"] = [
@@ -3472,8 +3514,30 @@ def rescale_item(item: dict, grams: float = None, factor: float = None,
     every caller is executing an amount the athlete stated, but the meal-sizing path is
     not: there the grams are the model's reading of "it was a whole meal", and presenting
     those as "as stated" would put words in his mouth and hide the assumption from the one
-    message where he can still say no."""
+    message where he can still say no.
+
+    A field named in `stated_fields` is HELD, never recomputed - see below."""
     out = dict(item)
+    # HIS FIGURE IS FOR WHAT HE ATE, AND IT DOES NOT SCALE (17 Aug 2026). resolve() can now
+    # lay a macro the athlete stated over whatever the ladder found - "chicken salad with
+    # 21g protein" resolves the salad and keeps his 21 g - and every one of those items
+    # then arrives here the moment he answers "how much?". `stated_fields` survived the
+    # dict copy above perfectly well; his number did not, because the loops below recompute
+    # every field in _RESCALE_FIELDS from the per-100g basis. The confirm line came back
+    # reading "your own figure: protein 16.5 g" - a figure he never gave, printed under his
+    # own name. His feedback log already carries an invented RPE 8 and an invented 300 mg
+    # of sodium, and both cost more than the absent data would have.
+    #
+    # The mistake underneath it is treating a stated macro as a basis. It is not: a
+    # per-100g row is a rate and multiplies, whereas "21 g of protein" is his account of
+    # the plate in front of him, and "how much was it?" is a question about that same
+    # plate. Scaling his answer by the answer to a question about it is nonsense twice
+    # over. So the rest of the row scales and his figures hold.
+    #
+    # Only non-None values are held. A `stated_fields` naming a field that is None would
+    # otherwise blank a figure the ladder did supply, which trades this bug for a worse one.
+    held = {f: item[f] for f in (item.get("stated_fields") or ())
+            if f in _RESCALE_FIELDS and item.get(f) is not None}
     per = item.get("per_100g") or {}
     if grams is not None and per:
         for f in _RESCALE_FIELDS:
@@ -3494,6 +3558,25 @@ def rescale_item(item: dict, grams: float = None, factor: float = None,
         return None
     if out.get("dietary_sodium_mg") is not None:
         out["dietary_sodium_mg"] = round(out["dietary_sodium_mg"])
+    if held:
+        # LAST, after every branch and after the sodium rounding, so nothing above can have
+        # touched them. Restoring rather than skipping the loops keeps the no-stated-figure
+        # path - which is still almost every call - byte-for-byte what it was.
+        out.update(held)
+        # The per-100g basis loses the held fields with them. It is the one thing left on
+        # the item that can still reconstruct the number we have just refused to
+        # reconstruct, and it would do it silently on the next rescale if `stated_fields`
+        # were ever dropped in between. Rebuilt into a NEW dict: `out` is a shallow copy,
+        # so editing this one in place would reach back into the pending batch's own item.
+        if per:
+            out["per_100g"] = {k: v for k, v in per.items() if k not in held}
+        # Underscored like `_stated` and `_components`: a note from this rescale to the
+        # confirm line, not a field of the record. Distinct from `stated_fields`, which
+        # says which figures came from him - this says which ones a scaling just left
+        # behind, and that is the bit he has to be told about, because the panel he is
+        # about to approve no longer adds up.
+        out["_stated_held"] = [f for f in (item.get("stated_fields") or ())
+                               if f in held]
     if grams is not None:
         out["portion_used_g"] = grams
         out["portion_assumed"] = (f"{grams:.0f} g - {why or 'an estimated portion'}"
@@ -3627,18 +3710,38 @@ def apply_batch_rescale(ctx: Context, pend, decision: dict, day: date,
     # or a weight he gave is not. meal_portions is the only kind where the grams are ours.
     estimated = (kind == "meal_portions")
     why = "my estimate of the portion for a meal that size"
-    fresh, changed, refused = list(batch), [], []
+    fresh, changed, refused, all_his = list(batch), [], [], []
     for spec in specs:
         idx = spec["index"]
         # NOTHING TO SCALE IS NOT THE SAME AS SCALED. rescale_item's factor branch multiplies
         # whatever macro fields are present, so an item with none - one still waiting on
         # figures - passes through it unchanged and would be counted as done, and the reply
         # would claim to have scaled all of them.
-        has_basis = (bool(fresh[idx].get("per_100g"))
-                     or any(fresh[idx].get(f) is not None for f in _RESCALE_FIELDS))
+        #
+        # A HELD FIGURE IS THE SECOND WAY OF HAVING NOTHING TO SCALE (17 Aug 2026).
+        # rescale_item now refuses to recompute anything named in `stated_fields`, so an
+        # item whose only figures are his own - the miss path keeps his 21 g of protein and
+        # nothing else - satisfied the old test, went through the factor branch, came out
+        # identical and was counted in `changed`. Straight back to the false claim the
+        # paragraph above is here to prevent, by a route that did not exist when it was
+        # written. So the basis is looked for among the figures that are actually OURS.
+        held = set(fresh[idx].get("stated_fields") or ())
+        item_per = {k: v for k, v in (fresh[idx].get("per_100g") or {}).items()
+                    if k not in held}
+        has_basis = (bool(item_per)
+                     or any(fresh[idx].get(f) is not None
+                            for f in _RESCALE_FIELDS if f not in held))
         scaled = rescale_item(fresh[idx], grams=spec.get("grams"),
                               factor=spec.get("factor"),
                               estimated=estimated, why=why) if has_basis else None
+        if scaled is None and held:
+            # Refused for a DIFFERENT REASON, and told apart from the others below: "there
+            # is no portion or per-100g basis behind it, so tell me the grams" is the wrong
+            # thing to say about a row he costed himself. Grams would not help; there is
+            # simply nothing here that is ours to multiply.
+            all_his.append(fresh[idx].get("resolved_name")
+                           or fresh[idx].get("_raw") or f"item {idx + 1}")
+            continue
         if scaled is None:
             # No per-100g basis and no current portion, so there is nothing to scale FROM.
             # Named in the reply rather than skipped in silence: a component that quietly
@@ -3649,12 +3752,19 @@ def apply_batch_rescale(ctx: Context, pend, decision: dict, day: date,
         fresh[idx] = drop_stale_breakdown(scaled)
         changed.append(idx)
     if not changed:
-        log(f"  batch rescale had no basis to work from: {refused}")
+        log(f"  batch rescale had no basis to work from: {refused + all_his}")
         return False
     set_pending(ctx.store, {**pend, "batch": fresh})
     body = "\n\n".join(fmt_confirm(i) for i in fresh)
     total = round(sum(i.get("kcal") or 0 for i in fresh))
-    lead = {"rescale_all": f"Scaled all {len(fresh)} of them.",
+    # "ALL" ONLY WHEN IT WAS ALL OF THEM (17 Aug 2026). This lead was fixed text, so a
+    # rescale_all that refused one component announced "Scaled all 4 of them" and then
+    # contradicted itself two clauses later with "I could not scale X". Latent before, and
+    # the held-figure bucket above makes it easy to hit, so it is corrected here: the
+    # sentence he skim-reads must not be the one that is wrong.
+    lead = {"rescale_all": (f"Scaled all {len(fresh)} of them."
+                            if len(changed) == len(fresh)
+                            else f"Scaled {len(changed)} of the {len(fresh)}."),
             "rescale_items": f"Scaled {len(changed)} of them, the rest are unchanged.",
             "meal_portions": "Sized it as a meal - every portion below is my estimate, "
                              "so correct any that look wrong."}[kind]
@@ -3664,6 +3774,12 @@ def apply_batch_rescale(ctx: Context, pend, decision: dict, day: date,
                  + ("it" if len(refused) == 1 else "them")
                  + ", so tell me the grams and I will redo "
                  + ("it." if len(refused) == 1 else "them."))
+    if all_his:
+        lead += (" I left " + ", ".join(r[:40] for r in all_his)
+                 + " as " + ("it is" if len(all_his) == 1 else "they are")
+                 + ": the figures on "
+                 + ("it are" if len(all_his) == 1 else "them are")
+                 + " your own, so there was nothing of mine to scale.")
     if len(fresh) > 1:
         body += f"\n\n*Total* {total} kcal"
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
