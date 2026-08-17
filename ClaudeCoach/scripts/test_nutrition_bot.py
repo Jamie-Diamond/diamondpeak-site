@@ -3166,6 +3166,205 @@ check("the web rung names its source in words",
 check("and it is not the raw rung name any more",
       NR.describe_provenance({"source_rung": NR.Rung.WEB}) != NR.Rung.WEB)
 
+print("\n--- a figure HE stated survives a rescale (17 Aug 2026) ---")
+# resolve() lays a macro he gave over whatever the ladder found, and the item then reaches
+# rescale_item the moment he answers "how much was it?". rescale_item recomputed every
+# field in _RESCALE_FIELDS, so "chicken salad with 21g protein" came back as "your own
+# figure: protein 16.5 g" - a number he never said, attributed to him.
+_oats = {"resolved_name": "Oats, porridge, raw",
+         "kcal": 151.6, "protein_g": 5.3, "carb_g": 27.1, "fat_g": 2.6,
+         "fibre_g": 4.0, "dietary_sodium_mg": 2, "portion_used_g": 40.0,
+         "per_100g": {"kcal": 379.0, "protein_g": 13.2, "carb_g": 67.7,
+                      "fat_g": 6.5, "fibre_g": 10.1, "dietary_sodium_mg": 4.0},
+         "confidence": "label", "source_rung": "cofid"}
+# THE UNCHANGED PATH, PINNED WHOLE. Almost every call carries no stated figure, and the
+# guard is worth nothing if it moved any of them: this compares the entire dict, so an
+# extra key or a scrubbed per-100g row would fail it too.
+_plain = NB.rescale_item(_oats, grams=80)
+check("an item with no stated figure rescales exactly as it did before the guard",
+      _plain == {**_oats, "kcal": 303.2, "protein_g": 10.6, "carb_g": 54.2,
+                 "fat_g": 5.2, "fibre_g": 8.1, "dietary_sodium_mg": 3,
+                 "portion_used_g": 80.0, "portion_estimated": False,
+                 "portion_assumed": "80 g - as stated"})
+check("and picks up no note about held figures", "_stated_held" not in _plain)
+
+_stated = {**_oats, "protein_g": 21.0, "stated_fields": ["protein_g"]}
+_kept = NB.rescale_item(_stated, grams=80)
+check("the figure he stated is NOT recomputed by the portion answer",
+      _kept["protein_g"] == 21.0)
+check("and is not the 10.6 the per-100g row would have invented for him",
+      _kept["protein_g"] != _plain["protein_g"])
+check("every field he said nothing about still scales normally",
+      (_kept["kcal"], _kept["carb_g"], _kept["fat_g"]) == (303.2, 54.2, 5.2))
+check("the portion itself moves - the amount was never in dispute",
+      _kept["portion_used_g"] == 80.0)
+check("and the rescale records which figures it left alone",
+      _kept["_stated_held"] == ["protein_g"])
+# The per-100g row is the only thing left that could rebuild the number just refused.
+check("the held field is dropped from the per-100g basis",
+      "protein_g" not in _kept["per_100g"] and _kept["per_100g"]["kcal"] == 379.0)
+check("and the item it was copied from keeps its own basis - no shared-dict damage",
+      _stated["per_100g"]["protein_g"] == 13.2)
+
+check("the portion-ratio branch holds it too",
+      NB.rescale_item({"kcal": 100.0, "protein_g": 21.0, "portion_used_g": 50.0,
+                       "stated_fields": ["protein_g"]}, grams=75)["protein_g"] == 21.0)
+_fac = NB.rescale_item({"kcal": 100.0, "protein_g": 21.0,
+                        "stated_fields": ["protein_g"]}, factor=1.5)
+check("and so does a x1.5 - what he ate is not a rate to be multiplied",
+      _fac["protein_g"] == 21.0 and _fac["kcal"] == 150.0)
+# Sodium is rounded AFTER the scaling loops, so a naive guard would lose his figure there.
+_na = NB.rescale_item({"kcal": 100.0, "dietary_sodium_mg": 812.0,
+                       "portion_used_g": 50.0,
+                       "stated_fields": ["dietary_sodium_mg"]}, grams=100)
+check("his sodium figure survives the rounding step that runs after the scaling",
+      _na["dietary_sodium_mg"] == 812.0 and _na["kcal"] == 200.0)
+# Holding a None would blank a figure the ladder did supply: this bug for a worse one.
+_none = NB.rescale_item({**_oats, "fibre_g": None, "stated_fields": ["fibre_g"]},
+                        grams=80)
+check("a stated_fields entry with no value behind it blanks nothing",
+      _none["fibre_g"] == 8.1 and "_stated_held" not in _none)
+
+# An inconsistent panel presented in silence is its own trap: his protein next to a kcal
+# worked out from a per-100g row does not add up, and he cannot tell deference from a bug.
+check("the confirm line says the figure was held rather than scaled",
+      "protein 21 g is your figure" in NB.fmt_confirm(_kept)
+      and "should scale too" in NB.fmt_confirm(_kept))
+check("and an ordinary rescale says nothing of the sort",
+      "the rescale left" not in NB.fmt_confirm(_plain))
+_two = NB.rescale_item({**_oats, "protein_g": 21.0, "fat_g": 9.0,
+                        "stated_fields": ["protein_g", "fat_g"]}, grams=80)
+check("two of his figures read as plural rather than a list bolted onto a singular",
+      "protein 21 g, fat 9 g are your figures" in NB.fmt_confirm(_two)
+      and "they should scale too" in NB.fmt_confirm(_two))
+check("the pre-send gate is told why the row does not reconcile",
+      NB._gate_numbers([_kept])[0]["his_own_figures_over_the_lookup"] == ["protein_g"])
+# The FIRST offer is odd for the same reason, before any rescale has happened.
+check("and it is told on the un-rescaled offer too, off stated_fields alone",
+      NB._gate_numbers([{**_oats, "stated_fields": ["protein_g"]}])[0]
+      ["his_own_figures_over_the_lookup"] == ["protein_g"])
+check("and an ordinary row carries no such key",
+      "his_own_figures_over_the_lookup" not in NB._gate_numbers([_plain])[0])
+
+# NOTHING TO SCALE, BY THE NEW ROUTE. An item off the miss path holds his 21 g and nothing
+# else, so it satisfied the old has_basis test, went through the factor branch unchanged,
+# and was counted as done - the same false claim the has_basis guard was written to stop.
+_h_real = {"send": NB.tg.send, "publish": NB.publish_now, "today": NB.today_block,
+           "chat": NB._chat, "gate": NB.GATE_RUNNER}
+_h_sent = []
+NB.tg.send = lambda token, chat, text, **k: _h_sent.append(text)
+NB.publish_now = lambda ctx: None
+NB.today_block = lambda ctx, day: "(totals)"
+NB._chat = lambda ctx, role, text: None
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
+_hs = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-held-")))
+_hctx = FakeCtxCommit(_hs)
+NB.set_pending(_hs, {"batch": [
+    {"resolved_name": "Noodles", "_raw": "noodles", "kcal": 166.0, "protein_g": 5.0,
+     "portion_used_g": 100.0, "per_100g": {"kcal": 166.0, "protein_g": 5.0},
+     "confidence": "label", "source_rung": "cofid"},
+    {"resolved_name": "Chicken salad", "_raw": "chicken salad with 21g protein",
+     "protein_g": 21.0, "stated_fields": ["protein_g"],
+     "confidence": "estimate", "source_rung": "llm"}]})
+NB.apply_batch_rescale(_hctx, NB.get_pending(_hs),
+                       {"kind": "rescale_all", "factor": 1.5}, TODAY, "token", 1)
+_h_after = NB.get_pending(_hs)["batch"]
+check("an item whose only figures are his own is not multiplied",
+      _h_after[1]["protein_g"] == 21.0)
+check("the component that did have a basis of ours was scaled",
+      _h_after[0]["kcal"] == 249.0)
+check("and the reply says so instead of claiming it scaled both",
+      "Scaled 1 of the 2." in _h_sent[-1]
+      and "nothing of mine to scale" in _h_sent[-1]
+      and "Scaled all" not in _h_sent[-1])
+NB.tg.send, NB.publish_now = _h_real["send"], _h_real["publish"]
+NB.today_block, NB._chat = _h_real["today"], _h_real["chat"]
+NB.GATE_RUNNER = _h_real["gate"]
+check("and this section's stubs are put back",
+      NB.tg.send is _h_real["send"] and NB.GATE_RUNNER is _h_real["gate"])
+
+print("\n--- and the stated block actually REACHES the ladder (17 Aug 2026) ---")
+# The half that breaks. resolve() has honoured a `stated` overlay since c6b40652 and not one
+# caller passed it, so the feature was complete and dead. Source-string assertions are not
+# enough here: this calls the offers with the stubbed ladder and reads the kwarg off it.
+_s_real = {"resolve": NB.NR.resolve, "send": NB.tg.send, "publish": NB.publish_now,
+           "today": NB.today_block, "cache": NB.NR.cache_resolved, "gate": NB.GATE_RUNNER,
+           "chat": NB._chat}
+_seen_stated = []
+
+
+def _stated_recording_resolve(text, **k):
+    _seen_stated.append((text, k.get("stated")))
+    return _fake_item(text.title(), kcal=100.0, raw=text)
+
+
+NB.NR.resolve = _stated_recording_resolve
+NB.tg.send = lambda token, chat, text, **k: None
+NB.publish_now = lambda ctx: None
+NB.today_block = lambda ctx, day: "(totals)"
+NB.NR.cache_resolved = lambda store, item: None
+NB._chat = lambda ctx, role, text: None
+NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
+_ss = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-stated-")))
+_sctx = FakeCtxCommit(_ss)
+_S_BLOCK = {"protein_g": 21.0, "basis": "estimate", "components": []}
+
+# The interpret path, which is the one most messages take.
+NB.offer_planned(_sctx, [{"canonical_name": "chicken salad",
+                          "search_terms": ["chicken salad"], "is_supplement": False,
+                          "expect_macros": True, "portion_g": None, "count": None,
+                          "in_session": False, "at": None, "day": "", "meal": "",
+                          "brand": None, "form": "prepared", "category": "meal",
+                          "dose_mg": None, "stated": dict(_S_BLOCK)}],
+                 TODAY, "token", 1, said="chicken salad with 21g protein")
+check("offer_planned hands his figure to the ladder",
+      _seen_stated and _seen_stated[-1][1] == _S_BLOCK)
+
+# The fallback path: classify's own items, so the block is already on the right food.
+_seen_stated.clear()
+NB.offer_items(_sctx, [{"text": "chicken salad with 21g protein", "portion_g": None,
+                        "in_session": False, "stated": dict(_S_BLOCK)}],
+               TODAY, "token", 1, said="chicken salad with 21g protein")
+check("and so does offer_items, the path taken when interpret is unavailable",
+      _seen_stated and _seen_stated[-1][1] == _S_BLOCK)
+
+# A MIXED BATCH. carry_stated only ever sets the key on one item, so most plan items
+# reach here without it at all - the ladder must be given None for those, and the batch
+# must still round-trip through the pending store with the key on one item only.
+_seen_stated.clear()
+
+
+def _plan_item(name, stated=None):
+    it = {"canonical_name": name, "search_terms": [name], "is_supplement": False,
+          "expect_macros": True, "portion_g": None, "count": None, "in_session": False,
+          "at": None, "day": "", "meal": "", "brand": None, "form": "prepared",
+          "category": "meal", "dose_mg": None}
+    if stated is not None:
+        it["stated"] = stated
+    return it
+
+
+NB.offer_planned(_sctx, [_plan_item("chicken salad", dict(_S_BLOCK)),
+                         _plan_item("banana")],
+                 TODAY, "token", 1, said="chicken salad with 21g protein and a banana")
+check("both items reach the ladder and only the one he costed carries a figure",
+      [s for _, s in _seen_stated] == [_S_BLOCK, None])
+check("and the mixed batch round-trips through the pending store",
+      len(NB.get_pending(_ss)["batch"]) >= 2)
+
+# Almost every message states nothing, and resolve must see no overlay for those.
+_seen_stated.clear()
+NB.offer_items(_sctx, [{"text": "a banana", "portion_g": None, "in_session": False}],
+               TODAY, "token", 1, said="a banana")
+check("an ordinary item reaches the ladder with no overlay at all",
+      _seen_stated and _seen_stated[-1][1] is None)
+NB.NR.resolve, NB.tg.send = _s_real["resolve"], _s_real["send"]
+NB.publish_now, NB.today_block = _s_real["publish"], _s_real["today"]
+NB.NR.cache_resolved, NB._chat = _s_real["cache"], _s_real["chat"]
+NB.GATE_RUNNER = _s_real["gate"]
+check("and this section's stubs are put back too",
+      NB.NR.resolve is _s_real["resolve"] and NB.GATE_RUNNER is _s_real["gate"])
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)

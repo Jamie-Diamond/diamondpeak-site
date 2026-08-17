@@ -2378,8 +2378,51 @@ def form_family(form: str) -> str:
     return "unknown"
 
 
+# WHOSE FOOD HIS FIGURE BELONGS TO (17 Aug 2026). resolve() will lay a macro the athlete
+# stated over whatever the ladder finds, and classify puts that block on its own items -
+# but on this path the items actually resolved are the ones interpret RE-PLANS from the
+# raw text, and the allowlist rebuild in interpret never copied `stated`. So the whole of
+# that feature was unreachable from a live message: "chicken salad with 21g protein" was
+# answered with a composition table's protein and his own figure was gone by the time
+# anything could have used it.
+#
+# Carrying it across is an n:m join, and the join is the dangerous part. classify and
+# interpret are two independent model calls on the same sentence, and they routinely
+# disagree about how many foods are in it - "chicken salad with 21g protein and a banana"
+# can come back as two items from one and three from the other, and there is no key to
+# match them on. Attaching his 21 g to the banana would be a SILENT corruption and a
+# strictly worse bug than the one being fixed: the figure would still be his, still
+# labelled as his on the confirm line, and now against a food he said nothing about.
+# Nothing downstream can catch it either, because a stated figure is precisely the thing
+# nothing downstream is permitted to second-guess.
+#
+# So only the shape with no join to get wrong: ONE food in, ONE food out, where there is
+# exactly one item his figure can possibly be about. Every other shape is dropped, as it
+# was before - but LOGGED, because a feature that quietly does nothing in most shapes is a
+# mystery rather than a known limitation, and this line is what makes the gap findable
+# when he asks why his protein went missing.
+def carry_stated(planned: list, classified: list, log=print) -> None:
+    """Move classify's stated macro block onto the planned item, in place, when the
+    message held exactly one food on both parses. A silent no-op when he stated nothing.
+
+    Deliberately NOT part of the allowlist rebuild: `stated` must come from classify,
+    which validates it through stated_macros, and never from interpret's own model, which
+    is not asked for figures and must never start supplying them."""
+    blocks = [i.get("stated") for i in (classified or []) if (i or {}).get("stated")]
+    if not blocks:
+        return
+    if len(classified) == 1 and len(planned) == 1:
+        planned[0]["stated"] = blocks[0]
+        log(f"interpret: carried his own figures onto "
+            f"{str(planned[0].get('canonical_name'))[:40]!r}")
+        return
+    log(f"interpret: DROPPED {len(blocks)} stated macro block(s) - the message parsed as "
+        f"{len(classified)} item(s) and planned as {len(planned)}, so there is no one "
+        f"item they can safely belong to")
+
+
 def interpret(text: str, claude_bin: str, model: str, log=print, runner=None,
-              timeout: int = 90) -> dict | None:
+              timeout: int = 90, classified: list = None) -> dict | None:
     """Plan the lookup before doing it. Returns {'items': [...]} or None.
 
     Jamie's design, and it is better than what it replaces. The ladder used to search the
@@ -2393,7 +2436,11 @@ def interpret(text: str, claude_bin: str, model: str, log=print, runner=None,
     ladder trustworthy in the first place - first for meaning, last for macros.
 
     The returned `form` and `category` are what the ladder validates hits against, which
-    replaces guesswork with a stated expectation."""
+    replaces guesswork with a stated expectation.
+
+    `classified` is classify's own items for the same message, passed in for one purpose:
+    a macro figure the athlete stated is on THOSE items and has to reach the items that
+    actually get resolved. See carry_stated for why it only ever travels in one shape."""
     runner = runner or subprocess.run
     try:
         proc = runner([claude_bin, "--print", "--model", model],
@@ -2462,5 +2509,11 @@ def interpret(text: str, claude_bin: str, model: str, log=print, runner=None,
             "day": normalise_stated_day(it.get("day")),
             "meal": ("" if it.get("in_session") else normalise_meal(it.get("meal"))),
             "search_terms": terms[:4],
+            # `stated` is NOT in this allowlist on purpose - it is attached below, from
+            # classify, rather than read from this call's model. Adding it here would let
+            # a lookup PLANNER supply figures, and "it never supplies a NUMBER" is the
+            # property that makes the ladder trustworthy at all.
         })
+    if out:
+        carry_stated(out, classified or [], log)
     return {"items": out} if out else None
