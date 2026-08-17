@@ -231,9 +231,13 @@ for site, expected in (("_run_once", 3), ("_stream_once", 3)):
 _spawns = _calls_named(_eng_ast, "subprocess.run", "subprocess.Popen")
 check(f"every subprocess spawn in engine.py passes env= ({len(_spawns)} found)",
       len(_spawns) == 3 and all(_passes_env(c) for c in _spawns))
+# Matched WITHOUT the closing paren (17 Aug 2026): what this is guarding is that both
+# helpers take env=, and _stream_once legitimately grew a `run=None` handle when
+# cancellation landed (bug #30). Pinning the exact spelling of the whole signature made
+# an unrelated, correct change look like a scoping regression; the env= claim is intact.
 check("_run_once and _stream_once both take env",
-      "def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None)" in _eng_src
-      and "def _stream_once(prompt, model, extra_args, cwd, env=None)" in _eng_src)
+      "def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None" in _eng_src
+      and "def _stream_once(prompt, model, extra_args, cwd, env=None" in _eng_src)
 check("run_claude takes env and passes it to subprocess.run",
       "env=None" in (BASE / "lib" / "claude_call.py").read_text()
       and "timeout=timeout, env=env" in (BASE / "lib" / "claude_call.py").read_text())
