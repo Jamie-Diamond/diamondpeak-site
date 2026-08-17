@@ -272,9 +272,15 @@ check("both actionable verdicts are the ones that speak and retry",
       V.ACTIONABLE == ("absent", "unchanged"))
 check("the retry line names the destination", "Strava" in V.retry_line("strava")
       and "calendar" in V.retry_line("icu"))
-check("a failed retry tells the athlete nothing was written",
-      "Nothing was written" in V.result_line("strava", False)
-      and "unchanged" in V.result_line("icu", False))
+# 17 Aug 2026: the absolute wording now needs a PROVED verdict behind it. bot.py folds an
+# "unknown" read-back in with a proved "absent", so the unqualified line hedges - see the
+# note above _RESULT_FAIL, and test_write_verify.py for the rest of this.
+check("a failed retry tells the athlete nothing was written, once it is proved",
+      "Nothing was written" in V.result_line("strava", False, verdict="absent")
+      and "unchanged" in V.result_line("icu", False, verdict="absent"))
+check("an unproved failure does not assert the state of the athlete's calendar",
+      "couldn't confirm" in V.result_line("icu", False)
+      and "Treat your calendar as unchanged" not in V.result_line("icu", False))
 check("a successful retry says so without overclaiming",
       V.result_line("strava", True) == "Saved to Strava this time.")
 check("an unknown kind still yields honest copy, never a crash",
