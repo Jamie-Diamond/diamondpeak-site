@@ -248,11 +248,12 @@ def fmt_confirm(item: dict) -> str:
         # would be right to distrust the numbers either way. Same argument as the
         # assumed-portion line above - the assumption is named on the one message where
         # saying "no, scale that too" still costs him nothing.
+        # Worded so it does not repeat describe_provenance, which has already said the
+        # figure is his. The new information is only that the RESCALE did not touch it.
         many = len(item.get("_stated_held") or ()) > 1
-        bits.append(f"_{kept} {'are' if many else 'is'} your own "
-                    f"{'figures' if many else 'figure'}, so I left "
-                    f"{'them' if many else 'it'} as you gave "
-                    f"{'them' if many else 'it'} and scaled the rest. Say if "
+        bits.append(f"_{kept} {'are' if many else 'is'} your "
+                    f"{'figures' if many else 'figure'}, so the rescale left "
+                    f"{'them' if many else 'it'} alone and scaled the rest. Say if "
                     f"{'they' if many else 'it'} should scale too._")
     if item.get("fibre_g"):
         bits.append(f"fibre {round(item['fibre_g'])} g")
@@ -877,13 +878,17 @@ def _gate_numbers(batch: list) -> list:
         if it.get("_stated"):
             row["figures_are_his_own"] = True
             row["his_rows"] = [str(c)[:80] for c in (it.get("_components") or [])[:12]]
-        if it.get("_stated_held"):
-            # WHY THIS ROW DOES NOT RECONCILE (17 Aug 2026). A rescale holds a figure he
-            # stated and scales everything else, so the protein no longer follows from the
-            # kcal and the portion - which is the exact shape the gate is asked to catch.
-            # Named, or the gate blocks the message for the one thing about it that is
-            # deliberate, and he gets silence instead of his own number back.
-            row["his_own_figures_held_unscaled"] = list(it["_stated_held"])
+        # WHY THIS ROW NEED NOT RECONCILE (17 Aug 2026). A macro he stated is laid over the
+        # lookup's row, so the protein does not have to follow from the kcal and the
+        # portion - the exact shape the gate is asked to catch. Named on BOTH shapes, not
+        # just after a rescale: the first offer, straight out of resolve, is already
+        # arithmetically odd for the same reason, and `stated_fields` is the only thing
+        # saying so. Distinct from `figures_are_his_own` above, which means the WHOLE row
+        # is his. Without this the gate blocks the message for the one thing about it that
+        # is deliberate, and he gets silence instead of his own number back.
+        his = it.get("_stated_held") or it.get("stated_fields")
+        if his:
+            row["his_own_figures_over_the_lookup"] = list(his)
         if it.get("_composed"):
             row["costed_as_a_whole_meal"] = True
             row["components"] = [
@@ -1990,7 +1995,16 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
             # Fell through: the model was unreachable. The interpret path below still asks
             # for cooked states and as-eaten portions, which is a poor second to a costed
             # table and far better than refusing to log his dinner.
-        plan = NLU.interpret(t, CLAUDE_BIN, LLM_MODEL, log=log)
+        # HIS FIGURES HAVE TO CROSS THE RE-PLAN (17 Aug 2026). The kcal-bearing case above
+        # never gets here - it took the verbatim path and returned. What DOES get here is a
+        # message that gave one macro and described the rest, "chicken salad with 21g
+        # protein": there is no total to log, so it belongs on the ladder, but his 21 g is
+        # still the best figure anyone has for the protein in it. interpret re-plans from
+        # the raw text and its items are the ones resolved, so classify's items go with it
+        # or the figure is lost at the hand-off. carry_stated decides whether it is safe to
+        # attach; it refuses, loudly, in every shape where it could pick the wrong food.
+        plan = NLU.interpret(t, CLAUDE_BIN, LLM_MODEL, log=log,
+                             classified=got.get("items") or [])
         if plan and plan.get("items"):
             # Pinned on this path too. offer_planned reads each item's day from the PLAN,
             # not from the classify items pinned above, so a day left as a word here would
@@ -2571,6 +2585,12 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
         item = NR.resolve(name, day=day, store=ctx.store, table=ctx.table,
                           portion_g=it.get("portion_g"), fetchers=fetchers,
                           cofid=ctx.cofid, hint=it, queries=it["search_terms"],
+                          # A MACRO HE GAVE, laid over whatever the ladder finds. Only ever
+                          # present when carry_stated judged the message unambiguous enough
+                          # to attach it; absent otherwise, and resolve treats that as no
+                          # overlay at all. The ladder still runs either way - his figure
+                          # replaces the one field it is about, not the lookup.
+                          stated=it.get("stated"),
                           # HIS OWN MESSAGE, not the interpretation. Voiding a rejection is
                           # justified only by HIM asking for the food, and `canonical_name`
                           # and `search_terms` are the interpreter's invention - it rewrites
@@ -3179,6 +3199,13 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                           portion_g=it.get("portion_g"), fetchers=fetchers,
                           cofid=ctx.cofid, hint=hint,
                           queries=hint.get("search_terms"),
+                          # NO JOIN TO GET WRONG ON THIS PATH. These ARE classify's own
+                          # items - the fallback taken when interpret is unavailable - so
+                          # the stated block is already on the right food and carry_stated's
+                          # 1-to-1 rule has nothing to decide. The figure would otherwise be
+                          # lost exactly when the model is down and it is the only one we
+                          # have, which is the same reason the time and the day travel here.
+                          stated=it.get("stated"),
                           # HIS OWN WORDS FOR THIS ITEM, so a rejection he made about
                           # something else - or about this food, before he asked for it by
                           # name - is judged per item rather than across the whole day.
