@@ -3699,17 +3699,37 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
     else:
         patch = {f: new.get(f) for f in _RESCALE_FIELDS if new.get(f) is not None}
         patch.update({"portion_used_g": new.get("portion_used_g"),
+                      # BOTH PORTION KEYS MOVE, OR ONE OF THEM LIES (17 Aug 2026). Only
+                      # portion_used_g was patched here, which was harmless for as long as
+                      # commit_one wrote no portion at all and `portion_g` was None on every
+                      # row: the readers that want grams all spell it
+                      # `portion_used_g or portion_g`, so the stale one was never reached.
+                      # Now that a commit fills both, leaving this one behind would freeze
+                      # the original 80 g into the record beside a corrected 160 g - and the
+                      # same-as path copies `portion_g` ALONE into a fresh item, so "same
+                      # porridge as yesterday" would come back at the amount he corrected
+                      # away from. Set from the same value rather than from the row, None
+                      # included, so the two can never disagree about what he ate.
+                      "portion_g": new.get("portion_used_g"),
                       "portion_estimated": False,
                       "portion_assumed": new.get("portion_assumed")})
         # SAY THE AMOUNT SAFELY, AND SETTLE IT BEFORE THE WRITE (17 Aug 2026). All three
         # lines below formatted portion_used_g with :.0f, but rescale_item's FACTOR branch
-        # only sets that field when the row ALREADY had one, and a freshly committed row
-        # does not: commit_one passes no portion and add_entry stores no per_100g. So "x1.5"
-        # against a committed entry patched the store on the line above and then died on
-        # None.__format__ before a single word reached him. The write landed, the reply
+        # only sets that field when the row ALREADY had one. A freshly committed row did not
+        # have one - commit_one passed no portion and add_entry stored no per_100g - so
+        # "x1.5" against a committed entry patched the store on the line above and then died
+        # on None.__format__ before a single word reached him. The write landed, the reply
         # never came, and his log changed without him being told. A silent mutation of the
         # record is the one failure this file exists to prevent, so the phrase is resolved
         # up here where a mistake cannot strand a completed write.
+        #
+        # THE CAUSE HAS SINCE NARROWED, THE GUARD HAS NOT (17 Aug 2026, later). commit_one
+        # now carries the basis into the record, so an ordinary food row arrives here with a
+        # portion and the factor branch fills it. What is left is the row that genuinely
+        # never had one - a flat white logged as 120 kcal and nothing else, an estimate no
+        # rung could size - and "x1.5" against that still reaches this line with None. The
+        # ordering below is what makes that a wording rather than a silent write, and it
+        # stays whatever fraction of rows can still take that path.
         _g = new.get("portion_used_g")
         amount = (f"{_g:.0f} g" if _g is not None
                   else f"x{factor:g}" if factor else "a new amount")
@@ -4839,7 +4859,29 @@ def commit_one(ctx: Context, item: dict, day: date, today: date = None) -> None:
         # dict in this module carries transient notes (`_stated_held`, `_components`) that
         # have no business in the longitudinal record, and an allowlist is what keeps them
         # out. `or None` so an item with an empty list writes the same row it always did.
-        stated_fields=item.get("stated_fields") or None)
+        stated_fields=item.get("stated_fields") or None,
+        # AND WHAT THE FIGURES WERE COMPUTED FROM (17 Aug 2026). Found the same day and the
+        # same shape as the line above: the item in front of this call already carries both
+        # halves of the basis - `_finalise` names `portion_used_g` and `per_100g` in
+        # PASSTHROUGH_FIELDS, so an ordinary CoFID hit for "80g porridge oats" arrives here
+        # with portion_used_g 80.0 and a full per-100g row - and add_entry had no keyword for
+        # either, so both died at the commit. The stored row had nothing to multiply, and
+        # apply_quantity_correction, which checks for a basis before it will touch a figure,
+        # declined outright. "Make that 160g" against something he confirmed five minutes
+        # earlier, the most ordinary correction there is, got no reply at all. It looked
+        # intermittent because a label photo or a correction against the still-pending offer
+        # supplies a basis by another route, so the paths anyone tested by hand worked.
+        #
+        # portion_used_g FIRST, falling back to portion_g, for the reason spelled out at the
+        # re-resolve above: a resolved item does not carry `portion_g` - it is not in
+        # PASSTHROUGH_FIELDS - so reading that alone would have written None and changed
+        # nothing. The store's two portion keys are set together here and moved together by
+        # a correction, so they cannot drift apart in the record.
+        portion_g=item.get("portion_used_g") or item.get("portion_g"),
+        portion_used_g=item.get("portion_used_g") or item.get("portion_g"),
+        # An item still waiting on a portion has a `per_100g` of `{}` rather than a basis.
+        # add_entry omits a falsy one, so nothing is written and the row keeps its old shape.
+        per_100g=item.get("per_100g"))
     NR.cache_resolved(ctx.store, item)
 
 
