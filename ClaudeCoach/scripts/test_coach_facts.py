@@ -286,9 +286,18 @@ check("both actionable verdicts are the ones that speak and retry",
       V.ACTIONABLE == ("absent", "unchanged"))
 check("the retry line names the destination", "Strava" in V.retry_line("strava")
       and "calendar" in V.retry_line("icu"))
-# 17 Aug 2026: the absolute wording now needs a PROVED verdict behind it. bot.py folds an
-# "unknown" read-back in with a proved "absent", so the unqualified line hedges - see the
-# note above _RESULT_FAIL, and test_write_verify.py for the rest of this.
+# 17 Aug 2026: the absolute wording now needs a PROVED verdict behind it. Both bot branches
+# pass the post-retry verdict through, and the unqualified line still hedges for the callers
+# that have none - see the note above _RESULT_FAIL, and test_write_verify.py for the rest.
+#
+# The membership below is the inference the Strava retry now leans on. Its unproved paths (a
+# failed read-back, and the 120s subprocess timeout that may have written before it died)
+# return "unknown", and that is only safe while "unknown" stays OUT of ACTIONABLE: bot reads
+# `proved = post in ACTIONABLE` to choose between two very differently-worded ops alerts, so
+# quietly widening ACTIONABLE would put "did not land and the retry failed" on an outcome
+# nobody established.
+check("an unknown verdict can never be mistaken for a proved one",
+      "unknown" not in V.ACTIONABLE and "ok" not in V.ACTIONABLE)
 check("a failed retry tells the athlete nothing was written, once it is proved",
       "Nothing was written" in V.result_line("strava", False, verdict="absent")
       and "unchanged" in V.result_line("icu", False, verdict="absent"))

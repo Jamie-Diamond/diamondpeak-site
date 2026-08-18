@@ -208,10 +208,16 @@ _STRAVA_DESC_RE = re.compile(r"\b(description|write-?up|notes?|summary)\b", re.I
 #
 # WHAT IS STILL OPEN, so nobody reads this as closed. engine._tool_input_summary truncates
 # the hint to 80 characters, and the realistic command above is 99 - `push_workout` is cut
-# off upstream and never reaches _classify_tool at all. A write marker in an EARLY segment
-# is now caught unconditionally; one in a LATE segment is caught only when it survives the
-# cut. The remaining fix belongs in lib/engine.py (a summary that keeps the tail, or one
-# fragment per segment) and is not in this module's gift. Pinned by a test below.
+# off upstream and never reaches _classify_tool at all.
+#
+# The surviving rule is CHARACTER OFFSET, not segment position, and the distinction matters
+# because segment position is the intuitive reading and it is wrong. A marker is caught if
+# and only if it falls inside the first 80 characters; segment order no longer affects
+# anything. `python3 /Users/.../ClaudeCoach/lib/icu_fetch.py push_workout` puts the marker
+# at index 99 of its FIRST segment and loses it just the same. So the ordering half is
+# closed outright and the residual is one clean condition rather than a vague "long chains
+# are risky". The remaining fix belongs in lib/engine.py (a summary that keeps the tail, or
+# one fragment per segment) and is not in this module's gift. Pinned by a test below.
 #
 # The five markers are exactly the five keys of _TOOL_WRITES, and a test asserts that
 # correspondence in both directions: a sixth entry added here without a marker in
@@ -443,16 +449,26 @@ _RESULT_OK = {
 #
 # WHICH WAY THE DEFAULT LEANS, and why it is not the other way. The absolute wording needs
 # a PROVED verdict ("absent"/"unchanged") behind it; everything else, INCLUDING verdict=None,
-# gets the hedge. It is tempting to argue the opposite - that a caller with no verdict to
-# give has already proved the failure in its bool - and that argument is wrong on the one
-# caller it would apply to. bot's Strava branch reduces the retry to a bool, and
-# _retry_strava_description returns False on at least two paths with no proof at all:
-# when the read-back itself fails (desc is None, which strava_desc_verdict scores "absent"
-# purely because the text it never received is empty), and on the early return after the
-# 120s subprocess timeout, which may have written before it died. Defaulting to the
-# assertive copy would put "Nothing was written" on both. Hedging costs an under-claim on a
-# proved Strava failure; the alternative costs a false accusation, which is the thing this
-# module exists to prevent.
+# gets the hedge. It is tempting to argue the opposite - that a caller who passes no verdict
+# has already proved the failure in its bool - and it is wrong, because `ok=False` is what a
+# caller returns when it could not establish anything either way. A bare bool cannot tell
+# "proved nothing is there" from "the read-back fell over", and the assertive copy states
+# the first about both. Hedging costs an under-claim on a proved failure; the alternative
+# costs a false accusation, which is the thing this module exists to prevent.
+#
+# THE STRAVA CALLER, which used to be the worked example of that (fixed 17 Aug 2026, later
+# the same day). bot's Strava branch really did reduce its retry to a bool, and
+# _retry_strava_description really did return False on two paths with no proof at all: when
+# the read-back itself failed (desc came back None, which strava_desc_verdict scores
+# "absent" purely because the text it never received is empty), and on the early return
+# after the 120s subprocess timeout, which may have written before it died. Left on the
+# hedge, that was honest. What it was not was complete: the SAME False also carried a
+# genuine proved absence - a description read back and found empty - so every Strava ops
+# alert said "could not be confirmed" even when the failure was established, and a real
+# signal read as noise. _retry_strava_description now returns (ok, verdict): the two
+# unproved paths return "unknown" instead of a fabricated "absent", the proved ones return
+# "absent"/"unchanged", and bot passes it as verdict= exactly as the calendar branch does.
+# The rule above is unchanged; it simply no longer has a caller forced to under-claim.
 _RESULT_FAIL_UNPROVED = {
     "strava": "Still not saving to Strava, and I've logged it for a fix. I couldn't confirm "
               "the description landed, so check the activity before relying on it.",
