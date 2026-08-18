@@ -237,12 +237,133 @@ store.cache_put("old item", {"kcal": 100, "resolved_at": "2024-01-01"})
 check("stale cache entry is a MISS, not a warning",
       store.cache_get("old item", on=TODAY) is None)
 check("absent key is a miss", store.cache_get("never seen", on=TODAY) is None)
+# ONE PAYLOAD, SEVERAL WAYS OF ASKING (18 Aug 2026). The resolution ladder keys a row on
+# the product and points the athlete's own words at it, so several keys have to reach one
+# payload. Pointers rather than copies: a copy per key rots the moment the product is
+# re-resolved under one of them, and then the same food answers with two different macro
+# sets depending on which words were used.
+store.cache_put("co-op matcha cookie#x1",
+                {"kcal": 470, "resolved_at": "2026-08-01", "confidence": "label"},
+                aliases=("one cookie", "a whole matcha cookie"))
+check("an alias reaches the payload it points at",
+      store.cache_get("a whole matcha cookie", on=TODAY)["kcal"] == 470)
+check("the alias is stored as a pointer, not a second copy",
+      json.loads((tmp / "nutrition" / "cache.json").read_text())["one cookie"]
+      == {"alias_of": "co-op matcha cookie#x1"})
+store.cache_put("gone stale", {"kcal": 9, "resolved_at": "2024-01-01"},
+                aliases=("that old thing",))
+check("an alias of a STALE payload is stale too",
+      store.cache_get("that old thing", on=TODAY) is None)
+store.cache_put("dangler", {"alias_of": "a key that is not there"})
+check("a dangling alias is a miss, never a crash",
+      store.cache_get("dangler", on=TODAY) is None)
+# cache_rows is what a search over the cache reads, so an alias must not appear as a
+# second candidate for the same product - and an old flat file, whose rows are ALL
+# payloads keyed on his words, must still read as the resolutions they are.
+rows = dict(store.cache_rows(on=TODAY))
+check("cache_rows returns payloads only, never the aliases pointing at them",
+      "co-op matcha cookie#x1" in rows and "one cookie" not in rows)
+check("cache_rows drops stale rows, as cache_get does",
+      "old item" not in rows and "gone stale" not in rows)
+check("and a pre-alias flat row still reads as a payload",
+      rows.get("m&s nut collection 75g", {}).get("kcal") == 470)
 
 # 14) Unresolved strings are queued for review, never dropped.
 store.log_unresolved("some artisanal thing from a market stall", day=TODAY)
 store.log_unresolved("another mystery", day=TODAY)
 queue = json.loads((tmp / "nutrition" / "unresolved.json").read_text())
 check("unresolved strings are queued", len(queue) == 2)
+
+# 14b) THE QUEUE IS READ BACK NOW (18 Aug 2026). It was write-only for as long as it
+#      existed, which is how ten rows piled up on the VM with an item stuck in there for
+#      most of a day and the athlete never told. Every check below is a reader.
+check("the queue reads back, oldest first",
+      [r["raw_text"] for r in store.read_unresolved()]
+      == ["some artisanal thing from a market stall", "another mystery"])
+check("a read fills the whole row shape rather than handing back holes",
+      store.read_unresolved()[0]["times_seen"] == 1
+      and store.read_unresolved()[0]["last_seen_on"] == TODAY.isoformat()
+      and store.read_unresolved()[0]["nudged_on"] == [])
+
+# 14c) A repeat BUMPS, it does not append. Three rows for one stuck item need one
+#      mapping added to species.json, and would have read the same item back to him
+#      three times in a single nudge.
+_tmr = TODAY + timedelta(days=1)
+store.log_unresolved("  ANOTHER Mystery ", day=_tmr)
+store.log_unresolved("another mystery", day=_tmr)
+_q = store.read_unresolved()
+check("a repeat does not add a second row", len(_q) == 2)
+_myst = [r for r in _q if r["raw_text"] == "another mystery"][0]
+check("case and stray space are the same string", _myst["times_seen"] == 3)
+check("seen_on stays the FIRST sighting - how long it has been stuck is the point",
+      _myst["seen_on"] == TODAY.isoformat())
+check("and last_seen_on carries the latest", _myst["last_seen_on"] == _tmr.isoformat())
+check("a different portion is a DIFFERENT item, never folded in",
+      len(store.read_unresolved()) == 2
+      and store.log_unresolved("62g of the thing", day=_tmr)["times_seen"] == 1
+      and len(store.read_unresolved()) == 3)
+
+# 14d) Being nudged about is recorded, so a row cannot nag for ever.
+store.mark_unresolved_nudged("another mystery", day=_tmr)
+store.mark_unresolved_nudged("another mystery", day=_tmr)
+_myst = [r for r in store.read_unresolved() if r["raw_text"] == "another mystery"][0]
+check("a nudge is recorded once per day, not once per send",
+      _myst["nudged_on"] == [_tmr.isoformat()])
+check("marking a row that is gone is None, never a new row",
+      store.mark_unresolved_nudged("never queued at all", day=_tmr) is None
+      and len(store.read_unresolved()) == 3)
+try:
+    store.mark_unresolved_nudged("another mystery")
+    check("mark_unresolved_nudged requires an explicit local day too", False)
+except TypeError:
+    check("mark_unresolved_nudged requires an explicit local day too", True)
+
+# 14e) Once it is logged it stops being open - the drain commit_one calls.
+check("clearing a queued row removes exactly it",
+      store.clear_unresolved("Another Mystery  ") == 1
+      and [r["raw_text"] for r in store.read_unresolved()]
+      == ["some artisanal thing from a market stall", "62g of the thing"])
+check("clearing something never queued is 0, not an error",
+      store.clear_unresolved("a thing that resolved fine") == 0)
+check("and an empty string can never truncate the file",
+      store.clear_unresolved("") == 0 and store.clear_unresolved("   ") == 0
+      and len(store.read_unresolved()) == 2)
+
+# 14f) LEGACY ROWS. The ten live rows on the VM predate every field above and carry
+#      only raw_text and seen_on. They must read, dedupe against, nudge and clear
+#      without one of them.
+_legacy = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nut-unres-legacy-")))
+(_legacy.dir).mkdir(parents=True, exist_ok=True)
+(_legacy.dir / "unresolved.json").write_text(json.dumps(
+    [{"raw_text": "same Co-op item as yesterday", "seen_on": "2026-08-16"},
+     {"raw_text": "unspecified item weighed 62g", "seen_on": "2026-08-17"}]))
+_lr = _legacy.read_unresolved()
+check("a legacy row reads with the new fields defaulted",
+      len(_lr) == 2 and _lr[0]["times_seen"] == 1
+      and _lr[0]["last_seen_on"] == "2026-08-16" and _lr[0]["nudged_on"] == [])
+check("reading a legacy queue does not rewrite it on disk",
+      json.loads((_legacy.dir / "unresolved.json").read_text())[0]
+      == {"raw_text": "same Co-op item as yesterday", "seen_on": "2026-08-16"})
+_legacy.log_unresolved("same Co-op item as yesterday", day=date(2026, 8, 18))
+_up = _legacy.read_unresolved()[0]
+check("a recurrence upgrades a legacy row in place, keeping its original seen_on",
+      len(_legacy.read_unresolved()) == 2 and _up["times_seen"] == 2
+      and _up["seen_on"] == "2026-08-16" and _up["last_seen_on"] == "2026-08-18")
+check("a legacy row can be nudged and cleared like any other",
+      _legacy.mark_unresolved_nudged("unspecified item weighed 62g",
+                                     day=date(2026, 8, 18))["nudged_on"] == ["2026-08-18"]
+      and _legacy.clear_unresolved("unspecified item weighed 62g") == 1
+      and len(_legacy.read_unresolved()) == 1)
+
+# 14g) A corrupt queue must degrade to empty, exactly like a corrupt month file - the
+#      bot logging food must never die because a review queue will not parse.
+_broken = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nut-unres-broken-")))
+_broken.dir.mkdir(parents=True, exist_ok=True)
+(_broken.dir / "unresolved.json").write_text("[not json at all")
+check("a corrupt queue reads as empty rather than raising", _broken.read_unresolved() == [])
+check("and writes resume over the top of it",
+      _broken.log_unresolved("first good row", day=TODAY)["times_seen"] == 1
+      and len(_broken.read_unresolved()) == 1)
 
 # 15) A corrupt month file must not take the bot down mid-conversation.
 month = tmp / "nutrition" / "2026-09.json"

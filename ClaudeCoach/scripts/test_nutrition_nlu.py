@@ -1229,6 +1229,59 @@ check("interpret's own model cannot supply a stated block through the allowlist"
                               '"stated":{"kcal":900,"protein_g":80}}]}'),
           classified=[{"text": "chicken salad"}])["items"][0])
 
+print("\n--- the correction sees what he has ALREADY said (18 Aug 2026, the cookie) ---")
+# The summary described the item as it stood NOW and nothing else, so "1.5" against an
+# offer of 78 g had exactly one available reading: multiply that by 1.5. The 78 g WAS his
+# 1.5 - he was restating it because the identity was still wrong - and the offer grew to
+# 117 g, then to 175.5 g when he said it a third time.
+_ck = {"resolved_name": "Cookie, chocolate chip", "_raw": "1.5 cookies",
+       "kcal": 561.6, "portion_used_g": 117.0,
+       "per_100g": {"kcal": 480.0},
+       "_rescale_trail": {"factor": 1.5, "from_portion_g": 78.0}}
+_csink = []
+NLU.decide_correction("It's just 1.5", _ck, "claude", "m", log=lambda *a: None,
+                      runner=fixed_runner('{"kind":"unclear"}', _csink))
+check("the prompt carries his own words for the item",
+      '"from_his_words": "1.5 cookies"' in _csink[0])
+check("and says the portion in front of him is the product of his last correction",
+      '"portion_came_from_his_last_correction"' in _csink[0]
+      and '"factor": 1.5' in _csink[0] and '"from_portion_g": 78.0' in _csink[0])
+# An item that has never been rescaled carries no such claim: a field that appeared on
+# every offer would say nothing and would be read as noise.
+_psink = []
+NLU.decide_correction("half of it", _item, "claude", "m", log=lambda *a: None,
+                      runner=fixed_runner('{"kind":"rescale_factor","factor":0.5}',
+                                          _psink))
+# Matched on the JSON key, quotes and colon included: the PROMPT names both fields when it
+# explains them, so a bare substring test is true of every call ever made.
+check("an item with no correction behind it makes no such claim",
+      '"portion_came_from_his_last_correction":' not in _psink[0])
+check("and one resolved from no text of his own carries no words either",
+      '"from_his_words":' not in _psink[0])
+check("the prompt tells the model what a restated figure means, with the incident",
+      "A FIGURE ALREADY APPLIED CHANGES NOTHING" in NLU.CORRECTION_PROMPT
+      and "18 Aug 2026" in NLU.CORRECTION_PROMPT
+      and "175.5" in NLU.CORRECTION_PROMPT)
+check("and names the two decisions that are honest instead of scaling twice",
+      "belongs\n        inside `text`" in NLU.CORRECTION_PROMPT
+      and "`unclear` is the honest answer" in NLU.CORRECTION_PROMPT)
+# A component of a pending meal can be restated in exactly the same way.
+check("a batch summary carries his words for each component too",
+      NLU.batch_summaries([{"resolved_name": "Egg noodles", "_raw": "egg noodles, cooked"}]
+                          )[0]["from_his_words"] == "egg noodles, cooked")
+
+# THE PROMPT IS %-FORMATTED, and a stray percent sign in it raises inside decide_correction's
+# own try - which returns None, which the caller reads as "the model was unreachable" and
+# answers with the regex fallback. Adding "another 50%" to the text above did exactly that
+# and turned every correction in this file into a silent no-op. Named here so the next
+# edit fails with a sentence rather than an IndexError three checks later.
+try:
+    _fmt = (NLU.CORRECTION_PROMPT % ("{}", "x")) and ""
+except (TypeError, ValueError) as exc:
+    _fmt = f"{type(exc).__name__}: {exc}"
+check(f"the correction prompt survives its own %-formatting ({_fmt or 'it does'})",
+      _fmt == "")
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)

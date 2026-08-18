@@ -7,6 +7,7 @@ a ceiling rendered as a progress bar reads compliance as failure, and an estimat
 rendered like label data corrupts trust in the whole record. Those are tested here.
 """
 import importlib.util
+import json
 import sys
 import tempfile
 from datetime import date, datetime, timedelta
@@ -1546,12 +1547,30 @@ check("and it is offered with no Log it button", sent_full[-1][1] is None)
 # fast_intent sees a pending record and returns confirm, and commit_pending writes the very
 # figures the gate called absurd.
 sent_msgs.clear()
+# STUBBED even though this confirmation states no portion and so cannot re-price: the
+# recovery path can reach offer_items now, and a real ladder pass out of this section would
+# be a network call in an offline test suite the day somebody edits the line above.
+_gate_reoffered = []
+_gate_real_offer_items = NB.offer_items
+NB.offer_items = lambda ctx, items, *a, **k: _gate_reoffered.append(list(items))
 NB.commit_pending(gctx2, NB.get_pending(gate_store), TODAY, "token", 1)
 check("a blocked offer refuses to commit",
       not (gate_store.get_day(TODAY).get("entries") or [])
-      and "not logging that one" in sent_msgs[-1])
+      and "I have not logged that" in sent_msgs[-1]
+      and _gate_reoffered == [])
+# THE REFUSAL IS NOT A DEAD END ANY MORE (17 Aug 2026). It used to say "tell me what it was"
+# and nothing else, so the one thing he could not learn from it was what had gone wrong.
+check("and names the food and the thing to restate, not just 'tell me again'",
+      "stir fry" in sent_msgs[-1].lower() and "portion in grams" in sent_msgs[-1])
+# ...but the gate's REASON is model prose about food, and the fixture's is "447 kcal is not
+# plausible". Quoting that would put a figure no source produced into the chat beside real
+# ones, which is the hole nutrition_gate's fallback check exists to keep shut.
+check("while a block reason carrying a figure is withheld rather than quoted",
+      "447" not in sent_msgs[-1]
+      and any("block reason withheld" in l for l in gate_lines))
 check("and says so without gating the refusal itself",
       not any("kind=confirmation" in l for l in gate_lines[-2:]))
+NB.offer_items = _gate_real_offer_items
 
 # 2) A re-offer clears the mark, or a corrected offer he HAS seen would stay unloggable.
 NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
@@ -1843,6 +1862,96 @@ check("and the meal he had already named survives the swap",
 check("the message says it used the pack's figures rather than offering it twice",
       "rather than offering it twice" in sent_msgs[-1])
 NB.clear_pending(pz_store)
+
+# AND THE AMOUNT HE HAD ALREADY GIVEN SURVIVES IT (18 Aug 2026, the 62 g cookie). He had
+# stated 62 g of a cookie whose pack reads 471 kcal/100 g, then re-sent the label to help
+# the bot identify it - and every swap re-offered the cookie at the pack's own basis, 471
+# kcal, contradicting the amount he had given minutes earlier. The gate blocked it as
+# contradicts_input, correctly, which left him no way forward but to state 62 g again into
+# the same loop. The label knows the food; only he knows how much of it he ate.
+COOKIE_LABEL = {"kind": "nutrition_label", "per": "100g", "kcal": 471, "protein_g": 5.4,
+                "carb_g": 59, "fat_g": 23, "fibre_g": 2.4,
+                "product": "Oat and raisin cookie",
+                "ingredients": "oats, raisins, wheat flour, butter"}
+NB.NLU.read_photo = lambda *a, **k: dict(COOKIE_LABEL)
+NB.NLU.decide_label_target = lambda label, cands, *a, **k: {"kind": "replace",
+                                                            "entry_id": "pending:0"}
+
+
+def _stated_cookie():
+    """The pending offer as it stood: his 62 g, on a lookup that got the food wrong."""
+    NB.set_pending(pz_store, {"batch": [{"resolved_name": "Oat cookie", "_raw": "62g cookie",
+                                         "kcal": 280.0, "protein_g": 3.0, "carb_g": 35.0,
+                                         "fat_g": 14.0, "portion_used_g": 62.0,
+                                         "portion_estimated": False,
+                                         "portion_assumed": "62 g - as stated",
+                                         "confidence": "estimate", "source_rung": "llm",
+                                         "_meal": "snack"}]})
+
+
+_stated_cookie()
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+_cookie = NB.get_pending(pz_store)["batch"][0]
+check("the label is priced at the amount he stated, not at the pack's own basis",
+      _cookie["kcal"] == 292.0 and _cookie["portion_used_g"] == 62.0)
+check("every macro is recomputed from the pack's per-100g row at that amount",
+      (_cookie["protein_g"], _cookie["carb_g"], _cookie["fat_g"], _cookie["fibre_g"])
+      == (3.3, 36.6, 14.3, 1.5))
+check("the pack's identity is the label's, not the lookup's",
+      _cookie["resolved_name"] == "Oat and raisin cookie"
+      and _cookie["confidence"] == "label")
+check("the per-100g basis survives, so the next correction is still a multiplication",
+      (_cookie.get("per_100g") or {}).get("kcal") == 471.0)
+check("his amount is not re-branded as an assumption of ours",
+      _cookie.get("portion_estimated") is False
+      and "as stated" in (_cookie.get("portion_assumed") or ""))
+check("and the meal he named still survives the rescale, not just the swap",
+      _cookie["_meal"] == "snack")
+check("and the offer says the amount it kept, which fmt_confirm prints only for a guess",
+      "62 g" in sent_msgs[-1] and "rather than offering it twice" in sent_msgs[-1])
+# A PORTION WE GUESSED IS NOT A PORTION HE GAVE. The pack's basis is stated data and our
+# estimate of a plate is not, so an assumed portion does not override it - the deliberate
+# other half of the rule above, and the reason the carry-over reads portion_estimated.
+NB.set_pending(pz_store, {"batch": [{"resolved_name": "Oat cookie", "_raw": "a cookie",
+                                     "kcal": 225.0, "portion_used_g": 50.0,
+                                     "portion_estimated": True,
+                                     "portion_assumed": "50 g - my estimate for a cookie",
+                                     "confidence": "estimate", "source_rung": "llm"}]})
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("a portion WE assumed does not overrule the pack's own basis",
+      NB.get_pending(pz_store)["batch"][0]["kcal"] == 471.0)
+# AND A PANEL WITH NOTHING TO MULTIPLY BY NEVER CLAIMS TO HAVE USED HIS AMOUNT. A
+# per-portion label that did not print its serving weight has no per-100g row and no grams
+# of its own, so his 62 g cannot be priced - and a sentence saying it was kept would be a
+# claim about work the code did not do, which is the one class of failure this file exists
+# to prevent. The figures stand as the panel gave them and the message stays quiet.
+NB.NLU.read_photo = lambda *a, **k: {"kind": "nutrition_label", "per": "portion",
+                                     "kcal": 300, "protein_g": 4,
+                                     "product": "Cookie, one biscuit"}
+_stated_cookie()
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("a panel with no basis to scale from is left exactly as the pack gave it",
+      NB.get_pending(pz_store)["batch"][0]["kcal"] == 300.0)
+check("and the message claims no amount it could not actually apply",
+      "62 g" not in sent_msgs[-1] and "kept the" not in sent_msgs[-1])
+# NOTHING TO SCALE IS NOT THE SAME AS SCALED (apply_batch_rescale's rule, 17 Aug 2026). A
+# panel read as a serving weight with no figures on it goes through rescale_item's RATIO
+# branch, multiplies nothing, and still comes back a dict wearing portion_used_g - so a
+# bare "did it return?" test would announce the pack priced at his 62 g with no pack
+# figures anywhere on the offer.
+NB.NLU.read_photo = lambda *a, **k: {"kind": "nutrition_label", "per": "portion",
+                                     "portion_g": 40, "product": "Cookie, unreadable panel"}
+_stated_cookie()
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("a panel with a serving weight but no figures claims nothing was priced",
+      "62 g" not in sent_msgs[-1] and "kept the" not in sent_msgs[-1]
+      and NB.get_pending(pz_store)["batch"][0].get("kcal") is None)
+NB.clear_pending(pz_store)
+NB.NLU.read_photo = lambda *a, **k: dict(LABEL_PHOTO)
 
 print("\n--- REPLAY 15:25: 'you've added the pizza twice' (14 Aug 2026) ---")
 # It was decided `unclear`, fell into a re-resolution, and the reply said the duplicate had
@@ -2450,6 +2559,158 @@ check("he is told plainly why it is being priced again",
       "will not log it blind" in friction_sent[-1])
 NB.offer_items = _f_real["offer_items"]
 
+# 3b) A BLOCKED OFFER CONFIRMED IN WORDS, WHICH IS THE SHAPE THAT DEAD-ENDED (17 Aug 2026).
+#     The gate was right five times running that evening. Then he said "Yes that's the right
+#     one 62g of that." - the correction and the confirmation in one sentence - and got "I am
+#     not logging that one ... tell me what it was", which is the safe half of an answer with
+#     the useful half missing. The recovery above did not cover it: `ordered` is set ONLY by
+#     fast_intent's looks_like_commit_order, so it fires for "log the bloody food" and for
+#     nothing else a person says before he gets that annoyed.
+check("neither a bare yes nor a natural confirmation is an 'ordered' commit",
+      not (NLU.fast_intent("yes", True) or {}).get("ordered")
+      and not (NLU.fast_intent("that's right", True) or {}).get("ordered"))
+NB.NLU.classify = lambda text, pending, *a, **k: {"intent": "confirm"}
+NB.set_pending(friction_store, {"batch": [_fake_item("Whole 62g pack, matcha cookie", 438,
+                                                     raw="the matcha cookie")]})
+NB._mark_pending_gate_blocked(fctx, "the offer is for the whole pack, he said less")
+_reoffered = []
+NB.offer_items = lambda ctx, items, *a, **k: _reoffered.append(list(items))
+friction_sent.clear()
+_before = len(friction_store.get_day(TODAY).get("entries") or [])
+NB.handle_text(fctx, "Yes that's the right one 62g of that.", "token", 1)
+check("a blocked offer confirmed WITH a restated portion is priced again at his figure",
+      len(_reoffered) == 1 and _reoffered[0][0]["text"] == "the matcha cookie"
+      and _reoffered[0][0]["portion_g"] == 62.0)
+check("and still nothing is written on the way through",
+      len(friction_store.get_day(TODAY).get("entries") or []) == _before)
+check("the pending is cleared first, so the re-offer cannot duplicate it",
+      NB.get_pending(friction_store) is None)
+check("he is told nothing was added and that it is his figure being used",
+      "nothing has been added" in friction_sent[-1] and "62 g" in friction_sent[-1])
+check("and it is not the dead end he actually got",
+      "I am not logging that one" not in friction_sent[-1])
+
+# A BARE YES ADDS NOTHING, so it must NOT re-price: the ladder is deterministic, so the
+# second pass returns the first pass's figures, meets the same block, and has spent a ladder
+# pass and an Opus call to arrive back where it started.
+NB.set_pending(friction_store, {"batch": [_fake_item("Whole 62g pack, matcha cookie", 438,
+                                                     raw="the matcha cookie")]})
+NB._mark_pending_gate_blocked(fctx, "the offer is for the whole pack, he said less")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "yes", "token", 1)
+check("a bare yes on a blocked offer does not re-price it", _reoffered == [])
+check("but the refusal names what confused the bot and what to restate",
+      "he said less" in friction_sent[-1] and "matcha cookie" in friction_sent[-1]
+      and "portion in grams" in friction_sent[-1])
+check("and the offer is kept, so a correction can still land on it",
+      (NB.get_pending(friction_store) or {}).get("_gate_blocked"))
+# THE ASK REACHES THE TRANSCRIPT. handle_text records his side on the way in, so an
+# unrecorded refusal leaves recent_chat() ending on a question nobody answered - and the
+# gate's own stale_context rule blocks a reply for "asking again for something he has
+# already answered", which it cannot judge if the asking was never written down.
+_turns = friction_store.recent_chat()
+check("the refusal and what it asked for are recorded, not just sent",
+      _turns[-1]["role"] == "coach" and "asked him for the portion" in _turns[-1]["text"])
+# `[gate]`, never `[log]`: reconstructable_offer stops at the first `[log] ` line that is
+# not an offer, and this refusal deliberately KEEPS the pending record.
+check("and it does not read as the offer having ended",
+      not _turns[-1]["text"].startswith("[log] ")
+      and NB.reconstructable_offer(fctx) != [])
+# A REASON CARRYING A FIGURE IS DROPPED WHOLE. nutrition_gate figure-checks its FALLBACK and
+# not its reason, because the reason was only ever written to the log. Quoted to him it is a
+# model-authored number arriving in the chat beside real ones, so it goes through the same
+# detector - and the refusal still does its job without it.
+NB.set_pending(friction_store, {"batch": [_fake_item("Stir fry", 447, raw="the stir fry")]})
+NB._mark_pending_gate_blocked(fctx, "447 kcal is not plausible for that meal")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "yes", "token", 1)
+check("a block reason carrying figures is withheld, not quoted at him",
+      "447" not in friction_sent[-1])
+check("and the refusal still names the food and the way out",
+      "stir fry" in friction_sent[-1].lower() and "portion in grams" in friction_sent[-1])
+# The inline button never reaches handle_text at all - it goes straight to commit_pending -
+# which is the second route the old `ordered` recovery could not have covered.
+NB.set_inbound(fctx, "[tapped Log it]")
+friction_sent.clear()
+NB.commit_pending(fctx, NB.get_pending(friction_store), TODAY, "token", 1)
+check("the Log it button on a blocked offer gets the same recovery, not a write",
+      _reoffered == [] and "I have not logged that" in friction_sent[-1]
+      and not friction_store.get_day(TODAY).get("entries"))
+
+# GRAMS ONLY. A factor or "the whole pack" is computed FROM the item's existing basis, which
+# is the set of figures the gate just refused - re-offering that is the laundering
+# carry_pending_batch refuses at the merge, arriving by the recovery instead.
+for _said in ("yes, double that", "yes it was the whole pack"):
+    NB.set_pending(friction_store, {"batch": [_fake_item("Mystery meal", 9000,
+                                                         raw="whatever that was")]})
+    NB._mark_pending_gate_blocked(fctx, "magnitude")
+    _reoffered.clear(); friction_sent.clear()
+    NB.handle_text(fctx, _said, "token", 1)
+    check(f"{_said!r} scales the blocked figures, so it is asked about, not re-priced",
+          _reoffered == [] and "portion in grams" in friction_sent[-1])
+# ...and a bare reason_class on the record reads as English rather than as a log token.
+check("a block recorded as a bare class name is still explained in words",
+      "did not look right for what you described" in friction_sent[-1])
+
+# ONE ITEM, ONE FIGURE. Against a batch, "62g of that" is a guess about which line he means.
+NB.set_pending(friction_store, {"batch": [_fake_item("Toast", 90, raw="toast"),
+                                          _fake_item("Jam", 40, raw="jam")]})
+NB._mark_pending_gate_blocked(fctx, "magnitude")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "yes that's right, 62g of that", "token", 1)
+check("a portion against a two-item blocked batch is ambiguous, so it asks",
+      _reoffered == [] and "Toast, Jam" in friction_sent[-1])
+
+# A CORRECTION IS NEVER RE-PRICED. offer_items rebuilds the pending record as {"batch": ...},
+# so `_replaces` would be dropped and the confirmed re-offer would ADD an entry beside the
+# one it was meant to replace. Silent duplicate; the recovery names the entry and asks.
+NB.set_pending(friction_store, {"batch": [_fake_item("Cookie", 438, raw="the cookie")],
+                                "_replaces": {"id": "e9", "name": "Matcha cookie"}})
+NB._mark_pending_gate_blocked(fctx, "magnitude")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "Yes that's the right one 62g of that.", "token", 1)
+check("a blocked REPLACEMENT is never priced again, however he confirms it",
+      _reoffered == [] and NB.get_pending(friction_store) is not None)
+check("and the entry it was tied to is named, so he knows what is still there",
+      "Matcha cookie" in friction_sent[-1]
+      and "have not touched what it was replacing" in friction_sent[-1])
+# The same holds for an explicit ORDER, which is where the duplicate has been reachable since
+# that branch was written: mark_pending_replaces deliberately keeps the block across it.
+NB.NLU.classify = _f_real["classify"]
+friction_sent.clear()
+NB.handle_text(fctx, "Log the bloody food", "token", 1)
+check("even an imperative order does not re-price a blocked replacement",
+      _reoffered == [] and "Matcha cookie" in friction_sent[-1])
+# A label correction holds figures off his own pack. Re-pricing throws away the best source
+# in the system to replace it with a search.
+NB.NLU.classify = lambda text, pending, *a, **k: {"intent": "confirm"}
+NB.set_pending(friction_store, {"batch": [_fake_item("Coop pizza", 1147, raw="the pizza")],
+                                "_apply_label_to": {"id": "e1", "name": "pizza",
+                                                    "kcal": 964}})
+NB._mark_pending_gate_blocked(fctx, "magnitude")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "yes that's right, 350g of that", "token", 1)
+check("a blocked LABEL correction is never priced again either",
+      _reoffered == [] and not friction_store.get_day(TODAY).get("entries"))
+check("and he is asked for the label, not for a search term",
+      "send me the photo again" in friction_sent[-1])
+
+# THE ITEM'S TAGS TRAVEL WITH THE RE-PRICE. in_session, the clock time, the day and the meal
+# were settled on the first pass and are not what the gate objected to; dropping them would
+# move in-session fuel off his ride totals as the price of a re-price.
+_fuel = _fake_item("Gel", 90, raw="a gel")
+_fuel.update({"in_session": True, "_at": "13:50", "_day": "yesterday", "_meal": ""})
+NB.set_pending(friction_store, {"batch": [_fuel]})
+NB._mark_pending_gate_blocked(fctx, "magnitude")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "yes, 60g of that", "token", 1)
+check("a re-priced item keeps its in-session tag, its time and its day",
+      len(_reoffered) == 1 and _reoffered[0][0]["in_session"] is True
+      and _reoffered[0][0]["at"] == "13:50" and _reoffered[0][0]["day"] == "yesterday")
+NB.offer_items = _f_real["offer_items"]
+NB.NLU.classify = _f_real["classify"]
+NB.clear_pending(friction_store)
+
 # 4) PARTIAL CONFIRM. Commit what he accepted; hold what he is arguing about.
 NB.clear_pending(friction_store)
 part_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-partial-")))
@@ -2507,7 +2768,12 @@ NB.apply_confirm_except(pctx, NB.get_pending(part_store),
                         TODAY, "token", 1)
 check("a partial confirm cannot commit an offer the gate blocked",
       len(part_store.get_day(TODAY)["entries"]) == before
-      and "not logging any of that" in friction_sent[-1])
+      and "I have not logged that" in friction_sent[-1])
+# And it answers with the same recovery line as every other confirmation route, rather than
+# its own dead-end refusal: this is the path reached mid-argument, so it is the last one that
+# should tell him least. Two items and no stated portion is the ask, never a guess.
+check("and it names what to restate instead of asking him to start again",
+      "Nonsense" in friction_sent[-1] and "portion in grams" in friction_sent[-1])
 
 # 5) A GATE BLOCK IS FED BACK, ONCE. Blocking the same wrong stance three times stopped the
 #    sentence and never corrected it.
@@ -3604,6 +3870,275 @@ NB.today_block, NB._chat = _c_real["today"], _c_real["chat"]
 NB.NR.cache_resolved, NB.GATE_RUNNER = _c_real["cache"], _c_real["gate"]
 check("and this section's stubs are put back",
       NB.tg.send is _c_real["send"] and NB.GATE_RUNNER is _c_real["gate"])
+
+print("\n--- REPLAY: saying “1.5” again is not another 1.5x (18 Aug 2026, the cookie) ---")
+# He had said "1.5 cookies" and was offered 78 g, which IS 1.5 of them and was right. What
+# was wrong was the identity, so he wrote "it's the fucking one I sent picture of twice
+# today and yesterday. 1.5" - the same amount restated. decide_correction read the bare
+# number as rescale_factor 1.5 and the code multiplied the 78 g that already was his 1.5
+# into 117 g. The gate blocked that offer as contradicting his input, so he never saw it;
+# he restated the amount once more and the next decision came back as `rescale` grams
+# 175.5, which is 117 x 1.5. One unchanging fact, +50% every time he repeated it.
+#
+# Run against the real store, the real rescale_item and the real apply_quantity_correction,
+# with the model's decisions injected as the qc dicts handle_text builds from them - the
+# decision is the model's job and the compounding was the code's.
+# The section above this one puts the REAL tg.send back, so this one stubs its own or
+# every offer here tries to reach Telegram.
+_r_real = {"send": NB.tg.send, "publish": NB.publish_now, "chat": NB._chat,
+           "cache": NB.NR.cache_resolved}
+_r_sent = []
+NB.tg.send = lambda token, chat, text, **k: _r_sent.append(text)
+NB.publish_now = lambda ctx: None
+NB._chat = lambda ctx, role, text: None
+NB.NR.cache_resolved = lambda store, item: None
+_rs = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-restate-")))
+_rctx = FakeCtxCommit(_rs)
+
+
+def _cookie():
+    """The offer as it stood: 1.5 of a 52 g cookie, priced off a per-100g basis."""
+    return {"resolved_name": "Cookie, chocolate chip", "_raw": "1.5 cookies",
+            "raw_text": "1.5 cookies", "kcal": 374.4, "protein_g": 4.7,
+            "carb_g": 46.8, "fat_g": 18.7, "portion_used_g": 78.0,
+            "per_100g": {"kcal": 480.0, "protein_g": 6.0, "carb_g": 60.0, "fat_g": 24.0},
+            "confidence": "estimate", "source_rung": "llm"}
+
+
+NB.set_pending(_rs, {"batch": [_cookie()]})
+# STEP ONE, UNCHANGED. The first 1.5x is still executed: nothing on the item yet says the
+# 78 g was itself his 1.5, and refusing a first factor would break every honest "half of
+# it". This is the step the prompt change is for, and it is the model's call.
+NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"factor": 1.5},
+                             TODAY, "token", 1)
+_r1 = NB.get_pending(_rs)["batch"][0]
+check(f"the first factor is applied as it always was (portion {_r1['portion_used_g']})",
+      _r1["portion_used_g"] == 117.0 and _r1["kcal"] == 561.6)
+check("and the item now records that its portion came from a x1.5 of 78 g",
+      _r1["_rescale_trail"] == {"factor": 1.5, "from_portion_g": 78.0})
+# The gate blocked exactly this offer in production, so he never saw the 117 g at all.
+# Marked directly rather than by stubbing a blocking verdict: send_verified's gate is
+# skipped in this harness for want of an inbound message, and this is the one line it
+# would have run.
+NB.set_pending(_rs, {"batch": [dict(_r1)]})
+NB._mark_pending_gate_blocked(_rctx, "contradicts_input")
+check("the blocked offer he was never shown is still on the table",
+      NB.get_pending(_rs).get("_gate_blocked") == "contradicts_input")
+
+# STEP TWO, THE ONE THAT RAN AWAY. Same fact, third time of asking, and the decision comes
+# back as the GRAMS that factor would produce rather than as the factor itself - so a
+# check that only looked at factors would have missed it.
+_r_before = len(_r_sent)
+_r_handled = NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"grams": 175.5},
+                                          TODAY, "token", 1)
+_r2 = NB.get_pending(_rs)["batch"][0]
+check("the compounding rescale is declined rather than executed",
+      _r_handled is False)
+# DECLINED, NOT ANSWERED: False sends handle_text on to the re-resolution path with his own
+# words, which is what he was actually asking for - he was disputing WHICH cookie it was.
+# A reply from here would be a second voice on the same message.
+check("and nothing is said from here - the caller answers him",
+      len(_r_sent) == _r_before)
+check(f"and the cookie is NOT 175.5 g (it is {_r2['portion_used_g']} g)",
+      _r2["portion_used_g"] != 175.5 and _r2["kcal"] != 842.4)
+check("it is put back to the 78 g that was already his 1.5",
+      _r2["portion_used_g"] == 78.0 and _r2["kcal"] == 374.4)
+check("the restored offer carries no trail, so it is not read as a repeat next time",
+      "_rescale_trail" not in _r2)
+# The block belonged to the 117 g version, which has just been taken back with it. The
+# offer now on the table is the earlier one he WAS shown and which did pass the gate.
+check("and the gate block goes with the offer it was about",
+      "_gate_blocked" not in NB.get_pending(_rs))
+
+# The same message a fourth time, arriving as the factor rather than as grams.
+NB.set_pending(_rs, {"batch": [dict(_r1)]})
+check("the same ratio a second time is declined too",
+      NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"factor": 1.5},
+                                   TODAY, "token", 1) is False
+      and NB.get_pending(_rs)["batch"][0]["portion_used_g"] == 78.0)
+# AND A REAL SECOND CORRECTION STILL WORKS. The guard is about one figure applied twice,
+# not about correcting a correction: "no, half that" after a 1.5x is a different number and
+# has to go through.
+NB.set_pending(_rs, {"batch": [dict(_r1)]})
+check("a DIFFERENT ratio against the same offer is still applied",
+      NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"factor": 0.5},
+                                   TODAY, "token", 1) is True
+      and NB.get_pending(_rs)["batch"][0]["portion_used_g"] == 58.5)
+NB.set_pending(_rs, {"batch": [dict(_r1)]})
+check("and so is a weight that is not the one the last factor would have produced",
+      NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"grams": 130.0},
+                                   TODAY, "token", 1) is True
+      and NB.get_pending(_rs)["batch"][0]["portion_used_g"] == 130.0)
+
+# THE WHOLE-PACK PATH IS NOT A REPEAT OF ANYTHING, and the guard runs before it: "actually
+# I had the whole pack" arrives with neither grams nor a factor on it, so the check has
+# nothing to compare and the pack weight is read below it as it always was. Pinned because
+# the ordering is the only thing keeping that true - a guard placed after the pack lookup
+# would be comparing a weight off a label against his last ratio.
+NB.set_pending(_rs, {"batch": [dict(_r1, pack_g=260.0)]})
+check("a whole-pack correction against a rescaled offer still scales to the pack",
+      NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"whole_pack": True},
+                                   TODAY, "token", 1) is True
+      and NB.get_pending(_rs)["batch"][0]["portion_used_g"] == 260.0)
+
+# The arithmetic on its own, away from the store.
+check("a repeat is recognised whether it arrives as the ratio or as the grams",
+      NB._repeat_of_last_rescale(_r1, factor=1.5)
+      and NB._repeat_of_last_rescale(_r1, grams=175.5)
+      and NB._repeat_of_last_rescale(_r1, grams=175.0))     # a rounded restatement
+check("and an item with no trail behind it is never a repeat",
+      NB._repeat_of_last_rescale(_cookie(), factor=1.5) == ""
+      and NB._repeat_of_last_rescale(_cookie(), grams=117.0) == "")
+# Grams REPLACE a portion rather than multiplying it, so no memory of one is needed - and
+# stamping a trail on every grams rescale would put a new key on almost every item here.
+check("a grams rescale leaves no trail, because it cannot compound",
+      "_rescale_trail" not in NB.rescale_item(_cookie(), grams=100))
+
+# THE 17 AUG GUARD IS UNTOUCHED BY ALL OF THIS. A figure he stated is held on the way up
+# and still his on the way back down: the undo is an ordinary rescale and defers like one.
+_r_stated = {**_cookie(), "protein_g": 21.0, "stated_fields": ["protein_g"]}
+_r_up = NB.rescale_item(_r_stated, factor=1.5)
+check("a trail-stamped rescale still refuses to recompute a figure he gave",
+      _r_up["protein_g"] == 21.0 and _r_up["_stated_held"] == ["protein_g"]
+      and _r_up["kcal"] == 561.6)
+_r_down = NB._undo_rescale(_r_up)
+check("and putting it back does not invent one either",
+      _r_down["protein_g"] == 21.0 and _r_down["portion_used_g"] == 78.0)
+# With no portion to go back to, the undo is the reciprocal of what was applied.
+_r_nop = NB.rescale_item({"kcal": 200.0, "protein_g": 10.0}, factor=2.0)
+check("an item with no portion is undone by the reciprocal of its factor",
+      _r_nop["kcal"] == 400.0
+      and NB._undo_rescale(_r_nop)["kcal"] == 200.0)
+check("and an item that was never rescaled cannot be undone",
+      NB._undo_rescale(_cookie()) is None)
+
+# The trail is a note between two corrections and must never become a field of the log.
+NB.commit_one(_rctx, _r1, TODAY)
+check("the trail never reaches the stored row",
+      all("_rescale_trail" not in e for e in _rs.get_day(TODAY)["entries"]))
+NB.tg.send, NB.publish_now = _r_real["send"], _r_real["publish"]
+NB._chat, NB.NR.cache_resolved = _r_real["chat"], _r_real["cache"]
+check("and this section's stubs are put back",
+      NB.tg.send is _r_real["send"] and NB._chat is _r_real["chat"])
+
+print("\n--- the unresolved queue finally says something out loud (18 Aug 2026) ---")
+# unresolved.json was written by the ladder and read by NOBODY for as long as it existed.
+# Ten rows on the VM going back over a week, one of them a Co-op item that sat open most
+# of a day while Jamie had no idea an entry was still missing, because nothing ever told
+# him. These are the checks that the queue now reaches him, that it says it ONCE per item
+# and TWICE per row at most, and that logging the thing shuts it up.
+_n_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-nudge-")))
+_N_TODAY = date(2026, 8, 18)
+
+# Nothing due is silence, not an empty message. The commonest outcome by far - most
+# mornings the queue is empty or everything in it is from today.
+check("an empty queue produces no message at all",
+      NB.fmt_unresolved_nudge(NB.due_unresolved([], _N_TODAY), _N_TODAY) == "")
+_n_store.log_unresolved("something from a market stall", day=_N_TODAY)
+check("a SAME-DAY item is not stuck, it is in progress - no nudge yet",
+      NB.due_unresolved(_n_store.read_unresolved(), _N_TODAY) == [])
+check("and one clear day later it is",
+      len(NB.due_unresolved(_n_store.read_unresolved(), _N_TODAY + timedelta(days=1))) == 1)
+
+# The two production rows that prompted this, in the shape they actually have on the VM:
+# raw_text and seen_on only, none of the fields added today.
+(_n_store.dir / "unresolved.json").write_text(json.dumps(
+    [{"raw_text": "same Co-op item as yesterday", "seen_on": "2026-08-16"},
+     {"raw_text": "unspecified item weighed 62g (scaled x1.5 per athlete's note)",
+      "seen_on": "2026-08-17"},
+     {"raw_text": "a flapjack from the cafe", "seen_on": "2026-08-18"}]))
+_n_due = NB.due_unresolved(_n_store.read_unresolved(), _N_TODAY)
+check("legacy rows with none of the new fields still nudge",
+      [r["raw_text"] for r in _n_due]
+      == ["same Co-op item as yesterday",
+          "unspecified item weighed 62g (scaled x1.5 per athlete's note)"])
+_n_msg = NB.fmt_unresolved_nudge(_n_due, _N_TODAY)
+# ONE message, both items - the coach's evening slot settled this argument already
+# ("two or more collapse into ONE question rather than stacking question marks").
+check("two stuck items are one message, not two",
+      _n_msg.count("Still open") == 1 and _n_msg.count("- same Co-op") == 1)
+check("each line names the item and the DAY, the way day_phrase insists",
+      "(Sunday, 16 Aug)" in _n_msg and "(yesterday, 17 Aug)" in _n_msg)
+check("today's item is not in it", "flapjack" not in _n_msg)
+check("it says what to do about it rather than only that something is wrong",
+      "send the pack values" in _n_msg)
+# IT MUST NOT OFFER WHAT IS NOT WIRED. An earlier draft invited "say so and I will stop
+# asking"; nothing maps that reply to clear_unresolved, so it would have been parsed as
+# food and the row would have kept asking anyway - a promise no code reads back, which
+# is this whole change's defect pointed the other way.
+check("and offers nothing the bot cannot actually do",
+      "say so" not in _n_msg and "rather drop it" not in _n_msg
+      and "I will not keep asking about this." in _n_msg)
+check("and it carries no macro figures, which is what keeps it out of the gate",
+      "kcal" not in _n_msg and "protein" not in _n_msg)
+check("one stuck item reads as one, not as a list of one",
+      "I never got figures for this" in NB.fmt_unresolved_nudge(_n_due[:1], _N_TODAY))
+
+# THE SEND. The ledger must only ever be written after the message actually left.
+_n_sent = []
+_n_ok = lambda t: (_n_sent.append(t), {"ok": True})[1]
+_n_fail = lambda t: {"ok": False, "error": "telegram is down"}
+check("a FAILED send marks nothing - the ask has to still be owed",
+      NB.send_unresolved_nudge(_n_store, "tok", 1, _N_TODAY, sender=_n_fail) == ""
+      and all(r["nudged_on"] == [] for r in _n_store.read_unresolved()))
+_n_text = NB.send_unresolved_nudge(_n_store, "tok", 1, _N_TODAY, sender=_n_ok)
+check("a successful send goes out once and is recorded against both rows",
+      len(_n_sent) == 1 and _n_text == _n_sent[0]
+      and sum(1 for r in _n_store.read_unresolved() if r["nudged_on"] == ["2026-08-18"]) == 2)
+check("the nudge is in the chat transcript, so his answer has a question to belong to",
+      _n_store.recent_chat()[-1]["text"] == _n_text)
+# A cron that fires twice, or a hand re-run, must not push the same sentence at him
+# again the same morning. Only a SUCCESSFUL send suppresses, so the failed attempt above
+# left the ask genuinely owed.
+check("running it again the same day sends nothing",
+      NB.send_unresolved_nudge(_n_store, "tok", 1, _N_TODAY, sender=_n_ok) == ""
+      and len(_n_sent) == 1)
+
+# THE CAP. The drain matches on raw_text, so an item he resolved by REPHRASING leaves its
+# row standing - without a cap that row asks him about an already-logged dinner every
+# morning for ever. Same lesson as .capture-reminded.json.
+_n_d2, _n_d3 = _N_TODAY + timedelta(days=1), _N_TODAY + timedelta(days=2)
+_n_m2 = NB.send_unresolved_nudge(_n_store, "tok", 1, _n_d2, sender=_n_ok)
+check("day two still asks, because the first one can genuinely be missed",
+      "same Co-op item" in _n_m2)
+# The cap is PER ROW, not per morning: the flapjack only became due on day two, so its
+# own two asks run a day behind. A whole-queue counter would have silenced it for a
+# stuck item it has nothing to do with.
+_n_m3 = NB.send_unresolved_nudge(_n_store, "tok", 1, _n_d3, sender=_n_ok)
+check("day three has stopped asking about the two that have now had their two asks",
+      "same Co-op item" not in _n_m3 and "62g" not in _n_m3)
+check("and is still asking about the one whose turn it is",
+      "a flapjack from the cafe" in _n_m3)
+check("day four is silent altogether - it stops being his problem",
+      NB.send_unresolved_nudge(_n_store, "tok", 1, _N_TODAY + timedelta(days=3),
+                               sender=_n_ok) == "")
+check("but the rows are still there for the admin/mapping reader",
+      len(_n_store.read_unresolved()) == 3)
+
+# THE DRAIN, through the real commit_one. Logging the thing retires the row.
+_n_real = {"cache": NB.NR.cache_resolved, "chat": NB._chat}
+NB.NR.cache_resolved = lambda store, item: None
+NB._chat = lambda ctx, role, text: None
+_n_ctx = FakeCtxCommit(_n_store)
+NB.commit_one(_n_ctx, {"resolved_name": "Co-op Thai green curry",
+                       "raw_text": "same Co-op item as yesterday",
+                       "kcal": 480.0, "confidence": "label", "source_rung": "retailer"},
+              _n_d3)
+check("committing the item clears its queued row",
+      [r["raw_text"] for r in _n_store.read_unresolved()]
+      == ["unspecified item weighed 62g (scaled x1.5 per athlete's note)",
+          "a flapjack from the cafe"])
+check("and the entry itself was written, which is the thing that must never be risked",
+      _n_store.get_day(_n_d3)["entries"][0]["resolved_name"] == "Co-op Thai green curry")
+# A row that will not parse is an admin problem, not a reason to skip every OTHER stuck
+# item that morning.
+check("an undateable row is skipped, and the rest still go",
+      [r["raw_text"] for r in NB.due_unresolved(
+          [{"raw_text": "broken", "seen_on": "not-a-date"},
+           {"raw_text": "fine", "seen_on": "2026-08-16"}], _N_TODAY)] == ["fine"])
+NB.NR.cache_resolved, NB._chat = _n_real["cache"], _n_real["chat"]
+check("and this section's stubs are put back too",
+      NB.NR.cache_resolved is _n_real["cache"] and NB._chat is _n_real["chat"])
 
 print()
 if FAILED:

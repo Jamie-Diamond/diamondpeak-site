@@ -43,6 +43,15 @@ This is the only way a ladder like this fails, so all three are load-bearing:
     and label-grade confidence on a figure nobody has checked in two years is the
     worst of both worlds.
 
+THE CACHE IS KEYED ON THE PRODUCT, NOT ON THE SENTENCE HE TYPED
+Nobody says a thing the same way twice, and the cache key was literally his words - so a
+photographed label saved as "One cookie" was unreachable the next day as "a whole matcha
+cookie", and the best-graded row this module can hold was re-guessed from scratch every
+time it was rephrased. A row is now keyed on the resolved product and the amount, with
+his words kept as an alias pointing at it. See "the cache key" further down for the
+guards that stop a looser lookup reaching the wrong product, which is the risk this
+trades against.
+
 SPECIES COME FROM THE INGREDIENTS, NOT THE PRODUCT NAME
 Learned the hard way in test: "M&S nut collection" tagged ZERO species, because the
 name does not say which nuts. Composite products need their ingredient list, so
@@ -125,12 +134,23 @@ _STOPWORDS = {
 COFID_MAX_UNEXPLAINED_TOKENS = 1
 
 
-def _tokens(text: str) -> set:
-    out = set()
+def _token_list(text: str) -> list:
+    """The identifying words, IN THE ORDER THEY WERE SAID.
+
+    Split out of `_tokens` (which is a set and always was) because the cache key needs
+    the LAST identifying word of a name - English puts the product type at the end, so
+    "peanut butter" and "peanut butter protein bar" are told apart by nothing else. A
+    set has no last element, and `max()` or `sorted()[-1]` of one is alphabetical order
+    wearing the look of word order."""
+    out = []
     for w in re.split(r"[^a-z0-9]+", (text or "").lower()):
         if len(w) >= 3 and w not in _STOPWORDS and not w.isdigit():
-            out.add(w.rstrip("s") if len(w) > 4 and w.endswith("s") else w)
+            out.append(w.rstrip("s") if len(w) > 4 and w.endswith("s") else w)
     return out
+
+
+def _tokens(text: str) -> set:
+    return set(_token_list(text))
 
 
 # A query naming a DOSE form must not match a candidate naming a FOOD form. "collagen
@@ -822,6 +842,262 @@ def _stated_overlay(stated) -> dict:
     return out
 
 
+# --- the cache key ----------------------------------------------------------
+#
+# WHAT THE CACHE IS KEYED ON, AND WHY IT STOPPED BEING HIS SENTENCE (18 Aug 2026).
+# The key was `raw_text.strip().lower()` at both ends - literally the words he happened
+# to type. A photographed Co-op cookie label went in on 16 Aug under "One cookie", so it
+# was saved as `"one cookie"`; the next day the same biscuit was "a whole matcha cookie",
+# "same Co-op item as yesterday" and "the matcha white choc one", and every one of them
+# missed. Nobody says a thing the same way twice, so the best-graded row this module can
+# hold - a label he photographed and confirmed - was unreachable the moment he rephrased,
+# and the ladder re-guessed it from scratch each time. That was the root of a 17-hour,
+# multi-photo saga in which the cookie never actually got logged.
+#
+# So the row is keyed on the PRODUCT, and his words become an alias pointing at it:
+#
+#   "chocolate cookie matcha white#x1"   <- the payload. identity # amount
+#   "one cookie"                         -> {"alias_of": "chocolate cookie matcha white#x1"}
+#
+# IDENTITY is the resolved_name's identifying tokens, sorted: lower-cased, punctuation
+# and word order gone, stopwords and quantity words dropped by the same tokeniser the
+# rest of this module matches with. resolved_name is not stable WORDING - the rungs build
+# it differently ("brands + product_name" at OFF, `description` at USDA, the published
+# PHE name at CoFID, whatever the page said at the web rung) - but it is stable IDENTITY,
+# which is all a key needs. Where two spellings do differ ("Oat, rolled" against "Oats,
+# rolled" - `_tokens` only strips a plural over four letters) the cost is an extra row and
+# a miss, never a wrong hit.
+#
+# AMOUNT is in the key because the payload is a resolution of a PORTION, not of a food.
+# Identity alone would file "50 g of oats" and "150 g of oats" as one row, the second
+# would overwrite the first, and the first phrasing would then answer with the second's
+# macros - a silent trebling, which is worse than the miss this whole change is about.
+# It is read off his words at BOTH ends and never from the `portion_g` the interpreter
+# supplies, because the two ends have to agree: an asymmetric key buys no safety, only
+# permanent misses.
+
+
+# Explicit amounts. Longest alternative first so "grams" cannot be read as "g".
+_MEASURE = re.compile(r"(\d+(?:\.\d+)?)\s*"
+                      r"(kgs?|grams?|millilitres?|litres?|ounces?|oz|ml|[gl])\b")
+_UNIT_CANON = {"g": "g", "gram": "g", "grams": "g", "kg": "kg", "kgs": "kg",
+               "ml": "ml", "millilitre": "ml", "millilitres": "ml",
+               "l": "l", "litre": "l", "litres": "l",
+               "oz": "oz", "ounce": "oz", "ounces": "oz"}
+_COUNT_ANY = re.compile(r"\b(\d+(?:\.\d+)?|"
+                        + "|".join(sorted(_COUNT_WORDS, key=len, reverse=True))
+                        + r")\b")
+# Size words are quantity words that carry no number, and they are all STOPWORDS to the
+# tokeniser - deliberately, since "large" says nothing about what a product IS. That is
+# exactly why they have to be caught here instead: without them "a small bowl of porridge"
+# and "a big bowl of porridge" have the same identity AND the same count, and the cache
+# would answer one with the other's figures.
+#
+# "whole" is NOT in here, though it looks like it belongs. "a whole matcha cookie" means
+# one cookie, which is the default already, and treating it as a size word would put that
+# phrasing in a different row from "one cookie" - the very miss this change exists to fix.
+_SIZE_WORDS = ("small", "little", "mini", "medium", "large", "big", "huge", "giant",
+               "double", "triple")
+
+
+def _amount_key(text: str) -> str:
+    """How much he said, canonically: "75g x1", "large x1", "x2", "x0.5".
+
+    Never empty, so a phrase that names no amount at all ("porridge oats") files under
+    the same "x1" as one that says "a portion of porridge oats" - the count IS one in
+    both, and splitting them would cost a hit for no gain."""
+    said = (text or "").lower()
+    measures, spans = [], []
+    for m in _MEASURE.finditer(said):
+        spans.append(m.span())
+        measures.append(f"{float(m.group(1)):g}{_UNIT_CANON.get(m.group(2), m.group(2))}")
+    count = 1.0
+    for m in _COUNT_ANY.finditer(said):
+        # A number that belongs to a measure is not a count: "75 g" is one portion of
+        # 75 grams, not seventy-five of something.
+        if any(s <= m.start() < e for s, e in spans):
+            continue
+        # Nor is a clock time. He logs at times ("half a cookie at 13:50"), and reading
+        # the hour as a count files the row where nothing will ever find it again.
+        if said[m.start() - 1:m.start()] == ":" or said[m.end():m.end() + 1] == ":":
+            continue
+        tok = m.group(1)
+        try:
+            n = float(tok) if tok[0].isdigit() else float(_COUNT_WORDS.get(tok, 1))
+        except ValueError:
+            n = 1.0
+        # Same bounds as `_stated_count`: outside them it is a year, a price or a typo.
+        # KEEP LOOKING rather than settling for the default, which is the whole difference
+        # between "at 1350, half a cookie" filing as x0.5 and filing as x1 - and x1 is the
+        # row for a WHOLE cookie, so stopping here would serve double what he ate. A
+        # nonsense number is not a statement about how much; it is not a number at all.
+        if 0.25 <= n <= 12:
+            count = n
+            break
+    sizes = [w for w in _SIZE_WORDS if re.search(rf"\b{w}\b", said)]
+    return " ".join(sorted(measures) + sorted(sizes) + [f"x{count:g}"])
+
+
+def _identity(text: str) -> str:
+    """The identifying words of a name, sorted - the product, with the phrasing gone."""
+    return " ".join(sorted(_tokens(text)))
+
+
+def _head_noun(text: str) -> str:
+    """The LAST identifying word, which in English is what the thing IS.
+
+    The discriminator that keeps a loose match honest. Everything else about "peanut
+    butter" is shared with "Peanut Butter Protein Bar" - same tokens, one a subset of the
+    other, "protein" a stopword - and the only thing that says they are different foods is
+    that one is a butter and the other is a bar.
+
+    Read off the FIRST COMMA-SEGMENT for the same reason `CofidTable.lookup` reads a row's
+    identity there: a published name states what the food is, then qualifies it, so
+    "Peanut butter, smooth" is a butter and "Bread, wholemeal" is a bread."""
+    words = _token_list((text or "").split(",")[0])
+    return words[-1] if words else ""
+
+
+def cache_keys(resolved_name: str, raw_text: str) -> tuple:
+    """(the key the payload lives under, the alias keys pointing at it).
+
+    His exact words stay as an alias so the commonest case - saying the same thing again -
+    is still one dict lookup and still hits, including on a cache file written before any
+    of this existed, where his words ARE the key."""
+    raw_key = (raw_text or "").strip().lower()
+    identity = _identity(resolved_name)
+    if not identity:
+        # Nothing identifying in the name (a bare "300 kcal", a number). There is no
+        # product to key on, so it files under his words exactly as it always did.
+        return raw_key, ()
+    return f"{identity}#{_amount_key(raw_text)}", ((raw_key,) if raw_key else ())
+
+
+# How many identifying words a phrase must carry before it is allowed to match a saved
+# product it does not name in full. One is not enough and never will be: "butter" against
+# a saved "Peanut butter, smooth" is this module's own worked example of a one-word match
+# reaching the wrong food, and it happened six times on 12 Aug 2026.
+_CACHE_MIN_TOKENS = 2
+
+
+def _bare_plural(raw_text: str, name: str, amount: str) -> bool:
+    """He said MORE THAN ONE of this and did not say how many.
+
+    A BARE PLURAL IS A COUNT QUESTION, NOT A PORTION. `_default_portion` refuses to read
+    "bananas" as one banana for precisely this reason, and a cached row is the figures for
+    ONE stated amount: answering "matcha cookies" with the row saved for one cookie halves
+    the entry, and does it quietly, which is the failure this module is arranged against.
+    How many is a question the ladder can ask and a cache lookup cannot.
+
+    An explicit count ("two matcha cookies") never gets here - it is a different amount
+    and therefore a different row. Only the AMBIGUOUS plural is refused."""
+    head = _head_noun(name)
+    return bool(head and amount.endswith("x1")
+                and re.search(rf"\b{re.escape(head)}s\b", (raw_text or "").lower()))
+
+
+def _cache_candidate(store, raw_text: str, queries, *, on, hint, exclude):
+    """The saved resolution for this food, however he worded it today.
+
+    Returns (payload, how, blocked): the row, a phrase for the attempt log saying HOW it
+    was matched, and the exclusion that stopped an otherwise-good row - so the caller can
+    still record `excluded_by_athlete` rather than a bare miss.
+
+    Three lookups, loosest last:
+      1. his exact words        - one dict hop, and what an old cache file holds
+      2. the same identity      - "matcha white chocolate cookie" for the same product
+      3. a contained identity   - everything he named is in the product's name
+
+    Only (3) can reach a product he did not fully name, so only (3) carries the guards:
+    at least two identifying words, the same head noun, the same amount, no form conflict,
+    and - if two saved products both fit - a MISS. Ambiguity resolved by dict order would
+    be a coin toss wearing label confidence, and re-walking the ladder costs one lookup."""
+    raw_key = (raw_text or "").strip().lower()
+    amount = _amount_key(raw_text)
+    # His words first, and his words for THIS item ahead of the interpreter's search
+    # terms, which are a rewrite of them.
+    phrasings = [q for q in [raw_text] + list(queries or []) if q]
+    blocked = ""
+
+    def offer(payload, how):
+        """The row unless he has ruled it out today, remembering the ruling either way."""
+        nonlocal blocked
+        name = (payload or {}).get("resolved_name") or ""
+        rejected = _excluded_by(name, exclude)
+        if rejected:
+            # The cache is the rung most likely to hold the thing he just rejected: a
+            # wrong answer once confirmed is exactly what gets re-served for a year.
+            blocked = blocked or f"{name!r} matches {rejected!r}"
+            return None
+        return payload, how
+
+    hit = store.cache_get(raw_key, on=on) if raw_key else None
+    if hit:
+        got = offer(hit, "")
+        if got:
+            return got + (blocked,)
+
+    rows = store.cache_rows(on=on)
+    by_key = {k: p for k, p in rows}
+    for phrase in phrasings:
+        identity = _identity(phrase)
+        if not identity:
+            continue
+        hit = by_key.get(f"{identity}#{amount}")
+        # Stopwords and stripped plurals make this reachable on a plural: "Co-op Cookie"
+        # keys as `cookie#x1` (co and op are too short to identify anything) and so does
+        # "cookies". The exact-WORDS path above is exempt - a repeat of a sentence he
+        # confirmed once is the contract the cache has always had - but everything looser
+        # than that has to answer the same question about how many.
+        if hit and not _bare_plural(raw_text, hit.get("resolved_name") or "", amount):
+            got = offer(hit, f" - saved as {hit.get('resolved_name')!r}")
+            if got:
+                return got + (blocked,)
+
+    found = []
+    for key, payload in rows:
+        name = payload.get("resolved_name") or ""
+        known = _tokens(name)
+        if not known:
+            continue                      # not a resolution: nothing to match on
+        # AMOUNT BEFORE AMBIGUITY. A saved "two cookies" row is not a candidate for a
+        # one-cookie question at all, and counting it as one would make a single
+        # unambiguous match read as a coin toss and fall through.
+        if (payload.get("amount_key") or _amount_key(key)) != amount:
+            continue
+        head = _head_noun(name)
+        if not head:
+            continue
+        if _bare_plural(raw_text, name, amount):
+            continue
+        for phrase in phrasings:
+            said = _tokens(phrase)
+            if len(said) < _CACHE_MIN_TOKENS or not said <= known:
+                continue
+            if _head_noun(phrase) != head:
+                continue
+            if _form_conflict(phrase, name) or _hint_conflict(hint, name):
+                continue
+            found.append((payload, name))
+            break
+    kept = [(p, n) for p, n in found if not _excluded_by(n, exclude)]
+    if len(kept) < len(found):
+        gone = next(n for p, n in found if _excluded_by(n, exclude))
+        blocked = blocked or f"{gone!r} matches {_excluded_by(gone, exclude)!r}"
+    distinct = {_identity(n) for p, n in kept}
+    if len(distinct) > 1:
+        return None, ("ambiguous: " + ", ".join(sorted({n for p, n in kept}))
+                      + " all fit what you said"), blocked
+    if kept:
+        # One product, but an old flat file can hold it twice under two of his phrasings.
+        # NEWEST WINS, rather than whichever the file lists first: the two were resolved
+        # months apart, retailers reformulate, and a tie broken by dict order is a tie
+        # broken by nothing.
+        kept.sort(key=lambda pn: str(pn[0].get("resolved_at") or ""), reverse=True)
+        return kept[0][0], f" - saved as {kept[0][1]!r}, matched on the product", blocked
+    return None, "", blocked
+
+
 def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
             table=None, fetchers: dict = None, cofid: CofidTable = None,
             hint: dict = None, queries=None, on: date = None, exclude=(),
@@ -849,7 +1125,6 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
     # Search the INTERPRETED terms, not the athlete's sentence. "400mg of my protein
     # collagen capsules" is a poor query; "collagen peptides" is a good one.
     search_queries = [q for q in (queries or hint.get("search_terms") or [raw_text]) if q]
-    key = (raw_text or "").strip().lower()
     on = on or (date.fromisoformat(str(day)[:10]) if day else date.today())
 
     def record(rung, outcome, detail=""):
@@ -857,22 +1132,24 @@ def resolve(raw_text: str, *, day, store=None, portion_g: float = None,
 
     # cache first, and a hit short-circuits everything below it
     if store is not None:
-        hit = store.cache_get(key, on=on)
-        rejected = _excluded_by(hit.get("resolved_name") or "", exclude) if hit else ""
-        if hit and rejected:
-            # The cache is the rung most likely to hold the thing he just rejected: it is
-            # keyed on his own words, and a wrong answer he once confirmed is exactly what
-            # gets re-served for a year. Skipping it here re-walks the ladder rather than
-            # handing back the same mistake instantly.
-            record(Rung.CACHE, "excluded_by_athlete",
-                   f"{hit.get('resolved_name')!r} matches {rejected!r}")
-        elif hit:
-            record(Rung.CACHE, "hit", f"resolved_at {hit.get('resolved_at')}")
+        hit, how, blocked = _cache_candidate(store, raw_text, search_queries,
+                                             on=on, hint=hint, exclude=exclude)
+        if hit:
+            # WHICH WORDS FOUND IT is in the log, not just that something did. A row
+            # reached through the product identity rather than through his own sentence
+            # is the one that can be the wrong product, so it has to be readable
+            # afterwards which of the two happened.
+            record(Rung.CACHE, "hit", f"resolved_at {hit.get('resolved_at')}{how}")
             return _finalise(dict(hit), raw_text, Rung.CACHE,
                              hit.get("confidence", "estimate"), attempts, table, day,
                              degraded=False, stated=overlay)
+        elif blocked:
+            # He ruled this out today. Re-walking the ladder hands back something else
+            # rather than the same mistake instantly.
+            record(Rung.CACHE, "excluded_by_athlete", blocked)
         else:
-            record(Rung.CACHE, "miss", f"absent or older than {CACHE_MAX_AGE_DAYS} days")
+            record(Rung.CACHE, "miss",
+                   how or f"absent or older than {CACHE_MAX_AGE_DAYS} days")
 
     # CoFID is a local table, so wire it in automatically when present
     if Rung.COFID not in fetchers:
@@ -1143,7 +1420,14 @@ def cache_resolved(store, item: dict) -> None:
 
     Only label and database rungs are cached. Caching an LLM estimate would freeze
     one guess and re-serve it for a year as though it had been looked up, which is
-    exactly the false confidence the ladder exists to prevent."""
+    exactly the false confidence the ladder exists to prevent.
+
+    WHAT IS SAFE TO CACHE IS UNCHANGED BY THE NEW KEY (18 Aug 2026). The three refusals
+    below decide WHETHER a row is written and the key decides WHERE - they are separate
+    questions and the key change touched neither. If anything the refusals matter more
+    now: a row is reachable from more phrasings than the one it was saved under, so an
+    estimate or a figure of his that slipped in here would be re-served against more
+    sentences, not fewer."""
     if item.get("confidence") not in ("label", "database"):
         return
     if item.get("needs_input"):
@@ -1156,6 +1440,7 @@ def cache_resolved(store, item: dict) -> None:
         # figure. The same reasoning that keeps LLM estimates out of the cache: what gets
         # frozen here has to be a lookup, not a one-off.
         return
+    raw_text = item.get("raw_text") or ""
     payload = {f: item.get(f) for f in MACRO_FIELDS}
     payload.update({"resolved_name": item.get("resolved_name"),
                     "ingredients": item.get("ingredients", ""),
@@ -1163,7 +1448,16 @@ def cache_resolved(store, item: dict) -> None:
                     "source_rung": item.get("source_rung"),
                     "source_url": item.get("source_url", ""),
                     "species": item.get("species", []),
-                    "resolved_at": item.get("resolved_at")})
+                    "resolved_at": item.get("resolved_at"),
+                    # WHAT HE SAID, and how much of it he said he had. The key is the
+                    # product now, so without these two the row loses every trace of the
+                    # message that produced it - and cache.json is a file people read by
+                    # hand when a figure looks wrong. `amount_key` is stored rather than
+                    # re-derived at read time because it is what a search compares
+                    # against, and re-deriving it from a key that is no longer his words
+                    # would compare the wrong thing.
+                    "raw_text": raw_text,
+                    "amount_key": _amount_key(raw_text)})
     if item.get("portion_estimated"):
         # AN ASSUMED PORTION HAS TO SURVIVE THE CACHE. The macros here were scaled by a
         # default, and the cache payload is an allowlist, so without these three keys the
@@ -1174,7 +1468,8 @@ def cache_resolved(store, item: dict) -> None:
         payload.update({"portion_estimated": True,
                         "portion_assumed": item.get("portion_assumed"),
                         "portion_used_g": item.get("portion_used_g")})
-    store.cache_put((item.get("raw_text") or "").strip().lower(), payload)
+    primary, aliases = cache_keys(item.get("resolved_name") or "", raw_text)
+    store.cache_put(primary, payload, aliases=aliases)
 
 
 # How a stated macro reads back to him. His own words for the macro, and the unit it is
