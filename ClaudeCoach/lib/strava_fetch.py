@@ -85,10 +85,17 @@ def main():
         if se.get("pr_rank") == 1 and se.get("name")
     ]
 
+    # Gear must come from Strava's per-activity gear object, never from ICU's
+    # gear.id/gear.name — ICU's gear field is stale and does not pick up
+    # Strava gear overrides made after the activity synced.
+    gear = detail.get("gear") or {}
+
     print(json.dumps({
         "laps":         laps,
         "splits_metric": splits,
         "segment_prs":  segment_prs,
+        "gear_name":    gear.get("name"),
+        "gear_id":      gear.get("id"),
     }, indent=2))
 
 
