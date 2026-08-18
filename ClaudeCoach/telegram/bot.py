@@ -5348,9 +5348,81 @@ def _classify_tool(name, hint):
     def has(*subs):
         return any(s in blob for s in subs)
 
+    # --- A WRITE MARKER ANYWHERE IN THE HINT WINS ------------------------------
+    # WHY (17 Aug 2026, follow-up to the 16 Aug write-verify incident). This
+    # function stopped being only a status line the day lib/write_verify.py
+    # started reading its past-tense fragments as EVIDENCE. tool_summary_kinds
+    # suppresses a claimed external write when every fragment of the collapse
+    # summary is provably local, so a fragment that says "built the session" is
+    # now an assertion that nothing left this box.
+    #
+    # The branches below are first-match-wins over one flat blob, and the model
+    # chains commands. `plan_tools.py session-for-load ... && icu_fetch.py
+    # push_workout ...` matched "plan_tools" first, collapsed to "built the
+    # session", and the gate would then have suppressed a claim that was TRUE
+    # while a session really did land on the calendar. Suppressing a true claim
+    # is the one failure the whole write-verify module exists to prevent, so the
+    # markers that can only mean an external write are lifted out and tested
+    # against the WHOLE hint, ahead of everything else.
+    #
+    # WHOLE-STRING SEARCH, NOT SHELL PARSING, and this was the real decision.
+    # Splitting the hint on && / ; / | and classifying each segment sounds more
+    # rigorous and cannot actually give a different answer: one tool_use event
+    # yields one triple, so a segmented version still needs a precedence rule to
+    # pick a winner, which is exactly the ordering below. What segmentation adds
+    # is failure modes - the hint is a hard 80-char truncation, so the final
+    # segment is routinely half a token and quotes are routinely unbalanced -
+    # and every one of those failure modes loses a marker. The asymmetry decides
+    # it: a false WRITE costs nothing (tool_summary_kinds returns a non-empty set,
+    # the gate fails open, and the prose defence runs exactly as it does today),
+    # while a false LOCAL is the bug. So the rule should be the one that fires
+    # most readily, and that is the plain substring search.
+    #
+    # NAME-GATED OFF CLAUDE'S OWN FILE TOOLS, which is correctness and not just
+    # tidiness. write_verify calls the read/grep/glob and write/edit/multiedit
+    # branches the strongest proof in its list precisely BECAUSE the tool name
+    # forecloses the network. `grep -n "push_workout" lib/plan_tools.py` must
+    # stay "checked your data"; a marker sitting in a search pattern is not a
+    # write and must not be allowed to override a name that cannot reach ICU.
+    #
+    # RESIDUAL, stated so nobody reads more into this than it does. (1) Only one
+    # fragment comes back, so a command that writes to BOTH destinations names
+    # one of them. Harmless: a single write kind is enough to make the gate
+    # non-empty, and a non-empty gate falls through to the prose for every kind.
+    # (2) The 80-char truncation happens in engine._tool_input_summary, upstream
+    # of here, and a marker in a LATE segment of a long chain is cut off before
+    # this function ever sees it - measured at 99 chars for the exact command
+    # above. This fix closes the ordering hole completely and the truncation hole
+    # only where the marker survives the cut. Pinned by a test.
+    #
+    # The five groups are the five keys of write_verify._TOOL_WRITES; a test
+    # asserts that correspondence, so a sixth entry there without a marker here
+    # fails rather than quietly reopening the hole. Order is by how precisely the
+    # marker states what landed: the direct API calls first, then the scripts,
+    # with render-workout last because it is the one that is a pure renderer in
+    # fact and only listed as a write out of caution.
+    if n not in ("read", "grep", "glob", "write", "edit", "multiedit"):
+        if has("push_workout", "edit_workout", "update_activity", "delete_workout"):
+            return ("icu-write", "Updating your workout on intervals.icu",
+                    "updated intervals.icu")
+        if has("strava-update", "strava_update"):
+            return ("strava", "Updating the activity on Strava",
+                    "updated it on Strava")
+        if has("stage1-plan", "generate-plan", "generate-blueprint"):
+            return ("plan", "Rebuilding your plan", "rebuilt your plan")
+        if has("log-strength"):
+            return ("logstrength", "Logging your strength session",
+                    "logged your strength work")
+        if has("render-workout"):
+            return ("render", "Writing the workout to intervals.icu",
+                    "wrote the workout")
+
     # --- Plan / session maths (plan_tools.py subcommands, run via Bash) ---------
     # Checked first: these commands don't carry "icu" in the hint, and they are
     # the load/plan calculations, not a raw data pull or a file read.
+    # (The write markers above have already been taken off the table for every
+    # tool but Claude's own file tools, which still reach the duplicated tests
+    # inside these branches - that is the path the name gate deliberately spares.)
     if "plan_tools" in blob:
         if "session-for-load" in blob:
             return ("session", "Building the session to your Load target",

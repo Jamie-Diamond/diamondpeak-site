@@ -46,6 +46,22 @@ import write_verify as V  # noqa: E402
 
 BOT_PY = Path(__file__).resolve().parents[2] / "telegram/bot.py"
 
+if str(BOT_PY.parent) not in sys.path:
+    sys.path.insert(0, str(BOT_PY.parent))
+# A guarded import and a skipif on each CLASS that needs it, not pytest.importorskip.
+# bot.py is the transport and pulls in the whole telegram side, so it is the plausible
+# thing to become unimportable in a bare checkout - and importorskip at module scope raises
+# during COLLECTION, which skips the entire file. That would silently stop the ~100 pure
+# tests here from gating the repo, which is the exact failure this module exists to
+# prevent. Imported at the top rather than beside section 12 (moved 17 Aug 2026) because
+# section 8 now calls _classify_tool for real: source-reading alone could prove where the
+# branches SIT but never what they RETURN, and the compound-command hole was a bug about
+# what they return.
+try:
+    import bot                                     # noqa: E402
+except Exception:                                  # pragma: no cover - environment only
+    bot = None
+
 # The exact reply that caused the incident, and the exact collapse summary of that turn:
 # a Read and a Write of Jamie's own files, no network write anywhere.
 INCIDENT_SENTENCE = "The week I pushed earlier is still on the calendar and is correct"
@@ -417,22 +433,124 @@ class TestCouplingToClassifyTool:
                      "checked your activities", "checked your heat dose"):
             assert frag in V._TOOL_LOCAL, frag
 
-    def test_the_compound_bash_command_limitation_is_still_the_shape_we_think(self):
-        """KNOWN LIMITATION, pinned so it stays visible (17 Aug 2026).
-
-        engine._tool_input_summary hands _classify_tool the whole Bash command truncated to
-        80 chars, and _classify_tool tests "plan_tools" BEFORE the intervals.icu branch. So
-        one chained command that both calculates and pushes collapses to a single local
-        fragment, and the gate would suppress a claim that was true. Accepted for now: the
-        fix belongs in _classify_tool, which also drives the athlete-facing status line.
-        The prose defence still covers the case, which is why it is survivable."""
-        src = BOT_PY.read_text()
-        assert src.index('if "plan_tools" in blob:') < src.index('has("icu_fetch", "icusync"')
-        # The suppressing half of the hazard, stated concretely.
+    def test_the_local_fragment_at_the_heart_of_the_hazard_is_still_local(self):
+        """"Built the session" really IS local, and stays gated as such. The compound-command
+        bug (fixed below) was never that this fragment is wrong; it was that a chained
+        command which also pushed to the calendar EMITTED it."""
         assert V.tool_summary_kinds("Built the session") == set()
-        # ... and the reason it is survivable: a genuinely fresh claim in the prose is what
-        # the gate would eat, and a RETROSPECTIVE one is caught by section 1 regardless.
+        # The prose defence, which carried this case on its own while the ordering hole was
+        # open, and which still has to hold: a RETROSPECTIVE claim is caught by section 1
+        # whatever the gate says.
         assert V.claim_kinds(INCIDENT_REPLY, tool_summary="Built the session") == set()
+
+
+# --- 8b) compound Bash commands: a write marker anywhere wins ----------------------------
+# THE BUG (found 17 Aug 2026, fixed 17 Aug 2026). bot._classify_tool was first-match-wins
+# over one flat blob and tested "plan_tools" ahead of the intervals.icu branch, so a single
+# chained command that calculated AND pushed collapsed to the local fragment "built the
+# session". The gate would then have suppressed a claim of a calendar write that really
+# happened. It is pinned here by CALLING the classifier, not by reading the source: the old
+# test asserted only where the branches sat, and a bug about what a function returns needs a
+# test about what it returns.
+
+@pytest.mark.skipif(bot is None,
+                    reason="telegram/bot.py is not importable in this environment; the "
+                           "pure write_verify tests above still run and still gate")
+class TestACompoundBashCommandCannotHideItsWrite:
+
+    # (marker, the past-tense fragment it must force). These are the five write markers
+    # lifted into _classify_tool's pre-pass, one per key of _TOOL_WRITES.
+    MARKERS = [
+        ("icu_fetch.py push_workout --athlete jamie", "updated intervals.icu"),
+        ("icu_fetch.py edit_workout --id 1", "updated intervals.icu"),
+        ("icu_fetch.py delete_workout --id 1", "updated intervals.icu"),
+        ("icu_fetch.py update_activity --id 1", "updated intervals.icu"),
+        ("scripts/strava-update-activity.py --icu-id i1", "updated it on Strava"),
+        ("scripts/generate-blueprint.py --athlete jamie", "rebuilt your plan"),
+        ("scripts/stage1-plan.py --athlete jamie", "rebuilt your plan"),
+        ("plan_tools.py log-strength --athlete jamie", "logged your strength work"),
+        ("plan_tools.py render-workout --athlete jamie", "wrote the workout"),
+    ]
+    # The local command the write used to hide behind, and its fragment.
+    LOCAL = "plan_tools.py session-for-load --athlete jamie"
+
+    @pytest.mark.parametrize("joiner", [" && ", "; ", " | ", " || "])
+    @pytest.mark.parametrize("write_cmd,fragment", MARKERS)
+    def test_the_write_wins_whichever_segment_it_sits_in(self, write_cmd, fragment, joiner):
+        """Both orders, because first-match-wins was the whole bug: a fix that only handled
+        `write && local` would leave the original incident shape (`local && write`) open."""
+        for hint in (self.LOCAL + joiner + write_cmd, write_cmd + joiner + self.LOCAL):
+            got = bot._classify_tool("Bash", hint)[2]
+            assert got == fragment, f"{hint!r} classified as {got!r}"
+            assert V.tool_summary_kinds(got), (
+                f"{hint!r} yields {got!r}, which does not disarm the suppressing gate")
+
+    def test_the_incident_shape_no_longer_suppresses_a_true_claim(self):
+        """The concrete case the old test accepted as a limitation. A genuinely fresh claim
+        of a calendar write, on a turn whose one chained command really did push."""
+        hint = "python3 lib/plan_tools.py session-for-load && icu_fetch.py push_workout"
+        frag = bot._classify_tool("Bash", hint)[2]
+        summary = frag[0].upper() + frag[1:]      # exactly how bot builds the collapse line
+        assert V.tool_summary_kinds(summary) == {"icu"}
+        assert V.claim_kinds(FRESH_CLAIM, tool_summary=summary) == {"icu"}
+
+    def test_every_write_the_gate_knows_about_has_a_marker(self):
+        """Self-maintaining, and the point of the whole exercise. A future _TOOL_WRITES
+        entry with no marker in _classify_tool's pre-pass silently reopens the hole for
+        that destination, so it fails here instead."""
+        # Lower-cased on both sides: _TOOL_WRITES is keyed lower-case because
+        # tool_summary_kinds folds case, while _classify_tool returns display text
+        # ("updated it on Strava").
+        covered = {frag.lower() for _cmd, frag in self.MARKERS}
+        assert covered == set(V._TOOL_WRITES), (
+            "these gated writes have no compound-command marker, so a chained command can "
+            f"still hide them: {sorted(set(V._TOOL_WRITES) - covered)}")
+
+    def test_claudes_own_file_tools_are_not_dragged_into_a_write(self):
+        """The name gate, which is correctness and not tidiness. _TOOL_LOCAL calls the
+        read/grep/glob branches its strongest proof BECAUSE the tool name forecloses the
+        network, so a marker sitting in a search pattern must not override it."""
+        for name in ("Read", "Grep", "Glob", "Write", "Edit", "MultiEdit"):
+            got = bot._classify_tool(name, "render-workout")[2]
+            assert V.tool_summary_kinds(got) == set(), f"{name}: {got!r}"
+
+    def test_a_plain_local_command_is_untouched(self):
+        """The fix must not make everything look like a write: that would cost the gate its
+        entire suppressing power, which is the other way to break it."""
+        for hint, frag in [(self.LOCAL, "built the session"),
+                           ("plan_tools.py week-tss --athlete jamie", "added up your week"),
+                           ("icu_fetch.py --endpoint wellness", "checked your wellness")]:
+            assert bot._classify_tool("Bash", hint)[2] == frag
+            assert V.tool_summary_kinds(frag) == set()
+
+    def test_the_residual_truncation_hole_is_pinned_not_claimed_closed(self):
+        """WHAT IS STILL OPEN (17 Aug 2026), and it is NOT this file's to fix.
+
+        engine._tool_input_summary (lib/engine.py) truncates the hint to 80 characters
+        before _classify_tool ever sees it. The realistic incident command is 99, so
+        `push_workout` is cut off upstream and the fragment is local again. A marker in an
+        EARLY segment is now caught unconditionally; one in a LATE segment only when it
+        survives the cut. This test asserts the hole is exactly that shape, so the day
+        engine.py stops truncating mid-chain it fails and gets deleted rather than sitting
+        here as a stale warning."""
+        full = ("python3 lib/plan_tools.py session-for-load --athlete jamie && "
+                "python3 lib/icu_fetch.py push_workout")
+        assert len(full) > 80, "the sample command no longer overruns the truncation"
+        assert bot._classify_tool("Bash", full)[2] == "updated intervals.icu"
+        # ... and the same command as engine actually delivers it.
+        assert "push_workout" not in full[:80]
+        assert bot._classify_tool("Bash", full[:80])[2] == "built the session"
+        # Survivable for the same reason it always was: the prose defence is independent and
+        # does not read the tool summary at all.
+        assert V.claim_kinds(FRESH_CLAIM) == {"icu"}
+
+    def test_reversing_the_long_chain_does_survive_the_truncation(self):
+        """The other half of the honest statement: put the write first and the 80-char cut
+        cannot reach it, so the long-command case is genuinely covered in that order."""
+        full = ("python3 lib/icu_fetch.py push_workout --athlete jamie && "
+                "python3 lib/plan_tools.py session-for-load --athlete jamie")
+        assert len(full) > 80
+        assert bot._classify_tool("Bash", full[:80])[2] == "updated intervals.icu"
 
 
 # --- 9) the bot wiring -------------------------------------------------------------------
@@ -612,19 +730,6 @@ def test_empty_replies_claim_nothing(reply):
 # The unit tests above prove the parts. This drives the real function with the network and
 # Telegram stubbed, because the thing that actually went wrong on 16 Aug was two messages
 # being SENT, and "sends nothing" is the property Jamie cares about.
-
-if str(BOT_PY.parent) not in sys.path:
-    sys.path.insert(0, str(BOT_PY.parent))
-# A guarded import and a skipif on the CLASS, not pytest.importorskip. bot.py is the
-# transport and pulls in the whole telegram side, so it is the plausible thing to become
-# unimportable in a bare checkout - and importorskip at module scope raises during
-# COLLECTION, which skips the entire file. That would silently stop the ~100 pure tests
-# above from gating the repo, which is the exact failure this module exists to prevent.
-try:
-    import bot                                     # noqa: E402
-except Exception:                                  # pragma: no cover - environment only
-    bot = None
-
 
 @pytest.mark.skipif(bot is None,
                     reason="telegram/bot.py is not importable in this environment; the "

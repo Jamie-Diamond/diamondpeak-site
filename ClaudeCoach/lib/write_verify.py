@@ -188,16 +188,34 @@ _STRAVA_DESC_RE = re.compile(r"\b(description|write-?up|notes?|summary)\b", re.I
 # cannot change anything at the far end. A reader who takes LOCAL to mean "offline" will
 # delete them and quietly halve the gate's coverage.
 #
-# KNOWN LIMITATION, compound Bash commands (17 Aug 2026, verified against
-# engine._tool_input_summary). One tool_use event yields one fragment, and the hint is the
-# whole Bash command truncated to 80 chars. bot._classify_tool tests "plan_tools" in the
-# blob BEFORE the intervals.icu branch, so a single chained command of the shape
-# `plan_tools.py session-for-load ... && icu_fetch.py push_workout ...` collapses to the
-# local fragment "built the session" while genuinely pushing to the calendar, and the gate
-# would suppress a true claim. Not fixed here: the fix belongs in _classify_tool (a hint
-# that mentions push_workout should classify as the write whatever else it mentions), which
-# is a change to a 40-branch function shared with the athlete-facing status line. Logged as
-# a finding; pinned by a test below so it stays visible.
+# COMPOUND BASH COMMANDS: the ordering half is fixed, the truncation half is not
+# (17 Aug 2026, logged as a limitation earlier the same day and closed the same day).
+#
+# What was wrong. One tool_use event yields one fragment, and bot._classify_tool was
+# first-match-wins over a flat blob, testing "plan_tools" BEFORE the intervals.icu branch.
+# A single chained command of the shape `plan_tools.py session-for-load ... && icu_fetch.py
+# push_workout ...` therefore collapsed to the LOCAL fragment "built the session" while
+# genuinely pushing to the calendar, and this gate would have suppressed a claim that was
+# true. Suppressing a true claim is the one failure the module exists to prevent.
+#
+# What was done. _classify_tool now tests the five write markers against the WHOLE hint,
+# ahead of every other branch, so a marker anywhere wins whatever else the command
+# mentions. Deliberately a substring search and not a shell-segment parse: the classifier
+# returns ONE triple, so segmentation still needs the same precedence rule, and parsing a
+# hard-truncated command only adds ways to LOSE a marker. The reasoning is written out
+# above the pre-pass in telegram/bot.py; the short version is that a false write costs
+# nothing here (a non-empty set fails open to the prose) and a false local is the bug.
+#
+# WHAT IS STILL OPEN, so nobody reads this as closed. engine._tool_input_summary truncates
+# the hint to 80 characters, and the realistic command above is 99 - `push_workout` is cut
+# off upstream and never reaches _classify_tool at all. A write marker in an EARLY segment
+# is now caught unconditionally; one in a LATE segment is caught only when it survives the
+# cut. The remaining fix belongs in lib/engine.py (a summary that keeps the tail, or one
+# fragment per segment) and is not in this module's gift. Pinned by a test below.
+#
+# The five markers are exactly the five keys of _TOOL_WRITES, and a test asserts that
+# correspondence in both directions: a sixth entry added here without a marker in
+# _classify_tool would silently reopen the hole, so it fails instead.
 #
 # These strings are the past-tense fragments from bot._classify_tool, so this module is
 # coupled to another file by string literal. That is fragile and known to be; the
