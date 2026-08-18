@@ -1220,6 +1220,25 @@ Decide which ONE of these he means and reply in that shape:
   {"kind":"rescale_factor","factor":<number>}
       - he is changing how much by a ratio with no known base amount ("half of it" -> 0.5,
         "I had two of them" -> 2)
+  BOTH OF THOSE CHANGE THE AMOUNT. A FIGURE ALREADY APPLIED CHANGES NOTHING
+  (18 Aug 2026, the cookie). Two fields tell you what he has already said:
+  `from_his_words` is his own text that this item was built from, and
+  `portion_came_from_his_last_correction` says the portion in front of him IS the result
+  of the correction before this one. When the number he is giving you is one of those, he
+  is RESTATING an unchanging fact because something ELSE about the item is still wrong -
+  he is not asking for it to be scaled again.
+      - What happened: he had said "1.5 cookies", was offered 78 g, and replied "it's the
+        one I sent a picture of twice today and yesterday. 1.5". That is a dispute about
+        WHICH COOKIE with the amount repeated, and it was read as rescale_factor 1.5 -
+        which multiplied the 78 g that already WAS his 1.5 into 117 g. He said the same
+        thing again and got 175.5 g, which is 117 x 1.5. Every restatement of one fact
+        bought another half a cookie.
+      - So when he disputes the FOOD as well, this is `reidentify` and the amount belongs
+        inside `text` ("1.5 of the cookie I sent a picture of"), exactly as the rule below
+        about disputing the food and giving an amount already says.
+      - And when the amount really is all he is repeating, and it is already applied,
+        there is nothing left to scale: `unclear` is the honest answer and the code will
+        ask him what is wrong with it. Do not scale a figure twice for want of a decision.
   {"kind":"whole_pack"}
       - he ate the whole pack/bag/tub (use the item's pack_g; the code will ask if unknown)
   {"kind":"reidentify","text":"<what to look up instead>","exclusions":["<food he says it
@@ -1366,6 +1385,12 @@ def batch_summaries(batch: list) -> list:
             "name": (it.get("resolved_name") or it.get("_raw") or "")[:70],
             "kcal": it.get("kcal"),
             "portion_used_g": it.get("portion_used_g"),
+            # HIS OWN WORDS FOR THIS COMPONENT, for the same reason the single-item summary
+            # carries them (18 Aug 2026): a portion he already stated ("1.5 cookies", "two
+            # slices") reads as a fresh instruction when the only thing shown is the number
+            # it produced. Two lines, and the same restatement is possible against a
+            # component of a meal as against an item on its own.
+            "from_his_words": (it.get("_raw") or it.get("raw_text") or "")[:70],
             # Stated as a fact rather than as figures: with a basis, a portion becomes a
             # multiplication; without one, only a ratio can be applied.
             "has_per_100g_basis": bool(it.get("per_100g")),
@@ -1485,6 +1510,22 @@ def decide_correction(message: str, item: dict, claude_bin: str, model: str,
                ("resolved_name", "confidence", "kcal", "protein_g", "carb_g", "fat_g",
                 "portion_used_g", "pack_g", "per_100g", "portion_assumed")
                if (item or {}).get(k) is not None}
+    # WHAT HE HAS ALREADY SAID ABOUT IT (18 Aug 2026). Everything above describes the item
+    # as it stands NOW, which is why a restatement was indistinguishable from a new
+    # instruction: shown 78 g and the words "1.5", the only reading available to the model
+    # was "multiply that by 1.5" - because nothing said the 78 g was itself his 1.5. These
+    # two fields are the missing half of the exchange. `from_his_words` is the text this
+    # item was resolved from; the trail is left by rescale_item on any portion that is the
+    # product of a correction, and it is what makes "he is saying it again" a readable
+    # state rather than a coincidence of numbers.
+    raw = str((item or {}).get("_raw") or (item or {}).get("raw_text") or "").strip()
+    if raw:
+        summary["from_his_words"] = raw[:120]
+    trail = (item or {}).get("_rescale_trail") or {}
+    if trail.get("factor") is not None:
+        summary["portion_came_from_his_last_correction"] = {
+            k: trail.get(k) for k in ("factor", "from_portion_g")
+            if trail.get(k) is not None}
     # THE WHOLE MEAL, when there is one on the table. Showing a single item was the defect
     # of 14 Aug 2026: with a four-component stir-fry awaiting confirmation, the caller had
     # no rule for which component to show, so it showed the last thing he had COMMITTED -

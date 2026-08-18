@@ -3480,6 +3480,156 @@ NB.NR.cache_resolved, NB.GATE_RUNNER = _c_real["cache"], _c_real["gate"]
 check("and this section's stubs are put back",
       NB.tg.send is _c_real["send"] and NB.GATE_RUNNER is _c_real["gate"])
 
+print("\n--- REPLAY: saying “1.5” again is not another 1.5x (18 Aug 2026, the cookie) ---")
+# He had said "1.5 cookies" and was offered 78 g, which IS 1.5 of them and was right. What
+# was wrong was the identity, so he wrote "it's the fucking one I sent picture of twice
+# today and yesterday. 1.5" - the same amount restated. decide_correction read the bare
+# number as rescale_factor 1.5 and the code multiplied the 78 g that already was his 1.5
+# into 117 g. The gate blocked that offer as contradicting his input, so he never saw it;
+# he restated the amount once more and the next decision came back as `rescale` grams
+# 175.5, which is 117 x 1.5. One unchanging fact, +50% every time he repeated it.
+#
+# Run against the real store, the real rescale_item and the real apply_quantity_correction,
+# with the model's decisions injected as the qc dicts handle_text builds from them - the
+# decision is the model's job and the compounding was the code's.
+# The section above this one puts the REAL tg.send back, so this one stubs its own or
+# every offer here tries to reach Telegram.
+_r_real = {"send": NB.tg.send, "publish": NB.publish_now, "chat": NB._chat,
+           "cache": NB.NR.cache_resolved}
+_r_sent = []
+NB.tg.send = lambda token, chat, text, **k: _r_sent.append(text)
+NB.publish_now = lambda ctx: None
+NB._chat = lambda ctx, role, text: None
+NB.NR.cache_resolved = lambda store, item: None
+_rs = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-restate-")))
+_rctx = FakeCtxCommit(_rs)
+
+
+def _cookie():
+    """The offer as it stood: 1.5 of a 52 g cookie, priced off a per-100g basis."""
+    return {"resolved_name": "Cookie, chocolate chip", "_raw": "1.5 cookies",
+            "raw_text": "1.5 cookies", "kcal": 374.4, "protein_g": 4.7,
+            "carb_g": 46.8, "fat_g": 18.7, "portion_used_g": 78.0,
+            "per_100g": {"kcal": 480.0, "protein_g": 6.0, "carb_g": 60.0, "fat_g": 24.0},
+            "confidence": "estimate", "source_rung": "llm"}
+
+
+NB.set_pending(_rs, {"batch": [_cookie()]})
+# STEP ONE, UNCHANGED. The first 1.5x is still executed: nothing on the item yet says the
+# 78 g was itself his 1.5, and refusing a first factor would break every honest "half of
+# it". This is the step the prompt change is for, and it is the model's call.
+NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"factor": 1.5},
+                             TODAY, "token", 1)
+_r1 = NB.get_pending(_rs)["batch"][0]
+check(f"the first factor is applied as it always was (portion {_r1['portion_used_g']})",
+      _r1["portion_used_g"] == 117.0 and _r1["kcal"] == 561.6)
+check("and the item now records that its portion came from a x1.5 of 78 g",
+      _r1["_rescale_trail"] == {"factor": 1.5, "from_portion_g": 78.0})
+# The gate blocked exactly this offer in production, so he never saw the 117 g at all.
+# Marked directly rather than by stubbing a blocking verdict: send_verified's gate is
+# skipped in this harness for want of an inbound message, and this is the one line it
+# would have run.
+NB.set_pending(_rs, {"batch": [dict(_r1)]})
+NB._mark_pending_gate_blocked(_rctx, "contradicts_input")
+check("the blocked offer he was never shown is still on the table",
+      NB.get_pending(_rs).get("_gate_blocked") == "contradicts_input")
+
+# STEP TWO, THE ONE THAT RAN AWAY. Same fact, third time of asking, and the decision comes
+# back as the GRAMS that factor would produce rather than as the factor itself - so a
+# check that only looked at factors would have missed it.
+_r_before = len(_r_sent)
+_r_handled = NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"grams": 175.5},
+                                          TODAY, "token", 1)
+_r2 = NB.get_pending(_rs)["batch"][0]
+check("the compounding rescale is declined rather than executed",
+      _r_handled is False)
+# DECLINED, NOT ANSWERED: False sends handle_text on to the re-resolution path with his own
+# words, which is what he was actually asking for - he was disputing WHICH cookie it was.
+# A reply from here would be a second voice on the same message.
+check("and nothing is said from here - the caller answers him",
+      len(_r_sent) == _r_before)
+check(f"and the cookie is NOT 175.5 g (it is {_r2['portion_used_g']} g)",
+      _r2["portion_used_g"] != 175.5 and _r2["kcal"] != 842.4)
+check("it is put back to the 78 g that was already his 1.5",
+      _r2["portion_used_g"] == 78.0 and _r2["kcal"] == 374.4)
+check("the restored offer carries no trail, so it is not read as a repeat next time",
+      "_rescale_trail" not in _r2)
+# The block belonged to the 117 g version, which has just been taken back with it. The
+# offer now on the table is the earlier one he WAS shown and which did pass the gate.
+check("and the gate block goes with the offer it was about",
+      "_gate_blocked" not in NB.get_pending(_rs))
+
+# The same message a fourth time, arriving as the factor rather than as grams.
+NB.set_pending(_rs, {"batch": [dict(_r1)]})
+check("the same ratio a second time is declined too",
+      NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"factor": 1.5},
+                                   TODAY, "token", 1) is False
+      and NB.get_pending(_rs)["batch"][0]["portion_used_g"] == 78.0)
+# AND A REAL SECOND CORRECTION STILL WORKS. The guard is about one figure applied twice,
+# not about correcting a correction: "no, half that" after a 1.5x is a different number and
+# has to go through.
+NB.set_pending(_rs, {"batch": [dict(_r1)]})
+check("a DIFFERENT ratio against the same offer is still applied",
+      NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"factor": 0.5},
+                                   TODAY, "token", 1) is True
+      and NB.get_pending(_rs)["batch"][0]["portion_used_g"] == 58.5)
+NB.set_pending(_rs, {"batch": [dict(_r1)]})
+check("and so is a weight that is not the one the last factor would have produced",
+      NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"grams": 130.0},
+                                   TODAY, "token", 1) is True
+      and NB.get_pending(_rs)["batch"][0]["portion_used_g"] == 130.0)
+
+# THE WHOLE-PACK PATH IS NOT A REPEAT OF ANYTHING, and the guard runs before it: "actually
+# I had the whole pack" arrives with neither grams nor a factor on it, so the check has
+# nothing to compare and the pack weight is read below it as it always was. Pinned because
+# the ordering is the only thing keeping that true - a guard placed after the pack lookup
+# would be comparing a weight off a label against his last ratio.
+NB.set_pending(_rs, {"batch": [dict(_r1, pack_g=260.0)]})
+check("a whole-pack correction against a rescaled offer still scales to the pack",
+      NB.apply_quantity_correction(_rctx, NB.get_pending(_rs), {"whole_pack": True},
+                                   TODAY, "token", 1) is True
+      and NB.get_pending(_rs)["batch"][0]["portion_used_g"] == 260.0)
+
+# The arithmetic on its own, away from the store.
+check("a repeat is recognised whether it arrives as the ratio or as the grams",
+      NB._repeat_of_last_rescale(_r1, factor=1.5)
+      and NB._repeat_of_last_rescale(_r1, grams=175.5)
+      and NB._repeat_of_last_rescale(_r1, grams=175.0))     # a rounded restatement
+check("and an item with no trail behind it is never a repeat",
+      NB._repeat_of_last_rescale(_cookie(), factor=1.5) == ""
+      and NB._repeat_of_last_rescale(_cookie(), grams=117.0) == "")
+# Grams REPLACE a portion rather than multiplying it, so no memory of one is needed - and
+# stamping a trail on every grams rescale would put a new key on almost every item here.
+check("a grams rescale leaves no trail, because it cannot compound",
+      "_rescale_trail" not in NB.rescale_item(_cookie(), grams=100))
+
+# THE 17 AUG GUARD IS UNTOUCHED BY ALL OF THIS. A figure he stated is held on the way up
+# and still his on the way back down: the undo is an ordinary rescale and defers like one.
+_r_stated = {**_cookie(), "protein_g": 21.0, "stated_fields": ["protein_g"]}
+_r_up = NB.rescale_item(_r_stated, factor=1.5)
+check("a trail-stamped rescale still refuses to recompute a figure he gave",
+      _r_up["protein_g"] == 21.0 and _r_up["_stated_held"] == ["protein_g"]
+      and _r_up["kcal"] == 561.6)
+_r_down = NB._undo_rescale(_r_up)
+check("and putting it back does not invent one either",
+      _r_down["protein_g"] == 21.0 and _r_down["portion_used_g"] == 78.0)
+# With no portion to go back to, the undo is the reciprocal of what was applied.
+_r_nop = NB.rescale_item({"kcal": 200.0, "protein_g": 10.0}, factor=2.0)
+check("an item with no portion is undone by the reciprocal of its factor",
+      _r_nop["kcal"] == 400.0
+      and NB._undo_rescale(_r_nop)["kcal"] == 200.0)
+check("and an item that was never rescaled cannot be undone",
+      NB._undo_rescale(_cookie()) is None)
+
+# The trail is a note between two corrections and must never become a field of the log.
+NB.commit_one(_rctx, _r1, TODAY)
+check("the trail never reaches the stored row",
+      all("_rescale_trail" not in e for e in _rs.get_day(TODAY)["entries"]))
+NB.tg.send, NB.publish_now = _r_real["send"], _r_real["publish"]
+NB._chat, NB.NR.cache_resolved = _r_real["chat"], _r_real["cache"]
+check("and this section's stubs are put back",
+      NB.tg.send is _r_real["send"] and NB._chat is _r_real["chat"])
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
