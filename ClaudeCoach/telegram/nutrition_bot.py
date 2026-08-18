@@ -829,14 +829,20 @@ GATE_RUNNER = None
 #   "Barcode NNN, looking it up...", the photo-download failure, the "nothing logged today
 #   to X" refusals, the "I could not reach the model" notices, the credential warning, the
 #   which-one-do-you-mean list, the deterministic today/target/plants/week/undo/edit/close
-#   blocks, the trivial-dose note, the gate's own fallbacks and the blocked-offer refusal,
+#   blocks, the trivial-dose note, the gate's own fallbacks, the whole of
+#   recover_blocked_offer (its two correction refusals, its plain refusal and the notice
+#   that precedes its re-price),
 #   the unknown-intent line, and the two "nothing was logged, here it is again" notices that
 #   precede a re-offer (commit ordered with nothing pending, and commit ordered on an offer
 #   the gate blocked) - the offer that follows each one is gated in the ordinary way.
 # Each is either a FIXED STRING or a straight read of the store, so there is no model or
 # ladder figure in it to be insane, and two of them exist precisely to report that a model
 # call failed - gating those would let a broken verifier silence the outage notice.
-EXEMPT_SENDS = "see the comment above; asserted in test_nutrition_bot.py"
+# THE TWO NON-FIXED FRAGMENTS ON THAT LIST, both inside recover_blocked_offer, and why they
+# are still safe: the gram figure it echoes back is one HE typed in the very message it is
+# answering, and the gate's block reason goes through blocked_reason_for_him first - the
+# same figure-detector nutrition_gate runs over a fallback before that, too, is sent ungated.
+EXEMPT_SENDS ="see the comment above; asserted in test_nutrition_bot.py"
 
 
 def set_inbound(ctx, text: str) -> None:
@@ -1554,13 +1560,26 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
         # The chat model reads recent_chat() and had no idea a food argument had just
         # happened - the whole exchange lived in the pending record, invisible to it.
         _chat(ctx, "athlete", t)
-        if pend.get("_gate_blocked") and got.get("ordered"):
+        if (pend.get("_gate_blocked") and got.get("ordered")
+                # NOT A CORRECTION, which falls through to commit_pending and
+                # recover_blocked_offer instead. offer_items rebuilds the pending record as
+                # `{"batch": ...}`, so a `_replaces` or an `_apply_label_to` on the blocked
+                # record is dropped by the re-price below - and a replacement that has
+                # forgotten what it replaces writes a SECOND entry beside the original when
+                # he confirms it. That has been live on this branch since it was written; it
+                # is rare only because it needs a blocked correction and an imperative order
+                # in the same breath. The recovery path names the entry and asks instead.
+                and not (pend.get("_replaces") or pend.get("_apply_label_to"))):
             # AN ORDER MUST NOT MEET THE SAME REFUSAL TWICE. commit_pending rightly will not
             # write an offer the gate blocked - he was never properly shown those figures -
             # but answering "I am not logging that one" to a man who has now told the bot
             # four times to log his food is the loop of 15 Aug 2026 with a politer sentence.
             # Nothing is written: the same food goes back down the ladder and comes back as
             # a fresh offer, which the gate judges on its own merits.
+            # UNCONDITIONAL HERE, unlike the recovery in commit_pending, which re-prices only
+            # when he has just stated a portion. An explicit order repeated at the bot is the
+            # one signal strong enough to be worth a ladder pass that may return the same
+            # figures; a bare "yes" is not, and re-pricing on every yes is a treadmill.
             raws = [(i.get("_raw") or i.get("raw_text") or "")
                     for i in (pend.get("batch") or [])]
             raws = [r for r in raws if r]
@@ -4566,15 +4585,14 @@ def apply_confirm_except(ctx: Context, pend, decision: dict, day: date, token,
         # One item, one entry, one decision. There is no subset of it to accept.
         return False
     if (pend or {}).get("_gate_blocked"):
-        # Same refusal as commit_pending, and for the same reason: these are figures he was
-        # never properly shown, so no route may write them. Exempt from the gate - a fixed
-        # line with no figures in it.
+        # Same answer as commit_pending, and DELEGATED to it rather than written out again:
+        # these are figures he was never properly shown, so no route may write them, and a
+        # partial acceptance of them is still an acceptance. It used to be its own fixed
+        # refusal, which meant the one path most likely to be reached mid-argument had the
+        # least helpful sentence on it - no reason, no name, nothing to restate.
         log(f"[gate] refused a partial commit of a blocked offer: "
             f"{pend['_gate_blocked'][:120]}")
-        tg.send(token, chat_id,
-                "I am not logging any of that one - I could not make sense of it and never "
-                "showed it to you properly. Tell me what it was and I will log that "
-                "instead.", log=log)
+        recover_blocked_offer(ctx, pend, day, token, chat_id)
         return True
     commit = [i for i in (decision.get("commit_indexes") or []) if 0 <= i < len(batch)]
     if not commit:
@@ -4641,19 +4659,211 @@ def apply_confirm_except(ctx: Context, pend, decision: dict, day: date, token,
     return True
 
 
+# The block reason in words, per class, for the case where the gate returned a verdict and
+# no sentence. `_mark_pending_gate_blocked` stores `reason or reason_class or "blocked"`, so
+# the record can carry the bare token "magnitude" - and "I could not make sense of it -
+# magnitude" tells him nothing at all, which is the failure the whole explanation exists to
+# end. Deliberately shorter and tenser than NG.FALLBACK_BY_CLASS: those are whole sentences
+# written for the moment of the block, and this one is a clause inside a later refusal.
+_BLOCK_PHRASE = {
+    "magnitude": "the figures I had did not look right for what you described",
+    "off_topic": "what I had drifted onto something else",
+    "contradicts_input": "what I had contradicted the figures you gave me",
+    "stale_context": "I was answering an older part of the conversation",
+    "false_claim": "what I had claimed a change to your log that never happened",
+}
+
+
+def blocked_reason_for_him(reason: str) -> str:
+    """The gate's block reason in a form it is safe to put in front of him. "" when none is.
+
+    WHY THIS IS FILTERED WHEN THE LOG LINE IS NOT. nutrition_gate's `_clean_verdict` runs
+    `fallback_invents_figures` over the gate's FALLBACK and never over its REASON, and that
+    is right as long as the reason only ever reaches the log, which is allowed figures. The
+    moment it is quoted to him it becomes a sentence a model wrote about food landing in the
+    chat beside real ones - the reason in the live fixture is "447 kcal is not plausible for
+    that meal", and 447 is a number no source ever produced. That is precisely the hole the
+    gate keeps shut for fallbacks, and it must not re-open through the explanation. So the
+    same detector, and a reason carrying a figure is dropped WHOLE rather than scrubbed: a
+    half-quoted reason reads like a fact with the evidence removed."""
+    reason = (reason or "").strip()
+    if not reason:
+        return ""
+    phrase = _BLOCK_PHRASE.get(reason.lower())
+    if phrase:
+        return phrase
+    if NG.fallback_invents_figures(reason):
+        log(f"[gate] block reason withheld from him, it carries figures: {reason[:80]!r}")
+        return ""
+    # Trailing punctuation off, because the caller quotes this and supplies its own full
+    # stop. Markdown in a model's sentence is not escaped: tg.post already retries a message
+    # as plain text when Telegram rejects the parse, so an odd asterisk costs the formatting
+    # and never the message - and this one must reach him above all others.
+    return reason[:160].strip().rstrip(".!?,;: ")
+
+
+def _blocked_names(batch: list, limit: int = 3) -> str:
+    """What the blocked offer was about, so a refusal names the thing to restate."""
+    named = ", ".join((i.get("resolved_name") or i.get("_raw") or "").strip()[:40]
+                      for i in (batch or [])[:limit]
+                      if (i.get("resolved_name") or i.get("_raw") or "").strip())
+    return named or "that one"
+
+
+def recover_blocked_offer(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
+    """Answer a confirmation of an offer the gate blocked. Writes nothing, ever.
+
+    THE DEAD END THIS REPLACES (17 Aug 2026). The gate was right five times running - a
+    portion offered at the full pack weight when he had said less, a question re-asked about
+    something he had already answered - and each block correctly left the offer unconfirmable.
+    Then he said "Yes that's the right one 62g of that." and got "I am not logging that one -
+    tell me what it was". Correct, and terminal: it named nothing that had gone wrong, and it
+    asked him to start from scratch in the same breath as he had just supplied the one figure
+    that would have fixed it. The refusal was the safe half of an answer with the useful half
+    missing.
+
+    WHY IT LIVES HERE RATHER THAN IN handle_text. There was already a recovery route - the
+    `ordered` branch - but it hangs off `NLU.fast_intent`'s `looks_like_commit_order`, which
+    is a deterministic matcher for imperative clauses ("log the bloody food"). Nothing else
+    ever sets `ordered`: not the YES set, so a bare "yes" dead-ended; not the model, so a
+    sentence like the one above dead-ended; and the inline "Log it" button does not go through
+    handle_text at all. So the recovery covered the one confirmation shape a man types when he
+    is already exasperated, and none of the four he types before that. commit_pending is where
+    all four routes meet, which is the only place a rule like this holds.
+
+    RE-PRICED ONLY WHEN HE HAS JUST ADDED A FIGURE, and this is the line worth defending.
+    send_verified's own rule is that "an offer blocked for magnitude needs different
+    arithmetic, not a better sentence": the ladder is deterministic and cached, so re-pricing
+    the same text on a bare "yes" returns the same figures, meets the same block, and costs a
+    ladder pass and an Opus call to do it - a treadmill wearing the clothes of a fix. A stated
+    portion is new arithmetic and earns the second attempt. Everything else gets the refusal,
+    which now says WHAT confused the bot and names the food, so he knows the one thing to
+    restate rather than being told to tell it the lot again.
+
+    GRAMS ONLY, never a factor and never "the whole pack". quantity_correction reads those
+    too, and both are computed FROM the item's existing basis - which is the set of figures
+    the gate just refused. Scaling them and offering the result is laundering exactly what
+    carry_pending_batch refuses to carry, arriving through the recovery path instead of the
+    merge. His grams go down the ladder as a portion on a fresh resolution, so the figures
+    that come back are the ladder's, not the blocked ones scaled.
+    THAT RULE IS THIS PATH'S, NOT THE FILE'S, and the distinction matters to anyone reading
+    it as a guarantee. A message classified `correction` rather than `confirm` reaches
+    apply_quantity_correction and apply_batch_rescale, which will happily rescale a blocked
+    pending and rebuild it with `{**pend, "batch": fresh}` - stripping the mark. That is far
+    less alarming than it sounds, because the rescaled offer is composed and GATED afresh, so
+    nothing reaches him unread; it is simply not this function's promise to keep.
+
+    A CORRECTION IS NEVER RE-PRICED. A pending record carrying `_apply_label_to` holds
+    figures he read off his own pack - the highest-confidence source this bot has, and one no
+    search will reproduce - and one carrying `_replaces` is tied to an entry id that
+    offer_items would drop on the floor, since it rebuilds the record as `{"batch": ...}`.
+    Re-pricing either means a duplicate entry or a lost label, which is the silent-wrong-write
+    class this file refuses everywhere else. Same shape as carry_pending_batch's refusal to
+    merge into a correction: say so out loud, name the entry, ask.
+
+    Exempt from the gate. Every sentence below is fixed text plus a name off the pending
+    record, the gate's own reason (figure-checked above, exactly as its fallbacks are before
+    they are sent ungated) and a gram figure he typed himself a moment ago.
+
+    AND EVERY REFUSAL IS PUT IN THE TRANSCRIPT, which the old dead end was not and did not
+    need to be. Each branch below now ASKS him something, and an unrecorded question is the
+    blindness the `_chat` on the confirm route was added to end: recent_chat() feeds both the
+    conversation model and the gate's own context, and `stale_context` blocks a reply for
+    "asking again for something he has already answered" - which it cannot see if the asking
+    never reached the store. Prefixed `[gate]` rather than `[log]`, matching send_verified's
+    own note: `reconstructable_offer` stops at the first `[log] ` line that is not an offer,
+    and a refusal that KEEPS the pending record must not read as the offer having ended."""
+    blocked = str((pend or {}).get("_gate_blocked") or "")
+    said = (getattr(ctx, "_inbound", "") or "").strip()
+    why = blocked_reason_for_him(blocked)
+    # QUOTED AS A NOTE, never spliced into a sentence addressed to him. The gate writes its
+    # reason for a log reader, so it talks about him in the third person - "the offer is for
+    # the whole pack when HE said a smaller portion" - and folding that into "I have not
+    # logged that, because..." reads like the bot discussing him with somebody else. As a
+    # quoted line from a check it reads as what it is, and the third person stops mattering.
+    note = f' My check on it said: "{why}."' if why else ""
+    batch = list((pend or {}).get("batch") or [])
+
+    if (pend or {}).get("_apply_label_to"):
+        log(f"[gate] blocked label correction confirmed; not re-pricing: {blocked[:120]}")
+        tg.send(token, chat_id,
+                f"I have not changed anything, and I will not rewrite an entry from figures "
+                f"I never showed you properly.{note} That one was meant to take its numbers "
+                f"off the label, so send me the photo again - or type the kcal and the "
+                f"portion off the pack - and I will apply those to "
+                f"*{_blocked_names(batch)}*.", log=log)
+        _chat(ctx, "coach", f"[gate] would not apply a blocked label correction to "
+                            f"{_blocked_names(batch)}; asked him for the label again")
+        return
+    if (pend or {}).get("_replaces"):
+        # Named from `_replaces` rather than from the batch: the entry in his log is the
+        # thing he can actually see, and it is what a duplicate would sit next to.
+        old = ((pend.get("_replaces") or {}).get("name") or "").strip()[:40]
+        log(f"[gate] blocked replacement confirmed; not re-pricing: {blocked[:120]}")
+        tg.send(token, chat_id,
+                f"I have not logged that and I have not touched what it was replacing."
+                f"{note} It was tied to *{old or 'the original entry'}* in your log, so "
+                f"pricing it again blind risks leaving you with both. Tell me what it "
+                f"should have been - the food, or the portion, or your own kcal - and I "
+                f"will redo the correction from that.", log=log)
+        _chat(ctx, "coach", f"[gate] would not re-price a blocked replacement for "
+                            f"{old or 'an entry'}; nothing added, nothing removed, asked "
+                            f"him what it should have been")
+        return
+
+    qty = quantity_correction(said) or {}
+    grams = qty.get("grams")
+    raws = [(i.get("_raw") or i.get("raw_text") or "").strip() for i in batch]
+    raws = [r for r in raws if r]
+    # ONE ITEM, ONE FIGURE. "62g of that" says which item it belongs to only when there is
+    # one to belong to; against a batch it is a guess about which line he means, and a guess
+    # here re-prices the wrong food at somebody else's portion. Two items and a number is
+    # the refusal below, which asks him which - the house answer to an ambiguity.
+    if grams and len(batch) == 1 and len(raws) == 1:
+        it = batch[0]
+        log(f"  blocked offer confirmed with {grams:.0f} g stated; re-pricing "
+            f"{raws[0][:60]!r}")
+        # CLEARED FIRST, for the reason the ordered path documents: offer_items rewrites an
+        # item's text when a remembered alias matches it, so the fresh item's key is not
+        # reliably the old one and the merge would offer him both copies. Nothing is lost -
+        # the raw text is in hand and is about to be resolved again.
+        clear_pending(ctx.store)
+        tg.send(token, chat_id,
+                f"I could not make sense of the offer I had, so I never showed it to you "
+                f"properly and I will not log it blind - nothing has been added.{note} "
+                f"Same food, priced again at the {grams:.0f} g you have just given me:",
+                log=log)
+        # THE ITEM'S OWN TAGS TRAVEL WITH IT. in_session, the clock time, the day and the
+        # meal were all decided on the first pass and are not what the gate objected to;
+        # dropping them here would quietly move in-session fuel out of his ride totals, or
+        # land last night's dinner on today, as the price of a re-price.
+        offer_items(ctx, [{"text": raws[0], "portion_g": float(grams),
+                           "in_session": bool(it.get("in_session")),
+                           "at": it.get("_at"), "day": it.get("_day") or "",
+                           "meal": it.get("_meal") or ""}],
+                    day, token, chat_id, said=said)
+        return
+
+    log(f"[gate] refused to commit a blocked offer: {blocked[:120]}")
+    tg.send(token, chat_id,
+            f"I have not logged that and nothing has been added - I never showed you those "
+            f"figures properly, so I will not write them on a yes.{note} Tell me the "
+            f"portion in grams for *{_blocked_names(batch)}*, or what it actually was, or "
+            f"your own kcal for it, and I will price it again from that.", log=log)
+    _chat(ctx, "coach", f"[gate] would not log a blocked offer of {_blocked_names(batch)}; "
+                        f"nothing added, asked him for the portion or his own figures")
+
+
 def commit_pending(ctx: Context, pend: dict, day: date, token, chat_id) -> None:
     """Write the pending batch. Called only after an explicit confirmation."""
     # AN OFFER HE WAS NEVER SHOWN IS NOT CONFIRMABLE. The gate blocked its text, so the
     # figures below are ones it judged absurd; a bare "ok" - or the "Log it" button on an
     # older message - would otherwise write them, one tap from the defect the gate exists
-    # to catch. The record itself is kept, so a correction can still land on it, and any
-    # re-offer clears the mark. Exempt from the gate: a fixed refusal with no figures.
+    # to catch. Nothing is written here on any branch of the recovery; the record is kept
+    # unless the recovery re-prices it, so a correction can still land on it, and any
+    # re-offer clears the mark.
     if (pend or {}).get("_gate_blocked"):
-        log(f"[gate] refused to commit a blocked offer: {pend['_gate_blocked'][:120]}")
-        tg.send(token, chat_id,
-                "I am not logging that one - I could not make sense of it and never "
-                "showed it to you properly. Tell me what it was, or your own figures, "
-                "and I will log that instead.", log=log)
+        recover_blocked_offer(ctx, pend, day, token, chat_id)
         return
     # A LABEL CORRECTING AN ENTRY UPDATES IT; it does not write a second one. Handled here
     # rather than in the photo path because this is the only place a confirmation lands -

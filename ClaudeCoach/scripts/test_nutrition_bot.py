@@ -1546,12 +1546,30 @@ check("and it is offered with no Log it button", sent_full[-1][1] is None)
 # fast_intent sees a pending record and returns confirm, and commit_pending writes the very
 # figures the gate called absurd.
 sent_msgs.clear()
+# STUBBED even though this confirmation states no portion and so cannot re-price: the
+# recovery path can reach offer_items now, and a real ladder pass out of this section would
+# be a network call in an offline test suite the day somebody edits the line above.
+_gate_reoffered = []
+_gate_real_offer_items = NB.offer_items
+NB.offer_items = lambda ctx, items, *a, **k: _gate_reoffered.append(list(items))
 NB.commit_pending(gctx2, NB.get_pending(gate_store), TODAY, "token", 1)
 check("a blocked offer refuses to commit",
       not (gate_store.get_day(TODAY).get("entries") or [])
-      and "not logging that one" in sent_msgs[-1])
+      and "I have not logged that" in sent_msgs[-1]
+      and _gate_reoffered == [])
+# THE REFUSAL IS NOT A DEAD END ANY MORE (17 Aug 2026). It used to say "tell me what it was"
+# and nothing else, so the one thing he could not learn from it was what had gone wrong.
+check("and names the food and the thing to restate, not just 'tell me again'",
+      "stir fry" in sent_msgs[-1].lower() and "portion in grams" in sent_msgs[-1])
+# ...but the gate's REASON is model prose about food, and the fixture's is "447 kcal is not
+# plausible". Quoting that would put a figure no source produced into the chat beside real
+# ones, which is the hole nutrition_gate's fallback check exists to keep shut.
+check("while a block reason carrying a figure is withheld rather than quoted",
+      "447" not in sent_msgs[-1]
+      and any("block reason withheld" in l for l in gate_lines))
 check("and says so without gating the refusal itself",
       not any("kind=confirmation" in l for l in gate_lines[-2:]))
+NB.offer_items = _gate_real_offer_items
 
 # 2) A re-offer clears the mark, or a corrected offer he HAS seen would stay unloggable.
 NB.GATE_RUNNER = gate_says('{"verdict":"send","reason":"fine"}')
@@ -2450,6 +2468,158 @@ check("he is told plainly why it is being priced again",
       "will not log it blind" in friction_sent[-1])
 NB.offer_items = _f_real["offer_items"]
 
+# 3b) A BLOCKED OFFER CONFIRMED IN WORDS, WHICH IS THE SHAPE THAT DEAD-ENDED (17 Aug 2026).
+#     The gate was right five times running that evening. Then he said "Yes that's the right
+#     one 62g of that." - the correction and the confirmation in one sentence - and got "I am
+#     not logging that one ... tell me what it was", which is the safe half of an answer with
+#     the useful half missing. The recovery above did not cover it: `ordered` is set ONLY by
+#     fast_intent's looks_like_commit_order, so it fires for "log the bloody food" and for
+#     nothing else a person says before he gets that annoyed.
+check("neither a bare yes nor a natural confirmation is an 'ordered' commit",
+      not (NLU.fast_intent("yes", True) or {}).get("ordered")
+      and not (NLU.fast_intent("that's right", True) or {}).get("ordered"))
+NB.NLU.classify = lambda text, pending, *a, **k: {"intent": "confirm"}
+NB.set_pending(friction_store, {"batch": [_fake_item("Whole 62g pack, matcha cookie", 438,
+                                                     raw="the matcha cookie")]})
+NB._mark_pending_gate_blocked(fctx, "the offer is for the whole pack, he said less")
+_reoffered = []
+NB.offer_items = lambda ctx, items, *a, **k: _reoffered.append(list(items))
+friction_sent.clear()
+_before = len(friction_store.get_day(TODAY).get("entries") or [])
+NB.handle_text(fctx, "Yes that's the right one 62g of that.", "token", 1)
+check("a blocked offer confirmed WITH a restated portion is priced again at his figure",
+      len(_reoffered) == 1 and _reoffered[0][0]["text"] == "the matcha cookie"
+      and _reoffered[0][0]["portion_g"] == 62.0)
+check("and still nothing is written on the way through",
+      len(friction_store.get_day(TODAY).get("entries") or []) == _before)
+check("the pending is cleared first, so the re-offer cannot duplicate it",
+      NB.get_pending(friction_store) is None)
+check("he is told nothing was added and that it is his figure being used",
+      "nothing has been added" in friction_sent[-1] and "62 g" in friction_sent[-1])
+check("and it is not the dead end he actually got",
+      "I am not logging that one" not in friction_sent[-1])
+
+# A BARE YES ADDS NOTHING, so it must NOT re-price: the ladder is deterministic, so the
+# second pass returns the first pass's figures, meets the same block, and has spent a ladder
+# pass and an Opus call to arrive back where it started.
+NB.set_pending(friction_store, {"batch": [_fake_item("Whole 62g pack, matcha cookie", 438,
+                                                     raw="the matcha cookie")]})
+NB._mark_pending_gate_blocked(fctx, "the offer is for the whole pack, he said less")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "yes", "token", 1)
+check("a bare yes on a blocked offer does not re-price it", _reoffered == [])
+check("but the refusal names what confused the bot and what to restate",
+      "he said less" in friction_sent[-1] and "matcha cookie" in friction_sent[-1]
+      and "portion in grams" in friction_sent[-1])
+check("and the offer is kept, so a correction can still land on it",
+      (NB.get_pending(friction_store) or {}).get("_gate_blocked"))
+# THE ASK REACHES THE TRANSCRIPT. handle_text records his side on the way in, so an
+# unrecorded refusal leaves recent_chat() ending on a question nobody answered - and the
+# gate's own stale_context rule blocks a reply for "asking again for something he has
+# already answered", which it cannot judge if the asking was never written down.
+_turns = friction_store.recent_chat()
+check("the refusal and what it asked for are recorded, not just sent",
+      _turns[-1]["role"] == "coach" and "asked him for the portion" in _turns[-1]["text"])
+# `[gate]`, never `[log]`: reconstructable_offer stops at the first `[log] ` line that is
+# not an offer, and this refusal deliberately KEEPS the pending record.
+check("and it does not read as the offer having ended",
+      not _turns[-1]["text"].startswith("[log] ")
+      and NB.reconstructable_offer(fctx) != [])
+# A REASON CARRYING A FIGURE IS DROPPED WHOLE. nutrition_gate figure-checks its FALLBACK and
+# not its reason, because the reason was only ever written to the log. Quoted to him it is a
+# model-authored number arriving in the chat beside real ones, so it goes through the same
+# detector - and the refusal still does its job without it.
+NB.set_pending(friction_store, {"batch": [_fake_item("Stir fry", 447, raw="the stir fry")]})
+NB._mark_pending_gate_blocked(fctx, "447 kcal is not plausible for that meal")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "yes", "token", 1)
+check("a block reason carrying figures is withheld, not quoted at him",
+      "447" not in friction_sent[-1])
+check("and the refusal still names the food and the way out",
+      "stir fry" in friction_sent[-1].lower() and "portion in grams" in friction_sent[-1])
+# The inline button never reaches handle_text at all - it goes straight to commit_pending -
+# which is the second route the old `ordered` recovery could not have covered.
+NB.set_inbound(fctx, "[tapped Log it]")
+friction_sent.clear()
+NB.commit_pending(fctx, NB.get_pending(friction_store), TODAY, "token", 1)
+check("the Log it button on a blocked offer gets the same recovery, not a write",
+      _reoffered == [] and "I have not logged that" in friction_sent[-1]
+      and not friction_store.get_day(TODAY).get("entries"))
+
+# GRAMS ONLY. A factor or "the whole pack" is computed FROM the item's existing basis, which
+# is the set of figures the gate just refused - re-offering that is the laundering
+# carry_pending_batch refuses at the merge, arriving by the recovery instead.
+for _said in ("yes, double that", "yes it was the whole pack"):
+    NB.set_pending(friction_store, {"batch": [_fake_item("Mystery meal", 9000,
+                                                         raw="whatever that was")]})
+    NB._mark_pending_gate_blocked(fctx, "magnitude")
+    _reoffered.clear(); friction_sent.clear()
+    NB.handle_text(fctx, _said, "token", 1)
+    check(f"{_said!r} scales the blocked figures, so it is asked about, not re-priced",
+          _reoffered == [] and "portion in grams" in friction_sent[-1])
+# ...and a bare reason_class on the record reads as English rather than as a log token.
+check("a block recorded as a bare class name is still explained in words",
+      "did not look right for what you described" in friction_sent[-1])
+
+# ONE ITEM, ONE FIGURE. Against a batch, "62g of that" is a guess about which line he means.
+NB.set_pending(friction_store, {"batch": [_fake_item("Toast", 90, raw="toast"),
+                                          _fake_item("Jam", 40, raw="jam")]})
+NB._mark_pending_gate_blocked(fctx, "magnitude")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "yes that's right, 62g of that", "token", 1)
+check("a portion against a two-item blocked batch is ambiguous, so it asks",
+      _reoffered == [] and "Toast, Jam" in friction_sent[-1])
+
+# A CORRECTION IS NEVER RE-PRICED. offer_items rebuilds the pending record as {"batch": ...},
+# so `_replaces` would be dropped and the confirmed re-offer would ADD an entry beside the
+# one it was meant to replace. Silent duplicate; the recovery names the entry and asks.
+NB.set_pending(friction_store, {"batch": [_fake_item("Cookie", 438, raw="the cookie")],
+                                "_replaces": {"id": "e9", "name": "Matcha cookie"}})
+NB._mark_pending_gate_blocked(fctx, "magnitude")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "Yes that's the right one 62g of that.", "token", 1)
+check("a blocked REPLACEMENT is never priced again, however he confirms it",
+      _reoffered == [] and NB.get_pending(friction_store) is not None)
+check("and the entry it was tied to is named, so he knows what is still there",
+      "Matcha cookie" in friction_sent[-1]
+      and "have not touched what it was replacing" in friction_sent[-1])
+# The same holds for an explicit ORDER, which is where the duplicate has been reachable since
+# that branch was written: mark_pending_replaces deliberately keeps the block across it.
+NB.NLU.classify = _f_real["classify"]
+friction_sent.clear()
+NB.handle_text(fctx, "Log the bloody food", "token", 1)
+check("even an imperative order does not re-price a blocked replacement",
+      _reoffered == [] and "Matcha cookie" in friction_sent[-1])
+# A label correction holds figures off his own pack. Re-pricing throws away the best source
+# in the system to replace it with a search.
+NB.NLU.classify = lambda text, pending, *a, **k: {"intent": "confirm"}
+NB.set_pending(friction_store, {"batch": [_fake_item("Coop pizza", 1147, raw="the pizza")],
+                                "_apply_label_to": {"id": "e1", "name": "pizza",
+                                                    "kcal": 964}})
+NB._mark_pending_gate_blocked(fctx, "magnitude")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "yes that's right, 350g of that", "token", 1)
+check("a blocked LABEL correction is never priced again either",
+      _reoffered == [] and not friction_store.get_day(TODAY).get("entries"))
+check("and he is asked for the label, not for a search term",
+      "send me the photo again" in friction_sent[-1])
+
+# THE ITEM'S TAGS TRAVEL WITH THE RE-PRICE. in_session, the clock time, the day and the meal
+# were settled on the first pass and are not what the gate objected to; dropping them would
+# move in-session fuel off his ride totals as the price of a re-price.
+_fuel = _fake_item("Gel", 90, raw="a gel")
+_fuel.update({"in_session": True, "_at": "13:50", "_day": "yesterday", "_meal": ""})
+NB.set_pending(friction_store, {"batch": [_fuel]})
+NB._mark_pending_gate_blocked(fctx, "magnitude")
+_reoffered.clear(); friction_sent.clear()
+NB.handle_text(fctx, "yes, 60g of that", "token", 1)
+check("a re-priced item keeps its in-session tag, its time and its day",
+      len(_reoffered) == 1 and _reoffered[0][0]["in_session"] is True
+      and _reoffered[0][0]["at"] == "13:50" and _reoffered[0][0]["day"] == "yesterday")
+NB.offer_items = _f_real["offer_items"]
+NB.NLU.classify = _f_real["classify"]
+NB.clear_pending(friction_store)
+
 # 4) PARTIAL CONFIRM. Commit what he accepted; hold what he is arguing about.
 NB.clear_pending(friction_store)
 part_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-partial-")))
@@ -2507,7 +2677,12 @@ NB.apply_confirm_except(pctx, NB.get_pending(part_store),
                         TODAY, "token", 1)
 check("a partial confirm cannot commit an offer the gate blocked",
       len(part_store.get_day(TODAY)["entries"]) == before
-      and "not logging any of that" in friction_sent[-1])
+      and "I have not logged that" in friction_sent[-1])
+# And it answers with the same recovery line as every other confirmation route, rather than
+# its own dead-end refusal: this is the path reached mid-argument, so it is the last one that
+# should tell him least. Two items and no stated portion is the ask, never a guess.
+check("and it names what to restate instead of asking him to start again",
+      "Nonsense" in friction_sent[-1] and "portion in grams" in friction_sent[-1])
 
 # 5) A GATE BLOCK IS FED BACK, ONCE. Blocking the same wrong stance three times stopped the
 #    sentence and never corrected it.
