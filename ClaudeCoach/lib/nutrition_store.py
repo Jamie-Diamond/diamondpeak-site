@@ -1156,7 +1156,75 @@ class NutritionStore:
             _atomic_write(self._facts_path(), facts)
         return facts[key]
 
-    def log_unresolved(self, raw_text: str, day) -> None:
+    # --- the unresolved queue -----------------------------------------------
+    #
+    # athletes/<slug>/nutrition/unresolved.json
+    #   [{"raw_text": "...", "seen_on": "2026-08-16", "last_seen_on": "2026-08-17",
+    #     "times_seen": 3, "nudged_on": ["2026-08-17"]}]
+    #
+    # IT HAS TWO READERS NOW, AND FOR EIGHT DAYS IT HAD NONE. Written since it was built,
+    # read by nobody: on the VM on 18 Aug 2026 it held ten rows going back over a week,
+    # including an item ("same Co-op item as yesterday", later "unspecified item weighed
+    # 62g") that sat there for most of a day while Jamie had no idea the bot still owed
+    # him a completed entry, because nothing ever told him. The admin/mapping purpose in
+    # log_unresolved's docstring is still the first reader; the second is the athlete
+    # himself, via scripts/nutrition-unresolved-nudge.py.
+    #
+    # THE LOCK IS THE FILE'S OWN, not the month's. This was written under
+    # _month_lock(day), whose lock NAME is the month - so two writers either side of a
+    # month boundary took different locks over the same single file and could lose an
+    # update. It also made the queue contend with every day-log write for no reason, and
+    # left the new drain/nudge writers with no `day` to derive a lock name from at all.
+    # One file, one lock, named for the file.
+
+    def _unresolved_path(self) -> Path:
+        return self.dir / "unresolved.json"
+
+    @staticmethod
+    def _unresolved_key(raw_text: str) -> str:
+        """The identity of a queued string. Case and surrounding space are noise, so
+        this is the same normalisation cache_get/cache_put already use on this file's
+        other keyed store - one convention, not two.
+
+        DELIBERATELY NOT FUZZY. "unspecified item weighed 62g" and "unspecified item
+        weighed 83g" are two different portions of possibly two different things, and a
+        near-match rule that folded them together would drop one of them out of the
+        review queue entirely - which is the exact failure (a food silently missing from
+        the count) this queue exists to prevent."""
+        return " ".join((raw_text or "").split()).lower()
+
+    def _read_unresolved_raw(self) -> list:
+        p = self._unresolved_path()
+        if not p.exists():
+            return []
+        try:
+            rows = json.loads(p.read_text() or "[]")
+        except (json.JSONDecodeError, OSError):
+            # Same contract as product_facts and the month files: a broken queue
+            # degrades to an empty one, never to a crash in the middle of logging food.
+            return []
+        return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+    def read_unresolved(self) -> list:
+        """Everything still queued, oldest first, with the full row shape filled in.
+
+        Rows written before 18 Aug 2026 carry only `raw_text` and `seen_on`, and the ten
+        live ones on the VM are all of that vintage. Defaulting the newer fields HERE, in
+        memory, is the same choice get_day makes in returning a blank day rather than
+        None: one uniform shape for every consumer, and no read that rewrites the file
+        just because it was read."""
+        out = []
+        for r in self._read_unresolved_raw():
+            seen = str(r.get("seen_on") or "")[:10]
+            out.append({**r,
+                        "raw_text": r.get("raw_text") or "",
+                        "seen_on": seen,
+                        "last_seen_on": str(r.get("last_seen_on") or seen)[:10],
+                        "times_seen": int(r.get("times_seen") or 1),
+                        "nudged_on": list(r.get("nudged_on") or [])})
+        return out
+
+    def log_unresolved(self, raw_text: str, day) -> dict:
         """Record a string the ladder could not map, for the review queue.
 
         Unmapped strings are logged rather than dropped because the plant-diversity
@@ -1167,17 +1235,82 @@ class NutritionStore:
 
         `day` is required, not defaulted to date.today(): this module never decides
         which local day something belongs to, because a UTC-dated write after 23:00
-        London time lands on the wrong day."""
-        p = self.dir / "unresolved.json"
-        with self._month_lock(_as_iso(day)):
-            rows = []
-            if p.exists():
-                try:
-                    rows = json.loads(p.read_text() or "[]")
-                except json.JSONDecodeError:
-                    rows = []
-            rows.append({"raw_text": raw_text, "seen_on": _as_iso(day)})
-            _atomic_write_list(p, rows)
+        London time lands on the wrong day.
+
+        REPEATS BUMP A COUNTER, THEY DO NOT APPEND A ROW (18 Aug 2026). One stuck item
+        reaches this function once per parse attempt, so a food he retyped three times
+        while the bot failed to place it was three rows that need ONE mapping added to
+        species.json - noise in the review queue, and worse in the nudge, which would
+        have read the same stuck item back to him three times in one message.
+        `times_seen` keeps what the extra rows were actually good for: a string seen
+        twelve times is a more urgent mapping than one seen once. `seen_on` stays the
+        FIRST sighting, because how long it has been stuck is the thing worth knowing;
+        `last_seen_on` carries the latest."""
+        iso = _as_iso(day)
+        key = self._unresolved_key(raw_text)
+        with self._file_lock("unresolved"):
+            rows = self._read_unresolved_raw()
+            for r in rows:
+                if self._unresolved_key(r.get("raw_text")) != key:
+                    continue
+                # A legacy row is upgraded in place the first time it recurs - the keys
+                # it lacks are added, the ones it has are left exactly as written.
+                r.setdefault("seen_on", iso)
+                r["times_seen"] = int(r.get("times_seen") or 1) + 1
+                r["last_seen_on"] = iso
+                _atomic_write_list(self._unresolved_path(), rows)
+                return r
+            row = {"raw_text": raw_text, "seen_on": iso, "last_seen_on": iso,
+                   "times_seen": 1, "nudged_on": []}
+            rows.append(row)
+            _atomic_write_list(self._unresolved_path(), rows)
+            return row
+
+    def clear_unresolved(self, raw_text: str) -> int:
+        """Drop the queued row for `raw_text`. Returns how many rows went.
+
+        THE ITEM STOPPED BEING OPEN. Called when the thing finally gets logged, so the
+        nudge stops asking about a food that is now in the day - and called by the admin
+        path too, once a mapping for it has been added to species.json.
+
+        `raw_text` is required and there is deliberately no clear-everything form: this
+        file is the only record that a food went uncounted, and a no-argument truncate is
+        one mistyped command away from erasing that evidence for good."""
+        key = self._unresolved_key(raw_text)
+        if not key:
+            return 0
+        with self._file_lock("unresolved"):
+            rows = self._read_unresolved_raw()
+            keep = [r for r in rows if self._unresolved_key(r.get("raw_text")) != key]
+            if len(keep) == len(rows):
+                return 0
+            _atomic_write_list(self._unresolved_path(), keep)
+            return len(rows) - len(keep)
+
+    def mark_unresolved_nudged(self, raw_text: str, day) -> dict | None:
+        """Record that the athlete was asked about this row on `day`. None if it is gone.
+
+        WRITTEN ONLY AFTER THE MESSAGE ACTUALLY LEFT, by the same reasoning
+        evening-checkin._clear_queue gives for its own ledger: a nudge marked against a
+        send that failed is an ask that never happened and will now never happen again.
+
+        `day` is required for the same reason it is on log_unresolved - a UTC-dated mark
+        after 23:00 London belongs to the wrong day - even though the caller is a cron
+        job that will only ever run in the morning."""
+        iso = _as_iso(day)
+        key = self._unresolved_key(raw_text)
+        with self._file_lock("unresolved"):
+            rows = self._read_unresolved_raw()
+            for r in rows:
+                if self._unresolved_key(r.get("raw_text")) != key:
+                    continue
+                asked = [d for d in (r.get("nudged_on") or []) if isinstance(d, str)]
+                if iso not in asked:
+                    asked.append(iso)
+                r["nudged_on"] = asked
+                _atomic_write_list(self._unresolved_path(), rows)
+                return r
+        return None
 
 
 def _atomic_write_list(path: Path, payload: list) -> None:
