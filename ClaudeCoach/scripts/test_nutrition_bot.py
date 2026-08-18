@@ -1844,6 +1844,96 @@ check("the message says it used the pack's figures rather than offering it twice
       "rather than offering it twice" in sent_msgs[-1])
 NB.clear_pending(pz_store)
 
+# AND THE AMOUNT HE HAD ALREADY GIVEN SURVIVES IT (18 Aug 2026, the 62 g cookie). He had
+# stated 62 g of a cookie whose pack reads 471 kcal/100 g, then re-sent the label to help
+# the bot identify it - and every swap re-offered the cookie at the pack's own basis, 471
+# kcal, contradicting the amount he had given minutes earlier. The gate blocked it as
+# contradicts_input, correctly, which left him no way forward but to state 62 g again into
+# the same loop. The label knows the food; only he knows how much of it he ate.
+COOKIE_LABEL = {"kind": "nutrition_label", "per": "100g", "kcal": 471, "protein_g": 5.4,
+                "carb_g": 59, "fat_g": 23, "fibre_g": 2.4,
+                "product": "Oat and raisin cookie",
+                "ingredients": "oats, raisins, wheat flour, butter"}
+NB.NLU.read_photo = lambda *a, **k: dict(COOKIE_LABEL)
+NB.NLU.decide_label_target = lambda label, cands, *a, **k: {"kind": "replace",
+                                                            "entry_id": "pending:0"}
+
+
+def _stated_cookie():
+    """The pending offer as it stood: his 62 g, on a lookup that got the food wrong."""
+    NB.set_pending(pz_store, {"batch": [{"resolved_name": "Oat cookie", "_raw": "62g cookie",
+                                         "kcal": 280.0, "protein_g": 3.0, "carb_g": 35.0,
+                                         "fat_g": 14.0, "portion_used_g": 62.0,
+                                         "portion_estimated": False,
+                                         "portion_assumed": "62 g - as stated",
+                                         "confidence": "estimate", "source_rung": "llm",
+                                         "_meal": "snack"}]})
+
+
+_stated_cookie()
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+_cookie = NB.get_pending(pz_store)["batch"][0]
+check("the label is priced at the amount he stated, not at the pack's own basis",
+      _cookie["kcal"] == 292.0 and _cookie["portion_used_g"] == 62.0)
+check("every macro is recomputed from the pack's per-100g row at that amount",
+      (_cookie["protein_g"], _cookie["carb_g"], _cookie["fat_g"], _cookie["fibre_g"])
+      == (3.3, 36.6, 14.3, 1.5))
+check("the pack's identity is the label's, not the lookup's",
+      _cookie["resolved_name"] == "Oat and raisin cookie"
+      and _cookie["confidence"] == "label")
+check("the per-100g basis survives, so the next correction is still a multiplication",
+      (_cookie.get("per_100g") or {}).get("kcal") == 471.0)
+check("his amount is not re-branded as an assumption of ours",
+      _cookie.get("portion_estimated") is False
+      and "as stated" in (_cookie.get("portion_assumed") or ""))
+check("and the meal he named still survives the rescale, not just the swap",
+      _cookie["_meal"] == "snack")
+check("and the offer says the amount it kept, which fmt_confirm prints only for a guess",
+      "62 g" in sent_msgs[-1] and "rather than offering it twice" in sent_msgs[-1])
+# A PORTION WE GUESSED IS NOT A PORTION HE GAVE. The pack's basis is stated data and our
+# estimate of a plate is not, so an assumed portion does not override it - the deliberate
+# other half of the rule above, and the reason the carry-over reads portion_estimated.
+NB.set_pending(pz_store, {"batch": [{"resolved_name": "Oat cookie", "_raw": "a cookie",
+                                     "kcal": 225.0, "portion_used_g": 50.0,
+                                     "portion_estimated": True,
+                                     "portion_assumed": "50 g - my estimate for a cookie",
+                                     "confidence": "estimate", "source_rung": "llm"}]})
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("a portion WE assumed does not overrule the pack's own basis",
+      NB.get_pending(pz_store)["batch"][0]["kcal"] == 471.0)
+# AND A PANEL WITH NOTHING TO MULTIPLY BY NEVER CLAIMS TO HAVE USED HIS AMOUNT. A
+# per-portion label that did not print its serving weight has no per-100g row and no grams
+# of its own, so his 62 g cannot be priced - and a sentence saying it was kept would be a
+# claim about work the code did not do, which is the one class of failure this file exists
+# to prevent. The figures stand as the panel gave them and the message stays quiet.
+NB.NLU.read_photo = lambda *a, **k: {"kind": "nutrition_label", "per": "portion",
+                                     "kcal": 300, "protein_g": 4,
+                                     "product": "Cookie, one biscuit"}
+_stated_cookie()
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("a panel with no basis to scale from is left exactly as the pack gave it",
+      NB.get_pending(pz_store)["batch"][0]["kcal"] == 300.0)
+check("and the message claims no amount it could not actually apply",
+      "62 g" not in sent_msgs[-1] and "kept the" not in sent_msgs[-1])
+# NOTHING TO SCALE IS NOT THE SAME AS SCALED (apply_batch_rescale's rule, 17 Aug 2026). A
+# panel read as a serving weight with no figures on it goes through rescale_item's RATIO
+# branch, multiplies nothing, and still comes back a dict wearing portion_used_g - so a
+# bare "did it return?" test would announce the pack priced at his 62 g with no pack
+# figures anywhere on the offer.
+NB.NLU.read_photo = lambda *a, **k: {"kind": "nutrition_label", "per": "portion",
+                                     "portion_g": 40, "product": "Cookie, unreadable panel"}
+_stated_cookie()
+sent_msgs.clear()
+NB.handle_photo(pctx, "file-id", "", TODAY, "token", 1)
+check("a panel with a serving weight but no figures claims nothing was priced",
+      "62 g" not in sent_msgs[-1] and "kept the" not in sent_msgs[-1]
+      and NB.get_pending(pz_store)["batch"][0].get("kcal") is None)
+NB.clear_pending(pz_store)
+NB.NLU.read_photo = lambda *a, **k: dict(LABEL_PHOTO)
+
 print("\n--- REPLAY 15:25: 'you've added the pizza twice' (14 Aug 2026) ---")
 # It was decided `unclear`, fell into a re-resolution, and the reply said the duplicate had
 # been "noted and removed" while both copies sat in the log and a THIRD was being offered.

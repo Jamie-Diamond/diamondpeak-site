@@ -2514,22 +2514,86 @@ def replace_pending_with_label(ctx: Context, item: dict, target_id: str, token,
     for key in ("_at", "_meal", "in_session", "_supplement"):
         if old.get(key) is not None:
             fresh[key] = old[key]
+    # AND SO IS THE AMOUNT (18 Aug 2026, the 62 g cookie). He had already said 62 g of a
+    # cookie whose pack reads 471 kcal/100 g, then re-sent the label to help the bot
+    # identify it - and this swap handed back the LABEL's own basis every time, re-offering
+    # the whole 471 kcal against a portion he had given minutes earlier. The gate caught it
+    # as contradicts_input, which is exactly right and left him nowhere to go: the only way
+    # out was to state 62 g again, into a swap that would throw it away again.
+    #
+    # The four keys above are the same argument one step short. A label is an answer to
+    # "WHAT is this", never to "how much of it did you eat" - `portion_g` on a panel is the
+    # pack's serving size, a fact about the packet on the shelf and not about his plate. So
+    # the label supplies the identity and the per-100g rate, and his grams supply the
+    # amount that rate is multiplied by.
+    #
+    # rescale_item rather than arithmetic here, so this path prices a portion the same way
+    # every other correction path in this file does - off `per_100g` at 1 dp, with
+    # portion_assumed reading "as stated" because the amount genuinely is his.
+    #
+    # ONLY the grams cross over, never his stated MACROS, and the distinction is not a
+    # nicety. rescale_item's `held` dict reads values off the item it is scaling, so
+    # carrying `stated_fields` from `old` onto a label-derived `fresh` would stamp the
+    # PACK's figures as his own, strip them out of the per-100g basis and print a
+    # "your figure, so the rescale left it alone" note about numbers he never gave. It
+    # would also contradict the offer being sent: _whose_note promises him the panel is
+    # better data than his own reckoning and that saying no leaves his figures untouched.
+    # His macros are what this offer is asking permission to replace. His grams are not.
+    grams, kept_g = old.get("portion_used_g"), None
+    if grams and not old.get("portion_estimated"):
+        # A portion WE assumed is not carried: the pack's basis is stated data and our
+        # estimate of a plate is not, so an estimate has nothing to overrule it with.
+        scaled = rescale_item(fresh, grams=float(grams))
+        if scaled is not None:
+            fresh = scaled
+        # NOTHING TO SCALE IS NOT THE SAME AS SCALED - apply_batch_rescale's rule (17 Aug
+        # 2026), and it applies here for a reason peculiar to labels. A panel the vision
+        # read produced a serving weight for but no figures at all comes through
+        # rescale_item's RATIO branch, which multiplies whatever macros are present -
+        # none - and still returns a dict carrying portion_used_g and portion_assumed. A
+        # bare `scaled is not None` would take that as priced and announce that the pack's
+        # figures had been put at his 62 g, with no figures on the offer to show for it.
+        # So the claim below tracks whether a NUMBER actually moved, never merely whether
+        # the call returned.
+        if scaled is not None and any(scaled.get(f) is not None for f in _RESCALE_FIELDS):
+            kept_g = float(grams)
+        else:
+            # No per-100g row and no figures to take a ratio of - a per-portion panel that
+            # did not print its serving weight - so there is nothing to multiply and his
+            # grams stay unpriced. Named in the log rather than swallowed, and the sentence
+            # below is conditional on the same test: claiming to have kept 62 g while
+            # showing the panel's own figures is a false claim about work not done, which is
+            # the one class of failure this file exists to prevent.
+            log(f"  label swap could not price his {float(grams):.0f} g: no basis on the "
+                f"panel")
     batch[idx] = fresh
     set_pending(ctx.store, {**pend, "batch": batch})
     body = "\n\n".join(fmt_confirm(i) for i in batch)
     kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
     was = (old.get("resolved_name") or old.get("_raw") or "item")[:60]
+    # AND IT SAYS WHAT AMOUNT IT PRICED, because fmt_confirm will not. That line prints the
+    # portion only when it was ASSUMED, and an amount he stated is by definition not - so
+    # the swap would otherwise come back reading 292 kcal with his 62 g nowhere on it, and
+    # a figure he cannot reconcile is the thing that made the original loop unreadable.
+    # Conditional on kept_g, never on `grams`: this is a claim about work the code did, and
+    # a panel with no basis to scale from leaves the label's own figures standing.
+    kept = (f" I have kept the {kept_g:.0f} g you gave me and priced the pack's figures "
+            f"at that amount." if kept_g else "")
     send_verified(ctx, token, chat_id,
                   f"That is the label for the *{was}* "
                   f"you have not confirmed yet, so I have used the pack's figures for it "
-                  f"rather than offering it twice.\n\n" + body
+                  f"rather than offering it twice." + kept + "\n\n" + body
                   + "\n\nLog " + ("these?" if len(batch) > 1 else "it?")
                   # A pending offer can be his own pasted figures or a costed table, and
                   # both outrank a lookup: the swap has to name whose numbers went.
                   + _whose_note(whose_figures(old)),
                   kind="offer", numbers=_gate_numbers(batch), reply_markup=kb)
-    _chat(ctx, "coach", "[log] replaced the pending item's figures with its label "
-                        "- awaiting confirm")
+    # The amount goes on the coach's transcript too, since that is the record the next turn
+    # is read against: "replaced with its label" alone would leave the coach reasoning about
+    # a pack-sized cookie while the offer on his phone is priced at 62 g.
+    _chat(ctx, "coach", "[log] replaced the pending item's figures with its label"
+                        + (f", at his stated {kept_g:.0f} g" if kept_g else "")
+                        + " - awaiting confirm")
     return True
 
 
