@@ -7,6 +7,7 @@ a ceiling rendered as a progress bar reads compliance as failure, and an estimat
 rendered like label data corrupts trust in the whole record. Those are tested here.
 """
 import importlib.util
+import json
 import sys
 import tempfile
 from datetime import date, datetime, timedelta
@@ -3479,6 +3480,125 @@ NB.today_block, NB._chat = _c_real["today"], _c_real["chat"]
 NB.NR.cache_resolved, NB.GATE_RUNNER = _c_real["cache"], _c_real["gate"]
 check("and this section's stubs are put back",
       NB.tg.send is _c_real["send"] and NB.GATE_RUNNER is _c_real["gate"])
+
+print("\n--- the unresolved queue finally says something out loud (18 Aug 2026) ---")
+# unresolved.json was written by the ladder and read by NOBODY for as long as it existed.
+# Ten rows on the VM going back over a week, one of them a Co-op item that sat open most
+# of a day while Jamie had no idea an entry was still missing, because nothing ever told
+# him. These are the checks that the queue now reaches him, that it says it ONCE per item
+# and TWICE per row at most, and that logging the thing shuts it up.
+_n_store = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-nudge-")))
+_N_TODAY = date(2026, 8, 18)
+
+# Nothing due is silence, not an empty message. The commonest outcome by far - most
+# mornings the queue is empty or everything in it is from today.
+check("an empty queue produces no message at all",
+      NB.fmt_unresolved_nudge(NB.due_unresolved([], _N_TODAY), _N_TODAY) == "")
+_n_store.log_unresolved("something from a market stall", day=_N_TODAY)
+check("a SAME-DAY item is not stuck, it is in progress - no nudge yet",
+      NB.due_unresolved(_n_store.read_unresolved(), _N_TODAY) == [])
+check("and one clear day later it is",
+      len(NB.due_unresolved(_n_store.read_unresolved(), _N_TODAY + timedelta(days=1))) == 1)
+
+# The two production rows that prompted this, in the shape they actually have on the VM:
+# raw_text and seen_on only, none of the fields added today.
+(_n_store.dir / "unresolved.json").write_text(json.dumps(
+    [{"raw_text": "same Co-op item as yesterday", "seen_on": "2026-08-16"},
+     {"raw_text": "unspecified item weighed 62g (scaled x1.5 per athlete's note)",
+      "seen_on": "2026-08-17"},
+     {"raw_text": "a flapjack from the cafe", "seen_on": "2026-08-18"}]))
+_n_due = NB.due_unresolved(_n_store.read_unresolved(), _N_TODAY)
+check("legacy rows with none of the new fields still nudge",
+      [r["raw_text"] for r in _n_due]
+      == ["same Co-op item as yesterday",
+          "unspecified item weighed 62g (scaled x1.5 per athlete's note)"])
+_n_msg = NB.fmt_unresolved_nudge(_n_due, _N_TODAY)
+# ONE message, both items - the coach's evening slot settled this argument already
+# ("two or more collapse into ONE question rather than stacking question marks").
+check("two stuck items are one message, not two",
+      _n_msg.count("Still open") == 1 and _n_msg.count("- same Co-op") == 1)
+check("each line names the item and the DAY, the way day_phrase insists",
+      "(Sunday, 16 Aug)" in _n_msg and "(yesterday, 17 Aug)" in _n_msg)
+check("today's item is not in it", "flapjack" not in _n_msg)
+check("it says what to do about it rather than only that something is wrong",
+      "send the pack values" in _n_msg)
+# IT MUST NOT OFFER WHAT IS NOT WIRED. An earlier draft invited "say so and I will stop
+# asking"; nothing maps that reply to clear_unresolved, so it would have been parsed as
+# food and the row would have kept asking anyway - a promise no code reads back, which
+# is this whole change's defect pointed the other way.
+check("and offers nothing the bot cannot actually do",
+      "say so" not in _n_msg and "rather drop it" not in _n_msg
+      and "I will not keep asking about this." in _n_msg)
+check("and it carries no macro figures, which is what keeps it out of the gate",
+      "kcal" not in _n_msg and "protein" not in _n_msg)
+check("one stuck item reads as one, not as a list of one",
+      "I never got figures for this" in NB.fmt_unresolved_nudge(_n_due[:1], _N_TODAY))
+
+# THE SEND. The ledger must only ever be written after the message actually left.
+_n_sent = []
+_n_ok = lambda t: (_n_sent.append(t), {"ok": True})[1]
+_n_fail = lambda t: {"ok": False, "error": "telegram is down"}
+check("a FAILED send marks nothing - the ask has to still be owed",
+      NB.send_unresolved_nudge(_n_store, "tok", 1, _N_TODAY, sender=_n_fail) == ""
+      and all(r["nudged_on"] == [] for r in _n_store.read_unresolved()))
+_n_text = NB.send_unresolved_nudge(_n_store, "tok", 1, _N_TODAY, sender=_n_ok)
+check("a successful send goes out once and is recorded against both rows",
+      len(_n_sent) == 1 and _n_text == _n_sent[0]
+      and sum(1 for r in _n_store.read_unresolved() if r["nudged_on"] == ["2026-08-18"]) == 2)
+check("the nudge is in the chat transcript, so his answer has a question to belong to",
+      _n_store.recent_chat()[-1]["text"] == _n_text)
+# A cron that fires twice, or a hand re-run, must not push the same sentence at him
+# again the same morning. Only a SUCCESSFUL send suppresses, so the failed attempt above
+# left the ask genuinely owed.
+check("running it again the same day sends nothing",
+      NB.send_unresolved_nudge(_n_store, "tok", 1, _N_TODAY, sender=_n_ok) == ""
+      and len(_n_sent) == 1)
+
+# THE CAP. The drain matches on raw_text, so an item he resolved by REPHRASING leaves its
+# row standing - without a cap that row asks him about an already-logged dinner every
+# morning for ever. Same lesson as .capture-reminded.json.
+_n_d2, _n_d3 = _N_TODAY + timedelta(days=1), _N_TODAY + timedelta(days=2)
+_n_m2 = NB.send_unresolved_nudge(_n_store, "tok", 1, _n_d2, sender=_n_ok)
+check("day two still asks, because the first one can genuinely be missed",
+      "same Co-op item" in _n_m2)
+# The cap is PER ROW, not per morning: the flapjack only became due on day two, so its
+# own two asks run a day behind. A whole-queue counter would have silenced it for a
+# stuck item it has nothing to do with.
+_n_m3 = NB.send_unresolved_nudge(_n_store, "tok", 1, _n_d3, sender=_n_ok)
+check("day three has stopped asking about the two that have now had their two asks",
+      "same Co-op item" not in _n_m3 and "62g" not in _n_m3)
+check("and is still asking about the one whose turn it is",
+      "a flapjack from the cafe" in _n_m3)
+check("day four is silent altogether - it stops being his problem",
+      NB.send_unresolved_nudge(_n_store, "tok", 1, _N_TODAY + timedelta(days=3),
+                               sender=_n_ok) == "")
+check("but the rows are still there for the admin/mapping reader",
+      len(_n_store.read_unresolved()) == 3)
+
+# THE DRAIN, through the real commit_one. Logging the thing retires the row.
+_n_real = {"cache": NB.NR.cache_resolved, "chat": NB._chat}
+NB.NR.cache_resolved = lambda store, item: None
+NB._chat = lambda ctx, role, text: None
+_n_ctx = FakeCtxCommit(_n_store)
+NB.commit_one(_n_ctx, {"resolved_name": "Co-op Thai green curry",
+                       "raw_text": "same Co-op item as yesterday",
+                       "kcal": 480.0, "confidence": "label", "source_rung": "retailer"},
+              _n_d3)
+check("committing the item clears its queued row",
+      [r["raw_text"] for r in _n_store.read_unresolved()]
+      == ["unspecified item weighed 62g (scaled x1.5 per athlete's note)",
+          "a flapjack from the cafe"])
+check("and the entry itself was written, which is the thing that must never be risked",
+      _n_store.get_day(_n_d3)["entries"][0]["resolved_name"] == "Co-op Thai green curry")
+# A row that will not parse is an admin problem, not a reason to skip every OTHER stuck
+# item that morning.
+check("an undateable row is skipped, and the rest still go",
+      [r["raw_text"] for r in NB.due_unresolved(
+          [{"raw_text": "broken", "seen_on": "not-a-date"},
+           {"raw_text": "fine", "seen_on": "2026-08-16"}], _N_TODAY)] == ["fine"])
+NB.NR.cache_resolved, NB._chat = _n_real["cache"], _n_real["chat"]
+check("and this section's stubs are put back too",
+      NB.NR.cache_resolved is _n_real["cache"] and NB._chat is _n_real["chat"])
 
 print()
 if FAILED:

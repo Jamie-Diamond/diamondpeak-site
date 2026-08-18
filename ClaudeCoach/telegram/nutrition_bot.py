@@ -4841,6 +4841,18 @@ def commit_one(ctx: Context, item: dict, day: date, today: date = None) -> None:
         # out. `or None` so an item with an empty list writes the same row it always did.
         stated_fields=item.get("stated_fields") or None)
     NR.cache_resolved(ctx.store, item)
+    # IT IS NO LONGER OPEN, SO IT MUST STOP BEING NUDGED ABOUT. The item reached the
+    # unresolved queue under this exact string (resolve() logs the raw_text it was given
+    # and _finalise puts that same string on the item), so clearing by it retires the row
+    # the moment the thing is actually in the log. Deliberately AFTER add_entry rather
+    # than inside it: add_entry runs under the month flock, and the queue takes its own
+    # flock on a second file handle, which the same process would simply block on for
+    # ever. A queue write must also never be able to cost a food entry - if the clear
+    # throws, the entry is already written and the worst case is one stale nudge.
+    try:
+        ctx.store.clear_unresolved(item.get("raw_text") or item.get("_raw") or "")
+    except Exception as exc:
+        log(f"[nudge] could not clear the unresolved row: {type(exc).__name__}: {exc}")
 
 
 def in_session_line(ctx: Context, day: date) -> str:
@@ -4981,6 +4993,159 @@ def handle_command(ctx: Context, cmd: str, day: date, token, chat_id) -> None:
                 log=log)
     else:
         tg.send(token, chat_id, HELP, log=log)
+
+
+# --- the unresolved nudge ---------------------------------------------------
+#
+# THE DEFECT: HE WAS NEVER TOLD. When every rung of the ladder misses, the item is
+# queued in unresolved.json and the reply asks him for the figures. If that reply
+# scrolls away, or arrives while he is riding, nothing ever asks again - and on 18 Aug
+# 2026 the live queue held ten rows going back over a week, one of them a Co-op item
+# that sat open most of a day while he had no idea the bot still owed him an entry. A
+# write-only queue is a promise nobody kept.
+#
+# WHY A SEPARATE CRON SCRIPT AND NOT THE COACH'S EVENING CHECK-IN. The reply to this
+# nudge is food, and only THIS bot's token reaches this bot's store. Pushed through
+# telegram/notify.py it would land in the coach chat, where "it was the Co-op curry"
+# goes into the coach's history and never becomes a logged entry - the athlete would
+# answer the question and still not be logged, which is the same defect wearing a
+# different hat. So: scripts/nutrition-unresolved-nudge.py, a thin cron wrapper over
+# the two functions below, in the shape morning-checkin / evening-checkin /
+# night-before-brief already use for every proactive send in this system.
+#
+# The selection and the wording live HERE rather than in that script because this is
+# the module that owns everything this bot says, and because a hyphenated filename in
+# scripts/ cannot be imported by test_nutrition_bot.py. The script is the plumbing;
+# the judgement is testable.
+
+# A SAME-DAY ITEM IS NOT STUCK, IT IS IN PROGRESS. He often comes back within the hour
+# with the pack weight, and a bot that chased him for it the same afternoon would be
+# nagging about something he is already dealing with. One clear calendar day is the
+# threshold: the day it was seen on has ended, its log is finished, and an item still
+# open across that boundary is genuinely stranded rather than merely recent. It is
+# expressed in days rather than hours because `seen_on` is a DATE - the queue has never
+# stored a clock time and inventing one for this would only be honest for new rows.
+UNRESOLVED_NUDGE_AFTER_DAYS = 1
+
+# TWO ASKS, THEN IT GOES QUIET - and this is the important half of the design, not a
+# detail. The drain matches on raw_text, so an item he resolved by REPHRASING it ("it
+# was the Co-op Thai green curry pot") leaves the original row standing, and without a
+# cap that row would ask him about an already-logged dinner every morning for ever. The
+# coach side learned exactly this and wrote it down: ".capture-reminded.json ... one ask
+# per session - repeat nagging is the defect being fixed" (evening-checkin, Case A2).
+# Two rather than one because the first can genuinely be missed; after that the row
+# stays in the file for the admin/mapping reader and stops being his problem.
+UNRESOLVED_MAX_NUDGES = 2
+
+
+def due_unresolved(rows, today: date, after_days: int = UNRESOLVED_NUDGE_AFTER_DAYS,
+                   max_nudges: int = UNRESOLVED_MAX_NUDGES) -> list:
+    """The queued rows worth asking him about this morning, oldest first.
+
+    Takes rows rather than a store so it stays a pure function of the queue and the
+    date - the whole point of putting it here instead of in the cron script.
+
+    Fail-soft on a row it cannot date: an unparseable `seen_on` is skipped, not raised
+    and not nudged. A malformed row is an admin problem, and taking down the morning
+    push for every OTHER stuck item on account of it would be the worse trade."""
+    due = []
+    for r in rows or []:
+        raw = (r.get("raw_text") or "").strip()
+        if not raw:
+            continue
+        try:
+            seen = date.fromisoformat(str(r.get("seen_on"))[:10])
+        except (TypeError, ValueError):
+            log(f"[nudge] skipping a queue row with an unusable seen_on: {r!r:.120}")
+            continue
+        if (today - seen).days < after_days:
+            continue
+        # Nudges are counted by DISTINCT DAY, not by send, and a day already spent is a
+        # day that does not ask again. Both halves matter and they are not the same
+        # check. Without the count he is asked for ever; without the `today` test a cron
+        # that fires twice - or is re-run by hand after a bad night - pushes the same
+        # sentence at him twice in one morning, which is the stacking the coach's evening
+        # slot was rebuilt to stop. A FAILED send marks nothing, so a genuine retry after
+        # an outage still goes.
+        asked = {d for d in (r.get("nudged_on") or []) if isinstance(d, str)}
+        if today.isoformat() in asked or len(asked) >= max_nudges:
+            continue
+        due.append((seen, r))
+    return [r for _seen, r in sorted(due, key=lambda x: x[0])]
+
+
+def fmt_unresolved_nudge(rows, today: date) -> str:
+    """The message. "" when there is nothing due, so the caller sends nothing.
+
+    ONE MESSAGE, however many items are stuck - the same rule the coach's evening slot
+    settled on after four separate pushes inside fifty minutes went unanswered ("two or
+    more collapse into ONE question rather than stacking question marks",
+    evening-checkin._queued_ask_text). Each line carries the DAY as well as the item,
+    for the reason day_phrase exists: "yesterday" alone is the one part of the claim he
+    cannot check at a glance.
+
+    No macros, no totals, no zone line. This says only what is outstanding and what to
+    do about it, which is also what keeps it outside the reply gate - see the blocked-
+    offer refusal in confirm_partial, "a fixed line with no figures in it"."""
+    if not rows:
+        return ""
+    lines = [f"- {(r.get('raw_text') or '').strip()[:120]} "
+             f"({day_phrase(date.fromisoformat(str(r['seen_on'])[:10]), today)})"
+             for r in rows]
+    head = ("Still open from your log - I never got figures for this and it was never "
+            "logged:" if len(rows) == 1 else
+            "Still open from your log - I never got figures for these and they were "
+            "never logged:")
+    # IT PROMISES ONLY WHAT IS WIRED. An earlier draft ended "if you would rather drop
+    # it, say so and I will stop asking" - and nothing anywhere maps "drop it" to
+    # clear_unresolved, so that reply would have been parsed as a fresh food statement
+    # and the row would have kept asking regardless. A message making an offer no code
+    # reads back is the very defect this whole change exists to fix, pointed the other
+    # way. The second sentence is true because UNRESOLVED_MAX_NUDGES makes it true.
+    return (head + "\n" + "\n".join(lines)
+            + "\n\nTell me what it was, or send the pack values, and I will log it. "
+              "I will not keep asking about this.")
+
+
+def send_unresolved_nudge(store, token, chat_id, today: date, sender=None) -> str:
+    """Send this morning's nudge, if there is one. Returns the text sent, or "".
+
+    THE LEDGER IS WRITTEN AFTER THE SEND, NEVER BEFORE. A row marked as asked against a
+    message that failed to leave has spent one of its two asks on nothing, and the
+    athlete is no better off than before this function existed.
+
+    The nudge is ALSO appended to the store's chat transcript. Without that,
+    recent_chat() shows the bot's next turn a reply ("it was the Co-op curry") with no
+    question in front of it, and an answer whose question is missing is exactly the
+    shape that misparses - fixing "he was never told" only to break "and his answer was
+    understood" would not be a fix.
+
+    parse_mode is off deliberately. The lines interpolate HIS OWN strings, which is the
+    one place an unbalanced `_` or `*` is likely; tg.post does retry a parse_mode 400 as
+    plain text, but there is nothing here that wants formatting, so the round trip and
+    the error line are pure cost."""
+    rows = due_unresolved(store.read_unresolved(), today)
+    text = fmt_unresolved_nudge(rows, today)
+    if not text:
+        return ""
+    send = sender or (lambda t: tg.send(token, chat_id, t, parse_mode=None, log=log))
+    res = send(text) or {}
+    # `not res.get("ok")`, not `res.get("ok") is False`: a reply with no `ok` at all is a
+    # reply we cannot say landed, and the safe direction is to leave the ask owed. Burning
+    # one of his two asks on a message that may never have arrived is the failure mode
+    # that costs the most and is the hardest to notice afterwards.
+    if not res.get("ok"):
+        log(f"[nudge] send failed, nothing marked: {res.get('error') or res!r:.160}")
+        return ""
+    for r in rows:
+        store.mark_unresolved_nudged(r.get("raw_text"), today)
+    try:
+        store.append_chat("coach", text)
+    except Exception as exc:
+        # The transcript is context, not the deliverable. He has been told either way.
+        log(f"[nudge] chat transcript append failed: {type(exc).__name__}: {exc}")
+    log(f"[nudge] asked about {len(rows)} stuck item(s)")
+    return text
 
 
 # --- poll loop --------------------------------------------------------------
