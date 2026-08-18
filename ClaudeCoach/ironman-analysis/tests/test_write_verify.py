@@ -33,6 +33,7 @@ covered by this suite - the one that gates the repo.
 """
 import ast
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -45,6 +46,22 @@ if str(LIB) not in sys.path:
 import write_verify as V  # noqa: E402
 
 BOT_PY = Path(__file__).resolve().parents[2] / "telegram/bot.py"
+
+if str(BOT_PY.parent) not in sys.path:
+    sys.path.insert(0, str(BOT_PY.parent))
+# A guarded import and a skipif on each CLASS that needs it, not pytest.importorskip.
+# bot.py is the transport and pulls in the whole telegram side, so it is the plausible
+# thing to become unimportable in a bare checkout - and importorskip at module scope raises
+# during COLLECTION, which skips the entire file. That would silently stop the ~100 pure
+# tests here from gating the repo, which is the exact failure this module exists to
+# prevent. Imported at the top rather than beside section 12 (moved 17 Aug 2026) because
+# section 8 now calls _classify_tool for real: source-reading alone could prove where the
+# branches SIT but never what they RETURN, and the compound-command hole was a bug about
+# what they return.
+try:
+    import bot                                     # noqa: E402
+except Exception:                                  # pragma: no cover - environment only
+    bot = None
 
 # The exact reply that caused the incident, and the exact collapse summary of that turn:
 # a Read and a Write of Jamie's own files, no network write anywhere.
@@ -417,22 +434,145 @@ class TestCouplingToClassifyTool:
                      "checked your activities", "checked your heat dose"):
             assert frag in V._TOOL_LOCAL, frag
 
-    def test_the_compound_bash_command_limitation_is_still_the_shape_we_think(self):
-        """KNOWN LIMITATION, pinned so it stays visible (17 Aug 2026).
-
-        engine._tool_input_summary hands _classify_tool the whole Bash command truncated to
-        80 chars, and _classify_tool tests "plan_tools" BEFORE the intervals.icu branch. So
-        one chained command that both calculates and pushes collapses to a single local
-        fragment, and the gate would suppress a claim that was true. Accepted for now: the
-        fix belongs in _classify_tool, which also drives the athlete-facing status line.
-        The prose defence still covers the case, which is why it is survivable."""
-        src = BOT_PY.read_text()
-        assert src.index('if "plan_tools" in blob:') < src.index('has("icu_fetch", "icusync"')
-        # The suppressing half of the hazard, stated concretely.
+    def test_the_local_fragment_at_the_heart_of_the_hazard_is_still_local(self):
+        """"Built the session" really IS local, and stays gated as such. The compound-command
+        bug (fixed below) was never that this fragment is wrong; it was that a chained
+        command which also pushed to the calendar EMITTED it."""
         assert V.tool_summary_kinds("Built the session") == set()
-        # ... and the reason it is survivable: a genuinely fresh claim in the prose is what
-        # the gate would eat, and a RETROSPECTIVE one is caught by section 1 regardless.
+        # The prose defence, which carried this case on its own while the ordering hole was
+        # open, and which still has to hold: a RETROSPECTIVE claim is caught by section 1
+        # whatever the gate says.
         assert V.claim_kinds(INCIDENT_REPLY, tool_summary="Built the session") == set()
+
+
+# --- 8b) compound Bash commands: a write marker anywhere wins ----------------------------
+# THE BUG (found 17 Aug 2026, fixed 17 Aug 2026). bot._classify_tool was first-match-wins
+# over one flat blob and tested "plan_tools" ahead of the intervals.icu branch, so a single
+# chained command that calculated AND pushed collapsed to the local fragment "built the
+# session". The gate would then have suppressed a claim of a calendar write that really
+# happened. It is pinned here by CALLING the classifier, not by reading the source: the old
+# test asserted only where the branches sat, and a bug about what a function returns needs a
+# test about what it returns.
+
+@pytest.mark.skipif(bot is None,
+                    reason="telegram/bot.py is not importable in this environment; the "
+                           "pure write_verify tests above still run and still gate")
+class TestACompoundBashCommandCannotHideItsWrite:
+
+    # (marker, the past-tense fragment it must force). These are the five write markers
+    # lifted into _classify_tool's pre-pass, one per key of _TOOL_WRITES.
+    MARKERS = [
+        ("icu_fetch.py push_workout --athlete jamie", "updated intervals.icu"),
+        ("icu_fetch.py edit_workout --id 1", "updated intervals.icu"),
+        ("icu_fetch.py delete_workout --id 1", "updated intervals.icu"),
+        ("icu_fetch.py update_activity --id 1", "updated intervals.icu"),
+        ("scripts/strava-update-activity.py --icu-id i1", "updated it on Strava"),
+        ("scripts/generate-blueprint.py --athlete jamie", "rebuilt your plan"),
+        ("scripts/stage1-plan.py --athlete jamie", "rebuilt your plan"),
+        ("plan_tools.py log-strength --athlete jamie", "logged your strength work"),
+        ("plan_tools.py render-workout --athlete jamie", "wrote the workout"),
+    ]
+    # The local command the write used to hide behind, and its fragment.
+    LOCAL = "plan_tools.py session-for-load --athlete jamie"
+
+    @pytest.mark.parametrize("joiner", [" && ", "; ", " | ", " || "])
+    @pytest.mark.parametrize("write_cmd,fragment", MARKERS)
+    def test_the_write_wins_whichever_segment_it_sits_in(self, write_cmd, fragment, joiner):
+        """Both orders, because first-match-wins was the whole bug: a fix that only handled
+        `write && local` would leave the original incident shape (`local && write`) open."""
+        for hint in (self.LOCAL + joiner + write_cmd, write_cmd + joiner + self.LOCAL):
+            got = bot._classify_tool("Bash", hint)[2]
+            assert got == fragment, f"{hint!r} classified as {got!r}"
+            assert V.tool_summary_kinds(got), (
+                f"{hint!r} yields {got!r}, which does not disarm the suppressing gate")
+
+    def test_the_incident_shape_no_longer_suppresses_a_true_claim(self):
+        """The concrete case the old test accepted as a limitation. A genuinely fresh claim
+        of a calendar write, on a turn whose one chained command really did push."""
+        hint = "python3 lib/plan_tools.py session-for-load && icu_fetch.py push_workout"
+        frag = bot._classify_tool("Bash", hint)[2]
+        summary = frag[0].upper() + frag[1:]      # exactly how bot builds the collapse line
+        assert V.tool_summary_kinds(summary) == {"icu"}
+        assert V.claim_kinds(FRESH_CLAIM, tool_summary=summary) == {"icu"}
+
+    def test_every_write_the_gate_knows_about_has_a_marker(self):
+        """Self-maintaining, and the point of the whole exercise. A future _TOOL_WRITES
+        entry with no marker in _classify_tool's pre-pass silently reopens the hole for
+        that destination, so it fails here instead."""
+        # Lower-cased on both sides: _TOOL_WRITES is keyed lower-case because
+        # tool_summary_kinds folds case, while _classify_tool returns display text
+        # ("updated it on Strava").
+        covered = {frag.lower() for _cmd, frag in self.MARKERS}
+        assert covered == set(V._TOOL_WRITES), (
+            "these gated writes have no compound-command marker, so a chained command can "
+            f"still hide them: {sorted(set(V._TOOL_WRITES) - covered)}")
+
+    def test_claudes_own_file_tools_are_not_dragged_into_a_write(self):
+        """The name gate, which is correctness and not tidiness. _TOOL_LOCAL calls the
+        read/grep/glob branches its strongest proof BECAUSE the tool name forecloses the
+        network, so a marker sitting in a search pattern must not override it."""
+        for name in ("Read", "Grep", "Glob", "Write", "Edit", "MultiEdit"):
+            got = bot._classify_tool(name, "render-workout")[2]
+            assert V.tool_summary_kinds(got) == set(), f"{name}: {got!r}"
+
+    def test_a_plain_local_command_is_untouched(self):
+        """The fix must not make everything look like a write: that would cost the gate its
+        entire suppressing power, which is the other way to break it."""
+        for hint, frag in [(self.LOCAL, "built the session"),
+                           ("plan_tools.py week-tss --athlete jamie", "added up your week"),
+                           ("icu_fetch.py --endpoint wellness", "checked your wellness")]:
+            assert bot._classify_tool("Bash", hint)[2] == frag
+            assert V.tool_summary_kinds(frag) == set()
+
+    def test_the_residual_truncation_hole_is_pinned_not_claimed_closed(self):
+        """WHAT IS STILL OPEN (17 Aug 2026), and it is NOT this file's to fix.
+
+        engine._tool_input_summary (lib/engine.py) truncates the hint to 80 characters
+        before _classify_tool ever sees it. The realistic incident command is 99, so
+        `push_workout` is cut off upstream and the fragment is local again.
+
+        The rule that survives is CHARACTER OFFSET, not segment position - see the sibling
+        test below, where a marker in the FIRST segment is lost behind a long absolute
+        path. Segment order no longer matters at all; a marker is caught iff it lands
+        inside the first 80 characters. This test asserts the hole is exactly that shape,
+        so the day engine.py stops truncating mid-chain it fails and gets deleted rather
+        than sitting here as a stale warning."""
+        full = ("python3 lib/plan_tools.py session-for-load --athlete jamie && "
+                "python3 lib/icu_fetch.py push_workout")
+        assert len(full) > 80, "the sample command no longer overruns the truncation"
+        assert bot._classify_tool("Bash", full)[2] == "updated intervals.icu"
+        # ... and the same command as engine actually delivers it.
+        assert "push_workout" not in full[:80]
+        assert bot._classify_tool("Bash", full[:80])[2] == "built the session"
+        # Survivable for the same reason it always was: the prose defence is independent and
+        # does not read the tool summary at all.
+        assert V.claim_kinds(FRESH_CLAIM) == {"icu"}
+
+    def test_reversing_the_long_chain_does_survive_the_truncation(self):
+        """The other half of the honest statement: put the write inside the first 80
+        characters and the cut cannot reach it, however long the rest of the chain is."""
+        full = ("python3 lib/icu_fetch.py push_workout --athlete jamie && "
+                "python3 lib/plan_tools.py session-for-load --athlete jamie")
+        assert len(full) > 80
+        assert bot._classify_tool("Bash", full[:80])[2] == "updated intervals.icu"
+
+    def test_the_residual_is_character_offset_and_not_segment_position(self):
+        """The correction that stops the pin above being read too kindly (17 Aug 2026).
+
+        "a marker in a late segment" is the intuitive statement of the residual and it is
+        WRONG, which would leave somebody believing a single un-chained command is always
+        safe. It is not: the marker below sits in the FIRST and only segment, at index 99,
+        behind an absolute path of the length this repo actually uses, and the truncation
+        eats it just the same. Asserted here so the residual is pinned as the one condition
+        it really is - the marker must land inside the first 80 characters."""
+        one_segment = ("python3 /Users/diamondpeakconsulting/conductor/repos/"
+                       "diamondpeak-site/ClaudeCoach/lib/icu_fetch.py push_workout "
+                       "--athlete jamie")
+        assert "&&" not in one_segment and ";" not in one_segment
+        assert one_segment.index("push_workout") > 80
+        assert bot._classify_tool("Bash", one_segment)[2] == "updated intervals.icu"
+        assert V.tool_summary_kinds(
+            bot._classify_tool("Bash", one_segment[:80])[2]) != {"icu"}
 
 
 # --- 9) the bot wiring -------------------------------------------------------------------
@@ -527,15 +667,38 @@ class TestBotDoesNotFoldUnknownInWithAbsent:
     def test_the_calendar_branch_passes_its_verdict_to_the_copy(self):
         assert "verdict=post" in BOT_PY.read_text()
 
-    def test_the_strava_branch_is_left_on_a_bool_and_therefore_hedges(self):
-        """Documenting the scope-out so it is a decision and not an oversight.
-        _retry_strava_description returns False on paths with no proof behind them (the
-        read-back failing, and the early return after the 120s subprocess timeout), so its
-        False must NOT unlock the assertive copy. Leaving `post` at None on that branch is
-        what makes result_line hedge, so the two facts have to stay true together."""
-        assert any("ok = _retry_strava_description(slug, icu_id, desc)" in ln
-                   for ln in self._code_lines())
+    def test_the_strava_branch_keeps_its_verdict_too(self):
+        """WAS the scope-out, now the fix (17 Aug 2026). This test used to assert the
+        opposite - that the Strava branch was deliberately left on a bool and therefore
+        hedged on everything. That was honest but incomplete: the same False carried a
+        proved absence and an unproved one, so a Strava failure we HAD established was
+        reported as one we could not check. The branch now keeps the verdict, like the
+        calendar branch, and the unproved paths say "unknown" rather than fabricating an
+        absence."""
+        lines = self._code_lines()
+        assert any("ok, post = _retry_strava_description(slug, icu_id, desc)" in ln
+                   for ln in lines), (
+            "the Strava retry's verdict is being discarded again, so a proved absence and "
+            "a failed read-back are indistinguishable at the copy and the alert")
+        assert not any("ok = _retry_strava_description(" in ln for ln in lines)
+        # The default still hedges: a caller with no verdict has proved nothing, and that
+        # rule is what made the old scope-out safe. It has to survive the fix.
         assert "Nothing was written" not in V.result_line("strava", False)
+
+    def test_the_unproved_paths_of_the_strava_retry_say_unknown_not_absent(self):
+        """Source-level companion to the behavioural tests in section 12. The two paths
+        named when this was found - the read-back failing and the 120s subprocess timeout -
+        must not reach strava_desc_verdict at all, because feeding it a description it
+        never received scores "absent" on nothing."""
+        src = BOT_PY.read_text()
+        fn = src[src.index("def _retry_strava_description("):
+                 src.index("def _icu_client(")]
+        body = [ln for ln in fn.splitlines() if not ln.lstrip().startswith("#")]
+        assert any("if desc is None:" in ln for ln in body), (
+            "the read-back's None is no longer short-circuited, so it will be scored as a "
+            "proved absence again")
+        assert sum('return (False, "unknown")' in ln for ln in body) == 3
+        assert not any('return (False, "absent")' in ln for ln in body)
 
 
 # --- 10) the athlete-facing failure copy -------------------------------------------------
@@ -613,40 +776,39 @@ def test_empty_replies_claim_nothing(reply):
 # Telegram stubbed, because the thing that actually went wrong on 16 Aug was two messages
 # being SENT, and "sends nothing" is the property Jamie cares about.
 
-if str(BOT_PY.parent) not in sys.path:
-    sys.path.insert(0, str(BOT_PY.parent))
-# A guarded import and a skipif on the CLASS, not pytest.importorskip. bot.py is the
-# transport and pulls in the whole telegram side, so it is the plausible thing to become
-# unimportable in a bare checkout - and importorskip at module scope raises during
-# COLLECTION, which skips the entire file. That would silently stop the ~100 pure tests
-# above from gating the repo, which is the exact failure this module exists to prevent.
-try:
-    import bot                                     # noqa: E402
-except Exception:                                  # pragma: no cover - environment only
-    bot = None
-
-
 @pytest.mark.skipif(bot is None,
                     reason="telegram/bot.py is not importable in this environment; the "
                            "pure write_verify tests above still run and still gate")
 class TestEndToEndThroughVerifyExternalWrites:
 
     @staticmethod
-    def _run(monkeypatch, reply, tool_summary, calendar_verdicts):
+    def _run(monkeypatch, reply, tool_summary, calendar_verdicts,
+             alerts=None, strava_claim=None, strava_retry=None):
         """Drive _verify_external_writes with every side effect captured.
 
         `calendar_verdicts` is the sequence _verify_icu_calendar_claim returns, so a test
         can set the pre-retry verdict and the post-retry verdict independently. Returns
-        (messages_sent, retries_invoked, appended_transcript)."""
+        (messages_sent, retries_invoked, appended_transcript).
+
+        `alerts`, `strava_claim` and `strava_retry` were added 17 Aug 2026 when the Strava
+        branch started carrying a verdict: the ops alert is the thing that branch most
+        obviously got wrong (it hedged on proved failures too), and an alert nobody captures
+        is an alert nobody can assert on. All three are optional so the calendar tests above
+        read exactly as they did."""
         sent, calls = [], {"retry": 0, "verdicts": list(calendar_verdicts)}
         monkeypatch.setattr(bot, "send",
                             lambda *a, **k: sent.append(a[2]) or 1)
         monkeypatch.setattr(bot, "log", lambda *a, **k: None)
-        monkeypatch.setattr(bot.ops_log, "alert", lambda *a, **k: None)
+        monkeypatch.setattr(
+            bot.ops_log, "alert",
+            lambda *a, **k: (alerts.append(a[1]) if alerts is not None else None))
         monkeypatch.setattr(bot, "_verify_icu_calendar_claim",
                             lambda slug: calls["verdicts"].pop(0))
         monkeypatch.setattr(bot, "_verify_strava_claim",
-                            lambda slug, reply: ("unknown", None, None))
+                            lambda slug, reply: strava_claim or ("unknown", None, None))
+        if strava_retry is not None:
+            monkeypatch.setattr(bot, "_retry_strava_description",
+                                lambda slug, icu_id, desc: strava_retry)
 
         def _retry():
             calls["retry"] += 1
@@ -706,3 +868,175 @@ class TestEndToEndThroughVerifyExternalWrites:
         sent, retries, _ = self._run(monkeypatch, FRESH_CLAIM, None, ["unknown"])
         assert sent == []
         assert retries == 0
+
+    # --- the Strava branch's verdict, end to end (17 Aug 2026) ---------------------------
+
+    STRAVA_CLAIM = "Updated the Strava description for that ride."
+
+    def _strava(self, monkeypatch, retry_result):
+        alerts = []
+        sent, _retries, _appended = self._run(
+            monkeypatch, self.STRAVA_CLAIM, None, [],
+            alerts=alerts,
+            strava_claim=("absent", "i123", ""),
+            strava_retry=retry_result)
+        return sent, alerts
+
+    def test_a_proved_strava_absence_now_says_so_to_the_athlete_and_to_ops(self, monkeypatch):
+        """The case the old bool could not express. The retry ran, the description read
+        back empty, so the failure is ESTABLISHED and both the copy and the alert are
+        entitled to say so."""
+        sent, alerts = self._strava(monkeypatch, (False, "absent"))
+        assert sent[0] == "That didn't actually save to Strava. Retrying now."
+        assert "Nothing was written" in sent[1]
+        assert "couldn't confirm" not in sent[1]
+        assert alerts and "did not land and the retry failed" in alerts[0]
+        assert "could not be confirmed" not in alerts[0]
+
+    def test_an_unknown_strava_outcome_still_refuses_to_accuse(self, monkeypatch):
+        """The read-back failed or the updater timed out. The write may well have landed,
+        so neither the athlete copy nor the alert may assert that it did not."""
+        sent, alerts = self._strava(monkeypatch, (False, "unknown"))
+        assert "Nothing was written" not in sent[1]
+        assert "couldn't confirm the description landed" in sent[1]
+        assert alerts and "could not be confirmed after the retry" in alerts[0]
+        assert "did not land" not in alerts[0]
+
+    def test_the_two_outcomes_are_actually_worded_differently(self, monkeypatch):
+        """The whole point of ticket 2, asserted as one comparison rather than inferred
+        from two separate tests: if these ever collapse back to the same string, the
+        distinction has been lost again whatever the verdict says."""
+        proved_sent, proved_alerts = self._strava(monkeypatch, (False, "absent"))
+        unknown_sent, unknown_alerts = self._strava(monkeypatch, (False, "unknown"))
+        assert proved_sent[1] != unknown_sent[1]
+        assert proved_alerts[0] != unknown_alerts[0]
+
+    def test_an_unchanged_strava_description_is_proved_too(self, monkeypatch):
+        sent, alerts = self._strava(monkeypatch, (False, "unchanged"))
+        assert "Nothing was written" in sent[1]
+        assert "did not land and the retry failed" in alerts[0]
+
+    def test_a_successful_strava_retry_says_so_and_raises_no_alert(self, monkeypatch):
+        sent, alerts = self._strava(monkeypatch, (True, "unknown"))
+        assert sent[1] == "Saved to Strava this time."
+        assert alerts == []
+
+
+# --- 13) what the Strava retry actually knows, path by path ------------------------------
+# TICKET 2 (17 Aug 2026). _retry_strava_description returned a bare bool, so the Strava
+# branch above could never tell "proved nothing is there" from "we could not tell". Section
+# 12 asserts the wording that falls out of the verdict; this section drives the real
+# function and asserts the verdict itself, because a table of hand-fed (ok, verdict) pairs
+# proves nothing about which pair the function actually produces.
+
+@pytest.mark.skipif(bot is None,
+                    reason="telegram/bot.py is not importable in this environment; the "
+                           "pure write_verify tests above still run and still gate")
+class TestTheStravaRetryReportsWhatItActuallyKnows:
+
+    @staticmethod
+    def _drive(monkeypatch, read_back, before_desc="Aim: Z2 ride.\nOld text.",
+               run=None, allowed=True):
+        """Run the real _retry_strava_description with the subprocess and both reads
+        stubbed. `read_back` is what _read_strava_description returns; `run` replaces
+        subprocess.run so a test can make it raise the way the real one does."""
+        monkeypatch.setattr(bot, "log", lambda *a, **k: None)
+        monkeypatch.setattr(bot, "_description_allowed", lambda slug, icu_id: allowed)
+        monkeypatch.setattr(bot.subprocess, "run",
+                            run or (lambda *a, **k: None))
+        monkeypatch.setattr(bot, "_read_strava_description",
+                            lambda slug, icu_id: read_back)
+        monkeypatch.setattr(bot, "_STRAVA_DESC_SEEN", {})
+        return bot._retry_strava_description("jamie", "i123", before_desc)
+
+    def test_a_failed_read_back_is_unknown_and_not_a_fabricated_absence(self, monkeypatch):
+        """THE BUG. _read_strava_description returns (None, None) when the ICU or Strava
+        read raises, and when the activity has no strava_id at all. That None used to go
+        straight into strava_desc_verdict, which scored "absent" purely because text we
+        never received is empty. write_verify still scores a literal None that way - that
+        behaviour is correct and is asserted in scripts/test_coach_facts.py - so the fix
+        has to be here, at the only place that knows the read failed."""
+        assert self._drive(monkeypatch, (None, None)) == (False, "unknown")
+        # And the proof that this is the path being tested rather than a coincidence.
+        assert V.strava_desc_verdict(None, before="Aim: Z2 ride.\nOld text.") == "absent"
+
+    def test_the_subprocess_timeout_is_unknown_because_it_may_have_written(self, monkeypatch):
+        """A real subprocess.TimeoutExpired, so the test proves the actual exception type
+        the 120s timeout raises is caught. The updater POSTs near the end of its run, so a
+        process killed on the timeout may already have written."""
+        def _timeout(*a, **k):
+            raise subprocess.TimeoutExpired(cmd="strava-update-activity.py", timeout=120)
+        ok, verdict = self._drive(monkeypatch, ("s1", ""), run=_timeout)
+        assert (ok, verdict) == (False, "unknown")
+
+    def test_any_other_subprocess_failure_is_unknown_too(self, monkeypatch):
+        def _boom(*a, **k):
+            raise OSError("python3 not found")
+        assert self._drive(monkeypatch, ("s1", ""), run=_boom) == (False, "unknown")
+
+    def test_a_genuine_empty_description_is_still_a_proved_absence(self, monkeypatch):
+        """THE TRUE NEGATIVE, which the fix must not break. The read SUCCEEDED and what came
+        back was empty, so the write really did not land and the copy is entitled to the
+        assertive wording."""
+        assert self._drive(monkeypatch, ("s1", "")) == (False, "absent")
+
+    def test_a_byte_identical_description_is_a_proved_unchanged(self, monkeypatch):
+        before = "Aim: Z2 ride.\nHeld Z2."
+        assert self._drive(monkeypatch, ("s1", before), before_desc=before) \
+            == (False, "unchanged")
+
+    def test_a_description_that_moved_counts_as_a_success(self, monkeypatch):
+        """`ok` is unchanged from the bool era on this path: the retry re-ran our own
+        writer and the text is no longer what it was. The verdict stays "unknown" because
+        we never knew the exact text that was meant to land, and result_line ignores the
+        verdict when ok is True anyway."""
+        ok, verdict = self._drive(monkeypatch, ("s1", "Aim: Z2 ride.\nNew text."))
+        assert ok is True
+        assert verdict == "unknown"
+        assert V.result_line("strava", ok, verdict=verdict) == "Saved to Strava this time."
+
+    def test_a_no_description_sport_is_unknown_rather_than_absent(self, monkeypatch):
+        """Defensive: _verify_strava_claim already returns "unknown" for these, so the
+        caller never gets this far. "absent" would unlock "Nothing was written, so don't
+        treat that description as updated" - telling the athlete to expect a description on
+        a sailing activity that must never carry one."""
+        assert self._drive(monkeypatch, ("s1", ""), allowed=False) == (False, "unknown")
+
+    def test_a_failed_read_back_does_not_poison_the_baseline(self, monkeypatch):
+        """_STRAVA_DESC_SEEN is the "before" for the NEXT claim on this activity. Writing a
+        None or an empty into it on a failed read would make the next comparison lie."""
+        monkeypatch.setattr(bot, "log", lambda *a, **k: None)
+        monkeypatch.setattr(bot, "_description_allowed", lambda slug, icu_id: True)
+        monkeypatch.setattr(bot.subprocess, "run", lambda *a, **k: None)
+        monkeypatch.setattr(bot, "_read_strava_description", lambda slug, icu_id: (None, None))
+        seen = {}
+        monkeypatch.setattr(bot, "_STRAVA_DESC_SEEN", seen)
+        bot._retry_strava_description("jamie", "i123", "Aim: Z2 ride.")
+        assert seen == {}
+
+    @pytest.mark.parametrize("read_back,before,expected", [
+        ((None, None), "old", (False, "unknown")),
+        (("s1", ""), "old", (False, "absent")),
+        (("s1", "same"), "same", (False, "unchanged")),
+        (("s1", "new"), "old", (True, "unknown")),
+    ])
+    def test_the_ok_bool_is_unchanged_on_every_path_it_used_to_reach(
+            self, monkeypatch, read_back, before, expected):
+        """REGRESSION SAFETY, and the reason this ticket could ship on its own. The verdict
+        is new information alongside the outcome, not a redefinition of it: `ok` is what
+        decides whether the athlete is told "Saved to Strava this time", and the old
+        formula's answer has to survive verbatim."""
+        got = self._drive(monkeypatch, read_back, before_desc=before)
+        assert got == expected
+        _sid, desc = read_back
+        legacy = (V.strava_desc_verdict(desc, before=before) not in V.ACTIONABLE
+                  and bool(desc))
+        assert got[0] == legacy, "the retry's success/failure call has moved"
+
+    def test_the_verdict_is_always_one_write_verify_understands(self, monkeypatch):
+        """Vocabulary check. A verdict outside this set silently falls to the hedge in
+        result_line, which is safe but would quietly undo the whole ticket."""
+        known = {"ok", "absent", "unchanged", "unknown"}
+        for read_back in [(None, None), ("s1", ""), ("s1", "same"), ("s1", "new")]:
+            _ok, verdict = self._drive(monkeypatch, read_back, before_desc="same")
+            assert verdict in known, verdict

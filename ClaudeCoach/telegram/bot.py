@@ -2305,29 +2305,73 @@ def _description_allowed(slug: str, icu_id: str) -> bool:
     return True
 
 
-def _retry_strava_description(slug: str, icu_id: str, before_desc) -> bool:
+def _retry_strava_description(slug: str, icu_id: str, before_desc) -> tuple:
     """Deterministic retry: re-run the bot's own description builder for that activity,
     then read back. No model round-trip is needed to re-derive intent — the description is
     generated from the activity and the session log, so the retry is exactly the write
-    that was claimed."""
+    that was claimed.
+
+    Returns (ok, verdict). `verdict` is write_verify's own three-valued vocabulary -
+    "ok" / "absent" / "unchanged" / "unknown" - and the caller hands it straight to
+    write_verify.result_line, exactly as the calendar branch already hands it `post`.
+
+    WHY IT IS NO LONGER JUST A BOOL (17 Aug 2026). The bool folded three different
+    situations into one False, and because the caller could not tell them apart the copy
+    had to hedge on all three to stay honest. Two of them deserve the hedge and were
+    written down in write_verify's own note when this was found: the read-back itself
+    failing (desc came back None, and strava_desc_verdict scored "absent" on text it never
+    actually received), and the early return after the 120s subprocess timeout, which may
+    perfectly well have written before it died. Neither is a proved absence. But the third
+    is - the description read back and was genuinely empty - and that one was being
+    reported as "could not be confirmed after the retry" too. A real signal, degraded to
+    noise on every Strava alert, because the proof had nowhere to travel. So it travels
+    with the bool now.
+
+    `ok` keeps EXACTLY its old value on every path. That is deliberate: the verdict is new
+    information sitting alongside the outcome, not a redefinition of the outcome the
+    athlete gets told about."""
     if not _description_allowed(slug, icu_id):
+        # Defensive only. _verify_strava_claim returns "unknown" for a no-description sport
+        # and the caller skips the retry on anything but a proved verdict, so nothing should
+        # reach here. "unknown" and not "absent" because nothing was ATTEMPTED: "absent"
+        # unlocks "Nothing was written, so don't treat that description as updated", which
+        # would tell the athlete to expect a description on a sailing activity that is
+        # renamed only and must never carry one.
         log(f"[{slug}] Strava description retry skipped — {icu_id} is a no-description sport")
-        return False
+        return (False, "unknown")
     try:
         subprocess.run(
             ["python3", str(BASE.parent / "scripts/strava-update-activity.py"),
              "--athlete", slug, "--icu-id", str(icu_id)],
             capture_output=True, text=True, cwd=str(PROJECT_DIR), timeout=120)
     except Exception as e:
-        log(f"[{slug}] Strava retry subprocess failed: {e}")
-        return False
+        # subprocess.TimeoutExpired at 120s lands here, and it is the case that matters: the
+        # updater's write is a POST it makes near the end of its run, so a process killed on
+        # the timeout may already have sent it and nothing here can tell. Every other way of
+        # failing to run the updater gets "unknown" for the same reason - we never looked,
+        # so we never saw. The exception type is logged because a timeout and a missing
+        # interpreter want very different follow-up from whoever reads the alert.
+        log(f"[{slug}] Strava retry subprocess failed ({type(e).__name__}): {e}")
+        return (False, "unknown")
     _, desc = _read_strava_description(slug, icu_id)
-    if desc is not None:
-        _STRAVA_DESC_SEEN[slug] = (str(icu_id), desc)
+    if desc is None:
+        # THE FALSE ABSENCE, and the reason this function changed shape.
+        # _read_strava_description returns (None, None) when the ICU or Strava read raises,
+        # and when the activity has no strava_id linked at all. Handing that None to
+        # strava_desc_verdict scores "absent" purely because text we never received is
+        # empty, which is the accusation-on-unknown write_verify's docstring forbids
+        # outright. A read that SUCCEEDS gives "" at worst, so `is None` separates the two
+        # cleanly: only a description we actually saw is allowed to prove anything.
+        log(f"[{slug}] Strava retry read-back failed - outcome unknown, not an absence")
+        return (False, "unknown")
+    _STRAVA_DESC_SEEN[slug] = (str(icu_id), desc)
+    verdict = write_verify.strava_desc_verdict(desc, before=before_desc)
     # Still empty, or still byte-identical to the text that was there when the claim was
     # made: either way nothing about the activity on Strava changed, so the retry failed.
-    return (write_verify.strava_desc_verdict(desc, before=before_desc)
-            not in write_verify.ACTIONABLE and bool(desc))
+    # Both of those are PROVED, and the verdict is how that proof now reaches the copy and
+    # the ops alert. The redundant-looking bool(desc) stays so `ok` is unchanged by
+    # construction rather than by an argument about strava_desc_verdict's internals.
+    return (verdict not in write_verify.ACTIONABLE and bool(desc), verdict)
 
 
 def _icu_client(slug: str):
@@ -2422,15 +2466,18 @@ def _verify_external_writes(token, chat_id, slug: str, clean: str, icu_retry=Non
             # confirmations that were true.
             post = None
             if kind == "strava":
-                # Left on a bool, and the copy therefore hedges (write_verify.result_line
-                # treats verdict=None as unproved). That is the right default here:
-                # _retry_strava_description returns False on paths with no proof behind
-                # them - the read-back itself failing, and the early return after the 120s
-                # subprocess timeout, which may have written before it died. Giving this
-                # branch a real verdict means changing that function to return
-                # (ok, verdict); deliberately not done here, because doing it half way for
-                # one rare branch is worse than not at all.
-                ok = _retry_strava_description(slug, icu_id, desc)
+                # Now symmetrical with the calendar branch (17 Aug 2026). This used to
+                # reduce the retry to a bool and leave `post` at None, so result_line
+                # hedged on EVERY Strava outcome. That was the honest default while the
+                # bool was all there was - two of its three False paths have no proof
+                # behind them - but it also hedged on the one that does: a description
+                # read back empty is a proved absence, and Jamie was being told "I
+                # couldn't confirm the description landed" about a failure we had
+                # established. _retry_strava_description now returns (ok, verdict), the
+                # unproved paths return "unknown" instead of a fabricated "absent", and
+                # the verdict travels the same route `post` already travels below: into
+                # result_line for the athlete copy, and into `proved` for the ops alert.
+                ok, post = _retry_strava_description(slug, icu_id, desc)
             else:
                 if icu_retry is not None:
                     try:
@@ -5348,9 +5395,87 @@ def _classify_tool(name, hint):
     def has(*subs):
         return any(s in blob for s in subs)
 
+    # --- A WRITE MARKER ANYWHERE IN THE HINT WINS ------------------------------
+    # WHY (17 Aug 2026, follow-up to the 16 Aug write-verify incident). This
+    # function stopped being only a status line the day lib/write_verify.py
+    # started reading its past-tense fragments as EVIDENCE. tool_summary_kinds
+    # suppresses a claimed external write when every fragment of the collapse
+    # summary is provably local, so a fragment that says "built the session" is
+    # now an assertion that nothing left this box.
+    #
+    # The branches below are first-match-wins over one flat blob, and the model
+    # chains commands. `plan_tools.py session-for-load ... && icu_fetch.py
+    # push_workout ...` matched "plan_tools" first, collapsed to "built the
+    # session", and the gate would then have suppressed a claim that was TRUE
+    # while a session really did land on the calendar. Suppressing a true claim
+    # is the one failure the whole write-verify module exists to prevent, so the
+    # markers that can only mean an external write are lifted out and tested
+    # against the WHOLE hint, ahead of everything else.
+    #
+    # WHOLE-STRING SEARCH, NOT SHELL PARSING, and this was the real decision.
+    # Splitting the hint on && / ; / | and classifying each segment sounds more
+    # rigorous and cannot actually give a different answer: one tool_use event
+    # yields one triple, so a segmented version still needs a precedence rule to
+    # pick a winner, which is exactly the ordering below. What segmentation adds
+    # is failure modes - the hint is a hard 80-char truncation, so the final
+    # segment is routinely half a token and quotes are routinely unbalanced -
+    # and every one of those failure modes loses a marker. The asymmetry decides
+    # it: a false WRITE costs nothing (tool_summary_kinds returns a non-empty set,
+    # the gate fails open, and the prose defence runs exactly as it does today),
+    # while a false LOCAL is the bug. So the rule should be the one that fires
+    # most readily, and that is the plain substring search.
+    #
+    # NAME-GATED OFF CLAUDE'S OWN FILE TOOLS, which is correctness and not just
+    # tidiness. write_verify calls the read/grep/glob and write/edit/multiedit
+    # branches the strongest proof in its list precisely BECAUSE the tool name
+    # forecloses the network. `grep -n "push_workout" lib/plan_tools.py` must
+    # stay "checked your data"; a marker sitting in a search pattern is not a
+    # write and must not be allowed to override a name that cannot reach ICU.
+    #
+    # RESIDUAL, stated so nobody reads more into this than it does. (1) Only one
+    # fragment comes back, so a command that writes to BOTH destinations names
+    # one of them. Harmless: a single write kind is enough to make the gate
+    # non-empty, and a non-empty gate falls through to the prose for every kind.
+    # (2) The 80-char truncation happens in engine._tool_input_summary, upstream
+    # of here, so a marker past character 80 is cut off before this function ever
+    # sees it. State that rule as CHARACTER OFFSET and not as segment position,
+    # because segment position is the intuitive reading and it is wrong: the
+    # marker in `python3 /Users/.../ClaudeCoach/lib/icu_fetch.py push_workout`
+    # sits at index 99 of the FIRST segment and is lost just the same. So the
+    # ordering hole is closed completely - segment order no longer matters at all
+    # - and what remains is one clean condition, that the marker fall inside the
+    # first 80 characters. The fix for that lives in lib/engine.py (keep the tail,
+    # or emit one fragment per segment) and is not this function's to make.
+    # Pinned by a test.
+    #
+    # The five groups are the five keys of write_verify._TOOL_WRITES; a test
+    # asserts that correspondence, so a sixth entry there without a marker here
+    # fails rather than quietly reopening the hole. Order is by how precisely the
+    # marker states what landed: the direct API calls first, then the scripts,
+    # with render-workout last because it is the one that is a pure renderer in
+    # fact and only listed as a write out of caution.
+    if n not in ("read", "grep", "glob", "write", "edit", "multiedit"):
+        if has("push_workout", "edit_workout", "update_activity", "delete_workout"):
+            return ("icu-write", "Updating your workout on intervals.icu",
+                    "updated intervals.icu")
+        if has("strava-update", "strava_update"):
+            return ("strava", "Updating the activity on Strava",
+                    "updated it on Strava")
+        if has("stage1-plan", "generate-plan", "generate-blueprint"):
+            return ("plan", "Rebuilding your plan", "rebuilt your plan")
+        if has("log-strength"):
+            return ("logstrength", "Logging your strength session",
+                    "logged your strength work")
+        if has("render-workout"):
+            return ("render", "Writing the workout to intervals.icu",
+                    "wrote the workout")
+
     # --- Plan / session maths (plan_tools.py subcommands, run via Bash) ---------
     # Checked first: these commands don't carry "icu" in the hint, and they are
     # the load/plan calculations, not a raw data pull or a file read.
+    # (The write markers above have already been taken off the table for every
+    # tool but Claude's own file tools, which still reach the duplicated tests
+    # inside these branches - that is the path the name gate deliberately spares.)
     if "plan_tools" in blob:
         if "session-for-load" in blob:
             return ("session", "Building the session to your Load target",
