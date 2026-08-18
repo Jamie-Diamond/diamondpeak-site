@@ -7,7 +7,10 @@ lets the engine be tested offline against fixtures.
 
 STORAGE SHAPE
   athletes/<slug>/nutrition/YYYY-MM.json     one file per month
-  athletes/<slug>/nutrition/cache.json       resolved-item cache (see resolve step)
+  athletes/<slug>/nutrition/cache.json       resolved-item cache (see resolve step).
+                                             A flat dict, whose rows are either a
+                                             payload or an {"alias_of": key} pointer -
+                                             see the cache section below.
 Monthly files rather than one big file or one per day: a rolling 7-day plant
 window and a 7-day weight mean both need several days at once, so per-day files
 would mean seven opens for every reply, and a single lifetime file would be
@@ -989,27 +992,48 @@ class NutritionStore:
             return []
         return turns[-(limit or self.CHAT_TURNS_KEPT):]
 
+    # ONE PAYLOAD, SEVERAL WAYS OF ASKING FOR IT (18 Aug 2026). The cache file is still a
+    # flat {key: row} dict, but a row is now one of two things: a PAYLOAD, or an ALIAS -
+    # {"alias_of": "<the payload's key>"} - so several keys can reach one resolution.
+    #
+    # Aliases are POINTERS rather than copies on purpose. Copying the payload under each
+    # key was the obvious alternative and it rots: re-resolve a product and only the key
+    # you happened to come in under is refreshed, so the same food answers with two
+    # different macro sets depending on which words were used - the exact class of
+    # silent divergence this module is arranged against. A pointer has one source of
+    # truth, and a dangling one is a MISS, not a crash.
+    #
+    # OLD CACHE FILES NEED NO MIGRATION. Every row in a file written before this is a
+    # payload keyed on the athlete's words; nothing in here treats an unknown row shape
+    # as an alias, so those rows keep answering exactly as they did. They simply have no
+    # alias rows pointing at them until the next time that food is resolved and written
+    # back. There is no migration to run on the live VM, which is the whole point.
+
     def _cache_path(self) -> Path:
         return self.dir / "cache.json"
 
-    def cache_get(self, key: str, on=None) -> dict | None:
-        """A cached resolution, or None if absent or stale.
+    def _cache_read(self) -> dict:
+        """The whole cache file, or {} when it is absent or unreadable. A broken cache
+        must degrade to re-resolving, never to a crash mid-message."""
+        p = self._cache_path()
+        if not p.exists():
+            return {}
+        try:
+            cache = json.loads(p.read_text() or "{}")
+        except json.JSONDecodeError:
+            return {}
+        return cache if isinstance(cache, dict) else {}
+
+    def _cache_fresh(self, row: dict, on=None) -> dict | None:
+        """The row if it is still good, else None.
 
         Stale is a MISS, not a warning: UK retailers reformulate, so a two-year-old
         cached macro set is unreliable and silently trusting it would be the worst
         of both worlds - label-grade confidence on a figure nobody has checked
         since."""
-        p = self._cache_path()
-        if not p.exists():
+        if not row:
             return None
-        try:
-            cache = json.loads(p.read_text() or "{}")
-        except json.JSONDecodeError:
-            return None
-        hit = cache.get(key.strip().lower())
-        if not hit:
-            return None
-        resolved = hit.get("resolved_at")
+        resolved = row.get("resolved_at")
         if resolved:
             ref = date.fromisoformat(_as_iso(on)) if on else date.today()
             try:
@@ -1017,10 +1041,45 @@ class NutritionStore:
                     return None
             except ValueError:
                 return None
-        return hit
+        return row
 
-    def cache_put(self, key: str, payload: dict) -> None:
+    def cache_get(self, key: str, on=None) -> dict | None:
+        """A cached resolution, or None if absent or stale.
+
+        Follows ONE alias hop and no more. One hop is all the writer ever creates, and
+        refusing to chain means a corrupted file cannot spin here inside a message."""
+        cache = self._cache_read()
+        hit = cache.get(key.strip().lower())
+        if isinstance(hit, dict) and hit.get("alias_of"):
+            hit = cache.get(str(hit["alias_of"]).strip().lower())
+            if isinstance(hit, dict) and hit.get("alias_of"):
+                return None          # a chain, or a loop: treat as absent
+        return self._cache_fresh(hit if isinstance(hit, dict) else None, on=on)
+
+    def cache_rows(self, on=None) -> list:
+        """Every fresh PAYLOAD in the cache as (key, payload), aliases left out.
+
+        For the caller that has to search the cache by something other than a key -
+        the resolution ladder matching a product identity against what the athlete
+        said this time. Alias rows are omitted so each saved resolution appears
+        exactly once and a search cannot read the same product as two candidates."""
+        out = []
+        for key, row in self._cache_read().items():
+            if not isinstance(row, dict) or row.get("alias_of"):
+                continue
+            fresh = self._cache_fresh(row, on=on)
+            if fresh is not None:
+                out.append((key, fresh))
+        return out
+
+    def cache_put(self, key: str, payload: dict, aliases=()) -> None:
+        """Write one payload, plus any number of alias keys pointing at it.
+
+        Aliases are written in the SAME locked read-modify-write as the payload: an
+        alias that landed without its target, or a target without its aliases, would
+        be a cache that answers differently depending on when it was interrupted."""
         p = self._cache_path()
+        primary = key.strip().lower()
         with self._file_lock("cache"):
             cache = {}
             if p.exists():
@@ -1028,7 +1087,11 @@ class NutritionStore:
                     cache = json.loads(p.read_text() or "{}")
                 except json.JSONDecodeError:
                     cache = {}
-            cache[key.strip().lower()] = payload
+            cache[primary] = payload
+            for alias in aliases or ():
+                alias = (alias or "").strip().lower()
+                if alias and alias != primary:
+                    cache[alias] = {"alias_of": primary}
             _atomic_write(p, cache)
 
     # --- remembered product facts -------------------------------------------

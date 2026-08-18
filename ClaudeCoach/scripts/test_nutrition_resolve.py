@@ -753,6 +753,192 @@ check("a cache hit takes the overlay too",
       cached_part["source_rung"] == R.Rung.CACHE and cached_part["protein_g"] == 21.0
       and cached_part["kcal"] == 300)
 
+# 25) THE CACHE KEY (18 Aug 2026). It was his sentence, lower-cased, so a photographed
+#     Co-op cookie label saved on 16 Aug under "One cookie" was unreachable the next day
+#     when the same biscuit was "a whole matcha cookie". Every rephrasing re-walked the
+#     ladder and re-guessed a label we already had, which is how a cookie took 17 hours,
+#     several photos and a hand-backfill to log.
+COOKIE = {"kcal": 470, "protein_g": 5.0, "carb_g": 55.0, "fat_g": 25.0,
+          "resolved_name": "Co-op Matcha & White Chocolate Cookie",
+          "confidence": "label", "source_kind": "manufacturer",
+          "source_url": "https://coop.co.uk/x"}
+st25 = new_store()
+R.cache_resolved(st25, R.resolve("One cookie", day=TODAY, store=st25, table=TABLE,
+                                 cofid=EMPTY_COFID,
+                                 fetchers={R.Rung.WEB: lambda t, p: COOKIE}))
+# THE ROW IS FILED UNDER THE PRODUCT, and his words are an alias pointing at it - so the
+# commonest case, saying the same thing again, is still one dict hop.
+keys25 = dict(st25.cache_rows(on=TODAY))
+check("the payload is keyed on the product identity and the amount",
+      list(keys25) == ["chocolate cookie matcha white#x1"])
+check("his exact words still reach it", (st25.cache_get("one cookie", on=TODAY)
+                                         or {}).get("kcal") == 470)
+check("an alias is a pointer, not a second copy of the macros",
+      __import__("json").loads((st25.dir / "cache.json").read_text())["one cookie"]
+      == {"alias_of": "chocolate cookie matcha white#x1"})
+# THE BUG ITSELF. `boom` on the rung that would otherwise answer, as in test 7: a
+# non-degraded CACHE hit is the only way this can come back.
+rephrased = R.resolve("a whole matcha cookie", day=TODAY, store=st25, table=TABLE,
+                      cofid=EMPTY_COFID, fetchers={R.Rung.WEB: boom})
+check("a rephrasing of the same product now hits the cache",
+      rephrased["source_rung"] == R.Rung.CACHE and rephrased["kcal"] == 470)
+check("and it short-circuits the ladder rather than surviving a failure",
+      rephrased["degraded"] is False)
+check("the log says it was matched on the product, not on his words",
+      "matched on the product" in
+      next(a["detail"] for a in rephrased["attempts"] if a["rung"] == R.Rung.CACHE))
+same = R.resolve("One cookie", day=TODAY, store=st25, table=TABLE, cofid=EMPTY_COFID,
+                 fetchers={R.Rung.WEB: boom})
+check("an exact repeat still hits, and says it matched his own words",
+      same["source_rung"] == R.Rung.CACHE
+      and "matched on the product" not in
+      next(a["detail"] for a in same["attempts"] if a["rung"] == R.Rung.CACHE))
+# NO MIGRATION. Every row in a cache file written before this is a payload keyed on his
+# words - and it carries the resolved_name, so the identity search finds it where it lies.
+# Old data gets better rather than merely surviving.
+st25old = new_store()
+st25old.dir.mkdir(parents=True, exist_ok=True)
+(st25old.dir / "cache.json").write_text(__import__("json").dumps(
+    {"one cookie": {"kcal": 470, "confidence": "label", "resolved_at": TODAY.isoformat(),
+                    "resolved_name": "Co-op Matcha & White Chocolate Cookie"}}))
+check("a pre-existing flat cache file needs no migration to be rephrased into",
+      R.resolve("a whole matcha cookie", day=TODAY, store=st25old, table=TABLE,
+                cofid=EMPTY_COFID,
+                fetchers={R.Rung.WEB: boom})["source_rung"] == R.Rung.CACHE)
+check("and it still answers the words it was saved under",
+      R.resolve("one cookie", day=TODAY, store=st25old, table=TABLE, cofid=EMPTY_COFID,
+                fetchers={R.Rung.WEB: boom})["source_rung"] == R.Rung.CACHE)
+
+
+def saved(name, raw="whatever", kcal=200, at=None):
+    """A store holding one saved resolution, written the way cache_resolved writes."""
+    st = new_store()
+    st.dir.mkdir(parents=True, exist_ok=True)
+    primary, aliases = R.cache_keys(name, raw)
+    st.cache_put(primary, {"kcal": kcal, "resolved_name": name, "confidence": "label",
+                           "amount_key": R._amount_key(raw),
+                           "resolved_at": (at or TODAY).isoformat()}, aliases=aliases)
+    return st
+
+
+def cache_rung(st, phrase, **kw):
+    return R.resolve(phrase, day=TODAY, store=st, table=TABLE, cofid=EMPTY_COFID,
+                     fetchers={R.Rung.WEB: boom}, **kw)["source_rung"]
+
+
+# THE HEAD NOUN IS WHAT STOPS THIS BECOMING THE 12 AUG BUG AGAIN. Containment alone
+# accepts "peanut butter" against a saved peanut butter BAR - same tokens, one a subset
+# of the other, "protein" a stopword - and hands back a bar's macros wearing the label
+# confidence the bar's own label earned. English puts the product type last, and that is
+# the only thing telling the two apart.
+check("a saved BAR does not answer a question about the butter",
+      cache_rung(saved("Peanut Butter Protein Bar", "a peanut butter bar"),
+                 "peanut butter") != R.Rung.CACHE)
+check("a saved SANDWICH does not answer a question about the salad",
+      cache_rung(saved("Chicken Salad Sandwich", "a chicken salad sandwich"),
+                 "chicken salad") != R.Rung.CACHE)
+check("one identifying word is never enough to reach a product he did not name",
+      cache_rung(saved("Peanut butter, smooth", "peanut butter"), "butter")
+      != R.Rung.CACHE)
+check("but the product he DID name still answers",
+      cache_rung(saved("Peanut butter, smooth", "peanut butter"), "smooth peanut butter")
+      == R.Rung.CACHE)
+# HOW MUCH is in the key, because the payload is a resolution of a PORTION. Identity
+# alone would have filed these as one row and answered either question with the other's
+# figures - a silent trebling, which is worse than the miss this whole change is about.
+st25oats = new_store()
+for text, kcal in (("50g of porridge oats", 190), ("150g of porridge oats", 570)):
+    R.cache_resolved(st25oats, R.resolve(
+        text, day=TODAY, store=st25oats, table=TABLE, cofid=EMPTY_COFID,
+        fetchers={R.Rung.WEB: lambda t, p, _k=kcal: {
+            "kcal": _k, "resolved_name": "Porridge oats", "confidence": "label",
+            "source_kind": "manufacturer"}}))
+check("two portions of one food are two rows, not one overwriting the other",
+      len(st25oats.cache_rows(on=TODAY)) == 2)
+check("and each amount gets its own figures back",
+      [R.resolve(t, day=TODAY, store=st25oats, table=TABLE, cofid=EMPTY_COFID,
+                 fetchers={R.Rung.WEB: boom})["kcal"]
+       for t in ("50g of porridge oats", "150g of porridge oats")] == [190, 570])
+check("a count he stated is part of the amount too, or two cookies log as one",
+      cache_rung(saved("Co-op Matcha & White Chocolate Cookie", "one cookie"),
+                 "two matcha cookies") != R.Rung.CACHE)
+check("and a bare plural is a count QUESTION, not a licence to serve the one-cookie row",
+      cache_rung(saved("Co-op Matcha & White Chocolate Cookie", "one cookie"),
+                 "some matcha cookies") != R.Rung.CACHE)
+# THE PLURAL GUARD HAS TO HOLD ON THE EXACT-IDENTITY PATH TOO, which is easier to reach
+# than it looks: "Co-op Cookie" keys as `cookie#x1` because "co" and "op" are too short to
+# identify anything, and "cookies" reduces to the same identity.
+check("a plural does not slip through the exact-identity lookup either",
+      cache_rung(saved("Co-op Cookie", "one cookie"), "cookies") != R.Rung.CACHE)
+# HOW MUCH, read off a sentence that also carries a time or a figure. Settling for the
+# default at the first number it sees filed "half a cookie" as one whole cookie - the
+# amount key's own version of the silent doubling it exists to prevent.
+for said, want in (("at 1350, half a cookie", "x0.5"), ("400 kcal, two portions", "x2"),
+                   ("a cookie at 9:30", "x1"), ("150g of porridge oats", "150g x1"),
+                   ("a big bowl of porridge", "big x1"), ("two slices of toast", "x2")):
+    check(f"the amount in {said!r} reads as {want!r}", R._amount_key(said) == want)
+check("while the singular he saved it under still answers",
+      cache_rung(saved("Co-op Matcha & White Chocolate Cookie", "one cookie"),
+                 "a matcha cookie") == R.Rung.CACHE)
+check("and so is a size word, which the tokeniser drops as noise",
+      cache_rung(saved("Porridge with berries", "a small bowl of porridge"),
+                 "a big bowl of porridge") != R.Rung.CACHE)
+# AMBIGUITY IS A MISS. Two saved products that both fit means we do not know which he
+# ate, and picking by dict order would be a coin toss wearing label confidence.
+st25two = new_store()
+for name in ("Co-op Matcha White Chocolate Cookie", "Tesco Matcha Oat Cookie"):
+    primary, aliases = R.cache_keys(name, "a cookie")
+    st25two.cache_put(primary, {"kcal": 470, "resolved_name": name, "amount_key": "x1",
+                                "confidence": "label",
+                                "resolved_at": TODAY.isoformat()}, aliases=aliases)
+amb = R.resolve("a matcha cookie", day=TODAY, store=st25two, table=TABLE,
+                cofid=EMPTY_COFID, fetchers={R.Rung.WEB: boom})
+check("two saved products that both fit is a miss, not a guess",
+      amb["source_rung"] != R.Rung.CACHE
+      and "ambiguous" in next(a["detail"] for a in amb["attempts"]
+                              if a["rung"] == R.Rung.CACHE))
+# A rejection still bypasses the cache, and now does so however he worded it.
+check("something he ruled out today is still bypassed under the new key",
+      outcome(R.resolve("smooth peanut butter", day=TODAY, table=TABLE,
+                        cofid=EMPTY_COFID, exclude=["peanut butter"],
+                        store=saved("Peanut butter, smooth", "peanut butter"),
+                        fetchers={R.Rung.WEB: lambda t, p: dict(
+                            SALTED, confidence="label", source_kind="manufacturer")}),
+              R.Rung.CACHE) == "excluded_by_athlete")
+
+# 26) WHAT MAY BE CACHED DID NOT CHANGE, and the check has to be made against the NEW
+#     key. Asserting only that his sentence misses would pass even if the payload had
+#     been written under the product key, which is precisely the row that is now
+#     reachable from the most phrasings. So: nothing at all may be in the file.
+st26 = new_store()
+R.cache_resolved(st26, R.resolve("guessy thing", day=TODAY, store=st26, table=TABLE,
+                                 cofid=EMPTY_COFID,
+                                 fetchers={R.Rung.LLM: lambda t, p: LLM_HIT}))
+check("an LLM estimate writes NO row under any key, old or new",
+      st26.cache_rows(on=TODAY) == []
+      and st26.cache_get("guessy thing", on=TODAY) is None
+      and st26.cache_get(R.cache_keys("mixed nuts (estimated)", "guessy thing")[0],
+                         on=TODAY) is None)
+st26b = new_store()
+overlaid = R.resolve("chicken salad with 21g protein", day=TODAY, store=st26b,
+                     table=TABLE, cofid=EMPTY_COFID, stated={"protein_g": 21},
+                     fetchers={R.Rung.WEB: lambda t, p: dict(SALAD)})
+R.cache_resolved(st26b, overlaid)
+check("a figure of his writes NO row under any key either",
+      st26b.cache_rows(on=TODAY) == []
+      and st26b.cache_get(R.cache_keys(overlaid["resolved_name"],
+                                       overlaid["raw_text"])[0], on=TODAY) is None)
+check("so no rephrasing can pull his one-off figure back out",
+      R.resolve("that chicken salad", day=TODAY, store=st26b, table=TABLE,
+                cofid=EMPTY_COFID,
+                fetchers={R.Rung.WEB: lambda t, p: dict(SALAD)})["source_rung"]
+      != R.Rung.CACHE)
+st26c = new_store()
+R.cache_resolved(st26c, R.resolve("utterly unknown thing", day=TODAY, store=st26c,
+                                  table=TABLE, cofid=EMPTY_COFID,
+                                  fetchers={R.Rung.WEB: lambda t, p: None}))
+check("and a needs_input record writes nothing either", st26c.cache_rows(on=TODAY) == [])
+
 print()
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED))

@@ -237,6 +237,36 @@ store.cache_put("old item", {"kcal": 100, "resolved_at": "2024-01-01"})
 check("stale cache entry is a MISS, not a warning",
       store.cache_get("old item", on=TODAY) is None)
 check("absent key is a miss", store.cache_get("never seen", on=TODAY) is None)
+# ONE PAYLOAD, SEVERAL WAYS OF ASKING (18 Aug 2026). The resolution ladder keys a row on
+# the product and points the athlete's own words at it, so several keys have to reach one
+# payload. Pointers rather than copies: a copy per key rots the moment the product is
+# re-resolved under one of them, and then the same food answers with two different macro
+# sets depending on which words were used.
+store.cache_put("co-op matcha cookie#x1",
+                {"kcal": 470, "resolved_at": "2026-08-01", "confidence": "label"},
+                aliases=("one cookie", "a whole matcha cookie"))
+check("an alias reaches the payload it points at",
+      store.cache_get("a whole matcha cookie", on=TODAY)["kcal"] == 470)
+check("the alias is stored as a pointer, not a second copy",
+      json.loads((tmp / "nutrition" / "cache.json").read_text())["one cookie"]
+      == {"alias_of": "co-op matcha cookie#x1"})
+store.cache_put("gone stale", {"kcal": 9, "resolved_at": "2024-01-01"},
+                aliases=("that old thing",))
+check("an alias of a STALE payload is stale too",
+      store.cache_get("that old thing", on=TODAY) is None)
+store.cache_put("dangler", {"alias_of": "a key that is not there"})
+check("a dangling alias is a miss, never a crash",
+      store.cache_get("dangler", on=TODAY) is None)
+# cache_rows is what a search over the cache reads, so an alias must not appear as a
+# second candidate for the same product - and an old flat file, whose rows are ALL
+# payloads keyed on his words, must still read as the resolutions they are.
+rows = dict(store.cache_rows(on=TODAY))
+check("cache_rows returns payloads only, never the aliases pointing at them",
+      "co-op matcha cookie#x1" in rows and "one cookie" not in rows)
+check("cache_rows drops stale rows, as cache_get does",
+      "old item" not in rows and "gone stale" not in rows)
+check("and a pre-alias flat row still reads as a payload",
+      rows.get("m&s nut collection 75g", {}).get("kcal") == 470)
 
 # 14) Unresolved strings are queued for review, never dropped.
 store.log_unresolved("some artisanal thing from a market stall", day=TODAY)
