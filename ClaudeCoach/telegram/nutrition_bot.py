@@ -3645,6 +3645,12 @@ def rescale_item(item: dict, grams: float = None, factor: float = None,
 
     A field named in `stated_fields` is HELD, never recomputed - see below."""
     out = dict(item)
+    # WHAT THE CALLER ASKED FOR, kept before the branches below can move it. The factor
+    # branch reassigns `grams` to the portion it computed, so by the time the trail is
+    # stamped at the bottom there is no longer any way to tell "he said 117 g" from "he
+    # said x1.5 of 78 g" - and those are exactly the two things the next correction has to
+    # be able to tell apart.
+    asked_grams, asked_factor = grams, factor
     # HIS FIGURE IS FOR WHAT HE ATE, AND IT DOES NOT SCALE (17 Aug 2026). resolve() can now
     # lay a macro the athlete stated over whatever the ladder found - "chicken salad with
     # 21g protein" resolves the salad and keeps his 21 g - and every one of those items
@@ -3710,7 +3716,107 @@ def rescale_item(item: dict, grams: float = None, factor: float = None,
                                  if estimated else f"{grams:.0f} g - as stated")
     # A STATED amount is not an assumption - the flag exists to mark guesses.
     out["portion_estimated"] = bool(estimated)
+    # WHERE THIS AMOUNT CAME FROM, SO THE NEXT CORRECTION CANNOT APPLY IT TWICE
+    # (18 Aug 2026, the cookie). He had said "1.5 cookies" and was offered 78 g, which is
+    # 1.5 of them and was right. He then wrote "it's the one I sent a picture of twice
+    # today and yesterday. 1.5" - the SAME amount restated, because what was wrong was
+    # WHICH cookie. That was decided as a factor of 1.5 and multiplied the 78 g that
+    # already was his 1.5 into 117 g. The gate blocked the offer, so he never saw it; he
+    # restated it once more and got 175.5 g, which is 117 x 1.5. Every repetition of one
+    # unchanging fact bought another 50%, because nothing on the item recorded that its
+    # portion was itself the answer to the correction he was repeating.
+    #
+    # A NOTE FROM THIS RESCALE TO THE NEXT ONE, underscored like `_stated_held` and
+    # `_components`: transient, never a field of the record. commit_one names every field
+    # it writes, so this cannot reach the store even on a confirmed item. Deliberately
+    # FLAT and never nested - it holds the last step only, not a chain - so a pending
+    # record that is corrected repeatedly cannot grow without bound.
+    #
+    # A RATIO ONLY, because a ratio is the only thing that can compound. Grams REPLACE the
+    # portion, so "160g" applied twice is 160 g both times and needs no memory of itself -
+    # and stamping one anyway would put a new key on the output of almost every rescale in
+    # the file, for nothing. It is also what lets test_nutrition_bot.py go on comparing a
+    # plain grams rescale as a WHOLE DICT - the pin that says the held-figure guard above
+    # moved none of the calls that carry no stated figure.
+    if asked_factor is not None and asked_grams is None:
+        out["_rescale_trail"] = {"factor": asked_factor,
+                                 "from_portion_g": item.get("portion_used_g")}
     return out
+
+
+def _repeat_of_last_rescale(item: dict, grams=None, factor=None) -> str:
+    """Why this amount would apply a correction the item has ALREADY had, or "".
+
+    The compounding of 18 Aug 2026 in one sentence: a portion that is already the result
+    of his "1.5" must not be multiplied by 1.5 again, whether the second decision arrives
+    as that same ratio or as the grams it would produce (117 -> 175.5 came back as
+    `rescale` grams, not as a factor, so a factor-only check would have missed it).
+
+    Only a FACTOR in the trail can be compounded like this. A rescale stated in grams is
+    absolute - it replaces the portion rather than multiplying it - so repeating "160g"
+    is already harmless and is left alone rather than guarded against twice.
+
+    This is deliberately arithmetic and not a reading of his words: it has to hold on the
+    message where the model has just got the meaning wrong, which is the only kind of
+    message it will ever see."""
+    trail = item.get("_rescale_trail") or {}
+    try:
+        prev = float(trail.get("factor"))
+    except (TypeError, ValueError):
+        return ""
+    if prev <= 0:
+        return ""
+    if factor is not None:
+        try:
+            if abs(float(factor) - prev) <= 0.001 * max(1.0, prev):
+                return f"x{prev:g} has already been applied to this offer"
+        except (TypeError, ValueError):
+            return ""
+    if grams is not None and item.get("portion_used_g"):
+        try:
+            cur, want = float(item["portion_used_g"]), float(grams)
+        except (TypeError, ValueError):
+            return ""
+        again = cur * prev
+        # A tolerance rather than equality: the figure comes back through the model as a
+        # rounded number ("175.5"), and rescale_item's own 1 dp rounding moves it again.
+        if abs(want - again) <= max(0.5, again * 0.01):
+            return (f"{want:g} g is the {cur:g} g already in this offer scaled by "
+                    f"x{prev:g} a second time")
+    return ""
+
+
+def _undo_rescale(item: dict):
+    """The item as it was before its last rescale, or None when it cannot be undone.
+
+    Recomputed rather than remembered: keeping a copy of the previous item on the pending
+    record would double its size and, worse, would nest a copy inside a copy every time he
+    corrected the same offer twice. The portion it came from is enough, because
+    rescale_item is exact in both directions - from a per-100g basis it prices the old
+    portion outright, and without one it multiplies by the reciprocal of what was applied.
+
+    `stated_fields` survives this like any other rescale: a figure he gave was HELD on the
+    way up, so it is still his own on the way back down and is held again here."""
+    trail = item.get("_rescale_trail") or {}
+    was = trail.get("from_portion_g")
+    factor = trail.get("factor")
+    if was:
+        back = rescale_item(item, grams=float(was))
+    elif factor:
+        try:
+            back = rescale_item(item, factor=1.0 / float(factor))
+        except (TypeError, ValueError, ZeroDivisionError):
+            return None
+    else:
+        return None
+    if back is None:
+        return None
+    # The restored item is NOT the product of a correction, so it carries no trail: the
+    # stamp rescale_item just put on it describes the undo, not anything he asked for, and
+    # leaving it would make the next correction look like a repeat of a step that has been
+    # taken back.
+    back.pop("_rescale_trail", None)
+    return back
 
 
 def drop_stale_breakdown(item: dict) -> dict:
@@ -3753,6 +3859,51 @@ def apply_quantity_correction(ctx: Context, pend, qc: dict, day: date,
             return False
         item = target
     grams, factor = qc.get("grams"), qc.get("factor")
+    # A CORRECTION HE IS REPEATING IS NOT A SECOND CORRECTION (18 Aug 2026, the cookie).
+    # The full story is in rescale_item's trail comment; the part that matters here is that
+    # the athlete restating one unchanging fact - "1.5" - was executed as another 1.5x on
+    # top of the 78 g that already was his 1.5, twice, and his cookie grew by half each
+    # time he said the same thing. The model has no way to see that from the item alone,
+    # so the arithmetic is refused here rather than argued about in a prompt: whatever the
+    # decision meant, applying his own last correction to its own result is not it.
+    #
+    # PENDING ONLY. A committed entry cannot carry a trail (commit_one names every field it
+    # writes), so this could never fire against one - but it is stated rather than left to
+    # be inferred, because the branch below patches the store and the undo would have
+    # nothing to write to.
+    #
+    # DECLINED, NOT ANSWERED. False falls through to the re-resolution path with his own
+    # words attached, which is what he was actually asking for: he was disputing WHICH
+    # cookie it was, and a fresh lookup carrying "the one I sent a picture of twice" is a
+    # better answer than a question about a number he has now given three times.
+    repeat = (_repeat_of_last_rescale(item, grams=grams, factor=factor)
+              if target is None else "")
+    if repeat:
+        log(f"  quantity correction declined, it would compound one already applied: "
+            f"{repeat}")
+        back = _undo_rescale(item)
+        if back is not None:
+            # PUT BACK BEFORE GIVING UP. The fall-through usually replaces this record with
+            # a fresh offer, but it has doors that only send a message ("I have lost track
+            # of what that refers to"), and behind one of those the record would be left at
+            # a portion the gate had already refused to show him.
+            #
+            # set_pending drops `_gate_blocked` and that is right here, unlike everywhere
+            # else it is re-marked: the offer being restored is the earlier one, which he
+            # WAS shown and which did pass the gate. The block belonged to the inflated
+            # version that is being taken back with it.
+            batch[0] = back
+            set_pending(ctx.store, {**pend, "batch": batch})
+            log(f"  put the offer back to {back.get('portion_used_g') or '?'} g")
+        else:
+            # BEST EFFORT, AND SAID SO. rescale_item refuses an item with no basis to scale
+            # from, and there is no honest way to reconstruct what it was before - so the
+            # record keeps the inflated portion and the log says which one it is. Not
+            # silent: the refusal above is what stops it growing again, and the
+            # re-resolution this falls through to normally replaces the record anyway.
+            log(f"  could not put the offer back: nothing to rebuild "
+                f"{item.get('portion_used_g') or '?'} g from")
+        return False
     if qc.get("whole_pack"):
         pack = item.get("pack_g")
         if not pack:
