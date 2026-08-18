@@ -1430,6 +1430,28 @@ def looks_like_sport_exclusion(text: str) -> bool:
     return bool(p["framed"] and p["excluded"])
 
 
+def week_framed(text: str) -> bool:
+    """True when the message frames itself as being about a WEEK rather than a day.
+
+    A public wrapper, added 18 Aug 2026 for bug #30 part (b), over the two framing patterns
+    this module already had and already trusts. It invents no vocabulary: _WEEK_FRAMING_RE
+    is what decides whether "12 max" is a week's budget or a single session's, and
+    _WEEK_FRAMED_RE is what lets "no cycling this week" delete a sport from a week's plan.
+    Between them they cover this/next/coming/the week, big/easy/light/quiet/heavy/full/
+    short/normal week, all week and whole week - and, deliberately, NOT "midweek".
+
+    The union is used, not either one alone, because the caller is the scope check that
+    decides whether to auto-undo a multi-day calendar change on silence. A false positive
+    there costs a card nobody sees; a false negative deletes a replan the athlete asked
+    for in so many words. Given that asymmetry, the widest reading of "they said week" is
+    the safe one - which is also why this is a wrapper and not a third regex.
+    """
+    t = (text or "").strip()
+    if not t:
+        return False
+    return bool(_WEEK_FRAMING_RE.search(t) or _WEEK_FRAMED_RE.search(t))
+
+
 def sport_exclusion_summary(excluded: dict) -> str:
     """One-line readback for the confirmation message."""
     label = {"swim_days": "swim", "bike_days": "bike", "run_days": "run"}

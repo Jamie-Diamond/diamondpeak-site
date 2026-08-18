@@ -526,6 +526,18 @@ def events_diff(before_events, after_events) -> dict:
     return {"created": created, "deleted": deleted, "edited": edited}
 
 
+def event_unchanged(a, b) -> bool:
+    """Are these two reads of one event still the same session?
+
+    The public form of _event_shape, added 18 Aug 2026 for bug #30 part (b). The scope
+    card's auto-apply fires ten minutes after the card was sent and has to check the
+    calendar has not moved under it before it reverses anything, and reaching into a
+    private helper from bot.py to do that is how a rename silently disables a safety gate.
+    Same five fields as events_diff compares, so "unchanged" means exactly what it means
+    when events_diff decides an event was NOT edited."""
+    return _event_shape(a) == _event_shape(b)
+
+
 def diff_is_empty(diff) -> bool:
     return not any((diff or {}).get(k) for k in ("created", "deleted", "edited"))
 
