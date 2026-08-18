@@ -5985,6 +5985,395 @@ def _handle_undo(token, chat_id, data, message_id, athletes):
     return True
 
 
+# --- Scope confirmation: a turn that ran to completion and changed too much ---
+# Bug #30 part (b), 18 Aug 2026.
+#
+# THE INCIDENT. Kathryn, 16 Aug: "2.5 hours". She meant one day. The coach read it as a
+# constraint on the whole week and rebuilt the week. Part (a) above gave her a Stop button
+# and an honest account of what a stopped turn had managed to write. This is the other
+# half: the turn that is NEVER stopped, because it looks fine while it runs and only turns
+# out to have gone too far once it has finished.
+#
+# WHY THIS IS NOT A PRE-WRITE BLOCK. There is no chokepoint to block. The coach model
+# reaches intervals.icu through Bash, so there is no push_workout call in this process to
+# intercept and no way to ask "may I?" before the write happens. The only place the truth
+# exists is the calendar itself, afterwards. So: let the turn complete, let the reply go
+# out, diff the calendar against the "before" this turn started from, and if the diff is
+# WIDER than the athlete's own message authorised, say so and offer to put the excess back.
+#
+# WHY IT IS NOT A LIST OF SUSPICIOUS PHRASES. That was the obvious design and Jamie
+# rejected it on sight: "it needs to be discretional". A list of ambiguous wordings only
+# ever catches the wordings somebody thought of, and "2.5 hours" was not on anybody's list
+# on 15 Aug. The check below never looks at the message for suspicion. It asks the message
+# exactly two literal questions - which DAYS did you name, and did you say "week"? - and
+# compares the answers against the days the calendar diff actually touched. A wording
+# nobody has seen yet is handled by the same arithmetic as one we have.
+#
+# WHAT SILENCE MEANS. Jamie, asked directly: on no response, default to the NARROWER,
+# non-bespoke scope. So the card is not "reply or the change stands"; it is "reply or I
+# undo the part you did not ask for". That makes silence a destructive default, which is
+# why _scope_card_text states the deadline and the outcome in the card itself, and why
+# _authorised_dates and _week_scope_signalled are both deliberately generous: every
+# uncertainty in reading the message is resolved towards "they authorised it", because the
+# cost of getting that wrong the other way is deleting a session they asked for.
+
+_KEEP_PREFIX = "keep:"
+
+# How long the card waits before it applies the narrow default on its own.
+#
+# The hard ceiling is _PENDING_UNDO_TTL (1800s). The auto-apply goes through _take_undo
+# like a tap does, and _take_undo refuses an expired token - so a timeout at or above the
+# TTL would fire, find nothing, and silently leave the wider change in place, which is the
+# one outcome Jamie ruled out. 600s sits comfortably inside it with room for a slow pool.
+#
+# Downwards, the constraint is a human one: the reply that triggered this arrived as a push
+# notification seconds ago, so ten minutes is a realistic "read it, think, tap" window
+# without leaving a week the athlete may not have asked for sitting on the calendar long
+# enough for the next turn to start reasoning from it as fact.
+_SCOPE_CONFIRM_S = 600
+
+# Timers are kept only so the tests can join them. A restart loses them, exactly as it
+# loses _PENDING_UNDO itself; the card then expires unanswered and the change stands. That
+# is a worse default than the one Jamie chose, and it is stated here rather than hidden:
+# closing it needs the pending store to be on disk, which is a bigger change than this one.
+_SCOPE_TIMERS = {}
+
+
+def _event_day(e) -> str:
+    return ((e or {}).get("start_date_local") or "")[:10]
+
+
+def _diff_dates(diff) -> set:
+    """Every calendar date the diff touches. An EDIT counts on both sides: a session moved
+    off Thursday and onto Saturday changed two days, and only counting one of them would
+    let a move out of the authorised scope read as being inside it."""
+    days = set()
+    for e in (diff or {}).get("created", []) + (diff or {}).get("deleted", []):
+        if _event_day(e):
+            days.add(_event_day(e))
+    for b, a in (diff or {}).get("edited", []):
+        for e in (b, a):
+            if _event_day(e):
+                days.add(_event_day(e))
+    return days
+
+
+def _authorised_dates(text, today=None) -> set:
+    """The days THIS MESSAGE named, from the athlete's own words. No model in the loop.
+
+    day_overrides.named_dates does the reading and owns the reasoning; see its docstring
+    for why it is not resolve_directed_date (which refuses "no sport named", and so would
+    have read the literal incident message "2.5 hours on Thursday" as naming nothing)."""
+    try:
+        return day_overrides.named_dates(text or "", today)
+    except Exception as e:
+        # A parse failure must not become an accusation. Returning "they named nothing"
+        # would widen the excess to the whole diff and hand a timer the job of deleting it.
+        log(f"scope check: could not read the days in the message: {e}")
+        return None
+
+
+def _week_scope_signalled(text) -> bool:
+    """True when the athlete asked for the whole week, by any route this bot already
+    recognises as a whole-week request. Nothing new is invented here:
+
+      _REPLAN_RE / _PLAN_RE   the literal commands that launch a week build. They are
+                              routed off before _chat_reply_worker today, so this is
+                              belt-and-braces against that routing ever changing.
+      weekly_availability.week_framed        "this week", "next week", "big week", ...
+      ...looks_like_day_shape_declaration    "Mon rest Tue swim ... Sun rest" - a whole
+                              week's shape, already trusted enough to rewrite day_rules.
+      ...looks_like_sport_exclusion          "no cycling this week", already trusted
+                              enough to delete a sport from a week's plan.
+
+    Checked before the calendar is read, so an explicit whole-week request costs this
+    feature nothing at all - no fetch, no card, no timer."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    try:
+        if _REPLAN_RE.match(t) or _PLAN_RE.match(t):
+            return True
+        return bool(weekly_availability.week_framed(t)
+                    or weekly_availability.looks_like_day_shape_declaration(t)
+                    or weekly_availability.looks_like_sport_exclusion(t))
+    except Exception as e:
+        # Fail towards "they did ask for the week", i.e. towards saying nothing. The
+        # alternative is a helper raising and a timer deleting a legitimate replan.
+        log(f"scope check: week-scope read failed, treating as whole-week: {e}")
+        return True
+
+
+def _scope_excess(diff, authorised) -> dict:
+    """The part of the diff that fell OUTSIDE the days the message named.
+
+    Same shape as events_diff, so _reversible, describe_diff and _undo_worker all take it
+    unchanged - the excess is parked as an ordinary pending undo and there is still exactly
+    one code path that reverses anything. An edit is out of scope if EITHER end of it is:
+    dragging Thursday's session onto Saturday is a change to Saturday."""
+    out_of = lambda d: bool(d) and d not in (authorised or set())
+    return {
+        "created": [e for e in (diff or {}).get("created", []) if out_of(_event_day(e))],
+        "deleted": [e for e in (diff or {}).get("deleted", []) if out_of(_event_day(e))],
+        "edited": [(b, a) for b, a in (diff or {}).get("edited", [])
+                   if out_of(_event_day(b)) or out_of(_event_day(a))],
+    }
+
+
+def _pretty_days(days) -> str:
+    """"Wed 19 Aug and Fri 21 Aug". Days, in the athlete's terms and in order, because the
+    day is the thing they recognise - the same reasoning as write_verify.describe_event."""
+    out = []
+    for d in sorted(days or []):
+        try:
+            out.append(date.fromisoformat(d).strftime("%a %-d %b"))
+        except Exception:
+            out.append(d)
+    if len(out) <= 1:
+        return out[0] if out else ""
+    return ", ".join(out[:-1]) + " and " + out[-1]
+
+
+def _scope_card_text(kept_days, authorised, excess_dates, excess, minutes):
+    """The card. THREE shapes, not two, and the third is the one worth the extra branch:
+
+      * they named a day and it changed, along with others - "this ALSO changed";
+      * they named a day and it did NOT change - "also" would be a lie and a button
+        offering to keep that day would be offering them nothing;
+      * they named no day at all.
+
+    Every shape states the deadline and what happens at it, because silence here is a
+    DESTRUCTIVE default. Jamie chose the narrow scope on no response; a default the athlete
+    was never told about is not a default, it is a surprise."""
+    if kept_days:
+        head = (f"You asked about {_pretty_days(kept_days)}. "
+                f"This also changed {_pretty_days(excess_dates)}:")
+        tail = (f"No reply in {minutes} minutes and I'll keep {_pretty_days(kept_days)} "
+                f"and undo the rest.")
+    elif authorised:
+        head = (f"You asked about {_pretty_days(sorted(authorised))}, but nothing changed "
+                f"there. What did change was {_pretty_days(excess_dates)}:")
+        tail = (f"No reply in {minutes} minutes and I'll undo it and leave "
+                f"{_pretty_days(sorted(authorised))} as it was.")
+    else:
+        head = ("Your message didn't name a day, and this changed "
+                f"{_pretty_days(excess_dates)}:")
+        tail = f"No reply in {minutes} minutes and I'll undo all of it."
+    lines = [head] + write_verify.describe_diff(excess)
+    plan = _reversible(excess)
+    if plan["manual"]:
+        # Identical refusal to the cancel report's: an edit cannot be un-edited from a
+        # five-field fingerprint, and a removed NOTE or race entry would come back as a
+        # WORKOUT. Naming it is the honest half of a thing we cannot do.
+        lines += ["", "I can't safely reverse " + ("these" if len(plan["manual"]) > 1
+                                                   else "this") + ", so check "
+                  + ("them" if len(plan["manual"]) > 1 else "it") + " yourself:"]
+        lines += [f"• {write_verify.describe_event(e)}" for e in plan["manual"]]
+    if plan["delete"] or plan["recreate"]:
+        lines += ["", tail]
+    return "\n".join(lines)
+
+
+def _scope_keyboard(token_id, kept_days, authorised=None):
+    """Reuses the undo pipeline's own callback (_UNDO_PREFIX -> _handle_undo) for the
+    narrow choice, so the "just Thursday" tap and the cancel report's "Undo that" tap are
+    the same code doing the same thing to the same parked diff. Only the label differs, and
+    only because the athlete is choosing a scope here rather than reversing a stopped run.
+
+    The label tracks the card's three shapes. "Just Thursday" on a change that never
+    touched Thursday would be offering to keep nothing, so that case falls back to
+    #30(a)'s own wording."""
+    if kept_days:
+        narrow = (f"↩️ Just {_pretty_days(kept_days)}" if len(kept_days) <= 2
+                  else "↩️ Just what I asked for")
+    elif authorised:
+        narrow = "↩️ Undo that"
+    else:
+        narrow = "↩️ Undo all of it"
+    return {"inline_keyboard": [[
+        {"text": narrow, "callback_data": f"{_UNDO_PREFIX}{token_id}"},
+        {"text": "✅ Keep it all", "callback_data": f"{_KEEP_PREFIX}{token_id}"}]]}
+
+
+def _handle_scope_keep(token, chat_id, data, message_id):
+    """"Keep it all". A clean no-op that only has to make sure the timer finds nothing:
+    _take_undo pops under _PENDING_UNDO_GUARD and the parked diff is single-use, so this
+    tap and the auto-apply can never both win."""
+    if not data.startswith(_KEEP_PREFIX):
+        return False
+    pending = _take_undo(data[len(_KEEP_PREFIX):].strip(), chat_id)
+    if message_id:
+        edit_keyboard_confirm(token, chat_id, message_id,
+                              "✅ Kept as it is." if pending else
+                              "That one has already been settled - your calendar is "
+                              "unchanged from when I last described it.")
+    return True
+
+
+def _scope_still_as_described(slug, pending) -> bool:
+    """Has the calendar moved since the card was sent?
+
+    The auto-apply runs ten minutes later and the athlete may have had another turn in
+    between - one that legitimately dropped a session this undo would push back, or moved
+    one this undo would delete. Restoring on top of that is a write nobody asked for, and
+    it is the same class of mistake as diffing against a stale snapshot: acting on a
+    picture that is no longer true.
+
+    A gate, not a second writer. _undo_worker remains the only thing in this process that
+    reverses a diff. Refuses on a failed read for the usual reason - "unknown" is not
+    permission."""
+    now = _read_planned_window(slug)
+    if now is None:
+        return False
+    plan = _reversible(pending["diff"])
+    live = {str(e.get("id")): e for e in now}
+    for e in plan["delete"]:
+        # Still there, and still the session the card described.
+        cur = live.get(str(e.get("id")))
+        if cur is None or not write_verify.event_unchanged(cur, e):
+            return False
+    for e in plan["recreate"]:
+        # Still gone. If it is back, something else put it back and this must not double it.
+        if str(e.get("id")) in live:
+            return False
+    return True
+
+
+def _arm_scope_auto_undo(token, chat_id, slug, token_id, card_id):
+    """Apply the narrow default if nobody answers.
+
+    A daemon threading.Timer rather than a poll-loop deadline, matching engine's
+    _terminate_then_kill escalation: one deferred action, no shared clock to keep, and it
+    dies with the process instead of resurrecting a ten-minute-old decision on restart.
+
+    It cannot race a tap - _take_undo is a single-use pop under _PENDING_UNDO_GUARD - and
+    it cannot race the athlete's next MESSAGE either, because the write goes through
+    _submit and so runs under the chat lock, whole turns apart from anything else."""
+    def _fire():
+        try:
+            pending = _take_undo(token_id, chat_id)
+            if not pending:
+                return                      # tapped, expired, or already settled
+            if not _scope_still_as_described(slug, pending):
+                log(f"[{slug}] scope auto-undo skipped - the calendar moved since the card")
+                if card_id:
+                    edit_keyboard_confirm(
+                        token, chat_id, card_id,
+                        "Your calendar has changed since I asked about that, so I've left "
+                        "it alone rather than guess. Tell me if you still want it undone.")
+                return
+            log(f"[{slug}] scope card unanswered after {_SCOPE_CONFIRM_S}s - "
+                f"applying the narrow default")
+            if card_id:
+                # Said BEFORE the write and phrased as what is happening now, not as a
+                # result: _undo_worker's own message reports whether it worked, and this
+                # card must not be the thing that claims a restore that failed.
+                edit_keyboard_confirm(token, chat_id, card_id,
+                                      "⏳ No reply, so I'm undoing the extra now.")
+            # message_id None on purpose - the card has already been settled above, and a
+            # second writer editing it from the pool is how two messages disagree.
+            _submit(_undo_worker, chat_id, token, chat_id, slug, pending, None)
+        except Exception as e:
+            log(f"[{slug}] scope auto-undo failed: {e}")
+        finally:
+            _SCOPE_TIMERS.pop(token_id, None)
+
+    t = threading.Timer(_SCOPE_CONFIRM_S, _fire)
+    t.daemon = True
+    _SCOPE_TIMERS[token_id] = t
+    t.start()
+    return t
+
+
+def _turn_before_events(slug, turn_started):
+    """The "before" a COMPLETED turn may safely be diffed against, or None.
+
+    Read once, near the top of the worker, and carried down as a local. Not re-read at
+    report time, which is the obvious shortcut and is wrong: _verify_icu_calendar_claim
+    refreshes _EVENTS_SNAPSHOT after the reply on any turn that claimed a calendar write,
+    so a report-time read would hand back the AFTER window and diff it against itself. The
+    check would then be silently dead on precisely the turns that wrote to the calendar,
+    and every test that set a snapshot by hand would still pass.
+
+    The turn boundary is the same defence _report_cancelled_turn documents at length, and
+    it matters more here because this runs on EVERY turn rather than only stopped ones:
+    prefetch_context returns early on a _PREFETCH_CACHE hit (150s) WITHOUT retaking the
+    snapshot, so a "before" can predate this turn and be missing the PREVIOUS turn's
+    perfectly legitimate push. Diffed naively that push reads as this turn's overreach -
+    and here it would not merely be offered for undo, it would be auto-undone on silence.
+    A stale snapshot buys a false accusation elsewhere in write_verify; here it buys a
+    destructive write against a session the athlete asked for in an earlier message.
+
+    Cost of the strictness, stated plainly: a turn that follows another within the prefetch
+    TTL has no usable before, and the scope check no-ops. Saying nothing is the correct
+    behaviour on "unknown"; buying an events fetch before every reply is not, because it
+    would put a network round trip in front of the answer."""
+    snap = _events_snapshot(slug)
+    if not snap or snap[2] is None:
+        return None
+    if turn_started is None or snap[0] < turn_started:
+        return None
+    return snap[2]
+
+
+def _check_reply_scope(token, chat_id, slug, text, before_events):
+    """Did this completed turn change more of the calendar than the message asked for?
+
+    Called after the reply has been delivered and history saved, so it cannot delay an
+    answer, and never raises: it runs inside _chat_reply_worker's try, where an escaping
+    exception would post the "I hit a snag" apology on top of a reply that went out fine.
+
+    Mutually exclusive with _report_cancelled_turn by construction, not by convention. The
+    worker's `if cancelled:` branch reports and RETURNS, so a stopped turn never reaches
+    this line, and a completed turn never reaches that branch. One turn, one report."""
+    try:
+        if before_events is None:
+            return                          # no usable before; see _turn_before_events
+        if _week_scope_signalled(text):
+            return                          # they asked for the week - before any fetch
+        authorised = _authorised_dates(text)
+        if authorised is None:
+            return                          # could not read the message; say nothing
+        after = _read_planned_window(slug)
+        if after is None:
+            return                          # read-back failed; "unknown" says nothing
+        diff = write_verify.events_diff(before_events, after)
+        if write_verify.diff_is_empty(diff):
+            return
+        touched = _diff_dates(diff)
+        if len(touched) <= 1 and not authorised:
+            # One day changed and the message named none. This is the ordinary turn - "add
+            # a swim", "make it easier", "shorten that" - and it is the overwhelming
+            # majority of everything that reaches here. Carding it would mean auto-undoing
+            # single sessions the athlete plainly asked for, on nothing more than a parser
+            # that could not find a weekday. #30 is about a change that SPREADS.
+            return
+        excess_dates = touched - authorised
+        if not excess_dates:
+            return                          # every day it touched is a day they named
+        excess = _scope_excess(diff, authorised)
+        if write_verify.diff_is_empty(excess):
+            return
+        kept_days = sorted(touched & authorised)
+        plan = _reversible(excess)
+        log(f"[{slug}] scope check: message named {sorted(authorised) or 'no day'}, "
+            f"diff touched {sorted(touched)} - flagging {sorted(excess_dates)}")
+        body = _scope_card_text(kept_days, authorised, excess_dates, excess,
+                                _SCOPE_CONFIRM_S // 60)
+        if not (plan["delete"] or plan["recreate"]):
+            # Edits only, or a removed NOTE/race entry. There is no button that would do
+            # the right thing, so the card becomes a statement - same choice the cancel
+            # report makes, and for the same reason.
+            send(token, chat_id, body, reply_markup=_reply_inline(slug))
+            return
+        token_id = _park_undo(chat_id, slug, excess)
+        card_id = send(token, chat_id, body,
+                       reply_markup=_scope_keyboard(token_id, kept_days, authorised))
+        _arm_scope_auto_undo(token, chat_id, slug, token_id, card_id)
+    except Exception as e:
+        log(f"[{slug}] scope check failed: {e}")
+
+
 class _StatusTicker:
     """Owns msg1 (the status message). A single background thread performs ALL
     edits of msg1, so the main stream loop and the elapsed-time counter never
@@ -6218,6 +6607,13 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
         turn_started = time.time()
         history = load_history(files["history"])
         context = prefetch_context(slug)
+        # The "before" for the completed-turn scope check (bug #30 part (b), 18 Aug 2026).
+        # Taken HERE, one line after the call that populates the snapshot, and carried down
+        # as a local: _verify_icu_calendar_claim refreshes _EVENTS_SNAPSHOT after the reply,
+        # so reading it at report time would diff the after window against itself and kill
+        # the check on exactly the turns that wrote to the calendar. Boundary-checked
+        # inside _turn_before_events; None means "no usable before" and the check no-ops.
+        before_events = _turn_before_events(slug, turn_started)
         # The capture's read-back was transcripted in the poll loop so it could not be lost;
         # take it back out and carry it in this turn's single entry instead, so the athlete's
         # message appears in history once. Two entries with the same `user` text would read
@@ -6448,6 +6844,17 @@ def _chat_reply_worker(token, chat_id, config, athlete, files, athlete_name, slu
             text, _capture_history_assistant(readback, clean)
             + (f"\n\n{extra}" if extra else "")))
         save_history(history, files["history"])
+
+        # LAST: after the reply, after the verifier (so the diff includes anything its
+        # retry pushed) and after history is safe on disk. It reads the calendar for
+        # itself rather than reusing whatever _verify_icu_calendar_claim left in
+        # _EVENTS_SNAPSHOT. That reuse WOULD be correct today - the ICU branch re-verifies
+        # after the retry, so the snapshot it leaves is post-retry - but it is correct only
+        # by an invariant spread across two functions with no test holding it, and the
+        # thing it buys is one avoided read on the minority of turns that claimed a write.
+        # A scope check that silently sees a pre-retry window is a scope check that is
+        # blind on exactly the turns it exists for, so it buys its own "after" (18 Aug 2026).
+        _check_reply_scope(token, chat_id, slug, text, before_events)
     except Exception as _reply_err:
         log(f"[{slug}] reply handling error for {chat_id}: {_reply_err}")
         try:
@@ -6918,6 +7325,12 @@ def main():
                 # DOES go through _submit (inside the handler) - the turn is over, so the
                 # lock is free, and calendar writes must be serialised with the next message.
                 if _handle_undo(token, chat_id, text, msg_id, athletes):
+                    continue
+                # ✅ Keep it all: the other button on the scope card (bug #30 part (b),
+                # 18 Aug 2026). Handled INLINE and immediately after the undo branch - it
+                # writes nothing, and its whole job is to pop the parked diff before the
+                # auto-apply timer can reach it, so it must not queue behind a reply.
+                if _handle_scope_keep(token, chat_id, text, msg_id):
                     continue
                 # 🔊 Speak: re-render the last reply as a voice note on demand,
                 # regardless of voice mode (feature req 2026-06-21).

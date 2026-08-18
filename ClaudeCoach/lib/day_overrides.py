@@ -291,6 +291,79 @@ def resolve_directed_date(text: str, today: date | None = None):
     return cand if cand >= base else None
 
 
+# A relative-day vocabulary resolve_directed_date does not need but named_dates does:
+# "tonight" and "this evening" are today, and a message can name several of these at once.
+_RELATIVE_DAYS = (
+    (re.compile(r"\byesterday\b", re.I), -1),
+    (re.compile(r"\b(?:today|tonight|this\s+(?:morning|afternoon|evening|arvo))\b", re.I), 0),
+    (re.compile(r"\btomorrow\b", re.I), 1),
+)
+
+
+def named_dates(text: str, today: date | None = None) -> set:
+    """EVERY calendar date this message names, as ISO strings. Never raises.
+
+    Added 18 Aug 2026 for bug #30 part (b) — the scope check that catches a whole-week
+    replan the athlete never asked for (Kathryn, 16 Aug: "2.5 hours" meant one day; her
+    week was rebuilt). That check compares the days the MESSAGE named against the days the
+    calendar diff actually touched, and undoes the excess if nobody answers the card. So
+    this function's errors are not symmetric:
+
+      * naming a day the athlete did not mean only SUPPRESSES a card, and the athlete is
+        left exactly where they are today;
+      * MISSING a day they did name lets a timer delete work they explicitly asked for.
+
+    Every judgement below therefore breaks towards naming more days, which is the opposite
+    of resolve_directed_date's contract and the reason this is a separate function rather
+    than a loop around it. resolve_directed_date exists to write a PERMISSION into a
+    register that outlives the conversation, so it refuses anything less than one
+    unambiguous date - two weekdays, or a bare weekday already gone by, both return None.
+    Reusing it here would read "move Wed and Fri" as authorising nothing at all.
+
+    Same tokens either way: this shares _WEEKDAY_RE, _weekday_index and the this/next-week
+    framing with resolve_directed_date, so a message the register understands and a message
+    the scope check understands can never disagree about which Thursday is meant.
+
+    The one genuine ambiguity - a BARE weekday already past in this week, which could be
+    that day or the same day next week - yields BOTH dates rather than neither. Two dates
+    out of a 21-day planning window is still a scope, and it cannot cost the athlete a
+    session they asked for.
+    """
+    out: set = set()
+    t = (text or "").strip()
+    if not t:
+        return out
+    base = today or date.today()
+
+    for m in re.finditer(r"\b(\d{4}-\d{2}-\d{2})\b", t):
+        try:
+            out.add(date.fromisoformat(m.group(1)).isoformat())
+        except ValueError:
+            continue
+
+    for rx, delta in _RELATIVE_DAYS:
+        if rx.search(t):
+            out.add((base + timedelta(days=delta)).isoformat())
+
+    monday = base - timedelta(days=base.weekday())
+    low = t.lower()
+    next_week = bool(_NEXT_WEEK_RE.search(low))
+    this_week = bool(_THIS_WEEK_RE.search(low))
+    for tok in _WEEKDAY_RE.findall(t):
+        idx = _weekday_index(tok)
+        if idx is None:
+            continue
+        if next_week:
+            out.add((monday + timedelta(days=7 + idx)).isoformat())
+            continue
+        cand = monday + timedelta(days=idx)
+        out.add(cand.isoformat())
+        if not this_week and cand < base:
+            # Bare weekday, already gone by. Both readings, for the reason in the docstring.
+            out.add((cand + timedelta(days=7)).isoformat())
+    return out
+
+
 def parse_directed_day(text: str, today: date | None = None) -> dict:
     """A directed-day instruction, or a refusal with the reason.
 
