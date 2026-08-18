@@ -3402,13 +3402,20 @@ _c_row = _cs.get_day(TODAY)["entries"][0]
 # hours this morning while looking complete.
 check("the commit carries which figures are his into the record",
       _c_row.get("stated_fields") == ["protein_g"])
-# A freshly committed row has no per-100g row and no portion_used_g - commit_one writes
-# neither - so there is nothing for a grams correction to scale FROM and it is declined.
-# In production the basis arrives with a label photo or a previous correction's patch;
-# seeded directly here so the two corrections below exercise the ratio branch for real.
-check("a grams correction against a bare committed row is declined, not guessed at",
-      NB.apply_quantity_correction(_cctx, None, {"grams": 500}, TODAY, "token", 1) is False)
-_cs.update_entry(TODAY, _c_row["id"], portion_used_g=250.0)
+# THE BASIS COMES OVER THE COMMIT TOO, AND IT USED NOT TO (17 Aug 2026, later). This
+# section originally had to seed `portion_used_g` by hand here, because commit_one wrote
+# neither portion nor per-100g row and the two corrections below had nothing to scale from
+# - the check on this line asserted the decline as though it were correct behaviour. It was
+# not: it meant the commonest correction there is could only work when a label photo or a
+# still-pending offer happened to supply a basis by another route.
+check("the commit carries the basis the next correction has to scale from",
+      _c_row.get("portion_used_g") == 250.0 and _c_row.get("per_100g", {}).get("kcal")
+      == 120.0 and _c_row.get("portion_g") == 250.0)
+# rescale_item prunes the HELD figures out of the basis it hands back, so the row committed
+# from an already-rescaled offer carries a per-100g row with no protein in it. Deliberate,
+# and it changes nothing below: `stated_fields` is what holds his 21 g, not the gap.
+check("and the basis it stored cannot re-derive the figure he gave",
+      "protein_g" not in (_c_row.get("per_100g") or {}))
 NB.apply_quantity_correction(_cctx, None, {"grams": 500}, TODAY, "token", 1)
 _c1 = _cs.get_day(TODAY)["entries"][0]
 check(f"correction one against the committed row holds it (protein "
@@ -3442,8 +3449,26 @@ NB.commit_one(_cctx, {"resolved_name": "Flat white", "raw_text": "flat white",
               TODAY)
 check("an item with no stated figure commits without growing the key",
       "stated_fields" not in _cs.get_day(TODAY)["entries"][1])
-# And that row's own correction reply is the plain sentence it has always been.
 _c_flat = _cs.get_day(TODAY)["entries"][1]
+# NOR THE TWO NEW ONES. A flat white logged as 120 kcal has no portion and no per-100g row
+# because there never was one, and the row it writes is byte-for-byte the shape it has
+# always been - which is the whole point of omitting the keys rather than storing nulls.
+check("and without growing the basis keys it has nothing to put in",
+      "portion_used_g" not in _c_flat and "per_100g" not in _c_flat
+      and _c_flat["portion_g"] is None)
+# A ROW WITH GENUINELY NO BASIS STILL DECLINES, and that is the correct answer rather than a
+# gap in the fix: there is no arithmetic that turns 120 kcal of coffee into 300 g of it, so
+# re-resolution is the honest route. Kept as a permanent check because the fix above removed
+# the only other case that exercised this branch.
+check("a grams correction against a row with no basis at all is declined, not guessed at",
+      NB.apply_quantity_correction(_cctx, None, {"grams": 300}, TODAY, "token", 1) is False
+      and _cs.get_day(TODAY)["entries"][1]["kcal"] == 120.0)
+# AND AN OLD ROW READS BACK THE SAME WAY. Every row written before today lacks the two keys
+# entirely and carries `portion_g` at None, which is the shape above - so the pre-fix record
+# is handled by the same branch and no migration is owed.
+check("an old pre-fix row is declined the same way rather than crashing",
+      NB.rescale_item({"id": "old", "resolved_name": "Old row", "kcal": 250.0,
+                       "protein_g": 10.0, "portion_g": None}, grams=300.0) is None)
 _cs.update_entry(TODAY, _c_flat["id"], portion_used_g=200.0)
 NB.apply_quantity_correction(_cctx, None, {"grams": 300}, TODAY, "token", 1)
 check("an ordinary rescale reply says nothing about held figures",
@@ -3473,6 +3498,106 @@ check("and he is actually told, rather than the write landing in silence",
       len(_c_sent) > _c_before)
 check("the reply names the factor instead of inventing a gram count",
       "x1.5" in _c_sent[-1] and " g:" not in _c_sent[-1])
+
+print("\n--- and so does the BASIS those figures were computed from (17 Aug 2026) ---")
+# THE ORDINARY CASE, WHICH COULD NOT BE HANDLED AT ALL. He confirms 80 g of porridge, then
+# five minutes later says "actually that was more like 160g". A resolved item carries
+# `portion_used_g` and a per-100g row by the time it is offered - `_finalise` names both in
+# PASSTHROUGH_FIELDS - and commit_one passed neither to add_entry, so the stored row had
+# nothing for the arithmetic to start from and apply_quantity_correction declined. Nobody
+# noticed for as long as they did because a label photo or a correction against the offer
+# while it was still pending supplies a basis by another route, so every path anybody tried
+# by hand worked. Run through the REAL ladder, the real commit_one and the real correction,
+# against a CoFID table pinned here so the numbers are the test's rather than the shipped
+# config's: 379 kcal per 100 g, so 80 g is 303.2, 160 g is 606.4 and 240 g is 909.6.
+_pb_cofid = NR.CofidTable(data={"foods": [
+    {"name": "Oats, porridge, raw", "aliases": ["porridge oats", "porridge"],
+     "kcal": 379, "protein_g": 13.2, "carb_g": 60.0, "fat_g": 8.1, "fibre_g": 9.0,
+     "dietary_sodium_mg": 3}]})
+_ps = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-commit-basis-")))
+_pctx = FakeCtxCommit(_ps)
+_p_item = NR.resolve("80g porridge oats", day=TODAY, store=None, portion_g=80.0,
+                     cofid=_pb_cofid)
+check(f"the ladder hands commit_one a portion and a basis already "
+      f"(portion {_p_item.get('portion_used_g')}, per-100g kcal "
+      f"{(_p_item.get('per_100g') or {}).get('kcal')})",
+      _p_item["portion_used_g"] == 80.0 and _p_item["per_100g"]["kcal"] == 379
+      and _p_item["kcal"] == 303.2)
+NB.commit_one(_pctx, _p_item, TODAY)
+_p_row = _ps.get_day(TODAY)["entries"][0]
+# ASSERTED ON WHAT CAME BACK OUT OF THE STORE, not on add_entry's signature: a keyword
+# nothing passes is the trap this whole class of bug keeps falling into.
+check("and both halves of it survive the commit",
+      _p_row.get("portion_used_g") == 80.0 and _p_row.get("per_100g", {}).get("kcal") == 379)
+# A resolved item has no `portion_g` of its own - it is not in PASSTHROUGH_FIELDS - so the
+# store's long-standing column is filled from portion_used_g or it stays the None it always
+# was, which is what the same-as path would have copied into a fresh item.
+check("including the store's own portion column, which was always None before",
+      _p_row["portion_g"] == 80.0)
+NB.apply_quantity_correction(_pctx, None, {"grams": 160}, TODAY, "token", 1)
+_p1 = _ps.get_day(TODAY)["entries"][0]
+check(f"correction one against the committed row lands (kcal {_p1['kcal']}, was declined)",
+      _p1["kcal"] == 606.4 and _p1["protein_g"] == 21.1 and _p1["portion_used_g"] == 160)
+# TWO IN A ROW, because one working correction proves only that a basis was present once.
+# The patch has to leave the row scalable again or the second is back to the old silence.
+NB.apply_quantity_correction(_pctx, None, {"grams": 240}, TODAY, "token", 1)
+_p2 = _ps.get_day(TODAY)["entries"][0]
+check(f"and so does correction two, from the same basis (kcal {_p2['kcal']})",
+      _p2["kcal"] == 909.6 and _p2["protein_g"] == 31.7 and _p2["carb_g"] == 144.0)
+check("the two corrections moved the figures, rather than repeating one answer",
+      _p1["kcal"] != _p2["kcal"] and _p1["kcal"] != 303.2)
+# BOTH PORTION COLUMNS MOVE TOGETHER. Only portion_used_g was patched, which was inert while
+# portion_g was None on every row and is not now: the same-as path copies portion_g alone.
+check("and both portion columns followed, so neither can name a stale amount",
+      _p2.get("portion_used_g") == 240 and _p2.get("portion_g") == 240)
+check("he is told what it moved to, both times",
+      "160 g: 606 kcal" in _c_sent[-2] and "240 g: 910 kcal" in _c_sent[-1])
+# THE BASIS IS A RATE AND IS LEFT ALONE. It is not in UPDATABLE and the patch does not send
+# it: 100 g of porridge is 379 kcal whichever amount of it he ate, so a third correction has
+# the same exact basis to work from rather than a ratio off an already-corrected figure.
+check("the per-100g rate is untouched by a portion moving",
+      _p2.get("per_100g") == _p_row.get("per_100g") == {
+          "kcal": 379, "protein_g": 13.2, "carb_g": 60.0, "fat_g": 8.1,
+          "fibre_g": 9.0, "dietary_sodium_mg": 3})
+
+print("\n--- a stated macro AND a basis, on the same committed row ---")
+# The two fixes made today meet here. Persisting the basis is what lets a committed row be
+# rescaled at all; `stated_fields` is what stops that rescale recomputing a figure he gave.
+# Before the basis was stored the second guard could not even be reached on a fresh row, so
+# this combination has never actually run end to end. His 21 g of protein must hold through
+# both corrections while everything he said nothing about scales off the rate.
+_bs = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nb-commit-both-")))
+_bctx = FakeCtxCommit(_bs)
+_b_item = NR.resolve("80g porridge oats", day=TODAY, store=None, portion_g=80.0,
+                     cofid=_pb_cofid, stated={"protein_g": 21.0})
+check(f"the ladder lays his figure over the lookup and keeps the basis "
+      f"(protein {_b_item['protein_g']}, per-100g kcal "
+      f"{(_b_item.get('per_100g') or {}).get('kcal')})",
+      _b_item["protein_g"] == 21.0 and _b_item["stated_fields"] == ["protein_g"]
+      and _b_item["per_100g"]["kcal"] == 379 and _b_item["portion_used_g"] == 80.0)
+NB.commit_one(_bctx, _b_item, TODAY)
+_b_row = _bs.get_day(TODAY)["entries"][0]
+check("both notes reach the record, or one of the two guards is missing",
+      _b_row.get("stated_fields") == ["protein_g"]
+      and _b_row.get("per_100g", {}).get("kcal") == 379
+      and _b_row.get("portion_used_g") == 80.0)
+NB.apply_quantity_correction(_bctx, None, {"grams": 160}, TODAY, "token", 1)
+_b1 = _bs.get_day(TODAY)["entries"][0]
+check(f"correction one scales the lookup's figures (kcal {_b1['kcal']})",
+      _b1["kcal"] == 606.4 and _b1["carb_g"] == 96.0)
+check(f"and holds his own, which the new basis would otherwise have doubled "
+      f"(protein {_b1['protein_g']}, would be 21.1 off the rate)",
+      _b1["protein_g"] == 21.0)
+NB.apply_quantity_correction(_bctx, None, {"grams": 240}, TODAY, "token", 1)
+_b2 = _bs.get_day(TODAY)["entries"][0]
+check(f"correction two scales again (kcal {_b2['kcal']})",
+      _b2["kcal"] == 909.6 and _b2["carb_g"] == 144.0)
+check(f"and his figure survives the second too, which is where a dropped flag shows "
+      f"(protein {_b2['protein_g']})", _b2["protein_g"] == 21.0)
+check("the row still says which figure is his, or a third correction would invent one",
+      _b2.get("stated_fields") == ["protein_g"])
+check("and he is told it was held, rather than watching kcal move and protein sit still",
+      "protein 21 g is your figure" in _c_sent[-1])
 
 NB.tg.send, NB.publish_now = _c_real["send"], _c_real["publish"]
 NB.today_block, NB._chat = _c_real["today"], _c_real["chat"]

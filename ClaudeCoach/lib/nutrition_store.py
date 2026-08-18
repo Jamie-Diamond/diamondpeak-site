@@ -289,7 +289,8 @@ class NutritionStore:
                   source_rung: str = "llm", source_url: str = "",
                   resolved_at=None, in_session: bool = False,
                   species=None, ingredients: str = "", logged_at=None,
-                  meal: str = "", stated_fields=None) -> dict:
+                  meal: str = "", stated_fields=None,
+                  portion_used_g=None, per_100g=None) -> dict:
         """Append one confirmed food entry. Returns the stored entry, including the
         `id` the bot needs for /undo and /edit.
 
@@ -302,7 +303,11 @@ class NutritionStore:
         summed into one figure.
 
         `stated_fields` names the figures above that came from HIM rather than from a
-        lookup - see the note beside the entry dict."""
+        lookup - see the note beside the entry dict.
+
+        `portion_used_g` and `per_100g` are the BASIS the figures were computed from, so
+        a later "actually it was 300g" is arithmetic rather than a fresh search - again,
+        see the note beside the entry dict."""
         if confidence not in CONFIDENCE_LEVELS:
             raise ValueError(f"confidence must be one of {CONFIDENCE_LEVELS}")
         if source_rung not in SOURCE_RUNGS:
@@ -383,6 +388,41 @@ class NutritionStore:
             # `.get("stated_fields") or ()`.
             if his:
                 entry["stated_fields"] = his
+            # WHAT THE FIGURES WERE COMPUTED FROM, CARRIED INTO THE RECORD (17 Aug 2026).
+            # Same class of loss as `stated_fields` above, found the same day. rescale_item
+            # scales an entry from one of two bases: a per-100g rate, or the ratio between
+            # the old and new `portion_used_g`. A resolved item has both by the time it is
+            # offered - `_finalise` passes them through - and this signature had neither, so
+            # commit_one dropped them and the stored row was left with nothing to multiply.
+            # apply_quantity_correction checks for a basis before it will touch anything and
+            # so declined outright: he confirmed 80 g of oats, said "make that 160g" five
+            # minutes later, and got silence. The ordinary case, and it could not be handled
+            # at all. It only ever appeared to work when something else happened to supply a
+            # basis first - a label photo, or a correction against the offer while it was
+            # still pending - which is why it read as intermittent rather than broken.
+            #
+            # A RATE AND AN AMOUNT, WHICH ARE NOT THE SAME THING. `per_100g` is exact and is
+            # preferred; `portion_used_g` is what the ratio fallback needs when there is no
+            # rate, and it is also how he points at a row ("the 160g"). Both are stored
+            # because rescale_item's branches genuinely use them for different foods.
+            #
+            # OMITTED WHEN THERE IS NOTHING TO RECORD, exactly as `stated_fields` is: a
+            # supplement-shaped or estimate row that never had a basis keeps the shape it
+            # has always had, and every reader already spells these `.get(...) or` something.
+            # `per_100g` is tested for truth rather than for None on purpose - the
+            # needs_portion path hands back a literal `{}`, and an empty basis stored as a
+            # present one would make rescale_item's `if grams is not None and per` branch
+            # take the exact route with no rates in it and silently scale nothing.
+            #
+            # `portion_g` above is NOT given this treatment. It has been written
+            # unconditionally since the first version of this function, so every row in the
+            # record already has the key - usually at None, because commit_one never filled
+            # it either. Omitting it now would change the shape of the ordinary row, which
+            # is the one thing this convention exists to avoid.
+            if portion_used_g is not None:
+                entry["portion_used_g"] = float(portion_used_g)
+            if per_100g:
+                entry["per_100g"] = dict(per_100g)
             rec["entries"].append(entry)
             return entry
 
@@ -406,6 +446,26 @@ class NutritionStore:
     # the key to None rather than removing it. Harmless, because every reader spells it
     # `.get("stated_fields") or ()`, but it is why the label path below pops the key instead
     # of patching it.
+    #
+    # `per_100g` IS DELIBERATELY ABSENT, though add_entry now stores it (17 Aug 2026). It is
+    # a RATE, and a rate does not move when the portion does: 100 g of porridge oats is 379
+    # kcal whether he ate 80 g of it or 240 g, so a quantity correction has nothing to say
+    # about it and listing it here would be a keyword no caller ever sends -
+    # apply_quantity_correction's patch carries the six figures and the portion, and the one
+    # path that genuinely replaces a basis, apply_label_to_entry, writes `e["per_100g"]`
+    # directly and never comes through here.
+    #
+    # There is a real thing being given up, and it is worth naming. rescale_item prunes the
+    # held figures out of the basis it hands back, so that a row whose `stated_fields` were
+    # somehow lost could not silently re-derive his 21 g of protein from the rate. Not
+    # persisting that pruned copy means the stored row keeps its full basis. That is the
+    # right way round: on a committed row the guard against re-deriving his figure is
+    # `stated_fields`, which IS updatable above and which every path preserves, whereas
+    # freezing a pruned basis into the record would outlive the claim it was pruned for - a
+    # label that later replaces his protein pops `stated_fields` but does not always carry a
+    # new `per_100g`, and the row would be left scaling its kcal while its protein sat
+    # still. rescale_item's pruning defends the pending item in flight; this defends the
+    # record.
     UPDATABLE = ("kcal", "protein_g", "carb_g", "fat_g", "fibre_g",
                  "dietary_sodium_mg", "portion_g", "portion_used_g",
                  "portion_estimated", "portion_assumed", "raw_text",

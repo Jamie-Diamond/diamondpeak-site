@@ -740,6 +740,79 @@ bare = lb.add_entry(_SD, raw_text="pack of nuts", kcal=200, confidence="label",
 check("a label against a row that never claimed anything is untouched by all this",
       "stated_fields" not in lb.apply_label_to_entry(_SD, bare["id"], {"kcal": 235.0}))
 
+print("\n--- and so does the BASIS the figures were computed from (17 Aug 2026) ---")
+# The same loss as stated_fields, found the same day. rescale_item scales a row from one of
+# two bases - an exact per-100g rate, or the ratio between the old and new portion - and
+# add_entry stored neither, so a freshly committed row had nothing to multiply and
+# apply_quantity_correction declined outright. "80g of porridge" confirmed, then "actually
+# that was more like 160g" five minutes later, and nothing happened.
+bs = S.NutritionStore(Path(tempfile.mkdtemp(prefix="nut-basis-")))
+_BD = date(2026, 8, 14)
+_PER = {"kcal": 379, "protein_g": 13.2, "carb_g": 60.0, "fat_g": 8.1, "fibre_g": 9.0,
+        "dietary_sodium_mg": 3}
+oats = bs.add_entry(_BD, raw_text="80g porridge oats", resolved_name="Oats, porridge, raw",
+                    kcal=303.2, protein_g=10.6, carb_g=48, fat_g=6.5, fibre_g=7.2,
+                    dietary_sodium_mg=2, confidence="label", source_rung="cofid",
+                    portion_g=80.0, portion_used_g=80.0, per_100g=_PER)
+check("the basis is on the returned entry, both halves of it",
+      oats["portion_used_g"] == 80.0 and oats["per_100g"] == _PER
+      and oats["portion_g"] == 80.0)
+check("and is there when the month file is read back",
+      bs.get_day(_BD)["entries"][0]["per_100g"] == _PER)
+check("it survives a round trip through the JSON on disk",
+      json.loads((bs.dir / "2026-08.json").read_text())["days"][_BD.isoformat()]
+      ["entries"][0]["portion_used_g"] == 80.0)
+# THE STORED BASIS IS A COPY. The item the bot commits stays in the pending batch for the
+# rest of the turn, so keeping a reference would let a later edit of either reach the other.
+check("the stored per-100g row is not the caller's dict",
+      oats["per_100g"] is not _PER)
+
+# THE SHAPE OF EVERY OTHER ROW IS UNCHANGED, the same convention stated_fields follows: a
+# row with no basis - an estimate no rung could size - keeps the shape it has always had
+# rather than growing two nulls.
+noth = bs.add_entry(_BD, raw_text="flat white", resolved_name="Flat white", kcal=120,
+                    confidence="label", source_rung="cofid")
+check("a row with no basis grows neither key",
+      "portion_used_g" not in noth and "per_100g" not in noth)
+# `portion_g` is the exception and must stay one: it has been written unconditionally since
+# the first version of add_entry, so every row in the record already has it. Omitting it now
+# would change the ordinary row rather than leave it alone.
+check("but portion_g is still written, because every existing row already has it",
+      "portion_g" in noth and noth["portion_g"] is None)
+# An item still waiting on a portion carries `per_100g` as a literal {}. Stored as a present
+# basis it would send rescale_item down its EXACT branch with no rates in it, which scales
+# nothing and reports success - worse than declining.
+check("an empty basis is no basis, and is not stored as one",
+      "per_100g" not in bs.add_entry(_BD, raw_text="peanut butter", kcal=0,
+                                     confidence="estimate", source_rung="llm",
+                                     per_100g={}))
+# A row written before today has neither key, which is the same absence - so the pre-fix
+# record needs no migration and reads back as the basis-less row it is.
+oldb = bs.get_day(_BD)["entries"][1]
+check("an old row lacking both keys reads back as having no basis",
+      (oldb.get("portion_used_g") or None) is None and (oldb.get("per_100g") or {}) == {})
+check("and can still be patched like any other",
+      bs.update_entry(_BD, oldb["id"], kcal=130)["kcal"] == 130.0)
+
+# BOTH PORTION COLUMNS ARE PATCHABLE AND MOVE TOGETHER; the RATE is not patchable at all.
+# 100 g of porridge is 379 kcal whichever amount of it he ate, so a quantity correction has
+# nothing to say about it, and listing it in UPDATABLE would be a keyword no caller sends.
+# The one path that genuinely replaces a basis is apply_label_to_entry, which writes the
+# field directly and never comes through here.
+moved = bs.update_entry(_BD, oats["id"], portion_used_g=160.0, portion_g=160.0, kcal=606.4)
+check("a correction moves both portion columns, so neither names a stale amount",
+      moved["portion_used_g"] == 160.0 and moved["portion_g"] == 160.0)
+check("and leaves the rate alone, so the next correction is exact rather than a ratio",
+      moved["per_100g"] == _PER)
+# Not in UPDATABLE, so it is filtered out of the patch entirely - and a patch of nothing but
+# unpatchable fields is refused rather than written, which is the existing contract. The row
+# keeps the rate it was committed with.
+check("per_100g is deliberately not patchable: the patch is refused, not half-applied",
+      bs.update_entry(_BD, oats["id"], per_100g={"kcal": 1}) is None
+      and bs.get_day(_BD)["entries"][0]["per_100g"] == _PER)
+check("a move carries the basis to the new day, like every other field",
+      bs.move_entry(_BD, oats["id"], date(2026, 8, 15))["moved"]["per_100g"] == _PER)
+
 if FAILED:
     print(f"{len(FAILED)} FAILED: " + ", ".join(FAILED)); sys.exit(1)
 print("all checks passed")
