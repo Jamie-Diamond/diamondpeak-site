@@ -20,7 +20,7 @@ and are invalidated when the system prompt / persistent rules change
 the worst case is exactly the old behaviour. Disable with "session_resume":
 false in config.json.
 """
-import hashlib, json, subprocess, sys, threading, time, shutil, os, uuid
+import hashlib, json, signal, subprocess, sys, threading, time, shutil, os, uuid
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -522,6 +522,21 @@ def _turn_index(st) -> int:
 # a cancel naming a run that has already finished finds nothing and is a no-op.
 # There is deliberately no "cancel whatever is running for this chat" call, and
 # there must never be one - that is precisely the API that kills the wrong run.
+#
+# WHAT THE FIRST CUT MISSED (17 Aug 2026, same day, second half of the fix). The
+# Stop button shipped this morning killed the CLI and ONLY the CLI. proc.terminate()
+# and proc.kill() signal one pid, and the coach's work does not all happen in that
+# pid: the model holds a Bash tool and its own authority rule tells it to shell out
+# to plan_distribution.py for calendar writes. Measured on the day: the parent went
+# down with rc -15 and a Bash-spawned grandchild carried on and finished its work
+# about five seconds later, unaffected. So a turn stopped mid-replan could still
+# land the write, AFTER the athlete had been told "Stopped."
+#
+# The awareness machinery (snapshot diff, undo) exists because a kill can never be
+# a guarantee. But it should have less to report on and less to undo than this. So
+# the CLI is now spawned into a process group of its own and the signals go to the
+# GROUP, which is the only handle the OS gives us on "that process and everything
+# it spawned".
 
 # Terminate first, and only reach for SIGKILL if the CLI is still there after
 # this long. Polite first because the CLI flushes and tidies on SIGTERM; short
@@ -579,27 +594,133 @@ def _deregister_run(run) -> None:
             del _RUNS[run.run_id]
 
 
-def _terminate_then_kill(proc, grace=None) -> None:
-    """SIGTERM now, SIGKILL later if it is ignored. The escalation waits on a
-    daemon thread because the caller is a Telegram poll loop or a web request:
-    it must get its "stopping..." back immediately, not `grace` seconds later."""
-    if proc is None:
-        return
+def _signalable_group(proc):
+    """The process group id it is SAFE to signal on `proc`'s behalf, or None when
+    we must fall back to signalling the single process.
+
+    The None cases are the whole reason this is a function rather than an inline
+    os.getpgid(), and neither of them is about Windows - this repo is POSIX to the
+    bone (systemd units, /usr/bin/claude, /root paths):
+
+      * The group has already gone. getpgid raises ProcessLookupError and there is
+        nothing to signal. Falling back is a no-op either way, but it must not be
+        an exception out of a cancel path that promises never to raise.
+
+      * THE GROUP IS OUR OWN. This is the dangerous one. If `proc` was spawned
+        WITHOUT start_new_session it sits in the bot's own process group, and
+        os.killpg on that group SIGTERMs the bot - the cancel would take down the
+        service it was called from, and in the test suite it takes down the pytest
+        runner rather than failing a test. _stream_once always passes
+        start_new_session=True so this should never fire in production, but the
+        cost of being wrong is the whole process, so it is checked every time
+        rather than assumed. Do not remove this comparison.
+
+    hasattr(os, "killpg") is then free insurance on top, not the motivation."""
+    if not hasattr(os, "killpg") or not hasattr(os, "getpgid"):
+        return None
     try:
-        proc.terminate()
+        pgid = os.getpgid(proc.pid)
+        if pgid <= 0 or pgid == os.getpgrp():
+            return None
+        return pgid
+    except Exception:
+        return None
+
+
+def _signal_group(pgid, sig) -> None:
+    """Signal a whole process group, swallowing the "it is already gone" cases.
+    A cancel that raises would take its caller (a Telegram poll loop) down with
+    it, and by the time we are here the athlete has already been told we stopped."""
+    try:
+        os.killpg(pgid, sig)
     except Exception:
         pass
 
+
+def _group_is_alive(pgid) -> bool:
+    """Is there still anything in this process group? Signal 0 asks the kernel
+    without delivering anything.
+
+    Deliberately NOT _signal_group with sig=0: that swallows every outcome and
+    returns None, which is the right shape for "make this stop" and useless as a
+    question. The polarity is worth spelling out because inverting it is silent -
+    ProcessLookupError means the group is empty, PermissionError means something
+    is in there that we are not allowed to signal (so: alive), and anything else
+    we call gone rather than escalate against a group we cannot reason about."""
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except Exception:
+        return False
+
+
+def _terminate_then_kill(proc, grace=None) -> None:
+    """SIGTERM now, SIGKILL later if it is ignored. The escalation waits on a
+    daemon thread because the caller is a Telegram poll loop or a web request:
+    it must get its "stopping..." back immediately, not `grace` seconds later.
+
+    Signals the process GROUP where there is one (17 Aug 2026). Signalling the pid
+    alone left a Bash-spawned grandchild running: it finished its work five seconds
+    after the parent died with rc -15, which for a replan means the calendar write
+    lands after the athlete has been told "Stopped." See the section note above.
+
+    The group id is resolved ONCE, here, synchronously, and the escalation thread
+    closes over the integer. Resolving it inside the thread instead would be asking
+    getpgid about a pid that proc.wait() may already have reaped, and a reaped pid
+    can be recycled - the answer would be some unrelated process's group.
+
+    WHY THE ESCALATION ASKS ABOUT THE GROUP AND NOT THE LEADER. Signalling a group
+    is not a barrier: a member forked AFTER the killpg never receives it. Measured
+    while building this, cancelling six milliseconds after the first line of output
+    and watching the pids, 3 runs in 4: the shell died with rc -15 at t+0.05s and a
+    child that appeared at t+0.053s, forked in the window between our SIGTERM and
+    the shell acting on it, ran happily for its full 30 seconds. proc.wait() had
+    returned cleanly, so an escalation keyed on the leader never fired. That window
+    is exactly the moment a tool call starts, which is exactly the calendar write
+    this is all trying to stop. So once the leader is gone (or the grace runs out),
+    anything STILL in the group gets SIGKILL, with no second grace: it never saw
+    the SIGTERM, and everything in that group is the cancelled turn's work.
+
+    Residual, stated honestly: proc.wait() reaps the leader, so the pgid could in
+    principle be recycled before the killpg. The window is the microseconds between
+    wait() returning and the next line, and recycling would need a new process to
+    take that pid AND make itself a session leader inside it."""
+    if proc is None:
+        return
+    pgid = _signalable_group(proc)
+    if pgid is None:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+    else:
+        _signal_group(pgid, signal.SIGTERM)
+
     def _escalate():
+        timed_out = False
         try:
             proc.wait(timeout=CANCEL_GRACE_S if grace is None else grace)
         except Exception:
             # TimeoutExpired (still alive) or anything odd - either way we have
             # already asked nicely, so stop asking.
-            try:
-                proc.kill()
-            except Exception:
-                pass
+            timed_out = True
+        if pgid is None:
+            # No group to reason about, so the old rule stands unchanged: SIGKILL
+            # only a process that ignored the SIGTERM.
+            if timed_out:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            return
+        # Politeness is preserved by the liveness check, not by the return code:
+        # a group that emptied itself on the SIGTERM is not there to be killed.
+        if _group_is_alive(pgid):
+            _signal_group(pgid, signal.SIGKILL)
     threading.Thread(target=_escalate, daemon=True).start()
 
 
@@ -774,6 +895,28 @@ def _stream_once(prompt, model, extra_args, cwd, env=None, run=None):
                        ["--output-format", "stream-json", "--verbose"] + extra_args),
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             stdin=subprocess.PIPE, text=True, cwd=cwd, env=env,
+            # Its own session, so the CLI and everything it spawns share a process
+            # group that is NOT the bot's (17 Aug 2026, second half of bug #30).
+            # Without this there is no group to signal, and cancelling a turn kills
+            # the CLI while a Bash-spawned grandchild carries on and finishes its
+            # calendar write. See the cancellation section note.
+            #
+            # start_new_session=True and NOT preexec_fn=os.setsid. Same effect, but
+            # preexec_fn runs in the child between fork and exec, and bot.py serves
+            # three athletes off a ThreadPoolExecutor: forking a threaded process
+            # and then taking a lock in the child is the classic way to hang it
+            # forever. It is also already how this repo spawns detached processes
+            # (telegram/bot.py, scripts/session-sync.py), so it is the local idiom.
+            #
+            # THE THING THIS CHANGES FOR AN UNCANCELLED RUN: the CLI no longer
+            # receives signals sent to the bot's process group. Checked before
+            # shipping - system/claudecoach-bot.service sets no KillMode, so
+            # systemd's default control-group applies and systemctl stop/restart
+            # (which is also all bot-watchdog.py does) still reaps the CLI through
+            # the cgroup, which a process group does not escape. What it does
+            # change is Ctrl-C on a bot run by hand in a terminal: that used to
+            # reach the CLI through the foreground group and now will not.
+            start_new_session=True,
         )
         if run is not None:
             # Publish and re-check under the SAME lock cancel_run takes. Without
