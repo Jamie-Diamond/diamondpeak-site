@@ -2675,11 +2675,10 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
     # yesterday morning. Protein bar, oats and the smoothie" is one instruction covering
     # three items, and by the time an item reaches this loop its own canonical_name is
     # just "protein bar" or "oats" - the interpreter's job is to strip qualifiers like
-    # this one down to a searchable food name, not to preserve them. Checked once here
-    # rather than per item; see from_history's `hinted` docstring for the breakfast this
-    # exists for - three items priced generic/plain/stub instead of matching yesterday's
-    # actual M&S bar, overnight oats and smoothie, for less than half the true kcal.
-    same_as_hint = bool(_SAME_AS.search(said or ""))
+    # this one down to a searchable food name, not to preserve them. See _same_as_applies
+    # for how much of the message a qualifier like this one is allowed to cover - a whole
+    # message ("Same as yesterday morning.") or just its own clause ("a Rubicon (same as
+    # yesterday)"), never blindly the former.
     for it in planned[:8]:
         name = it["canonical_name"]
         if it["is_supplement"] or not it["expect_macros"]:
@@ -2708,7 +2707,7 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
         # HIS OWN LOG FIRST when he says "same as": no search can beat a figure he has
         # already accepted. Tried before the ladder, same as offer_items - see
         # from_history's docstring.
-        prior = from_history(ctx, name, day, hinted=same_as_hint)
+        prior = from_history(ctx, name, day, hinted=_same_as_applies(said, name))
         if prior is not None:
             item = dict(prior)
             item["_raw"] = name
@@ -2801,6 +2800,48 @@ _SAME_AS = re.compile(
     r"|\bas\s+(?:yesterday|before|last\s+time)\b"
     r"|\bthe\s+usual\b|\bmy\s+usual\b", re.I)
 
+_SAME_AS_STOP = {"same", "before", "last", "time", "yesterday", "monday", "tuesday",
+                 "wednesday", "thursday", "friday", "saturday", "sunday", "the", "usual",
+                 "one", "other", "day", "and", "for", "with", "had",
+                 # TIME-OF-DAY WORDS, not food. "Same as yesterday morning" is still a
+                 # content-free header - "morning" says WHEN, not WHAT - and without this
+                 # it read as a clause naming food, which is what a standalone header is
+                 # not, and the breakfast fix this file exists for stopped firing at all.
+                 "morning", "afternoon", "evening", "night", "tonight", "today",
+                 "breakfast", "lunch", "dinner", "this"}
+_CLAUSE_SPLIT = re.compile(r"[.;,?!\n]+|\s+[-–—]\s+")
+
+
+def _content_words(text: str) -> set:
+    return {w for w in re.split(r"[^a-z0-9]+", (text or "").lower()) if len(w) > 2}
+
+
+def _same_as_applies(said: str, item_text: str) -> bool:
+    """Does the "same as X" he said cover THIS item, or a different one in the same
+    message?
+
+    THE FAILURE THIS EXISTS FOR (19 Aug 2026, lunch). "I had the same sandwich today for
+    lunch. A Rubicon (same as yesterday). A peperami." - the qualifier was said once, in
+    its own clause, about the Rubicon. A single message-wide flag cannot tell that from a
+    qualifier meant for everything: it broadcast to the peperami too, and from_history's
+    word-overlap search - built to find "peperami" in his history - found one shared word,
+    "stick", in an unrelated "Chinese Chicken on a Stick" from days earlier, and handed
+    that back as though it were the same food he had just named.
+
+    A qualifier that IS its own clause, with no food in it - "Same as yesterday morning."
+    ahead of a list - is a HEADER for the whole message, and every item gets it (this is
+    the shape the 19 Aug breakfast fix was built for). A qualifier sharing a clause with a
+    named food belongs to THAT food alone, and reaches another item only if the two
+    genuinely share a word."""
+    clauses = _CLAUSE_SPLIT.split(said or "")
+    same_as_clauses = [c for c in clauses if _SAME_AS.search(c)]
+    if not same_as_clauses:
+        return False
+    if any(not (_content_words(c) - _SAME_AS_STOP) for c in same_as_clauses):
+        return True
+    item_words = _content_words(item_text)
+    return any(item_words & _content_words(c) for c in same_as_clauses)
+
 
 def from_history(ctx: Context, text: str, day: date, back_days: int = 30,
                   hinted: bool = False) -> dict | None:
@@ -2846,7 +2887,15 @@ def from_history(ctx: Context, text: str, day: date, back_days: int = 30,
                 best, score, when = e, hit, d
         if best is not None:
             break                                  # do not reach past a day that matched
-    if best is None or score < 1:
+    # AT LEAST HALF HIS WORDS, NOT JUST ONE (19 Aug 2026). "Peperami snack stick" shares
+    # exactly one word, "stick", with a "Grab It Chinese Chicken on a Stick" logged a week
+    # earlier - a single generic shape word, not evidence they are the same food - and the
+    # old bar (score >= 1) handed it back as though they matched. "Oats" -> "M&S Salted
+    # Caramel Overnight Oats" is also a one-word match and must still pass, so the bar is a
+    # FRACTION of his words, not a count: a short, specific word he used IS most of what he
+    # said, while "stick" is one of three and the other two - "peperami", "snack" - go
+    # unmatched.
+    if best is None or (score / len(words)) < 0.5:
         return None
     log(f"  same-as: reusing {best.get('resolved_name')!r} from {when} "
         f"({best.get('kcal')} kcal)")
@@ -3310,16 +3359,16 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                       kind="offer", numbers=_gate_numbers(merged), reply_markup=kb)
         return
 
-    # THE QUALIFIER IS CHECKED ON THE WHOLE MESSAGE, ONCE, not on each item's own text
-    # (19 Aug 2026). "Same as yesterday morning" said once covers every item the parser
-    # split it into; see from_history's `hinted` docstring for the breakfast this exists for.
-    same_as_hint = bool(_SAME_AS.search(said or ""))
+    # THE QUALIFIER MAY COVER THE WHOLE MESSAGE OR JUST ITS OWN CLAUSE (19 Aug 2026). See
+    # _same_as_applies: "Same as yesterday morning" said once covers every item the parser
+    # split it into, but "(same as yesterday)" beside one named item must not also grab an
+    # unrelated item mentioned elsewhere in the same message.
     resolved = []
     for it in items[:8]:
         # HIS OWN LOG FIRST when he says "same as": no search can beat a figure he has
         # already accepted, and asking him again for something he told the bot yesterday is
         # what made lunch unloggable.
-        prior = from_history(ctx, it["text"], day, hinted=same_as_hint)
+        prior = from_history(ctx, it["text"], day, hinted=_same_as_applies(said, it["text"]))
         if prior is not None:
             prior["_raw"] = it["text"]
             prior["in_session"] = bool(it.get("in_session"))
