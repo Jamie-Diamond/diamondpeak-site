@@ -1292,6 +1292,19 @@ Decide which ONE of these he means and reply in that shape:
         and the vegetables 3x" is three items at factor 1.5 and one at factor 3. Give
         grams when he states an amount for that component, factor when he gives a ratio.
         Name only the components he is changing; the rest stay as they are.
+  {"kind":"reidentify_all"}
+      - HE IS SAYING THE WHOLE BATCH SHOULD MATCH HIS OWN LOG, not new words for each
+        component: "the same as yesterday for all of them", "they're all wrong, do what
+        I had yesterday", "same as before, every item". Only valid when you were shown
+        an ARRAY - a single item disputing what it is is `reidentify`, not this.
+      - THIS IS WHY IT EXISTS (19 Aug 2026). He had logged breakfast as "same as
+        yesterday morning: protein bar, oats and the smoothie" and the three items came
+        back generic/plain/stub instead of yesterday's actual entries. He then said "Are
+        you stupid I said the same as yesterday for all of them" - a correction naming no
+        new food for any component, which decided `unclear` and asked him "which one is
+        wrong, and what should it be?" about a batch he had already told it was ALL
+        wrong, the same way, twice. The code re-searches every component against his
+        history using its own name; no new lookup text is needed from you.
   {"kind":"meal_portions","items":[{"index":i,"grams":<n>}]}
       - HE IS TELLING YOU IT WAS A REAL MEAL AND ASKING YOU TO SIZE IT: "it was a whole
         meal", "that was a full dinner plate, work it out". The components were priced per
@@ -1559,6 +1572,14 @@ def decide_correction(message: str, item: dict, claude_bin: str, model: str,
     if kind in ("rescale", "rescale_factor", "whole_pack", "reidentify", "meal",
                 "unclear"):
         return got
+    if kind == "reidentify_all":
+        # Same house rule as the other batch kinds: `unclear` on anything unusable, never
+        # None, or the caller reads it as "model unreachable" and runs it through the
+        # regex fallback instead.
+        if not n:
+            log("decide_correction: reidentify_all with no batch to apply it to")
+            return {"kind": "unclear"}
+        return {"kind": "reidentify_all"}
     if kind in ("rescale_all", "rescale_items", "meal_portions"):
         # UNVALIDATED IS NOT THE SAME AS UNAVAILABLE. Returning None here would be read by
         # the caller as "the model could not be reached" and would run the regex fallback

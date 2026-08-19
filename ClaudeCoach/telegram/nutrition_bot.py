@@ -1758,6 +1758,9 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
             if kind in ("rescale_all", "rescale_items", "meal_portions"):
                 if apply_batch_rescale(ctx, pend, decision, day, token, chat_id):
                     return
+            if kind == "reidentify_all":
+                if apply_batch_history_reidentify(ctx, pend, day, token, chat_id):
+                    return
             if kind == "confirm_except":
                 # BEFORE the rest, because it is the only decision that WRITES part of the
                 # batch. Falling through it into a re-resolution would re-price items he
@@ -2652,6 +2655,15 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
     canonical name by the time it gets here."""
     batch, notes = [], []
     planned = apply_product_facts(remembered_facts(ctx), planned, said)
+    # THE QUALIFIER LIVES IN THE MESSAGE, NOT IN ANY ONE ITEM (19 Aug 2026). "Same as
+    # yesterday morning. Protein bar, oats and the smoothie" is one instruction covering
+    # three items, and by the time an item reaches this loop its own canonical_name is
+    # just "protein bar" or "oats" - the interpreter's job is to strip qualifiers like
+    # this one down to a searchable food name, not to preserve them. Checked once here
+    # rather than per item; see from_history's `hinted` docstring for the breakfast this
+    # exists for - three items priced generic/plain/stub instead of matching yesterday's
+    # actual M&S bar, overnight oats and smoothie, for less than half the true kcal.
+    same_as_hint = bool(_SAME_AS.search(said or ""))
     for it in planned[:8]:
         name = it["canonical_name"]
         if it["is_supplement"] or not it["expect_macros"]:
@@ -2676,6 +2688,26 @@ def offer_planned(ctx: Context, planned: list, day: date, token, chat_id,
                     else (f"{it['portion_g']} g" if it.get("portion_g") else "as stated"))
             notes.append(f"*{name}*\nSupplement, {dose}. Recorded as a dose, not looked "
                          f"up against food data, and it does not touch your macros.")
+            continue
+        # HIS OWN LOG FIRST when he says "same as": no search can beat a figure he has
+        # already accepted. Tried before the ladder, same as offer_items - see
+        # from_history's docstring.
+        prior = from_history(ctx, name, day, hinted=same_as_hint)
+        if prior is not None:
+            item = dict(prior)
+            item["_raw"] = name
+            item["in_session"] = it["in_session"]
+            item["_supplement"] = False
+            item["_trivial"] = False
+            item["_dose_mg"] = None
+            item["_at"] = it.get("at") or default_at
+            item["_day"] = it.get("day") or default_day or ""
+            item["_meal"] = ("" if it.get("in_session")
+                             else (it.get("meal") or default_meal or ""))
+            log(f"    -> {item.get('resolved_name')!r} history/"
+                f"{item.get('confidence')} {item.get('kcal')} kcal")
+            batch.append(item)
+            notes.append(fmt_confirm(item))
             continue
         # The web rung needs the form to reject a wrong-form product, so it is rebound
         # per item rather than taken from the shared fetcher table.
@@ -2754,7 +2786,8 @@ _SAME_AS = re.compile(
     r"|\bthe\s+usual\b|\bmy\s+usual\b", re.I)
 
 
-def from_history(ctx: Context, text: str, day: date, back_days: int = 30) -> dict | None:
+def from_history(ctx: Context, text: str, day: date, back_days: int = 30,
+                  hinted: bool = False) -> dict | None:
     """The entry he means when he says "same as yesterday". None if there is no clear match.
 
     THE BUG THIS EXISTS FOR. He wrote "Fridge raiders (same as before)" and the bot asked him
@@ -2763,8 +2796,20 @@ def from_history(ctx: Context, text: str, day: date, back_days: int = 30) -> dic
     was 15. Both answers were already in his log.
 
     A figure he has already accepted beats anything a fresh search returns, so his history is
-    searched FIRST and a hit is used verbatim - product, portion, figures and provenance."""
-    if not _SAME_AS.search(text or ""):
+    searched FIRST and a hit is used verbatim - product, portion, figures and provenance.
+
+    `hinted=True` SKIPS THE PHRASE CHECK ON `text` ITSELF (19 Aug 2026). "Same as yesterday
+    morning. Protein bar, oats and the smoothie" is ONE qualifier covering a three-item
+    breakfast, and the parser correctly splits it into three items whose OWN text is just
+    "protein bar" / "oats" / "smoothie" - the phrase that triggers history search lives in the
+    message, not in any one item. Requiring it per-item meant none of the three ever reached
+    this function's search at all: "protein bar" priced as a generic bar, "oats" priced as
+    plain porridge, "smoothie" priced as a bare CoFID stub, all three wrong and less than half
+    of yesterday's actual 748 kcal. The caller checks the WHOLE message once and passes the
+    result in here for every item in the batch; an item's own short text is still what gets
+    matched against history, so "protein bar" still finds yesterday's protein bar and not the
+    oats."""
+    if not hinted and not _SAME_AS.search(text or ""):
         return None
     words = {w for w in re.split(r"[^a-z0-9]+", (text or "").lower()) if len(w) > 2}
     words -= {"same", "before", "last", "time", "yesterday", "monday", "tuesday",
@@ -3249,12 +3294,16 @@ def offer_items(ctx: Context, items: list, day: date, token, chat_id,
                       kind="offer", numbers=_gate_numbers(merged), reply_markup=kb)
         return
 
+    # THE QUALIFIER IS CHECKED ON THE WHOLE MESSAGE, ONCE, not on each item's own text
+    # (19 Aug 2026). "Same as yesterday morning" said once covers every item the parser
+    # split it into; see from_history's `hinted` docstring for the breakfast this exists for.
+    same_as_hint = bool(_SAME_AS.search(said or ""))
     resolved = []
     for it in items[:8]:
         # HIS OWN LOG FIRST when he says "same as": no search can beat a figure he has
         # already accepted, and asking him again for something he told the bot yesterday is
         # what made lunch unloggable.
-        prior = from_history(ctx, it["text"], day)
+        prior = from_history(ctx, it["text"], day, hinted=same_as_hint)
         if prior is not None:
             prior["_raw"] = it["text"]
             prior["in_session"] = bool(it.get("in_session"))
@@ -4106,6 +4155,65 @@ def apply_batch_rescale(ctx: Context, pend, decision: dict, day: date,
                   numbers=_gate_numbers(fresh), reply_markup=kb)
     _chat(ctx, "coach", f"[log] rescaled {len(changed)} of {len(fresh)} offered items "
                         f"to {total} kcal - awaiting confirm")
+    return True
+
+
+def apply_batch_history_reidentify(ctx: Context, pend, day: date, token, chat_id) -> bool:
+    """Re-match every pending item against his history and re-offer. True once handled.
+
+    THE FAILURE THIS EXISTS FOR (19 Aug 2026). "Same as yesterday morning" priced three
+    breakfast items generic/plain/stub instead of matching yesterday's actual entries -
+    see from_history's `hinted` docstring. He then said "Are you stupid I said the same
+    as yesterday for all of them", a correction naming no new food for any one component
+    because none of them needed one: the whole batch was meant to be his own log. That
+    decided `unclear` and asked which ONE was wrong, about a batch he had just said was
+    all wrong the same way. This runs the same from_history search a fresh log uses,
+    against each item ALREADY on the table, hinted so the phrase need not repeat per
+    component.
+
+    A component with no match in history is left exactly as it stood - guessing which
+    of his old entries it might be is worse than saying so and leaving it alone."""
+    batch = list((pend or {}).get("batch") or [])
+    if not batch:
+        return False
+    fresh, changed, unmatched = list(batch), [], []
+    for idx, it in enumerate(fresh):
+        if it.get("_supplement"):
+            # A dose was never searched against food data, so there is nothing here for
+            # history to match against either.
+            unmatched.append(it.get("resolved_name") or it.get("_raw") or f"item {idx + 1}")
+            continue
+        text = it.get("_raw") or it.get("raw_text") or it.get("resolved_name") or ""
+        prior = from_history(ctx, text, day, hinted=True)
+        if prior is None:
+            unmatched.append(it.get("resolved_name") or it.get("_raw") or f"item {idx + 1}")
+            continue
+        carry = {k: it.get(k) for k in
+                 ("_raw", "in_session", "_supplement", "_trivial", "_dose_mg", "_at",
+                  "_day", "_meal")}
+        fresh[idx] = {**prior, **carry}
+        changed.append(idx)
+    if not changed:
+        log(f"  batch history-reidentify found no match for any item: {unmatched}")
+        return False
+    set_pending(ctx.store, {**pend, "batch": fresh})
+    body = "\n\n".join(fmt_confirm(i) for i in fresh)
+    total = round(sum(i.get("kcal") or 0 for i in fresh))
+    lead = (f"Matched all {len(fresh)} to your history."
+            if len(changed) == len(fresh)
+            else f"Matched {len(changed)} of {len(fresh)} to your history.")
+    if unmatched:
+        lead += (" I could not find " + ", ".join(u[:40] for u in unmatched)
+                 + " in the last 30 days, so "
+                 + ("it is" if len(unmatched) == 1 else "they are") + " unchanged.")
+    if len(fresh) > 1:
+        body += f"\n\n*Total* {total} kcal"
+    kb = tg.inline([[("Log it", "confirm"), ("No", "cancel")]])
+    send_verified(ctx, token, chat_id, lead + "\n\n" + body + "\n\nLog "
+                  + ("these?" if len(fresh) > 1 else "it?"), kind="offer",
+                  numbers=_gate_numbers(fresh), reply_markup=kb)
+    _chat(ctx, "coach", f"[log] history-matched {len(changed)} of {len(fresh)} offered "
+                        f"items to {total} kcal - awaiting confirm")
     return True
 
 
