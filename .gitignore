@@ -85,3 +85,4 @@ ClaudeCoach/athletes/*/strava_tokens.json
 # one `git add -A` from being published (4 Aug 2026). athletes.json.enc is
 # committed deliberately and is unaffected - it is encrypted.
 ClaudeCoach/config/*.backup-*
+ClaudeCoach/config/athletes.json.bak-*
