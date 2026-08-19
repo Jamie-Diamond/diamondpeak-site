@@ -119,6 +119,14 @@ BLOCK it only for one of these, which are the failures this check exists for:
   - off_topic: the reply answers something else. He asked about a stir-fry and the reply
     is about a brookie. He asked how much protein he has had and the reply discusses
     tomorrow's ride instead.
+    THIS INCLUDES A SINGLE WRONG ROW INSIDE AN OTHERWISE-CORRECT OFFER. Check every row's
+    `he_said` against its `name` individually, even when most of the batch is right and
+    the message reads like it is mostly about something else. "A peperami" resolved to
+    "Grab It Chinese Chicken on a Stick" and was sent anyway (19 Aug 2026) - reasoned as "a
+    snack stick he named", treating the resolved PRODUCT as though it were the food he
+    said, when the two share nothing but the word "stick". A big offer with several
+    correct items is not evidence the odd one out is fine; it is the shape most likely to
+    let one bad row hide.
   - contradicts_input: the reply restates or re-prices figures HE supplied in his own
     message. He pasted a meal at 980 kcal and the reply says 2,400.
   - stale_context: the reply treats a finished or old event as live - advice about a run

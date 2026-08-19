@@ -892,7 +892,19 @@ def _gate_numbers(batch: list) -> list:
     raw" - and a stated meal's authority lives in the rows he typed."""
     out = []
     for i, it in enumerate((batch or [])[:8]):
+        # HE_SAID BESIDE NAME, STRUCTURALLY, NOT LEFT FOR THE GATE TO RECONSTRUCT
+        # (19 Aug 2026). "A peperami" resolved to "Grab It Chinese Chicken on a Stick" -
+        # sharing nothing with peperami but the word "stick" - and the gate sent it anyway,
+        # reasoning "a snack stick he named" as though the resolved product were the one he
+        # said. His own words and the reply's text WERE both in the prompt, so the gate
+        # could in principle have compared them itself; it did not, in a multi-item offer
+        # where most rows were right. Every other structural mismatch this gate reliably
+        # catches (a false completion claim, a figure that is his own) is one it is handed
+        # as a labelled field rather than one it has to notice in prose - `actions_this_turn`
+        # exists for exactly that reason. This is the same fix for the same class of miss:
+        # what he said and what it became, side by side, on every row.
         row = {"index": i,
+               "he_said": (it.get("_raw") or it.get("raw_text") or "")[:70],
                "name": (it.get("resolved_name") or it.get("_raw") or "")[:70],
                "kcal": it.get("kcal"), "protein_g": it.get("protein_g"),
                "carb_g": it.get("carb_g"), "fat_g": it.get("fat_g"),
