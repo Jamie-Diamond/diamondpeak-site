@@ -1872,7 +1872,23 @@ def handle_text(ctx: Context, text: str, token: str, chat_id) -> None:
                 return
             combined = NLU.apply_correction(target.get("raw_text") or "",
                                             corr)
-            _chat(ctx, 
+            # THE SAME GUARD AS THE PENDING-BATCH PATH BELOW, MISSING HERE (19 Aug 2026).
+            # An entry with no raw_text of its own - a photo-resolved "item from label
+            # photo", or one whose raw_text is empty for any other reason - combines with
+            # a correction into JUST the correction, in parentheses: " (half the
+            # portion)", " (470kcal is wrong, dispute the calorie figure just logged)".
+            # That is not a food, so every rung missed and it was queued to unresolved.json
+            # and re-asked about every morning for a week - four of the eight rows the
+            # 19 Aug nudge listed were this, not real missing food. _has_subject already
+            # existed for exactly this shape on the pending-batch branch; this branch found
+            # its target a different way (find_entry, not a batch) and never got the guard.
+            if not _has_subject(combined, corr):
+                tg.send(token, chat_id,
+                        "I have lost track of what that refers to. Tell me the item and "
+                        "the change together - “half a bag of the M&S nut "
+                        "collection” - and I will redo it.", log=log)
+                return
+            _chat(ctx,
                 "coach", f"[log] correction noted: {(got.get('correction') or t)[:60]}")
             offer_items(ctx, [{"text": combined, "portion_g": None,
                                "in_session": bool(target.get("in_session"))}],
