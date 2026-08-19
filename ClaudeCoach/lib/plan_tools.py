@@ -26,6 +26,14 @@ Usage:
   # What SHOULD this week's TSS be, given the phase CTL target
   python3 plan_tools.py required-tss --athlete jamie
 
+  # Windowed/segment NP and W' balance — never hand-compute either from raw
+  # streams (skips the 30s rolling average / has no recovery term; see
+  # lib/np_curve.py and lib/wbal.py for why).
+  python3 plan_tools.py windowed-np --athlete jamie --activity-id i12345 \
+        --start 600 --end 900
+  python3 plan_tools.py wbal --athlete jamie --activity-id i12345 \
+        --cp-low 250 --cp-high 265 --wprime-j 20000
+
 Every subcommand prints a single JSON object to stdout. On error it prints
 {"error": "..."} and exits non-zero.
 """
@@ -1247,6 +1255,78 @@ def cmd_wetsuit(args) -> dict:
     }
 
 
+def _extract_watts(streams):
+    for s in (streams or []):
+        if s.get("type") == "watts":
+            return s.get("data")
+    return None
+
+
+# ── subcommand: windowed-np ─────────────────────────────────────────────────────
+def cmd_windowed_np(args) -> dict:
+    """NP for one segment of a ride (--start/--end in seconds from ride start),
+    using the same 30s-rolling-mean^4 method as the power-curve cache — never
+    hand-average watts for a segment in chat. Also computes whole-ride NP the same
+    way and reconciles it against Intervals.icu's own recorded icu_weighted_avg_watts
+    for the activity; a mismatch beyond a few watts means the streams don't line up
+    with what ICU scored (trimmed/re-synced ride, wrong activity id), and the
+    windowed figure is flagged rather than handed over as if it were trustworthy."""
+    import np_curve
+    cfg = _load_cfg(args.athlete)
+    client = _client(cfg)
+    watts = _extract_watts(client.get_activity_streams(args.activity_id))
+    if not watts:
+        raise SystemExit(_err(f"activity {args.activity_id} has no watts stream"))
+    start, end = int(args.start), int(args.end)
+    seg_np = np_curve.np_for_window(watts, start, end)
+    if seg_np is None:
+        raise SystemExit(_err(
+            f"window [{start},{end}) is invalid or shorter than the 30s NP smoothing "
+            f"window (stream length {len(watts)}s)"))
+    whole_ride_np = np_curve.np_for_ride(watts)
+    icu_np = client.get_activity_detail(args.activity_id).get("icu_weighted_avg_watts")
+    reconciled, note = True, None
+    if icu_np and whole_ride_np:
+        delta = abs(whole_ride_np - icu_np)
+        if delta > 5:
+            reconciled = False
+            note = (f"computed whole-ride NP ({whole_ride_np}W) differs from ICU's "
+                     f"recorded NP ({icu_np}W) by {delta:.0f}W — streams may not match "
+                     "this activity (re-synced/trimmed ride); treat the windowed "
+                     "figure as unverified")
+    return {"athlete": args.athlete, "activity_id": args.activity_id,
+            "window_s": [start, end], "windowed_np_w": seg_np,
+            "whole_ride_np_w": whole_ride_np, "icu_recorded_np_w": icu_np,
+            "reconciled": reconciled, "note": note}
+
+
+# ── subcommand: wbal ────────────────────────────────────────────────────────────
+def cmd_wbal(args) -> dict:
+    """W' balance (Skiba differential model) swept across a CP band, for one
+    activity — never hand-compute joules-above-CP from raw streams in chat, and
+    never substitute a plain running total of joules above threshold for W'bal
+    (it has no recovery term and silently overstates fatigue). CP is rarely known
+    to the exact watt, so this scans [--cp-low, --cp-high] rather than one guessed
+    value; --wprime-j must come from a known/measured figure, never assumed."""
+    import wbal as wbal_mod
+    cfg = _load_cfg(args.athlete)
+    client = _client(cfg)
+    watts = _extract_watts(client.get_activity_streams(args.activity_id))
+    if not watts:
+        raise SystemExit(_err(f"activity {args.activity_id} has no watts stream"))
+    cp_low, cp_high, w_prime_j = float(args.cp_low), float(args.cp_high), float(args.wprime_j)
+    if cp_low <= 0 or cp_high < cp_low or w_prime_j <= 0:
+        raise SystemExit(_err("implausible inputs — check --cp-low/--cp-high/--wprime-j"))
+    sweep = wbal_mod.sweep_cp(watts, cp_low, cp_high, w_prime_j,
+                              step=max(1, int(args.cp_step or 5)))
+    if not sweep:
+        raise SystemExit(_err("stream too short or empty for a W'bal curve"))
+    worst_cp = min(sweep, key=lambda cp: sweep[cp]["min_j"])
+    return {"athlete": args.athlete, "activity_id": args.activity_id,
+            "cp_range_w": [cp_low, cp_high], "wprime_j": w_prime_j,
+            "sweep": sweep, "worst_case": {"cp_w": worst_cp, **sweep[worst_cp]}}
+
+
 # ── subcommand: log-strength ───────────────────────────────────────────────────
 def cmd_log_strength(args) -> dict:
     """Log a non-device training session (CrossFit / gym / kettlebells) as REAL
@@ -1398,6 +1478,21 @@ def main():
     pls.add_argument("--date", help="YYYY-MM-DD; default today")
     pls.add_argument("--name")
 
+    pnp = sub.add_parser("windowed-np", help="NP for one segment of a ride, reconciled against ICU's own recorded NP")
+    pnp.add_argument("--athlete", required=True)
+    pnp.add_argument("--activity-id", required=True, dest="activity_id")
+    pnp.add_argument("--start", type=int, required=True, help="segment start, seconds from ride start")
+    pnp.add_argument("--end", type=int, required=True, help="segment end, seconds from ride start")
+
+    pwb = sub.add_parser("wbal", help="W' balance (Skiba model) swept across a CP band, for one activity")
+    pwb.add_argument("--athlete", required=True)
+    pwb.add_argument("--activity-id", required=True, dest="activity_id")
+    pwb.add_argument("--cp-low", type=float, required=True, dest="cp_low")
+    pwb.add_argument("--cp-high", type=float, required=True, dest="cp_high")
+    pwb.add_argument("--wprime-j", type=float, required=True, dest="wprime_j",
+                     help="anaerobic work capacity, joules — known/measured, never guessed")
+    pwb.add_argument("--cp-step", type=int, dest="cp_step", help="CP sweep increment, watts (default 5)")
+
     args = p.parse_args()
     handler = {"tss": cmd_tss, "session-for-load": cmd_session_for_load,
                "session-load": cmd_session_load, "sum": cmd_sum,
@@ -1406,7 +1501,8 @@ def main():
                "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target,
                "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check,
                "wetsuit": cmd_wetsuit, "race-predict": cmd_race_predict,
-               "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength}[args.cmd]
+               "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength,
+               "windowed-np": cmd_windowed_np, "wbal": cmd_wbal}[args.cmd]
     try:
         result = handler(args)
     except SystemExit:
