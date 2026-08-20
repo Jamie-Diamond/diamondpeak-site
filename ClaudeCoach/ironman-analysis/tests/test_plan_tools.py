@@ -21,6 +21,8 @@ import plan_tools as pt                                   # noqa: E402
 from primitives.load import project_pmc_daily            # noqa: E402
 from primitives.planned_tss import tss_from_segments, render_workout  # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr  # noqa: E402
+import np_curve                                            # noqa: E402
+import wbal                                                 # noqa: E402
 
 
 # ── single-source guarantee: CLI projection ≡ the load chart's projection ──────
@@ -178,3 +180,45 @@ def test_week_rollup_actual_beats_planned_same_day_sport():
     assert r["completed_to_date_tss"] == 60
     assert r["planned_remaining_tss"] == 160        # only the future ride
     assert r["projected_week_tss"] == 220
+
+
+# ── windowed NP — locks the fix for the 23x-repeated hand-computed NP bug ──────
+def test_windowed_np_beats_ride_average_on_a_surge():
+    watts = [200.0] * 300 + [250.0] * 300 + [200.0] * 300
+    surge_np = np_curve.np_for_window(watts, 300, 600)
+    whole_np = np_curve.np_for_ride(watts)
+    assert surge_np > whole_np              # the surge alone reads higher than the ride
+
+
+def test_windowed_np_none_below_smoothing_window():
+    watts = [200.0] * 900
+    assert np_curve.np_for_window(watts, 100, 110) is None    # 10s < 30s smoothing floor
+
+
+def test_windowed_np_none_out_of_range():
+    watts = [200.0] * 900
+    assert np_curve.np_for_window(watts, 0, 5000) is None
+
+
+# ── W' balance — locks the fix for the recurring hand-computed W'bal bug ───────
+def test_wbal_depletes_above_cp_and_recovers_below_it():
+    mixed = [300] * 300 + [100] * 900       # 5 min hard, then easy
+    curve = wbal.wbal_curve(mixed, cp=250, w_prime_j=20000)
+    assert curve[299] < curve[0]            # depleted while above CP
+    assert curve[-1] > curve[299]           # recovered while below CP
+
+
+def test_wbal_never_a_plain_joules_running_total():
+    # A no-recovery "joules above CP" total would keep falling through the rest
+    # block; the real (Skiba) model must climb back up instead.
+    mixed = [300] * 60 + [50] * 600
+    curve = wbal.wbal_curve(mixed, cp=250, w_prime_j=20000)
+    assert curve[-1] > curve[59]
+
+
+def test_wbal_sweep_reports_worst_cp_in_the_band():
+    mixed = [300] * 300 + [100] * 300
+    sweep = wbal.sweep_cp(mixed, cp_low=240, cp_high=260, w_prime_j=20000, step=10)
+    assert set(sweep) == {240, 250, 260}
+    # a lower CP treats more of the ride as "above threshold" -> deeper depletion
+    assert sweep[240]["min_j"] < sweep[260]["min_j"]

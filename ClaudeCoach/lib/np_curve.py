@@ -77,6 +77,40 @@ def np_curve_for_watts(watts, durations):
     return out
 
 
+def np_for_window(watts, start_s, end_s):
+    """NP for one caller-chosen [start_s, end_s) segment of a 1Hz watts array, same
+    30s-rolling-mean^4 definition as np_curve_for_watts. This is the "give me the NP
+    of this segment" entry point windowed/segment analysis needs instead of hand-
+    averaging watts in a chat turn.
+
+    The rolling mean is computed over the FULL stream before slicing, not reset at
+    start_s - a segment boundary is not a physiological reset, so the smoothing must
+    see whatever load came just before it, exactly as np_curve_for_watts already does
+    for whole-ride windows.
+
+    Returns None if the window is out of range or shorter than the 30s smoothing
+    constant (NP is undefined below that), rather than a misleadingly precise number.
+    """
+    vals = [float(w or 0) for w in (watts or [])]
+    start_s, end_s = int(start_s), int(end_s)
+    if start_s < 0 or end_s <= start_s or end_s > len(vals):
+        return None
+    if end_s - start_s < _NP_SMOOTH:
+        return None
+    r = _rolling_mean(vals, _NP_SMOOTH)
+    seg = r[start_s:end_s]
+    mean_p4 = sum(v ** 4 for v in seg) / len(seg)
+    return round(mean_p4 ** 0.25, 1)
+
+
+def np_for_ride(watts):
+    """Whole-ride NP via np_for_window over the entire stream - used to reconcile a
+    windowed figure against Intervals.icu's own recorded icu_weighted_avg_watts for
+    the activity, since the two must use the same method to be comparable."""
+    vals = [float(w or 0) for w in (watts or [])]
+    return np_for_window(vals, 0, len(vals))
+
+
 def load_cache(path):
     try:
         return json.loads(path.read_text())
