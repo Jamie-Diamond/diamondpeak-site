@@ -6,6 +6,7 @@ Called as a background process from both activity-watcher and bot.
 Usage: python3 ClaudeCoach/scripts/strava-update-activity.py --athlete jamie --icu-id i149586944
 """
 import argparse, json, re, subprocess, sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 BASE        = Path(__file__).parent.parent  # ClaudeCoach/
@@ -21,7 +22,6 @@ import public_text_guard
 def build_description(first_name: str, sport: str, entry: dict, detail: dict, events: list) -> str:
     tss     = entry.get("tss") or detail.get("icu_training_load")
     np_w    = entry.get("norm_power") or detail.get("icu_weighted_avg_watts")
-    ftp     = detail.get("icu_ftp") or 316
     # RPE and injury/pain scores are private — never published to Strava.
     carbs   = entry.get("nutrition_g_carb")
     # `feel` is NEVER published either. It was stripped 2026-07-30: removing the `rpe`
@@ -52,7 +52,7 @@ def build_description(first_name: str, sport: str, entry: dict, detail: dict, ev
     ) >= 25 if (avg_t is not None or max_t is not None) else False
 
     metrics = []
-    if np_w:  metrics.append(f"NP {np_w}W · IF {round(np_w/ftp, 2):.2f}")
+    if np_w:  metrics.append(f"NP {np_w}W")
     if tss:   metrics.append(f"TSS {tss}")
     if dur:   metrics.append(f"{dur} min")
     if dist:  metrics.append(f"{dist:.1f}km")
@@ -104,20 +104,20 @@ Sport: {sport_line}
 {plan_block}
 Metrics: {metrics_str}
 
-Write exactly 3 lines, plain text, no markdown, no hashtags, no exclamation marks:
+Write exactly 2 lines, plain text, no markdown, no hashtags, no exclamation marks:
 Line 1 — "Aim: [one plain sentence on what the session was targeting]"
-Line 2 — [one neutral, factual sentence describing what was actually done — key metrics (zones, NP/IF, decoupling, pace). Describe what happened, NOT how it deviated from plan. NEVER snide, sarcastic, wry, or negative. NEVER imply the athlete quit, gave up, fell short, or underperformed. A shorter-than-planned session is reported plainly by its actual numbers, with no commentary on the gap. Never state RPE or any injury/pain score — those are private. {heat_rule}]
-Line 3 — "ClaudeCoach"
+Line 2 — [one neutral, factual sentence describing what was actually done — key metrics (zones, NP, decoupling, pace). Describe what happened, NOT how it deviated from plan. NEVER snide, sarcastic, wry, or negative. NEVER imply the athlete quit, gave up, fell short, or underperformed. A shorter-than-planned session is reported plainly by its actual numbers, with no commentary on the gap. Never state RPE or any injury/pain score — those are private. {heat_rule}]
+Never sign the description or mention ClaudeCoach anywhere in it — it's the athlete's public Strava, not the coach's. Never state a raw IF or %FTP value.
 
 Examples of the right tone (neutral, factual, no judgement):
 - "Held Z2 throughout, 107 min in zone. Decoupling 3.2%."
 - "1.2km open water, avg 2:03/100m, HR 129. Firm aerobic effort in the heat."
-- "Intervals completed at NP 254W, IF 0.85. Steady across all reps."
+- "Intervals completed at NP 254W. Steady across all reps."
 - "8.9km continuous, avg GAP 5:10/km, HR 143 — within the Z2 band."
 
 Total under 300 characters. Output nothing else."""
 
-    fallback = f"Aim: {entry.get('name', sport)}.\n{metrics_str}\nClaudeCoach"
+    fallback = f"Aim: {entry.get('name', sport)}.\n{metrics_str}"
     try:
         result = subprocess.run(
             [CLAUDE, "-p", "--model", "claude-haiku-4-5-20251001"],
@@ -147,8 +147,36 @@ def _looks_like_description(text: str) -> bool:
     )
     if any(m in low for m in bad_markers):
         return False
-    # A real description is multi-line and ends on the ClaudeCoach signature.
-    return "claudecoach" in low
+    # A real description opens with the "Aim:" line every valid output starts with.
+    return low.startswith("aim:")
+
+
+def _snapshot_existing_description(slug: str, icu_id: str, strava_id, sc: StravaClient) -> None:
+    """Persist whatever description is currently on Strava before this script overwrites it.
+
+    Strava keeps no revision history, so without this an overwrite is unrecoverable
+    (persistent-rules.md, set 25 Jul 2026: "snapshot the existing text first"). Best
+    effort only — a failed snapshot must not block the write.
+    """
+    try:
+        existing = (sc.get_activity_detail(strava_id) or {}).get("description") or ""
+    except Exception as e:
+        print(f"Description snapshot failed (write proceeding): {e}", file=sys.stderr)
+        return
+    if not existing:
+        return
+    log_path = BASE / "athletes" / slug / "strava-description-log.json"
+    try:
+        history = json.loads(log_path.read_text()) if log_path.exists() else []
+    except Exception:
+        history = []
+    history.insert(0, {
+        "icu_id": icu_id,
+        "strava_id": strava_id,
+        "snapshotted_at": datetime.now(timezone.utc).isoformat(),
+        "previous_description": existing,
+    })
+    log_path.write_text(json.dumps(history, indent=2))
 
 
 def main():
@@ -208,6 +236,7 @@ def main():
         # The activity's own name is exempt: it is already public and athlete-chosen.
         description = public_text_guard.assert_publishable(
             description, exempt=entry.get("name") or detail.get("name"))
+        _snapshot_existing_description(slug, icu_id, strava_id, sc)
         # update_description returns `r.status == 200`; it used to be discarded and this
         # line printed unconditionally, so the log claimed a write Strava had refused.
         # (The bot's verify-after-write path re-reads the description independently.)

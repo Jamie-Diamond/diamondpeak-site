@@ -36,6 +36,12 @@ _PRIVATE_PATTERNS = [
     (re.compile(r"\bpain\b", re.I), "pain"),
     (re.compile(r"\binjur", re.I), "injury"),
     (re.compile(r"\bniggle", re.I), "niggle (injury detail)"),
+    # Not privacy leaks, but banned from every description-writing path the same way
+    # (persistent-rules.md, set 25 Jul, recurred 19 Aug — a second, un-synced script
+    # published both of these after the first had already been fixed).
+    (re.compile(r"claudecoach", re.I), "the ClaudeCoach signature"),
+    (re.compile(r"\bIF\s+\d+\.\d+\b", re.I), "a raw IF value"),
+    (re.compile(r"%\s*FTP|\bFTP\s*%", re.I), "a raw %FTP value"),
 ]
 
 
