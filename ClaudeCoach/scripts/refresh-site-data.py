@@ -611,11 +611,18 @@ def _build_jamie_data(client) -> dict:
         if not ev_date or ev_date < today.isoformat():
             continue
         ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
-        if any(_sport_normalise(a.get("type","")) == ev_sport
-               for a in completed_by_date.get(ev_date,[])):
-            continue
         # Prefer the workout-computed load; load_target can be a stale/manual over-estimate.
         ev_tss = ev.get("icu_training_load") or ev.get("load") or ev.get("load_target")
+        same_day_completed = [e for e in week_calendar
+                               if e["date"] == ev_date and e["sport"] == ev_sport
+                               and e["status"] == "completed"]
+        if same_day_completed:
+            # Already logged: keep the actual TSS as the headline figure, but carry
+            # what was prescribed so the app can show actual against planned rather
+            # than losing the plan the moment a session is done.
+            if ev_tss:
+                same_day_completed[0]["planned_tss"] = int(ev_tss)
+            continue
         ev_dur = ev.get("moving_time") or ev.get("duration")
         week_calendar.append({"date":ev_date,"sport":ev_sport,"name":ev.get("name",""),
                                "tss":int(ev_tss) if ev_tss else None,
@@ -1628,11 +1635,18 @@ def _build_athlete_training_data(slug, athlete_cfg):
         if not ev_date or ev_date < today.isoformat():
             continue
         ev_sport = _sport_normalise(ev.get("type") or ev.get("sport_type") or "Other")
-        # Skip if there's already a completed activity of same sport on that date
-        if any(_sport_normalise(a.get("type", "")) == ev_sport
-               for a in completed_by_date.get(ev_date, [])):
-            continue
         ev_tss = ev.get("icu_training_load") or ev.get("load")
+        # If there's already a completed activity of the same sport on that date,
+        # keep the actual TSS as the headline figure but carry what was prescribed
+        # so the app can show actual against planned rather than losing the plan
+        # the moment a session is done.
+        same_day_completed = [e for e in week_calendar
+                               if e["date"] == ev_date and e["sport"] == ev_sport
+                               and e["status"] == "completed"]
+        if same_day_completed:
+            if ev_tss:
+                same_day_completed[0]["planned_tss"] = int(ev_tss)
+            continue
         ev_dur = ev.get("moving_time") or ev.get("duration")
         week_calendar.append({
             "date": ev_date, "sport": ev_sport, "name": ev.get("name", ""),

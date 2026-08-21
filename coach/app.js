@@ -98,6 +98,10 @@
             accent: '#10656b', blue: '#1d4e73', amber: '#a86a12', red: '#b3241f',
             paper: '#f6f7f8' };
 
+  // Same discipline colours as the session dots and the load-chart bars (.sp-swim
+  // etc in the stylesheet) - swim is blue everywhere, not just on the badges.
+  var SPORT_LINE_COLOR = { swim: C.blue, bike: C.accent, run: C.amber };
+
   var state = {
     slug: 'jamie', tab: 'today', data: null, lib: null,
     // fitMetric is 'tss' (CTL) or 'dur' (hours/week). fitSport is shared by both, so
@@ -139,6 +143,12 @@
   }
   function daysBetween(a, b) {
     return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5);
+  }
+  function isoAdd(iso, days) {
+    var d = new Date(iso + 'T12:00:00');
+    d.setDate(d.getDate() + days);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+           '-' + String(d.getDate()).padStart(2, '0');
   }
   function sportClass(s) { return 'sp-' + (SPORT[s] || 'other'); }
 
@@ -369,7 +379,7 @@
   }
 
   function weekSoFar(d) {
-    var t = todayISO(), ws = weekStart(t);
+    var t = todayISO(), ws = weekStart(t), we = isoAdd(ws, 6);
     var done = { mins: 0, tss: 0, n: 0 }, left = { mins: 0, tss: 0, n: 0 };
     var daysLoaded = {};
 
@@ -381,9 +391,13 @@
       // matches the Calendar's rule (a covered day with no items), so the two agree.
       if ((r.tss || 0) > 0 || (r.dur || 0) > 0) daysLoaded[r.date] = 1;
     });
+    // Bounded to THIS week (ws..we) and keyed on status rather than date, so a
+    // not-yet-done session dated TODAY counts as "to go" instead of vanishing, and a
+    // planned session next week can never leak into this week's count - both were
+    // wrong before (Jamie, 21 Aug 2026).
     (d.weekCalendar || []).forEach(function (x) {
-      if (x.date < ws) return;
-      if (x.date > t && x.status !== 'completed') {
+      if (x.date < ws || x.date > we) return;
+      if (x.status !== 'completed') {
         left.mins += x.duration_min || 0; left.tss += x.tss || 0; left.n++;
       }
     });
@@ -399,18 +413,18 @@
     var elapsed = daysBetween(ws, t) + 1;              // Monday..today inclusive
     var rest = Math.max(0, elapsed - Object.keys(daysLoaded).length);
 
-    var h = '<div class="minis">' +
-      mini(hhmm(done.mins), 'hours done') +
-      mini(Math.round(done.tss), 'tss done') +
-      mini(target ? Math.round(target) : '—', 'tss target') +
-      mini(pct != null ? pct + '%' : '—', 'of target',
-           pct != null && pct > 110 ? 'warn' : '') +
-      '</div>';
-
-    var bits = [done.n + ' done'];
-    if (left.n) bits.push(left.n + ' left (' + hhmm(left.mins) + ')');
-    bits.push(rest > 0 ? rest + ' rest day' + (rest === 1 ? '' : 's') + ' so far'
-                       : 'no rest day yet this week');
+    // Everything the four-tile minis row under this card used to say - hours done,
+    // tss done, tss target, % of target - is now in this one sentence, so the tiles
+    // were repeating it and are gone (Jamie, 21 Aug 2026).
+    var bits = [done.n + (done.n === 1 ? ' session' : ' sessions') +
+                ' (' + hhmm(done.mins) + ') done'];
+    if (left.n) bits.push(left.n + ' to go');
+    bits.push(rest > 0 ? rest + ' rest day' + (rest === 1 ? '' : 's') + ' done'
+                       : 'no rest day yet');
+    if (target) {
+      bits.push(Math.round(done.tss) + ' / ' + Math.round(target) + ' tss' +
+                (pct != null ? ' (' + pct + '%)' : ''));
+    }
 
     /* The rolling energy figure USED to be appended here, as "+73 kcal/day average"
        against the day's deficit-adjusted target. It measured adherence, not balance, and
@@ -422,7 +436,7 @@
       (target ? '<div class="bar' + (pct > 110 ? ' warn' : '') + '"><i style="width:' +
         Math.min(100, pct || 0) + '%"></i></div>' : '') + '</div>',
       { foot: 'As of ' + esc(d.generated || 'unknown') +
-              (d.refreshCadence ? '. Refreshes ' + d.refreshCadence + '.' : '.') }) + h;
+              (d.refreshCadence ? '. Refreshes ' + d.refreshCadence + '.' : '.') });
   }
 
   /* Detail for one session, hidden until its heading is tapped. Every field is emitted
@@ -436,7 +450,11 @@
       rows.push('<p class="hero-m"><span class="mut">' + esc(label) + '</span> ' +
                 esc(String(value)) + '</p>');
     }
-    add('Planned load', s.tss != null ? Math.round(s.tss) + ' TSS' : null);
+    add(s.status === 'completed' ? 'Actual load' : 'Planned load',
+        s.tss != null ? Math.round(s.tss) + ' TSS' : null);
+    if (s.status === 'completed') {
+      add('Planned load', s.planned_tss != null ? Math.round(s.planned_tss) + ' TSS' : null);
+    }
     add('Duration', s.duration_min ? hhmm(s.duration_min) : null);
     add('Distance', s.distance_km != null ? Number(s.distance_km).toFixed(1) + ' km' : null);
     add('Status', s.status);
@@ -473,11 +491,18 @@
       '<p class="hero-k">' + esc(dow(t)) + ' ' + dnum(t) + ' · today</p>' +
       (today.length
         ? today.map(function (s, si) {
+            // A completed session that had a plan behind it says both numbers - actual
+            // is the headline, planned rides alongside it - rather than the plan simply
+            // vanishing the moment the session is logged (Jamie, 21 Aug 2026).
+            var tssTxt = s.tss != null
+              ? Math.round(s.tss) + ' tss' +
+                (s.status === 'completed' && s.planned_tss != null && s.planned_tss !== s.tss
+                  ? ' (planned ' + Math.round(s.planned_tss) + ')' : '')
+              : null;
             return '<h2 class="hero-t" data-sess="' + si + '">' +
               '<span class="sp ' + sportClass(s.sport) + '"></span>' +
               esc(s.name || s.sport) + '</h2>' +
-              '<p class="hero-m">' + esc([hhmm(s.duration_min),
-                s.tss != null ? Math.round(s.tss) + ' tss' : null,
+              '<p class="hero-m">' + esc([hhmm(s.duration_min), tssTxt,
                 s.detail].filter(Boolean).join(' · ')) + '</p>' +
               (s.status === 'completed' ? '<p class="hero-done">✓ Completed</p>' : '') +
               sessionDetail(s, si);
@@ -490,6 +515,16 @@
       fig(Number(k.atl).toFixed(1), 'Fatigue', 'ATL') +
       fig(signed(k.tsb), 'Form', 'TSB', k.tsb >= 0 ? 'pos' : (k.tsb <= -20 ? 'neg' : 'flat')) +
       '</div>';
+
+    // These figures come from ICU's own wellness row for today, which reflects
+    // activities actually LOGGED, not the plan - so a not-yet-done session sits
+    // outside them. Flagged here rather than silently trusted (Jamie, 21 Aug 2026).
+    var pendingToday = today.filter(function (s) { return s.status !== 'completed'; })
+      .reduce(function (a, s) { return a + (s.tss || 0); }, 0);
+    if (pendingToday > 0) {
+      h += '<p class="hint">' + esc(Math.round(pendingToday)) +
+        ' tss still planned today, not yet in Fitness / Fatigue / Form</p>';
+    }
 
     // Ramp and heat were two full cards each. They are two numbers - so they are
     // two numbers, on one row, with the warning state carried by colour.
@@ -512,18 +547,19 @@
 
     h += weekSoFar(d);
 
-    h += card('Coming up', '<div class="body-flush">' +
-      (next.length ? groupByDay(next) : '<div class="empty">Nothing planned yet</div>') +
-      '</div>', { flush: true });
-
-    // The ±7 day chart, same one as Trends, at the bottom of Today: it answers "how
-    // heavy has this week been and what is left" without changing tab.
+    // The ±7 day chart, same one as Trends: it answers "how heavy has this week been
+    // and what is left" without changing tab, which is why it sits above Coming Up
+    // rather than below it (Jamie, 21 Aug 2026).
     if ((d.loadChart || []).length) {
       h += card('Seven days either side',
         '<div class="readout" id="ro-today"><b>—</b><span></span></div>' +
         '<div class="chartbox"><canvas id="c-today"></canvas></div>',
         { foot: 'Daily TSS by sport, faded where still planned. Line is form (TSB).' });
     }
+
+    h += card('Coming up', '<div class="body-flush">' +
+      (next.length ? groupByDay(next) : '<div class="empty">Nothing planned yet</div>') +
+      '</div>', { flush: true });
 
     $('#v-today').innerHTML = h;
     var th = $('#v-today');
@@ -1500,7 +1536,8 @@
     }
     ds.push({
       label: 'This season', order: 1,
-      data: rel(pick3('current'), raceThis), borderColor: C.accent, borderWidth: 2.2,
+      data: rel(pick3('current'), raceThis),
+      borderColor: SPORT_LINE_COLOR[state.fitSport] || C.accent, borderWidth: 2.2,
       pointRadius: 0, tension: 0.25, fill: false
     });
     if ((cp.target_milestones || []).length && raceThis && state.fitSport === 'all') {
@@ -1590,7 +1627,7 @@
     ds.push({
       label: 'This season', order: 1,
       data: relToRace(durSeries(d, 'current', sport), races.current),
-      borderColor: C.accent, borderWidth: 2.2,
+      borderColor: SPORT_LINE_COLOR[sport] || C.accent, borderWidth: 2.2,
       pointRadius: 0, tension: 0.25, fill: false
     });
 
@@ -1648,10 +1685,28 @@
     var totals = lc.map(function (r) {
       return (r.activities || []).reduce(function (a, x) { return a + (x.tss || 0); }, 0);
     });
+    // Daily completed TSS from before the graph's own window, published far enough
+    // back (recent[] runs to HISTORY_DAYS) to seed the window properly. Without this,
+    // the leftmost day's "7-day average" was an average of one day - itself - because
+    // it had nothing earlier to look at (Jamie, 21 Aug 2026).
+    var priorTss = {};
+    (d.recent || []).forEach(function (r) {
+      if (r.date < lc[0].date) priorTss[r.date] = (priorTss[r.date] || 0) + (r.tss || 0);
+    });
+    var dailyTss = function (i) {
+      if (i >= 0) return totals[i];
+      var iso = isoAdd(lc[0].date, i);
+      return Object.prototype.hasOwnProperty.call(priorTss, iso) ? priorTss[iso] : null;
+    };
     // Trailing 7-day mean of daily load, on the TSS axis because it shares the unit.
+    // Reaches outside the drawn window for the leftmost days rather than clamping.
     var roll = totals.map(function (_, i) {
-      var w = totals.slice(Math.max(0, i - 6), i + 1);
-      return w.reduce(function (a, b) { return a + b; }, 0) / w.length;
+      var vals = [];
+      for (var k = i - 6; k <= i; k++) {
+        var v = dailyTss(k);
+        if (v != null) vals.push(v);
+      }
+      return vals.length ? vals.reduce(function (a, b) { return a + b; }, 0) / vals.length : 0;
     });
 
     var ds = [];

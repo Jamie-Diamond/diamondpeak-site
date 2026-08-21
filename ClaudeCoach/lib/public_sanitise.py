@@ -324,7 +324,7 @@ TRAINING_DATA_SPEC = {
     }),
     "weekCalendar": Records({
         "date": S, "name": S, "sport": S, "detail": S,
-        "duration_min": S, "tss": S, "status": S, "key": S,
+        "duration_min": S, "tss": S, "planned_tss": S, "status": S, "key": S,
     }),
     # progressData.carb: PUBLISHED on an explicit owner decision, 3 Aug 2026
     # ("carb intake can be published and should be"). It was previously withheld
