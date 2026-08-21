@@ -1076,7 +1076,7 @@
               return '<div class="sesh' + (a.status === 'completed' ? ' done' : '') + '">' +
                 '<span class="tick">' + (a.status === 'completed' ? '✓' : '○') + '</span>' +
                 '<span class="body"><span class="nm"><span class="sp ' + sportClass(a.sport) +
-                '"></span>' + esc(a.sport) + '</span></span>' +
+                '"></span>' + esc(a.name || a.sport) + '</span></span>' +
                 '<span class="rt"><b>' + hhmm(a.dur) + '</b>' +
                 (a.tss != null ? Math.round(a.tss) + ' tss' : '') + '</span></div>';
             }).join('') + '</div>';
@@ -1798,7 +1798,14 @@
         if (it.dataset.yAxisID === 'y1') return 'TSB ' + signed(it.parsed.y);
         if (it.dataset.label === '7d avg load') return '7d avg ' + Math.round(it.parsed.y);
         if (!it.parsed.y) return null;
-        return it.dataset.label + ' ' + Math.round(it.parsed.y) + ' tss';
+        // Named, not just sported: the bar is a per-sport TOTAL (usually one session),
+        // so the session's own name reads better here than the sport twice over.
+        var row = lc[it.dataIndex] || {};
+        var names = (row.activities || [])
+          .filter(function (a) { return norm(a.sport) === it.dataset.label && a.name; })
+          .map(function (a) { return a.name; });
+        return it.dataset.label + ' ' + Math.round(it.parsed.y) + ' tss' +
+          (names.length ? ' — ' + names.join(', ') : '');
       },
       footer: function (items) {
         return 'Day total ' + Math.round(totals[items[0].dataIndex]) + ' tss';

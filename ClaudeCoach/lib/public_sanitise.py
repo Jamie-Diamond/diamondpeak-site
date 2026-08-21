@@ -255,7 +255,7 @@ TRAINING_DATA_SPEC = {
 
     "loadChart": Records({
         "date": S, "projected": S, "tsb": S,
-        "activities": Records({"sport": S, "dur": S, "tss": S, "status": S}),
+        "activities": Records({"sport": S, "name": S, "dur": S, "tss": S, "status": S}),
     }),
     "planVsActual": Records({
         "week_num": S, "week_start": S, "planned_tss": S, "actual_tss": S,

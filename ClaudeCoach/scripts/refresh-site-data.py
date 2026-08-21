@@ -636,7 +636,7 @@ def _build_jamie_data(client) -> dict:
     load_chart = []
     for i in range(-7, 8):
         d    = (today + timedelta(days=i)).isoformat()
-        acts = [{"sport":_sport_normalise(a.get("type","Other")),
+        acts = [{"sport":_sport_normalise(a.get("type","Other")),"name":a.get("name",""),
                  "tss":int(a.get("icu_training_load") or 0),
                  "dur":round((a.get("moving_time") or 0)/60),
                  "status":"completed"}
@@ -651,7 +651,8 @@ def _build_jamie_data(client) -> dict:
                 # manual over-estimate that doesn't match the prescribed (e.g. Z2) structure.
                 ev_tss = ev.get("icu_training_load") or ev.get("load") or ev.get("load_target")
                 ev_dur = ev.get("moving_time") or ev.get("duration")
-                acts.append({"sport":ev_sport,"tss":int(ev_tss) if ev_tss else None,
+                acts.append({"sport":ev_sport,"name":ev.get("name",""),
+                              "tss":int(ev_tss) if ev_tss else None,
                               "dur":round(int(ev_dur)/60) if ev_dur else None,"status":"planned"})
         load_chart.append({"date":d,"tsb":tsb_by_date.get(d),"activities":acts})
 
@@ -1673,6 +1674,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
             if a.get("start_date_local", "")[:10] == d:
                 acts.append({
                     "sport": _sport_normalise(a.get("type", "Other")),
+                    "name":  a.get("name", ""),
                     "tss":   int(a.get("icu_training_load") or 0),
                     "dur":   round((a.get("moving_time") or 0) / 60),
                     "status": "completed",
@@ -1689,6 +1691,7 @@ def _build_athlete_training_data(slug, athlete_cfg):
                 ev_dur = ev.get("moving_time") or ev.get("duration")
                 acts.append({
                     "sport": ev_sport,
+                    "name":  ev.get("name", ""),
                     "tss":   int(ev_tss) if ev_tss else None,
                     "dur":   round(int(ev_dur) / 60) if ev_dur else None,
                     "status": "planned",
