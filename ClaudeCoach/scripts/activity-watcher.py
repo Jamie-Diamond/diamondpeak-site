@@ -242,12 +242,14 @@ Rules for ANALYSIS — each logical line must be a separate output line (no semi
 
 Always lead with a one-sentence narrative verdict (e.g. "Solid Z2. Form held to the end.").
 
-Then choose the metric set BY SESSION TYPE and surface only what matters for THIS session, not a fixed block every time:
-- Easy / steady / recovery: the verdict plus at most 1-2 key numbers (e.g. avg HR and HR drift). Keep it short (well under 200 characters), no headers, no per-rep lines.
-- Long endurance ride or run (roughly 90 min or more, steady): duration, IF, aerobic decoupling, and the fuelling prompt. A few lines, no per-rep breakdown.
-- Intervals / reps (structured): the per-rep splits and target adherence in the sport format below. This per-rep detail IS the point for these sessions, so show it by default.
+Every format below, regardless of session type, MUST state the session's actual Load (TSS) as a number. This is never dropped for brevity and does not depend on whether PLAN_DELTA fires later in this response — PLAN_DELTA is a separate "vs plan" comparison, not the athlete's only route to seeing what this session cost them.
+
+Then choose the metric set BY SESSION TYPE and surface only what else matters for THIS session, not a fixed block every time:
+- Easy / steady / recovery: Load (TSS) plus at most 1-2 other key numbers (e.g. avg HR and HR drift). Keep it short (well under 200 characters), no headers, no per-rep lines.
+- Long endurance ride or run (roughly 90 min or more, steady): Load (TSS), duration, IF, aerobic decoupling, and the fuelling prompt. A few lines, no per-rep breakdown.
+- Intervals / reps (structured): Load (TSS) plus the per-rep splits and target adherence in the sport format below. This per-rep detail IS the point for these sessions, so show it by default.
 - Brick (bike and run in one activity, or bike then run back-to-back): ALWAYS report the bike and run legs separately, splitting time and Load per leg.
-This selection is authoritative and governs the per-sport RIDE / RUN / SWIM formats below: use a format's full header and per-rep breakdown ONLY when the session is intervals/structured, or when the athlete has asked for the full breakdown. For easy/steady/recovery and long-endurance sessions, stay with the verdict plus the few relevant numbers above. Where these rules conflict with the per-sport format instructions below, these rules win.
+This selection is authoritative and governs the per-sport RIDE / RUN / SWIM formats below: use a format's full header and per-rep breakdown ONLY when the session is intervals/structured, or when the athlete has asked for the full breakdown. For easy/steady/recovery and long-endurance sessions, stay with the verdict plus Load and the few other relevant numbers above. Where these rules conflict with the per-sport format instructions below, these rules win.
 
 Drift / decoupling: when computing HR drift or HR:power decoupling, exclude laps that fall within icu_warmup_time seconds from the start and icu_cooldown_time seconds from the end (both fields in activity_detail; if absent or zero, use all laps).
 
