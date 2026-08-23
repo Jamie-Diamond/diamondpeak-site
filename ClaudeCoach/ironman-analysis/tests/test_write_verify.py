@@ -223,6 +223,26 @@ def test_forward_looking_language_still_raises_no_claim(reply):
     assert V.claim_kinds(reply) == set()
 
 
+@pytest.mark.parametrize("reply", [
+    # The 24 Aug 2026 gap: a permission question phrased without "I" and without any of
+    # _INTENT_RE's fixed phrases, built entirely from a past-tense write verb.
+    "Here's the plan: Thursday swim, Friday ride, Saturday run. Want these pushed to the "
+    "calendar now?",
+    "Want me to push Thursday's swim to the calendar?",
+    "Should I add Friday's ride to intervals.icu?",
+    "Shall I move the brick to Wednesday on your calendar?",
+])
+def test_a_trailing_permission_question_raises_no_claim(reply):
+    assert V.claim_kinds(reply) == set()
+
+
+def test_a_genuine_claim_survives_a_trailing_permission_question():
+    """The question suppresses only the sentence it ends, not the whole reply: a real claim
+    earlier on must still be caught."""
+    reply = "Pushed Thursday's swim to your calendar. Want me to do Friday's ride too?"
+    assert V.claim_kinds(reply) == {"icu"}
+
+
 # --- 4) name-only Strava claims stay excluded (sailing hard rule) ------------------------
 
 def test_a_rename_only_claim_is_still_not_a_description_claim():
