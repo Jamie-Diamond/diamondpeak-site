@@ -45,6 +45,11 @@ def build_block(slug: str, cfg: dict) -> str:
     if n:
         lines.append(f"- Deload: every {n}th training week at ~62% volume; a week executed "
                      f"under 70% of prescription converts the next week to recovery")
+    skip_weeks = cfg.get("deload_skip_weeks") or []
+    if skip_weeks:
+        lines.append(f"- Deload cadence above is SUSPENDED for week(s) starting "
+                     f"{', '.join(skip_weeks)} (deload_skip_weeks — enforced in "
+                     f"plan_tools.py required_tss, this line only mirrors it)")
     lines.append("- Taper: final ~2 weeks, volume steps 70/55/40% of maintenance load, "
                  "INTENSITY HELD (never revert taper sessions to all-easy)")
     fuel = cfg.get("nutrition_target_g_hr")
