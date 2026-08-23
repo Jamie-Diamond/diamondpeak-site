@@ -775,7 +775,10 @@ def active_run_ids(owner=None) -> list:
 
 def scoped_env(sp_file):
     """Environment for a spawned claude, carrying CC_ATHLETE_SCOPE so lib/icu_fetch.py
-    refuses calendar WRITES to any athlete but this one (reads are unrestricted).
+    refuses calendar WRITES to any athlete but this one (reads are unrestricted), and
+    CC_TURN_ID so lib/replan_gate.py can tell "a plan_tools load command ran earlier in
+    THIS turn" from "ran at some other point entirely" (24 Aug 2026, the ad-hoc-replan
+    gate — see replan_gate.py's docstring for why a prose rule was not enough).
 
     The slug comes from the system-prompt path — athletes/<slug>/system_prompt.txt — which
     is the one thing every spawn site already has and which cannot disagree with the
@@ -783,9 +786,13 @@ def scoped_env(sp_file):
 
     Built PER SPAWN and passed as `env=`; os.environ is never mutated. bot.py serves three
     athletes from a ThreadPoolExecutor, so a process-global scope would race and could
-    scope Jamie's turn to Kathryn."""
+    scope Jamie's turn to Kathryn. The same reasoning fixes CC_TURN_ID's lifetime: called
+    ONCE per turn (call_claude/stream_claude), so a resume-fallback or model-fallback retry
+    within the same turn reuses this same env and the same id, while the NEXT turn — even
+    seconds later, even mid-replan — gets a fresh one and cannot be authorised by evidence
+    left over from the turn before it."""
     slug = Path(sp_file).parent.name
-    return {**os.environ, "CC_ATHLETE_SCOPE": slug}
+    return {**os.environ, "CC_ATHLETE_SCOPE": slug, "CC_TURN_ID": uuid.uuid4().hex}
 
 
 def _run_once(prompt, model, extra_args, cwd, timeout=300, env=None):
