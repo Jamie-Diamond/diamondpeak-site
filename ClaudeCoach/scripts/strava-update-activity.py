@@ -17,9 +17,12 @@ sys.path.insert(0, str(BASE / "lib"))
 from icu_api import IcuClient
 from strava_client import StravaClient
 import public_text_guard
+import ops_log
+from claude_call import is_auth_failure
 
 
-def build_description(first_name: str, sport: str, entry: dict, detail: dict, events: list) -> str:
+def build_description(first_name: str, sport: str, entry: dict, detail: dict, events: list,
+                       label: str = "") -> str:
     tss     = entry.get("tss") or detail.get("icu_training_load")
     np_w    = entry.get("norm_power") or detail.get("icu_weighted_avg_watts")
     # RPE and injury/pain scores are private — never published to Strava.
@@ -127,6 +130,17 @@ Total under 300 characters. Output nothing else."""
         text = (result.stdout or "").strip()
         if result.returncode != 0 or not _looks_like_description(text):
             print(f"Claude returned no usable description (rc={result.returncode}): {text[:120]!r}", file=sys.stderr)
+            # Same auth-failure detection claude_call.run_claude uses. A dead/expired
+            # token fails identically here, but this script talks to the CLI directly
+            # rather than through run_claude, so it never hit that alert path — the
+            # fallback template silently covered for it instead. Loud now, same as there.
+            if is_auth_failure(text) or is_auth_failure(result.stderr or ""):
+                ops_log.alert(
+                    "strava-update-activity",
+                    "Claude CLI authentication failed while writing a Strava description — "
+                    "the token has likely expired. Descriptions are silently falling back to "
+                    "the plain-fact template until this is refreshed.",
+                    athlete=label)
             return fallback
         return text
     except Exception as e:
@@ -228,7 +242,7 @@ def main():
         first_name = profile.get("name", slug).split()[0]
         sport = entry.get("sport") or detail.get("type", "session")
 
-        description = build_description(first_name, sport, entry, detail, events)
+        description = build_description(first_name, sport, entry, detail, events, label=slug)
         # Hard gate, not a prompt request. The LLM writes line 2 of this description
         # freely, so even with `feel` stripped it can still surface a pain score it saw
         # in its context. Fails CLOSED: no description beats a leaked one. Three prior
