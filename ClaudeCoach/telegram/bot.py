@@ -6019,24 +6019,11 @@ def _handle_undo(token, chat_id, data, message_id, athletes):
 
 _KEEP_PREFIX = "keep:"
 
-# How long the card waits before it applies the narrow default on its own.
-#
-# The hard ceiling is _PENDING_UNDO_TTL (1800s). The auto-apply goes through _take_undo
-# like a tap does, and _take_undo refuses an expired token - so a timeout at or above the
-# TTL would fire, find nothing, and silently leave the wider change in place, which is the
-# one outcome Jamie ruled out. 600s sits comfortably inside it with room for a slow pool.
-#
-# Downwards, the constraint is a human one: the reply that triggered this arrived as a push
-# notification seconds ago, so ten minutes is a realistic "read it, think, tap" window
-# without leaving a week the athlete may not have asked for sitting on the calendar long
-# enough for the next turn to start reasoning from it as fact.
-_SCOPE_CONFIRM_S = 600
-
-# Timers are kept only so the tests can join them. A restart loses them, exactly as it
-# loses _PENDING_UNDO itself; the card then expires unanswered and the change stands. That
-# is a worse default than the one Jamie chose, and it is stated here rather than hidden:
-# closing it needs the pending store to be on disk, which is a bigger change than this one.
-_SCOPE_TIMERS = {}
+# The card never applies anything on its own. There was a 600s timer here that undid the
+# excess on silence; Jamie, 24 Aug 2026: "I can't just reply immediately", after it had
+# twice deleted a fortnight of sessions he had asked for. A destructive action on no
+# response is not a safeguard, and the cost of the other default is only that a change he
+# did not want sits on the calendar until he says so - which is what the card is for.
 
 
 def _event_day(e) -> str:
@@ -6134,7 +6121,7 @@ def _pretty_days(days) -> str:
     return ", ".join(out[:-1]) + " and " + out[-1]
 
 
-def _scope_card_text(kept_days, authorised, excess_dates, excess, minutes):
+def _scope_card_text(kept_days, authorised, excess_dates, excess):
     """The card. THREE shapes, not two, and the third is the one worth the extra branch:
 
       * they named a day and it changed, along with others - "this ALSO changed";
@@ -6142,23 +6129,24 @@ def _scope_card_text(kept_days, authorised, excess_dates, excess, minutes):
         offering to keep that day would be offering them nothing;
       * they named no day at all.
 
-    Every shape states the deadline and what happens at it, because silence here is a
-    DESTRUCTIVE default. Jamie chose the narrow scope on no response; a default the athlete
-    was never told about is not a default, it is a surprise."""
+    Silence is NOT a decision. Jamie, 24 Aug 2026: "I can't just reply immediately" - a
+    timer that deletes calendar work he never asked to lose is a destructive default
+    dressed as a safeguard. The card asks, the buttons stay live, and nothing is undone
+    unless he taps."""
     if kept_days:
         head = (f"You asked about {_pretty_days(kept_days)}. "
                 f"This also changed {_pretty_days(excess_dates)}:")
-        tail = (f"No reply in {minutes} minutes and I'll keep {_pretty_days(kept_days)} "
-                f"and undo the rest.")
+        tail = (f"It all stands unless you say otherwise - tap below to keep only "
+                f"{_pretty_days(kept_days)} and undo the rest.")
     elif authorised:
         head = (f"You asked about {_pretty_days(sorted(authorised))}, but nothing changed "
                 f"there. What did change was {_pretty_days(excess_dates)}:")
-        tail = (f"No reply in {minutes} minutes and I'll undo it and leave "
+        tail = ("It stands unless you say otherwise - tap below to undo it and leave "
                 f"{_pretty_days(sorted(authorised))} as it was.")
     else:
         head = ("Your message didn't name a day, and this changed "
                 f"{_pretty_days(excess_dates)}:")
-        tail = f"No reply in {minutes} minutes and I'll undo all of it."
+        tail = "It all stands unless you say otherwise - tap below to undo it."
     lines = [head] + write_verify.describe_diff(excess)
     plan = _reversible(excess)
     if plan["manual"]:
@@ -6196,9 +6184,8 @@ def _scope_keyboard(token_id, kept_days, authorised=None):
 
 
 def _handle_scope_keep(token, chat_id, data, message_id):
-    """"Keep it all". A clean no-op that only has to make sure the timer finds nothing:
-    _take_undo pops under _PENDING_UNDO_GUARD and the parked diff is single-use, so this
-    tap and the auto-apply can never both win."""
+    """"Keep it all". A clean no-op: it pops the parked diff so a later tap on the same
+    card cannot replay it, and writes nothing."""
     if not data.startswith(_KEEP_PREFIX):
         return False
     pending = _take_undo(data[len(_KEEP_PREFIX):].strip(), chat_id)
@@ -6208,81 +6195,6 @@ def _handle_scope_keep(token, chat_id, data, message_id):
                               "That one has already been settled - your calendar is "
                               "unchanged from when I last described it.")
     return True
-
-
-def _scope_still_as_described(slug, pending) -> bool:
-    """Has the calendar moved since the card was sent?
-
-    The auto-apply runs ten minutes later and the athlete may have had another turn in
-    between - one that legitimately dropped a session this undo would push back, or moved
-    one this undo would delete. Restoring on top of that is a write nobody asked for, and
-    it is the same class of mistake as diffing against a stale snapshot: acting on a
-    picture that is no longer true.
-
-    A gate, not a second writer. _undo_worker remains the only thing in this process that
-    reverses a diff. Refuses on a failed read for the usual reason - "unknown" is not
-    permission."""
-    now = _read_planned_window(slug)
-    if now is None:
-        return False
-    plan = _reversible(pending["diff"])
-    live = {str(e.get("id")): e for e in now}
-    for e in plan["delete"]:
-        # Still there, and still the session the card described.
-        cur = live.get(str(e.get("id")))
-        if cur is None or not write_verify.event_unchanged(cur, e):
-            return False
-    for e in plan["recreate"]:
-        # Still gone. If it is back, something else put it back and this must not double it.
-        if str(e.get("id")) in live:
-            return False
-    return True
-
-
-def _arm_scope_auto_undo(token, chat_id, slug, token_id, card_id):
-    """Apply the narrow default if nobody answers.
-
-    A daemon threading.Timer rather than a poll-loop deadline, matching engine's
-    _terminate_then_kill escalation: one deferred action, no shared clock to keep, and it
-    dies with the process instead of resurrecting a ten-minute-old decision on restart.
-
-    It cannot race a tap - _take_undo is a single-use pop under _PENDING_UNDO_GUARD - and
-    it cannot race the athlete's next MESSAGE either, because the write goes through
-    _submit and so runs under the chat lock, whole turns apart from anything else."""
-    def _fire():
-        try:
-            pending = _take_undo(token_id, chat_id)
-            if not pending:
-                return                      # tapped, expired, or already settled
-            if not _scope_still_as_described(slug, pending):
-                log(f"[{slug}] scope auto-undo skipped - the calendar moved since the card")
-                if card_id:
-                    edit_keyboard_confirm(
-                        token, chat_id, card_id,
-                        "Your calendar has changed since I asked about that, so I've left "
-                        "it alone rather than guess. Tell me if you still want it undone.")
-                return
-            log(f"[{slug}] scope card unanswered after {_SCOPE_CONFIRM_S}s - "
-                f"applying the narrow default")
-            if card_id:
-                # Said BEFORE the write and phrased as what is happening now, not as a
-                # result: _undo_worker's own message reports whether it worked, and this
-                # card must not be the thing that claims a restore that failed.
-                edit_keyboard_confirm(token, chat_id, card_id,
-                                      "⏳ No reply, so I'm undoing the extra now.")
-            # message_id None on purpose - the card has already been settled above, and a
-            # second writer editing it from the pool is how two messages disagree.
-            _submit(_undo_worker, chat_id, token, chat_id, slug, pending, None)
-        except Exception as e:
-            log(f"[{slug}] scope auto-undo failed: {e}")
-        finally:
-            _SCOPE_TIMERS.pop(token_id, None)
-
-    t = threading.Timer(_SCOPE_CONFIRM_S, _fire)
-    t.daemon = True
-    _SCOPE_TIMERS[token_id] = t
-    t.start()
-    return t
 
 
 def _turn_before_events(slug, turn_started):
@@ -6358,8 +6270,7 @@ def _check_reply_scope(token, chat_id, slug, text, before_events):
         plan = _reversible(excess)
         log(f"[{slug}] scope check: message named {sorted(authorised) or 'no day'}, "
             f"diff touched {sorted(touched)} - flagging {sorted(excess_dates)}")
-        body = _scope_card_text(kept_days, authorised, excess_dates, excess,
-                                _SCOPE_CONFIRM_S // 60)
+        body = _scope_card_text(kept_days, authorised, excess_dates, excess)
         if not (plan["delete"] or plan["recreate"]):
             # Edits only, or a removed NOTE/race entry. There is no button that would do
             # the right thing, so the card becomes a statement - same choice the cancel
@@ -6367,9 +6278,10 @@ def _check_reply_scope(token, chat_id, slug, text, before_events):
             send(token, chat_id, body, reply_markup=_reply_inline(slug))
             return
         token_id = _park_undo(chat_id, slug, excess)
-        card_id = send(token, chat_id, body,
-                       reply_markup=_scope_keyboard(token_id, kept_days, authorised))
-        _arm_scope_auto_undo(token, chat_id, slug, token_id, card_id)
+        # No auto-undo timer. The parked diff stays available for a tap; silence leaves
+        # the calendar exactly as the turn left it.
+        send(token, chat_id, body,
+             reply_markup=_scope_keyboard(token_id, kept_days, authorised))
     except Exception as e:
         log(f"[{slug}] scope check failed: {e}")
 

@@ -16,16 +16,15 @@ ARITHMETIC of scope, never about the wording:
      observably unchanged. The check exists for a change that SPREADS.
   3. A whole-week request is not overreach, whichever of this bot's existing whole-week
      signals it arrives by.
-  4. Silence applies the NARROW default (Jamie: "always default to the narrower,
-     non-bespoke scope"), so the card must SAY that, and the auto-apply must go through the
-     same _undo_worker a tap does - there is one writer to that calendar or there is none.
+  4. Silence changes NOTHING. This suite originally asserted the opposite: a 600s timer
+     applied the narrow default on no reply. It fired twice on Jamie in one afternoon and
+     deleted a fortnight of sessions he had asked for - "I can't just reply immediately"
+     (24 Aug 2026). The card asks and the buttons stay live; only a tap writes.
   5. The stale-snapshot defence. A "before" from an earlier turn would make the PREVIOUS
-     turn's legitimate push look like this turn's overreach, and here that is not a false
-     accusation, it is a timer deleting a session the athlete asked for.
+     turn's legitimate push look like this turn's overreach.
   6. This path and the cancellation path are mutually exclusive for a given turn.
 
-Fake Telegram transport, fake ICU client, no subprocess, no socket, and no timer left
-running past the test that armed it.
+Fake Telegram transport, fake ICU client, no subprocess and no socket.
 """
 from __future__ import annotations
 
@@ -123,18 +122,10 @@ def ev(eid, day, name="Endurance ride", etype="Ride", load=60, minutes=90, **ext
 @pytest.fixture(autouse=True)
 def _clean_module_state():
     """Module-level registries, poked directly by this suite. A leaked pending undo would
-    be popped by the next test's timer; a leaked TIMER would fire mid-suite and mutate
-    another test's FakeIcu, which is the flake nobody would ever reproduce."""
-    for t in list(bot._SCOPE_TIMERS.values()):
-        t.cancel()
-    bot._SCOPE_TIMERS.clear()
+    still be sitting there when the next test asserts on _PENDING_UNDO."""
     bot._PENDING_UNDO.clear()
     bot._EVENTS_SNAPSHOT.clear()
     yield
-    for t in list(bot._SCOPE_TIMERS.values()):
-        t.cancel()
-        t.join(timeout=2)
-    bot._SCOPE_TIMERS.clear()
     bot._PENDING_UNDO.clear()
     bot._EVENTS_SNAPSHOT.clear()
 
@@ -221,16 +212,16 @@ def test_one_day_changed_matching_the_day_named_says_nothing(monkeypatch):
 
 def test_two_days_changed_when_the_message_named_both_says_nothing(monkeypatch):
     """The payoff for named_dates returning a SET. resolve_directed_date gives up on the
-    second weekday, so a single-date reading would authorise nothing here - and ten
-    minutes later a timer would delete a two-day change she asked for in so many words."""
+    second weekday, so a single-date reading would authorise nothing here - and a two-day
+    change she asked for in so many words would be carded as overreach."""
     tg = _check(monkeypatch, "move Wed and Fri to easy", [], [ev(2, WED), ev(3, FRI)])
     assert tg.sends == []
-    assert bot._PENDING_UNDO == {} and bot._SCOPE_TIMERS == {}
+    assert bot._PENDING_UNDO == {}
 
 
 def test_one_day_changed_with_no_day_named_says_nothing(monkeypatch):
     """The ordinary turn, and the overwhelming majority of everything that gets here. A
-    card would mean auto-undoing a single session the athlete plainly asked for, on nothing
+    card would mean questioning a single session the athlete plainly asked for, on nothing
     stronger than a parser that could not find a weekday."""
     tg = _check(monkeypatch, "add a swim please", [], [ev(7, WED)])
     assert tg.sends == []
@@ -278,9 +269,8 @@ def test_a_multi_day_change_with_no_day_named_is_carded(monkeypatch):
                            "Wed 19 Aug, Thu 20 Aug and Fri 21 Aug:")
     assert "• added Wed 19 Aug: Recovery spin (30 TSS)" in text
     assert "• added Fri 21 Aug: Easy run (25 TSS)" in text
-    # The destructive default is stated on the card. Silence is only a fair default if the
-    # athlete was told it was one.
-    assert "No reply in 10 minutes and I'll undo all of it." in text
+    # And it says so: the change stands, the athlete decides.
+    assert "It all stands unless you say otherwise - tap below to undo it." in text
     labels = [b["text"] for row in kb["inline_keyboard"] for b in row]
     assert labels == ["↩️ Undo all of it", "✅ Keep it all"]
 
@@ -292,11 +282,12 @@ def test_a_change_that_spreads_beyond_the_named_day_is_carded(monkeypatch):
     text, kb = tg.cards()[0]
     assert text.startswith("You asked about Thu 20 Aug. "
                            "This also changed Wed 19 Aug and Fri 21 Aug:")
-    assert "No reply in 10 minutes and I'll keep Thu 20 Aug and undo the rest." in text
+    assert ("It all stands unless you say otherwise - tap below to keep only Thu 20 Aug "
+            "and undo the rest.") in text
     labels = [b["text"] for row in kb["inline_keyboard"] for b in row]
     assert labels == ["↩️ Just Thu 20 Aug", "✅ Keep it all"]
     # Thursday's own edit is IN scope, so it is not in the card and not in the undo.
-    assert "Thu 20 Aug" not in text.split(":", 1)[1].split("No reply")[0]
+    assert "Thu 20 Aug" not in text.split(":", 1)[1].split("It all stands")[0]
 
 
 def test_a_change_on_a_different_day_than_the_one_named_is_carded(monkeypatch):
@@ -307,7 +298,8 @@ def test_a_change_on_a_different_day_than_the_one_named_is_carded(monkeypatch):
     assert text.startswith(
         "You asked about Thu 20 Aug, but nothing changed there. "
         "What did change was Fri 21 Aug:")
-    assert "No reply in 10 minutes and I'll undo it and leave Thu 20 Aug as it was." in text
+    assert ("It stands unless you say otherwise - tap below to undo it and leave "
+            "Thu 20 Aug as it was.") in text
     labels = [b["text"] for row in kb["inline_keyboard"] for b in row]
     # NOT "Just Thu 20 Aug". Nothing landed on Thursday, so that button would be offering
     # to keep nothing at all.
@@ -337,10 +329,10 @@ def test_an_edit_only_overreach_is_stated_and_not_offered(monkeypatch):
              ev(3, FRI, name="Easy run", load=25)]
     tg = _check(monkeypatch, "2.5 hours", before, after)
     assert tg.cards() == [], "no button that would do the wrong thing"
-    assert bot._PENDING_UNDO == {} and bot._SCOPE_TIMERS == {}
+    assert bot._PENDING_UNDO == {}
     text = tg.sent_text()
     assert "I can't safely reverse these, so check them yourself:" in text
-    assert "No reply in 10 minutes" not in text, "nothing is going to happen on silence"
+    assert "tap below" not in text, "there is no button on this one to tap"
 
 
 def test_a_removed_note_is_stated_and_not_offered(monkeypatch):
@@ -376,8 +368,8 @@ def test_a_stale_before_suppresses_the_card_entirely(monkeypatch):
     The previous turn legitimately pushed Wed, Thu and Fri because the athlete asked for
     them. THIS turn is a question that writes nothing. prefetch_context hit its 150s cache
     and did not retake the snapshot, so the only "before" on file predates the earlier
-    push. Diffed naively that push is three days of overreach, the card offers to undo it,
-    and ten minutes later a timer deletes three sessions she asked for.
+    push. Diffed naively that push is three days of overreach and the card accuses her of
+    something she never did, over sessions she asked for.
 
     Delete the `snap[0] < turn_started` line in _turn_before_events and this test fails.
     """
@@ -389,7 +381,7 @@ def test_a_stale_before_suppresses_the_card_entirely(monkeypatch):
     before_events = bot._turn_before_events(SLUG, turn_started)
     bot._check_reply_scope("tok", CHAT, SLUG, "how am I looking?", before_events)
     assert tg.sends == [], "a stale before must buy silence, never a destructive offer"
-    assert bot._PENDING_UNDO == {} and bot._SCOPE_TIMERS == {}
+    assert bot._PENDING_UNDO == {}
 
 
 # ---------------------------------------------------------------------------
@@ -437,7 +429,7 @@ def test_keep_it_all_is_a_clean_no_op(monkeypatch):
     monkeypatch.setattr(bot, "_submit",
                         lambda *a: pytest.fail("keeping it queues nothing"))
     assert bot._handle_scope_keep("tok", CHAT, keep, 902) is True
-    assert bot._PENDING_UNDO == {}, "and the timer must now find nothing to apply"
+    assert bot._PENDING_UNDO == {}, "single use - a second tap must find nothing"
     assert tg.edits()[-1]["text"] == "✅ Kept as it is."
 
 
@@ -456,131 +448,53 @@ def test_a_second_tap_on_a_settled_card_is_answered_honestly(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 8. Silence applies the narrow default
+# 8. Silence changes NOTHING
+#
+# The regression this section exists for. There was a 600s threading.Timer here that
+# applied the narrow default on no reply. On 24 Aug 2026 it fired twice in an afternoon
+# and deleted a fortnight of sessions Jamie had explicitly asked for: "I can't just reply
+# immediately." The tests below are the ones that fail if anybody re-arms it.
 # ---------------------------------------------------------------------------
 
-def test_the_timeout_must_stay_inside_the_pending_undo_ttl():
-    """_take_undo refuses an expired token. A timeout at or above the TTL would fire, find
-    nothing, and silently leave the wider change standing - the one outcome Jamie ruled
-    out. This is the assertion that fails if anybody retunes either number."""
-    assert bot._SCOPE_CONFIRM_S < bot._PENDING_UNDO_TTL
+def test_the_card_arms_no_timer(monkeypatch):
+    """No deferred writer, under any name. The parked diff is there for a TAP."""
+    _check(monkeypatch, "make Thursday 2.5 hours",
+           [ev(1, THU)], [ev(1, THU, load=40), ev(2, WED), ev(3, FRI)])
+    assert len(bot._PENDING_UNDO) == 1, "parked for a tap, not for a timer"
+    assert not [t for t in threading.enumerate()
+                if isinstance(t, threading.Timer) and t.is_alive()]
 
 
-def test_no_reply_applies_the_undo_for_the_excess(monkeypatch):
+def test_no_module_still_defers_an_undo():
+    """A source-level assertion because a re-armed timer would otherwise only show up as a
+    calendar that quietly empties itself ten minutes after a good turn."""
+    for gone in ("_arm_scope_auto_undo", "_SCOPE_TIMERS", "_SCOPE_CONFIRM_S"):
+        assert not hasattr(bot, gone), f"{gone} is the auto-undo coming back"
+    assert "threading.Timer" not in BOT_SRC
+
+
+def test_silence_leaves_the_calendar_exactly_as_the_turn_left_it(monkeypatch):
+    """The incident itself. Card sent, nobody replies, and the ICU client is never touched
+    - not after ten minutes, not ever, until the athlete taps."""
+    icu = FakeIcu()
+    monkeypatch.setattr(bot, "_icu_client", lambda slug: icu)
+    monkeypatch.setattr(bot, "_submit",
+                        lambda *a: pytest.fail("silence must queue no writer at all"))
     tg = _check(monkeypatch, "make Thursday 2.5 hours",
                 [ev(1, THU)], [ev(1, THU, load=40), ev(2, WED), ev(3, FRI)])
-    tok = tg.cards()[0][1]["inline_keyboard"][0][0]["callback_data"][len("undo:"):]
-    assert tok in bot._SCOPE_TIMERS
-
-    icu = FakeIcu()
-    monkeypatch.setattr(bot, "_icu_client", lambda slug: icu)
-    # The calendar is still exactly as the card described it.
-    monkeypatch.setattr(bot, "_read_planned_window",
-                        lambda slug: [ev(1, THU, load=40), ev(2, WED), ev(3, FRI)])
-    monkeypatch.setattr(bot, "_invalidate_prefetch", lambda slug: None)
-    monkeypatch.setattr(bot, "_reply_inline", lambda slug=None: {"inline_keyboard": []})
-    ran = []
-    monkeypatch.setattr(bot, "_submit",
-                        lambda worker, chat_id, *a: (ran.append(worker), worker(*a)))
-    monkeypatch.setattr(bot, "_SCOPE_CONFIRM_S", 0.01)
-
-    # Re-arm at the tiny timeout rather than sleeping ten minutes.
-    bot._SCOPE_TIMERS.pop(tok).cancel()
-    t = bot._arm_scope_auto_undo("tok", CHAT, SLUG, tok, 902)
-    t.join(timeout=5)
-    assert ran == [bot._undo_worker], \
-        "the auto-apply must be the SAME writer a tap uses, not a parallel one"
-    assert sorted(icu.deleted) == ["2", "3"]
-    assert bot._PENDING_UNDO == {}
-    assert "undoing the extra now" in " ".join(e["text"] for e in tg.edits())
-
-
-def test_the_auto_undo_refuses_when_the_calendar_has_moved(monkeypatch):
-    """Ten minutes is long enough for another turn. If the days the card described are no
-    longer as it described them, acting is a write nobody asked for."""
-    tg = _check(monkeypatch, "2.5 hours", [], _week_replan_after())
-    tok = tg.cards()[0][1]["inline_keyboard"][0][0]["callback_data"][len("undo:"):]
-    icu = FakeIcu()
-    monkeypatch.setattr(bot, "_icu_client", lambda slug: icu)
-    monkeypatch.setattr(bot, "_submit",
-                        lambda *a: pytest.fail("a moved calendar must not be written to"))
-    # Wednesday's session has since been rescaled by a later turn.
-    monkeypatch.setattr(bot, "_read_planned_window", lambda slug: [
-        ev(11, WED, name="Recovery spin", load=95),
-        ev(12, THU, name="Short ride", load=35),
-        ev(13, FRI, name="Easy run", etype="Run", load=25)])
-    monkeypatch.setattr(bot, "_SCOPE_CONFIRM_S", 0.01)
-    bot._SCOPE_TIMERS.pop(tok).cancel()
-    bot._arm_scope_auto_undo("tok", CHAT, SLUG, tok, 902).join(timeout=5)
+    assert len(tg.cards()) == 1
+    time.sleep(0.2)                          # long enough for a short-tuned timer to fire
     assert icu.deleted == [] and icu.pushed == []
-    assert "left it alone" in " ".join(e["text"] for e in tg.edits())
+    assert len(bot._PENDING_UNDO) == 1, "and the button is still live for him to tap"
 
 
-def test_a_read_back_failure_stops_the_auto_undo(monkeypatch):
+def test_the_card_never_promises_to_undo_on_silence(monkeypatch):
+    """The wording is load-bearing. "No reply in N minutes and I'll..." would be telling
+    him a threat that the code no longer carries out."""
     tg = _check(monkeypatch, "2.5 hours", [], _week_replan_after())
-    tok = tg.cards()[0][1]["inline_keyboard"][0][0]["callback_data"][len("undo:"):]
-    monkeypatch.setattr(bot, "_submit",
-                        lambda *a: pytest.fail("'unknown' is not permission to write"))
-    monkeypatch.setattr(bot, "_read_planned_window", lambda slug: None)
-    monkeypatch.setattr(bot, "_SCOPE_CONFIRM_S", 0.01)
-    bot._SCOPE_TIMERS.pop(tok).cancel()
-    bot._arm_scope_auto_undo("tok", CHAT, SLUG, tok, 902).join(timeout=5)
-    assert "left it alone" in " ".join(e["text"] for e in tg.edits())
-
-
-def test_a_tap_during_the_window_wins_and_the_timer_finds_nothing(monkeypatch):
-    """The athlete replies before the deadline. The parked diff is single-use and popped
-    under _PENDING_UNDO_GUARD, so the timer that wakes afterwards has nothing to apply and
-    the undo can never run twice."""
-    tg = _check(monkeypatch, "2.5 hours", [], _week_replan_after())
-    tok = tg.cards()[0][1]["inline_keyboard"][0][0]["callback_data"][len("undo:"):]
-    icu = FakeIcu()
-    monkeypatch.setattr(bot, "_icu_client", lambda slug: icu)
-    monkeypatch.setattr(bot, "_read_planned_window", lambda slug: _week_replan_after())
-    monkeypatch.setattr(bot, "_invalidate_prefetch", lambda slug: None)
-    monkeypatch.setattr(bot, "_reply_inline", lambda slug=None: {"inline_keyboard": []})
-    calls = []
-    monkeypatch.setattr(bot, "_submit",
-                        lambda worker, chat_id, *a: (calls.append(worker), worker(*a)))
-    monkeypatch.setattr(bot, "_SCOPE_CONFIRM_S", 0.15)
-    bot._SCOPE_TIMERS.pop(tok).cancel()
-    t = bot._arm_scope_auto_undo("tok", CHAT, SLUG, tok, 902)
-    assert bot._handle_undo("tok", CHAT, f"undo:{tok}", 902, {CHAT: {"slug": SLUG}}) is True
-    t.join(timeout=5)
-    assert calls == [bot._undo_worker], "exactly once - the tap, not the tap and the timer"
-    assert sorted(icu.deleted) == ["11", "12", "13"]
-
-
-def test_an_athlete_message_during_the_window_is_serialised_not_raced(monkeypatch):
-    """The auto-apply writes through _submit, so it runs under the chat lock and can never
-    interleave with the turn the athlete's next message starts. Asserted on the real lock:
-    hold it, let the timer fire, and the undo must still be waiting when it is released."""
-    tg = _check(monkeypatch, "2.5 hours", [], _week_replan_after())
-    tok = tg.cards()[0][1]["inline_keyboard"][0][0]["callback_data"][len("undo:"):]
-    icu = FakeIcu()
-    monkeypatch.setattr(bot, "_icu_client", lambda slug: icu)
-    monkeypatch.setattr(bot, "_read_planned_window", lambda slug: _week_replan_after())
-    monkeypatch.setattr(bot, "_invalidate_prefetch", lambda slug: None)
-    monkeypatch.setattr(bot, "_reply_inline", lambda slug=None: {"inline_keyboard": []})
-    monkeypatch.setattr(bot, "_SCOPE_CONFIRM_S", 0.01)
-    done = threading.Event()
-    real_submit = bot._submit
-
-    def _watched(worker, chat_id, *a):
-        def _wrapped(*wa):
-            worker(*wa)
-            done.set()
-        real_submit(_wrapped, chat_id, *a)
-    monkeypatch.setattr(bot, "_submit", _watched)
-
-    with bot._chat_lock(CHAT):               # the athlete's next turn is in flight
-        bot._SCOPE_TIMERS.pop(tok).cancel()
-        bot._arm_scope_auto_undo("tok", CHAT, SLUG, tok, 902).join(timeout=5)
-        assert done.wait(timeout=0.5) is False, \
-            "the undo must not touch the calendar while a turn holds the chat lock"
-        assert icu.deleted == []
-    assert done.wait(timeout=5) is True
-    assert sorted(icu.deleted) == ["11", "12", "13"]
+    text = tg.cards()[0][0]
+    assert "No reply" not in text and "minutes" not in text
+    assert "stands unless you say otherwise" in text
 
 
 # ---------------------------------------------------------------------------
