@@ -65,6 +65,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "lib"))
 
 import agreed_week
+import replan_gate
 from icu_api import IcuClient
 
 CONFIG = ROOT / "config" / "athletes.json"
@@ -162,6 +163,53 @@ def authority_violation(endpoint: str, authority: str, event_date: str | None,
                     f"payload targets {str(event_date)[:10]}. A readiness modulation "
                     f"adjusts today's session — it does not move other days.")
     return None
+
+
+# Fields a write can carry that only relabel a session already on the calendar —
+# never what actually made it a REPLAN (a different day, duration, load or sport).
+# A payload confined to these is a cosmetic edit and clears the gate on its own.
+_COSMETIC_FIELDS = frozenset({"name", "description", "description_raw"})
+
+
+def load_bearing(fields: dict) -> bool:
+    """True if `fields` states or moves an actual session, not just relabels one
+    already on the calendar — i.e. this write is the kind an ad-hoc replan makes."""
+    return any(k not in _COSMETIC_FIELDS for k in (fields or {}))
+
+
+def recompute_violation(endpoint: str, authority: str, fields: dict,
+                        recomputed: bool | None) -> str | None:
+    """The refusal message when a load-bearing push/edit has no plan_tools recompute
+    behind it THIS TURN, else None. Pure — `recomputed` is looked up by the caller
+    (replan_gate.recomputed_this_turn) so this stays testable with no filesystem.
+
+    This is the ad-hoc-replan fix (24 Aug 2026): re-logged as a prose "[perm] rule"
+    eight times after the Sun 23 Aug incident because a rule the model can read and
+    still bypass is not a fix. `replan_gate` is the enforcement lib/engine.py's
+    `_ACCURACY_RULE` never got — see that module's docstring for the full history.
+
+    `recomputed=None` means "not a chat turn" (no CC_TURN_ID reached this process) —
+    nothing to gate here, so hand-runs, cron jobs and any caller that never goes
+    through engine.scoped_env behave exactly as before.
+
+    `authority == "coach-auto"` (daily-prescription's same-day readiness modulation)
+    is exempt: it is not a replan, it is bounded to today's session, and
+    `authority_violation` above already keeps it inside that remit."""
+    if recomputed is None or (authority or "agreed") != "agreed":
+        return None
+    if endpoint not in ("push_workout", "edit_workout"):
+        return None
+    if not load_bearing(fields):
+        return None
+    if recomputed:
+        return None
+    return (
+        "ERROR: refusing this write — no plan_tools.py load command has run yet this "
+        "turn. An ad-hoc replan must be rebuilt from Fitness/Fatigue/Form and "
+        "week-load-to-date, not edited around whatever is already on the calendar. "
+        "Run `plan_tools.py required-tss` (or `tss` / `session-for-load`, whichever "
+        "fits) first, then retry this write."
+    )
 
 
 def _resolve_event_date(client, event_id, start: date, end: date) -> tuple[bool, str | None]:
@@ -355,6 +403,14 @@ def main():
     _aviol = authority_violation(ep, args.authority, payload_date(fields))
     if _aviol:
         print(_aviol, file=sys.stderr)
+        sys.exit(2)
+
+    _turn_id = os.environ.get("CC_TURN_ID", "")
+    _recomputed = (replan_gate.recomputed_this_turn(args.athlete, _turn_id)
+                  if _turn_id else None)
+    _rviol = recompute_violation(ep, args.authority, fields, _recomputed)
+    if _rviol:
+        print(_rviol, file=sys.stderr)
         sys.exit(2)
 
     segments = None

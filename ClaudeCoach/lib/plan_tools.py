@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import date, datetime, timedelta
@@ -65,6 +66,14 @@ from primitives.validate_plan import validate_week              # noqa: E402
 from primitives.blueprint import current_phase                   # noqa: E402
 from primitives.nutrition import fuel_target, recent_avg_g_hr   # noqa: E402
 from rpe_context import SPORT_FAMILY                             # noqa: E402
+import replan_gate                                               # noqa: E402
+
+# The three subcommands lib/icu_fetch.py's push_workout/edit_workout gate on (the
+# ad-hoc-replan fix, 24 Aug 2026 — see replan_gate.py). Running one of these for the
+# CC_ATHLETE_SCOPE athlete is what "recomputed this turn" means; every other
+# subcommand is either a read, a pure helper (sum, session-load) or already
+# athlete-scoped some other way and does not clear the gate.
+_RECOMPUTE_COMMANDS = frozenset({"tss", "session-for-load", "required-tss"})
 
 # Non-endurance ICU types that all mean "the strength / other slot for that day".
 # Kathryn's 27 Jul week had a COMPLETED "Cardio" against a PLANNED "Kettlebell";
@@ -1510,6 +1519,11 @@ def main():
     except Exception as e:
         print(_err(f"{type(e).__name__}: {e}"))
         sys.exit(1)
+    if args.cmd in _RECOMPUTE_COMMANDS:
+        # No-ops outside a chat turn (CC_ATHLETE_SCOPE / CC_TURN_ID unset), so a hand
+        # run at a terminal behaves exactly as before.
+        replan_gate.mark_recomputed(os.environ.get("CC_ATHLETE_SCOPE", ""),
+                                    os.environ.get("CC_TURN_ID", ""))
     print(json.dumps(result, indent=1))
 
 
