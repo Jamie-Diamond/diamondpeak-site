@@ -50,6 +50,20 @@ _INTENT_RE = re.compile(
     r"\b(shall i|should i|want me to|i can|i could|do you want|would you like|"
     r"i'?ll |i will |about to|let me know)\b", re.IGNORECASE)
 
+# WHY (24 Aug 2026). _INTENT_RE only catches PARTICULAR permission-seeking phrasings
+# ("do you want", "want me to", "shall/should I"...), so a plan preview that ends "Want
+# these pushed to the calendar now?" slipped through: no "I" in sight, just "Want", and the
+# past-tense verb ("pushed") sits inside a question about what to do next, not a claim about
+# what was done. _ICU_CLAIM_RE has no notion of mood, so it read the verb and fired a retry
+# nobody asked for - a real write onto a calendar that had not been touched, which is exactly
+# the outcome the standing no-inferred-calendar-pushes rule exists to prevent.
+#
+# A question is not an assertion regardless of which verb sits inside it, so this is checked
+# per SENTENCE (the same unit _INTENT_RE and _asserts_now already work in), not per reply:
+# a genuine claim earlier in the same reply must still be caught even if it ends on a
+# trailing question ("Pushed Thursday's swim to your calendar. Want me to do Friday's too?").
+_QUESTION_RE = re.compile(r"\?[\"'\)\]]*\s*$")
+
 # WHY (17 Aug 2026 incident). _INTENT_RE only ever looked FORWARD. On 16 Aug at 21:57
 # Jamie asked for a bug to be logged and the reply reassured him about a plan pushed in an
 # EARLIER turn: "The week I pushed earlier is still on the calendar and is correct; the
@@ -343,7 +357,7 @@ def claim_kinds(reply: str, tool_summary=None) -> set:
             return set()
     kinds = set()
     for sentence in re.split(r"(?<=[.!?\n])\s+", reply):
-        if _INTENT_RE.search(sentence):
+        if _INTENT_RE.search(sentence) or _QUESTION_RE.search(sentence):
             continue
         if _asserts_now(sentence, _STRAVA_CLAIM_RE) and not (
                 _STRAVA_NAME_ONLY_RE.search(sentence) and not _STRAVA_DESC_RE.search(sentence)):
