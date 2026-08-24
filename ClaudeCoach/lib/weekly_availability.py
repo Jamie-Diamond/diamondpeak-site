@@ -537,6 +537,36 @@ _SESSION_CTX_RE = re.compile(
     r"\b(?:ride|rides|run|runs|swim|swims|session|sessions|bike|turbo|gym|race|"
     r"long\s+run|long\s+ride|brick|interval|intervals|tempo|workout)\b", re.I)
 
+# Splits a message into sentence/line clauses, punctuation kept on the clause it ends
+# (so a clause's own "?" stays visible on it — see _clause_containing).
+_CLAUSE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
+
+# "Tuesday to Thursday" — spelled out with "to" — is naming the SCOPE of a cap, not
+# the week. Deliberately narrower than any two day names: constraint shorthand like
+# "away Thu-Fri" or "nothing long Mon-Thu" is a hyphenated aside, not a scope-setting
+# range, and must keep registering as a normal declaration (test_hours_false_positive
+# ::TestRealDeclarationsStillWork).
+_DAY_NAME = (r"(?:mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|"
+             r"fri(?:day)?|sat(?:urday)?|sun(?:day)?)")
+_DAY_RANGE_TO_RE = re.compile(rf"\b{_DAY_NAME}\b\s+to\s+\b{_DAY_NAME}\b", re.I)
+
+
+def _clause_containing(text: str, pos: int) -> str:
+    """The sentence/line that character offset `pos` falls inside.
+
+    A multi-topic message ("Tuesday to Thursday, cap at 2.5 hours. This week I can
+    move swimming...") can carry week-framing in one clause and a figure in another;
+    treating the two as one blob is what let an unrelated clause's "week" attach to a
+    day-scoped cap, and let a mid-message question's number get written as a
+    declaration. Isolating the figure's own clause lets both be caught.
+    """
+    start = 0
+    for m in _CLAUSE_SPLIT_RE.finditer(text):
+        if start <= pos <= m.start():
+            return text[start:m.start()]
+        start = m.end()
+    return text[start:]
+
 
 def _lower_of_range(text: str):
     """The lower bound of a hedged range, or None. "maybe 12-13" -> 12.0."""
@@ -619,11 +649,17 @@ def parse_hours_message(text: str) -> dict:
         out["refused"] = "reads as one session's duration, not a week's budget"
         return out
 
+    fig_clause = None
+    range_m = _HOURS_RANGE_RE.search(t)
     h = _lower_of_range(t)
+    if h is not None and range_m is not None:
+        fig_clause = _clause_containing(t, range_m.start())
     if h is None:
         m = _HOURS_TOKEN_RE.search(t)
         if m:
             h = _clean_hours(m.group(1))
+            if h is not None:
+                fig_clause = _clause_containing(t, m.start())
         elif framed:
             # No unit, but the message says "week" — a bare figure is the hours.
             nums = [_clean_hours(n) for n in _BARE_NUM_RE.findall(t)]
@@ -643,6 +679,23 @@ def parse_hours_message(text: str) -> dict:
     if h is None:
         out["refused"] = out["refused"] or "no single plausible hours figure"
         return out
+
+    # The figure's OWN clause can disqualify it even though a different clause in the
+    # same message frames a week — a multi-topic message must not let one sentence's
+    # "week" leak onto another sentence's number. Jamie's "How would you replan the
+    # week...? Why is my Saturday ride over 4 hours?" wrote 4h as the week's budget off
+    # an embedded question; Kathryn's "Tuesday to Thursday...cannot be longer than 2.5
+    # hours. This week I can move swimming..." wrote 2.5h off a day-scoped cap (both
+    # 2026-08-23/24). Scoped to the RANGE/TOKEN paths only — the bare-number paths above
+    # already gate on whole-message `framed` by design.
+    if fig_clause is not None:
+        if fig_clause.rstrip().endswith("?") or _QUESTION_RE.search(fig_clause):
+            out["refused"] = "the hours figure sits inside a question, not a declaration"
+            return out
+        if (_DAY_RANGE_TO_RE.search(fig_clause)
+                and not _WEEK_FRAMING_RE.search(fig_clause)):
+            out["refused"] = "figure is scoped to specific days, not the whole week"
+            return out
 
     out["hours"] = h
     out["framed"] = framed
