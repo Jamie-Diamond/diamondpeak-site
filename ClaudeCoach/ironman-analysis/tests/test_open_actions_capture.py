@@ -48,6 +48,10 @@ class TestInstructionDetection:
         "aero helmet ordered",
         "drop the ISM saddle order",
         "push the ice retention test to next week",
+        "the aero helmet arrived",
+        "picked up the aero helmet",
+        "new saddle is fitted",
+        "wetsuit arrived",
     ])
     def test_detected(self, msg):
         assert oa.looks_like_action_instruction(msg), msg
@@ -87,6 +91,9 @@ class TestParsedIntent:
         ("drop the ISM saddle order", "dropped"),
         ("the running FTP is sorted", "done"),
         ("bike fit is in the diary", "scheduled"),
+        ("the aero helmet arrived", "done"),
+        ("picked up the aero helmet", "done"),
+        ("new saddle is fitted", "done"),
     ])
     def test_status_intent(self, msg, status):
         assert oa.parse_action_message(msg)["status"] == status
@@ -118,6 +125,12 @@ class TestCandidateMatching:
         p = oa.parse_action_message("had the sweat sodium test done")
         c = oa.candidates(items, p["subject"])
         assert c and c[0]["action"] == "Book Precision Hydration sweat-sodium test"
+
+    def test_an_arrival_phrasing_matches_and_closes_the_equipment_item(self, adir):
+        items = oa.evaluate_from_dir(adir, TODAY)
+        p = oa.parse_action_message("the aero helmet arrived")
+        c = oa.candidates(items, p["subject"])
+        assert c and c[0]["action"] == "Aero helmet"
 
     def test_no_overlap_yields_no_candidates(self, adir):
         # Must return nothing rather than the closest of five on no evidence.

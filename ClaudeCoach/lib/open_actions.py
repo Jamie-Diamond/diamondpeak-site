@@ -507,7 +507,8 @@ _INTENTS = (
                   r"\b(?:push(?:ing|ed)?|move|shift|slide)\b(?=.*\b(?:to|back|out|until|till)\b)"),
     ("done",      r"\b(?:done|did\s+(?:it|that|this)|completed?|finished|sorted(?:\s+it)?|"
                   r"ticked\s+off|all\s+good\s+on|had\s+(?:it|the)\s+\w+\s+done|"
-                  r"been\s+(?:done|and\s+done))\b"),
+                  r"been\s+(?:done|and\s+done)|arrived|turned\s+up|delivered|"
+                  r"picked\s+(?:it|them|him|her)?\s*up|collected|fitted)\b"),
 )
 
 # A question is never an instruction — the lesson races.looks_like_race_statement learned.
