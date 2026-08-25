@@ -313,11 +313,15 @@ If no activities at all: ACTIVITY_ID: none  ANALYSIS: none
 
 ALREADY-DISCUSSED CHECK — recent Telegram chat with this athlete (oldest first):
 {recent_chat}
-If THIS activity has already been discussed in the chat above — the athlete asked about it or an
-analysis of it was already given (match on sport, distance/duration, recency) — output exactly
-`ANALYSIS: discussed` instead of repeating it. Numbers the athlete has already seen (distance,
-pace, HR, Load, decoupling) are NOT new insight; only produce a normal ANALYSIS here if you have
-something material the chat did not cover. All logging steps (session-log stub, swim-log, etc.)
+If THIS activity's RESULTS have already been discussed in the chat above — the athlete asked about
+how it went, or an analysis of the completed session was already given (match on sport,
+distance/duration, recency) — output exactly `ANALYSIS: discussed` instead of repeating it.
+Numbers the athlete has already seen (distance, pace, HR, Load, decoupling) are NOT new insight;
+only produce a normal ANALYSIS here if you have something material the chat did not cover.
+A PRE-SESSION message is NOT a discussion: a night-before brief, a morning card, a plan reminder,
+or the athlete asking what the session IS ("remind me of today's swim") all describe the session
+before it happened and contain no actual results. Never output `discussed` on the strength of one
+— if every mention in the chat predates the activity, produce the full normal ANALYSIS. All logging steps (session-log stub, swim-log, etc.)
 still apply regardless — `discussed` suppresses the message, never the capture.
 When writing the session-log stub, if the chat above contains the athlete's feedback for THIS
 activity (RPE, injury/ankle pain scores, nutrition), fill those fields from the chat instead of
