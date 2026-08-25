@@ -12,15 +12,33 @@ must never override a real completed run as the progression baseline.
 import re
 
 PROGRESSION_FACTOR = 1.125
+BASELINE_WINDOW_DAYS = 28
 _KM_RE = re.compile(r"~?\s*(\d+(?:\.\d+)?)\s*km", re.IGNORECASE)
 
 
 def last_completed_long_run_km(session_log: list) -> float | None:
-    """Most recent completed run/trail-run ≥10km from session-log.json, or None."""
-    for s in session_log or []:
-        if s.get("sport") in ("Run", "TrailRun") and float(s.get("distance_km") or 0) >= 10:
-            return float(s["distance_km"])
-    return None
+    """Longest completed run/trail-run in the trailing 28 days, or None.
+
+    Uses the window maximum, not the most recent qualifying run: a mid-week easy
+    run is not a progression baseline, and taking the newest ≥10km entry let a
+    10.6km easy run cap a planned 33km long run at 11.9km (2026-08-25).
+    """
+    runs = sorted(
+        (s for s in session_log or []
+         if s.get("sport") in ("Run", "TrailRun")
+         and float(s.get("distance_km") or 0) >= 10
+         and s.get("date")),
+        key=lambda s: s["date"], reverse=True,
+    )
+    if not runs:
+        return None
+    from datetime import date
+    newest = date.fromisoformat(runs[0]["date"])
+    in_window = [
+        float(s["distance_km"]) for s in runs
+        if (newest - date.fromisoformat(s["date"])).days <= BASELINE_WINDOW_DAYS
+    ]
+    return max(in_window)
 
 
 def long_run_cap_km(events: list, session_log: list, classify_session_type) -> float | None:
