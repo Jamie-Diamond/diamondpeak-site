@@ -22,6 +22,10 @@ one of these two sources — nothing else:
          python3 ClaudeCoach/lib/plan_tools.py project --athlete {slug} --daily '[{"date":"2026-06-20","tss":160},...]'
      • The weekly TSS you SHOULD prescribe for the current phase:
          python3 ClaudeCoach/lib/plan_tools.py required-tss --athlete {slug}
+     • The weekly-summary CAPTION text (Hrs / TSS-vs-floor / by-sport / Fitness
+       ramp — fixed short template, no strength line, no day-by-day detail):
+         python3 ClaudeCoach/lib/plan_tools.py week-caption --athlete {slug} --start <Mon> --end <Sun>
+       Use the `caption` field verbatim. Never retype this format from memory.
 
 MID-WEEK ADJUSTMENTS ("make this run longer to compensate", "I missed Tuesday,
 what now?", "can I add a ride Sunday?"): do NOT eyeball the effect. The workflow

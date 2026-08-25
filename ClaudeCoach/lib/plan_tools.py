@@ -19,6 +19,10 @@ Usage:
   # Deterministic weekly roll-up from the live calendar (completed + planned)
   python3 plan_tools.py week-tss --athlete jamie [--week-start 2026-06-15]
 
+  # Fixed weekly-summary caption text (Hrs / TSS-vs-floor / by-sport / Fitness-ramp)
+  # — the ONE template, never re-typed from memory
+  python3 plan_tools.py week-caption --athlete jamie --start 2026-08-18 --end 2026-08-24
+
   # Day-by-day CTL/ATL/TSB projection (seeds default to latest wellness)
   python3 plan_tools.py project --athlete jamie \
         --daily '[{"date":"2026-06-16","tss":113},{"date":"2026-06-17","tss":58}]'
@@ -372,6 +376,105 @@ def week_rollup_summary(history: list, events: list, week_start: date, today: da
             "completed_to_date_tss": completed,
             "planned_remaining_tss": planned,
             "projected_week_tss": completed + planned}
+
+
+# ── subcommand: week-caption ────────────────────────────────────────────────────
+# Sport families the caption reports as their own line. Gravel/Virtual/Trail etc.
+# already fold into these via _sport_family (Jamie's standing Ride-grouping rule);
+# strength/mobility is deliberately excluded (Jamie, 24 Aug 2026: "remove the
+# strength... make it short so it fits as a caption").
+_CAPTION_SPORT_LABELS = {"bike": "Ride", "run": "Run", "swim": "Swim"}
+
+
+def cmd_week_caption(args) -> dict:
+    """The ONE fixed weekly-summary caption template (Jamie, 24 Aug 2026): Hrs,
+    TSS-vs-floor, one line per sport, Fitness ramp — short enough to fit as a photo
+    caption, no strength line, no day-by-day detail. Was being re-typed from
+    memory each week and drifted into 7 near-duplicate persistent-rules.md entries;
+    this is now the single source of the format."""
+    cfg = _load_cfg(args.athlete)
+    week_start = date.fromisoformat(args.start)
+    week_end = date.fromisoformat(args.end)
+    if week_end < week_start:
+        raise SystemExit(_err("--end must not be before --start"))
+
+    client = _client(cfg)
+    today = date.today()
+    history = client.get_training_history(days=max(7, (today - week_start).days + 1))
+    events = client.get_events(week_start.isoformat(), week_end.isoformat())
+
+    completed = {}
+    for a in history or []:
+        d = (a.get("start_date_local") or "")[:10]
+        if not (week_start.isoformat() <= d <= week_end.isoformat()):
+            continue
+        completed.setdefault(d, []).append({
+            "sport": a.get("type") or "?",
+            "tss": int(round(float(a.get("icu_training_load") or 0))),
+            "min": round((a.get("moving_time") or 0) / 60),
+            "km": round((a.get("distance") or 0) / 1000, 1),
+        })
+
+    by_day = {}
+    for off in range((week_end - week_start).days + 1):
+        d = (week_start + timedelta(days=off)).isoformat()
+        by_day[d] = list(completed.get(d, []))
+
+    for ev in events or []:
+        d = (ev.get("start_date_local") or "")[:10]
+        if d not in by_day:
+            continue
+        if ev.get("category") and ev.get("category") != "WORKOUT":
+            continue
+        sport = ev.get("type") or ""
+        if _already_completed(sport, completed.get(d, [])):
+            continue  # actual already counted
+        r = _event_tss(ev)
+        by_day[d].append({"sport": sport, "tss": r["tss"], "min": r["duration_min"], "km": 0.0})
+
+    totals = {fam: {"n": 0, "min": 0, "km": 0.0, "tss": 0} for fam in _CAPTION_SPORT_LABELS}
+    total_tss = total_min = 0
+    for sessions in by_day.values():
+        for s in sessions:
+            total_tss += s["tss"]
+            total_min += s["min"]
+            fam = _sport_family(s["sport"])
+            if fam in totals:
+                t = totals[fam]
+                t["n"] += 1
+                t["min"] += s["min"]
+                t["km"] += s["km"]
+                t["tss"] += s["tss"]
+
+    # CTL at the start and end of the window, for the "Fitness A -> B" line — the
+    # floor also needs an end-of-window CTL to derive the phase's weekly_tss_floor.
+    anchor = min(week_end, today)
+    wellness = client.get_wellness(days=(anchor - week_start).days + 3,
+                                    newest=anchor.isoformat())
+    by_date = {(row.get("id") or "")[:10]: row for row in (wellness or [])}
+    ctl_start = (by_date.get(week_start.isoformat()) or {}).get("ctl")
+    ctl_end = (by_date.get(week_end.isoformat()) or (wellness[-1] if wellness else {})).get("ctl")
+
+    floor = None
+    if ctl_end:
+        req = required_tss(cfg, round(float(ctl_end), 1), today=week_end, last_week_tss=None)
+        floor = req.get("weekly_tss_floor")
+
+    lines = [f"Hrs: {round(total_min / 60, 1)} · TSS: {total_tss}" +
+             (f" (min {int(floor)})" if floor else "")]
+    for fam, label in _CAPTION_SPORT_LABELS.items():
+        t = totals[fam]
+        if t["n"] == 0:
+            continue
+        lines.append(f"{label}: {t['n']}x, {round(t['min'] / 60, 1)}h, "
+                      f"{round(t['km'], 1)}km, Load {t['tss']}")
+    if ctl_start is not None and ctl_end is not None:
+        lines.append(f"Fitness {round(float(ctl_start), 1)} -> {round(float(ctl_end), 1)}, "
+                      f"ramp {round(float(ctl_end) - float(ctl_start), 1)}/wk")
+
+    return {"athlete": args.athlete, "week_start": week_start.isoformat(),
+            "week_end": week_end.isoformat(), "weekly_tss_floor": floor,
+            "caption": "\n".join(lines)}
 
 
 # ── subcommand: project ────────────────────────────────────────────────────────
@@ -1417,6 +1520,12 @@ def main():
     pw = sub.add_parser("week-tss", help="deterministic weekly roll-up from the calendar")
     pw.add_argument("--athlete", required=True); pw.add_argument("--week-start")
 
+    pwc = sub.add_parser("week-caption",
+                         help="fixed Hrs/TSS-vs-floor/by-sport/Fitness-ramp weekly caption text")
+    pwc.add_argument("--athlete", required=True)
+    pwc.add_argument("--start", required=True, help="Monday of the week, YYYY-MM-DD")
+    pwc.add_argument("--end", required=True, help="Sunday of the week, YYYY-MM-DD")
+
     pp = sub.add_parser("project", help="day-by-day CTL/ATL/TSB projection")
     pp.add_argument("--athlete", required=True); pp.add_argument("--daily", required=True)
     pp.add_argument("--seed-ctl", type=float); pp.add_argument("--seed-atl", type=float)
@@ -1505,7 +1614,7 @@ def main():
     args = p.parse_args()
     handler = {"tss": cmd_tss, "session-for-load": cmd_session_for_load,
                "session-load": cmd_session_load, "sum": cmd_sum,
-               "week-tss": cmd_week_tss, "project": cmd_project,
+               "week-tss": cmd_week_tss, "week-caption": cmd_week_caption, "project": cmd_project,
                "required-tss": cmd_required_tss, "validate": cmd_validate,
                "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target,
                "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check,
