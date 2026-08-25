@@ -559,6 +559,26 @@ def _has_new_activity(slug: str, existing_ids: set) -> bool:
         return True
 
 
+def _last_logged_label(session_log_f) -> str:
+    """'Swim today · 51min · Load 68' for the most recent session-log entry."""
+    try:
+        entries = json.loads(session_log_f.read_text())
+    except (json.JSONDecodeError, OSError):
+        return ""
+    dated = [e for e in entries if e.get("date")]
+    if not dated:
+        return ""
+    e = max(dated, key=lambda x: x["date"])
+    today = datetime.now().strftime("%Y-%m-%d")
+    when = "today" if e["date"] == today else e["date"]
+    bits = [f"{e.get('sport', 'session')} {when}"]
+    if e.get("duration_min"):
+        bits.append(f"{int(e['duration_min'])}min")
+    if e.get("tss"):
+        bits.append(f"Load {int(e['tss'])}")
+    return " · ".join(bits)
+
+
 def load_state(state_file):
     if state_file.exists():
         return json.loads(state_file.read_text())
@@ -1356,7 +1376,10 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     # Claude call is gated, so this script can poll every 5 min cheaply.
     if not _has_new_activity(slug, existing_ids):
         if announce_empty and chat_id:
-            _notify("No new activity since your last logged session. 👍", chat_id, slug=slug)
+            last = _last_logged_label(session_log_f)
+            msg = (f"Nothing new to log — last session already logged: {last}. 👍"
+                   if last else "Nothing new to log. 👍")
+            _notify(msg, chat_id, slug=slug)
         _send_followup_nudge(state, session_log_f, chat_id, injuries=injuries,
                              state_file=state_file, slug=slug)
         return
