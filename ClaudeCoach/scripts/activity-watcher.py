@@ -291,11 +291,6 @@ For unstructured rides > 3 hours (or structured rides > 3 hours where Pa:HR data
 DECOUPLING: <activity_id>|<date>|<name>|<duration_min>|<intensity_factor>|<decoupling_pct>|<tss>
 If conditions not met or Pa:HR data unavailable: DECOUPLING: none
 
-For structured sessions with >3 intervals:
-SESSION_CHART: {{"name":"<activity name>","ftp":{ftp},"intervals":[{{"duration_seconds":600,"average_power":250,"type":"WORK"}},...}}]}}
-Fetch interval data from activity_detail endpoint. type values: WORK, RECOVERY, WARMUP, COOLDOWN.
-If unstructured: SESSION_CHART: none
-
 If a planned session exists in today's events matching this sport, output:
 PLAN_DELTA: <planned_session_name>|<planned_tss>|<actual_tss>|<delta_pct>
 (delta_pct = round((actual_tss - planned_tss) / planned_tss * 100, 1))
@@ -1475,7 +1470,6 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
     activity_id = None
     decoupling_raw = None
     plan_delta_raw = None
-    session_chart_raw = None
     test_result_raw = None
     analysis_lines = []
     in_analysis = False
@@ -1485,9 +1479,6 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
             in_analysis = False
         elif line.startswith("DECOUPLING:"):
             decoupling_raw = line.split(":", 1)[1].strip()
-            in_analysis = False
-        elif line.startswith("SESSION_CHART:"):
-            session_chart_raw = line.split(":", 1)[1].strip()
             in_analysis = False
         elif line.startswith("PLAN_DELTA:"):
             plan_delta_raw = line.split(":", 1)[1].strip()
@@ -1500,7 +1491,7 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
             first = line.split(":", 1)[1].strip()
             if first:
                 analysis_lines.append(first)
-        elif in_analysis and not line.startswith(("ACTIVITY_ID:", "DECOUPLING:", "SESSION_CHART:", "PLAN_DELTA:", "TEST_RESULT:")):
+        elif in_analysis and not line.startswith(("ACTIVITY_ID:", "DECOUPLING:", "PLAN_DELTA:", "TEST_RESULT:")):
             analysis_lines.append(line)
 
     if not activity_id or activity_id == "none":
@@ -1552,31 +1543,6 @@ def check_athlete(slug, athlete_cfg, announce_empty=False):
                 if not any(e.get("activity_id") == entry["activity_id"] for e in entries):
                     entries.append(entry)
                     decoupling_log.write_text(json.dumps(entries, indent=2))
-        except Exception:
-            pass
-
-    # Send session structure chart
-    if session_chart_raw and session_chart_raw != "none":
-        try:
-            import sys as _sys
-            _sys.path.insert(0, str(BASE / "telegram"))
-            import charts as _charts
-            chart_data = json.loads(session_chart_raw)
-            png = _charts.session_chart(
-                chart_data.get("name", "Session"),
-                chart_data.get("intervals", []),
-                ftp=chart_data.get("ftp", ftp),
-            )
-            if png:
-                import tempfile, os as _os
-                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-                    f.write(png)
-                    tmp_path = f.name
-                subprocess.run(
-                    ["python3", str(NOTIFY), "--chat-id", str(chat_id), "--photo", tmp_path],
-                    cwd=PROJECT_DIR,
-                )
-                _os.unlink(tmp_path)
         except Exception:
             pass
 

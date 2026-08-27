@@ -1062,8 +1062,6 @@ CHART_RE    = re.compile(r'<<<CHART:(\w+):(.*?)>>>', re.DOTALL)
 TELEGRAM_RE = re.compile(r'<telegram>(.*?)</telegram>', re.DOTALL | re.IGNORECASE)
 
 
-
-
 def _profile_coaching_level(slug):
     """Read coaching_level from athlete profile.json, defaulting to 'mid'."""
     try:
@@ -1087,22 +1085,7 @@ def process_charts(token, chat_id, response, slug=None):
         try:
             data = json.loads(raw)
             png = None
-            if chart_type in ("fitness", "form"):
-                if isinstance(data, list):
-                    data = {"data": data}
-                if "today" not in data:
-                    data["today"] = date.today().strftime("%m-%d")
-                if chart_type == "fitness":
-                    png = _charts.fitness_chart(data, coaching_level=coaching_level)
-                else:
-                    png = _charts.form_chart(data, coaching_level=coaching_level)
-            elif chart_type == "week":
-                png = _charts.week_chart(
-                    data.get("events", []),
-                    title=data.get("title", "Training week"),
-                    week_start=data.get("week_start"),
-                )
-            elif chart_type == "load":
+            if chart_type == "load":
                 # Always re-fetch live data from training_history and ICU events —
                 # never render the model's JSON, which may be reconstructed from
                 # conversation context and produce stale data or missing completed sessions.
@@ -1113,20 +1096,6 @@ def process_charts(token, chat_id, response, slug=None):
                         log(f"load chart live re-fetch failed, falling back to model data: {_fe}")
                 log(f"load chart: days={len(data.get('days',[]))}, seed_ctl={data.get('seed_ctl')}, seed_atl={data.get('seed_atl')}")
                 png = _charts.load_chart(data, coaching_level=coaching_level)
-            elif chart_type == "powercurve":
-                png = _charts.power_curve_chart(
-                    data.get("efforts", []),
-                    ftp=data.get("ftp", 316),
-                )
-            elif chart_type == "heat":
-                # Always re-fetch live: acclimation_score() + heat-log.json, never the
-                # model's JSON (same reasoning as the load chart).
-                if slug:
-                    try:
-                        data = _build_heat_payload(slug)
-                    except Exception as _fe:
-                        log(f"heat chart live re-fetch failed, falling back to model data: {_fe}")
-                png = _charts.heat_chart(data, coaching_level=coaching_level)
             if png:
                 send_photo(token, chat_id, png)
                 sent_types.add(chart_type)
@@ -1190,14 +1159,8 @@ _PENDING_REPLAN: dict[str, dict] = {}
 _REPLAN_CARD_TTL = 300
 
 _LOAD_CMD_RE     = re.compile(r'^/load\s*$', re.I)
-_FITNESS_CMD_RE  = re.compile(r'^/fitness\s*$', re.I)
-_DURATION_CMD_RE = re.compile(r'^/duration\s*$', re.I)
 _ACTIVITY_CMD_RE = re.compile(r'^/?activity(?:\s+check)?\s*$', re.I)
 _GRAPHS_RE       = re.compile(r'^/?graphs\s*$', re.I)
-_DURABILITY_RE   = re.compile(r'^/?durability\s*$', re.I)
-_RECOVERY_RE     = re.compile(r'^/?recovery\s*$', re.I)
-_COMPLIANCE_RE   = re.compile(r'^/?compliance\s*$', re.I)
-_POWERCURVE_RE   = re.compile(r'^/?power\s?curve\s*$', re.I)
 _FEEDBACK_LOG_RE = re.compile(
     r'^(?:feedback|note|log|correction|reminder|fyi|heads.?up)\s*:[ \t]*.{5,}',
     re.I | re.DOTALL,
@@ -1225,9 +1188,8 @@ BOT_COMMANDS = [
     ("week",    "This week's sessions + Load"),
     ("form",    "Fitness / Fatigue / Form + race projection"),
     ("race",    "Race predictor (Now / Race day / Target)"),
-    ("fitness", "Fitness & Form charts"),
     ("load",    "Training-load chart (±8 days)"),
-    ("graphs",  "All charts menu"),
+    ("graphs",  "Training-load chart (±8 days)"),
     # NOT "this week's plan". The build plans _next_monday(today), which on a Monday is the
     # FOLLOWING Monday, so the old label promised the week the athlete is in and delivered a
     # different one. A setMyCommands label is registered at startup and cannot carry a date,
@@ -1542,33 +1504,6 @@ def _build_load_payload(slug: str) -> dict:
     }
 
 
-def _build_heat_payload(slug: str, window_days: int = 45) -> dict:
-    """Build the heat_chart payload from heat.py's acclimation_score() + the
-    athlete's heat-log.json. Always re-fetched live, same reasoning as load chart."""
-    sys.path.insert(0, str(BASE.parent / "lib"))
-    import heat as heat_lib
-
-    today = date.today()
-    days = []
-    for i in range(window_days, -1, -1):
-        d = today - timedelta(days=i)
-        days.append({"date": d.isoformat(), "score": round(heat_lib.acclimation_score(slug, d), 1)})
-
-    log_file = BASE.parent / "athletes" / slug / "heat-log.json"
-    try:
-        entries = json.loads(log_file.read_text())
-    except Exception:
-        entries = []
-    cutoff = (today - timedelta(days=window_days)).isoformat()
-    events = [
-        {"date": str(e.get("date") or "")[:10], "dose": e.get("dose") or 1.0,
-         "method": e.get("method") or ""}
-        for e in entries if str(e.get("date") or "")[:10] >= cutoff
-    ]
-
-    return {"today": today.strftime("%m-%d"), "days": days, "events": events}
-
-
 def _load_chart_quick(token, chat_id, slug):
     """Fetch live data and send the load chart directly — no Claude round-trip."""
     if _charts is None:
@@ -1594,371 +1529,11 @@ def _load_chart_quick(token, chat_id, slug):
         send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
 
 
-def _fitness_charts_quick(token, chat_id, slug):
-    """Fetch 42-day wellness and send fitness (CTL/ATL) + form (TSB) charts — no Claude round-trip."""
-    if _charts is None:
-        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug))
-        return
-    try:
-        sys.path.insert(0, str(BASE.parent / "lib"))
-        from icu_api import IcuClient
-
-        athletes_data = json.loads(ATHLETES_CONFIG.read_text())
-        a = athletes_data[slug]
-        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
-
-        today = date.today()
-        wellness = client.get_wellness(42)
-        if not wellness:
-            send(token, chat_id, "No fitness data available.", reply_markup=build_keyboard(slug))
-            return
-
-        data = []
-        for w in wellness:
-            d = (w.get("id") or "")[:10]
-            ctl = w.get("ctl") or 0
-            atl = w.get("atl") or 0
-            if d:
-                data.append({"date": d, "ctl": round(float(ctl), 1),
-                              "atl": round(float(atl), 1),
-                              "tsb": round(float(ctl) - float(atl), 1)})
-
-        # Project the next 14 days of CTL/ATL/TSB from planned sessions, so the
-        # fitness + form charts show where training is heading, not just history.
-        try:
-            sys.path.insert(0, str(BASE.parent / "ironman-analysis"))
-            from primitives.load import project_pmc_daily
-            end14 = (today + timedelta(days=14)).isoformat()
-            planned = {}
-            for ev in (client.get_events(today.isoformat(), end14) or []):
-                d = (ev.get("start_date_local") or "")[:10]
-                if d and d > today.isoformat():
-                    planned[d] = planned.get(d, 0) + float(ev.get("icu_training_load") or ev.get("load_target") or 0)
-            if data:
-                fdates = [(today + timedelta(days=i)).isoformat() for i in range(1, 15)]
-                ftss = [planned.get(d, 0) for d in fdates]
-                for d, p in zip(fdates, project_pmc_daily(data[-1]["ctl"], data[-1]["atl"], ftss)):
-                    data.append({"date": d, "ctl": round(p["ctl"], 1),
-                                 "atl": round(p["atl"], 1), "tsb": round(p["tsb"], 1),
-                                 "projected": True})
-        except Exception as exc:
-            log(f"fitness projection skipped: {exc}")
-
-        # Phase bands (Base/Build/Specific/Peak/Taper) clamped to the chart window,
-        # so the chart shows where in the plan each date sits. x0/x1 are MM-DD labels
-        # that exist in the data (daily series), so box annotations align.
-        phases = []
-        try:
-            if data and a.get("plan_start") and a.get("race_date"):
-                ps = date.fromisoformat(a["plan_start"]); rd = date.fromisoformat(a["race_date"])
-                pt = a.get("phase_tss", {})
-                spans, prev = [], ps
-                for nm, wk, col in (("Base", pt.get("base_end_week", 6), "rgba(41,128,185,0.07)"),
-                                    ("Build", pt.get("build_end_week", 10), "rgba(29,104,64,0.07)"),
-                                    ("Specific", pt.get("specific_end_week", 14), "rgba(39,174,96,0.07)"),
-                                    ("Peak", pt.get("peak_end_week", 17), "rgba(192,57,43,0.07)")):
-                    spans.append((nm, prev, ps + timedelta(weeks=wk), col)); prev = ps + timedelta(weeks=wk)
-                spans.append(("Taper", prev, rd, "rgba(124,77,255,0.07)"))
-                lo = date.fromisoformat(data[0]["date"]); hi = date.fromisoformat(data[-1]["date"])
-                for nm, s, e, col in spans:
-                    s2, e2 = max(s, lo), min(e, hi)
-                    if s2 < e2:
-                        phases.append({"name": nm, "x0": s2.strftime("%m-%d"),
-                                       "x1": e2.strftime("%m-%d"), "color": col})
-        except Exception as exc:
-            log(f"phase bands skipped: {exc}")
-
-        payload = {"today": today.strftime("%m-%d"), "data": data, "phases": phases}
-        log(f"fitness charts (quick): {len(data)} days, {len(phases)} phases")
-        cl = _profile_coaching_level(slug)
-        png_fit = _charts.fitness_chart(payload, coaching_level=cl)
-        png_form = _charts.form_chart(payload, coaching_level=cl)
-        if png_fit:
-            send_photo(token, chat_id, png_fit)
-        if png_form:
-            send_photo(token, chat_id, png_form)
-        if png_fit or png_form:
-            w = wellness[-1]
-            ctl = round(float(w.get("ctl") or 0), 1)
-            atl = round(float(w.get("atl") or 0), 1)
-            tsb = round(ctl - atl, 1)
-            send(token, chat_id,
-                 f"Fitness *{ctl}* · Fatigue {atl} · Form *{tsb:+.1f}*",
-                 reply_markup=build_keyboard(slug))
-        else:
-            send(token, chat_id, "Could not generate charts.", reply_markup=build_keyboard(slug))
-    except Exception as e:
-        log(f"fitness charts quick error: {e}")
-        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
-
-
-def _duration_chart_quick(token, chat_id, slug):
-    """Rolling hours/week (CTL-style duration, see charts.duration_chart) for this
-    season, overlaid with any previous seasons in duration-prev-cache.json built by
-    scripts/build-duration-prev-cache.py — no Claude round-trip."""
-    if _charts is None:
-        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug)); return
-    try:
-        sys.path.insert(0, str(BASE.parent / "lib"))
-        from icu_api import IcuClient
-        a = json.loads(ATHLETES_CONFIG.read_text())[slug]
-        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
-
-        today = date.today()
-        race_date_str = a.get("race_date") or None
-        plan_start_str = a.get("plan_start")
-        plan_start = date.fromisoformat(plan_start_str) if plan_start_str else (today - timedelta(days=180))
-        if plan_start > today:
-            plan_start = today - timedelta(days=180)
-
-        # One fetch covers both the plotted window and the 6-week warm-up before it
-        # (get_training_history only takes a days-back-from-today window), so the EWMA
-        # seed below needs no second round-trip.
-        seed_start = plan_start - timedelta(days=42)
-        fetch_days = (today - seed_start).days + 1
-        history = client.get_training_history(max(fetch_days, 1)) or []
-
-        by_day = {}
-        for act in history:
-            d = (act.get("start_date_local") or "")[:10]
-            if not d:
-                continue
-            by_day[d] = by_day.get(d, 0.0) + float(act.get("moving_time") or 0) / 60.0
-
-        def _rows(lo, hi):
-            out, d = [], lo
-            while d <= hi:
-                out.append([d.isoformat(), round(by_day.get(d.isoformat(), 0.0), 1)])
-                d += timedelta(days=1)
-            return out
-
-        current_rows = _rows(plan_start, today)
-        if not current_rows:
-            send(token, chat_id, "No training-duration data available yet.", reply_markup=build_keyboard(slug)); return
-
-        # Seed the EWMA from the warm-up window, converted back from hours/week to the
-        # minutes/day units _duration_ewma_hours_per_week's recursion actually runs in —
-        # so the early-season ramp reads true instead of climbing from an unfit-looking 0.
-        seed = 0.0
-        seed_rows = _rows(seed_start, plan_start - timedelta(days=1))
-        if seed_rows:
-            _, seed_minutes = _charts._expand_daily(seed_rows)
-            if seed_minutes:
-                hpw = _charts._duration_ewma_hours_per_week(seed_minutes, seed=0.0)[-1]
-                seed = hpw * 60.0 / 7.0
-
-        cache_path = BASE.parent / "athletes" / slug / "duration-prev-cache.json"
-        cache = {}
-        if cache_path.exists():
-            try:
-                cache = json.loads(cache_path.read_text())
-            except Exception:
-                cache = {}
-
-        payload = {
-            "today": today.isoformat(),
-            "race_date": race_date_str,
-            "current": current_rows,
-            "seed": round(seed, 1),
-        }
-        if cache.get("prev"):
-            payload["prev"] = cache["prev"]
-        if cache.get("prev2"):
-            payload["prev2"] = cache["prev2"]
-
-        log(f"duration chart (quick): {len(current_rows)} days, seed={round(seed, 1)}, "
-            f"prev_seasons={[k for k in ('prev', 'prev2') if cache.get(k)]}")
-        png = _charts.duration_chart(payload, coaching_level=_profile_coaching_level(slug))
-        if png:
-            send_photo(token, chat_id, png)
-            _, cur_minutes = _charts._expand_daily(current_rows)
-            last_hpw = _charts._duration_ewma_hours_per_week(cur_minutes, seed=seed)[-1]
-            send(token, chat_id, f"Rolling *{round(last_hpw, 1)}* h/wk",
-                 reply_markup=build_keyboard(slug))
-        else:
-            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
-    except Exception as e:
-        log(f"duration chart error: {e}")
-        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
-
-
-def _recovery_chart_quick(token, chat_id, slug):
-    """HRV (vs rolling baseline) + RHR + sleep — no Claude round-trip."""
-    if _charts is None:
-        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug)); return
-    try:
-        sys.path.insert(0, str(BASE.parent / "lib"))
-        from icu_api import IcuClient
-        a = json.loads(ATHLETES_CONFIG.read_text())[slug]
-        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
-        today = date.today()
-        days = []
-        for w in (client.get_wellness(42) or []):
-            d = (w.get("id") or "")[:10]
-            if not d:
-                continue
-            ss = w.get("sleepSecs")
-            days.append({"date": d, "hrv": w.get("hrv"), "rhr": w.get("restingHR"),
-                         "sleep_h": round(ss / 3600, 1) if ss else None})
-        if not any(x.get("hrv") for x in days) and not any(x.get("rhr") for x in days):
-            send(token, chat_id, "No recovery data (HRV/RHR/sleep) available yet.", reply_markup=build_keyboard(slug)); return
-        payload = {"today": today.strftime("%m-%d"), "days": days}
-        log(f"recovery chart (quick): {len(days)} days")
-        png = _charts.recovery_chart(payload, coaching_level=_profile_coaching_level(slug))
-        if png:
-            send_photo(token, chat_id, png)
-            last = days[-1]
-            send(token, chat_id,
-                 f"HRV *{last.get('hrv') or '—'}* · RHR {last.get('rhr') or '—'} · sleep {last.get('sleep_h') or '—'}h",
-                 reply_markup=build_keyboard(slug))
-        else:
-            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
-    except Exception as e:
-        log(f"recovery chart error: {e}")
-        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
-
-
-def _durability_chart_quick(token, chat_id, slug):
-    """Aerobic decoupling (Pa:HR) per long session — bike + run, lower = better."""
-    if _charts is None:
-        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug)); return
-    try:
-        adir = BASE.parent / "athletes" / slug
-        sessions = []
-        for fn, sport in (("decoupling-log.json", "Ride"), ("run-durability-log.json", "Run")):
-            f = adir / fn
-            if not f.exists():
-                continue
-            try:
-                for e in json.loads(f.read_text()):
-                    if e.get("decoupling_pct") is not None and e.get("date"):
-                        sessions.append({"date": e["date"][:10],
-                                         "decoupling_pct": round(float(e["decoupling_pct"]), 1),
-                                         "sport": sport, "if": e.get("if"),
-                                         "duration_min": e.get("duration_min")})
-            except Exception:
-                pass
-        sessions.sort(key=lambda s: s["date"])
-        sessions = sessions[-12:]
-        if not sessions:
-            send(token, chat_id, "No durability data yet (needs long rides/runs with decoupling logged).",
-                 reply_markup=build_keyboard(slug)); return
-        payload = {"today": date.today().strftime("%m-%d"), "sessions": sessions}
-        log(f"durability chart (quick): {len(sessions)} sessions")
-        png = _charts.durability_chart(payload, coaching_level=_profile_coaching_level(slug))
-        if png:
-            send_photo(token, chat_id, png)
-            send(token, chat_id, "Lower decoupling = better durability (holding power/pace late).",
-                 reply_markup=build_keyboard(slug))
-        else:
-            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
-    except Exception as e:
-        log(f"durability chart error: {e}")
-        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
-
-
-def _compliance_chart_quick(token, chat_id, slug):
-    """Per-week planned vs actual TSS for the last ~8 weeks."""
-    if _charts is None:
-        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug)); return
-    try:
-        from collections import defaultdict
-        sys.path.insert(0, str(BASE.parent / "lib"))
-        from icu_api import IcuClient
-        a = json.loads(ATHLETES_CONFIG.read_text())[slug]
-        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
-        today = date.today()
-
-        def _wk(dstr):
-            dd = date.fromisoformat(dstr[:10])
-            return (dd - timedelta(days=dd.weekday())).isoformat()
-
-        actual, planned = defaultdict(float), defaultdict(float)
-        for act in (client.get_training_history(63) or []):
-            d = (act.get("start_date_local") or "")[:10]
-            if d:
-                actual[_wk(d)] += float(act.get("icu_training_load") or 0)
-        for ev in (client.get_events((today - timedelta(days=63)).isoformat(),
-                                      (today + timedelta(days=7)).isoformat()) or []):
-            d = (ev.get("start_date_local") or "")[:10]
-            if d:
-                planned[_wk(d)] += float(ev.get("icu_training_load") or ev.get("load_target") or 0)
-        this_wk = _wk(today.isoformat())
-        wks = sorted(w for w in set(list(actual) + list(planned)) if w <= this_wk)[-8:]
-        if not wks:
-            send(token, chat_id, "No weekly data available.", reply_markup=build_keyboard(slug)); return
-        weeks = [{"label": date.fromisoformat(w).strftime("%m-%d"),
-                  "planned": round(planned.get(w, 0)), "actual": round(actual.get(w, 0))} for w in wks]
-        payload = {"today": today.strftime("%m-%d"), "weeks": weeks}
-        log(f"compliance chart (quick): {len(weeks)} weeks")
-        png = _charts.compliance_chart(payload, coaching_level=_profile_coaching_level(slug))
-        if png:
-            send_photo(token, chat_id, png)
-            send(token, chat_id, "Planned vs actual weekly Load — are you hitting the plan?",
-                 reply_markup=build_keyboard(slug))
-        else:
-            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
-    except Exception as e:
-        log(f"compliance chart error: {e}")
-        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
-
-
 # Standard power-curve durations (mirrors scripts/refresh-site-data.py _POWER_DURATIONS).
 _PC_DURATIONS = [
     (5, "5s"), (15, "15s"), (30, "30s"), (60, "1m"), (120, "2m"), (300, "5m"),
     (600, "10m"), (1200, "20m"), (1800, "30m"), (3600, "60m"), (5400, "90m"),
 ]
-
-
-def _power_curve_quick(token, chat_id, slug):
-    """90-day cycling power curve, pulled straight from intervals.icu (no Claude).
-
-    Replaces the old Claude-emitted [[CHART:powercurve:JSON]] path, which broke
-    whenever the model hand-wrote malformed JSON for the ~11-point efforts array.
-    """
-    if _charts is None:
-        send(token, chat_id, "Chart library not available.", reply_markup=build_keyboard(slug)); return
-    try:
-        sys.path.insert(0, str(BASE.parent / "lib"))
-        from icu_api import IcuClient
-        a = json.loads(ATHLETES_CONFIG.read_text())[slug]
-        client = IcuClient(a["icu_athlete_id"], a["icu_api_key"])
-
-        pc_raw = client.get_power_curves(sport="Ride", curves="90d")
-        curve  = (pc_raw.get("list") or [None])[0]
-        if not curve or not curve.get("secs"):
-            send(token, chat_id, "No cycling power-curve data in the last 90 days.",
-                 reply_markup=build_keyboard(slug)); return
-        secs_to_w = dict(zip(curve.get("secs", []), curve.get("values", [])))
-        efforts = [{"label": lbl, "power": round(secs_to_w[t])}
-                   for t, lbl in _PC_DURATIONS if secs_to_w.get(t)]
-        if not efforts:
-            send(token, chat_id, "No cycling power-curve data in the last 90 days.",
-                 reply_markup=build_keyboard(slug)); return
-
-        # Resolve FTP: profile.json first, then the athlete's cycling FTP, else 316.
-        ftp = _load_profile(slug).get("ftp_watts")
-        if not ftp:
-            try:
-                prof = client.get_athlete_profile()
-                for sp in (prof.get("sportSettings") or prof.get("sport_settings") or []):
-                    if (sp.get("type") in ("Ride", "VirtualRide", "Cycling")) and sp.get("ftp"):
-                        ftp = sp["ftp"]; break
-            except Exception:
-                pass
-        ftp = int(ftp or 316)
-
-        log(f"power curve (quick): {len(efforts)} efforts, ftp={ftp}")
-        png = _charts.power_curve_chart(efforts, ftp=ftp)
-        if png:
-            send_photo(token, chat_id, png)
-            send(token, chat_id, f"90-day best power by duration · FTP {ftp}W.",
-                 reply_markup=build_keyboard(slug))
-        else:
-            send(token, chat_id, "Could not generate chart.", reply_markup=build_keyboard(slug))
-    except Exception as e:
-        log(f"power curve chart error: {e}")
-        send(token, chat_id, f"Chart error: {e}", reply_markup=build_keyboard(slug))
 
 
 def _git_commit(msg):
@@ -2864,25 +2439,11 @@ def fast_path(text, slug: str = "", athlete_cfg: dict | None = None):
     if _LOAD_CMD_RE.match(txt):
         return "__LOAD_CHART__"
 
-    if _FITNESS_CMD_RE.match(txt):
-        return "__FITNESS_CHARTS__"
-
-    if _DURATION_CMD_RE.match(txt):
-        return "__DURATION_CHART__"
-
     if _ACTIVITY_CMD_RE.match(txt):
         return "__ACTIVITY_CHECK__"
 
     if _GRAPHS_RE.match(txt):
         return "__GRAPHS__"
-    if _DURABILITY_RE.match(txt):
-        return "__DURABILITY__"
-    if _RECOVERY_RE.match(txt):
-        return "__RECOVERY__"
-    if _COMPLIANCE_RE.match(txt):
-        return "__COMPLIANCE__"
-    if _POWERCURVE_RE.match(txt):
-        return "__POWERCURVE__"
 
     m = _ANKLE_RE.match(txt)
     if m and slug:
@@ -4736,8 +4297,10 @@ def prefetch_context(slug: str) -> str:
             lines.append(
                 "NEVER restart the bot, run systemctl/service, reboot or kill the process while replying — it drops the "
                 "reply mid-send (this caused repeated ~25-min silences). Committed code changes apply on the next "
-                "natural restart; say 'live on next restart' and move on. To show a chart, emit a <<<CHART:TYPE:JSON>>> "
-                "marker (types include heat) — never write code to build a chart.")
+                "natural restart; say 'live on next restart' and move on. The only chart still wired here is the "
+                "load chart — emit <<<CHART:load:JSON>>> for it; every other chart type was retired 27 Aug 2026 "
+                "in favour of the coach webapp's Trends tab, so point the athlete there instead. "
+                "Never write code to build a chart.")
         except Exception as _e:
             log(f"prefetch planning numbers (non-fatal): {_e}")
 
@@ -7055,48 +6618,12 @@ def _route_text(token, chat_id, text, athletes, config):
         send(token, chat_id, reply, reply_markup=build_keyboard(slug))
         log(f"[{slug}] Out (LTHR update): {fast.split(':', 1)[1]}")
         return
-    elif fast == "__LOAD_CHART__":
+    elif fast == "__LOAD_CHART__" or fast == "__GRAPHS__":
+        # load_chart is the only telegram graph left (27 Aug 2026) — the rest moved to
+        # the coach webapp's Trends tab, so "graphs" no longer needs a picker menu.
         typing(token, chat_id)
         log(f"[{slug}] Out (fast): load chart")
         _load_chart_quick(token, chat_id, slug)
-        return
-    elif fast == "__FITNESS_CHARTS__":
-        typing(token, chat_id)
-        log(f"[{slug}] Out (fast): fitness charts")
-        _fitness_charts_quick(token, chat_id, slug)
-        return
-    elif fast == "__DURATION_CHART__":
-        typing(token, chat_id)
-        log(f"[{slug}] Out (fast): duration chart")
-        _duration_chart_quick(token, chat_id, slug)
-        return
-    elif fast == "__GRAPHS__":
-        send(token, chat_id, "*Graphs* — pick one:", reply_markup={"inline_keyboard": [
-            [{"text": "📈 Fitness & Form", "callback_data": "/fitness"}],
-            [{"text": "🔋 Load",            "callback_data": "/load"}],
-            [{"text": "⏱️ Duration",        "callback_data": "/duration"}],
-            [{"text": "💪 Durability",       "callback_data": "/durability"}],
-            [{"text": "😴 Recovery",         "callback_data": "/recovery"}],
-            [{"text": "✅ Compliance",       "callback_data": "/compliance"}],
-            [{"text": "⚡ Power curve",      "callback_data": "/powercurve"}],
-        ]})
-        log(f"[{slug}] Out (fast): graphs menu")
-        return
-    elif fast == "__DURABILITY__":
-        typing(token, chat_id); log(f"[{slug}] Out (fast): durability")
-        _durability_chart_quick(token, chat_id, slug)
-        return
-    elif fast == "__RECOVERY__":
-        typing(token, chat_id); log(f"[{slug}] Out (fast): recovery")
-        _recovery_chart_quick(token, chat_id, slug)
-        return
-    elif fast == "__COMPLIANCE__":
-        typing(token, chat_id); log(f"[{slug}] Out (fast): compliance")
-        _compliance_chart_quick(token, chat_id, slug)
-        return
-    elif fast == "__POWERCURVE__":
-        typing(token, chat_id); log(f"[{slug}] Out (fast): power curve")
-        _power_curve_quick(token, chat_id, slug)
         return
     elif fast == "__ACTIVITY_CHECK__":
         send(token, chat_id, "_Checking for new activity…_")
