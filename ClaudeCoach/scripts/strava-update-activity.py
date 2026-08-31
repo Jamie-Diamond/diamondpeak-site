@@ -54,11 +54,24 @@ def build_description(first_name: str, sport: str, entry: dict, detail: dict, ev
         v for v in (avg_t, max_t) if v is not None
     ) >= 25 if (avg_t is not None or max_t is not None) else False
 
+    avg_hr = entry.get("avg_hr") or detail.get("average_heartrate")
+    max_hr = detail.get("max_heartrate")
+    # GAP only exists (and only means anything) for runs; ICU stores it as m/s.
+    gap_ms = detail.get("gap") if "run" in sport.lower() else None
+
     metrics = []
     if np_w:  metrics.append(f"NP {np_w}W")
     if tss:   metrics.append(f"TSS {tss}")
     if dur:   metrics.append(f"{dur} min")
     if dist:  metrics.append(f"{dist:.1f}km")
+    if gap_ms:
+        secs = round(1000 / gap_ms)
+        metrics.append(f"GAP {secs // 60}:{secs % 60:02d}/km")
+    if avg_hr:
+        hr_str = f"HR {round(avg_hr)} avg"
+        if max_hr:
+            hr_str += f" / {round(max_hr)} max"
+        metrics.append(hr_str)
     # nutrition_g_carb is a TOTAL in grams, never a rate — derive g/hr from duration.
     if carbs:
         if dur:
