@@ -5,13 +5,14 @@ Called as a background process from both activity-watcher and bot.
 
 Usage: python3 ClaudeCoach/scripts/strava-update-activity.py --athlete jamie --icu-id i149586944
 """
-import argparse, json, re, subprocess, sys
+import argparse, json, os, re, subprocess, sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 BASE        = Path(__file__).parent.parent  # ClaudeCoach/
 PROJECT_DIR = str(BASE.parent)
 CLAUDE      = "/usr/bin/claude"
+CC_ENV      = Path("/root/.claude/cc.env")  # same file cc-run sources for cron
 
 sys.path.insert(0, str(BASE / "lib"))
 from icu_api import IcuClient
@@ -19,6 +20,34 @@ from strava_client import StravaClient
 import public_text_guard
 import ops_log
 from claude_call import is_auth_failure
+
+
+def _resolve_claude_env() -> dict:
+    """Environment for the `claude` CLI subprocess.
+
+    Cron always runs this script through cc-run, which sources cc.env and so
+    always carries CLAUDE_CODE_OAUTH_TOKEN. A chat-side Bash invocation calls
+    this script directly, without that wrapper, so the token is simply never
+    in the environment being inherited here — the CLI then 401s on a missing
+    credential, which used to be misread as an expired token. Fall back to
+    reading the same cc.env cc-run uses, so a manual run authenticates the
+    same way the bot does.
+    """
+    env = dict(os.environ)
+    if (env.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip():
+        return env
+    try:
+        for line in CC_ENV.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            if key.strip() == "CLAUDE_CODE_OAUTH_TOKEN":
+                env["CLAUDE_CODE_OAUTH_TOKEN"] = val.strip().strip('"').strip("'")
+                break
+    except Exception:
+        pass
+    return env
 
 
 def build_description(first_name: str, sport: str, entry: dict, detail: dict, events: list,
@@ -135,10 +164,12 @@ Total under 300 characters. Output nothing else."""
 
     fallback = f"Aim: {entry.get('name', sport)}.\n{metrics_str}"
     try:
+        claude_env = _resolve_claude_env()
         result = subprocess.run(
             [CLAUDE, "-p", "--model", "claude-haiku-4-5-20251001"],
             input=prompt,  # prompt on stdin, not argv (MAX_ARG_STRLEN)
             capture_output=True, text=True, cwd=PROJECT_DIR, timeout=60,
+            env=claude_env,
         )
         text = (result.stdout or "").strip()
         if result.returncode != 0 or not _looks_like_description(text):
@@ -148,12 +179,27 @@ Total under 300 characters. Output nothing else."""
             # rather than through run_claude, so it never hit that alert path — the
             # fallback template silently covered for it instead. Loud now, same as there.
             if is_auth_failure(text) or is_auth_failure(result.stderr or ""):
-                ops_log.alert(
-                    "strava-update-activity",
-                    "Claude CLI authentication failed while writing a Strava description — "
-                    "the token has likely expired. Descriptions are silently falling back to "
-                    "the plain-fact template until this is refreshed.",
-                    athlete=label)
+                if (claude_env.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip():
+                    # A token WAS present for this call (own env or cc.env fallback)
+                    # and still got rejected — this is the real production case.
+                    ops_log.alert(
+                        "strava-update-activity",
+                        "Claude CLI authentication failed while writing a Strava description "
+                        "with a token present — it has likely expired or been revoked. "
+                        "Descriptions are silently falling back to the plain-fact template "
+                        "until this is refreshed.",
+                        athlete=label)
+                else:
+                    # No token anywhere (env or cc.env) — a hand-run outside cc-run,
+                    # not an expiry. Recorded, not escalated as an outage.
+                    ops_log.alert(
+                        "strava-update-activity",
+                        "Claude CLI authentication failed while writing a Strava description — "
+                        "no CLAUDE_CODE_OAUTH_TOKEN was found in this invocation's environment "
+                        "or in cc.env. This is a missing credential for this specific call, not "
+                        "a token expiry. Descriptions are silently falling back to the "
+                        "plain-fact template until this is refreshed.",
+                        athlete=label)
             return fallback
         return text
     except Exception as e:
