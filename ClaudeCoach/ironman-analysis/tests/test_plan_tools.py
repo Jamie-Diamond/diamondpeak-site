@@ -162,6 +162,19 @@ def test_required_tss_no_basis_refuses():
     assert "error" in out and "recommended_weekly_tss" not in out
 
 
+def test_weekly_tss_floor_enforces_maintenance_when_phase_target_is_lower():
+    # CTL (100) already exceeds this phase's target (95), so the CTL-chase
+    # recommendation comes in under maintenance (7 x CTL). The floor must
+    # still hold at maintenance — it must never be undercut by a lower phase
+    # number (Jamie, 5 Jul 2026 under-training floor; regressed to min()
+    # instead of max() and silently let this happen).
+    out = pt.required_tss(_JAMIE_CFG, 100.0, today=date(2026, 6, 22))
+    maintenance = out["maintenance_weekly_tss"]
+    rec = out["recommended_weekly_tss"]
+    assert rec < maintenance
+    assert out["weekly_tss_floor"] == maintenance
+
+
 # ── weekly roll-up: actuals win, planned-remaining only, no double count ───────
 def test_week_rollup_actual_beats_planned_same_day_sport():
     ws = date(2026, 6, 15)            # Monday
