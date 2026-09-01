@@ -1252,6 +1252,80 @@ def cmd_race_predict(args) -> dict:
     return rp
 
 
+# ── subcommand: ctl-sweep ──────────────────────────────────────────────────────
+def cmd_ctl_sweep(args) -> dict:
+    """CTL-sensitivity sweep: how much a race-day CTL / predicted outcome moves
+    across a band of ramp-rate assumptions. NEVER hand-derive this — it re-uses
+    the exact `project` (project_pmc_daily) and `race-predict` (race_predictor)
+    machinery so the answer is one deterministic table, not a re-narrated
+    trajectory each time the question comes up.
+
+    For each ramp step (CTL points/week) in [--ramp-low, --ramp-high], the
+    weekly TSS that ramp implies (compute_required_tss, same as required-tss's
+    ramp cap) is held constant and projected day-by-day from today's seed
+    CTL/ATL to race day (project_pmc_daily). The resulting race-day CTL is then
+    fed through the shared race predictor to get a predicted total time."""
+    from race_predictor import race_predictor
+    cfg = _load_cfg(args.athlete)
+    client = _client(cfg)
+
+    seed_ctl, seed_atl = args.seed_ctl, args.seed_atl
+    if seed_ctl is None or seed_atl is None:
+        w = client.get_wellness(days=3)
+        if not w:
+            raise SystemExit(_err("no wellness data to seed CTL/ATL; pass --seed-ctl/--seed-atl"))
+        last = w[-1]
+        seed_ctl = round(float(last.get("ctl") or 0), 1) if seed_ctl is None else seed_ctl
+        seed_atl = round(float(last.get("atl") or 0), 1) if seed_atl is None else seed_atl
+
+    race_s = args.race_date or cfg.get("race_date")
+    if not race_s:
+        raise SystemExit(_err("no race_date configured; pass --race-date"))
+    race = date.fromisoformat(race_s)
+    today = date.fromisoformat(args.date) if getattr(args, "date", None) else date.today()
+    days_to_race = (race - today).days
+    if days_to_race <= 0:
+        raise SystemExit(_err("race_date is not in the future"))
+
+    lo, hi, step = args.ramp_low, args.ramp_high, args.ramp_step
+    if lo > hi or step <= 0:
+        raise SystemExit(_err("--ramp-low must be <= --ramp-high and --ramp-step must be > 0"))
+
+    prof_p = BASE / "athletes" / args.athlete / "profile.json"
+    if not prof_p.exists():
+        raise SystemExit(_err(f"no profile.json for '{args.athlete}'"))
+    profile = json.loads(prof_p.read_text())
+
+    rows = []
+    n_steps = int(round((hi - lo) / step)) + 1
+    for i in range(n_steps):
+        ramp = round(lo + i * step, 2)
+        weekly_tss = compute_required_tss(seed_ctl, seed_ctl + ramp, 1)
+        daily_tss = [weekly_tss / 7.0] * days_to_race
+        race_day = project_pmc_daily(seed_ctl, seed_atl, daily_tss)[-1]
+        row = {"ramp_ctl_per_week": ramp, "weekly_tss": weekly_tss,
+               "race_day_ctl": race_day["ctl"], "race_day_tsb": race_day["tsb"]}
+        rp = race_predictor(profile, race_day["ctl"])
+        if rp:
+            row["predicted_total"] = _fmt_hm(rp["rows"][0]["total_min"])
+            row["predicted_total_min"] = rp["rows"][0]["total_min"]
+        rows.append(row)
+
+    out = {"athlete": args.athlete, "seed_ctl": seed_ctl, "seed_atl": seed_atl,
+           "race_date": race_s, "days_to_race": days_to_race,
+           "ramp_band": {"low": lo, "high": hi, "step": step}, "rows": rows,
+           "race_day_ctl_range": {"min": min(r["race_day_ctl"] for r in rows),
+                                  "max": max(r["race_day_ctl"] for r in rows)}}
+    totals = [r["predicted_total_min"] for r in rows if "predicted_total_min" in r]
+    if totals:
+        out["predicted_total_range"] = {"min": _fmt_hm(min(totals)), "max": _fmt_hm(max(totals)),
+                                        "spread_min": max(totals) - min(totals)}
+    else:
+        out["note"] = ("race predictor inputs missing (profile needs prev_race + "
+                       "race_predictor blocks) — race-day CTL range only, no time prediction")
+    return out
+
+
 # ── subcommand: sweat-rate ─────────────────────────────────────────────────────
 def cmd_sweat_rate(args) -> dict:
     """Sweat rate from a pre/post weigh-in (the standard field test): total loss =
@@ -1577,6 +1651,20 @@ def main():
     prp.add_argument("--athlete", required=True)
     prp.add_argument("--ctl", type=float, help="current CTL (default: training-data.json kpi.ctl)")
 
+    pcs = sub.add_parser("ctl-sweep",
+                         help="CTL-sensitivity sweep: race-day CTL + predicted-outcome range "
+                              "across a band of ramp-rate assumptions (reuses project + race-predict)")
+    pcs.add_argument("--athlete", required=True)
+    pcs.add_argument("--seed-ctl", type=float); pcs.add_argument("--seed-atl", type=float)
+    pcs.add_argument("--race-date", help="YYYY-MM-DD (default: cfg race_date)")
+    pcs.add_argument("--date", help="evaluate from this date (YYYY-MM-DD; default today)")
+    pcs.add_argument("--ramp-low", type=float, default=2.0, dest="ramp_low",
+                     help="lowest ramp-rate to sweep, CTL points/week (default 2.0)")
+    pcs.add_argument("--ramp-high", type=float, default=6.0, dest="ramp_high",
+                     help="highest ramp-rate to sweep, CTL points/week (default 6.0)")
+    pcs.add_argument("--ramp-step", type=float, default=1.0, dest="ramp_step",
+                     help="step between swept ramp-rates (default 1.0)")
+
     psr = sub.add_parser("sweat-rate", help="sweat rate from a pre/post weigh-in; --save updates the athlete's sweat_ml_hr")
     psr.add_argument("--athlete", required=True)
     psr.add_argument("--pre", type=float, required=True, help="pre-session weight kg")
@@ -1619,6 +1707,7 @@ def main():
                "render-workout": cmd_render_workout, "fuel-target": cmd_fuel_target,
                "race-fuelling": cmd_race_fuelling, "fuel-check": cmd_fuel_check,
                "wetsuit": cmd_wetsuit, "race-predict": cmd_race_predict,
+               "ctl-sweep": cmd_ctl_sweep,
                "sweat-rate": cmd_sweat_rate, "log-strength": cmd_log_strength,
                "windowed-np": cmd_windowed_np, "wbal": cmd_wbal}[args.cmd]
     try:
