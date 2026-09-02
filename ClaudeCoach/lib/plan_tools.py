@@ -759,8 +759,12 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
     rec = out["recommended_weekly_tss"]
     out["week_type"] = phase
     # UNDER-TRAINING floor (Jamie, 5 Jul 2026): a training week must at least
-    # reach the lower of the phase requirement and maintenance (7 x CTL). Below
-    # that the week detrains the athlete and validate_week hard-fails it.
+    # reach maintenance (7 x CTL) even when the phase-required TSS is lower than
+    # that — otherwise a light phase target would silently let the floor sit
+    # below maintenance and detrain the athlete. So the floor is the HIGHER of
+    # the phase requirement and maintenance (max, NOT min — required_weekly_tss
+    # only governs, i.e. is allowed to sit below maintenance, when CTL is
+    # genuinely below the phase target and rec is already >= maintenance).
     # Deload/taper weeks overwrite this with 0 (explicitly no floor).
     maintenance = int(round(7 * float(ctl_today))) if ctl_today else None
     out["maintenance_weekly_tss"] = maintenance
@@ -808,7 +812,7 @@ def required_tss(cfg: dict, ctl_today: float, today: date | None = None,
             })
             rec = out["recommended_weekly_tss"]
 
-    out["weekly_tss_floor"] = min(int(rec), maintenance) if (rec and maintenance) else None
+    out["weekly_tss_floor"] = max(int(rec), maintenance) if (rec and maintenance) else None
     # Manual easy-week override (B-race taper etc.): a hand-declared week that the
     # mechanical every-Nth-week cadence doesn't know about. Keyed on the Monday of
     # the week `today` falls in, so it survives regardless of training-week drift.
