@@ -214,7 +214,12 @@ _ACCURACY_RULE = (
     "(3) NO MENTAL MATHS: any total or sum of Loads comes from a tool (`plan_tools.py sum` "
     "or `plan_tools.py tss --sessions`), never added by hand; any past trip/block is looked "
     "up by DATE RANGE via icu_fetch (history / training_summary / events), never recalled "
-    "from memory."
+    "from memory. "
+    "(4) CTL SENSITIVITY / PEAK-TARGET: never re-derive by hand how sensitive race-day CTL "
+    "or the predicted outcome is to ramp-rate assumptions — run `plan_tools.py ctl-sweep "
+    "--athlete <slug>` (sweeps a ramp-rate band through the same PMC projection and race "
+    "predictor `project`/`race-predict` use) and report its race-day CTL and predicted-time "
+    "range, never a single hand-picked trajectory."
 )
 
 
