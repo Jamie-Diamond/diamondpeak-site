@@ -266,6 +266,22 @@ def state(slug: str, profile: dict | None = None) -> dict:
             "surface": bool(active and in_window and not silent)}
 
 
+def bath_protocol() -> dict:
+    """heat_bath_protocol facts (temperature, duration, timing, frequency) from
+    reference/heat.json — the Zurawlew hot-water-immersion protocol behind the
+    "sauna / hot bath entry = 1.0" dose rule above. That dose rule is a judgment
+    call about how an entry counts; it was never the protocol itself, so a
+    question like "what temperature/how long" had no fact to answer from. Read
+    on demand (a handful of lookups a week) rather than injected into every
+    turn's prompt, same reasoning as the athlete-scoped reference files this
+    module already reads lazily (e.g. state()'s training-blueprint.json)."""
+    f = BASE / "reference" / "heat.json"
+    try:
+        return json.loads(f.read_text()).get("heat_bath_protocol") or {}
+    except Exception:
+        return {}
+
+
 def surfacing_allowed(slug: str, profile: dict | None = None) -> bool:
     """May a card / plan / watchdog trigger raise heat work UNPROMPTED for this
     athlete? False when the protocol is off, before the window, or silenced. Answering

@@ -1,0 +1,15 @@
+{
+  "version": "0.1",
+  "source": "session-library.md H1 (Post-exercise hot-water immersion) / B1 heat add-on — Zurawlew protocol",
+  "heat_bath_protocol": {
+    "method": "post-exercise hot-water immersion",
+    "temperature_c": 40,
+    "duration_min_range": [30, 40],
+    "depth": "neck-deep",
+    "timing": "immediately post long Z2 ride (or equivalent long aerobic session)",
+    "frequency": "4-6 sessions/week through July-August",
+    "during_session": "sip plain water",
+    "validation": "Zurawlew protocol",
+    "physiological_effect": "plasma volume expansion, lower core temp at fixed work rate, earlier sweat onset, lower sweat sodium"
+  }
+}
